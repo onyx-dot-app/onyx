@@ -1,6 +1,7 @@
 import time
 from collections.abc import Callable
 from datetime import date
+from enum import Enum
 from typing import Any, TypeVar
 from urllib.parse import quote, urljoin, urlparse
 
@@ -9,6 +10,9 @@ from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
 
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
+from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
+    rate_limit_builder,
+)
 from onyx.connectors.exceptions import (
     CredentialExpiredError,
     CredentialInvalidError,
@@ -29,11 +33,15 @@ from onyx.connectors.zoom.models import (
     ZoomUserPage,
     ZoomWebinarDetails,
 )
+from onyx.utils.logger import setup_logger
+from onyx.utils.retry_after import parse_retry_after_seconds
 from onyx.utils.url import (
     SSRFException,
     ssrf_safe_get,
     validate_outbound_http_url,
 )
+
+logger = setup_logger()
 
 _OAUTH_TOKEN_URL = "https://zoom.us/oauth/token"
 _API_BASE_URL = "https://api.zoom.us/v2"
@@ -61,10 +69,169 @@ _MAX_ACCESS_LIST_PAGES = 200
 _AccessRecordT = TypeVar("_AccessRecordT")
 
 
+class ZoomRateLimitTier(str, Enum):
+    """Zoom's rate-limit label for an endpoint, taken from its reference page.
+    Zoom also has Heavy and Resource-Intensive tiers, which are the only two
+    with a daily cap. This connector calls no endpoint in either, so nothing
+    here paces against a daily budget."""
+
+    LIGHT = "light"
+    MEDIUM = "medium"
+
+
+class ZoomPlanTier(str, Enum):
+    """Which rate-limit column the account falls in. Do not add Enterprise:
+    Zoom publishes one Business+ column covering Business, Education,
+    Enterprise and Partner on identical numbers. Free is absent because
+    listing recordings needs Pro."""
+
+    PRO = "pro"
+    BUSINESS_PLUS = "business_plus"
+
+
+_PLAN_CALLS_PER_SECOND = {
+    ZoomPlanTier.PRO: {
+        ZoomRateLimitTier.LIGHT: 30,
+        ZoomRateLimitTier.MEDIUM: 20,
+    },
+    ZoomPlanTier.BUSINESS_PLUS: {
+        ZoomRateLimitTier.LIGHT: 80,
+        ZoomRateLimitTier.MEDIUM: 60,
+    },
+}
+
+_RATE_LIMIT_PERIOD_SECONDS = 1.0
+
+# rate_limit_builder's own default sleep is 2 seconds and doubles from there,
+# which overshoots a window that always frees within one second.
+_PACING_POLL_SECONDS = 0.05
+
+# Zoom can send a Retry-After of an hour, so one sleep is capped and the retries
+# run out. Giving up is cheap: the checkpoint resumes on the same occurrence.
+_MAX_RATE_LIMIT_SLEEPS = 6
+_RATE_LIMIT_BASE_SLEEP_SECONDS = 2.0
+_MAX_RATE_LIMIT_SLEEP_SECONDS = 60.0
+
+# Half, because Zoom's limit is account-wide and the customer's other
+# integrations spend from the same allowance.
+_DEFAULT_RATE_LIMIT_SHARE = 0.5
+
+# A percent rather than a fraction because the admin form's NumberInput sets no
+# step, so HTML's default of 1 marks 0.25 invalid.
+_MIN_RATE_LIMIT_PERCENT = 1
+_MAX_RATE_LIMIT_PERCENT = 100
+
+
 class ZoomNotEntitledError(InsufficientPermissionsError):
     """The account's plan or licence does not cover an endpoint, which no retry
     and no scope change can fix. Kept apart from a missing scope so a caller can
     carry on without the data instead of failing the run."""
+
+
+class ZoomRateLimitError(requests.HTTPError):
+    """Zoom kept answering 429 for longer than the client will wait.
+
+    It subclasses HTTPError and carries the 429 response so that
+    fails_the_whole_run reads it as systemic. Anything that function does not
+    recognise becomes a ConnectorFailure, which ends the attempt
+    COMPLETED_WITH_ERRORS — a success as far as Onyx is concerned — so the
+    throttled occurrence would never be retried.
+    """
+
+
+def parse_rate_limit_percent(value: int | float | None) -> float | None:
+    if value is None:
+        return None
+    if not _MIN_RATE_LIMIT_PERCENT <= value <= _MAX_RATE_LIMIT_PERCENT:
+        raise ValueError(
+            f"Zoom rate limit percent must be between {_MIN_RATE_LIMIT_PERCENT} "
+            f"and {_MAX_RATE_LIMIT_PERCENT}, got {value}"
+        )
+    return value / 100
+
+
+def parse_plan_tier(value: str | None) -> ZoomPlanTier:
+    """Blank means Pro, the lowest plan this connector supports, because
+    guessing high spends an allowance the account may not have."""
+    if not value or not value.strip():
+        return ZoomPlanTier.PRO
+    try:
+        return ZoomPlanTier(value.strip().lower())
+    except ValueError as e:
+        known = ", ".join(plan.value for plan in ZoomPlanTier)
+        raise ValueError(f"Unknown Zoom plan {value!r}. Use one of: {known}") from e
+
+
+def _tier_calls_per_second(
+    plan: ZoomPlanTier, tier: ZoomRateLimitTier, share: float
+) -> int:
+    """A share small enough to round down to no calls would stall the pacer
+    forever, so the budget never drops below one call per second."""
+    return max(1, int(_PLAN_CALLS_PER_SECOND[plan][tier] * share))
+
+
+def _rate_limit_sleep_seconds(response: requests.Response, sleeps_so_far: int) -> float:
+    retry_after = parse_retry_after_seconds(response.headers.get("Retry-After"))
+    if retry_after is None:
+        retry_after = _RATE_LIMIT_BASE_SLEEP_SECONDS * (2**sleeps_so_far)
+    return min(retry_after, _MAX_RATE_LIMIT_SLEEP_SECONDS)
+
+
+class _ZoomRateLimiter:
+    """There is one of these per client and Zoom's limit is account-wide, so
+    nothing here can see the customer's other integrations, or their own other
+    Zoom connectors. Two connectors on one account spend twice the share.
+    """
+
+    def __init__(self, plan: ZoomPlanTier, share: float) -> None:
+        self._pacers = {
+            tier: _build_pacer(plan, tier, share) for tier in ZoomRateLimitTier
+        }
+
+    def call(
+        self,
+        description: str,
+        tier: ZoomRateLimitTier,
+        send: Callable[[], requests.Response],
+    ) -> requests.Response:
+        for sleeps_so_far in range(_MAX_RATE_LIMIT_SLEEPS + 1):
+            response = self._pacers[tier](send)
+            if response.status_code != 429:
+                return response
+            if sleeps_so_far == _MAX_RATE_LIMIT_SLEEPS:
+                break
+
+            sleep_seconds = _rate_limit_sleep_seconds(response, sleeps_so_far)
+            logger.notice(
+                "Zoom rate limited %s (%s tier). Waiting %.1fs before retrying.",
+                description,
+                tier.value,
+                sleep_seconds,
+            )
+            time.sleep(sleep_seconds)
+
+        raise ZoomRateLimitError(
+            f"Zoom kept rate limiting {description} after "
+            f"{_MAX_RATE_LIMIT_SLEEPS} backoffs",
+            response=response,
+        )
+
+
+def _build_pacer(
+    plan: ZoomPlanTier,
+    tier: ZoomRateLimitTier,
+    share: float,
+) -> Callable[[Callable[[], requests.Response]], requests.Response]:
+    @rate_limit_builder(
+        max_calls=_tier_calls_per_second(plan, tier, share),
+        period=_RATE_LIMIT_PERIOD_SECONDS,
+        sleep_time=_PACING_POLL_SECONDS,
+        sleep_backoff=1.0,
+    )
+    def paced(send: Callable[[], requests.Response]) -> requests.Response:
+        return send()
+
+    return paced
 
 
 def _encode_path_segment(value: str) -> str:
@@ -125,7 +292,14 @@ def _raise_for_zoom_error(response: requests.Response, description: str) -> None
 
 
 class ZoomClient:
-    def __init__(self, account_id: str, client_id: str, client_secret: str) -> None:
+    def __init__(
+        self,
+        account_id: str,
+        client_id: str,
+        client_secret: str,
+        plan_tier: ZoomPlanTier = ZoomPlanTier.PRO,
+        rate_limit_share: float | None = None,
+    ) -> None:
         self.account_id = account_id
         self.client_id = client_id
         self.client_secret = client_secret
@@ -133,11 +307,19 @@ class ZoomClient:
         self._access_token: str | None = None
         self._token_expires_at: float = 0.0
 
+        share = (
+            _DEFAULT_RATE_LIMIT_SHARE if rate_limit_share is None else rate_limit_share
+        )
+        self._rate_limiter = _ZoomRateLimiter(plan_tier, share)
+
         self._session = requests.Session()
+        # 429 is deliberately absent: _ZoomRateLimiter handles it, so a spent
+        # backoff raises ZoomRateLimitError rather than urllib3's RetryError,
+        # which carries no response to classify on.
         retry_strategy = Retry(
             total=5,
             backoff_factor=1,
-            status_forcelist=[429, 500, 502, 503, 504],
+            status_forcelist=[500, 502, 503, 504],
             allowed_methods=["GET", "POST"],
         )
         # Mount on the scheme, not per URL: the API, token endpoint and download
@@ -145,14 +327,18 @@ class ZoomClient:
         self._session.mount("https://", HTTPAdapter(max_retries=retry_strategy))
 
     def _fetch_access_token(self) -> str:
-        response = self._session.post(
-            _OAUTH_TOKEN_URL,
-            params={
-                "grant_type": "account_credentials",
-                "account_id": self.account_id,
-            },
-            auth=(self.client_id, self.client_secret),
-            timeout=REQUEST_TIMEOUT_SECONDS,
+        response = self._rate_limiter.call(
+            "the OAuth token request",
+            ZoomRateLimitTier.MEDIUM,
+            lambda: self._session.post(
+                _OAUTH_TOKEN_URL,
+                params={
+                    "grant_type": "account_credentials",
+                    "account_id": self.account_id,
+                },
+                auth=(self.client_id, self.client_secret),
+                timeout=REQUEST_TIMEOUT_SECONDS,
+            ),
         )
         # A Server-to-Server client secret never expires, so this 401 is invalid,
         # not expired. The 401 in _send_authorized is a real token expiry.
@@ -182,17 +368,29 @@ class ZoomClient:
         return self._access_token
 
     def _send_authorized(
-        self, description: str, send: Callable[[str], requests.Response]
+        self,
+        description: str,
+        send: Callable[[str], requests.Response],
+        tier: ZoomRateLimitTier = ZoomRateLimitTier.MEDIUM,
     ) -> requests.Response:
         """Zoom sometimes rejects a token before the expiry it gave us, so retry
         once with a fresh one. Reporting the 401 instead raises
         CredentialExpiredError, and five of those in a row mark the connector
         invalid and email the admins.
+
+        The pacing sits here rather than in _request because the transcript
+        download does not go through _request. The tier defaults to MEDIUM, the
+        stricter of the two, so a call site that forgets one is paced too slowly
+        rather than too fast.
         """
-        response = send(self._get_access_token())
+
+        def paced(token: str) -> requests.Response:
+            return self._rate_limiter.call(description, tier, lambda: send(token))
+
+        response = paced(self._get_access_token())
         if response.status_code == 401:
             self._access_token = None
-            response = send(self._get_access_token())
+            response = paced(self._get_access_token())
 
         if response.status_code == 401:
             raise CredentialExpiredError(
@@ -204,7 +402,14 @@ class ZoomClient:
             )
         return response
 
-    def _request(self, method: str, endpoint: str, **kwargs: Any) -> requests.Response:
+    def _request(
+        self,
+        method: str,
+        endpoint: str,
+        *,
+        tier: ZoomRateLimitTier = ZoomRateLimitTier.MEDIUM,
+        **kwargs: Any,
+    ) -> requests.Response:
         url = f"{_API_BASE_URL}{endpoint}"
         headers = kwargs.pop("headers", {})
 
@@ -217,17 +422,20 @@ class ZoomClient:
                 **kwargs,
             )
 
-        return self._send_authorized(endpoint, send)
+        return self._send_authorized(endpoint, send, tier)
 
     def _request_webinar(
-        self, endpoint: str, params: dict[str, Any] | None = None
+        self,
+        endpoint: str,
+        params: dict[str, Any] | None = None,
+        tier: ZoomRateLimitTier = ZoomRateLimitTier.MEDIUM,
     ) -> requests.Response:
         """Every webinar endpoint fails the same way without the Webinar add-on,
         and the generic scope message sends the admin to check scopes that are
         already correct.
         """
         try:
-            response = self._request("GET", endpoint, params=params or {})
+            response = self._request("GET", endpoint, params=params or {}, tier=tier)
         except InsufficientPermissionsError as e:
             raise InsufficientPermissionsError(f"{_WEBINAR_ACCESS_HINT} ({e})") from e
 
@@ -271,7 +479,9 @@ class ZoomClient:
         self, meeting_identifier: str
     ) -> ZoomPastMeetingDetails:
         response = self._request(
-            "GET", f"/past_meetings/{_encode_meeting_identifier(meeting_identifier)}"
+            "GET",
+            f"/past_meetings/{_encode_meeting_identifier(meeting_identifier)}",
+            tier=ZoomRateLimitTier.LIGHT,
         )
         _raise_for_zoom_error(response, f"the details for {meeting_identifier}")
         return ZoomPastMeetingDetails.model_validate(response.json())
@@ -299,7 +509,8 @@ class ZoomClient:
         occurrence is read back through this one.
         """
         response = self._request_webinar(
-            f"/webinars/{_encode_meeting_identifier(webinar_identifier)}"
+            f"/webinars/{_encode_meeting_identifier(webinar_identifier)}",
+            tier=ZoomRateLimitTier.LIGHT,
         )
         _raise_for_zoom_error(response, f"the details for webinar {webinar_identifier}")
         return ZoomWebinarDetails.model_validate(response.json())
@@ -314,7 +525,8 @@ class ZoomClient:
         a webinar that ran no times.
         """
         response = self._request_webinar(
-            f"/past_webinars/{_encode_meeting_identifier(webinar_id)}/instances"
+            f"/past_webinars/{_encode_meeting_identifier(webinar_id)}/instances",
+            tier=ZoomRateLimitTier.LIGHT,
         )
         _raise_for_zoom_error(response, f"the occurrences for webinar {webinar_id}")
         occurrences = response.json().get("webinars", [])
@@ -484,7 +696,9 @@ class ZoomClient:
         here, so an old meeting still answers.
         """
         identifier = _encode_meeting_identifier(meeting_id)
-        response = self._request("GET", f"/meetings/{identifier}")
+        response = self._request(
+            "GET", f"/meetings/{identifier}", tier=ZoomRateLimitTier.LIGHT
+        )
         _raise_for_zoom_error(response, f"the details for meeting {meeting_id}")
 
         settings = response.json().get("settings") or {}
