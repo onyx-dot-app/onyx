@@ -68,6 +68,10 @@ _MAX_ACCESS_LIST_PAGES = 200
 
 _AccessRecordT = TypeVar("_AccessRecordT")
 
+# Takes a thunk that sends one request, waits until the tier's budget allows it,
+# and returns what the thunk returned.
+_Pacer = Callable[[Callable[[], requests.Response]], requests.Response]
+
 
 class ZoomRateLimitTier(str, Enum):
     """Zoom's rate-limit label for an endpoint, taken from its reference page.
@@ -89,7 +93,7 @@ class ZoomPlanTier(str, Enum):
     BUSINESS_PLUS = "business_plus"
 
 
-_PLAN_CALLS_PER_SECOND = {
+_PLAN_CALLS_PER_SECOND: dict[ZoomPlanTier, dict[ZoomRateLimitTier, int]] = {
     ZoomPlanTier.PRO: {
         ZoomRateLimitTier.LIGHT: 30,
         ZoomRateLimitTier.MEDIUM: 20,
@@ -171,7 +175,9 @@ def _tier_calls_per_second(
 
 
 def _rate_limit_sleep_seconds(response: requests.Response, sleeps_so_far: int) -> float:
-    retry_after = parse_retry_after_seconds(response.headers.get("Retry-After"))
+    retry_after: float | None = parse_retry_after_seconds(
+        response.headers.get("Retry-After")
+    )
     if retry_after is None:
         retry_after = _RATE_LIMIT_BASE_SLEEP_SECONDS * (2**sleeps_so_far)
     return min(retry_after, _MAX_RATE_LIMIT_SLEEP_SECONDS)
@@ -184,7 +190,7 @@ class _ZoomRateLimiter:
     """
 
     def __init__(self, plan: ZoomPlanTier, share: float) -> None:
-        self._pacers = {
+        self._pacers: dict[ZoomRateLimitTier, _Pacer] = {
             tier: _build_pacer(plan, tier, share) for tier in ZoomRateLimitTier
         }
 
@@ -221,7 +227,7 @@ def _build_pacer(
     plan: ZoomPlanTier,
     tier: ZoomRateLimitTier,
     share: float,
-) -> Callable[[Callable[[], requests.Response]], requests.Response]:
+) -> _Pacer:
     @rate_limit_builder(
         max_calls=_tier_calls_per_second(plan, tier, share),
         period=_RATE_LIMIT_PERIOD_SECONDS,
@@ -307,7 +313,7 @@ class ZoomClient:
         self._access_token: str | None = None
         self._token_expires_at: float = 0.0
 
-        share = (
+        share: float = (
             _DEFAULT_RATE_LIMIT_SHARE if rate_limit_share is None else rate_limit_share
         )
         self._rate_limiter = _ZoomRateLimiter(plan_tier, share)
