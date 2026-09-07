@@ -34,6 +34,7 @@ from onyx.connectors.zoom.client import (
     parse_plan_tier,
     parse_rate_limit_percent,
 )
+from onyx.connectors.zoom.recordings.access import permanently_unavailable
 from onyx.connectors.zoom.recordings.discovery import build_discovery_sources
 from onyx.connectors.zoom.recordings.models import (
     OccurrenceWork,
@@ -56,30 +57,37 @@ def _rebuilt_work(
     session_type: ZoomSessionType,
     occurrence_uuid: str,
     include_permissions: bool,
-) -> OccurrenceWork:
-    """Registrants, invitees and panelists all hang off the session rather than
-    the occurrence, so a reindex that guesses at the session id gets an empty
-    access list back instead of an error. Zoom stops answering for an old
-    session, so that occurrence falls back to indexing on its participants
-    alone.
+) -> OccurrenceWork | None:
+    """Registrants, invitees and panelists hang off the session rather than the
+    occurrence, and Zoom answers a wrong identifier with a 404 that the access
+    code reads as "nobody has access". So None here means the session couldn't
+    be resolved for a permission-synced run, and guessing it would quietly index
+    the document with a narrower access list than the crawl gives it.
     """
+    if not include_permissions:
+        return OccurrenceWork(
+            session_type=session_type,
+            session_id=occurrence_uuid,
+            occurrence_uuid=occurrence_uuid,
+        )
+
     handler = get_session_type_handler(session_type)
-    details = None
-    if include_permissions:
-        try:
-            details = handler.get_occurrence_details(client, occurrence_uuid)
-        except Exception:
-            logger.warning(
-                "Couldn't resolve the Zoom session behind occurrence %s; its "
-                "access list will cover participants only",
-                occurrence_uuid,
-            )
+    try:
+        details = handler.get_occurrence_details(client, occurrence_uuid)
+    except Exception as e:
+        if not permanently_unavailable(e):
+            raise
+        details = None
+
+    if details is None or details.session_id is None:
+        return None
+
     return OccurrenceWork(
         session_type=session_type,
-        session_id=(details.session_id if details else None) or occurrence_uuid,
+        session_id=details.session_id,
         occurrence_uuid=occurrence_uuid,
-        start_time=details.start_time if details else None,
-        topic=details.topic if details else None,
+        start_time=details.start_time,
+        topic=details.topic,
     )
 
 
@@ -190,12 +198,22 @@ class ZoomConnector(
 
             session_type, occurrence_uuid = parsed
             try:
+                work = _rebuilt_work(
+                    self.client, session_type, occurrence_uuid, include_permissions
+                )
+                if work is None:
+                    yield ConnectorFailure(
+                        failed_document=DocumentFailure(document_id=document_id),
+                        failure_message=(
+                            f"Zoom no longer has the session behind occurrence "
+                            f"{occurrence_uuid}, so its access list can't be "
+                            "rebuilt. Reindex the connector from the beginning "
+                            "to recover this session."
+                        ),
+                    )
+                    continue
                 yield from process_occurrence(
-                    self.client,
-                    _rebuilt_work(
-                        self.client, session_type, occurrence_uuid, include_permissions
-                    ),
-                    include_access=include_permissions,
+                    self.client, work, include_access=include_permissions
                 )
             except Exception as e:
                 # A whole batch arrives at once, so one bad target must not

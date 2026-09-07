@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock
 
 import pytest
+import requests
 
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.models import (
@@ -10,6 +11,7 @@ from onyx.connectors.models import (
     EntityFailure,
 )
 from onyx.connectors.zoom.connector import ZoomConnector
+from onyx.connectors.zoom.models import ZoomSessionDetails
 from onyx.connectors.zoom.recordings.models import OccurrenceWork, ZoomSessionType
 from onyx.connectors.zoom.recordings.processing import process_occurrence
 from tests.unit.onyx.connectors.zoom.helpers import (
@@ -265,18 +267,58 @@ class TestPermissionParity:
         assert reindexed.external_access is not None
         assert reindexed.external_access == crawled.external_access
 
-    def test_an_unresolvable_session_still_indexes_on_participants(self) -> None:
-        # Zoom's meeting details endpoint stops answering after a year.
+    @pytest.mark.parametrize(
+        "details",
+        # Zoom says "over a year old" with code 12702, answers 404 for a
+        # session it has dropped, and can answer without a session number.
+        [
+            http_error(400, 12702),
+            None,
+            ZoomSessionDetails(topic="Weekly Sync"),
+        ],
+    )
+    def test_a_session_it_cannot_resolve_fails_that_target(
+        self, details: object
+    ) -> None:
         client = _client()
         self._populate_access(client)
-        client.get_past_meeting_details.side_effect = RuntimeError("too old")
+        if isinstance(details, Exception):
+            client.get_past_meeting_details.side_effect = details
+        else:
+            client.get_past_meeting_details.return_value = details
 
         items = _reindex(client, [_target(_MEETING_DOC_ID)], include_permissions=True)
 
-        doc = items[0]
-        assert isinstance(doc, Document)
-        assert doc.external_access is not None
-        assert doc.external_access.external_user_emails == {"attendee@example.com"}
+        assert len(items) == 1
+        failure = items[0]
+        assert isinstance(failure, ConnectorFailure)
+        assert failure.failed_document is not None
+        assert failure.failed_document.document_id == _MEETING_DOC_ID
+        assert "uuid-abc" in failure.failure_message
+        client.list_meeting_registrants.assert_not_called()
+
+    def test_an_unresolvable_session_still_indexes_without_permissions(self) -> None:
+        # Nothing reads the session id when no access list is built.
+        client = _client()
+        client.get_past_meeting_details.return_value = None
+
+        items = _reindex(client, [_target(_MEETING_DOC_ID)])
+
+        assert isinstance(items[0], Document)
+
+    @pytest.mark.parametrize(
+        "error",
+        [http_error(429), http_error(503), requests.ConnectionError("dropped")],
+    )
+    def test_a_session_that_could_not_be_reached_is_not_guessed_at(
+        self, error: Exception
+    ) -> None:
+        client = _client()
+        self._populate_access(client)
+        client.get_past_meeting_details.side_effect = error
+
+        with pytest.raises(type(error)):
+            _reindex(client, [_target(_MEETING_DOC_ID)], include_permissions=True)
 
     def test_permissions_are_not_fetched_when_not_requested(self) -> None:
         client = _client()
