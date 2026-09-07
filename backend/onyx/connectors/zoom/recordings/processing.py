@@ -27,12 +27,30 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+_DOCUMENT_ID_PREFIX = "ZOOM"
+
+
 # The session type is baked into the id because a targeted reindex is handed
 # document ids and nothing else, and it has to know which endpoints to call
 # to rebuild the document. Changing this scheme later orphans everything
 # already indexed, so it carries the type from the start.
 def zoom_document_id(session_type: ZoomSessionType, occurrence_uuid: str) -> str:
-    return f"ZOOM_{session_type.value.upper()}_{occurrence_uuid}"
+    return f"{_DOCUMENT_ID_PREFIX}_{session_type.value.upper()}_{occurrence_uuid}"
+
+
+def parse_zoom_document_id(document_id: str) -> tuple[ZoomSessionType, str] | None:
+    """A Zoom occurrence uuid is base64 and can contain an underscore of its
+    own, so splitting any further hands back a truncated uuid that resolves to
+    nothing.
+    """
+    parts = document_id.split("_", 2)
+    if len(parts) != 3 or parts[0] != _DOCUMENT_ID_PREFIX or not parts[2]:
+        return None
+    try:
+        session_type = ZoomSessionType(parts[1].lower())
+    except ValueError:
+        return None
+    return session_type, parts[2]
 
 
 def process_occurrence(

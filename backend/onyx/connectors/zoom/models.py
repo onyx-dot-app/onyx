@@ -50,12 +50,19 @@ class ZoomTranscript(BaseModel):
 
 
 class ZoomSessionDetails(BaseModel):
-    """The two fields both details endpoints always carry. Meetings and webinars
+    """The fields both details endpoints always carry. Meetings and webinars
     answer with different shapes, so each gets its own subclass below.
     """
 
+    # Zoom sends the session number as an integer here and as a string
+    # everywhere else, so callers read it through session_id.
+    id: int | None = None
     topic: str
     start_time: str | None = None
+
+    @property
+    def session_id(self) -> str | None:
+        return str(self.id) if self.id is not None else None
 
 
 class ZoomPastMeetingDetails(ZoomSessionDetails):
