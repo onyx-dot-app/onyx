@@ -12,7 +12,10 @@ from onyx.connectors.models import (
     TextSection,
 )
 from onyx.connectors.zoom.client import ZoomClient
-from onyx.connectors.zoom.recordings.access import zoom_access_resolver
+from onyx.connectors.zoom.recordings.access import (
+    ZoomAccessListUnavailable,
+    zoom_access_resolver,
+)
 from onyx.connectors.zoom.recordings.models import (
     OccurrenceWork,
     ZoomSessionType,
@@ -82,7 +85,11 @@ def process_occurrence(
             failed_document=DocumentFailure(
                 document_id=zoom_document_id(work.session_type, occurrence_uuid)
             ),
-            failure_message=f"Failed to fetch transcript for Zoom session {work.session_id} occurrence {occurrence_uuid}: {e}",
+            failure_message=(
+                f"Zoom {work.session_type.value} {work.session_id} occurrence "
+                f"{occurrence_uuid} was not indexed because its transcript "
+                f"could not be fetched: {e}"
+            ),
             exception=e,
         )
 
@@ -121,7 +128,11 @@ def process_occurrence(
             failed_document=DocumentFailure(
                 document_id=zoom_document_id(work.session_type, occurrence_uuid)
             ),
-            failure_message=f"Failed to download transcript for Zoom session {work.session_id} occurrence {occurrence_uuid}: {e}",
+            failure_message=(
+                f"Zoom {work.session_type.value} {work.session_id} occurrence "
+                f"{occurrence_uuid} was not indexed because its transcript "
+                f"could not be downloaded: {e}"
+            ),
             exception=e,
         )
 
@@ -163,6 +174,17 @@ def process_occurrence(
         external_access = (
             zoom_access_resolver(client, work, handler) if include_access else None
         )
+    except ZoomAccessListUnavailable as e:
+        # This one already reads as a whole sentence, so don't bury it behind
+        # a prefix the way the generic case below has to.
+        logger.warning("%s", e)
+        return ConnectorFailure(
+            failed_document=DocumentFailure(
+                document_id=zoom_document_id(work.session_type, occurrence_uuid)
+            ),
+            failure_message=str(e),
+            exception=e,
+        )
     except Exception as e:
         if fails_the_whole_run(e):
             raise
@@ -175,7 +197,11 @@ def process_occurrence(
             failed_document=DocumentFailure(
                 document_id=zoom_document_id(work.session_type, occurrence_uuid)
             ),
-            failure_message=f"Failed to build the access list for Zoom session {work.session_id} occurrence {occurrence_uuid}: {e}",
+            failure_message=(
+                f"Zoom {work.session_type.value} {work.session_id} occurrence "
+                f"{occurrence_uuid} was not indexed because its access list "
+                f"could not be built: {e}"
+            ),
             exception=e,
         )
 

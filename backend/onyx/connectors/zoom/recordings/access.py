@@ -50,7 +50,7 @@ def _zoom_error_code(error: requests.HTTPError) -> str | None:
     return str(body["code"])
 
 
-def _is_plan_denial(error: Exception) -> bool:
+def is_plan_denial(error: Exception) -> bool:
     """Zoom refuses on plan or licence grounds two different ways: a typed error
     on the webinar endpoints, and a code on the rest."""
     if isinstance(error, ZoomNotEntitledError):
@@ -66,7 +66,7 @@ def permanently_unavailable(error: Exception) -> bool:
     plain InsufficientPermissionsError and fails the whole run so an admin fixes
     it, instead of quietly emptying every document's access list.
     """
-    if _is_plan_denial(error):
+    if is_plan_denial(error):
         return True
     if not isinstance(error, requests.HTTPError):
         return False
@@ -128,7 +128,7 @@ def union_source_emails(sources: list[AccessSource]) -> set[str]:
         except Exception as e:
             if not permanently_unavailable(e):
                 raise
-            if _is_plan_denial(e):
+            if is_plan_denial(e):
                 logger.warning("Zoom refused %s on plan grounds: %s", description, e)
             else:
                 logger.info(
