@@ -10,6 +10,7 @@ from onyx.connectors.exceptions import (
 from onyx.connectors.models import ConnectorFailure, Document
 from onyx.connectors.zoom.recordings.models import OccurrenceWork, ZoomSessionType
 from onyx.connectors.zoom.recordings.processing import (
+    parse_zoom_document_id,
     process_occurrence,
     zoom_document_id,
 )
@@ -54,6 +55,37 @@ class TestZoomDocumentId:
         assert meeting == "ZOOM_MEETING_abc=="
         assert webinar == "ZOOM_WEBINAR_abc=="
         assert meeting != webinar
+
+    @pytest.mark.parametrize("session_type", list(ZoomSessionType))
+    @pytest.mark.parametrize(
+        "occurrence_uuid",
+        # Zoom uuids are base64, so an underscore, a slash and padding all
+        # turn up in real ones.
+        ["uuid-abc", "xy_z==", "4444AAAiAAAAAiAiAiiAii==", "a/b+c_d=="],
+    )
+    def test_an_id_round_trips(
+        self, session_type: ZoomSessionType, occurrence_uuid: str
+    ) -> None:
+        document_id = zoom_document_id(session_type, occurrence_uuid)
+
+        assert parse_zoom_document_id(document_id) == (session_type, occurrence_uuid)
+
+    @pytest.mark.parametrize(
+        "document_id",
+        [
+            "",
+            "ZOOM",
+            "ZOOM_MEETING",
+            "ZOOM_MEETING_",
+            "SLACK_MEETING_uuid-abc",
+            "ZOOM_BREAKOUT_uuid-abc",
+            "zoom_meeting_uuid-abc",
+        ],
+    )
+    def test_an_id_this_connector_never_wrote_is_rejected(
+        self, document_id: str
+    ) -> None:
+        assert parse_zoom_document_id(document_id) is None
 
 
 class TestProcessOccurrence:

@@ -123,6 +123,11 @@ class TestZoomConnectorCredentials:
         with pytest.raises(ConnectorMissingCredentialError):
             next(connector.load_from_checkpoint(0, 1, checkpoint))
 
+    def test_reindex_without_credentials_raises(self) -> None:
+        connector = ZoomConnector(meeting_ids=["111"])
+        with pytest.raises(ConnectorMissingCredentialError):
+            next(connector.reindex(errors=[]))
+
     @pytest.mark.parametrize(
         "plan, percent, expected_plan, expected_share",
         [
