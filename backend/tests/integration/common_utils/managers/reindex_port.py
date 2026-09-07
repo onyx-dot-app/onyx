@@ -14,6 +14,12 @@ from tests.integration.common_utils.test_models import DATestUser
 SEARCH_SETTINGS_URL = f"{API_SERVER_URL}/search-settings"
 
 
+# Must stay in sync with the detail _guard_index_name_reuse raises in
+# onyx/server/manage/search_settings.py. Nothing enforces that, so rewording the message
+# there silently turns every retry here into an immediate failure.
+_RETRYABLE_CONFLICT = "it's being cleaned up now"
+
+
 class ReindexPortManager:
     """Drives the reindex *port* flow through the real API + worker fleet.
 
@@ -147,6 +153,11 @@ class ReindexPortManager:
             if response.status_code != 409:
                 response.raise_for_status()
                 return int(response.json()["id"])
+
+            # The other 409s -- a reindex already running, a backfill still draining --
+            # never clear on their own, so waiting on them just burns the full timeout.
+            if _RETRYABLE_CONFLICT not in response.text:
+                raise RuntimeError(f"Reindex was refused: {response.text}")
 
             elapsed = time.monotonic() - start
             if elapsed > timeout:

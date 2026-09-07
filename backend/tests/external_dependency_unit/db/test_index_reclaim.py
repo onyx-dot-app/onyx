@@ -359,24 +359,77 @@ def test_cancel_keeps_reclaim_intent_a_newer_reindex_stamped(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
     present_search_settings: SearchSettings,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Cancel commits the FUTURE to PAST before it clears intent, so a reindex submitted in
     that window stamps its own intent on the same row and must not have it wiped."""
     present = present_search_settings
-    newer_future = _make_settings(db_session, None, status=IndexModelStatus.FUTURE)
-    set_reclaim_intent_on_current__no_commit(db_session, [101, 202])
+    # The shared test database already holds a FUTURE row. Leave it in place and that
+    # stray row spares the intent on its own, so this test passes without exercising
+    # the race at all.
+    parked = [
+        ss
+        for ss in db_session.query(SearchSettings)
+        .filter(SearchSettings.status == IndexModelStatus.FUTURE)
+        .all()
+    ]
+    for ss in parked:
+        ss.status = IndexModelStatus.PAST
     db_session.commit()
+
+    canceled_reindex_intent = [1, 2]
+    newer_reindex_intent = [101, 202]
+
+    canceled_future = _make_settings(db_session, None, status=IndexModelStatus.FUTURE)
+    set_reclaim_intent_on_current__no_commit(db_session, canceled_reindex_intent)
+    db_session.commit()
+
+    newer_futures: list[SearchSettings] = []
+    real_update_status = search_settings_api.update_search_settings_status
+
+    # This runs after cancel retires its own FUTURE and before it re-reads the secondary,
+    # which is the exact window a newer reindex has to land in for the race to happen.
+    def _submit_newer_reindex_mid_cancel(
+        search_settings: SearchSettings,
+        new_status: IndexModelStatus,
+        db_session: Session,
+    ) -> None:
+        real_update_status(
+            search_settings=search_settings,
+            new_status=new_status,
+            db_session=db_session,
+        )
+        if newer_futures:
+            return
+        newer_futures.append(
+            _make_settings(db_session, None, status=IndexModelStatus.FUTURE)
+        )
+        set_reclaim_intent_on_current__no_commit(db_session, newer_reindex_intent)
+        db_session.commit()
+
+    monkeypatch.setattr(
+        search_settings_api,
+        "update_search_settings_status",
+        _submit_newer_reindex_mid_cancel,
+    )
     try:
         search_settings_api.cancel_new_embedding(_=MagicMock(), db_session=db_session)
 
+        assert newer_futures, (
+            "the newer reindex never landed; the race wasn't exercised"
+        )
         db_session.refresh(present)
         assert present.reclaim_status == IndexReclaimStatus.PENDING
-        assert present.pending_cc_pair_deletions == [101, 202]
+        assert present.pending_cc_pair_deletions == newer_reindex_intent
     finally:
         db_session.rollback()
         clear_reclaim_intent__no_commit(db_session, present.id)
         db_session.commit()
-        db_session.delete(newer_future)
+        for ss in [*newer_futures, canceled_future]:
+            db_session.delete(ss)
+        db_session.commit()
+        for ss in parked:
+            ss.status = IndexModelStatus.FUTURE
         db_session.commit()
 
 
