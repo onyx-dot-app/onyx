@@ -123,7 +123,7 @@ The scripts include multiple safety checks:
 
 ## Need More Details?
 
-See [NO_BASTION_README.md](./NO_BASTION_README.md) for:
+See [README.md](./README.md) for:
 - Detailed explanations of each step
 - Troubleshooting guide
 - How it works under the hood
