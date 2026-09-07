@@ -313,14 +313,17 @@ class ZoomClient:
         self._rate_limiter = _ZoomRateLimiter(plan_tier, share)
 
         self._session = requests.Session()
-        # 429 is deliberately absent: _ZoomRateLimiter handles it, so a spent
-        # backoff raises ZoomRateLimitError rather than urllib3's RetryError,
-        # which carries no response to classify on.
+        # Dropping 429 from status_forcelist is not enough on its own: urllib3
+        # also retries 413, 429 and 503 whenever the response carries a
+        # Retry-After header, and then sleeps the full uncapped delay. Both are
+        # off here so _ZoomRateLimiter alone handles 429, capping the wait and
+        # raising a typed error rather than urllib3's response-less RetryError.
         retry_strategy = Retry(
             total=5,
             backoff_factor=1,
             status_forcelist=[500, 502, 503, 504],
             allowed_methods=["GET", "POST"],
+            respect_retry_after_header=False,
         )
         # Mount on the scheme, not per URL: the API, token endpoint and download
         # are three different Zoom hosts, and a missed one silently gets no retries.
