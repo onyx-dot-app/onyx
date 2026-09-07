@@ -31,6 +31,7 @@ from tests.unit.onyx.connectors.utils import (
     load_everything_from_checkpoint_connector,
     load_everything_from_checkpoint_connector_from_checkpoint,
 )
+from tests.unit.onyx.connectors.zoom.helpers import SAMPLE_VTT, mock_zoom_client
 from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
     invitee,
     participant,
@@ -61,18 +62,6 @@ def _days_ago(days: int) -> str:
     return moment.isoformat()
 
 
-_SAMPLE_VTT = """WEBVTT
-
-1
-00:00:00.000 --> 00:00:02.500
-Jane Doe: Hello everyone, welcome to the call.
-
-2
-00:00:02.600 --> 00:00:05.000
-John Smith: Thanks for having me.
-"""
-
-
 def _make_connector(
     meeting_ids: list[str] | None = None,
     webinar_ids: list[str] | None = None,
@@ -89,7 +78,7 @@ def _make_connector(
         group_id=group_id,
     )
     connector.load_credentials(_ZOOM_CREDS)
-    mock_client = MagicMock(spec=ZoomClient)
+    mock_client = mock_zoom_client()
     connector.client = mock_client
     return connector, mock_client
 
@@ -102,7 +91,7 @@ def _configure_happy_path(mock_client: MagicMock) -> None:
         download_url=f"https://zoom.example/{uuid}.vtt",
         meeting_topic="Recorded Session",
     )
-    mock_client.download_transcript_vtt.return_value = _SAMPLE_VTT
+    mock_client.download_transcript_vtt.return_value = SAMPLE_VTT
     mock_client.get_past_meeting_details.return_value = past_meeting_details(
         topic="Weekly Sync"
     )
@@ -628,6 +617,8 @@ def _recording(
     topic: str = "Weekly Sync",
     recording_type: str = "2",
 ) -> ZoomRecordingEntry:
+    # The poll window is measured off the same clock as _FULL_HISTORY_END, so
+    # these timestamps have to be relative rather than a pinned date.
     return recording_entry(
         uuid=uuid,
         id=session_id,

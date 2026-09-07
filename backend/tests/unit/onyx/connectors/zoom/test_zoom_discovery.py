@@ -9,7 +9,6 @@ from onyx.connectors.exceptions import (
     CredentialExpiredError,
     InsufficientPermissionsError,
 )
-from onyx.connectors.zoom.client import ZoomClient
 from onyx.connectors.zoom.models import (
     ZoomRecordingEntry,
     ZoomRecordingPage,
@@ -26,6 +25,7 @@ from onyx.connectors.zoom.recordings.discovery import (
     build_discovery_sources,
 )
 from onyx.connectors.zoom.recordings.models import ZoomSessionType
+from tests.unit.onyx.connectors.zoom.helpers import mock_zoom_client
 from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
     occurrence,
     recording_entry,
@@ -53,7 +53,7 @@ def _occurrence_at(uuid: str, epoch_seconds: float) -> ZoomSessionOccurrence:
 def _client_with_occurrences(
     occurrences: list[ZoomSessionOccurrence],
 ) -> MagicMock:
-    client = MagicMock(spec=ZoomClient)
+    client = mock_zoom_client()
     client.list_past_meeting_occurrences.return_value = occurrences
     return client
 
@@ -61,7 +61,7 @@ def _client_with_occurrences(
 class TestIdAllowlistSource:
     def test_one_id_expanded_per_step_with_cursor_progression(self) -> None:
         source = IdAllowlistSource(["111", "222"])
-        client = MagicMock(spec=ZoomClient)
+        client = mock_zoom_client()
         client.list_past_meeting_occurrences.side_effect = lambda session_id: [
             occurrence(uuid=f"uuid-{session_id}")
         ]
@@ -111,7 +111,7 @@ class TestIdAllowlistSource:
 
     def test_listing_failure_reports_entity_failure_and_still_advances(self) -> None:
         source = IdAllowlistSource(["111", "222"])
-        client = MagicMock(spec=ZoomClient)
+        client = mock_zoom_client()
         client.list_past_meeting_occurrences.side_effect = RuntimeError("boom")
 
         result = source.discover_step(client, _START, _END, None)
@@ -132,7 +132,7 @@ class TestIdAllowlistSource:
 
     def test_cursor_past_end_is_done(self) -> None:
         source = IdAllowlistSource(["111"])
-        client = MagicMock(spec=ZoomClient)
+        client = mock_zoom_client()
 
         result = source.discover_step(client, _START, _END, {"index": 5})
 
@@ -297,7 +297,7 @@ class TestIdAllowlistPaging:
 
     def test_new_occurrence_mid_paging_does_not_skip_earlier_ones(self) -> None:
         source = IdAllowlistSource(["111"])
-        client = MagicMock(spec=ZoomClient)
+        client = mock_zoom_client()
         base = [
             ZoomSessionOccurrence(
                 uuid=f"uuid-{i:04d}", start_time=f"2026-01-01T00:{i:02d}:00Z"
@@ -410,7 +410,7 @@ class TestDiscoverySystemicFailures:
 
     def test_rate_limit_stops_discovery_instead_of_skipping_the_session(self) -> None:
         source = IdAllowlistSource(["111", "222"])
-        client = MagicMock(spec=ZoomClient)
+        client = mock_zoom_client()
         response = requests.Response()
         response.status_code = 429
         client.list_past_meeting_occurrences.side_effect = requests.HTTPError(
@@ -422,7 +422,7 @@ class TestDiscoverySystemicFailures:
 
     def test_expired_credentials_stop_discovery(self) -> None:
         source = IdAllowlistSource(["111", "222"])
-        client = MagicMock(spec=ZoomClient)
+        client = mock_zoom_client()
         client.list_past_meeting_occurrences.side_effect = CredentialExpiredError(
             "token expired"
         )
@@ -434,7 +434,7 @@ class TestDiscoverySystemicFailures:
         # The occurrence listing ends in response.json(), so a truncated body
         # surfaces as this rather than as an HTTP error.
         source = IdAllowlistSource(["111", "222"])
-        client = MagicMock(spec=ZoomClient)
+        client = mock_zoom_client()
         client.list_past_meeting_occurrences.side_effect = (
             requests.exceptions.JSONDecodeError("truncated", "{", 1)
         )
@@ -447,7 +447,7 @@ class TestIdAllowlistWebinars:
     def _client_with_webinar_occurrences(
         self, occurrences: list[ZoomSessionOccurrence]
     ) -> MagicMock:
-        client = MagicMock(spec=ZoomClient)
+        client = mock_zoom_client()
         client.list_past_webinar_occurrences.return_value = occurrences
         return client
 
@@ -468,7 +468,7 @@ class TestIdAllowlistWebinars:
 
     def test_meetings_run_before_webinars_in_one_cursor_walk(self) -> None:
         source = IdAllowlistSource(["111"], ["222"])
-        client = MagicMock(spec=ZoomClient)
+        client = mock_zoom_client()
         client.list_past_meeting_occurrences.return_value = [
             ZoomSessionOccurrence(uuid="m-1", start_time="2026-01-15T10:00:00Z")
         ]
@@ -489,7 +489,7 @@ class TestIdAllowlistWebinars:
 
     def test_failure_names_the_webinar_rather_than_the_bare_id(self) -> None:
         source = IdAllowlistSource([], ["111"])
-        client = MagicMock(spec=ZoomClient)
+        client = mock_zoom_client()
         client.list_past_webinar_occurrences.side_effect = RuntimeError("boom")
 
         result = source.discover_step(client, _START, _END, None)
@@ -503,7 +503,7 @@ class TestIdAllowlistWebinars:
         # Without the add-on every webinar call fails, so skipping this one
         # silently skips them all and still reports success.
         source = IdAllowlistSource([], ["222", "333"])
-        client = MagicMock(spec=ZoomClient)
+        client = mock_zoom_client()
         client.list_past_webinar_occurrences.side_effect = InsufficientPermissionsError(
             "no add-on"
         )
@@ -533,7 +533,7 @@ def _client_for_hosts(
     members: list[ZoomUser] | None = None,
     recordings: list[ZoomRecordingEntry] | None = None,
 ) -> MagicMock:
-    client = MagicMock(spec=ZoomClient)
+    client = mock_zoom_client()
     client.list_users.return_value = ZoomUserPage(users=users or [])
     client.list_group_members.return_value = ZoomUserPage(users=members or [])
     client.list_user_recordings.return_value = ZoomRecordingPage(
