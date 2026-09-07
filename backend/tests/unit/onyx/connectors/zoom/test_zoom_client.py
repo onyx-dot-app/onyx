@@ -364,13 +364,16 @@ class TestRetryPolicy:
 
     def test_the_transport_does_not_also_retry_429(self) -> None:
         # Two layers backing off on the same 429 multiply the wait, and a spent
-        # urllib3 retry raises RetryError, which carries no response to
-        # classify on.
+        # urllib3 retry raises RetryError, which carries no response to classify
+        # on. Asserting on status_forcelist alone would miss it: urllib3 retries
+        # a 429 that carries a Retry-After header whatever the forcelist says.
         client = ZoomClient(account_id="a", client_id="c", client_secret="s")
 
         adapter = client._session.get_adapter(_API_BASE_URL)
         assert isinstance(adapter, HTTPAdapter)
-        assert 429 not in adapter.max_retries.status_forcelist
+        retry = adapter.max_retries
+        assert 429 not in retry.status_forcelist
+        assert not retry.is_retry("GET", 429, has_retry_after=True)
 
 
 class TestRequestErrorMapping:
