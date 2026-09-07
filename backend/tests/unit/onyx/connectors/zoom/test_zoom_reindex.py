@@ -10,6 +10,7 @@ from onyx.connectors.models import (
     DocumentFailure,
     EntityFailure,
 )
+from onyx.connectors.zoom.client import ZoomNotEntitledError
 from onyx.connectors.zoom.connector import ZoomConnector
 from onyx.connectors.zoom.models import ZoomSessionDetails
 from onyx.connectors.zoom.recordings.models import OccurrenceWork, ZoomSessionType
@@ -88,6 +89,9 @@ class TestResolveTargets:
 
     def test_webinar_target_uses_the_webinar_handler(self) -> None:
         client = _client()
+        client.list_past_webinar_participants.return_value = [
+            participant(user_email="viewer@example.com")
+        ]
 
         items = _reindex(client, [_target(_WEBINAR_DOC_ID)], include_permissions=True)
 
@@ -296,6 +300,20 @@ class TestPermissionParity:
         assert failure.failed_document.document_id == _MEETING_DOC_ID
         assert "uuid-abc" in failure.failure_message
         client.list_meeting_registrants.assert_not_called()
+
+    def test_a_webinar_without_the_add_on_fails_and_names_the_plan(self) -> None:
+        # Every webinar endpoint needs the add-on, the access list included, so
+        # this account can name nobody.
+        client = _client()
+        client.get_webinar_details.side_effect = ZoomNotEntitledError("no add-on")
+
+        items = _reindex(client, [_target(_WEBINAR_DOC_ID)], include_permissions=True)
+
+        failure = items[0]
+        assert isinstance(failure, ConnectorFailure)
+        assert failure.failed_document is not None
+        assert failure.failed_document.document_id == _WEBINAR_DOC_ID
+        assert "plan does not cover" in failure.failure_message
 
     def test_an_unresolvable_session_still_indexes_without_permissions(self) -> None:
         # Nothing reads the session id when no access list is built.

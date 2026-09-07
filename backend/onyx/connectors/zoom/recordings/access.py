@@ -10,7 +10,7 @@ document on document-set and group access.
 """
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 import requests
 
@@ -31,6 +31,13 @@ if TYPE_CHECKING:
 
 logger = setup_logger()
 
+
+class ZoomAccessListUnavailable(Exception):
+    """Nobody could be named as having access to a session. Indexing it anyway
+    would put it on connector-level access, which is broader than the session,
+    so the document is failed instead."""
+
+
 _PERMANENT_ERROR_CODES = frozenset(
     {ZOOM_MEETING_TOO_OLD_CODE, ZOOM_NOT_FOUND_CODE, ZOOM_NOT_ENTITLED_CODE}
 )
@@ -49,7 +56,7 @@ def _zoom_error_code(error: requests.HTTPError) -> str | None:
     return str(body["code"])
 
 
-def _is_plan_denial(error: Exception) -> bool:
+def is_plan_denial(error: Exception) -> bool:
     """Zoom refuses on plan or licence grounds two different ways: a typed error
     on the webinar endpoints, and a code on the rest."""
     if isinstance(error, ZoomNotEntitledError):
@@ -65,7 +72,7 @@ def permanently_unavailable(error: Exception) -> bool:
     plain InsufficientPermissionsError and fails the whole run so an admin fixes
     it, instead of quietly emptying every document's access list.
     """
-    if _is_plan_denial(error):
+    if is_plan_denial(error):
         return True
     if not isinstance(error, requests.HTTPError):
         return False
@@ -107,43 +114,55 @@ def _usable_emails(description: str, emails: list[str]) -> set[str]:
 AccessSource = tuple[str, Callable[[], list[str]]]
 
 
-def union_source_emails(sources: list[AccessSource]) -> set[str]:
+class AccessList(NamedTuple):
+    emails: set[str]
+    # Why each source could not be read, so a session that ends up with nobody
+    # can name which ones failed and why.
+    unavailable: list[str]
+
+
+def union_source_emails(sources: list[AccessSource]) -> AccessList:
     """A source Zoom has forgotten contributes nothing; any other failure is
     raised for the caller to turn into a document failure."""
     emails: set[str] = set()
+    unavailable: list[str] = []
     for description, fetch in sources:
         try:
             emails |= _usable_emails(description, fetch())
         except Exception as e:
             if not permanently_unavailable(e):
                 raise
-            if _is_plan_denial(e):
-                logger.warning("Zoom refused %s on plan grounds: %s", description, e)
-            else:
-                logger.info(
-                    "Zoom has no %s any more (deleted or past its retention window)",
-                    description,
-                )
-    return emails
+            reason = (
+                "the account's plan does not cover it"
+                if is_plan_denial(e)
+                else "Zoom has deleted it or it is past its retention window"
+            )
+            logger.warning("Couldn't read %s: %s (%s)", description, reason, e)
+            unavailable.append(f"{description} ({reason})")
+    return AccessList(emails=emails, unavailable=unavailable)
 
 
 def zoom_access_resolver(
     client: ZoomClient,
     work: OccurrenceWork,
     handler: "SessionTypeHandler",
-) -> ExternalAccess | None:
-    emails = handler.fetch_access_list(client, work)
-    if not emails:
-        logger.warning(
-            "No Zoom access list for %s occurrence %s; falling back to "
-            "document-set and group access",
-            work.session_id,
-            work.occurrence_uuid,
+) -> ExternalAccess:
+    access_list = handler.fetch_access_list(client, work)
+    if not access_list.emails:
+        raise ZoomAccessListUnavailable(
+            f"Zoom {work.session_type.value} {work.session_id} occurrence "
+            f"{work.occurrence_uuid} was not indexed because permission sync is "
+            "on and nobody could be named as having access to it: "
+            + (
+                "; ".join(access_list.unavailable)
+                if access_list.unavailable
+                else "Zoom gave an email address for nobody who was there, which "
+                "it does for everybody outside the host's account"
+            )
         )
-        return None
 
     access = ExternalAccess(
-        external_user_emails=emails,
+        external_user_emails=access_list.emails,
         # Zoom cannot grant a Session to a Group, so this stays empty. A Group
         # only provisions licences, and filling it in would give everyone in it
         # access to meetings they never attended.

@@ -6,6 +6,7 @@ import requests
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.zoom.client import ZoomNotEntitledError
 from onyx.connectors.zoom.recordings.access import (
+    ZoomAccessListUnavailable,
     permanently_unavailable,
     zoom_access_resolver,
 )
@@ -24,11 +25,11 @@ from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
 )
 
 
-def _resolve(client: MagicMock, work: OccurrenceWork) -> set[str] | None:
+def _resolve(client: MagicMock, work: OccurrenceWork) -> set[str]:
     access = zoom_access_resolver(
         client, work, get_session_type_handler(work.session_type)
     )
-    return access.external_user_emails if access else None
+    return access.external_user_emails
 
 
 class TestAccessListSources:
@@ -113,7 +114,8 @@ class TestCancelledRegistrations:
             registrants=[registrant(email="denied@example.com", status="denied")],
         )
 
-        assert _resolve(client, occurrence_work()) is None
+        with pytest.raises(ZoomAccessListUnavailable):
+            _resolve(client, occurrence_work())
 
 
 class TestExternalInvitees:
@@ -147,12 +149,13 @@ class TestBlankEmails:
 
         assert _resolve(client, occurrence_work()) == {"real@example.com"}
 
-    def test_all_blank_emails_fall_back_instead_of_hiding_the_document(self) -> None:
+    def test_all_blank_emails_fail_the_document(self) -> None:
+        # Zoom blanks the email of anyone outside the host's account, so a
+        # session of only external people names nobody at all.
         client = with_access(participants=[participant(user_email="")])
 
-        # None means no access list, so document-set and group access applies.
-        # An empty access list would hide the document from everyone.
-        assert _resolve(client, occurrence_work()) is None
+        with pytest.raises(ZoomAccessListUnavailable):
+            _resolve(client, occurrence_work())
 
 
 class TestWebinarSources:
@@ -278,10 +281,14 @@ class TestPermanentVersusTransientFailures:
         with pytest.raises(InsufficientPermissionsError):
             _resolve(client, occurrence_work())
 
-    def test_every_source_gone_falls_back(self) -> None:
+    def test_every_source_gone_fails_the_document_and_says_why(self) -> None:
         client = with_access()
         client.list_past_meeting_participants.side_effect = http_error(400, 12702)
         client.list_meeting_registrants.side_effect = http_error(404)
         client.list_meeting_invitees.side_effect = http_error(404)
 
-        assert _resolve(client, occurrence_work()) is None
+        with pytest.raises(ZoomAccessListUnavailable) as raised:
+            _resolve(client, occurrence_work())
+
+        assert "retention window" in str(raised.value)
+        assert "the participants of meeting uuid-abc" in str(raised.value)

@@ -35,7 +35,11 @@ from onyx.connectors.zoom.client import (
     parse_rate_limit_percent,
 )
 from onyx.connectors.zoom.models import ZoomSessionDetails
-from onyx.connectors.zoom.recordings.access import permanently_unavailable
+from onyx.connectors.zoom.recordings.access import (
+    ZoomAccessListUnavailable,
+    is_plan_denial,
+    permanently_unavailable,
+)
 from onyx.connectors.zoom.recordings.discovery import build_discovery_sources
 from onyx.connectors.zoom.recordings.models import (
     OccurrenceWork,
@@ -58,12 +62,12 @@ def _rebuilt_work(
     session_type: ZoomSessionType,
     occurrence_uuid: str,
     include_permissions: bool,
-) -> OccurrenceWork | None:
+) -> OccurrenceWork:
     """Registrants, invitees and panelists hang off the session rather than the
-    occurrence, and Zoom answers a wrong identifier with a 404 that the access
-    code reads as "nobody has access". So None here means the session couldn't
-    be resolved for a permission-synced run, and guessing it would quietly index
-    the document with a narrower access list than the crawl gives it.
+    occurrence, and Zoom answers a wrong identifier with a 404 that reads as
+    "nobody has access". So a permission-synced run that can't resolve the
+    session raises rather than guess it, because guessing would index the
+    document with a narrower access list than the crawl gives it.
     """
     if not include_permissions:
         return OccurrenceWork(
@@ -79,10 +83,24 @@ def _rebuilt_work(
     except Exception as e:
         if not permanently_unavailable(e):
             raise
-        details = None
+        reason = (
+            "the account's plan does not cover reading it"
+            if is_plan_denial(e)
+            else "Zoom has deleted it or it is past its retention window"
+        )
+        raise ZoomAccessListUnavailable(
+            f"Zoom {session_type.value} occurrence {occurrence_uuid} was not "
+            "reindexed because permission sync is on and the session it belongs "
+            f"to could not be resolved, so its access list can't be rebuilt: "
+            f"{reason}"
+        ) from e
 
     if details is None or details.session_id is None:
-        return None
+        raise ZoomAccessListUnavailable(
+            f"Zoom {session_type.value} occurrence {occurrence_uuid} was not "
+            "reindexed because permission sync is on and Zoom no longer names "
+            "the session it belongs to, so its access list can't be rebuilt"
+        )
 
     return OccurrenceWork(
         session_type=session_type,
@@ -200,22 +218,19 @@ class ZoomConnector(
 
             session_type, occurrence_uuid = parsed
             try:
-                work = _rebuilt_work(
-                    self.client, session_type, occurrence_uuid, include_permissions
-                )
-                if work is None:
-                    yield ConnectorFailure(
-                        failed_document=DocumentFailure(document_id=document_id),
-                        failure_message=(
-                            f"Zoom no longer has the session behind occurrence "
-                            f"{occurrence_uuid}, so its access list can't be "
-                            "rebuilt. Reindex the connector from the beginning "
-                            "to recover this session."
-                        ),
-                    )
-                    continue
                 yield from process_occurrence(
-                    self.client, work, include_access=include_permissions
+                    self.client,
+                    _rebuilt_work(
+                        self.client, session_type, occurrence_uuid, include_permissions
+                    ),
+                    include_access=include_permissions,
+                )
+            except ZoomAccessListUnavailable as e:
+                logger.warning("%s", e)
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(document_id=document_id),
+                    failure_message=str(e),
+                    exception=e,
                 )
             except Exception as e:
                 # A whole batch arrives at once, so one bad target must not
