@@ -34,6 +34,7 @@ from onyx.connectors.zoom.client import (
     parse_plan_tier,
     parse_rate_limit_percent,
 )
+from onyx.connectors.zoom.models import ZoomSessionDetails
 from onyx.connectors.zoom.recordings.access import permanently_unavailable
 from onyx.connectors.zoom.recordings.discovery import build_discovery_sources
 from onyx.connectors.zoom.recordings.models import (
@@ -72,6 +73,7 @@ def _rebuilt_work(
         )
 
     handler = get_session_type_handler(session_type)
+    details: ZoomSessionDetails | None
     try:
         details = handler.get_occurrence_details(client, occurrence_uuid)
     except Exception as e:
