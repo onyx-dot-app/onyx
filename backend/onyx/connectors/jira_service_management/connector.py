@@ -22,6 +22,7 @@ from onyx.connectors.interfaces import (
     SlimConnector,
 )
 from onyx.connectors.jira.connector import JiraConnector, JiraConnectorCheckpoint
+from onyx.connectors.models import TextSection
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 
 _SERVICE_DESK_PROJECT_TYPE = "service_desk"
@@ -114,8 +115,19 @@ class JiraServiceManagementConnector(
             JiraConnectorCheckpoint
         ]()(output):
             if document is not None:
+                sections = document.sections
+                # Empty ticket bodies otherwise lose their links during chunking.
+                if not any(
+                    section.text and section.text.strip() for section in sections
+                ):
+                    sections = [
+                        TextSection(link=document.id, text=document.semantic_identifier)
+                    ]
                 yield document.model_copy(
-                    update={"source": DocumentSource.JIRA_SERVICE_MANAGEMENT}
+                    update={
+                        "source": DocumentSource.JIRA_SERVICE_MANAGEMENT,
+                        "sections": sections,
+                    }
                 )
             if hierarchy is not None:
                 yield hierarchy

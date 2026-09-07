@@ -214,8 +214,11 @@ def test_connector_is_registered() -> None:
     assert mapping.class_name == JiraServiceManagementConnector.__name__
 
 
+@pytest.mark.parametrize("description", ["Please help", None, " \n"])
 def test_real_jira_pipeline_keeps_project_scope_across_pages(
-    connector: JiraServiceManagementConnector, client: MagicMock
+    connector: JiraServiceManagementConnector,
+    client: MagicMock,
+    description: str | None,
 ) -> None:
     client._options = {"rest_api_version": "2"}
     issues = [
@@ -226,7 +229,7 @@ def test_real_jira_pipeline_keeps_project_scope_across_pages(
                 "key": f"HELP-{number}",
                 "fields": {
                     "summary": f"Request {number}",
-                    "description": "Please help",
+                    "description": description,
                     "labels": [],
                     "comment": {"comments": []},
                     "created": "2026-01-01T00:00:00.000+0000",
@@ -264,6 +267,12 @@ def test_real_jira_pipeline_keeps_project_scope_across_pages(
         for document in documents
     )
     assert all(document.metadata["project"] == "HELP" for document in documents)
+    for document in documents:
+        assert document.sections[0].link == document.id
+        expected_text = description.strip() if description else ""
+        section_text = document.sections[0].text
+        assert section_text is not None
+        assert section_text.strip() == (expected_text or document.semantic_identifier)
     assert [call.kwargs["startAt"] for call in client.search_issues.call_args_list] == [
         0,
         1,
