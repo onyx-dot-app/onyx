@@ -254,8 +254,10 @@ class ZoomConnector(
             failed_entity=error.failed_entity,
             failure_message=(
                 "Zoom targeted reindex can only replay individual sessions. This "
-                "failure is from discovery, so recovering it needs a wider "
-                "ZOOM_TRANSCRIPT_LAG_BUFFER_HOURS or a reindex from the beginning. "
+                "failure is from discovery, so recovery means a wider "
+                "ZOOM_TRANSCRIPT_LAG_BUFFER_HOURS or a reindex from the "
+                "beginning — neither of which reaches a session Zoom has stopped "
+                "listing, which it does for a meeting id after 15 months. "
                 f"Original failure: {error.failure_message}"
             ),
         )
