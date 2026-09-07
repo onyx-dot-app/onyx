@@ -1427,7 +1427,7 @@ questions about entities and their relationships."""
 
 # Just in case, for best practice, send a system message with key rules.
 # (The db user permissions executing the SQL will avoid issues anyway,
-# but it does not hurt to to put multiple checks in place.)
+# but it does not hurt to put multiple checks in place.)
 SQL_INSTRUCTIONS_RELATIONSHIP_PROMPT = """
 You are an expert at generating SQL queries to answer questions about a knowledge graph.
 

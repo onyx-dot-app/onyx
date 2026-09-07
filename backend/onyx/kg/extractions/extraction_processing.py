@@ -589,7 +589,7 @@ def kg_extraction(
                     )
                     db_session.commit()
 
-        # Update the the Skipped Docs back to Not Started
+        # Update the Skipped Docs back to Not Started
         with get_session_with_current_tenant() as db_session:
             skipped_documents = get_skipped_kg_documents(db_session)
             for document_id in skipped_documents:

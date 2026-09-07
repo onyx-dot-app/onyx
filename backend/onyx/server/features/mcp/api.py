@@ -2134,7 +2134,7 @@ def _sync_tools_for_server(
 ) -> int:
     """Toggle enabled state for MCP tools that exist for the server.
     Updates to the db model of a tool all happen when the user Lists Tools.
-    This ensures that the the tools added to the db match what the user sees in the UI,
+    This ensures that the tools added to the db match what the user sees in the UI,
     even if the underlying tool has changed on the server after list tools is called.
     That's a corner case anyways; the admin should go back and update the server by re-listing tools.
     """
