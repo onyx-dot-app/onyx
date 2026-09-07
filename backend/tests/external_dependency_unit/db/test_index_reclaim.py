@@ -26,9 +26,14 @@ import pytest
 from sqlalchemy.orm import Session
 
 import onyx.server.manage.search_settings as search_settings_api
+from onyx.configs.constants import NotificationType
 from onyx.context.search.models import (
     SavedSearchSettings,
     SearchSettingsCreationRequest,
+)
+from onyx.db.connector_alerts import (
+    clear_connector_alerts__no_commit,
+    connector_alert_additional_data,
 )
 from onyx.db.connector_credential_pair import (
     compute_wont_port_cc_pair_ids,
@@ -41,7 +46,8 @@ from onyx.db.enums import (
     IndexReclaimStatus,
     SwitchoverType,
 )
-from onyx.db.models import ConnectorCredentialPair, SearchSettings
+from onyx.db.models import ConnectorCredentialPair, Notification, SearchSettings
+from onyx.db.notification import batch_create_notifications
 from onyx.db.search_settings import (
     advance_to_soaking__no_commit,
     clear_reclaim_intent__no_commit,
@@ -55,6 +61,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.natural_language_processing.search_nlp_models import clean_model_name
 from shared_configs.configs import ALT_INDEX_SUFFIX
+from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
     make_cc_pair,
@@ -204,6 +211,64 @@ def test_mark_deleting_transitions_only_still_wont_port(
     finally:
         for pair in (invalid, paused, reactivated):
             cleanup_cc_pair(db_session, pair)
+
+
+def _connector_alert_count(db_session: Session, cc_pair_id: int) -> int:
+    return (
+        db_session.query(Notification)
+        .filter(
+            Notification.notif_type == NotificationType.CONNECTOR_INVALID,
+            Notification.additional_data == connector_alert_additional_data(cc_pair_id),
+        )
+        .count()
+    )
+
+
+def test_mark_deleting_clears_the_invalid_alert_for_transitioned_pairs(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """Reclaim deletes the connector, but a notification points at its cc_pair through
+    additional_data rather than a foreign key, so nothing cascades. Without an explicit
+    clear the admin keeps an INVALID alert for a connector that no longer exists."""
+    admin = create_test_user(db_session, "reclaim_alert", is_admin=True)
+    transitioned = _make_cc_pair_with_status(
+        db_session, ConnectorCredentialPairStatus.INVALID
+    )
+    spared = _make_cc_pair_with_status(db_session, ConnectorCredentialPairStatus.ACTIVE)
+    try:
+        for pair in (transitioned, spared):
+            batch_create_notifications(
+                user_ids=[admin.id],
+                notif_type=NotificationType.CONNECTOR_INVALID,
+                db_session=db_session,
+                title="Connector is invalid",
+                additional_data=connector_alert_additional_data(pair.id),
+            )
+        assert _connector_alert_count(db_session, transitioned.id) == 1
+        assert _connector_alert_count(db_session, spared.id) == 1
+
+        marked = mark_cc_pairs_deleting_if_still_wont_port__no_commit(
+            db_session, [transitioned.id, spared.id]
+        )
+        db_session.commit()
+
+        assert marked == [transitioned.id]
+        assert _connector_alert_count(db_session, transitioned.id) == 0
+        # The ACTIVE pair never transitioned, so its alert has to survive.
+        assert _connector_alert_count(db_session, spared.id) == 1
+    finally:
+        for pair in (transitioned, spared):
+            clear_connector_alerts__no_commit(
+                db_session=db_session,
+                cc_pair_id=pair.id,
+                notif_type=NotificationType.CONNECTOR_INVALID,
+            )
+        db_session.commit()
+        for pair in (transitioned, spared):
+            cleanup_cc_pair(db_session, pair)
+        delete_test_user(db_session, admin)
+        db_session.commit()
 
 
 # --- transitions ----------------------------------------------------------------
@@ -487,7 +552,8 @@ def test_guard_conflicts_while_index_unreclaimed(
     try:
         with pytest.raises(OnyxError) as exc:
             search_settings_api._guard_index_name_reuse(db_session, name)
-        assert exc.value.error_code == OnyxErrorCode.CONFLICT
+        # Distinct from a plain CONFLICT so a caller can tell this one is worth retrying.
+        assert exc.value.error_code == OnyxErrorCode.INDEX_NAME_RECLAIMING
         assert "earlier re-index" in exc.value.detail
         db_session.refresh(ss)
         assert ss.reclaim_status == IndexReclaimStatus.DELETING  # pulled into reclaim

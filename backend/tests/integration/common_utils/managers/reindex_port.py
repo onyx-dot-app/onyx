@@ -6,18 +6,13 @@ import httpx
 from onyx.configs.constants import DEFAULT_CC_PAIR_ID
 from onyx.db.enums import ConnectorCredentialPairStatus, SwitchoverType
 from onyx.db.port_attempt import ReindexErrorRow, ReindexProgressCounts
+from onyx.error_handling.error_codes import OnyxErrorCode
 from tests.integration.common_utils.constants import API_SERVER_URL, MAX_DELAY
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.test_models import DATestUser
 
 SEARCH_SETTINGS_URL = f"{API_SERVER_URL}/search-settings"
-
-
-# Must stay in sync with the detail _guard_index_name_reuse raises in
-# onyx/server/manage/search_settings.py. Nothing enforces that, so rewording the message
-# there silently turns every retry here into an immediate failure.
-_RETRYABLE_CONFLICT = "it's being cleaned up now"
 
 
 class ReindexPortManager:
@@ -156,7 +151,12 @@ class ReindexPortManager:
 
             # The other 409s -- a reindex already running, a backfill still draining --
             # never clear on their own, so waiting on them just burns the full timeout.
-            if _RETRYABLE_CONFLICT not in response.text:
+            error_code = ""
+            try:
+                error_code = response.json().get("error_code", "")
+            except ValueError:
+                pass
+            if error_code != OnyxErrorCode.INDEX_NAME_RECLAIMING.code:
                 raise RuntimeError(f"Reindex was refused: {response.text}")
 
             elapsed = time.monotonic() - start
