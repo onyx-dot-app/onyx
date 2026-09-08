@@ -263,6 +263,11 @@ class StreamingTranscriptionFailed(Exception):
         self.client_ended = client_ended
 
 
+def _session_deadline() -> float:
+    """Loop time at which a transcription connection must end."""
+    return asyncio.get_running_loop().time() + WS_SESSION_TIMEOUT_SECONDS
+
+
 async def _close_transcriber(transcriber: StreamingTranscriberProtocol) -> None:
     """Close a provider session with a bound, so teardown cannot hang."""
     try:
@@ -476,9 +481,17 @@ async def _receive_client_audio(
 async def handle_streaming_transcription(
     websocket: WebSocket,
     transcriber: StreamingTranscriberProtocol,
+    deadline: float | None = None,
 ) -> None:
-    """Handle transcription using native streaming API."""
+    """Handle transcription using native streaming API.
+
+    `deadline` is the loop time the connection must end at. The caller shares
+    one deadline across the streaming handler and the chunked fallback, so a
+    fallback does not restart the session budget.
+    """
     logger.info("Streaming transcription: starting handler")
+    if deadline is None:
+        deadline = _session_deadline()
     state = _ClientStreamState()
     receiver_failed = state.provider_failed
 
@@ -496,7 +509,7 @@ async def handle_streaming_transcription(
     try:
         done, _ = await asyncio.wait(
             {client_task, failure_task},
-            timeout=WS_SESSION_TIMEOUT_SECONDS,
+            timeout=max(deadline - asyncio.get_running_loop().time(), 0.0),
             return_when=asyncio.FIRST_COMPLETED,
         )
         if receiver_failed.is_set():
@@ -550,18 +563,22 @@ async def handle_chunked_transcription(
     transcriber: ChunkedTranscriber,
     initial_audio: bytes = b"",
     client_ended: bool = False,
+    deadline: float | None = None,
 ) -> None:
     """Handle transcription using chunked batch API.
 
     `initial_audio` is audio the client already sent on this connection, for
     example before native streaming failed. Set `client_ended` when the client
     already ended the recording, so the handler transcribes and returns without
-    waiting for more audio.
+    waiting for more audio. `deadline` is the loop time the connection must end
+    at; see handle_streaming_transcription.
     """
+    if deadline is None:
+        deadline = _session_deadline()
     # The bound covers the replay of recovered audio and every provider call,
     # not only the wait for client messages.
     try:
-        async with asyncio.timeout(WS_SESSION_TIMEOUT_SECONDS):
+        async with asyncio.timeout_at(deadline):
             await _run_chunked_transcription(
                 websocket, transcriber, initial_audio, client_ended
             )
@@ -774,11 +791,16 @@ async def websocket_transcribe(
             provider.supports_streaming_stt() and not VOICE_DISABLE_STREAMING_STT
         )
 
+        # One budget for the whole connection, shared with the chunked fallback.
+        session_deadline = _session_deadline()
+
         if use_streaming:
             try:
                 streaming_transcriber = await provider.create_streaming_transcriber()
                 logger.info("WebSocket transcribe: streaming transcriber created")
-                await handle_streaming_transcription(websocket, streaming_transcriber)
+                await handle_streaming_transcription(
+                    websocket, streaming_transcriber, deadline=session_deadline
+                )
                 return
             except WebSocketDisconnect:
                 raise
@@ -808,6 +830,7 @@ async def websocket_transcribe(
                     chunked_transcriber,
                     initial_audio=recovered_audio,
                     client_ended=recording_ended,
+                    deadline=session_deadline,
                 )
                 return
         elif VOICE_DISABLE_STREAMING_FALLBACK and not VOICE_DISABLE_STREAMING_STT:
@@ -819,7 +842,9 @@ async def websocket_transcribe(
 
         # Chunked/REST path; browser sends raw PCM16 chunks.
         chunked_transcriber = ChunkedTranscriber(provider, audio_format="pcm16")
-        await handle_chunked_transcription(websocket, chunked_transcriber)
+        await handle_chunked_transcription(
+            websocket, chunked_transcriber, deadline=session_deadline
+        )
 
     except WebSocketDisconnect:
         logger.debug("WebSocket transcribe: client disconnected")

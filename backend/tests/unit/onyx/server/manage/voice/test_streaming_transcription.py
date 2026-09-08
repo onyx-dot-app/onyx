@@ -149,6 +149,14 @@ class HangingCloseTranscriber(ErrorResultTranscriber):
         raise AssertionError("unreachable")
 
 
+class SilentTranscriber(ErrorResultTranscriber):
+    """Provider that never produces a transcript and never fails."""
+
+    async def receive_transcript(self) -> TranscriptResult | None:
+        await asyncio.Event().wait()
+        raise AssertionError("unreachable")
+
+
 class FailAfterAudioTranscriber(ErrorResultTranscriber):
     """Provider that fails only once it has consumed audio."""
 
@@ -372,3 +380,24 @@ async def test_hanging_provider_close_does_not_block_teardown(
             )
 
     assert transcriber.closed
+
+
+@pytest.mark.asyncio
+async def test_handlers_honor_a_shared_deadline() -> None:
+    """A deadline passed by the caller bounds both handlers, so a fallback does
+    not restart the session budget."""
+    deadline = asyncio.get_running_loop().time() + 0.05
+
+    async with asyncio.timeout(5):
+        await handle_streaming_transcription(
+            cast(Any, NeverReceivingWebSocket()),
+            cast(Any, SilentTranscriber()),
+            deadline=deadline,
+        )
+        await handle_chunked_transcription(
+            cast(Any, NeverReceivingWebSocket()),
+            cast(Any, HangingChunkedTranscriber(window_bytes=2)),
+            initial_audio=b"\x01\x02",
+            client_ended=True,
+            deadline=deadline,
+        )
