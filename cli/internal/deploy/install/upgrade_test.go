@@ -426,9 +426,9 @@ func TestUpgradeReloadsProxyAfterRecreate(t *testing.T) {
 	}
 }
 
-// onyx-lite publishes the app directly and has no nginx service, so there is
+// A proxy that is not running holds no address to re-resolve, so there is
 // nothing to reload and nothing to warn about.
-func TestUpgradeSkipsProxyReloadWhenAbsent(t *testing.T) {
+func TestUpgradeSkipsProxyReloadWhenNotRunning(t *testing.T) {
 	runner := &fakeRunner{handler: healthyDockerHandler}
 	root := installFixture(t, runner, "v4.0.0")
 
@@ -451,7 +451,41 @@ func TestUpgradeSkipsProxyReloadWhenAbsent(t *testing.T) {
 
 	for _, c := range running.calls {
 		if strings.Contains(argv(c), "exec -T "+proxyService) {
-			t.Errorf("ran %q against a deployment with no proxy", argv(c))
+			t.Errorf("ran %q against a proxy that is not running", argv(c))
+		}
+	}
+}
+
+// A failed probe is not the same as an absent proxy: a running proxy could
+// still be holding the replaced container's address, so the run must say the
+// state is unknown rather than report a clean upgrade.
+func TestUpgradeWarnsWhenProxyStateUnknown(t *testing.T) {
+	runner := &fakeRunner{handler: healthyDockerHandler}
+	root := installFixture(t, runner, "v4.0.0")
+
+	running := &fakeRunner{handler: func(c dockercmd.Command) (dockercmd.Result, error) {
+		a := argv(c)
+		if strings.HasSuffix(a, "ps -q "+proxyService) {
+			return dockercmd.Result{}, errors.New("docker daemon unreachable")
+		}
+		if strings.Contains(a, "ps -q") {
+			return dockercmd.Result{Stdout: "abc\n"}, nil
+		}
+		return healthyDockerHandler(c)
+	}}
+	deps := testDeps(t, running, notFoundServer(t))
+	if err := RunUpgrade(context.Background(), deps, Options{
+		NoPrompt: true, Tag: "v4.2.0", Dir: root, NoWait: true,
+	}); err != nil {
+		t.Fatalf("an unreadable proxy state must not fail the upgrade: %v", err)
+	}
+
+	if got := outBuf(deps).String(); !strings.Contains(got, "Could not tell whether "+proxyService) {
+		t.Errorf("probe failure was swallowed; output was %q", got)
+	}
+	for _, c := range running.calls {
+		if strings.Contains(argv(c), "nginx -s reload") {
+			t.Error("reloaded a proxy whose state could not be read")
 		}
 	}
 }

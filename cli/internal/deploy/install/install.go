@@ -1171,8 +1171,9 @@ func (in *installer) startServices(ctx context.Context, tag, prevTag string, hos
 	return nil
 }
 
-// proxyService is the compose service that fronts the deployment. Absent from
-// onyx-lite, which publishes the app directly.
+// proxyService is the compose service that fronts the deployment. Every mode
+// layers its overlay onto a base file that defines it, so it is present
+// whatever the mode — but it is not necessarily running.
 const proxyService = "nginx"
 
 // reloadProxy makes nginx re-read its config after an upgrade replaced the app
@@ -1190,8 +1191,16 @@ const proxyService = "nginx"
 func (in *installer) reloadProxy(ctx context.Context, dir string, env map[string]string, files []string) {
 	idCmd := in.compose.Command(dir, env, files, "ps", "-q", proxyService)
 	res, err := in.deps.Runner.Run(ctx, idCmd)
-	if err != nil || strings.TrimSpace(res.Stdout) == "" {
-		// No proxy in this deployment, or it is not running.
+	if err != nil {
+		// Not the same as an absent proxy: the state is unknown, so say so
+		// rather than let a running proxy keep a stale address unreported.
+		in.warnf("Could not tell whether %s is running: %v", proxyService, err)
+		in.infof("If it is, it may still route to the replaced containers and answer 502.")
+		in.cmdf("docker compose exec %s nginx -s reload", proxyService)
+		return
+	}
+	if strings.TrimSpace(res.Stdout) == "" {
+		// Not running, so it holds no address to re-resolve.
 		return
 	}
 
