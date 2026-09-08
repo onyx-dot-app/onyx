@@ -39,7 +39,7 @@ backend = [
     "boxsdk==10.12.0",
     "celery==5.5.1",
     "chardet==5.2.0",
-    "chonkie==1.0.10",
+    "chonkie[code]==1.0.10",
     "croniter==6.2.2",
     "cron-descriptor==2.0.8",
     "dask==2026.1.1",
