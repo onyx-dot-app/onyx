@@ -444,9 +444,11 @@ class ZoomVoiceProvider(VoiceProviderInterface):
     def allows_streaming_stt_fallback(self) -> bool:
         return False
 
-    async def create_streaming_transcriber(  # ty: ignore[invalid-method-override]
-        self, _audio_format: str = "pcm16"
+    async def create_streaming_transcriber(
+        self, audio_format: str = "pcm16"
     ) -> ZoomStreamingTranscriber:
+        if audio_format.lower() != "pcm16":
+            raise ValueError("Zoom Scribe only supports pcm16 audio in Onyx.")
         if not self.api_key or not self.api_secret:
             raise ValueError(
                 "Zoom API key and API secret are required for streaming STT."

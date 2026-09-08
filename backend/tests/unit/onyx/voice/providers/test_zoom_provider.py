@@ -300,6 +300,7 @@ async def test_close_flushes_remainder_and_is_idempotent() -> None:
     transcriber._ws = cast(Any, ws)
     transcriber._session = cast(Any, session)
     transcriber._buffer.extend(b"\x02\x00" * 100)
+    transcriber._close_event.set()
 
     assert await transcriber.close() == ""
     assert await transcriber.close() == ""
