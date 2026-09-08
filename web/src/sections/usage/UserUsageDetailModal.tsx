@@ -68,11 +68,11 @@ function dailySpend(user: UsageExportUser): DailySpend[] {
 function StatCell({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex min-w-0 flex-col gap-0.5 px-3 first:ps-0 last:pe-0">
-      <Text font="secondary-body" color="text-03" nowrap>
+      <Text font="secondary-body" color="text-03" wordWrap="whitespace-nowrap">
         {label}
       </Text>
       <span className="tabular-nums">
-        <Text font="main-content-emphasis" nowrap>
+        <Text font="main-content-emphasis" wordWrap="whitespace-nowrap">
           {value}
         </Text>
       </span>
@@ -135,7 +135,11 @@ function BreakdownList({
                 <span className="flex min-w-0 items-center gap-1.5">
                   {Icon && <Icon size={16} className="shrink-0" />}
                   <span className="min-w-0 truncate">
-                    <Text font="main-ui-body" color="text-05" nowrap>
+                    <Text
+                      font="main-ui-body"
+                      color="text-05"
+                      wordWrap="whitespace-nowrap"
+                    >
                       {slice.label}
                     </Text>
                   </span>

@@ -22,7 +22,7 @@ providers.
 | `onyx_cc_pair` | Connector-credential pairs (`/manage/connector/.../credential/...`) | numeric id |
 | `onyx_document_set` | Document sets (`/manage/admin/document-set`) | numeric id |
 | `onyx_custom_tool` | Custom actions (`/admin/tool/custom`) | numeric id |
-| `onyx_persona` | Agents / assistants (`/persona`) | numeric id |
+| `onyx_agent` | Agents / assistants (`/persona`) | numeric id |
 | `onyx_mcp_server` | MCP servers Onyx connects to (`/admin/mcp`) | numeric id |
 | `onyx_user_group` | User groups: roster, managers, permission grants (**EE only**) | numeric id |
 | `data.onyx_llm_providers` | Read-only list of providers + defaults | — |
@@ -177,7 +177,7 @@ that uses the twin clears it from state and moves the resource onto the write-on
   Onyx renders as a bad request, so "gone" cannot be read off the status. The provider
   confirms against the agent listing instead of matching on the message text. Making that
   endpoint return 404 is a worthwhile backend fix.
-- **`onyx_persona` does not own every field on an agent.** Attached folders and documents
+- **`onyx_agent` does not own every field on an agent.** Attached folders and documents
   are cleared by an omitted list, and sending null is rejected (422), so the provider reads
   them and sends them back unchanged. That leaves a narrow window in which an attachment
   added between the read and the write is reverted; making the two fields nullable
@@ -201,7 +201,7 @@ that uses the twin clears it from state and moves the resource onto the write-on
 - **`onyx_user_group` does not manage what a group can see.** Connectors, document sets,
   agents, LLM providers, MCP servers and credentials each carry their own `groups`
   attribute and own that link. The group exposes `cc_pair_ids`, `document_set_ids` and
-  `persona_ids` read-only, so the two sides never fight over the same edge.
+  `agent_ids` read-only, so the two sides never fight over the same edge.
 - **A roster change must not disturb those links, and how it avoids that depends on the
   change.** Onyx's update endpoint replaces connector links along with members. A roster
   that only gains members therefore goes through the add-users endpoint instead, which

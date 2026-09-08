@@ -333,7 +333,7 @@ func TestAccUserGroupRefusesToRenameADefaultGroup(t *testing.T) {
 //
 // Managers, incognito and permissions are separate calls made after the group
 // exists. Returning at the first failure left cc_pair_ids, document_set_ids,
-// persona_ids and is_default unknown, and Terraform reported four provider bugs
+// agent_ids and is_default unknown, and Terraform reported four provider bugs
 // in place of the real reason. The group must also survive into state, or the
 // one that now exists is leaked — the destroy check at the end proves it did.
 func TestAccUserGroupReportsAFailedFollowUpCall(t *testing.T) {

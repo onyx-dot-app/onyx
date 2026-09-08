@@ -102,13 +102,21 @@ export default function WebSearchBody({ toolCall }: ToolCardBodyProps) {
             <div className="flex items-center gap-2 min-w-0">
               <SvgGlobe className="size-3.5 stroke-text-03 shrink-0" />
               <span className="truncate min-w-0">
-                <Text font="main-ui-action" color="text-04" nowrap>
+                <Text
+                  font="main-ui-action"
+                  color="text-04"
+                  wordWrap="whitespace-nowrap"
+                >
                   {result.title ?? domainFromUrl(result.url)}
                 </Text>
               </span>
             </div>
             <div className="ps-5 truncate">
-              <Text font="secondary-mono" color="text-02" nowrap>
+              <Text
+                font="secondary-mono"
+                color="text-02"
+                wordWrap="whitespace-nowrap"
+              >
                 {result.url}
               </Text>
             </div>

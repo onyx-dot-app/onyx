@@ -102,7 +102,11 @@ export default function ScheduledRunBanner({
           >
             <SvgClock size={14} className="shrink-0 text-text-03" />
             <span className="flex h-5 shrink-0 items-center">
-              <Text font="figure-small-label" color="text-03" nowrap>
+              <Text
+                font="figure-small-label"
+                color="text-03"
+                wordWrap="whitespace-nowrap"
+              >
                 {t("badge.label")}
               </Text>
             </span>
@@ -116,7 +120,11 @@ export default function ScheduledRunBanner({
           >
             <SvgExternalLink size={14} className="shrink-0 text-text-03" />
             <span className="flex h-5 shrink-0 items-center">
-              <Text font="figure-small-label" color="text-03" nowrap>
+              <Text
+                font="figure-small-label"
+                color="text-03"
+                wordWrap="whitespace-nowrap"
+              >
                 {t("viewTask.label")}
               </Text>
             </span>
@@ -136,12 +144,21 @@ export default function ScheduledRunBanner({
         >
           <div className="h-3 w-px shrink-0 bg-border-01" />
           <span className="flex h-5 min-w-0 -translate-y-px items-center overflow-hidden">
-            <Text font="main-ui-action" color="text-05" nowrap maxLines={1}>
+            <Text
+              font="main-ui-action"
+              color="text-05"
+              wordWrap="whitespace-nowrap"
+              maxLines={1}
+            >
               {data.task_name}
             </Text>
           </span>
           <span className="hidden h-5 shrink-0 items-center xl:flex">
-            <Text font="secondary-body" color="text-03" nowrap>
+            <Text
+              font="secondary-body"
+              color="text-03"
+              wordWrap="whitespace-nowrap"
+            >
               {t("startedAt.label", { time: formatAbsolute(data.started_at) })}
             </Text>
           </span>

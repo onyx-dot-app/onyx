@@ -21,7 +21,7 @@ const tc = createTableColumns<IndexAttemptStageMetric>();
 // `StageLabelCell`/`AvgTimeCell` so all cells share the same type style.
 function TextCell({ children }: { children: string | number }) {
   return (
-    <Text font="secondary-body" color="text-05" nowrap>
+    <Text font="secondary-body" color="text-05" wordWrap="whitespace-nowrap">
       {String(children)}
     </Text>
   );
