@@ -148,6 +148,13 @@ func TestConfigRef(t *testing.T) {
 		"latest": "main",
 		"v4.4.6": "v4.4.6",
 		"main":   "main",
+		// -dev twins ship their config files at the plain tag's ref.
+		"v4.7.1-dev":         "v4.7.1",
+		"v4.7.0-cloud.3-dev": "v4.7.0-cloud.3",
+		"edge-dev":           "main",
+		"latest-dev":         "main",
+		// An unrelated ref that happens to end in -dev is not a twin.
+		"sandbox-dev": "sandbox-dev",
 	}
 	for tag, want := range cases {
 		if got := ConfigRef(tag); got != want {
@@ -156,6 +163,38 @@ func TestConfigRef(t *testing.T) {
 	}
 	if !IsFloatingTag("edge") || !IsFloatingTag("latest") || IsFloatingTag("v4.4.6") {
 		t.Error("IsFloatingTag misclassifies")
+	}
+	if !IsFloatingTag("edge-dev") || !IsFloatingTag("latest-dev") ||
+		IsFloatingTag("v4.7.1-dev") || IsFloatingTag("sandbox-dev") {
+		t.Error("IsFloatingTag misclassifies -dev twins")
+	}
+}
+
+// The -dev suffix is an image variant of a release or floating tag, built
+// from the same ref. Anything else ending in -dev is left alone.
+func TestSplitDevSuffix(t *testing.T) {
+	cases := []struct {
+		in   string
+		base string
+		dev  bool
+	}{
+		{"v4.7.1-dev", "v4.7.1", true},
+		{"4.7.1-dev", "4.7.1", true},
+		{"v4.7.0-beta.1-dev", "v4.7.0-beta.1", true},
+		{"edge-dev", "edge", true},
+		{"latest-dev", "latest", true},
+		{"v4.7.1", "v4.7.1", false},
+		{"edge", "edge", false},
+		{"sandbox-dev", "sandbox-dev", false},
+		{"beta-dev", "beta-dev", false},
+		{"-dev", "-dev", false},
+		{"", "", false},
+	}
+	for _, c := range cases {
+		base, dev := SplitDevSuffix(c.in)
+		if base != c.base || dev != c.dev {
+			t.Errorf("SplitDevSuffix(%q) = (%q, %t), want (%q, %t)", c.in, base, dev, c.base, c.dev)
+		}
 	}
 }
 
@@ -220,7 +259,11 @@ func TestNormalizeVersionTag(t *testing.T) {
 		{"edge", "edge", false},
 		{"latest", "latest", false},
 		{"main", "main", false},
-		{"v4.4.6-dev", "v4.4.6-dev", false}, // pullable image, not a git ref
+		// A -dev twin keeps its suffix and is checkable through its plain tag.
+		{"v4.4.6-dev", "v4.4.6-dev", true},
+		{"4.4.6-dev", "v4.4.6-dev", true},
+		{"v4.7.0-cloud.3-dev", "v4.7.0-cloud.3-dev", false},
+		{"sandbox-dev", "sandbox-dev", false},
 		{"beta", "beta", false},
 		{"v4.4", "v4.4", false},
 	}

@@ -691,17 +691,53 @@ func TestInstallProceedsWhenExistenceCannotBeConfirmed(t *testing.T) {
 	}
 }
 
-// Image tags that aren't git refs (hand-built images, -dev twins) are
-// pullable and must skip the repo lookup rather than be rejected.
-func TestInstallAcceptsNonReleaseImageTag(t *testing.T) {
+// Image tags that aren't git refs (hand-built images) are pullable and must
+// skip the repo lookup rather than be rejected.
+func TestInstallAcceptsHandBuiltImageTag(t *testing.T) {
 	isolateEnv(t)
 	shimDockerOnPath(t)
 	root := t.TempDir()
 	deps := testDeps(t, &fakeRunner{handler: healthyDockerHandler}, refServer(t))
 	if err := RunInstall(context.Background(), deps, Options{
-		NoPrompt: true, Tag: "v4.0.0-dev", Dir: root, NoWait: true,
+		NoPrompt: true, Tag: "mybuild", Dir: root, NoWait: true,
 	}); err != nil {
-		t.Fatalf("non-release image tag must be accepted: %v", err)
+		t.Fatalf("hand-built image tag must be accepted: %v", err)
+	}
+}
+
+// A -dev twin has no git ref of its own; it is verified through the release
+// it was built from, and kept as the image tag.
+func TestInstallAcceptsDevTwinOfKnownVersion(t *testing.T) {
+	isolateEnv(t)
+	shimDockerOnPath(t)
+	root := t.TempDir()
+	deps := testDeps(t, &fakeRunner{handler: healthyDockerHandler}, refServer(t, "v4.0.0"))
+	if err := RunInstall(context.Background(), deps, Options{
+		NoPrompt: true, Tag: "4.0.0-dev", Dir: root, NoWait: true,
+	}); err != nil {
+		t.Fatalf("-dev twin of an existing release must be accepted: %v\noutput:\n%s", err, outBuf(deps).String())
+	}
+	env, _ := os.ReadFile(filepath.Join(root, "deployment", ".env"))
+	if got := Var(string(env), "IMAGE_TAG"); got != "v4.0.0-dev" {
+		t.Errorf("IMAGE_TAG = %q, want the v-prefixed -dev image tag", got)
+	}
+}
+
+// A -dev twin can only exist when its release does, so a typo in the version
+// part fails as early as it would without the suffix.
+func TestInstallRejectsDevTwinOfUnknownVersion(t *testing.T) {
+	isolateEnv(t)
+	shimDockerOnPath(t)
+	root := t.TempDir()
+	deps := testDeps(t, &fakeRunner{handler: healthyDockerHandler}, refServer(t))
+	err := RunInstall(context.Background(), deps, Options{
+		NoPrompt: true, Tag: "v9.9.9-dev", Dir: root, NoWait: true,
+	})
+	if err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("err = %v, want unknown-version rejection", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(root, "deployment", ".env")); !os.IsNotExist(statErr) {
+		t.Error("rejected install must not create .env")
 	}
 }
 

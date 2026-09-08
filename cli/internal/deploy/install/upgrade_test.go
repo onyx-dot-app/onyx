@@ -3,9 +3,12 @@ package install
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/dockercmd"
@@ -82,6 +85,63 @@ func TestUpgradeRewritesOnlyImageTag(t *testing.T) {
 	}
 	if m.Mode != state.ModeLite {
 		t.Errorf("mode changed on upgrade: %q", m.Mode)
+	}
+}
+
+// A -dev image tag is the release's image with debugging tools added, and its
+// config files live at the release's ref. The upgrade must fetch them from
+// there rather than fall back to the embedded copies for a ref that does not
+// exist, while .env and the manifest keep naming the -dev image.
+func TestUpgradeDevTagFetchesConfigFromReleaseRef(t *testing.T) {
+	runner := &fakeRunner{handler: healthyDockerHandler}
+	root := installFixture(t, runner, "v4.0.0")
+
+	upstream := "# compose at v4.2.0\nname: onyx\n"
+	var mu sync.Mutex
+	var fetched []string
+	raw := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		fetched = append(fetched, r.URL.Path)
+		mu.Unlock()
+		if r.Method == http.MethodHead {
+			return
+		}
+		_, _ = w.Write([]byte(upstream))
+	}))
+	t.Cleanup(raw.Close)
+
+	deps := testDeps(t, runner, raw)
+	err := RunUpgrade(context.Background(), deps, Options{
+		NoPrompt: true, Tag: "v4.2.0-dev", Dir: root, NoWait: true,
+	})
+	if err != nil {
+		t.Fatalf("RunUpgrade: %v\noutput:\n%s", err, outBuf(deps).String())
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(fetched) == 0 {
+		t.Fatal("no config files were fetched")
+	}
+	for _, p := range fetched {
+		if !strings.Contains(p, "/v4.2.0/") {
+			t.Errorf("fetched %s, want every file from the release ref v4.2.0", p)
+		}
+	}
+	compose, _ := os.ReadFile(filepath.Join(root, "deployment", "docker-compose.yml"))
+	if string(compose) != upstream {
+		t.Errorf("compose = %q, want the copy fetched from v4.2.0", compose)
+	}
+	env, _ := os.ReadFile(filepath.Join(root, "deployment", ".env"))
+	if got := Var(string(env), "IMAGE_TAG"); got != "v4.2.0-dev" {
+		t.Errorf("IMAGE_TAG = %q, want the -dev image tag kept", got)
+	}
+	m, merr := state.Load(root)
+	if merr != nil || m == nil {
+		t.Fatalf("manifest: %+v, %v", m, merr)
+	}
+	if m.InstalledTag != "v4.2.0-dev" {
+		t.Errorf("manifest tag = %q, want v4.2.0-dev", m.InstalledTag)
 	}
 }
 
