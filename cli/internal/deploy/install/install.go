@@ -1189,6 +1189,10 @@ const proxyService = "nginx"
 // Best effort: `up` has already succeeded by this point, so a proxy that will
 // not reload is reported and the upgrade still counts as done.
 func (in *installer) reloadProxy(ctx context.Context, dir string, env map[string]string, files []string) {
+	// Built up front so the two failure paths can print it as the command to
+	// run by hand.
+	reloadCmd := in.compose.Command(dir, env, files, "exec", "-T", proxyService, "nginx", "-s", "reload")
+
 	idCmd := in.compose.Command(dir, env, files, "ps", "-q", proxyService)
 	res, err := in.deps.Runner.Run(ctx, idCmd)
 	if err != nil {
@@ -1196,7 +1200,7 @@ func (in *installer) reloadProxy(ctx context.Context, dir string, env map[string
 		// rather than let a running proxy keep a stale address unreported.
 		in.warnf("Could not tell whether %s is running: %v", proxyService, err)
 		in.infof("If it is, it may still route to the replaced containers and answer 502.")
-		in.cmdf("docker compose exec %s nginx -s reload", proxyService)
+		in.cmdf("%s", displayCommand(reloadCmd))
 		return
 	}
 	if strings.TrimSpace(res.Stdout) == "" {
@@ -1210,18 +1214,29 @@ func (in *installer) reloadProxy(ctx context.Context, dir string, env map[string
 	testCmd := in.compose.Command(dir, env, files, "exec", "-T", proxyService, "nginx", "-t")
 	if _, err := in.deps.Runner.Run(ctx, testCmd); err != nil {
 		in.warnf("Did not reload %s: its config does not pass `nginx -t` (%v).", proxyService, err)
-		in.infof("It may still route to the previous containers and answer 502.")
+		in.infof("It may still route to the replaced containers and answer 502.")
 		return
 	}
 
-	reloadCmd := in.compose.Command(dir, env, files, "exec", "-T", proxyService, "nginx", "-s", "reload")
 	if _, err := in.deps.Runner.Run(ctx, reloadCmd); err != nil {
 		in.warnf("Could not reload %s: %v", proxyService, err)
-		in.infof("It may still route to the previous containers and answer 502.")
-		in.cmdf("docker compose exec %s nginx -s reload", proxyService)
+		in.infof("It may still route to the replaced containers and answer 502.")
+		in.cmdf("%s", displayCommand(reloadCmd))
 		return
 	}
 	in.successf("Reloaded %s onto the new containers", proxyService)
+}
+
+// displayCommand renders a built command the way an operator would retype it.
+// The compose invocation carries the project name, the -f list and the
+// standalone-vs-plugin choice, so a hand-written approximation would target
+// the wrong stack on any deployment that is not the default one.
+func displayCommand(c dockercmd.Command) string {
+	line := strings.Join(append([]string{c.Name}, c.Args...), " ")
+	if c.Dir == "" {
+		return line
+	}
+	return fmt.Sprintf("cd %s && %s", c.Dir, line)
 }
 
 // explainIncompleteStart says what a half-finished `up` left behind. Unlike a
