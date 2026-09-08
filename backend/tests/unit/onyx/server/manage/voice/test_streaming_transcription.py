@@ -169,6 +169,15 @@ class RecordingChunkedTranscriber:
         return "full recording"
 
 
+class HangingChunkedTranscriber(RecordingChunkedTranscriber):
+    """Provider whose batch transcription never returns."""
+
+    async def add_chunk(self, chunk: bytes) -> str | None:
+        _ = chunk
+        await asyncio.Event().wait()
+        raise AssertionError("unreachable")
+
+
 @pytest.mark.asyncio
 async def test_streaming_failure_keeps_audio_for_fallback() -> None:
     """The fallback needs the audio the failed stream already consumed."""
@@ -317,3 +326,22 @@ async def test_chunked_handler_enforces_session_timeout(
         await handle_chunked_transcription(
             cast(Any, websocket), cast(Any, RecordingChunkedTranscriber())
         )
+
+
+@pytest.mark.asyncio
+async def test_chunked_replay_is_bounded_by_session_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Replaying recovered audio counts against the session limit."""
+    monkeypatch.setattr(websocket_api, "WS_SESSION_TIMEOUT_SECONDS", 0.05)
+    websocket = NeverReceivingWebSocket()
+
+    async with asyncio.timeout(5):
+        await handle_chunked_transcription(
+            cast(Any, websocket),
+            cast(Any, HangingChunkedTranscriber(window_bytes=2)),
+            initial_audio=b"\x01\x02\x03\x04",
+            client_ended=True,
+        )
+
+    assert websocket.sent_json == []

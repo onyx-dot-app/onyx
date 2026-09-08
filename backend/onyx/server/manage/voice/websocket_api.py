@@ -262,19 +262,13 @@ class StreamingTranscriptionFailed(Exception):
 
 
 async def _receive_client_message(
-    websocket: WebSocket, deadline: float | None = None
+    websocket: WebSocket,
 ) -> MutableMapping[str, Any] | None:
-    """Receive one client message.
-
-    Returns None when the client goes idle, or when `deadline` (loop time) has
-    passed. Callers that run without a background task pass the session
-    deadline here.
-    """
-    timeout = float(WS_CLIENT_IDLE_TIMEOUT_SECONDS)
-    if deadline is not None:
-        timeout = min(timeout, deadline - asyncio.get_running_loop().time())
+    """Receive one client message, or None when the client goes idle."""
     try:
-        return await asyncio.wait_for(websocket.receive(), timeout=max(timeout, 0.0))
+        return await asyncio.wait_for(
+            websocket.receive(), timeout=WS_CLIENT_IDLE_TIMEOUT_SECONDS
+        )
     except asyncio.TimeoutError:
         return None
 
@@ -556,6 +550,26 @@ async def handle_chunked_transcription(
     already ended the recording, so the handler transcribes and returns without
     waiting for more audio.
     """
+    # The bound covers the replay of recovered audio and every provider call,
+    # not only the wait for client messages.
+    try:
+        async with asyncio.timeout(WS_SESSION_TIMEOUT_SECONDS):
+            await _run_chunked_transcription(
+                websocket, transcriber, initial_audio, client_ended
+            )
+    except TimeoutError:
+        logger.warning(
+            "Chunked transcription: session exceeded %ss, ending session",
+            WS_SESSION_TIMEOUT_SECONDS,
+        )
+
+
+async def _run_chunked_transcription(
+    websocket: WebSocket,
+    transcriber: ChunkedTranscriber,
+    initial_audio: bytes,
+    client_ended: bool,
+) -> None:
     logger.info("Chunked transcription: starting handler")
     chunk_count = 0
     total_bytes = 0
@@ -575,14 +589,12 @@ async def handle_chunked_transcription(
         )
         return
 
-    deadline = asyncio.get_running_loop().time() + WS_SESSION_TIMEOUT_SECONDS
     while True:
-        message = await _receive_client_message(websocket, deadline)
+        message = await _receive_client_message(websocket)
         if message is None:
             logger.warning(
-                "Chunked transcription: client idle for %ss or session over %ss, ending session",
+                "Chunked transcription: no client message for %ss, ending session",
                 WS_CLIENT_IDLE_TIMEOUT_SECONDS,
-                WS_SESSION_TIMEOUT_SECONDS,
             )
             break
         msg_type = message.get("type", "unknown")
