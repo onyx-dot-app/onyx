@@ -1,15 +1,14 @@
-from typing import Any
-
 from onyx.db.models import VoiceProvider
+from onyx.utils.sensitive import SensitiveValue
 from onyx.voice.interface import VoiceProviderInterface
 
 
-def _extract_sensitive_string(value: Any) -> str | None:
-    if value is None:
-        return None
-    if hasattr(value, "get_value"):
-        return value.get_value(apply_mask=False)
-    return value
+def _extract_sensitive_string(
+    value: SensitiveValue[str] | str | None,
+) -> str | None:
+    if value is None or isinstance(value, str):
+        return value
+    return value.get_value(apply_mask=False)
 
 
 def get_voice_provider(provider: VoiceProvider) -> VoiceProviderInterface:
