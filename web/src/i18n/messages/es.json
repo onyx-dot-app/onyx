@@ -10731,8 +10731,7 @@
       }
     },
     "enabledCount": {
-      "label": "<value>{enabled}</value> de {total}",
-      "tools": "{total, plural, one {<value>{enabled}</value> de {total} herramienta} other {<value>{enabled}</value> de {total} herramientas}}"
+      "label": "<value>{enabled}</value> de {total}"
     },
     "errorPages": {
       "accessRestricted": {

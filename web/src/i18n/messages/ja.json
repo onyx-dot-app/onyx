@@ -10731,8 +10731,7 @@
       }
     },
     "enabledCount": {
-      "label": "{total} 中 <value>{enabled}</value>",
-      "tools": "{total, plural, one {{total} 個中 <value>{enabled}</value> 個のツール} other {{total} 個中 <value>{enabled}</value> 個のツール}}"
+      "label": "{total} 中 <value>{enabled}</value>"
     },
     "errorPages": {
       "accessRestricted": {

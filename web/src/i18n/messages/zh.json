@@ -10731,8 +10731,7 @@
       }
     },
     "enabledCount": {
-      "label": "{total} 个中的 <value>{enabled}</value> 个",
-      "tools": "{total, plural, one {{total} 个工具中的 <value>{enabled}</value> 个} other {{total} 个工具中的 <value>{enabled}</value> 个}}"
+      "label": "{total} 个中的 <value>{enabled}</value> 个"
     },
     "errorPages": {
       "accessRestricted": {

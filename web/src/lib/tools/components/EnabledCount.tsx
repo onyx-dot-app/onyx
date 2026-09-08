@@ -8,16 +8,15 @@ import { richNodes } from "@opal/utils";
 interface EnabledCountProps {
   enabledCount: number;
   totalCount: number;
-  /**
-   * What is being counted, when the count reads better with the noun spelled
-   * out. A fixed set rather than free text: every noun needs its own plural
-   * forms in each locale, so it cannot be supplied by the caller.
-   */
-  noun?: "tool";
 }
 
+/**
+ * How many of a set of tools are switched on, e.g. "3 of 12".
+ *
+ * The noun is left to the surrounding row, which already names what is being
+ * counted — every call site is a tool context.
+ */
 export default function EnabledCount({
-  noun,
   enabledCount,
   totalCount,
 }: EnabledCountProps) {
@@ -33,17 +32,11 @@ export default function EnabledCount({
   return (
     <Text color="text-03">
       {richNodes(
-        noun === "tool"
-          ? t.rich("enabledCount.tools", {
-              enabled: enabledCount,
-              total: totalCount,
-              value,
-            })
-          : t.rich("enabledCount.label", {
-              enabled: enabledCount,
-              total: totalCount,
-              value,
-            })
+        t.rich("enabledCount.label", {
+          enabled: enabledCount,
+          total: totalCount,
+          value,
+        })
       )}
     </Text>
   );
