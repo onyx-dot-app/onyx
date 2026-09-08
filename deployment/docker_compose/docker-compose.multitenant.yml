@@ -16,7 +16,9 @@
 #     startup. The base `alembic upgrade head` refuses to run when
 #     MULTI_TENANT=true.
 #   - Sets MULTI_TENANT=true and AUTH_TYPE=cloud on api_server and background.
-#     Multi-tenant mode needs Enterprise Edition features, so they are pinned on.
+#   - Pins ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true on every app service.
+#     Tenant provisioning is Enterprise Edition code, so multi-tenant mode does
+#     not work without it. The pin wins over any value in .env.
 #   - Skips email verification, which needs SMTP under cloud auth.
 #
 # Development only. This file is not embedded in onyx-cli.
@@ -42,3 +44,7 @@ services:
       - AUTH_TYPE=cloud
       - ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
       - REQUIRE_EMAIL_VERIFICATION=false
+
+  web_server:
+    environment:
+      - ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
