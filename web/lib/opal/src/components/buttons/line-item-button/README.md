@@ -85,8 +85,7 @@ meanings in one prop. Use `tooltip` for hover text.
 | `variant`             | `ContentVariant`        | `"heading"`     | Content layout variant                                                                                                                                                                                                       |
 | `rightChildren`       | `ReactNode`             | —               | Content after the label (e.g. action button)                                                                                                                                                                                 |
 | `color`               | `ColorTypes`            | `"interactive"` | Content colour mode. Defaults to `"interactive"`, which is what lets the row's hover / selected / disabled colours reach its title and icon — passing anything else opts out of that. `undefined` counts as not passing one. |
-
-| `strikethrough` | `boolean` | `false` | Strike the label through, e.g. a row switched off |
+| `strikethrough`       | `boolean`               | `false`         | Strike the label through, e.g. a row switched off                                                                                                                                                                            |
 
 That table is the entire content surface. The remaining `ContentAction` /
 `Content` props — `editable`, `onTitleChange`, `auxIcon`, `tag`, and the rest —
