@@ -411,18 +411,38 @@ them into every artifact name.
 
 ### Cutting a release
 
+Add the version's section to [`CHANGELOG.md`](./CHANGELOG.md) first. Publish reads it and
+uses it as the GitHub release body, which is what a user sees before upgrading. A version
+with no section fails the release rather than publishing empty notes.
+
 ```console
 $ ods release tf-provider              # bumps the patch version
 $ ods release tf-provider --bump minor
 $ ods release tf-provider --version 1.0.0
+$ ods release tf-provider --dry-run    # computes the version, tags nothing
 ```
+
+> [!IMPORTANT]
+> `ods release` tags **`HEAD`**, not `main`, and does not check which branch you are on.
+> Run `git rev-parse HEAD` and `git rev-parse origin/main` and compare them first. Tagging
+> from a stale branch publishes that branch's provider under the new version.
 
 To rehearse, run **Publish** by hand from the mirror's Actions tab. It defaults to a dry
 run, which builds every archive and publishes none of them.
 
+If a release fails after the tag is pushed, re-drive it from the monorepo's Actions tab, or
+with the command below. Do not delete and re-push the tag: the mirror step commits the tree
+at the ref you dispatch from, so dispatching from `main` also picks up any fix merged since
+the tag was cut.
+
+```console
+$ gh workflow run release-terraform-provider.yml --ref main -f version=0.3.0
+```
+
 ### One-time setup
 
-`v0.1.0` is published, so everything the registry needs is in place:
+All of it is done, and releases have been automated since `v0.2.0`. This records what
+exists, for whoever has to rebuild or rotate it:
 
 - [x] The public repo `onyx-dot-app/terraform-provider-onyx` exists.
 - [x] The mirror carries its own `LICENSE`.
@@ -431,21 +451,20 @@ run, which builds every archive and publishes none of them.
 - [x] The mirror holds `TF_PROVIDER_GPG_PRIVATE_KEY` and `TF_PROVIDER_GPG_PASSPHRASE`,
       which is where the signing happens. The monorepo never holds the key.
 - [x] The mirror is linked on registry.terraform.io as the `onyx-dot-app` organisation.
+- [x] The `release-terraform-provider` environment holds the mirror credential: variable
+      `TF_PROVIDER_RELEASE_APP_CLIENT_ID` — the App's **Client ID** (`Iv23li...`), *not*
+      the numeric App ID — and secret `TF_PROVIDER_RELEASE_APP_PRIVATE_KEY`, the whole
+      generated `.pem` including its `BEGIN`/`END` lines.
 
-One step is left, and it is the only reason a release is still cut by hand:
+Two properties of that App are load-bearing, and each one failed a release once:
 
-- [ ] Give this repo a credential that can push to the mirror. The
-      `release-terraform-provider` environment exists but is empty, so
-      `release-terraform-provider.yml` has nothing to authenticate with and has never
-      run. Create a GitHub App, install it on the mirror alone with **contents: write**,
-      and put two values in that environment:
-      - variable `TF_PROVIDER_RELEASE_APP_CLIENT_ID` — the App's **Client ID**
-        (`Iv23li...`) from its settings page, *not* the numeric App ID.
-      - secret `TF_PROVIDER_RELEASE_APP_PRIVATE_KEY` — the whole generated `.pem`,
-        `BEGIN`/`END` lines included.
-
-Until that exists, a release is the workflow's own commands run locally against the
-mirror, followed by the tag — about a minute. That is how `v0.1.0` shipped.
+- It needs **contents: write** *and* **workflows: write**. The mirrored tree contains
+  `.github/workflows/publish.yml`, and GitHub refuses a push from an App that changes a
+  workflow file without the second one. It only bites on a release that edits that file,
+  so the first releases did not need it.
+- It must be a **bypass actor on the mirror's `Read-only mirror` rulesets**, for both the
+  branch and the tag rule. Without that the push is refused with `GH013` and nothing
+  reaches the mirror.
 
 ## Licence
 
