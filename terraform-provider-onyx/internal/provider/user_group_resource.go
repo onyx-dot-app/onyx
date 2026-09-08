@@ -49,7 +49,7 @@ type userGroupResourceModel struct {
 	IncognitoEnabled types.Bool     `tfsdk:"incognito_enabled"`
 	CCPairIDs        types.Set      `tfsdk:"cc_pair_ids"`
 	DocumentSetIDs   types.Set      `tfsdk:"document_set_ids"`
-	PersonaIDs       types.Set      `tfsdk:"persona_ids"`
+	AgentIDs         types.Set      `tfsdk:"agent_ids"`
 	IsDefault        types.Bool     `tfsdk:"is_default"`
 	Timeouts         timeouts.Value `tfsdk:"timeouts"`
 }
@@ -147,10 +147,10 @@ func (r *userGroupResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				MarkdownDescription: "Document sets shared with this group. Read-only here: " +
 					"`onyx_document_set` owns the link.",
 			},
-			"persona_ids": schema.SetAttribute{
+			"agent_ids": schema.SetAttribute{
 				ElementType: types.StringType,
 				Computed:    true,
-				MarkdownDescription: "Agents shared with this group. Read-only here: `onyx_persona` " +
+				MarkdownDescription: "Agents shared with this group. Read-only here: `onyx_agent` " +
 					"owns the link.",
 			},
 			"is_default": schema.BoolAttribute{
@@ -582,7 +582,7 @@ func (r *userGroupResource) readInto(
 	model.Permissions = stringSetFrom(ctx, permissions, diags)
 	model.CCPairIDs = stringSetFrom(ctx, int64sAsStrings(group.CCPairIDs()), diags)
 	model.DocumentSetIDs = stringSetFrom(ctx, namedRefIDs(group.DocumentSets), diags)
-	model.PersonaIDs = stringSetFrom(ctx, namedRefIDs(group.Personas), diags)
+	model.AgentIDs = stringSetFrom(ctx, namedRefIDs(group.Agents), diags)
 	return true
 }
 
@@ -611,8 +611,8 @@ func (m *userGroupResourceModel) ensureComputedKnown() {
 	if m.DocumentSetIDs.IsUnknown() {
 		m.DocumentSetIDs = types.SetNull(types.StringType)
 	}
-	if m.PersonaIDs.IsUnknown() {
-		m.PersonaIDs = types.SetNull(types.StringType)
+	if m.AgentIDs.IsUnknown() {
+		m.AgentIDs = types.SetNull(types.StringType)
 	}
 	if m.IsDefault.IsUnknown() {
 		m.IsDefault = types.BoolNull()

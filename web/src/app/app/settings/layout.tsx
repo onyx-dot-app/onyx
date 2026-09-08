@@ -99,7 +99,11 @@ export default function Layout({ children }: LayoutProps) {
             >
               <InputSelect.Trigger placeholder={t("sectionSelect.placeholder")}>
                 {activeTab && (
-                  <Text font="main-ui-body" color="text-04" nowrap>
+                  <Text
+                    font="main-ui-body"
+                    color="text-04"
+                    wordWrap="whitespace-nowrap"
+                  >
                     {activeTab.label}
                   </Text>
                 )}

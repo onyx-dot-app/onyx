@@ -127,12 +127,20 @@ export default function TodoListCard({
               )}
 
               {/* Title */}
-              <Text font="main-ui-action" color="text-04" nowrap>
+              <Text
+                font="main-ui-action"
+                color="text-04"
+                wordWrap="whitespace-nowrap"
+              >
                 {t("header.title")}
               </Text>
 
               {/* Progress count */}
-              <Text font="secondary-body" color="text-03" nowrap>
+              <Text
+                font="secondary-body"
+                color="text-03"
+                wordWrap="whitespace-nowrap"
+              >
                 {t("progress.label", { completed, total })}
               </Text>
             </div>

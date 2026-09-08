@@ -1,6 +1,6 @@
 # An agent (assistant) pairs instructions with the knowledge and actions it may
 # use. Agent names are unique across the deployment.
-resource "onyx_persona" "support" {
+resource "onyx_agent" "support" {
   name        = "Support"
   description = "Answers customer questions from the handbook"
 
@@ -28,7 +28,7 @@ resource "onyx_persona" "support" {
 }
 
 # An agent that only its group may use, kept out of the assistant list.
-resource "onyx_persona" "hr_private" {
+resource "onyx_agent" "hr_private" {
   name          = "HR"
   description   = "Answers policy questions for the HR team"
   system_prompt = "You answer HR policy questions."
@@ -47,7 +47,7 @@ resource "onyx_persona" "hr_private" {
 
 # Onyx promotes a featured agent to users. Ignoring documents from before a
 # migration keeps an agent off stale material.
-resource "onyx_persona" "onboarding" {
+resource "onyx_agent" "onboarding" {
   name          = "Onboarding"
   description   = "Walks new starters through their first week"
   system_prompt = "You help new employees get set up."

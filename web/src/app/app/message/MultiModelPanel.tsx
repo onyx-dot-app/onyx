@@ -139,7 +139,11 @@ export default function MultiModelPanel({
             isPreferred ? (
               <div className="flex items-center px-2">
                 <span className="text-action-selection-05 shrink-0">
-                  <Text font="secondary-body" color="inherit" nowrap>
+                  <Text
+                    font="secondary-body"
+                    color="inherit"
+                    wordWrap="whitespace-nowrap"
+                  >
                     {t("multiModelPanel.preferredResponse.label")}
                   </Text>
                 </span>
@@ -151,7 +155,11 @@ export default function MultiModelPanel({
               {isPreferred && (
                 <>
                   <span className="text-action-selection-05 shrink-0">
-                    <Text font="secondary-body" color="inherit" nowrap>
+                    <Text
+                      font="secondary-body"
+                      color="inherit"
+                      wordWrap="whitespace-nowrap"
+                    >
                       {t("multiModelPanel.preferredResponse.label")}
                     </Text>
                   </span>

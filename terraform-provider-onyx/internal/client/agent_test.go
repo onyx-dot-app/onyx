@@ -7,14 +7,14 @@ import (
 	"testing"
 )
 
-const personaResponse = `{
+const agentResponse = `{
 	"id": 4,
 	"name": "support",
 	"description": "answers support questions",
 	"is_public": true,
 	"is_listed": true,
 	"is_featured": false,
-	"builtin_persona": false,
+	"builtin_persona": true,
 	"icon_name": null,
 	"display_priority": null,
 	"starter_messages": [{"name": "Refunds", "message": "How do refunds work?"}],
@@ -32,9 +32,9 @@ const personaResponse = `{
 	"replace_base_system_prompt": false
 }`
 
-func TestCreatePersonaSendsFullBody(t *testing.T) {
-	c, captured := newTestServer(t, http.StatusOK, personaResponse)
-	persona, err := c.CreatePersona(context.Background(), PersonaWrite{
+func TestCreateAgentSendsFullBody(t *testing.T) {
+	c, captured := newTestServer(t, http.StatusOK, agentResponse)
+	agent, err := c.CreateAgent(context.Background(), AgentWrite{
 		Name:             "support",
 		Description:      "answers support questions",
 		DocumentSetIDs:   []int64{2},
@@ -46,8 +46,8 @@ func TestCreatePersonaSendsFullBody(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if persona.ID != 4 || persona.Name != "support" {
-		t.Errorf("unexpected persona: %+v", persona)
+	if agent.ID != 4 || agent.Name != "support" {
+		t.Errorf("unexpected agent: %+v", agent)
 	}
 	if captured.Method != http.MethodPost || captured.Path != "/persona" {
 		t.Errorf("%s %s", captured.Method, captured.Path)
@@ -66,9 +66,9 @@ func TestCreatePersonaSendsFullBody(t *testing.T) {
 	}
 }
 
-func TestUpdatePersonaUsesPatchWithIDInPath(t *testing.T) {
-	c, captured := newTestServer(t, http.StatusOK, personaResponse)
-	if _, err := c.UpdatePersona(context.Background(), 4, PersonaWrite{Name: "support"}); err != nil {
+func TestUpdateAgentUsesPatchWithIDInPath(t *testing.T) {
+	c, captured := newTestServer(t, http.StatusOK, agentResponse)
+	if _, err := c.UpdateAgent(context.Background(), 4, AgentWrite{Name: "support"}); err != nil {
 		t.Fatal(err)
 	}
 	if captured.Method != http.MethodPatch || captured.Path != "/persona/4" {
@@ -76,9 +76,9 @@ func TestUpdatePersonaUsesPatchWithIDInPath(t *testing.T) {
 	}
 }
 
-func TestGetPersonaAndDelete(t *testing.T) {
-	c, captured := newTestServer(t, http.StatusOK, personaResponse)
-	if _, err := c.GetPersona(context.Background(), 4); err != nil {
+func TestGetAgentAndDelete(t *testing.T) {
+	c, captured := newTestServer(t, http.StatusOK, agentResponse)
+	if _, err := c.GetAgent(context.Background(), 4); err != nil {
 		t.Fatal(err)
 	}
 	if captured.Method != http.MethodGet || captured.Path != "/persona/4" {
@@ -86,7 +86,7 @@ func TestGetPersonaAndDelete(t *testing.T) {
 	}
 
 	c, captured = newTestServer(t, http.StatusOK, `null`)
-	if err := c.DeletePersona(context.Background(), 4); err != nil {
+	if err := c.DeleteAgent(context.Background(), 4); err != nil {
 		t.Fatal(err)
 	}
 	if captured.Method != http.MethodDelete || captured.Path != "/persona/4" {
@@ -95,9 +95,9 @@ func TestGetPersonaAndDelete(t *testing.T) {
 }
 
 // is_listed is not on the upsert body; it has an admin-only endpoint.
-func TestSetPersonaListed(t *testing.T) {
+func TestSetAgentListed(t *testing.T) {
 	c, captured := newTestServer(t, http.StatusOK, `null`)
-	if err := c.SetPersonaListed(context.Background(), 4, false); err != nil {
+	if err := c.SetAgentListed(context.Background(), 4, false); err != nil {
 		t.Fatal(err)
 	}
 	if captured.Method != http.MethodPatch || captured.Path != "/admin/persona/4/listed" {
@@ -110,35 +110,35 @@ func TestSetPersonaListed(t *testing.T) {
 
 // The snapshot nests each relation as an object, so the ids the provider
 // stores have to be pulled out of them.
-func TestPersonaIDAccessors(t *testing.T) {
-	c, _ := newTestServer(t, http.StatusOK, personaResponse)
-	persona, err := c.GetPersona(context.Background(), 4)
+func TestAgentIDAccessors(t *testing.T) {
+	c, _ := newTestServer(t, http.StatusOK, agentResponse)
+	agent, err := c.GetAgent(context.Background(), 4)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := persona.ToolIDs(); len(got) != 2 || got[0] != 7 || got[1] != 9 {
+	if got := agent.ToolIDs(); len(got) != 2 || got[0] != 7 || got[1] != 9 {
 		t.Errorf("ToolIDs() = %v, want [7 9]", got)
 	}
-	if got := persona.DocumentSetIDs(); len(got) != 1 || got[0] != 2 {
+	if got := agent.DocumentSetIDs(); len(got) != 1 || got[0] != 2 {
 		t.Errorf("DocumentSetIDs() = %v, want [2]", got)
 	}
-	if got := persona.LabelIDs(); len(got) != 1 || got[0] != 5 {
+	if got := agent.LabelIDs(); len(got) != 1 || got[0] != 5 {
 		t.Errorf("LabelIDs() = %v, want [5]", got)
 	}
-	if got := persona.UserIDs(); len(got) != 1 || got[0] != "3f2b7c1e-0000-4000-8000-000000000001" {
+	if got := agent.UserIDs(); len(got) != 1 || got[0] != "3f2b7c1e-0000-4000-8000-000000000001" {
 		t.Errorf("UserIDs() = %v", got)
 	}
-	if got := persona.HierarchyNodeIDs(); len(got) != 1 || got[0] != 21 {
+	if got := agent.HierarchyNodeIDs(); len(got) != 1 || got[0] != 21 {
 		t.Errorf("HierarchyNodeIDs() = %v, want [21]", got)
 	}
-	if got := persona.DocumentIDs(); len(got) != 1 || got[0] != "doc-1" {
+	if got := agent.DocumentIDs(); len(got) != 1 || got[0] != "doc-1" {
 		t.Errorf("DocumentIDs() = %v, want [doc-1]", got)
 	}
 }
 
 // A deleted agent answers 400, not 404, so "gone" cannot be read off the
-// status alone. LookupPersona confirms against the listing instead.
-func TestLookupPersonaTreatsAMissingAgentAsGone(t *testing.T) {
+// status alone. LookupAgent confirms against the listing instead.
+func TestLookupAgentTreatsAMissingAgentAsGone(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
 		listBody  string
@@ -156,11 +156,11 @@ func TestLookupPersonaTreatsAMissingAgentAsGone(t *testing.T) {
 					return
 				}
 				w.WriteHeader(http.StatusBadRequest)
-				_, _ = w.Write([]byte(`{"message": "Persona with ID 4 does not exist"}`))
+				_, _ = w.Write([]byte(`{"message": "Agent with ID 4 does not exist"}`))
 			}))
 			defer server.Close()
 
-			_, found, err := newFastRetryClient(server.URL).LookupPersona(context.Background(), 4)
+			_, found, err := newFastRetryClient(server.URL).LookupAgent(context.Background(), 4)
 			if found != tc.wantFound {
 				t.Errorf("found = %v, want %v", found, tc.wantFound)
 			}
@@ -173,9 +173,9 @@ func TestLookupPersonaTreatsAMissingAgentAsGone(t *testing.T) {
 
 // The upsert ignores display_priority once the agent exists, so it has to go
 // through the endpoint that takes a map of agent id to priority.
-func TestSetPersonaDisplayPriority(t *testing.T) {
+func TestSetAgentDisplayPriority(t *testing.T) {
 	c, captured := newTestServer(t, http.StatusOK, `null`)
-	if err := c.SetPersonaDisplayPriority(context.Background(), 4, 2); err != nil {
+	if err := c.SetAgentDisplayPriority(context.Background(), 4, 2); err != nil {
 		t.Fatal(err)
 	}
 	if captured.Method != http.MethodPatch || captured.Path != "/admin/agents/display-priorities" {

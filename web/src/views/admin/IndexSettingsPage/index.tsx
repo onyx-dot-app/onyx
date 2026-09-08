@@ -1345,7 +1345,7 @@ export default function IndexSettingsPage() {
                                 <Text
                                   font="secondary-body"
                                   color="text-03"
-                                  nowrap
+                                  wordWrap="whitespace-nowrap"
                                 >
                                   {t("changesBanner.orSeparator.label")}
                                 </Text>

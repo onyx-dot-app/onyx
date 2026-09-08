@@ -96,7 +96,7 @@ resource "onyx_document_set" "docs" {
 # Agent
 # ---------------------------------------------------------------------------
 
-resource "onyx_persona" "docs" {
+resource "onyx_agent" "docs" {
   name        = "Docs"
   description = "Answers product questions from the documentation"
 
