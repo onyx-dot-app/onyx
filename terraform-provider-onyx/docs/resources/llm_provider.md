@@ -50,6 +50,7 @@ resource "onyx_llm_provider" "openai" {
 
 > **NOTE**: [Write-only arguments](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments) are supported in Terraform 1.11 and later.
 
+- `agents` (Set of Number) Agent ids the provider is restricted to.
 - `api_base` (String) Custom API base URL (e.g. for Azure or self-hosted gateways).
 - `api_key` (String, Sensitive) Provider API key. The Onyx API masks this on read, so Terraform cannot detect out-of-band changes; the configured value is authoritative. Prefer `api_key_wo`, which keeps the value out of state entirely; the two cannot be set together.
 - `api_key_wo` (String, Sensitive, [Write-only](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments)) Provider API key, held only in configuration. Terraform sends it on every apply and stores nothing, so the key never reaches state. Pair it with `api_key_wo_version` to rotate it. Needs Terraform 1.11 or later.
@@ -64,7 +65,6 @@ resource "onyx_llm_provider" "openai" {
 - `is_auto_mode` (Boolean) Onyx Auto mode: the model list is managed by Onyx. When enabled, the server owns `model_configurations`: Terraform stops drift-checking the list, and updates re-assert the server's current models instead of the configured ones, so registry-managed models are never removed.
 - `is_public` (Boolean) Whether the provider is available to all users.
 - `name` (String) Display name for the provider configuration.
-- `personas` (Set of Number) Persona ids the provider is restricted to.
 
 ### Read-Only
 
