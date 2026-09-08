@@ -395,6 +395,7 @@ def process_jira_issue(
     comment_email_blacklist: tuple[str, ...] = (),
     labels_to_skip: set[str] | None = None,
     parent_hierarchy_raw_node_id: str | None = None,
+    source: DocumentSource = DocumentSource.JIRA,
 ) -> Document | None:
     if labels_to_skip:
         if any(label in issue.fields.labels for label in labels_to_skip):
@@ -487,7 +488,7 @@ def process_jira_issue(
     return Document(
         id=page_url,
         sections=[TextSection(link=page_url, text=ticket_content)],
-        source=DocumentSource.JIRA,
+        source=source,
         semantic_identifier=f"{issue.key}: {issue.fields.summary}",
         title=f"{issue.key} {issue.fields.summary}",
         doc_updated_at=time_str_to_utc(issue.fields.updated),
@@ -545,6 +546,16 @@ class JiraConnector(
         self._jira_client: JIRA | None = None
         # Cache project permissions to avoid fetching them repeatedly across runs
         self._project_permissions_cache: dict[str, Any] = {}
+
+    @property
+    def document_source(self) -> DocumentSource:
+        """The DocumentSource issues from this connector are stamped with.
+
+        Subclasses (e.g. Jira Service Management) override this so that indexed
+        tickets are attributed to the correct source while reusing all of the
+        Jira fetching/parsing logic.
+        """
+        return DocumentSource.JIRA
 
     @property
     def comment_email_blacklist(self) -> tuple:
@@ -833,6 +844,7 @@ class JiraConnector(
                     comment_email_blacklist=self.comment_email_blacklist,
                     labels_to_skip=self.labels_to_skip,
                     parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+                    source=self.document_source,
                 ):
                     # Add permission information to the document if requested
                     if include_permissions:
