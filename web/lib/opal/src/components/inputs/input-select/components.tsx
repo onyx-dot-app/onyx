@@ -91,7 +91,7 @@ function TruncatedDisplay({
   }, [children]);
 
   const text = (
-    <Text color={dimmed ? "text-01" : "text-04"} nowrap>
+    <Text color={dimmed ? "text-01" : "text-04"} wordWrap="whitespace-nowrap">
       {children}
     </Text>
   );

@@ -88,11 +88,11 @@ Onyx refuses a removal that would leave someone in no group at all, because a pe
 
 ### Read-Only
 
+- `agent_ids` (Set of String) Agents shared with this group. Read-only here: `onyx_agent` owns the link.
 - `cc_pair_ids` (Set of String) Connector-credential pairs shared with this group. Read-only here: `onyx_cc_pair` owns the link through its own `groups` attribute.
 - `document_set_ids` (Set of String) Document sets shared with this group. Read-only here: `onyx_document_set` owns the link.
 - `id` (String) Group id, assigned by Onyx.
 - `is_default` (Boolean) Whether this is one of the seeded system groups (`Admin`, `Basic`). A default group holds members and nothing else: Onyx refuses to rename it, delete it, or change its permissions or incognito setting. Importing one and managing its roster works; anything else fails at apply time.
-- `persona_ids` (Set of String) Agents shared with this group. Read-only here: `onyx_persona` owns the link.
 
 <a id="nestedblock--timeouts"></a>
 ### Nested Schema for `timeouts`

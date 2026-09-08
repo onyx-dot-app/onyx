@@ -63,7 +63,7 @@ export TF_VAR_openai_api_key="sk-..."
 | `onyx_connector.docs` | Says what to index and how often |
 | `onyx_cc_pair.docs` | Joins connector to credential and indexes |
 | `onyx_document_set.docs` | Groups the indexed pair for search |
-| `onyx_persona.docs` | The agent that answers from the set |
+| `onyx_agent.docs` | The agent that answers from the set |
 | `onyx_user_group.platform` | Enterprise Edition only, off by default |
 
 Indexing starts after apply and runs in the background, so the agent answers

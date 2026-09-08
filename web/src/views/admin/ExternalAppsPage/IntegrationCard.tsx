@@ -87,7 +87,11 @@ export default function IntegrationCard({ integration }: IntegrationCardProps) {
             {/* Toggles org-wide availability, never a single member's
                 connection; the label fades in on hover or focus. */}
             <Hoverable.Item group="integration-row" variant="appear-on-hover">
-              <Text font="secondary-body" color="text-03" nowrap>
+              <Text
+                font="secondary-body"
+                color="text-03"
+                wordWrap="whitespace-nowrap"
+              >
                 {t("card.availableInCraft.label")}
               </Text>
             </Hoverable.Item>

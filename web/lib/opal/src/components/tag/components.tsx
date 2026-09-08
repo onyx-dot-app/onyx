@@ -105,13 +105,13 @@ function Tag({
             capped && "opal-auxiliary-tag-capped"
           )}
         >
-          <Text font={font} color="inherit" nowrap>
+          <Text font={font} color="inherit" wordWrap="whitespace-nowrap">
             {title}
           </Text>
         </span>
         {value !== undefined && (
           <span className="opal-auxiliary-tag-value">
-            <Text font={font} color="inherit" nowrap>
+            <Text font={font} color="inherit" wordWrap="whitespace-nowrap">
               {value}
             </Text>
           </span>
