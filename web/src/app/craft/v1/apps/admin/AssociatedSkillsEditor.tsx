@@ -164,6 +164,9 @@ export default function AssociatedSkillsEditor({
                           title={skill.name}
                           onClick={() => select(skill)}
                           description={disabledReason ?? skill.description}
+                          // Skill descriptions are user-authored, so cap the
+                          // row rather than let one grow the popover.
+                          descriptionMaxLines={1}
                           disabled={disabledReason !== null}
                           state={
                             selectedIds.has(skill.id) ? "selected" : "empty"
