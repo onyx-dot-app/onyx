@@ -1,3 +1,0 @@
-upstream mcp_server {
-    server ${ONYX_MCP_SERVER_HOST}:8090 fail_timeout=0;
-}

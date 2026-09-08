@@ -7,24 +7,10 @@ log_format custom_main '$remote_addr - $remote_user [$time_local] "$request" '
                 '"$http_user_agent" "$http_x_forwarded_for" '
                 'rt=$request_time';
 
-upstream api_server {
-    # fail_timeout=0 means we always retry an upstream even if it failed
-    # to return a good HTTP response
-
-    # for UNIX domain socket setups
-    #server unix:/tmp/gunicorn.sock fail_timeout=0;
-
-    # for a TCP configuration
-    # TODO: use gunicorn to manage multiple processes
-    server ${ONYX_BACKEND_API_HOST}:8080 fail_timeout=0;
-}
-
-upstream web_server {
-    server ${ONYX_WEB_SERVER_HOST}:3000 fail_timeout=0;
-}
-
-# Conditionally include MCP upstream configuration
-include /etc/nginx/conf.d/mcp_upstream.conf.inc;
+# Docker's embedded DNS. Upstream hosts are resolved per request (see the
+# $..._upstream variables below) rather than once at startup, so a container
+# that compose recreates with a new address is reached without a reload.
+resolver 127.0.0.11 valid=10s ipv6=off;
 
 # WebSocket support: only set Connection "upgrade" for actual upgrade requests
 map $http_upgrade $connection_upgrade {
@@ -38,6 +24,12 @@ server {
     client_max_body_size 5G;    # Maximum upload size
 
     access_log /var/log/nginx/access.log custom_main;
+
+    # A variable in proxy_pass makes nginx resolve the host per request. Keep
+    # these names out of any `upstream {}` block: nginx would match the block
+    # and pin its addresses again.
+    set $api_upstream ${ONYX_BACKEND_API_HOST}:8080;
+    set $web_upstream ${ONYX_WEB_SERVER_HOST}:3000;
 
     # Conditionally include MCP location configuration
     include /etc/nginx/conf.d/mcp.conf.inc;
@@ -62,7 +54,7 @@ server {
         proxy_http_version 1.1;
         proxy_buffering off;
         proxy_redirect off;
-        proxy_pass http://api_server;
+        proxy_pass http://$api_upstream;
     }
 
     location ~ ^/scim(/.*)?$ {
@@ -78,7 +70,7 @@ server {
         proxy_connect_timeout ${NGINX_PROXY_CONNECT_TIMEOUT}s;
         proxy_send_timeout ${NGINX_PROXY_SEND_TIMEOUT}s;
         proxy_read_timeout ${NGINX_PROXY_READ_TIMEOUT}s;
-        proxy_pass http://api_server;
+        proxy_pass http://$api_upstream;
     }
 
     # Match both /api/* and /openapi.json in a single rule
@@ -108,7 +100,7 @@ server {
         # we don't want nginx trying to do something clever with
         # redirects, we set the Host: header above already.
         proxy_redirect off;
-        proxy_pass http://api_server;
+        proxy_pass http://$api_upstream;
     }
 
     location / {
@@ -130,7 +122,7 @@ server {
         # we don't want nginx trying to do something clever with
         # redirects, we set the Host: header above already.
         proxy_redirect off;
-        proxy_pass http://web_server;
+        proxy_pass http://$web_upstream;
     }
 
 }

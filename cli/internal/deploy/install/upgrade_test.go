@@ -383,3 +383,136 @@ func TestUpgradeConfigFailureLeavesVersionAlone(t *testing.T) {
 		}
 	}
 }
+
+// Compose leaves nginx alone on an upgrade (its own config and image are the
+// same), but nginx reads its config templates only at start: the upgrade
+// restarts the container `up` kept so this release's templates take effect.
+func TestUpgradeRestartsNginxLeftRunning(t *testing.T) {
+	runner := &fakeRunner{handler: healthyDockerHandler}
+	root := installFixture(t, runner, "v4.0.0")
+
+	running := &fakeRunner{handler: func(c dockercmd.Command) (dockercmd.Result, error) {
+		a := argv(c)
+		switch {
+		case strings.Contains(a, "ps -q"):
+			return dockercmd.Result{Stdout: "abc\n"}, nil
+		case strings.Contains(a, "{{.Names}}"):
+			return dockercmd.Result{Stdout: "onyx-api_server-1\tapi1\nonyx-nginx-1\tnginx1\n"}, nil
+		}
+		return healthyDockerHandler(c)
+	}}
+	deps := testDeps(t, running, notFoundServer(t))
+	err := RunUpgrade(context.Background(), deps, Options{
+		NoPrompt: true, Tag: "v4.2.0", Dir: root, NoWait: true,
+	})
+	if err != nil {
+		t.Fatalf("RunUpgrade: %v\noutput:\n%s", err, outBuf(deps).String())
+	}
+	up, restart := -1, -1
+	for i, c := range running.calls {
+		a := argv(c)
+		if strings.Contains(a, " up -d") {
+			up = i
+		}
+		if strings.HasSuffix(a, " restart nginx") {
+			restart = i
+			if !strings.Contains(a, "-f docker-compose.yml") {
+				t.Errorf("restart must name the deployment's compose files: %s", a)
+			}
+			if c.Env["IMAGE_TAG"] != "v4.2.0" {
+				t.Errorf("restart env = %+v, want the target tag", c.Env)
+			}
+		}
+	}
+	if up < 0 {
+		t.Fatal("compose up never ran")
+	}
+	if restart < 0 {
+		t.Fatalf("nginx was not restarted after up; calls:\n%s", callList(running))
+	}
+	if restart < up {
+		t.Errorf("nginx restarted before up (restart at %d, up at %d)", restart, up)
+	}
+}
+
+// A container `up` replaced already runs this release's config: no restart.
+func TestUpgradeSkipsNginxRestartWhenRecreated(t *testing.T) {
+	runner := &fakeRunner{handler: healthyDockerHandler}
+	root := installFixture(t, runner, "v4.0.0")
+
+	var upSeen bool
+	running := &fakeRunner{handler: func(c dockercmd.Command) (dockercmd.Result, error) {
+		a := argv(c)
+		switch {
+		case strings.Contains(a, " up -d"):
+			upSeen = true
+		case strings.Contains(a, "ps -q"):
+			return dockercmd.Result{Stdout: "abc\n"}, nil
+		case strings.Contains(a, "{{.Names}}"):
+			id := "nginx1"
+			if upSeen {
+				id = "nginx2"
+			}
+			return dockercmd.Result{Stdout: "onyx-nginx-1\t" + id + "\n"}, nil
+		}
+		return healthyDockerHandler(c)
+	}}
+	deps := testDeps(t, running, notFoundServer(t))
+	err := RunUpgrade(context.Background(), deps, Options{
+		NoPrompt: true, Tag: "v4.2.0", Dir: root, NoWait: true,
+	})
+	if err != nil {
+		t.Fatalf("RunUpgrade: %v\noutput:\n%s", err, outBuf(deps).String())
+	}
+	for _, c := range running.calls {
+		if strings.HasSuffix(argv(c), " restart nginx") {
+			t.Errorf("nginx was restarted although up had replaced it: %s", argv(c))
+		}
+	}
+}
+
+// A failed restart is reported with the command to run by hand, not treated
+// as a failed upgrade: the services are already up on the target version.
+func TestUpgradeNginxRestartFailureIsAWarning(t *testing.T) {
+	runner := &fakeRunner{handler: healthyDockerHandler}
+	root := installFixture(t, runner, "v4.0.0")
+
+	running := &fakeRunner{handler: func(c dockercmd.Command) (dockercmd.Result, error) {
+		a := argv(c)
+		switch {
+		case strings.HasSuffix(a, " restart nginx"):
+			return dockercmd.Result{}, errors.New("exit status 1: no such service: nginx")
+		case strings.Contains(a, "ps -q"):
+			return dockercmd.Result{Stdout: "abc\n"}, nil
+		case strings.Contains(a, "{{.Names}}"):
+			return dockercmd.Result{Stdout: "onyx-nginx-1\tnginx1\n"}, nil
+		}
+		return healthyDockerHandler(c)
+	}}
+	deps := testDeps(t, running, notFoundServer(t))
+	err := RunUpgrade(context.Background(), deps, Options{
+		NoPrompt: true, Tag: "v4.2.0", Dir: root, NoWait: true,
+	})
+	if err != nil {
+		t.Fatalf("a failed nginx restart must not fail the upgrade: %v", err)
+	}
+	out := outBuf(deps).String()
+	if !strings.Contains(out, "Could not restart nginx") || !strings.Contains(out, "restart nginx") {
+		t.Errorf("output must warn and show the restart command:\n%s", out)
+	}
+	manifest, err := state.Load(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if manifest.InstalledTag != "v4.2.0" {
+		t.Errorf("InstalledTag = %q, want v4.2.0", manifest.InstalledTag)
+	}
+}
+
+func callList(r *fakeRunner) string {
+	lines := make([]string, 0, len(r.calls))
+	for _, c := range r.calls {
+		lines = append(lines, argv(c))
+	}
+	return strings.Join(lines, "\n")
+}

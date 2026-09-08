@@ -9,12 +9,19 @@ location = /mcp/oauth/callback {
     proxy_set_header Host $host;
     proxy_http_version 1.1;
     proxy_redirect off;
-    proxy_pass http://web_server;
+    # Resolved per request, like $web_upstream in app.conf. Set here as well
+    # so this file loads with an app.conf that predates those variables.
+    set $mcp_web_upstream ${ONYX_WEB_SERVER_HOST}:3000;
+    proxy_pass http://$mcp_web_upstream;
 }
 
 # MCP Server - Model Context Protocol for LLM integrations
 # Match /mcp, /mcp/, or /mcp/* but NOT /mcpserver, /mcpapi, etc.
 location ~ ^/mcp(/.*)?$ {
+    # Resolved per request, like $api_upstream in app.conf. `set` runs in
+    # order with the rewrites below, so it has to come before `break`.
+    set $mcp_upstream ${ONYX_MCP_SERVER_HOST}:8090;
+
     # misc headers
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -34,5 +41,5 @@ location ~ ^/mcp(/.*)?$ {
     proxy_redirect off;
     rewrite ^/mcp(/.*)$ $1 break;
     rewrite ^/mcp/?$ / break;
-    proxy_pass http://mcp_server;
+    proxy_pass http://$mcp_upstream;
 }

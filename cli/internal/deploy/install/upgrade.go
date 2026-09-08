@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/deployfiles"
@@ -249,9 +250,11 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 		in.rollbackEnv(envPath, envBytes)
 		return err
 	}
+	before := in.runningContainers(ctx)
 	if err := in.startServices(ctx, targetTag, installedTag, hostPort); err != nil {
 		return err
 	}
+	in.restartKeptNginx(ctx, targetTag, hostPort, before)
 
 	now := time.Now().UTC()
 	manifest.InstalledTag = targetTag
@@ -280,6 +283,29 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 
 	in.printUpgradeSuccess(hostPort, installedTag, targetTag)
 	return nil
+}
+
+// restartKeptNginx restarts nginx when `up` left it running. Compose replaces
+// a container only when its own config or image changed, and nginx's do not
+// change with the Onyx version. nginx reads its config templates only at
+// start though, so the templates this release ships take effect only after a
+// restart; before it runs them, nginx keeps addresses `up` may have retired.
+// Skipped when `up` already replaced the container (a floating tag, or a
+// compose config change).
+func (in *installer) restartKeptNginx(ctx context.Context, tag string, hostPort int, before map[string]string) {
+	id := before["nginx"]
+	if id == "" || in.runningContainers(ctx)["nginx"] != id {
+		return
+	}
+	in.infof("Restarting nginx so this release's nginx config takes effect...")
+	cmd := in.compose.Command(in.deploymentDir(), in.composeRunEnv(tag, hostPort), in.composeFileNames(false), "restart", "nginx")
+	if _, err := in.deps.Runner.Run(ctx, cmd); err != nil {
+		in.warnf("Could not restart nginx: %v", err)
+		in.infof("It serves with the previous nginx config until you restart it, from %s:", in.deploymentDir())
+		in.cmdf("%s", strings.Join(append([]string{cmd.Name}, cmd.Args...), " "))
+		return
+	}
+	in.successf("Restarted nginx")
 }
 
 // printUpgradeSuccess mirrors printSuccess: a summary card when the wizard

@@ -503,8 +503,8 @@ services:
   nginx:
     image: ${BASE_IMAGE_REGISTRY:-docker.io}/library/nginx:1.25.5-alpine
     restart: unless-stopped
-    # nginx will immediately crash with `nginx: [emerg] host not found in upstream`
-    # if api_server / web_server are not up
+    # nginx resolves api_server / web_server per request and would start without
+    # them; starting it once they are healthy avoids 502s while they come up.
     depends_on:
       api_server:
         condition: service_healthy
