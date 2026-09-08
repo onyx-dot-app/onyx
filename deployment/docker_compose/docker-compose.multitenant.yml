@@ -1,0 +1,44 @@
+# =============================================================================
+# MULTI-TENANT DEVELOPMENT OVERLAY
+# =============================================================================
+# Runs api_server and background in multi-tenant (Onyx Cloud) mode. Stack it on
+# docker-compose.yml and docker-compose.dev.yml:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml \
+#                  -f docker-compose.multitenant.yml up -d --wait
+#
+# Or let ods stack the files:
+#
+#   ods compose multitenant
+#
+# This overlay:
+#   - Runs the public-schema (schema_private) alembic migrations on api_server
+#     startup. The base `alembic upgrade head` refuses to run when
+#     MULTI_TENANT=true.
+#   - Sets MULTI_TENANT=true and AUTH_TYPE=cloud on api_server and background.
+#     Multi-tenant mode needs Enterprise Edition features, so they are pinned on.
+#   - Skips email verification, which needs SMTP under cloud auth.
+#
+# Development only. This file is not embedded in onyx-cli.
+# =============================================================================
+
+services:
+  api_server:
+    command: >
+      /bin/sh -c "alembic -n schema_private upgrade head &&
+      echo \"Starting Onyx Api Server\" &&
+      uvicorn onyx.main:app --host 0.0.0.0 --port 8080"
+    environment:
+      - MULTI_TENANT=true
+      - AUTH_TYPE=cloud
+      - ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
+      - REQUIRE_EMAIL_VERIFICATION=false
+      # Relaxes the multi-tenant user-management restrictions for local work.
+      - DEV_MODE=true
+
+  background:
+    environment:
+      - MULTI_TENANT=true
+      - AUTH_TYPE=cloud
+      - ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
+      - REQUIRE_EMAIL_VERIFICATION=false

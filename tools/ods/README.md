@@ -77,7 +77,7 @@ ods compose [profile]
 **Profiles:**
 
 - `dev` - Use dev configuration (exposes service ports for development)
-- `multitenant` - Use multitenant configuration
+- `multitenant` - Dev configuration plus the `docker-compose.multitenant.yml` overlay (multi-tenant mode)
 
 **Flags:**
 
@@ -97,7 +97,7 @@ ods compose
 # Start containers with dev configuration
 ods compose dev
 
-# Start containers with multitenant configuration
+# Start containers in multi-tenant mode
 ods compose multitenant
 
 # Stop running containers
