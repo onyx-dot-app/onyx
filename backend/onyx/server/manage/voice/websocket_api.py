@@ -542,10 +542,13 @@ async def handle_chunked_transcription(
     chunk_count = 0
     total_bytes = 0
 
-    if initial_audio:
+    # Replay in the transcriber's window size, so recovered audio keeps the same
+    # request sizes and silence detection as audio that arrives live.
+    for offset in range(0, len(initial_audio), transcriber.window_bytes):
+        window = initial_audio[offset : offset + transcriber.window_bytes]
         chunk_count += 1
-        total_bytes += len(initial_audio)
-        await transcriber.add_chunk(initial_audio)
+        total_bytes += len(window)
+        await transcriber.add_chunk(window)
 
     if client_ended:
         final_transcript = await transcriber.flush()
@@ -555,7 +558,13 @@ async def handle_chunked_transcription(
         return
 
     while True:
-        message = await websocket.receive()
+        message = await _receive_client_message(websocket)
+        if message is None:
+            logger.warning(
+                "Chunked transcription: no client message for %ss, ending session",
+                WS_CLIENT_IDLE_TIMEOUT_SECONDS,
+            )
+            break
         msg_type = message.get("type", "unknown")
 
         if msg_type == "websocket.disconnect":

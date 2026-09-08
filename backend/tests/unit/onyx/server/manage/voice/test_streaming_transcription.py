@@ -131,7 +131,8 @@ class FailAfterAudioTranscriber(ErrorResultTranscriber):
 
 
 class RecordingChunkedTranscriber:
-    def __init__(self) -> None:
+    def __init__(self, window_bytes: int = 1024) -> None:
+        self.window_bytes = window_bytes
         self.chunks: list[bytes] = []
 
     async def add_chunk(self, chunk: bytes) -> str | None:
@@ -241,3 +242,20 @@ async def test_close_failure_reports_client_ended() -> None:
 
     assert failure.value.buffered_audio == b"\x01\x02"
     assert failure.value.client_ended is True
+
+
+@pytest.mark.asyncio
+async def test_chunked_handler_replays_initial_audio_in_windows() -> None:
+    """Recovered audio is replayed in the transcriber's window size."""
+    websocket = NeverReceivingWebSocket()
+    transcriber = RecordingChunkedTranscriber(window_bytes=2)
+
+    async with asyncio.timeout(5):
+        await handle_chunked_transcription(
+            cast(Any, websocket),
+            cast(Any, transcriber),
+            initial_audio=b"\x01\x02\x03\x04\x05",
+            client_ended=True,
+        )
+
+    assert transcriber.chunks == [b"\x01\x02", b"\x03\x04", b"\x05"]
