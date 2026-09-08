@@ -18,7 +18,7 @@ const llmProviderListJSON = `{
 		"is_public": true,
 		"is_auto_mode": false,
 		"groups": [],
-		"agents": [],
+		"personas": [8, 9],
 		"deployment_name": null,
 		"model_configurations": [{
 			"id": 11,

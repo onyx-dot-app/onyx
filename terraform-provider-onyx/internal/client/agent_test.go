@@ -14,7 +14,7 @@ const agentResponse = `{
 	"is_public": true,
 	"is_listed": true,
 	"is_featured": false,
-	"builtin_agent": false,
+	"builtin_persona": true,
 	"icon_name": null,
 	"display_priority": null,
 	"starter_messages": [{"name": "Refunds", "message": "How do refunds work?"}],

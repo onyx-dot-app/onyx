@@ -44,7 +44,7 @@ func syncedGroup(id int64) map[string]any {
 		"manager_ids":        []string{},
 		"cc_pairs":           []any{},
 		"document_sets":      []any{},
-		"agents":             []any{},
+		"personas":           []any{},
 		"is_up_to_date":      true,
 		"is_up_for_deletion": false,
 		"is_default":         false,
