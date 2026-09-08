@@ -26,6 +26,10 @@ type coverageGate struct {
 	Update    bool
 	Markdown  string
 	Tolerance float64
+	// ReportReference, when set, is what the report shows the measurement
+	// against instead of the floors, e.g. the snapshot of the base commit. The
+	// gate keeps using the floors.
+	ReportReference *coverage.Reference
 }
 
 // runCoverageGate writes the baseline, or compares against it, and returns the
@@ -52,7 +56,13 @@ func runCoverageGate(g coverageGate) int {
 		return 1
 	}
 
-	report := coverage.Compare(g.Profile, baseline, g.Tolerance)
+	// The gate always compares against the committed floors. ReportReference
+	// only changes what the report shows.
+	gateReport := coverage.Compare(g.Profile, baseline.Reference(), g.Tolerance)
+	report := gateReport
+	if g.ReportReference != nil {
+		report = coverage.Compare(g.Profile, g.ReportReference, g.Tolerance)
+	}
 	if err := coverage.WriteReport(os.Stdout, report, g.Kind); err != nil {
 		log.Errorf("Failed to write the report: %v", err)
 		return 1
@@ -66,7 +76,7 @@ func runCoverageGate(g coverageGate) int {
 		log.Infof("Markdown report written to %s", g.Markdown)
 	}
 
-	if improvements := report.Improvements(); len(improvements) > 0 {
+	if improvements := gateReport.Improvements(); len(improvements) > 0 {
 		log.Infof("%s rose above the baseline. Lock the gain in with: %s --update",
 			g.Kind.Count(len(improvements)), g.Command)
 	}
@@ -74,13 +84,13 @@ func runCoverageGate(g coverageGate) int {
 	if !g.Check || baseline == nil {
 		return 0
 	}
-	regressions := report.Regressions()
+	regressions := gateReport.Regressions()
 	if len(regressions) == 0 {
 		log.Infof("%s holds at or above the baseline in %s", g.Kind.Title(), g.BaselinePath)
 		return 0
 	}
 	for _, regression := range regressions {
-		log.Errorf("%s fell to %.1f%%, below its %.1f%% floor", regression.Package, regression.Percent, regression.Floor)
+		log.Errorf("%s fell to %.1f%%, below its %.1f%% floor", regression.Package, regression.Percent, regression.Reference)
 	}
 	log.Errorf("%s regressed in %s. %s, or justify the drop and run: %s --update",
 		g.Kind.Title(), g.Kind.Count(len(regressions)), g.Kind.Remedy, g.Command)

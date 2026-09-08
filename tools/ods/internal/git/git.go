@@ -142,6 +142,25 @@ func HasUncommittedChanges() bool {
 	return staged.Run() != nil || unstaged.Run() != nil
 }
 
+// WorkingTreeChanges returns one `git status --porcelain` line per path that
+// differs from HEAD, untracked files included. HasUncommittedChanges ignores
+// untracked files, which suits a stash but not a check that the tree is
+// exactly the commit.
+func WorkingTreeChanges() ([]string, error) {
+	cmd := exec.Command("git", "status", "--porcelain", "--untracked-files=normal")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git status --porcelain failed: %w", err)
+	}
+	changes := []string{}
+	for _, line := range strings.Split(string(output), "\n") {
+		if line != "" {
+			changes = append(changes, line)
+		}
+	}
+	return changes, nil
+}
+
 // StashResult holds the result of a stash operation
 type StashResult struct {
 	Stashed bool
@@ -193,6 +212,84 @@ func IsAncestor(ancestor, descendant string) (bool, error) {
 		return false, fmt.Errorf("git merge-base --is-ancestor %s %s failed: %w: %s", ancestor, descendant, err, diagnostic)
 	}
 	return false, fmt.Errorf("git merge-base --is-ancestor %s %s failed: %w", ancestor, descendant, err)
+}
+
+// ResolveCommit resolves a commit-ish to a full commit SHA.
+func ResolveCommit(ref string) (string, error) {
+	out, err := exec.Command("git", "rev-parse", "--verify", ref+"^{commit}").Output()
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && len(exitErr.Stderr) > 0 {
+			return "", fmt.Errorf("failed to resolve %q: %w: %s", ref, err, strings.TrimSpace(string(exitErr.Stderr)))
+		}
+		return "", fmt.Errorf("failed to resolve %q: %w", ref, err)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// MergeBase returns the best common ancestor of a and b. found is false when
+// the repository knows no common ancestor (git exits 1), which a shallow
+// clone reports even for related commits. Any other failure is an error.
+func MergeBase(a, b string) (sha string, found bool, err error) {
+	cmd := exec.Command("git", "merge-base", a, b)
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err = cmd.Run()
+	if err == nil {
+		return strings.TrimSpace(stdout.String()), true, nil
+	}
+	// Exit code 1 is the documented "no merge base" result; anything else
+	// (e.g. an unknown revision) is a real error.
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
+		return "", false, nil
+	}
+	if diagnostic := strings.TrimSpace(stderr.String()); diagnostic != "" {
+		return "", false, fmt.Errorf("git merge-base %s %s failed: %w: %s", a, b, err, diagnostic)
+	}
+	return "", false, fmt.Errorf("git merge-base %s %s failed: %w", a, b, err)
+}
+
+// FirstParentRevList returns up to limit commit SHAs starting at rev and
+// following first parents only, newest first. rev itself is the first entry.
+func FirstParentRevList(rev string, limit int) ([]string, error) {
+	if limit < 1 {
+		return nil, fmt.Errorf("rev-list limit must be at least 1, got %d", limit)
+	}
+	cmd := exec.Command("git", "rev-list", "--first-parent", fmt.Sprintf("--max-count=%d", limit), rev)
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		if diagnostic := strings.TrimSpace(stderr.String()); diagnostic != "" {
+			return nil, fmt.Errorf("git rev-list --first-parent %s failed: %w: %s", rev, err, diagnostic)
+		}
+		return nil, fmt.Errorf("git rev-list --first-parent %s failed: %w", rev, err)
+	}
+	shas := []string{}
+	for _, line := range strings.Split(stdout.String(), "\n") {
+		if sha := strings.TrimSpace(line); sha != "" {
+			shas = append(shas, sha)
+		}
+	}
+	return shas, nil
+}
+
+// FetchCommitWithDepth fetches rev from origin with the given history depth
+// and returns the full SHA it resolved to. A remote-tracking name such as
+// origin/main is fetched as main: the remote serves its branches, not the
+// local names that track them. There is no fetch-everything fallback: a
+// shallow CI clone must stay small.
+func FetchCommitWithDepth(rev string, depth int) (string, error) {
+	if depth < 1 {
+		return "", fmt.Errorf("fetch depth must be at least 1, got %d", depth)
+	}
+	ref := strings.TrimPrefix(rev, "origin/")
+	if err := RunCommand("fetch", "--quiet", fmt.Sprintf("--depth=%d", depth), "origin", ref); err != nil {
+		return "", fmt.Errorf("git fetch --depth=%d origin %s failed: %w", depth, ref, err)
+	}
+	return ResolveCommit("FETCH_HEAD")
 }
 
 // IsShallowRepository reports whether the current repository is a shallow
