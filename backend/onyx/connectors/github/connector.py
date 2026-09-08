@@ -17,8 +17,21 @@ from typing_extensions import override
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import GITHUB_CONNECTOR_BASE_URL
-from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import (
+    CODE_FILE_BRANCH_KEY,
+    CODE_FILE_LANGUAGE_KEY,
+    CODE_FILE_METADATA_TYPE,
+    CODE_FILE_PATH_KEY,
+    CODE_FILE_REPO_KEY,
+    CODE_FILE_TYPE_KEY,
+    DocumentSource,
+)
 from onyx.connectors.connector_runner import CheckpointOutputWrapper, ConnectorRunner
+from onyx.connectors.cross_connector_utils.code_file_utils import (
+    infer_code_language,
+    is_generated_code_file,
+    is_sensitive_code_file,
+)
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
@@ -32,6 +45,7 @@ from onyx.connectors.github.utils import (
     deserialize_repository,
     get_external_access_permission,
     normalize_github_base_url,
+    parse_repositories_config,
     validate_credential_base_url,
 )
 from onyx.connectors.interfaces import (
@@ -46,6 +60,7 @@ from onyx.connectors.interfaces import (
     SlimConnectorWithPermSync,
 )
 from onyx.connectors.models import (
+    CodeSection,
     ConnectorMissingCredentialError,
     Document,
     DocumentFailure,
@@ -54,7 +69,11 @@ from onyx.connectors.models import (
     SlimDocument,
     TextSection,
 )
-from onyx.file_processing.extract_file_text import file_io_to_text, is_text_file
+from onyx.file_processing.extract_file_text import (
+    file_io_to_text,
+    get_file_ext,
+    is_text_file,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -96,14 +115,29 @@ GITHUB_INDEXABLE_FILENAMES = {
     "support",
 }
 # Path segments whose presence anywhere in a file's path excludes it.
+# Dependency trees and build output: with code indexing on these hold most
+# of a repo's files and none of its source.
 GITHUB_PATH_DENYLIST = {
     ".git",
-    "node_modules",
-    "vendor",
-    "dist",
-    "build",
+    ".gradle",
+    ".mypy_cache",
+    ".next",
+    ".nuxt",
+    ".pytest_cache",
+    ".terraform",
+    ".tox",
     ".venv",
     "__pycache__",
+    "bower_components",
+    "build",
+    "coverage",
+    "dist",
+    "node_modules",
+    "out",
+    "Pods",
+    "target",
+    "third_party",
+    "vendor",
 }
 # Skip files larger than this (checked against the git tree size before fetching).
 GITHUB_MAX_FILE_SIZE_BYTES = 1_000_000
@@ -114,12 +148,34 @@ _GITHUB_EMPTY_REPOSITORY_TREE_STATUS = 409
 _GITHUB_EMPTY_REPOSITORY_TREE_MESSAGE = "Git Repository is empty."
 
 
-def _is_indexable_path(path: str, size: int | None) -> bool:
+def _code_language(path: str) -> str | None:
+    """The source-code language of `path`, or None when it is not code.
+
+    Document extensions are never code — grammars exist for prose formats
+    like markdown, so the docs set must be subtracted, not just preferred.
+    Generated files are dropped for the same reason the denylist drops
+    build directories. Credential files are never indexed at all; the chunker
+    refuses them again for sections that arrive from the ingestion API.
+    """
+    if get_file_ext(path) in GITHUB_INDEXABLE_FILE_EXTENSIONS:
+        return None
+    if is_sensitive_code_file(path) or is_generated_code_file(path):
+        return None
+    return infer_code_language(path)
+
+
+def _is_indexable_path(
+    path: str,
+    size: int | None,
+    include_docs: bool = True,
+    include_code_files: bool = False,
+) -> bool:
     """Pure predicate: should this repo file be indexed?
 
-    Filters on a max size and path-segment denylist, then matches either a
-    document extension (.md, .txt, ...) or a conventional extensionless
-    document basename (README, LICENSE, ...).
+    Filters on a max size and path-segment denylist, then matches a document
+    extension (.md, .txt, ...), a conventional extensionless document basename
+    (README, LICENSE, ...), or — when code indexing is enabled — a known
+    source-code extension.
     """
     if size is not None and size > GITHUB_MAX_FILE_SIZE_BYTES:
         return False
@@ -129,12 +185,19 @@ def _is_indexable_path(path: str, size: int | None) -> bool:
         return False
 
     basename = path.rsplit("/", 1)[-1]
-    _, extension = os.path.splitext(basename)
-    if extension.lower() in GITHUB_INDEXABLE_FILE_EXTENSIONS:
+    extension = get_file_ext(basename)
+    if include_docs and extension in GITHUB_INDEXABLE_FILE_EXTENSIONS:
         return True
 
     # Extensionless docs like README / LICENSE (basename has no extension).
-    if not extension and basename.lower() in GITHUB_INDEXABLE_FILENAMES:
+    if (
+        include_docs
+        and not extension
+        and basename.lower() in GITHUB_INDEXABLE_FILENAMES
+    ):
+        return True
+
+    if include_code_files and _code_language(path) is not None:
         return True
 
     return False
@@ -520,7 +583,6 @@ def _convert_file_to_document(
     repo_name = parts[1] if len(parts) > 1 else repo_full_name
 
     html_url = f"{repo.html_url}/blob/{branch}/{path}"
-    _, extension = os.path.splitext(path)
 
     # NOTE: GitHub's tree API does not expose per-file modification times without
     # additional per-file commit-history calls. repo.pushed_at is the closest
@@ -537,21 +599,39 @@ def _convert_file_to_document(
             "object_type": "file",
         },
     }
+
+    metadata: dict[str, str | list[str]] = {
+        "object_type": "File",
+        CODE_FILE_REPO_KEY: repo_full_name,
+        CODE_FILE_PATH_KEY: path,
+        "file_extension": get_file_ext(path),
+        CODE_FILE_BRANCH_KEY: branch,
+    }
+    # Source-code files become CodeSections so they chunk at syntactic
+    # boundaries; everything else stays prose.
+    language = _code_language(path)
+    section: TextSection | CodeSection
+    if language is not None:
+        section = CodeSection(
+            link=html_url,
+            text=content_text,
+            language=language,
+            file_path=path,
+        )
+        metadata[CODE_FILE_TYPE_KEY] = CODE_FILE_METADATA_TYPE
+        metadata[CODE_FILE_LANGUAGE_KEY] = language
+    else:
+        section = TextSection(link=html_url, text=content_text)
+
     return Document(
         id=html_url,
-        sections=[TextSection(link=html_url, text=content_text)],
+        sections=[section],
         source=DocumentSource.GITHUB,
         external_access=repo_external_access,
         semantic_identifier=path,
         doc_updated_at=updated_at,
         doc_metadata=doc_metadata,
-        metadata={
-            "object_type": "File",
-            "repo": repo_full_name,
-            "path": path,
-            "file_extension": extension.lower(),
-            "branch": branch,
-        },
+        metadata=metadata,
     )
 
 
@@ -572,9 +652,11 @@ class GithubConnectorCheckpoint(ConnectorCheckpoint):
     # Resolved + filtered file paths for the current repo's FILES stage.
     # Populated once when the stage begins, then paginated via curr_page.
     file_paths: list[str] | None = None
-    # Branch file_paths was listed from; a resumed checkpoint whose branch no
-    # longer matches (connector edited, default branch changed) is re-listed.
+    # Branch and code-file setting file_paths was listed under. A resumed
+    # checkpoint that no longer matches (connector edited, default branch
+    # changed) is re-listed, since both decide what the listing contains.
     file_paths_branch: str | None = None
+    file_paths_include_code: bool | None = None
 
     # Used for the fallback cursor-based pagination strategy
     num_retrieved: int
@@ -582,14 +664,15 @@ class GithubConnectorCheckpoint(ConnectorCheckpoint):
 
     def reset(self) -> None:
         """
-        Resets curr_page, num_retrieved, cursor_url, file_paths, and
-        file_paths_branch to their initial values (0, 0, None, None, None)
+        Resets curr_page, num_retrieved, cursor_url, and the file listing
+        to their initial values (0, 0, None, None, None, None)
         """
         self.curr_page = 0
         self.num_retrieved = 0
         self.cursor_url = None
         self.file_paths = None
         self.file_paths_branch = None
+        self.file_paths_include_code = None
 
 
 def make_cursor_url_callback(
@@ -618,6 +701,7 @@ class GithubConnector(
         include_prs: bool = True,
         include_issues: bool = False,
         include_files: bool = False,
+        include_code_files: bool = False,
         branch: str | None = None,
     ) -> None:
         self.repo_owner = repo_owner
@@ -626,6 +710,7 @@ class GithubConnector(
         self.include_prs = include_prs
         self.include_issues = include_issues
         self.include_files = include_files
+        self.include_code_files = include_code_files
         # Branch to index files from; None means each repo's default branch.
         self.branch = (branch or "").strip() or None
         self.github_client: Github | None = None
@@ -682,23 +767,19 @@ class GithubConnector(
 
         try:
             repos = []
-            # Split repo_name by comma and strip whitespace
-            repo_names = [
-                name.strip() for name in (cast(str, self.repositories)).split(",")
-            ]
+            repo_names = parse_repositories_config(self.repositories)
 
             for repo_name in repo_names:
-                if repo_name:  # Skip empty strings
-                    try:
-                        repo = github_client.get_repo(f"{self.repo_owner}/{repo_name}")
-                        repos.append(repo)
-                    except GithubException as e:
-                        logger.warning(
-                            "Could not fetch repo %s/%s: %s",
-                            self.repo_owner,
-                            repo_name,
-                            e,
-                        )
+                try:
+                    repo = github_client.get_repo(f"{self.repo_owner}/{repo_name}")
+                    repos.append(repo)
+                except GithubException as e:
+                    logger.warning(
+                        "Could not fetch repo %s/%s: %s",
+                        self.repo_owner,
+                        repo_name,
+                        e,
+                    )
 
             return repos
         except RateLimitExceededException:
@@ -774,6 +855,7 @@ class GithubConnector(
                 "Re-tried listing repo files too many times. "
                 "Something is going wrong with fetching objects from Github"
             )
+
         assert self.github_client is not None  # for type-checking
         try:
             git_tree = repo.get_git_tree(self._resolve_branch(repo), recursive=True)
@@ -788,7 +870,12 @@ class GithubConnector(
                 element.path
                 for element in git_tree.tree
                 if element.type == "blob"
-                and _is_indexable_path(element.path, element.size)
+                and _is_indexable_path(
+                    element.path,
+                    element.size,
+                    include_docs=self.include_files,
+                    include_code_files=self.include_code_files,
+                )
             ]
             paths.sort()
             return paths, truncated
@@ -857,25 +944,27 @@ class GithubConnector(
         caller should return the checkpoint to resume), False once drained.
         """
         branch = self._resolve_branch(repo)
-        branch_changed = (
-            checkpoint.file_paths is not None and checkpoint.file_paths_branch != branch
+        listing_stale = checkpoint.file_paths is not None and (
+            checkpoint.file_paths_branch != branch
+            or checkpoint.file_paths_include_code != self.include_code_files
         )
-        if branch_changed:
-            # The cached listing came from a different branch (resumed
-            # checkpoint after a connector edit or default-branch change) —
-            # discard it so paths and content come from the same branch.
+        if listing_stale:
+            # The cached listing came from a different branch or filter (a
+            # resumed checkpoint after a connector edit or default-branch
+            # change) — discard it so paths and content agree.
             checkpoint.file_paths = None
             checkpoint.file_paths_branch = None
+            checkpoint.file_paths_include_code = None
             checkpoint.curr_page = 0
 
         if checkpoint.file_paths is None:
             pushed_at = (
                 repo.pushed_at.replace(tzinfo=timezone.utc) if repo.pushed_at else None
             )
-            # After a branch change the new branch was never indexed, so the
-            # pushed_at freshness gate must not skip the re-listing.
+            # After a branch or filter change the listing was never taken
+            # this way, so the pushed_at gate must not skip the re-listing.
             if (
-                not branch_changed
+                not listing_stale
                 and start is not None
                 and pushed_at is not None
                 and pushed_at < start
@@ -884,11 +973,13 @@ class GithubConnector(
                 logger.info("Skipping files for repo %s (pushed_at < start)", repo.name)
                 checkpoint.file_paths = []
                 checkpoint.file_paths_branch = branch
+                checkpoint.file_paths_include_code = self.include_code_files
             else:
                 logger.info("Listing files for repo: %s", repo.name)
                 paths, truncated = self._list_indexable_files(repo)
                 checkpoint.file_paths = paths
                 checkpoint.file_paths_branch = branch
+                checkpoint.file_paths_include_code = self.include_code_files
                 logger.info(
                     "Found %s indexable files for repo: %s", len(paths), repo.name
                 )
@@ -1176,7 +1267,9 @@ class GithubConnector(
         ):
             checkpoint.stage = GithubConnectorStage.FILES
 
-        if self.include_files and checkpoint.stage == GithubConnectorStage.FILES:
+        if (
+            self.include_files or self.include_code_files
+        ) and checkpoint.stage == GithubConnectorStage.FILES:
             has_more_file_batches = yield from self._fetch_repo_files(
                 repo, checkpoint, start, is_slim, repo_external_access
             )
@@ -1323,17 +1416,22 @@ class GithubConnector(
                 "Invalid connector settings: 'repo_owner' must be provided."
             )
 
-        if not (self.include_prs or self.include_issues or self.include_files):
+        if not (
+            self.include_prs
+            or self.include_issues
+            or self.include_files
+            or self.include_code_files
+        ):
             raise ConnectorValidationError(
                 "Invalid connector settings: at least one of pull requests, "
-                "issues, or files must be selected for indexing."
+                "issues, documents, or code files must be selected for indexing."
             )
 
         try:
             if self.repositories:
                 if "," in self.repositories:
                     # Multiple repositories specified
-                    repo_names = [name.strip() for name in self.repositories.split(",")]
+                    repo_names = parse_repositories_config(self.repositories)
                     if not repo_names:
                         raise ConnectorValidationError(
                             "Invalid connector settings: No valid repository names provided."

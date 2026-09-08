@@ -4,6 +4,7 @@ from tree_sitter_language_pack import manifest_languages
 from onyx.connectors.cross_connector_utils.code_file_utils import (
     SENSITIVE_FILE_LANGUAGES,
     infer_code_language,
+    is_generated_code_file,
     is_sensitive_code_file,
 )
 
@@ -118,3 +119,30 @@ def test_prose_and_tabular_files_are_not_code(path: str) -> None:
     """.txt resolves to the Vim help-file grammar and .csv/.tsv have their own
     tabular path; chunking them as code produces meaningless boundaries."""
     assert infer_code_language(path) is None
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "package-lock.json",
+        "yarn.lock",
+        "Cargo.lock",
+        "pnpm-lock.yaml",
+        "bun.lockb",
+        "static/jquery.min.js",
+        "static/site.min.css",
+        "gen/service.pb.go",
+        "gen/service_pb2.py",
+    ],
+)
+def test_generated_files_are_refused(path: str) -> None:
+    """Machine-written files outnumber source in a repo and add nothing to
+    retrieval, so connectors must be able to drop them."""
+    assert is_generated_code_file(path) is True
+
+
+@pytest.mark.parametrize(
+    "path", ["main.py", "lockfile_utils.py", "src/minify.js", "protobuf.py", ""]
+)
+def test_handwritten_files_are_not_generated(path: str) -> None:
+    assert is_generated_code_file(path) is False
