@@ -140,168 +140,134 @@ that uses the twin clears it from state and moves the resource onto the write-on
 
 ## Known limitations (by API design)
 
-Each of these follows from how the Onyx API behaves, not from a gap in the provider, so each
-one is a thing to design around rather than a bug to wait on.
+These follow from how the Onyx API behaves, so each is something to design around rather than
+a bug to wait on.
 
-A few are marked **fixed upstream**. The backend change is merged but is not in a released
-Onyx yet, so the provider keeps the workaround and the limitation still applies. They go away
-once the fix ships in a release and the provider drops the workaround.
+**Fixed upstream** marks a limitation the backend has already changed. The fix is not in a
+released Onyx yet, so the provider keeps its workaround and the limitation still applies.
 
 ### Secrets
 
-- **Secret drift is undetectable.** The API masks `api_key`/`custom_config` on read, so
-  rotating them out-of-band (e.g. in the admin UI) is invisible to `terraform plan`. The
-  configured value is authoritative and is re-asserted on the next apply.
+- **Secret drift is undetectable.** The API masks secrets on read, so rotating one in the
+  admin UI is invisible to `terraform plan`. The configured value is authoritative and is
+  re-asserted on the next apply.
 
 ### Settings and deployment defaults
 
-- **`onyx_settings` and `onyx_llm_provider_default` don't really delete.** Onyx has no
-  reset-settings API and no unset API for the text/vision defaults; destroy removes them
-  from state with a warning and leaves the live values alone. The chat-naming default is
-  the exception: it has an unset API and is cleared on destroy when managed.
+- **`onyx_settings` and `onyx_llm_provider_default` do not really delete.** Onyx has no
+  reset-settings API and no unset API for the text and vision defaults, so destroy drops them
+  from state and leaves the live values alone. The chat-naming default does have an unset API
+  and is cleared.
 
 ### LLM and embedding providers
 
-- **`onyx_embedding_provider` updates replace all fields.** Keep `api_key` (or
-  `api_key_wo`) in configuration — an update applied without it clears the stored key (the
-  API has no keep-stored-key flag). The currently-active embedding provider also cannot be
-  deleted.
-- **`model_configurations` is the list of record.** Models omitted from it are removed
-  server-side, and removing the model currently set as deployment default fails — repoint
-  `onyx_llm_provider_default` first (references order this correctly).
-- **The model list read is the API's display view.** It hides obsolete models and dated
-  duplicates, so writes (including the auto-mode pass-through, which is also not atomic
-  with its read) cannot preserve rows the API hides. The admin UI round-trips the same
-  filtered view. *Fixed upstream:* the upsert now takes a `keep_existing_models` flag.
+- **`onyx_embedding_provider` updates replace all fields.** Keep `api_key` (or `api_key_wo`)
+  in the configuration or an update clears the stored key. The active embedding provider
+  cannot be deleted.
+- **`model_configurations` is the list of record.** Omitted models are removed server-side,
+  and removing the current deployment default fails — repoint `onyx_llm_provider_default`
+  first, which references order correctly.
+- **The model list read is the API's display view.** It hides obsolete and dated-duplicate
+  models, so no write can preserve rows it does not return. The admin UI has the same
+  behaviour. *Fixed upstream:* the upsert takes `keep_existing_models`.
 
 ### Credentials and connectors
 
-- **`onyx_credential` payloads are never read back.** The API always returns the payload
-  masked, so it is never refreshed or diffed. `admin_public`, `curator_public` and `groups`
-  have no update endpoint and force replacement instead.
-- **A private credential can look deleted.** The API hides a credential with
-  `admin_public = false` from admins other than its creator, and that is indistinguishable
-  from a deleted one, so Terraform would drop it from state and recreate it. Keep
-  `admin_public = true` (the default) for credentials Terraform manages, or run Terraform
-  with the key that created them.
-- **`onyx_connector` does not own its access control.** Onyx applies access when a
-  credential is associated, so `access_type` and `groups` belong to the connector-credential
-  pair. The connector endpoints still require an `access_type` in the request body and then
-  ignore it, so the provider sends a fixed value rather than offering a knob that would do
-  nothing. Set access control on `onyx_cc_pair`.
-- **Onyx rewrites an unset `prune_freq` to 7 days** on a connector's first update, which the
-  provider then keeps as the value of record.
+- **`onyx_credential` payloads are never read back.** The API always masks the payload, so it
+  is never refreshed or diffed. `admin_public`, `curator_public` and `groups` have no update
+  endpoint and force replacement.
+- **A private credential can look deleted.** Onyx hides a credential with
+  `admin_public = false` from every admin but its creator, which is indistinguishable from
+  deletion, so Terraform would drop it and recreate it. Keep the default `admin_public = true`
+  for managed credentials, or apply with the key that created them.
+- **`onyx_connector` does not own its access control.** Onyx applies access when a credential
+  is associated, so `access_type` and `groups` live on the connector-credential pair. The
+  connector endpoints still require `access_type` in the body and ignore it, so the provider
+  sends a fixed value rather than offering a knob that does nothing. Set access on
+  `onyx_cc_pair`.
+- **An unset `prune_freq` becomes 7 days** on a connector's first update, and the provider
+  then keeps that as the value of record.
 
 ### Agents and actions
 
-- **Deleting an agent leaves a tombstone.** Onyx marks the row deleted instead of removing
-  it, so the name stays taken. A later create under that name revives the tombstone, which
-  is why destroy-then-apply returns the same agent id rather than a new one.
-- **A deleted agent answers 400, not 404.** The lookup raises a plain `ValueError`, which
-  Onyx renders as a bad request, so "gone" cannot be read off the status. The provider
-  confirms against the agent listing instead of matching on the message text.
-  *Fixed upstream:* the route now answers a typed `PERSONA_NOT_FOUND`.
-- **`onyx_agent` does not own every field on an agent.** Attached folders and documents
-  are cleared by an omitted list, and sending null is rejected (422), so the provider reads
-  them and sends them back unchanged. That leaves a narrow window in which an attachment
-  added between the read and the write is reverted. *Fixed upstream:* both fields are
-  nullable now. Also, `search_start_date` is sent but never read back, because Onyx returns
-  it as a parsed timestamp that would not match a plain date. Avatar images are not managed
-  at all.
-- **`display_priority` is create-only on the upsert.** Onyx reads it when an agent is
-  created and ignores it on every later write, so the provider applies a change through
-  the display-priority endpoint as a second call. That endpoint only sets a number, so the
-  attribute is computed: removing it from the configuration leaves the last value rather
-  than reporting a difference that never settles.
+- **Deleting an agent leaves a tombstone.** The row is marked deleted, so the name stays
+  taken and a later create under it revives the same agent. Destroy-then-apply returns the
+  original id, not a new one.
+- **A deleted agent answers 400, not 404**, so "gone" cannot be read off the status. The
+  provider confirms against the agent listing rather than matching error text.
+  *Fixed upstream:* the route answers a typed `PERSONA_NOT_FOUND`.
+- **`onyx_agent` does not own every field.** Attached folders and documents are cleared by an
+  omitted list and reject an explicit null, so the provider reads them and writes them back —
+  leaving a one-round-trip window where an attachment added in between is reverted.
+  *Fixed upstream:* both fields are nullable. Separately, `search_start_date` is written but
+  never read back, and avatars are not managed.
+- **`display_priority` is create-only on the upsert.** Onyx ignores it on later writes, so a
+  change costs a second call to the display-priority endpoint. That endpoint can only set a
+  number, so the attribute is computed: removing it keeps the last value.
 - **Two built-in actions are hidden from the API.** `OktaProfileTool` and `MemoryTool` are
-  left out of the agent snapshot, so an agent holding one reports fewer `tool_ids` than
-  were written and the difference never settles. Attach custom actions and the ordinary
-  built-ins instead.
-- **Deleting a custom action detaches it from every agent that uses it**, including agents
-  Terraform does not manage, without an error or a warning.
+  left out of the agent snapshot, so an agent holding one reports fewer `tool_ids` than were
+  written and never settles. Use custom actions and the other built-ins.
+- **Deleting a custom action detaches it from every agent using it**, including agents
+  Terraform does not manage, with no error or warning.
 
 ### User groups (Enterprise Edition)
 
-- **`onyx_user_group` is Enterprise Edition only.** The routes live in the EE application
-  and do not exist on Community Edition, where every call answers 404. Its acceptance tests
-  skip when `ee_features_enabled` is false.
+- **`onyx_user_group` is Enterprise Edition only.** The routes do not exist on Community
+  Edition, where every call answers 404.
 - **`onyx_user_group` does not manage what a group can see.** Connectors, document sets,
-  agents, LLM providers, MCP servers and credentials each carry their own `groups`
-  attribute and own that link. The group exposes `cc_pair_ids`, `document_set_ids` and
-  `agent_ids` read-only, so the two sides never fight over the same edge.
-- **A roster change must not disturb those links, and how it avoids that depends on the
-  change.** Onyx's update endpoint replaces connector links along with members. A roster
-  that only gains members therefore goes through the add-users endpoint instead, which
-  takes members alone and lets Onyx preserve the links itself, inside the transaction that
-  holds the membership lock. A roster that loses one has no such endpoint: the provider
-  reads the connector ids and sends them back, so a connector share made between that read
-  and the write is overwritten by the older list. The window is one round-trip and only
-  opens for a removal. Sending an empty list instead — the obvious-looking alternative —
-  would unshare every connector from the group with nothing in the plan saying so.
-- **A group's computed links lag by one apply.** Terraform creates a group before the
-  `onyx_cc_pair` that references it, so `cc_pair_ids` is still empty in the state written
-  by that first apply and fills in on the next refresh.
-- **Onyx refuses membership, rename and delete while a group is syncing**, and a newly
-  created group starts out syncing, so the provider waits before each of those. Managers,
-  incognito and permissions are not gated. **The user group tests therefore need Celery
-  beat as well as the workers** — the sync that clears the gate is beat-scheduled every 20
-  seconds, so without beat every one of those writes waits until it times out.
-- **A syncing group answers HTTP 404**, not a conflict, on the membership routes *and on
-  delete*, because those handlers map every `ValueError` to not-found. The rename route gets
-  this right. So a 404 from any of them does not mean the group is gone — the destroy
-  confirms each one against the listing before reporting success, since trusting it would
-  drop a live group out of state and leave the next apply failing on the name it still holds.
-  *Fixed upstream:* the sync gate now raises a distinct `RESOURCE_SYNCING` conflict.
-- **`onyx_user_group` permissions use Onyx's wire tokens**, for example `manage:connectors`,
-  not the enum names. Only toggleable permissions can be set; `basic`, `admin`,
-  `craft_sandbox`, `manage:skills` and the implied read tokens are managed by Onyx and are
-  neither read back nor writable.
-- **A seeded default group (`Admin`, `Basic`) holds members and nothing else.** Importing
-  one and managing its roster works, but a rename, a delete, or a permission or incognito
-  change is refused with a conflict.
-- **Onyx refuses a membership removal that would strand someone**, leaving them in no group
-  at all — a person with no group has no permissions. Destroying a group is checked the same
-  way, because it drops the whole roster, so a `terraform destroy` can fail on a member whose
-  only group this is. It also guards self-removal by a manager, privilege amplification, and
-  the survival of admin access.
+  agents, LLM providers, MCP servers and credentials each carry their own `groups` and own
+  that link. The group exposes `cc_pair_ids`, `document_set_ids` and `agent_ids` read-only, so
+  the two sides never fight over one edge.
+- **Removing a member can overwrite a concurrent connector share.** Onyx's update endpoint
+  replaces connector links along with members, and there is no removal-only route, so the
+  provider reads the links and writes them back. The window is one round-trip and only opens
+  for a removal; adding members uses an endpoint that preserves the links server-side.
+- **A group's computed links lag one apply.** Terraform creates the group before the
+  `onyx_cc_pair` referencing it, so `cc_pair_ids` fills in on the next refresh.
+- **Onyx refuses membership, rename and delete while a group is syncing**, and a new group
+  starts out syncing, so the provider waits before each. Managers, incognito and permissions
+  are not gated.
+- **A syncing group answers 404, not a conflict**, on the membership and delete routes, which
+  map every error to not-found. So a 404 does not prove the group is gone, and destroy
+  confirms against the listing before reporting success. *Fixed upstream:* the gate raises a
+  distinct `RESOURCE_SYNCING` conflict.
+- **Permissions use Onyx's wire tokens**, such as `manage:connectors`, not the enum names.
+  Only toggleable permissions can be set; `basic`, `admin`, `craft_sandbox`, `manage:skills`
+  and the implied read tokens are managed by Onyx.
+- **A seeded default group (`Admin`, `Basic`) holds members and nothing else.** Managing its
+  roster works; rename, delete, permission and incognito changes are refused.
+- **Onyx refuses a removal that would strand someone** in no group at all, since a person with
+  no group has no permissions. Destroying a group is checked the same way, so a destroy can
+  fail on a member whose only group it is. Self-removal by a manager, privilege amplification
+  and the survival of admin access are guarded too.
 
 ### MCP servers
 
-- **`onyx_mcp_server` manages only servers that need no interactive sign-in.** `NONE` and
-  `API_TOKEN` are supported; `OAUTH` and `PT_OAUTH` need a browser round-trip and are
-  refused while the plan is built, with a diagnostic naming the admin panel.
-- **Which tools an MCP server exposes is not managed.** Onyx only learns them by calling
-  the server, and it rejects both a tool selection and a Craft approval policy naming a
-  tool it has never seen. Neither attribute is exposed rather than exposing one that
-  silently does nothing on a server Terraform just created.
-- **An MCP server's `description` left out of the configuration is cleared, not kept.** Onyx
-  reads a missing description as "leave it alone", so the provider always sends the field and
-  an unstated one goes out empty — the same rule as `groups` and `users` below. The upsert
-  cannot carry `available_in_craft`, which lives on a different endpoint, so setting it costs
-  a second call.
-- **An MCP server added from the admin panel but never configured imports with empty strings.**
-  That flow leaves `auth_type` and `transport` unset, and Terraform has no value to show for
-  them, so the first plan after such an import moves them to the schema defaults. It settles
-  in one apply.
-- **A configured `auth_template_headers` is never refreshed from Onyx.** A header value may be
-  a literal rather than a `{placeholder}`, and Onyx masks those on the way out, so refreshing
-  would store the mask and leave a difference that never settles. Onyx's own template is read
-  back only when the configuration states none. Editing the headers in the admin panel is
-  therefore invisible to `terraform plan`, like any other secret.
-- **`auth_performer = "PER_USER"` credentials belong to the identity that applied them.**
-  Onyx stores `admin_credentials` against the applying user rather than the server, so a
-  Terraform-managed per-user server holds the API key's own credentials, not an
-  administrator's. It also masks them partially rather than fully, unlike a shared token.
-- **An MCP server's header template is never reset.** Onyx keeps the stored template
-  whenever a write omits one, so switching a server from `PER_USER` to a shared token
-  leaves the per-user headers in place rather than restoring the default `Authorization`
-  header. Recreate the server to start over.
-- **`groups` and `users` on an MCP server are owned by the configuration.** Onyx reads a
-  missing list as "leave it alone", so the provider sends an empty one instead. Removing
-  either from the configuration clears it on the server, including entries added from the
-  admin panel.
-- **An MCP server URL cannot point at the Onyx host.** The SSRF guard refuses `localhost`
-  and link-local addresses by name at every protection level, not only the strictest.
+- **Only servers needing no interactive sign-in are managed.** `NONE` and `API_TOKEN` work;
+  `OAUTH` and `PT_OAUTH` need a browser round-trip and are refused at plan time.
+- **Which tools a server exposes is not managed.** Onyx learns them by calling the server and
+  rejects a tool selection or Craft policy naming one it has never seen, so a server Terraform
+  just created has none to name.
+- **An omitted `description` is cleared, not kept**, because Onyx reads a missing one as
+  "leave alone" and the provider therefore always sends the field. The same rule applies to
+  `groups` and `users`: removing either from the configuration clears it on the server,
+  including entries added from the admin panel. `available_in_craft` lives on another
+  endpoint, so setting it costs a second call.
+- **A server added from the admin panel but never configured imports with empty strings.**
+  `auth_type` and `transport` are unset there, so the first plan after import moves them to
+  the schema defaults. It settles in one apply.
+- **`auth_template_headers` is never refreshed.** A header value may be a literal rather than
+  a `{placeholder}`, and Onyx masks those, so refreshing would store the mask and never
+  settle. Onyx's own template is read back only when the configuration states none. Admin-panel
+  edits are invisible to `terraform plan`, like any other secret.
+- **The header template is never reset.** Onyx keeps the stored template whenever a write
+  omits one, so moving a server from `PER_USER` to a shared token leaves the per-user headers
+  in place. Recreate the server to start over.
+- **`auth_performer = "PER_USER"` credentials belong to the identity that applied them.** Onyx
+  stores `admin_credentials` against the applying user, so a Terraform-managed per-user server
+  holds the API key's own credentials, not an administrator's, and masks them only partially.
+- **A server URL cannot point at the Onyx host.** The SSRF guard refuses `localhost` and
+  link-local addresses at every protection level, not just the strictest.
 
 ## Development
 
@@ -457,14 +423,22 @@ $ ods release tf-provider --dry-run    # computes the version, tags nothing
 To rehearse, run **Publish** by hand from the mirror's Actions tab. It defaults to a dry
 run, which builds every archive and publishes none of them.
 
-If a release fails after the tag is pushed, re-drive it from the monorepo's Actions tab, or
-with the command below. Do not delete and re-push the tag: the mirror step commits the tree
-at the ref you dispatch from, so dispatching from `main` also picks up any fix merged since
-the tag was cut.
+How a failed release is recovered depends on whether the mirror push got through. Check
+whether the mirror already carries the tag.
+
+**It does not** — the monorepo's *Release Terraform Provider* failed. Re-drive it from that
+repo's Actions tab, or with the command below. Do not delete and re-push the `tf-provider`
+tag: the mirror step commits the tree at the ref you dispatch from, so dispatching from `main`
+also picks up any fix merged since the tag was cut.
 
 ```console
 $ gh workflow run release-terraform-provider.yml --ref main -f version=0.3.0
 ```
+
+**It does** — the mirror push succeeded and the mirror's *Publish* failed (goreleaser,
+signing, the registry). Re-run that workflow from the **mirror's** Actions tab. Dispatching
+the monorepo workflow again will not work: it pushes `main` and the tag atomically, so a tag
+the mirror already holds rejects the whole push and nothing moves.
 
 ### One-time setup
 
