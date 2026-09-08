@@ -49,6 +49,17 @@ UNCHANGED_ITEM = {
     "parentReference": {"driveId": DRIVE_ID, "path": "/drives/d1/root:"},
 }
 
+# A file created in the window and modified after it closed.
+STRADDLING_ITEM = {
+    "id": "straddling",
+    "name": "in_progress.pdf",
+    "webUrl": "https://example.sharepoint.com/in_progress.pdf",
+    "file": {"mimeType": "application/pdf"},
+    "createdDateTime": "2026-03-01T12:00:00Z",
+    "lastModifiedDateTime": "2026-03-03T09:00:00Z",
+    "parentReference": {"driveId": DRIVE_ID, "path": "/drives/d1/root:"},
+}
+
 # A file that landed after the window closed.
 AFTER_WINDOW_ITEM = {
     "id": "after-window",
@@ -149,6 +160,18 @@ def test_file_added_after_window_is_skipped(
     collect_ids: Callable[[SharepointConnector], list[str]],
 ) -> None:
     connector = _connector(monkeypatch, {"value": [AFTER_WINDOW_ITEM]})
+
+    assert collect_ids(connector) == []
+
+
+@pytest.mark.parametrize("collect_ids", ITEM_SOURCES)
+def test_file_modified_after_window_waits_for_the_next_window(
+    monkeypatch: pytest.MonkeyPatch,
+    collect_ids: Callable[[SharepointConnector], list[str]],
+) -> None:
+    """Only the latest change places an item, so a file created in this window
+    but modified after it belongs to the next poll window."""
+    connector = _connector(monkeypatch, {"value": [STRADDLING_ITEM]})
 
     assert collect_ids(connector) == []
 

@@ -364,6 +364,10 @@ def _drive_item_in_time_window(
     is present: a file copied or synced into a drive keeps its original
     modification date, which can predate the window even though the file is new
     to the drive. Items carrying neither timestamp are kept.
+
+    Checking only the latest change attributes each item to exactly one poll
+    window. A change after `end` lands in the next window, which starts
+    POLL_CONNECTOR_OFFSET before this one ends.
     """
     if start is None and end is None:
         return True
