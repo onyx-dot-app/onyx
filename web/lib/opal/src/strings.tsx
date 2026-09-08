@@ -54,7 +54,7 @@ export type OpalStrings = {
   selectAnItemToContinue: string;
   singleItemSelected: string;
   selectedItemCount: (count: number) => string;
-  /** Table footer summary, e.g. "Showing 1~10 of 22". Both arguments are styled inline nodes. */
+  /** Table footer summary, e.g. "Showing 1~10 of 22", as text chunks around the two styled nodes. */
   showing: (range: ReactNode, total: ReactNode) => ReactNode;
 };
 
@@ -108,11 +108,7 @@ export const defaultOpalStrings: OpalStrings = {
   singleItemSelected: "Item selected",
   selectedItemCount: (count) =>
     `${count} item${count !== 1 ? "s" : ""} selected`,
-  showing: (range, total) => (
-    <>
-      Showing {range} of {total}
-    </>
-  ),
+  showing: (range, total) => ["Showing ", range, " of ", total],
 };
 
 const OpalStringsContext = createContext<OpalStrings>(defaultOpalStrings);

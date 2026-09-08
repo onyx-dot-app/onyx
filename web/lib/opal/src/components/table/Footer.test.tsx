@@ -20,29 +20,31 @@ function renderSummaryFooter(strings: OpalStrings = defaultOpalStrings) {
   );
   const footer = container.querySelector(".table-footer");
   if (!footer) throw new Error("footer did not render");
+  // The left side holds the summary row first, then any extra action.
+  const summaryRow = footer.firstElementChild?.firstElementChild;
   return {
-    summary: footer.firstElementChild?.textContent ?? "",
+    summary: summaryRow?.textContent ?? "",
+    // Every chunk is its own span, which is what keeps the spacing stable.
+    spanCount: summaryRow?.children.length ?? 0,
     range: footer.querySelector('span[dir="ltr"]'),
   };
 }
 
 describe("Footer summary", () => {
   it("renders the English summary with the range in an LTR isolate", () => {
-    const { summary, range } = renderSummaryFooter();
+    const { summary, spanCount, range } = renderSummaryFooter();
     expect(summary).toBe("Showing 1~10 of 22 users");
+    expect(spanCount).toBe(4);
     expect(range).toHaveTextContent("1~10");
   });
 
   it("renders a translated summary around the same styled nodes", () => {
-    const { summary, range } = renderSummaryFooter({
+    const { summary, spanCount, range } = renderSummaryFooter({
       ...defaultOpalStrings,
-      showing: (range, total) => (
-        <>
-          عرض {range} من {total}
-        </>
-      ),
+      showing: (range, total) => ["عرض ", range, " من ", total],
     });
     expect(summary).toBe("عرض 1~10 من 22 users");
+    expect(spanCount).toBe(4);
     expect(range).toHaveTextContent("1~10");
   });
 });

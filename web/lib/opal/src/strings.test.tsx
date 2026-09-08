@@ -31,11 +31,7 @@ describe("useOpalStrings", () => {
           ...defaultOpalStrings,
           copy: "نسخ",
           selectedItemCount: (count) => `${count} محدد`,
-          showing: (range, total) => (
-            <>
-              عرض {range} من {total}
-            </>
-          ),
+          showing: (range, total) => ["عرض ", range, " من ", total],
         }}
       >
         <Probe />

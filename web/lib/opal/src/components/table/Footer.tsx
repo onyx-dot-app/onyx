@@ -5,8 +5,7 @@ import { Text } from "@opal/components";
 import { useTableSize } from "@opal/components/table/TableSizeContext";
 import { SvgEye, SvgXCircle } from "@opal/icons";
 import { useOpalStrings, type OpalStrings } from "@opal/strings";
-import { richNodes } from "@opal/utils";
-import type { ReactNode } from "react";
+import { Children, type ReactNode } from "react";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -273,11 +272,19 @@ function SummaryLeft({
       {`${totalItems}${suffix}`}
     </Text>
   );
+  // Each text chunk gets its own Text span, so the summary keeps the sibling
+  // layout (and spacing) it had before the words came from a translation.
+  const parts = Children.toArray(strings.showing(range, total)).map(
+    (part, index) =>
+      typeof part === "string" ? (
+        <Text key={index} font={bodyFont} color="text-03">
+          {part}
+        </Text>
+      ) : (
+        part
+      )
+  );
   return (
-    <div className="flex flex-row items-center w-fit h-fit px-1">
-      <Text font={bodyFont} color="text-03">
-        {richNodes(strings.showing(range, total))}
-      </Text>
-    </div>
+    <div className="flex flex-row items-center w-fit h-fit px-1">{parts}</div>
   );
 }
