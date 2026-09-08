@@ -343,7 +343,11 @@ function ConnectableRow({
         }}
         rightChildren={
           unauth ? (
-            <Text font="secondary-action" color="text-03" nowrap>
+            <Text
+              font="secondary-action"
+              color="text-03"
+              wordWrap="whitespace-nowrap"
+            >
               {t("entryPickerPopover.connectAction.label")}
             </Text>
           ) : undefined
