@@ -246,8 +246,8 @@ ods web test --watch
 
 ### `test` - Run Tests
 
-Run the repo's test suites without changing directories or remembering which
-suite owns a file.
+Run any test suite in the repo without changing directories or remembering
+which runner applies.
 
 ```shell
 ods test <suite|path> [args...]
@@ -255,31 +255,64 @@ ods test <suite|path> [args...]
 
 The first argument is a suite name or a path inside a suite. A path selects the
 suite that covers it, so you can pass a file straight from your editor. All
-later arguments go to the suite's test runner.
+later arguments go to the underlying runner.
 
-| Suite | Aliases | Directory | Runner |
+| Suite | Aliases | Runner | Needs services |
 | --- | --- | --- | --- |
-| `ods` | | `tools/ods` | `go test` |
-| `cli` | | `cli` | `go test` |
-| `terraform` | `tf` | `terraform-provider-onyx` | `go test` |
+| `unit` | `u` | pytest | no |
+| `external` | `edu`, `ext` | pytest | Postgres, Redis, OpenSearch, MinIO |
+| `integration` | `int` | pytest | full deployment |
+| `web` | `jest` | jest | no |
+| `e2e` | `playwright`, `pw` | playwright | full deployment |
+| `mobile` | | jest-expo | no |
+| `ods` | | go test | no |
+| `cli` | | go test | no |
+| `terraform` | `tf` | go test | no |
+| `backend` | `py` | pytest | any other `backend/tests` path |
 
-The Go suites run with `-race`, the same as `pr-golang-tests.yml`. A runner that
-takes packages rather than files, such as `go test`, runs the package that holds
-a file argument. `<file>::<TestName>` runs one test.
+Backend suites run from `backend/`, so `backend/pytest.ini` applies. Suites that
+need credentials read `.vscode/.env`, which is created from
+`.vscode/env_template.txt` on first use. Enterprise Edition features are on by
+default; use `--no-ee` to turn them off.
+
+The Go suites cover the repo's three Go modules. They run with `-race`, the same
+as `pr-golang-tests.yml`. `go test` takes packages rather than files, so a file
+argument runs the package that holds it, and `<file>::<TestName>` becomes a
+`-run` filter.
+
+A bare `ods test integration` runs `backend/tests/integration/tests`, which is
+what CI shards. The sibling directories under `backend/tests/integration` each
+need a setup of their own — `multitenant_tests` a multi-tenant deployment,
+`connector_job_tests` connector credentials — so give a path to run one.
+
+**Careful:** the integration suite calls `reset_all()`, which wipes Postgres and
+the file store for the current project. Do not point it at data you want to
+keep.
 
 **Examples:**
 
 ```shell
-# Run a whole module
+# Run a whole suite
+ods test unit
+
+# Run one file, or one test
+ods test backend/tests/unit/onyx/utils/test_vespa_tasks.py
+ods test backend/tests/unit/onyx/utils/test_vespa_tasks.py::test_monitor
+
+# Forward arguments to the runner
+ods test unit -k some_name
+ods test web --watch
+
+# Run a backend suite in parallel (pytest-xdist)
+ods test external --parallel
+
+# Web end-to-end tests
+ods test e2e chat
+
+# Go modules
 ods test ods
-
-# Run one package, one file's package, or one test
 ods test tools/ods/internal/testsuite
-ods test tools/ods/internal/testsuite/testsuite_test.go
-ods test tools/ods/internal/testsuite/testsuite_test.go::TestResolveGoTargets
-
-# Forward arguments to go test
-ods test cli -run TestChat -v
+ods test cli/internal/tui/viewport_test.go::TestAddUserMessage
 ```
 
 ### `coverage` - Measure Go Coverage Against a Baseline

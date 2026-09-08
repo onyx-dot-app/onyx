@@ -95,6 +95,15 @@ Write the migration manually and place it in the file that alembic creates when 
 Run pytest through `uv run` from the repo root — no venv activation needed (`uv run` uses the
 lockfile-pinned environment and creates/syncs `.venv` as needed).
 
+`ods test` is the shorter form of every command in this section. It picks the suite from a name
+or a path, supplies `.vscode/.env` where the suite needs it, and passes the rest to pytest:
+
+```bash
+ods test unit                                   # the whole suite
+ods test backend/tests/unit/onyx/test_foo.py    # one file
+ods test external -k some_name                  # arguments reach pytest
+```
+
 There are 4 main types of tests within Onyx:
 
 ### Model choice for tests that make real LLM calls
@@ -144,6 +153,13 @@ mock anything in these tests. Prefer writing integration tests (or External Depe
 verification is necessary) over any other type of test.
 
 Tests are parallelized at a directory level.
+
+Careful: these tests call `reset_all()`, which wipes Postgres and the file store for the current
+project. Do not point them at data you want to keep.
+
+`ods test integration` runs `backend/tests/integration/tests`, the same set CI shards. The sibling
+directories need a setup of their own, so give a path to run one, for example
+`ods test backend/tests/integration/multitenant_tests`.
 
 When writing integration tests, make sure to check the root `conftest.py` for useful fixtures + the `backend/tests/integration/common_utils` directory for utilities. Prefer (if one exists), calling the appropriate Manager
 class in the utils over directly calling the APIs with a library like `requests`. Prefer using fixtures rather than

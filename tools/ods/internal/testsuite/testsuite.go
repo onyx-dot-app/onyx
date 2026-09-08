@@ -1,7 +1,7 @@
-// Package testsuite maps a suite name or a file path onto the test suite that
-// owns it. The repo holds several suites, each with its own working directory
-// and test runner; this package holds the routing table and the pure logic
-// that picks an entry from it.
+// Package testsuite maps a suite name or a file path onto the test runner that
+// knows how to execute it. The repo has four runners (pytest, jest, playwright,
+// go test) with different working directories and arguments; this package holds
+// the routing table and the pure logic that picks an entry from it.
 package testsuite
 
 import (
@@ -13,6 +13,16 @@ import (
 	"strings"
 )
 
+// Runner identifies the tool that executes a suite.
+type Runner string
+
+const (
+	RunnerPytest     Runner = "pytest"
+	RunnerJest       Runner = "jest"
+	RunnerPlaywright Runner = "playwright"
+	RunnerGo         Runner = "go"
+)
+
 // ErrNoArgs is returned when no suite or path was given.
 var ErrNoArgs = errors.New("no suite or path given")
 
@@ -22,10 +32,23 @@ type Suite struct {
 	Name string
 	// Aliases are alternate names accepted on the command line.
 	Aliases []string
-	// Dir is the suite's directory, relative to the git root. It is the
-	// working directory for the test runner and the prefix used to infer the
-	// suite from a path.
+	// Runner is the tool that executes this suite.
+	Runner Runner
+	// Dir is the working directory for the runner, relative to the git root.
 	Dir string
+	// Target is the suite's root test path, relative to Dir. It is the prefix
+	// used to infer the suite from a path, and the default argument for
+	// pytest unless Default overrides it.
+	Target string
+	// Default overrides Target as the argument used when the caller gives no
+	// path. Set it where the suite root holds more than a plain run should
+	// take on.
+	Default string
+	// Caution is a one-line warning printed before the suite runs. Set it
+	// where a run changes state outside the test process.
+	Caution string
+	// NeedsBackendEnv marks suites that need credentials from .vscode/.env.
+	NeedsBackendEnv bool
 	// DefaultArgs are passed to the runner before any user arguments, so a
 	// user argument for the same option still wins.
 	DefaultArgs []string
@@ -33,27 +56,110 @@ type Suite struct {
 	Short string
 }
 
+// Prefix returns the suite's test path relative to the git root.
+func (s *Suite) Prefix() string {
+	return path(s.Dir, s.Target)
+}
+
+// DefaultTarget returns the path to run when the caller gives no path.
+func (s *Suite) DefaultTarget() string {
+	if s.Default != "" {
+		return s.Default
+	}
+	return s.Target
+}
+
 // suites is the routing table. Order here is the order shown in help.
 var suites = []Suite{
 	{
-		Name: "ods",
-		Dir:  "tools/ods",
+		Name:    "unit",
+		Aliases: []string{"u"},
+		Runner:  RunnerPytest,
+		Dir:     "backend",
+		Target:  "tests/unit",
+		Short:   "Backend unit tests (no services needed)",
+	},
+	{
+		Name:            "external",
+		Aliases:         []string{"edu", "ext"},
+		Runner:          RunnerPytest,
+		Dir:             "backend",
+		Target:          "tests/external_dependency_unit",
+		NeedsBackendEnv: true,
+		// Match CI, which leaves nightly-only tests to the nightly workflow.
+		DefaultArgs: []string{"-m", "not nightly"},
+		Short:       "External dependency unit tests (needs Postgres, Redis, OpenSearch, MinIO)",
+	},
+	{
+		Name:    "integration",
+		Aliases: []string{"int"},
+		Runner:  RunnerPytest,
+		Dir:     "backend",
+		Target:  "tests/integration",
+		// A bare run covers what CI shards. The sibling directories need a
+		// setup of their own — multitenant_tests a multi-tenant deployment,
+		// connector_job_tests connector credentials — so they are reachable
+		// by path but are not part of a plain `ods test integration`.
+		Default:         "tests/integration/tests",
+		NeedsBackendEnv: true,
+		Caution:         "these tests call reset_all(), which wipes Postgres and the file store for this project",
+		Short:           "Backend integration tests (needs a full Onyx deployment)",
+	},
+	{
+		Name:    "web",
+		Aliases: []string{"jest"},
+		Runner:  RunnerJest,
+		Dir:     "web",
+		Short:   "Web unit and component tests (jest)",
+	},
+	{
+		Name:    "e2e",
+		Aliases: []string{"playwright", "pw"},
+		Runner:  RunnerPlaywright,
+		Dir:     "web",
+		Target:  "tests/e2e",
+		Short:   "Web end-to-end tests (needs a full Onyx deployment)",
+	},
+	{
+		Name:   "mobile",
+		Runner: RunnerJest,
+		Dir:    "mobile",
+		Short:  "Mobile tests (jest-expo)",
+	},
+	{
+		Name:    "ods",
+		Runner:  RunnerGo,
+		Dir:     "tools/ods",
+		Default: "./...",
 		// -race matches pr-golang-tests.yml, which runs every Go module.
 		DefaultArgs: []string{"-race"},
-		Short:       "Tests for this tool",
+		Short:       "Tests for this tool (go)",
 	},
 	{
 		Name:        "cli",
+		Runner:      RunnerGo,
 		Dir:         "cli",
+		Default:     "./...",
 		DefaultArgs: []string{"-race"},
-		Short:       "Onyx CLI tests",
+		Short:       "Onyx CLI tests (go)",
 	},
 	{
 		Name:        "terraform",
 		Aliases:     []string{"tf"},
+		Runner:      RunnerGo,
 		Dir:         "terraform-provider-onyx",
+		Default:     "./...",
 		DefaultArgs: []string{"-race"},
-		Short:       "Terraform provider tests",
+		Short:       "Terraform provider tests (go)",
+	},
+	{
+		Name:            "backend",
+		Aliases:         []string{"py"},
+		Runner:          RunnerPytest,
+		Dir:             "backend",
+		Target:          "tests",
+		NeedsBackendEnv: true,
+		Short:           "Any other backend/tests path (daily, regression, api, ...)",
 	},
 }
 
@@ -94,7 +200,7 @@ func byName(name string) *Suite {
 // remaining arguments pass through untouched.
 //
 // root is the git root. cwd is the caller's working directory, so that a path
-// typed relative to it (for example inside tools/ods/) resolves correctly.
+// typed relative to it (for example inside backend/) resolves correctly.
 func Resolve(root, cwd string, args []string) (*Suite, []string, error) {
 	if len(args) == 0 {
 		return nil, nil, ErrNoArgs
@@ -129,11 +235,15 @@ func Resolve(root, cwd string, args []string) (*Suite, []string, error) {
 	return suite, append(runnerTarget(root, suite, path(target)), rest...), nil
 }
 
-// runnerTarget shapes a suite-relative path into what the suite's runner
-// accepts. go test takes packages rather than files, so a file becomes the
-// directory that holds it, and a "<file>::<TestName>" node id becomes a -run
-// filter.
+// runnerTarget shapes a suite-relative path into what the runner accepts.
+// pytest, jest, and playwright all take paths. go test takes packages, so a
+// file becomes the directory that holds it, and a node id becomes a -run
+// filter, which keeps "<file>::<test>" working across every suite.
 func runnerTarget(root string, suite *Suite, rel string) []string {
+	if suite.Runner != RunnerGo {
+		return []string{rel}
+	}
+
 	file := stripNodeID(rel)
 	pkg := goPackage(root, suite, file)
 	if name := strings.TrimPrefix(rel[len(file):], "::"); name != "" {
@@ -159,9 +269,9 @@ func goPackage(root string, suite *Suite, rel string) string {
 // suite-relative arguments returned by Resolve, where a target always carries a
 // path separator or a node id.
 //
-// Callers need this because a runner given no target may cover less than the
-// whole suite, so a bare run needs the suite's catch-all target — but only
-// when the caller has not already picked one.
+// Callers need this because pytest with no target collects from its working
+// directory. For a backend suite that is the whole of backend/, so
+// `ods test unit -k foo` would reach every backend test, integration included.
 func HasTarget(args []string) bool {
 	for _, arg := range args {
 		if looksLikePath(arg) {
@@ -173,7 +283,8 @@ func HasTarget(args []string) bool {
 
 // relocate rewrites arguments that name an existing path into paths relative
 // to the suite's working directory, which is where the runner starts.
-// Everything else — flags and their values — passes through untouched.
+// Everything else — flags, their values, playwright test-name filters — passes
+// through untouched.
 func relocate(root, cwd string, suite *Suite, args []string) []string {
 	out := make([]string, 0, len(args))
 	for _, arg := range args {
@@ -189,8 +300,8 @@ func relocateArg(root, cwd string, suite *Suite, arg string) []string {
 	repoPath, ok := repoRelative(root, cwd, arg)
 	if !ok {
 		// The path may still be relative to the suite directory, which is
-		// where the runner starts. go test needs a "./" prefix, so shape it
-		// here.
+		// where the runner starts. pytest and jest read it that way on their
+		// own; go test needs a "./" prefix, so shape it here.
 		if rel, ok := suiteRelative(root, suite, arg); ok {
 			return runnerTarget(root, suite, rel)
 		}
@@ -221,13 +332,13 @@ func suiteRelative(root string, suite *Suite, arg string) (string, bool) {
 	return path(filePart) + arg[len(filePart):], true
 }
 
-// suiteForPath returns the suite whose directory is the longest match for a
-// repo-relative path. Longest wins so that a suite nested inside another
-// resolves to the inner one, whatever the table holds.
+// suiteForPath returns the suite whose prefix is the longest match for a
+// repo-relative path. Longest wins so that web/tests/e2e resolves to the e2e
+// suite rather than to web.
 func suiteForPath(repoPath string) *Suite {
 	matches := make([]*Suite, 0, 2)
 	for i := range suites {
-		if underPrefix(repoPath, suites[i].Dir) {
+		if underPrefix(repoPath, suites[i].Prefix()) {
 			matches = append(matches, &suites[i])
 		}
 	}
@@ -235,7 +346,7 @@ func suiteForPath(repoPath string) *Suite {
 		return nil
 	}
 	sort.SliceStable(matches, func(a, b int) bool {
-		return len(matches[a].Dir) > len(matches[b].Dir)
+		return len(matches[a].Prefix()) > len(matches[b].Prefix())
 	})
 	return matches[0]
 }
@@ -248,8 +359,8 @@ func underPrefix(repoPath, prefix string) bool {
 // repoRelative turns a user-supplied path into a slash-separated path relative
 // to the git root, reporting false when it does not point at anything real.
 // The path is tried against the working directory first, then against the git
-// root, so both "internal/testsuite" from inside tools/ods/ and
-// "tools/ods/internal/testsuite" from anywhere work.
+// root, so both "tests/unit" from inside backend/ and "backend/tests/unit"
+// from anywhere work.
 func repoRelative(root, cwd, arg string) (string, bool) {
 	filePart := stripNodeID(arg)
 	if filePart == "" {
@@ -282,13 +393,13 @@ func repoRelative(root, cwd, arg string) (string, bool) {
 }
 
 // looksLikePath reports whether an argument is shaped like a path worth
-// rewriting: it has more than one segment, or carries a node id.
+// rewriting: it has more than one segment, or carries a pytest node id.
 //
 // A single bare word is deliberately excluded even when a file by that name
-// exists. Such a word is far more often a flag value (`-run TestFoo`) than a
-// target, and when it really is a target it is already relative to the
-// caller's directory, so rewriting it would only change a path that already
-// works.
+// exists. Such a word is far more often a flag value (`-k web`, a playwright
+// test-name filter) than a target, and when it really is a target it is
+// already relative to the caller's directory, so rewriting it would only
+// change a path that already works.
 func looksLikePath(arg string) bool {
 	if strings.HasPrefix(arg, "-") {
 		return false
@@ -296,8 +407,8 @@ func looksLikePath(arg string) bool {
 	return strings.ContainsAny(arg, `/\`) || strings.Contains(arg, "::")
 }
 
-// stripNodeID drops the trailing "::TestName" of a node id, leaving the part
-// that exists on disk.
+// stripNodeID drops the trailing "::test_name" of a pytest node id, leaving
+// the part that exists on disk.
 func stripNodeID(arg string) string {
 	if idx := strings.Index(arg, "::"); idx >= 0 {
 		return arg[:idx]
@@ -306,7 +417,7 @@ func stripNodeID(arg string) string {
 }
 
 // path joins segments and normalizes to forward slashes, which is what both
-// go test and the prefix table expect.
+// the runners and the prefix table expect.
 func path(segments ...string) string {
 	joined := filepath.Join(segments...)
 	return filepath.ToSlash(joined)

@@ -17,6 +17,34 @@ func writeFile(t *testing.T, path string) {
 	}
 }
 
+// TestRepoDirs checks the helpers that hang off the git root. The test runs
+// from its own source directory, which is always inside the checkout.
+func TestRepoDirs(t *testing.T) {
+	root, err := GitRoot()
+	if err != nil {
+		t.Fatalf("GitRoot failed: %v", err)
+	}
+	if !filepath.IsAbs(root) {
+		t.Fatalf("GitRoot = %q, want an absolute path", root)
+	}
+
+	backend, err := BackendDir()
+	if err != nil {
+		t.Fatalf("BackendDir failed: %v", err)
+	}
+	if want := filepath.Join(root, "backend"); backend != want {
+		t.Errorf("BackendDir = %q, want %q", backend, want)
+	}
+
+	web, err := WebDir()
+	if err != nil {
+		t.Fatalf("WebDir failed: %v", err)
+	}
+	if want := filepath.Join(root, "web"); web != want {
+		t.Errorf("WebDir = %q, want %q", web, want)
+	}
+}
+
 func TestResolveInBackend(t *testing.T) {
 	// Precondition.
 	// A repository-shaped tree with files inside and outside the backend

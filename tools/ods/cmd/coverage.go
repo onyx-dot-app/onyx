@@ -225,6 +225,11 @@ func coverageSuite(root, cwd, target string) *testsuite.Suite {
 	if err != nil {
 		log.Fatalf("%v", err)
 	}
+	// Only Go suites carry a baseline; the others have no coverage tooling
+	// here yet. Say so rather than failing later on a missing go.mod.
+	if suite.Runner != testsuite.RunnerGo {
+		log.Fatalf("Coverage covers the Go suites only; %q runs under %s", suite.Name, suite.Runner)
+	}
 	// Coverage is measured for a whole module, since a baseline covers every
 	// package in it. A path pointing deeper would silently measure less.
 	if len(args) > 0 && args[0] != "./..." {
@@ -253,6 +258,9 @@ Examples:
 
 Suites:`)
 	for _, suite := range testsuite.All() {
+		if suite.Runner != testsuite.RunnerGo {
+			continue
+		}
 		fmt.Fprintf(&b, "\n  %-12s %s", suite.Name, suite.Short)
 	}
 	return b.String()
