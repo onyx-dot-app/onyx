@@ -47,6 +47,20 @@ OIDC_DISCOVERY_CACHE_TTL_SECONDS: int = int(
 # Negative entries retry quickly so a transient IdP outage self-heals fast.
 OIDC_DISCOVERY_NEGATIVE_TTL_SECONDS: int = 45
 
+# Hard cap on every outgoing OAuth/OIDC HTTP call. Without it an unreachable IdP
+# pins the DB session the request holds while refreshing, until the async pool is
+# exhausted and every authenticated endpoint times out.
+OAUTH_HTTP_TIMEOUT_SECONDS: float = float(
+    os.environ.get("OAUTH_HTTP_TIMEOUT_SECONDS") or 10.0
+)
+
+# Cap on the whole refresh pass a request performs before it is served. Bounds the
+# combined lock wait, DB reads and IdP round-trip so no request can hold its DB
+# session past this budget.
+OAUTH_REFRESH_TOTAL_TIMEOUT_SECONDS: float = float(
+    os.environ.get("OAUTH_REFRESH_TOTAL_TIMEOUT_SECONDS") or 15.0
+)
+
 # Per-discovery-URL locks so one IdP's hanging fetch never blocks another's.
 # Created on first use so they bind to the running event loop.
 _OIDC_DISCOVERY_LOCKS: Dict[str, asyncio.Lock] = {}
@@ -156,8 +170,8 @@ async def _get_oidc_token_endpoint(config_url: str) -> Optional[str]:
             return await _revalidate_cached_endpoint(cached)
         token_endpoint: Optional[str] = None
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(config_url, timeout=10.0)
+            async with httpx.AsyncClient(timeout=OAUTH_HTTP_TIMEOUT_SECONDS) as client:
+                response = await client.get(config_url)
                 response.raise_for_status()
                 config: Dict[str, Any] = response.json()
             raw_endpoint = config.get("token_endpoint")
@@ -318,7 +332,7 @@ async def refresh_oauth_token(
     try:
         logger.info("Refreshing OAuth token for %s's %s account", user.email, provider)
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=OAUTH_HTTP_TIMEOUT_SECONDS) as client:
             response = await client.post(
                 context.token_endpoint,
                 data={
