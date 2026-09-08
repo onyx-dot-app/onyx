@@ -219,16 +219,6 @@ class DriveItemData(BaseModel):
 
     @classmethod
     def from_graph_json(cls, item: dict[str, Any]) -> "DriveItemData":
-        last_mod_raw = item.get(DRIVE_ITEM_LAST_MODIFIED_DATETIME_PROPERTY)
-        last_mod: datetime | None = None
-        if isinstance(last_mod_raw, str):
-            last_mod = datetime.fromisoformat(last_mod_raw.replace("Z", "+00:00"))
-
-        created_raw = item.get(DRIVE_ITEM_CREATED_DATETIME_PROPERTY)
-        created: datetime | None = None
-        if isinstance(created_raw, str):
-            created = datetime.fromisoformat(created_raw.replace("Z", "+00:00"))
-
         last_modified_by = item.get(DRIVE_ITEM_LAST_MODIFIED_BY_PROPERTY, {}).get(
             "user", {}
         )
@@ -242,8 +232,12 @@ class DriveItemData(BaseModel):
             size=item.get(DRIVE_ITEM_SIZE_PROPERTY),
             mime_type=item.get(DRIVE_ITEM_FILE_PROPERTY, {}).get("mimeType"),
             download_url=item.get(DRIVE_ITEM_DOWNLOAD_URL_PROPERTY),
-            created_datetime=created,
-            last_modified_datetime=last_mod,
+            created_datetime=_parse_sharepoint_datetime(
+                item.get(DRIVE_ITEM_CREATED_DATETIME_PROPERTY)
+            ),
+            last_modified_datetime=_parse_sharepoint_datetime(
+                item.get(DRIVE_ITEM_LAST_MODIFIED_DATETIME_PROPERTY)
+            ),
             last_modified_by_display_name=last_modified_by.get("displayName"),
             last_modified_by_email=(
                 last_modified_by.get("email")
@@ -320,7 +314,7 @@ class CertificateData(BaseModel):
     thumbprint: str
 
 
-def _parse_sharepoint_datetime(value: Any) -> datetime | None:
+def _parse_sharepoint_datetime(value: str | datetime | None) -> datetime | None:
     """Parse a SharePoint Graph datetime that may be an ISO string or datetime."""
     if not value:
         return None
@@ -1175,24 +1169,10 @@ def _convert_sitepage_to_document(
     if not page_text and title:
         page_text = title
 
-    # Parse creation and modification info
-    created_datetime = site_page.get("createdDateTime")
-    if created_datetime:
-        if isinstance(created_datetime, str):
-            created_datetime = datetime.fromisoformat(
-                created_datetime.replace("Z", "+00:00")
-            )
-        elif not created_datetime.tzinfo:
-            created_datetime = created_datetime.replace(tzinfo=timezone.utc)
-
-    last_modified_datetime = site_page.get("lastModifiedDateTime")
-    if last_modified_datetime:
-        if isinstance(last_modified_datetime, str):
-            last_modified_datetime = datetime.fromisoformat(
-                last_modified_datetime.replace("Z", "+00:00")
-            )
-        elif not last_modified_datetime.tzinfo:
-            last_modified_datetime = last_modified_datetime.replace(tzinfo=timezone.utc)
+    created_datetime = _parse_sharepoint_datetime(site_page.get("createdDateTime"))
+    last_modified_datetime = _parse_sharepoint_datetime(
+        site_page.get("lastModifiedDateTime")
+    )
 
     # Extract owner information
     primary_owners = []
