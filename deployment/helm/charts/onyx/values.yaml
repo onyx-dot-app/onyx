@@ -1583,6 +1583,10 @@ configMap:
   # clouds (e.g. *.blob.core.usgovcloudapi.net).
   AZURE_STORAGE_ACCOUNT_URL: ""
   # Gen AI Settings
+  # Maximum tokens per model-facing tool result. Results can be smaller to fit the shared input budget.
+  # Saved results remain complete. The existing input margin still applies.
+  # Output tokens are not reserved again. Use a positive integer.
+  MAX_TOOL_RESULT_TOKENS: "20000"
   GEN_AI_MAX_TOKENS: ""
   LLM_SOCKET_READ_TIMEOUT: "60"
   IMAGE_SUMMARIZATION_TIMEOUT: "300"

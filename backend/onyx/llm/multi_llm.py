@@ -29,6 +29,8 @@ from onyx.llm.custom_config_mapping import (
     UI_ONLY_CONFIG_KEYS,
     map_custom_config_to_model_kwargs,
 )
+from onyx.llm.exceptions import InputBudgetExceededError
+from onyx.llm.input_budget import estimate_request_tokens
 from onyx.llm.interfaces import (
     LLM,
     LanguageModelInput,
@@ -56,6 +58,7 @@ from onyx.llm.models import (
     ANTHROPIC_ADAPTIVE_REASONING_EFFORT,
     ANTHROPIC_REASONING_EFFORT_BUDGET,
     OPENAI_REASONING_EFFORT,
+    LLMInputBudget,
     NamedToolChoice,
     ToolChoiceOptions,
     resolve_reasoning_effort,
@@ -587,6 +590,52 @@ class LitellmLLM(LLM):
             # Log but don't fail the LLM call if tracking fails
             logger.warning("Failed to track LLM cost: %s", e)
 
+    def prepare_messages(
+        self, prompt: LanguageModelInput, has_tools: bool
+    ) -> list[dict[str, Any]]:
+        model_identity_names = resolve_model_identity_names(
+            self.config.model_name, self.config.deployment_name
+        )
+        is_claude_model = any("claude" in name.lower() for name in model_identity_names)
+        messages = _prompt_to_dicts(prompt)
+
+        if not (
+            is_claude_model
+            and (
+                self._model_provider in _THINKING_BLOCK_PROVIDERS
+                or self._api_surface is LlmApiSurface.ANTHROPIC_MESSAGES
+            )
+        ):
+            messages = _strip_thinking_blocks_from_messages(messages)
+
+        # Bedrock's Converse API requires toolConfig when messages
+        # contain toolUse/toolResult content blocks. When no tools are
+        # provided for this request but the history contains tool
+        # content from previous turns, strip it to plain text.
+        is_bedrock = self._model_provider in {
+            LlmProviderNames.BEDROCK,
+            LlmProviderNames.BEDROCK_CONVERSE,
+        }
+        if is_bedrock and not has_tools and _messages_contain_tool_content(messages):
+            messages = _strip_tool_content_from_messages(messages)
+
+        # Some models (e.g. Mistral) reject a user message
+        # immediately after a tool message. Insert a synthetic
+        # assistant bridge message to satisfy the ordering
+        # constraint. Check the provider, the LiteLLM routing
+        # override, and every identity name (deployment alias and
+        # model name) to catch Mistral served behind Azure or
+        # OpenAI-compatible endpoints (e.g. vLLM).
+        is_mistral_model = (
+            self._model_provider == LlmProviderNames.MISTRAL
+            or self._custom_llm_provider == LlmProviderNames.MISTRAL
+            or _is_mistral_family_name(model_identity_names)
+        )
+        if is_mistral_model:
+            messages = _fix_tool_user_message_ordering(messages)
+
+        return messages
+
     def _completion(
         self,
         prompt: LanguageModelInput,
@@ -600,6 +649,7 @@ class LitellmLLM(LLM):
         max_tokens: int | None = None,
         user_identity: LLMUserIdentity | None = None,
         client: "HTTPHandler | None" = None,
+        input_budget: LLMInputBudget | None = None,
     ) -> Union["ModelResponse", "CustomStreamWrapper"]:
         # Lazy loading to avoid memory bloat for non-inference flows
         from litellm.exceptions import BadRequestError, RateLimitError, Timeout
@@ -915,42 +965,16 @@ class LitellmLLM(LLM):
             if "api_key" not in passthrough_kwargs:
                 passthrough_kwargs["api_key"] = self._api_key or None
 
-            messages = _prompt_to_dicts(prompt)
-
-            if not (
-                is_claude_model
-                and (
-                    self._model_provider in _THINKING_BLOCK_PROVIDERS
-                    or self._api_surface is LlmApiSurface.ANTHROPIC_MESSAGES
+            messages = self.prepare_messages(prompt, bool(tools))
+            if input_budget is not None:
+                estimated_tokens = estimate_request_tokens(
+                    messages,
+                    tools,
+                    input_budget.token_counter,
+                    input_budget.image_tokens,
                 )
-            ):
-                messages = _strip_thinking_blocks_from_messages(messages)
-
-            # Bedrock's Converse API requires toolConfig when messages
-            # contain toolUse/toolResult content blocks. When no tools are
-            # provided for this request but the history contains tool
-            # content from previous turns, strip it to plain text.
-            is_bedrock = self._model_provider in {
-                LlmProviderNames.BEDROCK,
-                LlmProviderNames.BEDROCK_CONVERSE,
-            }
-            if is_bedrock and not tools and _messages_contain_tool_content(messages):
-                messages = _strip_tool_content_from_messages(messages)
-
-            # Some models (e.g. Mistral) reject a user message
-            # immediately after a tool message. Insert a synthetic
-            # assistant bridge message to satisfy the ordering
-            # constraint. Check the provider, the LiteLLM routing
-            # override, and every identity name (deployment alias and
-            # model name) to catch Mistral served behind Azure or
-            # OpenAI-compatible endpoints (e.g. vLLM).
-            is_mistral_model = (
-                is_mistral
-                or self._custom_llm_provider == LlmProviderNames.MISTRAL
-                or _is_mistral_family_name(model_identity_names)
-            )
-            if is_mistral_model:
-                messages = _fix_tool_user_message_ordering(messages)
+                if estimated_tokens > input_budget.max_tokens:
+                    raise InputBudgetExceededError()
 
             # Only pass tool_choice when tools are present — some providers (e.g. Fireworks)
             # reject requests where tool_choice is explicitly null.
@@ -1202,6 +1226,7 @@ class LitellmLLM(LLM):
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
+        input_budget: LLMInputBudget | None = None,
     ) -> Iterator[ModelResponseStream]:
         from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
         from litellm import HTTPHandler
@@ -1272,6 +1297,7 @@ class LitellmLLM(LLM):
                         reasoning_effort=reasoning_effort,
                         user_identity=user_identity,
                         client=client,
+                        input_budget=input_budget,
                     ),
                 )
 

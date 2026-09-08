@@ -1,7 +1,16 @@
+from collections.abc import Callable
 from enum import Enum
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
+
+
+class LLMInputBudget(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    max_tokens: int
+    token_counter: Callable[[str], int]
+    image_tokens: int = 0
 
 
 class LLMErrorInfo(BaseModel):
