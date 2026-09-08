@@ -5,7 +5,7 @@ import { createContext, useContext, type ReactNode } from "react";
 /**
  * Labels Opal renders itself. Hosts translate them via `OpalStringsProvider`.
  */
-export interface OpalStrings {
+export type OpalStrings = {
   close: string;
   loading: string;
   loadingPage: string;
@@ -56,7 +56,7 @@ export interface OpalStrings {
   selectedItemCount: (count: number) => string;
   /** Table footer summary, e.g. "Showing 1~10 of 22". Both arguments are styled inline nodes. */
   showing: (range: ReactNode, total: ReactNode) => ReactNode;
-}
+};
 
 export const defaultOpalStrings: OpalStrings = {
   close: "Close",
