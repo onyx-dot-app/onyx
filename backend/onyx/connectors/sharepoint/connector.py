@@ -81,6 +81,7 @@ from onyx.file_processing.image_utils import (
     store_image_and_create_section,
 )
 from onyx.file_store.staging import RawFileCallback
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_after import parse_retry_after_seconds
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
@@ -325,9 +326,7 @@ def _parse_sharepoint_datetime(value: str | datetime | None) -> datetime | None:
     else:
         raise TypeError(f"Unsupported Graph datetime value: {value!r}")
     # Graph timestamps are UTC. A naive value would not compare with aware bounds.
-    if not parsed.tzinfo:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+    return datetime_to_utc(parsed)
 
 
 def _timestamp_in_window(
