@@ -102,6 +102,12 @@ sandboxImagePrepull:
 # ---- Secrets ----
 
 auth:
+  objectstorage:
+    values:
+      s3_aws_access_key_id: "minioadmin"
+      s3_aws_secret_access_key: "minioadmin"
+      rootUser: "minioadmin"
+      rootPassword: "minioadmin"
   sandboxPushSecret:
     enabled: true
     values:
