@@ -472,14 +472,32 @@ class WebConnector(LoadConnector, SlimConnector):
         # Handle cookies for the URL
         _handle_cookies(session_ctx.playwright_context, initial_url)
 
-        # First do a HEAD request to check content type without downloading the entire content
-        head_response = requests.head(
-            initial_url,
-            headers=DEFAULT_HEADERS,
-            allow_redirects=True,
-            timeout=REQUEST_TIMEOUT_SECONDS,
-        )
-        content_type = head_response.headers.get("content-type")
+        # First do a HEAD request to check content type without downloading the
+        # entire content. This is only a precheck, so it must never abort the
+        # scrape. One real case: `requests` resolves a redirect by doing
+        # `location.encode("latin1").decode("utf8")`, so a `Location` holding
+        # non-UTF-8 bytes (an accented path served as latin-1) raises
+        # UnicodeDecodeError. Fall through to the browser fetch below, which
+        # percent-encodes those bytes and follows the redirect, instead of
+        # burning the URL's retries on the precheck.
+        content_type: str | None
+        try:
+            head_response = requests.head(
+                initial_url,
+                headers=DEFAULT_HEADERS,
+                allow_redirects=True,
+                timeout=REQUEST_TIMEOUT_SECONDS,
+            )
+            content_type = head_response.headers.get("content-type")
+        except (requests.RequestException, UnicodeDecodeError) as e:
+            logger.warning(
+                "HEAD precheck failed for %s (%s: %s) - skipping content-type "
+                "based PDF detection and falling through to the browser fetch",
+                initial_url,
+                type(e).__name__,
+                e,
+            )
+            content_type = None
         is_pdf = is_pdf_resource(initial_url, content_type)
 
         if is_pdf:
