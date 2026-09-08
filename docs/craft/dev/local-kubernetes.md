@@ -248,24 +248,23 @@ directly (CLI scripts, ad-hoc invocations, tests) needs the value to be
 in the file too.
 
 `OPENSEARCH_ADMIN_PASSWORD` is the one cluster-random value — leave it as
-`<AUTO_FROM_CLUSTER>` in your `.env.k8s`. The `k8s: telepresence intercept
-api_server` preLaunchTask reads the `onyx-opensearch` Secret and rewrites
-that one line before each launch, so the password stays in sync even
-across `k8s-up.sh` reinstalls (which rotate it).
+`<AUTO_FROM_CLUSTER>` in your `.env.k8s`. The shared Kubernetes launch task
+reads the OpenSearch and encryption secrets before each launch. It updates
+both values in `.env.k8s`.
 
-The preLaunchTask fails fast if `.env.k8s` doesn't exist or if the
-opensearch Secret can't be read (cluster down), so you'll know immediately
-if you missed a step.
+The task fails if `.env.k8s` does not exist. It also fails if the cluster
+secrets are not available.
 
 ### Run your local processes
 
 Open the debug panel and pick **Run All Onyx Services (k8s)** — web + api +
 every celery worker + beat. Model server stays in-cluster.
 
-Each `(k8s)` config has `telepresence intercept onyx-api-server` as its
-`preLaunchTask`. vscode dedupes the task across the compound, so one run
-connects + (re)creates the intercept idempotently. No manual telepresence
-invocation needed.
+In Zed, start `web`, `api (k8s)`, and each required `celery: ... (k8s)`
+configuration. Zed runs multiple debug sessions but does not support compounds.
+
+Each Kubernetes configuration runs `k8s-intercept-api.sh` before launch.
+The script connects Telepresence and creates the API intercept.
 
 The intercept points cluster ingress to your local api_server using the same
 labels, secrets, and service account as the real pod — NetworkPolicies and
