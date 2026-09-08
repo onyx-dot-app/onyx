@@ -1,8 +1,9 @@
 "use client";
 
-import { memo, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
+import { richNodes } from "@opal/utils";
 
 interface EnabledCountProps {
   enabledCount: number;
@@ -15,22 +16,24 @@ interface EnabledCountProps {
   noun?: "tool";
 }
 
-const EnabledCount = memo(
-  ({ noun, enabledCount, totalCount }: EnabledCountProps) => {
-    const t = useTranslations("common");
+export default function EnabledCount({
+  noun,
+  enabledCount,
+  totalCount,
+}: EnabledCountProps) {
+  const t = useTranslations("common");
 
-    // The enabled figure is picked out from the rest of the phrase. It has to
-    // be a tag rather than a separate element, because where the number falls
-    // in the sentence is the translation's business, not this component's.
-    const value = (chunks: ReactNode) => (
-      <Text mainUiBody className="text-action-selection-05">
-        {chunks}
-      </Text>
-    );
+  // The enabled figure is picked out from the rest of the phrase. It has to
+  // be a tag rather than a separate element, because where the number falls
+  // in the sentence is the translation's business, not this component's.
+  function value(chunks: ReactNode) {
+    return <Text color="action-selection-05">{richNodes(chunks)}</Text>;
+  }
 
-    return (
-      <Text text03 mainUiBody>
-        {noun === "tool"
+  return (
+    <Text color="text-03">
+      {richNodes(
+        noun === "tool"
           ? t.rich("enabledCount.tools", {
               enabled: enabledCount,
               total: totalCount,
@@ -40,11 +43,8 @@ const EnabledCount = memo(
               enabled: enabledCount,
               total: totalCount,
               value,
-            })}
-      </Text>
-    );
-  }
-);
-EnabledCount.displayName = "EnabledCount";
-
-export default EnabledCount;
+            })
+      )}
+    </Text>
+  );
+}
