@@ -1,4 +1,5 @@
 import asyncio
+import math
 import os
 import time
 import uuid
@@ -47,18 +48,42 @@ OIDC_DISCOVERY_CACHE_TTL_SECONDS: int = int(
 # Negative entries retry quickly so a transient IdP outage self-heals fast.
 OIDC_DISCOVERY_NEGATIVE_TTL_SECONDS: int = 45
 
+
+def _timeout_from_env(name: str, default: float) -> float:
+    """Read a timeout from the environment, rejecting values that would remove
+    the bound. `inf` disables it entirely and `0` aborts every refresh on the
+    spot, so both fall back to the default rather than silently misbehaving."""
+    raw = os.environ.get(name)
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        logger.warning("%s is not a number (%r) - using %ss", name, raw, default)
+        return default
+    if not math.isfinite(value) or value <= 0:
+        logger.warning(
+            "%s must be a finite positive number of seconds (got %r) - using %ss",
+            name,
+            raw,
+            default,
+        )
+        return default
+    return value
+
+
 # Hard cap on every outgoing OAuth/OIDC HTTP call. Without it an unreachable IdP
 # pins the DB session the request holds while refreshing, until the async pool is
 # exhausted and every authenticated endpoint times out.
-OAUTH_HTTP_TIMEOUT_SECONDS: float = float(
-    os.environ.get("OAUTH_HTTP_TIMEOUT_SECONDS") or 10.0
+OAUTH_HTTP_TIMEOUT_SECONDS: float = _timeout_from_env(
+    "OAUTH_HTTP_TIMEOUT_SECONDS", 10.0
 )
 
 # Cap on the whole refresh pass a request performs before it is served. Bounds the
 # combined lock wait, DB reads and IdP round-trip so no request can hold its DB
 # session past this budget.
-OAUTH_REFRESH_TOTAL_TIMEOUT_SECONDS: float = float(
-    os.environ.get("OAUTH_REFRESH_TOTAL_TIMEOUT_SECONDS") or 15.0
+OAUTH_REFRESH_TOTAL_TIMEOUT_SECONDS: float = _timeout_from_env(
+    "OAUTH_REFRESH_TOTAL_TIMEOUT_SECONDS", 15.0
 )
 
 # Per-discovery-URL locks so one IdP's hanging fetch never blocks another's.
