@@ -455,9 +455,10 @@ func (in *installer) runInstall(ctx context.Context) error {
 // exists BEFORE anything is written, so a typo fails here instead of
 // surfacing minutes later as a pull error with the bad version already in
 // .env. Only release versions are looked up: floating and hand-built image
-// tags are pullable without a matching git ref. Verification is best-effort
-// by design — an unreachable (or lying) GitHub must never be able to block
-// an install that would otherwise work.
+// tags are pullable without a matching git ref. A -dev twin is looked up
+// through the release it was built from. Verification is best-effort by
+// design — an unreachable (or lying) GitHub must never be able to block an
+// install that would otherwise work.
 func (in *installer) validateTag(ctx context.Context, tag string) (string, error) {
 	tag = strings.TrimSpace(tag)
 	if tag == "" {
@@ -472,7 +473,8 @@ func (in *installer) validateTag(ctx context.Context, tag string) (string, error
 		return normalized, nil
 	}
 
-	exists, err := in.deps.Release.RefExists(ctx, normalized)
+	// A -dev twin has no ref of its own: its plain tag is what must exist.
+	exists, err := in.deps.Release.RefExists(ctx, release.ConfigRef(normalized))
 	if err != nil {
 		in.warnf("Could not verify that version %s exists (%v) — continuing", normalized, err)
 		return normalized, nil
