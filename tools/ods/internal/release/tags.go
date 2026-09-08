@@ -10,18 +10,6 @@ import (
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/git"
 )
 
-// ResolveCommit resolves a commit-ish to a full commit SHA.
-func ResolveCommit(ref string) (string, error) {
-	out, err := exec.Command("git", "rev-parse", "--verify", ref+"^{commit}").Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok && len(exitErr.Stderr) > 0 {
-			return "", fmt.Errorf("failed to resolve %q: %w: %s", ref, err, strings.TrimSpace(string(exitErr.Stderr)))
-		}
-		return "", fmt.Errorf("failed to resolve %q: %w", ref, err)
-	}
-	return strings.TrimSpace(string(out)), nil
-}
-
 // FetchTags force-updates the local tags matching pattern from origin. A
 // fetch refspec allows only one wildcard per side, so the matching tag names
 // are listed with ls-remote (which globs freely) and fetched by exact refspec.

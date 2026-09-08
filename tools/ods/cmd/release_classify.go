@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/git"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/release"
 )
 
@@ -42,7 +43,7 @@ Example usage:
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if sha == "" {
-				resolved, err := release.ResolveCommit("HEAD")
+				resolved, err := git.ResolveCommit("HEAD")
 				if err != nil {
 					return err
 				}
