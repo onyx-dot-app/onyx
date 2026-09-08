@@ -5,7 +5,16 @@ import re
 import time
 from collections.abc import Callable, Generator
 from functools import wraps
-from typing import Any, Concatenate, Literal, ParamSpec, TypedDict, TypeVar, Union
+from typing import (
+    Any,
+    BinaryIO,
+    Concatenate,
+    Literal,
+    ParamSpec,
+    TypedDict,
+    TypeVar,
+    Union,
+)
 
 import requests
 from pydantic import BaseModel
@@ -487,8 +496,13 @@ class CodeInterpreterClient:
 
         return BashExecResponse(**response.json())
 
-    def upload_file(self, file_content: bytes, filename: str) -> str:
-        """Upload file to Code Interpreter and return file_id"""
+    def upload_file(self, file_content: bytes | BinaryIO, filename: str) -> str:
+        """Upload file to Code Interpreter and return file_id.
+
+        A file object spares the caller from holding the bytes for its own
+        lifetime, but requests reads it in full to build the multipart body,
+        so the peak is still the file size.
+        """
         url = f"{self.base_url}/v1/files"
 
         files = {"file": (filename, file_content)}

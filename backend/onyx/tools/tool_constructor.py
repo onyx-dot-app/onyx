@@ -373,6 +373,7 @@ def _construct_tools_impl(
                         tool_id=db_tool_model.id,
                         emitter=emitter,
                         llm=llm,
+                        user=user,
                     )
                 ]
 
