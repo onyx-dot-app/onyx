@@ -230,6 +230,20 @@ def check_internet_connection(url: str) -> None:
             else e.args
         )
         raise Exception(f"SSL error {str(cause)}")
+    except UnicodeDecodeError as e:
+        # Not a reachability problem: `requests` resolves a redirect by doing
+        # `location.encode("latin1").decode("utf8")`, so a `Location` holding
+        # non-UTF-8 bytes raises here. The browser fetch percent-encodes those
+        # bytes and follows the redirect, so let the scrape proceed. Listed
+        # before the ValueError clause below, which would otherwise catch it
+        # (UnicodeDecodeError subclasses ValueError) and abort the run.
+        logger.warning(
+            "Could not resolve redirects for %s (%s) - continuing, the browser "
+            "fetch follows these natively",
+            url,
+            e,
+        )
+        return
     except (requests.RequestException, ValueError) as e:
         raise Exception(f"Unable to reach {url} - check your internet connection: {e}")
 

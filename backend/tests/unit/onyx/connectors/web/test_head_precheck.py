@@ -9,7 +9,11 @@ import pytest
 import requests
 
 from onyx.connectors.models import Document
-from onyx.connectors.web.connector import WEB_CONNECTOR_VALID_SETTINGS, WebConnector
+from onyx.connectors.web.connector import (
+    WEB_CONNECTOR_VALID_SETTINGS,
+    WebConnector,
+    check_internet_connection,
+)
 
 BASE_URL = "http://example.com"
 PAGE_HTML = "<html><body><p>Indexable content</p></body></html>"
@@ -83,3 +87,29 @@ def test_failed_head_precheck_still_indexes_the_page(
     assert doc.id == BASE_URL + "/"
     # Proves the browser fetch below the precheck actually ran.
     assert "Indexable content" in doc.get_text_content()
+
+
+@pytest.mark.parametrize(
+    ("probe_error", "expect_raise"),
+    [
+        # Reachability probe on the base URL. A non-UTF-8 redirect `Location` is
+        # not a connectivity problem, so it must not abort the run.
+        (
+            UnicodeDecodeError("utf-8", b"\xe9", 0, 1, "invalid continuation byte"),
+            False,
+        ),
+        (requests.ConnectionError("connection reset"), True),
+    ],
+    ids=["unicode_decode_error", "connection_error"],
+)
+def test_check_internet_connection_ignores_undecodable_redirects(
+    probe_error: Exception, expect_raise: bool
+) -> None:
+    """`check_internet_connection` runs on the base URL before the scrape loop,
+    and it follows redirects too. A genuinely unreachable host still raises."""
+    with patch.object(requests.Session, "get", side_effect=probe_error):
+        if expect_raise:
+            with pytest.raises(Exception, match="check your internet connection"):
+                check_internet_connection(BASE_URL + "/")
+        else:
+            check_internet_connection(BASE_URL + "/")
