@@ -869,7 +869,9 @@ async def websocket_transcribe(
                 logger.info("WebSocket transcribe: streaming transcriber created")
                 if await _run_with_zoom_session_cap(
                     provider_type,
-                    handle_streaming_transcription(websocket, streaming_transcriber, deadline=session_deadline),
+                    handle_streaming_transcription(
+                        websocket, streaming_transcriber, deadline=session_deadline
+                    ),
                 ):
                     await _send_zoom_session_timeout(websocket)
                 return
@@ -915,7 +917,9 @@ async def websocket_transcribe(
         chunked_transcriber = ChunkedTranscriber(provider, audio_format="pcm16")
         if await _run_with_zoom_session_cap(
             provider_type,
-            handle_chunked_transcription(websocket, chunked_transcriber, deadline=session_deadline),
+            handle_chunked_transcription(
+                websocket, chunked_transcriber, deadline=session_deadline
+            ),
         ):
             await _send_zoom_session_timeout(websocket)
 
