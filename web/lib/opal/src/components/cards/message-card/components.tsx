@@ -1,3 +1,5 @@
+"use client";
+
 import "@opal/components/cards/shared.css";
 import "@opal/components/cards/message-card/styles.css";
 import { cn } from "@opal/utils";
@@ -18,6 +20,7 @@ import {
   SvgX,
   SvgXOctagon,
 } from "@opal/icons";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -144,6 +147,7 @@ function MessageCard({
 }: MessageCardProps) {
   const { icon: DefaultIcon, iconClass } = VARIANT_CONFIG[variant];
   const Icon = iconOverride ?? DefaultIcon;
+  const strings = useOpalStrings();
 
   const right = onClose ? (
     <Button
@@ -151,7 +155,8 @@ function MessageCard({
       prominence="internal"
       size="md"
       onClick={onClose}
-      aria-label="Close"
+      aria-label={strings.close}
+      data-message-card-close=""
     />
   ) : (
     rightChildren

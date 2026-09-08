@@ -53,6 +53,10 @@
       "types": "./dist/hooks/index.d.ts",
       "import": "./dist/hooks/index.js"
     },
+    "./strings": {
+      "types": "./dist/strings.d.ts",
+      "import": "./dist/strings.js"
+    },
     "./time": {
       "types": "./dist/time.d.ts",
       "import": "./dist/time.js"

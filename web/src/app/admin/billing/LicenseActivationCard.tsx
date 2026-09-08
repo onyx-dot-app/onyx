@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Button, Card } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import InputFile from "@/refresh-components/inputs/InputFile";
@@ -30,6 +30,7 @@ export default function LicenseActivationCard({
   hideClose,
 }: LicenseActivationCardProps) {
   const t = useTranslations("admin.billing");
+  const locale = useLocale();
   const [licenseKey, setLicenseKey] = useState("");
   const [isActivating, setIsActivating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +46,7 @@ export default function LicenseActivationCard({
     license?.status === "gated_access" ||
     isDateExpired;
   const expirationDate = license?.expires_at
-    ? formatDateShort(license.expires_at)
+    ? formatDateShort(license.expires_at, locale)
     : null;
 
   const handleActivate = async () => {

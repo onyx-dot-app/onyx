@@ -12582,6 +12582,67 @@
       }
     }
   },
+  "opal": {
+    "common": {
+      "clear": "清除",
+      "clearFilter": "清除筛选",
+      "close": "关闭",
+      "copied": "已复制！",
+      "copy": "复制",
+      "copyCode": "复制代码",
+      "date": "日期",
+      "edit": "编辑",
+      "loading": "加载中",
+      "loadingPage": "加载中…",
+      "openCalendar": "打开日历",
+      "progress": "进度",
+      "remove": "移除",
+      "removeItem": "移除 {title}",
+      "search": "搜索...",
+      "selectAnOption": "选择一个选项",
+      "showFullMessage": "显示完整消息",
+      "time": "时间"
+    },
+    "input": {
+      "day": "日",
+      "hidePassword": "隐藏密码",
+      "hours": "小时",
+      "minutes": "分钟",
+      "month": "月",
+      "seconds": "秒",
+      "showPassword": "显示密码",
+      "valueCannotBeRevealed": "无法显示该值",
+      "year": "年"
+    },
+    "pagination": {
+      "goToPage": "跳转到页面",
+      "nextPage": "下一页",
+      "previousPage": "上一页"
+    },
+    "table": {
+      "alwaysShown": "始终显示",
+      "ascending": "升序",
+      "columns": "列",
+      "descending": "降序",
+      "deselectAll": "取消全选",
+      "dragToReorder": "拖动以重新排序",
+      "manualOrdering": "手动排序",
+      "selectAnItemToContinue": "选择一个项目以继续",
+      "selectedItemCount": "{count, plural, one {已选择 # 个项目} other {已选择 # 个项目}}",
+      "selectItemsToContinue": "选择项目以继续",
+      "showing": "显示 <range></range>，共 <total></total>",
+      "shownColumns": "显示的列",
+      "singleItemSelected": "已选择项目",
+      "sort": "排序",
+      "sortBy": "排序依据",
+      "sortingOrder": "排序方向",
+      "viewSelected": "查看已选"
+    },
+    "tabs": {
+      "scrollLeft": "向左滚动标签",
+      "scrollRight": "向右滚动标签"
+    }
+  },
   "settings": {
     "accounts": {
       "email": {

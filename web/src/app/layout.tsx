@@ -22,6 +22,7 @@ import { AuthenticationShell } from "@/lib/auth/components";
 import ProductGatingWrapper from "@/providers/ProductGatingWrapper";
 import SWRConfigProvider from "@/providers/SWRConfigProvider";
 import { NextIntlClientProvider } from "next-intl";
+import OpalStringsBridge from "@/i18n/OpalStringsBridge";
 import { getLocale, getMessages } from "next-intl/server";
 import { DirectionProvider } from "@radix-ui/react-direction";
 import { cookies } from "next/headers";
@@ -148,43 +149,47 @@ export default async function Layout({ children }: LayoutProps) {
 
       <body className={`relative font-hanken`}>
         <NextIntlClientProvider locale={locale} messages={messages}>
-          {/* Radix reads direction from context, not the DOM, so popovers,
+          <OpalStringsBridge>
+            {/* Radix reads direction from context, not the DOM, so popovers,
               menus and roving focus need this alongside <html dir>. */}
-          <DirectionProvider dir={dir}>
-            <ThemeProvider
-              attribute="class"
-              defaultTheme="system"
-              enableSystem
-              disableTransitionOnChange
-            >
-              <div className="text-text min-h-screen bg-background">
-                <TooltipProvider>
-                  <PHProvider>
-                    <SWRConfigProvider>
-                      <AppHealthBanner />
-                      <BannerQueue />
-                      <AuthenticationShell>
-                        <AppProvider>
-                          <PostHogRuntimeInitializer />
-                          <CustomAnalyticsScript />
-                          <PostHogPageTracker />
-                          <div id={MODAL_ROOT_ID} className="h-screen w-screen">
-                            <ProductGatingWrapper>
-                              {children}
-                            </ProductGatingWrapper>
-                          </div>
-                          <WebVitals />
-                          {process.env.NEXT_PUBLIC_ENABLE_STATS === "true" && (
-                            <StatsOverlayLoader />
-                          )}
-                        </AppProvider>
-                      </AuthenticationShell>
-                    </SWRConfigProvider>
-                  </PHProvider>
-                </TooltipProvider>
-              </div>
-            </ThemeProvider>
-          </DirectionProvider>
+            <DirectionProvider dir={dir}>
+              <ThemeProvider
+                attribute="class"
+                defaultTheme="system"
+                enableSystem
+                disableTransitionOnChange
+              >
+                <div className="text-text min-h-screen bg-background">
+                  <TooltipProvider>
+                    <PHProvider>
+                      <SWRConfigProvider>
+                        <AppHealthBanner />
+                        <BannerQueue />
+                        <AuthenticationShell>
+                          <AppProvider>
+                            <PostHogRuntimeInitializer />
+                            <CustomAnalyticsScript />
+                            <PostHogPageTracker />
+                            <div
+                              id={MODAL_ROOT_ID}
+                              className="h-screen w-screen"
+                            >
+                              <ProductGatingWrapper>
+                                {children}
+                              </ProductGatingWrapper>
+                            </div>
+                            <WebVitals />
+                            {process.env.NEXT_PUBLIC_ENABLE_STATS ===
+                              "true" && <StatsOverlayLoader />}
+                          </AppProvider>
+                        </AuthenticationShell>
+                      </SWRConfigProvider>
+                    </PHProvider>
+                  </TooltipProvider>
+                </div>
+              </ThemeProvider>
+            </DirectionProvider>
+          </OpalStringsBridge>
         </NextIntlClientProvider>
       </body>
     </html>

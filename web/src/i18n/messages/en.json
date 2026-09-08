@@ -12582,6 +12582,67 @@
       }
     }
   },
+  "opal": {
+    "common": {
+      "clear": "Clear",
+      "clearFilter": "Clear filter",
+      "close": "Close",
+      "copied": "Copied!",
+      "copy": "Copy",
+      "copyCode": "Copy code",
+      "date": "Date",
+      "edit": "Edit",
+      "loading": "Loading",
+      "loadingPage": "Loading …",
+      "openCalendar": "Open calendar",
+      "progress": "Progress",
+      "remove": "Remove",
+      "removeItem": "Remove {title}",
+      "search": "Search...",
+      "selectAnOption": "Select an option",
+      "showFullMessage": "Show the full message",
+      "time": "Time"
+    },
+    "input": {
+      "day": "Day",
+      "hidePassword": "Hide password",
+      "hours": "Hours",
+      "minutes": "Minutes",
+      "month": "Month",
+      "seconds": "Seconds",
+      "showPassword": "Show password",
+      "valueCannotBeRevealed": "Value cannot be revealed",
+      "year": "Year"
+    },
+    "pagination": {
+      "goToPage": "Go to page",
+      "nextPage": "Next page",
+      "previousPage": "Previous page"
+    },
+    "table": {
+      "alwaysShown": "Always Shown",
+      "ascending": "Ascending",
+      "columns": "Columns",
+      "descending": "Descending",
+      "deselectAll": "Deselect all",
+      "dragToReorder": "Drag to reorder",
+      "manualOrdering": "Manual Ordering",
+      "selectAnItemToContinue": "Select an item to continue",
+      "selectedItemCount": "{count, plural, one {# item selected} other {# items selected}}",
+      "selectItemsToContinue": "Select items to continue",
+      "showing": "Showing <range></range> of <total></total>",
+      "shownColumns": "Shown Columns",
+      "singleItemSelected": "Item selected",
+      "sort": "Sort",
+      "sortBy": "Sort by",
+      "sortingOrder": "Sorting Order",
+      "viewSelected": "View selected"
+    },
+    "tabs": {
+      "scrollLeft": "Scroll tabs left",
+      "scrollRight": "Scroll tabs right"
+    }
+  },
   "settings": {
     "accounts": {
       "email": {

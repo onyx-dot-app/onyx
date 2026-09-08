@@ -21,6 +21,7 @@ import {
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { ContentAction } from "@opal/layouts";
 import { SvgChevronDownSmall } from "@opal/icons";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Context
@@ -230,6 +231,7 @@ function InputSelectTrigger({
 }: InputSelectTriggerProps) {
   const { variant, currentValue, selectedItemDisplay } =
     useInputSelectContext();
+  const strings = useOpalStrings();
 
   // Read every render, the refs already hold the latest children/icon.
   let displayContent: React.ReactNode;
@@ -256,7 +258,7 @@ function InputSelectTrigger({
       />
     );
   } else {
-    const effectivePlaceholder = placeholder || "Select an option";
+    const effectivePlaceholder = placeholder || strings.selectAnOption;
     displayContent =
       typeof effectivePlaceholder === "string" ? (
         <Text as="p" color="text-03">
@@ -491,8 +493,9 @@ interface InputSelectSearchProps {
 function InputSelectSearch({
   value,
   onChange,
-  placeholder = "Search...",
+  placeholder,
 }: InputSelectSearchProps) {
+  const strings = useOpalStrings();
   const rowRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
@@ -547,7 +550,7 @@ function InputSelectSearch({
         clearButton
         value={value}
         onChange={onChange}
-        placeholder={placeholder}
+        placeholder={placeholder ?? strings.search}
       />
     </div>
   );

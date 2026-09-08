@@ -31,6 +31,7 @@ export default defineConfig({
     "src/illustrations/index.ts",
     "src/logos/index.ts",
     "src/hooks/index.ts",
+    "src/strings.tsx",
     "src/time.ts",
     "src/types.ts",
     "src/utils.ts",
