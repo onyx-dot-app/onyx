@@ -93,8 +93,13 @@ def get_filerecord_by_prefix(
 ) -> list[FileRecord]:
     if not prefix:
         return db_session.query(FileRecord).all()
+    # Ids embed user-supplied names, and "_" is a LIKE wildcard: unescaped,
+    # a prefix for "my_repo" also matches every other "myXrepo".
+    escaped = prefix.translate(str.maketrans({c: f"\\{c}" for c in "\\%_"}))
     return (
-        db_session.query(FileRecord).filter(FileRecord.file_id.like(f"{prefix}%")).all()
+        db_session.query(FileRecord)
+        .filter(FileRecord.file_id.like(f"{escaped}%", escape="\\"))
+        .all()
     )
 
 
