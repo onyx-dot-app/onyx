@@ -251,7 +251,7 @@ async def upsert_voice_provider_endpoint(
     # Validate credentials before committing - rollback on failure
     try:
         voice_provider = get_voice_provider(provider)
-        if request.activate_tts:
+        if request.activate_tts or provider.is_default_tts:
             _validate_tts_activation_supported(voice_provider)
         await voice_provider.validate_credentials()
     except OnyxError:

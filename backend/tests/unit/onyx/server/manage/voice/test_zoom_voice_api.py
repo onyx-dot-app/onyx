@@ -74,6 +74,41 @@ async def test_upsert_rejects_tts_activation_without_tts_models(
     db_session.commit.assert_not_called()
 
 
+@pytest.mark.asyncio
+async def test_upsert_rejects_default_tts_row_changed_to_zoom(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    existing_provider = _make_provider(provider_type="openai")
+    existing_provider.api_key = "key"  # ty: ignore[invalid-assignment]
+    existing_provider.is_default_tts = True
+    db_session = MagicMock()
+    db_session.scalar.return_value = existing_provider
+    mock_voice_provider = MockVoiceProvider(tts_models=[])
+
+    monkeypatch.setattr(
+        "onyx.server.manage.voice.api.get_voice_provider",
+        lambda _: mock_voice_provider,
+    )
+
+    with pytest.raises(OnyxError, match="does not support text-to-speech"):
+        await upsert_voice_provider_endpoint(
+            VoiceProviderUpsertRequest(
+                id=1,
+                name="Zoom",
+                provider_type="ZOOM",
+                api_key="key",
+                api_key_changed=True,
+                activate_tts=False,
+            ),
+            MagicMock(),
+            db_session,
+        )
+
+    assert existing_provider.provider_type == "zoom"
+    db_session.rollback.assert_called_once()
+    db_session.commit.assert_not_called()
+
+
 def test_activate_tts_rejects_provider_without_tts_models(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
