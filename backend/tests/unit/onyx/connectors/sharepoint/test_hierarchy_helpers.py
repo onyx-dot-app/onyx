@@ -81,11 +81,10 @@ def test_build_folder_url_simple() -> None:
     """Test building folder URL with simple folder path."""
     connector = SharepointConnector()
 
-    site_url = "https://company.sharepoint.com/sites/eng"
-    drive_name = "Shared Documents"
+    drive_web_url = "https://company.sharepoint.com/sites/eng/Shared Documents"
     folder_path = "Engineering"
 
-    result = connector._build_folder_url(site_url, drive_name, folder_path)
+    result = connector._build_folder_url(drive_web_url, folder_path)
     expected = "https://company.sharepoint.com/sites/eng/Shared Documents/Engineering"
     assert result == expected
 
@@ -94,11 +93,10 @@ def test_build_folder_url_nested() -> None:
     """Test building folder URL with nested folder path."""
     connector = SharepointConnector()
 
-    site_url = "https://company.sharepoint.com/sites/eng"
-    drive_name = "Shared Documents"
+    drive_web_url = "https://company.sharepoint.com/sites/eng/Shared Documents"
     folder_path = "Engineering/API/v2"
 
-    result = connector._build_folder_url(site_url, drive_name, folder_path)
+    result = connector._build_folder_url(drive_web_url, folder_path)
     expected = (
         "https://company.sharepoint.com/sites/eng/Shared Documents/Engineering/API/v2"
     )
@@ -109,13 +107,33 @@ def test_build_folder_url_with_spaces() -> None:
     """Test building folder URL with spaces in folder path."""
     connector = SharepointConnector()
 
-    site_url = "https://company.sharepoint.com/sites/eng"
-    drive_name = "Shared Documents"
+    drive_web_url = "https://company.sharepoint.com/sites/eng/Shared Documents"
     folder_path = "Engineering/API Docs/Version 2"
 
-    result = connector._build_folder_url(site_url, drive_name, folder_path)
+    result = connector._build_folder_url(drive_web_url, folder_path)
     expected = "https://company.sharepoint.com/sites/eng/Shared Documents/Engineering/API Docs/Version 2"
     assert result == expected
+
+
+def test_build_folder_url_uses_drive_web_url_not_display_name() -> None:
+    """Regression test for #14525.
+
+    On non-English tenants the drive display name (e.g. "Dokumenty") differs
+    from its URL segment ("Shared Documents"). The folder URL must be derived
+    from the canonical drive webUrl so the resulting server-relative path is
+    valid; the localized display name must never appear in it.
+    """
+    connector = SharepointConnector()
+
+    # webUrl carries the real URL segment, not the localized "Dokumenty".
+    drive_web_url = "https://company.sharepoint.com/sites/projects/Shared Documents"
+    folder_path = "Finance"
+
+    result = connector._build_folder_url(drive_web_url, folder_path)
+    assert result == (
+        "https://company.sharepoint.com/sites/projects/Shared Documents/Finance"
+    )
+    assert "Dokumenty" not in result
 
 
 @patch(
@@ -161,7 +179,6 @@ def test_hierarchy_helpers_fetch_permissions_when_requested(
             connector._yield_folder_hierarchy_nodes(
                 site_url,
                 drive_url,
-                "Shared Documents",
                 "Engineering",
                 checkpoint,
                 include_permissions=True,

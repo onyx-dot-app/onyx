@@ -2380,7 +2380,6 @@ class SharepointConnector(
                             self._yield_folder_hierarchy_nodes(
                                 site_url,
                                 drive_web_url,
-                                drive_name,
                                 folder_path,
                                 temp_checkpoint,
                                 include_permissions=include_permissions,
@@ -2390,7 +2389,7 @@ class SharepointConnector(
                     parent_hierarchy_url: str | None = None
                     if drive_web_url:
                         parent_hierarchy_url = self._get_parent_hierarchy_url(
-                            site_url, drive_web_url, drive_name, driveitem
+                            drive_web_url, driveitem
                         )
 
                     try:
@@ -2593,18 +2592,18 @@ class SharepointConnector(
             logger.warning("Failed to fetch drives for site '%s': %s", site_url, e)
             return []
 
-    def _build_folder_url(
-        self, site_url: str, drive_name: str, folder_path: str
-    ) -> str:
-        """Build a URL for a folder to use as raw_node_id.
+    def _build_folder_url(self, drive_web_url: str, folder_path: str) -> str:
+        """Build a folder URL used both as a hierarchy raw_node_id and as the
+        basis for the folder's server-relative API path.
 
-        NOTE: This constructs an approximate folder URL from components rather than
-        fetching the actual webUrl from the API. The constructed URL may differ
-        slightly from SharePoint's canonical webUrl (e.g., URL encoding differences),
-        but it functions correctly as a unique identifier for hierarchy tracking.
-        We avoid fetching folder metadata to minimize API calls.
+        Built from the drive's canonical ``webUrl`` (already fetched, so this
+        still avoids extra API calls) rather than the drive's localized display
+        name. On non-English tenants the display name differs from the URL
+        segment (e.g. "Dokumenty" vs "Shared Documents"); using the display name
+        produced an invalid server-relative URL and made the entire library fail
+        to index as soon as it contained a subfolder.
         """
-        return f"{site_url}/{drive_name}/{folder_path}"
+        return f"{drive_web_url}/{folder_path}"
 
     def _extract_folder_path_from_parent_reference(
         self, parent_reference_path: str | None
@@ -2705,7 +2704,6 @@ class SharepointConnector(
         self,
         site_url: str,
         drive_web_url: str,
-        drive_name: str,
         folder_path: str,
         checkpoint: SharepointConnectorCheckpoint,
         include_permissions: bool = False,
@@ -2729,7 +2727,7 @@ class SharepointConnector(
 
         for i, part in enumerate(path_parts):
             current_path = "/".join(path_parts[: i + 1])
-            folder_url = self._build_folder_url(site_url, drive_name, current_path)
+            folder_url = self._build_folder_url(drive_web_url, current_path)
 
             if folder_url in checkpoint.seen_hierarchy_node_raw_ids:
                 continue
@@ -2753,7 +2751,7 @@ class SharepointConnector(
             else:
                 # Parent is the previous folder
                 parent_path = "/".join(path_parts[:i])
-                parent_url = self._build_folder_url(site_url, drive_name, parent_path)
+                parent_url = self._build_folder_url(drive_web_url, parent_path)
 
             yield HierarchyNode(
                 raw_node_id=folder_url,
@@ -2766,9 +2764,7 @@ class SharepointConnector(
 
     def _get_parent_hierarchy_url(
         self,
-        site_url: str,
         drive_web_url: str,
-        drive_name: str,
         driveitem: DriveItemData,
     ) -> str:
         """Determine the parent hierarchy node URL for a document.
@@ -2782,7 +2778,7 @@ class SharepointConnector(
         )
 
         if folder_path:
-            return self._build_folder_url(site_url, drive_name, folder_path)
+            return self._build_folder_url(drive_web_url, folder_path)
 
         # Document is at drive root
         return drive_web_url
@@ -2853,7 +2849,6 @@ class SharepointConnector(
             yield from self._yield_folder_hierarchy_nodes(
                 site_url,
                 drive_web_url,
-                drive_name,
                 folder_path,
                 checkpoint,
                 include_permissions=include_permissions,
@@ -2862,9 +2857,7 @@ class SharepointConnector(
         parent_hierarchy_url: str | None = None
         if drive_web_url:
             parent_hierarchy_url = self._get_parent_hierarchy_url(
-                site_url,
                 drive_web_url,
-                drive_name,
                 driveitem,
             )
 
