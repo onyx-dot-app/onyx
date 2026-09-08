@@ -14,9 +14,8 @@ from onyx.connectors.models import (
     ConnectorCheckpoint,
     ConnectorFailure,
     Document,
+    DocumentSection,
     HierarchyNode,
-    ImageSection,
-    TabularSection,
     TextSection,
 )
 
@@ -170,14 +169,14 @@ def load_all_from_connector(
 
 def to_sections(
     documents: list[Document],
-) -> Iterator[TextSection | ImageSection | TabularSection]:
+) -> Iterator[DocumentSection]:
     for doc in documents:
         for section in doc.sections:
             yield section
 
 
 def to_text_sections(
-    sections: Iterator[TextSection | ImageSection | TabularSection],
+    sections: Iterator[DocumentSection],
 ) -> Iterator[str]:
     for section in sections:
         if isinstance(section, TextSection):

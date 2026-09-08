@@ -27,19 +27,8 @@ from onyx.indexing.chunking.tabular_section_chunker.total_descriptor import (
     TOTALS_HEADER,
     build_total_descriptor_chunks,
 )
-from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.utils.csv_utils import parse_csv_string, read_csv_header
-
-
-class CharTokenizer(BaseTokenizer):
-    def encode(self, string: str) -> list[int]:
-        return [ord(c) for c in string]
-
-    def tokenize(self, string: str) -> list[str]:
-        return list(string)
-
-    def decode(self, tokens: list[int]) -> str:
-        return "".join(chr(t) for t in tokens)
+from tests.unit.onyx.indexing.conftest import CharTokenizer
 
 
 def _make_chunker_no_metadata() -> TabularChunker:

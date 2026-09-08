@@ -7,6 +7,11 @@ from pydantic import BaseModel, Field
 
 from onyx.connectors.models import IndexingDocument, Section
 from onyx.indexing.models import DocAwareChunk
+from onyx.natural_language_processing.utils import (
+    BaseTokenizer,
+    count_tokens,
+    split_text_by_tokens,
+)
 
 
 def extract_blurb(text: str, blurb_splitter: SentenceChunker) -> str:
@@ -37,6 +42,8 @@ class ChunkPayload(BaseModel):
     links: dict[int, str]
     is_continuation: bool = False
     image_file_id: str | None = None
+    # Set by chunkers whose content doesn't split on sentence boundaries.
+    skip_mini_chunks: bool = False
 
     def to_doc_aware_chunk(
         self,
@@ -59,12 +66,51 @@ class ChunkPayload(BaseModel):
             title_prefix=title_prefix,
             metadata_suffix_semantic=metadata_suffix_semantic,
             metadata_suffix_keyword=metadata_suffix_keyword,
-            mini_chunk_texts=get_mini_chunk_texts(self.text, mini_chunk_splitter),
+            mini_chunk_texts=(
+                None
+                if self.skip_mini_chunks
+                else get_mini_chunk_texts(self.text, mini_chunk_splitter)
+            ),
             large_chunk_id=None,
             doc_summary="",
             chunk_context="",
             contextual_rag_reserved_tokens=0,
         )
+
+
+def build_payloads(
+    text: str,
+    link: str,
+    tokenizer: BaseTokenizer,
+    content_token_limit: int,
+    *,
+    is_continuation: bool = False,
+    enforce_token_limit: bool = True,
+    reset_continuation_on_split: bool = False,
+    skip_mini_chunks: bool = False,
+) -> list[ChunkPayload]:
+    """Payloads for one piece of section text, hard-split by tokens when it
+    exceeds the budget so the embedder never truncates.
+
+    `is_continuation` marks the first payload; the rest always continue.
+    `reset_continuation_on_split` instead marks the first hard-split piece as a
+    fresh chunk, which is what the text chunker has always done.
+    """
+    texts = [text]
+    if enforce_token_limit and count_tokens(text, tokenizer) > content_token_limit:
+        texts = split_text_by_tokens(text, tokenizer, content_token_limit)
+        if reset_continuation_on_split:
+            is_continuation = False
+
+    return [
+        ChunkPayload(
+            text=piece,
+            links={0: link},
+            is_continuation=is_continuation or i != 0,
+            skip_mini_chunks=skip_mini_chunks,
+        )
+        for i, piece in enumerate(texts)
+    ]
 
 
 class AccumulatorState(BaseModel):
