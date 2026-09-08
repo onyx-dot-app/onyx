@@ -3886,7 +3886,8 @@
           "connectors": "{count, plural, other {# 个连接器}}",
           "documentSets": "{count, plural, other {# 个文档集}}",
           "agents": "{count, plural, other {# 个智能体}}",
-          "noPrivateResources": "没有私有连接器 / 文档集 / 智能体"
+          "noPrivateResources": "没有私有连接器 / 文档集 / 智能体",
+          "joined": "{first}・{rest}"
         },
         "memberCount": "{count, plural, other {# 名成员}}"
       },

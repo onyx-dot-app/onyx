@@ -3886,7 +3886,8 @@
           "connectors": "{count, plural, other {# 個のコネクタ}}",
           "documentSets": "{count, plural, other {# 個のドキュメントセット}}",
           "agents": "{count, plural, other {# 個のエージェント}}",
-          "noPrivateResources": "非公開のコネクタ / ドキュメントセット / エージェントはありません"
+          "noPrivateResources": "非公開のコネクタ / ドキュメントセット / エージェントはありません",
+          "joined": "{first}・{rest}"
         },
         "memberCount": "{count, plural, other {# 人のメンバー}}"
       },

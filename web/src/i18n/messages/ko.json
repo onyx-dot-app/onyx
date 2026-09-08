@@ -3886,7 +3886,8 @@
           "connectors": "{count, plural, other {커넥터 #개}}",
           "documentSets": "{count, plural, other {문서 세트 #개}}",
           "agents": "{count, plural, other {에이전트 #개}}",
-          "noPrivateResources": "비공개 커넥터 / 문서 세트 / 에이전트 없음"
+          "noPrivateResources": "비공개 커넥터 / 문서 세트 / 에이전트 없음",
+          "joined": "{first} · {rest}"
         },
         "memberCount": "{count, plural, other {멤버 #명}}"
       },

@@ -65,9 +65,11 @@ export function buildGroupDescription(
     );
   }
 
-  return parts.length > 0
-    ? parts.join(" · ")
-    : t("card.resourceCounts.noPrivateResources");
+  if (parts.length === 0) return t("card.resourceCounts.noPrivateResources");
+  // One pair message per join so translators own the separator and its order.
+  return parts.reduce((first, rest) =>
+    t("card.resourceCounts.joined", { first, rest })
+  );
 }
 
 /** Format the member count badge, e.g. "306 Members" or "1 Member". */

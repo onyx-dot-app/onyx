@@ -3886,7 +3886,8 @@
           "connectors": "{count, plural, one {# Konnektor} other {# Konnektoren}}",
           "documentSets": "{count, plural, one {# Dokumentensatz} other {# Dokumentensätze}}",
           "agents": "{count, plural, one {# Agent} other {# Agenten}}",
-          "noPrivateResources": "Keine privaten Konnektoren / Dokumentensätze / Agenten"
+          "noPrivateResources": "Keine privaten Konnektoren / Dokumentensätze / Agenten",
+          "joined": "{first} · {rest}"
         },
         "memberCount": "{count, plural, one {# Mitglied} other {# Mitglieder}}"
       },

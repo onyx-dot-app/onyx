@@ -3886,7 +3886,8 @@
           "connectors": "{count, plural, zero {# موصّل} one {موصّل واحد} two {موصّلان} few {# موصّلات} many {# موصّلًا} other {# موصّل}}",
           "documentSets": "{count, plural, zero {# مجموعة مستندات} one {مجموعة مستندات واحدة} two {مجموعتا مستندات} few {# مجموعات مستندات} many {# مجموعة مستندات} other {# مجموعة مستندات}}",
           "agents": "{count, plural, zero {# وكيل} one {وكيل واحد} two {وكيلان} few {# وكلاء} many {# وكيلًا} other {# وكيل}}",
-          "noPrivateResources": "لا توجد موصّلات / مجموعات مستندات / وكلاء خاصة"
+          "noPrivateResources": "لا توجد موصّلات / مجموعات مستندات / وكلاء خاصة",
+          "joined": "{first} · {rest}"
         },
         "memberCount": "{count, plural, zero {# أعضاء} one {عضو واحد} two {عضوان} few {# أعضاء} many {# عضوًا} other {# عضو}}"
       },
