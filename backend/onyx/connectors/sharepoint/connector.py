@@ -357,8 +357,10 @@ def _drive_item_in_time_window(
     timestamps = [
         ts
         for ts in (
-            _parse_sharepoint_datetime(item.get("createdDateTime")),
-            _parse_sharepoint_datetime(item.get("lastModifiedDateTime")),
+            _parse_sharepoint_datetime(item.get(DRIVE_ITEM_CREATED_DATETIME_PROPERTY)),
+            _parse_sharepoint_datetime(
+                item.get(DRIVE_ITEM_LAST_MODIFIED_DATETIME_PROPERTY)
+            ),
         )
         if ts is not None
     ]
