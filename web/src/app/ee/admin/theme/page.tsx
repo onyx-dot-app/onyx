@@ -22,12 +22,15 @@ import { invalidateNotificationCaches } from "@/lib/notifications/api";
 
 const route = ADMIN_ROUTES.THEME;
 
+// NOTE(@raunakab): these constants are enforced by the backend; if those are
+// updated, please update these ones as well. We duplicate them here to avoid
+// unnecessary API fetches to get max-values.
 const CHAR_LIMITS = {
   application_name: 50,
   custom_greeting_message: 50,
   custom_login_subtitle: 100,
   custom_header_content: 100,
-  custom_lower_disclaimer_content: 200,
+  custom_lower_disclaimer_content: 500,
   custom_popup_header: 100,
   custom_popup_content: 500,
   consent_screen_prompt: 200,

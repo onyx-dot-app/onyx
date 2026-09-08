@@ -91,6 +91,9 @@ export async function connectEmbeddingProvider({
     is_default_provider: false,
     is_configured: true,
   };
+  // Explicit, so the backend never has to infer intent from the masked value:
+  // null means the admin left the stored key alone.
+  body.api_key_changed = apiKey !== null;
   if (apiKey !== null) body.api_key = apiKey;
 
   const saveResponse = await fetch(SWR_KEYS.embeddingProviders, {

@@ -25,26 +25,33 @@ jobs:
         with:
           enable-cache: false
           version: "0.11.25"
-      # Build every platform wheel first, then publish once. Publishing per
-      # platform would leave a partial release on PyPI if a later platform
-      # failed; building all up front keeps the release atomic. Remove the
-      # cached Go binary before each build so the build hook recompiles for the
-      # target platform instead of reusing the previous platform's binary.
+      # Build every platform wheel of both projects first, then publish once.
+      # Publishing per platform would leave a partial release on PyPI if a later
+      # platform failed; building all up front keeps the release atomic. Remove
+      # the cached Go binary before each build so the build hook recompiles for
+      # the target platform instead of reusing the previous platform's binary.
+      # onyx-devtools-audit ships the ods-audit binary that `ods audit` runs, so
+      # both go out under the same version from the same tag.
       - run: |
-          for goos in linux windows darwin; do
-            for goarch in amd64 arm64; do
-              rm -f ods
-              GOOS="$goos" GOARCH="$goarch" uv build --wheel
+          for project in ods ods-audit; do
+            for goos in linux windows darwin; do
+              for goarch in amd64 arm64; do
+                rm -f "tools/$project/$project"
+                GOOS="$goos" GOARCH="$goarch" uv build --wheel "tools/$project"
+              done
             done
           done
-        working-directory: tools/ods
       - name: Upload built wheels
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: onyx-devtools-wheels
-          path: tools/ods/dist/*.whl
+          path: tools/ods*/dist/*.whl
           if-no-files-found: error
           retention-days: 7
+      # Publish the auditor first: onyx-devtools[audit] depends on it, so it must
+      # exist by the time onyx-devtools is installable.
+      - run: uv publish
+        working-directory: tools/ods-audit
       - run: uv publish
         working-directory: tools/ods
 
@@ -54,7 +61,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      PYPROJECT_FILE: pyproject.toml
       DEV_REQUIREMENTS_FILE: backend/requirements/dev.txt
     steps:
       - name: Mint GitHub App installation token
@@ -65,6 +71,10 @@ jobs:
           private-key: ${{ secrets.CHERRY_PICK_APP_PRIVATE_KEY }}
           permission-contents: write
           permission-pull-requests: write
+          # The upgrade commit also rewrites the `onyx-devtools==` pins in
+          # .github/workflows/. GitHub rejects a push that touches a workflow
+          # file unless the App token carries this permission.
+          permission-workflows: write
 
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
@@ -100,19 +110,38 @@ jobs:
             exit 1
           fi
 
-          sed -i -E \
-            "s|(onyx-devtools==)[0-9]+\.[0-9]+\.[0-9]+|\1${new_version}|" \
-            "${PYPROJECT_FILE}"
+          # Every hand-written pin moves together: pyproject.toml, the `ods`
+          # pre-commit hooks, and the CI workflows that run `uv run --with`.
+          # uv.lock and the requirements exports are generated below instead.
+          # The optional extras group is part of the pin (`onyx-devtools[audit]`),
+          # so match it too -- otherwise an extras-only file is skipped.
+          pin_re='onyx-devtools(\[[a-z0-9,._-]+\])?==[0-9]+\.[0-9]+\.[0-9]+'
+          mapfile -t pinned_files < <(
+            git grep -lE "${pin_re}" -- ':!uv.lock' ':!backend/requirements/'
+          )
+          if [ "${#pinned_files[@]}" -eq 0 ]; then
+            echo "::error::Found no onyx-devtools pins to update."
+            exit 1
+          fi
+          printf 'Updating pin in: %s\n' "${pinned_files[@]}"
 
-          if git diff --quiet -- "${PYPROJECT_FILE}"; then
+          sed -i -E \
+            "s|(onyx-devtools(\[[a-z0-9,._-]+\])?==)[0-9]+\.[0-9]+\.[0-9]+|\1${new_version}|" \
+            "${pinned_files[@]}"
+
+          if git diff --quiet -- "${pinned_files[@]}"; then
             echo "onyx-devtools already pinned to ${new_version}. Nothing to do."
             exit 0
           fi
 
           # Regenerate the lockfile so pyproject.toml and uv.lock stay consistent.
+          # Both packages release under one version from this tag, so refresh
+          # both: the `[audit]` extra resolves onyx-devtools-audit, and a stale
+          # cached index entry for it would hold the lock on the old version.
           # Retry to tolerate PyPI index propagation lag right after publish.
           for attempt in 1 2 3 4 5; do
-            if uv lock --refresh-package onyx-devtools; then
+            if uv lock --refresh-package onyx-devtools \
+              --refresh-package onyx-devtools-audit; then
               break
             fi
             if [ "${attempt}" = 5 ]; then
@@ -137,14 +166,14 @@ jobs:
           fi
 
           git switch -c "${branch}"
-          git add "${PYPROJECT_FILE}" uv.lock "${DEV_REQUIREMENTS_FILE}"
+          git add "${pinned_files[@]}" uv.lock "${DEV_REQUIREMENTS_FILE}"
           git commit -m "chore(dev): upgrade onyx-devtools to ${new_version}"
           git push --force origin "${branch}"
 
           body="$(cat <<EOF
           Automated upgrade of \`onyx-devtools\` to \`${new_version}\`, published by [this release run](${RUN_URL}).
 
-          Regenerated \`uv.lock\` and \`backend/requirements/dev.txt\` to match the new pin.
+          Updates every \`onyx-devtools\` pin, extras included (\`pyproject.toml\`, the \`ods\` pre-commit hooks, and the CI workflows), then regenerates \`uv.lock\` and \`backend/requirements/dev.txt\` to match.
 
           Generated by the Release Devtools workflow.
           EOF

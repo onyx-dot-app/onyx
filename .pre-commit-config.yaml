@@ -60,13 +60,16 @@ repos:
         files: ^(pyproject\.toml|uv\.lock|backend/requirements/.*\.txt)$
       - id: uv-run
         name: Check getattr
-        args: ["--no-project", "--with=onyx-devtools", "ods", "check-getattr"]
+        # Keep the pinned version in sync with `onyx-devtools` in the dev
+        # dependency group in pyproject.toml, here and in every `ods` hook
+        # below. Without the pin, `--with` resolves the latest published wheel.
+        args: ["--no-project", "--with=onyx-devtools==0.13.2", "ods", "check-getattr"]
         pass_filenames: true
         files: ^backend/.*\.py$
       - id: uv-run
         name: Check lazy imports
         args:
-          ["--no-project", "--with=onyx-devtools", "ods", "check-lazy-imports"]
+          ["--no-project", "--with=onyx-devtools==0.13.2", "ods", "check-lazy-imports"]
         pass_filenames: true
         files: ^backend/(?!\.venv/|scripts/).*\.py$
       - id: uv-run
@@ -81,7 +84,7 @@ repos:
         # release that adds the embedded-copy sync, the extra trigger paths below
         # are harmless no-ops (the cli module's drift test still gates staleness).
         args:
-          ["--no-project", "--with=onyx-devtools", "ods", "generate-compose", "--write"]
+          ["--no-project", "--with=onyx-devtools==0.13.2", "ods", "generate-compose", "--write"]
         pass_filenames: false
         files: >-
           (?x)^(
@@ -147,9 +150,10 @@ repos:
         # the result matches terraform byte for byte without needing the
         # binary on PATH. Replaces the pre-commit-terraform terraform_fmt hook.
         # `ods fmt tf` and `ods lint tf` ship in onyx-devtools (tools/ods), and
-        # `--with=onyx-devtools` resolves the published wheel, so both hooks
-        # need an ods release before they can run. Tag `ods/` first.
-        args: ["--no-project", "--with=onyx-devtools", "ods", "fmt", "tf"]
+        # `--with=onyx-devtools==` resolves a published wheel, so both hooks
+        # need an ods release and a version bump before they can run. Tag
+        # `ods/` first.
+        args: ["--no-project", "--with=onyx-devtools==0.13.2", "ods", "fmt", "tf"]
         pass_filenames: true
         files: \.tf$
       - id: uv-run
@@ -159,7 +163,7 @@ repos:
         # an internal value can travel across by accident. Fails on account
         # ids, access key ids, routable IPv4 CIDRs, and email addresses.
         # Append '# public-safe: ok' to accept a line.
-        args: ["--no-project", "--with=onyx-devtools", "ods", "lint", "tf"]
+        args: ["--no-project", "--with=onyx-devtools==0.13.2", "ods", "lint", "tf"]
         pass_filenames: true
         files: ^deployment/terraform/.*\.tf$
       - id: uv-run

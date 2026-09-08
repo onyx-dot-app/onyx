@@ -244,6 +244,119 @@ ods web lint
 ods web test --watch
 ```
 
+### `test` - Run Tests
+
+Run the repo's test suites without changing directories or remembering which
+suite owns a file.
+
+```shell
+ods test <suite|path> [args...]
+```
+
+The first argument is a suite name or a path inside a suite. A path selects the
+suite that covers it, so you can pass a file straight from your editor. All
+later arguments go to the suite's test runner.
+
+| Suite | Aliases | Directory | Runner |
+| --- | --- | --- | --- |
+| `ods` | | `tools/ods` | `go test` |
+| `cli` | | `cli` | `go test` |
+| `terraform` | `tf` | `terraform-provider-onyx` | `go test` |
+
+The Go suites run with `-race`, the same as `pr-golang-tests.yml`. A runner that
+takes packages rather than files, such as `go test`, runs the package that holds
+a file argument. `<file>::<TestName>` runs one test.
+
+**Examples:**
+
+```shell
+# Run a whole module
+ods test ods
+
+# Run one package, one file's package, or one test
+ods test tools/ods/internal/testsuite
+ods test tools/ods/internal/testsuite/testsuite_test.go
+ods test tools/ods/internal/testsuite/testsuite_test.go::TestResolveGoTargets
+
+# Forward arguments to go test
+ods test cli -run TestChat -v
+```
+
+### `coverage` - Measure Go Coverage Against a Baseline
+
+Measure Go statement coverage per package and hold it against a committed
+baseline, so coverage can go up but not down.
+
+```shell
+ods coverage <suite|module-dir> [flags]
+```
+
+The baseline is a `.coverage-baseline.yaml` at the module root recording each
+package's floor. `--check` fails when a package drops below its floor, which is
+what `pr-golang-tests.yml` runs on every PR. After adding tests, `--update`
+raises the floors.
+
+Coverage is measured per package with `go test -coverprofile`, so a package's
+number counts only its own tests. That is a number the package's owner can act
+on; a cross-package `-coverpkg` total would credit a package for statements its
+own tests never assert on.
+
+The suites are the same Go modules `ods test` knows: `ods`, `cli`, and
+`terraform`. A module directory such as `tools/ods` is accepted in place of a
+suite name, which is what CI passes.
+
+**Flags:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--check` | `false` | Fail when a package drops below its baseline floor |
+| `--update` | `false` | Rewrite the baseline from this run |
+| `--profile` | | Keep the coverage profile at this path (for `go tool cover`) |
+| `--html` | | Render the profile as a browsable page at this path |
+| `--markdown` | | Write the changed packages as a markdown table at this path, for a PR comment |
+| `--tolerance` | `0.1` | Percentage points a package may drop below its floor without failing |
+
+**Examples:**
+
+```shell
+# Report where each package stands
+ods coverage ods
+
+# Fail on a regression (what CI runs)
+ods coverage ods --check
+
+# Record today's numbers as the new floors
+ods coverage ods --update
+
+# Keep the profile and browse the uncovered lines
+ods coverage ods --profile /tmp/cover.out
+go tool cover -html=/tmp/cover.out
+```
+
+#### Raising the baseline
+
+The gate never fails on an improvement, so a baseline goes stale as tests are
+added. `ods coverage ods` reports how many packages have risen; commit the gain
+with `--update` so the new level becomes the floor.
+
+`pr-golang-tests.yml` runs `ods coverage <module> --check` for every Go module.
+Without a baseline the tests still run and the report prints, but nothing is
+gated. A module opts into the gate by committing a baseline, so `cli` and
+`terraform-provider-onyx` join by running `ods coverage <suite> --update` once.
+
+In CI, each module's `--markdown` report goes to the job summary, and its
+`--html` page is uploaded as an artifact and published to the reports bucket.
+One PR comment, updated in place, lists the modules with a baseline where a
+package moved, each with a link to its page.
+
+Floors are rounded down to one decimal, and a package may sit `--tolerance`
+below its floor without failing. That absorbs the jitter from suites that depend
+on ports or timing; a real regression is far larger.
+
+The package floors are the gate. The module total is reported with its delta
+but never fails the check: a package added without tests, or a well-covered
+package deleted, moves the total without any package regressing.
+
 ### `dev` - Devcontainer Management
 
 Manage the Onyx devcontainer. Also available as `ods dc`.
@@ -429,6 +542,22 @@ ods lint tf deployment/terraform/modules/aws/vpc/main.tf
 ```
 
 ### `audit` - Audit Dependencies for Vulnerabilities
+
+> **Install the `audit` extra first.** The scanner is about 50 MB, most of the
+> download, so it ships as a separate `onyx-devtools-audit` wheel that provides
+> the `ods-audit` binary. `ods audit` forwards to it and prints an install hint
+> when it is missing.
+>
+> ```shell
+> # Install alongside ods
+> uv tool install 'onyx-devtools[audit]'
+>
+> # Or run it without installing (how CI runs the gate)
+> uv run --with 'onyx-devtools[audit]' ods audit
+> ```
+>
+> `ods-audit` takes the same arguments, so `ods audit --python` and
+> `ods-audit --python` are the same command.
 
 Scan the JavaScript (`bun.lock`) and Python (`uv.lock`) lockfiles via
 [osv-scanner](https://github.com/google/osv-scanner) (vendored as a library, no

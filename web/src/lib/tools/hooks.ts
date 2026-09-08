@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import useSWR, { mutate } from "swr";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -12,6 +13,17 @@ import type {
 } from "@/lib/tools/types";
 import { useAppPosition } from "@/lib/position/hooks";
 import { useActiveAgent } from "@/lib/agents/hooks";
+import {
+  CODING_AGENT_TOOL_ID,
+  FILE_READER_TOOL_ID,
+  IMAGE_GENERATION_TOOL_ID,
+  KNOWLEDGE_GRAPH_TOOL_ID,
+  MEMORY_TOOL_ID,
+  OPEN_URL_TOOL_ID,
+  PYTHON_TOOL_ID,
+  SEARCH_TOOL_ID,
+  WEB_SEARCH_TOOL_ID,
+} from "@/lib/tools/constants";
 
 /**
  * Every MCP server the current user can reach.
@@ -488,4 +500,33 @@ export function useToolConfiguration(
       handOffToNewChatWith,
     };
   }, [configuration, setToolState, handOffTo, handOffToNewChatWith]);
+}
+
+/**
+ * Display names for the built-in tools, keyed by `in_code_tool_id`.
+ *
+ * The backend names these in English, which is right for the model but not for
+ * the UI, so a row reads its name from here instead. Spelled out rather than
+ * looked up dynamically because next-intl types its keys, and a lookup by
+ * variable would give up that checking.
+ *
+ * Only in-code tools appear. A tool defined through the UI or served by an MCP
+ * server is named by whoever created it, and there is nothing to translate.
+ */
+export function useBuiltInToolNames(): Record<string, string> {
+  const t = useTranslations("actions");
+  return useMemo(
+    () => ({
+      [SEARCH_TOOL_ID]: t("toolNames.internalSearch.label"),
+      [IMAGE_GENERATION_TOOL_ID]: t("toolNames.imageGeneration.label"),
+      [WEB_SEARCH_TOOL_ID]: t("toolNames.webSearch.label"),
+      [KNOWLEDGE_GRAPH_TOOL_ID]: t("toolNames.knowledgeGraph.label"),
+      [OPEN_URL_TOOL_ID]: t("toolNames.openUrl.label"),
+      [PYTHON_TOOL_ID]: t("toolNames.codeInterpreter.label"),
+      [FILE_READER_TOOL_ID]: t("toolNames.fileReader.label"),
+      [MEMORY_TOOL_ID]: t("toolNames.addMemory.label"),
+      [CODING_AGENT_TOOL_ID]: t("toolNames.codingAgent.label"),
+    }),
+    [t]
+  );
 }

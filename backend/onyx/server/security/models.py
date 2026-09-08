@@ -128,6 +128,10 @@ class SecuritySettingsOverrides(BaseModel):
     track_external_idp_expiry: bool | None = Field(
         default=None, json_schema_extra=_tenant_editable()
     )
+    # Relink window for an IdP client change. KV-backed, see KV_BACKED_OVERRIDE_KEYS.
+    allow_same_provider_subject_relink: bool | None = Field(
+        default=None, json_schema_extra=_tenant_editable()
+    )
     incognito_availability: IncognitoAvailability | None = Field(
         default=None, json_schema_extra=_tenant_editable()
     )
@@ -236,6 +240,7 @@ class SecuritySettings(BaseModel):
 
     user_directory_admin_only: bool
     track_external_idp_expiry: bool
+    allow_same_provider_subject_relink: bool
     incognito_availability: IncognitoAvailability
     incognito_record_mode: IncognitoRecordMode
     ssrf_protection_level: SSRFProtectionLevel

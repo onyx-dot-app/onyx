@@ -544,3 +544,106 @@ class TestEveryFlowDefaultIsGuarded:
         default_craft = fetch_default_craft_model(db_session)
         assert default_craft is not None
         assert default_craft.name == "gpt-4o"
+
+
+class TestCapabilityChangesCannotEraseADefault:
+    """A default lives on the LLMModelFlow row, so dropping the capability that
+    row represents deletes the default along with it."""
+
+    def test_cannot_disable_image_input_on_the_vision_default(
+        self,
+        db_session: Session,
+        provider_name: str,
+    ) -> None:
+        provider = _create_test_provider(db_session, provider_name)
+        update_default_vision_provider(provider.id, "gpt-4o", db_session)
+
+        with pytest.raises(ValueError, match=r"Cannot disable vision support"):
+            upsert_llm_provider(
+                LLMProviderUpsertRequest(
+                    id=provider.id,
+                    name=provider_name,
+                    provider=LlmProviderNames.OPENAI,
+                    api_key="sk-test-key-00000000000000000000000000000000000",
+                    api_key_changed=True,
+                    model_configurations=[
+                        ModelConfigurationUpsertRequest(
+                            name="gpt-4o",
+                            is_visible=True,
+                            supports_image_input=False,
+                        ),
+                        ModelConfigurationUpsertRequest(
+                            name="gpt-4o-mini", is_visible=True
+                        ),
+                    ],
+                ),
+                db_session=db_session,
+            )
+
+        assert fetch_default_vision_model(db_session) is not None
+
+    def test_omitting_image_support_keeps_the_stored_capability(
+        self,
+        db_session: Session,
+        provider_name: str,
+    ) -> None:
+        """supports_image_input is optional. An omitted one used to read as false
+        and silently drop the vision flow, taking the default with it."""
+        provider = _create_test_provider(db_session, provider_name)
+        update_default_vision_provider(provider.id, "gpt-4o", db_session)
+
+        upsert_llm_provider(
+            LLMProviderUpsertRequest(
+                id=provider.id,
+                name=provider_name,
+                provider=LlmProviderNames.OPENAI,
+                api_key="sk-test-key-00000000000000000000000000000000000",
+                api_key_changed=True,
+                model_configurations=[
+                    # no supports_image_input, as a partial client would send
+                    ModelConfigurationUpsertRequest(name="gpt-4o", is_visible=True),
+                    ModelConfigurationUpsertRequest(
+                        name="gpt-4o-mini", is_visible=True
+                    ),
+                ],
+            ),
+            db_session=db_session,
+        )
+
+        default_vision = fetch_default_vision_model(db_session)
+        assert default_vision is not None
+        assert default_vision.name == "gpt-4o"
+
+    def test_disabling_vision_is_caught_when_one_model_holds_several_defaults(
+        self,
+        db_session: Session,
+        provider_name: str,
+    ) -> None:
+        """The chat default is commonly the vision default too. Keying the lookup
+        by model id kept only the first flow found, so the vision default went
+        unguarded and the reconciliation deleted it."""
+        provider = _create_test_provider(db_session, provider_name)
+        update_default_provider(provider.id, "gpt-4o", db_session)
+        update_default_vision_provider(provider.id, "gpt-4o", db_session)
+
+        with pytest.raises(ValueError, match=r"Cannot disable vision support"):
+            upsert_llm_provider(
+                LLMProviderUpsertRequest(
+                    id=provider.id,
+                    name=provider_name,
+                    provider=LlmProviderNames.OPENAI,
+                    api_key="sk-test-key-00000000000000000000000000000000000",
+                    api_key_changed=True,
+                    model_configurations=[
+                        ModelConfigurationUpsertRequest(
+                            name="gpt-4o",
+                            is_visible=True,
+                            supports_image_input=False,
+                        ),
+                        ModelConfigurationUpsertRequest(
+                            name="gpt-4o-mini", is_visible=True
+                        ),
+                    ],
+                ),
+                db_session=db_session,
+            )

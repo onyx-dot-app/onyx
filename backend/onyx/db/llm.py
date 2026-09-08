@@ -1,3 +1,5 @@
+from enum import Enum, auto
+
 from sqlalchemy import delete, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, load_only, selectinload
@@ -203,8 +205,44 @@ def fetch_persona_with_groups(db_session: Session, persona_id: int) -> Persona |
     )
 
 
+class ApiKeyIntent(Enum):
+    """What a request states about the api_key it carries."""
+
+    # A new key, taken as given. The only way to rotate to a value equal to the
+    # stored key's mask, which UNSTATED reads as an unchanged echo.
+    ROTATED = auto()
+    # Keep the stored key and ignore whatever api_key holds. The admin UI sends
+    # this with no api_key at all when the key is left alone.
+    UNCHANGED = auto()
+    # The caller does not set the flag, so the mask-echo heuristic decides. This
+    # is what keeps callers predating the flag able to rotate a key.
+    UNSTATED = auto()
+
+    @classmethod
+    def from_request_flag(cls, api_key_changed: bool | None) -> "ApiKeyIntent":
+        if api_key_changed is None:
+            return cls.UNSTATED
+        return cls.ROTATED if api_key_changed else cls.UNCHANGED
+
+
 def _resolve_embedding_api_key(
-    incoming: str | None, existing: SensitiveValue[str] | None
+    incoming: str | None,
+    existing: SensitiveValue[str] | None,
+    intent: ApiKeyIntent,
+) -> str | None:
+    """Pick the api_key to store for an embedding provider."""
+    if intent is ApiKeyIntent.ROTATED:
+        return incoming
+    if intent is ApiKeyIntent.UNCHANGED and existing is not None:
+        return existing.get_value(apply_mask=False)
+    # UNCHANGED with nothing stored says to keep a key that does not exist, so
+    # read the request instead of creating a provider with no key at all.
+    return _restore_masked_embedding_api_key(incoming, existing)
+
+
+def _restore_masked_embedding_api_key(
+    incoming: str | None,
+    existing: SensitiveValue[str] | None,
 ) -> str | None:
     """Restore the stored key when the caller submits the masked placeholder.
 
@@ -216,6 +254,7 @@ def _resolve_embedding_api_key(
         return incoming
 
     stored = existing.get_value(apply_mask=False) if existing is not None else None
+
     if stored is not None:
         # Compare against this key's own mask rather than the general shape
         # test, so a real key that happens to look like a placeholder is still
@@ -224,8 +263,8 @@ def _resolve_embedding_api_key(
         # shape, so refusing it would break providers holding a valid one.
         #
         # A caller rotating to a key that equals this mask exactly is read as an
-        # unchanged echo, and keeps the old key. Only a changed-flag on the
-        # request can separate the two, as LLMProviderUpsertRequest does.
+        # unchanged echo, and keeps the old key. Only api_key_changed on the
+        # request separates the two.
         return stored if incoming == mask_string(stored) else incoming
 
     if is_masked_credential(incoming):
@@ -246,15 +285,23 @@ def upsert_cloud_embedding_provider(
         .first()
     )
     if existing_provider:
-        updates = provider.model_dump()
+        # api_key_changed is a request-only flag; every remaining key is setattr'd
+        # straight onto the model.
+        updates = provider.model_dump(exclude={"api_key_changed"})
         updates["api_key"] = _resolve_embedding_api_key(
-            provider.api_key, existing_provider.api_key
+            provider.api_key,
+            existing_provider.api_key,
+            ApiKeyIntent.from_request_flag(provider.api_key_changed),
         )
         for key, value in updates.items():
             setattr(existing_provider, key, value)
     else:
-        creation = provider.model_dump()
-        creation["api_key"] = _resolve_embedding_api_key(provider.api_key, None)
+        creation = provider.model_dump(exclude={"api_key_changed"})
+        creation["api_key"] = _resolve_embedding_api_key(
+            provider.api_key,
+            None,
+            ApiKeyIntent.from_request_flag(provider.api_key_changed),
+        )
         new_provider = CloudEmbeddingProviderModel(**creation)
 
         db_session.add(new_provider)
@@ -332,10 +379,34 @@ def upsert_llm_provider(
         for mc in llm_provider_upsert_request.model_configurations
     }
 
-    # Delete removed models
-    removed_ids = [
-        mc.id for name, mc in existing_by_name.items() if name not in models_to_exist
-    ]
+    # supports_image_input and supports_reasoning are optional, so an omitted one
+    # used to read as false and drop the flow — taking any deployment default that
+    # flow carried with it. Merge them against what is stored, the same way the
+    # reasoning and temperature fields below are merged.
+    merged_capabilities: dict[str, set[LLMModelFlowType]] = {}
+    for mc_request in llm_provider_upsert_request.model_configurations:
+        existing_mc = existing_by_name.get(mc_request.name)
+        stored_flows = set(existing_mc.llm_model_flow_types) if existing_mc else set()
+        merged: set[LLMModelFlowType] = set()
+        for capability_flow, sent in (
+            (LLMModelFlowType.VISION, mc_request.supports_image_input),
+            (LLMModelFlowType.REASONING, mc_request.supports_reasoning),
+        ):
+            keeps = sent if sent is not None else capability_flow in stored_flows
+            if keeps:
+                merged.add(capability_flow)
+        merged_capabilities[mc_request.name] = merged
+
+    # Delete removed models, unless the caller asked to keep what it did not send
+    removed_ids = (
+        []
+        if llm_provider_upsert_request.keep_existing_models
+        else [
+            mc.id
+            for name, mc in existing_by_name.items()
+            if name not in models_to_exist
+        ]
+    )
 
     # Every deployment default lives on a flow row pointing at a model, and
     # _update_default_model__no_commit makes that model visible, so a model
@@ -366,6 +437,22 @@ def upsert_llm_provider(
                 f"Cannot hide the default model '{name}'. It is the default for: "
                 f"{held}. Please change those defaults before hiding."
             )
+        # Dropping a capability deletes the flow row that represents it, so a
+        # model holding that flow's default must keep it.
+        for capability_flow in (
+            LLMModelFlowType.VISION,
+            LLMModelFlowType.REASONING,
+        ):
+            if (
+                capability_flow in held_flows
+                and name in merged_capabilities
+                and capability_flow not in merged_capabilities[name]
+            ):
+                raise ValueError(
+                    f"Cannot disable {capability_flow.value} support on '{name}'. "
+                    f"It is the deployment's {capability_flow.value} default "
+                    "model. Please change that default first."
+                )
 
     if removed_ids:
         db_session.query(ModelConfiguration).filter(
@@ -375,10 +462,7 @@ def upsert_llm_provider(
 
     for model_config in llm_provider_upsert_request.model_configurations:
         supported_flows = [LLMModelFlowType.CHAT]
-        if model_config.supports_image_input:
-            supported_flows.append(LLMModelFlowType.VISION)
-        if model_config.supports_reasoning:
-            supported_flows.append(LLMModelFlowType.REASONING)
+        supported_flows.extend(merged_capabilities.get(model_config.name, set()))
 
         existing = existing_by_name.get(model_config.name)
         if existing:
@@ -1211,13 +1295,6 @@ def sync_auto_mode_models(
         ).all()
     }
 
-    # Mark models that are no longer in GitHub config as not visible
-    for model_name, model in existing_models.items():
-        if model_name not in recommended_visible_model_names:
-            if model.is_visible:
-                model.is_visible = False
-                changes += 1
-
     # Add or update models from GitHub config
     for model_config in recommended_visible_models:
         if model_config.name in existing_models:
@@ -1248,6 +1325,8 @@ def sync_auto_mode_models(
             changes += 1
 
     # Update the default if this provider currently holds the global CHAT default.
+    # This runs before the models the config dropped are hidden, so a model that
+    # gives up the chat default here can still be hidden below.
     # We flush (but don't commit) so that _update_default_model can see the new
     # model rows, then commit everything atomically to avoid a window where the
     # old default is invisible but still pointed-to.
@@ -1269,6 +1348,63 @@ def sync_auto_mode_models(
                 flow_type=LLMModelFlowType.CHAT,
             )
             changes += 1
+
+    # Reconcile the visibility of the models the config dropped. A model still
+    # holding a deployment default stays visible: only the chat default is
+    # re-pointed above, so hiding the rest would strand a default on a model the
+    # admin can no longer see or change. Every other write path keeps a default
+    # model visible.
+    #
+    # Both statements test the default in SQL rather than from a snapshot read
+    # here. A default assigned between the two would otherwise be missed, and
+    # the model hidden anyway. They synchronize the session because sessions are
+    # built with expire_on_commit=False, so a caller holding these rows — as
+    # put_llm_provider does — would otherwise serialize stale visibility.
+    db_session.flush()
+
+    dropped_names = [
+        name for name in existing_models if name not in recommended_visible_model_names
+    ]
+    if dropped_names:
+        holds_a_default = (
+            select(LLMModelFlow.id)
+            .where(
+                LLMModelFlow.model_configuration_id == ModelConfiguration.id,
+                LLMModelFlow.is_default == True,  # noqa: E712
+            )
+            .exists()
+        )
+        dropped_models = (
+            ModelConfiguration.llm_provider_id == provider.id,
+            ModelConfiguration.name.in_(dropped_names),
+        )
+
+        hidden = db_session.execute(
+            update(ModelConfiguration)
+            .where(
+                *dropped_models,
+                ModelConfiguration.is_visible == True,  # noqa: E712
+                ~holds_a_default,
+            )
+            .values(is_visible=False)
+            .execution_options(synchronize_session="fetch")
+        )
+
+        # An earlier sync could have hidden a model that still holds a default,
+        # so restore those rather than leaving the default unreachable forever.
+        restored = db_session.execute(
+            update(ModelConfiguration)
+            .where(
+                *dropped_models,
+                ModelConfiguration.is_visible == False,  # noqa: E712
+                holds_a_default,
+            )
+            .values(is_visible=True)
+            .execution_options(synchronize_session="fetch")
+        )
+
+        changes += int(hidden.rowcount)  # ty: ignore[unresolved-attribute]
+        changes += int(restored.rowcount)  # ty: ignore[unresolved-attribute]
 
     db_session.commit()
     return changes

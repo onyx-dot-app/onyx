@@ -64,6 +64,9 @@
       "addConnectors": {
         "label": "Konnektoren hinzufügen"
       },
+      "authenticate": {
+        "label": "Authentifizieren"
+      },
       "configure": {
         "tooltip": "Konfigurieren"
       },
@@ -653,6 +656,35 @@
       "showEnabledButton": {
         "ariaLabel": "Nur aktivierte Tools anzeigen",
         "tooltip": "Nur aktivierte anzeigen"
+      }
+    },
+    "toolNames": {
+      "internalSearch": {
+        "label": "Interne Suche"
+      },
+      "imageGeneration": {
+        "label": "Bilderzeugung"
+      },
+      "webSearch": {
+        "label": "Websuche"
+      },
+      "knowledgeGraph": {
+        "label": "Wissensgraph-Suche"
+      },
+      "openUrl": {
+        "label": "URL öffnen"
+      },
+      "codeInterpreter": {
+        "label": "Code-Interpreter"
+      },
+      "fileReader": {
+        "label": "Dateileser"
+      },
+      "addMemory": {
+        "label": "Erinnerung hinzufügen"
+      },
+      "codingAgent": {
+        "label": "Coding-Agent"
       }
     },
     "toolsPopover": {
@@ -5110,6 +5142,10 @@
           "title": "Selbst gehostet & Benutzerdefiniert"
         }
       },
+      "hideProviderGrouping": {
+        "description": "Zeigen Sie alle Modelle als eine Liste an, wenn Sie im Chat Modelle auswählen. Ideal für eine kleine Modellauswahl.",
+        "title": "Anbietergruppierung ausblenden"
+      },
       "modals": {
         "access": {
           "admin": {
@@ -5571,6 +5607,8 @@
       "toasts": {
         "providerDeleteFailed": "Der Anbieter konnte nicht gelöscht werden: {message}",
         "providerDeleted": "Anbieter erfolgreich gelöscht!",
+        "settingsUpdateFailed": "Die Einstellungen konnten nicht aktualisiert werden",
+        "settingsUpdated": "Einstellungen aktualisiert",
         "unknownError": "Unbekannter Fehler"
       }
     },
@@ -6064,6 +6102,10 @@
         },
         "section": {
           "title": "Authentifizierung"
+        },
+        "subjectRelink": {
+          "description": "Lässt Benutzer, denen der Anbieter eine neue Subject-ID ausgestellt hat, sich wieder bei dem mit ihrer E-Mail verknüpften Konto anmelden. Nur während eines Wechsels des OIDC-Clients oder der App-Registrierung einschalten.",
+          "title": "Konten nach einem OIDC-Client-Wechsel neu verknüpfen"
         }
       },
       "jwt": {

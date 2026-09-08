@@ -64,6 +64,9 @@
       "addConnectors": {
         "label": "Ajouter des connecteurs"
       },
+      "authenticate": {
+        "label": "S'authentifier"
+      },
       "configure": {
         "tooltip": "Configurer"
       },
@@ -653,6 +656,35 @@
       "showEnabledButton": {
         "ariaLabel": "Afficher uniquement les outils activés",
         "tooltip": "Afficher uniquement les activés"
+      }
+    },
+    "toolNames": {
+      "internalSearch": {
+        "label": "Recherche interne"
+      },
+      "imageGeneration": {
+        "label": "Génération d'images"
+      },
+      "webSearch": {
+        "label": "Recherche web"
+      },
+      "knowledgeGraph": {
+        "label": "Recherche dans le graphe de connaissances"
+      },
+      "openUrl": {
+        "label": "Ouvrir l'URL"
+      },
+      "codeInterpreter": {
+        "label": "Interpréteur de code"
+      },
+      "fileReader": {
+        "label": "Lecteur de fichiers"
+      },
+      "addMemory": {
+        "label": "Ajouter à la mémoire"
+      },
+      "codingAgent": {
+        "label": "Agent de code"
       }
     },
     "toolsPopover": {
@@ -5110,6 +5142,10 @@
           "title": "Auto-hébergés et personnalisés"
         }
       },
+      "hideProviderGrouping": {
+        "description": "Affichez tous les modèles dans une seule liste lors du choix des modèles dans la discussion. Idéal pour un petit ensemble de modèles.",
+        "title": "Masquer le regroupement par fournisseur"
+      },
       "modals": {
         "access": {
           "admin": {
@@ -5571,6 +5607,8 @@
       "toasts": {
         "providerDeleteFailed": "Échec de la suppression du fournisseur : {message}",
         "providerDeleted": "Fournisseur supprimé avec succès !",
+        "settingsUpdateFailed": "Échec de la mise à jour des paramètres",
+        "settingsUpdated": "Paramètres mis à jour",
         "unknownError": "Erreur inconnue"
       }
     },
@@ -6064,6 +6102,10 @@
         },
         "section": {
           "title": "Authentification"
+        },
+        "subjectRelink": {
+          "description": "Permet aux utilisateurs dont le fournisseur a émis un nouvel identifiant de sujet de se reconnecter au compte lié à leur e-mail. À activer uniquement pendant un changement de client OIDC ou d'inscription d'application.",
+          "title": "Relier à nouveau les comptes après un changement de client OIDC"
         }
       },
       "jwt": {

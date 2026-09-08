@@ -20,7 +20,11 @@ from onyx.auth.permissions import (
     has_permission,
     require_permission,
 )
-from onyx.auth.users import current_chat_accessible_user, current_limited_user
+from onyx.auth.users import (
+    current_chat_accessible_user,
+    current_limited_user,
+    scope_exempt,
+)
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import PUBLIC_API_TAGS, FileOrigin, MilestoneRecordType
 from onyx.db.engine.sql_engine import get_session
@@ -588,6 +592,27 @@ def delete_persona(
         )
     except ValueError as e:
         logger.exception("Failed to delete persona")
+        # An agent this caller may edit but which is already a tombstone is gone,
+        # not forbidden. Only checked once the delete has already failed, so the
+        # happy path costs no extra query.
+        try:
+            get_persona_by_id(
+                persona_id=persona_id,
+                user=user,
+                db_session=db_session,
+                include_deleted=True,
+            )
+        except ValueError:
+            logger.info(
+                "Agent %s is not readable by this caller even including tombstones; "
+                "reporting the failed delete as an authorization error",
+                persona_id,
+            )
+        else:
+            raise OnyxError(
+                OnyxErrorCode.PERSONA_NOT_FOUND,
+                f"Agent with ID {persona_id} is already deleted",
+            ) from e
         # A non-owner failed the ownership check; its ValueError would 400 via the global
         # handler, so surface the real authorization failure as a 403.
         raise OnyxError(
@@ -596,7 +621,10 @@ def delete_persona(
         ) from e
 
 
-@basic_router.get("")
+# scope_exempt: the auth dependency below carries no require_permission marker,
+# so without this a scoped PAT is rejected fail-closed. MCP clients need this
+# route to resolve an agent name for a scoped search.
+@basic_router.get("", dependencies=[Depends(scope_exempt)])
 def list_personas(
     user: User = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
@@ -673,13 +701,21 @@ def get_persona(
     user_group_ids: set[int] = (
         get_user_group_ids_for_user(db_session, user.id) if user is not None else set()
     )
-    persona = get_persona_by_id(
-        persona_id=persona_id,
-        user=user,
-        db_session=db_session,
-        is_for_edit=False,
-        user_group_ids=user_group_ids,
-    )
+    try:
+        persona = get_persona_by_id(
+            persona_id=persona_id,
+            user=user,
+            db_session=db_session,
+            is_for_edit=False,
+            user_group_ids=user_group_ids,
+        )
+    except ValueError as e:
+        # Caller-scoped, like GET /manage/admin/document-set/{id}: someone who
+        # cannot see the agent gets not-found rather than a 403 that leaks it.
+        raise OnyxError(
+            OnyxErrorCode.PERSONA_NOT_FOUND,
+            f"Agent with ID {persona_id} does not exist",
+        ) from e
 
     # Validate and clear the model override if the referenced model is no longer
     # accessible to this persona (e.g. provider was restricted after the persona was saved).

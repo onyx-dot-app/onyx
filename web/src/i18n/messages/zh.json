@@ -64,6 +64,9 @@
       "addConnectors": {
         "label": "添加连接器"
       },
+      "authenticate": {
+        "label": "身份验证"
+      },
       "configure": {
         "tooltip": "配置"
       },
@@ -653,6 +656,35 @@
       "showEnabledButton": {
         "ariaLabel": "仅显示已启用的工具",
         "tooltip": "仅显示已启用"
+      }
+    },
+    "toolNames": {
+      "internalSearch": {
+        "label": "内部搜索"
+      },
+      "imageGeneration": {
+        "label": "图像生成"
+      },
+      "webSearch": {
+        "label": "网络搜索"
+      },
+      "knowledgeGraph": {
+        "label": "知识图谱搜索"
+      },
+      "openUrl": {
+        "label": "打开 URL"
+      },
+      "codeInterpreter": {
+        "label": "代码解释器"
+      },
+      "fileReader": {
+        "label": "文件读取器"
+      },
+      "addMemory": {
+        "label": "添加到记忆"
+      },
+      "codingAgent": {
+        "label": "编码智能体"
       }
     },
     "toolsPopover": {
@@ -5110,6 +5142,10 @@
           "title": "自托管和自定义"
         }
       },
+      "hideProviderGrouping": {
+        "description": "在聊天中选择模型时，将所有模型显示为一个列表。适合模型数量较少的情况。",
+        "title": "隐藏提供商分组"
+      },
       "modals": {
         "access": {
           "admin": {
@@ -5571,6 +5607,8 @@
       "toasts": {
         "providerDeleteFailed": "删除提供商失败：{message}",
         "providerDeleted": "提供商已成功删除！",
+        "settingsUpdateFailed": "更新设置失败",
+        "settingsUpdated": "设置已更新",
         "unknownError": "未知错误"
       }
     },
@@ -6064,6 +6102,10 @@
         },
         "section": {
           "title": "身份验证"
+        },
+        "subjectRelink": {
+          "description": "允许被提供商分配了新主体 ID 的用户重新登录与其邮箱关联的账户。仅在更换 OIDC 客户端或应用注册期间开启。",
+          "title": "OIDC 客户端变更后重新关联账户"
         }
       },
       "jwt": {
