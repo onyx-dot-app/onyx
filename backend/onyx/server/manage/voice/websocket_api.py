@@ -4,7 +4,7 @@ import asyncio
 import io
 import json
 import os
-from collections.abc import MutableMapping
+from collections.abc import Awaitable, MutableMapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -576,6 +576,34 @@ async def handle_streaming_transcription(
         )
 
 
+async def _run_with_zoom_session_cap(
+    provider_type: str | None, handler: Awaitable[None]
+) -> bool:
+    """Run a transcription handler; Zoom sessions stop at the hard cap.
+
+    Returns True when the cap ended the session. A TimeoutError raised by the
+    handler itself is re-raised so setup failures use the normal error path.
+    """
+    if provider_type != "zoom":
+        await handler
+        return False
+    deadline = asyncio.timeout(ZOOM_VOICE_SESSION_MAX_SECONDS)
+    try:
+        async with deadline:
+            await handler
+    except TimeoutError:
+        if not deadline.expired():
+            raise
+    return deadline.expired()
+
+
+async def _send_zoom_session_timeout(websocket: WebSocket) -> None:
+    logger.info("WebSocket transcribe: Zoom session reached the hard cap")
+    await websocket.send_json(
+        {"type": "error", "message": ZOOM_STREAMING_SESSION_TIMEOUT_MESSAGE}
+    )
+
+
 async def handle_chunked_transcription(
     websocket: WebSocket,
     transcriber: ChunkedTranscriber,
@@ -797,7 +825,7 @@ async def websocket_transcribe(
                 provider_db.provider_type,
             )
             try:
-                provider_type = provider_db.provider_type
+                provider_type = provider_db.provider_type.lower()
                 provider_id = provider_db.id
                 provider = get_voice_provider(provider_db)
                 logger.info(
@@ -839,26 +867,11 @@ async def websocket_transcribe(
             try:
                 streaming_transcriber = await provider.create_streaming_transcriber()
                 logger.info("WebSocket transcribe: streaming transcriber created")
-                if provider_type == "zoom":
-                    await asyncio.wait_for(
-                        handle_streaming_transcription(
-                            websocket, streaming_transcriber, deadline=session_deadline
-                        ),
-                        timeout=ZOOM_VOICE_SESSION_MAX_SECONDS,
-                    )
-                else:
-                    await handle_streaming_transcription(
-                        websocket, streaming_transcriber, deadline=session_deadline
-                    )
-                return
-            except TimeoutError:
-                logger.info("WebSocket transcribe: Zoom streaming session timed out")
-                await websocket.send_json(
-                    {
-                        "type": "error",
-                        "message": ZOOM_STREAMING_SESSION_TIMEOUT_MESSAGE,
-                    }
-                )
+                if await _run_with_zoom_session_cap(
+                    provider_type,
+                    handle_streaming_transcription(websocket, streaming_transcriber, deadline=session_deadline),
+                ):
+                    await _send_zoom_session_timeout(websocket)
                 return
             except WebSocketDisconnect:
                 raise
@@ -900,9 +913,11 @@ async def websocket_transcribe(
 
         # Chunked/REST path; browser sends raw PCM16 chunks.
         chunked_transcriber = ChunkedTranscriber(provider, audio_format="pcm16")
-        await handle_chunked_transcription(
-            websocket, chunked_transcriber, deadline=session_deadline
-        )
+        if await _run_with_zoom_session_cap(
+            provider_type,
+            handle_chunked_transcription(websocket, chunked_transcriber, deadline=session_deadline),
+        ):
+            await _send_zoom_session_timeout(websocket)
 
     except WebSocketDisconnect:
         logger.debug("WebSocket transcribe: client disconnected")
