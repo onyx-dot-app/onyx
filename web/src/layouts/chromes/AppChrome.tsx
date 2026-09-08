@@ -619,7 +619,12 @@ function Footer() {
           // the Text below then lets an unbroken run split, which ordinary
           // wrapping will not do — it only breaks at whitespace, so a
           // pasted URL or one long token would still overflow.
-          "relative w-full flex flex-row justify-center items-center gap-2 px-2 sm:px-4 mt-auto [&>*]:min-w-0",
+          //
+          // `text-center` sits here rather than on the Text because
+          // `justify-center` only centers the box: once the disclaimer wraps,
+          // the box fills the row and the lines fall back to `text-align:
+          // start`. `text-align` is inherited, so it reaches the text.
+          "relative w-full flex flex-row justify-center items-center text-center gap-2 px-2 sm:px-4 mt-auto [&>*]:min-w-0",
           // # Note (from @raunakab):
           //
           // The conditional rendering of vertical padding based on the current page is intentional.
