@@ -1,15 +1,9 @@
-"""Tests for [start, end] filtering of drive items in the SharePoint connector.
+"""[start, end] filtering of drive items in the SharePoint connector.
 
-When a file is copied, moved, or synced into OneDrive/SharePoint, Microsoft
-Graph preserves the file's original modification date in
-``lastModifiedDateTime`` while setting ``createdDateTime`` to the moment the
-file landed in the drive.  Filtering on ``lastModifiedDateTime`` alone makes an
-incremental run discard those files, so they only ever show up after a manual
-full re-index.
-
-These tests pin the behaviour for all three item sources: the BFS children
-traversal, the streaming delta traversal, and the per-page delta fetch used by
-checkpointed runs.
+Graph preserves a file's original ``lastModifiedDateTime`` when it is copied or
+synced in, setting only ``createdDateTime`` to the arrival time, so filtering on
+modification alone strands those files until a full re-index. Covers all three
+item sources: BFS children, streaming delta, and per-page delta.
 """
 
 from __future__ import annotations
@@ -20,9 +14,12 @@ from typing import Any
 
 import pytest
 
-from onyx.connectors.sharepoint.connector import DriveItemData, SharepointConnector
+from onyx.connectors.sharepoint.connector import (
+    GRAPH_API_BASE,
+    DriveItemData,
+    SharepointConnector,
+)
 
-GRAPH_API_BASE = "https://graph.microsoft.com/v1.0"
 DRIVE_ID = "fake-drive-id"
 
 # The incremental window: "everything that changed since the last run".
@@ -41,7 +38,7 @@ SYNCED_IN_ITEM = {
     "parentReference": {"driveId": DRIVE_ID, "path": "/drives/d1/root:"},
 }
 
-# A file that genuinely predates the window on both timestamps.
+# A file that predates the window on both timestamps.
 UNCHANGED_ITEM = {
     "id": "unchanged",
     "name": "ancient.pdf",
@@ -69,7 +66,6 @@ def _connector(
 ) -> SharepointConnector:
     """A connector whose Graph calls always return ``payload``."""
     connector = SharepointConnector()
-    connector.graph_api_base = GRAPH_API_BASE
 
     def fake_get_json(
         self: SharepointConnector,  # noqa: ARG001
@@ -116,17 +112,16 @@ def _one_delta_page_ids(connector: SharepointConnector) -> list[str]:
 
 
 # Each item source applies the same window filter, so they get the same cases.
-ITEM_SOURCES: list[tuple[str, Callable[[SharepointConnector], list[str]]]] = [
-    ("iter_drive_items_paged", _paged_ids),
-    ("iter_delta_pages", _delta_pages_ids),
-    ("fetch_one_delta_page", _one_delta_page_ids),
+ITEM_SOURCES = [
+    pytest.param(_paged_ids, id="iter_drive_items_paged"),
+    pytest.param(_delta_pages_ids, id="iter_delta_pages"),
+    pytest.param(_one_delta_page_ids, id="fetch_one_delta_page"),
 ]
 
 
-@pytest.mark.parametrize("source_name,collect_ids", ITEM_SOURCES)
+@pytest.mark.parametrize("collect_ids", ITEM_SOURCES)
 def test_file_synced_in_during_window_is_returned(
     monkeypatch: pytest.MonkeyPatch,
-    source_name: str,  # noqa: ARG001
     collect_ids: Callable[[SharepointConnector], list[str]],
 ) -> None:
     """A file added during the window counts as new even when its
@@ -136,22 +131,21 @@ def test_file_synced_in_during_window_is_returned(
     assert collect_ids(connector) == ["synced-in"]
 
 
-@pytest.mark.parametrize("source_name,collect_ids", ITEM_SOURCES)
+@pytest.mark.parametrize("collect_ids", ITEM_SOURCES)
 def test_file_untouched_before_window_is_skipped(
     monkeypatch: pytest.MonkeyPatch,
-    source_name: str,  # noqa: ARG001
     collect_ids: Callable[[SharepointConnector], list[str]],
 ) -> None:
-    """Widening the filter must not drag in genuinely unchanged files."""
+    """Items whose createdDateTime and lastModifiedDateTime both predate the
+    window stay out."""
     connector = _connector(monkeypatch, {"value": [UNCHANGED_ITEM]})
 
     assert collect_ids(connector) == []
 
 
-@pytest.mark.parametrize("source_name,collect_ids", ITEM_SOURCES)
+@pytest.mark.parametrize("collect_ids", ITEM_SOURCES)
 def test_file_added_after_window_is_skipped(
     monkeypatch: pytest.MonkeyPatch,
-    source_name: str,  # noqa: ARG001
     collect_ids: Callable[[SharepointConnector], list[str]],
 ) -> None:
     connector = _connector(monkeypatch, {"value": [AFTER_WINDOW_ITEM]})

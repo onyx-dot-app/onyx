@@ -320,6 +320,25 @@ class CertificateData(BaseModel):
     thumbprint: str
 
 
+def _parse_sharepoint_datetime(value: Any) -> datetime | None:
+    """Parse a SharePoint Graph datetime that may be an ISO string or datetime."""
+    if not value:
+        return None
+    if isinstance(value, str):
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if not value.tzinfo:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
+def _timestamp_in_window(
+    timestamp: datetime,
+    start: datetime | None,
+    end: datetime | None,
+) -> bool:
+    return (start is None or timestamp >= start) and (end is None or timestamp <= end)
+
+
 def _site_page_in_time_window(
     page: dict[str, Any],
     start: datetime | None,
@@ -328,15 +347,10 @@ def _site_page_in_time_window(
     """Return True if the page's lastModifiedDateTime falls within [start, end]."""
     if start is None and end is None:
         return True
-    raw = page.get("lastModifiedDateTime")
-    if not raw:
+    last_modified = _parse_sharepoint_datetime(page.get("lastModifiedDateTime"))
+    if last_modified is None:
         return True
-    if not isinstance(raw, str):
-        raise ValueError(f"lastModifiedDateTime is not a string: {raw}")
-    last_modified = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-    return (start is None or last_modified >= start) and (
-        end is None or last_modified <= end
-    )
+    return _timestamp_in_window(last_modified, start, end)
 
 
 def _drive_item_in_time_window(
@@ -346,10 +360,10 @@ def _drive_item_in_time_window(
 ) -> bool:
     """Return True if a drive item falls within [start, end].
 
-    Uses the later of `createdDateTime` and `lastModifiedDateTime`: a file
-    copied or synced into a drive keeps its original modification date, which
-    can predate the window even though the file is new to the drive. Items
-    carrying neither timestamp are kept.
+    Uses the later of `createdDateTime` and `lastModifiedDateTime`, or whichever
+    is present: a file copied or synced into a drive keeps its original
+    modification date, which can predate the window even though the file is new
+    to the drive. Items carrying neither timestamp are kept.
     """
     if start is None and end is None:
         return True
@@ -367,8 +381,7 @@ def _drive_item_in_time_window(
     if not timestamps:
         return True
 
-    item_ts = max(timestamps)
-    return (start is None or item_ts >= start) and (end is None or item_ts <= end)
+    return _timestamp_in_window(max(timestamps), start, end)
 
 
 # Transport-level exceptions that indicate a transient network/server-side
@@ -1220,17 +1233,6 @@ def _convert_sitepage_to_document(
         parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
     )
     return doc
-
-
-def _parse_sharepoint_datetime(value: Any) -> datetime | None:
-    """Parse a SharePoint Graph datetime that may be an ISO string or datetime."""
-    if not value:
-        return None
-    if isinstance(value, str):
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
-    if not value.tzinfo:
-        return value.replace(tzinfo=timezone.utc)
-    return value
 
 
 def _convert_driveitem_to_slim_document(
@@ -2147,13 +2149,11 @@ class SharepointConnector(
                         folder_queue.append(child_url)
                         continue
 
-                    # Skip non-file items (e.g. OneNote notebooks without a "file" facet)
-                    # but still yield them — the downstream conversion handles filtering
-                    # by extension / mime type.
-
                     if not _drive_item_in_time_window(item, start, end):
                         continue
 
+                    # Non-file items (e.g. OneNote notebooks without a "file" facet) are
+                    # yielded too. The downstream conversion filters by extension and mime.
                     yield DriveItemData.from_graph_json(item)
 
                 page_url = data.get("@odata.nextLink")
