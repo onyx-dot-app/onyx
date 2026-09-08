@@ -1,6 +1,11 @@
 # Changelog
 
-## 0.3.0 (Unreleased)
+The section headings are load-bearing: the mirror's Publish workflow extracts the
+block for the tag being released and uses it as the GitHub release body, which is
+what the Terraform Registry shows. A release whose version has no section here
+fails rather than publishing empty notes.
+
+## 0.3.0 (September 8, 2026)
 
 BREAKING CHANGES:
 
