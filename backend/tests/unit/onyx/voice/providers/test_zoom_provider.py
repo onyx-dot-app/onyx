@@ -11,7 +11,7 @@ import pytest
 
 from onyx.db.models import VoiceProvider
 from onyx.server.manage.voice.websocket_api import (
-    WS_SERVER_ERROR_CLOSE_CODE,
+    StreamingTranscriptionFailed,
     handle_streaming_transcription,
 )
 from onyx.voice.factory import get_voice_provider
@@ -144,18 +144,18 @@ def _binary_message(data: bytes = b"data") -> SimpleNamespace:
 
 
 @pytest.mark.asyncio
-async def test_streaming_handler_sends_sanitized_error_and_closes() -> None:
+async def test_streaming_handler_raises_on_provider_error() -> None:
     websocket = FakeClientWebSocket()
 
-    await handle_streaming_transcription(
-        cast(Any, websocket),
-        cast(Any, ErrorResultTranscriber()),
-    )
+    with pytest.raises(StreamingTranscriptionFailed):
+        await handle_streaming_transcription(
+            cast(Any, websocket),
+            cast(Any, ErrorResultTranscriber()),
+        )
 
-    assert websocket.sent_json == [
-        {"type": "error", "message": "Streaming transcription failed"}
-    ]
-    assert websocket.close_code == WS_SERVER_ERROR_CLOSE_CODE
+    # The route owns the error response and close, so the socket stays open.
+    assert websocket.sent_json == []
+    assert websocket.close_code is None
 
 
 def test_build_zoom_scribe_jwt_uses_expected_claims_and_hs256() -> None:

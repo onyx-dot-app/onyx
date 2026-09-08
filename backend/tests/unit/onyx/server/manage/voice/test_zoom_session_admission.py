@@ -98,9 +98,11 @@ async def test_zoom_transcribe_releases_session_when_upstream_creation_fails(
         user_id="user-7",
         session_member_id="session-member-1",
     )
-    assert websocket.sent_json == [{"type": "error", "message": "Streaming STT failed"}]
+    assert websocket.sent_json == [
+        {"type": "error", "message": websocket_api.STREAM_FAILED_ERROR}
+    ]
     websocket.accept.assert_awaited_once()
-    websocket.close.assert_awaited_once()
+    websocket.close.assert_any_await(code=websocket_api.WS_SERVER_ERROR_CLOSE_CODE)
 
 
 @pytest.mark.asyncio
@@ -305,5 +307,7 @@ async def test_zoom_handshake_timeout_reports_streaming_failure(
         _user=cast(User, SimpleNamespace(id="user-7")),
     )
 
-    assert websocket.sent_json == [{"type": "error", "message": "Streaming STT failed"}]
+    assert websocket.sent_json == [
+        {"type": "error", "message": websocket_api.STREAM_FAILED_ERROR}
+    ]
     release.assert_awaited_once()
