@@ -268,6 +268,10 @@ export interface DiscordCredentialJson {
   discord_bot_token: string;
 }
 
+export interface GoogleChatCredentialJson {
+  google_chat_service_account_secret: string;
+}
+
 export interface FreshdeskCredentialJson {
   freshdesk_domain: string;
   freshdesk_api_key: string;
@@ -525,6 +529,9 @@ export const credentialTemplates: Record<ValidSources, any> = {
   ingestion_api: null,
   federated_slack: null,
   discord: { discord_bot_token: "" } as DiscordCredentialJson,
+  google_chat: {
+    google_chat_service_account_secret: "",
+  } as GoogleChatCredentialJson,
 
   // NOTE: These are Special Cases
   google_drive: { google_tokens: "" } as GoogleDriveCredentialJson,
@@ -589,6 +596,7 @@ export const credentialDisplayNames: Record<string, string> = {
 
   // Discord
   discord_bot_token: "Discord Bot Token",
+  google_chat_service_account_secret: "Google Chat Service Account JSON",
 
   // Gmail and Google Drive
   google_tokens: "Google Oauth Tokens",

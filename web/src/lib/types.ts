@@ -604,6 +604,7 @@ export enum ValidSources {
   GitLab = "gitlab",
   Slack = "slack",
   GoogleDrive = "google_drive",
+  GoogleChat = "google_chat",
   Gmail = "gmail",
   Bookstack = "bookstack",
   Outline = "outline",
