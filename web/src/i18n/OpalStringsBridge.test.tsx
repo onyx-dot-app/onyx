@@ -36,13 +36,23 @@ describe("OpalStringsBridge", () => {
   it("keeps the English footer summary as four sibling spans", () => {
     const row = renderFooterThroughBridge("en", englishMessages);
     expect(row.textContent).toBe("Showing 1~10 of 22 users");
-    expect(row.children).toHaveLength(4);
+    expect([...row.children].map((child) => child.tagName)).toEqual([
+      "SPAN",
+      "SPAN",
+      "SPAN",
+      "SPAN",
+    ]);
   });
 
   it("splits a translated rich message into the same span layout", () => {
     const row = renderFooterThroughBridge("ar", arabicMessages);
     expect(row.textContent).toBe("عرض 1~10 من 22 users");
-    expect(row.children).toHaveLength(4);
+    expect([...row.children].map((child) => child.tagName)).toEqual([
+      "SPAN",
+      "SPAN",
+      "SPAN",
+      "SPAN",
+    ]);
     expect(row.querySelector('span[dir="ltr"]')).toHaveTextContent("1~10");
   });
 });

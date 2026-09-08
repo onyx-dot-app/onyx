@@ -25,26 +25,26 @@ function renderSummaryFooter(strings: OpalStrings = defaultOpalStrings) {
   return {
     summary: summaryRow?.textContent ?? "",
     // Every chunk is its own span, which is what keeps the spacing stable.
-    spanCount: summaryRow?.children.length ?? 0,
+    childTags: [...(summaryRow?.children ?? [])].map((child) => child.tagName),
     range: footer.querySelector('span[dir="ltr"]'),
   };
 }
 
 describe("Footer summary", () => {
   it("renders the English summary with the range in an LTR isolate", () => {
-    const { summary, spanCount, range } = renderSummaryFooter();
+    const { summary, childTags, range } = renderSummaryFooter();
     expect(summary).toBe("Showing 1~10 of 22 users");
-    expect(spanCount).toBe(4);
+    expect(childTags).toEqual(["SPAN", "SPAN", "SPAN", "SPAN"]);
     expect(range).toHaveTextContent("1~10");
   });
 
   it("renders a translated summary around the same styled nodes", () => {
-    const { summary, spanCount, range } = renderSummaryFooter({
+    const { summary, childTags, range } = renderSummaryFooter({
       ...defaultOpalStrings,
       showing: (range, total) => ["عرض ", range, " من ", total],
     });
     expect(summary).toBe("عرض 1~10 من 22 users");
-    expect(spanCount).toBe(4);
+    expect(childTags).toEqual(["SPAN", "SPAN", "SPAN", "SPAN"]);
     expect(range).toHaveTextContent("1~10");
   });
 });
