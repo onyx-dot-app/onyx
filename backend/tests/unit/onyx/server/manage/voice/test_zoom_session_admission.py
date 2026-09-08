@@ -119,7 +119,7 @@ async def test_zoom_transcribe_timeout_uses_hard_cap_and_releases_session(
     acquire = AsyncMock(return_value="session-member-1")
     release = AsyncMock()
 
-    async def hang(_websocket: object, _transcriber: object) -> None:
+    async def hang(_websocket: object, _transcriber: object, **_kwargs: object) -> None:
         await asyncio.sleep(60)
 
     monkeypatch.setattr(websocket_api, "get_sqlalchemy_engine", lambda: object())
@@ -206,7 +206,7 @@ async def test_zoom_chunked_path_uses_hard_cap(monkeypatch) -> None:
     acquire = AsyncMock(return_value="session-member-1")
     release = AsyncMock()
 
-    async def hang(_websocket: object, _transcriber: object) -> None:
+    async def hang(_websocket: object, _transcriber: object, **_kwargs: object) -> None:
         await asyncio.sleep(60)
 
     monkeypatch.setattr(websocket_api, "get_sqlalchemy_engine", lambda: object())
