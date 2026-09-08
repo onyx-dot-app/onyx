@@ -61,7 +61,7 @@ func (r *customToolResource) Schema(_ context.Context, _ resource.SchemaRequest,
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "A custom action: an external HTTP API, described by an OpenAPI schema, that " +
 			"assistants can call.\n\n" +
-			"Attach one to an assistant through `tool_ids` on `onyx_persona`.\n\n" +
+			"Attach one to an assistant through `tool_ids` on `onyx_agent`.\n\n" +
 			"~> **Deleting an action detaches it from every agent that uses it**, including agents " +
 			"Terraform does not manage. Onyx does not refuse the delete or warn about it.\n\n" +
 			"~> **`custom_headers` holds secrets.** Onyx masks the values on reads, but they are " +
