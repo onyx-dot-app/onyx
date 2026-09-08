@@ -50,14 +50,16 @@ jobs:
           gpg_private_key: ${{ secrets.TF_PROVIDER_GPG_PRIVATE_KEY }}
           passphrase: ${{ secrets.TF_PROVIDER_GPG_PASSPHRASE }}
 
-      # The GitHub release body is what a user reads before upgrading, and
-      # goreleaser's own changelog is disabled on purpose: the mirror carries one
-      # squashed commit per release, so a commit-derived changelog says nothing.
-      # Take the notes from CHANGELOG.md instead. A tag whose version has no
-      # section fails here rather than publishing an empty release.
+      # The GitHub release body is what a user reads before upgrading. The mirror
+      # carries one squashed commit per release, so a commit-derived changelog
+      # would say nothing; take the notes from CHANGELOG.md instead. Any release
+      # whose version has no section fails here rather than publishing empty.
+      #
       # Written outside the checkout on purpose: goreleaser refuses to release
       # from a dirty tree, and an untracked file in the repo root is dirty.
       - name: Extract the release notes
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
           set -euo pipefail
           notes="${RUNNER_TEMP}/release-notes.md"
@@ -70,11 +72,14 @@ jobs:
           # Not -s: a heading with no entries under it yields a file of blank
           # lines, which has a non-zero size but is an empty release body.
           if ! grep -q '[^[:space:]]' "${notes}"; then
-            if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            # Keyed on the dry run, not on the ref being a tag: a manual publish
+            # from a branch is a real publish and must fail closed too.
+            if [ "${DRY_RUN}" = "true" ]; then
+              echo "No notes for '${version}', but this is a dry run; continuing."
+            else
               echo "::error::CHANGELOG.md has no section for ${version}." >&2
               exit 1
             fi
-            echo "Not a tag, so there are no notes to extract; continuing."
           fi
           cat "${notes}"
 
