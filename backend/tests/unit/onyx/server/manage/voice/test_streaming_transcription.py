@@ -75,6 +75,45 @@ class AudioThenSilentWebSocket(FakeWebSocket):
         raise AssertionError("unreachable")
 
 
+class SendFailureTranscriber(ErrorResultTranscriber):
+    """Provider whose send raises a generic error, not a streaming failure."""
+
+    async def send_audio(self, chunk: bytes) -> None:
+        _ = chunk
+        raise RuntimeError("provider transport broke")
+
+    async def receive_transcript(self) -> TranscriptResult | None:
+        await asyncio.Event().wait()
+        raise AssertionError("unreachable")
+
+
+class AudioThenEndWebSocket(FakeWebSocket):
+    """Client that sends one audio chunk and then ends the recording."""
+
+    def __init__(self, chunk: bytes) -> None:
+        super().__init__()
+        self.chunk = chunk
+        self.messages: list[Any] = [{"bytes": chunk}, {"text": '{"type": "end"}'}]
+
+    async def receive(self) -> Any:
+        if self.messages:
+            return self.messages.pop(0)
+        await asyncio.Event().wait()
+        raise AssertionError("unreachable")
+
+
+class CloseFailureTranscriber(ErrorResultTranscriber):
+    """Provider whose close raises a generic error on the end signal."""
+
+    async def receive_transcript(self) -> TranscriptResult | None:
+        await asyncio.Event().wait()
+        raise AssertionError("unreachable")
+
+    async def close(self) -> str:
+        self.closed = True
+        raise RuntimeError("provider close broke")
+
+
 class FailAfterAudioTranscriber(ErrorResultTranscriber):
     """Provider that fails only once it has consumed audio."""
 
@@ -170,3 +209,35 @@ async def test_streaming_handler_stops_when_client_stays_silent() -> None:
 
     assert str(failure.value) == STREAM_FAILED_ERROR
     assert transcriber.closed
+
+
+@pytest.mark.asyncio
+async def test_send_failure_keeps_audio_for_fallback() -> None:
+    """A generic send failure must not drop the audio already received."""
+    websocket = AudioThenSilentWebSocket(b"\x01\x02\x03\x04")
+
+    async with asyncio.timeout(5):
+        with pytest.raises(StreamingTranscriptionFailed) as failure:
+            await handle_streaming_transcription(
+                cast(Any, websocket),
+                cast(Any, SendFailureTranscriber()),
+            )
+
+    assert failure.value.buffered_audio == b"\x01\x02\x03\x04"
+    assert failure.value.client_ended is False
+
+
+@pytest.mark.asyncio
+async def test_close_failure_reports_client_ended() -> None:
+    """A failure while closing must not leave the fallback waiting for audio."""
+    websocket = AudioThenEndWebSocket(b"\x01\x02")
+
+    async with asyncio.timeout(5):
+        with pytest.raises(StreamingTranscriptionFailed) as failure:
+            await handle_streaming_transcription(
+                cast(Any, websocket),
+                cast(Any, CloseFailureTranscriber()),
+            )
+
+    assert failure.value.buffered_audio == b"\x01\x02"
+    assert failure.value.client_ended is True
