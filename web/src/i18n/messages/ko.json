@@ -12814,7 +12814,8 @@
     "pagination": {
       "goToPage": "페이지로 이동",
       "nextPage": "다음 페이지",
-      "previousPage": "이전 페이지"
+      "previousPage": "이전 페이지",
+      "rangeOfTotal": "<range></range> / <total></total>"
     },
     "table": {
       "alwaysShown": "항상 표시",

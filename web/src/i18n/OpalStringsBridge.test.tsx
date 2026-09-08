@@ -1,14 +1,14 @@
 import { NextIntlClientProvider } from "next-intl";
 import { render } from "@tests/setup/test-utils";
 import Footer from "@opal/components/table/Footer";
-import type { Locale } from "@/i18n/config";
+import { runtimeLocale, type RuntimeLocale } from "@/i18n/config";
 import OpalStringsBridge from "@/i18n/OpalStringsBridge";
 import arabicMessages from "@/i18n/messages/ar.json";
 import englishMessages from "@/i18n/messages/en.json";
 
 type Messages = typeof englishMessages;
 
-function renderFooterThroughBridge(locale: Locale, messages: Messages) {
+function renderFooterThroughBridge(locale: RuntimeLocale, messages: Messages) {
   const { container } = render(
     <NextIntlClientProvider locale={locale} messages={messages}>
       <OpalStringsBridge>
@@ -54,5 +54,11 @@ describe("OpalStringsBridge", () => {
       "SPAN",
     ]);
     expect(row.querySelector('span[dir="ltr"]')).toHaveTextContent("1~10");
+  });
+
+  it("renders the footer digits in the numbering system of the runtime locale", () => {
+    const row = renderFooterThroughBridge(runtimeLocale("ar"), arabicMessages);
+    expect(row.textContent).toBe("عرض ١~١٠ من ٢٢ users");
+    expect(row.querySelector('span[dir="ltr"]')).toHaveTextContent("١~١٠");
   });
 });

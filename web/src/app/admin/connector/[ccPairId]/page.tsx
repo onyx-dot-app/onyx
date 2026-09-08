@@ -642,14 +642,17 @@ function Main({ ccPairId }: { ccPairId: number }) {
               {t("statusCard.documentsIndexed.label")}
             </div>
             <div className="text-sm text-text-default flex items-center gap-x-1">
-              {ccPair.num_docs_indexed.toLocaleString()}
+              {ccPair.num_docs_indexed.toLocaleString(locale)}
               {ccPair.status ===
                 ConnectorCredentialPairStatus.INITIAL_INDEXING &&
                 ccPair.overall_indexing_speed !== null &&
                 ccPair.num_docs_indexed > 0 && (
                   <div className="ms-0.5 text-xs font-medium">
                     {t("statusCard.indexingSpeed", {
-                      speed: ccPair.overall_indexing_speed.toFixed(1),
+                      speed: ccPair.overall_indexing_speed.toLocaleString(
+                        locale,
+                        { minimumFractionDigits: 1, maximumFractionDigits: 1 }
+                      ),
                     })}
                   </div>
                 )}

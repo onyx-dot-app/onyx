@@ -12814,7 +12814,8 @@
     "pagination": {
       "goToPage": "ページへ移動",
       "nextPage": "次のページ",
-      "previousPage": "前のページ"
+      "previousPage": "前のページ",
+      "rangeOfTotal": "<range></range> / <total></total>"
     },
     "table": {
       "alwaysShown": "常に表示",

@@ -28,9 +28,13 @@ describe("timeAgo", () => {
   });
 
   it("follows the locale", () => {
-    // Digit shaping for "ar" differs between ICU builds, so only the words are asserted.
+    // Digit shaping for bare "ar" differs between ICU builds, so only the words are asserted.
     expect(timeAgo(daysAgo(3), "ar")).toMatch(/^قبل .* أيام$/);
     expect(timeAgo(daysAgo(3), "de")).toBe("vor 3 Tagen");
+  });
+
+  it("shapes digits from the numbering system on the locale tag", () => {
+    expect(timeAgo(daysAgo(3), "ar-u-nu-arab")).toBe("قبل ٣ أيام");
   });
 });
 
@@ -42,6 +46,7 @@ describe("date formatters", () => {
     expect(humanReadableFormatShort(june6, "en")).toBe("Jun 6, 2026");
     expect(humanReadableFormatShort(june6, "de")).toBe("6. Juni 2026");
     expect(humanReadableFormat(june6, "fr")).toBe("6 juin 2026");
+    expect(humanReadableFormatShort(june6, "ar-u-nu-arab")).toContain("٢٠٢٦");
   });
 
   it("returns an empty string for a missing short date", () => {

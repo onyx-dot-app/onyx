@@ -142,6 +142,11 @@
     margin-inline-start: 0;
   }
 
+  /* Arabic reads Eastern Arabic-Indic digits, list markers included. */
+  :lang(ar) .prose ol {
+    list-style-type: arabic-indic;
+  }
+
   .prose ul {
     list-style-type: disc;
     padding-inline-start: 1.5rem;

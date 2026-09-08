@@ -7,6 +7,7 @@ import { containerSizeVariants } from "@opal/shared";
 import type { RichStr, WithoutStyles } from "@opal/types";
 import { Text } from "@opal/components";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
+import { textChunks } from "@opal/components/text/chunks";
 import { cn } from "@opal/utils";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 import {
@@ -167,15 +168,6 @@ function getPageNumbers(
   ];
 }
 
-function monoClass(size: PaginationSize): string {
-  return size === "sm" ? "font-secondary-mono" : "font-main-ui-mono";
-}
-
-function textClasses(size: PaginationSize, style: "mono" | "muted"): string {
-  if (style === "mono") return monoClass(size);
-  return size === "sm" ? "font-secondary-body" : "font-main-ui-muted";
-}
-
 const PAGE_NUMBER_FONT: Record<
   PaginationSize,
   { active: string; inactive: string }
@@ -210,19 +202,20 @@ function GoToPagePopup({ totalPages, onSubmit, children }: GoToPagePopupProps) {
   const focusOnMount = useFocusOnMount<HTMLInputElement>();
   const strings = useOpalStrings();
 
-  const parsed = parseInt(value, 10);
-  const isValid = !isNaN(parsed) && parsed >= 1 && parsed <= totalPages;
+  // The host's parser accepts the digits the page numbers are displayed in.
+  const page = strings.parseNumber(value);
+  const isValid = page !== null && page >= 1 && page <= totalPages;
 
   function handleChange(e: ChangeEvent<HTMLInputElement>) {
     const raw = e.target.value;
-    if (raw === "" || /^\d+$/.test(raw)) {
+    if (raw === "" || strings.parseNumber(raw) !== null) {
       setValue(raw);
     }
   }
 
   function handleSubmit() {
-    if (!isValid) return;
-    onSubmit(parsed);
+    if (page === null || !isValid) return;
+    onSubmit(page);
     setOpen(false);
     setValue("");
   }
@@ -342,11 +335,12 @@ function PaginationSimple({
   units,
   ...props
 }: SimplePaginationProps) {
+  const strings = useOpalStrings();
   const handleChange = (page: number) => onChange?.(page);
 
-  const label = `${currentPage}/${totalPages}${
-    units ? ` ${toPlainString(units)}` : ""
-  }`;
+  const label = `${strings.formatNumber(currentPage)}/${strings.formatNumber(
+    totalPages
+  )}${units ? ` ${toPlainString(units)}` : ""}`;
 
   return (
     <div {...props} className="flex items-center">
@@ -383,28 +377,38 @@ function PaginationCount({
   units,
   ...props
 }: CountPaginationProps) {
+  const strings = useOpalStrings();
   const handleChange = (page: number) => onChange?.(page);
   const rangeStart = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const rangeEnd = Math.min(currentPage * pageSize, totalItems);
+  const monoFont = size === "sm" ? "secondary-mono" : "main-ui-mono";
+  const mutedFont = size === "sm" ? "secondary-body" : "main-ui-muted";
+  // The range is an LTR isolate so "1~10" keeps its digit order in RTL copy.
+  const range = (
+    <Text font={monoFont} color="inherit" dir="ltr">
+      {`${strings.formatNumber(rangeStart)}~${strings.formatNumber(rangeEnd)}`}
+    </Text>
+  );
+  const total = (
+    <Text font={monoFont} color="inherit">
+      {strings.formatNumber(totalItems)}
+    </Text>
+  );
+  // Words between the numbers take the muted style. The flex gap spaces them.
+  const summary = textChunks(
+    strings.rangeOfTotal(range, total),
+    mutedFont,
+    "inherit",
+    true
+  );
 
   return (
     <div {...props} className="flex items-center gap-1">
       {/* Summary: range of total [units] */}
-      <span
-        className={cn(
-          "inline-flex items-center gap-1",
-          monoClass(size),
-          "text-text-03"
-        )}
-      >
-        {rangeStart}~{rangeEnd}
-        <span className={textClasses(size, "muted")}>of</span>
-        {totalItems}
+      <span className={cn("inline-flex items-center gap-1", "text-text-03")}>
+        {summary}
         {units && (
-          <Text
-            color="inherit"
-            font={size === "sm" ? "secondary-body" : "main-ui-muted"}
-          >
+          <Text color="inherit" font={mutedFont}>
             {units}
           </Text>
         )}
@@ -421,7 +425,7 @@ function PaginationCount({
           {!hidePages && (
             <GoToPagePopup totalPages={totalPages} onSubmit={handleChange}>
               <Button size={size} prominence="tertiary">
-                {String(currentPage)}
+                {strings.formatNumber(currentPage)}
               </Button>
             </GoToPagePopup>
           )}
@@ -442,6 +446,7 @@ function PaginationList({
   size = "lg",
   ...props
 }: ListPaginationProps) {
+  const strings = useOpalStrings();
   const pageNumbers = getPageNumbers(currentPage, totalPages);
   const fonts = PAGE_NUMBER_FONT[size];
 
@@ -498,7 +503,7 @@ function PaginationList({
                       isActive ? fonts.active : fonts.inactive
                     )}
                   >
-                    {page}
+                    {strings.formatNumber(page)}
                   </div>
                 )}
               />

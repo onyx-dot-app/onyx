@@ -12814,7 +12814,8 @@
     "pagination": {
       "goToPage": "الانتقال إلى صفحة",
       "nextPage": "الصفحة التالية",
-      "previousPage": "الصفحة السابقة"
+      "previousPage": "الصفحة السابقة",
+      "rangeOfTotal": "<range></range> من <total></total>"
     },
     "table": {
       "alwaysShown": "معروض دائمًا",
