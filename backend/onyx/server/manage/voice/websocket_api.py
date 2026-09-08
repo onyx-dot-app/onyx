@@ -149,6 +149,9 @@ WS_SERVER_ERROR_CLOSE_CODE = 1011
 # and the provider session open forever.
 WS_CLIENT_IDLE_TIMEOUT_SECONDS = 120
 WS_SESSION_TIMEOUT_SECONDS = 30 * 60
+# After close(), the transcript pump gets this long to drain results the
+# provider queued while closing, so a failure reported there is not lost.
+TRANSCRIPT_DRAIN_SECONDS = 0.5
 
 
 class ChunkedTranscriber:
@@ -280,6 +283,7 @@ class _ClientStreamState:
     client_ended: bool = False
     # Kept for the fallback path, and bounded by WS_MAX_TOTAL_BYTES.
     streamed_audio: bytearray = field(default_factory=bytearray)
+    provider_failed: asyncio.Event = field(default_factory=asyncio.Event)
 
 
 async def _forward_transcripts(
@@ -392,7 +396,15 @@ async def _handle_control_message(
         logger.info("Streaming transcription: end signal received, closing transcriber")
         final_transcript = await transcriber.close()
         state.transcriber_closed = True
+        await asyncio.wait({transcript_task}, timeout=TRANSCRIPT_DRAIN_SECONDS)
         transcript_task.cancel()
+        if state.provider_failed.is_set():
+            # The handler raises for the fallback; a final transcript sent here
+            # would reach the client twice.
+            logger.warning(
+                "Streaming transcription: provider failed while closing, skipping final transcript"
+            )
+            return True
         logger.info(
             "Streaming transcription: final transcript: %s...",
             final_transcript[:100] if final_transcript else "(empty)",
@@ -453,8 +465,8 @@ async def handle_streaming_transcription(
 ) -> None:
     """Handle transcription using native streaming API."""
     logger.info("Streaming transcription: starting handler")
-    receiver_failed = asyncio.Event()
     state = _ClientStreamState()
+    receiver_failed = state.provider_failed
 
     # The client loop blocks on websocket.receive(), so a provider failure has to
     # unblock it. Otherwise a client that never disconnects keeps the handler and

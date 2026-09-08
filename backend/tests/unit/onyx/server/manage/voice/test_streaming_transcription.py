@@ -114,6 +114,23 @@ class CloseFailureTranscriber(ErrorResultTranscriber):
         raise RuntimeError("provider close broke")
 
 
+class FailOnCloseTranscriber(ErrorResultTranscriber):
+    """Provider that queues its failure only while close() runs."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.closing = asyncio.Event()
+
+    async def receive_transcript(self) -> TranscriptResult | None:
+        await self.closing.wait()
+        return TranscriptResult(error="raw upstream details")
+
+    async def close(self) -> str:
+        self.closed = True
+        self.closing.set()
+        return "partial"
+
+
 class FailAfterAudioTranscriber(ErrorResultTranscriber):
     """Provider that fails only once it has consumed audio."""
 
@@ -259,3 +276,20 @@ async def test_chunked_handler_replays_initial_audio_in_windows() -> None:
         )
 
     assert transcriber.chunks == [b"\x01\x02", b"\x03\x04", b"\x05"]
+
+
+@pytest.mark.asyncio
+async def test_failure_queued_during_close_still_triggers_fallback() -> None:
+    """A failure the provider reports while closing must not be lost to the cancel."""
+    websocket = AudioThenEndWebSocket(b"\x01\x02")
+
+    async with asyncio.timeout(5):
+        with pytest.raises(StreamingTranscriptionFailed) as failure:
+            await handle_streaming_transcription(
+                cast(Any, websocket),
+                cast(Any, FailOnCloseTranscriber()),
+            )
+
+    assert failure.value.buffered_audio == b"\x01\x02"
+    assert failure.value.client_ended is True
+    assert websocket.sent_json == []
