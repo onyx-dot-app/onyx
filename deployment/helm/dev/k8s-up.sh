@@ -197,7 +197,11 @@ if command -v telepresence >/dev/null 2>&1; then
   fi
 else
   echo "note: telepresence CLI not found; skipping traffic-manager install."
-  echo "  install with: brew install datawire/blackbird/telepresence-oss"
+  echo "  install the OSS binary:"
+  echo "    curl -fLo /opt/homebrew/bin/telepresence \\"
+  echo "      https://github.com/telepresenceio/telepresence/releases/latest/download/telepresence-darwin-arm64"
+  echo "    chmod +x /opt/homebrew/bin/telepresence"
+  echo "  see docs/craft/dev/local-kubernetes.md for the full setup"
 fi
 
 # ---- 4. next steps ----
