@@ -126,7 +126,11 @@ export default function ThinkingCard({
         >
           <div className="flex items-center gap-2 min-w-0 w-full">
             <ThinkingActivityIcon isStreaming={isStreaming} />
-            <Text font="main-ui-muted" color="text-04" nowrap>
+            <Text
+              font="main-ui-muted"
+              color="text-04"
+              wordWrap="whitespace-nowrap"
+            >
               {isStreaming ? "Thinking..." : "Thinking"}
             </Text>
             <SvgChevronDown
