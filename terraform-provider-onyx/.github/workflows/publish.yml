@@ -50,12 +50,45 @@ jobs:
           gpg_private_key: ${{ secrets.TF_PROVIDER_GPG_PRIVATE_KEY }}
           passphrase: ${{ secrets.TF_PROVIDER_GPG_PASSPHRASE }}
 
+      # The GitHub release body is what a user reads before upgrading. The mirror
+      # carries one squashed commit per release, so a commit-derived changelog
+      # would say nothing; take the notes from CHANGELOG.md instead. Any release
+      # whose version has no section fails here rather than publishing empty.
+      #
+      # Written outside the checkout on purpose: goreleaser refuses to release
+      # from a dirty tree, and an untracked file in the repo root is dirty.
+      - name: Extract the release notes
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          notes="${RUNNER_TEMP}/release-notes.md"
+          version="${GITHUB_REF_NAME#v}"
+          awk -v prefix="## ${version} " '
+            index($0, prefix) == 1 { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > "${notes}"
+          # Not -s: a heading with no entries under it yields a file of blank
+          # lines, which has a non-zero size but is an empty release body.
+          if ! grep -q '[^[:space:]]' "${notes}"; then
+            # Keyed on the dry run, not on the ref being a tag: a manual publish
+            # from a branch is a real publish and must fail closed too.
+            if [ "${DRY_RUN}" = "true" ]; then
+              echo "No notes for '${version}', but this is a dry run; continuing."
+            else
+              echo "::error::CHANGELOG.md has no section for ${version}." >&2
+              exit 1
+            fi
+          fi
+          cat "${notes}"
+
       - name: Build and publish the release
         if: ${{ !inputs.dry_run }}
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # ratchet:goreleaser/goreleaser-action@v7.2.3
         with:
           version: "~> v2"
-          args: release --clean
+          args: release --clean --release-notes=${{ runner.temp }}/release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GPG_FINGERPRINT: ${{ steps.gpg.outputs.fingerprint }}
