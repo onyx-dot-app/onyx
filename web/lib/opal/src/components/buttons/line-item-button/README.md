@@ -28,16 +28,16 @@ row's label lines up with an adjacent button. A step outside that set is a type 
 
 ### Interactive surface
 
-| Prop            | Type                               | Default          | Description                                       |
-| --------------- | ---------------------------------- | ---------------- | ------------------------------------------------- |
-| `selectVariant` | `"select-light" \| "select-heavy"` | `"select-light"` | Interactive select variant                        |
-| `state`         | `InteractiveStatefulState`         | `"empty"`        | Value state (`"empty"`, `"filled"`, `"selected"`) |
-| `interaction`   | `InteractiveStatefulInteraction`   | `"rest"`         | JS-controlled interaction state override          |
-| `onClick`       | `MouseEventHandler<HTMLElement>`   | —                | Click handler                                     |
-| `href`          | `string`                           | —                | Renders an anchor instead of a div                |
-| `target`        | `string`                           | —                | Anchor target (e.g. `"_blank"`)                   |
-| `group`         | `string`                           | —                | Interactive group key                             |
-| `ref`           | `React.Ref<HTMLElement>`           | —                | Forwarded ref                                     |
+| Prop            | Type                               | Default          | Description                                                                                  |
+| --------------- | ---------------------------------- | ---------------- | -------------------------------------------------------------------------------------------- |
+| `selectVariant` | `"select-light" \| "select-heavy"` | `"select-light"` | Interactive select variant                                                                   |
+| `state`         | `InteractiveStatefulState`         | `"empty"`        | Value state (`"empty"`, `"filled"`, `"selected"`)                                            |
+| `interaction`   | `InteractiveStatefulInteraction`   | `"rest"`         | JS-controlled interaction state override                                                     |
+| `onClick`       | `MouseEventHandler<HTMLElement>`   | —                | Click handler                                                                                |
+| `href`          | `string`                           | —                | Renders an anchor instead of a div                                                           |
+| `target`        | `string`                           | —                | Anchor target (e.g. `"_blank"`)                                                              |
+| `group`         | `string`                           | —                | Interactive group key                                                                        |
+| `ref`           | `React.Ref<HTMLElement>`           | —                | Forwarded ref                                                                                |
 | `disabled`      | `boolean`                          | `false`          | Disabled colors; suppresses the row's own click only — nested `rightChildren` stay clickable |
 
 ### Row element
@@ -53,13 +53,13 @@ latter two for Enter/Space activation. Pass your own and the row defers —
 handlers compose, yours first, and `preventDefault()` stops the row's own
 activation.
 
-| Prop                                                          | Type                                | Description                                     |
-| ------------------------------------------------------------- | ----------------------------------- | ----------------------------------------------- |
-| `aria-label` / `aria-labelledby` / `aria-describedby`          | `string`                            | Accessible name and description for the row     |
-| `onMouseEnter` / `onMouseLeave` / `onMouseMove` / `onMouseDown` | `MouseEventHandler<HTMLDivElement>`  | Mouse handlers, e.g. hover-to-open a flyout     |
-| `onPointerEnter` / `onPointerLeave`                            | `PointerEventHandler<HTMLDivElement>` | Pointer equivalents                             |
+| Prop                                                            | Type                                  | Description                                 |
+| --------------------------------------------------------------- | ------------------------------------- | ------------------------------------------- |
+| `aria-label` / `aria-labelledby` / `aria-describedby`           | `string`                              | Accessible name and description for the row |
+| `onMouseEnter` / `onMouseLeave` / `onMouseMove` / `onMouseDown` | `MouseEventHandler<HTMLDivElement>`   | Mouse handlers, e.g. hover-to-open a flyout |
+| `onPointerEnter` / `onPointerLeave`                             | `PointerEventHandler<HTMLDivElement>` | Pointer equivalents                         |
 
-`title` is deliberately *not* forwarded: it is the row's label to
+`title` is deliberately _not_ forwarded: it is the row's label to
 `ContentAction`, and forwarding it as the native attribute would put two
 meanings in one prop. Use `tooltip` for hover text.
 
@@ -75,17 +75,18 @@ meanings in one prop. Use `tooltip` for hover text.
 
 ### Content (pass-through to ContentAction)
 
-| Prop            | Type                    | Default        | Description                                  |
-| --------------- | ----------------------- | -------------- | -------------------------------------------- |
-| `title`         | `string`                | **(required)** | Row label                                    |
-| `icon`          | `IconFunctionComponent` | —              | Left icon                                    |
-| `description`   | `string`                | —              | Description below the title                  |
-| `sizePreset`    | `SizePreset`            | `"headline"`   | Content size preset                          |
-| `variant`       | `ContentVariant`        | `"heading"`    | Content layout variant                       |
-| `rightChildren` | `ReactNode`             | —              | Content after the label (e.g. action button) |
-| `color`         | `ColorTypes`            | `"interactive"` | Content colour mode. Defaults to `"interactive"`, which is what lets the row's hover / selected / disabled colours reach its title and icon — passing anything else opts out of that. `undefined` counts as not passing one. |
+| Prop                  | Type                    | Default         | Description                                                                                                                                                                                                                  |
+| --------------------- | ----------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `title`               | `string`                | **(required)**  | Row label                                                                                                                                                                                                                    |
+| `icon`                | `IconFunctionComponent` | —               | Left icon                                                                                                                                                                                                                    |
+| `description`         | `string`                | —               | Description below the title                                                                                                                                                                                                  |
+| `descriptionMaxLines` | `number`                | —               | Cap the description at N lines and truncate the rest. Unset wraps without a limit — a row showing user-authored text usually wants `1`                                                                                       |
+| `sizePreset`          | `SizePreset`            | `"headline"`    | Content size preset                                                                                                                                                                                                          |
+| `variant`             | `ContentVariant`        | `"heading"`     | Content layout variant                                                                                                                                                                                                       |
+| `rightChildren`       | `ReactNode`             | —               | Content after the label (e.g. action button)                                                                                                                                                                                 |
+| `color`               | `ColorTypes`            | `"interactive"` | Content colour mode. Defaults to `"interactive"`, which is what lets the row's hover / selected / disabled colours reach its title and icon — passing anything else opts out of that. `undefined` counts as not passing one. |
 
-| `strikethrough` | `boolean`               | `false`         | Strike the label through, e.g. a row switched off |
+| `strikethrough` | `boolean` | `false` | Strike the label through, e.g. a row switched off |
 
 That table is the entire content surface. The remaining `ContentAction` /
 `Content` props — `editable`, `onTitleChange`, `auxIcon`, `tag`, and the rest —

@@ -20,7 +20,7 @@ import {
 // ---------------------------------------------------------------------------
 
 /**
- * The `ContentAction` props a row actually uses — nine of the twenty-two it
+ * The `ContentAction` props a row actually uses — ten of the twenty-two it
  * offers. Listed rather than spread, so that everything a caller passes which
  * is *not* here is DOM, and reaches the row element.
  *
@@ -43,6 +43,12 @@ type RowContentProps = {
 
   /** Secondary line under the title. */
   description?: string | RichStr;
+
+  /**
+   * Cap the description at N lines and truncate the rest. Unset wraps without
+   * a limit, so a row showing user-authored text usually wants `1`.
+   */
+  descriptionMaxLines?: number;
 
   /** Content after the label — an action button, a count, a chevron. */
   rightChildren?: React.ReactNode;
@@ -189,6 +195,7 @@ function LineItemButton({
   title,
   icon,
   description,
+  descriptionMaxLines,
   rightChildren,
   sizePreset,
   variant,
@@ -263,6 +270,7 @@ function LineItemButton({
               title,
               icon,
               description,
+              descriptionMaxLines,
               rightChildren,
               sizePreset,
               variant,
