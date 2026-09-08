@@ -1163,7 +1163,56 @@ func (in *installer) startServices(ctx context.Context, tag, prevTag string, hos
 		in.infof("If the issue persists, please contact: founders@onyx.app")
 		return exitcodes.Newf(exitcodes.General, "docker compose up failed: %v", err)
 	}
+	if prevTag != "" {
+		// Only after an upgrade: a fresh install starts the proxy alongside
+		// everything else, so it already resolved the containers it serves.
+		in.reloadProxy(ctx, dir, env, files)
+	}
 	return nil
+}
+
+// proxyService is the compose service that fronts the deployment. Absent from
+// onyx-lite, which publishes the app directly.
+const proxyService = "nginx"
+
+// reloadProxy makes nginx re-read its config after an upgrade replaced the app
+// containers.
+//
+// nginx resolves an upstream named in an `upstream` block once, when it loads
+// its config, and the generated config sets no `resolver`. `up` replaces
+// api_server with a container on a new address but leaves the proxy running,
+// so nginx keeps sending traffic to the address the old container had and
+// answers 502. The proxy's own config reload runs every six hours, so a
+// deployment can serve 502s long after an otherwise clean upgrade.
+//
+// Best effort: `up` has already succeeded by this point, so a proxy that will
+// not reload is reported and the upgrade still counts as done.
+func (in *installer) reloadProxy(ctx context.Context, dir string, env map[string]string, files []string) {
+	idCmd := in.compose.Command(dir, env, files, "ps", "-q", proxyService)
+	res, err := in.deps.Runner.Run(ctx, idCmd)
+	if err != nil || strings.TrimSpace(res.Stdout) == "" {
+		// No proxy in this deployment, or it is not running.
+		return
+	}
+
+	// nginx refuses a reload that would load a broken config and keeps the
+	// running workers, which looks the same from here as a reload that worked.
+	// Testing first separates the two.
+	testCmd := in.compose.Command(dir, env, files, "exec", "-T", proxyService, "nginx", "-t")
+	if _, err := in.deps.Runner.Run(ctx, testCmd); err != nil {
+		in.warnf("Did not reload %s: its config does not pass `nginx -t` (%v).", proxyService, err)
+		in.infof("It may still route to the previous containers and answer 502.")
+		return
+	}
+
+	reloadCmd := in.compose.Command(dir, env, files, "exec", "-T", proxyService, "nginx", "-s", "reload")
+	if _, err := in.deps.Runner.Run(ctx, reloadCmd); err != nil {
+		in.warnf("Could not reload %s: %v", proxyService, err)
+		in.infof("It may still route to the previous containers and answer 502.")
+		in.cmdf("docker compose exec %s nginx -s reload", proxyService)
+		return
+	}
+	in.successf("Reloaded %s onto the new containers", proxyService)
 }
 
 // explainIncompleteStart says what a half-finished `up` left behind. Unlike a
