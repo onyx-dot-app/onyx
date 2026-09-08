@@ -220,10 +220,14 @@ def test_created_datetime_is_parsed_onto_drive_item_data() -> None:
     )
 
 
-def test_parse_sharepoint_datetime_makes_naive_values_aware() -> None:
-    """The window bounds are aware, so parsed values must be too."""
+def test_parse_sharepoint_datetime_returns_aware_utc() -> None:
+    """The window bounds are aware UTC, so parsed values must be too."""
     expected = datetime(2026, 3, 1, 10, 0, tzinfo=timezone.utc)
 
+    assert _parse_sharepoint_datetime("2026-03-01T10:00:00Z") == expected
     assert _parse_sharepoint_datetime("2026-03-01T10:00:00") == expected
+    assert _parse_sharepoint_datetime("2026-03-01T12:00:00+02:00") == expected
     assert _parse_sharepoint_datetime(datetime(2026, 3, 1, 10, 0)) == expected
     assert _parse_sharepoint_datetime(None) is None
+    with pytest.raises(TypeError):
+        _parse_sharepoint_datetime(1772359200)  # ty: ignore[invalid-argument-type]

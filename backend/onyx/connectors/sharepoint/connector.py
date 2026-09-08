@@ -327,7 +327,7 @@ def _parse_sharepoint_datetime(value: str | datetime | None) -> datetime | None:
     # Graph timestamps are UTC. A naive value would not compare with aware bounds.
     if not parsed.tzinfo:
         return parsed.replace(tzinfo=timezone.utc)
-    return parsed
+    return parsed.astimezone(timezone.utc)
 
 
 def _timestamp_in_window(
