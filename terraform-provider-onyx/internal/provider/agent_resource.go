@@ -18,21 +18,21 @@ import (
 )
 
 var (
-	_ resource.Resource                = (*personaResource)(nil)
-	_ resource.ResourceWithConfigure   = (*personaResource)(nil)
-	_ resource.ResourceWithImportState = (*personaResource)(nil)
+	_ resource.Resource                = (*agentResource)(nil)
+	_ resource.ResourceWithConfigure   = (*agentResource)(nil)
+	_ resource.ResourceWithImportState = (*agentResource)(nil)
 )
 
-// NewPersonaResource returns the onyx_persona resource.
-func NewPersonaResource() resource.Resource {
-	return &personaResource{}
+// NewAgentResource returns the onyx_agent resource.
+func NewAgentResource() resource.Resource {
+	return &agentResource{}
 }
 
-type personaResource struct {
+type agentResource struct {
 	client *client.Client
 }
 
-type personaResourceModel struct {
+type agentResourceModel struct {
 	ID                          types.String `tfsdk:"id"`
 	Name                        types.String `tfsdk:"name"`
 	Description                 types.String `tfsdk:"description"`
@@ -53,7 +53,7 @@ type personaResourceModel struct {
 	SearchStartDate             types.String `tfsdk:"search_start_date"`
 	Users                       types.Set    `tfsdk:"users"`
 	Groups                      types.Set    `tfsdk:"groups"`
-	BuiltinPersona              types.Bool   `tfsdk:"builtin_persona"`
+	BuiltinAgent                types.Bool   `tfsdk:"builtin_agent"`
 }
 
 // starterMessageAttrTypes mirrors the nested block, for building list values.
@@ -67,11 +67,11 @@ type starterMessageModel struct {
 	Message types.String `tfsdk:"message"`
 }
 
-func (r *personaResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_persona"
+func (r *agentResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_agent"
 }
 
-func (r *personaResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *agentResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "An agent (assistant): a named set of instructions, knowledge and actions " +
 			"that users can chat with.\n\n" +
@@ -199,7 +199,7 @@ func (r *personaResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				MarkdownDescription: "User group ids that may use the agent when it is not public. " +
 					"Enterprise Edition only.",
 			},
-			"builtin_persona": schema.BoolAttribute{
+			"builtin_agent": schema.BoolAttribute{
 				Computed: true,
 				MarkdownDescription: "Whether Onyx ships the agent as a built-in. Built-in agents are " +
 					"configured in the deployment, not through the API.",
@@ -224,17 +224,17 @@ func (r *personaResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 	}
 }
 
-func (r *personaResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+func (r *agentResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	r.client = clientFromResourceConfigure(req, resp)
 }
 
 // writeFromModel builds the body shared by create and update. Both replace the
 // whole agent, so every managed field is always sent.
-func (r *personaResource) writeFromModel(
+func (r *agentResource) writeFromModel(
 	ctx context.Context,
-	model personaResourceModel,
+	model agentResourceModel,
 	diags *diag.Diagnostics,
-) (client.PersonaWrite, bool) {
+) (client.AgentWrite, bool) {
 	documentSetIDs, setDiags := stringSetToInt64s(ctx, model.DocumentSetIDs, "document_set_ids")
 	diags.Append(setDiags...)
 
@@ -266,18 +266,18 @@ func (r *personaResource) writeFromModel(
 	if !model.DefaultModelConfigurationID.IsNull() && !model.DefaultModelConfigurationID.IsUnknown() {
 		parsed, ok := parseID(model.DefaultModelConfigurationID, "model configuration", diags)
 		if !ok {
-			return client.PersonaWrite{}, false
+			return client.AgentWrite{}, false
 		}
 		defaultModelConfigurationID = &parsed
 	}
 
 	if diags.HasError() {
-		return client.PersonaWrite{}, false
+		return client.AgentWrite{}, false
 	}
 
 	isPublic := model.IsPublic.ValueBool()
 	isFeatured := model.IsFeatured.ValueBool()
-	return client.PersonaWrite{
+	return client.AgentWrite{
 		Name:                        model.Name.ValueString(),
 		Description:                 model.Description.ValueString(),
 		DocumentSetIDs:              documentSetIDs,
@@ -301,12 +301,12 @@ func (r *personaResource) writeFromModel(
 	}, true
 }
 
-// applyRemotePersona copies the server's view into the model.
+// applyRemoteAgent copies the server's view into the model.
 //
 // search_start_date is left alone. Onyx parses it into a timestamp and returns
 // that, so reading it back would rewrite a plain date into a form the
 // configuration never used and report a change on every plan.
-func applyRemotePersona(ctx context.Context, model *personaResourceModel, remote *client.Persona, diags *diag.Diagnostics) bool {
+func applyRemoteAgent(ctx context.Context, model *agentResourceModel, remote *client.Agent, diags *diag.Diagnostics) bool {
 	documentSetIDs := idSetFromInt64s(ctx, model.DocumentSetIDs, remote.DocumentSetIDs(), diags)
 	toolIDs := idSetFromInt64s(ctx, model.ToolIDs, remote.ToolIDs(), diags)
 
@@ -363,7 +363,7 @@ func applyRemotePersona(ctx context.Context, model *personaResourceModel, remote
 	model.IsPublic = types.BoolValue(remote.IsPublic)
 	model.IsListed = types.BoolValue(remote.IsListed)
 	model.IsFeatured = types.BoolValue(remote.IsFeatured)
-	model.BuiltinPersona = types.BoolValue(remote.BuiltinPersona)
+	model.BuiltinAgent = types.BoolValue(remote.BuiltinAgent)
 	model.StarterMessages = starterMessages
 	model.LabelIDs = labelIDs
 	model.Users = users
@@ -412,11 +412,11 @@ func stringOrEmpty(value *string) string {
 
 // applyListed applies is_listed, which has its own endpoint, and reports the
 // value that ended up stored.
-func (r *personaResource) applyListed(ctx context.Context, id int64, desired bool, remote *client.Persona) error {
+func (r *agentResource) applyListed(ctx context.Context, id int64, desired bool, remote *client.Agent) error {
 	if remote.IsListed == desired {
 		return nil
 	}
-	if err := r.client.SetPersonaListed(ctx, id, desired); err != nil {
+	if err := r.client.SetAgentListed(ctx, id, desired); err != nil {
 		return err
 	}
 	remote.IsListed = desired
@@ -429,14 +429,14 @@ func (r *personaResource) applyListed(ctx context.Context, id int64, desired boo
 // The endpoint can only set a number, so an attribute cleared in the
 // configuration is left as it is. Marking it computed makes that the declared
 // behaviour rather than a difference that never settles.
-func (r *personaResource) applyDisplayPriority(ctx context.Context, id int64, desired types.Int64, remote *client.Persona) error {
+func (r *agentResource) applyDisplayPriority(ctx context.Context, id int64, desired types.Int64, remote *client.Agent) error {
 	if desired.IsNull() || desired.IsUnknown() {
 		return nil
 	}
 	if remote.DisplayPriority != nil && *remote.DisplayPriority == desired.ValueInt64() {
 		return nil
 	}
-	if err := r.client.SetPersonaDisplayPriority(ctx, id, desired.ValueInt64()); err != nil {
+	if err := r.client.SetAgentDisplayPriority(ctx, id, desired.ValueInt64()); err != nil {
 		return err
 	}
 	priority := desired.ValueInt64()
@@ -444,8 +444,8 @@ func (r *personaResource) applyDisplayPriority(ctx context.Context, id int64, de
 	return nil
 }
 
-func (r *personaResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var plan personaResourceModel
+func (r *agentResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var plan agentResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -456,7 +456,7 @@ func (r *personaResource) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 
-	remote, err := r.client.CreatePersona(ctx, write)
+	remote, err := r.client.CreateAgent(ctx, write)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to create Onyx agent", err.Error())
 		return
@@ -466,7 +466,7 @@ func (r *personaResource) Create(ctx context.Context, req resource.CreateRequest
 	// written, so the agent that now exists stays tracked.
 	listedErr := r.applyListed(ctx, remote.ID, plan.IsListed.ValueBool(), remote)
 
-	if !applyRemotePersona(ctx, &plan, remote, &resp.Diagnostics) {
+	if !applyRemoteAgent(ctx, &plan, remote, &resp.Diagnostics) {
 		// Record the id even so. Names are unique, so an agent left out of
 		// state would fail every later apply as a duplicate.
 		plan.ID = types.StringValue(strconv.FormatInt(remote.ID, 10))
@@ -479,8 +479,8 @@ func (r *personaResource) Create(ctx context.Context, req resource.CreateRequest
 	}
 }
 
-func (r *personaResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	var state personaResourceModel
+func (r *agentResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var state agentResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -491,7 +491,7 @@ func (r *personaResource) Read(ctx context.Context, req resource.ReadRequest, re
 		return
 	}
 
-	remote, found, err := r.client.LookupPersona(ctx, id)
+	remote, found, err := r.client.LookupAgent(ctx, id)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to read Onyx agent", err.Error())
 		return
@@ -500,14 +500,14 @@ func (r *personaResource) Read(ctx context.Context, req resource.ReadRequest, re
 		resp.State.RemoveResource(ctx)
 		return
 	}
-	if !applyRemotePersona(ctx, &state, remote, &resp.Diagnostics) {
+	if !applyRemoteAgent(ctx, &state, remote, &resp.Diagnostics) {
 		return
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
-func (r *personaResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var plan, state personaResourceModel
+func (r *agentResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var plan, state agentResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
@@ -534,7 +534,7 @@ func (r *personaResource) Update(ctx context.Context, req resource.UpdateRequest
 	// the write below is reverted. Making the two fields nullable server-side,
 	// so null means "leave unchanged", would remove the read and the window
 	// with it.
-	current, err := r.client.GetPersona(ctx, id)
+	current, err := r.client.GetAgent(ctx, id)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to read the Onyx agent before updating it", err.Error())
 		return
@@ -542,7 +542,7 @@ func (r *personaResource) Update(ctx context.Context, req resource.UpdateRequest
 	write.HierarchyNodeIDs = current.HierarchyNodeIDs()
 	write.DocumentIDs = current.DocumentIDs()
 
-	remote, err := r.client.UpdatePersona(ctx, id, write)
+	remote, err := r.client.UpdateAgent(ctx, id, write)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to update Onyx agent", err.Error())
 		return
@@ -555,7 +555,7 @@ func (r *personaResource) Update(ctx context.Context, req resource.UpdateRequest
 		listedErr = r.applyDisplayPriority(ctx, id, plan.DisplayPriority, remote)
 	}
 
-	if !applyRemotePersona(ctx, &plan, remote, &resp.Diagnostics) {
+	if !applyRemoteAgent(ctx, &plan, remote, &resp.Diagnostics) {
 		return
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
@@ -564,8 +564,8 @@ func (r *personaResource) Update(ctx context.Context, req resource.UpdateRequest
 	}
 }
 
-func (r *personaResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	var state personaResourceModel
+func (r *agentResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var state agentResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -576,19 +576,19 @@ func (r *personaResource) Delete(ctx context.Context, req resource.DeleteRequest
 		return
 	}
 
-	err := r.client.DeletePersona(ctx, id)
+	err := r.client.DeleteAgent(ctx, id)
 	if err == nil || client.IsNotFound(err) {
 		return
 	}
 	// An agent that is already a tombstone fails this call, and not with a 404:
 	// the lookup behind it rejects a deleted agent, and the handler reports that
 	// as a permission error. Confirm it is really gone before failing a destroy.
-	if _, found, lookupErr := r.client.LookupPersona(ctx, id); lookupErr == nil && !found {
+	if _, found, lookupErr := r.client.LookupAgent(ctx, id); lookupErr == nil && !found {
 		return
 	}
 	resp.Diagnostics.AddError("Failed to delete Onyx agent", err.Error())
 }
 
-func (r *personaResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+func (r *agentResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }

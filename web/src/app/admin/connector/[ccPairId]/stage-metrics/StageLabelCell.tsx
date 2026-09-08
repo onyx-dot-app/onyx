@@ -34,7 +34,7 @@ export default function StageLabelCell({ stage }: StageLabelCellProps) {
           colorClassForStage(stage)
         )}
       />
-      <Text font="secondary-body" color="text-05" nowrap>
+      <Text font="secondary-body" color="text-05" wordWrap="whitespace-nowrap">
         {t(STAGE_LABEL_KEYS[stage])}
       </Text>
       <Button

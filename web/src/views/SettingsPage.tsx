@@ -1376,7 +1376,11 @@ function ChatPreferencesSettings() {
                     />
                   </Section>
                   <Section width={4} height="auto" alignItems="end">
-                    <Text font="secondary-mono" color="text-04" nowrap>
+                    <Text
+                      font="secondary-mono"
+                      color="text-04"
+                      wordWrap="whitespace-nowrap"
+                    >
                       {draftTemperature.toFixed(1)}
                     </Text>
                   </Section>
@@ -1411,7 +1415,11 @@ function ChatPreferencesSettings() {
                       />
                     </Section>
                     <Section width={4} height="auto" alignItems="end">
-                      <Text font="secondary-mono" color="text-04" nowrap>
+                      <Text
+                        font="secondary-mono"
+                        color="text-04"
+                        wordWrap="whitespace-nowrap"
+                      >
                         {tModelSelector(
                           REASONING_STOP_LABEL_KEYS[
                             ALL_REASONING_STOPS[draftEffortStop] ?? "medium"
