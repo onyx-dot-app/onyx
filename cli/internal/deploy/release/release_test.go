@@ -154,7 +154,8 @@ func TestConfigRef(t *testing.T) {
 		"edge-dev":           "main",
 		"latest-dev":         "main",
 		// An unrelated ref that happens to end in -dev is not a twin.
-		"sandbox-dev": "sandbox-dev",
+		"sandbox-dev":  "sandbox-dev",
+		"v4.7.1.2-dev": "v4.7.1.2-dev",
 	}
 	for tag, want := range cases {
 		if got := ConfigRef(tag); got != want {
@@ -187,6 +188,10 @@ func TestSplitDevSuffix(t *testing.T) {
 		{"edge", "edge", false},
 		{"sandbox-dev", "sandbox-dev", false},
 		{"beta-dev", "beta-dev", false},
+		// A version prefix alone does not make a release: the whole tag must
+		// have the shape.
+		{"v4.7.1.2-dev", "v4.7.1.2-dev", false},
+		{"v4.7.1rc-dev", "v4.7.1rc-dev", false},
 		{"-dev", "-dev", false},
 		{"", "", false},
 	}
@@ -267,6 +272,7 @@ func TestNormalizeVersionTag(t *testing.T) {
 		{"4.7.0-beta.1-dev", "v4.7.0-beta.1-dev", true},
 		{"edge-dev", "edge-dev", false},
 		{"sandbox-dev", "sandbox-dev", false},
+		{"v4.7.1.2-dev", "v4.7.1.2-dev", false},
 		// A bare pre-release is pullable but not looked up (hand-built tags
 		// share its shape).
 		{"v4.7.0-cloud.3", "v4.7.0-cloud.3", false},

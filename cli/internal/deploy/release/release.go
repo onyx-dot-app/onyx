@@ -56,11 +56,12 @@ var releaseVersionPattern = regexp.MustCompile(`^v?\d+\.\d+\.\d+$`)
 // suffix names an image variant, never a git ref of its own.
 const devSuffix = "-dev"
 
-// releaseShapedPattern matches tags that name a release, pre-release forms
-// included (v4.7.0-beta.1, v4.7.0-cloud.3), with or without the "v" prefix.
-// It bounds which -dev tags count as twins: the repo also carries unrelated
-// refs that happen to end in -dev.
-var releaseShapedPattern = regexp.MustCompile(`^v?\d+\.\d+\.\d+`)
+// releaseShapedPattern matches a whole tag that names a release, pre-release
+// forms included (v4.7.0-beta.1, v4.7.0-cloud.3), with or without the "v"
+// prefix. It bounds which -dev tags count as twins: the repo also carries
+// unrelated refs that happen to end in -dev, and a hand-built tag may start
+// with a version (v4.7.1.2-dev) without naming one.
+var releaseShapedPattern = regexp.MustCompile(`^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$`)
 
 // SplitDevSuffix separates a -dev twin into its plain tag and a flag. Only
 // twins of floating or release-shaped tags split; any other tag comes back
