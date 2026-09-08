@@ -76,6 +76,7 @@ def _should_emit(
     credential_type: str,
     row_id: int | None,
     actor: str,
+    resource: str | None,
 ) -> bool:
     """Best-effort Redis SETNX-with-EX dedup.
 
@@ -87,7 +88,10 @@ def _should_emit(
         from onyx.redis.redis_pool import get_redis_client
 
         client = get_redis_client(tenant_id=tenant_id)
-        dedup_key = f"audit:cred_access:{tenant_id}:{credential_type}:{row_id}:{actor}"
+        dedup_key = (
+            f"audit:cred_access:{tenant_id}:{credential_type}:{row_id}"
+            f":{actor}:{resource}"
+        )
         # set(..., nx=True) returns True only when the key did not already
         # exist; None means a prior event already claimed this window.
         result = client.set(dedup_key, "1", ex=_DEDUP_TTL_SECONDS, nx=True)
@@ -104,6 +108,7 @@ def emit_credential_access(
     *,
     user_id: str | None = None,
     auth_type: str | None = None,
+    resource: str | None = None,
 ) -> None:
     """Emit a single structured audit line for a credential decrypt event.
 
@@ -114,6 +119,9 @@ def emit_credential_access(
         user_id: The acting user id, if available. May be None (e.g. at
             ``LLMProviderView.from_model`` there is no user in scope).
         auth_type: How the actor authenticated, if known.
+        resource: What the credential was used to reach (e.g. a repository),
+            when the caller knows. Part of the dedup key, so each resource an
+            actor reaches is recorded rather than only the first.
 
     This function never raises. Any failure to gather context, dedup, or even
     log is swallowed so the credential read path is never disrupted.
@@ -127,7 +135,7 @@ def emit_credential_access(
         # Actor for dedup keying: prefer explicit user, then request, then IP.
         actor = user_id or request_id or client_ip or "unknown"
 
-        if not _should_emit(tenant_id, credential_type, row_id, actor):
+        if not _should_emit(tenant_id, credential_type, row_id, actor, resource):
             return
 
         payload: dict[str, Any] = {
@@ -138,6 +146,7 @@ def emit_credential_access(
             "row_id": row_id,
             "user_id": user_id,
             "auth_type": auth_type,
+            "resource": resource,
             "request_id": request_id,
             "endpoint": endpoint,
             "client_ip": client_ip,
