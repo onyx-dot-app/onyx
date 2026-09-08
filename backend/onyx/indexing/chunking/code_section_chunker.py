@@ -16,10 +16,17 @@ from onyx.indexing.chunking.section_chunker import (
     build_payloads,
 )
 from onyx.natural_language_processing.utils import BaseTokenizer, count_tokens
+from onyx.utils.circuit_breaker import CircuitBreaker
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import clean_code_text
 
 logger = setup_logger()
+
+# An uncached grammar makes the pack fetch its archive, which on a firewalled
+# network blocks until timeout (60s in testing). One archive serves every
+# language, so the failure is shared and the breaker covers all loads.
+# Module-level: a Chunker is built per document batch.
+_GRAMMAR_LOADS = CircuitBreaker()
 
 
 class _CodeSpan(NamedTuple):
@@ -203,6 +210,14 @@ class CodeChunker(SectionChunker):
             )
             return None
 
+        if _GRAMMAR_LOADS.is_open:
+            logger.debug(
+                "Grammar loading is suppressed after repeated failures; "
+                "token splitting language=%s",
+                language,
+            )
+            return None
+
         try:
             splitter = ChonkieCodeChunker(
                 tokenizer_or_token_counter=(
@@ -213,13 +228,24 @@ class CodeChunker(SectionChunker):
                 return_type="texts",
             )
         except Exception:
-            logger.warning(
-                "Could not load the tree-sitter grammar for language=%s; "
-                "falling back to token splitting.",
+            failures = _GRAMMAR_LOADS.record_failure()
+            # Warn on the first failure and again when the breaker opens: an
+            # open breaker degrades every language to token splitting.
+            log = (
+                logger.warning
+                if failures in (1, _GRAMMAR_LOADS.failures_before_open)
+                else logger.debug
+            )
+            log(
+                "Could not load the tree-sitter grammar for language=%s; falling "
+                "back to token splitting for now. Grammars "
+                "are extracted from a bundle the image build caches, so this "
+                "means that cache is missing or not writable.",
                 language,
-                exc_info=True,
+                exc_info=failures == 1,
             )
             return None
 
+        _GRAMMAR_LOADS.record_success()
         self._splitters[language] = _CachedSplitter(content_token_limit, splitter)
         return splitter

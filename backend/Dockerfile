@@ -133,15 +133,32 @@ RUN ln -s /usr/local/bin/supervisord /usr/bin/supervisord && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
 
-# Pre-downloading models for setups with limited egress
-RUN python -c "from tokenizers import Tokenizer; \
-Tokenizer.from_pretrained('nomic-ai/nomic-embed-text-v1')"
+# Deployments run this image as uid 1001, and the default caches land under
+# /root (mode 700). Pin them to /app so the runtime user can read them.
+# XDG_CACHE_HOME also drives huggingface_hub and tree-sitter-language-pack.
+ENV XDG_CACHE_HOME=/app/.cache \
+    NLTK_DATA=/app/nltk_data
 
-# Pre-downloading NLTK for setups with limited egress
-RUN python -c "import nltk; \
-    nltk.download('stopwords', quiet=True); \
-    nltk.download('punkt_tab', quiet=True);"
+# Pre-downloading models, NLTK data, and tree-sitter grammars for setups with
+# limited egress. One layer, ending in the chown that hands them to the runtime
+# user: chowning in a later layer rewrites every file, so the image would carry
+# a second copy of all of them.
+# mkdir: nltk.download() only writes to a search path that already exists, and
+# silently falls back to /root/nltk_data otherwise.
+# tree-sitter caches one archive covering every language and extracts grammars
+# from it on demand, so a read-only /app/.cache needs a volume mounted there.
+# get_parser is the check: it raises if the archive did not arrive.
 # nltk.download('wordnet', quiet=True); introduce this back if lemmatization is needed
+RUN mkdir -p /app/.cache /app/nltk_data && \
+python -c "from tokenizers import Tokenizer; \
+Tokenizer.from_pretrained('nomic-ai/nomic-embed-text-v1')" && \
+python -c "import nltk; \
+nltk.download('stopwords', quiet=True); \
+nltk.download('punkt_tab', quiet=True);" && \
+python -c "from tree_sitter_language_pack import get_parser, prefetch; \
+prefetch(['python']); \
+get_parser('python')" && \
+chown -R onyx:onyx /app/.cache /app/nltk_data
 
 # Pre-downloading tiktoken for setups with limited egress
 RUN python -c "import tiktoken; \

@@ -39,22 +39,50 @@ SENSITIVE_FILE_PATTERNS = (
     "*.kdbx",
 )
 
+# Formats the pack has grammars for but that are not code: .txt resolves to
+# the Vim help-file grammar, and .csv/.tsv have a TabularSection path.
+NON_CODE_LANGUAGES = frozenset({"vimdoc", "rst", "csv", "tsv"})
+
+
+# The pack's registry is extension-only, so these resolve to nothing.
+BASENAME_LANGUAGES = {
+    "makefile": "make",
+    "gnumakefile": "make",
+    "dockerfile": "dockerfile",
+    "containerfile": "dockerfile",
+    "cmakelists.txt": "cmake",
+    "gemfile": "ruby",
+    "rakefile": "ruby",
+    "brewfile": "ruby",
+}
+
 
 def infer_code_language(file_path: str | None) -> str | None:
     """Grammar name for a path, from tree-sitter-language-pack's extension
-    registry. None when the path is empty or the extension is unknown.
+    registry plus the extensionless names it does not cover. None when the
+    path is empty or nothing matches.
 
-    A grammar lookup, not a code-vs-prose judgment: prose formats with
-    grammars (e.g. .md -> markdown) return that grammar. Callers decide what
-    to exclude — connectors subtract their own document extensions, and both
-    connectors and the chunker call `is_sensitive_code_file` themselves.
+    The prose and tabular grammars in NON_CODE_LANGUAGES are subtracted, so
+    the answer is a code language. Everything else is a grammar lookup rather
+    than a code-vs-prose judgment: markdown has a grammar and returns it, so
+    connectors that keep prose out of code indexing still subtract their own
+    document extensions (e.g. the GitHub connector's docs set). Whether the
+    file holds credentials is a separate question — ask
+    `is_sensitive_code_file`.
     """
     if not file_path:
         return None
+    basename = PurePosixPath(file_path.replace("\\", "/")).name.lower()
+    known = BASENAME_LANGUAGES.get(basename)
+    if known is not None:
+        return known
+    if basename.startswith("dockerfile."):
+        return "dockerfile"
     # Local import: keeps the language pack off the connector import path.
     from tree_sitter_language_pack import detect_language_from_path
 
-    return detect_language_from_path(file_path)
+    language = detect_language_from_path(file_path)
+    return None if language in NON_CODE_LANGUAGES else language
 
 
 def is_sensitive_code_file(file_path: str | None) -> bool:
