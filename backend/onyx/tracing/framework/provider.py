@@ -10,7 +10,7 @@ from onyx.utils.logger import setup_logger
 
 from .processor_interface import TracingProcessor
 from .scope import Scope
-from .span_data import GenerationSpanData
+from .span_data import GenerationSpanData, SpanData
 from .spans import NoOpSpan, Span, SpanImpl, TSpanData
 from .traces import NoOpTrace, Trace, TraceContentMode, TraceImpl
 
@@ -40,9 +40,6 @@ class SynchronousMultiTracingProcessor(TracingProcessor):
         """
         with self._lock:
             self._processors = tuple(processors)
-
-    def has_processors(self) -> bool:
-        return bool(self._processors)
 
     def on_trace_start(self, trace: Trace) -> None:
         """
@@ -263,10 +260,6 @@ class DefaultTraceProvider(TraceProvider):
         """
         Create a new span.
         """
-        if disabled:
-            logger.debug("Tracing is disabled. Not creating span %s", span_data)
-            return NoOpSpan(span_data)
-
         trace_id: str
         parent_id: str | None
 
@@ -275,7 +268,12 @@ class DefaultTraceProvider(TraceProvider):
             current_trace = Scope.get_current_trace()
             if current_trace is None:
                 logger.debug("No active trace; returning NoOpSpan for %s", span_data)
-                return NoOpSpan(span_data)
+                inherited_content_mode = (
+                    current_span.content_mode if current_span else TraceContentMode.FULL
+                )
+                return self._create_noop_span(
+                    span_data, content_mode or inherited_content_mode
+                )
             elif isinstance(current_trace, NoOpTrace) or isinstance(
                 current_span, NoOpSpan
             ):
@@ -284,7 +282,14 @@ class DefaultTraceProvider(TraceProvider):
                     current_span,
                     current_trace,
                 )
-                return NoOpSpan(span_data)
+                inherited_content_mode = (
+                    current_span.content_mode
+                    if current_span
+                    else current_trace.content_mode
+                )
+                return self._create_noop_span(
+                    span_data, content_mode or inherited_content_mode
+                )
 
             parent_id = current_span.span_id if current_span else None
             trace_id = current_trace.trace_id
@@ -297,14 +302,18 @@ class DefaultTraceProvider(TraceProvider):
         elif isinstance(parent, Trace):
             if isinstance(parent, NoOpTrace):
                 logger.debug("Parent %s is no-op, returning NoOpSpan", parent)
-                return NoOpSpan(span_data)
+                return self._create_noop_span(
+                    span_data, content_mode or parent.content_mode
+                )
             trace_id = parent.trace_id
             parent_id = None
             inherited_content_mode = parent.content_mode
         elif isinstance(parent, Span):
             if isinstance(parent, NoOpSpan):
                 logger.debug("Parent %s is no-op, returning NoOpSpan", parent)
-                return NoOpSpan(span_data)
+                return self._create_noop_span(
+                    span_data, content_mode or parent.content_mode
+                )
             parent_id = parent.span_id
             trace_id = parent.trace_id
             inherited_content_mode = parent.content_mode
@@ -313,10 +322,11 @@ class DefaultTraceProvider(TraceProvider):
             raise ValueError(f"Invalid parent type: {type(parent)}")
 
         resolved_content_mode = content_mode or inherited_content_mode
-        if resolved_content_mode == TraceContentMode.METADATA_ONLY and isinstance(
-            span_data, GenerationSpanData
-        ):
-            span_data.disable_content_capture()
+        if disabled:
+            logger.debug("Tracing is disabled. Not creating span %s", span_data)
+            return self._create_noop_span(span_data, resolved_content_mode)
+
+        self._disable_generation_content(span_data, resolved_content_mode)
 
         return SpanImpl(
             trace_id=trace_id,
@@ -326,6 +336,22 @@ class DefaultTraceProvider(TraceProvider):
             span_data=span_data,
             content_mode=resolved_content_mode,
         )
+
+    @staticmethod
+    def _disable_generation_content(
+        span_data: SpanData, content_mode: TraceContentMode
+    ) -> None:
+        if content_mode == TraceContentMode.METADATA_ONLY and isinstance(
+            span_data, GenerationSpanData
+        ):
+            span_data.disable_content_capture()
+
+    @classmethod
+    def _create_noop_span(
+        cls, span_data: TSpanData, content_mode: TraceContentMode
+    ) -> NoOpSpan[TSpanData]:
+        cls._disable_generation_content(span_data, content_mode)
+        return NoOpSpan(span_data, content_mode)
 
     def shutdown(self) -> None:
         try:

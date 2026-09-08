@@ -136,7 +136,6 @@ def _summarize_image(
         with llm_generation_span(
             llm=llm,
             flow=LLMFlow.IMAGE_SUMMARIZATION,
-            input_messages=[{"type": "image_summarization_request"}],
             content_mode=TraceContentMode.METADATA_ONLY,
         ) as span_generation:
             response = llm.invoke(

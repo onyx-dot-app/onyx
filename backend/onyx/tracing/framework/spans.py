@@ -97,7 +97,7 @@ class Span(abc.ABC, Generic[TSpanData]):
     @property
     @abc.abstractmethod
     def content_mode(self) -> TraceContentMode:
-        """Control whether processors can include operation content."""
+        """Control whether a generation span can capture model content."""
 
     @abc.abstractmethod
     def start(self, mark_as_current: bool = False) -> None:

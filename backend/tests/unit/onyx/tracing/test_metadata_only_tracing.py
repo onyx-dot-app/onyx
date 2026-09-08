@@ -1,15 +1,21 @@
 """Metadata-only traces retain metering data without capturing model content."""
 
 from typing import Any
+from unittest.mock import MagicMock
 
 from onyx.tracing.flows import LLMFlow
+from onyx.tracing.framework.create import ensure_trace
 from onyx.tracing.framework.processor_interface import TracingProcessor
 from onyx.tracing.framework.provider import DefaultTraceProvider
 from onyx.tracing.framework.setup import get_trace_provider, set_trace_provider
 from onyx.tracing.framework.span_data import GenerationSpanData
 from onyx.tracing.framework.spans import NoOpSpan, Span
 from onyx.tracing.framework.traces import Trace, TraceContentMode
-from onyx.tracing.llm_utils import record_llm_span_output, traced_llm_call
+from onyx.tracing.llm_utils import (
+    llm_generation_span,
+    record_llm_span_output,
+    traced_llm_call,
+)
 
 
 class _CaptureProcessor(TracingProcessor):
@@ -74,17 +80,92 @@ def test_metadata_only_trace_removes_generation_content() -> None:
     assert span.span_data.usage == {"input_tokens": 5, "output_tokens": 2}
 
 
-def test_span_without_trace_remains_noop() -> None:
+def test_full_span_overrides_metadata_only_trace() -> None:
+    provider = DefaultTraceProvider()
+
+    with provider.create_trace(
+        "background_llm_call", content_mode=TraceContentMode.METADATA_ONLY
+    ):
+        span = provider.create_span(
+            GenerationSpanData(
+                input=[{"role": "user", "content": "captured document"}],
+                model="claude-sonnet",
+            ),
+            content_mode=TraceContentMode.FULL,
+        )
+
+    assert span.content_mode == TraceContentMode.FULL
+    assert span.span_data.input == [{"role": "user", "content": "captured document"}]
+
+
+def test_metadata_only_span_without_trace_remains_redacted_noop() -> None:
     provider = DefaultTraceProvider()
     processor = _CaptureProcessor()
     provider.register_processor(processor)
 
-    span = provider.create_span(GenerationSpanData(model="claude-sonnet"))
+    span = provider.create_span(
+        GenerationSpanData(
+            input=[{"role": "user", "content": "private document"}],
+            model="claude-sonnet",
+        ),
+        content_mode=TraceContentMode.METADATA_ONLY,
+    )
     with span:
+        span.span_data.output = [{"role": "assistant", "content": "private response"}]
         span.span_data.usage = {"input_tokens": 5, "output_tokens": 2}
 
     assert isinstance(span, NoOpSpan)
+    assert span.content_mode == TraceContentMode.METADATA_ONLY
+    assert span.span_data.input is None
+    assert span.span_data.output is None
+    assert span.span_data.usage == {"input_tokens": 5, "output_tokens": 2}
     assert processor.ended_spans == []
+
+
+def test_llm_helper_inherits_metadata_only_trace() -> None:
+    original_provider = get_trace_provider()
+    provider = DefaultTraceProvider()
+    set_trace_provider(provider)
+    llm = MagicMock()
+    llm.config.model_name = "claude-sonnet"
+    llm.config.model_provider = "anthropic"
+    llm.config.api_base = None
+
+    try:
+        with provider.create_trace(
+            "background_llm_call", content_mode=TraceContentMode.METADATA_ONLY
+        ):
+            with llm_generation_span(
+                llm=llm,
+                flow=LLMFlow.IMAGE_SUMMARIZATION,
+                input_messages=[{"role": "user", "content": "private document"}],
+            ) as span:
+                pass
+    finally:
+        set_trace_provider(original_provider)
+
+    assert span.content_mode == TraceContentMode.METADATA_ONLY
+    assert span.span_data.input is None
+
+
+def test_ensure_trace_reuses_active_trace() -> None:
+    original_provider = get_trace_provider()
+    provider = DefaultTraceProvider()
+    processor = _CaptureProcessor()
+    provider.register_processor(processor)
+    set_trace_provider(provider)
+
+    try:
+        with provider.create_trace("existing_trace") as existing_trace:
+            with ensure_trace(
+                "unused_trace", content_mode=TraceContentMode.METADATA_ONLY
+            ) as reused_trace:
+                assert reused_trace is existing_trace
+    finally:
+        set_trace_provider(original_provider)
+
+    assert processor.started_traces == [existing_trace]
+    assert processor.ended_traces == [existing_trace]
 
 
 def test_llm_helper_does_not_create_workflow_trace() -> None:

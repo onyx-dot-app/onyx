@@ -14,6 +14,8 @@ if TYPE_CHECKING:
 
 
 class TraceContentMode(StrEnum):
+    """Generation content policy; explicit span modes override trace defaults."""
+
     FULL = "full"
     METADATA_ONLY = "metadata_only"
 
@@ -117,7 +119,7 @@ class Trace(abc.ABC):
     @property
     @abc.abstractmethod
     def content_mode(self) -> TraceContentMode:
-        """Control whether child spans can capture operation content."""
+        """Set the default model-content policy for child generation spans."""
 
     @abc.abstractmethod
     def export(self) -> dict[str, Any] | None:
