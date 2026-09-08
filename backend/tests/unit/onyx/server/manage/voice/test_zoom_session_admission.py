@@ -1,5 +1,4 @@
-import inspect
-from collections.abc import Awaitable
+import asyncio
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import AsyncMock
@@ -117,13 +116,9 @@ async def test_zoom_transcribe_timeout_uses_hard_cap_and_releases_session(
     provider = _StreamingZoomProvider()
     acquire = AsyncMock(return_value="session-member-1")
     release = AsyncMock()
-    observed_timeouts: list[float | None] = []
 
-    async def fake_wait_for(awaitable: Awaitable[None], timeout: float | None) -> None:
-        observed_timeouts.append(timeout)
-        if inspect.iscoroutine(awaitable):
-            awaitable.close()
-        raise TimeoutError
+    async def hang(_websocket: object, _transcriber: object) -> None:
+        await asyncio.sleep(60)
 
     monkeypatch.setattr(websocket_api, "get_sqlalchemy_engine", lambda: object())
     monkeypatch.setattr(websocket_api, "Session", lambda _engine: _FakeSession())
@@ -135,14 +130,14 @@ async def test_zoom_transcribe_timeout_uses_hard_cap_and_releases_session(
     )
     monkeypatch.setattr(websocket_api, "acquire_zoom_voice_session", acquire)
     monkeypatch.setattr(websocket_api, "release_zoom_voice_session", release)
-    monkeypatch.setattr(websocket_api.asyncio, "wait_for", fake_wait_for)
+    monkeypatch.setattr(websocket_api, "handle_streaming_transcription", hang)
+    monkeypatch.setattr(websocket_api, "ZOOM_VOICE_SESSION_MAX_SECONDS", 0.01)
 
     await websocket_api.websocket_transcribe(
         cast(WebSocket, websocket),
         _user=cast(User, SimpleNamespace(id="user-7")),
     )
 
-    assert observed_timeouts == [websocket_api.ZOOM_VOICE_SESSION_MAX_SECONDS]
     assert websocket.sent_json == [
         {
             "type": "error",
@@ -199,3 +194,116 @@ async def test_zoom_transcribe_limit_returns_sanitized_message(monkeypatch) -> N
         }
     ]
     websocket.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_zoom_chunked_path_uses_hard_cap(monkeypatch) -> None:
+    websocket = _FakeWebSocket()
+    provider_db = SimpleNamespace(id=42, provider_type="zoom", api_key="api-key")
+    provider = _StreamingZoomProvider()
+    acquire = AsyncMock(return_value="session-member-1")
+    release = AsyncMock()
+
+    async def hang(_websocket: object, _transcriber: object) -> None:
+        await asyncio.sleep(60)
+
+    monkeypatch.setattr(websocket_api, "get_sqlalchemy_engine", lambda: object())
+    monkeypatch.setattr(websocket_api, "Session", lambda _engine: _FakeSession())
+    monkeypatch.setattr(
+        websocket_api, "fetch_default_stt_provider", lambda _db_session: provider_db
+    )
+    monkeypatch.setattr(
+        websocket_api, "get_voice_provider", lambda _provider_db: provider
+    )
+    monkeypatch.setattr(websocket_api, "acquire_zoom_voice_session", acquire)
+    monkeypatch.setattr(websocket_api, "release_zoom_voice_session", release)
+    monkeypatch.setattr(websocket_api, "VOICE_DISABLE_STREAMING_STT", True)
+    monkeypatch.setattr(websocket_api, "handle_chunked_transcription", hang)
+    monkeypatch.setattr(websocket_api, "ZOOM_VOICE_SESSION_MAX_SECONDS", 0.01)
+
+    await websocket_api.websocket_transcribe(
+        cast(WebSocket, websocket),
+        _user=cast(User, SimpleNamespace(id="user-7")),
+    )
+
+    assert websocket.sent_json == [
+        {
+            "type": "error",
+            "message": websocket_api.ZOOM_STREAMING_SESSION_TIMEOUT_MESSAGE,
+        }
+    ]
+    acquire.assert_awaited_once_with(provider_id=42, user_id="user-7")
+    release.assert_awaited_once()
+    websocket.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_zoom_guards_apply_to_mixed_case_provider_type(monkeypatch) -> None:
+    websocket = _FakeWebSocket()
+    provider_db = SimpleNamespace(id=42, provider_type="Zoom", api_key="api-key")
+    release = AsyncMock()
+
+    async def raise_limit(*, provider_id: int, user_id: str) -> str:
+        _ = provider_id, user_id
+        raise websocket_api.ZoomVoiceSessionLimitExceeded(
+            websocket_api.ZOOM_VOICE_SESSION_LIMIT_MESSAGE
+        )
+
+    monkeypatch.setattr(websocket_api, "get_sqlalchemy_engine", lambda: object())
+    monkeypatch.setattr(websocket_api, "Session", lambda _engine: _FakeSession())
+    monkeypatch.setattr(
+        websocket_api, "fetch_default_stt_provider", lambda _db_session: provider_db
+    )
+    monkeypatch.setattr(
+        websocket_api, "get_voice_provider", lambda _provider_db: _FailingZoomProvider()
+    )
+    monkeypatch.setattr(websocket_api, "acquire_zoom_voice_session", raise_limit)
+    monkeypatch.setattr(websocket_api, "release_zoom_voice_session", release)
+
+    await websocket_api.websocket_transcribe(
+        cast(WebSocket, websocket),
+        _user=cast(User, SimpleNamespace(id="user-7")),
+    )
+
+    assert websocket.sent_json == [
+        {
+            "type": "error",
+            "message": websocket_api.ZOOM_VOICE_SESSION_LIMIT_MESSAGE,
+        }
+    ]
+
+
+class _HandshakeTimeoutZoomProvider(_FailingZoomProvider):
+    async def create_streaming_transcriber(self) -> None:
+        raise TimeoutError
+
+
+@pytest.mark.asyncio
+async def test_zoom_handshake_timeout_reports_streaming_failure(
+    monkeypatch,
+) -> None:
+    websocket = _FakeWebSocket()
+    provider_db = SimpleNamespace(id=42, provider_type="zoom", api_key="api-key")
+    acquire = AsyncMock(return_value="session-member-1")
+    release = AsyncMock()
+
+    monkeypatch.setattr(websocket_api, "get_sqlalchemy_engine", lambda: object())
+    monkeypatch.setattr(websocket_api, "Session", lambda _engine: _FakeSession())
+    monkeypatch.setattr(
+        websocket_api, "fetch_default_stt_provider", lambda _db_session: provider_db
+    )
+    monkeypatch.setattr(
+        websocket_api,
+        "get_voice_provider",
+        lambda _provider_db: _HandshakeTimeoutZoomProvider(),
+    )
+    monkeypatch.setattr(websocket_api, "acquire_zoom_voice_session", acquire)
+    monkeypatch.setattr(websocket_api, "release_zoom_voice_session", release)
+
+    await websocket_api.websocket_transcribe(
+        cast(WebSocket, websocket),
+        _user=cast(User, SimpleNamespace(id="user-7")),
+    )
+
+    assert websocket.sent_json == [{"type": "error", "message": "Streaming STT failed"}]
+    release.assert_awaited_once()
