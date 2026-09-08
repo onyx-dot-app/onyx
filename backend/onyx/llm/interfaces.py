@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from onyx.llm.model_response import ModelResponse, ModelResponseStream
 from onyx.llm.models import (
     LanguageModelInput,
+    LLMInputBudget,
     ReasoningEffort,
     ToolChoice,
     ToolChoiceOptions,  # noqa: F401  # re-exported: onyx.chat imports it from here
@@ -87,6 +88,11 @@ class LLM(abc.ABC):
     def config(self) -> LLMConfig:
         raise NotImplementedError
 
+    def prepare_messages(
+        self, prompt: LanguageModelInput, has_tools: bool
+    ) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
     def invoke(
         self,
         prompt: LanguageModelInput,
@@ -111,5 +117,6 @@ class LLM(abc.ABC):
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
+        input_budget: LLMInputBudget | None = None,
     ) -> Iterator[ModelResponseStream]:
         raise NotImplementedError

@@ -31,7 +31,7 @@ from onyx.llm.utils import (
 from onyx.llm.well_known_providers.constants import (
     PROVIDERS_WITH_SPECIAL_API_KEY_HANDLING,
 )
-from onyx.natural_language_processing.utils import get_tokenizer
+from onyx.natural_language_processing.utils import count_tokens, get_tokenizer
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 from onyx.utils.headers import build_llm_extra_headers
 from onyx.utils.logger import setup_logger
@@ -540,5 +540,7 @@ def get_llm_tokenizer_encode_func(llm: LLM) -> Callable[[str], list[int]]:
 
 
 def get_llm_token_counter(llm: LLM) -> Callable[[str], int]:
-    tokenizer_encode_func = get_llm_tokenizer_encode_func(llm)
-    return lambda text: len(tokenizer_encode_func(text))
+    tokenizer = get_tokenizer(
+        model_name=llm.config.model_name, provider_type=llm.config.model_provider
+    )
+    return lambda text: count_tokens(text, tokenizer)

@@ -27,6 +27,7 @@ from onyx.llm.model_response import (
     ModelResponseStream,
     StreamingChoice,
 )
+from onyx.llm.models import LLMInputBudget
 
 T = TypeVar("T")
 
@@ -298,6 +299,13 @@ class MockLLM(LLM, MockLLMController):
             max_input_tokens=1000000000,
         )
 
+    def prepare_messages(
+        self, prompt: LanguageModelInput, has_tools: bool
+    ) -> list[dict[str, Any]]:
+        del has_tools
+        messages = prompt if isinstance(prompt, list) else [prompt]
+        return [message.model_dump(exclude_none=True) for message in messages]
+
     def invoke(
         self,
         prompt: LanguageModelInput,
@@ -322,7 +330,9 @@ class MockLLM(LLM, MockLLMController):
         max_tokens: int | None = None,  # noqa: ARG002
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,  # noqa: ARG002
         user_identity: LLMUserIdentity | None = None,  # noqa: ARG002
+        input_budget: LLMInputBudget | None = None,
     ) -> Iterator[ModelResponseStream]:
+        del input_budget
         if not self.stream_controller:
             return
 

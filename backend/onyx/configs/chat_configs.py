@@ -2,6 +2,11 @@ import os
 
 NUM_RETURNED_HITS = 50
 
+# The shared request budget can reduce each result below this ceiling.
+MAX_TOOL_RESULT_TOKENS = int(os.environ.get("MAX_TOOL_RESULT_TOKENS") or "20000")
+if MAX_TOOL_RESULT_TOKENS <= 0:
+    raise ValueError("MAX_TOOL_RESULT_TOKENS must be a positive integer")
+
 # May be less depending on model
 MAX_CHUNKS_FED_TO_CHAT = int(os.environ.get("MAX_CHUNKS_FED_TO_CHAT") or 25)
 
