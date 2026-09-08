@@ -152,3 +152,29 @@ def test_select_sections_for_expansion_passes_timeout_on_success(
 
     assert selected == sections
     assert invoke.call_args.kwargs["timeout_override"] == SECONDARY_LLM_FLOW_TIMEOUT_S
+
+
+@patch("onyx.tools.tool_implementations.search.search_utils._retrieve_adjacent_chunks")
+@patch("onyx.tools.tool_implementations.search.search_utils.classify_section_relevance")
+def test_not_relevant_sections_are_kept(
+    classify: MagicMock, adjacent: MagicMock
+) -> None:
+    """The classifier reads a truncated section, so letting it delete results
+    would change recall for every search in the product."""
+    from onyx.tools.tool_implementations.search.search_utils import (
+        expand_section_with_context,
+    )
+
+    classify.return_value = ContextExpansionType.NOT_RELEVANT
+    adjacent.return_value = ([], [])
+    section = _make_section()
+
+    result = expand_section_with_context(
+        section=section,
+        user_query="anything",
+        llm=MagicMock(spec=LLM),
+        document_index=MagicMock(),
+    )
+
+    assert result.section is section
+    assert result.classification is ContextExpansionType.NOT_RELEVANT

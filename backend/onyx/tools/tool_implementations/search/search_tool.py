@@ -42,13 +42,21 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.chat.emitter import Emitter
+from onyx.coding_agent.mock_tools import CODING_AGENT_TOOL_NAME
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
-from onyx.configs.constants import DocumentSource, FederatedConnectorSource
+from onyx.configs.constants import (
+    CODE_FILE_BRANCH_KEY,
+    CODE_FILE_COMMIT_SHA_KEY,
+    CODE_FILE_REPO_KEY,
+    DocumentSource,
+    FederatedConnectorSource,
+)
 from onyx.context.search.federated.slack_search import slack_retrieval
 from onyx.context.search.models import (
     BaseFilters,
     ChunkIndexRequest,
     ChunkSearchRequest,
+    ContextExpansionType,
     IndexFilters,
     InferenceChunk,
     InferenceSection,
@@ -123,8 +131,10 @@ from onyx.tools.tool_implementations.search.constants import (
     SELECTION_TOKEN_BUDGET_MULTIPLIER,
 )
 from onyx.tools.tool_implementations.search.search_utils import (
+    SectionExpansionResult,
     expand_section_with_context,
     merge_overlapping_sections,
+    metadata_values,
     weighted_reciprocal_rank_fusion,
 )
 from onyx.tools.tool_implementations.utils import (
@@ -165,6 +175,47 @@ def _build_scope_note(
     return (
         f"(This internal search covered only: {searched}. Queries run: {queries_str}. "
         "Call internal_search again with different query terms to keep searching.)"
+    )
+
+
+def _build_repo_analysis_note(escalation_chunks: list[InferenceChunk]) -> str:
+    """LLM-facing hint listing code files whose question likely needs
+    repository-wide analysis, with the repo pointer needed to escalate.
+
+    Empty unless the escalation can actually happen: the coding agent
+    currently acts on GitHub repositories only, so with none listed the note
+    is tokens spent on advice the LLM cannot take.
+    """
+    github_chunks = [
+        chunk
+        for chunk in escalation_chunks
+        if chunk.source_type == DocumentSource.GITHUB
+    ]
+    if not github_chunks:
+        return ""
+
+    lines: list[str] = []
+    for chunk in github_chunks:
+        pointer = f"- file: {chunk.semantic_identifier}"
+        pointer += f", platform: {chunk.source_type.value}"
+        for key in (
+            CODE_FILE_REPO_KEY,
+            CODE_FILE_BRANCH_KEY,
+            CODE_FILE_COMMIT_SHA_KEY,
+        ):
+            values = metadata_values(chunk.metadata, key)
+            if values:
+                pointer += f", {key}: {values[0]}"
+        lines.append(pointer)
+
+    return (
+        "\n\nNOTE: These code files are relevant, but fully answering likely "
+        "requires repository-wide analysis (callers, cross-file flow, "
+        "configuration):\n"
+        + "\n".join(lines)
+        + f"\nConsider calling `{CODING_AGENT_TOOL_NAME}` with the repository "
+        "listed above and the user's question. Otherwise answer from the "
+        "retrieved code and say what could not be verified."
     )
 
 
@@ -297,6 +348,9 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # Whether to infer source and time filters from the
         # query. When False, only user/persona-selected filters are applied.
         auto_detect_filters: bool = True,
+        # Whether this persona also has the coding agent tool. Gates the
+        # repo-analysis escalation note, which is useless without it.
+        coding_agent_available: bool = False,
     ) -> None:
         super().__init__(emitter=emitter)
 
@@ -311,6 +365,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self.slack_context = slack_context
         self.enable_slack_search = enable_slack_search
         self.auto_detect_filters = auto_detect_filters
+        self.coding_agent_available = coding_agent_available
 
         self._search_cycles: list[SearchCycle] = []
         self._cached_expansion: tuple[str | None, list[str]] | None = None
@@ -1144,24 +1199,25 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             llm: LLM,
             document_index: DocumentIndex,
             expand_override: bool,
-        ) -> InferenceSection:
+        ) -> SectionExpansionResult:
             """Wrapper that handles exceptions and returns original section on error."""
             try:
-                expanded_section = expand_section_with_context(
+                return expand_section_with_context(
                     section=section,
                     user_query=user_query,
                     llm=llm,
                     document_index=document_index,
                     expand_override=expand_override,
                 )
-                # Return expanded section if not None, otherwise original
-                return expanded_section if expanded_section is not None else section
             except Exception as e:
                 logger.warning(
                     "Error processing section context expansion: %s. Using original section.",
                     e,
                 )
-                return section
+                return SectionExpansionResult(
+                    section=section,
+                    classification=ContextExpansionType.MAIN_SECTION_ONLY,
+                )
 
         # Build parallel function calls for all sections
         expansion_functions: list[tuple[Callable, tuple]] = [
@@ -1182,7 +1238,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         document_expansion_start_time = time.time()
 
         # Run all expansions in parallel
-        expanded_sections = run_functions_tuples_in_parallel(expansion_functions)
+        expansion_results: list[SectionExpansionResult] = (
+            run_functions_tuples_in_parallel(expansion_functions)
+        )
+        expanded_sections = [result.section for result in expansion_results]
 
         # End timing for document expansion
         document_expansion_elapsed = time.time() - document_expansion_start_time
@@ -1199,13 +1258,46 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # This prevents duplicate content and reduces token usage
         merged_sections = merge_overlapping_sections(expanded_sections)
 
+        # Expansion can grow a selected section to MAX_FULL_FILE_CHUNKS
+        # chunks, so re-trim to the same budget the selection ran under —
+        # the converter's `limit` bounds section count, not tokens.
+        merged_sections = _trim_sections_by_tokens(
+            sections=merged_sections,
+            max_tokens=max_tokens_for_selection,
+            token_counter=token_counter,
+        )
+
+        # What the LLM actually receives. Sliced here rather than inside the
+        # converter so the note below can only cite files that survived.
+        llm_sections = merged_sections[: override_kwargs.max_llm_chunks]
+        visible_document_ids = {
+            section.center_chunk.document_id for section in llm_sections
+        }
+
+        # Code-aware expansion can classify a section as needing repo-wide
+        # analysis; surface those as an escalation hint for the main LLM
+        # loop. Carried inside the JSON payload's `note` field — appending
+        # text after the payload would corrupt it for JSON consumers.
+        escalation_chunks: list[InferenceChunk] = [
+            result.section.center_chunk
+            for result in expansion_results
+            if result.classification == ContextExpansionType.REPO_ANALYSIS
+            and result.section.center_chunk.document_id in visible_document_ids
+        ]
+        # Only worth its tokens when the coding agent is actually on this
+        # persona; without it the LLM cannot act on the escalation.
+        combined_note = (scope_note or "") + (
+            _build_repo_analysis_note(escalation_chunks)
+            if escalation_chunks and self.coding_agent_available
+            else ""
+        )
+
         docs_str, citation_mapping = convert_inference_sections_to_llm_string(
-            top_sections=merged_sections,
+            top_sections=llm_sections,
             citation_start=override_kwargs.starting_citation_num,
-            limit=override_kwargs.max_llm_chunks,
             include_document_id=False,
             include_link=override_kwargs.include_link,
-            note=scope_note or None,
+            note=combined_note or None,
         )
 
         # End overall timing
