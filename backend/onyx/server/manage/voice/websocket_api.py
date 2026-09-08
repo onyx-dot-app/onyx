@@ -262,13 +262,19 @@ class StreamingTranscriptionFailed(Exception):
 
 
 async def _receive_client_message(
-    websocket: WebSocket,
+    websocket: WebSocket, deadline: float | None = None
 ) -> MutableMapping[str, Any] | None:
-    """Receive one client message, or None when the client goes idle."""
+    """Receive one client message.
+
+    Returns None when the client goes idle, or when `deadline` (loop time) has
+    passed. Callers that run without a background task pass the session
+    deadline here.
+    """
+    timeout = float(WS_CLIENT_IDLE_TIMEOUT_SECONDS)
+    if deadline is not None:
+        timeout = min(timeout, deadline - asyncio.get_running_loop().time())
     try:
-        return await asyncio.wait_for(
-            websocket.receive(), timeout=WS_CLIENT_IDLE_TIMEOUT_SECONDS
-        )
+        return await asyncio.wait_for(websocket.receive(), timeout=max(timeout, 0.0))
     except asyncio.TimeoutError:
         return None
 
@@ -569,12 +575,14 @@ async def handle_chunked_transcription(
         )
         return
 
+    deadline = asyncio.get_running_loop().time() + WS_SESSION_TIMEOUT_SECONDS
     while True:
-        message = await _receive_client_message(websocket)
+        message = await _receive_client_message(websocket, deadline)
         if message is None:
             logger.warning(
-                "Chunked transcription: no client message for %ss, ending session",
+                "Chunked transcription: client idle for %ss or session over %ss, ending session",
                 WS_CLIENT_IDLE_TIMEOUT_SECONDS,
+                WS_SESSION_TIMEOUT_SECONDS,
             )
             break
         msg_type = message.get("type", "unknown")

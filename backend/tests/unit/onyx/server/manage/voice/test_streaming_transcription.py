@@ -3,6 +3,7 @@ from typing import Any, cast
 
 import pytest
 
+from onyx.server.manage.voice import websocket_api
 from onyx.server.manage.voice.websocket_api import (
     StreamingTranscriptionFailed,
     handle_chunked_transcription,
@@ -131,6 +132,14 @@ class FailOnCloseTranscriber(ErrorResultTranscriber):
         return "partial"
 
 
+class ChattyWebSocket(FakeWebSocket):
+    """Client that keeps sending control messages and never ends."""
+
+    async def receive(self) -> Any:
+        await asyncio.sleep(0.001)
+        return {"text": '{"type": "keepalive"}'}
+
+
 class FailAfterAudioTranscriber(ErrorResultTranscriber):
     """Provider that fails only once it has consumed audio."""
 
@@ -201,11 +210,12 @@ async def test_streaming_handler_raises_on_provider_failure() -> None:
     """The caller decides between fallback and an error, so the socket stays open."""
     websocket = FakeWebSocket()
 
-    with pytest.raises(StreamingTranscriptionFailed) as failure:
-        await handle_streaming_transcription(
-            cast(Any, websocket),
-            cast(Any, ErrorResultTranscriber()),
-        )
+    async with asyncio.timeout(5):
+        with pytest.raises(StreamingTranscriptionFailed) as failure:
+            await handle_streaming_transcription(
+                cast(Any, websocket),
+                cast(Any, ErrorResultTranscriber()),
+            )
 
     assert str(failure.value) == STREAM_FAILED_ERROR
     assert websocket.sent_json == []
@@ -293,3 +303,17 @@ async def test_failure_queued_during_close_still_triggers_fallback() -> None:
     assert failure.value.buffered_audio == b"\x01\x02"
     assert failure.value.client_ended is True
     assert websocket.sent_json == []
+
+
+@pytest.mark.asyncio
+async def test_chunked_handler_enforces_session_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Frequent control messages must not keep a chunked session open forever."""
+    monkeypatch.setattr(websocket_api, "WS_SESSION_TIMEOUT_SECONDS", 0.05)
+    websocket = ChattyWebSocket()
+
+    async with asyncio.timeout(5):
+        await handle_chunked_transcription(
+            cast(Any, websocket), cast(Any, RecordingChunkedTranscriber())
+        )
