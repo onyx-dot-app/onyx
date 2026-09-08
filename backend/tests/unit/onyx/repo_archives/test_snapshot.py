@@ -9,13 +9,19 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.repo_archives import snapshot
 from onyx.repo_archives.models import RepoArchive, RepoRevision
 from onyx.repo_archives.snapshot import (
     RepoSnapshotError,
     get_or_create_snapshot,
+    snapshot_or_none,
 )
 from tests.utils.repo_archives import (
+    TEST_REPO,
+    FakeArchiveProvider,
+    isolate_repo_archive_caches,
     make_repo_tarball,
     revision,
 )
@@ -299,3 +305,60 @@ def test_read_refuses_symlink_escaping_root_but_allows_internal(
     assert snap.read_file("alias.md", max_size_bytes=1_000_000) == FILES["README.md"]
     # Walks report only regular files; symlinks are never yielded.
     assert "alias.md" not in dict(snap.walk_files())
+
+
+# --- snapshot_or_none ----------------------------------------------------------------
+
+
+def _fake_provider(sha: str, archive: bytes) -> FakeArchiveProvider:
+    return FakeArchiveProvider(archives={sha: archive}, refs={"main": sha})
+
+
+def test_snapshot_or_none_fetches_once_and_serves_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    isolate_repo_archive_caches(monkeypatch, tmp_path)
+    sha = _rev("or-none-ok").commit_sha
+    provider = _fake_provider(sha, make_repo_tarball(FILES))
+
+    snap = snapshot_or_none(
+        provider, TEST_REPO, "main", max_size_bytes=1_000_000, timeout=30
+    )
+
+    assert snap is not None
+    assert dict(snap.walk_files()) == {path: len(c) for path, c in FILES.items()}
+    assert provider.downloads == [sha]
+
+
+def test_snapshot_or_none_returns_none_without_a_resolved_sha(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    isolate_repo_archive_caches(monkeypatch, tmp_path)
+    provider = FakeArchiveProvider(
+        archives={}, resolve_error=OnyxError(OnyxErrorCode.RATE_LIMITED)
+    )
+
+    assert (
+        snapshot_or_none(
+            provider, TEST_REPO, "main", max_size_bytes=1_000_000, timeout=30
+        )
+        is None
+    )
+    assert provider.downloads == []
+
+
+def test_snapshot_or_none_swallows_extraction_failures(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    isolate_repo_archive_caches(monkeypatch, tmp_path)
+    wrapper = tarfile.TarInfo(name="org-repo-abc1234")
+    wrapper.type = tarfile.DIRTYPE
+    sha = _rev("or-none-bad").commit_sha
+    provider = _fake_provider(sha, make_repo_tarball({}, extra_members=[wrapper]))
+
+    assert (
+        snapshot_or_none(
+            provider, TEST_REPO, "main", max_size_bytes=1_000_000, timeout=30
+        )
+        is None
+    )

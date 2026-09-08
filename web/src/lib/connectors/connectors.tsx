@@ -355,7 +355,9 @@ export const connectorConfigs: Record<
         label: "Include Code Files?",
         name: "include_code_files",
         description:
-          "Index source code files from repositories so they can be searched",
+          "Index source code files from repositories so they can be searched. " +
+          "On GitHub Enterprise each file is fetched individually, which can " +
+          "exhaust the API rate limit on large repositories.",
         optional: true,
       },
     ],

@@ -16,9 +16,14 @@ from pydantic import BaseModel
 from typing_extensions import override
 
 from onyx.access.models import ExternalAccess
-from onyx.configs.app_configs import GITHUB_CONNECTOR_BASE_URL
+from onyx.configs.app_configs import (
+    GITHUB_CONNECTOR_BASE_URL,
+    REPO_ARCHIVE_FETCH_TIMEOUT,
+    REPO_ARCHIVE_MAX_BYTES,
+)
 from onyx.configs.constants import (
     CODE_FILE_BRANCH_KEY,
+    CODE_FILE_COMMIT_SHA_KEY,
     CODE_FILE_LANGUAGE_KEY,
     CODE_FILE_METADATA_TYPE,
     CODE_FILE_PATH_KEY,
@@ -73,6 +78,13 @@ from onyx.file_processing.extract_file_text import (
     file_io_to_text,
     get_file_ext,
     is_text_file,
+)
+from onyx.repo_archives.github import GitHubArchiveProvider
+from onyx.repo_archives.models import RepoRef
+from onyx.repo_archives.snapshot import (
+    RepoSnapshot,
+    RepoSnapshotError,
+    snapshot_or_none,
 )
 from onyx.utils.logger import setup_logger
 
@@ -576,6 +588,7 @@ def _convert_file_to_document(
     content_text: str,
     repo_external_access: ExternalAccess | None,
     branch: str,
+    commit_sha: str | None = None,
 ) -> Document:
     repo_full_name = repo.full_name
     parts = repo_full_name.split("/", 1)
@@ -607,6 +620,11 @@ def _convert_file_to_document(
         "file_extension": get_file_ext(path),
         CODE_FILE_BRANCH_KEY: branch,
     }
+    if commit_sha:
+        # The exact revision indexed; lets downstream consumers (e.g. the
+        # coding agent) pin their analysis to it.
+        metadata[CODE_FILE_COMMIT_SHA_KEY] = commit_sha
+
     # Source-code files become CodeSections so they chunk at syntactic
     # boundaries; everything else stays prose.
     language = _code_language(path)
@@ -714,6 +732,15 @@ class GithubConnector(
         # Branch to index files from; None means each repo's default branch.
         self.branch = (branch or "").strip() or None
         self.github_client: Github | None = None
+        self._github_token: str | None = None
+        # Resolved API base URL: the credential's, else the env var. Set in
+        # load_credentials; None means github.com.
+        self._base_url: str | None = None
+        # Per-invocation snapshot cache: (repo, branch) -> snapshot, or None
+        # when it is unavailable so a batch doesn't retry per file. The
+        # snapshot itself is keyed by the resolved head SHA, so a branch that
+        # advances never serves stale content under the new revision.
+        self._snapshot_cache: dict[tuple[str, str], RepoSnapshot | None] = {}
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         # Prefer the per-credential URL so one deployment can index github.com
@@ -729,7 +756,10 @@ class GithubConnector(
         base_url: str | None = credential_base_url or normalize_github_base_url(
             GITHUB_CONNECTOR_BASE_URL
         )
+        self._base_url = base_url
 
+        # Kept for the one-request tarball download that serves the FILES stage.
+        self._github_token = credentials["github_access_token"]
         # defaults to 30 items per page, can be set to as high as 100
         self.github_client = (
             Github(
@@ -741,6 +771,35 @@ class GithubConnector(
             else Github(credentials["github_access_token"], per_page=ITEMS_PER_PAGE)
         )
         return None
+
+    def _ensure_snapshot(self, repo: Repository.Repository) -> RepoSnapshot | None:
+        """Local snapshot of the repo's files at the branch head, served by
+        ONE archive fetch, or None when unavailable (callers fall back to the
+        per-file content API). GitHub Enterprise deployments use the API path
+        — the archive provider only speaks to github.com."""
+        # A doc-only connector fetches a handful of markdown files. Trading
+        # those for a whole-repo download would be a straight regression.
+        # The base URL can come from the credential as well as the env var, so
+        # check the resolved one: fetching a github.com archive for a repo on
+        # an enterprise host would send that host's PAT to github.com.
+        if not self.include_code_files or self._base_url:
+            return None
+        branch = self._resolve_branch(repo)
+        cache_key = (repo.full_name, branch)
+        if cache_key in self._snapshot_cache:
+            return self._snapshot_cache[cache_key]
+
+        owner, _, name = repo.full_name.partition("/")
+        repo_ref = RepoRef(provider="github", host="github.com", owner=owner, name=name)
+        snapshot = snapshot_or_none(
+            GitHubArchiveProvider.from_token(self._github_token),
+            repo_ref,
+            branch,
+            max_size_bytes=REPO_ARCHIVE_MAX_BYTES,
+            timeout=REPO_ARCHIVE_FETCH_TIMEOUT,
+        )
+        self._snapshot_cache[cache_key] = snapshot
+        return snapshot
 
     def get_github_repo(
         self, github_client: Github, attempt_num: int = 0
@@ -842,7 +901,7 @@ class GithubConnector(
         return self.branch or repo.default_branch
 
     def _list_indexable_files(
-        self, repo: Repository.Repository, attempt_num: int = 0
+        self, repo: Repository.Repository, is_slim: bool, attempt_num: int = 0
     ) -> tuple[list[str], bool]:
         """Resolve the configured (or default) branch tree and return indexable file paths.
 
@@ -855,6 +914,37 @@ class GithubConnector(
                 "Re-tried listing repo files too many times. "
                 "Something is going wrong with fetching objects from Github"
             )
+
+        # Snapshot-first: one tarball request lists (and later serves) every
+        # file with zero per-file API calls, so large repos cannot rate-limit
+        # the file stage. Also immune to GitHub's tree truncation. Slim runs
+        # want paths and nothing else, which one tree call already gives, and
+        # they run far more often than indexing.
+        snapshot = None if is_slim else self._ensure_snapshot(repo)
+        if snapshot is not None:
+            try:
+                paths = sorted(
+                    path
+                    for path, size in snapshot.walk_files()
+                    if _is_indexable_path(
+                        path,
+                        size,
+                        include_docs=self.include_files,
+                        include_code_files=self.include_code_files,
+                    )
+                )
+                return paths, False
+            except (RepoSnapshotError, OSError):
+                # A concurrent prune can remove the snapshot mid-walk. The
+                # tree API listing below substitutes, so fall through. Narrow
+                # on purpose: a bug in the filter must surface instead of
+                # silently reverting to the rate-limiting path.
+                logger.warning(
+                    "Listing files from the snapshot of %s failed; "
+                    "falling back to the git tree API",
+                    repo.full_name,
+                    exc_info=True,
+                )
 
         assert self.github_client is not None  # for type-checking
         try:
@@ -881,7 +971,7 @@ class GithubConnector(
             return paths, truncated
         except RateLimitExceededException:
             sleep_after_rate_limit_exception(self.github_client)
-            return self._list_indexable_files(repo, attempt_num + 1)
+            return self._list_indexable_files(repo, is_slim, attempt_num + 1)
         except GithubException as e:
             if e.status == 404 and self.branch:
                 raise ConnectorValidationError(
@@ -976,7 +1066,7 @@ class GithubConnector(
                 checkpoint.file_paths_include_code = self.include_code_files
             else:
                 logger.info("Listing files for repo: %s", repo.name)
-                paths, truncated = self._list_indexable_files(repo)
+                paths, truncated = self._list_indexable_files(repo, is_slim)
                 checkpoint.file_paths = paths
                 checkpoint.file_paths_branch = branch
                 checkpoint.file_paths_include_code = self.include_code_files
@@ -1002,6 +1092,14 @@ class GithubConnector(
         batch = file_paths[page * FILE_BATCH_SIZE : (page + 1) * FILE_BATCH_SIZE]
         checkpoint.curr_page += 1
 
+        # The local snapshot serves file contents without per-file API calls.
+        # A resumed checkpoint on a different worker re-downloads the tarball
+        # once; if that fails, each file falls back to the content API.
+        snapshot = self._ensure_snapshot(repo) if batch and not is_slim else None
+        snapshot_commit_sha = (
+            snapshot.revision.commit_sha if snapshot is not None else None
+        )
+
         for path in batch:
             html_url = f"{repo.html_url}/blob/{branch}/{path}"
             if is_slim:
@@ -1015,7 +1113,36 @@ class GithubConnector(
                 )
                 continue
             try:
-                raw = self._fetch_file_content(repo, path)
+                raw: bytes | None = None
+                # Only snapshot-sourced content may claim the snapshot's
+                # revision; the content API serves the branch head.
+                commit_sha: str | None = None
+                if snapshot is not None:
+                    try:
+                        raw = snapshot.read_file(path, GITHUB_MAX_FILE_SIZE_BYTES)
+                        commit_sha = snapshot_commit_sha
+                    except (RepoSnapshotError, OSError) as e:
+                        if snapshot.is_available:
+                            logger.warning(
+                                "Reading %s from snapshot failed (%s); "
+                                "falling back to the content API",
+                                path,
+                                e,
+                            )
+                        else:
+                            # The snapshot went away mid-batch, so every later
+                            # read fails the same way. Decide once and say so:
+                            # the rest of this batch costs an API call a file.
+                            logger.warning(
+                                "Snapshot of %s is gone (%s); the rest of this "
+                                "batch falls back to the content API",
+                                repo.full_name,
+                                e,
+                            )
+                            snapshot = None
+                if raw is None:
+                    raw = self._fetch_file_content(repo, path)
+                    commit_sha = None
                 content_text = _decode_file_content(raw)
                 if content_text is None:
                     yield ConnectorFailure(
@@ -1027,7 +1154,12 @@ class GithubConnector(
                     )
                     continue
                 yield _convert_file_to_document(
-                    repo, path, content_text, repo_external_access, branch
+                    repo,
+                    path,
+                    content_text,
+                    repo_external_access,
+                    branch,
+                    commit_sha=commit_sha,
                 )
             except Exception as e:
                 error_msg = f"Error converting file {path} to document: {e}"
@@ -1442,9 +1574,6 @@ class GithubConnector(
                     validation_errors = []
 
                     for repo_name in repo_names:
-                        if not repo_name:
-                            continue
-
                         try:
                             test_repo = self.github_client.get_repo(
                                 f"{self.repo_owner}/{repo_name}"
