@@ -73,13 +73,13 @@ class JiraServiceManagementConnector(JiraConnector):
 
     @override
     def validate_connector_settings(self) -> None:
-        super().validate_connector_settings()
-
-        # When auto-scoping (no explicit project or JQL), require at least one
-        # service desk project so the connector fails validation instead of
-        # silently indexing nothing. super() has already confirmed the client
-        # and Jira API access at this point.
         if not self.jql_query and not self.jira_project:
+            # Auto-scoping: a single project listing both proves Jira API access
+            # (via the jira_client property, which raises if credentials are
+            # missing) and confirms at least one service desk project exists.
+            # Bypass the base validator here to avoid a second, redundant
+            # project-list request. The base is still used for the explicit
+            # project / JQL cases below.
             if not self._get_service_desk_project_keys():
                 raise ConnectorValidationError(
                     "No Jira Service Management (service desk) projects were "
@@ -87,6 +87,9 @@ class JiraServiceManagementConnector(JiraConnector):
                     "access to at least one service desk project, or configure a "
                     "specific project key or JQL query."
                 )
+            return
+
+        super().validate_connector_settings()
 
     @override
     def _get_jql_query(
