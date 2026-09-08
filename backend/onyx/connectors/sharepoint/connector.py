@@ -318,11 +318,12 @@ def _parse_sharepoint_datetime(value: str | datetime | None) -> datetime | None:
     """Parse a SharePoint Graph datetime that may be an ISO string or datetime."""
     if not value:
         return None
-    parsed = (
-        datetime.fromisoformat(value.replace("Z", "+00:00"))
-        if isinstance(value, str)
-        else value
-    )
+    if isinstance(value, str):
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    elif isinstance(value, datetime):
+        parsed = value
+    else:
+        raise TypeError(f"Unsupported Graph datetime value: {value!r}")
     # Graph timestamps are UTC. A naive value would not compare with aware bounds.
     if not parsed.tzinfo:
         return parsed.replace(tzinfo=timezone.utc)
@@ -1049,16 +1050,8 @@ def _convert_driveitem_to_document_with_permissions(
         source=DocumentSource.SHAREPOINT,
         semantic_identifier=driveitem.name,
         external_access=external_access,
-        doc_created_at=(
-            driveitem.created_datetime.replace(tzinfo=timezone.utc)
-            if driveitem.created_datetime
-            else None
-        ),
-        doc_updated_at=(
-            driveitem.last_modified_datetime.replace(tzinfo=timezone.utc)
-            if driveitem.last_modified_datetime
-            else None
-        ),
+        doc_created_at=driveitem.created_datetime,
+        doc_updated_at=driveitem.last_modified_datetime,
         primary_owners=[
             BasicExpertInfo(
                 display_name=driveitem.last_modified_by_display_name or "",
@@ -1249,11 +1242,7 @@ def _convert_driveitem_to_slim_document(
         id=driveitem.id,
         external_access=external_access,
         parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
-        doc_created_at=(
-            driveitem.created_datetime.replace(tzinfo=timezone.utc)
-            if driveitem.created_datetime
-            else None
-        ),
+        doc_created_at=driveitem.created_datetime,
     )
 
 
@@ -2414,13 +2403,7 @@ class SharepointConnector(
                                     id=driveitem.id,
                                     external_access=ExternalAccess.empty(),
                                     parent_hierarchy_raw_node_id=parent_hierarchy_url,
-                                    doc_created_at=(
-                                        driveitem.created_datetime.replace(
-                                            tzinfo=timezone.utc
-                                        )
-                                        if driveitem.created_datetime
-                                        else None
-                                    ),
+                                    doc_created_at=driveitem.created_datetime,
                                 )
                             )
                     except Exception as e:
