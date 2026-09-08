@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import EnabledCount from "./EnabledCount";
+import EnabledCount from "@/lib/tools/components/EnabledCount";
 
 const meta: Meta<typeof EnabledCount> = {
   title: "tools/EnabledCount",

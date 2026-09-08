@@ -19,7 +19,7 @@ import {
   MCPAuthenticationPerformer,
   ToolSnapshot,
 } from "@/lib/tools/types";
-import EnabledCount from "./EnabledCount";
+import EnabledCount from "@/lib/tools/components/EnabledCount";
 
 export interface MCPServer {
   id: number;
