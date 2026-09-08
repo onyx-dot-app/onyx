@@ -47,8 +47,7 @@ func checkRef(ref string) error {
 // releaseVersionPattern matches a release version as a user would type it,
 // with or without the conventional "v" prefix. Image tags that are not git
 // refs (beta, nightly, locally built tags) deliberately don't match: they are
-// pullable but can't be looked up in the repo. A -dev twin is matched through
-// its plain tag (see SplitDevSuffix).
+// pullable but can't be looked up in the repo.
 var releaseVersionPattern = regexp.MustCompile(`^v?\d+\.\d+\.\d+$`)
 
 // devSuffix marks the -dev twin of an image tag. CI publishes every tag set
@@ -76,11 +75,15 @@ func SplitDevSuffix(tag string) (base string, dev bool) {
 
 // NormalizeVersionTag adds the conventional "v" prefix to a bare release
 // version ("4.4.6" → "v4.4.6", "4.4.6-dev" → "v4.4.6-dev") and reports
-// whether the result is a release version, i.e. one whose existence can be
-// checked with RefExists at ConfigRef(tag).
+// whether the result can be checked with RefExists at ConfigRef(tag). That
+// holds for release versions and for every -dev twin SplitDevSuffix
+// recognizes: a twin's config ref is its plain tag, so a pre-release twin
+// (v4.7.0-beta.1-dev) is checked even though a bare pre-release is not.
 func NormalizeVersionTag(tag string) (string, bool) {
 	base, dev := SplitDevSuffix(tag)
-	if !releaseVersionPattern.MatchString(base) {
+	checkable := releaseVersionPattern.MatchString(base) ||
+		(dev && releaseShapedPattern.MatchString(base))
+	if !checkable {
 		return tag, false
 	}
 	if !strings.HasPrefix(base, "v") {

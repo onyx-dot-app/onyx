@@ -259,11 +259,17 @@ func TestNormalizeVersionTag(t *testing.T) {
 		{"edge", "edge", false},
 		{"latest", "latest", false},
 		{"main", "main", false},
-		// A -dev twin keeps its suffix and is checkable through its plain tag.
+		// A -dev twin keeps its suffix and is checkable through its plain tag,
+		// pre-release twins included.
 		{"v4.4.6-dev", "v4.4.6-dev", true},
 		{"4.4.6-dev", "v4.4.6-dev", true},
-		{"v4.7.0-cloud.3-dev", "v4.7.0-cloud.3-dev", false},
+		{"v4.7.0-cloud.3-dev", "v4.7.0-cloud.3-dev", true},
+		{"4.7.0-beta.1-dev", "v4.7.0-beta.1-dev", true},
+		{"edge-dev", "edge-dev", false},
 		{"sandbox-dev", "sandbox-dev", false},
+		// A bare pre-release is pullable but not looked up (hand-built tags
+		// share its shape).
+		{"v4.7.0-cloud.3", "v4.7.0-cloud.3", false},
 		{"beta", "beta", false},
 		{"v4.4", "v4.4", false},
 	}

@@ -708,36 +708,53 @@ func TestInstallAcceptsHandBuiltImageTag(t *testing.T) {
 // A -dev twin has no git ref of its own; it is verified through the release
 // it was built from, and kept as the image tag.
 func TestInstallAcceptsDevTwinOfKnownVersion(t *testing.T) {
-	isolateEnv(t)
-	shimDockerOnPath(t)
-	root := t.TempDir()
-	deps := testDeps(t, &fakeRunner{handler: healthyDockerHandler}, refServer(t, "v4.0.0"))
-	if err := RunInstall(context.Background(), deps, Options{
-		NoPrompt: true, Tag: "4.0.0-dev", Dir: root, NoWait: true,
-	}); err != nil {
-		t.Fatalf("-dev twin of an existing release must be accepted: %v\noutput:\n%s", err, outBuf(deps).String())
+	cases := []struct {
+		tag  string
+		ref  string
+		want string
+	}{
+		{"4.0.0-dev", "v4.0.0", "v4.0.0-dev"},
+		{"v4.7.0-cloud.3-dev", "v4.7.0-cloud.3", "v4.7.0-cloud.3-dev"},
 	}
-	env, _ := os.ReadFile(filepath.Join(root, "deployment", ".env"))
-	if got := Var(string(env), "IMAGE_TAG"); got != "v4.0.0-dev" {
-		t.Errorf("IMAGE_TAG = %q, want the v-prefixed -dev image tag", got)
+	for _, c := range cases {
+		t.Run(c.tag, func(t *testing.T) {
+			isolateEnv(t)
+			shimDockerOnPath(t)
+			root := t.TempDir()
+			deps := testDeps(t, &fakeRunner{handler: healthyDockerHandler}, refServer(t, c.ref))
+			if err := RunInstall(context.Background(), deps, Options{
+				NoPrompt: true, Tag: c.tag, Dir: root, NoWait: true,
+			}); err != nil {
+				t.Fatalf("-dev twin of an existing release must be accepted: %v\noutput:\n%s", err, outBuf(deps).String())
+			}
+			env, _ := os.ReadFile(filepath.Join(root, "deployment", ".env"))
+			if got := Var(string(env), "IMAGE_TAG"); got != c.want {
+				t.Errorf("IMAGE_TAG = %q, want the v-prefixed -dev image tag %q", got, c.want)
+			}
+		})
 	}
 }
 
 // A -dev twin can only exist when its release does, so a typo in the version
-// part fails as early as it would without the suffix.
+// part fails as early as it would without the suffix. Pre-release twins are
+// checked the same way: their config ref is the plain pre-release tag.
 func TestInstallRejectsDevTwinOfUnknownVersion(t *testing.T) {
-	isolateEnv(t)
-	shimDockerOnPath(t)
-	root := t.TempDir()
-	deps := testDeps(t, &fakeRunner{handler: healthyDockerHandler}, refServer(t))
-	err := RunInstall(context.Background(), deps, Options{
-		NoPrompt: true, Tag: "v9.9.9-dev", Dir: root, NoWait: true,
-	})
-	if err == nil || !strings.Contains(err.Error(), "not found") {
-		t.Fatalf("err = %v, want unknown-version rejection", err)
-	}
-	if _, statErr := os.Stat(filepath.Join(root, "deployment", ".env")); !os.IsNotExist(statErr) {
-		t.Error("rejected install must not create .env")
+	for _, tag := range []string{"v9.9.9-dev", "v4.7.0-cloud.999-dev"} {
+		t.Run(tag, func(t *testing.T) {
+			isolateEnv(t)
+			shimDockerOnPath(t)
+			root := t.TempDir()
+			deps := testDeps(t, &fakeRunner{handler: healthyDockerHandler}, refServer(t, "v4.7.0-cloud.3"))
+			err := RunInstall(context.Background(), deps, Options{
+				NoPrompt: true, Tag: tag, Dir: root, NoWait: true,
+			})
+			if err == nil || !strings.Contains(err.Error(), "not found") {
+				t.Fatalf("err = %v, want unknown-version rejection", err)
+			}
+			if _, statErr := os.Stat(filepath.Join(root, "deployment", ".env")); !os.IsNotExist(statErr) {
+				t.Error("rejected install must not create .env")
+			}
+		})
 	}
 }
 
