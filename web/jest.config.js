@@ -180,6 +180,7 @@ module.exports = {
         "**/src/refresh-pages/**/*.test.ts",
         "**/src/sections/**/*.test.ts",
         "**/src/components/**/*.test.ts",
+        "**/src/views/**/*.test.ts",
         "**/lib/opal/**/*.test.ts",
         // Add more patterns here as you add more unit tests
       ],

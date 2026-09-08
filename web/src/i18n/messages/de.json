@@ -3881,7 +3881,14 @@
         },
         "viewGroup": {
           "label": "Gruppe anzeigen"
-        }
+        },
+        "resourceCounts": {
+          "connectors": "{count, plural, one {# Konnektor} other {# Konnektoren}}",
+          "documentSets": "{count, plural, one {# Dokumentensatz} other {# Dokumentensätze}}",
+          "agents": "{count, plural, one {# Agent} other {# Agenten}}",
+          "noPrivateResources": "Keine privaten Konnektoren / Dokumentensätze / Agenten"
+        },
+        "memberCount": "{count, plural, one {# Mitglied} other {# Mitglieder}}"
       },
       "create": {
         "header": {
@@ -4130,6 +4137,16 @@
           "header": "Token-Limit",
           "placeholder": "Token-Limit (Tausend)",
           "unit": "(Tausend)"
+        }
+      },
+      "builtIn": {
+        "admin": {
+          "name": "Admin",
+          "description": "Integrierte Admin-Gruppe mit vollem Zugriff zur Verwaltung aller Berechtigungen."
+        },
+        "basic": {
+          "name": "Basis",
+          "description": "Standardgruppe für alle Benutzer mit Basisberechtigungen."
         }
       }
     },
@@ -4389,6 +4406,20 @@
         },
         "validationFailed": {
           "message": "Validierung fehlgeschlagen: {status}"
+        }
+      },
+      "points": {
+        "documentIngestion": {
+          "name": "Dokumentenaufnahme",
+          "description": "Wird für jedes Dokument ausgeführt, bevor es in die Indexierungspipeline gelangt. Ermöglicht das Filtern, Umschreiben oder Verwerfen von Dokumenten."
+        },
+        "documentPush": {
+          "name": "Dokumenten-Push",
+          "description": "Wird ausgelöst, nachdem ein Dokument erfolgreich indexiert wurde. Überträgt indexierte Dokumente an ein externes Ziel wie ein Wiki oder Data Warehouse. Nur für öffentliche Konnektoren in Single-Tenant-Deployments."
+        },
+        "queryProcessing": {
+          "name": "Anfrageverarbeitung",
+          "description": "Wird für jede Benutzeranfrage ausgeführt, bevor sie in die Pipeline gelangt. Ermöglicht das Umschreiben, Filtern oder Ablehnen von Anfragen."
         }
       }
     },
@@ -4958,6 +4989,24 @@
         "statusInvalid": "ungültig",
         "statusPaused": "pausiert",
         "restoreHint": "Um einen Konnektor zu behalten, brechen Sie hier ab, setzen Sie ihn fort oder korrigieren Sie ihn und starten Sie die Neuindizierung erneut – dann wird er übernommen. Andernfalls fügen Sie ihn nach Abschluss der Neuindizierung erneut hinzu."
+      },
+      "modelDescriptions": {
+        "cohereEmbedEnglishV3": "Englisches Embedding-Modell von Cohere. Gute Leistung bei englischsprachigen Aufgaben.",
+        "cohereEmbedEnglishLightV3": "Leichtgewichtiges englisches Embedding-Modell von Cohere. Schneller und effizienter für einfachere Aufgaben.",
+        "cohereEmbedV4": "Neuestes mehrsprachiges Embedding-Modell von Cohere mit standardmäßig 1536 Dimensionen für bessere Retrieval-Qualität.",
+        "openaiTextEmbedding3Large": "Großes Embedding-Modell von OpenAI. Beste Leistung, aber teurer.",
+        "openaiTextEmbedding3Small": "Neueres, effizienteres Embedding-Modell von OpenAI. Gutes Verhältnis von Leistung und Kosten.",
+        "googleGeminiEmbedding001": "Gemini-Embedding-Modell von Google. Leistungsstark und effizient.",
+        "googleTextEmbedding005": "Kleineres, leichteres Embedding-Modell von Google.",
+        "googleGeminiEmbedding2": "Neuestes multimodales Embedding-Modell von Google (GA). Höchste Retrieval-Qualität mit 3072 Dimensionen.",
+        "googleGeminiEmbedding2Preview": "Vorschauversion von Gemini Embedding 2. Für neue Einrichtungen durch gemini-embedding-2 ersetzt.",
+        "voyageLarge2Instruct": "Großes Embedding-Modell von Voyage. Hohe Leistung durch Instruction-Fine-Tuning.",
+        "voyageLight2Instruct": "Leichtgewichtiges Embedding-Modell von Voyage. Gutes Verhältnis von Leistung und Effizienz.",
+        "nomicEmbedTextV1": "Embedding-Modell von Nomic, spezialisiert auf Retrieval, Ähnlichkeit, Clustering und Klassifikation.",
+        "e5BaseV2": "Ein kleineres und schnelleres Modell als der Standard. Etwa doppelt so schnell wie das Standardmodell, bei geringerer Suchqualität.",
+        "e5SmallV2": "Die kleinste und schnellste Variante der E5-Modellreihe. Eine gute Wahl, wenn Onyx auf einem System mit begrenzten Ressourcen läuft.",
+        "multilingualE5Base": "Für Korpora in anderen Sprachen als Englisch ist dies die richtige Wahl.",
+        "multilingualE5Small": "Für Korpora in anderen Sprachen als Englisch auf einem System mit begrenzten Ressourcen ist dies die richtige Wahl."
       }
     },
     "indexing": {
@@ -6799,7 +6848,9 @@
         "gatedTooltip": "Mehrere aktivierte SSO-Anbieter sind im Business- oder Enterprise-Tarif verfügbar."
       },
       "copyRedirectUri": {
-        "tooltip": "Weiterleitungs-URI kopieren"
+        "tooltip": "Weiterleitungs-URI kopieren",
+        "successToast": "Weiterleitungs-URI kopiert",
+        "errorToast": "Kopieren nicht möglich"
       },
       "editProvider": {
         "tooltip": "Bearbeiten"
@@ -6911,6 +6962,75 @@
       },
       "toasts": {
         "unexpectedError": "Ein unerwarteter Fehler ist aufgetreten."
+      },
+      "providerTypes": {
+        "googleOauth": {
+          "description": "Google als Identitätsanbieter verwenden."
+        },
+        "oidc": {
+          "description": "Einen generischen OpenID-Connect-Anbieter verbinden."
+        },
+        "saml": {
+          "description": "Einen SAML-Identitätsanbieter verbinden."
+        }
+      },
+      "configFields": {
+        "clientId": {
+          "label": "Client-ID",
+          "description": "Die OAuth-Client-ID aus der Konsole Ihres Anbieters.",
+          "placeholder": "Client-ID"
+        },
+        "clientSecret": {
+          "label": "Client-Secret",
+          "description": "Das OAuth-Client-Secret. Wird verschlüsselt gespeichert.",
+          "placeholder": "Client-Secret"
+        },
+        "pkceEnabled": {
+          "label": "PKCE aktivieren",
+          "description": "Eine PKCE-Code-Challenge im Anmeldeablauf dieses Anbieters senden. Eine deploymentweite Einstellung kann dies erzwingen."
+        },
+        "scopes": {
+          "label": "Scopes",
+          "description": "Die bei der Anmeldung angeforderten OAuth-Scopes überschreiben. Leer verwendet die Standardwerte des Deployments.",
+          "placeholder": "Scope hinzufügen (z. B. openid)"
+        },
+        "openidConfigUrl": {
+          "label": "OpenID-Konfigurations-URL",
+          "description": "Die URL des OpenID-Connect-Discovery-Dokuments des IdP."
+        },
+        "requireVerifiedEmail": {
+          "label": "Verifizierten E-Mail-Claim verlangen",
+          "description": "Anmeldungen ablehnen, wenn der IdP den optionalen Claim email_verified nicht sendet. Für IdPs ohne diesen Claim, wie Microsoft Entra ID, deaktiviert lassen."
+        },
+        "idpEntityId": {
+          "label": "IdP-Entity-ID",
+          "description": "Die Entity-ID (Issuer) des Identitätsanbieters."
+        },
+        "idpSsoUrl": {
+          "label": "IdP-SSO-URL",
+          "description": "Der IdP-Endpunkt, der Anmeldeanfragen empfängt."
+        },
+        "idpX509Cert": {
+          "label": "IdP-X.509-Zertifikat",
+          "description": "Das Signaturzertifikat des IdP zur Prüfung von Assertions."
+        },
+        "spEntityId": {
+          "label": "SP-Entity-ID",
+          "description": "Die Entity-ID dieser Instanz, beim IdP registriert."
+        },
+        "spX509Cert": {
+          "label": "SP-X.509-Zertifikat",
+          "description": "Nur wenn diese Instanz Anfragen signiert oder Assertions entschlüsselt."
+        },
+        "spPrivateKey": {
+          "label": "SP-Private-Key",
+          "description": "Der zum SP-Zertifikat gehörende private Schlüssel. Wird verschlüsselt gespeichert."
+        },
+        "emailAttribute": {
+          "label": "E-Mail-Attribut",
+          "description": "SAML-Attribut mit der E-Mail-Adresse des Benutzers. Standardmäßig werden gängige Schlüssel verwendet.",
+          "placeholder": "email"
+        }
       }
     },
     "standardAnswers": {
@@ -7448,6 +7568,42 @@
         "connected": "{label} verbunden",
         "disconnected": "{label} getrennt",
         "unexpectedError": "Ein unerwarteter Fehler ist aufgetreten."
+      },
+      "providers": {
+        "braintrust": {
+          "description": "LLM-Evaluierung und -Monitoring",
+          "fields": {
+            "apiKey": {
+              "label": "API-Schlüssel",
+              "description": "Fügen Sie Ihren [API-Schlüssel](https://www.braintrust.dev/app) von Braintrust ein."
+            },
+            "project": {
+              "label": "Projektname",
+              "description": "Name des Braintrust-Projekts, in dem Traces protokolliert werden."
+            },
+            "apiUrl": {
+              "label": "API-URL",
+              "description": "Standard ist die US-Region. Fügen Sie Ihre Braintrust-API-URL für andere Regionen oder Self-Hosting ein."
+            }
+          }
+        },
+        "langfuse": {
+          "description": "Cloud- oder selbst gehostete Open-Source-Observability-Plattform",
+          "fields": {
+            "secretKey": {
+              "label": "Secret Key",
+              "description": "Fügen Sie Ihren [API-Schlüssel](https://cloud.langfuse.com) von Langfuse ein."
+            },
+            "publicKey": {
+              "label": "Public Key",
+              "placeholder": "Public Key"
+            },
+            "host": {
+              "label": "API-Basis-URL",
+              "description": "Standard ist die EU-Region. Fügen Sie Ihre Langfuse-Basis-URL für andere Regionen oder Self-Hosting ein."
+            }
+          }
+        }
       }
     },
     "usage": {
@@ -8073,6 +8229,35 @@
       },
       "unexpectedError": {
         "message": "Ein unerwarteter Fehler ist aufgetreten."
+      },
+      "contentProviders": {
+        "onyxWebCrawler": {
+          "subtitle": "Integrierter Web-Crawler. Funktioniert für die meisten Seiten, ist in Sonderfällen aber weniger leistungsfähig."
+        },
+        "firecrawl": {
+          "subtitle": "Führender Open-Source-Crawler."
+        },
+        "exa": {
+          "subtitle": "Exa.ai"
+        },
+        "tavily": {
+          "subtitle": "Tavily AI"
+        }
+      },
+      "configFields": {
+        "searchEngineId": {
+          "label": "Suchmaschinen-ID",
+          "placeholder": "Geben Sie Ihre Suchmaschinen-ID ein",
+          "description": "Fügen Sie Ihre [Suchmaschinen-ID](https://programmablesearchengine.google.com/controlpanel/all) für die Websuche ein."
+        },
+        "searxngBaseUrl": {
+          "label": "SearXNG-Basis-URL",
+          "description": "Fügen Sie die Basis-URL Ihrer [SearXNG-Instanz](https://docs.searxng.org/admin/installation.html) ein."
+        },
+        "firecrawlBaseUrl": {
+          "label": "API-Basis-URL",
+          "description": "Die Basis-URL Ihrer Firecrawl-API."
+        }
       }
     }
   },
@@ -9816,6 +10001,17 @@
           },
           "reading": {
             "status": "Liest"
+          },
+          "header": {
+            "default": "Interne Dokumente werden durchsucht",
+            "sources": "Suche in {sources}",
+            "sourcesOverflow": "{sources} +{count} weitere",
+            "withTimeWindow": "{header} ({timeWindow})"
+          },
+          "timeWindow": {
+            "since": "seit {date}",
+            "before": "vor {date}",
+            "between": "von {start} bis {end}"
           }
         },
         "interruptedThinking": {
@@ -13037,7 +13233,8 @@
           "label": "Andere"
         },
         "title": "Modellpreise",
-        "unavailable": "Preise nicht verfügbar"
+        "unavailable": "Preise nicht verfügbar",
+        "priceRow": "{input} Eingabe · {output} Ausgabe · {cache} Cache"
       },
       "modelUsage": {
         "cacheReads": {

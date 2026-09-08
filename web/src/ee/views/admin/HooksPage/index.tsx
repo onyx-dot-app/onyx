@@ -37,6 +37,10 @@ import { InputTypeIn } from "@opal/components";
 import HookFormModal from "@/ee/views/admin/HooksPage/HookFormModal";
 import HookStatusPopover from "@/ee/views/admin/HooksPage/HookStatusPopover";
 import {
+  hookPointDescription,
+  hookPointName,
+} from "@/ee/views/admin/HooksPage/hookPoints";
+import {
   activateHook,
   deactivateHook,
   deleteHook,
@@ -188,8 +192,8 @@ function UnconnectedHookCard({ spec, onConnect }: UnconnectedHookCardProps) {
             sizePreset="main-ui"
             variant="section"
             icon={Icon}
-            title={spec.display_name}
-            description={spec.description}
+            title={hookPointName(spec, t)}
+            description={hookPointDescription(spec, t)}
           />
 
           {spec.docs_url && (
@@ -371,7 +375,7 @@ function ConnectedHookCard({
                     : undefined
                 }
                 description={t("card.hookPoint.description", {
-                  name: spec?.display_name ?? hook.hook_point,
+                  name: spec ? hookPointName(spec, t) : hook.hook_point,
                 })}
               />
 
@@ -477,12 +481,13 @@ export default function HooksPage() {
   } = useHooks();
 
   const hookExtractor = useCallback(
-    (hook: HookResponse) =>
-      `${hook.name} ${
-        specs?.find((s: HookPointMeta) => s.hook_point === hook.hook_point)
-          ?.display_name ?? ""
-      }`,
-    [specs]
+    (hook: HookResponse) => {
+      const spec = specs?.find(
+        (s: HookPointMeta) => s.hook_point === hook.hook_point
+      );
+      return `${hook.name} ${spec ? hookPointName(spec, t) : ""}`;
+    },
+    [specs, t]
   );
 
   const sortedHooks = useMemo(
@@ -511,13 +516,13 @@ export default function HooksPage() {
         (spec: HookPointMeta) =>
           (hooksByPoint[spec.hook_point]?.length ?? 0) === 0 &&
           (!searchLower ||
-            spec.display_name.toLowerCase().includes(searchLower) ||
-            spec.description.toLowerCase().includes(searchLower))
+            hookPointName(spec, t).toLowerCase().includes(searchLower) ||
+            hookPointDescription(spec, t).toLowerCase().includes(searchLower))
       )
       .sort((a: HookPointMeta, b: HookPointMeta) =>
-        a.display_name.localeCompare(b.display_name)
+        hookPointName(a, t).localeCompare(hookPointName(b, t))
       );
-  }, [specs, hooksByPoint, search]);
+  }, [specs, hooksByPoint, search, t]);
 
   useEffect(() => {
     if (settings.isLoading) return;

@@ -3881,7 +3881,14 @@
         },
         "viewGroup": {
           "label": "그룹 보기"
-        }
+        },
+        "resourceCounts": {
+          "connectors": "{count, plural, other {커넥터 #개}}",
+          "documentSets": "{count, plural, other {문서 세트 #개}}",
+          "agents": "{count, plural, other {에이전트 #개}}",
+          "noPrivateResources": "비공개 커넥터 / 문서 세트 / 에이전트 없음"
+        },
+        "memberCount": "{count, plural, other {멤버 #명}}"
       },
       "create": {
         "header": {
@@ -4130,6 +4137,16 @@
           "header": "Token 한도",
           "placeholder": "Token 한도(천 단위)",
           "unit": "(천 단위)"
+        }
+      },
+      "builtIn": {
+        "admin": {
+          "name": "관리자",
+          "description": "모든 권한을 관리할 수 있는 기본 내장 관리자 그룹입니다."
+        },
+        "basic": {
+          "name": "기본",
+          "description": "기본 권한을 가진 모든 사용자의 기본 그룹입니다."
         }
       }
     },
@@ -4389,6 +4406,20 @@
         },
         "validationFailed": {
           "message": "검증 실패: {status}"
+        }
+      },
+      "points": {
+        "documentIngestion": {
+          "name": "문서 수집",
+          "description": "인덱싱 파이프라인에 들어가기 전 모든 문서에 대해 실행됩니다. 문서를 필터링, 재작성 또는 제외할 수 있습니다."
+        },
+        "documentPush": {
+          "name": "문서 푸시",
+          "description": "각 문서가 성공적으로 인덱싱된 후 실행됩니다. 인덱싱된 문서를 위키나 데이터 웨어하우스 같은 외부 대상으로 푸시합니다. 단일 테넌트 배포의 공개 커넥터에서만 실행됩니다."
+        },
+        "queryProcessing": {
+          "name": "쿼리 처리",
+          "description": "파이프라인에 들어가기 전 모든 사용자 쿼리에 대해 실행됩니다. 쿼리를 재작성, 필터링 또는 거부할 수 있습니다."
         }
       }
     },
@@ -4958,6 +4989,24 @@
         "statusInvalid": "유효하지 않음",
         "statusPaused": "일시 중지됨",
         "restoreHint": "커넥터를 유지하려면 여기서 취소하고 재개하거나 문제를 해결한 뒤 다시 재인덱싱하세요. 그러면 새 인덱스로 이전됩니다. 그렇지 않으면 재인덱싱이 끝난 뒤 다시 추가하세요."
+      },
+      "modelDescriptions": {
+        "cohereEmbedEnglishV3": "Cohere의 영어 임베딩 모델입니다. 영어 작업에 좋은 성능을 보입니다.",
+        "cohereEmbedEnglishLightV3": "Cohere의 경량 영어 임베딩 모델입니다. 단순한 작업에 더 빠르고 효율적입니다.",
+        "cohereEmbedV4": "Cohere의 최신 다국어 임베딩 모델로, 기본 1536차원 출력으로 더 높은 검색 품질을 제공합니다.",
+        "openaiTextEmbedding3Large": "OpenAI의 대형 임베딩 모델입니다. 성능은 가장 좋지만 비용이 더 높습니다.",
+        "openaiTextEmbedding3Small": "OpenAI의 더 새롭고 효율적인 임베딩 모델입니다. 성능과 비용의 균형이 좋습니다.",
+        "googleGeminiEmbedding001": "Google의 Gemini 임베딩 모델입니다. 강력하고 효율적입니다.",
+        "googleTextEmbedding005": "Google의 더 작고 가벼운 임베딩 모델입니다.",
+        "googleGeminiEmbedding2": "Google의 최신 멀티모달 임베딩 모델(GA)입니다. 3072차원 출력으로 최고 품질의 검색을 제공합니다.",
+        "googleGeminiEmbedding2Preview": "Gemini Embedding 2의 프리뷰 버전입니다. 새 설정에서는 gemini-embedding-2로 대체되었습니다.",
+        "voyageLarge2Instruct": "Voyage의 대형 임베딩 모델입니다. 지시 미세 조정으로 높은 성능을 제공합니다.",
+        "voyageLight2Instruct": "Voyage의 경량 임베딩 모델입니다. 성능과 효율의 균형이 좋습니다.",
+        "nomicEmbedTextV1": "검색, 유사도, 클러스터링, 분류에 특화된 Nomic의 임베딩 모델입니다.",
+        "e5BaseV2": "기본 모델보다 더 작고 빠른 모델입니다. 검색 품질은 낮아지지만 기본 모델보다 약 2배 빠릅니다.",
+        "e5SmallV2": "E5 모델 계열 중 가장 작고 빠른 버전입니다. 리소스가 제한된 시스템에서 Onyx를 실행한다면 좋은 선택입니다.",
+        "multilingualE5Base": "영어 이외의 언어로 된 코퍼스에는 이 모델을 선택하세요.",
+        "multilingualE5Small": "영어 이외의 언어로 된 코퍼스이면서 리소스가 제한된 시스템이라면 이 모델을 선택하세요."
       }
     },
     "indexing": {
@@ -6799,7 +6848,9 @@
         "gatedTooltip": "여러 SSO 공급자를 동시에 사용하려면 Business 또는 Enterprise 요금제가 필요합니다."
       },
       "copyRedirectUri": {
-        "tooltip": "리디렉션 URI 복사"
+        "tooltip": "리디렉션 URI 복사",
+        "successToast": "리디렉션 URI를 복사했습니다",
+        "errorToast": "복사할 수 없습니다"
       },
       "editProvider": {
         "tooltip": "편집"
@@ -6911,6 +6962,75 @@
       },
       "toasts": {
         "unexpectedError": "예기치 않은 오류가 발생했습니다."
+      },
+      "providerTypes": {
+        "googleOauth": {
+          "description": "Google을 ID 공급자로 사용합니다."
+        },
+        "oidc": {
+          "description": "일반 OpenID Connect 공급자를 연결합니다."
+        },
+        "saml": {
+          "description": "SAML ID 공급자를 연결합니다."
+        }
+      },
+      "configFields": {
+        "clientId": {
+          "label": "클라이언트 ID",
+          "description": "공급자 콘솔의 OAuth 클라이언트 ID입니다.",
+          "placeholder": "클라이언트 ID"
+        },
+        "clientSecret": {
+          "label": "클라이언트 시크릿",
+          "description": "OAuth 클라이언트 시크릿입니다. 암호화되어 저장됩니다.",
+          "placeholder": "클라이언트 시크릿"
+        },
+        "pkceEnabled": {
+          "label": "PKCE 사용",
+          "description": "이 공급자의 로그인 흐름에서 PKCE 코드 챌린지를 전송합니다. 배포 전체 설정에 의해 강제될 수 있습니다."
+        },
+        "scopes": {
+          "label": "스코프",
+          "description": "로그인 시 요청하는 OAuth 스코프를 재정의합니다. 비워 두면 배포 기본값을 사용합니다.",
+          "placeholder": "스코프 추가 (예: openid)"
+        },
+        "openidConfigUrl": {
+          "label": "OpenID 구성 URL",
+          "description": "IdP의 OpenID Connect 검색 문서 URL입니다."
+        },
+        "requireVerifiedEmail": {
+          "label": "이메일 검증 클레임 필수",
+          "description": "IdP가 선택적 email_verified 클레임을 생략하면 로그인을 거부합니다. Microsoft Entra ID처럼 이를 보내지 않는 IdP에서는 꺼 두세요."
+        },
+        "idpEntityId": {
+          "label": "IdP 엔터티 ID",
+          "description": "ID 공급자의 엔터티 ID(발급자)입니다."
+        },
+        "idpSsoUrl": {
+          "label": "IdP SSO URL",
+          "description": "로그인 요청을 받는 IdP 엔드포인트입니다."
+        },
+        "idpX509Cert": {
+          "label": "IdP X.509 인증서",
+          "description": "어설션 검증에 사용되는 IdP의 서명 인증서입니다."
+        },
+        "spEntityId": {
+          "label": "SP 엔터티 ID",
+          "description": "IdP에 등록된 이 인스턴스의 엔터티 ID입니다."
+        },
+        "spX509Cert": {
+          "label": "SP X.509 인증서",
+          "description": "이 인스턴스가 요청에 서명하거나 어설션을 복호화하는 경우에만 필요합니다."
+        },
+        "spPrivateKey": {
+          "label": "SP 개인 키",
+          "description": "SP 인증서와 쌍을 이루는 개인 키입니다. 암호화되어 저장됩니다."
+        },
+        "emailAttribute": {
+          "label": "이메일 속성",
+          "description": "사용자 이메일이 담긴 SAML 속성입니다. 기본값은 일반적인 키입니다.",
+          "placeholder": "email"
+        }
       }
     },
     "standardAnswers": {
@@ -7448,6 +7568,42 @@
         "connected": "{label}에 연결했습니다",
         "disconnected": "{label} 연결을 해제했습니다",
         "unexpectedError": "예기치 않은 오류가 발생했습니다."
+      },
+      "providers": {
+        "braintrust": {
+          "description": "LLM 평가 및 모니터링",
+          "fields": {
+            "apiKey": {
+              "label": "API 키",
+              "description": "Braintrust의 [API 키](https://www.braintrust.dev/app)를 붙여넣으세요."
+            },
+            "project": {
+              "label": "프로젝트 이름",
+              "description": "트레이스가 기록되는 Braintrust 프로젝트 이름입니다."
+            },
+            "apiUrl": {
+              "label": "API URL",
+              "description": "기본값은 미국 리전입니다. 다른 리전이나 자체 호스팅의 경우 Braintrust API URL을 붙여넣으세요."
+            }
+          }
+        },
+        "langfuse": {
+          "description": "클라우드 또는 자체 호스팅 오픈소스 관측 플랫폼",
+          "fields": {
+            "secretKey": {
+              "label": "시크릿 키",
+              "description": "Langfuse의 [API 키](https://cloud.langfuse.com)를 붙여넣으세요."
+            },
+            "publicKey": {
+              "label": "퍼블릭 키",
+              "placeholder": "퍼블릭 키"
+            },
+            "host": {
+              "label": "API 기본 URL",
+              "description": "기본값은 EU 리전입니다. 다른 리전이나 자체 호스팅의 경우 Langfuse 기본 URL을 붙여넣으세요."
+            }
+          }
+        }
       }
     },
     "usage": {
@@ -8073,6 +8229,35 @@
       },
       "unexpectedError": {
         "message": "예기치 않은 오류가 발생했습니다."
+      },
+      "contentProviders": {
+        "onyxWebCrawler": {
+          "subtitle": "기본 내장 웹 크롤러입니다. 대부분의 페이지에서 작동하지만 예외적인 경우 성능이 떨어집니다."
+        },
+        "firecrawl": {
+          "subtitle": "대표적인 오픈소스 크롤러입니다."
+        },
+        "exa": {
+          "subtitle": "Exa.ai"
+        },
+        "tavily": {
+          "subtitle": "Tavily AI"
+        }
+      },
+      "configFields": {
+        "searchEngineId": {
+          "label": "검색 엔진 ID",
+          "placeholder": "검색 엔진 ID를 입력하세요",
+          "description": "웹 검색에 사용할 [검색 엔진 ID](https://programmablesearchengine.google.com/controlpanel/all)를 붙여넣으세요."
+        },
+        "searxngBaseUrl": {
+          "label": "SearXNG 기본 URL",
+          "description": "[SearXNG 인스턴스](https://docs.searxng.org/admin/installation.html)의 기본 URL을 붙여넣으세요."
+        },
+        "firecrawlBaseUrl": {
+          "label": "API 기본 URL",
+          "description": "Firecrawl API 기본 URL입니다."
+        }
       }
     }
   },
@@ -9816,6 +10001,17 @@
           },
           "reading": {
             "status": "읽는 중"
+          },
+          "header": {
+            "default": "내부 문서 검색 중",
+            "sources": "{sources} 검색 중",
+            "sourcesOverflow": "{sources} 외 {count}개",
+            "withTimeWindow": "{header} ({timeWindow})"
+          },
+          "timeWindow": {
+            "since": "{date} 이후",
+            "before": "{date} 이전",
+            "between": "{start}부터 {end}까지"
           }
         },
         "interruptedThinking": {
@@ -13037,7 +13233,8 @@
           "label": "기타"
         },
         "title": "모델 가격",
-        "unavailable": "가격 정보 없음"
+        "unavailable": "가격 정보 없음",
+        "priceRow": "입력 {input} · 출력 {output} · 캐시 {cache}"
       },
       "modelUsage": {
         "cacheReads": {
