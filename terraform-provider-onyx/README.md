@@ -140,13 +140,28 @@ that uses the twin clears it from state and moves the resource onto the write-on
 
 ## Known limitations (by API design)
 
+Each of these follows from how the Onyx API behaves, not from a gap in the provider, so each
+one is a thing to design around rather than a bug to wait on.
+
+A few are marked **fixed upstream**. The backend change is merged but is not in a released
+Onyx yet, so the provider keeps the workaround and the limitation still applies. They go away
+once the fix ships in a release and the provider drops the workaround.
+
+### Secrets
+
 - **Secret drift is undetectable.** The API masks `api_key`/`custom_config` on read, so
   rotating them out-of-band (e.g. in the admin UI) is invisible to `terraform plan`. The
   configured value is authoritative and is re-asserted on the next apply.
+
+### Settings and deployment defaults
+
 - **`onyx_settings` and `onyx_llm_provider_default` don't really delete.** Onyx has no
   reset-settings API and no unset API for the text/vision defaults; destroy removes them
   from state with a warning and leaves the live values alone. The chat-naming default is
   the exception: it has an unset API and is cleared on destroy when managed.
+
+### LLM and embedding providers
+
 - **`onyx_embedding_provider` updates replace all fields.** Keep `api_key` (or
   `api_key_wo`) in configuration — an update applied without it clears the stored key (the
   API has no keep-stored-key flag). The currently-active embedding provider also cannot be
@@ -154,36 +169,45 @@ that uses the twin clears it from state and moves the resource onto the write-on
 - **`model_configurations` is the list of record.** Models omitted from it are removed
   server-side, and removing the model currently set as deployment default fails — repoint
   `onyx_llm_provider_default` first (references order this correctly).
+- **The model list read is the API's display view.** It hides obsolete models and dated
+  duplicates, so writes (including the auto-mode pass-through, which is also not atomic
+  with its read) cannot preserve rows the API hides. The admin UI round-trips the same
+  filtered view. *Fixed upstream:* the upsert now takes a `keep_existing_models` flag.
+
+### Credentials and connectors
+
 - **`onyx_credential` payloads are never read back.** The API always returns the payload
   masked, so it is never refreshed or diffed. `admin_public`, `curator_public` and `groups`
   have no update endpoint and force replacement instead.
-- **`onyx_connector` does not own its access control.** `access_type` and `groups` are
-  validated on write but stored on the cc-pair, so Terraform cannot refresh them. Onyx also
-  rewrites an unset `prune_freq` to 7 days on the first update, which the provider then
-  keeps as the value of record.
-- **`onyx_connector` does not set access control.** Onyx applies it when a credential is
-  associated, so it belongs to the connector-credential pair. The connector endpoints still
-  require an `access_type` in the request body but ignore it, so the provider sends a fixed
-  value rather than offering a knob that would do nothing.
 - **A private credential can look deleted.** The API hides a credential with
   `admin_public = false` from admins other than its creator, and that is indistinguishable
   from a deleted one, so Terraform would drop it from state and recreate it. Keep
   `admin_public = true` (the default) for credentials Terraform manages, or run Terraform
   with the key that created them.
+- **`onyx_connector` does not own its access control.** Onyx applies access when a
+  credential is associated, so `access_type` and `groups` belong to the connector-credential
+  pair. The connector endpoints still require an `access_type` in the request body and then
+  ignore it, so the provider sends a fixed value rather than offering a knob that would do
+  nothing. Set access control on `onyx_cc_pair`.
+- **Onyx rewrites an unset `prune_freq` to 7 days** on a connector's first update, which the
+  provider then keeps as the value of record.
+
+### Agents and actions
+
 - **Deleting an agent leaves a tombstone.** Onyx marks the row deleted instead of removing
   it, so the name stays taken. A later create under that name revives the tombstone, which
   is why destroy-then-apply returns the same agent id rather than a new one.
 - **A deleted agent answers 400, not 404.** The lookup raises a plain `ValueError`, which
   Onyx renders as a bad request, so "gone" cannot be read off the status. The provider
-  confirms against the agent listing instead of matching on the message text. Making that
-  endpoint return 404 is a worthwhile backend fix.
+  confirms against the agent listing instead of matching on the message text.
+  *Fixed upstream:* the route now answers a typed `PERSONA_NOT_FOUND`.
 - **`onyx_agent` does not own every field on an agent.** Attached folders and documents
   are cleared by an omitted list, and sending null is rejected (422), so the provider reads
   them and sends them back unchanged. That leaves a narrow window in which an attachment
-  added between the read and the write is reverted; making the two fields nullable
-  server-side would close it. Also,
-  `search_start_date` is sent but never read back, because Onyx returns it as a parsed
-  timestamp that would not match a plain date. Avatar images are not managed at all.
+  added between the read and the write is reverted. *Fixed upstream:* both fields are
+  nullable now. Also, `search_start_date` is sent but never read back, because Onyx returns
+  it as a parsed timestamp that would not match a plain date. Avatar images are not managed
+  at all.
 - **`display_priority` is create-only on the upsert.** Onyx reads it when an agent is
   created and ignores it on every later write, so the provider applies a change through
   the display-priority endpoint as a second call. That endpoint only sets a number, so the
@@ -195,6 +219,9 @@ that uses the twin clears it from state and moves the resource onto the write-on
   built-ins instead.
 - **Deleting a custom action detaches it from every agent that uses it**, including agents
   Terraform does not manage, without an error or a warning.
+
+### User groups (Enterprise Edition)
+
 - **`onyx_user_group` is Enterprise Edition only.** The routes live in the EE application
   and do not exist on Community Edition, where every call answers 404. Its acceptance tests
   skip when `ee_features_enabled` is false.
@@ -224,6 +251,7 @@ that uses the twin clears it from state and moves the resource onto the write-on
   this right. So a 404 from any of them does not mean the group is gone — the destroy
   confirms each one against the listing before reporting success, since trusting it would
   drop a live group out of state and leave the next apply failing on the name it still holds.
+  *Fixed upstream:* the sync gate now raises a distinct `RESOURCE_SYNCING` conflict.
 - **`onyx_user_group` permissions use Onyx's wire tokens**, for example `manage:connectors`,
   not the enum names. Only toggleable permissions can be set; `basic`, `admin`,
   `craft_sandbox`, `manage:skills` and the implied read tokens are managed by Onyx and are
@@ -236,6 +264,9 @@ that uses the twin clears it from state and moves the resource onto the write-on
   way, because it drops the whole roster, so a `terraform destroy` can fail on a member whose
   only group this is. It also guards self-removal by a manager, privilege amplification, and
   the survival of admin access.
+
+### MCP servers
+
 - **`onyx_mcp_server` manages only servers that need no interactive sign-in.** `NONE` and
   `API_TOKEN` are supported; `OAUTH` and `PT_OAUTH` need a browser round-trip and are
   refused while the plan is built, with a diagnostic naming the admin panel.
@@ -271,10 +302,6 @@ that uses the twin clears it from state and moves the resource onto the write-on
   admin panel.
 - **An MCP server URL cannot point at the Onyx host.** The SSRF guard refuses `localhost`
   and link-local addresses by name at every protection level, not only the strictest.
-- **The model list read is the API's display view.** It hides obsolete models and dated
-  duplicates, so writes (including the auto-mode pass-through, which is also not atomic
-  with its read) cannot preserve rows the API hides. The admin UI round-trips the same
-  filtered view; a keep-models flag on the upsert API is the planned structural fix.
 
 ## Development
 
