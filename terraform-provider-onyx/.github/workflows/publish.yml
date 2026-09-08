@@ -67,7 +67,9 @@ jobs:
             found && /^## / { exit }
             found { print }
           ' CHANGELOG.md > "${notes}"
-          if [ ! -s "${notes}" ]; then
+          # Not -s: a heading with no entries under it yields a file of blank
+          # lines, which has a non-zero size but is an empty release body.
+          if ! grep -q '[^[:space:]]' "${notes}"; then
             if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
               echo "::error::CHANGELOG.md has no section for ${version}." >&2
               exit 1
