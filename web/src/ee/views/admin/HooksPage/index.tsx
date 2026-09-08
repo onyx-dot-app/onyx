@@ -2,7 +2,7 @@
 
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { SettingsLayouts, toast } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
@@ -464,6 +464,7 @@ function ConnectedHookCard({
 
 export default function HooksPage() {
   const t = useTranslations("admin.hooks");
+  const locale = useLocale();
   const adminRouteTitle = useAdminRouteTitle();
   const router = useRouter();
   const settings = useSettings();
@@ -520,9 +521,9 @@ export default function HooksPage() {
             hookPointDescription(spec, t).toLowerCase().includes(searchLower))
       )
       .sort((a: HookPointMeta, b: HookPointMeta) =>
-        hookPointName(a, t).localeCompare(hookPointName(b, t))
+        hookPointName(a, t).localeCompare(hookPointName(b, t), locale)
       );
-  }, [specs, hooksByPoint, search, t]);
+  }, [specs, hooksByPoint, search, t, locale]);
 
   useEffect(() => {
     if (settings.isLoading) return;
