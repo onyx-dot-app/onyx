@@ -31,6 +31,12 @@ USER_PREFERENCES_PROMPT = """
 {user_preferences}
 """.lstrip()
 
+# The UI language is the default reply language. An explicit request in chat still wins.
+USER_LANGUAGE_PROMPT = """
+## Language
+The user's interface language is {language}. Reply in {language} unless the user asks for a different language.
+""".lstrip()
+
 # User memories should look something like:
 # - Memory 1
 # - Memory 2

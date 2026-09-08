@@ -20,7 +20,7 @@ If you need to ask questions, follow these guidelines:
 - Be concise and do not ask more than 5 questions.
 - If there are ambiguous terms or questions, ask the user to clarify.
 - Your questions should be a numbered list for clarity.
-- Respond in the same language as the user's query.
+- Respond in the user's interface language if one is given below, otherwise in the same language as the user's query.
 - Make sure to gather all the information needed to carry out the research task in a concise, well-structured manner.{{internal_search_clarification_guidance}}
 - Wrap up with a quick sentence on what the clarification will help with, it's ok to reference the user query closely here.
 """.strip()

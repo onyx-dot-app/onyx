@@ -18,6 +18,7 @@ from onyx.chat.emitter import Emitter
 from onyx.chat.llm_loop import construct_message_history
 from onyx.chat.llm_step import run_llm_step, run_llm_step_pkt_generator
 from onyx.chat.models import ChatMessageSimple, LlmStepResult, ToolCallSimple
+from onyx.chat.prompt_utils import with_language_section
 from onyx.configs.chat_configs import DR_REPORT_LLM_TIMEOUT_S
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDocsResponse
@@ -102,6 +103,7 @@ def generate_intermediate_report(
     user_identity: LLMUserIdentity | None,
     emitter: Emitter,
     placement: Placement,
+    language_section: str | None,
     reasoning_effort: ReasoningEffort = ReasoningEffort.LOW,
 ) -> str:
     # NOTE: This step outputs a lot of tokens and has been observed to run for more than 10 minutes in a nontrivial percentage of
@@ -113,9 +115,11 @@ def generate_intermediate_report(
         # Having the state container here to handle the tokens and not passed through means there is no way to
         # get partial saves of the report. Arguably this is not useful anyway so not going to implement partial saves.
         state_container = ChatStateContainer()
+        # The report streams to the UI, so it follows the user's interface language.
+        report_prompt = with_language_section(RESEARCH_REPORT_PROMPT, language_section)
         system_prompt = ChatMessageSimple(
-            message=RESEARCH_REPORT_PROMPT,
-            token_count=token_counter(RESEARCH_REPORT_PROMPT),
+            message=report_prompt,
+            token_count=token_counter(report_prompt),
             message_type=MessageType.SYSTEM,
         )
 
@@ -223,6 +227,7 @@ def run_research_agent_call(
     is_reasoning_model: bool,
     token_counter: Callable[[str], int],
     user_identity: LLMUserIdentity | None,
+    language_section: str | None,
     reasoning_effort: ReasoningEffort = ReasoningEffort.LOW,
 ) -> ResearchAgentCallResult | None:
     turn_index = research_agent_call.placement.turn_index
@@ -414,6 +419,7 @@ def run_research_agent_call(
                         citation_processor=citation_processor,
                         user_identity=user_identity,
                         emitter=emitter,
+                        language_section=language_section,
                         reasoning_effort=reasoning_effort,
                         placement=Placement(
                             turn_index=turn_index,
@@ -615,6 +621,7 @@ def run_research_agent_call(
                 citation_processor=citation_processor,
                 user_identity=user_identity,
                 emitter=emitter,
+                language_section=language_section,
                 reasoning_effort=reasoning_effort,
                 placement=Placement(
                     turn_index=turn_index,
@@ -673,6 +680,7 @@ def run_research_agent_calls(
     is_reasoning_model: bool,
     token_counter: Callable[[str], int],
     citation_mapping: CitationMapping,
+    language_section: str | None,
     user_identity: LLMUserIdentity | None = None,
     reasoning_effort: ReasoningEffort = ReasoningEffort.LOW,
 ) -> CombinedResearchAgentCallResult:
@@ -690,6 +698,7 @@ def run_research_agent_calls(
                 is_reasoning_model,
                 token_counter,
                 user_identity,
+                language_section,
                 reasoning_effort,
             ),
         )
@@ -803,6 +812,7 @@ if __name__ == "__main__":
             is_reasoning_model=is_reasoning,
             token_counter=token_counter,
             user_identity=None,
+            language_section=None,
         )
 
         if result is None:
