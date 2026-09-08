@@ -140,6 +140,15 @@ class ChattyWebSocket(FakeWebSocket):
         return {"text": '{"type": "keepalive"}'}
 
 
+class HangingCloseTranscriber(ErrorResultTranscriber):
+    """Provider whose close() never returns."""
+
+    async def close(self) -> str:
+        self.closed = True
+        await asyncio.Event().wait()
+        raise AssertionError("unreachable")
+
+
 class FailAfterAudioTranscriber(ErrorResultTranscriber):
     """Provider that fails only once it has consumed audio."""
 
@@ -345,3 +354,21 @@ async def test_chunked_replay_is_bounded_by_session_timeout(
         )
 
     assert websocket.sent_json == []
+
+
+@pytest.mark.asyncio
+async def test_hanging_provider_close_does_not_block_teardown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Handler cleanup bounds the provider close, so teardown always finishes."""
+    monkeypatch.setattr(websocket_api, "TRANSCRIBER_CLOSE_TIMEOUT_SECONDS", 0.05)
+    websocket = NeverReceivingWebSocket()
+    transcriber = HangingCloseTranscriber()
+
+    async with asyncio.timeout(5):
+        with pytest.raises(StreamingTranscriptionFailed):
+            await handle_streaming_transcription(
+                cast(Any, websocket), cast(Any, transcriber)
+            )
+
+    assert transcriber.closed

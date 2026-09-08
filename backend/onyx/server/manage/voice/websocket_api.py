@@ -152,6 +152,8 @@ WS_SESSION_TIMEOUT_SECONDS = 30 * 60
 # After close(), the transcript pump gets this long to drain results the
 # provider queued while closing, so a failure reported there is not lost.
 TRANSCRIPT_DRAIN_SECONDS = 0.5
+# Provider SDK teardown must not hold a session past its limit.
+TRANSCRIBER_CLOSE_TIMEOUT_SECONDS = 10
 
 
 class ChunkedTranscriber:
@@ -259,6 +261,18 @@ class StreamingTranscriptionFailed(Exception):
         super().__init__(message)
         self.buffered_audio = buffered_audio
         self.client_ended = client_ended
+
+
+async def _close_transcriber(transcriber: StreamingTranscriberProtocol) -> None:
+    """Close a provider session with a bound, so teardown cannot hang."""
+    try:
+        await asyncio.wait_for(
+            transcriber.close(), timeout=TRANSCRIBER_CLOSE_TIMEOUT_SECONDS
+        )
+    except Exception:
+        logger.error(
+            "Streaming transcription: failed to close transcriber", exc_info=True
+        )
 
 
 async def _receive_client_message(
@@ -523,13 +537,7 @@ async def handle_streaming_transcription(
             receive_task, client_task, failure_task, return_exceptions=True
         )
         if not state.transcriber_closed:
-            try:
-                await transcriber.close()
-            except Exception:
-                logger.error(
-                    "Streaming transcription: failed to close transcriber",
-                    exc_info=True,
-                )
+            await _close_transcriber(transcriber)
         logger.info(
             "Streaming transcription: handler finished. Processed %s chunks, %s total bytes",
             state.chunk_count,
@@ -826,10 +834,7 @@ async def websocket_transcribe(
             pass
     finally:
         if streaming_transcriber:
-            try:
-                await streaming_transcriber.close()
-            except Exception:
-                pass
+            await _close_transcriber(streaming_transcriber)
         try:
             await websocket.close()
         except Exception:
