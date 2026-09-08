@@ -324,11 +324,15 @@ def _parse_sharepoint_datetime(value: Any) -> datetime | None:
     """Parse a SharePoint Graph datetime that may be an ISO string or datetime."""
     if not value:
         return None
-    if isinstance(value, str):
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
-    if not value.tzinfo:
-        return value.replace(tzinfo=timezone.utc)
-    return value
+    parsed = (
+        datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if isinstance(value, str)
+        else value
+    )
+    # Graph timestamps are UTC. A naive value would not compare with aware bounds.
+    if not parsed.tzinfo:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed
 
 
 def _timestamp_in_window(

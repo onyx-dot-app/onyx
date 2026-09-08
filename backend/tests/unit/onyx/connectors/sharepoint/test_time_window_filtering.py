@@ -18,6 +18,7 @@ from onyx.connectors.sharepoint.connector import (
     GRAPH_API_BASE,
     DriveItemData,
     SharepointConnector,
+    _parse_sharepoint_datetime,
 )
 
 DRIVE_ID = "fake-drive-id"
@@ -184,3 +185,12 @@ def test_created_datetime_is_parsed_onto_drive_item_data() -> None:
     assert item.last_modified_datetime == datetime(
         2025, 11, 14, 8, 30, tzinfo=timezone.utc
     )
+
+
+def test_parse_sharepoint_datetime_makes_naive_values_aware() -> None:
+    """The window bounds are aware, so parsed values must be too."""
+    expected = datetime(2026, 3, 1, 10, 0, tzinfo=timezone.utc)
+
+    assert _parse_sharepoint_datetime("2026-03-01T10:00:00") == expected
+    assert _parse_sharepoint_datetime(datetime(2026, 3, 1, 10, 0)) == expected
+    assert _parse_sharepoint_datetime(None) is None
