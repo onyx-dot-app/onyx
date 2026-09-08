@@ -15,8 +15,6 @@ Only two things differ from a plain Jira connector:
    ordinary software/business Jira projects.
 """
 
-from typing import Any
-
 from typing_extensions import override
 
 from onyx.configs.constants import DocumentSource
@@ -41,11 +39,10 @@ class JiraServiceManagementConnector(JiraConnector):
     the class for ``DocumentSource.JIRA_SERVICE_MANAGEMENT``.
     """
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        # Cache the discovered service desk project keys so we do not re-list
-        # projects on every poll window.
-        self._service_desk_project_keys: list[str] | None = None
+    # Cache of discovered service desk project keys, populated lazily so we do
+    # not re-list projects on every poll window. A class-level default keeps the
+    # full JiraConnector __init__ signature without an untyped passthrough.
+    _service_desk_project_keys: list[str] | None = None
 
     @property
     @override
@@ -73,6 +70,23 @@ class JiraServiceManagementConnector(JiraConnector):
             service_desk_keys,
         )
         return service_desk_keys
+
+    @override
+    def validate_connector_settings(self) -> None:
+        super().validate_connector_settings()
+
+        # When auto-scoping (no explicit project or JQL), require at least one
+        # service desk project so the connector fails validation instead of
+        # silently indexing nothing. super() has already confirmed the client
+        # and Jira API access at this point.
+        if not self.jql_query and not self.jira_project:
+            if not self._get_service_desk_project_keys():
+                raise ConnectorValidationError(
+                    "No Jira Service Management (service desk) projects were "
+                    "found for the provided credentials. Ensure the account has "
+                    "access to at least one service desk project, or configure a "
+                    "specific project key or JQL query."
+                )
 
     @override
     def _get_jql_query(

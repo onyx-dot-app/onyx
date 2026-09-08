@@ -107,3 +107,35 @@ def test_projects_without_type_key_are_ignored() -> None:
     connector._jira_client = mock_client
 
     assert connector._get_service_desk_project_keys() == ["SUP"]
+
+
+def test_validate_raises_when_no_service_desk_projects() -> None:
+    connector = _connector()
+    mock_client = MagicMock()
+    mock_client.projects.return_value = [_project("ENG", "software")]
+    connector._jira_client = mock_client
+
+    with pytest.raises(ConnectorValidationError):
+        connector.validate_connector_settings()
+
+
+def test_validate_passes_with_a_service_desk_project() -> None:
+    connector = _connector()
+    mock_client = MagicMock()
+    mock_client.projects.return_value = [_project("SUP", "service_desk")]
+    connector._jira_client = mock_client
+
+    # Should not raise.
+    connector.validate_connector_settings()
+
+
+def test_validate_with_explicit_project_skips_service_desk_check() -> None:
+    # An explicit project key means auto-scoping is not used, so the absence of
+    # service desk projects must not fail validation.
+    connector = _connector(project_key="SUP")
+    mock_client = MagicMock()
+    mock_client.projects.return_value = [_project("ENG", "software")]
+    connector._jira_client = mock_client
+
+    # Should not raise.
+    connector.validate_connector_settings()
