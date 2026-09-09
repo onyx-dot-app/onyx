@@ -1079,11 +1079,13 @@ def run_llm_loop(
                 image_files_replayed_as_markers=image_files_replayed_as_markers,
             )
 
-            # Output room is what the assembled input leaves under the limit;
-            # image markers are counted at stored cost, which only undercounts room.
+            # Output room is what the assembled input leaves under the margined
+            # budget, so the tokenizer safety margin stays headroom for input
+            # undercounting rather than being spent on output. Image markers are
+            # counted at stored cost, which only undercounts room.
             max_output_tokens = compute_output_allowance(
                 model_max_output_tokens=model_max_output_tokens,
-                input_token_limit=llm.config.max_input_tokens,
+                input_token_limit=available_tokens,
                 estimated_input_tokens=tool_token_budget
                 + sum(msg.token_count for msg in truncated_message_history),
             )
