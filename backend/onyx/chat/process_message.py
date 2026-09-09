@@ -70,6 +70,7 @@ from onyx.chat.save_chat import save_chat_turn
 from onyx.chat.stop_signal_checker import is_connected as check_stop_signal
 from onyx.chat.stop_signal_checker import reset_cancel_status
 from onyx.chat.stream_buffer import StreamBufferWriter
+from onyx.chat.token_budget import resolve_chat_token_budget
 from onyx.configs.app_configs import DISABLE_VECTOR_DB, INTEGRATION_TESTS_MODE
 from onyx.configs.chat_configs import CHAT_HEARTBEAT_INTERVAL_S
 from onyx.configs.constants import (
@@ -375,8 +376,7 @@ def _extract_text_from_in_memory_file(f: InMemoryChatFile) -> str | None:
 
 def extract_context_files(
     user_files: list[UserFile],
-    llm_max_context_window: int,
-    reserved_token_count: int,
+    input_token_budget: int,
     db_session: Session,
     # Because the tokenizer is a generic tokenizer, the token count may be incorrect.
     # to account for this, the maximum context that is allowed for this function is
@@ -393,8 +393,7 @@ def extract_context_files(
     Args:
         project_id: The project ID to load files from
         user_id: The user ID for authorization
-        llm_max_context_window: Maximum tokens allowed in the LLM context window
-        reserved_token_count: Number of tokens to reserve for other content
+        input_token_budget: Output-reserved input tokens available to the model.
         db_session: Database session
         max_llm_context_percentage: Maximum percentage of the LLM context window to use.
     Returns:
@@ -418,9 +417,7 @@ def extract_context_files(
         for uf in user_files
         if not mime_type_to_chat_file_type(uf.file_type).use_metadata_only()
     )
-    max_actual_tokens = (
-        llm_max_context_window - reserved_token_count
-    ) * max_llm_context_percentage
+    max_actual_tokens = max(0, input_token_budget) * max_llm_context_percentage
 
     if aggregate_tokens >= max_actual_tokens:
         use_as_search_filter = not DISABLE_VECTOR_DB
@@ -891,13 +888,15 @@ def build_chat_turn(
         db_session=db_session,
     )
 
-    # Use the smallest context window across models for safety (harmless for N=1).
-    llm_max_context_window = min(llm.config.max_input_tokens for llm in llms)
+    # Use the smallest usable input budget across models for safety (harmless for N=1).
+    input_token_budget = min(
+        resolve_chat_token_budget(llm).input_tokens for llm in llms
+    )
+    project_input_token_budget = max(0, input_token_budget - reserved_token_count)
 
     extracted_context_files = extract_context_files(
         user_files=context_user_files,
-        llm_max_context_window=llm_max_context_window,
-        reserved_token_count=reserved_token_count,
+        input_token_budget=project_input_token_budget,
         db_session=db_session,
     )
 
@@ -1258,6 +1257,22 @@ def _run_models(
         with persist_lock:
             run_compression = not compression_claimed
             compression_claimed = True
+            measured_overheads = [
+                state_container.get_reserved_input_tokens()
+                for state_container in state_containers
+            ]
+            max_reserved_input_tokens = max(
+                overhead if overhead is not None else setup.reserved_token_count
+                for overhead in measured_overheads
+            )
+        compression_input_token_budget = max(
+            0,
+            min(
+                resolve_chat_token_budget(model_llm).input_tokens
+                for model_llm in setup.llms
+            )
+            - max_reserved_input_tokens,
+        )
 
         try:
             llm_loop_completion_handle(
@@ -1267,12 +1282,7 @@ def _run_models(
                 llm=setup.llms[model_idx],
                 reserved_tokens=setup.reserved_token_count,
                 run_compression=run_compression,
-                # The single compression check must still protect the
-                # smallest-window model, so it measures against the min
-                # window across the turn's models.
-                compression_max_input_tokens=min(
-                    model_llm.config.max_input_tokens for model_llm in setup.llms
-                ),
+                compression_input_token_budget=compression_input_token_budget,
             )
         except Exception:
             logger.exception(
@@ -1975,7 +1985,7 @@ def llm_loop_completion_handle(
     llm: LLM,
     reserved_tokens: int,
     run_compression: bool = True,
-    compression_max_input_tokens: int | None = None,
+    compression_input_token_budget: int | None = None,
 ) -> None:
     # Snapshot all state under the container's lock before any DB write.
     # Worker threads may still be running (e.g. user-cancellation path), so
@@ -2077,10 +2087,23 @@ def llm_loop_completion_handle(
     if not run_compression:
         return
 
+    reserved_input_tokens = state_container.get_reserved_input_tokens()
+    legacy_input_token_budget = max(
+        0,
+        resolve_chat_token_budget(llm).input_tokens
+        - (
+            reserved_input_tokens
+            if reserved_input_tokens is not None
+            else reserved_tokens
+        ),
+    )
     compression_params = get_compression_params(
-        max_input_tokens=compression_max_input_tokens or llm.config.max_input_tokens,
+        input_token_budget=(
+            compression_input_token_budget
+            if compression_input_token_budget is not None
+            else legacy_input_token_budget
+        ),
         current_history_tokens=total_tokens,
-        reserved_tokens=reserved_tokens,
     )
     if compression_params.should_compress:
         compress_chat_history(

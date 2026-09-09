@@ -93,7 +93,19 @@ def resolve_chat_token_budget(llm: LLM) -> ChatTokenBudget:
     model_context_tokens = (
         _positive_int(model_obj.get("max_context_tokens")) or model_input_tokens
     )
-    safe_input_tokens, safety_tokens = _safe_input_tokens(llm.config.max_input_tokens)
+    input_tokens_after_output_reserve = model_context_tokens - model_output_tokens
+    if input_tokens_after_output_reserve <= 0:
+        return _legacy_chat_token_budget(llm)
+
+    raw_input_tokens = min(
+        llm.config.max_input_tokens,
+        model_input_tokens,
+        input_tokens_after_output_reserve,
+    )
+    if raw_input_tokens <= 0:
+        return _legacy_chat_token_budget(llm)
+
+    safe_input_tokens, safety_tokens = _safe_input_tokens(raw_input_tokens)
     return ChatTokenBudget(
         input_tokens=safe_input_tokens,
         max_output_tokens=model_output_tokens,

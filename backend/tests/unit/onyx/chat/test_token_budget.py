@@ -46,7 +46,7 @@ def test_resolves_separate_input_output_and_context_caps() -> None:
             },
         ),
     ):
-        budget = resolve_chat_token_budget(_llm(max_input_tokens=922_000))
+        budget = resolve_chat_token_budget(_llm())
 
     assert budget.input_tokens == 875_900
     assert budget.safety_tokens == 46_100
@@ -69,16 +69,13 @@ def test_context_falls_back_to_metadata_input_for_shared_context_models() -> Non
         ),
     ):
         budget = resolve_chat_token_budget(
-            _llm(
-                provider="anthropic", model="claude-sonnet-5", max_input_tokens=200_000
-            )
+            _llm(provider="anthropic", model="claude-sonnet-5")
         )
 
-    assert budget.input_tokens == 190_000
-    assert budget.safety_tokens == 10_000
+    assert budget.input_tokens == 129_200
+    assert budget.safety_tokens == 6_800
     assert budget.context_tokens == 200_000
-    assert budget.output_allowance(estimated_input_tokens=120_000) == 64_000
-    assert budget.output_allowance(estimated_input_tokens=180_000) == 10_000
+    assert budget.output_allowance(estimated_input_tokens=129_200) == 64_000
 
 
 def test_operator_input_cap_does_not_reduce_full_output_allowance() -> None:
@@ -123,11 +120,11 @@ def test_malformed_context_uses_metadata_input_as_conservative_context() -> None
     ):
         budget = resolve_chat_token_budget(_llm(model="weird-context"))
 
-    assert budget.input_tokens == 1_000_000
+    assert budget.input_tokens == 90_000
     assert budget.context_tokens == 100_000
 
 
-def test_explicit_context_smaller_than_input_constrains_output_allowance() -> None:
+def test_explicit_context_smaller_than_input_constrains_input_budget() -> None:
     with (
         patch("onyx.chat.token_budget.GEN_AI_INPUT_TOKEN_SAFETY_MARGIN", 0),
         patch(
@@ -143,9 +140,8 @@ def test_explicit_context_smaller_than_input_constrains_output_allowance() -> No
     ):
         budget = resolve_chat_token_budget(_llm(model="small-context"))
 
-    assert budget.input_tokens == 1_000_000
+    assert budget.input_tokens == 40_000
     assert budget.output_allowance(estimated_input_tokens=40_000) == 10_000
-    assert budget.output_allowance(estimated_input_tokens=48_000) == 2_000
 
 
 @pytest.mark.parametrize(
@@ -196,7 +192,7 @@ def test_deployment_alias_is_used_after_configured_model_name() -> None:
             )
         )
 
-    assert budget.input_tokens == 950_000
+    assert budget.input_tokens == 106_400
     assert budget.max_output_tokens == 16_000
 
 
@@ -219,7 +215,7 @@ def test_matching_uses_requested_provider_before_bare_model_name() -> None:
     ):
         budget = resolve_chat_token_budget(_llm(provider="azure", model="openai/gpt-5"))
 
-    assert budget.input_tokens == 1_000_000
+    assert budget.input_tokens == 90_000
     assert budget.max_output_tokens == 10_000
     assert budget.context_tokens == 100_000
 
@@ -251,7 +247,7 @@ def test_complete_alias_record_is_used_when_model_metadata_is_partial() -> None:
     assert budget.input_tokens == 100_000
 
 
-def test_large_output_maximum_is_clamped_to_actual_room() -> None:
+def test_full_output_reserve_must_fit_context() -> None:
     with (
         patch("onyx.chat.token_budget.GEN_AI_INPUT_TOKEN_SAFETY_MARGIN", 0.05),
         patch(
@@ -267,9 +263,8 @@ def test_large_output_maximum_is_clamped_to_actual_room() -> None:
         budget = resolve_chat_token_budget(_llm(model="tiny", max_input_tokens=4_000))
 
     assert budget.input_tokens == 3_800
-    assert budget.max_output_tokens == 4_000
-    assert budget.context_tokens == 4_000
-    assert budget.output_allowance(estimated_input_tokens=2_000) == 1800
+    assert budget.max_output_tokens is None
+    assert budget.context_tokens is None
 
 
 @pytest.mark.parametrize("estimated_input_tokens", [95, 100, 200])
