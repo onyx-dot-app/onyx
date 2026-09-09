@@ -136,7 +136,7 @@ backend = [
 dev = [
     "boto3-stubs[s3]==1.39.11",
     "celery-types==0.26.0",
-    "faker==40.1.2",
+    "faker==40.38.0",
     "hatchling==1.28.0",
     "ipykernel==6.29.5",
     "manygo==0.2.0",
