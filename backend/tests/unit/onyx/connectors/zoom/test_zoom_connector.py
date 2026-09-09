@@ -14,11 +14,7 @@ from onyx.connectors.models import (
 )
 from onyx.connectors.zoom.client import ZoomClient
 from onyx.connectors.zoom.connector import ZoomConnector, ZoomConnectorCheckpoint
-from onyx.connectors.zoom.models import (
-    ZoomMeetingOccurrence,
-    ZoomPastMeetingDetails,
-    ZoomTranscript,
-)
+from onyx.connectors.zoom.models import ZoomMeetingOccurrence, ZoomTranscript
 from onyx.connectors.zoom.recordings.models import (
     OccurrenceWork,
     RecordingsState,
@@ -27,6 +23,10 @@ from onyx.connectors.zoom.recordings.models import (
 from tests.unit.onyx.connectors.utils import (
     load_everything_from_checkpoint_connector,
     load_everything_from_checkpoint_connector_from_checkpoint,
+)
+from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
+    past_meeting_details,
+    transcript,
 )
 
 _ZOOM_CREDS = {
@@ -39,9 +39,9 @@ _FULL_HISTORY_END = time.time()
 
 
 def _days_ago(days: int) -> str:
-    # Discovery drops any occurrence outside the poll window, so the timestamps
-    # have to come off the same clock as _FULL_HISTORY_END. A pinned calendar
-    # date silently empties every result set on a machine whose clock is older.
+    # Build these off the same clock as _FULL_HISTORY_END. A pinned calendar date
+    # falls outside the poll window on a machine whose clock is older, and every
+    # test then silently gets an empty result set.
     moment = datetime.fromtimestamp(_FULL_HISTORY_END, tz=timezone.utc) - timedelta(
         days=days
     )
@@ -79,11 +79,11 @@ def _configure_happy_path(mock_client: MagicMock) -> None:
     mock_client.list_past_meeting_occurrences.side_effect = lambda session_id: [
         ZoomMeetingOccurrence(uuid=f"uuid-{session_id}", start_time=_days_ago(7))
     ]
-    mock_client.get_meeting_transcript.side_effect = lambda uuid: ZoomTranscript(
+    mock_client.get_meeting_transcript.side_effect = lambda uuid: transcript(
         download_url=f"https://zoom.example/{uuid}.vtt"
     )
     mock_client.download_transcript_vtt.return_value = _SAMPLE_VTT
-    mock_client.get_past_meeting_details.return_value = ZoomPastMeetingDetails(
+    mock_client.get_past_meeting_details.return_value = past_meeting_details(
         topic="Weekly Sync"
     )
 
@@ -205,7 +205,7 @@ class TestZoomConnectorCheckpoint:
         def _transcript(uuid: str) -> ZoomTranscript:
             if uuid == "uuid-2":
                 raise RuntimeError("boom")
-            return ZoomTranscript(download_url=f"https://zoom.example/{uuid}.vtt")
+            return transcript(download_url=f"https://zoom.example/{uuid}.vtt")
 
         mock_client.get_meeting_transcript.side_effect = _transcript
 
@@ -311,8 +311,8 @@ class TestZoomConnectorCheckpoint:
         connector, mock_client = _make_connector(meeting_ids=["111", "222"])
         _configure_happy_path(mock_client)
 
-        # Send the checkpoint through JSON between invocations, the way the
-        # real worker does, and finish the run from the restored copy.
+        # The real worker serializes the checkpoint between invocations, so round-trip
+        # it through JSON here and finish the run from the restored copy.
         checkpoint = connector.build_dummy_checkpoint()
         generator = connector.load_from_checkpoint(0, _FULL_HISTORY_END, checkpoint)
         try:

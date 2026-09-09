@@ -15,13 +15,17 @@ from onyx.connectors.zoom.recordings.discovery import (
     build_discovery_sources,
 )
 from onyx.connectors.zoom.recordings.models import ZoomSessionType
+from tests.unit.onyx.connectors.zoom.zoom_api_shapes import occurrence
 
-# Fixed rather than time.time(): a float from the clock can carry more
-# precision than datetime keeps, so round-tripping it through a datetime
-# doesn't always compare equal.
+# Don't use time.time() here. The clock returns more precision than a
+# datetime keeps, so a value that round-trips through one stops comparing equal.
 _START = 0.0
 _END = 2_000_000_000.0
 _ONE_HOUR = 60 * 60
+
+# A window this narrow excludes any occurrence whose date parsed, so a test using
+# it can only pass through the branch that keeps an unreadable timestamp.
+_NARROW_WINDOW_SECONDS = 60.0
 
 
 def _occurrence_at(uuid: str, epoch_seconds: float) -> ZoomMeetingOccurrence:
@@ -44,7 +48,7 @@ class TestIdAllowlistSource:
         source = IdAllowlistSource(["111", "222"])
         client = MagicMock(spec=ZoomClient)
         client.list_past_meeting_occurrences.side_effect = lambda session_id: [
-            ZoomMeetingOccurrence(uuid=f"uuid-{session_id}")
+            occurrence(uuid=f"uuid-{session_id}")
         ]
 
         first = source.discover_step(client, _START, _END, None)
@@ -102,8 +106,6 @@ class TestIdAllowlistSource:
         failure = result.failures[0]
         assert failure.failed_entity is not None
         assert failure.failed_entity.entity_id == "meeting:111"
-        # Discovery moves on, so the failure has to say which window went
-        # uncovered or the gap is invisible to an admin.
         missed = failure.failed_entity.missed_time_range
         assert missed is not None
         missed_start, missed_end = missed
@@ -135,7 +137,6 @@ class TestIdAllowlistPollWindow:
             ]
         )
 
-        # Poll as a steady-state run would: start at the last successful run.
         result = source.discover_step(client, now - _ONE_HOUR, now, None)
 
         assert [w.occurrence_uuid for w in result.work] == ["uuid-new"]
@@ -165,7 +166,6 @@ class TestIdAllowlistPollWindow:
         result = source.discover_step(client, poll_start, now, None)
 
         assert result.work == []
-        # Nothing to do for this id, so it has to move on rather than stall.
         assert result.done is True
 
     def test_occurrence_after_the_window_end_is_excluded(self) -> None:
@@ -177,8 +177,6 @@ class TestIdAllowlistPollWindow:
 
         result = source.discover_step(client, now - _ONE_HOUR, now, None)
 
-        # The window is bounded at both ends; a future date (clock skew, or a
-        # scheduled instance) is not this poll's business.
         assert result.work == []
 
     def test_unparseable_start_time_is_kept_rather_than_dropped(self) -> None:
@@ -188,21 +186,18 @@ class TestIdAllowlistPollWindow:
             [ZoomMeetingOccurrence(uuid="uuid-junk", start_time="not-a-date")]
         )
 
-        # A narrow window that a real date would fall outside of: the point is
-        # that a timestamp we can't read must not cost us the transcript.
-        result = source.discover_step(client, now - 60, now, None)
+        result = source.discover_step(client, now - _NARROW_WINDOW_SECONDS, now, None)
 
         assert [w.occurrence_uuid for w in result.work] == ["uuid-junk"]
 
-    def test_occurrence_without_start_time_is_never_filtered_out(self) -> None:
+    def test_occurrence_with_blank_start_time_is_never_filtered_out(self) -> None:
         source = IdAllowlistSource(["111"])
         now = time.time()
         client = _client_with_occurrences(
-            [ZoomMeetingOccurrence(uuid="uuid-no-time", start_time=None)]
+            [ZoomMeetingOccurrence(uuid="uuid-no-time", start_time="")]
         )
 
-        # A window so narrow any dated occurrence would fall outside it.
-        result = source.discover_step(client, now - 60, now, None)
+        result = source.discover_step(client, now - _NARROW_WINDOW_SECONDS, now, None)
 
         assert [w.occurrence_uuid for w in result.work] == ["uuid-no-time"]
 
@@ -251,8 +246,8 @@ class TestIdAllowlistPaging:
 
         result = source.discover_step(client, _START, _END, None)
 
-        # next_offset == len here, so the "is there more" check must not send
-        # us round again for an empty page.
+        # This page ends exactly on the boundary, so a wrong check here asks
+        # Zoom for one more empty page.
         assert len(result.work) == _MAX_WORK_PER_STEP
         assert result.done is True
         assert result.next_cursor is None
@@ -263,7 +258,6 @@ class TestIdAllowlistPaging:
             [ZoomMeetingOccurrence(uuid="uuid-1", start_time="2026-01-15T10:00:00Z")]
         )
 
-        # A checkpoint we can't make sense of should re-do work, never skip it.
         result = source.discover_step(client, _START, _END, {"bogus": "value"})
 
         assert [w.occurrence_uuid for w in result.work] == ["uuid-1"]
@@ -295,8 +289,8 @@ class TestIdAllowlistPaging:
             )
             for i in range(_MAX_WORK_PER_STEP + 5)
         ]
-        # The meeting runs again between steps, and Zoom returns the newest
-        # entry first — order the connector must not depend on.
+        # The meeting runs again between the two steps, and Zoom lists the newest
+        # occurrence first, so the second page arrives in a different order.
         later = [
             ZoomMeetingOccurrence(uuid="uuid-9999", start_time="2026-06-01T00:00:00Z")
         ] + base
@@ -333,8 +327,8 @@ class TestSlowTranscriptIsRetried:
         meeting_at = now - lag_hours * _ONE_HOUR
         client = _client_with_occurrences([_occurrence_at("uuid-slow", meeting_at)])
 
-        # window_start has advanced to just before now, the way a steady-state
-        # run looks once the meeting is well in the past.
+        # A steady-state run only polls the last hour, so the overlap buffer is
+        # the only thing that can still offer an older meeting.
         poll_start = now - _ONE_HOUR
         result = source.discover_step(client, poll_start, now, None)
         return [w.occurrence_uuid for w in result.work] == ["uuid-slow"]
@@ -347,8 +341,6 @@ class TestSlowTranscriptIsRetried:
 
     def test_transcript_arriving_past_the_buffer_is_lost(self) -> None:
         buffer_hours = _OCCURRENCE_POLL_OVERLAP_SECONDS / _ONE_HOUR
-        # Documents the limit rather than endorsing it: past this, the meeting
-        # has fallen behind the window and nothing re-offers it.
         assert not self._still_offered_after(buffer_hours + 2)
 
 
