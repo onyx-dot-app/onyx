@@ -146,7 +146,7 @@ dev = [
     # .pre-commit-config.yaml, which install ods into an isolated overlay.
     "onyx-devtools[audit]==0.13.2",
     "openapi-generator-cli==7.17.0",
-    "pre-commit==3.2.2",
+    "pre-commit==4.6.2",
     "pytest-alembic==0.12.1",
     "pytest-asyncio==1.4.0",
     "pytest-dotenv==0.5.2",
