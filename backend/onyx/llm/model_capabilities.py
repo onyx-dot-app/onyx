@@ -526,7 +526,8 @@ _OPENAI_GPT_VERSION_PATTERN = re.compile(r"(?:^|[^a-z0-9])gpt-(\d+)(?:\.(\d+))?"
 
 
 def parse_openai_gpt_version(model_name: str) -> tuple[int, int] | None:
-    """(major, minor) from a GPT model name, None for any other name."""
+    """(major, minor) from a GPT model name, minor 0 when absent. None for any
+    other name."""
     match = _OPENAI_GPT_VERSION_PATTERN.search(model_name.lower())
     if match is None:
         return None

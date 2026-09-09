@@ -97,8 +97,8 @@ _VERTEX_ANTHROPIC_MODELS_REJECTING_STREAM_OPTIONS = (
 )
 
 # Best-effort tuning kwargs, never worth failing a chat over. _completion
-# retries provider rejections without them: reasoning keys first, then all.
-# Semantics-changing keys (tools, tool_choice, messages) are never stripped.
+# retries provider rejections without them (reasoning keys first, then all),
+# keeping keys a provider requires. Never tools, tool_choice or messages.
 _REASONING_KWARG_KEYS = frozenset(
     {"thinking", "output_config", "reasoning", "reasoning_effort"}
 )
@@ -113,6 +113,11 @@ _KWARG_ERROR_ALIASES: dict[str, tuple[str, ...]] = {
     "reasoning_effort": ("reasoning_effort", "effort"),
     "temperature": ("temperature",),
 }
+
+# Substring of the OpenAI-family 400 that names "none" as the only effort
+# accepted alongside function tools. Omitting the parameter gets the same 400.
+_REASONING_NONE_DEMAND = "set reasoning_effort to 'none'"
+_OPENAI_REASONING_NONE = OPENAI_REASONING_EFFORT[ReasoningEffort.OFF]
 
 
 def _merge_under(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -150,6 +155,25 @@ def _rejection_names_strippable_kwargs(error: Exception, strippable: set[str]) -
         for key in strippable
         for alias in _KWARG_ERROR_ALIASES.get(key, (key,))
     )
+
+
+def _rejection_demands_reasoning_none(error: Exception) -> bool:
+    return _REASONING_NONE_DEMAND in str(error).lower()
+
+
+def _retry_attempts(
+    kwargs: dict[str, Any], required_keys: frozenset[str]
+) -> list[dict[str, Any]]:
+    """The ladder: the kwargs as given, then without reasoning keys, then
+    without every best-effort key, skipping steps that drop nothing."""
+    attempts = [kwargs]
+    for strip_keys in (_REASONING_KWARG_KEYS, _BEST_EFFORT_KWARG_KEYS):
+        stripped = {
+            k: v for k, v in kwargs.items() if k not in strip_keys or k in required_keys
+        }
+        if len(stripped) < len(attempts[-1]):
+            attempts.append(stripped)
+    return attempts
 
 
 class LLMTimeoutError(Exception):
@@ -758,8 +782,8 @@ class LitellmLLM(LLM):
 
         # Tool turns over chat completions for GPT-5.4+ trade reasoning for a
         # working call. Responses routes, registry bridge included, are exempt.
-        forces_reasoning_none = (
-            bool(tools)
+        if (
+            tools
             and not is_openai_model
             and (
                 self._api_surface is LlmApiSurface.OPENAI_CHAT_COMPLETIONS
@@ -769,9 +793,11 @@ class LitellmLLM(LLM):
                 openai_chat_tools_require_reasoning_none(name)
                 for name in model_identity_names
             )
-        )
-        if forces_reasoning_none:
+        ):
             reasoning_effort = ReasoningEffort.OFF
+            optional_kwargs["reasoning_effort"] = _OPENAI_REASONING_NONE
+            required_kwarg_keys = frozenset({"reasoning_effort"})
+            _log_chat_completions_tools_disable_reasoning(model, self._api_base)
 
         # Note, there is a reasoning_effort parameter in LiteLLM but it is completely jank and does not work for any
         # of the major providers. Not setting it sets it to OFF.
@@ -875,13 +901,6 @@ class LitellmLLM(LLM):
                     optional_kwargs["reasoning_effort"] = ReasoningEffort.HIGH.value
                 else:
                     optional_kwargs["reasoning_effort"] = ReasoningEffort.MEDIUM.value
-
-        if forces_reasoning_none:
-            optional_kwargs["reasoning_effort"] = OPENAI_REASONING_EFFORT[
-                ReasoningEffort.OFF
-            ]
-            required_kwarg_keys = frozenset({"reasoning_effort"})
-            _log_chat_completions_tools_disable_reasoning(model, self._api_base)
 
         if tools:
             # OpenAI will error if parallel_tool_calls is True and tools are not specified
@@ -1041,18 +1060,9 @@ class LitellmLLM(LLM):
                         **passthrough_kwargs,
                     )
 
-            # Retry ladder for provider 400s: drop reasoning kwargs, then every
-            # best-effort kwarg. Unknown models or capability drift degrade to
-            # provider defaults with a warning instead of failing the message.
-            attempts = [optional_kwargs]
-            for strip_keys in (_REASONING_KWARG_KEYS, _BEST_EFFORT_KWARG_KEYS):
-                stripped = {
-                    k: v
-                    for k, v in optional_kwargs.items()
-                    if k not in strip_keys or k in required_kwarg_keys
-                }
-                if len(stripped) < len(attempts[-1]):
-                    attempts.append(stripped)
+            # Provider 400s degrade to provider defaults with a warning instead
+            # of failing the message, or learn the "none" a provider demands.
+            attempts = _retry_attempts(optional_kwargs, required_kwarg_keys)
 
             for i, opts in enumerate(attempts):
                 # Last write wins: sent_kwargs holds what the returning (or
@@ -1073,17 +1083,35 @@ class LitellmLLM(LLM):
                 try:
                     return _call_litellm(opts)
                 except BadRequestError as e:
-                    if i == len(attempts) - 1:
+                    if (
+                        _rejection_demands_reasoning_none(e)
+                        and opts.get("reasoning_effort") != _OPENAI_REASONING_NONE
+                    ):
+                        # A name the version gate cannot place learns "none" from
+                        # the 400 itself, one round trip late. Rebuilt attempts all
+                        # carry it, so the loop picks up the tail and this fires once.
+                        reasoning_effort = ReasoningEffort.OFF
+                        forced = {
+                            k: v
+                            for k, v in opts.items()
+                            if k not in _REASONING_KWARG_KEYS
+                        } | {"reasoning_effort": _OPENAI_REASONING_NONE}
+                        attempts[i + 1 :] = _retry_attempts(
+                            forced, required_kwarg_keys | {"reasoning_effort"}
+                        )
+                        _log_chat_completions_tools_disable_reasoning(
+                            model, self._api_base
+                        )
+                    elif i == len(attempts) - 1:
                         raise
-                    # Only retry rejections a later attempt can strip away.
-                    remaining_strippable = set(opts) - set(attempts[-1])
-                    if not _rejection_names_strippable_kwargs(e, remaining_strippable):
+                    elif not _rejection_names_strippable_kwargs(
+                        e, set(opts) - set(attempts[-1])
+                    ):
                         raise
                     logger.warning(
-                        "Provider rejected request for model %s. Retrying "
-                        "without %s: %s",
+                        "Provider rejected request for model %s. Retrying with %s: %s",
                         model,
-                        sorted(set(opts) - set(attempts[i + 1])),
+                        sorted(_BEST_EFFORT_KWARG_KEYS & attempts[i + 1].keys()),
                         e,
                     )
             raise RuntimeError("unreachable: retry ladder always returns or raises")

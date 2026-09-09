@@ -1,5 +1,5 @@
-"""The request builder must send an explicit reasoning_effort "none" when GPT-5.4+
-take function tools over chat completions, and leave responses routes and older
+"""`_completion` must send an explicit reasoning_effort "none" when GPT-5.4+ take
+function tools over chat completions, and leave responses routes and older
 models alone."""
 
 from typing import Any
@@ -152,3 +152,39 @@ def test_forced_none_survives_the_retry_ladder() -> None:
     assert "temperature" in calls[0] and "temperature" not in calls[1]
     assert calls[0]["reasoning_effort"] == "none"
     assert calls[1]["reasoning_effort"] == "none"
+
+
+def test_opaque_alias_learns_none_from_the_rejection() -> None:
+    """An alias with no version in its name cannot be matched by name, so the
+    ladder must send "none" once the provider demands it, keeping the rest."""
+    calls: list[dict[str, Any]] = []
+
+    def completion(**kwargs: Any) -> Any:
+        calls.append(kwargs)
+        if kwargs.get("reasoning_effort") != "none":
+            raise BadRequestError(
+                message=(
+                    "Function tools with reasoning_effort are not supported for "
+                    "prod-gpt in /v1/chat/completions. To use function tools, use "
+                    "/v1/responses or set reasoning_effort to 'none'."
+                ),
+                model="m",
+                llm_provider="azure",
+            )
+        return None
+
+    llm = _azure_llm("prod-gpt")
+    with patch("onyx.llm.litellm_singleton.litellm.completion", side_effect=completion):
+        llm._completion(
+            prompt=[UserMessage(content="hello")],
+            tools=_TOOLS,
+            tool_choice=None,
+            stream=False,
+            parallel_tool_calls=False,
+            reasoning_effort=ReasoningEffort.AUTO,
+        )
+
+    assert len(calls) == 2
+    assert "reasoning_effort" not in calls[0]
+    assert calls[1]["reasoning_effort"] == "none"
+    assert calls[1]["temperature"] == calls[0]["temperature"]
