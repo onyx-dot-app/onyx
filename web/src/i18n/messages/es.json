@@ -13129,6 +13129,9 @@
         "maxReached": "Se alcanzó el máximo de {count} memorias"
       },
       "empty": {
+        "addButton": {
+          "ariaLabel": "Añadir memoria"
+        },
         "description": "Añade una nota personal o una memoria que Onyx deba recordar.",
         "getStarted": "Aún no hay memorias. Haz clic en \"Añadir línea\" para empezar.",
         "noMatches": "Ninguna memoria coincide con tu búsqueda."

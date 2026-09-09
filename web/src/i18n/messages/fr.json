@@ -13129,6 +13129,9 @@
         "maxReached": "Maximum de {count} souvenirs atteint"
       },
       "empty": {
+        "addButton": {
+          "ariaLabel": "Ajouter un souvenir"
+        },
         "description": "Ajoutez une note personnelle ou un souvenir que Onyx doit retenir.",
         "getStarted": "Aucun souvenir pour le moment. Cliquez sur « Ajouter une ligne » pour commencer.",
         "noMatches": "Aucun souvenir ne correspond à votre recherche."

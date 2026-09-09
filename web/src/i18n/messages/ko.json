@@ -13129,6 +13129,9 @@
         "maxReached": "메모리 최대 {count}개에 도달했습니다"
       },
       "empty": {
+        "addButton": {
+          "ariaLabel": "메모리 추가"
+        },
         "description": "Onyx가 기억할 개인 메모나 메모리를 추가하세요.",
         "getStarted": "아직 메모리가 없습니다. \"줄 추가\"를 클릭하여 시작하세요.",
         "noMatches": "검색과 일치하는 메모리가 없습니다."

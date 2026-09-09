@@ -13129,6 +13129,9 @@
         "maxReached": "已达到 {count} 条记忆的上限"
       },
       "empty": {
+        "addButton": {
+          "ariaLabel": "添加记忆"
+        },
         "description": "添加希望 Onyx 记住的个人笔记或记忆。",
         "getStarted": "还没有记忆。点击“添加行”开始。",
         "noMatches": "没有与搜索匹配的记忆。"
