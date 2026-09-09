@@ -16,9 +16,10 @@ from onyx.connectors.exceptions import (
 )
 from onyx.connectors.zoom.models import (
     ZoomAccessToken,
-    ZoomSessionDetails,
+    ZoomPastMeetingDetails,
     ZoomSessionOccurrence,
     ZoomTranscript,
+    ZoomWebinarDetails,
 )
 from onyx.utils.url import (
     SSRFException,
@@ -39,7 +40,7 @@ _ZOOM_DATE_FORMAT = "%Y-%m-%d"
 _WEBINAR_ACCESS_HINT = (
     "Zoom refused a webinar request. Webinars need the Webinar add-on enabled for "
     "the host, and the app needs the webinar:read:admin scope. Meetings need "
-    "neither, so a connector that indexes meetings can still fail here."
+    "neither, so credentials that read meetings can still fail here."
 )
 
 # Zoom's own error code from the response body, not an HTTP status. It covers
@@ -238,12 +239,14 @@ class ZoomClient:
         _raise_for_zoom_error(response, f"the transcript for {meeting_identifier}")
         return ZoomTranscript.model_validate(response.json())
 
-    def get_past_meeting_details(self, meeting_identifier: str) -> ZoomSessionDetails:
+    def get_past_meeting_details(
+        self, meeting_identifier: str
+    ) -> ZoomPastMeetingDetails:
         response = self._request(
             "GET", f"/past_meetings/{_encode_meeting_identifier(meeting_identifier)}"
         )
         _raise_for_zoom_error(response, f"the details for {meeting_identifier}")
-        return ZoomSessionDetails.model_validate(response.json())
+        return ZoomPastMeetingDetails.model_validate(response.json())
 
     def list_past_meeting_occurrences(
         self,
@@ -277,7 +280,7 @@ class ZoomClient:
         occurrences = response.json().get("meetings", [])
         return [ZoomSessionOccurrence.model_validate(o) for o in occurrences]
 
-    def get_webinar_details(self, webinar_identifier: str) -> ZoomSessionDetails | None:
+    def get_webinar_details(self, webinar_identifier: str) -> ZoomWebinarDetails:
         """Takes a webinar ID or one occurrence's UUID. Zoom has no
         `/past_webinars/{id}` to match the meeting details endpoint, so a past
         occurrence is read back through this one.
@@ -285,22 +288,21 @@ class ZoomClient:
         response = self._request_webinar(
             f"/webinars/{_encode_meeting_identifier(webinar_identifier)}"
         )
-        if response.status_code == 404:
-            return None
         _raise_for_zoom_error(response, f"the details for webinar {webinar_identifier}")
-        return ZoomSessionDetails.model_validate(response.json())
+        return ZoomWebinarDetails.model_validate(response.json())
 
     def list_past_webinar_occurrences(
         self, webinar_id: str
     ) -> list[ZoomSessionOccurrence]:
         """Unlike the meeting equivalent, this endpoint declares no age limit,
         so webinar history is not cut off at 15 months.
+
+        An unknown webinar answers 404, which raises here rather than reading as
+        a webinar that ran no times.
         """
         response = self._request_webinar(
             f"/past_webinars/{_encode_meeting_identifier(webinar_id)}/instances"
         )
-        if response.status_code == 404:
-            return []
         _raise_for_zoom_error(response, f"the occurrences for webinar {webinar_id}")
         occurrences = response.json().get("webinars", [])
         return [ZoomSessionOccurrence.model_validate(o) for o in occurrences]
