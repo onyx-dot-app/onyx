@@ -12814,7 +12814,8 @@
     "pagination": {
       "goToPage": "Zu Seite springen",
       "nextPage": "Nächste Seite",
-      "previousPage": "Vorherige Seite"
+      "previousPage": "Vorherige Seite",
+      "rangeOfTotal": "<range></range> von <total></total>"
     },
     "table": {
       "alwaysShown": "Immer angezeigt",

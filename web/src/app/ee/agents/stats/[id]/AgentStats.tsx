@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Card, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import {
@@ -35,6 +35,7 @@ interface SummaryMetricProps {
 }
 
 function SummaryMetric({ label, value }: SummaryMetricProps) {
+  const locale = useLocale();
   return (
     <Section
       flexDirection="column"
@@ -47,7 +48,7 @@ function SummaryMetric({ label, value }: SummaryMetricProps) {
       <Text font="secondary-body" color="text-03">
         {label}
       </Text>
-      <Text font="heading-h3">{value.toLocaleString()}</Text>
+      <Text font="heading-h3">{value.toLocaleString(locale)}</Text>
     </Section>
   );
 }

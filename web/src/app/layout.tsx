@@ -26,7 +26,7 @@ import OpalStringsBridge from "@/i18n/OpalStringsBridge";
 import { getLocale, getMessages } from "next-intl/server";
 import { DirectionProvider } from "@radix-ui/react-direction";
 import { cookies } from "next/headers";
-import { htmlDirForLocale, type HtmlDir } from "@/i18n/config";
+import { htmlDirForLocale, messageLocale, type HtmlDir } from "@/i18n/config";
 
 // No generic at the end of either fallback list: the generic comes last in
 // the composed --font-* variables on <html> below, after the per-locale CJK
@@ -65,12 +65,16 @@ interface LayoutProps {
 }
 
 export default async function Layout({ children }: LayoutProps) {
-  // Locale comes from the NEXT_LOCALE cookie (see src/i18n/request.ts), which
-  // UserProvider keeps in sync with the user's stored language preference.
+  // The runtime tag comes from the NEXT_LOCALE cookie (see src/i18n/request.ts),
+  // which the backend sets from the stored language.
   const locale = await getLocale();
   const messages = await getMessages();
+  // <html lang> and the direction follow the stored language, not the runtime
+  // tag: UserProvider refreshes whenever <html lang> differs from the stored
+  // language, and the numbering system belongs to Intl, not the document.
+  const language = messageLocale(locale);
 
-  let dir: HtmlDir = htmlDirForLocale(locale);
+  let dir: HtmlDir = htmlDirForLocale(language);
   // Dev-only escape hatch so QA can preview either direction without
   // switching account language: set an "onyx-dir" cookie to "rtl" or
   // "ltr" (with path=/) and reload.
@@ -83,7 +87,7 @@ export default async function Layout({ children }: LayoutProps) {
 
   return (
     <html
-      lang={locale}
+      lang={language}
       dir={dir}
       // The app-wide font variables are composed here instead of with
       // next/font's `variable` option: the CJK tail (--font-cjk-sans,

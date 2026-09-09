@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, type ReactNode } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { OpalStringsProvider, type OpalStrings } from "@opal/strings";
+import { createLocaleIntegerParser } from "@/i18n/numbers";
 
 interface OpalStringsBridgeProps {
   children: ReactNode;
@@ -13,8 +14,11 @@ export default function OpalStringsBridge({
   children,
 }: OpalStringsBridgeProps) {
   const t = useTranslations("opal");
-  const strings = useMemo<OpalStrings>(
-    () => ({
+  const locale = useLocale();
+  const strings = useMemo<OpalStrings>(() => {
+    // Counts such as "1234~1250" are identifiers, so no grouping separators.
+    const digits = new Intl.NumberFormat(locale, { useGrouping: false });
+    return {
       close: t("common.close"),
       loading: t("common.loading"),
       loadingPage: t("common.loadingPage"),
@@ -63,11 +67,17 @@ export default function OpalStringsBridge({
       selectAnItemToContinue: t("table.selectAnItemToContinue"),
       singleItemSelected: t("table.singleItemSelected"),
       selectedItemCount: (count) => t("table.selectedItemCount", { count }),
+      formatNumber: (value) => digits.format(value),
+      parseNumber: createLocaleIntegerParser(digits),
       showing: (range, total) =>
         t.rich("table.showing", { range: () => range, total: () => total }),
-    }),
-    [t]
-  );
+      rangeOfTotal: (range, total) =>
+        t.rich("pagination.rangeOfTotal", {
+          range: () => range,
+          total: () => total,
+        }),
+    };
+  }, [t, locale]);
   return (
     <OpalStringsProvider strings={strings}>{children}</OpalStringsProvider>
   );

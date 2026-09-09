@@ -54,8 +54,14 @@ export type OpalStrings = {
   selectAnItemToContinue: string;
   singleItemSelected: string;
   selectedItemCount: (count: number) => string;
+  /** Locale digits, no grouping, for the counts Opal renders itself (footer range, page numbers). */
+  formatNumber: (value: number) => string;
+  /** Inverse of formatNumber for typed input: a whole number in the locale digits (ASCII always accepted), else null. */
+  parseNumber: (text: string) => number | null;
   /** Table footer summary, e.g. "Showing 1~10 of 22", as text chunks around the two styled nodes. */
   showing: (range: ReactNode, total: ReactNode) => ReactNode;
+  /** Pagination count summary, e.g. "1~10 of 22", same chunk shape as `showing`. */
+  rangeOfTotal: (range: ReactNode, total: ReactNode) => ReactNode;
 };
 
 export const defaultOpalStrings: OpalStrings = {
@@ -108,7 +114,10 @@ export const defaultOpalStrings: OpalStrings = {
   singleItemSelected: "Item selected",
   selectedItemCount: (count) =>
     `${count} item${count !== 1 ? "s" : ""} selected`,
+  formatNumber: (value) => String(value),
+  parseNumber: (text) => (/^\d+$/.test(text) ? Number(text) : null),
   showing: (range, total) => ["Showing ", range, " of ", total],
+  rangeOfTotal: (range, total) => [range, " of ", total],
 };
 
 const OpalStringsContext = createContext<OpalStrings>(defaultOpalStrings);

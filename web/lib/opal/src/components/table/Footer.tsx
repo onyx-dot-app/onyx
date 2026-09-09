@@ -4,8 +4,9 @@ import { Button, Pagination, SelectButton } from "@opal/components";
 import { Text } from "@opal/components";
 import { useTableSize } from "@opal/components/table/TableSizeContext";
 import { SvgEye, SvgXCircle } from "@opal/icons";
+import { textChunks } from "@opal/components/text/chunks";
 import { useOpalStrings, type OpalStrings } from "@opal/strings";
-import { Children, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -264,26 +265,15 @@ function SummaryLeft({
   // The range is an LTR isolate so "1~10" keeps its digit order in RTL copy.
   const range = (
     <Text font={monoFont} color="text-03" dir="ltr">
-      {`${rangeStart}~${rangeEnd}`}
+      {`${strings.formatNumber(rangeStart)}~${strings.formatNumber(rangeEnd)}`}
     </Text>
   );
   const total = (
     <Text font={monoFont} color="text-03">
-      {`${totalItems}${suffix}`}
+      {`${strings.formatNumber(totalItems)}${suffix}`}
     </Text>
   );
-  // Each text chunk gets its own Text span, so the summary keeps the sibling
-  // layout (and spacing) it had before the words came from a translation.
-  const parts = Children.toArray(strings.showing(range, total)).map(
-    (part, index) =>
-      typeof part === "string" ? (
-        <Text key={index} font={bodyFont} color="text-03">
-          {part}
-        </Text>
-      ) : (
-        part
-      )
-  );
+  const parts = textChunks(strings.showing(range, total), bodyFont, "text-03");
   return (
     <div className="flex flex-row items-center w-fit h-fit px-1">{parts}</div>
   );

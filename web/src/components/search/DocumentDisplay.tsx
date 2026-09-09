@@ -1,7 +1,7 @@
 "use client";
 
 import { JSX } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
 import { SourceIcon } from "../SourceIcon";
 import { WebResultIcon } from "../WebResultIcon";
@@ -133,6 +133,7 @@ export function CompactDocumentCard({
   updatePresentingDocument,
 }: CompactDocumentCardProps) {
   const t = useTranslations("common.documentDisplay");
+  const locale = useLocale();
   const isWebSource =
     document.is_internet || document.source_type === ValidSources.Web;
 
@@ -178,7 +179,7 @@ export function CompactDocumentCard({
               className="line-clamp-2 text-start m-0!"
             >
               {t("updated.text", {
-                date: new Date(document.updated_at).toLocaleDateString(),
+                date: new Date(document.updated_at).toLocaleDateString(locale),
               })}
             </Text>
           )}

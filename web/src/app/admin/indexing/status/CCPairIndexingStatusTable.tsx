@@ -78,6 +78,7 @@ function SummaryRow({
   onToggle: () => void;
 }) {
   const t = useTranslations("admin.indexing");
+  const locale = useLocale();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
 
   return (
@@ -103,7 +104,9 @@ function SummaryRow({
         <div className="text-sm text-neutral-500 dark:text-neutral-300">
           {t("status.summary.totalConnectors.label")}
         </div>
-        <div className="text-xl font-semibold">{summary.total_connectors}</div>
+        <div className="text-xl font-semibold">
+          {summary.total_connectors.toLocaleString(locale)}
+        </div>
       </TableCell>
 
       <TableCell>
@@ -111,7 +114,8 @@ function SummaryRow({
           {t("status.summary.activeConnectors.label")}
         </div>
         <p className="flex text-xl mx-auto font-semibold items-center text-lg mt-1">
-          {summary.active_connectors}/{summary.total_connectors}
+          {summary.active_connectors.toLocaleString(locale)}/
+          {summary.total_connectors.toLocaleString(locale)}
         </p>
       </TableCell>
 
@@ -121,7 +125,8 @@ function SummaryRow({
             {t("status.summary.publicConnectors.label")}
           </div>
           <p className="flex text-xl mx-auto font-semibold items-center text-lg mt-1">
-            {summary.public_connectors}/{summary.total_connectors}
+            {summary.public_connectors.toLocaleString(locale)}/
+            {summary.total_connectors.toLocaleString(locale)}
           </p>
         </TableCell>
       )}
@@ -131,7 +136,7 @@ function SummaryRow({
           {t("status.summary.totalDocsIndexed.label")}
         </div>
         <div className="text-xl font-semibold">
-          {summary.total_docs_indexed.toLocaleString()}
+          {summary.total_docs_indexed.toLocaleString(locale)}
         </div>
       </TableCell>
 
@@ -213,7 +218,9 @@ function ConnectorRow({
           )}
         </TableCell>
       )}
-      <TableCell>{ccPairsIndexingStatus.docs_indexed}</TableCell>
+      <TableCell>
+        {ccPairsIndexingStatus.docs_indexed.toLocaleString(locale)}
+      </TableCell>
       <TableCell>
         {isEditable && (
           <Tooltip tooltip={t("status.manageConnector.tooltip")}>

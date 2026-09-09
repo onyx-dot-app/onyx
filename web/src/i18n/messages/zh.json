@@ -12814,7 +12814,8 @@
     "pagination": {
       "goToPage": "跳转到页面",
       "nextPage": "下一页",
-      "previousPage": "上一页"
+      "previousPage": "上一页",
+      "rangeOfTotal": "<range></range> / <total></total>"
     },
     "table": {
       "alwaysShown": "始终显示",
