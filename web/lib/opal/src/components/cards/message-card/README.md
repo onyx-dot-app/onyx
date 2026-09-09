@@ -3,7 +3,7 @@
 **Import:** `import { MessageCard } from "@opal/components";`
 
 A styled card for displaying messages, alerts, or status notifications. Uses `Content` internally
-for consistent title/description/icon layout. Built on `Card`, which owns the surface — each variant maps to a `CardColor`, a border color, and an icon. Supports 5 variants with corresponding background
+for consistent title/description/icon layout. Built on `Card`, which owns the surface — each variant maps to a `CardColor`, a border color, and an icon. Supports 6 variants — `default`, `info`, `success`, `warning`, `pending`, `error` — with corresponding background
 and border colors.
 
 ## Props

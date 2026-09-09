@@ -134,13 +134,6 @@ export type OrientationVariants = "horizontal" | "vertical";
 export type BorderVariants = "none" | "dashed" | "solid";
 
 /**
- * Background fill variants shared across card-like surfaces.
- *
- * - `"none"`: transparent background.
- * - `"light"`: lightly tinted background.
- * - `"heavy"`: heavily tinted background.
- */
-/**
  * Card surface colors, named for the token they paint — no intensity
  * adjectives. `"transparent"` is the sentinel for no fill.
  */

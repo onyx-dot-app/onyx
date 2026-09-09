@@ -40,7 +40,7 @@ export const SurfaceColors: Story = {
     <div className="flex flex-col gap-4 w-96">
       {CARD_COLORS.map((bg) => (
         <Card key={bg} color={bg} border="solid">
-          <p>backgroundVariant: {bg}</p>
+          <p>color: {bg}</p>
         </Card>
       ))}
     </div>
@@ -99,7 +99,7 @@ export const AllCombinations: Story = {
                   border={border}
                 >
                   <p className="text-xs">
-                    bg: {bg}, border: {border}
+                    color: {bg}, border: {border}
                   </p>
                 </Card>
               ))

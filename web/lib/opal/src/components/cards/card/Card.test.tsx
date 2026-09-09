@@ -87,7 +87,7 @@ describe("Card disabled", () => {
     );
   });
 
-  it("stacks with background and border rather than replacing them", () => {
+  it("stacks with color and border rather than replacing them", () => {
     render(
       <Card disabled color="transparent" border="dashed">
         <p>Body</p>
@@ -95,7 +95,7 @@ describe("Card disabled", () => {
     );
     const card = screen.getByText("Body").parentElement;
     expect(card).toHaveAttribute("data-disabled");
-    expect(card).toHaveAttribute("data-background", "none");
+    expect(card).toHaveAttribute("data-color", "transparent");
     expect(card).toHaveAttribute("data-border", "dashed");
   });
 
