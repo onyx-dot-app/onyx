@@ -316,7 +316,7 @@ export default function ProjectChatSessionList() {
         {isLoadingProjectDetails && !currentProjectDetails ? (
           <SvgSimpleLoader className="mx-4" />
         ) : projectChats.length === 0 ? (
-          <Card rounding={3} border="dashed" background="none" padding={2}>
+          <Card rounding={3} border="dashed" color="transparent" padding={2}>
             <div className="p-1">
               <Text as="p" font="secondary-body" color="text-02">
                 {t("projects.sessionList.empty.message")}

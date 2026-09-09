@@ -84,7 +84,7 @@ export default function ExternalAppsOAuthCallbackPage() {
         description={t("description")}
       />
       <SettingsLayouts.Body>
-        <Card background="light" border="solid" rounding={4}>
+        <Card color="background-tint-00" border="solid" rounding={4}>
           <div className="flex flex-col gap-2">
             {status === "exchanging" && (
               <Text font="main-content-body">{t("exchanging.label")}</Text>

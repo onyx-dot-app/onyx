@@ -159,7 +159,7 @@ function AppConnections({ query }: AppConnectionsProps) {
 
   if (isLoading) {
     return (
-      <Card background="none" border="dashed" rounding={4}>
+      <Card color="transparent" border="dashed" rounding={4}>
         <Text font="main-content-body">{t("loading.label")}</Text>
       </Card>
     );
@@ -411,7 +411,7 @@ function ConnectableCard({
           highlight && "ring-2 ring-action-selection-04"
         )}
       >
-        <Card background="light" border="solid" rounding={4}>
+        <Card color="background-tint-00" border="solid" rounding={4}>
           <ContentAction
             sizePreset="main-ui"
             variant="section"

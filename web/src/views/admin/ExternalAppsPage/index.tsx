@@ -388,7 +388,7 @@ function AppsAdminContent({
 function LoadingCard() {
   const t = useTranslations("admin.externalApps");
   return (
-    <Card background="none" border="dashed" rounding={4}>
+    <Card color="transparent" border="dashed" rounding={4}>
       <Text font="main-content-body">{t("loading.label")}</Text>
     </Card>
   );

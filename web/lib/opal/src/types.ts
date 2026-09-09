@@ -140,7 +140,19 @@ export type BorderVariants = "none" | "dashed" | "solid";
  * - `"light"`: lightly tinted background.
  * - `"heavy"`: heavily tinted background.
  */
-export type BackgroundVariants = "none" | "light" | "heavy";
+/**
+ * Card surface colors, named for the token they paint — no intensity
+ * adjectives. `"transparent"` is the sentinel for no fill.
+ */
+export type CardColor =
+  | "transparent"
+  | "background-tint-00"
+  | "background-tint-01"
+  | "status-info-00"
+  | "status-success-00"
+  | "status-warning-00"
+  | "status-error-00"
+  | "theme-amber-01";
 
 // ---------------------------------------------------------------------------
 // Color Types

@@ -145,7 +145,7 @@ function VertexAIModalInternals({
               title={t("vertexAi.workloadIdentityNotice.title")}
             />
           </InputPadder>
-          <Card background="light" border="none" padding={2}>
+          <Card color="background-tint-00" border="none" padding={2}>
             <InputVertical
               withLabel={FIELD_VERTEX_PROJECT}
               title={t("vertexAi.projectField.title")}

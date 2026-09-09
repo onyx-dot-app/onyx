@@ -2,7 +2,16 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 import { Button, Card } from "@opal/components";
 
-const BACKGROUND_VARIANTS = ["none", "light", "heavy"] as const;
+const CARD_COLORS = [
+  "transparent",
+  "background-tint-00",
+  "background-tint-01",
+  "status-info-00",
+  "status-success-00",
+  "status-warning-00",
+  "status-error-00",
+  "theme-amber-01",
+] as const;
 const BORDER_VARIANTS = ["none", "dashed", "solid"] as const;
 const PADDING_VARIANTS = [0, 0.5, 1, 2, 4, 6] as const;
 const ROUNDING_VARIANTS = [1, 2, 3, 4] as const;
@@ -26,11 +35,11 @@ export const Default: Story = {
   ),
 };
 
-export const BackgroundVariants: Story = {
+export const SurfaceColors: Story = {
   render: () => (
     <div className="flex flex-col gap-4 w-96">
-      {BACKGROUND_VARIANTS.map((bg) => (
-        <Card key={bg} background={bg} border="solid">
+      {CARD_COLORS.map((bg) => (
+        <Card key={bg} color={bg} border="solid">
           <p>backgroundVariant: {bg}</p>
         </Card>
       ))}
@@ -81,12 +90,12 @@ export const AllCombinations: Story = {
         <div key={padding}>
           <p className="font-bold pb-2">padding: {padding}</p>
           <div className="grid grid-cols-3 gap-4">
-            {BACKGROUND_VARIANTS.map((bg) =>
+            {CARD_COLORS.map((bg) =>
               BORDER_VARIANTS.map((border) => (
                 <Card
                   key={`${padding}-${bg}-${border}`}
                   padding={padding}
-                  background={bg}
+                  color={bg}
                   border={border}
                 >
                   <p className="text-xs">
