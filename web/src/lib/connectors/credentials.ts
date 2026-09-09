@@ -30,7 +30,6 @@ export interface CredentialBase<T> {
   admin_public: boolean;
   source: ValidSources;
   name?: string;
-  curator_public?: boolean;
   groups?: number[];
 }
 

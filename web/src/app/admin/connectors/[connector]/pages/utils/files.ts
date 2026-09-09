@@ -58,7 +58,6 @@ export const submitFiles = async (
     credential_json: {},
     admin_public: true,
     source: ValidSources.File,
-    curator_public: true,
     groups: groups,
     name,
   });
