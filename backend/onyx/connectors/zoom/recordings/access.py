@@ -80,8 +80,8 @@ def permanently_unavailable(error: Exception) -> bool:
     )
 
 
-def approved_registrant_emails(registrants: list[ZoomRegistrant]) -> list[str | None]:
-    """The client already asks Zoom for approved registrants only. This checks
+def approved_registrant_emails(registrants: list[ZoomRegistrant]) -> list[str]:
+    """The caller already asks Zoom for approved registrants only. This checks
     again so access never depends on Zoom honouring a query parameter."""
     return [
         registrant.email
@@ -90,8 +90,8 @@ def approved_registrant_emails(registrants: list[ZoomRegistrant]) -> list[str | 
     ]
 
 
-def _usable_emails(description: str, emails: list[str | None]) -> set[str]:
-    usable = [email.strip() for email in emails if email and email.strip()]
+def _usable_emails(description: str, emails: list[str]) -> set[str]:
+    usable = [email.strip() for email in emails if email.strip()]
     dropped = len(emails) - len(usable)
     if dropped:
         logger.info(
@@ -104,7 +104,7 @@ def _usable_emails(description: str, emails: list[str | None]) -> set[str]:
     return {email.lower() for email in usable}
 
 
-AccessSource = tuple[str, Callable[[], list[str | None]]]
+AccessSource = tuple[str, Callable[[], list[str]]]
 
 
 def union_source_emails(sources: list[AccessSource]) -> set[str]:
