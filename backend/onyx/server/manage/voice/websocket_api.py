@@ -149,6 +149,7 @@ WS_SERVER_ERROR_CLOSE_CODE = 1011
 # and the provider session open forever.
 WS_CLIENT_IDLE_TIMEOUT_SECONDS = 120
 WS_SESSION_TIMEOUT_SECONDS = 30 * 60
+SESSION_TIMEOUT_ERROR = "Transcription session reached its maximum duration"
 # After close(), the transcript pump gets this long to drain results the
 # provider queued while closing, so a failure reported there is not lost.
 TRANSCRIPT_DRAIN_SECONDS = 0.5
@@ -530,6 +531,9 @@ async def handle_streaming_transcription(
                 "Streaming transcription: session exceeded %ss, ending session",
                 WS_SESSION_TIMEOUT_SECONDS,
             )
+            await websocket.send_json(
+                {"type": "error", "message": SESSION_TIMEOUT_ERROR}
+            )
             return
         # The client loop finished the session, so its outcome wins.
         # A failure here re-raises for the caller's fallback logic.
@@ -591,6 +595,7 @@ async def handle_chunked_transcription(
             "Chunked transcription: session exceeded %ss, ending session",
             WS_SESSION_TIMEOUT_SECONDS,
         )
+        await websocket.send_json({"type": "error", "message": SESSION_TIMEOUT_ERROR})
 
 
 async def _run_chunked_transcription(

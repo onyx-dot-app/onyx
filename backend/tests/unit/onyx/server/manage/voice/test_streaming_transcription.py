@@ -5,6 +5,7 @@ import pytest
 
 from onyx.server.manage.voice import websocket_api
 from onyx.server.manage.voice.websocket_api import (
+    SESSION_TIMEOUT_ERROR,
     StreamingTranscriptionFailed,
     handle_chunked_transcription,
     handle_streaming_transcription,
@@ -344,6 +345,8 @@ async def test_chunked_handler_enforces_session_timeout(
             cast(Any, websocket), cast(Any, RecordingChunkedTranscriber())
         )
 
+    assert websocket.sent_json == [{"type": "error", "message": SESSION_TIMEOUT_ERROR}]
+
 
 @pytest.mark.asyncio
 async def test_chunked_replay_is_bounded_by_session_timeout(
@@ -361,7 +364,7 @@ async def test_chunked_replay_is_bounded_by_session_timeout(
             client_ended=True,
         )
 
-    assert websocket.sent_json == []
+    assert websocket.sent_json == [{"type": "error", "message": SESSION_TIMEOUT_ERROR}]
 
 
 @pytest.mark.asyncio
@@ -387,20 +390,25 @@ async def test_handlers_honor_a_shared_deadline() -> None:
     """A deadline passed by the caller bounds both handlers, so a fallback does
     not restart the session budget."""
     deadline = asyncio.get_running_loop().time() + 0.05
+    streaming_ws = NeverReceivingWebSocket()
+    chunked_ws = NeverReceivingWebSocket()
 
     async with asyncio.timeout(5):
         await handle_streaming_transcription(
-            cast(Any, NeverReceivingWebSocket()),
-            cast(Any, SilentTranscriber()),
-            deadline=deadline,
+            cast(Any, streaming_ws), cast(Any, SilentTranscriber()), deadline=deadline
         )
         await handle_chunked_transcription(
-            cast(Any, NeverReceivingWebSocket()),
+            cast(Any, chunked_ws),
             cast(Any, HangingChunkedTranscriber(window_bytes=2)),
             initial_audio=b"\x01\x02",
             client_ended=True,
             deadline=deadline,
         )
+
+    assert streaming_ws.sent_json == [
+        {"type": "error", "message": SESSION_TIMEOUT_ERROR}
+    ]
+    assert chunked_ws.sent_json == [{"type": "error", "message": SESSION_TIMEOUT_ERROR}]
 
 
 @pytest.mark.asyncio
