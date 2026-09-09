@@ -14,6 +14,7 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
 )
 from onyx.connectors.zoom.models import (
+    ZoomAccessToken,
     ZoomMeetingOccurrence,
     ZoomPastMeetingDetails,
     ZoomTranscript,
@@ -122,10 +123,9 @@ class ZoomClient:
             )
         _raise_for_zoom_error(response, "the OAuth token request")
 
-        token_data = response.json()
-        self._access_token = token_data["access_token"]
-        expires_in = token_data.get("expires_in", 3600)
-        self._token_expires_at = time.monotonic() + expires_in
+        token = ZoomAccessToken.model_validate(response.json())
+        self._access_token = token.access_token
+        self._token_expires_at = time.monotonic() + token.expires_in
 
     def _get_access_token(self) -> str:
         if (

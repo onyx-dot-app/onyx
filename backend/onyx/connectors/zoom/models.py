@@ -8,6 +8,20 @@ Zoom's own text says the field is conditional.
 from pydantic import BaseModel
 
 
+class ZoomAccessToken(BaseModel):
+    """Response shape of `POST https://zoom.us/oauth/token`.
+
+    Zoom's API export does not document this endpoint, so these types come from
+    Zoom's OAuth docs and not from the export every other model here follows.
+    """
+
+    access_token: str
+    expires_in: int
+    token_type: str | None = None
+    scope: str | None = None
+    api_url: str | None = None
+
+
 class ZoomTranscript(BaseModel):
     """Response shape of `GET /meetings/{meetingId}/transcript`."""
 

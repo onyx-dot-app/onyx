@@ -139,6 +139,25 @@ class TestAccessToken:
         assert client._get_access_token() == "t2"
         assert post.call_count == 2
 
+    def test_a_token_response_without_a_token_names_the_missing_field(self) -> None:
+        client = ZoomClient(account_id="a", client_id="c", client_secret="s")
+        client._session = MagicMock()
+        client._session.post.return_value = _response(200, {"expires_in": 3600})
+
+        with pytest.raises(ValidationError) as exc:
+            client._get_access_token()
+
+        assert "access_token" in str(exc.value)
+
+    def test_an_expiry_zoom_did_not_send_is_not_invented(self) -> None:
+        # Inventing an expiry keeps a token Zoom ended early in use until a 401.
+        client = ZoomClient(account_id="a", client_id="c", client_secret="s")
+        client._session = MagicMock()
+        client._session.post.return_value = _response(200, {"access_token": "t1"})
+
+        with pytest.raises(ValidationError):
+            client._get_access_token()
+
     @pytest.mark.parametrize(
         "status, expected",
         [(401, CredentialInvalidError), (403, InsufficientPermissionsError)],
