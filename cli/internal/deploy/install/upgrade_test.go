@@ -443,3 +443,139 @@ func TestUpgradeConfigFailureLeavesVersionAlone(t *testing.T) {
 		}
 	}
 }
+
+// nginx resolves the upstreams named in its config once, at load. An upgrade
+// replaces api_server with a container on a new address but leaves the proxy
+// running, so without a reload nginx keeps answering 502 from the address the
+// old container had.
+func TestUpgradeReloadsProxyAfterRecreate(t *testing.T) {
+	runner := &fakeRunner{handler: healthyDockerHandler}
+	root := installFixture(t, runner, "v4.0.0")
+
+	running := &fakeRunner{handler: func(c dockercmd.Command) (dockercmd.Result, error) {
+		if strings.Contains(argv(c), "ps -q") {
+			return dockercmd.Result{Stdout: "abc\n"}, nil
+		}
+		return healthyDockerHandler(c)
+	}}
+	deps := testDeps(t, running, notFoundServer(t))
+	if err := RunUpgrade(context.Background(), deps, Options{
+		NoPrompt: true, Tag: "v4.2.0", Dir: root, NoWait: true,
+	}); err != nil {
+		t.Fatalf("upgrade failed: %v", err)
+	}
+
+	up, reload := -1, -1
+	for i, c := range running.calls {
+		line := argv(c)
+		switch {
+		case strings.Contains(line, "up -d"):
+			up = i
+		case strings.Contains(line, "exec -T nginx nginx -s reload"):
+			reload = i
+		}
+	}
+	if reload < 0 {
+		t.Fatal("upgrade must reload the proxy, or it keeps routing to the replaced containers")
+	}
+	if up < 0 {
+		t.Fatal("expected an `up` call")
+	}
+	if reload < up {
+		t.Errorf("reloaded the proxy at call %d, before `up` at %d — it must re-resolve after the containers move", reload, up)
+	}
+}
+
+// A proxy that is not running holds no address to re-resolve, so there is
+// nothing to reload and nothing to warn about.
+func TestUpgradeSkipsProxyReloadWhenNotRunning(t *testing.T) {
+	runner := &fakeRunner{handler: healthyDockerHandler}
+	root := installFixture(t, runner, "v4.0.0")
+
+	running := &fakeRunner{handler: func(c dockercmd.Command) (dockercmd.Result, error) {
+		a := argv(c)
+		if strings.HasSuffix(a, "ps -q "+proxyService) {
+			return dockercmd.Result{Stdout: ""}, nil
+		}
+		if strings.Contains(a, "ps -q") {
+			return dockercmd.Result{Stdout: "abc\n"}, nil
+		}
+		return healthyDockerHandler(c)
+	}}
+	deps := testDeps(t, running, notFoundServer(t))
+	if err := RunUpgrade(context.Background(), deps, Options{
+		NoPrompt: true, Tag: "v4.2.0", Dir: root, NoWait: true,
+	}); err != nil {
+		t.Fatalf("upgrade failed: %v", err)
+	}
+
+	for _, c := range running.calls {
+		if strings.Contains(argv(c), "exec -T "+proxyService) {
+			t.Errorf("ran %q against a proxy that is not running", argv(c))
+		}
+	}
+}
+
+// A failed probe is not the same as an absent proxy: a running proxy could
+// still be holding the replaced container's address, so the run must say the
+// state is unknown rather than report a clean upgrade.
+func TestUpgradeWarnsWhenProxyStateUnknown(t *testing.T) {
+	runner := &fakeRunner{handler: healthyDockerHandler}
+	root := installFixture(t, runner, "v4.0.0")
+
+	running := &fakeRunner{handler: func(c dockercmd.Command) (dockercmd.Result, error) {
+		a := argv(c)
+		if strings.HasSuffix(a, "ps -q "+proxyService) {
+			return dockercmd.Result{}, errors.New("docker daemon unreachable")
+		}
+		if strings.Contains(a, "ps -q") {
+			return dockercmd.Result{Stdout: "abc\n"}, nil
+		}
+		return healthyDockerHandler(c)
+	}}
+	deps := testDeps(t, running, notFoundServer(t))
+	if err := RunUpgrade(context.Background(), deps, Options{
+		NoPrompt: true, Tag: "v4.2.0", Dir: root, NoWait: true,
+	}); err != nil {
+		t.Fatalf("an unreadable proxy state must not fail the upgrade: %v", err)
+	}
+
+	if got := outBuf(deps).String(); !strings.Contains(got, "Could not tell whether "+proxyService) {
+		t.Errorf("probe failure was swallowed; output was %q", got)
+	}
+	for _, c := range running.calls {
+		if strings.Contains(argv(c), "nginx -s reload") {
+			t.Error("reloaded a proxy whose state could not be read")
+		}
+	}
+}
+
+// nginx keeps its running workers when a reload would load a broken config, so
+// the upgrade says so instead of reporting a reload that did not take effect.
+func TestUpgradeDoesNotReloadProxyWithBrokenConfig(t *testing.T) {
+	runner := &fakeRunner{handler: healthyDockerHandler}
+	root := installFixture(t, runner, "v4.0.0")
+
+	running := &fakeRunner{handler: func(c dockercmd.Command) (dockercmd.Result, error) {
+		a := argv(c)
+		if strings.Contains(a, "ps -q") {
+			return dockercmd.Result{Stdout: "abc\n"}, nil
+		}
+		if strings.Contains(a, "nginx -t") {
+			return dockercmd.Result{}, errors.New("nginx: configuration file test failed")
+		}
+		return healthyDockerHandler(c)
+	}}
+	deps := testDeps(t, running, notFoundServer(t))
+	if err := RunUpgrade(context.Background(), deps, Options{
+		NoPrompt: true, Tag: "v4.2.0", Dir: root, NoWait: true,
+	}); err != nil {
+		t.Fatalf("a proxy that fails its config test must not fail the upgrade: %v", err)
+	}
+
+	for _, c := range running.calls {
+		if strings.Contains(argv(c), "nginx -s reload") {
+			t.Error("reloaded the proxy even though `nginx -t` failed")
+		}
+	}
+}
