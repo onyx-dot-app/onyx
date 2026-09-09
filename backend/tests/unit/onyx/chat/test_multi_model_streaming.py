@@ -565,6 +565,9 @@ class TestRunModels:
                 side_effect=lambda *_, **__: completion_called.set(),
             ),
             patch(
+                "onyx.chat.process_message.run_chat_history_compression"
+            ) as compression,
+            patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
             ),
@@ -573,6 +576,7 @@ class TestRunModels:
             # The cancelled worker self-persists after the generator returns, so
             # wait inside the patch context — otherwise it calls the real handler.
             assert completion_called.wait(timeout=5)
+            compression.assert_not_called()
 
         stops = [
             p
@@ -610,6 +614,9 @@ class TestRunModels:
                 side_effect=mark_persisted,
             ) as mock_handle,
             patch(
+                "onyx.chat.process_message.run_chat_history_compression"
+            ) as compression,
+            patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
             ),
@@ -617,6 +624,7 @@ class TestRunModels:
             packets = _run_models_collect(setup)
             assert model_0_persisted.wait(timeout=5)
             assert model_1_persisted.wait(timeout=5)
+            compression.assert_not_called()
             assert mock_handle.call_count == 2
 
         stops = [
@@ -645,6 +653,9 @@ class TestRunModels:
                 "onyx.chat.process_message.llm_loop_completion_handle"
             ) as mock_handle,
             patch(
+                "onyx.chat.process_message.run_chat_history_compression"
+            ) as mock_compression,
+            patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
             ),
@@ -655,22 +666,25 @@ class TestRunModels:
         persisted_llms = [call.kwargs["llm"] for call in mock_handle.call_args_list]
         assert persisted_llms.count(setup.llms[0]) == 1
         assert persisted_llms.count(setup.llms[1]) == 1
-        # Exactly one completion owns compression; the other must skip it.
+        # Shared compression runs after all per-model saves.
         compression_flags = sorted(
             call.kwargs["run_compression"] for call in mock_handle.call_args_list
         )
-        assert compression_flags == [False, True]
+        assert compression_flags == [False, False]
+        mock_compression.assert_called_once()
 
     def test_compression_uses_smallest_model_budget_and_largest_overhead(self) -> None:
         setup = _make_setup(n_models=2)
-        both_models_ready = threading.Barrier(2)
+        fast_model_persisted = threading.Event()
 
         def record_overhead(**kwargs: Any) -> None:
             state = cast(ChatStateContainer, kwargs["state_container"])
-            overhead = 300 if kwargs["llm"] is setup.llms[0] else 1000
+            is_fast_model = kwargs["llm"] is setup.llms[0]
+            if not is_fast_model:
+                assert fast_model_persisted.wait(timeout=5)
+            overhead = 300 if is_fast_model else 1000
             state.set_reserved_input_tokens(overhead)
             state.set_reserved_input_tokens(overhead // 2)
-            both_models_ready.wait(timeout=5)
 
         def model_budget(llm: Any) -> ChatTokenBudget:
             return ChatTokenBudget(
@@ -679,6 +693,10 @@ class TestRunModels:
                 context_tokens=None,
                 safety_tokens=0,
             )
+
+        def mark_persisted(*_: Any, **kwargs: Any) -> None:
+            if kwargs["llm"] is setup.llms[0]:
+                fast_model_persisted.set()
 
         with (
             patch(
@@ -689,7 +707,13 @@ class TestRunModels:
                 "onyx.chat.process_message.resolve_chat_token_budget",
                 side_effect=model_budget,
             ),
-            patch("onyx.chat.process_message.llm_loop_completion_handle") as completion,
+            patch(
+                "onyx.chat.process_message.llm_loop_completion_handle",
+                side_effect=mark_persisted,
+            ) as completion,
+            patch(
+                "onyx.chat.process_message.run_chat_history_compression"
+            ) as compression,
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -699,11 +723,133 @@ class TestRunModels:
 
         assert completion.call_count == 2
         for call in completion.call_args_list:
-            assert call.kwargs["compression_input_token_budget"] == 5000
-        assert (
-            sum(call.kwargs["run_compression"] for call in completion.call_args_list)
-            == 1
-        )
+            assert call.kwargs["run_compression"] is False
+        compression.assert_called_once()
+        assert compression.call_args.kwargs["compression_input_token_budget"] == 5000
+
+    def test_compression_waits_for_delayed_persistence(self) -> None:
+        setup = _make_setup(n_models=2)
+        model_0_save_started = threading.Event()
+        model_1_saved = threading.Event()
+        allow_model_0_save = threading.Event()
+
+        def record_overhead(**kwargs: Any) -> None:
+            state = cast(ChatStateContainer, kwargs["state_container"])
+            if kwargs["llm"] is setup.llms[0]:
+                state.set_reserved_input_tokens(300)
+                return
+            assert model_0_save_started.wait(timeout=5)
+            state.set_reserved_input_tokens(1000)
+
+        def save_model(*_: Any, **kwargs: Any) -> None:
+            if kwargs["llm"] is setup.llms[0]:
+                model_0_save_started.set()
+                assert allow_model_0_save.wait(timeout=5)
+                return
+            model_1_saved.set()
+            allow_model_0_save.set()
+
+        def model_budget(llm: Any) -> ChatTokenBudget:
+            return ChatTokenBudget(
+                input_tokens=6000 if llm is setup.llms[0] else 10000,
+                max_output_tokens=None,
+                context_tokens=None,
+                safety_tokens=0,
+            )
+
+        def check_compression(*_: Any, **kwargs: Any) -> None:
+            assert model_1_saved.is_set()
+            assert allow_model_0_save.is_set()
+            assert kwargs["compression_input_token_budget"] == 5000
+
+        with (
+            patch(
+                "onyx.chat.process_message.run_llm_loop", side_effect=record_overhead
+            ),
+            patch("onyx.chat.process_message.construct_tools", return_value={}),
+            patch(
+                "onyx.chat.process_message.resolve_chat_token_budget",
+                side_effect=model_budget,
+            ),
+            patch(
+                "onyx.chat.process_message.llm_loop_completion_handle",
+                side_effect=save_model,
+            ),
+            patch(
+                "onyx.chat.process_message.run_chat_history_compression",
+                side_effect=check_compression,
+            ) as compression,
+            patch(
+                "onyx.chat.process_message.get_llm_token_counter",
+                return_value=lambda _: 0,
+            ),
+        ):
+            _run_models_collect(setup)
+
+        compression.assert_called_once()
+
+    def test_compression_runs_after_last_model_failure(self) -> None:
+        setup = _make_setup(n_models=2)
+        fast_model_persisted = threading.Event()
+
+        def success_then_failure(**kwargs: Any) -> None:
+            state = cast(ChatStateContainer, kwargs["state_container"])
+            if kwargs["llm"] is setup.llms[0]:
+                state.set_reserved_input_tokens(300)
+                return
+            assert fast_model_persisted.wait(timeout=5)
+            state.set_reserved_input_tokens(1000)
+            raise RuntimeError("delayed model failed")
+
+        def model_budget(llm: Any) -> ChatTokenBudget:
+            return ChatTokenBudget(
+                input_tokens=6000 if llm is setup.llms[0] else 10000,
+                max_output_tokens=None,
+                context_tokens=None,
+                safety_tokens=0,
+            )
+
+        def mark_fast_persisted(*_: Any, **kwargs: Any) -> None:
+            assert kwargs["llm"] is setup.llms[0]
+            fast_model_persisted.set()
+
+        db_session = MagicMock()
+        db_session.get.return_value = MagicMock()
+        session_ctx = MagicMock()
+        session_ctx.__enter__.return_value = db_session
+        session_ctx.__exit__.return_value = None
+
+        with (
+            patch(
+                "onyx.chat.process_message.run_llm_loop",
+                side_effect=success_then_failure,
+            ),
+            patch("onyx.chat.process_message.construct_tools", return_value={}),
+            patch(
+                "onyx.chat.process_message.resolve_chat_token_budget",
+                side_effect=model_budget,
+            ),
+            patch(
+                "onyx.chat.process_message.llm_loop_completion_handle",
+                side_effect=mark_fast_persisted,
+            ),
+            patch(
+                "onyx.chat.process_message.get_session_with_current_tenant",
+                return_value=session_ctx,
+            ),
+            patch(
+                "onyx.chat.process_message.run_chat_history_compression"
+            ) as compression,
+            patch(
+                "onyx.chat.process_message.get_llm_token_counter",
+                return_value=lambda _: 0,
+            ),
+        ):
+            _run_models_collect(setup)
+
+        compression.assert_called_once()
+        assert compression.call_args.kwargs["llm"] is setup.llms[0]
+        assert compression.call_args.kwargs["compression_input_token_budget"] == 5000
 
     def test_completion_handle_not_called_for_failed_model(self) -> None:
         """llm_loop_completion_handle must be skipped for a model that raised."""
@@ -718,6 +864,7 @@ class TestRunModels:
             patch(
                 "onyx.chat.process_message.llm_loop_completion_handle"
             ) as mock_handle,
+            patch("onyx.chat.process_message.run_chat_history_compression"),
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -746,6 +893,9 @@ class TestRunModels:
                 "onyx.chat.process_message.llm_loop_completion_handle"
             ) as mock_handle,
             patch(
+                "onyx.chat.process_message.run_chat_history_compression"
+            ) as mock_compression,
+            patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
             ),
@@ -755,7 +905,9 @@ class TestRunModels:
         assert mock_handle.call_count == 1
         call = mock_handle.call_args_list[0]
         assert call.kwargs["llm"] is setup.llms[1]
-        assert call.kwargs["run_compression"] is True
+        assert call.kwargs["run_compression"] is False
+        mock_compression.assert_called_once()
+        assert mock_compression.call_args.kwargs["llm"] is setup.llms[1]
 
     def test_http_disconnect_completion_via_generator_exit(self) -> None:
         """Worker-thread completion survives HTTP disconnect."""
@@ -772,6 +924,7 @@ class TestRunModels:
 
         setup = _make_setup(n_models=1)
         setup.check_is_connected = MagicMock(return_value=True)
+        compression_checked = threading.Event()
 
         with (
             patch(
@@ -784,6 +937,10 @@ class TestRunModels:
                 "onyx.chat.process_message.llm_loop_completion_handle",
                 side_effect=lambda *_, **__: completion_called.set(),
             ) as mock_handle,
+            patch(
+                "onyx.chat.process_message.run_chat_history_compression",
+                side_effect=lambda *_, **__: compression_checked.set(),
+            ),
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -800,6 +957,7 @@ class TestRunModels:
             assert completion_called.wait(timeout=5), (
                 "worker thread must call completion for the successful model"
             )
+            assert compression_checked.wait(timeout=5)
             assert mock_handle.call_count == 1
 
     def test_http_disconnect_error_saves_message_once(self) -> None:
@@ -875,6 +1033,7 @@ class TestRunModels:
 
         setup = _make_setup(n_models=1)
         setup.check_is_connected = MagicMock(return_value=True)
+        compression_checked = threading.Event()
 
         with (
             patch(
@@ -887,6 +1046,10 @@ class TestRunModels:
                 "onyx.chat.process_message.llm_loop_completion_handle",
                 side_effect=lambda *_, **__: completion_called.set(),
             ) as mock_handle,
+            patch(
+                "onyx.chat.process_message.run_chat_history_compression",
+                side_effect=lambda *_, **__: compression_checked.set(),
+            ),
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -903,6 +1066,7 @@ class TestRunModels:
             assert completion_called.wait(timeout=5), (
                 "completed model should stay persisted"
             )
+            assert compression_checked.wait(timeout=5)
             assert mock_handle.call_count == 1, "completion must be called exactly once"
 
     def test_http_disconnect_persists_each_model_once(self) -> None:
@@ -923,6 +1087,7 @@ class TestRunModels:
         setup.check_is_connected = MagicMock(return_value=True)
         model_0_persisted = threading.Event()
         model_1_persisted = threading.Event()
+        compression_checked = threading.Event()
 
         def mark_persisted(*_: Any, **kwargs: Any) -> None:
             if kwargs["llm"] is setup.llms[0]:
@@ -942,6 +1107,10 @@ class TestRunModels:
                 side_effect=mark_persisted,
             ) as mock_handle,
             patch(
+                "onyx.chat.process_message.run_chat_history_compression",
+                side_effect=lambda *_, **__: compression_checked.set(),
+            ),
+            patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
             ),
@@ -955,6 +1124,7 @@ class TestRunModels:
             gen.close()
             client_gone.set()
             assert model_1_persisted.wait(timeout=5)
+            assert compression_checked.wait(timeout=5)
 
         assert mock_handle.call_count == 2
         persisted_llms = [call.kwargs["llm"] for call in mock_handle.call_args_list]
@@ -989,6 +1159,7 @@ class TestRunModels:
             patch("onyx.chat.process_message.run_deep_research_llm_loop"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
             patch("onyx.chat.process_message.llm_loop_completion_handle"),
+            patch("onyx.chat.process_message.run_chat_history_compression"),
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -1037,12 +1208,16 @@ class TestRunModels:
                 side_effect=lambda *_, **__: model_1_persisted.set(),
             ) as mock_handle,
             patch(
+                "onyx.chat.process_message.run_chat_history_compression"
+            ) as compression,
+            patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
             ),
         ):
             _run_models_collect(setup)
             assert model_1_persisted.wait(timeout=5)
+            compression.assert_not_called()
             assert mock_handle.call_count == 1
 
         for call in mock_handle.call_args_list:
