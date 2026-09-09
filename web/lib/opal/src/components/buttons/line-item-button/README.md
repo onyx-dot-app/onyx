@@ -16,7 +16,9 @@ Interactive.Stateful         <- selectVariant, state, interaction, onClick, href
 
 The row renders as a focusable `<div role="button">` (with Enter/Space activation) rather than a
 native `<button>`, so interactive `rightChildren` such as action buttons don't produce invalid
-button-in-button nesting. With `href` it renders an anchor instead.
+button-in-button nesting. With `href` it renders an anchor instead. With `presentational` it makes
+no control at all — use it when the row sits inside a primitive that already owns focus and
+keyboard handling, where a second button would mean double tab stops and double announcements.
 
 `padding` is forwarded to the inner `ContentAction`, on top of the row's own `p-1.5` inset.
 
@@ -28,17 +30,18 @@ row's label lines up with an adjacent button. A step outside that set is a type 
 
 ### Interactive surface
 
-| Prop            | Type                               | Default          | Description                                                                                  |
-| --------------- | ---------------------------------- | ---------------- | -------------------------------------------------------------------------------------------- |
-| `selectVariant` | `"select-light" \| "select-heavy"` | `"select-light"` | Interactive select variant                                                                   |
-| `state`         | `InteractiveStatefulState`         | `"empty"`        | Value state (`"empty"`, `"filled"`, `"selected"`)                                            |
-| `interaction`   | `InteractiveStatefulInteraction`   | `"rest"`         | JS-controlled interaction state override                                                     |
-| `onClick`       | `MouseEventHandler<HTMLElement>`   | —                | Click handler                                                                                |
-| `href`          | `string`                           | —                | Renders an anchor instead of a div                                                           |
-| `target`        | `string`                           | —                | Anchor target (e.g. `"_blank"`)                                                              |
-| `group`         | `string`                           | —                | Interactive group key                                                                        |
-| `ref`           | `React.Ref<HTMLElement>`           | —                | Forwarded ref                                                                                |
-| `disabled`      | `boolean`                          | `false`          | Disabled colors; suppresses the row's own click only — nested `rightChildren` stay clickable |
+| Prop             | Type                               | Default          | Description                                                                                                                                                                                                                            |
+| ---------------- | ---------------------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `selectVariant`  | `"select-light" \| "select-heavy"` | `"select-light"` | Interactive select variant                                                                                                                                                                                                             |
+| `state`          | `InteractiveStatefulState`         | `"empty"`        | Value state (`"empty"`, `"filled"`, `"selected"`)                                                                                                                                                                                      |
+| `interaction`    | `InteractiveStatefulInteraction`   | `"rest"`         | JS-controlled interaction state override                                                                                                                                                                                               |
+| `onClick`        | `MouseEventHandler<HTMLElement>`   | —                | Click handler                                                                                                                                                                                                                          |
+| `href`           | `string`                           | —                | Renders an anchor instead of a div                                                                                                                                                                                                     |
+| `target`         | `string`                           | —                | Anchor target (e.g. `"_blank"`)                                                                                                                                                                                                        |
+| `group`          | `string`                           | —                | Interactive group key                                                                                                                                                                                                                  |
+| `ref`            | `React.Ref<HTMLElement>`           | —                | Forwarded ref                                                                                                                                                                                                                          |
+| `disabled`       | `boolean`                          | `false`          | Disabled colors; suppresses the row's own click only — nested `rightChildren` stay clickable                                                                                                                                           |
+| `presentational` | `boolean`                          | `false`          | Render as plain markup (`role="presentation"`, no tab stop, no Enter/Space) for rows nested inside another interactive primitive — e.g. a Radix `Select.Item`. The palette stays: drive it with `state` / `interaction` from the owner |
 
 ### Row element
 
@@ -78,6 +81,7 @@ meanings in one prop. Use `tooltip` for hover text.
 | Prop                  | Type                    | Default         | Description                                                                                                                                                                                                                  |
 | --------------------- | ----------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `title`               | `string`                | **(required)**  | Row label                                                                                                                                                                                                                    |
+| `titleMaxLines`       | `number`                | —               | Cap the title at N lines and truncate the rest. Unset wraps without a limit — a row showing a user-authored name usually wants `1`                                                                                           |
 | `icon`                | `IconFunctionComponent` | —               | Left icon                                                                                                                                                                                                                    |
 | `description`         | `string`                | —               | Description below the title                                                                                                                                                                                                  |
 | `descriptionMaxLines` | `number`                | —               | Cap the description at N lines and truncate the rest. Unset wraps without a limit — a row showing user-authored text usually wants `1`                                                                                       |
