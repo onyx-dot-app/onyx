@@ -1,6 +1,6 @@
 import { render, screen } from "@tests/setup/test-utils";
 import userEvent from "@testing-library/user-event";
-import { DateRangePicker } from "@/refresh-components/DateRangePicker";
+import { DateRangePicker } from "@opal/components";
 
 describe("DateRangePicker", () => {
   beforeEach(() => {

@@ -5,7 +5,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { Card, MessageCard, Text } from "@opal/components";
 import { SvgX } from "@opal/icons";
 import { PageLoader, Section } from "@opal/layouts";
-import type { DateRange } from "@/refresh-components/DateRangePicker";
+import type { DateRange } from "@opal/components";
 import { formatCalendarDay } from "@/lib/dateUtils";
 import { useUsageExport } from "@/lib/usage/userUsage";
 import { formatCost, formatTokens } from "@/lib/utils";

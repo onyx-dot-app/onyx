@@ -10862,29 +10862,11 @@
       "anyTime": {
         "text": "모든 기간..."
       },
-      "chooseCustom": {
-        "ariaLabel": "사용자 지정 범위 선택"
-      },
       "clearButton": {
         "ariaLabel": "지우기"
       },
-      "custom": {
-        "label": "사용자 지정"
-      },
-      "customRange": {
-        "ariaLabel": "사용자 지정 범위: {from}부터 {to}까지"
-      },
       "date": {
         "label": "날짜"
-      },
-      "group": {
-        "ariaLabel": "날짜 범위"
-      },
-      "preset": {
-        "oneDay": "1일",
-        "oneMonth": "1개월",
-        "sevenDays": "7일",
-        "threeMonths": "3개월"
       }
     },
     "deleteButton": {
@@ -12792,6 +12774,16 @@
       "selectAnOption": "옵션 선택",
       "showFullMessage": "전체 메시지 보기",
       "time": "시간"
+    },
+    "dateRange": {
+      "chooseCustom": "사용자 지정 범위 선택",
+      "custom": "사용자 지정",
+      "customRange": "사용자 지정 범위: {from}부터 {to}까지",
+      "label": "날짜 범위",
+      "oneDay": "1일",
+      "oneMonth": "1개월",
+      "sevenDays": "7일",
+      "threeMonths": "3개월"
     },
     "input": {
       "day": "일",

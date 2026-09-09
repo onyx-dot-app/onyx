@@ -4,7 +4,7 @@ import { toast } from "@opal/layouts";
 import { Button } from "@opal/components";
 import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import type { DateRange } from "@/refresh-components/DateRangePicker";
+import type { DateRange } from "@opal/components";
 import { withRequestId, withDateRange } from "./utils";
 import {
   CHECK_QUERY_HISTORY_EXPORT_STATUS_URL,

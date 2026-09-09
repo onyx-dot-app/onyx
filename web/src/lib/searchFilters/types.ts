@@ -1,6 +1,6 @@
 import type { Tag } from "@/lib/types";
 import type { SourceMetadata } from "@/lib/search/interfaces";
-import type { DateRangePickerValue } from "@/refresh-components/DateRangePicker";
+import type { DateRangePickerValue } from "@opal/components";
 
 /** What is selected, without the means to change it. */
 export interface SearchFiltersSelection {

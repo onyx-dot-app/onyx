@@ -6,7 +6,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type { Tag, ValidSources } from "@/lib/types";
 import type { SourceMetadata } from "@/lib/search/interfaces";
-import type { DateRangePickerValue } from "@/refresh-components/DateRangePicker";
+import type { DateRangePickerValue } from "@opal/components";
 import { getConfiguredSources } from "@/lib/sources";
 import type { SearchFilters } from "@/lib/searchFilters/types";
 

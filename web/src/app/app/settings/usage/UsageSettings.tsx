@@ -30,7 +30,7 @@ import {
   DateRangePicker,
   rangeForInclusiveDays,
   type DateRange,
-} from "@/refresh-components/DateRangePicker";
+} from "@opal/components";
 import { formatCalendarDay } from "@/lib/dateUtils";
 import {
   formatCurrencyFromCents as formatDollars,

@@ -10862,29 +10862,11 @@
       "anyTime": {
         "text": "N'importe quand..."
       },
-      "chooseCustom": {
-        "ariaLabel": "Choisir une plage personnalisée"
-      },
       "clearButton": {
         "ariaLabel": "Effacer"
       },
-      "custom": {
-        "label": "Personnalisé"
-      },
-      "customRange": {
-        "ariaLabel": "Plage personnalisée : {from} à {to}"
-      },
       "date": {
         "label": "Date"
-      },
-      "group": {
-        "ariaLabel": "Plage de dates"
-      },
-      "preset": {
-        "oneDay": "1J",
-        "oneMonth": "1M",
-        "sevenDays": "7J",
-        "threeMonths": "3M"
       }
     },
     "deleteButton": {
@@ -12792,6 +12774,16 @@
       "selectAnOption": "Sélectionnez une option",
       "showFullMessage": "Afficher le message complet",
       "time": "Heure"
+    },
+    "dateRange": {
+      "chooseCustom": "Choisir une plage personnalisée",
+      "custom": "Personnalisé",
+      "customRange": "Plage personnalisée : {from} à {to}",
+      "label": "Plage de dates",
+      "oneDay": "1J",
+      "oneMonth": "1M",
+      "sevenDays": "7J",
+      "threeMonths": "3M"
     },
     "input": {
       "day": "Jour",

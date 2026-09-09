@@ -10862,29 +10862,11 @@
       "anyTime": {
         "text": "Qualquer data..."
       },
-      "chooseCustom": {
-        "ariaLabel": "Escolher um intervalo personalizado"
-      },
       "clearButton": {
         "ariaLabel": "Limpar"
       },
-      "custom": {
-        "label": "Personalizado"
-      },
-      "customRange": {
-        "ariaLabel": "Intervalo personalizado: {from} a {to}"
-      },
       "date": {
         "label": "Data"
-      },
-      "group": {
-        "ariaLabel": "Intervalo de datas"
-      },
-      "preset": {
-        "oneDay": "1D",
-        "oneMonth": "1M",
-        "sevenDays": "7D",
-        "threeMonths": "3M"
       }
     },
     "deleteButton": {
@@ -12792,6 +12774,16 @@
       "selectAnOption": "Selecione uma opção",
       "showFullMessage": "Mostrar a mensagem completa",
       "time": "Hora"
+    },
+    "dateRange": {
+      "chooseCustom": "Escolher um intervalo personalizado",
+      "custom": "Personalizado",
+      "customRange": "Intervalo personalizado: {from} a {to}",
+      "label": "Intervalo de datas",
+      "oneDay": "1D",
+      "oneMonth": "1M",
+      "sevenDays": "7D",
+      "threeMonths": "3M"
     },
     "input": {
       "day": "Dia",

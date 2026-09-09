@@ -10862,29 +10862,11 @@
       "anyTime": {
         "text": "أي وقت..."
       },
-      "chooseCustom": {
-        "ariaLabel": "اختيار نطاق مخصص"
-      },
       "clearButton": {
         "ariaLabel": "مسح"
       },
-      "custom": {
-        "label": "مخصص"
-      },
-      "customRange": {
-        "ariaLabel": "نطاق مخصص: من {from} إلى {to}"
-      },
       "date": {
         "label": "التاريخ"
-      },
-      "group": {
-        "ariaLabel": "النطاق الزمني"
-      },
-      "preset": {
-        "oneDay": "يوم",
-        "oneMonth": "شهر",
-        "sevenDays": "7 أيام",
-        "threeMonths": "3 أشهر"
       }
     },
     "deleteButton": {
@@ -12792,6 +12774,16 @@
       "selectAnOption": "اختر خيارًا",
       "showFullMessage": "عرض الرسالة كاملة",
       "time": "الوقت"
+    },
+    "dateRange": {
+      "chooseCustom": "اختيار نطاق مخصص",
+      "custom": "مخصص",
+      "customRange": "نطاق مخصص: من {from} إلى {to}",
+      "label": "النطاق الزمني",
+      "oneDay": "يوم",
+      "oneMonth": "شهر",
+      "sevenDays": "7 أيام",
+      "threeMonths": "3 أشهر"
     },
     "input": {
       "day": "اليوم",

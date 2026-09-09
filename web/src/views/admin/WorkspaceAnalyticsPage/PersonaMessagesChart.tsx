@@ -17,7 +17,7 @@ import {
   chartSeries,
   resolveChartState,
 } from "@/sections/usage/AnalyticsChart";
-import { DateRangePickerValue } from "@/refresh-components/DateRangePicker";
+import { DateRangePickerValue } from "@opal/components";
 import { Agent } from "@/lib/agents/types";
 
 interface PersonaPickerProps {

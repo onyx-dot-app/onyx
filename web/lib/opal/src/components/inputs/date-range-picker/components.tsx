@@ -1,8 +1,10 @@
 import { memo, useState } from "react";
-import { useTranslations } from "next-intl";
 import { endOfDay, format, isSameDay, startOfDay, subDays } from "date-fns";
-import { Calendar, Popover, SelectButton } from "@opal/components";
+import { Calendar } from "@opal/components/calendar/components";
+import { Popover } from "@opal/components/popover/components";
+import { SelectButton } from "@opal/components/buttons/select-button/components";
 import { SvgCalendar } from "@opal/icons";
+import { useOpalStrings, type OpalStrings } from "@opal/strings";
 
 export const THIRTY_DAYS = "1M";
 
@@ -66,25 +68,18 @@ function rangesMatch(left: DateRange, right: DateRange): boolean {
 
 type SelectorSize = "md" | "sm";
 
-type DateRangeTranslator = ReturnType<
-  typeof useTranslations<"common.dateRange">
->;
-
 // Display labels are looked up per preset so the stable `label` ids used for
 // range matching stay untranslated.
-function presetDisplayLabel(
-  t: DateRangeTranslator,
-  preset: DatePreset
-): string {
+function presetDisplayLabel(strings: OpalStrings, preset: DatePreset): string {
   switch (preset.inclusiveDays) {
     case 1:
-      return t("preset.oneDay");
+      return strings.dateRangeOneDay;
     case 7:
-      return t("preset.sevenDays");
+      return strings.dateRangeSevenDays;
     case 30:
-      return t("preset.oneMonth");
+      return strings.dateRangeOneMonth;
     case 90:
-      return t("preset.threeMonths");
+      return strings.dateRangeThreeMonths;
     default:
       return preset.label;
   }
@@ -99,7 +94,7 @@ export const DateRangePicker = memo(function DateRangePicker({
   onValueChange: (value: DateRange) => void;
   size?: SelectorSize;
 }) {
-  const t = useTranslations("common.dateRange");
+  const strings = useOpalStrings();
   const buttonSize = size === "sm" ? "sm" : "md";
   const [isOpen, setIsOpen] = useState(false);
   const [draftRange, setDraftRange] = useState<DraftDateRange>(value);
@@ -114,7 +109,7 @@ export const DateRangePicker = memo(function DateRangePicker({
   const customLabel =
     customActive && value
       ? `${format(value.from, value.from.getFullYear() === value.to.getFullYear() ? "MMM d" : "MMM d, y")} – ${format(value.to, value.from.getFullYear() === value.to.getFullYear() ? "MMM d" : "MMM d, y")}`
-      : t("custom.label");
+      : strings.dateRangeCustom;
 
   function selectPreset(preset: DatePreset) {
     const range = rangeForPreset(preset);
@@ -129,7 +124,7 @@ export const DateRangePicker = memo(function DateRangePicker({
     <div
       className="inline-flex max-w-full shrink-0 items-center overflow-x-auto rounded-12 border border-border-02 bg-background-tint-03 p-0.5"
       role="group"
-      aria-label={t("group.ariaLabel")}
+      aria-label={strings.dateRange}
       data-testid="admin-date-range-selector"
     >
       {PRESETS.map((preset) => {
@@ -143,7 +138,7 @@ export const DateRangePicker = memo(function DateRangePicker({
             aria-pressed={active}
             onClick={() => selectPreset(preset)}
           >
-            {presetDisplayLabel(t, preset)}
+            {presetDisplayLabel(strings, preset)}
           </SelectButton>
         );
       })}
@@ -164,11 +159,11 @@ export const DateRangePicker = memo(function DateRangePicker({
             rightIcon={hasCustomRange ? undefined : SvgCalendar}
             aria-label={
               value
-                ? t("customRange.ariaLabel", {
-                    from: format(value.from, "MMM d, y"),
-                    to: format(value.to, "MMM d, y"),
-                  })
-                : t("chooseCustom.ariaLabel")
+                ? strings.dateRangeCustomRange(
+                    format(value.from, "MMM d, y"),
+                    format(value.to, "MMM d, y")
+                  )
+                : strings.dateRangeChooseCustom
             }
             aria-pressed={customActive}
             aria-haspopup="dialog"

@@ -2,7 +2,7 @@
 
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useTranslations } from "next-intl";
-import { DateRangePicker } from "@/refresh-components/DateRangePicker";
+import { DateRangePicker } from "@opal/components";
 import { useTimeRange } from "@/lib/usage/hooks";
 import PerUserUsagePanel from "@/views/admin/PerUserUsagePanel";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";

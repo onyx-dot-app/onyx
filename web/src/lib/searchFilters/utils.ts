@@ -1,6 +1,6 @@
 import type { Tag } from "@/lib/types";
 import type { SourceMetadata } from "@/lib/search/interfaces";
-import type { DateRangePickerValue } from "@/refresh-components/DateRangePicker";
+import type { DateRangePickerValue } from "@opal/components";
 import type { SearchFiltersRequest } from "@/lib/searchFilters/types";
 
 /** Freezes a live selection into the shape the backend receives. */

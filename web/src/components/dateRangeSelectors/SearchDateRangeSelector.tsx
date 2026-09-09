@@ -1,4 +1,4 @@
-import { DateRangePickerValue } from "@/refresh-components/DateRangePicker";
+import { DateRangePickerValue } from "@opal/components";
 import { useTranslations } from "next-intl";
 import { FiCalendar, FiChevronDown, FiXCircle } from "react-icons/fi";
 import { CustomDropdown } from "../Dropdown";

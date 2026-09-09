@@ -54,6 +54,15 @@ export {
   type TextButtonProps,
 } from "@opal/components/buttons/text-button/components";
 
+/* DateRangePicker */
+export {
+  DateRangePicker,
+  rangeForInclusiveDays,
+  THIRTY_DAYS,
+  type DateRange,
+  type DateRangePickerValue,
+} from "@opal/components/inputs/date-range-picker/components";
+
 /* InputFile */
 export {
   default as InputFile,

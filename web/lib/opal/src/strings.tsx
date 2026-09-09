@@ -17,6 +17,14 @@ export type OpalStrings = {
   clearFile: string;
   clearFilter: string;
   date: string;
+  dateRange: string;
+  dateRangeOneDay: string;
+  dateRangeSevenDays: string;
+  dateRangeOneMonth: string;
+  dateRangeThreeMonths: string;
+  dateRangeCustom: string;
+  dateRangeChooseCustom: string;
+  dateRangeCustomRange: (from: string, to: string) => string;
   time: string;
   edit: string;
   search: string;
@@ -78,6 +86,14 @@ export const defaultOpalStrings: OpalStrings = {
   clearFile: "Clear file",
   clearFilter: "Clear filter",
   date: "Date",
+  dateRange: "Date range",
+  dateRangeOneDay: "1D",
+  dateRangeSevenDays: "7D",
+  dateRangeOneMonth: "1M",
+  dateRangeThreeMonths: "3M",
+  dateRangeCustom: "Custom",
+  dateRangeChooseCustom: "Choose a custom range",
+  dateRangeCustomRange: (from, to) => `Custom range: ${from} to ${to}`,
   time: "Time",
   edit: "Edit",
   search: "Search...",

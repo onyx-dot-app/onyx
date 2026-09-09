@@ -7,7 +7,7 @@ import { Section } from "@opal/layouts";
 import {
   DateRangePicker,
   DateRange,
-} from "@/refresh-components/DateRangePicker";
+} from "@opal/components";
 import { useAgents } from "@/lib/agents/hooks";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import {

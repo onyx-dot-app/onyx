@@ -10862,29 +10862,11 @@
       "anyTime": {
         "text": "任何时间..."
       },
-      "chooseCustom": {
-        "ariaLabel": "选择自定义范围"
-      },
       "clearButton": {
         "ariaLabel": "清除"
       },
-      "custom": {
-        "label": "自定义"
-      },
-      "customRange": {
-        "ariaLabel": "自定义范围：{from}至{to}"
-      },
       "date": {
         "label": "日期"
-      },
-      "group": {
-        "ariaLabel": "日期范围"
-      },
-      "preset": {
-        "oneDay": "1天",
-        "oneMonth": "1个月",
-        "sevenDays": "7天",
-        "threeMonths": "3个月"
       }
     },
     "deleteButton": {
@@ -12792,6 +12774,16 @@
       "selectAnOption": "选择一个选项",
       "showFullMessage": "显示完整消息",
       "time": "时间"
+    },
+    "dateRange": {
+      "chooseCustom": "选择自定义范围",
+      "custom": "自定义",
+      "customRange": "自定义范围：{from}至{to}",
+      "label": "日期范围",
+      "oneDay": "1天",
+      "oneMonth": "1个月",
+      "sevenDays": "7天",
+      "threeMonths": "3个月"
     },
     "input": {
       "day": "日",

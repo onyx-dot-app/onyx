@@ -10862,29 +10862,11 @@
       "anyTime": {
         "text": "Any time..."
       },
-      "chooseCustom": {
-        "ariaLabel": "Choose a custom range"
-      },
       "clearButton": {
         "ariaLabel": "Clear"
       },
-      "custom": {
-        "label": "Custom"
-      },
-      "customRange": {
-        "ariaLabel": "Custom range: {from} to {to}"
-      },
       "date": {
         "label": "Date"
-      },
-      "group": {
-        "ariaLabel": "Date range"
-      },
-      "preset": {
-        "oneDay": "1D",
-        "oneMonth": "1M",
-        "sevenDays": "7D",
-        "threeMonths": "3M"
       }
     },
     "deleteButton": {
@@ -12792,6 +12774,16 @@
       "selectAnOption": "Select an option",
       "showFullMessage": "Show the full message",
       "time": "Time"
+    },
+    "dateRange": {
+      "chooseCustom": "Choose a custom range",
+      "custom": "Custom",
+      "customRange": "Custom range: {from} to {to}",
+      "label": "Date range",
+      "oneDay": "1D",
+      "oneMonth": "1M",
+      "sevenDays": "7D",
+      "threeMonths": "3M"
     },
     "input": {
       "day": "Day",
