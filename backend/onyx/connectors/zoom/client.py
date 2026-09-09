@@ -100,7 +100,7 @@ class ZoomClient:
         # are three different Zoom hosts, and a missed one silently gets no retries.
         self._session.mount("https://", HTTPAdapter(max_retries=retry_strategy))
 
-    def _fetch_access_token(self) -> None:
+    def _fetch_access_token(self) -> str:
         response = self._session.post(
             _OAUTH_TOKEN_URL,
             params={
@@ -126,6 +126,7 @@ class ZoomClient:
         token = ZoomAccessToken.model_validate(response.json())
         self._access_token = token.access_token
         self._token_expires_at = time.monotonic() + token.expires_in
+        return token.access_token
 
     def _get_access_token(self) -> str:
         if (
@@ -133,8 +134,7 @@ class ZoomClient:
             or time.monotonic()
             >= self._token_expires_at - _TOKEN_REFRESH_MARGIN_SECONDS
         ):
-            self._fetch_access_token()
-        assert self._access_token is not None
+            return self._fetch_access_token()
         return self._access_token
 
     def _send_authorized(
