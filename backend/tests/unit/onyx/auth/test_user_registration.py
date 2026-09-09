@@ -9,8 +9,9 @@ Tests cover:
 """
 
 from collections.abc import Iterator
+from functools import partial
 from types import SimpleNamespace, TracebackType
-from typing import cast
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -18,7 +19,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from fastapi_users import exceptions
 
 from onyx.auth.schemas import UserCreate
-from onyx.auth.users import UserManager
+from onyx.auth.users import UserManager, _upgrade_placeholder_to_web_login__no_commit
 from onyx.db.enums import AccountType
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -713,12 +714,10 @@ class TestOAuthNoAutoLinkExemptions:
     @patch("onyx.auth.users.remove_user_from_invited_users")
     @patch("onyx.auth.users.assign_user_to_default_groups__no_commit")
     @patch("onyx.auth.users._upgrade_will_add_seat", return_value=False)
-    @patch("onyx.auth.users.get_session_with_current_tenant")
     @patch("onyx.auth.users.SQLAlchemyUserDatabase")
     async def test_placeholder_promoted_without_auto_link(
         self,
         mock_user_db_cls: MagicMock,
-        mock_sync_session_factory: MagicMock,
         mock_will_add_seat: MagicMock,  # noqa: ARG002
         mock_assign_groups: MagicMock,
         mock_remove_invited: MagicMock,  # noqa: ARG002
@@ -751,10 +750,19 @@ class TestOAuthNoAutoLinkExemptions:
         mock_sync_db.query.return_value.filter.return_value.first.return_value = (
             sync_user
         )
-        mock_sync_session_factory.return_value.__enter__ = MagicMock(
-            return_value=mock_sync_db
-        )
-        mock_sync_session_factory.return_value.__exit__ = MagicMock(return_value=False)
+
+        # The upgrade runs on the callback's own session, so drive the real
+        # helper through run_sync rather than a second session. Email
+        # reconciliation arrives here too and stays stubbed out.
+        def _upgrade_only(fn: Any) -> Any:
+            if (
+                isinstance(fn, partial)
+                and fn.func is _upgrade_placeholder_to_web_login__no_commit
+            ):
+                return fn(mock_sync_db)
+            return None
+
+        mock_async_session.run_sync = AsyncMock(side_effect=_upgrade_only)
 
         result = await user_manager.oauth_callback(
             oauth_name="okta",
@@ -774,7 +782,8 @@ class TestOAuthNoAutoLinkExemptions:
         # short-circuit a placeholder before it reaches the upgrade.
         assert sync_user.is_active is True
         mock_assign_groups.assert_called_once()
-        mock_sync_db.commit.assert_called_once()
+        # Committed on the session holding the row lock, not a second one.
+        cast(AsyncMock, mock_async_session.commit).assert_awaited()
         assert result is placeholder
 
     @pytest.mark.asyncio
