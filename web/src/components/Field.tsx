@@ -1101,6 +1101,7 @@ export function DatePickerField({
     <div>
       <FieldLabel label={label} name={name} subtext={subtext} />
       <InputDatePicker
+        id={name}
         value={field.value}
         onChange={helper.setValue}
         minDate={new Date(startYear, 0, 1)}

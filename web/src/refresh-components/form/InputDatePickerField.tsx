@@ -23,11 +23,11 @@ export default function InputDatePickerField({
 
   return (
     <InputDatePicker
+      {...props}
       id={name}
       value={field.value}
       onChange={onChange}
       error={!!(meta.touched && meta.error)}
-      {...props}
     />
   );
 }
