@@ -380,13 +380,17 @@ class TestSystemicFailureDoesNotAdvanceWork:
             "429", response=response
         )
 
-        checkpoint = self._checkpoint()
+        emitted = 0
+        generator = connector.load_from_checkpoint(
+            0, _FULL_HISTORY_END, self._checkpoint()
+        )
         with pytest.raises(requests.HTTPError):
-            list(connector.load_from_checkpoint(0, _FULL_HISTORY_END, checkpoint))
+            for _ in generator:
+                emitted += 1
 
-        # The runner re-saves the checkpoint it came in with, so this is the
-        # one the next attempt resumes from.
-        assert checkpoint.recordings.work_index == 0
+        # Recording a failure here instead would let the attempt finish, and the
+        # checkpoint it saved would point past the occurrence that never indexed.
+        assert emitted == 0
 
     def test_a_document_specific_failure_still_advances(self) -> None:
         connector, mock_client = _make_connector(meeting_ids=["111"])
