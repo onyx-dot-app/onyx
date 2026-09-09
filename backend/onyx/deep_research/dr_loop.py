@@ -110,7 +110,7 @@ def generate_final_report(
     turn_index: int,
     citation_mapping: CitationMapping,
     user_identity: LLMUserIdentity | None,
-    reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
+    reasoning_effort: ReasoningEffort | None = None,
     saved_reasoning: str | None = None,
     pre_answer_processing_time: float | None = None,
     all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
@@ -205,7 +205,7 @@ def run_deep_research_llm_loop(
     custom_agent_prompt: str | None,  # noqa: ARG001
     llm: LLM,
     token_counter: Callable[[str], int],
-    reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
+    reasoning_effort: ReasoningEffort | None = None,
     skip_clarification: bool = False,
     user_identity: LLMUserIdentity | None = None,
     chat_session_id: str | None = None,
@@ -702,10 +702,10 @@ def run_deep_research_llm_loop(
                         token_counter=token_counter,
                         citation_mapping=citation_mapping,
                         user_identity=user_identity,
-                        # Session override wins in sub-agents. AUTO keeps the tuned LOW default.
+                        # Session override wins in sub-agents, else the tuned LOW default.
                         reasoning_effort=(
                             reasoning_effort
-                            if reasoning_effort is not ReasoningEffort.AUTO
+                            if reasoning_effort is not None
                             else ReasoningEffort.LOW
                         ),
                     )

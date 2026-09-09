@@ -190,13 +190,13 @@ def resolve_gateway_model(
     return provider, model
 
 
-def _parse_reasoning_effort(raw: str | None) -> ReasoningEffort:
+def _parse_reasoning_effort(raw: str | None) -> ReasoningEffort | None:
     if raw is None:
-        return ReasoningEffort.AUTO
+        return None
     try:
         return ReasoningEffort(raw.lower())
     except ValueError:
-        return ReasoningEffort.AUTO
+        return None
 
 
 def _drop_empty_text(message: ChatCompletionMessage) -> ChatCompletionMessage | None:
@@ -310,7 +310,7 @@ def _stream_worker(
     tool_choice: ToolChoice | None,
     structured_response_format: dict[str, Any] | None,
     max_tokens: int | None,
-    reasoning_effort: ReasoningEffort,
+    reasoning_effort: ReasoningEffort | None,
     model: str,
     out: "queue.Queue[Any]",
     cancelled: threading.Event,
@@ -545,7 +545,7 @@ def _responses_stream_worker(
     tools: list[dict[str, Any]] | None,
     tool_choice: ToolChoice | None,
     max_tokens: int | None,
-    reasoning_effort: ReasoningEffort,
+    reasoning_effort: ReasoningEffort | None,
     model: str,
     response_id: str,
     created_at: int,
@@ -983,7 +983,7 @@ def _require_named_tool(
 
 def _anthropic_reasoning_effort(
     thinking: dict[str, Any] | None, output_config: dict[str, Any] | None
-) -> ReasoningEffort:
+) -> ReasoningEffort | None:
     """Anthropic has two thinking APIs: legacy ``thinking.type=enabled`` with
     ``budget_tokens``, and adaptive ``thinking.type=adaptive`` where effort
     lives in top-level ``output_config.effort``. The downstream LLM layer
@@ -995,9 +995,9 @@ def _anthropic_reasoning_effort(
     if isinstance(effort_raw, str):
         return _parse_reasoning_effort(effort_raw)
     if thinking is None or thinking.get("type") == "adaptive":
-        # Adaptive without an explicit effort: leave it to the downstream
-        # adaptive default rather than pinning an effort tier.
-        return ReasoningEffort.AUTO
+        # No thinking block, or adaptive without an effort: leave it unpinned
+        # so the configured defaults apply.
+        return None
     from litellm.llms.anthropic.experimental_pass_through.adapters.transformation import (
         LiteLLMAnthropicMessagesAdapter,
     )
@@ -1080,7 +1080,7 @@ def _anthropic_stream_worker(
     tools: list[dict[str, Any]] | None,
     tool_choice: ToolChoice | None,
     max_tokens: int,
-    reasoning_effort: ReasoningEffort,
+    reasoning_effort: ReasoningEffort | None,
     model: str,
     message_id: str,
     out: "queue.Queue[Any]",

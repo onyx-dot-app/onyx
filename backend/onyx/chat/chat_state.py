@@ -224,7 +224,7 @@ class ChatTurnSetup:
     # Processing-fence value and stream-buffer key — single source for the run id
     processing_run_id: int
     reserved_token_count: int
-    reasoning_effort: ReasoningEffort
+    reasoning_effort: ReasoningEffort | None
     search_params: SearchParams
     all_injected_file_metadata: dict[str, FileToolMetadata]
     available_files: AvailableFiles

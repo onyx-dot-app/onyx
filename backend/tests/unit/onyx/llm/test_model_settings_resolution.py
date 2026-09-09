@@ -4,6 +4,7 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
+from pydantic import ValidationError
 
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.models import ReasoningEffort, UserMessage, resolve_reasoning_effort
@@ -34,7 +35,7 @@ def _make_llm(
     )
 
 
-def _sent_kwargs(llm: LitellmLLM, effort: ReasoningEffort) -> dict[str, Any]:
+def _sent_kwargs(llm: LitellmLLM, effort: ReasoningEffort | None) -> dict[str, Any]:
     """Run one completion and return the kwargs that reached the provider."""
     calls: list[dict[str, Any]] = []
 
@@ -66,11 +67,12 @@ class TestResolveReasoningEffort:
     @pytest.mark.parametrize(
         "requested,default,maximum,expected",
         [
-            # Nothing configured: the request passes through untouched.
-            (ReasoningEffort.AUTO, None, None, ReasoningEffort.AUTO),
+            # Nothing configured: an unpinned request gets the default and a
+            # pinned one passes through untouched.
+            (None, None, None, ReasoningEffort.MEDIUM),
             (ReasoningEffort.HIGH, None, None, ReasoningEffort.HIGH),
             # An admin default only fills in for an unpinned request.
-            (ReasoningEffort.AUTO, ReasoningEffort.HIGH, None, ReasoningEffort.HIGH),
+            (None, ReasoningEffort.HIGH, None, ReasoningEffort.HIGH),
             (ReasoningEffort.LOW, ReasoningEffort.HIGH, None, ReasoningEffort.LOW),
             # The cap wins over a session override, which is the whole point.
             (ReasoningEffort.XHIGH, None, ReasoningEffort.LOW, ReasoningEffort.LOW),
@@ -82,7 +84,7 @@ class TestResolveReasoningEffort:
             ),
             # ...and over the admin's own default, if they disagree.
             (
-                ReasoningEffort.AUTO,
+                None,
                 ReasoningEffort.XHIGH,
                 ReasoningEffort.MEDIUM,
                 ReasoningEffort.MEDIUM,
@@ -97,7 +99,7 @@ class TestResolveReasoningEffort:
     )
     def test_resolution_matrix(
         self,
-        requested: ReasoningEffort,
+        requested: ReasoningEffort | None,
         default: ReasoningEffort | None,
         maximum: ReasoningEffort | None,
         expected: ReasoningEffort,
@@ -118,17 +120,13 @@ class TestResolveReasoningEffort:
             (ReasoningEffort.XHIGH, ReasoningEffort.MEDIUM),
         ],
     )
-    def test_auto_is_concretized_before_clamping(
+    def test_default_is_clamped_like_any_request(
         self, maximum: ReasoningEffort, expected: ReasoningEffort
     ) -> None:
-        """AUTO means medium downstream, so a cap below medium must bind it.
-
-        Left as AUTO, a cap of LOW would be violated by the AUTO->medium
-        mapping in OPENAI_REASONING_EFFORT.
-        """
+        """The default is medium, so a cap below medium must bind it."""
         assert (
             resolve_reasoning_effort(
-                ReasoningEffort.AUTO, default=None, user_default=None, maximum=maximum
+                None, default=None, user_default=None, maximum=maximum
             )
             == expected
         )
@@ -136,10 +134,10 @@ class TestResolveReasoningEffort:
     @pytest.mark.parametrize(
         "requested,default,user_default,maximum,expected",
         [
-            # A user default fills in when the request is AUTO and the admin
+            # A user default fills in when nothing was pinned and the admin
             # set no default.
             (
-                ReasoningEffort.AUTO,
+                None,
                 None,
                 ReasoningEffort.HIGH,
                 None,
@@ -147,7 +145,7 @@ class TestResolveReasoningEffort:
             ),
             # The admin default outranks the user's.
             (
-                ReasoningEffort.AUTO,
+                None,
                 ReasoningEffort.LOW,
                 ReasoningEffort.HIGH,
                 None,
@@ -163,7 +161,7 @@ class TestResolveReasoningEffort:
             ),
             # The cap clamps a user default like any other source.
             (
-                ReasoningEffort.AUTO,
+                None,
                 None,
                 ReasoningEffort.XHIGH,
                 ReasoningEffort.MEDIUM,
@@ -171,26 +169,17 @@ class TestResolveReasoningEffort:
             ),
             # A user default of OFF is a real choice.
             (
-                ReasoningEffort.AUTO,
+                None,
                 None,
                 ReasoningEffort.OFF,
                 None,
                 ReasoningEffort.OFF,
-            ),
-            # An AUTO user default is no choice at all: without a cap the
-            # request stays AUTO.
-            (
-                ReasoningEffort.AUTO,
-                None,
-                ReasoningEffort.AUTO,
-                None,
-                ReasoningEffort.AUTO,
             ),
         ],
     )
     def test_user_default_tier(
         self,
-        requested: ReasoningEffort,
+        requested: ReasoningEffort | None,
         default: ReasoningEffort | None,
         user_default: ReasoningEffort | None,
         maximum: ReasoningEffort | None,
@@ -203,15 +192,6 @@ class TestResolveReasoningEffort:
             == expected
         )
 
-    def test_auto_stays_auto_without_a_cap(self) -> None:
-        """No cap means no reason to force a choice the provider can make."""
-        assert (
-            resolve_reasoning_effort(
-                ReasoningEffort.AUTO, default=None, user_default=None, maximum=None
-            )
-            is ReasoningEffort.AUTO
-        )
-
 
 class TestEffortReachesTheProvider:
     """The resolved effort is what gets sent, not the requested one."""
@@ -222,16 +202,16 @@ class TestEffortReachesTheProvider:
 
     def test_default_applies_when_unpinned(self) -> None:
         llm = _make_llm(reasoning_effort_default=ReasoningEffort.HIGH)
-        assert _effort_sent(_sent_kwargs(llm, ReasoningEffort.AUTO)) == "high"
+        assert _effort_sent(_sent_kwargs(llm, None)) == "high"
 
     def test_session_override_beats_the_default(self) -> None:
         llm = _make_llm(reasoning_effort_default=ReasoningEffort.HIGH)
         assert _effort_sent(_sent_kwargs(llm, ReasoningEffort.LOW)) == "low"
 
-    def test_auto_under_a_low_cap_does_not_leak_medium(self) -> None:
+    def test_unpinned_under_a_low_cap_does_not_leak_medium(self) -> None:
         """The trap this design exists to avoid."""
         llm = _make_llm(reasoning_effort_max=ReasoningEffort.LOW)
-        assert _effort_sent(_sent_kwargs(llm, ReasoningEffort.AUTO)) == "low"
+        assert _effort_sent(_sent_kwargs(llm, None)) == "low"
 
     def test_unset_policy_changes_nothing(self) -> None:
         llm = _make_llm()
@@ -257,7 +237,7 @@ class TestProvidedModelSettings:
         assert not request.temperature_default_provided
 
     def test_explicit_null_is_provided(self) -> None:
-        """Distinct from omission: this is an admin resetting to auto."""
+        """Distinct from omission: this is an admin clearing the cap."""
         request = ModelConfigurationUpsertRequest(
             name="gpt-5.1", is_visible=True, reasoning_effort_max=None
         )
@@ -276,21 +256,13 @@ class TestProvidedModelSettings:
 
 
 class TestUpsertValidation:
-    """Rejections happen at the API boundary, via OnyxError."""
+    """Rejections happen at the API boundary."""
 
-    @pytest.mark.parametrize("auto", ["auto", ReasoningEffort.AUTO])
-    def test_auto_is_not_storable(self, auto: object) -> None:
-        """AUTO has no rank, so storing it would make the clamp raise later.
-        The enum form matters: a programmatic caller can reach this directly."""
-        with pytest.raises(OnyxError):
+    @pytest.mark.parametrize("value", ["extreme", "auto"])
+    def test_unknown_effort_rejected(self, value: str) -> None:
+        with pytest.raises(ValidationError):
             ModelConfigurationUpsertRequest(
-                name="gpt-5.1", is_visible=True, reasoning_effort_max=auto
-            )
-
-    def test_unknown_effort_rejected(self) -> None:
-        with pytest.raises(OnyxError):
-            ModelConfigurationUpsertRequest(
-                name="gpt-5.1", is_visible=True, reasoning_effort_default="extreme"
+                name="gpt-5.1", is_visible=True, reasoning_effort_default=value
             )
 
     @pytest.mark.parametrize("temperature", [-0.1, 2.1])

@@ -95,11 +95,6 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.factory import get_llm_for_persona, get_llm_token_counter
-from onyx.llm.models import (
-    USER_SELECTABLE_REASONING_EFFORTS,
-    ReasoningEffort,
-    parse_user_selectable_reasoning_effort,
-)
 from onyx.llm.override_models import LLMOverride
 from onyx.secondary_llm_flows.chat_session_naming import (
     DEFAULT_CHAT_SESSION_NAME,
@@ -306,25 +301,8 @@ def update_chat_session_reasoning(
         db_session=db_session,
     )
 
-    # NULL clears the override. Any set value must be a user-selectable effort.
-    reasoning_effort: ReasoningEffort | None = None
-    if update_thread_req.reasoning_effort_override is not None:
-        try:
-            reasoning_effort = parse_user_selectable_reasoning_effort(
-                update_thread_req.reasoning_effort_override
-            )
-        except ValueError:
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                "reasoning_effort_override must be one of: "
-                + ", ".join(
-                    effort.value
-                    for effort in ReasoningEffort
-                    if effort in USER_SELECTABLE_REASONING_EFFORTS
-                ),
-            )
-
-    chat_session.reasoning_effort_override = reasoning_effort
+    # NULL clears the override.
+    chat_session.reasoning_effort_override = update_thread_req.reasoning_effort_override
     db_session.add(chat_session)
     db_session.commit()
 

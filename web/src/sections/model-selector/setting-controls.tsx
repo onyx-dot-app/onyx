@@ -31,7 +31,7 @@ export const REASONING_STOP_LABEL_KEYS = {
   xhigh: "reasoningLevel.xhigh.label",
 } as const satisfies Record<ReasoningEffortOverride, string>;
 
-/** Where an unset reasoning setting parks: the backend resolves AUTO to medium. */
+/** Where an unset reasoning setting parks: the backend's default is medium. */
 export const UNSET_REASONING_STOP = ALL_REASONING_STOPS.indexOf("medium");
 
 /** Highest supported stop. Nothing from an older backend means the base set. */

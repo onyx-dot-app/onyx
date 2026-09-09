@@ -1,7 +1,7 @@
 import csv
 import io
 from datetime import datetime, timedelta, timezone
-from typing import Any, cast
+from typing import cast
 from uuid import UUID
 
 import jwt
@@ -93,7 +93,7 @@ from onyx.db.users import (
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.key_value_store.factory import get_kv_store
-from onyx.llm.models import ReasoningEffort, parse_user_selectable_reasoning_effort
+from onyx.llm.models import ReasoningEffort
 from onyx.redis.redis_pool import get_raw_redis_client, get_redis_client
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.features.projects.models import UserFileSnapshot
@@ -1177,19 +1177,6 @@ class ReasoningEffortDefaultRequest(BaseModel):
     """The user's own default reasoning effort. Null clears it."""
 
     reasoning_effort_default: ReasoningEffort | None = None
-
-    @field_validator("reasoning_effort_default", mode="before")
-    @classmethod
-    def _validate_reasoning_effort(cls, value: Any) -> Any:
-        # AUTO has no rank and an unset column already means it.
-        if value is None:
-            return value
-        try:
-            return parse_user_selectable_reasoning_effort(
-                value.value if isinstance(value, ReasoningEffort) else value
-            )
-        except ValueError as e:
-            raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
 
 
 @router.patch("/reasoning-effort-default")

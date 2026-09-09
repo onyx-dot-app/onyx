@@ -28,7 +28,10 @@ def _bad_request(message: str = "effort not supported") -> BadRequestError:
 
 
 def _run(
-    llm: LitellmLLM, completion: Any, effort: ReasoningEffort, stream: bool = False
+    llm: LitellmLLM,
+    completion: Any,
+    effort: ReasoningEffort | None,
+    stream: bool = False,
 ) -> Any:
     with patch("onyx.llm.litellm_singleton.litellm.completion", side_effect=completion):
         return llm._completion(
@@ -138,7 +141,7 @@ def test_rejected_sampling_params_retry_without_reasoning_tier() -> None:
     result = _run(
         _make_llm(model_name="gpt-4.1", model_provider="openai"),
         completion,
-        ReasoningEffort.AUTO,
+        None,
     )
 
     assert result is _SENTINEL

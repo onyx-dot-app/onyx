@@ -3234,7 +3234,7 @@ class ChatSession(Base):
 
     # The latest temperature override specified by the user
     temperature_override: Mapped[float | None] = mapped_column(Float, nullable=True)
-    # User-pinned reasoning level. NULL means no override, AUTO is never stored.
+    # User-pinned reasoning level. NULL means no override.
     reasoning_effort_override: Mapped[ReasoningEffort | None] = mapped_column(
         Enum(
             ReasoningEffort,
@@ -3694,7 +3694,6 @@ class ModelConfiguration(Base):
     # over both display_name and the LiteLLM-derived name everywhere in the UI.
     custom_display_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    # Never store AUTO in either column, an unset value already means AUTO.
     reasoning_effort_max: Mapped[ReasoningEffort | None] = mapped_column(
         Enum(
             ReasoningEffort,

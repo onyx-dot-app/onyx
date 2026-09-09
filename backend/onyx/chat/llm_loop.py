@@ -755,7 +755,7 @@ def run_llm_loop(
     user_identity: LLMUserIdentity | None = None,
     chat_session_id: str | None = None,
     chat_files: list[ChatFile] | None = None,
-    reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
+    reasoning_effort: ReasoningEffort | None = None,
     include_citations: bool = True,
     all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
     inject_memories_in_prompt: bool = True,

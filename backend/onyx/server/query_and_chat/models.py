@@ -10,6 +10,7 @@ from onyx.context.search.models import BaseFilters, SavedSearchDoc, SearchDoc, T
 from onyx.db.enums import ChatSessionSharedStatus
 from onyx.db.models import ChatSession
 from onyx.file_store.models import FileDescriptor
+from onyx.llm.models import ReasoningEffort
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.streaming_models import Packet
 
@@ -71,7 +72,7 @@ class UpdateChatSessionTemperatureRequest(BaseModel):
 
 class UpdateChatSessionReasoningRequest(BaseModel):
     chat_session_id: UUID
-    reasoning_effort_override: str | None = None
+    reasoning_effort_override: ReasoningEffort | None = None
 
 
 class ChatSessionCreationRequest(BaseModel):
