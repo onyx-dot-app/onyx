@@ -2,6 +2,19 @@ import json
 from collections.abc import Callable
 from typing import Any
 
+from onyx.llm.models import ImageContentPart, LanguageModelInput, UserMessage
+
+
+def count_prompt_image_tokens(prompt: LanguageModelInput) -> int:
+    messages = prompt if isinstance(prompt, list) else [prompt]
+    return sum(
+        part.token_count
+        for message in messages
+        if isinstance(message, UserMessage) and isinstance(message.content, list)
+        for part in message.content
+        if isinstance(part, ImageContentPart)
+    )
+
 
 def estimate_request_tokens(
     messages: list[dict[str, Any]],

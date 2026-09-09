@@ -6,6 +6,7 @@ import subprocess
 import sys
 from collections.abc import Callable
 from contextlib import nullcontext
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -41,6 +42,8 @@ from onyx.llm.multi_llm import LitellmLLM
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolResponse
+
+_BACKEND_DIR = Path(__file__).parents[4]
 
 
 class _ScriptedResultTool(Tool[None]):
@@ -609,6 +612,7 @@ def test_configured_tool_result_ceiling_accepts_default_and_positive_values(
         ],
         check=False,
         capture_output=True,
+        cwd=_BACKEND_DIR,
         env=env,
         text=True,
     )
@@ -635,6 +639,7 @@ def test_configured_tool_result_ceiling_rejects_invalid_values(
         [sys.executable, "-c", "import onyx.configs.chat_configs"],
         check=False,
         capture_output=True,
+        cwd=_BACKEND_DIR,
         env=env,
         text=True,
     )

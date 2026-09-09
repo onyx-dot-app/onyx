@@ -30,7 +30,7 @@ from onyx.llm.custom_config_mapping import (
     map_custom_config_to_model_kwargs,
 )
 from onyx.llm.exceptions import InputBudgetExceededError
-from onyx.llm.input_budget import estimate_request_tokens
+from onyx.llm.input_budget import count_prompt_image_tokens, estimate_request_tokens
 from onyx.llm.interfaces import (
     LLM,
     LanguageModelInput,
@@ -971,7 +971,7 @@ class LitellmLLM(LLM):
                     messages,
                     tools,
                     input_budget.token_counter,
-                    input_budget.image_tokens,
+                    count_prompt_image_tokens(prompt),
                 )
                 if estimated_tokens > input_budget.max_tokens:
                     raise InputBudgetExceededError()
