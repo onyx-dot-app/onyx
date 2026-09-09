@@ -297,7 +297,7 @@ interface TabsContentProps extends WithoutStyles<
 
 function TabsContent({ padding, children, ...props }: TabsContentProps) {
   return (
-    <TabsPrimitive.Content {...props} className="w-full pt-4">
+    <TabsPrimitive.Content {...props} className="w-full">
       {padding ? (
         <div style={{ padding: spacingToRem(padding) }}>{children}</div>
       ) : (

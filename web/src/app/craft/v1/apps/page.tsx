@@ -245,9 +245,9 @@ function KindSlot({ tab, panel, children }: KindSlotProps) {
             ) : active ? (
               <Tabs.Content value={kind}>{content}</Tabs.Content>
             ) : (
-              // Mirrors the top padding Tabs.Content applies, so the height an
-              // unselected kind holds matches what it occupies once selected.
-              <div className="w-full pt-4">{content}</div>
+              // Mirrors the w-full wrapper Tabs.Content applies, so the height
+              // an unselected kind holds matches what it occupies once selected.
+              <div className="w-full">{content}</div>
             )}
           </div>
         );
