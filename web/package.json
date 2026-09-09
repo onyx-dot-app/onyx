@@ -127,7 +127,7 @@
     "@types/hast": "^3.0.4",
     "@types/jest": "^30.0.0",
     "@types/js-cookie": "^3.0.6",
-    "@types/lodash": "^4.17.20",
+    "@types/lodash": "^4.17.25",
     "@types/node": "24.12.2",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.7",
