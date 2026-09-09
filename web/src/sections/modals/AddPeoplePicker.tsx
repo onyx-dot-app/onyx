@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { Button, LineItemButton, Tag, Text } from "@opal/components";
 import { SvgBubbleText, SvgEdit, SvgUser, SvgUsers, SvgX } from "@opal/icons";
 import { cn } from "@opal/utils";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import type { MinimalUserSnapshot } from "@/lib/types";
 import type { MinimalUserGroupSnapshot } from "@/hooks/useShareableGroups";
 import {
