@@ -3881,7 +3881,15 @@
         },
         "viewGroup": {
           "label": "Ver grupo"
-        }
+        },
+        "resourceCounts": {
+          "connectors": "{count, plural, one {# conector} other {# conectores}}",
+          "documentSets": "{count, plural, one {# conjunto de documentos} other {# conjuntos de documentos}}",
+          "agents": "{count, plural, one {# agente} other {# agentes}}",
+          "noPrivateResources": "Nenhum conector / conjunto de documentos / agente privado",
+          "joined": "{first} · {rest}"
+        },
+        "memberCount": "{count, plural, one {# membro} other {# membros}}"
       },
       "create": {
         "header": {
@@ -4130,6 +4138,16 @@
           "header": "Limite de tokens",
           "placeholder": "Limite de tokens (milhares)",
           "unit": "(milhares)"
+        }
+      },
+      "builtIn": {
+        "admin": {
+          "name": "Admin",
+          "description": "Grupo de administradores integrado com acesso total para gerenciar todas as permissões."
+        },
+        "basic": {
+          "name": "Básico",
+          "description": "Grupo padrão para todos os usuários com permissões básicas."
         }
       }
     },
@@ -4389,6 +4407,20 @@
         },
         "validationFailed": {
           "message": "A validação falhou: {status}"
+        }
+      },
+      "points": {
+        "documentIngestion": {
+          "name": "Ingestão de documentos",
+          "description": "Executa em cada documento antes de entrar no pipeline de indexação. Permite filtrar, reescrever ou descartar documentos."
+        },
+        "documentPush": {
+          "name": "Envio de documentos",
+          "description": "Dispara após cada documento ser indexado com sucesso. Envia documentos indexados para um destino externo, como um wiki ou data warehouse. Dispara apenas para conectores públicos em implantações de inquilino único."
+        },
+        "queryProcessing": {
+          "name": "Processamento de consultas",
+          "description": "Executa em cada consulta do usuário antes de entrar no pipeline. Permite reescrever, filtrar ou rejeitar consultas."
         }
       }
     },
@@ -4958,6 +4990,24 @@
         "statusInvalid": "inválido",
         "statusPaused": "pausado",
         "restoreHint": "Para manter um conector, cancele aqui, retome-o ou corrija-o e reindexe novamente — assim ele será levado adiante. Caso contrário, adicione-o de volta quando a reindexação terminar."
+      },
+      "modelDescriptions": {
+        "cohereEmbedEnglishV3": "Modelo de embeddings em inglês da Cohere. Bom desempenho em tarefas em inglês.",
+        "cohereEmbedEnglishLightV3": "Modelo leve de embeddings em inglês da Cohere. Mais rápido e eficiente para tarefas simples.",
+        "cohereEmbedV4": "O modelo de embeddings multilíngue mais recente da Cohere, com saída padrão de 1536 dimensões para melhor qualidade de recuperação.",
+        "openaiTextEmbedding3Large": "Modelo de embeddings grande da OpenAI. Melhor desempenho, porém mais caro.",
+        "openaiTextEmbedding3Small": "Modelo de embeddings mais novo e eficiente da OpenAI. Bom equilíbrio entre desempenho e custo.",
+        "googleGeminiEmbedding001": "Modelo de embeddings Gemini do Google. Poderoso e eficiente.",
+        "googleTextEmbedding005": "Modelo de embeddings menor e mais leve do Google.",
+        "googleGeminiEmbedding2": "O modelo de embeddings multimodal mais recente do Google (GA). Recuperação da mais alta qualidade com saída de 3072 dimensões.",
+        "googleGeminiEmbedding2Preview": "Versão prévia do Gemini Embedding 2. Substituída pelo gemini-embedding-2 em novas configurações.",
+        "voyageLarge2Instruct": "Modelo de embeddings grande da Voyage. Alto desempenho com ajuste fino por instruções.",
+        "voyageLight2Instruct": "Modelo leve de embeddings da Voyage. Bom equilíbrio entre desempenho e eficiência.",
+        "nomicEmbedTextV1": "Modelo de embeddings da Nomic especializado em recuperação, similaridade, agrupamento e classificação.",
+        "e5BaseV2": "Um modelo menor e mais rápido que o padrão. É cerca de 2x mais rápido que o modelo padrão, com menor qualidade de busca.",
+        "e5SmallV2": "A versão menor e mais rápida da linha de modelos E5. Se você executa o Onyx em um sistema com recursos limitados, pode ser uma boa escolha.",
+        "multilingualE5Base": "Para corpora em outros idiomas além do inglês, esta é a escolha certa.",
+        "multilingualE5Small": "Para corpora em outros idiomas além do inglês em um sistema com recursos limitados, esta é a escolha certa."
       }
     },
     "indexing": {
@@ -6799,7 +6849,9 @@
         "gatedTooltip": "Vários provedores de SSO ativados estão disponíveis nos planos Business ou Enterprise."
       },
       "copyRedirectUri": {
-        "tooltip": "Copiar URI de redirecionamento"
+        "tooltip": "Copiar URI de redirecionamento",
+        "successToast": "URI de redirecionamento copiada",
+        "errorToast": "Não foi possível copiar"
       },
       "editProvider": {
         "tooltip": "Editar"
@@ -6911,6 +6963,75 @@
       },
       "toasts": {
         "unexpectedError": "Ocorreu um erro inesperado."
+      },
+      "providerTypes": {
+        "googleOauth": {
+          "description": "Usar o Google como provedor de identidade."
+        },
+        "oidc": {
+          "description": "Conectar um provedor genérico de OpenID Connect."
+        },
+        "saml": {
+          "description": "Conectar um provedor de identidade SAML."
+        }
+      },
+      "configFields": {
+        "clientId": {
+          "label": "ID do cliente",
+          "description": "O ID de cliente OAuth do console do seu provedor.",
+          "placeholder": "ID do cliente"
+        },
+        "clientSecret": {
+          "label": "Segredo do cliente",
+          "description": "O segredo de cliente OAuth. Armazenado criptografado.",
+          "placeholder": "Segredo do cliente"
+        },
+        "pkceEnabled": {
+          "label": "Ativar PKCE",
+          "description": "Enviar um code challenge PKCE no fluxo de login deste provedor. Uma configuração global da implantação pode forçar isso."
+        },
+        "scopes": {
+          "label": "Escopos",
+          "description": "Substituir os escopos OAuth solicitados no login. Vazio usa os padrões da implantação.",
+          "placeholder": "Adicionar um escopo (ex.: openid)"
+        },
+        "openidConfigUrl": {
+          "label": "URL de configuração do OpenID",
+          "description": "A URL do documento de descoberta OpenID Connect do IdP."
+        },
+        "requireVerifiedEmail": {
+          "label": "Exigir claim de e-mail verificado",
+          "description": "Rejeitar logins quando o IdP omitir o claim opcional email_verified. Deixe desativado para IdPs que não o enviam, como o Microsoft Entra ID."
+        },
+        "idpEntityId": {
+          "label": "ID da entidade do IdP",
+          "description": "O ID de entidade (emissor) do provedor de identidade."
+        },
+        "idpSsoUrl": {
+          "label": "URL de SSO do IdP",
+          "description": "O endpoint do IdP que recebe as solicitações de login."
+        },
+        "idpX509Cert": {
+          "label": "Certificado X.509 do IdP",
+          "description": "O certificado de assinatura do IdP, usado para verificar asserções."
+        },
+        "spEntityId": {
+          "label": "ID da entidade do SP",
+          "description": "O ID de entidade desta instância, registrado no IdP."
+        },
+        "spX509Cert": {
+          "label": "Certificado X.509 do SP",
+          "description": "Apenas se esta instância assinar solicitações ou descriptografar asserções."
+        },
+        "spPrivateKey": {
+          "label": "Chave privada do SP",
+          "description": "Chave privada associada ao certificado do SP. Armazenada criptografada."
+        },
+        "emailAttribute": {
+          "label": "Atributo de e-mail",
+          "description": "Atributo SAML que contém o e-mail do usuário. Usa chaves comuns por padrão.",
+          "placeholder": "email"
+        }
       }
     },
     "standardAnswers": {
@@ -7448,6 +7569,42 @@
         "connected": "{label} conectado",
         "disconnected": "{label} desconectado",
         "unexpectedError": "Ocorreu um erro inesperado."
+      },
+      "providers": {
+        "braintrust": {
+          "description": "Avaliação e monitoramento de LLM",
+          "fields": {
+            "apiKey": {
+              "label": "Chave de API",
+              "description": "Cole sua [chave de API](https://www.braintrust.dev/app) do Braintrust."
+            },
+            "project": {
+              "label": "Nome do projeto",
+              "description": "Nome do projeto do Braintrust onde os traces são registrados."
+            },
+            "apiUrl": {
+              "label": "URL da API",
+              "description": "O padrão é a região dos EUA. Cole a URL da API do Braintrust para outras regiões ou auto-hospedagem."
+            }
+          }
+        },
+        "langfuse": {
+          "description": "Plataforma de observabilidade de código aberto na nuvem ou auto-hospedada",
+          "fields": {
+            "secretKey": {
+              "label": "Chave secreta",
+              "description": "Cole sua [chave de API](https://cloud.langfuse.com) do Langfuse."
+            },
+            "publicKey": {
+              "label": "Chave pública",
+              "placeholder": "Chave pública"
+            },
+            "host": {
+              "label": "URL base da API",
+              "description": "O padrão é a região da UE. Cole a URL base do Langfuse para outras regiões ou auto-hospedagem."
+            }
+          }
+        }
       }
     },
     "usage": {
@@ -8073,6 +8230,35 @@
       },
       "unexpectedError": {
         "message": "Ocorreu um erro inesperado."
+      },
+      "contentProviders": {
+        "onyxWebCrawler": {
+          "subtitle": "Rastreador web integrado. Funciona na maioria das páginas, mas tem desempenho menor em casos extremos."
+        },
+        "firecrawl": {
+          "subtitle": "Rastreador de código aberto líder."
+        },
+        "exa": {
+          "subtitle": "Exa.ai"
+        },
+        "tavily": {
+          "subtitle": "Tavily AI"
+        }
+      },
+      "configFields": {
+        "searchEngineId": {
+          "label": "ID do mecanismo de busca",
+          "placeholder": "Insira o ID do seu mecanismo de busca",
+          "description": "Cole o [ID do mecanismo de busca](https://programmablesearchengine.google.com/controlpanel/all) para usar na busca na web."
+        },
+        "searxngBaseUrl": {
+          "label": "URL base do SearXNG",
+          "description": "Cole a URL base da sua [instância SearXNG](https://docs.searxng.org/admin/installation.html)."
+        },
+        "firecrawlBaseUrl": {
+          "label": "URL base da API",
+          "description": "A URL base da sua API do Firecrawl."
+        }
       }
     }
   },
@@ -9816,6 +10002,17 @@
           },
           "reading": {
             "status": "Lendo"
+          },
+          "header": {
+            "default": "Pesquisando documentos internos",
+            "sources": "Pesquisando {sources}",
+            "sourcesOverflow": "{sources} +{count} mais",
+            "withTimeWindow": "{header} ({timeWindow})"
+          },
+          "timeWindow": {
+            "since": "desde {date}",
+            "before": "antes de {date}",
+            "between": "de {start} a {end}"
           }
         },
         "interruptedThinking": {
@@ -13037,7 +13234,8 @@
           "label": "Outros"
         },
         "title": "Preços dos modelos",
-        "unavailable": "Preços indisponíveis"
+        "unavailable": "Preços indisponíveis",
+        "priceRow": "{input} entrada · {output} saída · {cache} cache"
       },
       "modelUsage": {
         "cacheReads": {
@@ -13051,7 +13249,8 @@
         },
         "tokensOut": {
           "label": "{count} de saída"
-        }
+        },
+        "joined": "{first} · {rest}"
       },
       "showFewerModels": {
         "ariaLabel": "Mostrar menos modelos"

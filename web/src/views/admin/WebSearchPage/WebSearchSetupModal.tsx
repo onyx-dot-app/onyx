@@ -102,8 +102,8 @@ export function WebSearchSetupModal({ state }: WebSearchSetupModalProps) {
 
   const configField =
     category === "search"
-      ? getSearchConfigField(providerType)
-      : getContentConfigField(providerType);
+      ? getSearchConfigField(providerType, t)
+      : getContentConfigField(providerType, t);
 
   const providerLabel =
     category === "search"
