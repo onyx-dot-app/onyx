@@ -14,8 +14,8 @@ All access controls are managed within the main Onyx application.
 Provide an Onyx Personal Access Token or API Key in the `Authorization` header as a Bearer token.
 The MCP server quickly validates and passes through the token on every request.
 
-A token scoped to `read:search` covers the document-search tool: it implies `read:search_filters`,
-which is what lists the indexed sources and document sets a search may be filtered by. Add
+A token scoped to `read:search` covers the document-search tool, including the listings of indexed
+sources and document sets that a search may be filtered by. Add
 `read:chat` or `write:chat` only if the client needs the chat surfaces. An unscoped token carries
 the user's full access, so prefer a scoped one.
 

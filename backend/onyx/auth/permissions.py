@@ -74,13 +74,6 @@ IMPLIED_PERMISSIONS: dict[str, set[str]] = {
         Permission.GENERATE_IMAGE.value,
         Permission.USE_LLM_GATEWAY.value,
     },
-    # The filter vocabulary is part of the search surface: a token that may
-    # search but cannot list the sources or document sets it may filter by is
-    # half a token. Implication (rather than repointing these listings at
-    # READ_CONNECTORS / READ_DOCUMENT_SETS) keeps basic users unchanged —
-    # basic implies READ_SEARCH — without handing them the admin connector
-    # surface or see-all-document-sets that those two scopes carry.
-    Permission.READ_SEARCH.value: {Permission.READ_SEARCH_FILTERS.value},
     Permission.WRITE_CHAT.value: {Permission.READ_CHAT.value},
     Permission.CRAFT_SANDBOX.value: {
         Permission.READ_SEARCH.value,

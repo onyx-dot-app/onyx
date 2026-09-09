@@ -53,7 +53,6 @@ class TestResolveEffectivePermissions:
         assert result == {
             "basic",
             "read:search",
-            "read:search_filters",
             "read:chat",
             "write:chat",
             "generate:image",
@@ -64,20 +63,17 @@ class TestResolveEffectivePermissions:
         result = resolve_effective_permissions({"write:chat"})
         assert result == {"write:chat", "read:chat"}
 
-    def test_read_search_implies_search_filters(self) -> None:
-        """A token that may search must be able to list what it can filter by."""
+    def test_read_search_no_implications(self) -> None:
         result = resolve_effective_permissions({"read:search"})
-        assert result == {"read:search", "read:search_filters"}
+        assert result == {"read:search"}
 
-    def test_search_filters_does_not_imply_connector_or_document_set_reads(
-        self,
-    ) -> None:
-        """The filter vocabulary must not become the admin connector surface or
-        see-all-document-sets, which is why it is its own scope."""
-        result = resolve_effective_permissions({"read:search_filters"})
-        assert result == {"read:search_filters"}
-        assert "read:connectors" not in resolve_effective_permissions({"basic"})
-        assert "read:document_sets" not in resolve_effective_permissions({"basic"})
+    def test_basic_does_not_imply_connector_or_document_set_reads(self) -> None:
+        """The search filter listings are gated on read:search, never on
+        READ_CONNECTORS (the admin connector surface) or READ_DOCUMENT_SETS
+        (see every document set)."""
+        basic = resolve_effective_permissions({"basic"})
+        assert "read:connectors" not in basic
+        assert "read:document_sets" not in basic
 
     def test_basic_does_not_imply_read_admin(self) -> None:
         """read:admin is admin-only — basic principals must never gain it."""
@@ -160,7 +156,6 @@ class TestResolveEffectivePermissions:
         assert result == {
             "basic",
             "read:search",
-            "read:search_filters",
             "read:chat",
             "write:chat",
             "generate:image",
@@ -190,7 +185,6 @@ class TestResolveEffectivePermissions:
         assert result == {
             "craft_sandbox",
             "read:search",
-            "read:search_filters",
             "generate:image",
             "use:llm_gateway",
         }
@@ -233,7 +227,6 @@ class TestGetEffectivePermissions:
         assert result == {
             Permission.BASIC_ACCESS,
             Permission.READ_SEARCH,
-            Permission.READ_SEARCH_FILTERS,
             Permission.READ_CHAT,
             Permission.WRITE_CHAT,
             Permission.GENERATE_IMAGE,
@@ -280,7 +273,6 @@ class TestCEUngatedPermissions:
         assert result == {
             Permission.BASIC_ACCESS,
             Permission.READ_SEARCH,
-            Permission.READ_SEARCH_FILTERS,
             Permission.READ_CHAT,
             Permission.WRITE_CHAT,
             Permission.GENERATE_IMAGE,
@@ -443,7 +435,6 @@ class TestAnonymousUserPermissions:
         assert get_effective_permissions(get_anonymous_user()) == {
             Permission.BASIC_ACCESS,
             Permission.READ_SEARCH,
-            Permission.READ_SEARCH_FILTERS,
             Permission.READ_CHAT,
             Permission.WRITE_CHAT,
             Permission.GENERATE_IMAGE,
@@ -592,7 +583,7 @@ class TestHasPermissionAuthority:
 
 class TestApiSurfaceScopeRegistration:
     # Hardcoded spec: the complete implied-only set (4 READ_* capability reads
-    # + 7 API-surface scopes). Equality, not subset, so an accidentally
+    # + 6 API-surface scopes). Equality, not subset, so an accidentally
     # over-broad set (a real capability made un-grantable) is also caught.
     EXPECTED_IMPLIED = {
         "read:connectors",
@@ -601,7 +592,6 @@ class TestApiSurfaceScopeRegistration:
         "read:users",
         "read:user_groups",
         "read:search",
-        "read:search_filters",
         "read:chat",
         "write:chat",
         "generate:image",

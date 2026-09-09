@@ -9,8 +9,7 @@ from tests.integration.common_utils.test_models import DATestUser
 
 BASIC_ACCESS_ENDPOINT = ("GET", "/user/pats")
 IDENTITY_ENDPOINT = ("GET", "/me")
-# Filter vocabulary a searcher needs: reachable via READ_SEARCH_FILTERS, which
-# READ_SEARCH implies.
+# Filter vocabulary a searcher needs; gated on READ_SEARCH alongside /search.
 INDEXED_SOURCES_ENDPOINT = ("GET", "/manage/indexed-sources")
 DOCUMENT_SET_LISTING_ENDPOINT = ("GET", "/manage/document-set")
 # Gated on READ_CONNECTORS — the admin connector surface, which the filter

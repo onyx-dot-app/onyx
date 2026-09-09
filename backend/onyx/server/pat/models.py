@@ -38,9 +38,6 @@ _ASSIGNABLE_SCOPES: list[PatScopeOption] = [
         label="Read",
         description="Use search and query endpoints.",
     ),
-    # READ_SEARCH_FILTERS is deliberately not assignable on its own: a token
-    # that may list the filter vocabulary but not search has no use. It reaches
-    # tokens through READ_SEARCH's closure, and `implies` surfaces it in the UI.
     PatScopeOption(
         scope=Permission.READ_CHAT,
         group_label="Chat",
