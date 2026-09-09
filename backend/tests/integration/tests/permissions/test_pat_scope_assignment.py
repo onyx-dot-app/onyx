@@ -19,7 +19,9 @@ def pat_creator(permission_holder_user_factory: Any) -> DATestUser:
     return permission_holder_user_factory(Permission.CREATE_USER_API_KEYS.value)
 
 
-# The scopes a user may assign today (admin scopes are intentionally excluded).
+# The scopes a user may assign today. Admin scopes are intentionally excluded,
+# as is read:search_filters — it is reached through read:search's closure rather
+# than assigned directly.
 EXPECTED_SELECTABLE_SCOPES = {
     Permission.READ_SEARCH.value,
     Permission.READ_CHAT.value,
@@ -38,12 +40,16 @@ def test_scope_implications(permission_basic_user: DATestUser) -> None:
     by_scope = {
         o["scope"]: o for o in PATManager.selectable_scopes(permission_basic_user)
     }
-    # write:chat implies read:chat (write superset of read); reads imply nothing.
+    # write:chat implies read:chat (write superset of read); read:search carries
+    # the filter vocabulary it needs, which is implied-only and never assignable
+    # on its own.
     assert by_scope[Permission.WRITE_CHAT.value]["implies"] == [
         Permission.READ_CHAT.value
     ]
     assert by_scope[Permission.READ_CHAT.value]["implies"] == []
-    assert by_scope[Permission.READ_SEARCH.value]["implies"] == []
+    assert by_scope[Permission.READ_SEARCH.value]["implies"] == [
+        Permission.READ_SEARCH_FILTERS.value
+    ]
     assert by_scope[Permission.USE_LLM_GATEWAY.value]["implies"] == []
     assert by_scope[Permission.USE_LLM_GATEWAY.value]["min_tier"] == "business"
 
