@@ -52,7 +52,7 @@ import {
 } from "lucide-react";
 import IndexAttemptErrorsModal from "./IndexAttemptErrorsModal";
 import usePaginatedFetch from "@/hooks/usePaginatedFetch";
-import { IndexAttemptSnapshot } from "@/lib/types";
+import { IndexAttemptSnapshot, ValidSources } from "@/lib/types";
 import { Spinner } from "@/components/Spinner";
 import { Callout } from "@/components/ui/callout";
 import { Card } from "@/components/ui/card";
@@ -71,6 +71,9 @@ import { useUser } from "@/providers/UserProvider";
 import { resolveAllErrorsForCCPair } from "@/lib/targeted_reindex";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { can } from "@/lib/permissions/resource-actions";
+import SeafileConnectorConfigEditModal from "./SeafileConnectorConfigEditModal";
+import type { SeafileConnectorConfig } from "./seafileConfig";
+import { updateSeafileConnectorConfig } from "./seafileConnectorUpdate";
 // synchronize these validations with the SQLAlchemy connector class until we have a
 // centralized schema for both frontend and backend
 const RefreshFrequencySchema = Yup.object().shape({
@@ -155,6 +158,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const [editingRefreshFrequency, setEditingRefreshFrequency] = useState(false);
   const [editingPruningFrequency, setEditingPruningFrequency] = useState(false);
   const [showIndexAttemptErrors, setShowIndexAttemptErrors] = useState(false);
+  const [showSeafileConfigEditModal, setShowSeafileConfigEditModal] =
+    useState(false);
 
   const [showIsResolvingKickoffLoader, setShowIsResolvingKickoffLoader] =
     useState(false);
@@ -284,6 +289,27 @@ function Main({ ccPairId }: { ccPairId: number }) {
     setEditingPruningFrequency(true);
   };
 
+  const handleSeafileConfigSubmit = async (
+    config: SeafileConnectorConfig
+  ): Promise<void> => {
+    if (!ccPair) {
+      return;
+    }
+
+    try {
+      await updateSeafileConnectorConfig(ccPair, config);
+      mutate(buildCCPairInfoUrl(ccPairId));
+      toast.warning(t("seafile.toasts.updated"));
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t("seafile.toasts.updateFailed")
+      );
+      throw error;
+    }
+  };
+
   const handleRefreshSubmit = async (
     propertyName: string,
     propertyValue: string
@@ -362,6 +388,11 @@ function Main({ ccPairId }: { ccPairId: number }) {
   }
 
   const isDeleting = ccPair.status === ConnectorCredentialPairStatus.DELETING;
+  const canEditSeafileConfig =
+    ccPair.connector.source === ValidSources.Seafile &&
+    can(ccPair, "edit") &&
+    !ccPair.indexing &&
+    !isDeleting;
 
   const {
     prune_freq: pruneFreq,
@@ -453,6 +484,15 @@ function Main({ ccPairId }: { ccPairId: number }) {
             }
           }}
           supportsTargetedReindex={ccPair.supports_targeted_reindex}
+        />
+      )}
+
+      {showSeafileConfigEditModal && (
+        <SeafileConnectorConfigEditModal
+          config={ccPair.connector.connector_specific_config}
+          credential={ccPair.credential}
+          onClose={() => setShowSeafileConfigEditModal(false)}
+          onSubmit={handleSeafileConfigSubmit}
         />
       )}
 
@@ -727,6 +767,11 @@ function Main({ ccPairId }: { ccPairId: number }) {
                   ccPair.connector.connector_specific_config,
                   ccPair.connector.source
                 )}
+                onEdit={
+                  canEditSeafileConfig
+                    ? () => setShowSeafileConfigEditModal(true)
+                    : undefined
+                }
               />
 
               {/* Inline file management for file connectors */}

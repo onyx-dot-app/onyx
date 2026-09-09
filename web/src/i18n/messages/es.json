@@ -1772,6 +1772,60 @@
       }
     },
     "connector": {
+      "seafile": {
+        "actions": {
+          "cancel": "Cancelar",
+          "save": "Guardar cambios",
+          "saving": "Guardando..."
+        },
+        "editModal": { "title": "Editar configuración de Seafile" },
+        "fields": {
+          "allowedExtensions": {
+            "description": "Extensiones de archivo que debe indexar este conector.",
+            "label": "Extensiones permitidas",
+            "placeholder": "Introduce una extensión"
+          },
+          "baseUrl": {
+            "description": "URL de tu Seafile autohospedado, p. ej. https://seafile.example.com",
+            "label": "URL base"
+          },
+          "libraries": {
+            "description": "Selecciona o introduce las bibliotecas de Seafile que se deben indexar.",
+            "label": "ID de bibliotecas"
+          },
+          "maxFileSize": {
+            "description": "Los archivos que superen este límite se omiten.",
+            "label": "Tamaño máximo en bytes"
+          },
+          "pathPrefixes": {
+            "description": "Rutas dentro de cada biblioteca. Usa / para indexar toda la biblioteca.",
+            "label": "Prefijos de ruta",
+            "placeholder": "Introduce un prefijo"
+          }
+        },
+        "libraryPicker": {
+          "fetchError": "No se pudieron obtener las bibliotecas.",
+          "loading": "Cargando bibliotecas de Seafile...",
+          "manualDescription": "Introduce los ID directamente si la detección no está disponible.",
+          "manualLabel": "ID manuales de bibliotecas",
+          "manualPlaceholder": "Introduce un ID",
+          "refresh": "Actualizar"
+        },
+        "toasts": {
+          "updated": "Configuración de Seafile actualizada. Ejecuta una reindexación completa y permite que la poda concilie los documentos existentes.",
+          "updateFailed": "No se pudo actualizar la configuración de Seafile"
+        },
+        "validation": {
+          "baseUrlProtocol": "La URL base debe comenzar por http:// o https://",
+          "baseUrlRequired": "La URL base es obligatoria",
+          "extensionRequired": "Se requiere al menos una extensión",
+          "extensionUnsupported": "El conector de Seafile no admite una o más extensiones",
+          "libraryRequired": "Se requiere al menos un ID de biblioteca",
+          "maxFileSizeInteger": "El tamaño máximo debe ser un entero",
+          "maxFileSizePositive": "El tamaño máximo debe ser mayor que cero",
+          "maxFileSizeRequired": "El tamaño máximo es obligatorio"
+        }
+      },
       "accessType": {
         "autoSyncOption": {
           "description": "Sincronizaremos automáticamente los permisos desde la fuente. Un documento solo se podrá buscar en Onyx si el usuario que realiza la búsqueda tiene permiso para acceder al documento en la fuente.",

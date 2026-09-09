@@ -23,6 +23,7 @@ from onyx.db.models import (
     Connector,
     ConnectorCredentialPair,
     Credential,
+    Document__Tag,
     DocumentByConnectorCredentialPair,
     FileRecord,
     IndexAttempt,
@@ -190,6 +191,9 @@ def cleanup_cc_pair(db_session: Session, pair: ConnectorCredentialPair) -> None:
                 pass
 
         if orphan_doc_ids:
+            db_session.query(Document__Tag).filter(
+                Document__Tag.document_id.in_(orphan_doc_ids)
+            ).delete(synchronize_session="fetch")
             db_session.query(DBDocument).filter(
                 DBDocument.id.in_(orphan_doc_ids)
             ).delete(synchronize_session="fetch")
