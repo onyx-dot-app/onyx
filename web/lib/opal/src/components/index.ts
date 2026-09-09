@@ -54,6 +54,12 @@ export {
   type TextButtonProps,
 } from "@opal/components/buttons/text-button/components";
 
+/* ListFieldInput */
+export {
+  ListFieldInput,
+  type ListFieldInputProps,
+} from "@opal/components/inputs/list-field-input/components";
+
 /* Text */
 export {
   Text,

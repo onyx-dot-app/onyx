@@ -1,6 +1,10 @@
+"use client";
+
 import { useState, KeyboardEvent } from "react";
-import { InputTypeIn, Tag } from "@opal/components";
-interface ListFieldInputProps {
+import InputTypeIn from "@opal/components/inputs/input-type-in/components";
+import { Tag } from "@opal/components/tag/components";
+
+export interface ListFieldInputProps {
   values: string[];
   onChange: (values: string[]) => void;
   placeholder?: string;
@@ -26,7 +30,7 @@ export function ListFieldInput({
 }: ListFieldInputProps) {
   const [inputValue, setInputValue] = useState("");
 
-  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+  function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter" && !e.nativeEvent.isComposing && inputValue.trim()) {
       e.preventDefault();
       const trimmedValue = inputValue.trim();
@@ -38,11 +42,11 @@ export function ListFieldInput({
 
       setInputValue("");
     }
-  };
+  }
 
-  const removeValue = (indexToRemove: number) => {
+  function removeValue(indexToRemove: number) {
     onChange(values.filter((_, index) => index !== indexToRemove));
-  };
+  }
 
   return (
     <div className="flex flex-col w-full space-y-2 mb-4">

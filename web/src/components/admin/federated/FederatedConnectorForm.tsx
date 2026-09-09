@@ -29,7 +29,7 @@ import { DropdownMenuItemWithTooltip } from "@/components/ui/dropdown-menu-with-
 import { toast } from "@opal/layouts";
 
 import { Badge } from "@/components/ui/badge";
-import { ListFieldInput } from "@/refresh-components/inputs/ListFieldInput";
+import { ListFieldInput } from "@opal/components";
 import { SvgSettings, SvgSimpleLoader } from "@opal/icons";
 
 export interface FederatedConnectorFormProps {

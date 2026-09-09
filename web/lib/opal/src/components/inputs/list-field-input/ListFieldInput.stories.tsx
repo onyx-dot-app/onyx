@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import React from "react";
-import { ListFieldInput } from "./ListFieldInput";
+import { ListFieldInput } from "@opal/components";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
 const meta: Meta<typeof ListFieldInput> = {
-  title: "refresh-components/inputs/ListFieldInput",
+  title: "opal/components/ListFieldInput",
   component: ListFieldInput,
   tags: ["autodocs"],
   decorators: [
