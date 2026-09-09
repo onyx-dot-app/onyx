@@ -33,6 +33,7 @@ from onyx.server.settings.models import Tier
 #   /tenants/billing-* - Legacy billing endpoints (backwards compatibility)
 #   /manage/users, /users - User management (needed for seat limit resolution)
 #   /notifications - Needed for UI to load properly
+#   /scim/v2/{ServiceProviderConfig,ResourceTypes,Schemas} - Static SCIM discovery docs
 LICENSE_ENFORCEMENT_ALLOWED_PREFIXES: frozenset[str] = frozenset(
     {
         "/auth",
@@ -60,6 +61,11 @@ LICENSE_ENFORCEMENT_ALLOWED_PREFIXES: frozenset[str] = frozenset(
         "/users",
         # Notifications - needed for UI to load properly
         "/notifications",
+        # SCIM discovery is unauthenticated. A bearer-less cloud probe resolves
+        # to the default schema, which never reaches the /scim ENTERPRISE floor.
+        "/scim/v2/ServiceProviderConfig",
+        "/scim/v2/ResourceTypes",
+        "/scim/v2/Schemas",
     }
 )
 
