@@ -1457,6 +1457,14 @@ class TestComputeOutputAllowance:
 
     RESERVE = 1024
 
+    @pytest.fixture(autouse=True)
+    def _pin_reserve(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # The reserve is env-configurable; pin it so the fixed expectations
+        # below do not depend on the test environment.
+        monkeypatch.setattr(
+            "onyx.chat.llm_loop.GEN_AI_NUM_RESERVED_OUTPUT_TOKENS", self.RESERVE
+        )
+
     def test_small_output_model_with_plenty_of_room(self) -> None:
         # gpt-4o style: 16k output, 127k input limit, short prompt.
         assert (
