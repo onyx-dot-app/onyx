@@ -9,7 +9,8 @@ from onyx.connectors.zoom.recordings.session_types import (
 )
 from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
     occurrence,
-    session_details,
+    past_meeting_details,
+    webinar_details,
 )
 
 
@@ -45,14 +46,14 @@ class TestMeetingSessionType:
 
     def test_get_occurrence_details_delegates_to_meeting_endpoint(self) -> None:
         mock_client = MagicMock(spec=ZoomClient)
-        mock_client.get_past_meeting_details.return_value = session_details(
+        mock_client.get_past_meeting_details.return_value = past_meeting_details(
             topic="Weekly Sync"
         )
 
         result = MeetingSessionType().get_occurrence_details(mock_client, "uuid-1")
 
         mock_client.get_past_meeting_details.assert_called_once_with("uuid-1")
-        assert result == session_details(topic="Weekly Sync")
+        assert result == past_meeting_details(topic="Weekly Sync")
 
 
 class TestWebinarSessionType:
@@ -70,7 +71,7 @@ class TestWebinarSessionType:
 
     def test_get_occurrence_details_delegates_to_the_webinar_endpoint(self) -> None:
         mock_client = MagicMock(spec=ZoomClient)
-        mock_client.get_webinar_details.return_value = session_details(
+        mock_client.get_webinar_details.return_value = webinar_details(
             topic="Product Launch"
         )
 
@@ -78,4 +79,4 @@ class TestWebinarSessionType:
 
         mock_client.get_webinar_details.assert_called_once_with("uuid-1")
         mock_client.get_past_meeting_details.assert_not_called()
-        assert result == session_details(topic="Product Launch")
+        assert result == webinar_details(topic="Product Launch")

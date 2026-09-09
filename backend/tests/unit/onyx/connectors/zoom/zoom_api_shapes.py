@@ -8,9 +8,10 @@ the field under test as an override.
 from typing import Any
 
 from onyx.connectors.zoom.models import (
-    ZoomSessionDetails,
+    ZoomPastMeetingDetails,
     ZoomSessionOccurrence,
     ZoomTranscript,
+    ZoomWebinarDetails,
 )
 
 
@@ -26,7 +27,7 @@ def transcript(**overrides: Any) -> ZoomTranscript:
     return ZoomTranscript(**(fields | overrides))
 
 
-def session_details(**overrides: Any) -> ZoomSessionDetails:
+def past_meeting_details(**overrides: Any) -> ZoomPastMeetingDetails:
     fields: dict[str, Any] = {
         "uuid": "uaFkQyFCSwya8iNYtkAw3A==",
         "id": 111,
@@ -44,7 +45,7 @@ def session_details(**overrides: Any) -> ZoomSessionDetails:
         "user_email": "host@example.com",
         "user_name": "Host User",
     }
-    return ZoomSessionDetails(**(fields | overrides))
+    return ZoomPastMeetingDetails(**(fields | overrides))
 
 
 def occurrence(**overrides: Any) -> ZoomSessionOccurrence:
@@ -53,3 +54,15 @@ def occurrence(**overrides: Any) -> ZoomSessionOccurrence:
         "start_time": "2026-01-15T10:00:00Z",
     }
     return ZoomSessionOccurrence(**(fields | overrides))
+
+
+def webinar_details(**overrides: Any) -> ZoomWebinarDetails:
+    fields: dict[str, Any] = {
+        "id": 97871060099,
+        "uuid": "m3WqMkvuRXyYqH+eKWhk9w==",
+        "host_id": "30R7kT7bTIKSNUFEuH_Qlg",
+        "type": 5,
+        "topic": "Product Launch",
+        "start_time": "2026-01-15T10:00:00Z",
+    }
+    return ZoomWebinarDetails(**(fields | overrides))

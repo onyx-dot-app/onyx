@@ -15,7 +15,7 @@ from onyx.connectors.zoom.recordings.processing import (
     zoom_document_id,
 )
 from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
-    session_details,
+    past_meeting_details,
     transcript,
 )
 
@@ -50,12 +50,20 @@ def _client_with_transcript() -> MagicMock:
         download_url="https://zoom.example/transcript.vtt", meeting_topic=""
     )
     client.download_transcript_vtt.return_value = _SAMPLE_VTT
-    client.get_past_meeting_details.return_value = session_details(topic="Weekly Sync")
+    client.get_past_meeting_details.return_value = past_meeting_details(
+        topic="Weekly Sync"
+    )
     return client
 
 
 def _run(client: MagicMock, work: OccurrenceWork) -> list[Document | ConnectorFailure]:
     return list(process_occurrence(client, work))
+
+
+def _http_error(status: int) -> requests.HTTPError:
+    response = requests.Response()
+    response.status_code = status
+    return requests.HTTPError(f"{status}", response=response)
 
 
 class TestZoomDocumentId:
@@ -167,9 +175,11 @@ class TestProcessOccurrence:
 
         assert _run(client, _work()) == []
 
-    def test_missing_details_falls_back_to_generic_title(self) -> None:
+    def test_a_session_zoom_no_longer_has_falls_back_to_a_generic_title(self) -> None:
+        # Zoom answers 404 once a meeting ages past the details endpoint's
+        # one-year window.
         client = _client_with_transcript()
-        client.get_past_meeting_details.return_value = None
+        client.get_past_meeting_details.side_effect = _http_error(404)
 
         items = _run(client, _work(start_time=None))
 
@@ -191,7 +201,7 @@ class TestProcessOccurrence:
 
     def test_details_fill_in_a_timestamp_discovery_did_not_have(self) -> None:
         client = _client_with_transcript()
-        client.get_past_meeting_details.return_value = session_details(
+        client.get_past_meeting_details.return_value = past_meeting_details(
             topic="Weekly Sync", start_time="2026-01-15T10:00:00Z"
         )
 
@@ -204,7 +214,7 @@ class TestProcessOccurrence:
 
     def test_empty_prefetched_topic_still_asks_for_details(self) -> None:
         client = _client_with_transcript()
-        client.get_past_meeting_details.return_value = session_details(
+        client.get_past_meeting_details.return_value = past_meeting_details(
             topic="Weekly Sync", start_time="2026-01-15T10:00:00Z"
         )
 
@@ -223,12 +233,6 @@ class TestProcessOccurrence:
         assert isinstance(doc, Document)
         assert doc.semantic_identifier == "Town Hall"
         client.get_past_meeting_details.assert_not_called()
-
-
-def _http_error(status: int) -> requests.HTTPError:
-    response = requests.Response()
-    response.status_code = status
-    return requests.HTTPError(f"{status}", response=response)
 
 
 class TestSystemicFailuresStopTheRun:
@@ -285,6 +289,26 @@ class TestSystemicFailuresStopTheRun:
 
         assert len(items) == 1
         assert isinstance(items[0], ConnectorFailure)
+
+    @pytest.mark.parametrize(
+        "error",
+        [_http_error(429), CredentialExpiredError("expired")],
+    )
+    def test_a_systemic_details_failure_still_yields_the_document(
+        self, error: Exception
+    ) -> None:
+        # The details call runs last, once the transcript is downloaded, so even
+        # a systemic error here costs a title rather than the document. The next
+        # occurrence fetches its transcript first and stops the run there.
+        client = _client_with_transcript()
+        client.get_past_meeting_details.side_effect = error
+
+        items = _run(client, _work(topic="", start_time=None))
+
+        assert len(items) == 1
+        doc = items[0]
+        assert isinstance(doc, Document)
+        assert doc.semantic_identifier == "Zoom Meeting 111"
 
     def test_an_http_error_carrying_no_response_is_not_treated_as_systemic(
         self,

@@ -124,9 +124,8 @@ def process_occurrence(
     if not topic or not started_at:
         try:
             details = handler.get_occurrence_details(client, occurrence_uuid)
-            if details:
-                topic = topic or details.topic
-                started_at = started_at or details.start_time
+            topic = topic or details.topic
+            started_at = started_at or details.start_time
         except Exception:
             # The transcript is already downloaded, so a missing title or
             # timestamp isn't worth throwing away an indexable document.

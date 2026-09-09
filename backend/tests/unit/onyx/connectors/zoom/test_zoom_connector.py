@@ -25,8 +25,9 @@ from tests.unit.onyx.connectors.utils import (
     load_everything_from_checkpoint_connector_from_checkpoint,
 )
 from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
-    session_details,
+    past_meeting_details,
     transcript,
+    webinar_details,
 )
 
 _ZOOM_CREDS = {
@@ -86,13 +87,13 @@ def _configure_happy_path(mock_client: MagicMock) -> None:
         meeting_topic="Recorded Session",
     )
     mock_client.download_transcript_vtt.return_value = _SAMPLE_VTT
-    mock_client.get_past_meeting_details.return_value = session_details(
+    mock_client.get_past_meeting_details.return_value = past_meeting_details(
         topic="Weekly Sync"
     )
     mock_client.list_past_webinar_occurrences.side_effect = lambda session_id: [
         ZoomSessionOccurrence(uuid=f"uuid-{session_id}", start_time=_days_ago(7))
     ]
-    mock_client.get_webinar_details.return_value = session_details(
+    mock_client.get_webinar_details.return_value = webinar_details(
         topic="Product Launch"
     )
 

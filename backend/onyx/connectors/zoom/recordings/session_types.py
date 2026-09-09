@@ -22,7 +22,7 @@ class SessionTypeHandler(abc.ABC):
     @abc.abstractmethod
     def get_occurrence_details(
         self, client: ZoomClient, occurrence_uuid: str
-    ) -> ZoomSessionDetails | None:
+    ) -> ZoomSessionDetails:
         raise NotImplementedError
 
 
@@ -36,7 +36,7 @@ class MeetingSessionType(SessionTypeHandler):
 
     def get_occurrence_details(
         self, client: ZoomClient, occurrence_uuid: str
-    ) -> ZoomSessionDetails | None:
+    ) -> ZoomSessionDetails:
         return client.get_past_meeting_details(occurrence_uuid)
 
 
@@ -50,7 +50,7 @@ class WebinarSessionType(SessionTypeHandler):
 
     def get_occurrence_details(
         self, client: ZoomClient, occurrence_uuid: str
-    ) -> ZoomSessionDetails | None:
+    ) -> ZoomSessionDetails:
         return client.get_webinar_details(occurrence_uuid)
 
 

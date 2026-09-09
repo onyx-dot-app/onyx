@@ -58,6 +58,52 @@ _DOCUMENTED_PAST_MEETING = {
 }
 
 
+# The five configuration objects ZoomWebinarDetails deliberately leaves off.
+# Naming them keeps the round-trip assertion honest about what it skips.
+_WEBINAR_CONFIG_FIELDS = frozenset(
+    {
+        "occurrences",
+        "recurrence",
+        "settings",
+        "simulive_delay_start",
+        "tracking_fields",
+    }
+)
+
+# Every field of Zoom's documented `GET /webinars/{webinarId}` example. The five
+# configuration objects are trimmed to one entry each, since nothing reads inside
+# them and `settings` alone holds 77 more fields.
+_DOCUMENTED_WEBINAR = {
+    "id": 97871060099,
+    "uuid": "m3WqMkvuRXyYqH+eKWhk9w==",
+    "host_id": "30R7kT7bTIKSNUFEuH_Qlg",
+    "host_email": "jchill@example.com",
+    "topic": "My Webinar",
+    "type": 5,
+    "agenda": "My webinar",
+    "duration": 60,
+    "start_time": "2022-03-26T06:44:14Z",
+    "timezone": "America/Los_Angeles",
+    "created_at": "2022-03-26T07:18:32Z",
+    "creation_source": "open_api",
+    "join_url": "https://example.com/j/11111",
+    "start_url": "https://example.com/s/11111",
+    "registration_url": "https://example.com/webinar/register/7ksAkRCoEpt1",
+    "password": "123456",
+    "encrypted_passcode": "8pEkRweVXPV3Ob2KJYgFTRlDtl1gSn.1",
+    "h323_passcode": "123456",
+    "template_id": "ull6574eur",
+    "record_file_id": "f09340e1-cdc3-4eae-9a74-98f9777ed908",
+    "is_simulive": True,
+    "transition_to_live": False,
+    "simulive_delay_start": {"enable": True, "time": 10, "timeunit": "second"},
+    "occurrences": [{"occurrence_id": "1648194360000", "status": "available"}],
+    "recurrence": {"type": 1, "repeat_interval": 1},
+    "settings": {"approval_type": 0, "auto_recording": "cloud"},
+    "tracking_fields": [{"field": "field1", "value": "value1"}],
+}
+
+
 def _transcript(**overrides: Any) -> ZoomTranscript:
     """Most fields are required, so a readiness case has to start from a whole
     response rather than the two fields it exercises.
@@ -431,27 +477,58 @@ class TestGetWebinarDetails:
     def test_parses_the_response(self) -> None:
         client = _client()
         client._session = MagicMock()
+        client._session.request.return_value = _response(200, _DOCUMENTED_WEBINAR)
+
+        details = client.get_webinar_details("222")
+
+        assert details.topic == "My Webinar"
+        assert details.start_time == "2022-03-26T06:44:14Z"
+
+    def test_keeps_every_documented_scalar_field(self) -> None:
+        # Sharing one model with /past_meetings parses no webinar at all, because
+        # that model requires seven fields a webinar never carries.
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200, _DOCUMENTED_WEBINAR)
+
+        details = client.get_webinar_details("222")
+
+        # Guards the fixture too: trimming the five out of it would quietly
+        # turn the comparison below into a weaker test.
+        assert _WEBINAR_CONFIG_FIELDS <= set(_DOCUMENTED_WEBINAR)
+        expected = {
+            k: v
+            for k, v in _DOCUMENTED_WEBINAR.items()
+            if k not in _WEBINAR_CONFIG_FIELDS
+        }
+        assert details.model_dump() == expected
+
+    def test_a_webinar_configured_with_nothing_optional_still_parses(self) -> None:
+        client = _client()
+        client._session = MagicMock()
         client._session.request.return_value = _response(
             200,
             {
-                **_DOCUMENTED_PAST_MEETING,
-                "topic": "Product Launch",
-                "start_time": "2026-01-15T10:00:00Z",
+                "id": 97871060099,
+                "uuid": "m3WqMkvuRXyYqH+eKWhk9w==",
+                "host_id": "30R7kT7bTIKSNUFEuH_Qlg",
+                "topic": "Bare Webinar",
+                "type": 5,
             },
         )
 
         details = client.get_webinar_details("222")
 
-        assert details is not None
-        assert details.topic == "Product Launch"
-        assert details.start_time == "2026-01-15T10:00:00Z"
+        assert details.topic == "Bare Webinar"
+        assert details.start_time is None
 
-    def test_404_returns_none(self) -> None:
+    def test_404_is_reported_not_swallowed(self) -> None:
         client = _client()
         client._session = MagicMock()
         client._session.request.return_value = _response(404)
 
-        assert client.get_webinar_details("222") is None
+        with pytest.raises(requests.HTTPError):
+            client.get_webinar_details("222")
 
 
 class TestListPastWebinarOccurrences:
@@ -483,12 +560,13 @@ class TestListPastWebinarOccurrences:
         url = client._session.request.call_args.args[1]
         assert url == f"{_API_BASE_URL}/past_webinars/222/instances"
 
-    def test_404_yields_an_empty_list(self) -> None:
+    def test_404_is_reported_not_read_as_no_occurrences(self) -> None:
         client = _client()
         client._session = MagicMock()
         client._session.request.return_value = _response(404)
 
-        assert client.list_past_webinar_occurrences("222") == []
+        with pytest.raises(requests.HTTPError):
+            client.list_past_webinar_occurrences("222")
 
     def test_missing_webinars_key_yields_an_empty_list(self) -> None:
         client = _client()
