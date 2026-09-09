@@ -1449,9 +1449,9 @@ markdownify==1.2.2 \
     --hash=sha256:3f02d3cc52714084d6e589f70397b6fc9f2f3a8531481bf35e8cc39f975e186a \
     --hash=sha256:b274f1b5943180b031b699b199cbaeb1e2ac938b75851849a31fd0c3d6603d09
     # via markitdown
-markitdown==0.1.2 \
-    --hash=sha256:4881f0768794ffccb52d09dd86498813a6896ba9639b4fc15512817f56ed9d74 \
-    --hash=sha256:85fe108a92bd18f317e75a36cf567a6fa812072612a898abf8c156d5d74c13c4
+markitdown==0.1.7 \
+    --hash=sha256:4d1f3c69cd43b82288fdc3653686d759dcf355ee7c681aa6a855aed98a1e4f44 \
+    --hash=sha256:4eca912c87c6aa6897284a7f4bf6769a23bccf8544530f5d8b175fbe3797c916
 markupsafe==3.0.3 \
     --hash=sha256:0eb9ff8191e8498cca014656ae6b8d61f39da5f95b488805da4bb029cccbfbaf \
     --hash=sha256:1085e7fbddd3be5f89cc898938f42c0b3c711fdcb37d75221de2666af647c175 \
@@ -1922,6 +1922,12 @@ pathable==0.5.0 \
 pdfminer-six==20260107 \
     --hash=sha256:366585ba97e80dffa8f00cebe303d2f381884d8637af4ce422f1df3ef38111a9 \
     --hash=sha256:96bfd431e3577a55a0efd25676968ca4ce8fd5b53f14565f85716ff363889602
+    # via
+    #   markitdown
+    #   pdfplumber
+pdfplumber==0.11.10 \
+    --hash=sha256:7741ea81bf165b474b153e6789d10d18e06b6ddcf3ec84289c3ef2fed6802580 \
+    --hash=sha256:b95b2d28c66efb0a794a83b88c6c6aea5987532a445d20a1cbcfa657022e6e57
     # via markitdown
 pillow==12.3.0 \
     --hash=sha256:06ff022112bc9cbf83b60f8e028d94ad87b60621706487e65f673de61610ab59 \
@@ -1980,6 +1986,7 @@ pillow==12.3.0 \
     --hash=sha256:fdafc9cce40277e0f7a0feabce0ee50dd2fa1800f3b38015e51296b5e814048d \
     --hash=sha256:fe3cca2e4e8a592be0f269a1ca4835c25199d9f3ce815c8491048f785b0a0198
     # via
+    #   pdfplumber
     #   python-pptx
     #   reportlab
 platformdirs==4.5.0 \
@@ -2366,6 +2373,7 @@ pypdfium2==5.9.0 \
     --hash=sha256:e93f0cf440169a3e445e6fbd06c803877e7418f3e13254287875cb67f208bb5a \
     --hash=sha256:f4991ae39bcea757552579bba4aebfaedb71c96dd35c2292f957b8ac9132f1ff \
     --hash=sha256:ffe49edde2ac86f28ca7e58f565255a442f38a7508fff31b79a55f508f25a31e
+    # via pdfplumber
 pyperclip==1.9.0 \
     --hash=sha256:b7de0142ddc81bfc5c7507eea19da920b92252b548b96186caf94a5e2527d310
     # via

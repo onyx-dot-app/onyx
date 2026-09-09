@@ -3378,7 +3378,7 @@ wheels = [
 
 [[package]]
 name = "markitdown"
-version = "0.1.2"
+version = "0.1.7"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "beautifulsoup4" },
@@ -3388,9 +3388,9 @@ dependencies = [
     { name = "markdownify" },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/da/bd/b7ae7863ee556411fbb6ca19a4a7593ef2b3531d6cd10b979ba386a2dd4d/markitdown-0.1.2.tar.gz", hash = "sha256:85fe108a92bd18f317e75a36cf567a6fa812072612a898abf8c156d5d74c13c4", size = 39361, upload-time = "2025-05-28T17:06:10.423Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/59/93/e8a4af0c47551beb6383e226e840cbc811a577b8096eb385251b3fcc8f62/markitdown-0.1.7.tar.gz", hash = "sha256:4d1f3c69cd43b82288fdc3653686d759dcf355ee7c681aa6a855aed98a1e4f44", size = 51767, upload-time = "2026-07-29T18:20:31.496Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ed/33/d52d06b44c28e0db5c458690a4356e6abbb866f4abc00c0cf4eebb90ca78/markitdown-0.1.2-py3-none-any.whl", hash = "sha256:4881f0768794ffccb52d09dd86498813a6896ba9639b4fc15512817f56ed9d74", size = 57751, upload-time = "2025-05-28T17:06:08.722Z" },
+    { url = "https://files.pythonhosted.org/packages/fc/16/51d269a754d690ec31d3faa0686c8c14ac955dbc0580c358f256ba3391ec/markitdown-0.1.7-py3-none-any.whl", hash = "sha256:4eca912c87c6aa6897284a7f4bf6769a23bccf8544530f5d8b175fbe3797c916", size = 71093, upload-time = "2026-07-29T18:20:30.226Z" },
 ]
 
 [package.optional-dependencies]
@@ -3400,6 +3400,7 @@ docx = [
 ]
 pdf = [
     { name = "pdfminer-six" },
+    { name = "pdfplumber" },
 ]
 pptx = [
     { name = "python-pptx" },
@@ -4399,7 +4400,7 @@ backend = [
     { name = "langfuse", specifier = "==4.14.4" },
     { name = "libpass", specifier = "==1.9.3" },
     { name = "lxml", specifier = "==6.1.1" },
-    { name = "markitdown", extras = ["pdf", "docx", "pptx", "xlsx", "xls"], specifier = "==0.1.2" },
+    { name = "markitdown", extras = ["pdf", "docx", "pptx", "xlsx", "xls"], specifier = "==0.1.7" },
     { name = "mcp", extras = ["cli"], specifier = "==1.28.1" },
     { name = "mistune", specifier = "==3.3.3" },
     { name = "mitmproxy", specifier = "==12.2.3" },
@@ -4866,6 +4867,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/34/a4/5cec1112009f0439a5ca6afa8ace321f0ab2f48da3255b7a1c8953014670/pdfminer_six-20260107.tar.gz", hash = "sha256:96bfd431e3577a55a0efd25676968ca4ce8fd5b53f14565f85716ff363889602", size = 8512094, upload-time = "2026-01-07T13:29:12.937Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/20/8b/28c4eaec9d6b036a52cb44720408f26b1a143ca9bce76cc19e8f5de00ab4/pdfminer_six-20260107-py3-none-any.whl", hash = "sha256:366585ba97e80dffa8f00cebe303d2f381884d8637af4ce422f1df3ef38111a9", size = 6592252, upload-time = "2026-01-07T13:29:10.742Z" },
+]
+
+[[package]]
+name = "pdfplumber"
+version = "0.11.10"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pdfminer-six" },
+    { name = "pillow" },
+    { name = "pypdfium2" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/05/56/6f450312ba05a27d7713b73857c1a25100dbda04fbc1331b13fb227a607d/pdfplumber-0.11.10.tar.gz", hash = "sha256:b95b2d28c66efb0a794a83b88c6c6aea5987532a445d20a1cbcfa657022e6e57", size = 102892, upload-time = "2026-06-15T03:31:31.035Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a2/9a/07d658e1e7fad860f1c541ab941348125dbdab773be3a0afaf32361866c7/pdfplumber-0.11.10-py3-none-any.whl", hash = "sha256:7741ea81bf165b474b153e6789d10d18e06b6ddcf3ec84289c3ef2fed6802580", size = 60047, upload-time = "2026-06-15T03:31:29.702Z" },
 ]
 
 [[package]]
