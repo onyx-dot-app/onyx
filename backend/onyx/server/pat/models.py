@@ -39,6 +39,15 @@ _ASSIGNABLE_SCOPES: list[PatScopeOption] = [
         description="Use search and query endpoints.",
     ),
     PatScopeOption(
+        scope=Permission.READ_SEARCH_FILTERS,
+        group_label="Search",
+        label="Read filters",
+        description=(
+            "List the indexed sources and document sets a search can be "
+            "filtered by. Implied by search read access."
+        ),
+    ),
+    PatScopeOption(
         scope=Permission.READ_CHAT,
         group_label="Chat",
         label="Read",

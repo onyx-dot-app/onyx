@@ -1861,7 +1861,9 @@ def get_connectors(
 
 @router.get("/indexed-sources", tags=PUBLIC_API_TAGS)
 def get_indexed_sources(
-    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    # Filter vocabulary, not the admin connector surface — hence
+    # READ_SEARCH_FILTERS rather than READ_CONNECTORS.
+    _: User = Depends(require_permission(Permission.READ_SEARCH_FILTERS)),
     db_session: Session = Depends(get_session),
 ) -> IndexedSourcesResponse:
     sources = sorted(

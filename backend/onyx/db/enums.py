@@ -648,6 +648,12 @@ class Permission(str, PyEnum):
 
     # API-surface scopes — coarse, implied by basic/admin, used to scope PATs.
     READ_SEARCH = "read:search"
+    # The vocabulary a search may be filtered by: indexed source types and the
+    # names of accessible document sets. Deliberately separate from
+    # READ_CONNECTORS / READ_DOCUMENT_SETS, which gate the admin connector
+    # surface and see-all-document-sets respectively; this one only covers the
+    # ACL-filtered listings a searcher needs to build a filter.
+    READ_SEARCH_FILTERS = "read:search_filters"
     READ_CHAT = "read:chat"
     WRITE_CHAT = "write:chat"
     READ_ADMIN = "read:admin"
@@ -691,6 +697,7 @@ Permission.IMPLIED = frozenset(
         Permission.READ_USERS,
         Permission.READ_USER_GROUPS,
         Permission.READ_SEARCH,
+        Permission.READ_SEARCH_FILTERS,
         Permission.READ_CHAT,
         Permission.WRITE_CHAT,
         Permission.READ_ADMIN,
