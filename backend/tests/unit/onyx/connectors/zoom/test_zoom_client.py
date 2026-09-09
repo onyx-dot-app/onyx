@@ -483,8 +483,20 @@ class TestListGroupMembers:
             200,
             {
                 "members": [
-                    {"id": "u1", "email": "jill@example.com", "first_name": "Jill"},
-                    {"id": "u2", "email": "jack@example.com"},
+                    {
+                        "id": "u1",
+                        "email": "jill@example.com",
+                        "first_name": "Jill",
+                        "last_name": "Chill",
+                        "type": 2,
+                    },
+                    {
+                        "id": "u2",
+                        "email": "jack@example.com",
+                        "first_name": "Jack",
+                        "last_name": "Chill",
+                        "type": 2,
+                    },
                 ],
                 "next_page_token": "tok",
             },
@@ -547,7 +559,15 @@ class TestListUsers:
         client._session.request.return_value = _response(
             200,
             {
-                "users": [{"id": "u1", "email": "host@example.com", "type": 2}],
+                "users": [
+                    {
+                        "id": "u1",
+                        "email": "host@example.com",
+                        "first_name": "Jill",
+                        "last_name": "Chill",
+                        "type": 2,
+                    }
+                ],
                 "next_page_token": "",
             },
         )
@@ -570,6 +590,11 @@ class TestListUserRecordings:
                     "topic": "My Personal Meeting",
                     "start_time": "2021-03-18T05:41:36Z",
                     "type": "1",
+                    "account_id": "Cx3wERazSgup7ZWRHQM8-w",
+                    "host_id": "_0ctZtY0REqWalTmwvrdIw",
+                    "duration": 20,
+                    "total_size": 22,
+                    "recording_count": 22,
                 }
             ],
             "next_page_token": "tok",

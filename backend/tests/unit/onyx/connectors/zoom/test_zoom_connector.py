@@ -19,7 +19,6 @@ from onyx.connectors.zoom.models import (
     ZoomRecordingPage,
     ZoomSessionOccurrence,
     ZoomTranscript,
-    ZoomUser,
     ZoomUserPage,
 )
 from onyx.connectors.zoom.recordings.models import (
@@ -33,7 +32,9 @@ from tests.unit.onyx.connectors.utils import (
 )
 from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
     past_meeting_details,
+    recording_entry,
     transcript,
+    user,
     webinar_details,
 )
 
@@ -583,7 +584,7 @@ def _recording(
     topic: str = "Weekly Sync",
     recording_type: str = "2",
 ) -> ZoomRecordingEntry:
-    return ZoomRecordingEntry(
+    return recording_entry(
         uuid=uuid,
         id=session_id,
         topic=topic,
@@ -597,12 +598,12 @@ def _configure_user_recordings(
 ) -> None:
     mock_client.list_users.return_value = ZoomUserPage(
         users=[
-            ZoomUser(id="host-user", email="host@example.com"),
-            ZoomUser(id="member-user", email="member@example.com"),
+            user(id="host-user", email="host@example.com"),
+            user(id="member-user", email="member@example.com"),
         ]
     )
     mock_client.list_group_members.return_value = ZoomUserPage(
-        users=[ZoomUser(id="member-user", email="member@example.com")]
+        users=[user(id="member-user", email="member@example.com")]
     )
     mock_client.list_user_recordings.side_effect = lambda user_id, **_: (
         ZoomRecordingPage(recordings=recordings_by_user.get(user_id, []))
