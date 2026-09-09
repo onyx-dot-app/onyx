@@ -255,9 +255,15 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
             # live on evt.cancellation_details (code is a CancellationErrorCode),
             # not on evt itself.
             details = getattr(evt, "cancellation_details", None)  # ods: ignore[getattr]
+            reason = getattr(details, "reason", None)  # ods: ignore[getattr]
+            if reason == speechsdk.CancellationReason.EndOfStream:
+                # Closing the push stream in close() ends the audio normally;
+                # the SDK reports that as a cancel, not as a failure.
+                transcriber._logger.info("Azure STT: end of audio stream")
+                return
             transcriber._logger.error(
                 "Azure STT canceled: reason=%s code=%s details=%s",
-                getattr(details, "reason", None),  # ods: ignore[getattr]
+                reason,
                 getattr(details, "code", None),  # ods: ignore[getattr]
                 getattr(details, "error_details", None),  # ods: ignore[getattr]
             )
