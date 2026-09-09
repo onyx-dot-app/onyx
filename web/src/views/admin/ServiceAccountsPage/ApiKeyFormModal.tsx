@@ -12,7 +12,6 @@ import type { APIKey } from "@/views/admin/ServiceAccountsPage/interfaces";
 import { Modal } from "@opal/components";
 import { Button } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
-import { FormikField } from "@/refresh-components/form/FormikField";
 import { InputVertical, toast } from "@opal/layouts";
 import { SvgCheck, SvgKey, SvgLogOut, SvgUsers } from "@opal/icons";
 import useGroups from "@/hooks/useGroups";
@@ -67,7 +66,7 @@ export default function ApiKeyFormModal({
         <Formik
           initialValues={{
             service_account_name: apiKey?.api_key_name || "",
-            group_ids: apiKey?.groups.map((g) => g.id) || ([] as number[]),
+            group_ids: apiKey?.groups.map((g) => g.id) ?? [],
           }}
           validationSchema={Yup.object().shape({
             service_account_name: Yup.string()
@@ -119,7 +118,7 @@ export default function ApiKeyFormModal({
             }
           }}
         >
-          {({ isSubmitting, values, setFieldValue }) => {
+          {({ isSubmitting, values, setFieldValue, isValid, dirty }) => {
             const memberGroupIds = new Set(values.group_ids);
             const joinedGroups = (allGroups ?? []).filter((g) =>
               memberGroupIds.has(g.id)
@@ -288,9 +287,7 @@ export default function ApiKeyFormModal({
                     {t("formModal.cancelButton.label")}
                   </Button>
                   <Button
-                    disabled={
-                      isSubmitting || !values.service_account_name.trim()
-                    }
+                    disabled={isSubmitting || !isValid || !dirty}
                     type="submit"
                   >
                     {isUpdate
