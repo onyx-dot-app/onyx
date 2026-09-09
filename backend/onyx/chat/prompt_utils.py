@@ -30,6 +30,7 @@ from onyx.prompts.tool_prompts import (
 from onyx.prompts.user_info import (
     BASIC_INFORMATION_PROMPT,
     ORGANIZATION_PROFILE_PROMPT,
+    QUERY_LANGUAGE_PROMPT,
     TEAM_INFORMATION_PROMPT,
     USER_INFORMATION_HEADER,
     USER_LANGUAGE_PROMPT,
@@ -161,21 +162,19 @@ def process_prompt_template(
     return processed_prompt
 
 
-def build_language_section(language: SupportedLanguage | None) -> str | None:
-    """English needs no hint, so only another UI language yields a section.
-    Deep research appends the same section to its own system prompts."""
+def build_language_section(language: SupportedLanguage | None) -> str:
+    """The branch is decided here so the model never has to notice whether a
+    language was given. English is the column default and counts as no choice."""
     if language is None or language is SupportedLanguage.EN:
-        return None
+        return QUERY_LANGUAGE_PROMPT
     return USER_LANGUAGE_PROMPT.format(
         language=SUPPORTED_LANGUAGE_ENGLISH_NAMES[language]
     )
 
 
-def with_language_section(prompt: str, language_section: str | None) -> str:
-    """Deep research builds its own system prompts, so the reply-language hint that
+def with_language_section(prompt: str, language_section: str) -> str:
+    """Deep research builds its own system prompts, so the reply-language line that
     build_system_prompt adds for chat is appended to the user-facing ones here."""
-    if not language_section:
-        return prompt
     return f"{prompt}\n\n{language_section}"
 
 
@@ -223,13 +222,16 @@ def _build_user_information_section(
             TEAM_INFORMATION_PROMPT.format(team_information=company_context.strip())
         )
 
+    # Language sits before Preferences so an explicit preference wins over the hint.
+    # Every prompt carries one line, so the model never infers whether a language was set.
+    sections.append(
+        build_language_section(
+            user_memory_context.user_info.language if user_memory_context else None
+        )
+    )
+
     if user_memory_context:
         ctx = user_memory_context
-
-        # Language sits before Preferences so an explicit preference wins over the hint.
-        language_section = build_language_section(ctx.user_info.language)
-        if language_section:
-            sections.append(language_section)
 
         if ctx.user_preferences:
             sections.append(
@@ -241,9 +243,6 @@ def _build_user_information_section(
             sections.append(
                 USER_MEMORIES_PROMPT.format(user_memories=formatted_memories)
             )
-
-    if not sections:
-        return ""
 
     return USER_INFORMATION_HEADER + "\n".join(sections)
 

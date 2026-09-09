@@ -112,7 +112,7 @@ def generate_final_report(
     turn_index: int,
     citation_mapping: CitationMapping,
     user_identity: LLMUserIdentity | None,
-    language_section: str | None,
+    language_section: str,
     reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
     saved_reasoning: str | None = None,
     pre_answer_processing_time: float | None = None,
@@ -244,10 +244,10 @@ def run_deep_research_llm_loop(
         available_tokens = llm.config.max_input_tokens
 
         # The clarification, the research-agent reports and the final report reach the
-        # user. The plan and the research tasks keep the query's language so the
-        # searches stay in it.
+        # user, so they carry the reply-language line. The plan and the research tasks
+        # keep the query's language so the searches stay in it.
         language_section = build_language_section(user_language)
-        language_tokens = token_counter(language_section) if language_section else 0
+        language_tokens = token_counter(language_section)
 
         llm_step_result: LlmStepResult | None = None
 

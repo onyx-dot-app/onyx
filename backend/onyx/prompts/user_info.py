@@ -31,10 +31,16 @@ USER_PREFERENCES_PROMPT = """
 {user_preferences}
 """.lstrip()
 
-# The UI language is the default reply language. An explicit request in chat still wins.
+# The backend picks the branch, so the model always gets one definitive line.
 USER_LANGUAGE_PROMPT = """
 ## Language
-The user's interface language is {language}. Reply in {language} unless the user asks for a different language.
+The user's interface language is {language}. Reply in {language}. If the user explicitly asks for another language, use that one.
+""".lstrip()
+
+# English is the column default, so it is not a choice and follows the message.
+QUERY_LANGUAGE_PROMPT = """
+## Language
+Reply in the language the user writes in.
 """.lstrip()
 
 # User memories should look something like:
