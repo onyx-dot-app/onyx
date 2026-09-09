@@ -6321,6 +6321,7 @@
         },
         "name": {
           "placeholder": "أدخل اسمًا",
+          "required": "الاسم مطلوب",
           "title": "الاسم"
         },
         "submitButton": {

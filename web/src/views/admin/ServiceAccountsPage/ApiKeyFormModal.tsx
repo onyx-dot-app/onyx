@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { Form, Formik } from "formik";
+import * as Yup from "yup";
 import {
   createApiKey,
   updateApiKey,
@@ -68,6 +69,11 @@ export default function ApiKeyFormModal({
             service_account_name: apiKey?.api_key_name || "",
             group_ids: apiKey?.groups.map((g) => g.id) || ([] as number[]),
           }}
+          validationSchema={Yup.object().shape({
+            service_account_name: Yup.string()
+              .trim()
+              .required(t("formModal.name.required")),
+          })}
           onSubmit={async (values, formikHelpers) => {
             formikHelpers.setSubmitting(true);
 

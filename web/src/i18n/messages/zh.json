@@ -6321,6 +6321,7 @@
         },
         "name": {
           "placeholder": "输入名称",
+          "required": "名称为必填项",
           "title": "名称"
         },
         "submitButton": {
