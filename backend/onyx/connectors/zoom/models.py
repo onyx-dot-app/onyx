@@ -5,7 +5,7 @@ only where Zoom types it `string | null`, and it has a default only where
 Zoom's own text says the field is conditional.
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ZoomAccessToken(BaseModel):
@@ -130,3 +130,82 @@ class ZoomSessionOccurrence(BaseModel):
 
     uuid: str
     start_time: str
+
+
+class ZoomUser(BaseModel):
+    """Every scalar field of `GET /users`. `GET /groups/{groupId}/members`
+    describes a user the same way under a different response key and sends a
+    subset of these, so both validate here. `/users` also returns
+    custom_attributes, division_ids, group_ids, im_group_ids, license_info_list
+    and login_types, all arrays that nothing reads.
+    """
+
+    email: str
+    type: int
+    first_name: str
+    last_name: str
+
+    id: str | None = None
+    display_name: str | None = None
+    status: str | None = None
+    role_id: str | None = None
+    dept: str | None = None
+    timezone: str | None = None
+    pmi: int | None = None
+    host_key: str | None = None
+    employee_unique_id: str | None = None
+    plan_united_type: str | None = None
+    last_client_version: str | None = None
+    last_login_time: str | None = None
+    created_at: str | None = None
+    user_created_at: str | None = None
+    verified: int | None = None
+
+
+class ZoomUserPage(BaseModel):
+    """One page of either user listing. The client builds this rather than
+    validating a response, because `/users` and `/groups/{groupId}/members`
+    return the same users under different keys.
+    """
+
+    users: list[ZoomUser] = Field(default_factory=list)
+    next_page_token: str | None = None
+
+
+class ZoomRecordingEntry(BaseModel):
+    """Every scalar field of one entry in the `meetings` array of
+    `GET /users/{userId}/recordings`. The entry also carries `recording_files`,
+    thirteen more fields describing each file, which nothing here reads.
+    """
+
+    uuid: str
+    topic: str
+    start_time: str
+    account_id: str
+    host_id: str
+    duration: int
+    total_size: int
+    recording_count: int
+
+    # Zoom sends the meeting number as an integer here and as a string everywhere else.
+    id: int | str | None = None
+    type: int | str | None = None
+
+    recording_play_passcode: str | None = None
+    auto_delete: bool | None = None
+    auto_delete_date: str | None = None
+
+    @property
+    def session_id(self) -> str:
+        # A recording uploaded through the web portal has no meeting number.
+        return str(self.id) if self.id is not None else self.uuid
+
+
+class ZoomRecordingPage(BaseModel):
+    """One page of `GET /users/{userId}/recordings`. The client builds this
+    rather than validating a response, so Zoom's `from`, `to` and page counters
+    are not carried across.
+    """
+
+    recordings: list[ZoomRecordingEntry] = Field(default_factory=list)
+    next_page_token: str | None = None

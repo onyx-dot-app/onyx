@@ -9,8 +9,10 @@ from typing import Any
 
 from onyx.connectors.zoom.models import (
     ZoomPastMeetingDetails,
+    ZoomRecordingEntry,
     ZoomSessionOccurrence,
     ZoomTranscript,
+    ZoomUser,
     ZoomWebinarDetails,
 )
 
@@ -66,3 +68,30 @@ def webinar_details(**overrides: Any) -> ZoomWebinarDetails:
         "start_time": "2026-01-15T10:00:00Z",
     }
     return ZoomWebinarDetails(**(fields | overrides))
+
+
+def recording_entry(**overrides: Any) -> ZoomRecordingEntry:
+    fields: dict[str, Any] = {
+        "uuid": "BOKXuumlTAGXfg==",
+        "id": 6840331990,
+        "topic": "My Personal Meeting",
+        "start_time": "2021-03-18T05:41:36Z",
+        "type": "2",
+        "account_id": "Cx3wERazSgup7ZWRHQM8-w",
+        "host_id": "_0ctZtY0REqWalTmwvrdIw",
+        "duration": 20,
+        "total_size": 22,
+        "recording_count": 22,
+    }
+    return ZoomRecordingEntry(**(fields | overrides))
+
+
+def user(**overrides: Any) -> ZoomUser:
+    fields: dict[str, Any] = {
+        "email": "host@example.com",
+        "type": 2,
+        "first_name": "Jill",
+        "last_name": "Chill",
+        "id": "_0ctZtY0REqWalTmwvrdIw",
+    }
+    return ZoomUser(**(fields | overrides))
