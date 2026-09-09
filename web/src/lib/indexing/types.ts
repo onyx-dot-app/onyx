@@ -12,6 +12,7 @@ export enum EmbeddingProviderName {
   GOOGLE = "google",
   LITELLM = "litellm",
   AZURE = "azure",
+  OPENAI_COMPATIBLE = "openai_compatible",
 
   // Self-hosted
   NOMIC = "nomic",
@@ -68,6 +69,9 @@ export interface EmbeddingModel {
   queryPrefix?: string | null;
   passagePrefix?: string | null;
   description: string;
+  /** See `EmbeddingModelRequest.reducedDimension`. Registry presets leave this
+   *  unset; it is only staged by providers whose modal collects it. */
+  reducedDimension?: number | null;
 }
 
 export type EmbeddingModelSpec = Omit<EmbeddingModel, "description">;
@@ -134,6 +138,15 @@ export interface EmbeddingModelRequest {
   normalize: boolean;
   queryPrefix?: string | null;
   passagePrefix?: string | null;
+  /**
+   * Requests a shorter vector from providers whose models support Matryoshka
+   * Representation Learning. When set, it becomes the OpenAI `dimensions`
+   * parameter AND the width of the vector index (`reduced_dimension or
+   * model_dim` on the backend), so `modelDim` stays the model's native size.
+   * Only settable while creating search settings, because changing the vector
+   * width needs a re-index.
+   */
+  reducedDimension?: number | null;
 }
 
 /** Shape returned by `GET /api/admin/embedding/embedding-provider`. */

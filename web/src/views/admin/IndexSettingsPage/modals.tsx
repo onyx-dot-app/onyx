@@ -472,6 +472,138 @@ function LiteLLMProviderModal({
 }
 
 // ---------------------------------------------------------------------------
+// OpenAI-Compatible
+// ---------------------------------------------------------------------------
+
+interface OpenAICompatibleFormValues {
+  apiUrl: string;
+  apiKey: string;
+  modelName: string;
+  modelDim: number;
+  /** Kept as a string so an empty box stays empty instead of becoming NaN. */
+  reducedDimension: string;
+  queryPrefix: string;
+  passagePrefix: string;
+  normalize: boolean;
+}
+
+function OpenAICompatibleProviderModal({
+  provider,
+  existingCredentials,
+  existingModel,
+  onSubmit,
+}: ProviderModalProps) {
+  const t = useTranslations("admin.indexSettings");
+  const isEditing = !!existingCredentials;
+  const maskedApiKey = existingCredentials?.api_key ?? "";
+
+  const schema = Yup.object({
+    apiUrl: Yup.string()
+      .trim()
+      .required(t("validation.apiBaseUrlRequired"))
+      .url(t("validation.urlInvalid")),
+    apiKey: isEditing
+      ? Yup.string().trim()
+      : Yup.string().trim().required(t("validation.apiKeyRequired")),
+    reducedDimension: Yup.string()
+      .defined()
+      .default("")
+      .test(
+        "optional-positive-int",
+        t("validation.modelDimPositive"),
+        (value) => {
+          if (!value?.trim()) return true;
+          const parsed = Number(value);
+          return Number.isInteger(parsed) && parsed > 0 && parsed <= 10000;
+        }
+      )
+      // Truncation can only shorten a vector. A larger value would size the
+      // index above what the model returns, which breaks indexing.
+      .test(
+        "not-above-model-dim",
+        t("validation.reducedDimensionAboveModelDim"),
+        function (value) {
+          if (!value?.trim()) return true;
+          const modelDim = Number(this.parent.modelDim);
+          if (!Number.isInteger(modelDim) || modelDim <= 0) return true;
+          return Number(value) <= modelDim;
+        }
+      ),
+    ...modelSpecSchemaShape(t),
+  });
+
+  const initialValues: OpenAICompatibleFormValues = {
+    apiUrl: existingCredentials?.api_url ?? "",
+    apiKey: maskedApiKey,
+    modelName: existingModel?.modelName ?? "",
+    modelDim: existingModel?.modelDim ?? 0,
+    reducedDimension: "",
+    queryPrefix: existingModel?.queryPrefix ?? "",
+    passagePrefix: existingModel?.passagePrefix ?? "",
+    normalize: existingModel?.normalize ?? false,
+  };
+
+  return (
+    <Formik<OpenAICompatibleFormValues>
+      initialValues={initialValues}
+      validationSchema={schema}
+      validateOnMount
+      onSubmit={async (values) => {
+        const apiKey =
+          values.apiKey === maskedApiKey ? null : values.apiKey || null;
+        if (
+          await testAndSaveProviderCredentials({
+            provider,
+            apiKey,
+            apiUrl: values.apiUrl,
+            modelName: values.modelName.trim(),
+            unknownErrorMessage: t("toasts.unknownError"),
+          })
+        ) {
+          onSubmit({
+            modelName: values.modelName.trim(),
+            modelDim: values.modelDim,
+            normalize: values.normalize,
+            queryPrefix: values.queryPrefix || null,
+            passagePrefix: values.passagePrefix || null,
+            reducedDimension: values.reducedDimension.trim()
+              ? Number(values.reducedDimension)
+              : null,
+          });
+        }
+      }}
+    >
+      <ModalShell provider={provider} isEditing={isEditing}>
+        <ApiUrlField
+          title={t("openaiCompatible.apiUrl.title")}
+          placeholder="http://localhost:8000/v1"
+          subDescription={t("openaiCompatible.apiUrl.description")}
+        />
+
+        <ApiKeyField provider={provider} />
+
+        <ModelSpecFields
+          modelNameSubDescription={t("openaiCompatible.modelName.description")}
+        />
+
+        {/* Only offered while creating: the vector width is fixed at index
+            build time, and the edit flow discards the staged model spec. */}
+        {!isEditing && (
+          <TextField
+            name="reducedDimension"
+            title={t("openaiCompatible.reducedDimension.title")}
+            suffix={t("fields.optional.suffix")}
+            placeholder={t("openaiCompatible.reducedDimension.placeholder")}
+            inputMode="numeric"
+            subDescription={t("openaiCompatible.reducedDimension.description")}
+          />
+        )}
+      </ModalShell>
+    </Formik>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Custom Self-Hosted
 // ---------------------------------------------------------------------------
 
@@ -526,6 +658,8 @@ export function ProviderCredentialsModal(props: ProviderModalProps) {
       return <AzureProviderModal {...props} />;
     case EmbeddingProviderName.LITELLM:
       return <LiteLLMProviderModal {...props} />;
+    case EmbeddingProviderName.OPENAI_COMPATIBLE:
+      return <OpenAICompatibleProviderModal {...props} />;
     case EmbeddingProviderName.CUSTOM:
       return <CustomSelfHostedModal {...props} />;
     default:

@@ -4681,6 +4681,7 @@
       "fields": {
         "apiKey": {
           "description": "粘贴来自 {provider} 的 [API 密钥]({link})，以访问您的模型。",
+          "descriptionNoLink": "粘贴您的 {provider} 端点的 API 密钥以访问您的模型。",
           "title": "API 密钥"
         },
         "googleCredentials": {
@@ -4828,6 +4829,20 @@
         },
         "title": "多轮索引"
       },
+      "openaiCompatible": {
+        "apiUrl": {
+          "description": "您的 OpenAI 兼容端点的基础 URL，例如 http://localhost:8000/v1。Onyx 会附加 /embeddings 路径。",
+          "title": "API 基础 URL"
+        },
+        "modelName": {
+          "description": "Onyx 将连接到您的 OpenAI 兼容端点上的此模型。"
+        },
+        "reducedDimension": {
+          "description": "向模型请求更短的向量。这仅适用于支持 Matryoshka Representation Learning 的模型。更短的向量占用更少存储空间，搜索速度更快。留空则使用模型的完整维度。",
+          "placeholder": "例如 1024",
+          "title": "嵌入维度"
+        }
+      },
       "progressBanner": {
         "attentionButton": {
           "label": "查看需要处理的单元"
@@ -4945,6 +4960,7 @@
         "modelDimPositive": "必须是正整数",
         "modelDimRequired": "模型维度为必填项",
         "modelNameRequired": "模型名称为必填项",
+        "reducedDimensionAboveModelDim": "不能大于模型维度",
         "serviceAccountJsonInvalid": "必须是有效的 Google 服务账号 JSON 文件",
         "serviceAccountJsonRequired": "服务账号 JSON 为必填项",
         "targetUrlRequired": "目标 URL 为必填项",

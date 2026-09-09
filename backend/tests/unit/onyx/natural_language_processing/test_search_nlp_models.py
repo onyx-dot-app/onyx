@@ -3,6 +3,7 @@ from threading import Lock
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 from httpx import AsyncClient
 from litellm.exceptions import RateLimitError
@@ -10,9 +11,11 @@ from tenacity import wait_none
 
 from onyx.llm.constants import LlmProviderNames
 from onyx.natural_language_processing.search_nlp_models import (
+    AuthenticationError,
     CloudEmbedding,
     EmbeddingModel,
     clean_model_name,
+    format_embedding_error,
 )
 from shared_configs.enums import EmbeddingProvider, EmbedTextType
 from shared_configs.model_server_models import EmbedRequest, EmbedResponse
@@ -77,6 +80,147 @@ async def test_openai_embedding(
 
         assert result == sample_embeddings
         mock_client.embeddings.create.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_openai_compatible_embedding_sends_base_url_and_dimensions(
+    mock_http_client: AsyncMock,  # noqa: ARG001
+    sample_embeddings: list[list[float]],
+) -> None:
+    """A reduced dimension must reach the server as `dimensions`, which is what
+    lets Matryoshka-capable models return a shorter vector."""
+    with patch("openai.AsyncOpenAI") as mock_openai:
+        mock_client = AsyncMock()
+        mock_openai.return_value = mock_client
+
+        mock_response = MagicMock()
+        mock_response.data = [MagicMock(embedding=emb) for emb in sample_embeddings]
+        mock_client.embeddings.create = AsyncMock(return_value=mock_response)
+
+        async with CloudEmbedding(
+            "fake-key",
+            EmbeddingProvider.OPENAI_COMPATIBLE,
+            api_url="https://embeddings.internal/v1",
+        ) as embedding:
+            result = await embedding.embed(
+                texts=["test1", "test2"],
+                text_type=EmbedTextType.PASSAGE,
+                model_name="Qwen3-Embedding-8B",
+                reduced_dimension=1024,
+            )
+
+        assert result == sample_embeddings
+        assert mock_openai.call_args.kwargs["base_url"] == (
+            "https://embeddings.internal/v1"
+        )
+        create_kwargs = mock_client.embeddings.create.call_args.kwargs
+        assert create_kwargs["model"] == "Qwen3-Embedding-8B"
+        assert create_kwargs["dimensions"] == 1024
+
+
+@pytest.mark.asyncio
+async def test_openai_compatible_embedding_omits_dimensions_when_not_reduced(
+    mock_http_client: AsyncMock,  # noqa: ARG001
+    sample_embeddings: list[list[float]],
+) -> None:
+    """Without a reduced dimension we must not send `dimensions` at all, because
+    some OpenAI-compatible servers reject the parameter."""
+    import openai
+
+    with patch("openai.AsyncOpenAI") as mock_openai:
+        mock_client = AsyncMock()
+        mock_openai.return_value = mock_client
+
+        mock_response = MagicMock()
+        mock_response.data = [MagicMock(embedding=emb) for emb in sample_embeddings]
+        mock_client.embeddings.create = AsyncMock(return_value=mock_response)
+
+        async with CloudEmbedding(
+            "fake-key",
+            EmbeddingProvider.OPENAI_COMPATIBLE,
+            api_url="https://embeddings.internal/v1",
+        ) as embedding:
+            await embedding.embed(
+                texts=["test1", "test2"],
+                text_type=EmbedTextType.PASSAGE,
+                model_name="Qwen3-Embedding-8B",
+                reduced_dimension=None,
+            )
+
+        create_kwargs = mock_client.embeddings.create.call_args.kwargs
+        assert create_kwargs["dimensions"] is openai.omit
+
+
+@pytest.mark.asyncio
+async def test_authentication_error_names_the_provider_by_value(
+    mock_http_client: AsyncMock,  # noqa: ARG001
+) -> None:
+    """`str()` on a `str, Enum` member yields `EmbeddingProvider.OPENAI_COMPATIBLE`,
+    so the message must use `.value` to stay readable."""
+    import openai
+
+    with patch("openai.AsyncOpenAI") as mock_openai:
+        mock_client = AsyncMock()
+        mock_openai.return_value = mock_client
+        mock_client.embeddings.create = AsyncMock(
+            side_effect=openai.AuthenticationError(
+                message="bad key",
+                response=httpx.Response(
+                    status_code=401, request=httpx.Request("POST", "https://host/v1")
+                ),
+                body=None,
+            )
+        )
+
+        embedding = CloudEmbedding(
+            "fake-key",
+            EmbeddingProvider.OPENAI_COMPATIBLE,
+            api_url="https://host/v1",
+        )
+
+        with patch.object(cast(Any, CloudEmbedding.embed).retry, "wait", wait_none()):
+            with pytest.raises(AuthenticationError) as caught:
+                await embedding.embed(
+                    texts=["test1"],
+                    text_type=EmbedTextType.PASSAGE,
+                    model_name="Qwen3-Embedding-8B",
+                )
+
+        assert caught.value.provider == "openai_compatible"
+        assert "EmbeddingProvider." not in str(caught.value)
+
+    await embedding.aclose()
+
+
+def test_format_embedding_error_names_the_provider_by_value() -> None:
+    """This string reaches the admin as an index-attempt failure message, so it
+    must not leak the enum repr."""
+    message = format_embedding_error(
+        ValueError("boom"),
+        EmbeddingProvider.OPENAI_COMPATIBLE.value,
+        "Qwen3-Embedding-8B",
+        EmbeddingProvider.OPENAI_COMPATIBLE,
+    )
+
+    assert "EmbeddingProvider." not in message
+    assert "Provider: openai_compatible" in message
+
+
+@pytest.mark.asyncio
+async def test_openai_compatible_embedding_requires_api_url() -> None:
+    """A missing base URL is a likely misconfiguration, so it must fail with a
+    message that names the cause."""
+    embedding = CloudEmbedding("fake-key", EmbeddingProvider.OPENAI_COMPATIBLE)
+
+    with patch.object(cast(Any, CloudEmbedding.embed).retry, "wait", wait_none()):
+        with pytest.raises(RuntimeError, match="API base URL is required"):
+            await embedding.embed(
+                texts=["test1"],
+                text_type=EmbedTextType.PASSAGE,
+                model_name="Qwen3-Embedding-8B",
+            )
+
+    await embedding.aclose()
 
 
 def _build_google_embed_response(

@@ -4681,6 +4681,7 @@
       "fields": {
         "apiKey": {
           "description": "모델에 접근하려면 {provider}의 [API 키]({link})를 붙여넣으세요.",
+          "descriptionNoLink": "모델에 액세스하려면 {provider} 엔드포인트의 API 키를 붙여넣으세요.",
           "title": "API 키"
         },
         "googleCredentials": {
@@ -4828,6 +4829,20 @@
         },
         "title": "멀티패스 인덱싱"
       },
+      "openaiCompatible": {
+        "apiUrl": {
+          "description": "OpenAI 호환 엔드포인트의 기본 URL입니다. 예: http://localhost:8000/v1. Onyx가 /embeddings 경로를 추가합니다.",
+          "title": "API 기본 URL"
+        },
+        "modelName": {
+          "description": "Onyx가 OpenAI 호환 엔드포인트에서 이 모델에 연결합니다."
+        },
+        "reducedDimension": {
+          "description": "모델에 더 짧은 벡터를 요청합니다. Matryoshka Representation Learning을 지원하는 모델에서만 작동합니다. 짧은 벡터는 저장 공간을 덜 사용하고 검색이 더 빠릅니다. 비워 두면 모델의 전체 크기를 사용합니다.",
+          "placeholder": "예: 1024",
+          "title": "임베딩 차원"
+        }
+      },
       "progressBanner": {
         "attentionButton": {
           "label": "확인이 필요한 항목 보기"
@@ -4945,6 +4960,7 @@
         "modelDimPositive": "양의 정수여야 합니다",
         "modelDimRequired": "모델 차원은 필수입니다",
         "modelNameRequired": "모델 이름은 필수입니다",
+        "reducedDimensionAboveModelDim": "모델 차원보다 클 수 없습니다",
         "serviceAccountJsonInvalid": "유효한 Google 서비스 계정 JSON 파일이어야 합니다",
         "serviceAccountJsonRequired": "서비스 계정 JSON은 필수입니다",
         "targetUrlRequired": "대상 URL은 필수입니다",

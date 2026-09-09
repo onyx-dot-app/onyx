@@ -35,16 +35,22 @@ interface ApiKeyFieldProps {
 export function ApiKeyField({ provider }: ApiKeyFieldProps) {
   const t = useTranslations("admin.indexSettings");
 
+  // Self-supplied endpoints have no vendor page to link to, so avoid rendering
+  // an empty `[API key]()` link.
+  const subDescription = provider.apiLink
+    ? markdown(
+        t("fields.apiKey.description", {
+          link: provider.apiLink,
+          provider: provider.displayName,
+        })
+      )
+    : t("fields.apiKey.descriptionNoLink", { provider: provider.displayName });
+
   return (
     <InputVertical
       title={t("fields.apiKey.title")}
       withLabel="apiKey"
-      subDescription={markdown(
-        t("fields.apiKey.description", {
-          link: provider.apiLink ?? "",
-          provider: provider.displayName,
-        })
-      )}
+      subDescription={subDescription}
     >
       <PasswordInputTypeInField name="apiKey" />
     </InputVertical>
