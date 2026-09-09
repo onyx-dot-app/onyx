@@ -405,10 +405,9 @@ def test_mcp_search_scopes_to_agent(
     assert "no-such-agent" in unknown_payload["error"]
     assert persona.name in unknown_payload["error"]
 
-    # A scoped PAT must still resolve the agent name and search. READ_SEARCH is
-    # the whole token: BASIC_ACCESS is not in SELECTABLE_PAT_SCOPES and
-    # READ_SEARCH does not imply it, so the inventory endpoints refuse this
-    # token and the tool has to degrade rather than fail the search.
+    # A scoped PAT must resolve the agent name and search. READ_SEARCH is the
+    # whole token: it covers /search, the filter listings the tool validates
+    # against, and /persona via its scope_exempt marker.
     scoped_pat_headers = _auth_headers(
         admin_user,
         name="mcp-agent-scope-scoped-pat",

@@ -31,8 +31,6 @@ class _Stub:
     agents: list[dict[str, Any]]
     sources: list[str]
     document_sets: list[dict[str, Any]]
-    # Stands in for a scoped PAT, which cannot hold BASIC_ACCESS.
-    forbid_inventory: bool = False
     inventory_status: int | None = None
 
 
@@ -63,8 +61,6 @@ async def stub(monkeypatch: pytest.MonkeyPatch) -> AsyncGenerator[_Stub, None]:
         )
         if is_inventory and state.inventory_status is not None:
             return httpx.Response(state.inventory_status, json={"detail": "boom"})
-        if is_inventory and state.forbid_inventory:
-            return httpx.Response(403, json={"detail": "insufficient permissions"})
         if path.endswith("/manage/indexed-sources"):
             return httpx.Response(200, json={"sources": state.sources})
         if path.endswith("/manage/document-set"):
@@ -237,46 +233,9 @@ async def test_unknown_document_set_errors_with_a_suggestion(stub: _Stub) -> Non
 
 
 @pytest.mark.asyncio
-async def test_search_survives_a_token_that_cannot_list_inventory(
-    stub: _Stub,
-) -> None:
-    """No PAT scope grants BASIC_ACCESS, so the inventory endpoints 403 for
-    every scoped token. Validation is a convenience and must not block a search
-    the token is allowed to run."""
-    stub.forbid_inventory = True
-
-    payload = await search_module.search_indexed_documents(
-        query="anything",
-        source_types=["github"],
-        document_set_names=["Engineering Wiki"],
-    )
-
-    assert "error" not in payload
-    sent = stub.search_requests[0]
-    assert sent["sources"] == ["github"]
-    assert sent["document_sets"] == ["Engineering Wiki"]
-
-
-@pytest.mark.asyncio
-async def test_unknown_source_still_errors_without_the_inventory(stub: _Stub) -> None:
-    """Dropping it would leave an empty source list, and retrieval adds no
-    clause for that — the search would widen to every accessible source."""
-    stub.forbid_inventory = True
-
-    payload = await search_module.search_indexed_documents(
-        query="anything", source_types=["not-a-real-source"]
-    )
-
-    assert payload["results"] == []
-    assert "not-a-real-source" in payload["error"]
-    assert stub.search_requests == []
-
-
-@pytest.mark.asyncio
-async def test_inventory_failure_that_is_not_permissions_still_errors(
-    stub: _Stub,
-) -> None:
-    """A 500 is real trouble, not a scope limitation — keep failing loudly."""
+async def test_inventory_failure_errors(stub: _Stub) -> None:
+    """The listings are reachable by anything that can search, so a failure
+    here is real trouble — fail loudly rather than search unvalidated."""
     stub.inventory_status = 500
 
     payload = await search_module.search_indexed_documents(

@@ -102,17 +102,6 @@ def _error_payload(error: str) -> dict[str, Any]:
     return {"error": error, "results": []}
 
 
-def _is_forbidden(err: Exception) -> bool:
-    """Whether the caller's token may not read an inventory endpoint.
-
-    The inventory endpoints require BASIC_ACCESS, which no PAT scope grants —
-    it is not in SELECTABLE_PAT_SCOPES — so every scoped token is refused.
-    Filter validation is a convenience and must never block a search the token
-    is otherwise allowed to run, so a 403 degrades to skipping validation.
-    """
-    return isinstance(err, httpx.HTTPStatusError) and err.response.status_code == 403
-
-
 _TIME_CUTOFF_ADAPTER: TypeAdapter[datetime | None] = TypeAdapter(datetime | None)
 
 # A full inventory duplicates the matching resource and costs tokens on every
@@ -195,33 +184,30 @@ async def _resolve_agent(agent: str, access_token: AccessToken) -> int:
     return matches[0].id
 
 
-async def _load_indexed_sources(access_token: AccessToken) -> list[str] | None:
-    """The tenant's filterable sources, or None when the token may not list them."""
+async def _load_indexed_sources(access_token: AccessToken) -> list[str]:
+    """The tenant's filterable sources.
+
+    Reachable by anything that can reach /search: both reads require
+    READ_SEARCH, so a caller authorized to search is authorized to list what
+    it may filter by.
+    """
     try:
         return await get_indexed_sources(access_token)
     except Exception as err:
-        if not _is_forbidden(err):
-            logger.error(
-                "Onyx MCP Server: Error checking indexed sources: %s",
-                err,
-                exc_info=True,
-            )
-            raise _FilterError(f"Failed to check indexed sources: {str(err)}") from err
-        logger.info(
-            "Onyx MCP Server: token may not list indexed sources; "
-            "searching without the source inventory"
+        logger.error(
+            "Onyx MCP Server: Error checking indexed sources: %s", err, exc_info=True
         )
-        return None
+        raise _FilterError(f"Failed to check indexed sources: {str(err)}") from err
 
 
 def _resolve_source_types(
-    source_types: list[str], available: set[str] | None
+    source_types: list[str], available: set[str]
 ) -> list[DocumentSource]:
     """Convert supplied source names, rejecting any this tenant cannot filter on."""
     resolved: list[DocumentSource] = []
     for source_str in source_types:
         canonical = source_str.lower()
-        if available is not None and canonical not in available:
+        if canonical not in available:
             raise _FilterError(
                 _unknown_value_error(
                     "Source type",
@@ -230,16 +216,8 @@ def _resolve_source_types(
                     "Read the `indexed_sources` resource for the current list.",
                 )
             )
-        try:
-            resolved.append(DocumentSource(canonical))
-        except ValueError as err:
-            # Only reachable when the inventory was unavailable. Dropping the
-            # value would leave an empty source list, and the retrieval layer
-            # adds no clause at all for that (`if source_types:`), so the
-            # search would silently widen to every accessible source.
-            raise _FilterError(
-                f"Source type '{source_str}' is not a known Onyx source."
-            ) from err
+        # Membership in the inventory guarantees this parses.
+        resolved.append(DocumentSource(canonical))
     return resolved
 
 
@@ -247,20 +225,14 @@ async def _validate_document_sets(
     document_set_names: list[str], access_token: AccessToken
 ) -> None:
     """Reject names the user cannot filter on, so the scope is never silently wider."""
-    accessible_sets: list[DocumentSetEntry] | None
+    accessible_sets: list[DocumentSetEntry]
     try:
         accessible_sets = await get_accessible_document_sets(access_token)
     except Exception as err:
-        if not _is_forbidden(err):
-            logger.error(
-                "Onyx MCP Server: Error fetching document sets: %s", err, exc_info=True
-            )
-            raise _FilterError(f"Failed to look up document sets: {str(err)}") from err
-        logger.info(
-            "Onyx MCP Server: token may not list document sets; "
-            "passing the filter through unvalidated"
+        logger.error(
+            "Onyx MCP Server: Error fetching document sets: %s", err, exc_info=True
         )
-        return
+        raise _FilterError(f"Failed to look up document sets: {str(err)}") from err
 
     available_set_names: set[str] = {entry.name for entry in accessible_sets}
     for set_name in document_set_names:
@@ -301,17 +273,16 @@ async def _resolve_filters(
     # when no connector has indexed anything.
     persona_id = await _resolve_agent(agent, access_token) if agent else None
 
-    indexed_sources: list[str] | None = None
+    indexed_sources: list[str] = []
     if agent is None or source_types is not None:
         indexed_sources = await _load_indexed_sources(access_token)
 
-    if agent is None and indexed_sources is not None and not indexed_sources:
+    if agent is None and not indexed_sources:
         raise _NoIndexedSources()
 
     source_type_enums: list[DocumentSource] | None = None
     if source_types is not None:
-        available = set(indexed_sources) if indexed_sources is not None else None
-        source_type_enums = _resolve_source_types(source_types, available)
+        source_type_enums = _resolve_source_types(source_types, set(indexed_sources))
 
     if document_set_names is not None:
         await _validate_document_sets(document_set_names, access_token)
