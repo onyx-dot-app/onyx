@@ -284,6 +284,7 @@ function SkillRow({
         sizePreset="main-ui"
         variant="section"
         title={`/${slug}`}
+        titleMaxLines={1}
         state={selected ? "selected" : "empty"}
         selectVariant="select-heavy"
         description={description}
@@ -336,6 +337,7 @@ function ConnectableRow({
         variant="section"
         icon={Logo}
         title={name}
+        titleMaxLines={1}
         color={unauth ? "muted" : undefined}
         state={selected ? "selected" : "empty"}
         selectVariant="select-heavy"

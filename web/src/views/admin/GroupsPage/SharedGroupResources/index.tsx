@@ -181,6 +181,7 @@ function SharedGroupResources({
                   id: p.cc_pair_id,
                 })
               }
+              titleMaxLines={1}
               rightChildren={
                 p.groups.length > 0 || dimmed ? <SharedBadge /> : undefined
               }
@@ -211,6 +212,7 @@ function SharedGroupResources({
               color={dimmed ? "muted" : undefined}
               icon={SvgFiles}
               title={ds.name}
+              titleMaxLines={1}
               rightChildren={
                 ds.groups.length > 0 || dimmed ? <SharedBadge /> : undefined
               }
@@ -273,6 +275,7 @@ function SharedGroupResources({
               color={dimmed ? "muted" : undefined}
               icon={(_props) => <AgentAvatar agent={a} size={16} />}
               title={a.name}
+              titleMaxLines={1}
               description={t("sharedResources.agent.description")}
               descriptionMaxLines={1}
               rightChildren={
