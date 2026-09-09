@@ -20,7 +20,7 @@ import {
 // ---------------------------------------------------------------------------
 
 /**
- * The `ContentAction` props a row actually uses — ten of the twenty-two it
+ * The `ContentAction` props a row actually uses — eleven of the twenty-two it
  * offers. Listed rather than spread, so that everything a caller passes which
  * is *not* here is DOM, and reaches the row element.
  *
@@ -37,6 +37,12 @@ import {
 type RowContentProps = {
   /** Main label. */
   title: string | RichStr;
+
+  /**
+   * Cap the title at N lines and truncate the rest. Unset wraps without a
+   * limit, so a row showing a user-authored name usually wants `1`.
+   */
+  titleMaxLines?: number;
 
   /** Leading icon. */
   icon?: IconFunctionComponent;
@@ -212,6 +218,7 @@ function LineItemButton({
 
   // Content
   title,
+  titleMaxLines,
   icon,
   description,
   descriptionMaxLines,
@@ -295,6 +302,7 @@ function LineItemButton({
           <ContentAction
             {...({
               title,
+              titleMaxLines,
               icon,
               description,
               descriptionMaxLines,
