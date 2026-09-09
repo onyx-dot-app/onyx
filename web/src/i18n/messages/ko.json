@@ -6321,6 +6321,7 @@
         },
         "name": {
           "placeholder": "이름 입력",
+          "required": "이름은 필수입니다",
           "title": "이름"
         },
         "submitButton": {

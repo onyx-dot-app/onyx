@@ -6321,6 +6321,7 @@
         },
         "name": {
           "placeholder": "Insira um nome",
+          "required": "O nome é obrigatório",
           "title": "Nome"
         },
         "submitButton": {

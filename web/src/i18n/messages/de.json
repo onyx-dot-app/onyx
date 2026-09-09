@@ -6321,6 +6321,7 @@
         },
         "name": {
           "placeholder": "Geben Sie einen Namen ein",
+          "required": "Name ist erforderlich",
           "title": "Name"
         },
         "submitButton": {

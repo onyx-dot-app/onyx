@@ -6321,6 +6321,7 @@
         },
         "name": {
           "placeholder": "名前を入力",
+          "required": "名前は必須です",
           "title": "名前"
         },
         "submitButton": {
