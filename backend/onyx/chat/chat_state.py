@@ -63,6 +63,7 @@ class ChatStateContainer:
         self._all_search_docs: dict[SearchDocKey, SearchDoc] = {}
         # Track which citation numbers were actually emitted during streaming
         self._emitted_citations: set[int] = set()
+        self._reserved_input_tokens: int | None = None
 
     def add_tool_call(self, tool_call: ToolCallInfo) -> None:
         """Add a tool call to the accumulated state."""
@@ -133,6 +134,19 @@ class ChatStateContainer:
         """Thread-safe getter for pre_answer_processing_time."""
         with self._lock:
             return self.pre_answer_processing_time
+
+    def set_reserved_input_tokens(self, reserved_input_tokens: int) -> None:
+        with self._lock:
+            previous = self._reserved_input_tokens
+            self._reserved_input_tokens = (
+                reserved_input_tokens
+                if previous is None
+                else max(previous, reserved_input_tokens)
+            )
+
+    def get_reserved_input_tokens(self) -> int | None:
+        with self._lock:
+            return self._reserved_input_tokens
 
     @staticmethod
     def create_search_doc_key(

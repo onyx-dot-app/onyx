@@ -15,8 +15,10 @@ from uuid import uuid4
 import pytest
 from litellm.exceptions import ContextWindowExceededError
 
+from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.llm_loop import EmptyLLMResponseError
 from onyx.chat.models import StreamingError
+from onyx.chat.token_budget import ChatTokenBudget
 from onyx.configs.constants import MessageType
 from onyx.db.chat import set_preferred_response
 from onyx.db.models import ChatMessage
@@ -658,6 +660,50 @@ class TestRunModels:
             call.kwargs["run_compression"] for call in mock_handle.call_args_list
         )
         assert compression_flags == [False, True]
+
+    def test_compression_uses_smallest_model_budget_and_largest_overhead(self) -> None:
+        setup = _make_setup(n_models=2)
+        both_models_ready = threading.Barrier(2)
+
+        def record_overhead(**kwargs: Any) -> None:
+            state = cast(ChatStateContainer, kwargs["state_container"])
+            overhead = 300 if kwargs["llm"] is setup.llms[0] else 1000
+            state.set_reserved_input_tokens(overhead)
+            state.set_reserved_input_tokens(overhead // 2)
+            both_models_ready.wait(timeout=5)
+
+        def model_budget(llm: Any) -> ChatTokenBudget:
+            return ChatTokenBudget(
+                input_tokens=6000 if llm is setup.llms[0] else 10000,
+                max_output_tokens=None,
+                context_tokens=None,
+                safety_tokens=0,
+            )
+
+        with (
+            patch(
+                "onyx.chat.process_message.run_llm_loop", side_effect=record_overhead
+            ),
+            patch("onyx.chat.process_message.construct_tools", return_value={}),
+            patch(
+                "onyx.chat.process_message.resolve_chat_token_budget",
+                side_effect=model_budget,
+            ),
+            patch("onyx.chat.process_message.llm_loop_completion_handle") as completion,
+            patch(
+                "onyx.chat.process_message.get_llm_token_counter",
+                return_value=lambda _: 0,
+            ),
+        ):
+            _run_models_collect(setup)
+
+        assert completion.call_count == 2
+        for call in completion.call_args_list:
+            assert call.kwargs["compression_input_token_budget"] == 5000
+        assert (
+            sum(call.kwargs["run_compression"] for call in completion.call_args_list)
+            == 1
+        )
 
     def test_completion_handle_not_called_for_failed_model(self) -> None:
         """llm_loop_completion_handle must be skipped for a model that raised."""
