@@ -12930,6 +12930,9 @@
         "maxReached": "メモリの上限（{count}件）に達しました"
       },
       "empty": {
+        "addButton": {
+          "ariaLabel": "メモリを追加"
+        },
         "description": "Onyx に覚えておいてほしい個人的なメモやメモリを追加します。",
         "getStarted": "まだメモリがありません。「行を追加」をクリックして始めてください。",
         "noMatches": "検索に一致するメモリはありません。"

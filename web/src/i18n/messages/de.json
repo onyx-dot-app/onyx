@@ -12930,6 +12930,9 @@
         "maxReached": "Maximum von {count} Erinnerungen erreicht"
       },
       "empty": {
+        "addButton": {
+          "ariaLabel": "Erinnerung hinzufügen"
+        },
         "description": "Fügen Sie eine persönliche Notiz oder Erinnerung hinzu, die sich Onyx merken soll.",
         "getStarted": "Noch keine Erinnerungen. Klicken Sie auf „Zeile hinzufügen“, um zu beginnen.",
         "noMatches": "Keine Erinnerungen entsprechen Ihrer Suche."

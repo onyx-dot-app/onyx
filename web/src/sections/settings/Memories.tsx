@@ -43,11 +43,15 @@ export default function Memories({ memories, onSaveMemories }: MemoriesProps) {
               </Text>
             </Section>
             <Button
-              prominence="internal"
+              prominence="tertiary"
               icon={SvgPlusCircle}
               size="md"
-              aria-label={t("empty.description")}
-              onClick={() => {
+              aria-label={t("empty.addButton.ariaLabel")}
+              onClick={(event) => {
+                // The card underneath opens the same modal; without this the
+                // click runs both handlers and relies on them staying
+                // identical.
+                event.stopPropagation();
                 setTargetMemoryId(null);
                 memoriesModal.toggle(true);
               }}
