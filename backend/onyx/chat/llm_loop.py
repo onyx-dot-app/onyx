@@ -409,13 +409,16 @@ def compute_output_allowance(
     distinct from input planning: the input budget only holds back the
     established reserve, so evidence is not evicted to guarantee the full
     output maximum. Returns None (provider default) when the model output
-    maximum is unknown.
+    maximum is unknown, or when the room left is below the minimum answer
+    reserve: a cap that small would only truncate, and a cap above the room
+    could push the request past a window the operator sized exactly.
     """
     if model_max_output_tokens is None:
         return None
     room = input_token_limit - estimated_input_tokens
-    floor = min(model_max_output_tokens, GEN_AI_NUM_RESERVED_OUTPUT_TOKENS)
-    return max(min(model_max_output_tokens, room), floor)
+    if room < min(model_max_output_tokens, GEN_AI_NUM_RESERVED_OUTPUT_TOKENS):
+        return None
+    return min(model_max_output_tokens, room)
 
 
 def construct_message_history(

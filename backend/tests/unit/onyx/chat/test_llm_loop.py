@@ -25,7 +25,6 @@ from onyx.chat.models import (
     ToolCallSimple,
 )
 from onyx.configs.constants import MessageType
-from onyx.configs.model_configs import GEN_AI_NUM_RESERVED_OUTPUT_TOKENS
 from onyx.file_store.models import ChatFileType
 from onyx.llm.interfaces import LLMConfig, ToolChoiceOptions
 from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER, OPEN_URL_REMINDER
@@ -1456,6 +1455,8 @@ class TestComputeOutputAllowance:
     """Per-call max_tokens derived from the model output maximum and the
     room the assembled input leaves under the input limit."""
 
+    RESERVE = 1024
+
     def test_small_output_model_with_plenty_of_room(self) -> None:
         # gpt-4o style: 16k output, 127k input limit, short prompt.
         assert (
@@ -1512,35 +1513,47 @@ class TestComputeOutputAllowance:
             is None
         )
 
-    def test_no_room_left_floors_at_reserved_output_tokens(self) -> None:
-        # A full or over-full context never yields a zero or negative
-        # max_tokens; the established minimum answer reserve applies.
+    def test_no_usable_room_keeps_provider_default(self) -> None:
+        # Below the minimum answer reserve, a cap would either truncate or
+        # push the request past an exactly sized window. Send no cap, which
+        # is the pre-existing behavior.
+        for estimated in (10000 - self.RESERVE + 1, 10000, 12000):
+            assert (
+                compute_output_allowance(
+                    model_max_output_tokens=64000,
+                    input_token_limit=10000,
+                    estimated_input_tokens=estimated,
+                )
+                is None
+            )
+
+    def test_room_equal_to_reserve_is_sent(self) -> None:
         assert (
             compute_output_allowance(
                 model_max_output_tokens=64000,
                 input_token_limit=10000,
-                estimated_input_tokens=10000,
+                estimated_input_tokens=10000 - self.RESERVE,
             )
-            == GEN_AI_NUM_RESERVED_OUTPUT_TOKENS
-        )
-        assert (
-            compute_output_allowance(
-                model_max_output_tokens=64000,
-                input_token_limit=10000,
-                estimated_input_tokens=12000,
-            )
-            == GEN_AI_NUM_RESERVED_OUTPUT_TOKENS
+            == self.RESERVE
         )
 
-    def test_floor_never_exceeds_model_output_maximum(self) -> None:
-        small_output = GEN_AI_NUM_RESERVED_OUTPUT_TOKENS // 2
+    def test_small_output_model_needs_only_its_own_maximum(self) -> None:
+        small_output = self.RESERVE // 2
         assert (
             compute_output_allowance(
                 model_max_output_tokens=small_output,
                 input_token_limit=10000,
-                estimated_input_tokens=10000,
+                estimated_input_tokens=10000 - small_output,
             )
             == small_output
+        )
+        assert (
+            compute_output_allowance(
+                model_max_output_tokens=small_output,
+                input_token_limit=10000,
+                estimated_input_tokens=10000 - small_output + 1,
+            )
+            is None
         )
 
 
