@@ -106,6 +106,16 @@ type LineItemButtonOwnProps = Pick<
 
   /** Which side the tooltip appears on. @default "top" */
   tooltipSide?: TooltipSide;
+
+  /**
+   * Render the row as plain markup inside another interactive primitive
+   * (e.g. Radix Select.Item, a selectable table row): no button role, no tab
+   * stop, no Enter/Space activation. The row keeps its interactive palette —
+   * drive it with `state` / `selectVariant` / `interaction` from the owning
+   * control. `role`, `tabIndex` and the key handlers still pass through, so
+   * the owner can substitute its own semantics.
+   */
+  presentational?: boolean;
 };
 
 /**
@@ -190,6 +200,7 @@ function LineItemButton({
   width = "full",
   tooltip,
   tooltipSide = "top",
+  presentational,
 
   // Content
   title,
@@ -235,15 +246,20 @@ function LineItemButton({
   // <button> so interactive `rightChildren` (e.g. action buttons) don't nest
   // a <button> inside a <button> — invalid HTML that breaks hydration. An
   // anchor row is already focusable and already activates on Enter, so it
-  // takes the caller's values unchanged.
-  const rowButtonProps = href
-    ? { role, tabIndex, onKeyDown, onKeyUp }
-    : {
-        role: role ?? "button",
-        tabIndex: tabIndex ?? 0,
-        onKeyDown: composeKeyHandler(onKeyDown, handleRowKeyDown),
-        onKeyUp: composeKeyHandler(onKeyUp, handleRowKeyUp),
-      };
+  // takes the caller's values unchanged. A presentational row makes no
+  // control of its own — the primitive that owns it already carries the
+  // semantics and the keyboard handling — so the caller's values pass
+  // through untouched there too.
+  const rowButtonProps = presentational
+    ? { role: role ?? "presentation", tabIndex, onKeyDown, onKeyUp }
+    : href
+      ? { role, tabIndex, onKeyDown, onKeyUp }
+      : {
+          role: role ?? "button",
+          tabIndex: tabIndex ?? 0,
+          onKeyDown: composeKeyHandler(onKeyDown, handleRowKeyDown),
+          onKeyUp: composeKeyHandler(onKeyUp, handleRowKeyUp),
+        };
 
   const item = (
     <Interactive.Stateful
