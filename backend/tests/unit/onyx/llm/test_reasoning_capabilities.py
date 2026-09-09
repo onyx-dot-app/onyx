@@ -5,7 +5,9 @@ from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_capabilities import (
     ReasoningParamStyle,
     is_openai_registry_model_name,
+    openai_chat_tools_require_reasoning_none,
     parse_anthropic_model_version,
+    parse_openai_gpt_version,
     resolve_reasoning_param_style,
     supported_reasoning_efforts,
 )
@@ -81,6 +83,56 @@ def test_parse_anthropic_model_version(
 )
 def test_is_openai_registry_model_name(model_name: str, expected: bool) -> None:
     assert is_openai_registry_model_name(model_name) is expected
+
+
+@pytest.mark.parametrize(
+    "model_name, expected",
+    [
+        ("gpt-5.6-sol", (5, 6)),
+        ("gpt-5.4-mini", (5, 4)),
+        ("gpt-5", (5, 0)),
+        ("gpt-4o", (4, 0)),
+        ("gpt-4.1-mini", (4, 1)),
+        # Gateway vendor prefixes and Azure deployment aliases
+        ("azure/gpt-5.6-sol", (5, 6)),
+        ("bedrock_mantle/openai.gpt-5.6-luna", (5, 6)),
+        ("gpt-5.6-sol-01-ptu", (5, 6)),
+        # "gpt-" inside another word is not a GPT model
+        ("chatgpt-4o-latest", None),
+        ("gpt-oss-120b", None),
+        ("claude-sonnet-5", None),
+        ("o3", None),
+    ],
+)
+def test_parse_openai_gpt_version(
+    model_name: str, expected: tuple[int, int] | None
+) -> None:
+    assert parse_openai_gpt_version(model_name) == expected
+
+
+@pytest.mark.parametrize(
+    "model_name, expected",
+    [
+        # gpt-5.4 is the first release to reject tools alongside reasoning
+        # over chat completions. Its -mini and -nano variants do too.
+        ("gpt-5.4", True),
+        ("gpt-5.4-mini", True),
+        ("gpt-5.4-nano", True),
+        ("gpt-5.5", True),
+        ("gpt-5.6-sol", True),
+        ("azure/gpt-5.6-sol", True),
+        ("gpt-5.6-sol-01-ptu", True),
+        ("gpt-5.2", False),
+        ("gpt-5", False),
+        ("gpt-4.1", False),
+        ("o3", False),
+        ("claude-sonnet-5", False),
+    ],
+)
+def test_openai_chat_tools_require_reasoning_none(
+    model_name: str, expected: bool
+) -> None:
+    assert openai_chat_tools_require_reasoning_none(model_name) is expected
 
 
 @pytest.mark.parametrize(

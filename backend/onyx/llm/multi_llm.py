@@ -38,12 +38,14 @@ from onyx.llm.interfaces import (
     ToolChoice,
 )
 from onyx.llm.model_capabilities import (
+    OPENAI_API_PROVIDERS,
     ReasoningParamStyle,
     anthropic_omits_sampling_params,
     anthropic_supports_thinking,
     anthropic_uses_adaptive_thinking,
     is_true_openai_model,
     model_is_reasoning_model,
+    openai_chat_tools_require_reasoning_none,
     openai_chat_variant_rejects_reasoning,
     openai_model_rejects_reasoning_effort,
     resolve_reasoning_param_style,
@@ -376,6 +378,22 @@ def _log_azure_responses_api_version_override(
         "chat-completions calls.",
         api_base,
         configured_api_version,
+    )
+
+
+@lru_cache(maxsize=None)
+def _log_chat_completions_tools_disable_reasoning(
+    model: str, api_base: str | None
+) -> None:
+    """Log once per model per process, for the same reason as
+    _log_azure_responses_api_version_override."""
+    logger.warning(
+        "%s at %s is reached over chat completions, where GPT-5.4+ cannot "
+        "combine function tools with reasoning. Tool-bearing requests send "
+        "reasoning_effort=none; switch the provider to the responses API mode "
+        "to keep reasoning.",
+        model,
+        api_base,
     )
 
 
@@ -838,6 +856,29 @@ class LitellmLLM(LLM):
                     optional_kwargs["reasoning_effort"] = ReasoningEffort.HIGH.value
                 else:
                     optional_kwargs["reasoning_effort"] = ReasoningEffort.MEDIUM.value
+
+        # GPT-5.4+ over chat completions accept function tools only with an
+        # explicit reasoning_effort "none" (omitting it fails too), so tool turns
+        # there trade reasoning for a working call. The responses bridge is exempt.
+        if (
+            tools
+            and not is_openai_model
+            and (
+                self._api_surface is LlmApiSurface.OPENAI_CHAT_COMPLETIONS
+                or self._model_provider in OPENAI_API_PROVIDERS
+            )
+            and any(
+                openai_chat_tools_require_reasoning_none(name)
+                for name in model_identity_names
+            )
+        ):
+            for key in _REASONING_KWARG_KEYS:
+                optional_kwargs.pop(key, None)
+            optional_kwargs["reasoning_effort"] = OPENAI_REASONING_EFFORT[
+                ReasoningEffort.OFF
+            ]
+            reasoning_effort = ReasoningEffort.OFF
+            _log_chat_completions_tools_disable_reasoning(model, self._api_base)
 
         if tools:
             # OpenAI will error if parallel_tool_calls is True and tools are not specified
