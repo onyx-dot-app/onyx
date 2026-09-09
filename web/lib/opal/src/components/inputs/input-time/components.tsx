@@ -11,6 +11,7 @@ import {
   makeSegmentChangeHandler,
   makeSegmentKeyDownHandler,
 } from "@opal/components/inputs/segmented";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Types and segment helpers
@@ -36,13 +37,10 @@ const SEGMENT_LIMITS: Record<keyof TimeSegments, number> = {
   seconds: 59,
 };
 
-const SEGMENT_META: Record<
-  keyof TimeSegments,
-  { label: string; placeholder: string }
-> = {
-  hours: { label: "Hours", placeholder: "HH" },
-  minutes: { label: "Minutes", placeholder: "MM" },
-  seconds: { label: "Seconds", placeholder: "SS" },
+const SEGMENT_PLACEHOLDERS: Record<keyof TimeSegments, string> = {
+  hours: "HH",
+  minutes: "MM",
+  seconds: "SS",
 };
 
 function isValidTime(time: TimeValue): boolean {
@@ -146,6 +144,7 @@ function InputTime({
   const [segments, setSegments] = React.useState<TimeSegments>(() =>
     toSegments(value)
   );
+  const strings = useOpalStrings();
 
   const hoursRef = React.useRef<HTMLInputElement>(null);
   const minutesRef = React.useRef<HTMLInputElement>(null);
@@ -206,7 +205,7 @@ function InputTime({
         <div
           className="opal-input-segmented-content"
           role="group"
-          aria-label="Time"
+          aria-label={strings.time}
         >
           {segmentParts.map((part, i) => (
             <React.Fragment key={part}>
@@ -217,8 +216,8 @@ function InputTime({
                 disabled={disabled}
                 ref={segmentRefs[part]}
                 id={part === "hours" ? id : undefined}
-                aria-label={SEGMENT_META[part].label}
-                placeholder={SEGMENT_META[part].placeholder}
+                aria-label={strings[part]}
+                placeholder={SEGMENT_PLACEHOLDERS[part]}
                 maxLength={2}
                 value={segments[part]}
                 onChange={handleSegmentChange(
@@ -243,7 +242,7 @@ function InputTime({
               icon={SvgX}
               prominence="internal"
               size="sm"
-              tooltip="Clear"
+              tooltip={strings.clear}
               onClick={() => onChange(null)}
             />
           </div>

@@ -1,5 +1,5 @@
 import React from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import {
   Table,
   TableRow,
@@ -150,6 +150,7 @@ function ConnectorRow({
   isEditable: boolean;
 }) {
   const t = useTranslations("admin.indexing");
+  const locale = useLocale();
   const router = useRouter();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
 
@@ -174,7 +175,7 @@ function ConnectorRow({
         <Truncated>{ccPairsIndexingStatus.name}</Truncated>
       </TableCell>
       <TableCell>
-        {timeAgo(ccPairsIndexingStatus?.last_success) || "-"}
+        {timeAgo(ccPairsIndexingStatus?.last_success, locale) || "-"}
       </TableCell>
       <TableCell>
         <CCPairStatus

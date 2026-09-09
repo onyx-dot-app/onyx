@@ -12582,6 +12582,67 @@
       }
     }
   },
+  "opal": {
+    "common": {
+      "clear": "クリア",
+      "clearFilter": "フィルターをクリア",
+      "close": "閉じる",
+      "copied": "コピーしました",
+      "copy": "コピー",
+      "copyCode": "コードをコピー",
+      "date": "日付",
+      "edit": "編集",
+      "loading": "読み込み中",
+      "loadingPage": "読み込み中…",
+      "openCalendar": "カレンダーを開く",
+      "progress": "進行状況",
+      "remove": "削除",
+      "removeItem": "{title} を削除",
+      "search": "検索...",
+      "selectAnOption": "オプションを選択",
+      "showFullMessage": "メッセージ全体を表示",
+      "time": "時刻"
+    },
+    "input": {
+      "day": "日",
+      "hidePassword": "パスワードを非表示",
+      "hours": "時",
+      "minutes": "分",
+      "month": "月",
+      "seconds": "秒",
+      "showPassword": "パスワードを表示",
+      "valueCannotBeRevealed": "値を表示できません",
+      "year": "年"
+    },
+    "pagination": {
+      "goToPage": "ページへ移動",
+      "nextPage": "次のページ",
+      "previousPage": "前のページ"
+    },
+    "table": {
+      "alwaysShown": "常に表示",
+      "ascending": "昇順",
+      "columns": "列",
+      "descending": "降順",
+      "deselectAll": "すべて選択解除",
+      "dragToReorder": "ドラッグして並べ替え",
+      "manualOrdering": "手動の順序",
+      "selectAnItemToContinue": "続行するには項目を選択してください",
+      "selectedItemCount": "{count, plural, one {# 件の項目を選択済み} other {# 件の項目を選択済み}}",
+      "selectItemsToContinue": "続行するには項目を選択してください",
+      "showing": "<total></total> 件中 <range></range> 件を表示",
+      "shownColumns": "表示中の列",
+      "singleItemSelected": "項目を選択済み",
+      "sort": "並べ替え",
+      "sortBy": "並べ替え基準",
+      "sortingOrder": "並べ替え順",
+      "viewSelected": "選択項目を表示"
+    },
+    "tabs": {
+      "scrollLeft": "タブを左にスクロール",
+      "scrollRight": "タブを右にスクロール"
+    }
+  },
   "settings": {
     "accounts": {
       "email": {

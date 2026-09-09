@@ -4,7 +4,8 @@ import { Button, Pagination, SelectButton } from "@opal/components";
 import { Text } from "@opal/components";
 import { useTableSize } from "@opal/components/table/TableSizeContext";
 import { SvgEye, SvgXCircle } from "@opal/icons";
-import type { ReactNode } from "react";
+import { useOpalStrings, type OpalStrings } from "@opal/strings";
+import { Children, type ReactNode } from "react";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -85,13 +86,16 @@ function getSelectionMessage(
   state: SelectionState,
   multi: boolean,
   count: number,
-  isViewingSelected: boolean
+  isViewingSelected: boolean,
+  strings: OpalStrings
 ): string {
   if (state === "none" && !isViewingSelected) {
-    return multi ? "Select items to continue" : "Select an item to continue";
+    return multi
+      ? strings.selectItemsToContinue
+      : strings.selectAnItemToContinue;
   }
-  if (!multi) return "Item selected";
-  return `${count} item${count !== 1 ? "s" : ""} selected`;
+  if (!multi) return strings.singleItemSelected;
+  return strings.selectedItemCount(count);
 }
 
 /**
@@ -182,11 +186,13 @@ function SelectionLeft({
   onClear,
   isSmall,
 }: SelectionLeftProps) {
+  const strings = useOpalStrings();
   const message = getSelectionMessage(
     selectionState,
     multiSelect,
     selectedCount,
-    isViewingSelected
+    isViewingSelected,
+    strings
   );
   const hasSelection = selectionState !== "none";
   // Show buttons when items are selected OR when the view filter is active
@@ -217,7 +223,7 @@ function SelectionLeft({
               icon={SvgEye}
               state={isViewingSelected ? "selected" : "empty"}
               onClick={onView}
-              tooltip="View selected"
+              tooltip={strings.viewSelected}
               size={isSmall ? "sm" : "md"}
             />
           )}
@@ -225,7 +231,7 @@ function SelectionLeft({
             <Button
               icon={SvgXCircle}
               onClick={onClear}
-              tooltip="Deselect all"
+              tooltip={strings.deselectAll}
               size={isSmall ? "sm" : "md"}
               prominence="tertiary"
             />
@@ -251,23 +257,34 @@ function SummaryLeft({
   units,
   isSmall,
 }: SummaryLeftProps) {
+  const strings = useOpalStrings();
   const suffix = units ? ` ${units}` : "";
   const bodyFont = isSmall ? "secondary-body" : "main-ui-muted";
   const monoFont = isSmall ? "secondary-mono" : "main-ui-mono";
+  // The range is an LTR isolate so "1~10" keeps its digit order in RTL copy.
+  const range = (
+    <Text font={monoFont} color="text-03" dir="ltr">
+      {`${rangeStart}~${rangeEnd}`}
+    </Text>
+  );
+  const total = (
+    <Text font={monoFont} color="text-03">
+      {`${totalItems}${suffix}`}
+    </Text>
+  );
+  // Each text chunk gets its own Text span, so the summary keeps the sibling
+  // layout (and spacing) it had before the words came from a translation.
+  const parts = Children.toArray(strings.showing(range, total)).map(
+    (part, index) =>
+      typeof part === "string" ? (
+        <Text key={index} font={bodyFont} color="text-03">
+          {part}
+        </Text>
+      ) : (
+        part
+      )
+  );
   return (
-    <div className="flex flex-row items-center w-fit h-fit px-1">
-      <Text font={bodyFont} color="text-03">
-        {`Showing `}
-      </Text>
-      <Text font={monoFont} color="text-03">
-        {`${rangeStart}~${rangeEnd}`}
-      </Text>
-      <Text font={bodyFont} color="text-03">
-        {` of `}
-      </Text>
-      <Text font={monoFont} color="text-03">
-        {`${totalItems}${suffix}`}
-      </Text>
-    </div>
+    <div className="flex flex-row items-center w-fit h-fit px-1">{parts}</div>
   );
 }

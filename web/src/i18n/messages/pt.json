@@ -12582,6 +12582,67 @@
       }
     }
   },
+  "opal": {
+    "common": {
+      "clear": "Limpar",
+      "clearFilter": "Limpar filtro",
+      "close": "Fechar",
+      "copied": "Copiado!",
+      "copy": "Copiar",
+      "copyCode": "Copiar código",
+      "date": "Data",
+      "edit": "Editar",
+      "loading": "Carregando",
+      "loadingPage": "Carregando…",
+      "openCalendar": "Abrir calendário",
+      "progress": "Progresso",
+      "remove": "Remover",
+      "removeItem": "Remover {title}",
+      "search": "Pesquisar...",
+      "selectAnOption": "Selecione uma opção",
+      "showFullMessage": "Mostrar a mensagem completa",
+      "time": "Hora"
+    },
+    "input": {
+      "day": "Dia",
+      "hidePassword": "Ocultar senha",
+      "hours": "Horas",
+      "minutes": "Minutos",
+      "month": "Mês",
+      "seconds": "Segundos",
+      "showPassword": "Mostrar senha",
+      "valueCannotBeRevealed": "O valor não pode ser exibido",
+      "year": "Ano"
+    },
+    "pagination": {
+      "goToPage": "Ir para a página",
+      "nextPage": "Próxima página",
+      "previousPage": "Página anterior"
+    },
+    "table": {
+      "alwaysShown": "Sempre exibida",
+      "ascending": "Crescente",
+      "columns": "Colunas",
+      "descending": "Decrescente",
+      "deselectAll": "Desmarcar tudo",
+      "dragToReorder": "Arraste para reordenar",
+      "manualOrdering": "Ordem manual",
+      "selectAnItemToContinue": "Selecione um item para continuar",
+      "selectedItemCount": "{count, plural, one {# item selecionado} other {# itens selecionados}}",
+      "selectItemsToContinue": "Selecione itens para continuar",
+      "showing": "Mostrando <range></range> de <total></total>",
+      "shownColumns": "Colunas exibidas",
+      "singleItemSelected": "Item selecionado",
+      "sort": "Ordenar",
+      "sortBy": "Ordenar por",
+      "sortingOrder": "Direção da ordenação",
+      "viewSelected": "Ver selecionados"
+    },
+    "tabs": {
+      "scrollLeft": "Rolar abas para a esquerda",
+      "scrollRight": "Rolar abas para a direita"
+    }
+  },
   "settings": {
     "accounts": {
       "email": {

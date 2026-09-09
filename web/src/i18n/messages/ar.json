@@ -12582,6 +12582,67 @@
       }
     }
   },
+  "opal": {
+    "common": {
+      "clear": "مسح",
+      "clearFilter": "مسح الفلتر",
+      "close": "إغلاق",
+      "copied": "تم النسخ!",
+      "copy": "نسخ",
+      "copyCode": "نسخ الكود",
+      "date": "التاريخ",
+      "edit": "تعديل",
+      "loading": "جارٍ التحميل",
+      "loadingPage": "جارٍ التحميل…",
+      "openCalendar": "فتح التقويم",
+      "progress": "التقدم",
+      "remove": "إزالة",
+      "removeItem": "إزالة {title}",
+      "search": "بحث...",
+      "selectAnOption": "اختر خيارًا",
+      "showFullMessage": "عرض الرسالة كاملة",
+      "time": "الوقت"
+    },
+    "input": {
+      "day": "اليوم",
+      "hidePassword": "إخفاء كلمة المرور",
+      "hours": "الساعات",
+      "minutes": "الدقائق",
+      "month": "الشهر",
+      "seconds": "الثواني",
+      "showPassword": "إظهار كلمة المرور",
+      "valueCannotBeRevealed": "لا يمكن إظهار القيمة",
+      "year": "السنة"
+    },
+    "pagination": {
+      "goToPage": "الانتقال إلى صفحة",
+      "nextPage": "الصفحة التالية",
+      "previousPage": "الصفحة السابقة"
+    },
+    "table": {
+      "alwaysShown": "معروض دائمًا",
+      "ascending": "تصاعدي",
+      "columns": "الأعمدة",
+      "descending": "تنازلي",
+      "deselectAll": "إلغاء تحديد الكل",
+      "dragToReorder": "اسحب لإعادة الترتيب",
+      "manualOrdering": "ترتيب يدوي",
+      "selectAnItemToContinue": "حدد عنصرًا للمتابعة",
+      "selectedItemCount": "{count, plural, zero {لم يتم تحديد أي عنصر} one {تم تحديد عنصر واحد} two {تم تحديد عنصرين} few {تم تحديد # عناصر} many {تم تحديد # عنصرًا} other {تم تحديد # عنصر}}",
+      "selectItemsToContinue": "حدد عناصر للمتابعة",
+      "showing": "عرض <range></range> من <total></total>",
+      "shownColumns": "الأعمدة المعروضة",
+      "singleItemSelected": "تم تحديد عنصر",
+      "sort": "ترتيب",
+      "sortBy": "ترتيب حسب",
+      "sortingOrder": "اتجاه الترتيب",
+      "viewSelected": "عرض المحدد"
+    },
+    "tabs": {
+      "scrollLeft": "تمرير التبويبات لليسار",
+      "scrollRight": "تمرير التبويبات لليمين"
+    }
+  },
   "settings": {
     "accounts": {
       "email": {

@@ -12,8 +12,8 @@ import { formatCost, formatTokens } from "@/lib/utils";
 import SpendByUserTable from "@/sections/usage/SpendByUserTable";
 import UserUsageDetailModal from "@/sections/usage/UserUsageDetailModal";
 
-function formatDate(value: string): string {
-  return formatCalendarDay(value, { withYear: true });
+function formatDate(value: string, locale: string): string {
+  return formatCalendarDay(value, locale, { withYear: true });
 }
 
 function SummaryMetric({
@@ -105,8 +105,8 @@ export default function PerUserUsagePanel({
       >
         {usage
           ? t("panel.description", {
-              start: formatDate(usage.start),
-              end: formatDate(usage.end),
+              start: formatDate(usage.start, locale),
+              end: formatDate(usage.end, locale),
             })
           : t("panel.emptyDescription")}
       </Text>
@@ -234,7 +234,7 @@ export default function PerUserUsagePanel({
           user={selectedUser}
           periodLabel={
             usage
-              ? `${formatDate(usage.start)} – ${formatDate(usage.end)}`
+              ? `${formatDate(usage.start, locale)} – ${formatDate(usage.end, locale)}`
               : undefined
           }
           onOpenChange={(open) => {

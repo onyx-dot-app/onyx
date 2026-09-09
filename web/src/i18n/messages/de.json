@@ -12582,6 +12582,67 @@
       }
     }
   },
+  "opal": {
+    "common": {
+      "clear": "Leeren",
+      "clearFilter": "Filter zurücksetzen",
+      "close": "Schließen",
+      "copied": "Kopiert!",
+      "copy": "Kopieren",
+      "copyCode": "Code kopieren",
+      "date": "Datum",
+      "edit": "Bearbeiten",
+      "loading": "Wird geladen",
+      "loadingPage": "Wird geladen …",
+      "openCalendar": "Kalender öffnen",
+      "progress": "Fortschritt",
+      "remove": "Entfernen",
+      "removeItem": "{title} entfernen",
+      "search": "Suchen...",
+      "selectAnOption": "Option auswählen",
+      "showFullMessage": "Vollständige Nachricht anzeigen",
+      "time": "Uhrzeit"
+    },
+    "input": {
+      "day": "Tag",
+      "hidePassword": "Passwort verbergen",
+      "hours": "Stunden",
+      "minutes": "Minuten",
+      "month": "Monat",
+      "seconds": "Sekunden",
+      "showPassword": "Passwort anzeigen",
+      "valueCannotBeRevealed": "Wert kann nicht angezeigt werden",
+      "year": "Jahr"
+    },
+    "pagination": {
+      "goToPage": "Zu Seite springen",
+      "nextPage": "Nächste Seite",
+      "previousPage": "Vorherige Seite"
+    },
+    "table": {
+      "alwaysShown": "Immer angezeigt",
+      "ascending": "Aufsteigend",
+      "columns": "Spalten",
+      "descending": "Absteigend",
+      "deselectAll": "Auswahl aufheben",
+      "dragToReorder": "Ziehen zum Umsortieren",
+      "manualOrdering": "Manuelle Reihenfolge",
+      "selectAnItemToContinue": "Element auswählen, um fortzufahren",
+      "selectedItemCount": "{count, plural, one {# Element ausgewählt} other {# Elemente ausgewählt}}",
+      "selectItemsToContinue": "Elemente auswählen, um fortzufahren",
+      "showing": "<range></range> von <total></total> angezeigt",
+      "shownColumns": "Angezeigte Spalten",
+      "singleItemSelected": "Element ausgewählt",
+      "sort": "Sortieren",
+      "sortBy": "Sortieren nach",
+      "sortingOrder": "Sortierrichtung",
+      "viewSelected": "Auswahl anzeigen"
+    },
+    "tabs": {
+      "scrollLeft": "Tabs nach links scrollen",
+      "scrollRight": "Tabs nach rechts scrollen"
+    }
+  },
   "settings": {
     "accounts": {
       "email": {

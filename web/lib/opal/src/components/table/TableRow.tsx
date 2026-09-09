@@ -6,6 +6,7 @@ import type { WithoutStyles } from "@opal/types";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { SvgHandle } from "@opal/icons";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -38,6 +39,7 @@ function SortableTableRow({
   ...props
 }: TableRowProps) {
   const resolvedSize = useTableSize();
+  const strings = useOpalStrings();
 
   const {
     attributes,
@@ -82,7 +84,7 @@ function SortableTableRow({
               "opacity-0 group-hover/row:opacity-100 transition-opacity",
               "flex items-center justify-center rounded-sm"
             )}
-            aria-label="Drag to reorder"
+            aria-label={strings.dragToReorder}
             onMouseDown={(e) => e.preventDefault()}
             {...listeners}
           >

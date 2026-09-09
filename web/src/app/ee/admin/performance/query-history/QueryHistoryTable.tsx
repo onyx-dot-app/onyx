@@ -1,6 +1,6 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import {
   Table,
   TableHead,
@@ -37,7 +37,10 @@ import {
   ITEMS_PER_PAGE,
   PAGES_PER_BATCH,
 } from "@/app/ee/admin/performance/query-history/constants";
-import { humanReadableFormatWithTime } from "@opal/time";
+import {
+  humanReadableFormatShort,
+  humanReadableFormatWithTime,
+} from "@opal/time";
 import { Modal } from "@opal/components";
 import { Button, Divider } from "@opal/components";
 import { Badge } from "@/components/ui/badge";
@@ -155,6 +158,7 @@ function PreviousQueryHistoryExportsModal({
   setShowModal: Dispatch<SetStateAction<boolean>>;
 }) {
   const t = useTranslations("admin.queryHistory");
+  const locale = useLocale();
   const { data: queryHistoryTasks } = useSWR<TaskQueueState[]>(
     LIST_QUERY_HISTORY_URL,
     errorHandlingFetcher,
@@ -208,10 +212,14 @@ function PreviousQueryHistoryExportsModal({
               {paginatedTasks.map((task, index) => (
                 <TableRow key={index}>
                   <TableCell>
-                    {humanReadableFormatWithTime(task.startTime)}
+                    {humanReadableFormatWithTime(task.startTime, locale)}
                   </TableCell>
-                  <TableCell>{task.start.toDateString()}</TableCell>
-                  <TableCell>{task.end.toDateString()}</TableCell>
+                  <TableCell>
+                    {humanReadableFormatShort(task.start, locale)}
+                  </TableCell>
+                  <TableCell>
+                    {humanReadableFormatShort(task.end, locale)}
+                  </TableCell>
                   <TableCell>
                     <ExportBadge status={task.status} />
                   </TableCell>

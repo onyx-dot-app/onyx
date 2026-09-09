@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Section } from "@/layouts/general-layouts";
 import { InputHorizontal } from "@opal/layouts";
 import { Button, Divider } from "@opal/components";
@@ -99,6 +99,7 @@ interface CheckoutViewProps {
 
 export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
   const t = useTranslations("admin.billing");
+  const locale = useLocale();
   const { user } = useUser();
   const { data: usersData } = useUsers({ includeApiKeys: false });
 
@@ -128,8 +129,8 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
   const trialEndDate = useMemo(() => {
     const date = new Date();
     date.setMonth(date.getMonth() + 1);
-    return formatDateShort(date.toISOString());
-  }, []);
+    return formatDateShort(date.toISOString(), locale);
+  }, [locale]);
 
   const handleSubmit = async () => {
     setIsSubmitting(true);

@@ -16,7 +16,7 @@ import { credentialTemplates } from "@/lib/connectors/credentials";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import Title from "@/components/ui/title";
 import { useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState, use } from "react";
 import useSWR, { mutate } from "swr";
 import {
@@ -96,6 +96,7 @@ const PAGES_PER_BATCH = 8;
 
 function Main({ ccPairId }: { ccPairId: number }) {
   const t = useTranslations("admin.connector");
+  const locale = useLocale();
   const router = useRouter();
   const { user } = useUser();
 
@@ -660,7 +661,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
               {t("statusCard.lastIndexed.label")}
             </div>
             <div className="text-sm text-text-default">
-              {timeAgo(ccPair?.last_indexed) ?? "-"}
+              {timeAgo(ccPair?.last_indexed, locale) ?? "-"}
             </div>
           </div>
 
@@ -689,8 +690,12 @@ function Main({ ccPairId }: { ccPairId: number }) {
                 </Text>
                 <Text as="p" className="text-sm text-text-default">
                   {ccPair.last_permission_sync_attempt_finished
-                    ? timeAgo(ccPair.last_permission_sync_attempt_finished)
-                    : (timeAgo(ccPair.last_full_permission_sync) ?? "-")}
+                    ? timeAgo(
+                        ccPair.last_permission_sync_attempt_finished,
+                        locale
+                      )
+                    : (timeAgo(ccPair.last_full_permission_sync, locale) ??
+                      "-")}
                 </Text>
               </div>
             </>

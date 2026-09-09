@@ -12582,6 +12582,67 @@
       }
     }
   },
+  "opal": {
+    "common": {
+      "clear": "지우기",
+      "clearFilter": "필터 지우기",
+      "close": "닫기",
+      "copied": "복사됨!",
+      "copy": "복사",
+      "copyCode": "코드 복사",
+      "date": "날짜",
+      "edit": "편집",
+      "loading": "로딩 중",
+      "loadingPage": "로딩 중…",
+      "openCalendar": "캘린더 열기",
+      "progress": "진행률",
+      "remove": "제거",
+      "removeItem": "{title} 제거",
+      "search": "검색...",
+      "selectAnOption": "옵션 선택",
+      "showFullMessage": "전체 메시지 보기",
+      "time": "시간"
+    },
+    "input": {
+      "day": "일",
+      "hidePassword": "비밀번호 숨기기",
+      "hours": "시",
+      "minutes": "분",
+      "month": "월",
+      "seconds": "초",
+      "showPassword": "비밀번호 표시",
+      "valueCannotBeRevealed": "값을 표시할 수 없습니다",
+      "year": "년"
+    },
+    "pagination": {
+      "goToPage": "페이지로 이동",
+      "nextPage": "다음 페이지",
+      "previousPage": "이전 페이지"
+    },
+    "table": {
+      "alwaysShown": "항상 표시",
+      "ascending": "오름차순",
+      "columns": "열",
+      "descending": "내림차순",
+      "deselectAll": "모두 선택 해제",
+      "dragToReorder": "드래그하여 순서 변경",
+      "manualOrdering": "수동 정렬",
+      "selectAnItemToContinue": "계속하려면 항목을 선택하세요",
+      "selectedItemCount": "{count, plural, one {#개 항목 선택됨} other {#개 항목 선택됨}}",
+      "selectItemsToContinue": "계속하려면 항목을 선택하세요",
+      "showing": "<total></total>개 중 <range></range> 표시",
+      "shownColumns": "표시된 열",
+      "singleItemSelected": "항목 선택됨",
+      "sort": "정렬",
+      "sortBy": "정렬 기준",
+      "sortingOrder": "정렬 순서",
+      "viewSelected": "선택 항목 보기"
+    },
+    "tabs": {
+      "scrollLeft": "탭을 왼쪽으로 스크롤",
+      "scrollRight": "탭을 오른쪽으로 스크롤"
+    }
+  },
   "settings": {
     "accounts": {
       "email": {

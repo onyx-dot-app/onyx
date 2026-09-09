@@ -17,6 +17,7 @@ import {
   type ReactNode,
 } from "react";
 import useFocusOnMount from "@opal/hooks/useFocusOnMount";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -207,6 +208,7 @@ function GoToPagePopup({ totalPages, onSubmit, children }: GoToPagePopupProps) {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState("");
   const focusOnMount = useFocusOnMount<HTMLInputElement>();
+  const strings = useOpalStrings();
 
   const parsed = parseInt(value, 10);
   const isValid = !isNaN(parsed) && parsed >= 1 && parsed <= totalPages;
@@ -258,7 +260,7 @@ function GoToPagePopup({ totalPages, onSubmit, children }: GoToPagePopupProps) {
             value={value}
             onChange={handleChange}
             onKeyDown={handleKeyDown}
-            placeholder="Go to page"
+            placeholder={strings.goToPage}
             ref={focusOnMount}
             className={cn(
               "w-28 bg-transparent px-1.5 py-1 rounded-08",
@@ -273,7 +275,7 @@ function GoToPagePopup({ totalPages, onSubmit, children }: GoToPagePopupProps) {
               icon={SvgArrowRight}
               size="lg"
               onClick={handleSubmit}
-              tooltip="Go to page"
+              tooltip={strings.goToPage}
             />
           </Disabled>
         </PopoverPrimitive.Content>
@@ -301,6 +303,7 @@ function NavButtons({
   size,
   children,
 }: NavButtonsProps) {
+  const strings = useOpalStrings();
   return (
     <>
       <Disabled disabled={currentPage <= 1}>
@@ -309,7 +312,7 @@ function NavButtons({
           onClick={() => onChange(Math.max(1, currentPage - 1))}
           size={size}
           prominence="tertiary"
-          tooltip="Previous page"
+          tooltip={strings.previousPage}
         />
       </Disabled>
       {children}
@@ -319,7 +322,7 @@ function NavButtons({
           onClick={() => onChange(Math.min(totalPages, currentPage + 1))}
           size={size}
           prominence="tertiary"
-          tooltip="Next page"
+          tooltip={strings.nextPage}
         />
       </Disabled>
     </>

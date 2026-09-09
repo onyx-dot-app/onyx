@@ -199,6 +199,8 @@ module.exports = {
         "**/src/hooks/**/*.test.tsx",
         "**/src/sections/**/*.test.tsx",
         "**/src/views/**/*.test.tsx",
+        "**/lib/opal/**/*.test.tsx",
+        "**/src/i18n/**/*.test.tsx",
         // Add more patterns here as you add more integration tests
       ],
     },

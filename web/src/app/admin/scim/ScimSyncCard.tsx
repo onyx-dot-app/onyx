@@ -1,4 +1,4 @@
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { SvgCheckCircle, SvgClock, SvgKey, SvgRefreshCw } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
@@ -34,6 +34,7 @@ export default function ScimSyncCard({
   onRegenerate,
 }: ScimSyncCardProps) {
   const t = useTranslations("admin.scim");
+  const locale = useLocale();
 
   return (
     <Card border="solid" rounding={4}>
@@ -101,7 +102,7 @@ export default function ScimSyncCard({
                       </Text>
                     )}
                     <Text as="p" secondaryBody text03>
-                      {timeAgo(lastUsedAt)}
+                      {timeAgo(lastUsedAt, locale)}
                     </Text>
                   </>
                 ) : (

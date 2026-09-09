@@ -12582,6 +12582,67 @@
       }
     }
   },
+  "opal": {
+    "common": {
+      "clear": "Borrar",
+      "clearFilter": "Quitar filtro",
+      "close": "Cerrar",
+      "copied": "¡Copiado!",
+      "copy": "Copiar",
+      "copyCode": "Copiar código",
+      "date": "Fecha",
+      "edit": "Editar",
+      "loading": "Cargando",
+      "loadingPage": "Cargando…",
+      "openCalendar": "Abrir calendario",
+      "progress": "Progreso",
+      "remove": "Quitar",
+      "removeItem": "Quitar {title}",
+      "search": "Buscar...",
+      "selectAnOption": "Selecciona una opción",
+      "showFullMessage": "Mostrar el mensaje completo",
+      "time": "Hora"
+    },
+    "input": {
+      "day": "Día",
+      "hidePassword": "Ocultar contraseña",
+      "hours": "Horas",
+      "minutes": "Minutos",
+      "month": "Mes",
+      "seconds": "Segundos",
+      "showPassword": "Mostrar contraseña",
+      "valueCannotBeRevealed": "El valor no se puede mostrar",
+      "year": "Año"
+    },
+    "pagination": {
+      "goToPage": "Ir a la página",
+      "nextPage": "Página siguiente",
+      "previousPage": "Página anterior"
+    },
+    "table": {
+      "alwaysShown": "Siempre visible",
+      "ascending": "Ascendente",
+      "columns": "Columnas",
+      "descending": "Descendente",
+      "deselectAll": "Deseleccionar todo",
+      "dragToReorder": "Arrastra para reordenar",
+      "manualOrdering": "Orden manual",
+      "selectAnItemToContinue": "Selecciona un elemento para continuar",
+      "selectedItemCount": "{count, plural, one {# elemento seleccionado} other {# elementos seleccionados}}",
+      "selectItemsToContinue": "Selecciona elementos para continuar",
+      "showing": "Mostrando <range></range> de <total></total>",
+      "shownColumns": "Columnas visibles",
+      "singleItemSelected": "Elemento seleccionado",
+      "sort": "Ordenar",
+      "sortBy": "Ordenar por",
+      "sortingOrder": "Dirección del orden",
+      "viewSelected": "Ver seleccionados"
+    },
+    "tabs": {
+      "scrollLeft": "Desplazar pestañas a la izquierda",
+      "scrollRight": "Desplazar pestañas a la derecha"
+    }
+  },
   "settings": {
     "accounts": {
       "email": {

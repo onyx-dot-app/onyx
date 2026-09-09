@@ -12582,6 +12582,67 @@
       }
     }
   },
+  "opal": {
+    "common": {
+      "clear": "Effacer",
+      "clearFilter": "Effacer le filtre",
+      "close": "Fermer",
+      "copied": "Copié !",
+      "copy": "Copier",
+      "copyCode": "Copier le code",
+      "date": "Date",
+      "edit": "Modifier",
+      "loading": "Chargement",
+      "loadingPage": "Chargement…",
+      "openCalendar": "Ouvrir le calendrier",
+      "progress": "Progression",
+      "remove": "Retirer",
+      "removeItem": "Retirer {title}",
+      "search": "Rechercher...",
+      "selectAnOption": "Sélectionnez une option",
+      "showFullMessage": "Afficher le message complet",
+      "time": "Heure"
+    },
+    "input": {
+      "day": "Jour",
+      "hidePassword": "Masquer le mot de passe",
+      "hours": "Heures",
+      "minutes": "Minutes",
+      "month": "Mois",
+      "seconds": "Secondes",
+      "showPassword": "Afficher le mot de passe",
+      "valueCannotBeRevealed": "La valeur ne peut pas être affichée",
+      "year": "Année"
+    },
+    "pagination": {
+      "goToPage": "Aller à la page",
+      "nextPage": "Page suivante",
+      "previousPage": "Page précédente"
+    },
+    "table": {
+      "alwaysShown": "Toujours affichée",
+      "ascending": "Croissant",
+      "columns": "Colonnes",
+      "descending": "Décroissant",
+      "deselectAll": "Tout désélectionner",
+      "dragToReorder": "Glisser pour réordonner",
+      "manualOrdering": "Ordre manuel",
+      "selectAnItemToContinue": "Sélectionnez un élément pour continuer",
+      "selectedItemCount": "{count, plural, one {# élément sélectionné} other {# éléments sélectionnés}}",
+      "selectItemsToContinue": "Sélectionnez des éléments pour continuer",
+      "showing": "Affichage de <range></range> sur <total></total>",
+      "shownColumns": "Colonnes affichées",
+      "singleItemSelected": "Élément sélectionné",
+      "sort": "Trier",
+      "sortBy": "Trier par",
+      "sortingOrder": "Sens du tri",
+      "viewSelected": "Voir la sélection"
+    },
+    "tabs": {
+      "scrollLeft": "Faire défiler les onglets vers la gauche",
+      "scrollRight": "Faire défiler les onglets vers la droite"
+    }
+  },
   "settings": {
     "accounts": {
       "email": {

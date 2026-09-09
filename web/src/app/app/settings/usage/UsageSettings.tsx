@@ -1,6 +1,6 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { Section } from "@/layouts/general-layouts";
 import { Content } from "@opal/layouts";
@@ -365,6 +365,7 @@ function BudgetSection({
   budgetResetAt,
 }: BudgetSectionProps) {
   const t = useTranslations("settings.usage");
+  const locale = useLocale();
   // budget_* are null when the user has no cost limit; show a graceful empty state.
   const hasBudget = budgetCents !== null;
   const remaining = budgetRemainingCents ?? 0;
@@ -373,7 +374,7 @@ function BudgetSection({
     hasBudget && budgetCents > 0 ? Math.min(1, spent / budgetCents) : 0;
   const budgetReset = budgetResetAt
     ? t("budget.resetsOn", {
-        date: formatCalendarDay(budgetResetAt.slice(0, 10)),
+        date: formatCalendarDay(budgetResetAt.slice(0, 10), locale),
       })
     : null;
 
