@@ -1,6 +1,7 @@
 import json
 import time
 from collections.abc import Callable
+from functools import partial
 from typing import Any, Literal
 
 from onyx.chat.chat_state import ChatStateContainer
@@ -34,13 +35,10 @@ from onyx.chat.prompt_utils import (
     get_default_base_system_prompt,
     process_prompt_template,
 )
+from onyx.chat.token_budget import resolve_chat_token_budget
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.chat_configs import MAX_LLM_CYCLES
 from onyx.configs.constants import DocumentSource, MessageType
-from onyx.configs.model_configs import (
-    GEN_AI_INPUT_TOKEN_SAFETY_MARGIN,
-    GEN_AI_NUM_RESERVED_OUTPUT_TOKENS,
-)
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.memory import UserMemoryContext, add_memory, update_memory_at_index
@@ -49,12 +47,7 @@ from onyx.file_store.models import ChatFileType
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.exceptions import ClassifiedLLMError
 from onyx.llm.interfaces import LLM, LLMUserIdentity, ToolChoiceOptions
-from onyx.llm.model_capabilities import (
-    get_model_map,
-    is_true_openai_model,
-    llm_max_output_tokens_or_none,
-    model_identity_names,
-)
+from onyx.llm.model_capabilities import is_true_openai_model
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.utils import model_supports_image_input
 from onyx.prompts.chat_prompts import (
@@ -385,40 +378,27 @@ def _build_project_message(
     return messages
 
 
-def resolve_model_max_output_tokens(llm: LLM) -> int | None:
-    """Output maximum of the selected model from LiteLLM metadata, or None."""
-    model_map = get_model_map()
-    for name in model_identity_names(llm.config.model_name, llm.config.deployment_name):
-        max_output = llm_max_output_tokens_or_none(
-            model_map, name, llm.config.model_provider
-        )
-        if max_output is not None:
-            return max_output
-    return None
-
-
-def compute_output_allowance(
-    model_max_output_tokens: int | None,
-    input_token_limit: int,
-    estimated_input_tokens: int,
-) -> int | None:
-    """Per-call `max_tokens` after the input is assembled.
-
-    Uses the model's output maximum, clamped to the room left under the
-    input limit so prompt + output stays inside the context window. This is
-    distinct from input planning: the input budget only holds back the
-    established reserve, so evidence is not evicted to guarantee the full
-    output maximum. Returns None (provider default) when the model output
-    maximum is unknown, or when the room left is below the minimum answer
-    reserve: a cap that small would only truncate, and a cap above the room
-    could push the request past a window the operator sized exactly.
-    """
-    if model_max_output_tokens is None:
-        return None
-    room = input_token_limit - estimated_input_tokens
-    if room < min(model_max_output_tokens, GEN_AI_NUM_RESERVED_OUTPUT_TOKENS):
-        return None
-    return min(model_max_output_tokens, room)
+def count_message_replay_tokens(
+    msg: ChatMessageSimple,
+    *,
+    image_files_replayed_as_markers: bool = False,
+    token_counter: Callable[[str], int] | None = None,
+) -> int:
+    if not image_files_replayed_as_markers:
+        return msg.token_count
+    # Include images whose stored cost is zero, such as project images.
+    num_images = sum(
+        1 for f in msg.image_files or [] if f.file_type == ChatFileType.IMAGE
+    )
+    if not num_images:
+        return msg.token_count
+    sample_marker = NON_VISION_IMAGE_MARKER.format(file_id="0" * 36)
+    marker_tokens = (
+        token_counter(sample_marker)
+        if token_counter
+        else _NON_VISION_MARKER_TOKEN_FALLBACK
+    )
+    return max(0, msg.token_count - msg.image_token_count) + num_images * marker_tokens
 
 
 def construct_message_history(
@@ -439,33 +419,11 @@ def construct_message_history(
                 "filtering chat history by last N user messages must be a value greater than 0"
             )
 
-    # Budget each message at its replay cost: when the model takes no image
-    # input, translate_history_to_llm_format sends short text markers instead
-    # of the images, so charging the stored image token cost would evict
-    # history that actually fits.
-    marker_tokens = 0
-    if image_files_replayed_as_markers:
-        sample_marker = NON_VISION_IMAGE_MARKER.format(file_id="0" * 36)
-        marker_tokens = (
-            token_counter(sample_marker)
-            if token_counter
-            else _NON_VISION_MARKER_TOKEN_FALLBACK
-        )
-
-    def _replay_token_count(msg: ChatMessageSimple) -> int:
-        if not image_files_replayed_as_markers:
-            return msg.token_count
-        # Charge markers for every IMAGE entry, including ones whose stored
-        # token contribution is zero (project/context images are never
-        # counted) — the marker text is still sent for them.
-        num_images = sum(
-            1 for f in msg.image_files or [] if f.file_type == ChatFileType.IMAGE
-        )
-        if not num_images:
-            return msg.token_count
-        return (
-            max(0, msg.token_count - msg.image_token_count) + num_images * marker_tokens
-        )
+    _replay_token_count = partial(
+        count_message_replay_tokens,
+        image_files_replayed_as_markers=image_files_replayed_as_markers,
+        token_counter=token_counter,
+    )
 
     # Build the project / file-metadata messages up front so we can use their
     # actual token counts for the budget.
@@ -852,12 +810,8 @@ def run_llm_loop(
             finish_reason=None,
         )
 
-        # Hold back a margin below max_input_tokens: our tiktoken estimate can
-        # undercount the provider's tokenizer and overflow the context window.
-        available_tokens = int(
-            llm.config.max_input_tokens * (1 - GEN_AI_INPUT_TOKEN_SAFETY_MARGIN)
-        )
-        model_max_output_tokens = resolve_model_max_output_tokens(llm)
+        token_budget = resolve_chat_token_budget(llm)
+        available_tokens = token_budget.input_tokens
         # When the model takes no image input, history images are replayed as
         # short text markers (translate_history_to_llm_format) — budget them
         # as markers too, not at their stored image token cost.
@@ -1079,15 +1033,16 @@ def run_llm_loop(
                 image_files_replayed_as_markers=image_files_replayed_as_markers,
             )
 
-            # Output room is what the assembled input leaves under the margined
-            # budget, so the tokenizer safety margin stays headroom for input
-            # undercounting rather than being spent on output. Image markers are
-            # counted at stored cost, which only undercounts room.
-            max_output_tokens = compute_output_allowance(
-                model_max_output_tokens=model_max_output_tokens,
-                input_token_limit=available_tokens,
+            max_output_tokens = token_budget.output_allowance(
                 estimated_input_tokens=tool_token_budget
-                + sum(msg.token_count for msg in truncated_message_history),
+                + sum(
+                    count_message_replay_tokens(
+                        msg,
+                        image_files_replayed_as_markers=image_files_replayed_as_markers,
+                        token_counter=token_counter,
+                    )
+                    for msg in truncated_message_history
+                ),
             )
 
             # This calls the LLM, yields packets (reasoning, answers, etc.) and returns the result

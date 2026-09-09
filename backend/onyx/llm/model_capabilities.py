@@ -49,6 +49,19 @@ CUSTOM_LITELLM_MODEL_OVERRIDES: dict[str, dict[str, Any]] = {
     for model_name in _TWELVE_LABS_PEGASUS_MODEL_NAMES
 }
 
+# These input limits exclude output space; LiteLLM has no total-context field.
+# https://developers.openai.com/api/docs/models/gpt-5.6-sol
+# https://developers.openai.com/api/docs/models/gpt-5.6-terra
+# https://developers.openai.com/api/docs/models/gpt-5.6-luna
+_MODEL_CONTEXT_WINDOWS = {
+    "gpt-5.6-sol": 1_050_000,
+    "openai/gpt-5.6-sol": 1_050_000,
+    "gpt-5.6-terra": 1_050_000,
+    "openai/gpt-5.6-terra": 1_050_000,
+    "gpt-5.6-luna": 1_050_000,
+    "openai/gpt-5.6-luna": 1_050_000,
+}
+
 
 @lru_cache(maxsize=1)  # the copy.deepcopy is expensive, so we cache the result
 def get_model_map() -> dict:
@@ -79,6 +92,13 @@ def get_model_map() -> dict:
         if model_name in starting_map:
             continue
         starting_map[model_name] = copy.deepcopy(model_metadata)
+
+    for model_name, context_window in _MODEL_CONTEXT_WINDOWS.items():
+        if model_name in starting_map:
+            starting_map[model_name] = {
+                "max_context_tokens": context_window,
+                **starting_map[model_name],
+            }
 
     # NOTE: outside of the explicit CUSTOM_LITELLM_MODEL_OVERRIDES,
     # we avoid hard-coding additional models here. Ollama, for example,
@@ -214,27 +234,6 @@ def get_llm_max_output_tokens(
         default_output_tokens,
     )
     return default_output_tokens
-
-
-def llm_max_output_tokens_or_none(
-    model_map: dict,
-    model_name: str,
-    model_provider: str,
-) -> int | None:
-    """Output-token maximum from the model metadata, or None when unknown.
-
-    Unlike `get_llm_max_output_tokens` this never guesses: the value is sent
-    to the provider as `max_tokens`, and a guess above the real limit is
-    rejected outright. Entries that only carry `max_tokens` count as unknown
-    because `llm_max_input_tokens` reads that key as the input window.
-    """
-    model_obj = find_model_obj(model_map, model_provider, model_name)
-    if not model_obj:
-        return None
-    max_output_tokens = model_obj.get("max_output_tokens")
-    if isinstance(max_output_tokens, int) and max_output_tokens > 0:
-        return max_output_tokens
-    return None
 
 
 def get_max_input_tokens(

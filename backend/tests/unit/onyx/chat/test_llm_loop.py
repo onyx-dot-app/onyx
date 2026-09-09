@@ -1,7 +1,8 @@
 """Tests for llm_loop.py, including history construction and empty-response paths."""
 
+from contextlib import nullcontext
 from typing import Any
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -10,9 +11,9 @@ from onyx.chat.llm_loop import (
     EmptyLLMResponseError,
     _build_empty_llm_response_error,
     _try_fallback_tool_extraction,
-    compute_output_allowance,
     construct_message_history,
-    resolve_model_max_output_tokens,
+    count_message_replay_tokens,
+    run_llm_loop,
     select_reminder_text,
 )
 from onyx.chat.models import (
@@ -791,6 +792,100 @@ class TestNonVisionImageBudgeting:
             "Follow-up",
         ]
 
+    @pytest.mark.parametrize("stored_image_tokens", [0, 20000])
+    @pytest.mark.parametrize("configured_input_limit", [8000, 24000])
+    def test_output_allowance_uses_image_replay_cost(
+        self,
+        stored_image_tokens: int,
+        configured_input_limit: int,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        image_msg = self._image_user_msg()
+        image_msg.token_count = stored_image_tokens + 5
+        image_msg.image_token_count = stored_image_tokens
+        monkeypatch.setattr(
+            "onyx.chat.token_budget.GEN_AI_INPUT_TOKEN_SAFETY_MARGIN", 0.05
+        )
+        llm = Mock()
+        llm.config = LLMConfig(
+            model_provider="openai",
+            model_name="text-only-model",
+            temperature=0,
+            max_input_tokens=configured_input_limit,
+        )
+        older_user = create_message("Old input", MessageType.USER, 20000)
+        older_answer = create_message("Old answer", MessageType.ASSISTANT, 5)
+        with (
+            patch("onyx.chat.llm_loop.trace", return_value=nullcontext()),
+            patch("onyx.llm.litellm_singleton.config.initialize_litellm"),
+            patch(
+                "onyx.chat.llm_loop.get_session_with_current_tenant",
+                return_value=nullcontext(),
+            ),
+            patch("onyx.chat.llm_loop.get_default_base_system_prompt", return_value=""),
+            patch("onyx.chat.llm_loop.select_reminder_text", return_value=""),
+            patch("onyx.chat.llm_loop.model_supports_image_input", return_value=False),
+            patch(
+                "onyx.chat.token_budget.get_model_map",
+                return_value={
+                    "openai/text-only-model": {
+                        "max_input_tokens": 24000,
+                        "max_output_tokens": 16000,
+                    }
+                },
+            ),
+            patch(
+                "onyx.chat.llm_loop.run_llm_step",
+                return_value=(
+                    LlmStepResult(answer="Done", tool_calls=None, reasoning=None),
+                    False,
+                ),
+            ) as step,
+        ):
+            run_llm_loop(
+                emitter=Mock(),
+                state_container=Mock(),
+                simple_chat_history=[older_user, older_answer, image_msg],
+                tools=[],
+                custom_agent_prompt=None,
+                context_files=create_context_files(),
+                persona=None,
+                user_memory_context=None,
+                llm=llm,
+                token_counter=lambda _: 10,
+            )
+
+        if configured_input_limit == 8000:
+            assert step.call_args.kwargs["history"] == [older_answer, image_msg]
+            assert step.call_args.kwargs["max_tokens"] == 16000
+        else:
+            assert step.call_args.kwargs["history"] == [
+                older_user,
+                older_answer,
+                image_msg,
+            ]
+            assert step.call_args.kwargs["max_tokens"] == 2780
+        assert (
+            count_message_replay_tokens(
+                image_msg,
+                image_files_replayed_as_markers=True,
+                token_counter=lambda _: 10,
+            )
+            == 15
+        )
+        assert image_msg.token_count == stored_image_tokens + 5
+
+    def test_vision_output_budget_keeps_stored_image_cost(self) -> None:
+        assert count_message_replay_tokens(self._image_user_msg()) == 505
+
+    def test_image_marker_budget_without_tokenizer(self) -> None:
+        assert (
+            count_message_replay_tokens(
+                self._image_user_msg(), image_files_replayed_as_markers=True
+            )
+            == 45
+        )
+
 
 class TestForgottenFileMetadata:
     """Tests for the forgotten-files mechanism in construct_message_history.
@@ -1449,158 +1544,3 @@ class TestSelectReminderText:
             ran_image_gen=True, just_ran_web_search=True, has_open_url_tool=True
         )
         assert result == IMAGE_GEN_REMINDER
-
-
-class TestComputeOutputAllowance:
-    """Per-call max_tokens derived from the model output maximum and the
-    room the assembled input leaves under the input limit."""
-
-    RESERVE = 1024
-
-    @pytest.fixture(autouse=True)
-    def _pin_reserve(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # The reserve is env-configurable; pin it so the fixed expectations
-        # below do not depend on the test environment.
-        monkeypatch.setattr(
-            "onyx.chat.llm_loop.GEN_AI_NUM_RESERVED_OUTPUT_TOKENS", self.RESERVE
-        )
-
-    def test_small_output_model_with_plenty_of_room(self) -> None:
-        # gpt-4o style: 16k output, 127k input limit, short prompt.
-        assert (
-            compute_output_allowance(
-                model_max_output_tokens=16384,
-                input_token_limit=126976,
-                estimated_input_tokens=3000,
-            )
-            == 16384
-        )
-
-    def test_large_output_model_with_plenty_of_room(self) -> None:
-        # claude-sonnet-4-5 style: 64k output, 199k input limit.
-        assert (
-            compute_output_allowance(
-                model_max_output_tokens=64000,
-                input_token_limit=198976,
-                estimated_input_tokens=20000,
-            )
-            == 64000
-        )
-
-    def test_large_search_context_clamps_to_remaining_room(self) -> None:
-        # Search evidence and tool schemas fill most of the window: the
-        # allowance shrinks to the room left instead of overflowing it.
-        assert (
-            compute_output_allowance(
-                model_max_output_tokens=64000,
-                input_token_limit=198976,
-                estimated_input_tokens=180000,
-            )
-            == 18976
-        )
-
-    def test_operator_configured_small_input_limit_is_honored(self) -> None:
-        # Admin capped the model at 8000 input tokens; the model metadata
-        # says 64k output. The configured limit bounds the output room.
-        assert (
-            compute_output_allowance(
-                model_max_output_tokens=64000,
-                input_token_limit=8000,
-                estimated_input_tokens=5000,
-            )
-            == 3000
-        )
-
-    def test_unknown_model_output_maximum_keeps_provider_default(self) -> None:
-        assert (
-            compute_output_allowance(
-                model_max_output_tokens=None,
-                input_token_limit=8000,
-                estimated_input_tokens=100,
-            )
-            is None
-        )
-
-    def test_no_usable_room_keeps_provider_default(self) -> None:
-        # Below the minimum answer reserve, a cap would either truncate or
-        # push the request past an exactly sized window. Send no cap, which
-        # is the pre-existing behavior.
-        for estimated in (10000 - self.RESERVE + 1, 10000, 12000):
-            assert (
-                compute_output_allowance(
-                    model_max_output_tokens=64000,
-                    input_token_limit=10000,
-                    estimated_input_tokens=estimated,
-                )
-                is None
-            )
-
-    def test_room_equal_to_reserve_is_sent(self) -> None:
-        assert (
-            compute_output_allowance(
-                model_max_output_tokens=64000,
-                input_token_limit=10000,
-                estimated_input_tokens=10000 - self.RESERVE,
-            )
-            == self.RESERVE
-        )
-
-    def test_small_output_model_needs_only_its_own_maximum(self) -> None:
-        small_output = self.RESERVE // 2
-        assert (
-            compute_output_allowance(
-                model_max_output_tokens=small_output,
-                input_token_limit=10000,
-                estimated_input_tokens=10000 - small_output,
-            )
-            == small_output
-        )
-        assert (
-            compute_output_allowance(
-                model_max_output_tokens=small_output,
-                input_token_limit=10000,
-                estimated_input_tokens=10000 - small_output + 1,
-            )
-            is None
-        )
-
-
-class TestResolveModelMaxOutputTokens:
-    def _make_llm(
-        self, provider: str, model: str, deployment_name: str | None = None
-    ) -> Mock:
-        llm = Mock()
-        llm.config = LLMConfig(
-            model_provider=provider,
-            model_name=model,
-            deployment_name=deployment_name,
-            temperature=0.0,
-            max_input_tokens=4096,
-        )
-        return llm
-
-    def test_uses_metadata_for_known_model(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        model_map = {"openai/gpt-4o": {"max_output_tokens": 16384}}
-        monkeypatch.setattr("onyx.chat.llm_loop.get_model_map", lambda: model_map)
-        assert resolve_model_max_output_tokens(self._make_llm("openai", "gpt-4o")) == (
-            16384
-        )
-
-    def test_falls_back_to_deployment_alias(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        model_map = {"azure/gpt-4o": {"max_output_tokens": 16384}}
-        monkeypatch.setattr("onyx.chat.llm_loop.get_model_map", lambda: model_map)
-        llm = self._make_llm("azure", "my-deployment", deployment_name="gpt-4o")
-        assert resolve_model_max_output_tokens(llm) == 16384
-
-    def test_unknown_custom_model_returns_none(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr("onyx.chat.llm_loop.get_model_map", lambda: {})
-        assert (
-            resolve_model_max_output_tokens(self._make_llm("openai", "in-house-llm"))
-            is None
-        )
