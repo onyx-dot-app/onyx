@@ -175,28 +175,26 @@ class ZoomClient:
 
         return self._send_authorized(endpoint, send)
 
-    def get_meeting_transcript(self, meeting_identifier: str) -> ZoomTranscript | None:
+    def get_meeting_transcript(self, meeting_identifier: str) -> ZoomTranscript:
         """Takes a meeting ID, a webinar ID, or one occurrence's UUID. Zoom has
         no webinar transcript endpoint, so webinars come through here too.
-        Returns None when the session was never recorded, which is a normal skip.
+
+        A session that was never recorded answers 404, which raises here. Whether
+        that is a skip or a failure is the caller's call, not this client's.
         """
         response = self._request(
             "GET",
             f"/meetings/{_encode_meeting_identifier(meeting_identifier)}/transcript",
         )
-        if response.status_code == 404:
-            return None
         _raise_for_zoom_error(response, f"the transcript for {meeting_identifier}")
         return ZoomTranscript.model_validate(response.json())
 
     def get_past_meeting_details(
         self, meeting_identifier: str
-    ) -> ZoomPastMeetingDetails | None:
+    ) -> ZoomPastMeetingDetails:
         response = self._request(
             "GET", f"/past_meetings/{_encode_meeting_identifier(meeting_identifier)}"
         )
-        if response.status_code == 404:
-            return None
         _raise_for_zoom_error(response, f"the details for {meeting_identifier}")
         return ZoomPastMeetingDetails.model_validate(response.json())
 
@@ -213,8 +211,6 @@ class ZoomClient:
             "GET",
             f"/past_meetings/{_encode_meeting_identifier(meeting_id)}/instances",
         )
-        if response.status_code == 404:
-            return []
         _raise_for_zoom_error(response, f"the occurrences for {meeting_id}")
         occurrences = response.json().get("meetings", [])
         return [ZoomMeetingOccurrence.model_validate(o) for o in occurrences]

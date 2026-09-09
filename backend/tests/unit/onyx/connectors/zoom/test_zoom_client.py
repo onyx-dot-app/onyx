@@ -302,12 +302,19 @@ class TestGetMeetingTranscript:
         assert transcript is not None
         assert transcript.model_dump() == _DOCUMENTED_TRANSCRIPT
 
-    def test_404_means_never_recorded_not_an_error(self) -> None:
+    def test_404_is_reported_not_swallowed(self) -> None:
+        # A session that was never recorded answers 404. Reading that as "skip
+        # this one" is the caller's decision, so the client only reports it.
         client = _client()
         client._session = MagicMock()
-        client._session.request.return_value = _response(404)
+        client._session.request.return_value = _response(
+            404, {"code": 3322, "message": "This meeting transcript does not exist."}
+        )
 
-        assert client.get_meeting_transcript("111") is None
+        with pytest.raises(requests.HTTPError) as exc:
+            client.get_meeting_transcript("111")
+
+        assert "Zoom code 3322" in str(exc.value)
 
     def test_identifier_is_encoded_into_the_path(self) -> None:
         client = _client()
@@ -357,12 +364,13 @@ class TestGetPastMeetingDetails:
         with pytest.raises(ValidationError):
             client.get_past_meeting_details("111")
 
-    def test_404_returns_none(self) -> None:
+    def test_404_is_reported_not_swallowed(self) -> None:
         client = _client()
         client._session = MagicMock()
         client._session.request.return_value = _response(404)
 
-        assert client.get_past_meeting_details("111") is None
+        with pytest.raises(requests.HTTPError):
+            client.get_past_meeting_details("111")
 
 
 class TestListPastMeetingOccurrences:
@@ -384,12 +392,13 @@ class TestListPastMeetingOccurrences:
         assert [o.uuid for o in occurrences] == ["u1", "u2"]
         assert occurrences[0].start_time == "2026-01-01T10:00:00Z"
 
-    def test_404_yields_an_empty_list(self) -> None:
+    def test_404_is_reported_not_swallowed(self) -> None:
         client = _client()
         client._session = MagicMock()
         client._session.request.return_value = _response(404)
 
-        assert client.list_past_meeting_occurrences("111") == []
+        with pytest.raises(requests.HTTPError):
+            client.list_past_meeting_occurrences("111")
 
     def test_missing_meetings_key_yields_an_empty_list(self) -> None:
         client = _client()
