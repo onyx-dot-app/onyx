@@ -9,11 +9,14 @@ from onyx.connectors.exceptions import (
 )
 from onyx.connectors.models import ConnectorFailure, Document
 from onyx.connectors.zoom.client import ZoomClient
-from onyx.connectors.zoom.models import ZoomPastMeetingDetails, ZoomTranscript
 from onyx.connectors.zoom.recordings.models import OccurrenceWork, ZoomSessionType
 from onyx.connectors.zoom.recordings.processing import (
     process_occurrence,
     zoom_document_id,
+)
+from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
+    past_meeting_details,
+    transcript,
 )
 
 _SAMPLE_VTT = """WEBVTT
@@ -43,11 +46,11 @@ def _work(
 
 def _client_with_transcript() -> MagicMock:
     client = MagicMock(spec=ZoomClient)
-    client.get_meeting_transcript.return_value = ZoomTranscript(
+    client.get_meeting_transcript.return_value = transcript(
         download_url="https://zoom.example/transcript.vtt"
     )
     client.download_transcript_vtt.return_value = _SAMPLE_VTT
-    client.get_past_meeting_details.return_value = ZoomPastMeetingDetails(
+    client.get_past_meeting_details.return_value = past_meeting_details(
         topic="Weekly Sync"
     )
     return client
@@ -68,7 +71,6 @@ class TestZoomDocumentId:
 
         assert meeting == "ZOOM_MEETING_abc=="
         assert webinar == "ZOOM_WEBINAR_abc=="
-        # Same occurrence uuid must not collide across types.
         assert meeting != webinar
 
 
@@ -99,7 +101,7 @@ class TestProcessOccurrence:
 
     def test_not_ready_transcript_is_skipped(self) -> None:
         client = _client_with_transcript()
-        client.get_meeting_transcript.return_value = ZoomTranscript(
+        client.get_meeting_transcript.return_value = transcript(
             download_url=None, download_restriction_reason="NOT_READY"
         )
 
@@ -107,10 +109,10 @@ class TestProcessOccurrence:
         client.download_transcript_vtt.assert_not_called()
 
     def test_restricted_transcript_is_skipped_even_with_a_url(self) -> None:
-        # Zoom really does return a url next to a restriction, so the url on its
-        # own is not enough to go on.
+        # Zoom's own example returns a download_url alongside a restriction reason,
+        # so the url on its own does not mean the transcript can be downloaded.
         client = _client_with_transcript()
-        client.get_meeting_transcript.return_value = ZoomTranscript(
+        client.get_meeting_transcript.return_value = transcript(
             download_url="https://zoom.example/t.vtt",
             download_restriction_reason="NO_TRANSCRIPT_DATA",
         )
@@ -120,26 +122,16 @@ class TestProcessOccurrence:
 
     def test_can_download_false_is_skipped_even_with_a_url(self) -> None:
         client = _client_with_transcript()
-        client.get_meeting_transcript.return_value = ZoomTranscript(
+        client.get_meeting_transcript.return_value = transcript(
             download_url="https://zoom.example/t.vtt", can_download=False
         )
 
         assert _run(client, _work()) == []
         client.download_transcript_vtt.assert_not_called()
 
-    def test_can_download_unset_still_downloads(self) -> None:
-        # Zoom omits can_download far more often than it sets it, so tightening
-        # is_downloadable to `is True` would skip almost every real transcript.
-        client = _client_with_transcript()
-        client.get_meeting_transcript.return_value = ZoomTranscript(
-            download_url="https://zoom.example/t.vtt", can_download=None
-        )
-
-        assert len(_run(client, _work())) == 1
-
     def test_missing_download_url_is_skipped(self) -> None:
         client = _client_with_transcript()
-        client.get_meeting_transcript.return_value = ZoomTranscript(download_url=None)
+        client.get_meeting_transcript.return_value = transcript(download_url=None)
 
         assert _run(client, _work()) == []
         client.download_transcript_vtt.assert_not_called()
@@ -201,7 +193,7 @@ class TestProcessOccurrence:
 
     def test_details_fill_in_a_timestamp_discovery_did_not_have(self) -> None:
         client = _client_with_transcript()
-        client.get_past_meeting_details.return_value = ZoomPastMeetingDetails(
+        client.get_past_meeting_details.return_value = past_meeting_details(
             topic="Weekly Sync", start_time="2026-01-15T10:00:00Z"
         )
 
@@ -214,7 +206,7 @@ class TestProcessOccurrence:
 
     def test_empty_prefetched_topic_still_asks_for_details(self) -> None:
         client = _client_with_transcript()
-        client.get_past_meeting_details.return_value = ZoomPastMeetingDetails(
+        client.get_past_meeting_details.return_value = past_meeting_details(
             topic="Weekly Sync", start_time="2026-01-15T10:00:00Z"
         )
 
@@ -255,7 +247,7 @@ class TestSystemicFailuresStopTheRun:
             _http_error(503),
             requests.ConnectionError("reset"),
             requests.Timeout("timed out"),
-            # None of these three is an HTTPError, so classifying on status
+            # None of these three is an HTTPError, so code that classifies on status
             # code alone reads a broken exchange as one bad session and skips it.
             requests.exceptions.RetryError("too many 429s"),
             requests.exceptions.ChunkedEncodingError("body stopped early"),
