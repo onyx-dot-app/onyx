@@ -10730,6 +10730,9 @@
         "ariaLabel": "Speichern"
       }
     },
+    "enabledCount": {
+      "label": "<value>{enabled}</value> von {total}"
+    },
     "errorPages": {
       "accessRestricted": {
         "billingAdminHint": {

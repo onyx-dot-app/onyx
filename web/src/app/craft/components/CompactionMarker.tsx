@@ -28,7 +28,7 @@ export default function CompactionMarker({ summary }: CompactionMarkerProps) {
     return (
       <span className="flex items-center gap-1.5">
         <SvgFold className="size-3.5 shrink-0 stroke-text-04" />
-        <Text font="main-ui-muted" color="text-04" nowrap>
+        <Text font="main-ui-muted" color="text-04" wordWrap="whitespace-nowrap">
           {t("marker.label")}
         </Text>
         {withChevron && (

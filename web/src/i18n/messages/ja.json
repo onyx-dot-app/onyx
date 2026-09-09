@@ -10730,6 +10730,9 @@
         "ariaLabel": "保存"
       }
     },
+    "enabledCount": {
+      "label": "{total} 中 <value>{enabled}</value>"
+    },
     "errorPages": {
       "accessRestricted": {
         "billingAdminHint": {

@@ -615,7 +615,11 @@ function LibraryTreeView({
 
             {/* File size */}
             {!entry.is_directory && entry.file_size !== null && (
-              <Text font="secondary-body" color="text-03" nowrap>
+              <Text
+                font="secondary-body"
+                color="text-03"
+                wordWrap="whitespace-nowrap"
+              >
                 {formatFileSize(entry.file_size)}
               </Text>
             )}

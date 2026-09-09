@@ -10730,6 +10730,9 @@
         "ariaLabel": "Save"
       }
     },
+    "enabledCount": {
+      "label": "<value>{enabled}</value> of {total}"
+    },
     "errorPages": {
       "accessRestricted": {
         "billingAdminHint": {

@@ -726,7 +726,7 @@ export default function MCPAuthenticationModal({
                             as="p"
                             font="secondary-body"
                             color="text-03"
-                            nowrap
+                            wordWrap="whitespace-nowrap"
                           >
                             {markdown(t("mcpAuthModal.redirectUri.label"))}
                           </Text>

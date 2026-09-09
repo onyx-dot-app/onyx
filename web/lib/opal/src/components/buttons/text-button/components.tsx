@@ -61,7 +61,12 @@ function TextButton({
   ...rest
 }: TextButtonProps) {
   const label = (
-    <Text font={font} color="inherit" as="p" nowrap={nowrap}>
+    <Text
+      font={font}
+      color="inherit"
+      as="p"
+      wordWrap={nowrap ? "whitespace-nowrap" : undefined}
+    >
       {children}
     </Text>
   );

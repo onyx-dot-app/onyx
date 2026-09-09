@@ -10730,6 +10730,9 @@
         "ariaLabel": "حفظ"
       }
     },
+    "enabledCount": {
+      "label": "<value>{enabled}</value> من {total}"
+    },
     "errorPages": {
       "accessRestricted": {
         "billingAdminHint": {

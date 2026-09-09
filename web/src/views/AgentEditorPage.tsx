@@ -87,7 +87,7 @@ import { useAvailableTools } from "@/lib/tools/hooks";
 import { getActionIcon } from "@/lib/tools/utils";
 import { AgentEditorMCPServer, MCPTool, ToolSnapshot } from "@/lib/tools/types";
 import useFilter from "@/hooks/useFilter";
-import EnabledCount from "@/refresh-components/EnabledCount";
+import EnabledCount from "@/lib/tools/components/EnabledCount";
 import { useAppPosition } from "@/lib/position/hooks";
 import { isDateInFuture } from "@/lib/dateUtils";
 import {
