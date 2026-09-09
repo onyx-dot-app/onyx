@@ -139,9 +139,11 @@ from onyx.db.pat import resolve_pat
 from onyx.db.pinned_personas import seed_pinned_personas_from_featured
 from onyx.db.users import (
     assign_user_to_default_groups__no_commit,
+    fetch_user_by_id,
     get_user_by_email,
     get_user_by_oauth_account,
     is_limited_user,
+    promote_placeholder_to_web_login__no_commit,
     reconcile_user_email__no_commit,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -535,29 +537,27 @@ def _upgrade_placeholder_to_web_login__no_commit(
     row lock from ``reconcile_user_email__no_commit``; a second connection
     would wait on that lock until the callback returns, which it never does.
 
+    Locks the row again rather than trusting that one: an email change commits
+    the reconcile before this runs, which drops it. Re-locking on the same
+    connection is a no-op when it is still held, and serializes concurrent
+    first logins when it is not.
+
     Returns whether the upgrade consumed a seat.
     """
-    user = (
-        db_session.query(User)
-        .filter(User.id == user_id)  # ty: ignore[invalid-argument-type]
-        .first()
-    )
+    user = fetch_user_by_id(db_session, user_id, for_update=True)
     if user is None:
         return False
 
-    was_inactive = not user.is_active
-    # The row is active either way once this returns: it already was, or it is
-    # activated below.
+    # The row is active once this returns: it already was, or the promotion
+    # below reactivates it.
     seat_added = False
     if _upgrade_will_add_seat(user, will_become_active=True):
         enforce_seat_limit_locked(db_session, seats_needed=1)
         seat_added = True
 
-    user.is_verified = is_verified_by_default
-    user.account_type = AccountType.STANDARD
-    if was_inactive:
-        user.is_active = True
-    assign_user_to_default_groups__no_commit(db_session, user)
+    promote_placeholder_to_web_login__no_commit(
+        db_session, user, is_verified=is_verified_by_default
+    )
     return seat_added
 
 

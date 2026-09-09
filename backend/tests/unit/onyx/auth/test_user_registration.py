@@ -712,12 +712,15 @@ class TestOAuthNoAutoLinkExemptions:
     @patch("onyx.auth.users.fetch_ee_implementation_or_noop")
     @patch("onyx.auth.users.get_async_session_context_manager")
     @patch("onyx.auth.users.remove_user_from_invited_users")
-    @patch("onyx.auth.users.assign_user_to_default_groups__no_commit")
+    # Patched where promote_placeholder_to_web_login__no_commit resolves it.
+    @patch("onyx.db.users.assign_user_to_default_groups__no_commit")
     @patch("onyx.auth.users._upgrade_will_add_seat", return_value=False)
+    @patch("onyx.auth.users.fetch_user_by_id")
     @patch("onyx.auth.users.SQLAlchemyUserDatabase")
     async def test_placeholder_promoted_without_auto_link(
         self,
         mock_user_db_cls: MagicMock,
+        mock_fetch_user_by_id: MagicMock,
         mock_will_add_seat: MagicMock,  # noqa: ARG002
         mock_assign_groups: MagicMock,
         mock_remove_invited: MagicMock,  # noqa: ARG002
@@ -747,9 +750,9 @@ class TestOAuthNoAutoLinkExemptions:
 
         sync_user = MagicMock(is_active=is_active)
         mock_sync_db = MagicMock()
-        mock_sync_db.query.return_value.filter.return_value.first.return_value = (
-            sync_user
-        )
+        # The row is re-locked through the db layer, so stub that lookup rather
+        # than the query chain behind it.
+        mock_fetch_user_by_id.return_value = sync_user
 
         # The upgrade runs on the callback's own session, so drive the real
         # helper through run_sync rather than a second session. Email
@@ -782,6 +785,11 @@ class TestOAuthNoAutoLinkExemptions:
         # short-circuit a placeholder before it reaches the upgrade.
         assert sync_user.is_active is True
         mock_assign_groups.assert_called_once()
+        # An email change commits the reconcile and drops its lock, so the
+        # upgrade has to take the row itself rather than assume it holds it.
+        mock_fetch_user_by_id.assert_called_once_with(
+            mock_sync_db, "placeholder-id", for_update=True
+        )
         # Committed on the session holding the row lock, not a second one.
         cast(AsyncMock, mock_async_session.commit).assert_awaited()
         assert result is placeholder
