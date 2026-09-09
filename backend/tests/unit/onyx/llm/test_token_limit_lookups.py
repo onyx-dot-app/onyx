@@ -1,5 +1,6 @@
 """Tests for the token-limit lookup helpers in `onyx.llm.model_capabilities`:
-`llm_max_input_tokens`, `get_llm_max_output_tokens`, and `get_max_input_tokens`."""
+`llm_max_input_tokens`, `get_llm_max_output_tokens`, `llm_max_output_tokens_or_none`,
+and `get_max_input_tokens`."""
 
 from unittest.mock import patch
 
@@ -8,6 +9,7 @@ from onyx.llm.model_capabilities import (
     get_llm_max_output_tokens,
     get_max_input_tokens,
     llm_max_input_tokens,
+    llm_max_output_tokens_or_none,
 )
 
 
@@ -225,3 +227,58 @@ class TestGetMaxInputTokens:
             )
         assert isinstance(result, int)
         assert result > 0
+
+
+class TestLlmMaxOutputTokensOrNone:
+    def test_returns_metadata_output_maximum(self) -> None:
+        model_map = {
+            "anthropic/claude-sonnet-4-5": {
+                "max_tokens": 64000,
+                "max_input_tokens": 200000,
+                "max_output_tokens": 64000,
+            }
+        }
+        assert (
+            llm_max_output_tokens_or_none(
+                model_map=model_map,
+                model_name="claude-sonnet-4-5",
+                model_provider="anthropic",
+            )
+            == 64000
+        )
+
+    def test_unknown_model_returns_none(self) -> None:
+        assert (
+            llm_max_output_tokens_or_none(
+                model_map={}, model_name="my-custom-model", model_provider="openai"
+            )
+            is None
+        )
+
+    def test_max_tokens_only_entry_is_unknown(self) -> None:
+        # `max_tokens` doubles as the input window elsewhere, so it is not a
+        # safe output maximum to send to the provider.
+        model_map = {"openai/legacy": {"max_tokens": 4096}}
+        assert (
+            llm_max_output_tokens_or_none(
+                model_map=model_map, model_name="legacy", model_provider="openai"
+            )
+            is None
+        )
+
+    def test_none_valued_output_maximum_is_unknown(self) -> None:
+        model_map = {
+            "bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0": {
+                "max_tokens": None,
+                "max_input_tokens": None,
+                "max_output_tokens": None,
+            }
+        }
+        assert (
+            llm_max_output_tokens_or_none(
+                model_map=model_map,
+                model_name="anthropic.claude-3-5-sonnet-20241022-v2:0",
+                model_provider="bedrock",
+            )
+            is None
+        )

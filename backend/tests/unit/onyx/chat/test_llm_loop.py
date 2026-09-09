@@ -10,7 +10,9 @@ from onyx.chat.llm_loop import (
     EmptyLLMResponseError,
     _build_empty_llm_response_error,
     _try_fallback_tool_extraction,
+    compute_output_allowance,
     construct_message_history,
+    resolve_model_max_output_tokens,
     select_reminder_text,
 )
 from onyx.chat.models import (
@@ -23,6 +25,7 @@ from onyx.chat.models import (
     ToolCallSimple,
 )
 from onyx.configs.constants import MessageType
+from onyx.configs.model_configs import GEN_AI_NUM_RESERVED_OUTPUT_TOKENS
 from onyx.file_store.models import ChatFileType
 from onyx.llm.interfaces import LLMConfig, ToolChoiceOptions
 from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER, OPEN_URL_REMINDER
@@ -1447,3 +1450,136 @@ class TestSelectReminderText:
             ran_image_gen=True, just_ran_web_search=True, has_open_url_tool=True
         )
         assert result == IMAGE_GEN_REMINDER
+
+
+class TestComputeOutputAllowance:
+    """Per-call max_tokens derived from the model output maximum and the
+    room the assembled input leaves under the input limit."""
+
+    def test_small_output_model_with_plenty_of_room(self) -> None:
+        # gpt-4o style: 16k output, 127k input limit, short prompt.
+        assert (
+            compute_output_allowance(
+                model_max_output_tokens=16384,
+                input_token_limit=126976,
+                estimated_input_tokens=3000,
+            )
+            == 16384
+        )
+
+    def test_large_output_model_with_plenty_of_room(self) -> None:
+        # claude-sonnet-4-5 style: 64k output, 199k input limit.
+        assert (
+            compute_output_allowance(
+                model_max_output_tokens=64000,
+                input_token_limit=198976,
+                estimated_input_tokens=20000,
+            )
+            == 64000
+        )
+
+    def test_large_search_context_clamps_to_remaining_room(self) -> None:
+        # Search evidence and tool schemas fill most of the window: the
+        # allowance shrinks to the room left instead of overflowing it.
+        assert (
+            compute_output_allowance(
+                model_max_output_tokens=64000,
+                input_token_limit=198976,
+                estimated_input_tokens=180000,
+            )
+            == 18976
+        )
+
+    def test_operator_configured_small_input_limit_is_honored(self) -> None:
+        # Admin capped the model at 8000 input tokens; the model metadata
+        # says 64k output. The configured limit bounds the output room.
+        assert (
+            compute_output_allowance(
+                model_max_output_tokens=64000,
+                input_token_limit=8000,
+                estimated_input_tokens=5000,
+            )
+            == 3000
+        )
+
+    def test_unknown_model_output_maximum_keeps_provider_default(self) -> None:
+        assert (
+            compute_output_allowance(
+                model_max_output_tokens=None,
+                input_token_limit=8000,
+                estimated_input_tokens=100,
+            )
+            is None
+        )
+
+    def test_no_room_left_floors_at_reserved_output_tokens(self) -> None:
+        # A full or over-full context never yields a zero or negative
+        # max_tokens; the established minimum answer reserve applies.
+        assert (
+            compute_output_allowance(
+                model_max_output_tokens=64000,
+                input_token_limit=10000,
+                estimated_input_tokens=10000,
+            )
+            == GEN_AI_NUM_RESERVED_OUTPUT_TOKENS
+        )
+        assert (
+            compute_output_allowance(
+                model_max_output_tokens=64000,
+                input_token_limit=10000,
+                estimated_input_tokens=12000,
+            )
+            == GEN_AI_NUM_RESERVED_OUTPUT_TOKENS
+        )
+
+    def test_floor_never_exceeds_model_output_maximum(self) -> None:
+        small_output = GEN_AI_NUM_RESERVED_OUTPUT_TOKENS // 2
+        assert (
+            compute_output_allowance(
+                model_max_output_tokens=small_output,
+                input_token_limit=10000,
+                estimated_input_tokens=10000,
+            )
+            == small_output
+        )
+
+
+class TestResolveModelMaxOutputTokens:
+    def _make_llm(
+        self, provider: str, model: str, deployment_name: str | None = None
+    ) -> Mock:
+        llm = Mock()
+        llm.config = LLMConfig(
+            model_provider=provider,
+            model_name=model,
+            deployment_name=deployment_name,
+            temperature=0.0,
+            max_input_tokens=4096,
+        )
+        return llm
+
+    def test_uses_metadata_for_known_model(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        model_map = {"openai/gpt-4o": {"max_output_tokens": 16384}}
+        monkeypatch.setattr("onyx.chat.llm_loop.get_model_map", lambda: model_map)
+        assert resolve_model_max_output_tokens(self._make_llm("openai", "gpt-4o")) == (
+            16384
+        )
+
+    def test_falls_back_to_deployment_alias(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        model_map = {"azure/gpt-4o": {"max_output_tokens": 16384}}
+        monkeypatch.setattr("onyx.chat.llm_loop.get_model_map", lambda: model_map)
+        llm = self._make_llm("azure", "my-deployment", deployment_name="gpt-4o")
+        assert resolve_model_max_output_tokens(llm) == 16384
+
+    def test_unknown_custom_model_returns_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("onyx.chat.llm_loop.get_model_map", lambda: {})
+        assert (
+            resolve_model_max_output_tokens(self._make_llm("openai", "in-house-llm"))
+            is None
+        )
