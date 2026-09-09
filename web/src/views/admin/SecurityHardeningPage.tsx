@@ -10,9 +10,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import InputNumber from "@/refresh-components/inputs/InputNumber";
-import InputChipField, {
-  type ChipItem,
-} from "@/refresh-components/inputs/InputChipField";
+import { InputTags, type TagItem } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import {
   Content,
@@ -320,7 +318,7 @@ export default function SecurityHardeningPage() {
     );
   }
 
-  const validDomains: ChipItem[] = draft.valid_email_domains.map((domain) => ({
+  const validDomains: TagItem[] = draft.valid_email_domains.map((domain) => ({
     id: domain,
     label: domain,
   }));
@@ -426,9 +424,9 @@ export default function SecurityHardeningPage() {
                       )}
                       withLabel
                     >
-                      <InputChipField
-                        chips={validDomains}
-                        onRemoveChip={removeDomain}
+                      <InputTags
+                        tags={validDomains}
+                        onRemoveTag={removeDomain}
                         onAdd={addDomain}
                         value={domainInput}
                         onChange={setDomainInput}

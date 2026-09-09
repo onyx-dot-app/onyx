@@ -22,7 +22,7 @@ import {
   SelectorFormField,
   Label,
 } from "@/components/Field";
-import InputChipField from "@/refresh-components/inputs/InputChipField";
+import { InputTags } from "@opal/components";
 import { Button, Text } from "@opal/components";
 
 function mapKeywordSelectToMatchAny(keywordSelect: "any" | "all"): boolean {
@@ -173,15 +173,15 @@ export const StandardAnswerCreationForm = ({
               </div>
               <div className="w-4/12 flex flex-col gap-2">
                 <Label>{t("form.categories.label")}</Label>
-                <InputChipField
+                <InputTags
                   placeholder={t("form.categories.placeholder")}
                   value={categoryInput}
                   onChange={setCategoryInput}
-                  chips={values.categories.map((category) => ({
+                  tags={values.categories.map((category) => ({
                     id: category.id.toString(),
                     label: category.name,
                   }))}
-                  onRemoveChip={(id) =>
+                  onRemoveTag={(id) =>
                     setFieldValue(
                       "categories",
                       values.categories.filter((c) => c.id.toString() !== id)
