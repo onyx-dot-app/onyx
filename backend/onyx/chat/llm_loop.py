@@ -47,7 +47,7 @@ from onyx.db.models import Persona
 from onyx.file_store.models import ChatFileType
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.exceptions import ClassifiedLLMError, InputBudgetExceededError
-from onyx.llm.input_budget import estimate_request_tokens
+from onyx.llm.input_budget import count_prompt_image_tokens, estimate_request_tokens
 from onyx.llm.interfaces import LLM, LLMUserIdentity, ToolChoiceOptions
 from onyx.llm.model_capabilities import is_true_openai_model
 from onyx.llm.models import LLMInputBudget, ReasoningEffort
@@ -408,6 +408,7 @@ def construct_message_history(
                 token_counter=token_counter,
                 all_injected_file_metadata=all_injected_file_metadata,
                 image_files_replayed_as_markers=image_files_replayed_as_markers,
+                defer_image_tokens=request_token_counter is not None,
             )
         except InputBudgetExceededError:
             if history_budget == available_tokens:
@@ -440,6 +441,7 @@ def _construct_message_history(
     token_counter: Callable[[str], int] | None = None,
     all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
     image_files_replayed_as_markers: bool = False,
+    defer_image_tokens: bool = False,
 ) -> list[ChatMessageSimple]:
     if last_n_user_messages is not None:
         if last_n_user_messages <= 0:
@@ -452,7 +454,7 @@ def _construct_message_history(
     # of the images, so charging the stored image token cost would evict
     # history that actually fits.
     marker_tokens = 0
-    if image_files_replayed_as_markers:
+    if image_files_replayed_as_markers and not defer_image_tokens:
         sample_marker = NON_VISION_IMAGE_MARKER.format(file_id="0" * 36)
         marker_tokens = (
             token_counter(sample_marker)
@@ -461,6 +463,8 @@ def _construct_message_history(
         )
 
     def _replay_token_count(msg: ChatMessageSimple) -> int:
+        if defer_image_tokens:
+            return max(0, msg.token_count - msg.image_token_count)
         if not image_files_replayed_as_markers:
             return msg.token_count
         # Charge markers for every IMAGE entry, including ones whose stored
@@ -479,6 +483,10 @@ def _construct_message_history(
     # actual token counts for the budget.
     project_messages = _build_project_message(context_files, token_counter)
     project_messages_tokens = sum(m.token_count for m in project_messages)
+    if defer_image_tokens and context_files and context_files.file_texts:
+        project_messages_tokens -= sum(
+            image.token_count for image in context_files.image_files
+        )
 
     history_token_budget = available_tokens
     history_token_budget -= system_prompt.token_count if system_prompt else 0
@@ -1091,15 +1099,9 @@ def run_llm_loop(
                 tool_definitions: list[dict[str, Any]] = tool_defs,
                 reserved_request_tokens: int = request_overhead_tokens,
             ) -> int:
-                messages = llm.prepare_messages(
-                    translate_history_to_llm_format(history, llm.config),
-                    bool(tool_definitions),
-                )
-                image_tokens = (
-                    0
-                    if image_files_replayed_as_markers
-                    else sum(message.image_token_count for message in history)
-                )
+                prompt = translate_history_to_llm_format(history, llm.config)
+                messages = llm.prepare_messages(prompt, bool(tool_definitions))
+                image_tokens = count_prompt_image_tokens(prompt)
                 # Tool definitions and the envelope were reserved before history selection.
                 return (
                     estimate_request_tokens(
@@ -1146,14 +1148,6 @@ def run_llm_loop(
                 input_budget=LLMInputBudget(
                     max_tokens=available_tokens,
                     token_counter=token_counter,
-                    image_tokens=(
-                        0
-                        if image_files_replayed_as_markers
-                        else sum(
-                            message.image_token_count
-                            for message in truncated_message_history
-                        )
-                    ),
                 ),
             )
             if has_reasoned:

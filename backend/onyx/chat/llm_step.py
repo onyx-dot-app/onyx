@@ -973,6 +973,7 @@ def translate_history_to_llm_format(
                         )
                         image_part = ImageContentPart(
                             type="image_url",
+                            token_count=img_file.token_count,
                             image_url=ImageUrlDetail(
                                 url=image_url,
                                 detail=None,
