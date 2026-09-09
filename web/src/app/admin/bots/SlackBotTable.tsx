@@ -129,14 +129,7 @@ export const SlackBotTable = ({ slackBots }: { slackBots: SlackBot[] }) => {
             <PageSelector
               totalPages={Math.ceil(slackBots.length / NUM_IN_PAGE)}
               currentPage={page}
-              onPageChange={(newPage) => {
-                setPage(newPage);
-                window.scrollTo({
-                  top: 0,
-                  left: 0,
-                  behavior: "smooth",
-                });
-              }}
+              onPageChange={setPage}
             />
           </div>
         </div>
