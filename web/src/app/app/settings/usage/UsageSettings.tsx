@@ -169,8 +169,11 @@ function WindowCostSection({ windowCostCents, rows }: WindowCostSectionProps) {
                           count: formatTokens(row.cache_creation_tokens),
                         }),
                     ]
-                      .filter(Boolean)
-                      .join(" · ")}
+                      .filter((label): label is string => label !== false)
+                      // One pair message per join so translators own the separator.
+                      .reduce((first, rest) =>
+                        t("modelUsage.joined", { first, rest })
+                      )}
                   </Text>
                 </Section>
               </div>

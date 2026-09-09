@@ -13249,7 +13249,8 @@
         },
         "tokensOut": {
           "label": "{count} إخراج"
-        }
+        },
+        "joined": "{first} · {rest}"
       },
       "showFewerModels": {
         "ariaLabel": "عرض نماذج أقل"

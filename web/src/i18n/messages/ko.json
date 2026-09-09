@@ -13249,7 +13249,8 @@
         },
         "tokensOut": {
           "label": "출력 {count}"
-        }
+        },
+        "joined": "{first} · {rest}"
       },
       "showFewerModels": {
         "ariaLabel": "모델 적게 표시"

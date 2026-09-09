@@ -13249,7 +13249,8 @@
         },
         "tokensOut": {
           "label": "输出 {count}"
-        }
+        },
+        "joined": "{first}・{rest}"
       },
       "showFewerModels": {
         "ariaLabel": "显示更少模型"

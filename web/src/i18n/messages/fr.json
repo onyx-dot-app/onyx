@@ -13249,7 +13249,8 @@
         },
         "tokensOut": {
           "label": "{count} en sortie"
-        }
+        },
+        "joined": "{first} · {rest}"
       },
       "showFewerModels": {
         "ariaLabel": "Afficher moins de modèles"

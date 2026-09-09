@@ -13249,7 +13249,8 @@
         },
         "tokensOut": {
           "label": "出力 {count}"
-        }
+        },
+        "joined": "{first}・{rest}"
       },
       "showFewerModels": {
         "ariaLabel": "表示するモデルを減らす"
