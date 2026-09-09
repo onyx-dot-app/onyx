@@ -1,7 +1,6 @@
-"""GPT-5.4+ over chat completions accept function tools only with an explicit
-reasoning_effort of "none". The request builder must send that value rather
-than omit the parameter, and leave the responses surface and older models
-alone."""
+"""The request builder must send an explicit reasoning_effort "none" when GPT-5.4+
+take function tools over chat completions, and leave responses routes and older
+models alone."""
 
 from typing import Any
 from unittest.mock import patch
@@ -126,8 +125,8 @@ def test_azure_registry_model_keeps_reasoning_on_responses_bridge() -> None:
 
 
 def test_forced_none_survives_the_retry_ladder() -> None:
-    """A rejection of another optional kwarg must not strip the required
-    "none" on retry, or the retry fails the way the original request would."""
+    """A rejection of another optional kwarg must not strip the required "none"
+    on retry, or the retry hits the 400 that value exists to avoid."""
     calls: list[dict[str, Any]] = []
 
     def completion(**kwargs: Any) -> Any:

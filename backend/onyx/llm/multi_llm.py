@@ -385,13 +385,13 @@ def _log_azure_responses_api_version_override(
 def _log_chat_completions_tools_disable_reasoning(
     model: str, api_base: str | None
 ) -> None:
-    """Log once per model per process, for the same reason as
-    _log_azure_responses_api_version_override."""
+    """Log once per model and api_base per process, for the same reason as
+    `_log_azure_responses_api_version_override`."""
     logger.warning(
         "%s at %s is reached over chat completions, where GPT-5.4+ cannot "
         "combine function tools with reasoning. Tool-bearing requests send "
-        "reasoning_effort=none; switch the provider to the responses API mode "
-        "to keep reasoning.",
+        "reasoning_effort=none. To keep reasoning, switch the provider to the "
+        "responses API mode or use a model name the registry knows.",
         model,
         api_base,
     )
@@ -669,6 +669,8 @@ class LitellmLLM(LLM):
         #########################
         # Optional kwargs - should only be passed to LiteLLM under certain conditions
         optional_kwargs: dict[str, Any] = {}
+        # Kwargs the provider requires, which the retry ladder must never strip.
+        required_kwarg_keys: frozenset[str] = frozenset()
 
         # Model name
         is_openai_compatible_proxy = self._api_surface in OPENAI_COMPATIBLE_SURFACES
@@ -753,6 +755,23 @@ class LitellmLLM(LLM):
             user_default=self.config.reasoning_effort_user_default,
             maximum=self.config.reasoning_effort_max,
         )
+
+        # Tool turns over chat completions for GPT-5.4+ trade reasoning for a
+        # working call. Responses routes, registry bridge included, are exempt.
+        forces_reasoning_none = (
+            bool(tools)
+            and not is_openai_model
+            and (
+                self._api_surface is LlmApiSurface.OPENAI_CHAT_COMPLETIONS
+                or self._model_provider in OPENAI_API_PROVIDERS
+            )
+            and any(
+                openai_chat_tools_require_reasoning_none(name)
+                for name in model_identity_names
+            )
+        )
+        if forces_reasoning_none:
+            reasoning_effort = ReasoningEffort.OFF
 
         # Note, there is a reasoning_effort parameter in LiteLLM but it is completely jank and does not work for any
         # of the major providers. Not setting it sets it to OFF.
@@ -857,30 +876,11 @@ class LitellmLLM(LLM):
                 else:
                     optional_kwargs["reasoning_effort"] = ReasoningEffort.MEDIUM.value
 
-        # GPT-5.4+ over chat completions accept function tools only with an
-        # explicit reasoning_effort "none" (omitting it fails too), so tool turns
-        # there trade reasoning for a working call. The responses bridge is exempt.
-        # Kwargs the provider requires, which the retry ladder must never strip.
-        required_kwarg_keys: frozenset[str] = frozenset()
-        if (
-            tools
-            and not is_openai_model
-            and (
-                self._api_surface is LlmApiSurface.OPENAI_CHAT_COMPLETIONS
-                or self._model_provider in OPENAI_API_PROVIDERS
-            )
-            and any(
-                openai_chat_tools_require_reasoning_none(name)
-                for name in model_identity_names
-            )
-        ):
-            for key in _REASONING_KWARG_KEYS:
-                optional_kwargs.pop(key, None)
+        if forces_reasoning_none:
             optional_kwargs["reasoning_effort"] = OPENAI_REASONING_EFFORT[
                 ReasoningEffort.OFF
             ]
             required_kwarg_keys = frozenset({"reasoning_effort"})
-            reasoning_effort = ReasoningEffort.OFF
             _log_chat_completions_tools_disable_reasoning(model, self._api_base)
 
         if tools:

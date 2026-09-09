@@ -516,7 +516,7 @@ def openai_chat_variant_rejects_reasoning(model_name: str) -> bool:
 
 # GPT-5.4+ refuse function tools over chat completions unless reasoning_effort
 # is explicitly "none", and omitting it fails the same way. gpt-5.2 and earlier
-# accept any effort. Version-gated so new releases need no code change.
+# accept tools with reasoning. Version-gated so new releases need no code change.
 _OPENAI_CHAT_TOOLS_REQUIRE_REASONING_NONE_MIN_VERSION = (5, 4)
 
 # Tolerates vendor prefixes ("openai.gpt-5.6-sol") and alias suffixes
@@ -527,17 +527,16 @@ _OPENAI_GPT_VERSION_PATTERN = re.compile(r"(?:^|[^a-z0-9])gpt-(\d+)(?:\.(\d+))?"
 
 def parse_openai_gpt_version(model_name: str) -> tuple[int, int] | None:
     """(major, minor) from a GPT model name, None for any other name."""
-    base_model_name = model_name.lower().split("/")[-1]
-    match = _OPENAI_GPT_VERSION_PATTERN.search(base_model_name)
+    match = _OPENAI_GPT_VERSION_PATTERN.search(model_name.lower())
     if match is None:
         return None
     return (int(match.group(1)), int(match.group(2) or 0))
 
 
 def openai_chat_tools_require_reasoning_none(model_name: str) -> bool:
-    """Name-only, like `openai_model_rejects_reasoning_effort`: these names are
-    GPT models wherever they're hosted, and a gateway alias missing from the
-    registry must still match or its tool calls fail outright."""
+    """True for gpt-5.4 and later, by name alone: the names are OpenAI's wherever
+    they're hosted, and a registry-unknown alias must still match or its tool
+    calls fail outright."""
     version = parse_openai_gpt_version(model_name)
     return (
         version is not None

@@ -97,7 +97,7 @@ def test_is_openai_registry_model_name(model_name: str, expected: bool) -> None:
         ("azure/gpt-5.6-sol", (5, 6)),
         ("bedrock_mantle/openai.gpt-5.6-luna", (5, 6)),
         ("gpt-5.6-sol-01-ptu", (5, 6)),
-        # "gpt-" inside another word is not a GPT model
+        # "gpt-" glued to another word, or with no version after it, is not GPT
         ("chatgpt-4o-latest", None),
         ("gpt-oss-120b", None),
         ("claude-sonnet-5", None),
@@ -120,12 +120,9 @@ def test_parse_openai_gpt_version(
         ("gpt-5.4-nano", True),
         ("gpt-5.5", True),
         ("gpt-5.6-sol", True),
-        ("azure/gpt-5.6-sol", True),
-        ("gpt-5.6-sol-01-ptu", True),
         ("gpt-5.2", False),
         ("gpt-5", False),
         ("gpt-4.1", False),
-        ("o3", False),
         ("claude-sonnet-5", False),
     ],
 )
