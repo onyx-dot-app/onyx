@@ -81,42 +81,50 @@ type RowContentProps = {
   padding?: 0 | 0.5 | 1 | 2;
 };
 
+/**
+ * `presentational` and `href` are mutually exclusive. An anchor is a native
+ * control — focusable, activated by Enter — which is exactly what the
+ * presentational mode promises the row will not be.
+ */
+type LineItemButtonModeProps =
+  | {
+      /**
+       * Render the row as plain markup inside another interactive primitive
+       * (e.g. Radix Select.Item, a selectable table row): no button role, no
+       * tab stop, no Enter/Space activation. The row keeps its interactive
+       * palette — drive it with `state` / `selectVariant` / `interaction`
+       * from the owning control. `role`, `tabIndex` and the key handlers
+       * still pass through, so the owner can substitute its own semantics.
+       */
+      presentational: true;
+      href?: never;
+      target?: never;
+    }
+  | ({ presentational?: false } & Pick<
+      InteractiveStatefulProps,
+      "href" | "target"
+    >);
+
 type LineItemButtonOwnProps = Pick<
   InteractiveStatefulProps,
-  | "state"
-  | "interaction"
-  | "onClick"
-  | "href"
-  | "target"
-  | "group"
-  | "ref"
-  | "disabled"
-> & {
-  /** Interactive select variant. @default "select-light" */
-  selectVariant?: "select-light" | "select-heavy";
+  "state" | "interaction" | "onClick" | "group" | "ref" | "disabled"
+> &
+  LineItemButtonModeProps & {
+    /** Interactive select variant. @default "select-light" */
+    selectVariant?: "select-light" | "select-heavy";
 
-  /** Corner rounding step (height is always content-driven). @default 3 */
-  rounding?: Rounding;
+    /** Corner rounding step (height is always content-driven). @default 3 */
+    rounding?: Rounding;
 
-  /** Container width. @default "full" */
-  width?: ExtremaSizeVariants;
+    /** Container width. @default "full" */
+    width?: ExtremaSizeVariants;
 
-  /** Tooltip text shown on hover. */
-  tooltip?: string;
+    /** Tooltip text shown on hover. */
+    tooltip?: string;
 
-  /** Which side the tooltip appears on. @default "top" */
-  tooltipSide?: TooltipSide;
-
-  /**
-   * Render the row as plain markup inside another interactive primitive
-   * (e.g. Radix Select.Item, a selectable table row): no button role, no tab
-   * stop, no Enter/Space activation. The row keeps its interactive palette —
-   * drive it with `state` / `selectVariant` / `interaction` from the owning
-   * control. `role`, `tabIndex` and the key handlers still pass through, so
-   * the owner can substitute its own semantics.
-   */
-  presentational?: boolean;
-};
+    /** Which side the tooltip appears on. @default "top" */
+    tooltipSide?: TooltipSide;
+  };
 
 /**
  * `title` and `color` are omitted from the DOM attributes because the row
@@ -250,7 +258,10 @@ function LineItemButton({
   // control of its own — the primitive that owns it already carries the
   // semantics and the keyboard handling — so the caller's values pass
   // through untouched there too.
-  const rowButtonProps = presentational
+  const rowButtonProps: Pick<
+    React.HTMLAttributes<HTMLDivElement>,
+    "role" | "tabIndex" | "onKeyDown" | "onKeyUp"
+  > = presentational
     ? { role: role ?? "presentation", tabIndex, onKeyDown, onKeyUp }
     : href
       ? { role, tabIndex, onKeyDown, onKeyUp }

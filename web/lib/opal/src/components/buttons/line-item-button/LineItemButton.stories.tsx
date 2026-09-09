@@ -160,7 +160,14 @@ export const UndefinedColorIsNoColor: Story = {
  */
 export const Presentational: Story = {
   render: () => (
-    <div className="flex w-96 flex-col gap-1" role="listbox" aria-label="demo">
+    // tabIndex makes the owner the tab stop — ARIA roles alone add none,
+    // and the presentational rows deliberately have none of their own.
+    <div
+      className="flex w-96 flex-col gap-1"
+      role="listbox"
+      aria-label="demo"
+      tabIndex={0}
+    >
       <div role="option" aria-selected={true}>
         <LineItemButton
           presentational
