@@ -22,19 +22,19 @@ from onyx.connectors.connector_runner import CheckpointOutputWrapper
 from onyx.connectors.models import Document, IndexAttemptMetadata
 from onyx.connectors.zoom.client import ZoomClient
 from onyx.connectors.zoom.connector import ZoomConnector, ZoomConnectorCheckpoint
-from onyx.connectors.zoom.models import (
-    ZoomInvitee,
-    ZoomParticipant,
-    ZoomRegistrant,
-    ZoomSessionOccurrence,
-    ZoomTranscript,
-)
+from onyx.connectors.zoom.models import ZoomSessionOccurrence
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
     get_doc_row,
     make_cc_pair,
+)
+from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
+    invitee,
+    participant,
+    registrant,
+    transcript,
 )
 
 _ZOOM_CREDS = {
@@ -75,22 +75,20 @@ def _zoom_documents(meeting_id: str) -> list[Document]:
             uuid=f"uuid-{meeting_id}", start_time="2026-01-15T10:00:00Z"
         )
     ]
-    client.get_meeting_transcript.return_value = ZoomTranscript(
+    client.get_meeting_transcript.return_value = transcript(
         download_url="https://zoom.us/rec/download/t.vtt", meeting_topic="Weekly Sync"
     )
     client.download_transcript_vtt.return_value = _SAMPLE_VTT
     client.list_past_meeting_participants.return_value = [
-        ZoomParticipant(user_email="attended@example.com"),
+        participant(user_email="attended@example.com"),
         # Zoom blanks the email of anyone outside the host's account.
-        ZoomParticipant(user_email=""),
+        participant(user_email=""),
     ]
     client.list_meeting_registrants.return_value = [
-        ZoomRegistrant(email="approved@example.com", status="approved"),
-        ZoomRegistrant(email="cancelled@example.com", status="denied"),
+        registrant(email="approved@example.com", status="approved"),
+        registrant(email="cancelled@example.com", status="denied"),
     ]
-    client.list_meeting_invitees.return_value = [
-        ZoomInvitee(email="invited@example.com")
-    ]
+    client.list_meeting_invitees.return_value = [invitee(email="invited@example.com")]
     connector.client = client
 
     documents: list[Document] = []

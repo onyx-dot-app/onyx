@@ -15,7 +15,6 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
 )
 from onyx.connectors.zoom.models import (
-    APPROVED_REGISTRANT_STATUS,
     ZOOM_NOT_ENTITLED_CODE,
     ZoomAccessToken,
     ZoomInvitee,
@@ -397,9 +396,9 @@ class ZoomClient:
         parse: Callable[[Any], _AccessRecordT],
         extra_params: dict[str, Any] | None = None,
     ) -> list[_AccessRecordT]:
-        """Drains every page in one go. A 404 or an empty page is a normal answer
-        for these endpoints: Zoom returns nothing for a session with a single
-        attendee, or one where registration was never turned on.
+        """Drains every page in one go. An empty page is a normal answer here:
+        Zoom returns no records for a session where registration was never
+        turned on.
         """
         records: list[_AccessRecordT] = []
         page_token: str | None = None
@@ -413,8 +412,6 @@ class ZoomClient:
                 params["next_page_token"] = page_token
 
             response = request(endpoint, params)
-            if response.status_code == 404:
-                return records
             _raise_for_zoom_error(response, description)
 
             body = response.json()
@@ -452,11 +449,11 @@ class ZoomClient:
             ZoomParticipant.model_validate,
         )
 
-    def list_meeting_registrants(self, meeting_id: str) -> list[ZoomRegistrant]:
+    def list_meeting_registrants(
+        self, meeting_id: str, status: str | None = None
+    ) -> list[ZoomRegistrant]:
         """Registrants belong to the scheduled meeting, not to one occurrence, so
-        a recurring series returns the same list for every run. The status
-        parameter only narrows what Zoom sends, so each record keeps its own
-        status for the caller to check."""
+        a recurring series returns the same list for every run."""
         identifier = _encode_meeting_identifier(meeting_id)
         return self._list_access_pages(
             f"the registrants of meeting {meeting_id}",
@@ -464,10 +461,12 @@ class ZoomClient:
             self._request_meeting,
             "registrants",
             ZoomRegistrant.model_validate,
-            extra_params={"status": APPROVED_REGISTRANT_STATUS},
+            extra_params={"status": status} if status else None,
         )
 
-    def list_webinar_registrants(self, webinar_id: str) -> list[ZoomRegistrant]:
+    def list_webinar_registrants(
+        self, webinar_id: str, status: str | None = None
+    ) -> list[ZoomRegistrant]:
         identifier = _encode_meeting_identifier(webinar_id)
         return self._list_access_pages(
             f"the registrants of webinar {webinar_id}",
@@ -475,7 +474,7 @@ class ZoomClient:
             self._request_webinar,
             "registrants",
             ZoomRegistrant.model_validate,
-            extra_params={"status": APPROVED_REGISTRANT_STATUS},
+            extra_params={"status": status} if status else None,
         )
 
     def list_meeting_invitees(self, meeting_id: str) -> list[ZoomInvitee]:
@@ -486,8 +485,6 @@ class ZoomClient:
         """
         identifier = _encode_meeting_identifier(meeting_id)
         response = self._request("GET", f"/meetings/{identifier}")
-        if response.status_code == 404:
-            return []
         _raise_for_zoom_error(response, f"the details for meeting {meeting_id}")
 
         settings = response.json().get("settings") or {}
@@ -501,8 +498,6 @@ class ZoomClient:
         """
         identifier = _encode_meeting_identifier(webinar_id)
         response = self._request_webinar(f"/webinars/{identifier}/panelists")
-        if response.status_code == 404:
-            return []
         _raise_for_zoom_error(response, f"the panelists of webinar {webinar_id}")
         return [
             ZoomPanelist.model_validate(p) for p in response.json().get("panelists", [])

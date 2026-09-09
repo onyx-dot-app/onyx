@@ -6,7 +6,11 @@ transcript does not: one endpoint serves both, and callers use it directly.
 import abc
 
 from onyx.connectors.zoom.client import ZoomClient
-from onyx.connectors.zoom.models import ZoomSessionDetails, ZoomSessionOccurrence
+from onyx.connectors.zoom.models import (
+    APPROVED_REGISTRANT_STATUS,
+    ZoomSessionDetails,
+    ZoomSessionOccurrence,
+)
 from onyx.connectors.zoom.recordings.access import (
     AccessSource,
     approved_registrant_emails,
@@ -97,7 +101,9 @@ class MeetingSessionType(SessionTypeHandler):
             (
                 f"the registrants of meeting {work.session_id}",
                 lambda: approved_registrant_emails(
-                    client.list_meeting_registrants(work.session_id)
+                    client.list_meeting_registrants(
+                        work.session_id, status=APPROVED_REGISTRANT_STATUS
+                    )
                 ),
             ),
             (
@@ -141,7 +147,9 @@ class WebinarSessionType(SessionTypeHandler):
             (
                 f"the registrants of webinar {work.session_id}",
                 lambda: approved_registrant_emails(
-                    client.list_webinar_registrants(work.session_id)
+                    client.list_webinar_registrants(
+                        work.session_id, status=APPROVED_REGISTRANT_STATUS
+                    )
                 ),
             ),
             (

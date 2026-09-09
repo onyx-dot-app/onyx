@@ -16,11 +16,8 @@ from onyx.connectors.models import (
 from onyx.connectors.zoom.client import ZoomClient
 from onyx.connectors.zoom.connector import ZoomConnector, ZoomConnectorCheckpoint
 from onyx.connectors.zoom.models import (
-    ZoomInvitee,
-    ZoomParticipant,
     ZoomRecordingEntry,
     ZoomRecordingPage,
-    ZoomRegistrant,
     ZoomSessionOccurrence,
     ZoomTranscript,
     ZoomUserPage,
@@ -35,8 +32,11 @@ from tests.unit.onyx.connectors.utils import (
     load_everything_from_checkpoint_connector_from_checkpoint,
 )
 from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
+    invitee,
+    participant,
     past_meeting_details,
     recording_entry,
+    registrant,
     transcript,
     user,
     webinar_details,
@@ -792,15 +792,15 @@ class TestPermissionSyncEntryPoint:
     def _access_configured(self, mock_client: MagicMock) -> None:
         _configure_happy_path(mock_client)
         mock_client.list_past_meeting_participants.return_value = [
-            ZoomParticipant(user_email="attended@example.com"),
-            ZoomParticipant(user_email=""),
+            participant(user_email="attended@example.com"),
+            participant(user_email=""),
         ]
         mock_client.list_meeting_registrants.return_value = [
-            ZoomRegistrant(email="approved@example.com", status="approved"),
-            ZoomRegistrant(email="cancelled@example.com", status="denied"),
+            registrant(email="approved@example.com", status="approved"),
+            registrant(email="cancelled@example.com", status="denied"),
         ]
         mock_client.list_meeting_invitees.return_value = [
-            ZoomInvitee(email="invited@example.com")
+            invitee(email="invited@example.com")
         ]
 
     def test_perm_sync_run_populates_the_access_list(self) -> None:

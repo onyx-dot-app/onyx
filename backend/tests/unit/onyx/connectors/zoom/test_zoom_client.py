@@ -107,6 +107,38 @@ _DOCUMENTED_WEBINAR = {
 }
 
 
+_DOCUMENTED_PARTICIPANT = {
+    "id": "30R7kT7bTIKSNUFEuH_Qlg",
+    "name": "Jill Chill",
+    "user_id": "27423744",
+    "registrant_id": "_f08HhPJS82MIVLuuFaJPg",
+    "user_email": "jchill@example.com",
+    "join_time": "2022-03-23T06:58:09Z",
+    "leave_time": "2022-03-23T07:02:28Z",
+    "duration": 259,
+    "failover": False,
+    "status": "in_meeting",
+    "internal_user": False,
+}
+
+_DOCUMENTED_REGISTRANT = {
+    "id": "9tboDiHUQAeOnbmudzWa5g",
+    "email": "jchill@example.com",
+    "first_name": "Jill",
+    "last_name": "Chill",
+    "status": "approved",
+    "create_time": "2022-03-22T05:59:09Z",
+    "join_url": "https://example.com/j/11111",
+}
+
+_DOCUMENTED_PANELIST = {
+    "id": "Tg2b6GhcQKKbV7nSCbDKug",
+    "email": "jchill@example.com",
+    "name": "Jill Chill",
+    "join_url": "https://example.com/j/11111",
+}
+
+
 def _transcript(**overrides: Any) -> ZoomTranscript:
     """Most fields are required, so a readiness case has to start from a whole
     response rather than the two fields it exercises.
@@ -1038,14 +1070,18 @@ class TestListPastMeetingParticipants:
             _response(
                 200,
                 {
-                    "participants": [{"user_email": "a@example.com"}],
+                    "participants": [
+                        {**_DOCUMENTED_PARTICIPANT, "user_email": "a@example.com"}
+                    ],
                     "next_page_token": "page-2",
                 },
             ),
             _response(
                 200,
                 {
-                    "participants": [{"user_email": "b@example.com"}],
+                    "participants": [
+                        {**_DOCUMENTED_PARTICIPANT, "user_email": "b@example.com"}
+                    ],
                     "next_page_token": "",
                 },
             ),
@@ -1070,7 +1106,7 @@ class TestListPastMeetingParticipants:
         client = _client()
         client._session = MagicMock()
         client._session.request.return_value = _response(
-            200, {"participants": [{"user_email": ""}]}
+            200, {"participants": [{**_DOCUMENTED_PARTICIPANT, "user_email": ""}]}
         )
 
         assert client.list_past_meeting_participants("uuid-abc")[0].user_email == ""
@@ -1083,6 +1119,17 @@ class TestListPastMeetingParticipants:
         client._session.request.return_value = _response(200, {})
 
         assert client.list_past_meeting_participants("uuid-abc") == []
+
+    def test_a_deleted_session_reaches_the_caller_as_a_404(self) -> None:
+        """An empty page means nobody attended, but a 404 means Zoom has no such
+        session. access.py tells those apart, so the client must not answer both
+        with an empty list."""
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(404, {"code": 3001})
+
+        with pytest.raises(requests.HTTPError):
+            client.list_past_meeting_participants("uuid-abc")
 
     def test_the_retention_window_error_reaches_the_caller(self) -> None:
         """Zoom answers 400 with code 12702 once a meeting is out of range. The
@@ -1100,16 +1147,25 @@ class TestListPastMeetingParticipants:
 
 
 class TestListRegistrants:
-    def test_zoom_is_asked_for_approved_registrants_only(self) -> None:
+    def test_the_caller_chooses_which_registrants_zoom_sends(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200, {"registrants": []})
+
+        client.list_meeting_registrants("111", status="approved")
+
+        params = client._session.request.call_args.kwargs["params"]
+        assert params["status"] == "approved"
+        assert params["page_size"] == _MAX_PAGE_SIZE
+
+    def test_no_status_asks_zoom_for_every_registrant(self) -> None:
         client = _client()
         client._session = MagicMock()
         client._session.request.return_value = _response(200, {"registrants": []})
 
         client.list_meeting_registrants("111")
 
-        params = client._session.request.call_args.kwargs["params"]
-        assert params["status"] == "approved"
-        assert params["page_size"] == _MAX_PAGE_SIZE
+        assert "status" not in client._session.request.call_args.kwargs["params"]
 
     def test_the_status_is_kept_on_each_record(self) -> None:
         """access.py decides who a registration grants access to, so it needs
@@ -1120,8 +1176,8 @@ class TestListRegistrants:
             200,
             {
                 "registrants": [
-                    {"email": "a@example.com", "status": "approved"},
-                    {"email": "b@example.com", "status": "denied"},
+                    {**_DOCUMENTED_REGISTRANT, "status": "approved"},
+                    {**_DOCUMENTED_REGISTRANT, "status": "denied"},
                 ]
             },
         )
@@ -1167,12 +1223,15 @@ class TestListMeetingInvitees:
 
         assert client.list_meeting_invitees("111") == []
 
-    def test_a_deleted_meeting_returns_nothing_rather_than_failing(self) -> None:
+    def test_a_deleted_meeting_reaches_the_caller_as_a_404(self) -> None:
+        """Returning an empty list here would read as a meeting nobody was invited
+        to. access.py decides what a meeting Zoom has forgotten means."""
         client = _client()
         client._session = MagicMock()
         client._session.request.return_value = _response(404)
 
-        assert client.list_meeting_invitees("111") == []
+        with pytest.raises(requests.HTTPError):
+            client.list_meeting_invitees("111")
 
 
 class TestListWebinarPanelists:
@@ -1180,7 +1239,8 @@ class TestListWebinarPanelists:
         client = _client()
         client._session = MagicMock()
         client._session.request.return_value = _response(
-            200, {"panelists": [{"email": "speaker@example.com", "name": "Jill"}]}
+            200,
+            {"panelists": [{**_DOCUMENTED_PANELIST, "email": "speaker@example.com"}]},
         )
 
         assert client.list_webinar_panelists("222")[0].email == "speaker@example.com"

@@ -17,6 +17,12 @@ from onyx.connectors.zoom.recordings.access import (
 )
 from onyx.connectors.zoom.recordings.models import OccurrenceWork, ZoomSessionType
 from onyx.connectors.zoom.recordings.session_types import get_session_type_handler
+from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
+    invitee,
+    panelist,
+    participant,
+    registrant,
+)
 
 
 def _work(session_type: ZoomSessionType = ZoomSessionType.MEETING) -> OccurrenceWork:
@@ -67,27 +73,27 @@ class TestAccessListSources:
     hold up with any combination of them missing."""
 
     def test_participants_only(self) -> None:
-        client = _client(participants=[ZoomParticipant(user_email="a@example.com")])
+        client = _client(participants=[participant(user_email="a@example.com")])
 
         assert _resolve(client, _work()) == {"a@example.com"}
 
     def test_registrants_only(self) -> None:
         client = _client(
-            registrants=[ZoomRegistrant(email="b@example.com", status="approved")]
+            registrants=[registrant(email="b@example.com", status="approved")]
         )
 
         assert _resolve(client, _work()) == {"b@example.com"}
 
     def test_invitees_only(self) -> None:
-        client = _client(invitees=[ZoomInvitee(email="c@example.com")])
+        client = _client(invitees=[invitee(email="c@example.com")])
 
         assert _resolve(client, _work()) == {"c@example.com"}
 
     def test_all_sources_are_unioned(self) -> None:
         client = _client(
-            participants=[ZoomParticipant(user_email="a@example.com")],
-            registrants=[ZoomRegistrant(email="b@example.com", status="approved")],
-            invitees=[ZoomInvitee(email="c@example.com")],
+            participants=[participant(user_email="a@example.com")],
+            registrants=[registrant(email="b@example.com", status="approved")],
+            invitees=[invitee(email="c@example.com")],
         )
 
         assert _resolve(client, _work()) == {
@@ -98,22 +104,22 @@ class TestAccessListSources:
 
     def test_the_same_person_in_two_sources_appears_once(self) -> None:
         client = _client(
-            participants=[ZoomParticipant(user_email="same@example.com")],
-            registrants=[ZoomRegistrant(email="same@example.com", status="approved")],
+            participants=[participant(user_email="same@example.com")],
+            registrants=[registrant(email="same@example.com", status="approved")],
         )
 
         assert _resolve(client, _work()) == {"same@example.com"}
 
     def test_addresses_are_lower_cased_to_one_spelling(self) -> None:
         client = _client(
-            participants=[ZoomParticipant(user_email="Jane@Example.com")],
-            registrants=[ZoomRegistrant(email="jane@example.com", status="approved")],
+            participants=[participant(user_email="Jane@Example.com")],
+            registrants=[registrant(email="jane@example.com", status="approved")],
         )
 
         assert _resolve(client, _work()) == {"jane@example.com"}
 
     def test_surrounding_whitespace_is_trimmed(self) -> None:
-        client = _client(participants=[ZoomParticipant(user_email="  a@example.com  ")])
+        client = _client(participants=[participant(user_email="  a@example.com  ")])
 
         assert _resolve(client, _work()) == {"a@example.com"}
 
@@ -125,19 +131,19 @@ class TestCancelledRegistrations:
     def test_a_cancelled_registrant_is_excluded(self) -> None:
         client = _client(
             registrants=[
-                ZoomRegistrant(email="approved@example.com", status="approved"),
-                ZoomRegistrant(email="cancelled@example.com", status="denied"),
-                ZoomRegistrant(email="waiting@example.com", status="pending"),
+                registrant(email="approved@example.com", status="approved"),
+                registrant(email="cancelled@example.com", status="denied"),
+                registrant(email="waiting@example.com", status="pending"),
             ]
         )
 
         assert _resolve(client, _work()) == {"approved@example.com"}
 
     def test_the_status_query_parameter_is_not_trusted_alone(self) -> None:
-        """The client asks Zoom for approved registrants and checks the record
+        """The handler asks Zoom for approved registrants and checks the record
         again, so a denied one is still excluded if Zoom ignores the filter."""
         client = _client(
-            registrants=[ZoomRegistrant(email="denied@example.com", status="denied")]
+            registrants=[registrant(email="denied@example.com", status="denied")]
         )
 
         assert _resolve(client, _work()) is None
@@ -148,8 +154,8 @@ class TestExternalInvitees:
         """Being invited is what grants access, wherever the person works."""
         client = _client(
             invitees=[
-                ZoomInvitee(email="colleague@example.com", internal_user=True),
-                ZoomInvitee(email="outsider@vendor.com", internal_user=False),
+                invitee(email="colleague@example.com", internal_user=True),
+                invitee(email="outsider@vendor.com", internal_user=False),
             ]
         )
 
@@ -166,17 +172,16 @@ class TestBlankEmails:
     def test_blank_emails_are_dropped(self) -> None:
         client = _client(
             participants=[
-                ZoomParticipant(user_email="real@example.com"),
-                ZoomParticipant(user_email=""),
-                ZoomParticipant(user_email=None),
-                ZoomParticipant(user_email="   "),
+                participant(user_email="real@example.com"),
+                participant(user_email=""),
+                participant(user_email="   "),
             ]
         )
 
         assert _resolve(client, _work()) == {"real@example.com"}
 
     def test_all_blank_emails_fall_back_instead_of_hiding_the_document(self) -> None:
-        client = _client(participants=[ZoomParticipant(user_email="")])
+        client = _client(participants=[participant(user_email="")])
 
         # None means no access list, so document-set and group access applies.
         # An empty access list would hide the document from everyone.
@@ -187,7 +192,7 @@ class TestWebinarSources:
     def test_panelists_are_included(self) -> None:
         """A panelist presents without necessarily registering, so without this
         a speaker is missing from the webinar they spoke at."""
-        client = _client(panelists=[ZoomPanelist(email="speaker@example.com")])
+        client = _client(panelists=[panelist(email="speaker@example.com")])
 
         assert _resolve(client, _work(ZoomSessionType.WEBINAR)) == {
             "speaker@example.com"
@@ -195,14 +200,14 @@ class TestWebinarSources:
 
     def test_webinars_never_ask_for_invitees(self) -> None:
         """Zoom has no invitee list on a webinar; asking would 404 every time."""
-        client = _client(participants=[ZoomParticipant(user_email="a@example.com")])
+        client = _client(participants=[participant(user_email="a@example.com")])
 
         _resolve(client, _work(ZoomSessionType.WEBINAR))
 
         client.list_meeting_invitees.assert_not_called()
 
     def test_meetings_never_ask_for_panelists(self) -> None:
-        client = _client(participants=[ZoomParticipant(user_email="a@example.com")])
+        client = _client(participants=[participant(user_email="a@example.com")])
 
         _resolve(client, _work())
 
@@ -215,9 +220,9 @@ class TestGroupsAreNeverAnAccessPrincipal:
         Discovery, and meeting_invitees holds single emails with no group entry
         type, so there is nothing this could ever be filled from."""
         client = _client(
-            participants=[ZoomParticipant(user_email="a@example.com")],
-            registrants=[ZoomRegistrant(email="b@example.com", status="approved")],
-            invitees=[ZoomInvitee(email="c@example.com")],
+            participants=[participant(user_email="a@example.com")],
+            registrants=[registrant(email="b@example.com", status="approved")],
+            invitees=[invitee(email="c@example.com")],
         )
 
         access = zoom_access_resolver(
@@ -249,7 +254,7 @@ class TestPermanentVersusTransientFailures:
         assert permanently_unavailable(error) is True
 
         client = _client(
-            registrants=[ZoomRegistrant(email="b@example.com", status="approved")]
+            registrants=[registrant(email="b@example.com", status="approved")]
         )
         client.list_past_meeting_participants.side_effect = error
 
@@ -282,7 +287,7 @@ class TestPermanentVersusTransientFailures:
         assert permanently_unavailable(error) is True
 
         client = _client(
-            registrants=[ZoomRegistrant(email="b@example.com", status="approved")]
+            registrants=[registrant(email="b@example.com", status="approved")]
         )
         client.list_past_webinar_participants.side_effect = error
 
