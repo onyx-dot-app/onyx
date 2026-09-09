@@ -860,6 +860,8 @@ class LitellmLLM(LLM):
         # GPT-5.4+ over chat completions accept function tools only with an
         # explicit reasoning_effort "none" (omitting it fails too), so tool turns
         # there trade reasoning for a working call. The responses bridge is exempt.
+        # Kwargs the provider requires, which the retry ladder must never strip.
+        required_kwarg_keys: frozenset[str] = frozenset()
         if (
             tools
             and not is_openai_model
@@ -877,6 +879,7 @@ class LitellmLLM(LLM):
             optional_kwargs["reasoning_effort"] = OPENAI_REASONING_EFFORT[
                 ReasoningEffort.OFF
             ]
+            required_kwarg_keys = frozenset({"reasoning_effort"})
             reasoning_effort = ReasoningEffort.OFF
             _log_chat_completions_tools_disable_reasoning(model, self._api_base)
 
@@ -1044,7 +1047,9 @@ class LitellmLLM(LLM):
             attempts = [optional_kwargs]
             for strip_keys in (_REASONING_KWARG_KEYS, _BEST_EFFORT_KWARG_KEYS):
                 stripped = {
-                    k: v for k, v in optional_kwargs.items() if k not in strip_keys
+                    k: v
+                    for k, v in optional_kwargs.items()
+                    if k not in strip_keys or k in required_kwarg_keys
                 }
                 if len(stripped) < len(attempts[-1]):
                     attempts.append(stripped)

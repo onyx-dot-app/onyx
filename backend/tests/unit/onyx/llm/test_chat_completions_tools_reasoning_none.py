@@ -6,6 +6,8 @@ alone."""
 from typing import Any
 from unittest.mock import patch
 
+from litellm.exceptions import BadRequestError
+
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.models import ReasoningEffort, UserMessage
 from onyx.llm.multi_llm import LitellmLLM
@@ -121,3 +123,33 @@ def test_azure_registry_model_keeps_reasoning_on_responses_bridge() -> None:
     assert kwargs["model"] == "azure/responses/gpt-5.6-sol"
     assert kwargs["reasoning"]["effort"] == "medium"
     assert "reasoning_effort" not in kwargs
+
+
+def test_forced_none_survives_the_retry_ladder() -> None:
+    """A rejection of another optional kwarg must not strip the required
+    "none" on retry, or the retry fails the way the original request would."""
+    calls: list[dict[str, Any]] = []
+
+    def completion(**kwargs: Any) -> Any:
+        calls.append(kwargs)
+        if "temperature" in kwargs:
+            raise BadRequestError(
+                message="temperature is not supported", model="m", llm_provider="openai"
+            )
+        return None
+
+    llm = _bifrost_llm("openai/gpt-5.6-sol", BIFROST_API_MODE_CHAT_COMPLETIONS)
+    with patch("onyx.llm.litellm_singleton.litellm.completion", side_effect=completion):
+        llm._completion(
+            prompt=[UserMessage(content="hello")],
+            tools=_TOOLS,
+            tool_choice=None,
+            stream=False,
+            parallel_tool_calls=False,
+            reasoning_effort=ReasoningEffort.AUTO,
+        )
+
+    assert len(calls) == 2
+    assert "temperature" in calls[0] and "temperature" not in calls[1]
+    assert calls[0]["reasoning_effort"] == "none"
+    assert calls[1]["reasoning_effort"] == "none"
