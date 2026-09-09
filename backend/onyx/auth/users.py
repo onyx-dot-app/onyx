@@ -548,6 +548,14 @@ def _upgrade_placeholder_to_web_login__no_commit(
     if user is None:
         return False
 
+    # The caller decided to promote from a read taken before this lock. Confirm
+    # the row is still a placeholder now that it is held: a concurrent login may
+    # have promoted it already, and an admin may have since deactivated the
+    # resulting account. Promoting again would reactivate a disabled account and
+    # re-check a seat that is already taken.
+    if user.account_type.is_web_login():
+        return False
+
     # The row is active once this returns: it already was, or the promotion
     # below reactivates it.
     seat_added = False
