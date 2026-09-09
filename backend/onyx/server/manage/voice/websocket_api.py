@@ -413,7 +413,11 @@ async def _handle_control_message(
     if data.get("type") == "end":
         state.client_ended = True
         logger.info("Streaming transcription: end signal received, closing transcriber")
-        final_transcript = await transcriber.close()
+        # A stalled close raises here, so the handler takes the fallback path
+        # with the recording instead of holding the session open.
+        final_transcript = await asyncio.wait_for(
+            transcriber.close(), timeout=TRANSCRIBER_CLOSE_TIMEOUT_SECONDS
+        )
         state.transcriber_closed = True
         await asyncio.wait({transcript_task}, timeout=TRANSCRIPT_DRAIN_SECONDS)
         transcript_task.cancel()

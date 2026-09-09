@@ -401,3 +401,22 @@ async def test_handlers_honor_a_shared_deadline() -> None:
             client_ended=True,
             deadline=deadline,
         )
+
+
+@pytest.mark.asyncio
+async def test_hanging_close_on_end_signal_falls_back(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A close that stalls on the end signal must hand the recording to the fallback."""
+    monkeypatch.setattr(websocket_api, "TRANSCRIBER_CLOSE_TIMEOUT_SECONDS", 0.05)
+    websocket = AudioThenEndWebSocket(b"\x01\x02")
+
+    async with asyncio.timeout(5):
+        with pytest.raises(StreamingTranscriptionFailed) as failure:
+            await handle_streaming_transcription(
+                cast(Any, websocket), cast(Any, HangingCloseTranscriber())
+            )
+
+    assert failure.value.buffered_audio == b"\x01\x02"
+    assert failure.value.client_ended is True
+    assert websocket.sent_json == []
