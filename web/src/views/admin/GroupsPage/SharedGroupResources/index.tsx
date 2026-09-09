@@ -5,8 +5,8 @@ import { useTranslations } from "next-intl";
 import { SvgEmpty, SvgFiles, SvgXOctagon } from "@opal/icons";
 import { Content } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
-import LineItem from "@/refresh-components/buttons/LineItem";
 import Text from "@/refresh-components/texts/Text";
+import { LineItemButton } from "@opal/components";
 import { Card, Divider } from "@opal/components";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
@@ -169,20 +169,22 @@ function SharedGroupResources({
                 )
               : onCcPairIdsChange([...selectedCcPairIds, p.cc_pair_id]),
           render: (dimmed: boolean) => (
-            <LineItem
-              interactive={false}
-              muted={dimmed}
+            <LineItemButton
+              presentational
+              sizePreset="main-ui"
+              variant="section"
+              color={dimmed ? "muted" : undefined}
               icon={getSourceMetadata(p.connector.source).icon}
-              strokeIcon={false}
+              title={
+                p.name ??
+                t("sharedResources.connectorFallback.label", {
+                  id: p.cc_pair_id,
+                })
+              }
               rightChildren={
                 p.groups.length > 0 || dimmed ? <SharedBadge /> : undefined
               }
-            >
-              {p.name ??
-                t("sharedResources.connectorFallback.label", {
-                  id: p.cc_pair_id,
-                })}
-            </LineItem>
+            />
           ),
         };
       });
@@ -202,16 +204,17 @@ function SharedGroupResources({
                 )
               : onDocSetIdsChange([...selectedDocSetIds, ds.id]),
           render: (dimmed: boolean) => (
-            <LineItem
-              interactive={false}
-              muted={dimmed}
+            <LineItemButton
+              presentational
+              sizePreset="main-ui"
+              variant="section"
+              color={dimmed ? "muted" : undefined}
               icon={SvgFiles}
+              title={ds.name}
               rightChildren={
                 ds.groups.length > 0 || dimmed ? <SharedBadge /> : undefined
               }
-            >
-              {ds.name}
-            </LineItem>
+            />
           ),
         };
       });
@@ -263,17 +266,19 @@ function SharedGroupResources({
               ? onAgentIdsChange(selectedAgentIds.filter((id) => id !== a.id))
               : onAgentIdsChange([...selectedAgentIds, a.id]),
           render: (dimmed: boolean) => (
-            <LineItem
-              interactive={false}
-              muted={dimmed}
+            <LineItemButton
+              presentational
+              sizePreset="main-ui"
+              variant="section"
+              color={dimmed ? "muted" : undefined}
               icon={(_props) => <AgentAvatar agent={a} size={16} />}
+              title={a.name}
               description={t("sharedResources.agent.description")}
+              descriptionMaxLines={1}
               rightChildren={
                 !a.is_public || dimmed ? <SharedBadge /> : undefined
               }
-            >
-              {a.name}
-            </LineItem>
+            />
           ),
         };
       });

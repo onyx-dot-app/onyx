@@ -10,8 +10,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useTranslations } from "next-intl";
-import { Popover, Text } from "@opal/components";
-import LineItem from "@/refresh-components/buttons/LineItem";
+import { LineItemButton, Popover, Text } from "@opal/components";
 import {
   filterPickerSections,
   flattenSections,
@@ -20,7 +19,6 @@ import {
   type PickerSections,
 } from "@/lib/skills/picker";
 import { pickerEntryIcon } from "@/lib/skills/pickerIcons";
-import { cn } from "@opal/utils";
 import type { IconFunctionComponent } from "@opal/types";
 
 interface EntryPickerPopoverProps {
@@ -281,11 +279,15 @@ function SkillRow({
 }: SkillRowProps) {
   return (
     <div className="cursor-pointer">
-      <LineItem
-        interactive={false}
-        selected={selected}
-        emphasized={selected}
+      <LineItemButton
+        presentational
+        sizePreset="main-ui"
+        variant="section"
+        title={`/${slug}`}
+        state={selected ? "selected" : "empty"}
+        selectVariant="select-heavy"
         description={description}
+        descriptionMaxLines={1}
         onMouseEnter={onHover}
         onMouseDown={(e) => {
           e.preventDefault();
@@ -293,9 +295,7 @@ function SkillRow({
         }}
         data-row-index={rowIndex}
         data-testid={`skill-picker-row-${slug}`}
-      >
-        {`/${slug}`}
-      </LineItem>
+      />
     </div>
   );
 }
@@ -327,15 +327,24 @@ function ConnectableRow({
   const unauth = !authenticated;
   return (
     <div className="cursor-pointer">
-      <LineItem
-        interactive={false}
-        selected={selected}
-        emphasized={selected}
+      {/* The logo takes the icon slot rather than riding inside the label,
+          and the unauthenticated dimming becomes the muted colour mode
+          rather than opacity on a hand-rolled span. */}
+      <LineItemButton
+        presentational
+        sizePreset="main-ui"
+        variant="section"
+        icon={Logo}
+        title={name}
+        color={unauth ? "muted" : undefined}
+        state={selected ? "selected" : "empty"}
+        selectVariant="select-heavy"
         description={
           authenticated
             ? t("entryPickerPopover.connectedRow.description")
             : t("entryPickerPopover.connectionRequiredRow.description")
         }
+        descriptionMaxLines={1}
         onMouseEnter={onHover}
         onMouseDown={(e) => {
           e.preventDefault();
@@ -354,17 +363,7 @@ function ConnectableRow({
         }
         data-row-index={rowIndex}
         data-testid={testId}
-      >
-        <span
-          className={cn(
-            "inline-flex items-center gap-2",
-            unauth && "opacity-50"
-          )}
-        >
-          <Logo className="h-4 w-4 shrink-0" />
-          <span>{name}</span>
-        </span>
-      </LineItem>
+      />
     </div>
   );
 }
