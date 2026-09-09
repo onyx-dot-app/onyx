@@ -11183,14 +11183,6 @@
         "tooltip": "Eliminar"
       }
     },
-    "inputFile": {
-      "attachButton": {
-        "ariaLabel": "Adjuntar archivo"
-      },
-      "clearButton": {
-        "ariaLabel": "Quitar archivo"
-      }
-    },
     "inputImage": {
       "dropRejected": {
         "fallback": "Archivo rechazado"
@@ -12811,6 +12803,10 @@
       "showPassword": "Mostrar contraseña",
       "valueCannotBeRevealed": "El valor no se puede mostrar",
       "year": "Año"
+    },
+    "inputFile": {
+      "attachFile": "Adjuntar archivo",
+      "clearFile": "Quitar archivo"
     },
     "pagination": {
       "goToPage": "Ir a la página",

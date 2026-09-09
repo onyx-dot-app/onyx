@@ -11183,14 +11183,6 @@
         "tooltip": "제거"
       }
     },
-    "inputFile": {
-      "attachButton": {
-        "ariaLabel": "파일 첨부"
-      },
-      "clearButton": {
-        "ariaLabel": "파일 지우기"
-      }
-    },
     "inputImage": {
       "dropRejected": {
         "fallback": "파일이 거부되었습니다"
@@ -12811,6 +12803,10 @@
       "showPassword": "비밀번호 표시",
       "valueCannotBeRevealed": "값을 표시할 수 없습니다",
       "year": "년"
+    },
+    "inputFile": {
+      "attachFile": "파일 첨부",
+      "clearFile": "파일 지우기"
     },
     "pagination": {
       "goToPage": "페이지로 이동",

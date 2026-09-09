@@ -1,11 +1,22 @@
 "use client";
 
 import React, { useRef, useState } from "react";
-import { useTranslations } from "next-intl";
-import { InputTypeIn, type InputTypeInProps } from "@opal/components";
-import { Button } from "@opal/components";
-import { noProp } from "@/lib/utils";
+import InputTypeIn, {
+  type InputTypeInProps,
+} from "@opal/components/inputs/input-type-in/components";
+import { Button } from "@opal/components/buttons/button/components";
 import { SvgPaperclip, SvgX } from "@opal/icons";
+import { useOpalStrings } from "@opal/strings";
+
+// Stops the click reaching the input chrome, which would re-open the picker.
+function noProp(
+  f?: (event: React.MouseEvent) => void
+): React.MouseEventHandler {
+  return (event) => {
+    event.stopPropagation();
+    f?.(event);
+  };
+}
 
 export interface InputFileProps extends Omit<
   InputTypeInProps,
@@ -43,7 +54,7 @@ export default function InputFile({
   placeholder,
   ...rest
 }: InputFileProps) {
-  const t = useTranslations("common.inputFile");
+  const strings = useOpalStrings();
   const [displayValue, setDisplayValue] = useState<string>("");
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [isFileMode, setIsFileMode] = useState<boolean>(false);
@@ -131,7 +142,7 @@ export default function InputFile({
       type="button"
       prominence="tertiary"
       size="sm"
-      aria-label={t("clearButton.ariaLabel")}
+      aria-label={strings.clearFile}
     />
   ) : (
     <Button
@@ -141,7 +152,7 @@ export default function InputFile({
       type="button"
       prominence="tertiary"
       size="sm"
-      aria-label={t("attachButton.ariaLabel")}
+      aria-label={strings.attachFile}
     />
   );
 

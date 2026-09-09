@@ -11183,14 +11183,6 @@
         "tooltip": "削除"
       }
     },
-    "inputFile": {
-      "attachButton": {
-        "ariaLabel": "ファイルを添付"
-      },
-      "clearButton": {
-        "ariaLabel": "ファイルをクリア"
-      }
-    },
     "inputImage": {
       "dropRejected": {
         "fallback": "ファイルが拒否されました"
@@ -12811,6 +12803,10 @@
       "showPassword": "パスワードを表示",
       "valueCannotBeRevealed": "値を表示できません",
       "year": "年"
+    },
+    "inputFile": {
+      "attachFile": "ファイルを添付",
+      "clearFile": "ファイルをクリア"
     },
     "pagination": {
       "goToPage": "ページへ移動",

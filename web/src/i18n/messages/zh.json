@@ -11183,14 +11183,6 @@
         "tooltip": "移除"
       }
     },
-    "inputFile": {
-      "attachButton": {
-        "ariaLabel": "附加文件"
-      },
-      "clearButton": {
-        "ariaLabel": "清除文件"
-      }
-    },
     "inputImage": {
       "dropRejected": {
         "fallback": "文件被拒绝"
@@ -12811,6 +12803,10 @@
       "showPassword": "显示密码",
       "valueCannotBeRevealed": "无法显示该值",
       "year": "年"
+    },
+    "inputFile": {
+      "attachFile": "附加文件",
+      "clearFile": "清除文件"
     },
     "pagination": {
       "goToPage": "跳转到页面",

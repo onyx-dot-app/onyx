@@ -13,6 +13,8 @@ export type OpalStrings = {
   copied: string;
   copyCode: string;
   clear: string;
+  attachFile: string;
+  clearFile: string;
   clearFilter: string;
   date: string;
   time: string;
@@ -72,6 +74,8 @@ export const defaultOpalStrings: OpalStrings = {
   copied: "Copied!",
   copyCode: "Copy code",
   clear: "Clear",
+  attachFile: "Attach file",
+  clearFile: "Clear file",
   clearFilter: "Clear filter",
   date: "Date",
   time: "Time",

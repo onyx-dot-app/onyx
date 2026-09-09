@@ -11183,14 +11183,6 @@
         "tooltip": "إزالة"
       }
     },
-    "inputFile": {
-      "attachButton": {
-        "ariaLabel": "إرفاق ملف"
-      },
-      "clearButton": {
-        "ariaLabel": "مسح الملف"
-      }
-    },
     "inputImage": {
       "dropRejected": {
         "fallback": "تم رفض الملف"
@@ -12811,6 +12803,10 @@
       "showPassword": "إظهار كلمة المرور",
       "valueCannotBeRevealed": "لا يمكن إظهار القيمة",
       "year": "السنة"
+    },
+    "inputFile": {
+      "attachFile": "إرفاق ملف",
+      "clearFile": "مسح الملف"
     },
     "pagination": {
       "goToPage": "الانتقال إلى صفحة",

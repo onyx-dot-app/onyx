@@ -11183,14 +11183,6 @@
         "tooltip": "Entfernen"
       }
     },
-    "inputFile": {
-      "attachButton": {
-        "ariaLabel": "Datei anhängen"
-      },
-      "clearButton": {
-        "ariaLabel": "Datei entfernen"
-      }
-    },
     "inputImage": {
       "dropRejected": {
         "fallback": "Datei abgelehnt"
@@ -12811,6 +12803,10 @@
       "showPassword": "Passwort anzeigen",
       "valueCannotBeRevealed": "Wert kann nicht angezeigt werden",
       "year": "Jahr"
+    },
+    "inputFile": {
+      "attachFile": "Datei anhängen",
+      "clearFile": "Datei entfernen"
     },
     "pagination": {
       "goToPage": "Zu Seite springen",

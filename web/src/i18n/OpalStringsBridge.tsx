@@ -26,6 +26,8 @@ export default function OpalStringsBridge({
       copied: t("common.copied"),
       copyCode: t("common.copyCode"),
       clear: t("common.clear"),
+      attachFile: t("inputFile.attachFile"),
+      clearFile: t("inputFile.clearFile"),
       clearFilter: t("common.clearFilter"),
       date: t("common.date"),
       time: t("common.time"),

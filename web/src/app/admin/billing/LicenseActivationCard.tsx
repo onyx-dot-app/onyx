@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Button, Card } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import InputFile from "@/refresh-components/inputs/InputFile";
+import { InputFile } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { InputVertical } from "@opal/layouts";
 import { SvgXCircle, SvgCheckCircle, SvgXOctagon } from "@opal/icons";
