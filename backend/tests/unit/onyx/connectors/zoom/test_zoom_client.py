@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 
 import pytest
 import requests
+from pydantic import ValidationError
 from requests.adapters import HTTPAdapter
 
 from onyx.connectors.exceptions import (
@@ -26,13 +27,42 @@ _ZOOM_DOWNLOAD_URL = "https://zoom.us/rec/download/abc.vtt"
 # once even though their field docs say that cannot happen.
 _DOCUMENTED_TRANSCRIPT = {
     "meeting_id": "uaFkQyFCSwya8iNYtkAw3A==",
+    "account_id": "Cx3wERazSgup7ZWRHQM8-w",
     "meeting_topic": "My Personal Meeting",
     "host_id": "_0ctZtY0REqWalTmwvrdIw",
     "transcript_created_time": "2025-06-27T13:48:24Z",
     "can_download": True,
+    "auto_delete": True,
+    "auto_delete_date": "2052-11-07",
     "download_url": "https://zoom.example/t.vtt",
     "download_restriction_reason": "NOT_READY",
 }
+
+
+_DOCUMENTED_PAST_MEETING = {
+    "id": 5638296721,
+    "uuid": "4444AAAiAAAAAiAiAiiAii==",
+    "duration": 60,
+    "start_time": "2021-07-13T21:44:51Z",
+    "end_time": "2021-07-13T23:00:51Z",
+    "host_id": "x1yCzABCDEfg23HiJKl4mN",
+    "dept": "Developers",
+    "participants_count": 2,
+    "source": "Zoom",
+    "topic": "My Meeting",
+    "total_minutes": 55,
+    "type": 1,
+    "user_email": "jchill@example.com",
+    "user_name": "Jill Chill",
+    "has_meeting_summary": False,
+}
+
+
+def _transcript(**overrides: Any) -> ZoomTranscript:
+    """Most fields are required, so a readiness case has to start from a whole
+    response rather than the two fields it exercises.
+    """
+    return ZoomTranscript.model_validate({**_DOCUMENTED_TRANSCRIPT, **overrides})
 
 
 def _response(
@@ -260,6 +290,18 @@ class TestGetMeetingTranscript:
         assert transcript.host_id == "_0ctZtY0REqWalTmwvrdIw"
         assert transcript.transcript_created_time == "2025-06-27T13:48:24Z"
 
+    def test_keeps_every_documented_field(self) -> None:
+        # Nothing reads account_id or the auto-delete pair yet, so without this
+        # test they look like dead fields someone can safely delete.
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200, _DOCUMENTED_TRANSCRIPT)
+
+        transcript = client.get_meeting_transcript("111")
+
+        assert transcript is not None
+        assert transcript.model_dump() == _DOCUMENTED_TRANSCRIPT
+
     def test_404_means_never_recorded_not_an_error(self) -> None:
         client = _client()
         client._session = MagicMock()
@@ -270,7 +312,7 @@ class TestGetMeetingTranscript:
     def test_identifier_is_encoded_into_the_path(self) -> None:
         client = _client()
         client._session = MagicMock()
-        client._session.request.return_value = _response(200, {})
+        client._session.request.return_value = _response(200, _DOCUMENTED_TRANSCRIPT)
 
         client.get_meeting_transcript("ab/cd==")
 
@@ -283,15 +325,37 @@ class TestGetPastMeetingDetails:
     def test_parses_the_response(self) -> None:
         client = _client()
         client._session = MagicMock()
-        client._session.request.return_value = _response(
-            200, {"topic": "Weekly Sync", "start_time": "2026-01-15T10:00:00Z"}
-        )
+        client._session.request.return_value = _response(200, _DOCUMENTED_PAST_MEETING)
 
         details = client.get_past_meeting_details("111")
 
         assert details is not None
-        assert details.topic == "Weekly Sync"
-        assert details.start_time == "2026-01-15T10:00:00Z"
+        assert details.topic == "My Meeting"
+        assert details.start_time == "2021-07-13T21:44:51Z"
+
+    def test_keeps_every_documented_field(self) -> None:
+        # Nothing reads most of these yet, so without this test they look like
+        # dead fields someone can safely delete.
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200, _DOCUMENTED_PAST_MEETING)
+
+        details = client.get_past_meeting_details("111")
+
+        assert details is not None
+        assert details.model_dump() == _DOCUMENTED_PAST_MEETING
+
+    def test_an_undocumented_shape_fails_here_not_in_the_connector(self) -> None:
+        # Zoom documents every field on this response as always sent. If that is
+        # wrong, the client has to say so rather than pass a None downstream.
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            200, {k: v for k, v in _DOCUMENTED_PAST_MEETING.items() if k != "dept"}
+        )
+
+        with pytest.raises(ValidationError):
+            client.get_past_meeting_details("111")
 
     def test_404_returns_none(self) -> None:
         client = _client()
@@ -417,23 +481,28 @@ class TestTranscriptReadiness:
         assert transcript.is_downloadable is False
 
     def test_ready_when_nothing_objects(self) -> None:
-        transcript = ZoomTranscript(can_download=True, download_url=_ZOOM_DOWNLOAD_URL)
-
-        assert transcript.is_downloadable is True
-
-    def test_a_missing_can_download_still_counts_as_ready(self) -> None:
-        # The field is absent on older responses, and reading absent as a refusal
-        # would index nothing at all.
-        transcript = ZoomTranscript(download_url=_ZOOM_DOWNLOAD_URL)
+        transcript = _transcript(
+            can_download=True,
+            download_url=_ZOOM_DOWNLOAD_URL,
+            download_restriction_reason=None,
+        )
 
         assert transcript.is_downloadable is True
 
     @pytest.mark.parametrize(
         "transcript",
         [
-            ZoomTranscript(can_download=False, download_url=_ZOOM_DOWNLOAD_URL),
-            ZoomTranscript(can_download=True, download_url=None),
-            ZoomTranscript(
+            _transcript(
+                can_download=False,
+                download_url=_ZOOM_DOWNLOAD_URL,
+                download_restriction_reason=None,
+            ),
+            _transcript(
+                can_download=True,
+                download_url=None,
+                download_restriction_reason=None,
+            ),
+            _transcript(
                 can_download=True,
                 download_url=_ZOOM_DOWNLOAD_URL,
                 download_restriction_reason="DELETED_OR_TRASHED",
