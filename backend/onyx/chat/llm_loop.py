@@ -37,7 +37,10 @@ from onyx.chat.prompt_utils import (
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.chat_configs import MAX_LLM_CYCLES
 from onyx.configs.constants import DocumentSource, MessageType
-from onyx.configs.model_configs import GEN_AI_INPUT_TOKEN_SAFETY_MARGIN
+from onyx.configs.model_configs import (
+    GEN_AI_INPUT_TOKEN_SAFETY_MARGIN,
+    GEN_AI_NUM_RESERVED_OUTPUT_TOKENS,
+)
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.memory import UserMemoryContext, add_memory, update_memory_at_index
@@ -46,7 +49,12 @@ from onyx.file_store.models import ChatFileType
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.exceptions import ClassifiedLLMError
 from onyx.llm.interfaces import LLM, LLMUserIdentity, ToolChoiceOptions
-from onyx.llm.model_capabilities import is_true_openai_model
+from onyx.llm.model_capabilities import (
+    get_model_map,
+    is_true_openai_model,
+    llm_max_output_tokens_or_none,
+    model_identity_names,
+)
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.utils import model_supports_image_input
 from onyx.prompts.chat_prompts import (
@@ -375,6 +383,39 @@ def _build_project_message(
             )
         )
     return messages
+
+
+def resolve_model_max_output_tokens(llm: LLM) -> int | None:
+    """Output maximum of the selected model from LiteLLM metadata, or None."""
+    model_map = get_model_map()
+    for name in model_identity_names(llm.config.model_name, llm.config.deployment_name):
+        max_output = llm_max_output_tokens_or_none(
+            model_map, name, llm.config.model_provider
+        )
+        if max_output is not None:
+            return max_output
+    return None
+
+
+def compute_output_allowance(
+    model_max_output_tokens: int | None,
+    input_token_limit: int,
+    estimated_input_tokens: int,
+) -> int | None:
+    """Per-call `max_tokens` after the input is assembled.
+
+    Uses the model's output maximum, clamped to the room left under the
+    input limit so prompt + output stays inside the context window. This is
+    distinct from input planning: the input budget only holds back the
+    established reserve, so evidence is not evicted to guarantee the full
+    output maximum. Returns None (provider default) when the model output
+    maximum is unknown.
+    """
+    if model_max_output_tokens is None:
+        return None
+    room = input_token_limit - estimated_input_tokens
+    floor = min(model_max_output_tokens, GEN_AI_NUM_RESERVED_OUTPUT_TOKENS)
+    return max(min(model_max_output_tokens, room), floor)
 
 
 def construct_message_history(
@@ -813,6 +854,7 @@ def run_llm_loop(
         available_tokens = int(
             llm.config.max_input_tokens * (1 - GEN_AI_INPUT_TOKEN_SAFETY_MARGIN)
         )
+        model_max_output_tokens = resolve_model_max_output_tokens(llm)
         # When the model takes no image input, history images are replayed as
         # short text markers (translate_history_to_llm_format) — budget them
         # as markers too, not at their stored image token cost.
@@ -1034,6 +1076,15 @@ def run_llm_loop(
                 image_files_replayed_as_markers=image_files_replayed_as_markers,
             )
 
+            # Output room is what the assembled input leaves under the limit;
+            # image markers are counted at stored cost, which only undercounts room.
+            max_output_tokens = compute_output_allowance(
+                model_max_output_tokens=model_max_output_tokens,
+                input_token_limit=llm.config.max_input_tokens,
+                estimated_input_tokens=tool_token_budget
+                + sum(msg.token_count for msg in truncated_message_history),
+            )
+
             # This calls the LLM, yields packets (reasoning, answers, etc.) and returns the result
             # It also pre-processes the tool calls in preparation for running them
             tool_defs = [tool.tool_definition() for tool in final_tools]
@@ -1058,6 +1109,7 @@ def run_llm_loop(
                 user_identity=user_identity,
                 pre_answer_processing_time=pre_answer_processing_time,
                 reasoning_effort=reasoning_effort,
+                max_tokens=max_output_tokens,
             )
             if has_reasoned:
                 reasoning_cycles += 1
