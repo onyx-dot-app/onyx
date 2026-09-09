@@ -20,6 +20,7 @@ import LineItem from "@/refresh-components/buttons/LineItem";
 import { ShadowDiv } from "@opal/components";
 import { cn } from "@opal/utils";
 import { Section } from "@/layouts/general-layouts";
+import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 
 interface ApiKeyFormModalProps {
   onClose: () => void;
@@ -64,14 +65,14 @@ export default function ApiKeyFormModal({
         />
         <Formik
           initialValues={{
-            name: apiKey?.api_key_name || "",
+            service_account_name: apiKey?.api_key_name || "",
             group_ids: apiKey?.groups.map((g) => g.id) || ([] as number[]),
           }}
           onSubmit={async (values, formikHelpers) => {
             formikHelpers.setSubmitting(true);
 
             const payload = {
-              name: values.name || undefined,
+              name: values.service_account_name || undefined,
               group_ids: values.group_ids,
             };
 
@@ -132,18 +133,17 @@ export default function ApiKeyFormModal({
               <Form className="w-full overflow-visible">
                 <Modal.Body>
                   <InputVertical
-                    withLabel="name"
+                    withLabel="service_account_name"
                     title={t("formModal.name.title")}
                   >
-                    <FormikField<string>
-                      name="name"
-                      render={(field) => (
-                        <InputTypeIn
-                          {...field}
-                          placeholder={t("formModal.name.placeholder")}
-                          clearButton
-                        />
-                      )}
+                    {/* The field key doubles as the input's DOM name and id,
+                        and name="name" reads as a contact-name field to
+                        browser autofill (Safari suggests contacts). */}
+                    <InputTypeInField
+                      name="service_account_name"
+                      autoComplete="off"
+                      placeholder={t("formModal.name.placeholder")}
+                      clearButton
                     />
                   </InputVertical>
 
@@ -282,7 +282,9 @@ export default function ApiKeyFormModal({
                     {t("formModal.cancelButton.label")}
                   </Button>
                   <Button
-                    disabled={isSubmitting || !values.name.trim()}
+                    disabled={
+                      isSubmitting || !values.service_account_name.trim()
+                    }
                     type="submit"
                   >
                     {isUpdate
