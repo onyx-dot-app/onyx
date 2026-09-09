@@ -16,7 +16,7 @@ from onyx.llm.well_known_providers.constants import (
     BIFROST_API_MODE_RESPONSES,
 )
 
-_TOOLS = [
+_TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
