@@ -22,8 +22,7 @@ import {
   SelectorFormField,
   Label,
 } from "@/components/Field";
-import { InputTags } from "@opal/components";
-import { Button, Text } from "@opal/components";
+import { Button, InputTags, Text } from "@opal/components";
 
 function mapKeywordSelectToMatchAny(keywordSelect: "any" | "all"): boolean {
   return keywordSelect == "any";

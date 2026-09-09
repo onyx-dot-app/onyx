@@ -2,10 +2,15 @@
 
 import { ChangeEvent, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button, LineItemButton, Tag, Text } from "@opal/components";
+import {
+  Button,
+  InputTypeIn,
+  LineItemButton,
+  Tag,
+  Text,
+} from "@opal/components";
 import { SvgBubbleText, SvgEdit, SvgUser, SvgUsers, SvgX } from "@opal/icons";
 import { cn } from "@opal/utils";
-import { InputTypeIn } from "@opal/components";
 import type { MinimalUserSnapshot } from "@/lib/types";
 import type { MinimalUserGroupSnapshot } from "@/hooks/useShareableGroups";
 import {

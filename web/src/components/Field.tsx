@@ -26,13 +26,19 @@ import ReactMarkdown from "react-markdown";
 import { FaMarkdown } from "react-icons/fa";
 import { useState, useEffect, memo, JSX } from "react";
 import remarkGfm from "remark-gfm";
-import { Button, Checkbox } from "@opal/components";
+import {
+  Button,
+  Checkbox,
+  InputDatePicker,
+  InputTextArea,
+  type InputTextAreaProps,
+  Tooltip,
+} from "@opal/components";
 
 import { Section } from "@/layouts/general-layouts";
 import { transformLinkUri } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import FileInput from "@/app/admin/connectors/[connector]/pages/ConnectorInput/FileInput";
-import { InputDatePicker } from "@opal/components";
 import { RichTextSubtext } from "./RichTextSubtext";
 import {
   TypedFile,
@@ -42,11 +48,6 @@ import {
 } from "@/lib/connectors/fileTypes";
 import Text from "@/refresh-components/texts/Text";
 
-import {
-  InputTextArea,
-  type InputTextAreaProps,
-  Tooltip,
-} from "@opal/components";
 import { SvgEye, SvgEyeClosed, SvgPlusCircle } from "@opal/icons";
 
 export function SectionHeader({

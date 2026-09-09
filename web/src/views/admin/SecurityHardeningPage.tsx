@@ -10,7 +10,6 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import InputNumber from "@/refresh-components/inputs/InputNumber";
-import { InputTags, type TagItem } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import {
   Content,
@@ -20,7 +19,14 @@ import {
   SettingsLayouts,
   toast,
 } from "@opal/layouts";
-import { Card, InputTypeIn, Switch, Text } from "@opal/components";
+import {
+  Card,
+  InputTags,
+  InputTypeIn,
+  Switch,
+  Text,
+  type TagItem,
+} from "@opal/components";
 import { markdown } from "@opal/utils";
 import { useSettings } from "@/lib/settings/hooks";
 import { Settings, toSettings } from "@/lib/settings/types";

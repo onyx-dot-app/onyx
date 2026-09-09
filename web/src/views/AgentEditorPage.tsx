@@ -16,6 +16,7 @@ import {
   PopoverMenu,
   Tooltip,
   useCreateModal,
+  InputTags,
 } from "@opal/components";
 import { Hoverable, Disabled } from "@opal/core";
 import { FullAgent, PersonaSharingStatus } from "@/lib/agents/types";
@@ -79,7 +80,6 @@ import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import SquareButton from "@/refresh-components/buttons/SquareButton";
 import { useAgents, useAgentLabels } from "@/lib/agents/hooks";
 import { createAgent, updateAgent } from "@/lib/agents/svc";
-import { InputTags } from "@opal/components";
 import { AgentUpsertParameters } from "@/lib/agents/types";
 import { useMcpServersForAgent } from "@/lib/tools/hooks";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
