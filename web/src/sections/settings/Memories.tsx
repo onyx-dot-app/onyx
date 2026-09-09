@@ -31,6 +31,9 @@ export default function Memories({ memories, onSaveMemories }: MemoriesProps) {
           border="dashed"
           padding={2}
           rounding={3}
+          // Keep the card visually engaged while the modal it opened is up —
+          // the same treatment OpenButton and Divider give their popovers.
+          interaction={memoriesModal.isOpen ? "hover" : "rest"}
           onClick={() => {
             setTargetMemoryId(null);
             memoriesModal.toggle(true);
