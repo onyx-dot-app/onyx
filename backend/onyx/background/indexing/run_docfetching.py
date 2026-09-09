@@ -9,7 +9,10 @@ import sentry_sdk
 from celery import Celery
 from sqlalchemy.orm import Session
 
-from onyx.access.access import source_should_fetch_permissions_during_indexing
+from onyx.access.access import (
+    source_should_fetch_permissions_during_indexing,
+    source_should_sync_on_every_index,
+)
 from onyx.background.indexing.checkpointing_utils import (
     check_checkpoint_size,
     get_latest_valid_checkpoint,
@@ -528,8 +531,14 @@ def connector_document_extraction(
             and source_should_fetch_permissions_during_indexing(db_connector.source)
             and is_primary
             # if we've already successfully indexed, let the doc_sync job
-            # take care of doc-level permissions
-            and (from_beginning or not has_successful_attempt)
+            # take care of doc-level permissions. Sources that opt out set
+            # permissions as they discover each document, and doc_sync never
+            # recomputes them.
+            and (
+                from_beginning
+                or not has_successful_attempt
+                or source_should_sync_on_every_index(db_connector.source)
+            )
         )
 
         # Set up time windows for polling. A port-flow FUTURE's resume cursor comes from its

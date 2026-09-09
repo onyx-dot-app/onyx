@@ -56,8 +56,14 @@ def _client_with_transcript() -> MagicMock:
     return client
 
 
-def _run(client: MagicMock, work: OccurrenceWork) -> list[Document | ConnectorFailure]:
-    return list(process_occurrence(client, work))
+def _run(
+    client: MagicMock,
+    work: OccurrenceWork,
+    include_access: bool = False,
+) -> list[Document | ConnectorFailure]:
+    """Leaves the access list off by default: these tests are about transcripts,
+    and access lists have their own file."""
+    return list(process_occurrence(client, work, include_access=include_access))
 
 
 def _http_error(status: int) -> requests.HTTPError:

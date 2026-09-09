@@ -18,6 +18,7 @@ from onyx.connectors.zoom.client import (
     _MAX_PAGE_SIZE,
     _OAUTH_TOKEN_URL,
     ZoomClient,
+    ZoomNotEntitledError,
     _encode_meeting_identifier,
     _reject_non_zoom_download_url,
 )
@@ -103,6 +104,38 @@ _DOCUMENTED_WEBINAR = {
     "recurrence": {"type": 1, "repeat_interval": 1},
     "settings": {"approval_type": 0, "auto_recording": "cloud"},
     "tracking_fields": [{"field": "field1", "value": "value1"}],
+}
+
+
+_DOCUMENTED_PARTICIPANT = {
+    "id": "30R7kT7bTIKSNUFEuH_Qlg",
+    "name": "Jill Chill",
+    "user_id": "27423744",
+    "registrant_id": "_f08HhPJS82MIVLuuFaJPg",
+    "user_email": "jchill@example.com",
+    "join_time": "2022-03-23T06:58:09Z",
+    "leave_time": "2022-03-23T07:02:28Z",
+    "duration": 259,
+    "failover": False,
+    "status": "in_meeting",
+    "internal_user": False,
+}
+
+_DOCUMENTED_REGISTRANT = {
+    "id": "9tboDiHUQAeOnbmudzWa5g",
+    "email": "jchill@example.com",
+    "first_name": "Jill",
+    "last_name": "Chill",
+    "status": "approved",
+    "create_time": "2022-03-22T05:59:09Z",
+    "join_url": "https://example.com/j/11111",
+}
+
+_DOCUMENTED_PANELIST = {
+    "id": "Tg2b6GhcQKKbV7nSCbDKug",
+    "email": "jchill@example.com",
+    "name": "Jill Chill",
+    "join_url": "https://example.com/j/11111",
 }
 
 
@@ -1025,3 +1058,213 @@ class TestDownloadRedirects:
 
         assert client.download_transcript_vtt(_ZOOM_DOWNLOAD_URL) == "WEBVTT\n"
         assert safe_get.call_args.args[0] == "https://zoom.us/rec/other.vtt"
+
+
+class TestListPastMeetingParticipants:
+    def test_pages_are_joined_into_one_list(self) -> None:
+        """A next_page_token dies 15 minutes after Zoom issues it, so the whole
+        list is paged in one call rather than resumed later."""
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.side_effect = [
+            _response(
+                200,
+                {
+                    "participants": [
+                        {**_DOCUMENTED_PARTICIPANT, "user_email": "a@example.com"}
+                    ],
+                    "next_page_token": "page-2",
+                },
+            ),
+            _response(
+                200,
+                {
+                    "participants": [
+                        {**_DOCUMENTED_PARTICIPANT, "user_email": "b@example.com"}
+                    ],
+                    "next_page_token": "",
+                },
+            ),
+        ]
+
+        participants = client.list_past_meeting_participants("uuid-abc")
+
+        assert [p.user_email for p in participants] == [
+            "a@example.com",
+            "b@example.com",
+        ]
+        assert (
+            client._session.request.call_args_list[1].kwargs["params"][
+                "next_page_token"
+            ]
+            == "page-2"
+        )
+
+    def test_a_blank_email_survives_as_far_as_the_model(self) -> None:
+        """Zoom empties this for anyone outside the host's account. Dropping it
+        here would hide how many people were lost."""
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            200, {"participants": [{**_DOCUMENTED_PARTICIPANT, "user_email": ""}]}
+        )
+
+        assert client.list_past_meeting_participants("uuid-abc")[0].user_email == ""
+
+    def test_a_session_with_one_attendee_returns_nothing_rather_than_failing(
+        self,
+    ) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200, {})
+
+        assert client.list_past_meeting_participants("uuid-abc") == []
+
+    def test_a_deleted_session_reaches_the_caller_as_a_404(self) -> None:
+        """An empty page means nobody attended, but a 404 means Zoom has no such
+        session. access.py tells those apart, so the client must not answer both
+        with an empty list."""
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(404, {"code": 3001})
+
+        with pytest.raises(requests.HTTPError):
+            client.list_past_meeting_participants("uuid-abc")
+
+    def test_the_retention_window_error_reaches_the_caller(self) -> None:
+        """Zoom answers 400 with code 12702 once a meeting is out of range. The
+        access layer turns that into "no data"; the client must not hide it."""
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            400, {"code": 12702, "message": "Can not access a meeting a year ago."}
+        )
+
+        with pytest.raises(requests.HTTPError) as caught:
+            client.list_past_meeting_participants("uuid-abc")
+
+        assert "12702" in str(caught.value)
+
+
+class TestListRegistrants:
+    def test_the_caller_chooses_which_registrants_zoom_sends(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200, {"registrants": []})
+
+        client.list_meeting_registrants("111", status="approved")
+
+        params = client._session.request.call_args.kwargs["params"]
+        assert params["status"] == "approved"
+        assert params["page_size"] == _MAX_PAGE_SIZE
+
+    def test_no_status_asks_zoom_for_every_registrant(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200, {"registrants": []})
+
+        client.list_meeting_registrants("111")
+
+        assert "status" not in client._session.request.call_args.kwargs["params"]
+
+    def test_the_status_is_kept_on_each_record(self) -> None:
+        """access.py decides who a registration grants access to, so it needs
+        the status even though Zoom was asked to filter."""
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            200,
+            {
+                "registrants": [
+                    {**_DOCUMENTED_REGISTRANT, "status": "approved"},
+                    {**_DOCUMENTED_REGISTRANT, "status": "denied"},
+                ]
+            },
+        )
+
+        registrants = client.list_meeting_registrants("111")
+
+        assert [r.status for r in registrants] == ["approved", "denied"]
+
+    def test_registration_being_off_returns_nothing(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200, {"registrants": []})
+
+        assert client.list_meeting_registrants("111") == []
+
+
+class TestListMeetingInvitees:
+    def test_invitees_are_read_out_of_the_settings_block(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            200,
+            {
+                "settings": {
+                    "meeting_invitees": [
+                        {"email": "a@example.com", "internal_user": True},
+                        {"email": "b@example.com", "internal_user": False},
+                    ]
+                }
+            },
+        )
+
+        invitees = client.list_meeting_invitees("111")
+
+        assert [i.email for i in invitees] == ["a@example.com", "b@example.com"]
+        assert [i.internal_user for i in invitees] == [True, False]
+
+    def test_an_ad_hoc_meeting_has_no_invitees(self) -> None:
+        """An instant meeting was never scheduled, so there is no invite list."""
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200, {"settings": {}})
+
+        assert client.list_meeting_invitees("111") == []
+
+    def test_a_deleted_meeting_reaches_the_caller_as_a_404(self) -> None:
+        """Returning an empty list here would read as a meeting nobody was invited
+        to. access.py decides what a meeting Zoom has forgotten means."""
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(404)
+
+        with pytest.raises(requests.HTTPError):
+            client.list_meeting_invitees("111")
+
+
+class TestListWebinarPanelists:
+    def test_panelists_are_returned(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            200,
+            {"panelists": [{**_DOCUMENTED_PANELIST, "email": "speaker@example.com"}]},
+        )
+
+        assert client.list_webinar_panelists("222")[0].email == "speaker@example.com"
+
+    def test_a_missing_webinar_addon_raises_the_entitlement_type(self) -> None:
+        """Zoom sends this as a 400, not a 403. It gets its own type so callers
+        can carry on without the data, unlike a missing scope."""
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            400, {"code": 200, "message": "Webinar plan is missing."}
+        )
+
+        with pytest.raises(ZoomNotEntitledError) as caught:
+            client.list_webinar_panelists("222")
+
+        assert "Webinar add-on" in str(caught.value)
+
+    def test_a_missing_scope_stays_a_plain_permissions_error(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(403)
+
+        with pytest.raises(InsufficientPermissionsError) as caught:
+            client.list_webinar_panelists("222")
+
+        assert not isinstance(caught.value, ZoomNotEntitledError)

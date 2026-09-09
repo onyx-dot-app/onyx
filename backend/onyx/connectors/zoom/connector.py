@@ -12,7 +12,7 @@ from pydantic import Field
 
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import (
-    CheckpointedConnector,
+    CheckpointedConnectorWithPermSync,
     CheckpointOutput,
     SecondsSinceUnixEpoch,
 )
@@ -33,7 +33,7 @@ class ZoomConnectorCheckpoint(ConnectorCheckpoint):
     recordings: RecordingsState = Field(default_factory=RecordingsState)
 
 
-class ZoomConnector(CheckpointedConnector[ZoomConnectorCheckpoint]):
+class ZoomConnector(CheckpointedConnectorWithPermSync[ZoomConnectorCheckpoint]):
     def __init__(
         self,
         meeting_ids: list[str] | None = None,
@@ -79,6 +79,27 @@ class ZoomConnector(CheckpointedConnector[ZoomConnectorCheckpoint]):
         end: SecondsSinceUnixEpoch,
         checkpoint: ZoomConnectorCheckpoint,
     ) -> CheckpointOutput[ZoomConnectorCheckpoint]:
+        # Don't collapse this into the method below: a connector that is not
+        # permission synced would then pay two or three extra Zoom calls per
+        # document for an access list it cannot use.
+        return self._advance(start, end, checkpoint, include_access=False)
+
+    def load_from_checkpoint_with_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: ZoomConnectorCheckpoint,
+    ) -> CheckpointOutput[ZoomConnectorCheckpoint]:
+        return self._advance(start, end, checkpoint, include_access=True)
+
+    def _advance(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: ZoomConnectorCheckpoint,
+        *,
+        include_access: bool,
+    ) -> CheckpointOutput[ZoomConnectorCheckpoint]:
         if self.client is None:
             raise ConnectorMissingCredentialError("Zoom")
 
@@ -87,7 +108,9 @@ class ZoomConnector(CheckpointedConnector[ZoomConnectorCheckpoint]):
 
         if state.work_index < len(state.pending_work):
             yield from process_occurrence(
-                self.client, state.pending_work[state.work_index]
+                self.client,
+                state.pending_work[state.work_index],
+                include_access=include_access,
             )
             state.work_index += 1
         elif state.source_index < len(self._sources):

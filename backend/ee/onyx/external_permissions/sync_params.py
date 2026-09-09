@@ -60,6 +60,11 @@ class DocSyncConfig(BaseModel):
     doc_sync_frequency: int
     doc_sync_func: DocSyncFuncType
     initial_index_should_sync: bool
+    # Without this, indexing stops setting permissions once a source has
+    # indexed successfully and every document found later is stored with no
+    # access list. Set it when doc_sync will not recompute those permissions,
+    # even if the source has a real doc_sync for its other content.
+    every_index_should_sync: bool = False
 
 
 class GroupSyncConfig(BaseModel):
@@ -81,14 +86,14 @@ class SyncConfig(BaseModel):
     censoring_config: CensoringConfig | None = None
 
 
-# Mock doc sync function for testing (no-op)
-def mock_doc_sync(
+def noop_doc_sync(
     cc_pair: "ConnectorCredentialPair",  # noqa: ARG001
     fetch_all_docs_fn: FetchAllDocumentsFunction,  # noqa: ARG001
     fetch_all_docs_ids_fn: FetchAllDocumentsIdsFunction,  # noqa: ARG001
     callback: Optional["IndexingHeartbeatInterface"],  # noqa: ARG001
 ) -> Generator["DocExternalAccess", None, None]:
-    """Mock doc sync function for testing - returns empty list since permissions are fetched during indexing"""
+    """Pair this with every_index_should_sync=True, or the source stops
+    getting permissions after its first successful index."""
     yield from []
 
 
@@ -186,11 +191,23 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
             chunk_censoring_func=censor_salesforce_chunks,
         ),
     ),
+    # No group sync: a meeting or webinar can only be shared with individual
+    # people, since a Zoom Group provisions licences and cannot be granted one.
+    # Checked for meetings and webinars, so re-check it if Zoom Docs land here.
+    DocumentSource.ZOOM: SyncConfig(
+        doc_sync_config=DocSyncConfig(
+            doc_sync_frequency=DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY,
+            doc_sync_func=noop_doc_sync,
+            initial_index_should_sync=True,
+            every_index_should_sync=True,
+        ),
+    ),
     DocumentSource.MOCK_CONNECTOR: SyncConfig(
         doc_sync_config=DocSyncConfig(
             doc_sync_frequency=DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY,
-            doc_sync_func=mock_doc_sync,
+            doc_sync_func=noop_doc_sync,
             initial_index_should_sync=True,
+            every_index_should_sync=True,
         ),
     ),
     # Groups are not needed for Teams.
@@ -281,3 +298,12 @@ def source_should_fetch_permissions_during_indexing(source: DocumentSource) -> b
         return False
 
     return doc_sync_config.initial_index_should_sync
+
+
+def source_should_sync_on_every_index(source: DocumentSource) -> bool:
+    if source not in _SOURCE_TO_SYNC_CONFIG:
+        return False
+    doc_sync_config = _SOURCE_TO_SYNC_CONFIG[source].doc_sync_config
+    if doc_sync_config is None:
+        return False
+    return doc_sync_config.every_index_should_sync
