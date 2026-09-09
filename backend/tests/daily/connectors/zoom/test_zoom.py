@@ -1,8 +1,10 @@
 import time
+from datetime import date, timedelta
 
 import pytest
 
 from onyx.connectors.models import Document
+from onyx.connectors.zoom.client import ZoomClient
 from onyx.connectors.zoom.connector import ZoomConnector
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 from tests.utils.secret_names import TestSecret
@@ -104,9 +106,8 @@ def test_zoom_webinar(zoom_webinar_connector: ZoomConnector) -> None:
 
 
 def test_zoom_host_allowlist(zoom_host_connector: ZoomConnector) -> None:
-    # Polling from 0 asks Zoom for everything since the epoch, so this test is
-    # also what settles whether the endpoint's rumoured one-month range cap is
-    # real. Zoom's own reference does not mention it.
+    # Polling from 0 asks Zoom for everything since the epoch, so this runs the
+    # full historical backfill rather than a narrow poll window.
     docs = _documents(zoom_host_connector)
 
     assert len(docs) >= 1
@@ -121,3 +122,52 @@ def test_zoom_group_discovery(zoom_group_connector: ZoomConnector) -> None:
     assert len(docs) >= 1
     assert all(doc.id.startswith(("ZOOM_MEETING_", "ZOOM_WEBINAR_")) for doc in docs)
     assert all(doc.sections[0].text for doc in docs)
+
+
+# Wider than both the one-month cap folklore attributes to this endpoint and
+# the three-month range its own reference example uses.
+_MULTI_MONTH_LOOKBACK = timedelta(days=400)
+
+
+def _zoom_client(test_secrets: dict[TestSecret, str]) -> ZoomClient:
+    return ZoomClient(
+        account_id=test_secrets[TestSecret.ZOOM_ACCOUNT_ID],
+        client_id=test_secrets[TestSecret.ZOOM_CLIENT_ID],
+        client_secret=test_secrets[TestSecret.ZOOM_CLIENT_SECRET],
+    )
+
+
+def _user_id_for(client: ZoomClient, email: str) -> str:
+    wanted = email.strip().lower()
+    page_token: str | None = None
+    while True:
+        page = client.list_users(page_token=page_token)
+        for user in page.users:
+            if (user.email or "").strip().lower() == wanted and user.id:
+                return user.id
+        page_token = page.next_page_token
+        if not page_token:
+            raise AssertionError(f"No active Zoom user has the email {email}")
+
+
+def test_recording_listing_accepts_a_multi_month_range(
+    test_secrets: dict[TestSecret, str],
+) -> None:
+    """The connector sends the whole poll window in one call, and a first sync
+    polls from the epoch. Zoom's reference puts "Maximum duration: 1 month" on
+    the Reports and analytics endpoints, never on this one, and documents no 400
+    for it at all. This test is what catches Zoom ever changing that.
+    """
+    client = _zoom_client(test_secrets)
+    user_id = _user_id_for(client, test_secrets[TestSecret.ZOOM_TEST_HOST_EMAIL])
+
+    to_date = date.today()
+    page = client.list_user_recordings(
+        user_id=user_id,
+        from_date=to_date - _MULTI_MONTH_LOOKBACK,
+        to_date=to_date,
+    )
+
+    # The test account's recordings come and go, so Zoom accepting the range is
+    # the whole result.
+    assert isinstance(page.recordings, list)

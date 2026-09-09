@@ -20,7 +20,11 @@ from onyx.connectors.models import (
     ConnectorCheckpoint,
     ConnectorMissingCredentialError,
 )
-from onyx.connectors.zoom.client import ZoomClient
+from onyx.connectors.zoom.client import (
+    ZoomClient,
+    parse_plan_tier,
+    parse_rate_limit_percent,
+)
 from onyx.connectors.zoom.recordings.discovery import build_discovery_sources
 from onyx.connectors.zoom.recordings.models import RecordingsState
 from onyx.connectors.zoom.recordings.processing import process_occurrence
@@ -40,10 +44,14 @@ class ZoomConnector(CheckpointedConnectorWithPermSync[ZoomConnectorCheckpoint]):
         webinar_ids: list[str] | None = None,
         host_emails: list[str] | None = None,
         group_id: str | None = None,
+        plan_tier: str | None = None,
+        rate_limit_percent: int | float | None = None,
     ) -> None:
         self._sources = build_discovery_sources(
             meeting_ids, webinar_ids, host_emails, group_id
         )
+        self.plan_tier = plan_tier
+        self.rate_limit_percent = rate_limit_percent
         self.client: ZoomClient | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
@@ -55,7 +63,11 @@ class ZoomConnector(CheckpointedConnectorWithPermSync[ZoomConnectorCheckpoint]):
             raise ConnectorMissingCredentialError("Zoom")
 
         self.client = ZoomClient(
-            account_id=account_id, client_id=client_id, client_secret=client_secret
+            account_id=account_id,
+            client_id=client_id,
+            client_secret=client_secret,
+            plan_tier=parse_plan_tier(self.plan_tier),
+            rate_limit_share=parse_rate_limit_percent(self.rate_limit_percent),
         )
         return None
 
@@ -66,6 +78,12 @@ class ZoomConnector(CheckpointedConnectorWithPermSync[ZoomConnectorCheckpoint]):
             raise ConnectorValidationError(
                 "At least one Zoom Discovery mechanism must be configured"
             )
+
+        try:
+            parse_plan_tier(self.plan_tier)
+            parse_rate_limit_percent(self.rate_limit_percent)
+        except ValueError as e:
+            raise ConnectorValidationError(str(e)) from e
 
     def build_dummy_checkpoint(self) -> ZoomConnectorCheckpoint:
         return ZoomConnectorCheckpoint(has_more=True)

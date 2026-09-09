@@ -1,6 +1,6 @@
 import time
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
@@ -13,7 +13,7 @@ from onyx.connectors.models import (
     Document,
     HierarchyNode,
 )
-from onyx.connectors.zoom.client import ZoomClient
+from onyx.connectors.zoom.client import ZoomClient, ZoomPlanTier
 from onyx.connectors.zoom.connector import ZoomConnector, ZoomConnectorCheckpoint
 from onyx.connectors.zoom.models import (
     ZoomRecordingEntry,
@@ -134,6 +134,31 @@ class TestZoomConnectorCredentials:
         with pytest.raises(ConnectorMissingCredentialError):
             next(connector.load_from_checkpoint(0, 1, checkpoint))
 
+    @pytest.mark.parametrize(
+        "plan, percent, expected_plan, expected_share",
+        [
+            (None, None, ZoomPlanTier.PRO, None),
+            ("business_plus", 10, ZoomPlanTier.BUSINESS_PLUS, 0.1),
+        ],
+        ids=["unset falls back to the defaults", "configured"],
+    )
+    def test_the_configured_rate_limits_reach_the_client(
+        self,
+        plan: str | None,
+        percent: int | None,
+        expected_plan: ZoomPlanTier,
+        expected_share: float | None,
+    ) -> None:
+        connector = ZoomConnector(
+            meeting_ids=["111"], plan_tier=plan, rate_limit_percent=percent
+        )
+
+        with patch.object(ZoomClient, "__init__", return_value=None) as build:
+            connector.load_credentials(_ZOOM_CREDS)
+
+        assert build.call_args.kwargs["plan_tier"] == expected_plan
+        assert build.call_args.kwargs["rate_limit_share"] == expected_share
+
 
 class TestZoomConnectorValidateSettings:
     def test_no_discovery_mechanism_rejected(self) -> None:
@@ -168,6 +193,21 @@ class TestZoomConnectorValidateSettings:
         # An admin who clears a field leaves whitespace behind, and accepting
         # that is what would start a full-organization crawl.
         connector = ZoomConnector(host_emails=["  "], group_id="  ")
+        with pytest.raises(ConnectorValidationError):
+            connector.validate_connector_settings()
+
+    def test_an_unknown_plan_is_rejected_at_setup(self) -> None:
+        # Without this check a typo reaches the client and crashes mid-backfill,
+        # where no admin sees it.
+        connector = ZoomConnector(meeting_ids=["111"], plan_tier="enterprise")
+        with pytest.raises(ConnectorValidationError):
+            connector.validate_connector_settings()
+
+    @pytest.mark.parametrize("percent", [0, 101])
+    def test_a_rate_limit_percent_outside_the_range_is_rejected(
+        self, percent: int
+    ) -> None:
+        connector = ZoomConnector(meeting_ids=["111"], rate_limit_percent=percent)
         with pytest.raises(ConnectorValidationError):
             connector.validate_connector_settings()
 
