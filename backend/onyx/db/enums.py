@@ -319,6 +319,20 @@ class SupportedLanguage(str, PyEnum):
     AR = "ar"
 
 
+# Prompts name the language in English so the model gets a word, not a code.
+SUPPORTED_LANGUAGE_ENGLISH_NAMES: dict[SupportedLanguage, str] = {
+    SupportedLanguage.EN: "English",
+    SupportedLanguage.ES: "Spanish",
+    SupportedLanguage.PT: "Portuguese",
+    SupportedLanguage.FR: "French",
+    SupportedLanguage.DE: "German",
+    SupportedLanguage.JA: "Japanese",
+    SupportedLanguage.ZH: "Simplified Chinese",
+    SupportedLanguage.KO: "Korean",
+    SupportedLanguage.AR: "Arabic",
+}
+
+
 class DefaultAppMode(str, PyEnum):
     AUTO = "AUTO"
     CHAT = "CHAT"

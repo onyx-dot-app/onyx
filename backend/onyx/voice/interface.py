@@ -4,15 +4,22 @@ from typing import Protocol
 
 from pydantic import BaseModel
 
+# Client-facing text for a failed streaming session. Providers must not put
+# upstream error details in `TranscriptResult.error`.
+STREAM_FAILED_ERROR = "Streaming transcription failed"
+
 
 class TranscriptResult(BaseModel):
     """Result from streaming transcription."""
 
-    text: str
+    text: str = ""
     """The accumulated transcript text."""
 
     is_vad_end: bool = False
     """True if VAD detected end of speech (silence). Use for auto-send."""
+
+    error: str | None = None
+    """Sanitized provider error, if the streaming session failed."""
 
 
 class StreamingTranscriberProtocol(Protocol):
@@ -144,6 +151,10 @@ class VoiceProviderInterface(ABC):
     def supports_streaming_tts(self) -> bool:
         """Returns True if this provider supports real-time streaming TTS."""
         return False
+
+    def allows_streaming_stt_fallback(self) -> bool:
+        """Returns True when native streaming STT failures may fall back to REST."""
+        return True
 
     async def create_streaming_transcriber(
         self, audio_format: str = "webm"
