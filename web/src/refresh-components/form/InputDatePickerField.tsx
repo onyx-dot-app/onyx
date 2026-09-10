@@ -6,7 +6,7 @@ import { useOnChangeValue } from "@/hooks/formHooks";
 
 interface InputDatePickerFieldProps extends Omit<
   InputDatePickerProps,
-  "value" | "onChange"
+  "value" | "onChange" | "id" | "error"
 > {
   name: string;
   /** Extra change listener alongside the Formik write. */

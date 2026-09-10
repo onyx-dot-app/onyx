@@ -33,6 +33,18 @@ const setKnowledgeCutoffDate = async (page: Page) => {
   await dateGroup.getByLabel("Day").fill(String(today.getDate()));
   await dateGroup.getByLabel("Year").fill(String(today.getFullYear()));
   await dateGroup.getByLabel("Year").press("Enter");
+
+  // The commit is async React state; the zero-padded values are the signal
+  // that it landed rather than reverting the draft.
+  await expect(dateGroup.getByLabel("Month")).toHaveValue(
+    String(today.getMonth() + 1).padStart(2, "0")
+  );
+  await expect(dateGroup.getByLabel("Day")).toHaveValue(
+    String(today.getDate()).padStart(2, "0")
+  );
+  await expect(dateGroup.getByLabel("Year")).toHaveValue(
+    String(today.getFullYear())
+  );
 };
 const getStarterMessageInput = (page: Page, index: number = 0) =>
   page.locator(`input[name="starter_messages.${index}"]`);
