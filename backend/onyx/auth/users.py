@@ -139,9 +139,11 @@ from onyx.db.pat import resolve_pat
 from onyx.db.pinned_personas import seed_pinned_personas_from_featured
 from onyx.db.users import (
     assign_user_to_default_groups__no_commit,
+    fetch_user_by_id,
     get_user_by_email,
     get_user_by_oauth_account,
     is_limited_user,
+    promote_placeholder_to_web_login__no_commit,
     reconcile_user_email__no_commit,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -524,6 +526,47 @@ def _invalidate_license_cache_after_seat_change() -> None:
     fetch_ee_implementation_or_noop(
         "onyx.db.license", "invalidate_license_cache", None
     )()
+
+
+def _upgrade_placeholder_to_web_login__no_commit(
+    user_id: uuid.UUID, is_verified_by_default: bool, db_session: Session
+) -> bool:
+    """Promote a placeholder row (EXT_PERM_USER, BOT) to a real web login.
+
+    Does NOT commit. Must run on the session that already holds the ``"user"``
+    row lock from ``reconcile_user_email__no_commit``; a second connection
+    would wait on that lock until the callback returns, which it never does.
+
+    Locks the row again rather than trusting that one: an email change commits
+    the reconcile before this runs, which drops it. Re-locking on the same
+    connection is a no-op when it is still held, and serializes concurrent
+    first logins when it is not.
+
+    Returns whether the upgrade consumed a seat.
+    """
+    user = fetch_user_by_id(db_session, user_id, for_update=True)
+    if user is None:
+        return False
+
+    # The caller decided to promote from a read taken before this lock. Confirm
+    # the row is still a placeholder now that it is held: a concurrent login may
+    # have promoted it already, and an admin may have since deactivated the
+    # resulting account. Promoting again would reactivate a disabled account and
+    # re-check a seat that is already taken.
+    if user.account_type.is_web_login():
+        return False
+
+    # The row is active once this returns: it already was, or the promotion
+    # below reactivates it.
+    seat_added = False
+    if _upgrade_will_add_seat(user, will_become_active=True):
+        enforce_seat_limit_locked(db_session, seats_needed=1)
+        seat_added = True
+
+    promote_placeholder_to_web_login__no_commit(
+        db_session, user, is_verified=is_verified_by_default
+    )
+    return seat_added
 
 
 async def resolve_tenant_for_user(email: str, request: Request | None = None) -> str:
@@ -1180,44 +1223,27 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
             # Handle case where user has used product outside of web and is now creating an account through web
             if not user.account_type.is_web_login():
-                if user.id:
-                    user_by_session = await db_session.get(User, user.id)
-                    if user_by_session:
-                        user = user_by_session
+                # Cache the id before the commit below expires `user`. Reading
+                # an attribute off an expired object here triggers a sync lazy
+                # load, which raises MissingGreenlet in this async context.
+                refreshed_user_id = user.id
 
-                # Lock + check + upgrade in one transaction.
-                was_inactive = not user.is_active
-                seat_added = False
-                with get_session_with_current_tenant() as sync_db:
-                    sync_user = (
-                        sync_db.query(User)
-                        .filter(User.id == user.id)  # ty: ignore[invalid-argument-type]
-                        .first()
+                # Runs on this session, which already holds the `"user"` row
+                # lock taken by reconcile_user_email__no_commit above. A second
+                # connection would wait on that lock for the whole callback.
+                seat_added = await db_session.run_sync(
+                    partial(
+                        _upgrade_placeholder_to_web_login__no_commit,
+                        refreshed_user_id,
+                        is_verified_by_default,
                     )
-                    if sync_user:
-                        will_become_active = (
-                            True if was_inactive else bool(sync_user.is_active)
-                        )
-                        if _upgrade_will_add_seat(
-                            sync_user, will_become_active=will_become_active
-                        ):
-                            enforce_seat_limit_locked(sync_db, seats_needed=1)
-                            seat_added = True
-                        sync_user.is_verified = is_verified_by_default
-                        sync_user.account_type = AccountType.STANDARD
-                        if was_inactive:
-                            sync_user.is_active = True
-                        assign_user_to_default_groups__no_commit(sync_db, sync_user)
-                        sync_db.commit()
+                )
+                await db_session.commit()
                 if seat_added:
                     _invalidate_license_cache_after_seat_change()
 
-                # Refresh the async user object so downstream code
-                # (e.g. oidc_expiry check) sees the updated fields.
-                # Cache id before expire. Accessing attrs on an expired object
-                # triggers a sync lazy-load which raises MissingGreenlet in this
-                # async context.
-                refreshed_user_id = user.id
+                # Reload so downstream code (e.g. the oidc_expiry check) sees
+                # the upgraded fields.
                 self.user_db.session.expire(user)
                 user = await self.user_db.get(refreshed_user_id)
                 assert user is not None
