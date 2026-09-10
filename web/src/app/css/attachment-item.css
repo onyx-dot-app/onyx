@@ -73,15 +73,6 @@
   overflow: hidden;
 }
 
-.attachment-item__view {
-  flex-shrink: 0;
-  visibility: hidden;
-}
-
-.attachment-item:hover .attachment-item__view {
-  visibility: visible;
-}
-
 .attachment-item__actions {
   display: flex;
   flex-direction: row;

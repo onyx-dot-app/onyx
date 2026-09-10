@@ -66,13 +66,13 @@
 import React from "react";
 import { noProp } from "@/lib/utils";
 import Truncated from "@/refresh-components/texts/Truncated";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import type { IconProps } from "@opal/types";
 import { Checkbox } from "@opal/components";
 import { SvgExternalLink } from "@opal/icons";
 import type { WithoutStyles } from "@opal/types";
+import { Hoverable } from "@opal/core";
 
 export interface AttachmentProps extends WithoutStyles<
   React.ButtonHTMLAttributes<HTMLButtonElement>
@@ -108,62 +108,65 @@ export default function AttachmentButton({
   const state = selected ? "selected" : processing ? "processing" : "default";
 
   return (
-    <button
-      type="button"
-      className="attachment-item"
-      data-state={state}
-      {...props}
-    >
-      <div className="attachment-item__content">
-        <div className="attachment-item__icon-wrapper">
-          {selected ? (
-            <Checkbox checked />
-          ) : (
-            <Icon className="attachment-item__icon" />
-          )}
-        </div>
-        <div className="attachment-item__text-container">
-          <div className="attachment-item__title-row">
-            <div className="attachment-item__title-wrapper">
-              <Truncated mainUiMuted text04 nowrap>
-                {children}
-              </Truncated>
-            </div>
-            {onView && (
-              // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
-              <IconButton
-                icon={SvgExternalLink}
-                onClick={noProp(onView)}
-                internal
-                className="attachment-item__view"
-              />
+    <Hoverable.Root group="attachment-button">
+      <button
+        type="button"
+        className="attachment-item"
+        data-state={state}
+        {...props}
+      >
+        <div className="attachment-item__content">
+          <div className="attachment-item__icon-wrapper">
+            {selected ? (
+              <Checkbox checked />
+            ) : (
+              <Icon className="attachment-item__icon" />
             )}
           </div>
-          {description && (
-            <Truncated secondaryBody text03 className="w-full">
-              {description}
-            </Truncated>
+          <div className="attachment-item__text-container">
+            <div className="attachment-item__title-row">
+              <div className="attachment-item__title-wrapper">
+                <Truncated mainUiMuted text04 nowrap>
+                  {children}
+                </Truncated>
+              </div>
+              {onView && (
+                <Hoverable.Item group="attachment-button">
+                  <Button
+                    size="sm"
+                    icon={SvgExternalLink}
+                    onClick={noProp(onView)}
+                    prominence="tertiary"
+                  />
+                </Hoverable.Item>
+              )}
+            </div>
+            {description && (
+              <Truncated secondaryBody text03 className="w-full">
+                {description}
+              </Truncated>
+            )}
+          </div>
+        </div>
+
+        <div className="attachment-item__actions">
+          {rightText && (
+            <Text as="p" secondaryBody text03>
+              {rightText}
+            </Text>
+          )}
+          {actionIcon && onAction && (
+            <Hoverable.Item group="attachment-button">
+              <Button
+                icon={actionIcon}
+                onClick={noProp(onAction)}
+                prominence="tertiary"
+                size="sm"
+              />
+            </Hoverable.Item>
           )}
         </div>
-      </div>
-
-      <div className="attachment-item__actions">
-        {rightText && (
-          <Text as="p" secondaryBody text03>
-            {rightText}
-          </Text>
-        )}
-        {actionIcon && onAction && (
-          <div className="attachment-item__action">
-            <Button
-              icon={actionIcon}
-              onClick={noProp(onAction)}
-              prominence="tertiary"
-              size="sm"
-            />
-          </div>
-        )}
-      </div>
-    </button>
+      </button>
+    </Hoverable.Root>
   );
 }
