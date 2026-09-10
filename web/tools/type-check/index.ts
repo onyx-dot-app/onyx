@@ -4,8 +4,10 @@ import { relative, resolve, sep } from "node:path";
 import { parseArgs } from "node:util";
 
 import {
+  isAsExpression,
   isIdentifier,
   isPrivateIdentifier,
+  isTypeAssertion,
   SyntaxKind,
 } from "typescript-7/unstable/ast";
 import type { Node } from "typescript-7/unstable/ast";
@@ -17,7 +19,8 @@ import {
 import type { Checker, Diagnostic, Program } from "typescript-7/unstable/async";
 
 // Type-checks web/ with TypeScript 7 and, from the same program, measures type
-// coverage: the share of identifiers whose type is not `any`.
+// coverage: the share of identifiers whose type is not `any`, with each type
+// cast counted as one more uncovered item.
 // `ods type-coverage typescript` groups the per-file counts into directories
 // and gates them against .type-coverage-baseline.yaml.
 
@@ -153,6 +156,7 @@ async function countFile(
   }
 
   const nodes: Node[] = [];
+  let casts = 0;
   const visit = (node: Node): void => {
     if (
       isIdentifier(node) ||
@@ -160,13 +164,18 @@ async function countFile(
       node.kind === SyntaxKind.ThisKeyword
     ) {
       nodes.push(node);
+    } else if (isAsExpression(node) || isTypeAssertion(node)) {
+      // A cast overrides the checker, so it counts as uncovered. `as const`
+      // only narrows literals and `as unknown` only widens, so they are safe.
+      const target = node.type.getText(sourceFile);
+      if (target !== "const" && target !== "unknown") casts++;
     }
     node.forEachChild(visit);
   };
   sourceFile.forEachChild(visit);
 
   let correct = 0;
-  let total = 0;
+  let total = casts;
   const types =
     nodes.length === 0 ? [] : await checker.getTypeAtLocation(nodes);
   for (const type of types) {
