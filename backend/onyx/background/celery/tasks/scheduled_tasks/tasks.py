@@ -50,9 +50,6 @@ from onyx.db.scheduled_task import (
     insert_run,
     mark_run_status,
 )
-from onyx.server.features.build.scheduled_tasks.executor import (
-    run_scheduled_task_logic,
-)
 from onyx.server.features.build.timeouts import (
     QUEUE_RESIDENCY_SECONDS,
     SCHEDULED_RUN_HARD_CAP_SECONDS,
@@ -233,6 +230,10 @@ def run_scheduled_task(self: Task, *, run_id: str, tenant_id: str) -> None:
     _ = self  # bound only for symmetry with other shared_task wrappers
     _ = tenant_id
     try:
+        from onyx.server.features.build.scheduled_tasks.executor import (
+            run_scheduled_task_logic,
+        )
+
         run_scheduled_task_logic(UUID(run_id))
     except Exception:
         task_logger.exception(

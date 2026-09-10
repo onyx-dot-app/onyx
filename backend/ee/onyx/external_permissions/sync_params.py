@@ -1,4 +1,4 @@
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from typing import TYPE_CHECKING, Optional
 
 from pydantic import BaseModel
@@ -21,19 +21,6 @@ from ee.onyx.configs.app_configs import (
     SLACK_PERMISSION_DOC_SYNC_FREQUENCY,
     TEAMS_PERMISSION_DOC_SYNC_FREQUENCY,
 )
-from ee.onyx.external_permissions.box.doc_sync import box_doc_sync
-from ee.onyx.external_permissions.box.group_sync import box_group_sync
-from ee.onyx.external_permissions.canvas.doc_sync import canvas_doc_sync
-from ee.onyx.external_permissions.canvas.group_sync import canvas_group_sync
-from ee.onyx.external_permissions.confluence.doc_sync import confluence_doc_sync
-from ee.onyx.external_permissions.confluence.group_sync import confluence_group_sync
-from ee.onyx.external_permissions.github.doc_sync import github_doc_sync
-from ee.onyx.external_permissions.github.group_sync import github_group_sync
-from ee.onyx.external_permissions.gmail.doc_sync import gmail_doc_sync
-from ee.onyx.external_permissions.google_drive.doc_sync import gdrive_doc_sync
-from ee.onyx.external_permissions.google_drive.group_sync import gdrive_group_sync
-from ee.onyx.external_permissions.jira.doc_sync import jira_doc_sync
-from ee.onyx.external_permissions.jira.group_sync import jira_group_sync
 from ee.onyx.external_permissions.perm_sync_types import (
     CensoringFuncType,
     DocSyncFuncType,
@@ -41,19 +28,155 @@ from ee.onyx.external_permissions.perm_sync_types import (
     FetchAllDocumentsIdsFunction,
     GroupSyncFuncType,
 )
-from ee.onyx.external_permissions.salesforce.postprocessing import (
-    censor_salesforce_chunks,
-)
-from ee.onyx.external_permissions.sharepoint.doc_sync import sharepoint_doc_sync
-from ee.onyx.external_permissions.sharepoint.group_sync import sharepoint_group_sync
-from ee.onyx.external_permissions.slack.doc_sync import slack_doc_sync
-from ee.onyx.external_permissions.teams.doc_sync import teams_doc_sync
 from onyx.configs.constants import DocumentSource
 
 if TYPE_CHECKING:
-    from onyx.access.models import DocExternalAccess  # noqa
+    from ee.onyx.db.external_perm import ExternalUserGroup  # noqa
+    from onyx.access.models import DocExternalAccess, ElementExternalAccess  # noqa
+    from onyx.context.search.models import InferenceChunk  # noqa
     from onyx.db.models import ConnectorCredentialPair  # noqa
     from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface  # noqa
+
+
+# Sync implementations import their connector SDKs (box_sdk_gen, office365,
+# google, github, ...), which cost ~60 MB. Load them on first call so workers
+# that only read this config stay small.
+def _lazy_doc_sync(load: Callable[[], DocSyncFuncType]) -> DocSyncFuncType:
+    def run(
+        cc_pair: "ConnectorCredentialPair",
+        fetch_all_docs_fn: FetchAllDocumentsFunction,
+        fetch_all_docs_ids_fn: FetchAllDocumentsIdsFunction,
+        callback: Optional["IndexingHeartbeatInterface"],
+    ) -> Generator["ElementExternalAccess", None, None]:
+        return load()(cc_pair, fetch_all_docs_fn, fetch_all_docs_ids_fn, callback)
+
+    return run
+
+
+def _lazy_group_sync(load: Callable[[], GroupSyncFuncType]) -> GroupSyncFuncType:
+    def run(
+        tenant_id: str, cc_pair: "ConnectorCredentialPair"
+    ) -> Generator["ExternalUserGroup", None, None]:
+        return load()(tenant_id, cc_pair)
+
+    return run
+
+
+def _lazy_censoring(load: Callable[[], CensoringFuncType]) -> CensoringFuncType:
+    def run(chunks: list["InferenceChunk"], user_email: str) -> list["InferenceChunk"]:
+        return load()(chunks, user_email)
+
+    return run
+
+
+def _load_box_doc_sync() -> DocSyncFuncType:
+    from ee.onyx.external_permissions.box.doc_sync import box_doc_sync
+
+    return box_doc_sync
+
+
+def _load_box_group_sync() -> GroupSyncFuncType:
+    from ee.onyx.external_permissions.box.group_sync import box_group_sync
+
+    return box_group_sync
+
+
+def _load_canvas_doc_sync() -> DocSyncFuncType:
+    from ee.onyx.external_permissions.canvas.doc_sync import canvas_doc_sync
+
+    return canvas_doc_sync
+
+
+def _load_canvas_group_sync() -> GroupSyncFuncType:
+    from ee.onyx.external_permissions.canvas.group_sync import canvas_group_sync
+
+    return canvas_group_sync
+
+
+def _load_confluence_doc_sync() -> DocSyncFuncType:
+    from ee.onyx.external_permissions.confluence.doc_sync import confluence_doc_sync
+
+    return confluence_doc_sync
+
+
+def _load_confluence_group_sync() -> GroupSyncFuncType:
+    from ee.onyx.external_permissions.confluence.group_sync import confluence_group_sync
+
+    return confluence_group_sync
+
+
+def _load_github_doc_sync() -> DocSyncFuncType:
+    from ee.onyx.external_permissions.github.doc_sync import github_doc_sync
+
+    return github_doc_sync
+
+
+def _load_github_group_sync() -> GroupSyncFuncType:
+    from ee.onyx.external_permissions.github.group_sync import github_group_sync
+
+    return github_group_sync
+
+
+def _load_gmail_doc_sync() -> DocSyncFuncType:
+    from ee.onyx.external_permissions.gmail.doc_sync import gmail_doc_sync
+
+    return gmail_doc_sync
+
+
+def _load_gdrive_doc_sync() -> DocSyncFuncType:
+    from ee.onyx.external_permissions.google_drive.doc_sync import gdrive_doc_sync
+
+    return gdrive_doc_sync
+
+
+def _load_gdrive_group_sync() -> GroupSyncFuncType:
+    from ee.onyx.external_permissions.google_drive.group_sync import gdrive_group_sync
+
+    return gdrive_group_sync
+
+
+def _load_jira_doc_sync() -> DocSyncFuncType:
+    from ee.onyx.external_permissions.jira.doc_sync import jira_doc_sync
+
+    return jira_doc_sync
+
+
+def _load_jira_group_sync() -> GroupSyncFuncType:
+    from ee.onyx.external_permissions.jira.group_sync import jira_group_sync
+
+    return jira_group_sync
+
+
+def _load_censor_salesforce_chunks() -> CensoringFuncType:
+    from ee.onyx.external_permissions.salesforce.postprocessing import (
+        censor_salesforce_chunks,
+    )
+
+    return censor_salesforce_chunks
+
+
+def _load_sharepoint_doc_sync() -> DocSyncFuncType:
+    from ee.onyx.external_permissions.sharepoint.doc_sync import sharepoint_doc_sync
+
+    return sharepoint_doc_sync
+
+
+def _load_sharepoint_group_sync() -> GroupSyncFuncType:
+    from ee.onyx.external_permissions.sharepoint.group_sync import sharepoint_group_sync
+
+    return sharepoint_group_sync
+
+
+def _load_slack_doc_sync() -> DocSyncFuncType:
+    from ee.onyx.external_permissions.slack.doc_sync import slack_doc_sync
+
+    return slack_doc_sync
+
+
+def _load_teams_doc_sync() -> DocSyncFuncType:
+    from ee.onyx.external_permissions.teams.doc_sync import teams_doc_sync
+
+    return teams_doc_sync
 
 
 class DocSyncConfig(BaseModel):
@@ -96,60 +219,60 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
     DocumentSource.GOOGLE_DRIVE: SyncConfig(
         doc_sync_config=DocSyncConfig(
             doc_sync_frequency=DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY,
-            doc_sync_func=gdrive_doc_sync,
+            doc_sync_func=_lazy_doc_sync(_load_gdrive_doc_sync),
             initial_index_should_sync=True,
         ),
         group_sync_config=GroupSyncConfig(
             group_sync_frequency=GOOGLE_DRIVE_PERMISSION_GROUP_SYNC_FREQUENCY,
-            group_sync_func=gdrive_group_sync,
+            group_sync_func=_lazy_group_sync(_load_gdrive_group_sync),
             group_sync_is_cc_pair_agnostic=False,
         ),
     ),
     DocumentSource.CONFLUENCE: SyncConfig(
         doc_sync_config=DocSyncConfig(
             doc_sync_frequency=CONFLUENCE_PERMISSION_DOC_SYNC_FREQUENCY,
-            doc_sync_func=confluence_doc_sync,
+            doc_sync_func=_lazy_doc_sync(_load_confluence_doc_sync),
             initial_index_should_sync=False,
         ),
         group_sync_config=GroupSyncConfig(
             group_sync_frequency=CONFLUENCE_PERMISSION_GROUP_SYNC_FREQUENCY,
-            group_sync_func=confluence_group_sync,
+            group_sync_func=_lazy_group_sync(_load_confluence_group_sync),
             group_sync_is_cc_pair_agnostic=True,
         ),
     ),
     DocumentSource.JIRA: SyncConfig(
         doc_sync_config=DocSyncConfig(
             doc_sync_frequency=JIRA_PERMISSION_DOC_SYNC_FREQUENCY,
-            doc_sync_func=jira_doc_sync,
+            doc_sync_func=_lazy_doc_sync(_load_jira_doc_sync),
             initial_index_should_sync=True,
         ),
         group_sync_config=GroupSyncConfig(
             group_sync_frequency=JIRA_PERMISSION_GROUP_SYNC_FREQUENCY,
-            group_sync_func=jira_group_sync,
+            group_sync_func=_lazy_group_sync(_load_jira_group_sync),
             group_sync_is_cc_pair_agnostic=True,
         ),
     ),
     DocumentSource.CANVAS: SyncConfig(
         doc_sync_config=DocSyncConfig(
             doc_sync_frequency=CANVAS_PERMISSION_DOC_SYNC_FREQUENCY,
-            doc_sync_func=canvas_doc_sync,
+            doc_sync_func=_lazy_doc_sync(_load_canvas_doc_sync),
             initial_index_should_sync=True,
         ),
         group_sync_config=GroupSyncConfig(
             group_sync_frequency=CANVAS_PERMISSION_GROUP_SYNC_FREQUENCY,
-            group_sync_func=canvas_group_sync,
+            group_sync_func=_lazy_group_sync(_load_canvas_group_sync),
             group_sync_is_cc_pair_agnostic=False,
         ),
     ),
     DocumentSource.BOX: SyncConfig(
         doc_sync_config=DocSyncConfig(
             doc_sync_frequency=BOX_PERMISSION_DOC_SYNC_FREQUENCY,
-            doc_sync_func=box_doc_sync,
+            doc_sync_func=_lazy_doc_sync(_load_box_doc_sync),
             initial_index_should_sync=True,
         ),
         group_sync_config=GroupSyncConfig(
             group_sync_frequency=BOX_PERMISSION_GROUP_SYNC_FREQUENCY,
-            group_sync_func=box_group_sync,
+            group_sync_func=_lazy_group_sync(_load_box_group_sync),
             group_sync_is_cc_pair_agnostic=False,
         ),
     ),
@@ -158,32 +281,32 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
     DocumentSource.SLACK: SyncConfig(
         doc_sync_config=DocSyncConfig(
             doc_sync_frequency=SLACK_PERMISSION_DOC_SYNC_FREQUENCY,
-            doc_sync_func=slack_doc_sync,
+            doc_sync_func=_lazy_doc_sync(_load_slack_doc_sync),
             initial_index_should_sync=True,
         ),
     ),
     DocumentSource.GMAIL: SyncConfig(
         doc_sync_config=DocSyncConfig(
             doc_sync_frequency=DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY,
-            doc_sync_func=gmail_doc_sync,
+            doc_sync_func=_lazy_doc_sync(_load_gmail_doc_sync),
             initial_index_should_sync=False,
         ),
     ),
     DocumentSource.GITHUB: SyncConfig(
         doc_sync_config=DocSyncConfig(
             doc_sync_frequency=GITHUB_PERMISSION_DOC_SYNC_FREQUENCY,
-            doc_sync_func=github_doc_sync,
+            doc_sync_func=_lazy_doc_sync(_load_github_doc_sync),
             initial_index_should_sync=True,
         ),
         group_sync_config=GroupSyncConfig(
             group_sync_frequency=GITHUB_PERMISSION_GROUP_SYNC_FREQUENCY,
-            group_sync_func=github_group_sync,
+            group_sync_func=_lazy_group_sync(_load_github_group_sync),
             group_sync_is_cc_pair_agnostic=False,
         ),
     ),
     DocumentSource.SALESFORCE: SyncConfig(
         censoring_config=CensoringConfig(
-            chunk_censoring_func=censor_salesforce_chunks,
+            chunk_censoring_func=_lazy_censoring(_load_censor_salesforce_chunks),
         ),
     ),
     DocumentSource.MOCK_CONNECTOR: SyncConfig(
@@ -198,19 +321,19 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
     DocumentSource.TEAMS: SyncConfig(
         doc_sync_config=DocSyncConfig(
             doc_sync_frequency=TEAMS_PERMISSION_DOC_SYNC_FREQUENCY,
-            doc_sync_func=teams_doc_sync,
+            doc_sync_func=_lazy_doc_sync(_load_teams_doc_sync),
             initial_index_should_sync=True,
         ),
     ),
     DocumentSource.SHAREPOINT: SyncConfig(
         doc_sync_config=DocSyncConfig(
             doc_sync_frequency=SHAREPOINT_PERMISSION_DOC_SYNC_FREQUENCY,
-            doc_sync_func=sharepoint_doc_sync,
+            doc_sync_func=_lazy_doc_sync(_load_sharepoint_doc_sync),
             initial_index_should_sync=True,
         ),
         group_sync_config=GroupSyncConfig(
             group_sync_frequency=SHAREPOINT_PERMISSION_GROUP_SYNC_FREQUENCY,
-            group_sync_func=sharepoint_group_sync,
+            group_sync_func=_lazy_group_sync(_load_sharepoint_group_sync),
             group_sync_is_cc_pair_agnostic=False,
         ),
     ),
