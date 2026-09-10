@@ -66,10 +66,12 @@ _GRAPH_HOST_INDEX: dict[str, MicrosoftGraphEnvironment] = {
 
 # Connector form defaults, read off the commercial cloud so they cannot drift
 # from the table above.
-_COMMERCIAL = next(e for e in _ENVIRONMENTS if e.environment == AzureEnvironment.Global)
-DEFAULT_AUTHORITY_HOST = _COMMERCIAL.authority_host
-DEFAULT_GRAPH_API_HOST = _COMMERCIAL.graph_host
-DEFAULT_SHAREPOINT_DOMAIN_SUFFIX = _COMMERCIAL.sharepoint_domain_suffix
+_COMMERCIAL: MicrosoftGraphEnvironment = next(
+    e for e in _ENVIRONMENTS if e.environment == AzureEnvironment.Global
+)
+DEFAULT_AUTHORITY_HOST: str = _COMMERCIAL.authority_host
+DEFAULT_GRAPH_API_HOST: str = _COMMERCIAL.graph_host
+DEFAULT_SHAREPOINT_DOMAIN_SUFFIX: str = _COMMERCIAL.sharepoint_domain_suffix
 
 
 def resolve_microsoft_environment(
