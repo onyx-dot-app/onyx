@@ -21,7 +21,10 @@ from ee.onyx.server.reporting.usage_report_pdf import (
 )
 from onyx.db.enums import AccountType, SystemUsageAttribution
 from onyx.db.models import User
-from onyx.db.system_usage import SystemUsageExportRow
+from onyx.db.system_usage import (
+    UNATTRIBUTED_SYSTEM_USAGE_CATEGORY,
+    SystemUsageExportRow,
+)
 from onyx.db.user_usage import DELETED_USER_EXPORT_EMAIL, UsageExportRow
 
 _BRANDING = ReportBranding(application_name="Acme Intelligence", logo=None)
@@ -67,9 +70,10 @@ def _user(
 def _system_row(
     flow: str = "image_summarization",
     cost: float = 7.0,
+    attribution: SystemUsageAttribution = SystemUsageAttribution.ATTRIBUTED,
 ) -> SystemUsageExportRow:
     return SystemUsageExportRow(
-        attribution=SystemUsageAttribution.ATTRIBUTED,
+        attribution=attribution,
         model="claude-sonnet",
         flow=flow,
         provider="anthropic",
@@ -127,13 +131,27 @@ def test_deleted_user_counts_toward_spend_but_is_not_a_person() -> None:
 
 
 def test_system_usage_counts_toward_spend_but_not_people() -> None:
-    data = _build([_row("a@x.com", cost=10.0)], [_user("a@x.com")], [_system_row()])
+    data = _build(
+        [_row("a@x.com", cost=10.0)],
+        [_user("a@x.com")],
+        [
+            _system_row(),
+            _system_row(
+                flow="untagged_invoke",
+                cost=3.0,
+                attribution=SystemUsageAttribution.UNATTRIBUTED,
+            ),
+        ],
+    )
 
-    assert data.total_cost_cents == pytest.approx(17.0)
-    assert data.system_cost_cents == pytest.approx(7.0)
+    assert data.total_cost_cents == pytest.approx(20.0)
+    assert data.system_cost_cents == pytest.approx(10.0)
     assert data.active_users == 1
-    assert data.system_by_flow[0].name == "image_summarization"
-    assert sum(entry.cost_cents for entry in data.by_model) == pytest.approx(17.0)
+    assert {entry.name: entry.cost_cents for entry in data.system_by_flow} == {
+        "image_summarization": 7.0,
+        UNATTRIBUTED_SYSTEM_USAGE_CATEGORY: 3.0,
+    }
+    assert sum(entry.cost_cents for entry in data.by_model) == pytest.approx(20.0)
 
 
 def test_pdf_includes_system_spend_section() -> None:

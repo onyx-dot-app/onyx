@@ -10,10 +10,40 @@ import pytest
 
 from ee.onyx.db.usage_export import UsageReportMetadata
 from onyx.configs.constants import DEFAULT_PERSONA_ID
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import SystemUsageAttribution
+from onyx.db.llm_usage import LLMUsageRecord
 from onyx.db.seeding.chat_history_seeding import seed_chat_history
+from onyx.db.system_usage import record_system_usage
+from onyx.tracing.flows import LLMFlow
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
+
+_SYSTEM_USAGE_MODEL = "usage-report-test-model"
+_SYSTEM_USAGE_PROVIDER = "usage-report-test-provider"
+
+
+def _seed_system_usage() -> LLMUsageRecord:
+    usage = LLMUsageRecord(
+        model=_SYSTEM_USAGE_MODEL,
+        flow=LLMFlow.IMAGE_SUMMARIZATION.value,
+        provider=_SYSTEM_USAGE_PROVIDER,
+        input_tokens=120,
+        output_tokens=30,
+        cache_read_tokens=10,
+        cache_creation_tokens=5,
+        cost_cents=2.5,
+        window_start=datetime.now(timezone.utc),
+    )
+    with get_session_with_current_tenant() as db_session:
+        record_system_usage(
+            db_session,
+            attribution=SystemUsageAttribution.ATTRIBUTED,
+            usage=usage,
+        )
+        db_session.commit()
+    return usage
 
 
 @pytest.mark.skipif(
@@ -231,6 +261,7 @@ class TestUsageExportAPI:
             user_id=UUID(admin_user.id),
             persona_id=DEFAULT_PERSONA_ID,
         )
+        system_usage = _seed_system_usage()
 
         # Get initial reports count
         initial_response = client.get(
@@ -336,6 +367,20 @@ class TestUsageExportAPI:
                     "cache_creation_tokens",
                     "cost_cents",
                 }
+                assert list(csv_reader) == [
+                    {
+                        "attribution": SystemUsageAttribution.ATTRIBUTED.value,
+                        "day": system_usage.window_start.date().isoformat(),
+                        "model": _SYSTEM_USAGE_MODEL,
+                        "flow": LLMFlow.IMAGE_SUMMARIZATION.value,
+                        "provider": _SYSTEM_USAGE_PROVIDER,
+                        "input_tokens": "120",
+                        "output_tokens": "30",
+                        "cache_read_tokens": "10",
+                        "cache_creation_tokens": "5",
+                        "cost_cents": "2.5",
+                    }
+                ]
 
             # Verify chat_messages.csv has the expected columns
             with zip_file.open("chat_messages.csv") as csv_file:

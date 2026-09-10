@@ -178,6 +178,21 @@ def _seed_system_usage(db_session: Session) -> None:
             UserUsage(
                 user_id=None,
                 actor_kind=UsageActorKind.SYSTEM,
+                system_attribution=SystemUsageAttribution.ATTRIBUTED,
+                window_start=_W1 + datetime.timedelta(hours=1),
+                model="model-a",
+                flow="image_summarization",
+                provider="anthropic",
+                incognito=False,
+                input_tokens=25,
+                output_tokens=5,
+                cache_read_tokens=2,
+                cache_creation_tokens=1,
+                cost_cents=1.5,
+            ),
+            UserUsage(
+                user_id=None,
+                actor_kind=UsageActorKind.SYSTEM,
                 system_attribution=SystemUsageAttribution.UNATTRIBUTED,
                 window_start=_W1,
                 model="model-b",
@@ -419,7 +434,11 @@ class TestSystemUsageEndpoint:
             category["category"]: category for category in response.json()["categories"]
         }
         assert set(categories) == {"image_summarization", "unattributed"}
-        assert categories["image_summarization"]["totals"]["cost_cents"] == 2.0
+        image_summary = categories["image_summarization"]
+        assert len(image_summary["records"]) == 1
+        assert image_summary["totals"]["input_tokens"] == 125
+        assert image_summary["totals"]["output_tokens"] == 25
+        assert image_summary["totals"]["cost_cents"] == 3.5
         assert categories["unattributed"]["records"][0]["flow"] == "untagged_invoke"
 
     def test_rejects_non_admin(self, db_session: Session) -> None:
