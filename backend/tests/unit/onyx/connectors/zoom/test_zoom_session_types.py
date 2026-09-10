@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 from onyx.connectors.zoom.client import ZoomClient
@@ -26,9 +27,16 @@ class TestMeetingSessionType:
             occurrence(uuid="uuid-1")
         ]
 
-        result = MeetingSessionType().list_occurrences(mock_client, "111")
+        window_start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        window_end = datetime(2026, 1, 31, tzinfo=timezone.utc)
 
-        mock_client.list_past_meeting_occurrences.assert_called_once_with("111")
+        result = MeetingSessionType().list_occurrences(
+            mock_client, "111", window_start, window_end
+        )
+
+        mock_client.list_past_meeting_occurrences.assert_called_once_with(
+            "111", window_start, window_end
+        )
         assert result == [occurrence(uuid="uuid-1")]
 
     def test_get_occurrence_details_delegates_to_meeting_endpoint(self) -> None:

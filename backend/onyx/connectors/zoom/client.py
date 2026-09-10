@@ -1,5 +1,6 @@
 import time
 from collections.abc import Callable
+from datetime import datetime
 from typing import Any
 from urllib.parse import quote, urljoin, urlparse
 
@@ -31,6 +32,9 @@ _API_BASE_URL = "https://api.zoom.us/v2"
 _ZOOM_HOST = "zoom.us"
 
 _TOKEN_REFRESH_MARGIN_SECONDS = 60
+
+# Zoom's date-scoped query parameters are whole UTC days.
+_ZOOM_DATE_FORMAT = "%Y-%m-%d"
 
 
 def _encode_meeting_identifier(identifier: str) -> str:
@@ -199,17 +203,32 @@ class ZoomClient:
         return ZoomPastMeetingDetails.model_validate(response.json())
 
     def list_past_meeting_occurrences(
-        self, meeting_id: str
+        self,
+        meeting_id: str,
+        window_start: datetime | None = None,
+        window_end: datetime | None = None,
     ) -> list[ZoomMeetingOccurrence]:
         """A recurring meeting records each run separately, and the bare
         meeting_id only ever reaches the latest one, so call this first for every
         occurrence's UUID. This endpoint is not paginated. Zoom returns nothing
         for meetings older than 15 months, silently and with no way to detect it,
         so scope by host or group to reach further back.
+
+        Zoom ignores from/to unless both are sent, and reads them as whole UTC
+        days, so the reply still overshoots a sub-day window at either end and
+        the caller trims it.
         """
+        params: dict[str, str] = {}
+        if window_start is not None and window_end is not None:
+            params = {
+                "from": window_start.strftime(_ZOOM_DATE_FORMAT),
+                "to": window_end.strftime(_ZOOM_DATE_FORMAT),
+            }
+
         response = self._request(
             "GET",
             f"/past_meetings/{_encode_meeting_identifier(meeting_id)}/instances",
+            params=params,
         )
         _raise_for_zoom_error(response, f"the occurrences for {meeting_id}")
         occurrences = response.json().get("meetings", [])

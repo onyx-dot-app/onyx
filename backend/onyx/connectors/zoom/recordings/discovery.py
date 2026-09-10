@@ -10,12 +10,15 @@ documents are keyed by occurrence UUID and get upserted.
 """
 
 import abc
-from datetime import datetime, timezone
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 from onyx.configs.app_configs import ZOOM_TRANSCRIPT_LAG_BUFFER_HOURS
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
+    datetime_from_utc_timestamp,
+    time_str_to_utc,
+)
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorFailure, EntityFailure
 from onyx.connectors.zoom.client import ZoomClient
@@ -24,7 +27,6 @@ from onyx.connectors.zoom.recordings.models import (
     OccurrenceWork,
     ZoomSessionType,
     fails_the_whole_run,
-    parse_zoom_datetime,
 )
 from onyx.connectors.zoom.recordings.session_types import get_session_type_handler
 from onyx.utils.logger import setup_logger
@@ -35,9 +37,9 @@ _OCCURRENCE_POLL_OVERLAP_SECONDS = ZOOM_TRANSCRIPT_LAG_BUFFER_HOURS * 60 * 60
 
 # pending_work is re-serialized into the checkpoint on every invocation, so
 # an uncapped batch makes a years-old meeting rewrite megabytes of JSON.
-# Zoom's instances endpoint takes no date or page parameters, so each page
-# after the first re-lists the meeting and slices further in; 200 keeps
-# almost every real meeting to a single listing.
+# Zoom's instances endpoint takes no page parameters, so each page after the
+# first re-lists the meeting and slices further in; 200 keeps almost every
+# real meeting to a single listing.
 _MAX_WORK_PER_STEP = 200
 
 
@@ -46,11 +48,13 @@ def _occurrence_in_poll_window(
     start: SecondsSinceUnixEpoch,
     end: SecondsSinceUnixEpoch,
 ) -> bool:
-    # Keep an occurrence whose start_time won't parse. Indexing it twice is
-    # cheap; dropping it means the transcript is never indexed at all.
-    occurrence_time = parse_zoom_datetime(occurrence.start_time)
-    if occurrence_time is None:
+    """Zoom scopes the listing by whole UTC days, so it still overshoots the
+    window at either end and this trims it back to the second. An occurrence
+    Zoom sent without a start_time is kept: indexing it twice is cheap, and
+    dropping it means the transcript is never indexed at all."""
+    if not occurrence.start_time:
         return True
+    occurrence_time = time_str_to_utc(occurrence.start_time)
     return (
         start - _OCCURRENCE_POLL_OVERLAP_SECONDS <= occurrence_time.timestamp() <= end
     )
@@ -104,11 +108,17 @@ class IdAllowlistSource(DiscoverySource):
 
         session_type, session_id = self._refs[position.index]
         handler = get_session_type_handler(session_type)
+        window_start = datetime_from_utc_timestamp(
+            int(start - _OCCURRENCE_POLL_OVERLAP_SECONDS)
+        )
+        window_end = datetime_from_utc_timestamp(int(end))
 
         failures: list[ConnectorFailure] = []
         occurrences: list[ZoomMeetingOccurrence] = []
         try:
-            occurrences = handler.list_occurrences(client, session_id)
+            occurrences = handler.list_occurrences(
+                client, session_id, window_start, window_end
+            )
         except Exception as e:
             if fails_the_whole_run(e):
                 raise
@@ -127,13 +137,7 @@ class IdAllowlistSource(DiscoverySource):
                         # the type has to travel with it or an admin can't tell
                         # which one failed.
                         entity_id=f"{session_type.value}:{session_id}",
-                        missed_time_range=(
-                            datetime.fromtimestamp(
-                                start - _OCCURRENCE_POLL_OVERLAP_SECONDS,
-                                tz=timezone.utc,
-                            ),
-                            datetime.fromtimestamp(end, tz=timezone.utc),
-                        ),
+                        missed_time_range=(window_start, window_end),
                     ),
                     failure_message=f"Failed to list occurrences for Zoom {session_type.value} {session_id}: {e}",
                     exception=e,

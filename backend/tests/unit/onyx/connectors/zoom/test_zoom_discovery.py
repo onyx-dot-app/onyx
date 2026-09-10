@@ -5,6 +5,9 @@ from unittest.mock import MagicMock
 import pytest
 import requests
 
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
+    datetime_from_utc_timestamp,
+)
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.zoom.client import ZoomClient
 from onyx.connectors.zoom.models import ZoomMeetingOccurrence
@@ -24,7 +27,7 @@ _END = 2_000_000_000.0
 _ONE_HOUR = 60 * 60
 
 # A window this narrow excludes any occurrence whose date parsed, so a test using
-# it can only pass through the branch that keeps an unreadable timestamp.
+# it can only pass through the branch that keeps a start_time Zoom left out.
 _NARROW_WINDOW_SECONDS = 60.0
 
 
@@ -47,7 +50,7 @@ class TestIdAllowlistSource:
     def test_one_id_expanded_per_step_with_cursor_progression(self) -> None:
         source = IdAllowlistSource(["111", "222"])
         client = MagicMock(spec=ZoomClient)
-        client.list_past_meeting_occurrences.side_effect = lambda session_id: [
+        client.list_past_meeting_occurrences.side_effect = lambda session_id, *_window: [
             occurrence(uuid=f"uuid-{session_id}")
         ]
 
@@ -127,6 +130,25 @@ class TestIdAllowlistSource:
 
 
 class TestIdAllowlistPollWindow:
+    def test_zoom_is_asked_for_the_window_including_the_overlap_buffer(self) -> None:
+        # Zoom scopes the listing itself, so the buffer has to reach the API or
+        # the recovery window exists only in the local filter.
+        source = IdAllowlistSource(["111"])
+        now = time.time()
+        poll_start = now - _ONE_HOUR
+        client = _client_with_occurrences([])
+
+        source.discover_step(client, poll_start, now, None)
+
+        session_id, window_start, window_end = (
+            client.list_past_meeting_occurrences.call_args.args
+        )
+        assert session_id == "111"
+        assert window_start == datetime_from_utc_timestamp(
+            int(poll_start - _OCCURRENCE_POLL_OVERLAP_SECONDS)
+        )
+        assert window_end == datetime_from_utc_timestamp(int(now))
+
     def test_steady_state_poll_only_keeps_occurrences_in_window(self) -> None:
         source = IdAllowlistSource(["111"])
         now = time.time()
@@ -179,16 +201,18 @@ class TestIdAllowlistPollWindow:
 
         assert result.work == []
 
-    def test_unparseable_start_time_is_kept_rather_than_dropped(self) -> None:
+    def test_unparseable_start_time_fails_the_run(self) -> None:
+        # Zoom documents start_time as a date-time, so a value that won't parse
+        # means the contract moved. Skipping it quietly would keep indexing
+        # against a shape we no longer understand.
         source = IdAllowlistSource(["111"])
         now = time.time()
         client = _client_with_occurrences(
             [ZoomMeetingOccurrence(uuid="uuid-junk", start_time="not-a-date")]
         )
 
-        result = source.discover_step(client, now - _NARROW_WINDOW_SECONDS, now, None)
-
-        assert [w.occurrence_uuid for w in result.work] == ["uuid-junk"]
+        with pytest.raises(ValueError):
+            source.discover_step(client, now - _NARROW_WINDOW_SECONDS, now, None)
 
     def test_occurrence_with_blank_start_time_is_never_filtered_out(self) -> None:
         source = IdAllowlistSource(["111"])
@@ -267,7 +291,8 @@ class TestIdAllowlistPaging:
         client = _client_with_occurrences(
             [
                 ZoomMeetingOccurrence(
-                    uuid=f"uuid-{i:04d}", start_time=f"2026-01-01T00:{i:02d}:00Z"
+                    uuid=f"uuid-{i:04d}",
+                    start_time=f"2026-01-01T00:{i // 60:02d}:{i % 60:02d}Z",
                 )
                 for i in range(_MAX_WORK_PER_STEP + 1)
             ]
@@ -285,7 +310,8 @@ class TestIdAllowlistPaging:
         client = MagicMock(spec=ZoomClient)
         base = [
             ZoomMeetingOccurrence(
-                uuid=f"uuid-{i:04d}", start_time=f"2026-01-01T00:{i:02d}:00Z"
+                uuid=f"uuid-{i:04d}",
+                start_time=f"2026-01-01T00:{i // 60:02d}:{i % 60:02d}Z",
             )
             for i in range(_MAX_WORK_PER_STEP + 5)
         ]

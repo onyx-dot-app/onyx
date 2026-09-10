@@ -4,6 +4,7 @@ transcript does not: one endpoint serves both, and callers use it directly.
 """
 
 import abc
+from datetime import datetime
 
 from onyx.connectors.zoom.client import ZoomClient
 from onyx.connectors.zoom.models import ZoomMeetingOccurrence, ZoomPastMeetingDetails
@@ -15,8 +16,14 @@ class SessionTypeHandler(abc.ABC):
 
     @abc.abstractmethod
     def list_occurrences(
-        self, client: ZoomClient, session_id: str
+        self,
+        client: ZoomClient,
+        session_id: str,
+        window_start: datetime,
+        window_end: datetime,
     ) -> list[ZoomMeetingOccurrence]:
+        """The window is a request to Zoom, not a promise: an endpoint that
+        can't scope by date ignores it and hands back everything."""
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -30,9 +37,15 @@ class MeetingSessionType(SessionTypeHandler):
     session_type = ZoomSessionType.MEETING
 
     def list_occurrences(
-        self, client: ZoomClient, session_id: str
+        self,
+        client: ZoomClient,
+        session_id: str,
+        window_start: datetime,
+        window_end: datetime,
     ) -> list[ZoomMeetingOccurrence]:
-        return client.list_past_meeting_occurrences(session_id)
+        return client.list_past_meeting_occurrences(
+            session_id, window_start, window_end
+        )
 
     def get_occurrence_details(
         self, client: ZoomClient, occurrence_uuid: str

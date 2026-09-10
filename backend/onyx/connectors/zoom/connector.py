@@ -78,9 +78,11 @@ class ZoomConnector(CheckpointedConnector[ZoomConnectorCheckpoint]):
         state = checkpoint.recordings
 
         if state.work_index < len(state.pending_work):
-            yield from process_occurrence(
+            processed = process_occurrence(
                 self.client, state.pending_work[state.work_index]
             )
+            if processed is not None:
+                yield processed
             state.work_index += 1
         elif state.source_index < len(self._sources):
             source = self._sources[state.source_index]

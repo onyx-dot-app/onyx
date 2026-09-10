@@ -76,9 +76,11 @@ def _make_connector(
 
 
 def _configure_happy_path(mock_client: MagicMock) -> None:
-    mock_client.list_past_meeting_occurrences.side_effect = lambda session_id: [
-        ZoomMeetingOccurrence(uuid=f"uuid-{session_id}", start_time=_days_ago(7))
-    ]
+    mock_client.list_past_meeting_occurrences.side_effect = (
+        lambda session_id, *_window: [
+            ZoomMeetingOccurrence(uuid=f"uuid-{session_id}", start_time=_days_ago(7))
+        ]
+    )
     mock_client.get_meeting_transcript.side_effect = lambda uuid: transcript(
         download_url=f"https://zoom.example/{uuid}.vtt"
     )
@@ -229,7 +231,9 @@ class TestZoomConnectorCheckpoint:
         connector, mock_client = _make_connector(meeting_ids=["111", "222"])
         _configure_happy_path(mock_client)
 
-        def _occurrences(session_id: str) -> list[ZoomMeetingOccurrence]:
+        def _occurrences(
+            session_id: str, *_window: datetime
+        ) -> list[ZoomMeetingOccurrence]:
             if session_id == "111":
                 raise RuntimeError("boom")
             return [

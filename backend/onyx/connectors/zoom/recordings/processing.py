@@ -3,9 +3,8 @@ Anything that differs between meetings and webinars belongs on the
 SessionTypeHandler, not in a branch here.
 """
 
-from collections.abc import Generator
-
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.models import (
     ConnectorFailure,
     Document,
@@ -17,7 +16,6 @@ from onyx.connectors.zoom.recordings.models import (
     OccurrenceWork,
     ZoomSessionType,
     fails_the_whole_run,
-    parse_zoom_datetime,
 )
 from onyx.connectors.zoom.recordings.session_types import get_session_type_handler
 from onyx.connectors.zoom.recordings.vtt import parse_vtt_transcript
@@ -36,8 +34,10 @@ def zoom_document_id(session_type: ZoomSessionType, occurrence_uuid: str) -> str
 
 def process_occurrence(
     client: ZoomClient, work: OccurrenceWork
-) -> Generator[Document | ConnectorFailure, None, None]:
-    handler = get_session_type_handler(work.session_type)
+) -> Document | ConnectorFailure | None:
+    """One occurrence is at most one transcript, so this answers with the
+    document, the failure that replaces it, or nothing when the occurrence has
+    no transcript to index."""
     occurrence_uuid = work.occurrence_uuid
 
     try:
@@ -50,14 +50,13 @@ def process_occurrence(
             work.session_id,
             occurrence_uuid,
         )
-        yield ConnectorFailure(
+        return ConnectorFailure(
             failed_document=DocumentFailure(
                 document_id=zoom_document_id(work.session_type, occurrence_uuid)
             ),
             failure_message=f"Failed to fetch transcript for Zoom session {work.session_id} occurrence {occurrence_uuid}: {e}",
             exception=e,
         )
-        return
 
     if transcript is None:
         logger.info(
@@ -65,7 +64,7 @@ def process_occurrence(
             work.session_id,
             occurrence_uuid,
         )
-        return
+        return None
 
     download_url = transcript.download_url
     if not transcript.is_downloadable or not download_url:
@@ -86,7 +85,7 @@ def process_occurrence(
                 transcript.can_download,
                 bool(download_url),
             )
-        return
+        return None
 
     try:
         vtt_content = client.download_transcript_vtt(download_url)
@@ -98,14 +97,13 @@ def process_occurrence(
             work.session_id,
             occurrence_uuid,
         )
-        yield ConnectorFailure(
+        return ConnectorFailure(
             failed_document=DocumentFailure(
                 document_id=zoom_document_id(work.session_type, occurrence_uuid)
             ),
             failure_message=f"Failed to download transcript for Zoom session {work.session_id} occurrence {occurrence_uuid}: {e}",
             exception=e,
         )
-        return
 
     transcript_text = parse_vtt_transcript(vtt_content)
     if not transcript_text:
@@ -115,12 +113,13 @@ def process_occurrence(
             work.session_id,
             occurrence_uuid,
         )
-        return
+        return None
 
     topic = work.topic
     started_at = work.start_time
     if not topic or not started_at:
         try:
+            handler = get_session_type_handler(work.session_type)
             details = handler.get_occurrence_details(client, occurrence_uuid)
             if details:
                 topic = topic or details.topic
@@ -135,9 +134,9 @@ def process_occurrence(
                 occurrence_uuid,
             )
     topic = topic or f"Zoom Meeting {work.session_id}"
-    occurrence_time = parse_zoom_datetime(started_at)
+    occurrence_time = time_str_to_utc(started_at) if started_at else None
 
-    yield Document(
+    return Document(
         id=zoom_document_id(work.session_type, occurrence_uuid),
         sections=[TextSection(text=transcript_text)],
         source=DocumentSource.ZOOM,

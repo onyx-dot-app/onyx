@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
@@ -6,9 +5,6 @@ import requests
 from pydantic import BaseModel, Field
 
 from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.utils.logger import setup_logger
-
-logger = setup_logger()
 
 
 class ZoomSessionType(str, Enum):
@@ -35,18 +31,6 @@ class RecordingsState(BaseModel):
     source_cursor: dict[str, Any] | None = None
     pending_work: list[OccurrenceWork] = Field(default_factory=list)
     work_index: int = 0
-
-
-def parse_zoom_datetime(value: str | None) -> datetime | None:
-    if not value:
-        return None
-    try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(
-            timezone.utc
-        )
-    except ValueError:
-        logger.warning("Couldn't parse Zoom timestamp: %s", value)
-        return None
 
 
 # The client's mounted Retry covers 429 but not 408, so a timed-out request

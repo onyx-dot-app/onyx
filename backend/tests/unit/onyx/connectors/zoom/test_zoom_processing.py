@@ -57,7 +57,10 @@ def _client_with_transcript() -> MagicMock:
 
 
 def _run(client: MagicMock, work: OccurrenceWork) -> list[Document | ConnectorFailure]:
-    return list(process_occurrence(client, work))
+    """process_occurrence answers with at most one item; the tests read it as a
+    list so an unexpected extra one would show up as a length mismatch."""
+    processed = process_occurrence(client, work)
+    return [] if processed is None else [processed]
 
 
 class TestZoomDocumentId:
