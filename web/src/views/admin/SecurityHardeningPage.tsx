@@ -9,7 +9,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
-import InputNumber from "@/refresh-components/inputs/InputNumber";
+import { InputNumber } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import {
   Content,

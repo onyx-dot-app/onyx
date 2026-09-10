@@ -9,7 +9,7 @@ import Card from "@/refresh-components/cards/Card";
 import { Button, MessageCard } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import InfoBlock from "@/refresh-components/messages/InfoBlock";
-import InputNumber from "@/refresh-components/inputs/InputNumber";
+import { InputNumber } from "@opal/components";
 import {
   SvgUsers,
   SvgExternalLink,
