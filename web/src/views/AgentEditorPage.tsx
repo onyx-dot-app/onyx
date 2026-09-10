@@ -16,6 +16,7 @@ import {
   PopoverMenu,
   Tooltip,
   useCreateModal,
+  InputTags,
 } from "@opal/components";
 import { Hoverable, Disabled } from "@opal/core";
 import { FullAgent, PersonaSharingStatus } from "@/lib/agents/types";
@@ -79,7 +80,6 @@ import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import SquareButton from "@/refresh-components/buttons/SquareButton";
 import { useAgents, useAgentLabels } from "@/lib/agents/hooks";
 import { createAgent, updateAgent } from "@/lib/agents/svc";
-import InputChipField from "@/refresh-components/inputs/InputChipField";
 import { AgentUpsertParameters } from "@/lib/agents/types";
 import { useMcpServersForAgent } from "@/lib/tools/hooks";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
@@ -1608,8 +1608,8 @@ export default function AgentEditorPage({
                               gap={1}
                               alignItems="stretch"
                             >
-                              <InputChipField
-                                chips={(allLabels ?? [])
+                              <InputTags
+                                tags={(allLabels ?? [])
                                   .filter((label) =>
                                     values.label_ids.includes(label.id)
                                   )
@@ -1617,7 +1617,7 @@ export default function AgentEditorPage({
                                     id: String(label.id),
                                     label: label.name,
                                   }))}
-                                onRemoveChip={(id) =>
+                                onRemoveTag={(id) =>
                                   setFieldValue(
                                     "label_ids",
                                     values.label_ids.filter(
