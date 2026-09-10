@@ -6,8 +6,8 @@ a cue can be nothing but a number, so matching either as markup deletes real
 speech.
 """
 
-import html
 import re
+from html import unescape
 
 _TIMING_LINE_RE = re.compile(r"^(?:\d+:)?\d{1,2}:\d{2}[.,]\d{1,3}\s*-->")
 
@@ -25,7 +25,7 @@ def _clean_cue_line(line: str) -> str:
     deleted. The decoded non-breaking space goes too, since it will not match a
     typed space in search.
     """
-    decoded = html.unescape(_CUE_TAG_RE.sub("", line))
+    decoded = unescape(_CUE_TAG_RE.sub("", line))
     return decoded.replace("\xa0", " ").strip()
 
 
