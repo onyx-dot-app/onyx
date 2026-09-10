@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock, patch
 from urllib.parse import urlparse
@@ -425,6 +426,33 @@ class TestListPastMeetingOccurrences:
         client._session.request.return_value = _response(200, {})
 
         assert client.list_past_meeting_occurrences("111") == []
+
+    def test_a_window_is_sent_as_whole_utc_days(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200, {"meetings": []})
+
+        client.list_past_meeting_occurrences(
+            "111",
+            datetime(2026, 1, 5, 23, 30, tzinfo=timezone.utc),
+            datetime(2026, 2, 3, 0, 15, tzinfo=timezone.utc),
+        )
+
+        assert client._session.request.call_args.kwargs["params"] == {
+            "from": "2026-01-05",
+            "to": "2026-02-03",
+        }
+
+    def test_no_window_sends_neither_bound(self) -> None:
+        # Zoom ignores from without to and vice versa, so a half-filled window
+        # would silently widen the listing back to everything.
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200, {"meetings": []})
+
+        client.list_past_meeting_occurrences("111")
+
+        assert client._session.request.call_args.kwargs["params"] == {}
 
 
 class TestDownloadTranscriptVtt:
