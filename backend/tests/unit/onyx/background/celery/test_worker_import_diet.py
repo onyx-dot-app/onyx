@@ -37,23 +37,32 @@ print({_REPORT_PREFIX!r} + json.dumps({{
 }}))
 """
 
-_BASELINE_APP_STAGE = {"fastapi_users", "boto3", "opensearchpy"}
+_BASELINE_APP_STAGE = {"fastapi_users"}
 
 _ALLOWED_WATCHLIST: dict[str, set[str]] = {
     "primary": _BASELINE_APP_STAGE
     | {
+        "boto3",
         "chonkie",
+        "opensearchpy",
         "tokenizers",
         "slack_sdk",
         "onyx.indexing.indexing_pipeline",
         "onyx.connectors.factory",
     },
-    "light": _BASELINE_APP_STAGE | {"onyx.connectors.factory"},
+    "light": _BASELINE_APP_STAGE | {"opensearchpy", "onyx.connectors.factory"},
     "heavy": _BASELINE_APP_STAGE | {"slack_sdk", "onyx.connectors.factory"},
-    "docprocessing": _BASELINE_APP_STAGE | {"chonkie", "tokenizers"},
-    "docfetching": _BASELINE_APP_STAGE | {"onyx.connectors.factory"},
+    "docprocessing": _BASELINE_APP_STAGE
+    | {"boto3", "chonkie", "opensearchpy", "tokenizers"},
+    "docfetching": _BASELINE_APP_STAGE | {"opensearchpy", "onyx.connectors.factory"},
     "user_file_processing": _BASELINE_APP_STAGE
-    | {"chonkie", "tokenizers", "onyx.indexing.indexing_pipeline"},
+    | {
+        "boto3",
+        "chonkie",
+        "opensearchpy",
+        "tokenizers",
+        "onyx.indexing.indexing_pipeline",
+    },
     "scheduled_tasks": _BASELINE_APP_STAGE,
     "monitoring": _BASELINE_APP_STAGE,
     "beat": _BASELINE_APP_STAGE,
