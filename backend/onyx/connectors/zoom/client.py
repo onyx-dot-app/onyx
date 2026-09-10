@@ -75,6 +75,20 @@ def _reject_non_zoom_download_url(download_url: str) -> None:
         raise ValueError(f"Unsafe Zoom transcript download URL: {e}") from e
 
 
+def _not_entitled_message(response: requests.Response) -> str | None:
+    try:
+        body = response.json()
+    except ValueError:
+        return None
+    if not isinstance(body, dict):
+        return None
+    # Compared as text: if Zoom ever sends the code as a string, an int
+    # comparison falls through and the admin loses the add-on hint.
+    if str(body.get("code")) != str(_ZOOM_NOT_ENTITLED_ERROR_CODE):
+        return None
+    return str(body.get("message") or "no permission")
+
+
 def _raise_for_zoom_error(response: requests.Response, description: str) -> None:
     """requests' own message stops at "400 Client Error" and drops Zoom's
     explanation, which is where codes like 12702 (meeting over a year old) live.
@@ -202,7 +216,7 @@ class ZoomClient:
             raise InsufficientPermissionsError(f"{_WEBINAR_ACCESS_HINT} ({e})") from e
 
         if response.status_code == 400:
-            denial = self._not_entitled_message(response)
+            denial = _not_entitled_message(response)
             if denial is not None:
                 # Zoom's message names the user whose licence is missing, which
                 # the hint can't know.
@@ -210,20 +224,6 @@ class ZoomClient:
                     f"{_WEBINAR_ACCESS_HINT} Zoom said: {denial}"
                 )
         return response
-
-    @staticmethod
-    def _not_entitled_message(response: requests.Response) -> str | None:
-        try:
-            body = response.json()
-        except ValueError:
-            return None
-        if not isinstance(body, dict):
-            return None
-        # Compared as text: if Zoom ever sends the code as a string, an int
-        # comparison falls through and the admin loses the add-on hint.
-        if str(body.get("code")) != str(_ZOOM_NOT_ENTITLED_ERROR_CODE):
-            return None
-        return str(body.get("message") or "no permission")
 
     def get_meeting_transcript(self, meeting_identifier: str) -> ZoomTranscript:
         """Takes a meeting ID, a webinar ID, or one occurrence's UUID. Zoom has
