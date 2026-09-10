@@ -344,6 +344,19 @@ Without a baseline the tests still run and the report prints, but nothing is
 gated. A module opts into the gate by committing a baseline, so `cli` and
 `terraform-provider-onyx` join by running `ods coverage <suite> --update` once.
 
+In CI, each module's `--markdown` report goes to the job summary, and its
+`--html` page is uploaded as an artifact and published to the reports bucket.
+One PR comment, updated in place, lists the modules with a baseline where a
+package moved, each with a link to its page.
+
+Floors are rounded down to one decimal, and a package may sit `--tolerance`
+below its floor without failing. That absorbs the jitter from suites that depend
+on ports or timing; a real regression is far larger.
+
+The package floors are the gate. The module total is reported with its delta
+but never fails the check: a package added without tests, or a well-covered
+package deleted, moves the total without any package regressing.
+
 ### `type-coverage` - Measure Type Coverage Against a Baseline
 
 Measure type coverage per directory and hold it against a committed baseline.
@@ -362,7 +375,7 @@ not supported yet, because `ty` does not report types.
 `ods web types:check` type-checks `web/` with the TypeScript 7 API. From the
 same program, it counts the identifiers in each file. A type error fails the
 command before the coverage is compared. The count does not include tests:
-`web/tests/`, `__tests__/` directories, and `*.test.*` and `*.spec.*` files.
+`tests/` and `__tests__/` directories, and `*.test.*` and `*.spec.*` files.
 Tests are still type-checked. This command groups the files into directories
 three levels deep, such as `src/app/admin`, and compares each directory with its
 floor in `web/.type-coverage-baseline.yaml`. The flags and the baseline format
@@ -400,19 +413,6 @@ ods web types:check
 
 The `typescript-check` pre-commit hook runs `--check` when a `.ts` or `.tsx`
 file in `web/` changes. `pr-quality-checks.yml` runs the same hook on every PR.
-
-In CI, each module's `--markdown` report goes to the job summary, and its
-`--html` page is uploaded as an artifact and published to the reports bucket.
-One PR comment, updated in place, lists the modules with a baseline where a
-package moved, each with a link to its page.
-
-Floors are rounded down to one decimal, and a package may sit `--tolerance`
-below its floor without failing. That absorbs the jitter from suites that depend
-on ports or timing; a real regression is far larger.
-
-The package floors are the gate. The module total is reported with its delta
-but never fails the check: a package added without tests, or a well-covered
-package deleted, moves the total without any package regressing.
 
 ### `dev` - Devcontainer Management
 

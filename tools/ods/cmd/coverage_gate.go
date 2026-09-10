@@ -36,9 +36,15 @@ func runCoverageGate(g coverageGate) int {
 	}
 
 	// A measurement opts into the gate by committing a baseline. Without one
-	// the report still prints, but nothing can regress.
+	// the report still prints, but nothing can regress, unless the kind
+	// requires a baseline.
 	baseline, err := coverage.LoadBaseline(g.BaselinePath)
 	if errors.Is(err, os.ErrNotExist) {
+		if g.Check && g.Kind.RequireBaseline {
+			log.Errorf("No baseline at %s, so %s is not gated. Restore the file, or create it with: %s --update",
+				g.BaselinePath, g.Kind.Name, g.Command)
+			return 1
+		}
 		log.Warnf("No baseline at %s, so nothing is gated. Opt in with: %s --update", g.BaselinePath, g.Command)
 		baseline = nil
 	} else if err != nil {
@@ -102,8 +108,11 @@ func writeMarkdown(path, name string, report *coverage.Report, kind coverage.Kin
 	if err != nil {
 		return err
 	}
-	defer func() { _ = f.Close() }()
-	return coverage.WriteMarkdown(f, name, report, kind)
+	err = coverage.WriteMarkdown(f, name, report, kind)
+	if closeErr := f.Close(); err == nil {
+		err = closeErr
+	}
+	return err
 }
 
 // outputTarget resolves where a measurement file is written. Without an

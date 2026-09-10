@@ -5,10 +5,10 @@
 # tests with `ods coverage <suite> --update`.
 #
 # Generated file: do not edit by hand.
-total: 36.9
+total: 37.1
 packages:
   .: 0
-  cmd: 17.2
+  cmd: 17.6
   internal/alembic: 0
   internal/audit: 55.1
   internal/auditcmd: 0
@@ -35,6 +35,6 @@ packages:
   internal/terraform: 83
   internal/testsuite: 88.1
   internal/tui: 38.8
-  internal/typecoverage: 94.5
+  internal/typecoverage: 94.7
   internal/version: 100
   odsaudit: 0

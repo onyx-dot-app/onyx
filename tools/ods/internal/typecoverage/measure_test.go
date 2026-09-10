@@ -41,6 +41,7 @@ func TestParse_rejectsMalformedInput(t *testing.T) {
 		"negative count":     `{"files":[{"file":"a.ts","correct":-1,"total":1}]}`,
 		"string count":       `{"files":[{"file":"a.ts","correct":"1","total":1}]}`,
 		"truncated document": `{"files":[{"file":"a.ts"`,
+		"extra data":         `{"files":[{"file":"a.ts","correct":1,"total":1}]} {"files":[]}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := Parse(strings.NewReader(input)); err == nil {

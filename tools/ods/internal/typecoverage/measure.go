@@ -44,6 +44,9 @@ func Parse(r io.Reader) ([]FileCount, error) {
 	if err := decoder.Decode(&m); err != nil {
 		return nil, fmt.Errorf("parse type coverage: %w", err)
 	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return nil, errors.New("parse type coverage: extra data after the measurement")
+	}
 	// Zero files means the script looked in the wrong place, not that web/
 	// is fully typed.
 	if len(m.Files) == 0 {
