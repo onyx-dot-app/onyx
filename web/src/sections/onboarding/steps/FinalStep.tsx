@@ -25,7 +25,7 @@ const FinalStepItem = React.memo(
       : {};
 
     return (
-      <Card background="none" border="solid" padding={1} rounding={4}>
+      <Card color="transparent" border="solid" padding={1} rounding={4}>
         <Section alignItems="start" height="fit">
           <ContentAction
             icon={Icon}
