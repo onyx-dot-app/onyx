@@ -173,7 +173,7 @@ repos:
         # drops below its type coverage floor in web/.type-coverage-baseline.yaml.
         # Raise the floors with `ods type-coverage typescript --update`.
         args:
-          ["--no-project", "--with=onyx-devtools==0.13.5", "ods", "type-coverage", "typescript", "--check"]
+          ["--no-project", "--with=onyx-devtools==0.13.6", "ods", "type-coverage", "typescript", "--check"]
         pass_filenames: false
         # The i18n catalogs are part of the type graph: keyParity.ts turns a
         # missing or extra locale key into a compile error.
