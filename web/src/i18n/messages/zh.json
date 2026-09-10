@@ -12631,6 +12631,9 @@
       "providerCard": {
         "connect": {
           "label": "连接"
+        },
+        "settingsButton": {
+          "ariaLabel": "提供商设置"
         }
       },
       "title": "连接您的 LLM 模型"
