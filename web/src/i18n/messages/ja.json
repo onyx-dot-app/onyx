@@ -3881,7 +3881,15 @@
         },
         "viewGroup": {
           "label": "グループを表示"
-        }
+        },
+        "resourceCounts": {
+          "connectors": "{count, plural, other {# 個のコネクタ}}",
+          "documentSets": "{count, plural, other {# 個のドキュメントセット}}",
+          "agents": "{count, plural, other {# 個のエージェント}}",
+          "noPrivateResources": "非公開のコネクタ / ドキュメントセット / エージェントはありません",
+          "joined": "{first}・{rest}"
+        },
+        "memberCount": "{count, plural, other {# 人のメンバー}}"
       },
       "create": {
         "header": {
@@ -4130,6 +4138,16 @@
           "header": "Token 上限",
           "placeholder": "Token 上限 (千単位)",
           "unit": "(千単位)"
+        }
+      },
+      "builtIn": {
+        "admin": {
+          "name": "管理者",
+          "description": "すべての権限を管理できる組み込みの管理者グループ。"
+        },
+        "basic": {
+          "name": "基本",
+          "description": "基本権限を持つ全ユーザーのデフォルトグループ。"
         }
       }
     },
@@ -4389,6 +4407,20 @@
         },
         "validationFailed": {
           "message": "検証に失敗しました: {status}"
+        }
+      },
+      "points": {
+        "documentIngestion": {
+          "name": "ドキュメント取り込み",
+          "description": "インデックス作成パイプラインに入る前のすべてのドキュメントに対して実行されます。ドキュメントのフィルタリング、書き換え、破棄が可能です。"
+        },
+        "documentPush": {
+          "name": "ドキュメントプッシュ",
+          "description": "各ドキュメントのインデックス作成が成功した後に発火します。インデックス済みドキュメントを wiki やデータウェアハウスなどの外部先へプッシュします。シングルテナント環境の公開コネクタでのみ発火します。"
+        },
+        "queryProcessing": {
+          "name": "クエリ処理",
+          "description": "パイプラインに入る前のすべてのユーザークエリに対して実行されます。クエリの書き換え、フィルタリング、拒否が可能です。"
         }
       }
     },
@@ -4958,6 +4990,24 @@
         "statusInvalid": "無効",
         "statusPaused": "一時停止中",
         "restoreHint": "コネクタを残したい場合は、ここでキャンセルし、再開または修正してから再インデックスを実行してください。そうすれば新しいインデックスに引き継がれます。そうしない場合は、再インデックスの完了後に追加し直してください。"
+      },
+      "modelDescriptions": {
+        "cohereEmbedEnglishV3": "Cohere の英語向け埋め込みモデル。英語タスクで良好な性能。",
+        "cohereEmbedEnglishLightV3": "Cohere の軽量な英語向け埋め込みモデル。単純なタスクではより高速で効率的。",
+        "cohereEmbedV4": "Cohere の最新の多言語埋め込みモデル。デフォルトの 1536 次元出力で検索品質を向上。",
+        "openaiTextEmbedding3Large": "OpenAI の大規模埋め込みモデル。最高の性能だが高コスト。",
+        "openaiTextEmbedding3Small": "OpenAI の新しく効率的な埋め込みモデル。性能とコストのバランスが良い。",
+        "googleGeminiEmbedding001": "Google の Gemini 埋め込みモデル。強力で効率的。",
+        "googleTextEmbedding005": "Google のより小型で軽量な埋め込みモデル。",
+        "googleGeminiEmbedding2": "Google の最新のマルチモーダル埋め込みモデル（GA）。3072 次元出力で最高品質の検索。",
+        "googleGeminiEmbedding2Preview": "Gemini Embedding 2 のプレビュー版。新規セットアップでは gemini-embedding-2 に置き換えられました。",
+        "voyageLarge2Instruct": "Voyage の大規模埋め込みモデル。指示によるファインチューニングで高性能。",
+        "voyageLight2Instruct": "Voyage の軽量な埋め込みモデル。性能と効率のバランスが良い。",
+        "nomicEmbedTextV1": "検索、類似度、クラスタリング、分類に特化した Nomic の埋め込みモデル。",
+        "e5BaseV2": "デフォルトより小型で高速なモデル。検索品質は下がるが、デフォルトモデルの約 2 倍高速。",
+        "e5SmallV2": "E5 系モデルの中で最小かつ最速のバージョン。リソースが限られた環境で Onyx を実行している場合に適しています。",
+        "multilingualE5Base": "英語以外の言語のコーパスには、これを選択してください。",
+        "multilingualE5Small": "英語以外の言語のコーパスで、かつリソースが限られた環境の場合は、これを選択してください。"
       }
     },
     "indexing": {
@@ -6271,6 +6321,7 @@
         },
         "name": {
           "placeholder": "名前を入力",
+          "required": "名前は必須です",
           "title": "名前"
         },
         "submitButton": {
@@ -6799,7 +6850,9 @@
         "gatedTooltip": "複数の SSO プロバイダーを有効にできるのは、Business プランまたは Enterprise プランです。"
       },
       "copyRedirectUri": {
-        "tooltip": "リダイレクト URI をコピー"
+        "tooltip": "リダイレクト URI をコピー",
+        "successToast": "リダイレクト URI をコピーしました",
+        "errorToast": "コピーできませんでした"
       },
       "editProvider": {
         "tooltip": "編集"
@@ -6911,6 +6964,75 @@
       },
       "toasts": {
         "unexpectedError": "予期しないエラーが発生しました。"
+      },
+      "providerTypes": {
+        "googleOauth": {
+          "description": "Google を ID プロバイダーとして使用します。"
+        },
+        "oidc": {
+          "description": "汎用の OpenID Connect プロバイダーを接続します。"
+        },
+        "saml": {
+          "description": "SAML ID プロバイダーを接続します。"
+        }
+      },
+      "configFields": {
+        "clientId": {
+          "label": "クライアント ID",
+          "description": "プロバイダーのコンソールで発行された OAuth クライアント ID。",
+          "placeholder": "クライアント ID"
+        },
+        "clientSecret": {
+          "label": "クライアントシークレット",
+          "description": "OAuth クライアントシークレット。暗号化して保存されます。",
+          "placeholder": "クライアントシークレット"
+        },
+        "pkceEnabled": {
+          "label": "PKCE を有効化",
+          "description": "このプロバイダーのログインフローで PKCE コードチャレンジを送信します。デプロイ全体の設定により強制される場合があります。"
+        },
+        "scopes": {
+          "label": "スコープ",
+          "description": "ログイン時に要求する OAuth スコープを上書きします。空の場合はデプロイのデフォルトを使用します。",
+          "placeholder": "スコープを追加（例: openid）"
+        },
+        "openidConfigUrl": {
+          "label": "OpenID 設定 URL",
+          "description": "IdP の OpenID Connect ディスカバリードキュメントの URL。"
+        },
+        "requireVerifiedEmail": {
+          "label": "メール検証済みクレームを必須にする",
+          "description": "IdP が任意の email_verified クレームを省略した場合にサインインを拒否します。Microsoft Entra ID など、このクレームを送信しない IdP ではオフにしてください。"
+        },
+        "idpEntityId": {
+          "label": "IdP エンティティ ID",
+          "description": "ID プロバイダーのエンティティ ID（発行者）。"
+        },
+        "idpSsoUrl": {
+          "label": "IdP SSO URL",
+          "description": "サインインリクエストを受け取る IdP のエンドポイント。"
+        },
+        "idpX509Cert": {
+          "label": "IdP X.509 証明書",
+          "description": "アサーションの検証に使用する IdP の署名証明書。"
+        },
+        "spEntityId": {
+          "label": "SP エンティティ ID",
+          "description": "IdP に登録されたこのインスタンスのエンティティ ID。"
+        },
+        "spX509Cert": {
+          "label": "SP X.509 証明書",
+          "description": "このインスタンスがリクエストに署名する、またはアサーションを復号する場合のみ。"
+        },
+        "spPrivateKey": {
+          "label": "SP 秘密鍵",
+          "description": "SP 証明書と対になる秘密鍵。暗号化して保存されます。"
+        },
+        "emailAttribute": {
+          "label": "メール属性",
+          "description": "ユーザーのメールアドレスを含む SAML 属性。デフォルトでは一般的なキーを使用します。",
+          "placeholder": "email"
+        }
       }
     },
     "standardAnswers": {
@@ -7448,6 +7570,42 @@
         "connected": "{label} に接続しました",
         "disconnected": "{label} を切断しました",
         "unexpectedError": "予期しないエラーが発生しました。"
+      },
+      "providers": {
+        "braintrust": {
+          "description": "LLM の評価とモニタリング",
+          "fields": {
+            "apiKey": {
+              "label": "API キー",
+              "description": "Braintrust の [API キー](https://www.braintrust.dev/app)を貼り付けてください。"
+            },
+            "project": {
+              "label": "プロジェクト名",
+              "description": "トレースを記録する Braintrust のプロジェクト名。"
+            },
+            "apiUrl": {
+              "label": "API URL",
+              "description": "デフォルトは米国リージョンです。他のリージョンやセルフホストの場合は Braintrust の API URL を貼り付けてください。"
+            }
+          }
+        },
+        "langfuse": {
+          "description": "クラウドまたはセルフホスト型のオープンソース可観測性プラットフォーム",
+          "fields": {
+            "secretKey": {
+              "label": "シークレットキー",
+              "description": "Langfuse の [API キー](https://cloud.langfuse.com)を貼り付けてください。"
+            },
+            "publicKey": {
+              "label": "パブリックキー",
+              "placeholder": "パブリックキー"
+            },
+            "host": {
+              "label": "API ベース URL",
+              "description": "デフォルトは EU リージョンです。他のリージョンやセルフホストの場合は Langfuse のベース URL を貼り付けてください。"
+            }
+          }
+        }
       }
     },
     "usage": {
@@ -8073,6 +8231,35 @@
       },
       "unexpectedError": {
         "message": "予期しないエラーが発生しました。"
+      },
+      "contentProviders": {
+        "onyxWebCrawler": {
+          "subtitle": "組み込みのウェブクローラー。ほとんどのページで動作しますが、特殊なケースでは性能が落ちます。"
+        },
+        "firecrawl": {
+          "subtitle": "代表的なオープンソースのクローラー。"
+        },
+        "exa": {
+          "subtitle": "Exa.ai"
+        },
+        "tavily": {
+          "subtitle": "Tavily AI"
+        }
+      },
+      "configFields": {
+        "searchEngineId": {
+          "label": "検索エンジン ID",
+          "placeholder": "検索エンジン ID を入力",
+          "description": "ウェブ検索に使用する[検索エンジン ID](https://programmablesearchengine.google.com/controlpanel/all)を貼り付けてください。"
+        },
+        "searxngBaseUrl": {
+          "label": "SearXNG ベース URL",
+          "description": "[SearXNG インスタンス](https://docs.searxng.org/admin/installation.html)のベース URL を貼り付けてください。"
+        },
+        "firecrawlBaseUrl": {
+          "label": "API ベース URL",
+          "description": "Firecrawl API のベース URL。"
+        }
       }
     }
   },
@@ -9816,6 +10003,17 @@
           },
           "reading": {
             "status": "読み取り中"
+          },
+          "header": {
+            "default": "社内ドキュメントを検索中",
+            "sources": "{sources}を検索中",
+            "sourcesOverflow": "{sources} 他{count}件",
+            "withTimeWindow": "{header}({timeWindow})"
+          },
+          "timeWindow": {
+            "since": "{date}以降",
+            "before": "{date}より前",
+            "between": "{start}から{end}まで"
           }
         },
         "interruptedThinking": {
@@ -10595,22 +10793,6 @@
         "text": "あア"
       }
     },
-    "comboBox": {
-      "createOption": {
-        "ariaLabel": "{prefix}「{value}」",
-        "defaultPrefix": "作成"
-      },
-      "dropdown": {
-        "closeAriaLabel": "ドロップダウンを閉じる",
-        "openAriaLabel": "ドロップダウンを開く"
-      },
-      "options": {
-        "empty": "オプションが見つかりません"
-      },
-      "separator": {
-        "label": "その他のオプション"
-      }
-    },
     "commandMenu": {
       "closeButton": {
         "ariaLabel": "メニューを閉じる"
@@ -10664,29 +10846,11 @@
       "anyTime": {
         "text": "期間指定なし..."
       },
-      "chooseCustom": {
-        "ariaLabel": "カスタム範囲を選択"
-      },
       "clearButton": {
         "ariaLabel": "クリア"
       },
-      "custom": {
-        "label": "カスタム"
-      },
-      "customRange": {
-        "ariaLabel": "カスタム範囲: {from}〜{to}"
-      },
       "date": {
         "label": "日付"
-      },
-      "group": {
-        "ariaLabel": "日付範囲"
-      },
-      "preset": {
-        "oneDay": "1日",
-        "oneMonth": "1ヶ月",
-        "sevenDays": "7日",
-        "threeMonths": "3ヶ月"
       }
     },
     "deleteButton": {
@@ -10729,6 +10893,9 @@
       "save": {
         "ariaLabel": "保存"
       }
+    },
+    "enabledCount": {
+      "label": "{total} 中 <value>{enabled}</value>"
     },
     "errorPages": {
       "accessRestricted": {
@@ -10982,34 +11149,6 @@
         "tooltip": "削除"
       }
     },
-    "inputFile": {
-      "attachButton": {
-        "ariaLabel": "ファイルを添付"
-      },
-      "clearButton": {
-        "ariaLabel": "ファイルをクリア"
-      }
-    },
-    "inputImage": {
-      "dropRejected": {
-        "fallback": "ファイルが拒否されました"
-      },
-      "editButton": {
-        "ariaLabel": "画像を編集"
-      },
-      "editOverlay": {
-        "label": "編集"
-      },
-      "image": {
-        "altFallback": "画像"
-      },
-      "removeButton": {
-        "ariaLabel": "画像を削除"
-      },
-      "uploadButton": {
-        "ariaLabel": "画像をアップロード"
-      }
-    },
     "inputSelect": {
       "placeholder": {
         "fallback": "オプションを選択"
@@ -11033,40 +11172,6 @@
       },
       "usersFallback": {
         "text": "ユーザー"
-      }
-    },
-    "keyValue": {
-      "addButton": {
-        "ariaLabel": "{keyTitle}と{valueTitle}のペアを追加",
-        "label": "行を追加"
-      },
-      "empty": {
-        "title": "まだ項目が追加されていません。"
-      },
-      "error": {
-        "duplicateKey": "キーが重複しています",
-        "duplicateSummary": "{count, plural, one {#件の重複キーが見つかりました} other {#件の重複キーが見つかりました}}",
-        "emptyKey": "キーを空にすることはできません",
-        "emptySummary": "{count, plural, one {#件の空のキーが見つかりました} other {#件の空のキーが見つかりました}}",
-        "validationSummary": "{count, plural, one {#件の検証エラーが見つかりました} other {#件の検証エラーが見つかりました}}"
-      },
-      "group": {
-        "ariaLabel": "{keyTitle}と{valueTitle}のペア"
-      },
-      "input": {
-        "ariaLabel": "{label} {index}"
-      },
-      "keyColumn": {
-        "title": "キー"
-      },
-      "pair": {
-        "fallbackLabel": "キーと値"
-      },
-      "removeButton": {
-        "ariaLabel": "{label}のペア{index}を削除"
-      },
-      "valueColumn": {
-        "title": "値"
       }
     },
     "logo": {
@@ -12579,6 +12684,113 @@
       }
     }
   },
+  "opal": {
+    "comboBox": {
+      "close": "ドロップダウンを閉じる",
+      "create": "作成",
+      "createOption": "{prefix}「{value}」",
+      "noOptions": "オプションが見つかりません",
+      "open": "ドロップダウンを開く",
+      "otherOptions": "その他のオプション"
+    },
+    "common": {
+      "clear": "クリア",
+      "clearFilter": "フィルターをクリア",
+      "close": "閉じる",
+      "copied": "コピーしました",
+      "copy": "コピー",
+      "copyCode": "コードをコピー",
+      "date": "日付",
+      "edit": "編集",
+      "loading": "読み込み中",
+      "loadingPage": "読み込み中…",
+      "openCalendar": "カレンダーを開く",
+      "progress": "進行状況",
+      "remove": "削除",
+      "removeItem": "{title} を削除",
+      "search": "検索...",
+      "selectAnOption": "オプションを選択",
+      "showFullMessage": "メッセージ全体を表示",
+      "time": "時刻"
+    },
+    "dateRange": {
+      "chooseCustom": "カスタム範囲を選択",
+      "custom": "カスタム",
+      "customRange": "カスタム範囲: {from}〜{to}",
+      "label": "日付範囲",
+      "oneDay": "1日",
+      "oneMonth": "1ヶ月",
+      "sevenDays": "7日",
+      "threeMonths": "3ヶ月"
+    },
+    "input": {
+      "day": "日",
+      "hidePassword": "パスワードを非表示",
+      "hours": "時",
+      "minutes": "分",
+      "month": "月",
+      "seconds": "秒",
+      "showPassword": "パスワードを表示",
+      "valueCannotBeRevealed": "値を表示できません",
+      "year": "年"
+    },
+    "inputFile": {
+      "attachFile": "ファイルを添付",
+      "clearFile": "ファイルをクリア"
+    },
+    "inputImage": {
+      "alt": "画像",
+      "dropRejected": "ファイルが拒否されました",
+      "edit": "画像を編集",
+      "remove": "画像を削除",
+      "upload": "画像をアップロード"
+    },
+    "keyValue": {
+      "addLine": "行を追加",
+      "addPair": "{keyTitle}と{valueTitle}のペアを追加",
+      "duplicateKey": "キーが重複しています",
+      "duplicateSummary": "{count, plural, one {#件の重複キーが見つかりました} other {#件の重複キーが見つかりました}}",
+      "empty": "まだ項目が追加されていません。",
+      "emptyKey": "キーを空にすることはできません",
+      "emptySummary": "{count, plural, one {#件の空のキーが見つかりました} other {#件の空のキーが見つかりました}}",
+      "group": "{keyTitle}と{valueTitle}のペア",
+      "input": "{label} {index}",
+      "key": "キー",
+      "pairFallback": "キーと値",
+      "removePair": "{label}のペア{index}を削除",
+      "validationSummary": "{count, plural, one {#件の検証エラーが見つかりました} other {#件の検証エラーが見つかりました}}",
+      "value": "値"
+    },
+    "pagination": {
+      "goToPage": "ページへ移動",
+      "nextPage": "次のページ",
+      "previousPage": "前のページ",
+      "rangeOfTotal": "<range></range> / <total></total>"
+    },
+    "table": {
+      "alwaysShown": "常に表示",
+      "ascending": "昇順",
+      "columns": "列",
+      "descending": "降順",
+      "deselectAll": "すべて選択解除",
+      "dragToReorder": "ドラッグして並べ替え",
+      "manualOrdering": "手動の順序",
+      "selectAnItemToContinue": "続行するには項目を選択してください",
+      "selectedItemCount": "{count, plural, one {# 件の項目を選択済み} other {# 件の項目を選択済み}}",
+      "selectItemsToContinue": "続行するには項目を選択してください",
+      "showing": "<total></total> 件中 <range></range> 件を表示",
+      "shownColumns": "表示中の列",
+      "singleItemSelected": "項目を選択済み",
+      "sort": "並べ替え",
+      "sortBy": "並べ替え基準",
+      "sortingOrder": "並べ替え順",
+      "viewSelected": "選択項目を表示"
+    },
+    "tabs": {
+      "scrollLeft": "タブを左にスクロール",
+      "scrollRight": "タブを右にスクロール"
+    }
+  },
   "settings": {
     "accounts": {
       "email": {
@@ -12866,6 +13078,9 @@
         "maxReached": "メモリの上限（{count}件）に達しました"
       },
       "empty": {
+        "addButton": {
+          "ariaLabel": "メモリを追加"
+        },
         "description": "Onyx に覚えておいてほしい個人的なメモやメモリを追加します。",
         "getStarted": "まだメモリがありません。「行を追加」をクリックして始めてください。",
         "noMatches": "検索に一致するメモリはありません。"
@@ -12973,7 +13188,8 @@
           "label": "その他"
         },
         "title": "モデル料金",
-        "unavailable": "料金情報がありません"
+        "unavailable": "料金情報がありません",
+        "priceRow": "入力 {input} · 出力 {output} · キャッシュ {cache}"
       },
       "modelUsage": {
         "cacheReads": {
@@ -12987,7 +13203,8 @@
         },
         "tokensOut": {
           "label": "出力 {count}"
-        }
+        },
+        "joined": "{first}・{rest}"
       },
       "showFewerModels": {
         "ariaLabel": "表示するモデルを減らす"

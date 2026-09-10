@@ -8,6 +8,7 @@ import { useEffect, useRef } from "react";
 import type { IconFunctionComponent } from "@opal/types";
 import { Button, Tag, TAG_REMOVE_CLASS } from "@opal/components";
 import { SvgX } from "@opal/icons";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -85,6 +86,7 @@ function InputTags({
 }: InputTagsProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const strings = useOpalStrings();
 
   useEffect(() => {
     if (focusOnMount) inputRef.current?.focus();
@@ -175,7 +177,7 @@ function InputTags({
           prominence="internal"
           icon={SvgX}
           size="xs"
-          tooltip="Clear"
+          tooltip={strings.clear}
           onClick={(event) => {
             event.stopPropagation();
             onClear();

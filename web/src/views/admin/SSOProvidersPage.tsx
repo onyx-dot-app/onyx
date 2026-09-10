@@ -178,7 +178,7 @@ export default function SSOProvidersPage() {
                           tooltip={t("copyRedirectUri.tooltip")}
                           disabled={isPending}
                           onClick={() => {
-                            void copyRedirectUri(provider.redirect_uri);
+                            void copyRedirectUri(provider.redirect_uri, t);
                           }}
                         />
                         <Switch

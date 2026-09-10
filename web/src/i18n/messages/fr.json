@@ -3881,7 +3881,15 @@
         },
         "viewGroup": {
           "label": "Voir le groupe"
-        }
+        },
+        "resourceCounts": {
+          "connectors": "{count, plural, one {# connecteur} other {# connecteurs}}",
+          "documentSets": "{count, plural, one {# ensemble de documents} other {# ensembles de documents}}",
+          "agents": "{count, plural, one {# agent} other {# agents}}",
+          "noPrivateResources": "Aucun connecteur / ensemble de documents / agent privé",
+          "joined": "{first} · {rest}"
+        },
+        "memberCount": "{count, plural, one {# membre} other {# membres}}"
       },
       "create": {
         "header": {
@@ -4130,6 +4138,16 @@
           "header": "Limite de jetons",
           "placeholder": "Limite de jetons (milliers)",
           "unit": "(milliers)"
+        }
+      },
+      "builtIn": {
+        "admin": {
+          "name": "Admin",
+          "description": "Groupe d'administration intégré avec un accès complet à la gestion de toutes les autorisations."
+        },
+        "basic": {
+          "name": "Basique",
+          "description": "Groupe par défaut pour tous les utilisateurs avec des autorisations de base."
         }
       }
     },
@@ -4389,6 +4407,20 @@
         },
         "validationFailed": {
           "message": "Échec de la validation : {status}"
+        }
+      },
+      "points": {
+        "documentIngestion": {
+          "name": "Ingestion de documents",
+          "description": "S'exécute sur chaque document avant son entrée dans le pipeline d'indexation. Permet de filtrer, réécrire ou supprimer des documents."
+        },
+        "documentPush": {
+          "name": "Envoi de documents",
+          "description": "Se déclenche après l'indexation réussie de chaque document. Envoie les documents indexés vers une destination externe, comme un wiki ou un entrepôt de données. Uniquement pour les connecteurs publics dans les déploiements mono-locataire."
+        },
+        "queryProcessing": {
+          "name": "Traitement des requêtes",
+          "description": "S'exécute sur chaque requête utilisateur avant son entrée dans le pipeline. Permet de réécrire, filtrer ou rejeter des requêtes."
         }
       }
     },
@@ -4958,6 +4990,24 @@
         "statusInvalid": "non valide",
         "statusPaused": "en pause",
         "restoreHint": "Pour conserver un connecteur, annulez ici, reprenez-le ou corrigez-le, puis relancez la réindexation : il sera alors repris. Sinon, rajoutez-le une fois la réindexation terminée."
+      },
+      "modelDescriptions": {
+        "cohereEmbedEnglishV3": "Modèle d'embedding anglais de Cohere. Bonnes performances pour les tâches en anglais.",
+        "cohereEmbedEnglishLightV3": "Modèle d'embedding anglais léger de Cohere. Plus rapide et plus efficace pour les tâches simples.",
+        "cohereEmbedV4": "Dernier modèle d'embedding multilingue de Cohere, avec une sortie par défaut de 1536 dimensions pour une meilleure qualité de recherche.",
+        "openaiTextEmbedding3Large": "Grand modèle d'embedding d'OpenAI. Meilleures performances, mais plus coûteux.",
+        "openaiTextEmbedding3Small": "Modèle d'embedding plus récent et plus efficace d'OpenAI. Bon équilibre entre performances et coût.",
+        "googleGeminiEmbedding001": "Modèle d'embedding Gemini de Google. Puissant et efficace.",
+        "googleTextEmbedding005": "Modèle d'embedding plus petit et plus léger de Google.",
+        "googleGeminiEmbedding2": "Dernier modèle d'embedding multimodal de Google (GA). Recherche de la plus haute qualité avec une sortie de 3072 dimensions.",
+        "googleGeminiEmbedding2Preview": "Version préliminaire de Gemini Embedding 2. Remplacée par gemini-embedding-2 pour les nouvelles configurations.",
+        "voyageLarge2Instruct": "Grand modèle d'embedding de Voyage. Hautes performances grâce au fine-tuning par instructions.",
+        "voyageLight2Instruct": "Modèle d'embedding léger de Voyage. Bon équilibre entre performances et efficacité.",
+        "nomicEmbedTextV1": "Modèle d'embedding de Nomic spécialisé dans la recherche, la similarité, le clustering et la classification.",
+        "e5BaseV2": "Un modèle plus petit et plus rapide que celui par défaut. Environ 2 fois plus rapide que le modèle par défaut, au prix d'une qualité de recherche moindre.",
+        "e5SmallV2": "La version la plus petite et la plus rapide de la gamme E5. Un bon choix si Onyx tourne sur un système aux ressources limitées.",
+        "multilingualE5Base": "Pour les corpus dans d'autres langues que l'anglais, c'est le modèle à choisir.",
+        "multilingualE5Small": "Pour les corpus dans d'autres langues que l'anglais sur un système aux ressources limitées, c'est le modèle à choisir."
       }
     },
     "indexing": {
@@ -6271,6 +6321,7 @@
         },
         "name": {
           "placeholder": "Saisissez un nom",
+          "required": "Le nom est requis",
           "title": "Nom"
         },
         "submitButton": {
@@ -6799,7 +6850,9 @@
         "gatedTooltip": "L'activation de plusieurs fournisseurs SSO est disponible avec le forfait Business ou Enterprise."
       },
       "copyRedirectUri": {
-        "tooltip": "Copier l'URI de redirection"
+        "tooltip": "Copier l'URI de redirection",
+        "successToast": "URI de redirection copiée",
+        "errorToast": "Copie impossible"
       },
       "editProvider": {
         "tooltip": "Modifier"
@@ -6911,6 +6964,75 @@
       },
       "toasts": {
         "unexpectedError": "Une erreur inattendue est survenue."
+      },
+      "providerTypes": {
+        "googleOauth": {
+          "description": "Utiliser Google comme fournisseur d'identité."
+        },
+        "oidc": {
+          "description": "Connecter un fournisseur OpenID Connect générique."
+        },
+        "saml": {
+          "description": "Connecter un fournisseur d'identité SAML."
+        }
+      },
+      "configFields": {
+        "clientId": {
+          "label": "ID client",
+          "description": "L'ID client OAuth issu de la console de votre fournisseur.",
+          "placeholder": "ID client"
+        },
+        "clientSecret": {
+          "label": "Secret client",
+          "description": "Le secret client OAuth. Stocké chiffré.",
+          "placeholder": "Secret client"
+        },
+        "pkceEnabled": {
+          "label": "Activer PKCE",
+          "description": "Envoyer un code challenge PKCE dans le flux de connexion de ce fournisseur. Un paramètre global du déploiement peut l'imposer."
+        },
+        "scopes": {
+          "label": "Scopes",
+          "description": "Remplacer les scopes OAuth demandés à la connexion. Vide utilise les valeurs par défaut du déploiement.",
+          "placeholder": "Ajouter un scope (ex. openid)"
+        },
+        "openidConfigUrl": {
+          "label": "URL de configuration OpenID",
+          "description": "L'URL du document de découverte OpenID Connect de l'IdP."
+        },
+        "requireVerifiedEmail": {
+          "label": "Exiger la revendication d'e-mail vérifié",
+          "description": "Refuser les connexions lorsque l'IdP omet la revendication facultative email_verified. À laisser désactivé pour les IdP qui ne l'envoient pas, comme Microsoft Entra ID."
+        },
+        "idpEntityId": {
+          "label": "ID d'entité IdP",
+          "description": "L'ID d'entité (émetteur) du fournisseur d'identité."
+        },
+        "idpSsoUrl": {
+          "label": "URL SSO de l'IdP",
+          "description": "Le point de terminaison de l'IdP qui reçoit les demandes de connexion."
+        },
+        "idpX509Cert": {
+          "label": "Certificat X.509 de l'IdP",
+          "description": "Le certificat de signature de l'IdP, utilisé pour vérifier les assertions."
+        },
+        "spEntityId": {
+          "label": "ID d'entité SP",
+          "description": "L'ID d'entité de cette instance, enregistré auprès de l'IdP."
+        },
+        "spX509Cert": {
+          "label": "Certificat X.509 du SP",
+          "description": "Uniquement si cette instance signe les requêtes ou déchiffre les assertions."
+        },
+        "spPrivateKey": {
+          "label": "Clé privée du SP",
+          "description": "Clé privée associée au certificat du SP. Stockée chiffrée."
+        },
+        "emailAttribute": {
+          "label": "Attribut e-mail",
+          "description": "Attribut SAML contenant l'e-mail de l'utilisateur. Utilise les clés courantes par défaut.",
+          "placeholder": "email"
+        }
       }
     },
     "standardAnswers": {
@@ -7448,6 +7570,42 @@
         "connected": "{label} connecté",
         "disconnected": "{label} déconnecté",
         "unexpectedError": "Une erreur inattendue est survenue."
+      },
+      "providers": {
+        "braintrust": {
+          "description": "Évaluation et supervision des LLM",
+          "fields": {
+            "apiKey": {
+              "label": "Clé API",
+              "description": "Collez votre [clé API](https://www.braintrust.dev/app) Braintrust."
+            },
+            "project": {
+              "label": "Nom du projet",
+              "description": "Nom du projet Braintrust dans lequel les traces sont enregistrées."
+            },
+            "apiUrl": {
+              "label": "URL de l'API",
+              "description": "Région US par défaut. Collez l'URL de l'API Braintrust pour d'autres régions ou un auto-hébergement."
+            }
+          }
+        },
+        "langfuse": {
+          "description": "Plateforme d'observabilité open source, cloud ou auto-hébergée",
+          "fields": {
+            "secretKey": {
+              "label": "Clé secrète",
+              "description": "Collez votre [clé API](https://cloud.langfuse.com) Langfuse."
+            },
+            "publicKey": {
+              "label": "Clé publique",
+              "placeholder": "Clé publique"
+            },
+            "host": {
+              "label": "URL de base de l'API",
+              "description": "Région UE par défaut. Collez l'URL de base Langfuse pour d'autres régions ou un auto-hébergement."
+            }
+          }
+        }
       }
     },
     "usage": {
@@ -8073,6 +8231,35 @@
       },
       "unexpectedError": {
         "message": "Une erreur inattendue est survenue."
+      },
+      "contentProviders": {
+        "onyxWebCrawler": {
+          "subtitle": "Robot d'exploration intégré. Fonctionne pour la plupart des pages, mais moins performant dans les cas limites."
+        },
+        "firecrawl": {
+          "subtitle": "Robot d'exploration open source de référence."
+        },
+        "exa": {
+          "subtitle": "Exa.ai"
+        },
+        "tavily": {
+          "subtitle": "Tavily AI"
+        }
+      },
+      "configFields": {
+        "searchEngineId": {
+          "label": "ID du moteur de recherche",
+          "placeholder": "Saisissez l'ID de votre moteur de recherche",
+          "description": "Collez votre [ID de moteur de recherche](https://programmablesearchengine.google.com/controlpanel/all) à utiliser pour la recherche web."
+        },
+        "searxngBaseUrl": {
+          "label": "URL de base SearXNG",
+          "description": "Collez l'URL de base de votre [instance SearXNG](https://docs.searxng.org/admin/installation.html)."
+        },
+        "firecrawlBaseUrl": {
+          "label": "URL de base de l'API",
+          "description": "L'URL de base de votre API Firecrawl."
+        }
       }
     }
   },
@@ -9816,6 +10003,17 @@
           },
           "reading": {
             "status": "Lecture"
+          },
+          "header": {
+            "default": "Recherche dans les documents internes",
+            "sources": "Recherche dans {sources}",
+            "sourcesOverflow": "{sources} +{count} autres",
+            "withTimeWindow": "{header} ({timeWindow})"
+          },
+          "timeWindow": {
+            "since": "depuis le {date}",
+            "before": "avant le {date}",
+            "between": "du {start} au {end}"
           }
         },
         "interruptedThinking": {
@@ -10595,22 +10793,6 @@
         "text": "Aa"
       }
     },
-    "comboBox": {
-      "createOption": {
-        "ariaLabel": "{prefix} « {value} »",
-        "defaultPrefix": "Créer"
-      },
-      "dropdown": {
-        "closeAriaLabel": "Fermer la liste déroulante",
-        "openAriaLabel": "Ouvrir la liste déroulante"
-      },
-      "options": {
-        "empty": "Aucune option trouvée"
-      },
-      "separator": {
-        "label": "Autres options"
-      }
-    },
     "commandMenu": {
       "closeButton": {
         "ariaLabel": "Fermer le menu"
@@ -10664,29 +10846,11 @@
       "anyTime": {
         "text": "N'importe quand..."
       },
-      "chooseCustom": {
-        "ariaLabel": "Choisir une plage personnalisée"
-      },
       "clearButton": {
         "ariaLabel": "Effacer"
       },
-      "custom": {
-        "label": "Personnalisé"
-      },
-      "customRange": {
-        "ariaLabel": "Plage personnalisée : {from} à {to}"
-      },
       "date": {
         "label": "Date"
-      },
-      "group": {
-        "ariaLabel": "Plage de dates"
-      },
-      "preset": {
-        "oneDay": "1J",
-        "oneMonth": "1M",
-        "sevenDays": "7J",
-        "threeMonths": "3M"
       }
     },
     "deleteButton": {
@@ -10729,6 +10893,9 @@
       "save": {
         "ariaLabel": "Enregistrer"
       }
+    },
+    "enabledCount": {
+      "label": "<value>{enabled}</value> sur {total}"
     },
     "errorPages": {
       "accessRestricted": {
@@ -10982,34 +11149,6 @@
         "tooltip": "Supprimer"
       }
     },
-    "inputFile": {
-      "attachButton": {
-        "ariaLabel": "Joindre un fichier"
-      },
-      "clearButton": {
-        "ariaLabel": "Effacer le fichier"
-      }
-    },
-    "inputImage": {
-      "dropRejected": {
-        "fallback": "Fichier refusé"
-      },
-      "editButton": {
-        "ariaLabel": "Modifier l'image"
-      },
-      "editOverlay": {
-        "label": "Modifier"
-      },
-      "image": {
-        "altFallback": "Image"
-      },
-      "removeButton": {
-        "ariaLabel": "Supprimer l'image"
-      },
-      "uploadButton": {
-        "ariaLabel": "Téléverser une image"
-      }
-    },
     "inputSelect": {
       "placeholder": {
         "fallback": "Sélectionnez une option"
@@ -11033,40 +11172,6 @@
       },
       "usersFallback": {
         "text": "Utilisateurs"
-      }
-    },
-    "keyValue": {
-      "addButton": {
-        "ariaLabel": "Ajouter une paire {keyTitle} et {valueTitle}",
-        "label": "Ajouter une ligne"
-      },
-      "empty": {
-        "title": "Aucun élément ajouté pour le moment."
-      },
-      "error": {
-        "duplicateKey": "Clé en double",
-        "duplicateSummary": "{count, plural, one {# clé en double trouvée} other {# clés en double trouvées}}",
-        "emptyKey": "La clé ne peut pas être vide",
-        "emptySummary": "{count, plural, one {# clé vide trouvée} other {# clés vides trouvées}}",
-        "validationSummary": "{count, plural, one {# erreur de validation trouvée} other {# erreurs de validation trouvées}}"
-      },
-      "group": {
-        "ariaLabel": "Paires {keyTitle} et {valueTitle}"
-      },
-      "input": {
-        "ariaLabel": "{label} {index}"
-      },
-      "keyColumn": {
-        "title": "Clé"
-      },
-      "pair": {
-        "fallbackLabel": "clé-valeur"
-      },
-      "removeButton": {
-        "ariaLabel": "Supprimer la paire {label} {index}"
-      },
-      "valueColumn": {
-        "title": "Valeur"
       }
     },
     "logo": {
@@ -12579,6 +12684,113 @@
       }
     }
   },
+  "opal": {
+    "comboBox": {
+      "close": "Fermer la liste déroulante",
+      "create": "Créer",
+      "createOption": "{prefix} « {value} »",
+      "noOptions": "Aucune option trouvée",
+      "open": "Ouvrir la liste déroulante",
+      "otherOptions": "Autres options"
+    },
+    "common": {
+      "clear": "Effacer",
+      "clearFilter": "Effacer le filtre",
+      "close": "Fermer",
+      "copied": "Copié !",
+      "copy": "Copier",
+      "copyCode": "Copier le code",
+      "date": "Date",
+      "edit": "Modifier",
+      "loading": "Chargement",
+      "loadingPage": "Chargement…",
+      "openCalendar": "Ouvrir le calendrier",
+      "progress": "Progression",
+      "remove": "Retirer",
+      "removeItem": "Retirer {title}",
+      "search": "Rechercher...",
+      "selectAnOption": "Sélectionnez une option",
+      "showFullMessage": "Afficher le message complet",
+      "time": "Heure"
+    },
+    "dateRange": {
+      "chooseCustom": "Choisir une plage personnalisée",
+      "custom": "Personnalisé",
+      "customRange": "Plage personnalisée : {from} à {to}",
+      "label": "Plage de dates",
+      "oneDay": "1J",
+      "oneMonth": "1M",
+      "sevenDays": "7J",
+      "threeMonths": "3M"
+    },
+    "input": {
+      "day": "Jour",
+      "hidePassword": "Masquer le mot de passe",
+      "hours": "Heures",
+      "minutes": "Minutes",
+      "month": "Mois",
+      "seconds": "Secondes",
+      "showPassword": "Afficher le mot de passe",
+      "valueCannotBeRevealed": "La valeur ne peut pas être affichée",
+      "year": "Année"
+    },
+    "inputFile": {
+      "attachFile": "Joindre un fichier",
+      "clearFile": "Effacer le fichier"
+    },
+    "inputImage": {
+      "alt": "Image",
+      "dropRejected": "Fichier refusé",
+      "edit": "Modifier l'image",
+      "remove": "Supprimer l'image",
+      "upload": "Téléverser une image"
+    },
+    "keyValue": {
+      "addLine": "Ajouter une ligne",
+      "addPair": "Ajouter une paire {keyTitle} et {valueTitle}",
+      "duplicateKey": "Clé en double",
+      "duplicateSummary": "{count, plural, one {# clé en double trouvée} other {# clés en double trouvées}}",
+      "empty": "Aucun élément ajouté pour le moment.",
+      "emptyKey": "La clé ne peut pas être vide",
+      "emptySummary": "{count, plural, one {# clé vide trouvée} other {# clés vides trouvées}}",
+      "group": "Paires {keyTitle} et {valueTitle}",
+      "input": "{label} {index}",
+      "key": "Clé",
+      "pairFallback": "clé-valeur",
+      "removePair": "Supprimer la paire {label} {index}",
+      "validationSummary": "{count, plural, one {# erreur de validation trouvée} other {# erreurs de validation trouvées}}",
+      "value": "Valeur"
+    },
+    "pagination": {
+      "goToPage": "Aller à la page",
+      "nextPage": "Page suivante",
+      "previousPage": "Page précédente",
+      "rangeOfTotal": "<range></range> sur <total></total>"
+    },
+    "table": {
+      "alwaysShown": "Toujours affichée",
+      "ascending": "Croissant",
+      "columns": "Colonnes",
+      "descending": "Décroissant",
+      "deselectAll": "Tout désélectionner",
+      "dragToReorder": "Glisser pour réordonner",
+      "manualOrdering": "Ordre manuel",
+      "selectAnItemToContinue": "Sélectionnez un élément pour continuer",
+      "selectedItemCount": "{count, plural, one {# élément sélectionné} other {# éléments sélectionnés}}",
+      "selectItemsToContinue": "Sélectionnez des éléments pour continuer",
+      "showing": "Affichage de <range></range> sur <total></total>",
+      "shownColumns": "Colonnes affichées",
+      "singleItemSelected": "Élément sélectionné",
+      "sort": "Trier",
+      "sortBy": "Trier par",
+      "sortingOrder": "Sens du tri",
+      "viewSelected": "Voir la sélection"
+    },
+    "tabs": {
+      "scrollLeft": "Faire défiler les onglets vers la gauche",
+      "scrollRight": "Faire défiler les onglets vers la droite"
+    }
+  },
   "settings": {
     "accounts": {
       "email": {
@@ -12866,6 +13078,9 @@
         "maxReached": "Maximum de {count} souvenirs atteint"
       },
       "empty": {
+        "addButton": {
+          "ariaLabel": "Ajouter un souvenir"
+        },
         "description": "Ajoutez une note personnelle ou un souvenir que Onyx doit retenir.",
         "getStarted": "Aucun souvenir pour le moment. Cliquez sur « Ajouter une ligne » pour commencer.",
         "noMatches": "Aucun souvenir ne correspond à votre recherche."
@@ -12973,7 +13188,8 @@
           "label": "Autres"
         },
         "title": "Prix des modèles",
-        "unavailable": "Prix indisponibles"
+        "unavailable": "Prix indisponibles",
+        "priceRow": "{input} entrée · {output} sortie · {cache} cache"
       },
       "modelUsage": {
         "cacheReads": {
@@ -12987,7 +13203,8 @@
         },
         "tokensOut": {
           "label": "{count} en sortie"
-        }
+        },
+        "joined": "{first} · {rest}"
       },
       "showFewerModels": {
         "ariaLabel": "Afficher moins de modèles"

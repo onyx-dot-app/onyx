@@ -54,6 +54,56 @@ export {
   type TextButtonProps,
 } from "@opal/components/buttons/text-button/components";
 
+/* DateRangePicker */
+export {
+  DateRangePicker,
+  rangeForInclusiveDays,
+  THIRTY_DAYS,
+  type DateRange,
+  type DateRangePickerValue,
+} from "@opal/components/inputs/date-range-picker/components";
+
+/* InputAvatar */
+export { default as InputAvatar } from "@opal/components/inputs/input-avatar/components";
+
+/* InputKeyValue */
+export {
+  default as InputKeyValue,
+  type KeyValue,
+  type KeyValueInputProps,
+} from "@opal/components/inputs/input-key-value/components";
+
+/* InputComboBox */
+export {
+  default as InputComboBox,
+  type InputComboBoxProps,
+  type ComboBoxOption,
+} from "@opal/components/inputs/input-combo-box/index";
+
+/* InputImage */
+export {
+  default as InputImage,
+  type InputImageProps,
+} from "@opal/components/inputs/input-image/components";
+
+/* InputNumber */
+export {
+  default as InputNumber,
+  type InputNumberProps,
+} from "@opal/components/inputs/input-number/components";
+
+/* InputFile */
+export {
+  default as InputFile,
+  type InputFileProps,
+} from "@opal/components/inputs/input-file/components";
+
+/* ListFieldInput */
+export {
+  ListFieldInput,
+  type ListFieldInputProps,
+} from "@opal/components/inputs/list-field-input/components";
+
 /* Text */
 export {
   Text,

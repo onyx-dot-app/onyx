@@ -29,6 +29,7 @@ import {
   CREATABLE_SSO_PROVIDER_TYPES,
   SSO_PROVIDER_DETAILS,
   type SSOConfigField,
+  type SSOTranslate,
 } from "@/lib/sso/utils";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
@@ -64,8 +65,6 @@ const ALL_CONFIG_FIELDS: SSOConfigField[] = Array.from(
   ).values()
 );
 
-type SSOTranslate = ReturnType<typeof useTranslations<"admin.ssoProviders">>;
-
 function configSchemaForType(fields: SSOConfigField[], t: SSOTranslate) {
   const shape: Record<string, Yup.AnySchema> = {};
   for (const field of fields) {
@@ -80,7 +79,9 @@ function configSchemaForType(fields: SSOConfigField[], t: SSOTranslate) {
     shape[field.name] = field.optional
       ? Yup.string().optional()
       : Yup.string().required(
-          t("modals.provider.validation.fieldRequired", { field: field.label })
+          t("modals.provider.validation.fieldRequired", {
+            field: t(field.labelKey),
+          })
         );
   }
   return Yup.object(shape);
@@ -222,26 +223,30 @@ function ConfigInput({
   field: SSOConfigField;
   isEditing: boolean;
 }) {
+  const t = useTranslations("admin.ssoProviders");
   const name = `config.${field.name}`;
+  const placeholder = field.placeholderKey
+    ? t(field.placeholderKey)
+    : field.placeholder;
   if (field.kind === "switch") {
     return <SwitchField name={name} />;
   }
   if (field.kind === "chips") {
-    return <TagListField name={name} placeholder={field.placeholder} />;
+    return <TagListField name={name} placeholder={placeholder} />;
   }
   if (field.kind === "textarea") {
-    return <InputTextAreaField name={name} placeholder={field.placeholder} />;
+    return <InputTextAreaField name={name} placeholder={placeholder} />;
   }
   if (field.kind === "password") {
     return (
       <PasswordInputTypeInField
         name={name}
-        placeholder={field.placeholder}
+        placeholder={placeholder}
         isNonRevealable={isEditing}
       />
     );
   }
-  return <InputTypeInField name={name} placeholder={field.placeholder} />;
+  return <InputTypeInField name={name} placeholder={placeholder} />;
 }
 
 export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
@@ -375,7 +380,7 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                               key={type}
                               value={type}
                               icon={detail.icon}
-                              description={detail.description}
+                              description={t(detail.descriptionKey)}
                               wrapDescription
                             >
                               {detail.label}
@@ -419,11 +424,11 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                       title={
                         field.optional
                           ? t("modals.provider.configField.optionalTitle", {
-                              label: field.label,
+                              label: t(field.labelKey),
                             })
-                          : field.label
+                          : t(field.labelKey)
                       }
-                      description={field.description}
+                      description={t(field.descriptionKey)}
                       withLabel={`config.${field.name}`}
                     >
                       <ConfigInput field={field} isEditing={isEditing} />

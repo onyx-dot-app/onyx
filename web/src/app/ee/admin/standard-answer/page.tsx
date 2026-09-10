@@ -338,7 +338,6 @@ const StandardAnswersTable = ({
                 currentPage={currentPage}
                 totalPages={totalPages}
                 onPageChange={handlePageChange}
-                shouldScroll={true}
               />
             </div>
           </>

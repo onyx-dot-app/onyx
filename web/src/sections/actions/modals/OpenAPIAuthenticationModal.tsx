@@ -16,9 +16,10 @@ import { InputTypeIn } from "@opal/components";
 import { FormField } from "@/refresh-components/form/FormField";
 import Text from "@/refresh-components/texts/Text";
 import { CopyButton } from "@opal/components";
-import KeyValueInput, {
-  KeyValue,
-} from "@/refresh-components/inputs/InputKeyValue";
+import {
+  InputKeyValue as KeyValueInput,
+  type KeyValue,
+} from "@opal/components";
 import { OAuthConfig } from "@/lib/tools/types";
 import { getOAuthConfig } from "@/lib/oauth/api";
 import { SvgArrowExchange } from "@opal/icons";

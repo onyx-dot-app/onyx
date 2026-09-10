@@ -90,3 +90,17 @@ export function clickOnKeyDown(
     onClick();
   };
 }
+
+/**
+ * Wraps a click handler so the event stops at this element — for controls
+ * nested inside a larger click surface (an input's action button, a card's
+ * inner control) that must not also trigger the surface.
+ */
+export function noProp(
+  f?: (event: React.MouseEvent) => void
+): React.MouseEventHandler {
+  return (event) => {
+    event.stopPropagation();
+    f?.(event);
+  };
+}

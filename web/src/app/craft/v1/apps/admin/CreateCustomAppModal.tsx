@@ -14,10 +14,7 @@ import {
   Text,
   Tooltip,
 } from "@opal/components";
-import { ListFieldInput } from "@/refresh-components/inputs/ListFieldInput";
-import InputKeyValue, {
-  KeyValue,
-} from "@/refresh-components/inputs/InputKeyValue";
+import { InputKeyValue, ListFieldInput, type KeyValue } from "@opal/components";
 import { ExternalAppAdminResponse } from "@/app/craft/v1/apps/registry";
 import {
   createCustomExternalApp,

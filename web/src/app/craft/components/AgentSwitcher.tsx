@@ -101,7 +101,7 @@ export default function AgentSwitcher() {
       {isViewingSubagent && (
         <SvgCpu className="w-4 h-4 stroke-text-03 shrink-0" />
       )}
-      <Text font="main-ui-action" color="text-04" nowrap>
+      <Text font="main-ui-action" color="text-04" wordWrap="whitespace-nowrap">
         {triggerLabel}
       </Text>
       {isViewingSubagent && viewedSubagent && (

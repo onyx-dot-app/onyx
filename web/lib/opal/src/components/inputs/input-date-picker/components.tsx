@@ -11,6 +11,7 @@ import {
   makeSegmentChangeHandler,
   makeSegmentKeyDownHandler,
 } from "@opal/components/inputs/segmented";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Segment helpers
@@ -25,9 +26,9 @@ interface Segments {
 const EMPTY_SEGMENTS: Segments = { month: "", day: "", year: "" };
 
 const SEGMENT_FIELDS = [
-  { part: "month", label: "Month", placeholder: "MM", maxLen: 2 },
-  { part: "day", label: "Day", placeholder: "DD", maxLen: 2 },
-  { part: "year", label: "Year", placeholder: "YYYY", maxLen: 4 },
+  { part: "month", placeholder: "MM", maxLen: 2 },
+  { part: "day", placeholder: "DD", maxLen: 2 },
+  { part: "year", placeholder: "YYYY", maxLen: 4 },
 ] as const;
 
 function toSegments(date: Date | null): Segments {
@@ -117,6 +118,7 @@ function InputDatePicker({
     toSegments(value)
   );
   const [open, setOpen] = React.useState(false);
+  const strings = useOpalStrings();
 
   const monthRef = React.useRef<HTMLInputElement>(null);
   const dayRef = React.useRef<HTMLInputElement>(null);
@@ -185,7 +187,7 @@ function InputDatePicker({
           <div
             className="opal-input-segmented-content"
             role="group"
-            aria-label="Date"
+            aria-label={strings.date}
           >
             {SEGMENT_FIELDS.map((field, i) => (
               <React.Fragment key={field.part}>
@@ -196,7 +198,7 @@ function InputDatePicker({
                   disabled={disabled}
                   ref={segmentRefs[field.part]}
                   id={field.part === "month" ? id : undefined}
-                  aria-label={field.label}
+                  aria-label={strings[field.part]}
                   placeholder={field.placeholder}
                   maxLength={field.maxLen}
                   data-wide={field.part === "year" ? true : undefined}
@@ -223,7 +225,7 @@ function InputDatePicker({
                 icon={SvgX}
                 prominence="internal"
                 size="sm"
-                tooltip="Clear"
+                tooltip={strings.clear}
                 onClick={() => onChange(null)}
               />
             )}
@@ -232,7 +234,7 @@ function InputDatePicker({
                 icon={SvgCalendar}
                 prominence="internal"
                 size="sm"
-                tooltip="Open calendar"
+                tooltip={strings.openCalendar}
                 disabled={disabled}
               />
             </Popover.Trigger>

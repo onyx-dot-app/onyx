@@ -66,6 +66,7 @@ import {
   CLOUD_BASED_PROVIDERS,
   CUSTOM_PROVIDER,
   SELF_HOSTED_PROVIDERS,
+  embeddingModelDescription,
   findProvider,
   findRegistryModel,
   isCloudBased,
@@ -584,7 +585,7 @@ function EmbeddingModelCard({
           <Content
             icon={provider.icon}
             title={model.modelName}
-            description={model.description}
+            description={embeddingModelDescription(model, t)}
             sizePreset="main-ui"
             variant="section"
           />
@@ -717,7 +718,6 @@ export default function IndexSettingsPage() {
       normalize: currentEmbeddingModel.normalize,
       queryPrefix: currentEmbeddingModel.query_prefix,
       passagePrefix: currentEmbeddingModel.passage_prefix,
-      description: "",
     };
   }, [currentEmbeddingModel]);
 
@@ -1345,7 +1345,7 @@ export default function IndexSettingsPage() {
                                 <Text
                                   font="secondary-body"
                                   color="text-03"
-                                  nowrap
+                                  wordWrap="whitespace-nowrap"
                                 >
                                   {t("changesBanner.orSeparator.label")}
                                 </Text>
@@ -1665,11 +1665,12 @@ export default function IndexSettingsPage() {
                                           currentProvider?.icon ?? SvgServer
                                         }
                                         title={currentEmbeddingModel.model_name}
-                                        description={
+                                        description={embeddingModelDescription(
                                           findRegistryModel(
                                             currentEmbeddingModel.model_name
-                                          )?.description
-                                        }
+                                          ),
+                                          t
+                                        )}
                                         sizePreset="main-ui"
                                         variant="section"
                                       />

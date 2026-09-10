@@ -7,7 +7,7 @@ import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
 import FadingEdgeContainer from "@/refresh-components/FadingEdgeContainer";
 import ToolItemSkeleton from "@/sections/actions/skeleton/ToolItemSkeleton";
-import EnabledCount from "@/refresh-components/EnabledCount";
+import EnabledCount from "@/lib/tools/components/EnabledCount";
 import { SvgEye, SvgXCircle } from "@opal/icons";
 
 export interface ToolsListProps {
@@ -96,7 +96,6 @@ const ToolsList: React.FC<ToolsListProps> = ({
                 <EnabledCount
                   enabledCount={enabledCount}
                   totalCount={totalCount}
-                  name="tool"
                 />
               )}
               {onToggleShowOnlyEnabled && enabledCount > 0 && (

@@ -1,13 +1,9 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { useTranslations } from "next-intl";
-import { Card, Text } from "@opal/components";
+import { useLocale, useTranslations } from "next-intl";
+import { Card, DateRange, DateRangePicker, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
-import {
-  DateRangePicker,
-  DateRange,
-} from "@/refresh-components/DateRangePicker";
 import { useAgents } from "@/lib/agents/hooks";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import {
@@ -35,6 +31,7 @@ interface SummaryMetricProps {
 }
 
 function SummaryMetric({ label, value }: SummaryMetricProps) {
+  const locale = useLocale();
   return (
     <Section
       flexDirection="column"
@@ -47,7 +44,7 @@ function SummaryMetric({ label, value }: SummaryMetricProps) {
       <Text font="secondary-body" color="text-03">
         {label}
       </Text>
-      <Text font="heading-h3">{value.toLocaleString()}</Text>
+      <Text font="heading-h3">{value.toLocaleString(locale)}</Text>
     </Section>
   );
 }

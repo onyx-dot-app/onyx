@@ -9,6 +9,7 @@ import {
 } from "@opal/components";
 import { cn } from "@opal/utils";
 import { SvgEye, SvgEyeClosed } from "@opal/icons";
+import { useOpalStrings } from "@opal/strings";
 
 // Backend placeholder pattern - indicates a stored value that can't be revealed
 const BACKEND_PLACEHOLDER_PATTERN = /^•+$/; // All bullet characters (U+2022)
@@ -85,6 +86,7 @@ function PasswordInputTypeIn({
   const [isPasswordVisible, setIsPasswordVisible] = React.useState(false);
   const [isFocused, setIsFocused] = React.useState(false);
   const containerRef = React.useRef<HTMLDivElement>(null);
+  const strings = useOpalStrings();
 
   const realValue = String(value || "");
   const hasValue = realValue.length > 0;
@@ -109,10 +111,10 @@ function PasswordInputTypeIn({
   const showToggleButton = hasValue || isFocused;
   const isRevealed = isPasswordVisible && !effectiveNonRevealable;
   const toggleLabel = effectiveNonRevealable
-    ? "Value cannot be revealed"
+    ? strings.valueCannotBeRevealed
     : isPasswordVisible
-      ? "Hide password"
-      : "Show password";
+      ? strings.hidePassword
+      : strings.showPassword;
 
   const isNativeMask = mask === "native";
   // The ✱ presentation only draws while idle. Focus anywhere in the field
@@ -182,7 +184,11 @@ function PasswordInputTypeIn({
           aria-hidden
           className="pointer-events-none absolute inset-y-0 start-[6px] end-10 flex items-center overflow-hidden"
         >
-          <Text font="main-ui-body" color="text-04" nowrap>
+          <Text
+            font="main-ui-body"
+            color="text-04"
+            wordWrap="whitespace-nowrap"
+          >
             {"✱".repeat(realValue.length)}
           </Text>
         </div>
