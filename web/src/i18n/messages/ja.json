@@ -12631,6 +12631,9 @@
       "providerCard": {
         "connect": {
           "label": "接続"
+        },
+        "settingsButton": {
+          "ariaLabel": "プロバイダー設定"
         }
       },
       "title": "LLM モデルを接続"

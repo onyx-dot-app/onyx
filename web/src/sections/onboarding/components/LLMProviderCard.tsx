@@ -101,6 +101,9 @@ function LLMProviderCardInner({
                   icon={SvgSettings}
                   disabled={disabled}
                   onClick={handleSettingsClick}
+                  aria-label={t(
+                    "llmStep.providerCard.settingsButton.ariaLabel"
+                  )}
                 />
               </Hoverable.Item>
               <div className="p-1">

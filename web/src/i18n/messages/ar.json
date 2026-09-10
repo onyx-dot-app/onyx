@@ -12631,6 +12631,9 @@
       "providerCard": {
         "connect": {
           "label": "ربط"
+        },
+        "settingsButton": {
+          "ariaLabel": "إعدادات المزوّد"
         }
       },
       "title": "اربط نماذج LLM الخاصة بك"

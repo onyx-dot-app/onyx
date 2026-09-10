@@ -83,11 +83,3 @@
   padding: 0.25rem;
   flex-shrink: 0;
 }
-
-.attachment-item__action {
-  visibility: hidden;
-}
-
-.attachment-item:hover .attachment-item__action {
-  visibility: visible;
-}
