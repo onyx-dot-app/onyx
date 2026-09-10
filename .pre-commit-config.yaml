@@ -167,17 +167,17 @@ repos:
         pass_filenames: true
         files: ^deployment/terraform/.*\.tf$
       - id: uv-run
-        alias: typescript-type-coverage
-        name: TypeScript type coverage
-        # Fails when a web/ directory drops below its floor in
-        # web/.type-coverage-baseline.yaml. The measurement takes about a
-        # minute. Raise the floors with `ods type-coverage typescript --update`.
+        alias: typescript-check
+        name: TypeScript type check and coverage
+        # Type-checks web/ with TypeScript 7 and fails when a web/ directory
+        # drops below its type coverage floor in web/.type-coverage-baseline.yaml.
+        # Raise the floors with `ods type-coverage typescript --update`.
         args:
           ["--no-project", "--with=onyx-devtools==0.13.5", "ods", "type-coverage", "typescript", "--check"]
         pass_filenames: false
-        files: ^web/(.*\.(ts|tsx)|package\.json|bun\.lock|tsconfig.*\.json|\.type-coverage-baseline\.yaml)$
-        # Tests are not measured, so a change to them cannot move a floor.
-        exclude: ^web/(tests/|(.*/)?__tests__/|.*\.(test|spec)\.tsx?$)
+        # The i18n catalogs are part of the type graph: keyParity.ts turns a
+        # missing or extra locale key into a compile error.
+        files: ^web/(.*\.(ts|tsx)|src/i18n/messages/.*\.json|package\.json|bun\.lock|tsconfig.*\.json|\.type-coverage-baseline\.yaml)$
       - id: uv-run
         alias: zizmor
         name: zizmor
@@ -354,20 +354,9 @@ repos:
         types_or: [javascript, ts, tsx]
 
       # Type checks with the native TypeScript compiler (~10x faster than classic
-      # tsc). web and web/lib/shared use the stable typescript@7 release (web
-      # aliases it as `typescript-7` since Next.js still needs typescript@5); the
-      # widget hooks below still use tsgo from @typescript/native-preview in the
-      # root workspace.
-      - id: typescript-check
-        name: TypeScript type check
-        entry: bash -c 'cd web && bun run types:check'
-
-        language: system
-        pass_filenames: false
-        # The i18n catalogs are part of the type graph: keyParity.ts turns a
-        # missing or extra locale key into a compile error.
-        files: ^web/(.*\.(ts|tsx)|src/i18n/messages/.*\.json)$
-
+      # tsc). web/ is checked by the `typescript-check` uv-run hook above. web/lib/shared
+      # uses the stable typescript@7 release; the widget hooks below still use
+      # tsgo from @typescript/native-preview in the root workspace.
       - id: widget-typescript-check
         name: widget TypeScript type check
         entry: bash -c 'cd widget && bunx tsgo --noEmit'

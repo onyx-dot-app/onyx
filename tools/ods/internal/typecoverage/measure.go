@@ -20,7 +20,7 @@ import (
 // "src/app/admin". Changing it renames the rows, so regenerate the baseline.
 const Depth = 3
 
-// FileCount is the measurement for one file, as web/tools/type-coverage
+// FileCount is the measurement for one file, as web/tools/type-check
 // writes it.
 type FileCount struct {
 	// File is the path relative to web/, with forward slashes.
@@ -35,7 +35,7 @@ type measurement struct {
 	Files []FileCount `json:"files"`
 }
 
-// Parse reads the JSON that web/tools/type-coverage writes.
+// Parse reads the JSON that web/tools/type-check writes.
 func Parse(r io.Reader) ([]FileCount, error) {
 	decoder := json.NewDecoder(r)
 	decoder.DisallowUnknownFields()

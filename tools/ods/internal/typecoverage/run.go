@@ -23,8 +23,9 @@ type RunOptions struct {
 	Stderr io.Writer
 }
 
-// Run measures web/ with `bun run types:coverage` and parses the result. When
-// the script fails, the error is a *coverage.ExitError with its exit code.
+// Run type-checks and measures web/ with `bun run types:check`, then parses the
+// result. When the script fails, for example on a type error, the error is a
+// *coverage.ExitError with its exit code.
 func Run(opts RunOptions) ([]FileCount, error) {
 	if !filepath.IsAbs(opts.OutputPath) {
 		return nil, fmt.Errorf("output path %q is not absolute", opts.OutputPath)
@@ -33,7 +34,7 @@ func Run(opts RunOptions) ([]FileCount, error) {
 		return nil, fmt.Errorf("create output directory: %w", err)
 	}
 
-	cmd := exec.Command("bun", "run", "types:coverage", "--", "--output", opts.OutputPath)
+	cmd := exec.Command("bun", "run", "types:check", "--", "--output", opts.OutputPath)
 	cmd.Dir = opts.WebDir
 	cmd.Stdout = opts.Stdout
 	cmd.Stderr = opts.Stderr

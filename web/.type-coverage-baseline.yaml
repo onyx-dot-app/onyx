@@ -6,37 +6,37 @@
 # removing `any` types with `ods type-coverage typescript --update`.
 #
 # Generated file: do not edit by hand.
-total: 99
+total: 98.8
 packages:
   .: 100
   src: 100
   src/app: 100
-  src/app/admin: 97.4
+  src/app/admin: 96.5
   src/app/anonymous: 100
-  src/app/api: 98.8
-  src/app/app: 99.1
-  src/app/auth: 98.6
+  src/app/api: 98.7
+  src/app/app: 98.8
+  src/app/auth: 98.3
   src/app/components: 100
   src/app/config: 100
-  src/app/connector: 90.1
+  src/app/connector: 90
   src/app/craft: 99.5
-  src/app/ee: 97.1
+  src/app/ee: 96
   src/app/federated: 97
   src/app/mcp: 100
   src/app/nrf: 99.6
   src/app/oauth-config: 100
-  src/components: 98.4
-  src/components/admin: 98
-  src/components/auth: 92.3
-  src/components/chat: 98.3
+  src/components: 98.1
+  src/components/admin: 97
+  src/components/auth: 89.3
+  src/components/chat: 97.6
   src/components/context: 100
   src/components/dateRangeSelectors: 100
   src/components/dev: 100
   src/components/errorPages: 100
-  src/components/filters: 97.2
+  src/components/filters: 95.8
   src/components/header: 100
   src/components/icons: 100
-  src/components/oauth: 91.4
+  src/components/oauth: 90
   src/components/resizable: 100
   src/components/search: 100
   src/components/sidebar: 100
@@ -45,62 +45,62 @@ packages:
   src/components/tooltip: 100
   src/components/ui: 100
   src/components/voice: 100
-  src/ee/hooks: 95
+  src/ee/hooks: 93.5
   src/ee/lib: 100
   src/ee/providers: 100
   src/ee/sections: 100
-  src/ee/views: 99.2
-  src/hooks: 99
+  src/ee/views: 99.1
+  src/hooks: 98.9
   src/i18n: 99.7
   src/i18n/messages: 100
   src/interfaces: 100
   src/layouts: 100
   src/layouts/chromes: 100
   src/layouts/craft: 100
-  src/lib: 99
+  src/lib: 98.9
   src/lib/agents: 99.4
   src/lib/analytics: 100
   src/lib/app: 100
-  src/lib/auth: 96
+  src/lib/auth: 95.6
   src/lib/banner: 99.3
-  src/lib/billing: 95.2
+  src/lib/billing: 93.8
   src/lib/build: 100
   src/lib/chat: 98.8
-  src/lib/connectors: 98.6
+  src/lib/connectors: 98.4
   src/lib/constants: 100
-  src/lib/credentials: 97.9
+  src/lib/credentials: 97.4
   src/lib/extension: 100
   src/lib/externalApps: 100
   src/lib/headers: 100
-  src/lib/hierarchy: 97.2
-  src/lib/hooks: 96
-  src/lib/indexing: 98.7
-  src/lib/languageModels: 97.4
+  src/lib/hierarchy: 96.6
+  src/lib/hooks: 95.7
+  src/lib/indexing: 98.4
+  src/lib/languageModels: 97
   src/lib/multiModel: 100
-  src/lib/notifications: 97.9
-  src/lib/oauth: 86.4
+  src/lib/notifications: 98
+  src/lib/oauth: 84.8
   src/lib/permissions: 100
   src/lib/position: 100
   src/lib/projects: 99.7
-  src/lib/search: 99.2
-  src/lib/searchFilters: 96.6
-  src/lib/settings: 98.1
+  src/lib/search: 99.1
+  src/lib/searchFilters: 95.6
+  src/lib/settings: 96.6
   src/lib/sidebar: 100
-  src/lib/skills: 98.7
-  src/lib/sso: 99.7
-  src/lib/tools: 98.2
-  src/lib/tracing: 97.7
-  src/lib/usage: 97.6
-  src/lib/users: 99.1
-  src/lib/voice: 98.5
-  src/lib/webSearch: 99
+  src/lib/skills: 98.6
+  src/lib/sso: 99.2
+  src/lib/tools: 97.7
+  src/lib/tracing: 97.4
+  src/lib/usage: 97.4
+  src/lib/users: 97.8
+  src/lib/voice: 98.3
+  src/lib/webSearch: 98.4
   src/providers: 99.5
-  src/refresh-components: 99.9
+  src/refresh-components: 99.7
   src/refresh-components/avatars: 100
   src/refresh-components/buttons: 100
-  src/refresh-components/cards: 99.5
+  src/refresh-components/cards: 98.4
   src/refresh-components/commandmenu: 100
-  src/refresh-components/form: 99.3
+  src/refresh-components/form: 98.7
   src/refresh-components/inputs: 100
   src/refresh-components/messages: 100
   src/refresh-components/modals: 100
@@ -109,7 +109,7 @@ packages:
   src/refresh-components/texts: 100
   src/refresh-components/tiles: 100
   src/sections: 100
-  src/sections/actions: 99.5
+  src/sections/actions: 99.2
   src/sections/admin: 100
   src/sections/agents: 100
   src/sections/banners: 98.5
@@ -118,13 +118,13 @@ packages:
   src/sections/document-sidebar: 99.7
   src/sections/input: 99.9
   src/sections/knowledge: 100
-  src/sections/modals: 99.6
+  src/sections/modals: 99.5
   src/sections/model-selector: 100
   src/sections/onboarding: 99.8
   src/sections/settings: 100
   src/sections/sidebar: 99.5
   src/sections/skills: 100
   src/sections/usage: 100
-  src/views: 99.4
-  src/views/admin: 99.3
+  src/views: 99.3
+  src/views/admin: 99.1
   types: 100

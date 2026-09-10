@@ -76,7 +76,7 @@ Never import from `web/src/components/`. It is legacy and being deleted. The one
   priority).
 - Run an e2e test with `cd web && bun run playwright <TEST_NAME>`. Do not use `bunx` or `npx`;
   they can fetch an unpinned Playwright.
-- Type coverage (the share of identifiers whose type is not `any`, tests excluded) must not drop
-  below the floors in `web/.type-coverage-baseline.yaml`. CI runs
-  `ods type-coverage typescript --check`. After you remove `any` types, raise the floors with
-  `ods type-coverage typescript --update`.
+- `ods type-coverage typescript --check` type-checks `web/` and gates type coverage (the share of
+  identifiers whose type is not `any`, tests excluded). Coverage must not drop below the floors in
+  `web/.type-coverage-baseline.yaml`. The `typescript-check` pre-commit hook runs it. After you
+  remove `any` types, raise the floors with `ods type-coverage typescript --update`.

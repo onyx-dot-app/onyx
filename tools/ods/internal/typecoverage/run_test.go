@@ -27,7 +27,7 @@ func fakeBun(t *testing.T, script string) (string, string) {
 
 func TestRun_parsesTheScriptOutput(t *testing.T) {
 	webDir, output := fakeBun(t, `
-[ "$*" = "run types:coverage -- --output $5" ] || { echo "unexpected args: $*" >&2; exit 9; }
+[ "$*" = "run types:check -- --output $5" ] || { echo "unexpected args: $*" >&2; exit 9; }
 printf '%s' '{"files":[{"file":"src/a.ts","correct":1,"total":2}]}' > "$5"
 `)
 

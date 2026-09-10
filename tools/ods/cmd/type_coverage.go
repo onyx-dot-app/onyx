@@ -20,15 +20,15 @@ type TypeCoverageOptions struct {
 	Tolerance float64
 }
 
-// NewTypeCoverageCommand creates a command that measures type coverage and
-// compares it against the committed baseline. Only TypeScript is supported:
-// ty does not report type coverage yet.
+// NewTypeCoverageCommand creates a command that type-checks, measures type
+// coverage and compares it against the committed baseline. Only TypeScript is
+// supported: ty does not report type coverage yet.
 func NewTypeCoverageCommand() *cobra.Command {
 	opts := &TypeCoverageOptions{}
 
 	cmd := &cobra.Command{
 		Use:       "type-coverage <checker>",
-		Short:     "Measure type coverage and hold it against a baseline",
+		Short:     "Type-check, then hold type coverage against a baseline",
 		Long:      typeCoverageHelpDescription(),
 		Args:      cobra.ExactArgs(1),
 		ValidArgs: []string{"typescript", "ts"},
@@ -71,7 +71,7 @@ func runTypeCoverage(checker string, opts *TypeCoverageOptions) int {
 	outputPath, cleanup := outputTarget(opts.Output, "type-coverage.json")
 	defer cleanup()
 
-	log.Info("Measuring TypeScript type coverage...")
+	log.Info("Type-checking web/ and measuring type coverage...")
 	files, err := typecoverage.Run(typecoverage.RunOptions{
 		WebDir:     dir,
 		OutputPath: outputPath,
@@ -105,19 +105,21 @@ func runTypeCoverage(checker string, opts *TypeCoverageOptions) int {
 }
 
 func typeCoverageHelpDescription() string {
-	return `Measure type coverage and hold it against a committed baseline.
+	return `Type-check, measure type coverage, and hold it against a committed baseline.
 
 Type coverage is the share of identifiers whose type is not ` + "`any`" + `. Each report
 row is a directory, at most three names deep, e.g. src/app/admin.
+
+A type error fails the command before the coverage is compared.
 
 The baseline is web/` + coverage.TypeBaselineFile + `. --check fails when a directory
 drops below its floor, which is how CI keeps ` + "`any`" + ` from spreading. After removing
 ` + "`any`" + ` types, --update raises the floors.
 
-For the raw per-file counts, run: ods web types:coverage
+For the type check and the total only, run: ods web types:check
 
 Checkers:
-  typescript (ts)  web/, measured with type-coverage-core
+  typescript (ts)  web/, type-checked and measured with TypeScript 7
 
 Examples:
   ods type-coverage ts              # report where each directory stands
