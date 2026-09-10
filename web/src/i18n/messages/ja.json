@@ -10862,29 +10862,11 @@
       "anyTime": {
         "text": "期間指定なし..."
       },
-      "chooseCustom": {
-        "ariaLabel": "カスタム範囲を選択"
-      },
       "clearButton": {
         "ariaLabel": "クリア"
       },
-      "custom": {
-        "label": "カスタム"
-      },
-      "customRange": {
-        "ariaLabel": "カスタム範囲: {from}〜{to}"
-      },
       "date": {
         "label": "日付"
-      },
-      "group": {
-        "ariaLabel": "日付範囲"
-      },
-      "preset": {
-        "oneDay": "1日",
-        "oneMonth": "1ヶ月",
-        "sevenDays": "7日",
-        "threeMonths": "3ヶ月"
       }
     },
     "deleteButton": {
@@ -11181,14 +11163,6 @@
     "inputElement": {
       "removeButton": {
         "tooltip": "削除"
-      }
-    },
-    "inputFile": {
-      "attachButton": {
-        "ariaLabel": "ファイルを添付"
-      },
-      "clearButton": {
-        "ariaLabel": "ファイルをクリア"
       }
     },
     "inputImage": {
@@ -12801,6 +12775,16 @@
       "showFullMessage": "メッセージ全体を表示",
       "time": "時刻"
     },
+    "dateRange": {
+      "chooseCustom": "カスタム範囲を選択",
+      "custom": "カスタム",
+      "customRange": "カスタム範囲: {from}〜{to}",
+      "label": "日付範囲",
+      "oneDay": "1日",
+      "oneMonth": "1ヶ月",
+      "sevenDays": "7日",
+      "threeMonths": "3ヶ月"
+    },
     "input": {
       "day": "日",
       "hidePassword": "パスワードを非表示",
@@ -12811,6 +12795,10 @@
       "showPassword": "パスワードを表示",
       "valueCannotBeRevealed": "値を表示できません",
       "year": "年"
+    },
+    "inputFile": {
+      "attachFile": "ファイルを添付",
+      "clearFile": "ファイルをクリア"
     },
     "pagination": {
       "goToPage": "ページへ移動",

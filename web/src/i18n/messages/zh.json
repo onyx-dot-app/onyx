@@ -10862,29 +10862,11 @@
       "anyTime": {
         "text": "任何时间..."
       },
-      "chooseCustom": {
-        "ariaLabel": "选择自定义范围"
-      },
       "clearButton": {
         "ariaLabel": "清除"
       },
-      "custom": {
-        "label": "自定义"
-      },
-      "customRange": {
-        "ariaLabel": "自定义范围：{from}至{to}"
-      },
       "date": {
         "label": "日期"
-      },
-      "group": {
-        "ariaLabel": "日期范围"
-      },
-      "preset": {
-        "oneDay": "1天",
-        "oneMonth": "1个月",
-        "sevenDays": "7天",
-        "threeMonths": "3个月"
       }
     },
     "deleteButton": {
@@ -11181,14 +11163,6 @@
     "inputElement": {
       "removeButton": {
         "tooltip": "移除"
-      }
-    },
-    "inputFile": {
-      "attachButton": {
-        "ariaLabel": "附加文件"
-      },
-      "clearButton": {
-        "ariaLabel": "清除文件"
       }
     },
     "inputImage": {
@@ -12801,6 +12775,16 @@
       "showFullMessage": "显示完整消息",
       "time": "时间"
     },
+    "dateRange": {
+      "chooseCustom": "选择自定义范围",
+      "custom": "自定义",
+      "customRange": "自定义范围：{from}至{to}",
+      "label": "日期范围",
+      "oneDay": "1天",
+      "oneMonth": "1个月",
+      "sevenDays": "7天",
+      "threeMonths": "3个月"
+    },
     "input": {
       "day": "日",
       "hidePassword": "隐藏密码",
@@ -12811,6 +12795,10 @@
       "showPassword": "显示密码",
       "valueCannotBeRevealed": "无法显示该值",
       "year": "年"
+    },
+    "inputFile": {
+      "attachFile": "附加文件",
+      "clearFile": "清除文件"
     },
     "pagination": {
       "goToPage": "跳转到页面",

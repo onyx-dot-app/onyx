@@ -11,7 +11,7 @@ import {
   DateRange,
   DateRangePicker,
   rangeForInclusiveDays,
-} from "@/refresh-components/DateRangePicker";
+} from "@opal/components";
 import { useCallback, useState } from "react";
 
 const route = ADMIN_ROUTES.QUERY_HISTORY;

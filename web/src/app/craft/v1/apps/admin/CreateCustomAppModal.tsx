@@ -14,7 +14,7 @@ import {
   Text,
   Tooltip,
 } from "@opal/components";
-import { ListFieldInput } from "@/refresh-components/inputs/ListFieldInput";
+import { ListFieldInput } from "@opal/components";
 import InputKeyValue, {
   KeyValue,
 } from "@/refresh-components/inputs/InputKeyValue";

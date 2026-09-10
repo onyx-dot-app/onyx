@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import {
   DateRangePicker,
   type DateRange,
-} from "@/refresh-components/DateRangePicker";
+} from "@opal/components/inputs/date-range-picker/components";
 
 const meta: Meta<typeof DateRangePicker> = {
   title: "components/DateRangePicker",

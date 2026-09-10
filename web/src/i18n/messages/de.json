@@ -10862,29 +10862,11 @@
       "anyTime": {
         "text": "Beliebiger Zeitraum..."
       },
-      "chooseCustom": {
-        "ariaLabel": "Benutzerdefinierten Zeitraum wählen"
-      },
       "clearButton": {
         "ariaLabel": "Zurücksetzen"
       },
-      "custom": {
-        "label": "Benutzerdefiniert"
-      },
-      "customRange": {
-        "ariaLabel": "Benutzerdefinierter Zeitraum: {from} bis {to}"
-      },
       "date": {
         "label": "Datum"
-      },
-      "group": {
-        "ariaLabel": "Datumsbereich"
-      },
-      "preset": {
-        "oneDay": "1T",
-        "oneMonth": "1M",
-        "sevenDays": "7T",
-        "threeMonths": "3M"
       }
     },
     "deleteButton": {
@@ -11181,14 +11163,6 @@
     "inputElement": {
       "removeButton": {
         "tooltip": "Entfernen"
-      }
-    },
-    "inputFile": {
-      "attachButton": {
-        "ariaLabel": "Datei anhängen"
-      },
-      "clearButton": {
-        "ariaLabel": "Datei entfernen"
       }
     },
     "inputImage": {
@@ -12801,6 +12775,16 @@
       "showFullMessage": "Vollständige Nachricht anzeigen",
       "time": "Uhrzeit"
     },
+    "dateRange": {
+      "chooseCustom": "Benutzerdefinierten Zeitraum wählen",
+      "custom": "Benutzerdefiniert",
+      "customRange": "Benutzerdefinierter Zeitraum: {from} bis {to}",
+      "label": "Datumsbereich",
+      "oneDay": "1T",
+      "oneMonth": "1M",
+      "sevenDays": "7T",
+      "threeMonths": "3M"
+    },
     "input": {
       "day": "Tag",
       "hidePassword": "Passwort verbergen",
@@ -12811,6 +12795,10 @@
       "showPassword": "Passwort anzeigen",
       "valueCannotBeRevealed": "Wert kann nicht angezeigt werden",
       "year": "Jahr"
+    },
+    "inputFile": {
+      "attachFile": "Datei anhängen",
+      "clearFile": "Datei entfernen"
     },
     "pagination": {
       "goToPage": "Zu Seite springen",

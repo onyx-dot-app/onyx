@@ -7,7 +7,7 @@ import type { RichStr } from "@opal/types";
 import AreaChart from "@/refresh-components/AreaChart";
 import { formatCalendarDay } from "@/lib/dateUtils";
 import { getDatesList } from "@/lib/usage/utils";
-import { DateRange } from "@/refresh-components/DateRangePicker";
+import { DateRange } from "@opal/components";
 import { ChartSeries, ChartState } from "@/sections/usage/interfaces";
 
 const CHART_BODY_HEIGHT = 20;

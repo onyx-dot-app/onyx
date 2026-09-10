@@ -10862,29 +10862,11 @@
       "anyTime": {
         "text": "Cualquier fecha..."
       },
-      "chooseCustom": {
-        "ariaLabel": "Elegir un rango personalizado"
-      },
       "clearButton": {
         "ariaLabel": "Borrar"
       },
-      "custom": {
-        "label": "Personalizado"
-      },
-      "customRange": {
-        "ariaLabel": "Rango personalizado: {from} a {to}"
-      },
       "date": {
         "label": "Fecha"
-      },
-      "group": {
-        "ariaLabel": "Rango de fechas"
-      },
-      "preset": {
-        "oneDay": "1D",
-        "oneMonth": "1M",
-        "sevenDays": "7D",
-        "threeMonths": "3M"
       }
     },
     "deleteButton": {
@@ -11181,14 +11163,6 @@
     "inputElement": {
       "removeButton": {
         "tooltip": "Eliminar"
-      }
-    },
-    "inputFile": {
-      "attachButton": {
-        "ariaLabel": "Adjuntar archivo"
-      },
-      "clearButton": {
-        "ariaLabel": "Quitar archivo"
       }
     },
     "inputImage": {
@@ -12801,6 +12775,16 @@
       "showFullMessage": "Mostrar el mensaje completo",
       "time": "Hora"
     },
+    "dateRange": {
+      "chooseCustom": "Elegir un rango personalizado",
+      "custom": "Personalizado",
+      "customRange": "Rango personalizado: {from} a {to}",
+      "label": "Rango de fechas",
+      "oneDay": "1D",
+      "oneMonth": "1M",
+      "sevenDays": "7D",
+      "threeMonths": "3M"
+    },
     "input": {
       "day": "Día",
       "hidePassword": "Ocultar contraseña",
@@ -12811,6 +12795,10 @@
       "showPassword": "Mostrar contraseña",
       "valueCannotBeRevealed": "El valor no se puede mostrar",
       "year": "Año"
+    },
+    "inputFile": {
+      "attachFile": "Adjuntar archivo",
+      "clearFile": "Quitar archivo"
     },
     "pagination": {
       "goToPage": "Ir a la página",
