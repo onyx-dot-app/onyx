@@ -78,6 +78,25 @@ export default function OpalStringsBridge({
       selectAnItemToContinue: t("table.selectAnItemToContinue"),
       singleItemSelected: t("table.singleItemSelected"),
       selectedItemCount: (count) => t("table.selectedItemCount", { count }),
+      keyValueKey: t("keyValue.key"),
+      keyValueValue: t("keyValue.value"),
+      keyValueAddLine: t("keyValue.addLine"),
+      keyValueAddPair: (keyTitle, valueTitle) =>
+        t("keyValue.addPair", { keyTitle, valueTitle }),
+      keyValueEmpty: t("keyValue.empty"),
+      keyValueEmptyKey: t("keyValue.emptyKey"),
+      keyValueDuplicateKey: t("keyValue.duplicateKey"),
+      keyValueEmptySummary: (count) => t("keyValue.emptySummary", { count }),
+      keyValueDuplicateSummary: (count) =>
+        t("keyValue.duplicateSummary", { count }),
+      keyValueValidationSummary: (count) =>
+        t("keyValue.validationSummary", { count }),
+      keyValueGroup: (keyTitle, valueTitle) =>
+        t("keyValue.group", { keyTitle, valueTitle }),
+      keyValueInput: (label, index) => t("keyValue.input", { label, index }),
+      keyValuePairFallback: t("keyValue.pairFallback"),
+      keyValueRemovePair: (label, index) =>
+        t("keyValue.removePair", { label, index }),
       formatNumber: (value) => digits.format(value),
       parseNumber: createLocaleIntegerParser(digits),
       showing: (range, total) =>

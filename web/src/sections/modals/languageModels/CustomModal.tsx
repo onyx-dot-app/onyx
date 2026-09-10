@@ -27,9 +27,10 @@ import {
 import { ModelSettingsPopover } from "@/sections/modals/languageModels/ModelSettingsPopover";
 import { useCustomProviderNames } from "@/lib/languageModels/hooks";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import KeyValueInput, {
-  KeyValue,
-} from "@/refresh-components/inputs/InputKeyValue";
+import {
+  InputKeyValue as KeyValueInput,
+  type KeyValue,
+} from "@opal/components";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import { InputTypeIn } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";

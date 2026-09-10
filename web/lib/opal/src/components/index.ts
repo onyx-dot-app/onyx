@@ -66,6 +66,13 @@ export {
 /* InputAvatar */
 export { default as InputAvatar } from "@opal/components/inputs/input-avatar/components";
 
+/* InputKeyValue */
+export {
+  default as InputKeyValue,
+  type KeyValue,
+  type KeyValueInputProps,
+} from "@opal/components/inputs/input-key-value/components";
+
 /* InputNumber */
 export {
   default as InputNumber,

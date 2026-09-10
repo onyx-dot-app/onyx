@@ -11210,40 +11210,6 @@
         "text": "Users"
       }
     },
-    "keyValue": {
-      "addButton": {
-        "ariaLabel": "Add {keyTitle} and {valueTitle} pair",
-        "label": "Add Line"
-      },
-      "empty": {
-        "title": "No items added yet."
-      },
-      "error": {
-        "duplicateKey": "Duplicate key",
-        "duplicateSummary": "{count, plural, one {# duplicate key found} other {# duplicate keys found}}",
-        "emptyKey": "Key cannot be empty",
-        "emptySummary": "{count, plural, one {# empty key found} other {# empty keys found}}",
-        "validationSummary": "{count, plural, one {# validation error found} other {# validation errors found}}"
-      },
-      "group": {
-        "ariaLabel": "{keyTitle} and {valueTitle} pairs"
-      },
-      "input": {
-        "ariaLabel": "{label} {index}"
-      },
-      "keyColumn": {
-        "title": "Key"
-      },
-      "pair": {
-        "fallbackLabel": "key-value"
-      },
-      "removeButton": {
-        "ariaLabel": "Remove {label} pair {index}"
-      },
-      "valueColumn": {
-        "title": "Value"
-      }
-    },
     "logo": {
       "image": {
         "alt": "Logo"
@@ -12799,6 +12765,22 @@
     "inputFile": {
       "attachFile": "Attach file",
       "clearFile": "Clear file"
+    },
+    "keyValue": {
+      "addLine": "Add Line",
+      "addPair": "Add {keyTitle} and {valueTitle} pair",
+      "duplicateKey": "Duplicate key",
+      "duplicateSummary": "{count, plural, one {# duplicate key found} other {# duplicate keys found}}",
+      "empty": "No items added yet.",
+      "emptyKey": "Key cannot be empty",
+      "emptySummary": "{count, plural, one {# empty key found} other {# empty keys found}}",
+      "group": "{keyTitle} and {valueTitle} pairs",
+      "input": "{label} {index}",
+      "key": "Key",
+      "pairFallback": "key-value",
+      "removePair": "Remove {label} pair {index}",
+      "validationSummary": "{count, plural, one {# validation error found} other {# validation errors found}}",
+      "value": "Value"
     },
     "pagination": {
       "goToPage": "Go to page",

@@ -11210,40 +11210,6 @@
         "text": "المستخدمون"
       }
     },
-    "keyValue": {
-      "addButton": {
-        "ariaLabel": "إضافة زوج {keyTitle} و{valueTitle}",
-        "label": "إضافة سطر"
-      },
-      "empty": {
-        "title": "لم تتم إضافة أي عناصر بعد."
-      },
-      "error": {
-        "duplicateKey": "مفتاح مكرر",
-        "duplicateSummary": "{count, plural, one {تم العثور على مفتاح مكرر واحد} other {تم العثور على # من المفاتيح المكررة}}",
-        "emptyKey": "لا يمكن ترك المفتاح فارغًا",
-        "emptySummary": "{count, plural, one {تم العثور على مفتاح فارغ واحد} other {تم العثور على # من المفاتيح الفارغة}}",
-        "validationSummary": "{count, plural, one {تم العثور على خطأ تحقق واحد} other {تم العثور على # من أخطاء التحقق}}"
-      },
-      "group": {
-        "ariaLabel": "أزواج {keyTitle} و{valueTitle}"
-      },
-      "input": {
-        "ariaLabel": "{label} {index}"
-      },
-      "keyColumn": {
-        "title": "المفتاح"
-      },
-      "pair": {
-        "fallbackLabel": "مفتاح-قيمة"
-      },
-      "removeButton": {
-        "ariaLabel": "إزالة زوج {label} رقم {index}"
-      },
-      "valueColumn": {
-        "title": "القيمة"
-      }
-    },
     "logo": {
       "image": {
         "alt": "الشعار"
@@ -12799,6 +12765,22 @@
     "inputFile": {
       "attachFile": "إرفاق ملف",
       "clearFile": "مسح الملف"
+    },
+    "keyValue": {
+      "addLine": "إضافة سطر",
+      "addPair": "إضافة زوج {keyTitle} و{valueTitle}",
+      "duplicateKey": "مفتاح مكرر",
+      "duplicateSummary": "{count, plural, one {تم العثور على مفتاح مكرر واحد} other {تم العثور على # من المفاتيح المكررة}}",
+      "empty": "لم تتم إضافة أي عناصر بعد.",
+      "emptyKey": "لا يمكن ترك المفتاح فارغًا",
+      "emptySummary": "{count, plural, one {تم العثور على مفتاح فارغ واحد} other {تم العثور على # من المفاتيح الفارغة}}",
+      "group": "أزواج {keyTitle} و{valueTitle}",
+      "input": "{label} {index}",
+      "key": "المفتاح",
+      "pairFallback": "مفتاح-قيمة",
+      "removePair": "إزالة زوج {label} رقم {index}",
+      "validationSummary": "{count, plural, one {تم العثور على خطأ تحقق واحد} other {تم العثور على # من أخطاء التحقق}}",
+      "value": "القيمة"
     },
     "pagination": {
       "goToPage": "الانتقال إلى صفحة",

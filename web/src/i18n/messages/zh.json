@@ -11210,40 +11210,6 @@
         "text": "用户"
       }
     },
-    "keyValue": {
-      "addButton": {
-        "ariaLabel": "添加{keyTitle}与{valueTitle}对",
-        "label": "添加行"
-      },
-      "empty": {
-        "title": "尚未添加任何条目。"
-      },
-      "error": {
-        "duplicateKey": "键重复",
-        "duplicateSummary": "{count, plural, one {发现 # 个重复的键} other {发现 # 个重复的键}}",
-        "emptyKey": "键不能为空",
-        "emptySummary": "{count, plural, one {发现 # 个空键} other {发现 # 个空键}}",
-        "validationSummary": "{count, plural, one {发现 # 个验证错误} other {发现 # 个验证错误}}"
-      },
-      "group": {
-        "ariaLabel": "{keyTitle}与{valueTitle}对"
-      },
-      "input": {
-        "ariaLabel": "{label} {index}"
-      },
-      "keyColumn": {
-        "title": "键"
-      },
-      "pair": {
-        "fallbackLabel": "键值"
-      },
-      "removeButton": {
-        "ariaLabel": "移除{label}对 {index}"
-      },
-      "valueColumn": {
-        "title": "值"
-      }
-    },
     "logo": {
       "image": {
         "alt": "徽标"
@@ -12799,6 +12765,22 @@
     "inputFile": {
       "attachFile": "附加文件",
       "clearFile": "清除文件"
+    },
+    "keyValue": {
+      "addLine": "添加行",
+      "addPair": "添加{keyTitle}与{valueTitle}对",
+      "duplicateKey": "键重复",
+      "duplicateSummary": "{count, plural, one {发现 # 个重复的键} other {发现 # 个重复的键}}",
+      "empty": "尚未添加任何条目。",
+      "emptyKey": "键不能为空",
+      "emptySummary": "{count, plural, one {发现 # 个空键} other {发现 # 个空键}}",
+      "group": "{keyTitle}与{valueTitle}对",
+      "input": "{label} {index}",
+      "key": "键",
+      "pairFallback": "键值",
+      "removePair": "移除{label}对 {index}",
+      "validationSummary": "{count, plural, one {发现 # 个验证错误} other {发现 # 个验证错误}}",
+      "value": "值"
     },
     "pagination": {
       "goToPage": "跳转到页面",

@@ -11210,40 +11210,6 @@
         "text": "Usuários"
       }
     },
-    "keyValue": {
-      "addButton": {
-        "ariaLabel": "Adicionar par de {keyTitle} e {valueTitle}",
-        "label": "Adicionar linha"
-      },
-      "empty": {
-        "title": "Nenhum item adicionado ainda."
-      },
-      "error": {
-        "duplicateKey": "Chave duplicada",
-        "duplicateSummary": "{count, plural, one {# chave duplicada encontrada} other {# chaves duplicadas encontradas}}",
-        "emptyKey": "A chave não pode estar vazia",
-        "emptySummary": "{count, plural, one {# chave vazia encontrada} other {# chaves vazias encontradas}}",
-        "validationSummary": "{count, plural, one {# erro de validação encontrado} other {# erros de validação encontrados}}"
-      },
-      "group": {
-        "ariaLabel": "Pares de {keyTitle} e {valueTitle}"
-      },
-      "input": {
-        "ariaLabel": "{label} {index}"
-      },
-      "keyColumn": {
-        "title": "Chave"
-      },
-      "pair": {
-        "fallbackLabel": "chave-valor"
-      },
-      "removeButton": {
-        "ariaLabel": "Remover par de {label} {index}"
-      },
-      "valueColumn": {
-        "title": "Valor"
-      }
-    },
     "logo": {
       "image": {
         "alt": "Logotipo"
@@ -12799,6 +12765,22 @@
     "inputFile": {
       "attachFile": "Anexar arquivo",
       "clearFile": "Limpar arquivo"
+    },
+    "keyValue": {
+      "addLine": "Adicionar linha",
+      "addPair": "Adicionar par de {keyTitle} e {valueTitle}",
+      "duplicateKey": "Chave duplicada",
+      "duplicateSummary": "{count, plural, one {# chave duplicada encontrada} other {# chaves duplicadas encontradas}}",
+      "empty": "Nenhum item adicionado ainda.",
+      "emptyKey": "A chave não pode estar vazia",
+      "emptySummary": "{count, plural, one {# chave vazia encontrada} other {# chaves vazias encontradas}}",
+      "group": "Pares de {keyTitle} e {valueTitle}",
+      "input": "{label} {index}",
+      "key": "Chave",
+      "pairFallback": "chave-valor",
+      "removePair": "Remover par de {label} {index}",
+      "validationSummary": "{count, plural, one {# erro de validação encontrado} other {# erros de validação encontrados}}",
+      "value": "Valor"
     },
     "pagination": {
       "goToPage": "Ir para a página",

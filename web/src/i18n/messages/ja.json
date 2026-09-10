@@ -11210,40 +11210,6 @@
         "text": "ユーザー"
       }
     },
-    "keyValue": {
-      "addButton": {
-        "ariaLabel": "{keyTitle}と{valueTitle}のペアを追加",
-        "label": "行を追加"
-      },
-      "empty": {
-        "title": "まだ項目が追加されていません。"
-      },
-      "error": {
-        "duplicateKey": "キーが重複しています",
-        "duplicateSummary": "{count, plural, one {#件の重複キーが見つかりました} other {#件の重複キーが見つかりました}}",
-        "emptyKey": "キーを空にすることはできません",
-        "emptySummary": "{count, plural, one {#件の空のキーが見つかりました} other {#件の空のキーが見つかりました}}",
-        "validationSummary": "{count, plural, one {#件の検証エラーが見つかりました} other {#件の検証エラーが見つかりました}}"
-      },
-      "group": {
-        "ariaLabel": "{keyTitle}と{valueTitle}のペア"
-      },
-      "input": {
-        "ariaLabel": "{label} {index}"
-      },
-      "keyColumn": {
-        "title": "キー"
-      },
-      "pair": {
-        "fallbackLabel": "キーと値"
-      },
-      "removeButton": {
-        "ariaLabel": "{label}のペア{index}を削除"
-      },
-      "valueColumn": {
-        "title": "値"
-      }
-    },
     "logo": {
       "image": {
         "alt": "ロゴ"
@@ -12799,6 +12765,22 @@
     "inputFile": {
       "attachFile": "ファイルを添付",
       "clearFile": "ファイルをクリア"
+    },
+    "keyValue": {
+      "addLine": "行を追加",
+      "addPair": "{keyTitle}と{valueTitle}のペアを追加",
+      "duplicateKey": "キーが重複しています",
+      "duplicateSummary": "{count, plural, one {#件の重複キーが見つかりました} other {#件の重複キーが見つかりました}}",
+      "empty": "まだ項目が追加されていません。",
+      "emptyKey": "キーを空にすることはできません",
+      "emptySummary": "{count, plural, one {#件の空のキーが見つかりました} other {#件の空のキーが見つかりました}}",
+      "group": "{keyTitle}と{valueTitle}のペア",
+      "input": "{label} {index}",
+      "key": "キー",
+      "pairFallback": "キーと値",
+      "removePair": "{label}のペア{index}を削除",
+      "validationSummary": "{count, plural, one {#件の検証エラーが見つかりました} other {#件の検証エラーが見つかりました}}",
+      "value": "値"
     },
     "pagination": {
       "goToPage": "ページへ移動",

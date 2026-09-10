@@ -1,11 +1,11 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import React from "react";
-import KeyValueInput from "./InputKeyValue";
-import type { KeyValue } from "./InputKeyValue";
+import KeyValueInput from "@opal/components/inputs/input-key-value/components";
+import type { KeyValue } from "@opal/components/inputs/input-key-value/components";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
 const meta: Meta<typeof KeyValueInput> = {
-  title: "refresh-components/inputs/InputKeyValue",
+  title: "opal/components/InputKeyValue",
   component: KeyValueInput,
   tags: ["autodocs"],
   decorators: [
