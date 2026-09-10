@@ -1,7 +1,7 @@
 """add system llm usage
 
 Revision ID: ad99acb9be41
-Revises: 947b94d2ebf1
+Revises: 287021f3b46c
 Create Date: 2026-09-02 16:59:23.117473
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "ad99acb9be41"
-down_revision = "947b94d2ebf1"
+down_revision = "287021f3b46c"
 branch_labels = None
 depends_on = None
 
