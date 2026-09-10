@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.microsoft_utils.graph_auth import MicrosoftAuthMethod
 from onyx.connectors.models import ExternalAccess
 from onyx.connectors.sharepoint.connector import (
     SharepointConnector,
@@ -22,6 +23,7 @@ SITE_URL = "https://tenant.sharepoint.com/sites/MySite"
 def _make_connector() -> SharepointConnector:
     connector = SharepointConnector(sites=[SITE_URL])
     connector.msal_app = MagicMock()
+    connector.auth_method = MicrosoftAuthMethod.CERTIFICATE
     connector.sp_tenant_domain = "tenant"
     connector._credential_json = {"sp_client_id": "x", "sp_directory_id": "y"}
     connector._graph_client = MagicMock()
@@ -447,3 +449,21 @@ def test_probe_group_members_passes_on_200(
 
     connector = _make_connector()
     connector.probe_group_members_permission()  # should not raise
+
+
+@patch("onyx.connectors.sharepoint.connector.acquire_token_for_rest")
+def test_probe_role_assignments_rejects_client_secret_auth(
+    mock_acquire: MagicMock,
+) -> None:
+    """A client secret can never reach the REST surface, so say that instead of
+    sending the admin to grant more permissions."""
+    connector = _make_connector()
+    connector.auth_method = MicrosoftAuthMethod.CLIENT_SECRET
+
+    with pytest.raises(ConnectorValidationError) as exc_info:
+        connector.probe_role_assignments_permission()
+
+    message = str(exc_info.value)
+    assert "certificate" in message.lower()
+    assert "Sites.FullControl.All" not in message
+    mock_acquire.assert_not_called()
