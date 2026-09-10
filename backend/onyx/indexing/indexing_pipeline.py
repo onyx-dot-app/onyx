@@ -1,3 +1,4 @@
+import os
 import time
 from collections import defaultdict
 from collections.abc import Callable, Generator, Iterator
@@ -114,8 +115,8 @@ from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
-MAX_CONTEXTUAL_RAG_WORKERS = 128  # Assume 8mb of memory per worker
-MAX_IMAGE_WORKERS = 16
+MAX_CONTEXTUAL_RAG_WORKERS: int = max(1, int(os.environ.get("MAX_CONTEXTUAL_RAG_WORKERS") or "128"))
+MAX_IMAGE_WORKERS: int = max(1, int(os.environ.get("MAX_IMAGE_WORKERS") or "16"))
 
 # Contextual-RAG doc/chunk summaries are a short, non-reasoning task. On a reasoning
 # model the hidden reasoning tokens consume the small MAX_CONTEXT_TOKENS budget and the
