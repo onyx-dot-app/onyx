@@ -79,6 +79,7 @@ class TestConnectorMappingValidation:
         """Test that all blob storage sources map to the same connector."""
         blob_sources = [
             DocumentSource.S3,
+            DocumentSource.RUSTFS,
             DocumentSource.R2,
             DocumentSource.GOOGLE_CLOUD_STORAGE,
             DocumentSource.OCI_STORAGE,

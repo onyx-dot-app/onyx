@@ -231,6 +231,11 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.Storage,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/s3`,
   },
+  rustfs: {
+    icon: S3Icon,
+    displayName: "RustFS",
+    category: SourceCategory.Storage,
+  },
   google_cloud_storage: {
     icon: GoogleStorageIcon,
     displayName: "Google Storage",
