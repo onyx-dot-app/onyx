@@ -1,0 +1,19 @@
+@reference "#reference.css";
+
+/* The primary input chrome, minus .opal-input's row layout — an avatar is a
+   circle, not a field. Kept in step with the "primary" variant in
+   inputs/shared.css. */
+.opal-input-avatar {
+  background-color: var(--background-neutral-00);
+  border: 1px solid var(--border-01);
+}
+.opal-input-avatar:hover {
+  border-color: var(--border-02);
+}
+.opal-input-avatar:active {
+  border-color: var(--border-05);
+}
+.opal-input-avatar:focus-within:not(:active) {
+  border-color: var(--border-05);
+  box-shadow: inset 0px 0px 0px 2px var(--background-tint-04);
+}

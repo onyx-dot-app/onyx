@@ -9,7 +9,7 @@ import {
   OnboardingActions,
   OnboardingStep,
 } from "@/interfaces/onboarding";
-import InputAvatar from "@/refresh-components/inputs/InputAvatar";
+import { InputAvatar } from "@opal/components";
 import { cn, clickOnKeyDown } from "@opal/utils";
 import { SvgCheckCircle, SvgEdit, SvgUser } from "@opal/icons";
 import { InputHorizontal } from "@opal/layouts";

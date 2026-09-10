@@ -63,6 +63,9 @@ export {
   type DateRangePickerValue,
 } from "@opal/components/inputs/date-range-picker/components";
 
+/* InputAvatar */
+export { default as InputAvatar } from "@opal/components/inputs/input-avatar/components";
+
 /* InputFile */
 export {
   default as InputFile,
