@@ -6,27 +6,27 @@
 # removing `any` types with `ods type-coverage typescript --update`.
 #
 # Generated file: do not edit by hand.
-total: 99.1
+total: 99
 packages:
   .: 100
   src: 100
   src/app: 100
-  src/app/admin: 97.5
+  src/app/admin: 97.4
   src/app/anonymous: 100
   src/app/api: 98.8
-  src/app/app: 99.2
-  src/app/auth: 98.7
+  src/app/app: 99.1
+  src/app/auth: 98.6
   src/app/components: 100
   src/app/config: 100
   src/app/connector: 90.1
-  src/app/craft: 99.6
+  src/app/craft: 99.5
   src/app/ee: 97.1
   src/app/federated: 97
   src/app/mcp: 100
   src/app/nrf: 99.6
   src/app/oauth-config: 100
   src/components: 98.4
-  src/components/admin: 97.6
+  src/components/admin: 98
   src/components/auth: 92.3
   src/components/chat: 98.3
   src/components/context: 100
@@ -50,64 +50,61 @@ packages:
   src/ee/providers: 100
   src/ee/sections: 100
   src/ee/views: 99.2
-  src/hooks: 99.1
-  src/hooks/__tests__: 100
-  src/i18n: 99.8
-  src/i18n/__tests__: 100
+  src/hooks: 99
+  src/i18n: 99.7
   src/i18n/messages: 100
   src/interfaces: 100
   src/layouts: 100
   src/layouts/chromes: 100
   src/layouts/craft: 100
-  src/lib: 99.1
-  src/lib/__tests__: 100
-  src/lib/agents: 99.5
+  src/lib: 99
+  src/lib/agents: 99.4
   src/lib/analytics: 100
   src/lib/app: 100
-  src/lib/auth: 96.8
-  src/lib/banner: 99.5
-  src/lib/billing: 94.7
+  src/lib/auth: 96
+  src/lib/banner: 99.3
+  src/lib/billing: 95.2
   src/lib/build: 100
-  src/lib/chat: 99.2
-  src/lib/connectors: 98.7
+  src/lib/chat: 98.8
+  src/lib/connectors: 98.6
   src/lib/constants: 100
-  src/lib/credentials: 98
+  src/lib/credentials: 97.9
   src/lib/extension: 100
   src/lib/externalApps: 100
   src/lib/headers: 100
   src/lib/hierarchy: 97.2
-  src/lib/hooks: 97
-  src/lib/indexing: 98.9
+  src/lib/hooks: 96
+  src/lib/indexing: 98.7
   src/lib/languageModels: 97.4
   src/lib/multiModel: 100
   src/lib/notifications: 97.9
   src/lib/oauth: 86.4
   src/lib/permissions: 100
   src/lib/position: 100
-  src/lib/projects: 99.6
-  src/lib/search: 99.4
-  src/lib/searchFilters: 96.8
-  src/lib/settings: 98.6
+  src/lib/projects: 99.7
+  src/lib/search: 99.2
+  src/lib/searchFilters: 96.6
+  src/lib/settings: 98.1
   src/lib/sidebar: 100
-  src/lib/skills: 99.1
+  src/lib/skills: 98.7
   src/lib/sso: 99.7
-  src/lib/tools: 98.3
+  src/lib/tools: 98.2
   src/lib/tracing: 97.7
   src/lib/usage: 97.6
   src/lib/users: 99.1
   src/lib/voice: 98.5
   src/lib/webSearch: 99
-  src/providers: 99.6
+  src/providers: 99.5
   src/refresh-components: 99.9
   src/refresh-components/avatars: 100
   src/refresh-components/buttons: 100
   src/refresh-components/cards: 99.5
-  src/refresh-components/commandmenu: 99.6
+  src/refresh-components/commandmenu: 100
   src/refresh-components/form: 99.3
   src/refresh-components/inputs: 100
   src/refresh-components/messages: 100
   src/refresh-components/modals: 100
-  src/refresh-components/popovers: 99.6
+  src/refresh-components/popovers: 99.5
   src/refresh-components/skeletons: 100
   src/refresh-components/texts: 100
   src/refresh-components/tiles: 100
@@ -115,36 +112,19 @@ packages:
   src/sections/actions: 99.5
   src/sections/admin: 100
   src/sections/agents: 100
-  src/sections/banners: 98.7
+  src/sections/banners: 98.5
   src/sections/cards: 100
   src/sections/chat: 100
   src/sections/document-sidebar: 99.7
   src/sections/input: 99.9
   src/sections/knowledge: 100
-  src/sections/modals: 99.2
+  src/sections/modals: 99.6
   src/sections/model-selector: 100
   src/sections/onboarding: 99.8
   src/sections/settings: 100
   src/sections/sidebar: 99.5
   src/sections/skills: 100
   src/sections/usage: 100
-  src/views: 99.5
-  src/views/__tests__: 100
+  src/views: 99.4
   src/views/admin: 99.3
-  tests/e2e: 100
-  tests/e2e/admin: 99.6
-  tests/e2e/agents: 100
-  tests/e2e/auth: 98.7
-  tests/e2e/chat: 99.5
-  tests/e2e/connectors: 100
-  tests/e2e/craft: 97.6
-  tests/e2e/fixtures: 95.4
-  tests/e2e/mcp: 98.6
-  tests/e2e/onboarding: 100
-  tests/e2e/pages: 100
-  tests/e2e/scheduled-tasks: 100
-  tests/e2e/settings: 100
-  tests/e2e/utils: 98
-  tests/setup: 97.8
-  tests/setup/mocks: 100
   types: 100

@@ -167,6 +167,18 @@ repos:
         pass_filenames: true
         files: ^deployment/terraform/.*\.tf$
       - id: uv-run
+        alias: typescript-type-coverage
+        name: TypeScript type coverage
+        # Fails when a web/ directory drops below its floor in
+        # web/.type-coverage-baseline.yaml. The measurement takes about a
+        # minute. Raise the floors with `ods type-coverage typescript --update`.
+        args:
+          ["--no-project", "--with=onyx-devtools==0.13.5", "ods", "type-coverage", "typescript", "--check"]
+        pass_filenames: false
+        files: ^web/(.*\.(ts|tsx)|package\.json|bun\.lock|tsconfig.*\.json|\.type-coverage-baseline\.yaml)$
+        # Tests are not measured, so a change to them cannot move a floor.
+        exclude: ^web/(tests/|(.*/)?__tests__/|.*\.(test|spec)\.tsx?$)
+      - id: uv-run
         alias: zizmor
         name: zizmor
         # Run zizmor in an isolated overlay (`--no-project --with`) so the hook

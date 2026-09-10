@@ -357,7 +357,9 @@ The only checker is `typescript` (alias `ts`), which measures `web/`. Python is
 not supported yet, because `ty` does not report types.
 
 `ods web types:coverage` does the measurement with `type-coverage-core` and
-writes the counts for each file. This command groups the files into directories
+writes the counts for each file. It does not count tests: `web/tests/`,
+`__tests__/` directories, and `*.test.*` and `*.spec.*` files. This command
+groups the files into directories
 three levels deep, such as `src/app/admin`, and compares each directory with its
 floor in `web/.type-coverage-baseline.yaml`. The flags and the baseline format
 are the same as for `ods coverage`.
@@ -392,8 +394,9 @@ ods type-coverage ts --update
 ods web types:coverage
 ```
 
-`pr-type-coverage.yml` runs `--check` on every PR. It adds the report to the
-job summary and updates one PR comment when a directory moves.
+The `TypeScript type coverage` pre-commit hook runs `--check` when a `.ts` or
+`.tsx` file in `web/` changes. `pr-quality-checks.yml` runs the same hook on
+every PR.
 
 In CI, each module's `--markdown` report goes to the job summary, and its
 `--html` page is uploaded as an artifact and published to the reports bucket.

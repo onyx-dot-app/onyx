@@ -28,7 +28,14 @@ const result = await lint("tsconfig.types.json", {
   //   the rows between machines.
   // - lib/ holds workspace packages that tsconfig.types.json excludes. Only
   //   the files web/ imports would count, so the rows would move with imports.
-  ignoreFiles: [".next/**", "lib/**"],
+  // - Tests and their helpers are not gated.
+  ignoreFiles: [
+    ".next/**",
+    "lib/**",
+    "tests/**",
+    "**/__tests__/**",
+    "**/*.{test,spec}.{ts,tsx}",
+  ],
 });
 
 // Keys are relative to process.cwd(), which `bun run` sets to web/.
