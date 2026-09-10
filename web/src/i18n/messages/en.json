@@ -11149,26 +11149,6 @@
         "tooltip": "Remove"
       }
     },
-    "inputImage": {
-      "dropRejected": {
-        "fallback": "File rejected"
-      },
-      "editButton": {
-        "ariaLabel": "Edit image"
-      },
-      "editOverlay": {
-        "label": "Edit"
-      },
-      "image": {
-        "altFallback": "Image"
-      },
-      "removeButton": {
-        "ariaLabel": "Remove image"
-      },
-      "uploadButton": {
-        "ariaLabel": "Upload image"
-      }
-    },
     "inputSelect": {
       "placeholder": {
         "fallback": "Select an option"
@@ -12757,6 +12737,13 @@
     "inputFile": {
       "attachFile": "Attach file",
       "clearFile": "Clear file"
+    },
+    "inputImage": {
+      "alt": "Image",
+      "dropRejected": "File rejected",
+      "edit": "Edit image",
+      "remove": "Remove image",
+      "upload": "Upload image"
     },
     "keyValue": {
       "addLine": "Add Line",

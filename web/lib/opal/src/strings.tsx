@@ -64,6 +64,11 @@ export type OpalStrings = {
   selectAnItemToContinue: string;
   singleItemSelected: string;
   selectedItemCount: (count: number) => string;
+  image: string;
+  imageUpload: string;
+  imageEdit: string;
+  imageRemove: string;
+  imageDropRejected: string;
   comboBoxOpen: string;
   comboBoxClose: string;
   comboBoxNoOptions: string;
@@ -155,6 +160,11 @@ export const defaultOpalStrings: OpalStrings = {
   singleItemSelected: "Item selected",
   selectedItemCount: (count) =>
     `${count} item${count !== 1 ? "s" : ""} selected`,
+  image: "Image",
+  imageUpload: "Upload image",
+  imageEdit: "Edit image",
+  imageRemove: "Remove image",
+  imageDropRejected: "File rejected",
   comboBoxOpen: "Open dropdown",
   comboBoxClose: "Close dropdown",
   comboBoxNoOptions: "No options found",

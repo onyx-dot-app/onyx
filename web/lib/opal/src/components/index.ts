@@ -80,6 +80,12 @@ export {
   type ComboBoxOption,
 } from "@opal/components/inputs/input-combo-box/index";
 
+/* InputImage */
+export {
+  default as InputImage,
+  type InputImageProps,
+} from "@opal/components/inputs/input-image/components";
+
 /* InputNumber */
 export {
   default as InputNumber,

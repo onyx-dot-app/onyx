@@ -11149,26 +11149,6 @@
         "tooltip": "제거"
       }
     },
-    "inputImage": {
-      "dropRejected": {
-        "fallback": "파일이 거부되었습니다"
-      },
-      "editButton": {
-        "ariaLabel": "이미지 편집"
-      },
-      "editOverlay": {
-        "label": "편집"
-      },
-      "image": {
-        "altFallback": "이미지"
-      },
-      "removeButton": {
-        "ariaLabel": "이미지 제거"
-      },
-      "uploadButton": {
-        "ariaLabel": "이미지 업로드"
-      }
-    },
     "inputSelect": {
       "placeholder": {
         "fallback": "옵션 선택"
@@ -12757,6 +12737,13 @@
     "inputFile": {
       "attachFile": "파일 첨부",
       "clearFile": "파일 지우기"
+    },
+    "inputImage": {
+      "alt": "이미지",
+      "dropRejected": "파일이 거부되었습니다",
+      "edit": "이미지 편집",
+      "remove": "이미지 제거",
+      "upload": "이미지 업로드"
     },
     "keyValue": {
       "addLine": "줄 추가",

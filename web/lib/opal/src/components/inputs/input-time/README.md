@@ -10,14 +10,14 @@ Segmented 24-hour time field on the shared `.opal-input` chrome, the Figma `Inpu
 
 ## Props
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `value` | `TimeValue \| null` | — | Selected time, 24-hour (required, controlled) |
-| `onChange` | `(time: TimeValue \| null) => void` | — | Fires on commit, `null` when cleared |
-| `error` | `boolean` | `false` | Error chrome on the field |
-| `disabled` | `boolean` | `false` | Disabled chrome, segments inert, clear action hidden |
-| `clearable` | `boolean` | `false` | Shows a clear action while a value is set and the field is enabled |
-| `showSeconds` | `boolean` | `true` | Shows the seconds segment. Hidden seconds commit as zero. |
-| `id` | `string` | — | Applied to the hours segment for `<label htmlFor>` |
+| Prop          | Type                                | Default | Description                                                        |
+| ------------- | ----------------------------------- | ------- | ------------------------------------------------------------------ |
+| `value`       | `TimeValue \| null`                 | —       | Selected time, 24-hour (required, controlled)                      |
+| `onChange`    | `(time: TimeValue \| null) => void` | —       | Fires on commit, `null` when cleared                               |
+| `error`       | `boolean`                           | `false` | Error chrome on the field                                          |
+| `disabled`    | `boolean`                           | `false` | Disabled chrome, segments inert, clear action hidden               |
+| `clearable`   | `boolean`                           | `false` | Shows a clear action while a value is set and the field is enabled |
+| `showSeconds` | `boolean`                           | `true`  | Shows the seconds segment. Hidden seconds commit as zero.          |
+| `id`          | `string`                            | —       | Applied to the hours segment for `<label htmlFor>`                 |
 
 `TimeValue` is `{ hours: number; minutes: number; seconds: number }`, always 24-hour. The segment chrome is shared with `InputDatePicker` (`.opal-input-segment` in `inputs/shared.css`).

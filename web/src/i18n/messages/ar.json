@@ -11149,26 +11149,6 @@
         "tooltip": "إزالة"
       }
     },
-    "inputImage": {
-      "dropRejected": {
-        "fallback": "تم رفض الملف"
-      },
-      "editButton": {
-        "ariaLabel": "تعديل الصورة"
-      },
-      "editOverlay": {
-        "label": "تعديل"
-      },
-      "image": {
-        "altFallback": "صورة"
-      },
-      "removeButton": {
-        "ariaLabel": "إزالة الصورة"
-      },
-      "uploadButton": {
-        "ariaLabel": "رفع صورة"
-      }
-    },
     "inputSelect": {
       "placeholder": {
         "fallback": "حدد خيارًا"
@@ -12757,6 +12737,13 @@
     "inputFile": {
       "attachFile": "إرفاق ملف",
       "clearFile": "مسح الملف"
+    },
+    "inputImage": {
+      "alt": "صورة",
+      "dropRejected": "تم رفض الملف",
+      "edit": "تعديل الصورة",
+      "remove": "إزالة الصورة",
+      "upload": "رفع صورة"
     },
     "keyValue": {
       "addLine": "إضافة سطر",

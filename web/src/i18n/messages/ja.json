@@ -11149,26 +11149,6 @@
         "tooltip": "削除"
       }
     },
-    "inputImage": {
-      "dropRejected": {
-        "fallback": "ファイルが拒否されました"
-      },
-      "editButton": {
-        "ariaLabel": "画像を編集"
-      },
-      "editOverlay": {
-        "label": "編集"
-      },
-      "image": {
-        "altFallback": "画像"
-      },
-      "removeButton": {
-        "ariaLabel": "画像を削除"
-      },
-      "uploadButton": {
-        "ariaLabel": "画像をアップロード"
-      }
-    },
     "inputSelect": {
       "placeholder": {
         "fallback": "オプションを選択"
@@ -12757,6 +12737,13 @@
     "inputFile": {
       "attachFile": "ファイルを添付",
       "clearFile": "ファイルをクリア"
+    },
+    "inputImage": {
+      "alt": "画像",
+      "dropRejected": "ファイルが拒否されました",
+      "edit": "画像を編集",
+      "remove": "画像を削除",
+      "upload": "画像をアップロード"
     },
     "keyValue": {
       "addLine": "行を追加",

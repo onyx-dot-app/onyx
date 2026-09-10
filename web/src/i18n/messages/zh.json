@@ -11149,26 +11149,6 @@
         "tooltip": "移除"
       }
     },
-    "inputImage": {
-      "dropRejected": {
-        "fallback": "文件被拒绝"
-      },
-      "editButton": {
-        "ariaLabel": "编辑图片"
-      },
-      "editOverlay": {
-        "label": "编辑"
-      },
-      "image": {
-        "altFallback": "图片"
-      },
-      "removeButton": {
-        "ariaLabel": "移除图片"
-      },
-      "uploadButton": {
-        "ariaLabel": "上传图片"
-      }
-    },
     "inputSelect": {
       "placeholder": {
         "fallback": "选择一个选项"
@@ -12757,6 +12737,13 @@
     "inputFile": {
       "attachFile": "附加文件",
       "clearFile": "清除文件"
+    },
+    "inputImage": {
+      "alt": "图片",
+      "dropRejected": "文件被拒绝",
+      "edit": "编辑图片",
+      "remove": "移除图片",
+      "upload": "上传图片"
     },
     "keyValue": {
       "addLine": "添加行",
