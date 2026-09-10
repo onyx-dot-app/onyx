@@ -1635,13 +1635,6 @@ def _docprocessing_task(
     batch_num: int,
     enqueue_time_ms: int | None = None,
 ) -> None:
-    from onyx.document_index.factory import get_all_document_indices
-    from onyx.indexing.adapters.document_indexing_adapter import (
-        DocumentIndexingBatchAdapter,
-    )
-    from onyx.indexing.embedder import DefaultIndexingEmbedder
-    from onyx.indexing.indexing_pipeline import run_indexing_pipeline
-
     start_time = time.monotonic()
 
     if tenant_id:
@@ -1713,6 +1706,14 @@ def _docprocessing_task(
     cross_batch_db_lock: RedisLock | None = None
 
     try:
+        # Inside the try so a failed first-use import still marks the attempt failed.
+        from onyx.document_index.factory import get_all_document_indices
+        from onyx.indexing.adapters.document_indexing_adapter import (
+            DocumentIndexingBatchAdapter,
+        )
+        from onyx.indexing.embedder import DefaultIndexingEmbedder
+        from onyx.indexing.indexing_pipeline import run_indexing_pipeline
+
         # FIX: Monitor memory before loading documents to track problematic batches
         emit_process_memory(
             os.getpid(),

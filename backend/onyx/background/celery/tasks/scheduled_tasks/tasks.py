@@ -227,13 +227,13 @@ def run_scheduled_task(self: Task, *, run_id: str, tenant_id: str) -> None:
     is responsible for translating failures into a ``FAILED`` row +
     notification.
     """
-    from onyx.server.features.build.scheduled_tasks.executor import (
-        run_scheduled_task_logic,
-    )
-
     _ = self  # bound only for symmetry with other shared_task wrappers
     _ = tenant_id
     try:
+        from onyx.server.features.build.scheduled_tasks.executor import (
+            run_scheduled_task_logic,
+        )
+
         run_scheduled_task_logic(UUID(run_id))
     except Exception:
         task_logger.exception(
