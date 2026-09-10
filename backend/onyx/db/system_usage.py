@@ -6,7 +6,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import SystemUsageAttribution, UsageActorKind
-from onyx.db.llm_usage import LLMUsageRecord
+from onyx.db.llm_usage import LLMUsageRecord, build_usage_upsert_values
 from onyx.db.models import UserUsage
 from onyx.utils.datetime import datetime_to_utc
 
@@ -49,20 +49,7 @@ def record_system_usage(
     statement = statement.on_conflict_do_update(
         index_elements=_CONFLICT_COLUMNS,
         index_where=_SYSTEM_ACTOR_INDEX_PREDICATE,
-        set_={
-            "input_tokens": UserUsage.input_tokens + statement.excluded.input_tokens,
-            "output_tokens": (
-                UserUsage.output_tokens + statement.excluded.output_tokens
-            ),
-            "cache_read_tokens": (
-                UserUsage.cache_read_tokens + statement.excluded.cache_read_tokens
-            ),
-            "cache_creation_tokens": (
-                UserUsage.cache_creation_tokens
-                + statement.excluded.cache_creation_tokens
-            ),
-            "cost_cents": UserUsage.cost_cents + statement.excluded.cost_cents,
-        },
+        set_=build_usage_upsert_values(statement),
     )
     db_session.execute(statement)
     db_session.flush()

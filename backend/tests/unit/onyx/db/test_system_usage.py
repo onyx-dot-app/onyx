@@ -33,5 +33,13 @@ def test_record_system_usage_builds_accumulating_upsert() -> None:
     statement = db_session.execute.call_args.args[0]
     compiled = statement.compile(dialect=postgresql.dialect())
     assert compiled.params["system_attribution"] == SystemUsageAttribution.ATTRIBUTED
-    assert "user_usage.input_tokens + excluded.input_tokens" in str(compiled)
+    sql = str(compiled)
+    for column in (
+        "input_tokens",
+        "output_tokens",
+        "cache_read_tokens",
+        "cache_creation_tokens",
+        "cost_cents",
+    ):
+        assert f"user_usage.{column} + excluded.{column}" in sql
     db_session.flush.assert_called_once()

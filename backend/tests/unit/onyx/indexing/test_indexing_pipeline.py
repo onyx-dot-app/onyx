@@ -671,6 +671,8 @@ def test_run_pipeline_owns_llm_enrichment_trace() -> None:
     search_settings = SimpleNamespace(enable_contextual_rag=False)
     all_search_settings = SimpleNamespace(primary=search_settings, secondary=None)
     expected_result = MagicMock()
+    vision_llm = MagicMock()
+    document = _make_image_doc("image-doc", [ImageSection(image_file_id="1")])
 
     with (
         patch(
@@ -682,15 +684,19 @@ def test_run_pipeline_owns_llm_enrichment_trace() -> None:
             f"{_PATCH_PREFIX}.get_image_extraction_and_analysis_enabled",
             return_value=True,
         ),
+        patch(
+            f"{_PATCH_PREFIX}.get_default_llm_with_vision",
+            return_value=vision_llm,
+        ),
         patch(f"{_PATCH_PREFIX}._system_llm_enrichment_is_allowed", return_value=True),
         patch(
             f"{_PATCH_PREFIX}.index_doc_batch_with_handler",
             return_value=expected_result,
-        ),
+        ) as index_doc_batch_with_handler,
         patch(f"{_PATCH_PREFIX}.ensure_trace", return_value=nullcontext()) as ensure,
     ):
         result = run_indexing_pipeline(
-            document_batch=[],
+            document_batch=[document],
             request_id=None,
             embedder=MagicMock(),
             document_indices=[],
@@ -704,6 +710,10 @@ def test_run_pipeline_owns_llm_enrichment_trace() -> None:
     ensure.assert_called_once_with(
         INDEXING_PIPELINE_TRACE_NAME,
         content_mode=TraceContentMode.METADATA_ONLY,
+    )
+    assert (
+        index_doc_batch_with_handler.call_args.kwargs["image_summarization_llm"]
+        is vision_llm
     )
 
 
@@ -748,6 +758,52 @@ def _make_image_doc(
         source=DocumentSource.FILE,
         metadata={},
     )
+
+
+def test_unavailable_vision_llm_does_not_enable_spend_gate() -> None:
+    search_settings = SimpleNamespace(enable_contextual_rag=False)
+    all_search_settings = SimpleNamespace(primary=search_settings, secondary=None)
+    expected_result = MagicMock()
+    document = _make_image_doc("image-doc", [ImageSection(image_file_id="1")])
+
+    with (
+        patch(
+            f"{_PATCH_PREFIX}.get_active_search_settings",
+            return_value=all_search_settings,
+        ),
+        patch(f"{_PATCH_PREFIX}.get_multipass_config"),
+        patch(
+            f"{_PATCH_PREFIX}.get_image_extraction_and_analysis_enabled",
+            return_value=True,
+        ),
+        patch(f"{_PATCH_PREFIX}.get_default_llm_with_vision", return_value=None),
+        patch(
+            f"{_PATCH_PREFIX}._system_llm_enrichment_is_allowed"
+        ) as enrichment_allowed,
+        patch(
+            f"{_PATCH_PREFIX}.index_doc_batch_with_handler",
+            return_value=expected_result,
+        ) as index_doc_batch_with_handler,
+        patch(f"{_PATCH_PREFIX}.ensure_trace") as ensure,
+    ):
+        result = run_indexing_pipeline(
+            document_batch=[document],
+            request_id=None,
+            embedder=MagicMock(),
+            document_indices=[],
+            db_session=MagicMock(),
+            tenant_id="tenant",
+            adapter=MagicMock(),
+            chunker=MagicMock(),
+        )
+
+    assert result is expected_result
+    enrichment_allowed.assert_not_called()
+    ensure.assert_not_called()
+    assert (
+        index_doc_batch_with_handler.call_args.kwargs["image_summarization_llm"] is None
+    )
+    assert index_doc_batch_with_handler.call_args.kwargs["llm_enrichment_allowed"]
 
 
 def test_spend_limit_blocks_only_documents_with_images() -> None:
@@ -826,10 +882,6 @@ def test_index_batch_returns_spend_limit_failures_before_contextual_rag() -> Non
         patch(
             f"{_PATCH_PREFIX}._apply_document_ingestion_hook",
             side_effect=lambda documents: documents,
-        ),
-        patch(
-            f"{_PATCH_PREFIX}.get_image_extraction_and_analysis_enabled",
-            return_value=False,
         ),
     ):
         result = index_doc_batch(

@@ -439,6 +439,7 @@ def index_doc_batch_with_handler(
     from_beginning: bool = False,
     enable_contextual_rag: bool = False,
     llm_enrichment_allowed: bool = True,
+    image_summarization_llm: LLM | None = None,
     llm: LLM | None = None,
 ) -> IndexingPipelineResult:
     try:
@@ -455,6 +456,7 @@ def index_doc_batch_with_handler(
             from_beginning=from_beginning,
             enable_contextual_rag=enable_contextual_rag,
             llm_enrichment_allowed=llm_enrichment_allowed,
+            image_summarization_llm=image_summarization_llm,
             llm=llm,
         )
 
@@ -824,40 +826,31 @@ def _partition_documents_blocked_by_llm_spend_limit(
     )
 
 
-def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
-    """
-    Process all sections in documents by:
-    1. Converting both TextSection and ImageSection objects to base Section objects
-    2. Processing ImageSections to generate text summaries using a vision-capable LLM
-    3. Returning IndexingDocument objects with both original and processed sections
-
-    Args:
-        documents: List of documents with TextSection | ImageSection objects
-
-    Returns:
-        List of IndexingDocument objects with processed_sections as list[Section]
-    """
-    # Check if image extraction and analysis is enabled before trying to get a vision LLM.
-    # Use section.type rather than isinstance because sections can round-trip
-    # through pydantic as base Section instances (not the concrete subclass).
+def _get_image_summarization_llm(
+    documents: list[Document], enabled: bool
+) -> LLM | None:
     has_image_section = any(
         section.type == SectionType.IMAGE
         for document in documents
         for section in document.sections
     )
-    if not get_image_extraction_and_analysis_enabled() or not has_image_section:
-        llm = None
-    else:
-        # Only get the vision LLM if image processing is enabled
-        llm = get_default_llm_with_vision()
+    if not enabled or not has_image_section:
+        return None
 
-    if not llm:
-        if get_image_extraction_and_analysis_enabled():
-            logger.warning(
-                "Image analysis is enabled but no vision-capable LLM is "
-                "available — images will not be summarized. Configure a "
-                "vision model in the admin LLM settings."
-            )
+    llm = get_default_llm_with_vision()
+    if llm is None:
+        logger.warning(
+            "Image analysis is enabled but no vision-capable LLM is "
+            "available — images will not be summarized. Configure a "
+            "vision model in the admin LLM settings."
+        )
+    return llm
+
+
+def _process_image_sections(
+    documents: list[Document], llm: LLM | None
+) -> list[IndexingDocument]:
+    if llm is None:
         return _convert_documents_without_image_summaries(documents)
 
     indexed_documents: list[IndexingDocument] = []
@@ -934,6 +927,14 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
             p.section.text = result or "[Error processing image]"
 
     return indexed_documents
+
+
+def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
+    """Convert document sections and summarize images when a vision LLM is available."""
+    llm = _get_image_summarization_llm(
+        documents, get_image_extraction_and_analysis_enabled()
+    )
+    return _process_image_sections(documents, llm)
 
 
 def add_document_summaries(
@@ -1365,6 +1366,7 @@ def index_doc_batch(
     adapter: IndexingBatchAdapter,
     enable_contextual_rag: bool = False,
     llm_enrichment_allowed: bool = True,
+    image_summarization_llm: LLM | None = None,
     llm: LLM | None = None,
     ignore_time_skip: bool = False,
     index_to_secondary: bool = False,
@@ -1418,7 +1420,7 @@ def index_doc_batch(
     enrichment_partition = _partition_documents_blocked_by_llm_spend_limit(
         context.updatable_docs,
         enable_contextual_rag=enable_contextual_rag,
-        enable_image_summarization=get_image_extraction_and_analysis_enabled(),
+        enable_image_summarization=image_summarization_llm is not None,
         llm_enrichment_allowed=llm_enrichment_allowed,
     )
     enrichment_failed_doc_ids = _get_failed_doc_ids(enrichment_partition.failures)
@@ -1441,9 +1443,13 @@ def index_doc_batch(
     )
     if has_image_section:
         with time_stage_if_set(IndexAttemptStage.IMAGE_PROCESSING, attempt_id):
-            context.indexable_docs = process_image_sections(context.updatable_docs)
+            context.indexable_docs = _process_image_sections(
+                context.updatable_docs, image_summarization_llm
+            )
     else:
-        context.indexable_docs = process_image_sections(context.updatable_docs)
+        context.indexable_docs = _process_image_sections(
+            context.updatable_docs, image_summarization_llm
+        )
 
     doc_descriptors = [
         {
@@ -1676,7 +1682,10 @@ def run_indexing_pipeline(
     contextual_rag_configured = (
         search_settings.enable_contextual_rag or ENABLE_CONTEXTUAL_RAG
     )
-    image_summarization_configured = get_image_extraction_and_analysis_enabled()
+    image_summarization_llm = _get_image_summarization_llm(
+        document_batch, get_image_extraction_and_analysis_enabled()
+    )
+    image_summarization_configured = image_summarization_llm is not None
     llm_enrichment_configured = (
         contextual_rag_configured or image_summarization_configured
     )
@@ -1714,6 +1723,7 @@ def run_indexing_pipeline(
             adapter=adapter,
             enable_contextual_rag=contextual_rag_configured,
             llm_enrichment_allowed=llm_enrichment_allowed,
+            image_summarization_llm=image_summarization_llm,
             llm=llm,
             ignore_time_skip=ignore_time_skip,
             index_to_secondary=index_to_secondary,

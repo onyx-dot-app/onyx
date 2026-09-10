@@ -135,7 +135,6 @@ class UserUsageTracingProcessor(TracingProcessor):
 
         user_id = get_current_user_id()
         if user_id is None and not data.usage:
-            # TODO: Meter non-text flows after they expose provider billing units.
             return None
 
         model = data.model

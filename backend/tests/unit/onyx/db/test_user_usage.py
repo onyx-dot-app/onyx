@@ -19,6 +19,7 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -128,12 +129,13 @@ def _seed_system_usage(
     input_tokens: int,
     output_tokens: int,
     cost_cents: float,
+    attribution: SystemUsageAttribution = SystemUsageAttribution.ATTRIBUTED,
 ) -> None:
     db_session.add(
         UserUsage(
             user_id=None,
             actor_kind=UsageActorKind.SYSTEM,
-            system_attribution=SystemUsageAttribution.ATTRIBUTED,
+            system_attribution=attribution,
             window_start=window_start,
             model="m",
             flow="image_summarization",
@@ -172,6 +174,18 @@ def db_session() -> Generator[Session, None, None]:
         yield session
     finally:
         session.close()
+
+
+def test_system_usage_rejects_unknown_attribution(db_session: Session) -> None:
+    with pytest.raises(IntegrityError):
+        _seed_system_usage(
+            db_session,
+            datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc),
+            input_tokens=1,
+            output_tokens=1,
+            cost_cents=1.0,
+            attribution=cast(SystemUsageAttribution, "UNKNOWN"),
+        )
 
 
 class TestRecordUserUsage:
@@ -515,8 +529,16 @@ class TestTotalCostSince:
         _seed_system_usage(
             db_session, window, input_tokens=5, output_tokens=2, cost_cents=4.0
         )
+        _seed_system_usage(
+            db_session,
+            window,
+            input_tokens=3,
+            output_tokens=1,
+            cost_cents=2.0,
+            attribution=SystemUsageAttribution.UNATTRIBUTED,
+        )
 
-        assert get_total_cost_cents_since(db_session, window) == pytest.approx(7.0)
+        assert get_total_cost_cents_since(db_session, window) == pytest.approx(9.0)
 
     def test_older_window_excluded(self, db_session: Session) -> None:
         u1 = str(uuid4())
@@ -599,9 +621,17 @@ class TestTokenBuckets:
         _seed_system_usage(
             db_session, window, input_tokens=50, output_tokens=10, cost_cents=1.0
         )
+        _seed_system_usage(
+            db_session,
+            window,
+            input_tokens=10,
+            output_tokens=5,
+            cost_cents=1.0,
+            attribution=SystemUsageAttribution.UNATTRIBUTED,
+        )
 
         assert get_total_token_buckets_since(db_session, window) == [
-            TokenUsageBucket(window_start=window, tokens=60)
+            TokenUsageBucket(window_start=window, tokens=75)
         ]
 
 

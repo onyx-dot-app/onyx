@@ -18,7 +18,7 @@ from sqlalchemy.engine.cursor import CursorResult
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import UsageActorKind
-from onyx.db.llm_usage import LLMUsageRecord
+from onyx.db.llm_usage import LLMUsageRecord, build_usage_upsert_values
 from onyx.db.models import TokenRateLimit, User, User__UserGroup, UserUsage
 from onyx.utils.datetime import datetime_to_utc, get_window_start
 from onyx.utils.logger import setup_logger
@@ -216,15 +216,7 @@ def record_user_usage(
     stmt = stmt.on_conflict_do_update(
         index_elements=_CONFLICT_COLS,
         index_where=_USER_ACTOR_INDEX_PREDICATE,
-        set_={
-            "input_tokens": UserUsage.input_tokens + stmt.excluded.input_tokens,
-            "output_tokens": UserUsage.output_tokens + stmt.excluded.output_tokens,
-            "cache_read_tokens": UserUsage.cache_read_tokens
-            + stmt.excluded.cache_read_tokens,
-            "cache_creation_tokens": UserUsage.cache_creation_tokens
-            + stmt.excluded.cache_creation_tokens,
-            "cost_cents": UserUsage.cost_cents + stmt.excluded.cost_cents,
-        },
+        set_=build_usage_upsert_values(stmt),
     )
     db_session.execute(stmt)
     db_session.flush()

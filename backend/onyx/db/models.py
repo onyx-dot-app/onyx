@@ -6253,7 +6253,9 @@ class UserUsage(Base):
         CheckConstraint(
             "(actor_kind = 'USER' AND system_attribution IS NULL) OR "
             "(actor_kind = 'SYSTEM' AND user_id IS NULL "
-            "AND system_attribution IS NOT NULL AND incognito = false)",
+            f"AND system_attribution IN ('{SystemUsageAttribution.ATTRIBUTED.value}', "
+            f"'{SystemUsageAttribution.UNATTRIBUTED.value}') "
+            "AND incognito = false)",
             name="ck_user_usage_actor",
         ),
         Index(

@@ -31,7 +31,8 @@ def upgrade() -> None:
         "user_usage",
         "(actor_kind = 'USER' AND system_attribution IS NULL) OR "
         "(actor_kind = 'SYSTEM' AND user_id IS NULL "
-        "AND system_attribution IS NOT NULL AND incognito = false)",
+        "AND system_attribution IN ('ATTRIBUTED', 'UNATTRIBUTED') "
+        "AND incognito = false)",
     )
     op.drop_index("uq_user_usage_dims", table_name="user_usage")
     op.create_index(
