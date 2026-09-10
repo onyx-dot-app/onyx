@@ -99,39 +99,39 @@ function FileAttachment({
         description={description}
         state={isSelected ? "selected" : undefined}
         centerChildren={
-          rightText ? (
-            <div className="flex flex-row justify-end">
-              <OpalText font="secondary-body" color="text-03" maxLines={1}>
-                {rightText}
-              </OpalText>
-            </div>
-          ) : undefined
+          <Section flexDirection="row" justifyContent="between">
+            {rightText ? (
+              <Section alignItems="end">
+                <OpalText font="secondary-body" color="text-03" maxLines={1}>
+                  {rightText}
+                </OpalText>
+              </Section>
+            ) : undefined}
+          </Section>
         }
         rightChildren={
-          <>
-            {onView && (
-              <Hoverable.Item group="user-file-row">
+          <Hoverable.Item group="user-file-row">
+            <Section flexDirection="row" gap={0}>
+              {onView && (
                 <Button
-                  size="sm"
                   icon={SvgExternalLink}
                   onClick={onView}
-                  prominence="tertiary"
-                  aria-label={t("fileRow.viewButton.ariaLabel")}
-                />
-              </Hoverable.Item>
-            )}
-            {onDelete && (
-              <Hoverable.Item group="user-file-row">
-                <Button
+                  prominence="internal"
                   size="sm"
+                  tooltip={t("fileRow.viewButton.ariaLabel")}
+                />
+              )}
+              {onDelete && (
+                <Button
                   icon={SvgTrash}
                   onClick={onDelete}
-                  prominence="tertiary"
-                  aria-label={t("fileRow.deleteButton.ariaLabel")}
+                  prominence="internal"
+                  size="sm"
+                  tooltip={t("fileRow.deleteButton.ariaLabel")}
                 />
-              </Hoverable.Item>
-            )}
-          </>
+              )}
+            </Section>
+          </Hoverable.Item>
         }
       />
     </Hoverable.Root>
@@ -261,7 +261,7 @@ export default function UserFilesModal({
             {filtered.length === 0 ? (
               <Text text03>{t("emptyState.description")}</Text>
             ) : (
-              <ScrollIndicatorDiv className="p-2 gap-2 max-h-[70vh]">
+              <ScrollIndicatorDiv className="p-1 gap-1 max-h-[70vh]">
                 {filtered.map((projectFle) => {
                   const isSelected = selectedIds.has(projectFle.id);
                   return (
