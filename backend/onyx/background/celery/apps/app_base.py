@@ -15,7 +15,7 @@ from celery.signals import before_task_publish, task_postrun, task_prerun
 from celery.states import READY_STATES
 from celery.utils.log import get_task_logger
 from celery.worker import strategy
-from celery.worker.control import control_command, inspect_command
+from celery.worker.control import control_command
 from redis.lock import Lock as RedisLock
 from sentry_sdk.integrations.celery import CeleryIntegration
 from sqlalchemy import text
@@ -29,10 +29,6 @@ from onyx.background.celery.apps.task_formatters import (
 from onyx.background.celery.celery_utils import (
     celery_is_worker_primary,
     make_probe_path,
-)
-from onyx.background.celery.import_watchlist import (
-    loaded_watchlist_modules,
-    process_memory_snapshot,
 )
 from onyx.background.celery.tasks.vespa.document_sync import (
     DOCUMENT_SYNC_PREFIX,
@@ -109,25 +105,6 @@ def clear_revoked(state: Any, **kwargs: Any) -> dict[str, Any]:  # noqa: ARG001
     worker_state.revoked.clear()
     task_logger.warning("clear_revoked: cleared %d revoked task ids", count)
     return {"ok": f"cleared {count} revoked task ids"}
-
-
-@inspect_command()
-def memory_report(state: Any, **kwargs: Any) -> dict[str, Any]:  # noqa: ARG001
-    """Remote command reporting this worker's memory, threads and heavy imports.
-
-    Usage: `celery -A onyx.background.celery.versioned_apps.primary inspect
-    memory_report --json` (the broadcast reaches every worker on the broker).
-    """
-    import threading
-
-    return {
-        "pid": os.getpid(),
-        "hostname": state.hostname,
-        "modules": len(sys.modules),
-        "python_threads": threading.active_count(),
-        **process_memory_snapshot(),
-        "watchlist_loaded": loaded_watchlist_modules(sys.modules),
-    }
 
 
 class TenantAwareTask(Task):
