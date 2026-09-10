@@ -10396,6 +10396,14 @@
         "fileCount": {
           "label": "{count, plural, one {# 个文件} other {# 个文件}}"
         },
+        "fileRow": {
+          "deleteButton": {
+            "ariaLabel": "删除文件"
+          },
+          "viewButton": {
+            "ariaLabel": "打开文件"
+          }
+        },
         "fileStatus": {
           "deleting": {
             "label": "正在删除..."

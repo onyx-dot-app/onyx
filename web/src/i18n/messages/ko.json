@@ -10396,6 +10396,14 @@
         "fileCount": {
           "label": "{count, plural, one {파일 #개} other {파일 #개}}"
         },
+        "fileRow": {
+          "deleteButton": {
+            "ariaLabel": "파일 삭제"
+          },
+          "viewButton": {
+            "ariaLabel": "파일 열기"
+          }
+        },
         "fileStatus": {
           "deleting": {
             "label": "삭제 중..."

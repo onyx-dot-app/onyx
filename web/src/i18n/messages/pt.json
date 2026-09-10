@@ -10396,6 +10396,14 @@
         "fileCount": {
           "label": "{count, plural, one {# arquivo} other {# arquivos}}"
         },
+        "fileRow": {
+          "deleteButton": {
+            "ariaLabel": "Excluir arquivo"
+          },
+          "viewButton": {
+            "ariaLabel": "Abrir arquivo"
+          }
+        },
         "fileStatus": {
           "deleting": {
             "label": "Excluindo..."

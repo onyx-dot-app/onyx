@@ -3,7 +3,7 @@
 import { useRef, useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Section, AttachmentItemLayout } from "@/layouts/general-layouts";
+import { Section } from "@/layouts/general-layouts";
 import {
   Content,
   ContentAction,
@@ -52,7 +52,13 @@ import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useFilter from "@/hooks/useFilter";
-import { Button, Divider, Checkbox, Text } from "@opal/components";
+import {
+  AttachmentItemButton,
+  Button,
+  Divider,
+  Checkbox,
+  Text,
+} from "@opal/components";
 import useFederatedOAuthStatus from "@/hooks/useFederatedOAuthStatus";
 import useCCPairs from "@/hooks/useCCPairs";
 import { ValidSources } from "@/lib/types";
@@ -73,7 +79,6 @@ import {
 } from "@/lib/constants/chatBackgrounds";
 import { SvgCheck } from "@opal/icons";
 import { cn } from "@opal/utils";
-import { Interactive } from "@opal/core";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { useIsSearchModeAvailable, useSettings } from "@/lib/settings/hooks";
@@ -2384,32 +2389,35 @@ function AccountsAccessSettings() {
                         });
 
                         return (
-                          <Interactive.Container
+                          <AttachmentItemButton
                             key={pat.id}
-                            size="fit"
-                            width="full"
-                          >
-                            <div className="w-full bg-background-tint-01">
-                              <AttachmentItemLayout
-                                icon={SvgKey}
-                                title={pat.name}
-                                description={pat.token_display}
-                                middleText={middleText}
-                                rightChildren={
-                                  <Button
-                                    icon={SvgTrash}
-                                    onClick={() => setTokenToDelete(pat)}
-                                    prominence="tertiary"
-                                    size="sm"
-                                    aria-label={t(
-                                      "apiKeys.list.deleteTokenAriaLabel",
-                                      { name: pat.name }
-                                    )}
-                                  />
-                                }
+                            presentational
+                            selectVariant="select-tinted"
+                            icon={SvgKey}
+                            title={pat.name}
+                            description={pat.token_display}
+                            centerChildren={
+                              <Text
+                                font="secondary-body"
+                                color="text-03"
+                                maxLines={1}
+                              >
+                                {middleText}
+                              </Text>
+                            }
+                            rightChildren={
+                              <Button
+                                icon={SvgTrash}
+                                onClick={() => setTokenToDelete(pat)}
+                                prominence="tertiary"
+                                size="sm"
+                                aria-label={t(
+                                  "apiKeys.list.deleteTokenAriaLabel",
+                                  { name: pat.name }
+                                )}
                               />
-                            </div>
-                          </Interactive.Container>
+                            }
+                          />
                         );
                       })}
                     </Section>

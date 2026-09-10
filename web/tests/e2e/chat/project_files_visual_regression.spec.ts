@@ -4,8 +4,9 @@ import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 
 const PROJECT_NAME = "E2E-PROJECT-FILES-VISUAL";
-const ATTACHMENT_ITEM_TITLE_TEST_ID = "attachment-item-title";
-const ATTACHMENT_ITEM_ICON_WRAPPER_TEST_ID = "attachment-item-icon-wrapper";
+// The file row is an Opal AttachmentItemButton; its tile has no testid, role
+// or text, so a class locator is the documented last resort.
+const ATTACHMENT_TILE_SELECTOR = ".opal-attachment-item-button-tile";
 const LONG_FILE_NAME =
   "CSE_202_Final_Project_Solution_Regression_Check_Long_Name.txt";
 const FILE_CONTENT = "Visual regression test content for long filename cards.";
@@ -149,24 +150,21 @@ test.describe("Project Files visual regression", () => {
     const filesSection = getFilesSection(page);
     await expect(filesSection).toBeVisible();
 
-    const fileTitle = filesSection
-      .locator(`[data-testid="${ATTACHMENT_ITEM_TITLE_TEST_ID}"]`)
-      .filter({ hasText: LONG_FILE_NAME })
-      .first();
+    const fileTitle = filesSection.getByText(LONG_FILE_NAME).first();
     await expect(fileTitle).toBeVisible();
 
-    // Wait for deterministic post-processing state before geometry checks/screenshot.
-    await expect(fileTitle).not.toContainText("Processing...", {
+    // Wait for deterministic post-processing state before geometry
+    // checks/screenshot. Title and description are separate elements now, so
+    // the state text is asserted on the whole files section.
+    await expect(filesSection).not.toContainText("Processing...", {
       timeout: 30_000,
     });
-    await expect(fileTitle).not.toContainText("Uploading...", {
+    await expect(filesSection).not.toContainText("Uploading...", {
       timeout: 30_000,
     });
-    await expect(fileTitle).toContainText("TXT", { timeout: 30_000 });
+    await expect(filesSection).toContainText("TXT", { timeout: 30_000 });
 
-    const iconWrapper = filesSection
-      .locator(`[data-testid="${ATTACHMENT_ITEM_ICON_WRAPPER_TEST_ID}"]`)
-      .first();
+    const iconWrapper = filesSection.locator(ATTACHMENT_TILE_SELECTOR).first();
     await expect(iconWrapper).toBeVisible();
 
     const container = page.locator("[data-main-container]");
