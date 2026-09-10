@@ -6,6 +6,7 @@ import { parseArgs } from "node:util";
 import {
   isAsExpression,
   isIdentifier,
+  isNonNullExpression,
   isPrivateIdentifier,
   isTypeAssertion,
   SyntaxKind,
@@ -20,7 +21,7 @@ import type { Checker, Diagnostic, Program } from "typescript-7/unstable/async";
 
 // Type-checks web/ with TypeScript 7 and, from the same program, measures type
 // coverage: the share of identifiers whose type is not `any`, with each type
-// cast counted as one more uncovered item.
+// cast and non-null assertion counted as one more uncovered item.
 // `ods type-coverage typescript` groups the per-file counts into directories
 // and gates them against .type-coverage-baseline.yaml.
 
@@ -169,6 +170,9 @@ async function countFile(
       // only narrows literals and `as unknown` only widens, so they are safe.
       const target = node.type.getText(sourceFile);
       if (target !== "const" && target !== "unknown") casts++;
+    } else if (isNonNullExpression(node)) {
+      // `x!` removes null and undefined without a check, so it is a cast too.
+      casts++;
     }
     node.forEachChild(visit);
   };

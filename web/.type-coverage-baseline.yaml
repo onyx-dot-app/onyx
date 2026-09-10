@@ -6,34 +6,34 @@
 # removing `any` types with `ods type-coverage typescript --update`.
 #
 # Generated file: do not edit by hand.
-total: 98.5
+total: 98.4
 packages:
   .: 100
   src: 99.4
   src/app: 99.5
-  src/app/admin: 96.3
+  src/app/admin: 96.2
   src/app/anonymous: 100
   src/app/api: 98.4
-  src/app/app: 98.3
+  src/app/app: 98.2
   src/app/auth: 98
   src/app/components: 100
   src/app/config: 100
   src/app/connector: 90
-  src/app/craft: 99.1
+  src/app/craft: 99
   src/app/ee: 95.6
   src/app/federated: 97
   src/app/mcp: 99.3
-  src/app/nrf: 99.5
+  src/app/nrf: 99.2
   src/app/oauth-config: 100
   src/components: 97.7
   src/components/admin: 96
   src/components/auth: 89.3
-  src/components/chat: 97.5
+  src/components/chat: 97.2
   src/components/context: 99.3
   src/components/dateRangeSelectors: 100
-  src/components/dev: 100
+  src/components/dev: 98.8
   src/components/errorPages: 100
-  src/components/filters: 95.8
+  src/components/filters: 95.4
   src/components/header: 100
   src/components/icons: 100
   src/components/oauth: 89.5
@@ -50,15 +50,15 @@ packages:
   src/ee/providers: 99.3
   src/ee/sections: 99.7
   src/ee/views: 99
-  src/hooks: 98.5
+  src/hooks: 98.3
   src/i18n: 99
   src/i18n/messages: 100
   src/interfaces: 100
   src/layouts: 100
   src/layouts/chromes: 99.8
   src/layouts/craft: 92.5
-  src/lib: 98.5
-  src/lib/agents: 99.2
+  src/lib: 98.4
+  src/lib/agents: 99.1
   src/lib/analytics: 99.4
   src/lib/app: 100
   src/lib/auth: 95.4
@@ -68,14 +68,14 @@ packages:
   src/lib/chat: 97.9
   src/lib/connectors: 96.4
   src/lib/constants: 100
-  src/lib/credentials: 97
+  src/lib/credentials: 96.9
   src/lib/extension: 100
   src/lib/externalApps: 100
   src/lib/headers: 100
   src/lib/hierarchy: 96.6
   src/lib/hooks: 95.7
   src/lib/indexing: 98.3
-  src/lib/languageModels: 97
+  src/lib/languageModels: 96.8
   src/lib/multiModel: 100
   src/lib/notifications: 97.3
   src/lib/oauth: 84.8
@@ -86,7 +86,7 @@ packages:
   src/lib/searchFilters: 95.3
   src/lib/settings: 96.6
   src/lib/sidebar: 100
-  src/lib/skills: 98.3
+  src/lib/skills: 97.3
   src/lib/sso: 99.2
   src/lib/tools: 97.4
   src/lib/tracing: 96.9
@@ -96,7 +96,7 @@ packages:
   src/lib/webSearch: 97.3
   src/providers: 99.4
   src/refresh-components: 99.7
-  src/refresh-components/avatars: 100
+  src/refresh-components/avatars: 99.7
   src/refresh-components/buttons: 99.6
   src/refresh-components/cards: 98.4
   src/refresh-components/commandmenu: 99.7
@@ -106,7 +106,7 @@ packages:
   src/refresh-components/modals: 100
   src/refresh-components/popovers: 99.5
   src/refresh-components/skeletons: 100
-  src/refresh-components/texts: 99.8
+  src/refresh-components/texts: 99.4
   src/refresh-components/tiles: 100
   src/sections: 100
   src/sections/actions: 99.1
@@ -114,17 +114,17 @@ packages:
   src/sections/agents: 99.6
   src/sections/banners: 98.5
   src/sections/cards: 100
-  src/sections/chat: 99.8
+  src/sections/chat: 99.7
   src/sections/document-sidebar: 99.3
   src/sections/input: 99.8
   src/sections/knowledge: 99.7
-  src/sections/modals: 99.3
+  src/sections/modals: 99.2
   src/sections/model-selector: 99.6
   src/sections/onboarding: 99.7
   src/sections/settings: 100
   src/sections/sidebar: 99.4
-  src/sections/skills: 100
-  src/sections/usage: 100
+  src/sections/skills: 99.8
+  src/sections/usage: 99.6
   src/views: 99
   src/views/admin: 99
   types: 100

@@ -348,8 +348,9 @@ gated. A module opts into the gate by committing a baseline, so `cli` and
 
 Measure type coverage per directory and hold it against a committed baseline.
 Type coverage is the share of identifiers whose type is not `any`. Each type
-cast (`x as T` or `<T>x`) also counts as one uncovered item. `as const` and
-`as unknown` do not count, because they do not override the checker.
+cast (`x as T` or `<T>x`) and each non-null assertion (`x!`) also counts as one
+uncovered item. `as const` and `as unknown` do not count, because they do not
+override the checker.
 
 ```shell
 ods type-coverage <checker> [flags]
