@@ -544,7 +544,7 @@ services:
     # The sandbox ships on its own release line, so IMAGE_TAG does not cover it.
     # Pinned so an upgrade cannot move it to an untested build. Bump with the
     # release that has been tested against it.
-    image: onyxdotapp/code-interpreter:${CODE_INTERPRETER_IMAGE_TAG:-0.4.6}
+    image: onyxdotapp/code-interpreter:${CODE_INTERPRETER_IMAGE_TAG:-0.4.7}
     command: ["bash", "./entrypoint.sh", "code-interpreter-api"]
     restart: unless-stopped
     env_file:
