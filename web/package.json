@@ -17,6 +17,7 @@
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "types:check": "next typegen && node node_modules/typescript-7/bin/tsc --noEmit --project tsconfig.types.json",
+    "types:coverage": "next typegen && node tools/type-coverage/index.ts",
     "format": "oxfmt src",
     "format:check": "oxfmt --check src",
     "playwright": "playwright test",
@@ -147,6 +148,7 @@
     "tailwindcss": "^4.3.3",
     "ts-unused-exports": "^11.0.1",
     "tsup": "^8.5.1",
+    "type-coverage-core": "2.30.1",
     "typescript": "^5.9.3",
     "typescript-7": "npm:typescript@^7.0.2",
     "whatwg-fetch": "^3.6.20"

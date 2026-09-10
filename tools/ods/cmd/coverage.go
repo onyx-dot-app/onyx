@@ -81,7 +81,7 @@ func runCoverage(target string, opts *CoverageOptions) int {
 	suite := coverageSuite(root, cwd, target)
 	moduleDir := filepath.Join(root, suite.Dir)
 
-	profilePath, cleanup := profileTarget(opts.Profile)
+	profilePath, cleanup := outputTarget(opts.Profile, "coverage.out")
 	defer cleanup()
 
 	log.Infof("Measuring %s coverage...", suite.Name)
@@ -116,105 +116,22 @@ func runCoverage(target string, opts *CoverageOptions) int {
 		log.Infof("HTML report written to %s", htmlPath)
 	}
 
-	baselinePath := coverage.BaselinePath(moduleDir)
-
-	if opts.Update {
-		return writeBaseline(baselinePath, profile)
-	}
-
-	// A module opts into the gate by committing a baseline. Without one the
-	// tests still run and the report still prints, but nothing can regress.
-	baseline, err := coverage.LoadBaseline(baselinePath)
-	if errors.Is(err, os.ErrNotExist) {
-		log.Warnf("No baseline at %s, so nothing is gated. Opt in with: ods coverage %s --update", baselinePath, suite.Name)
-		baseline = nil
-	} else if err != nil {
-		log.Errorf("Failed to read the baseline: %v", err)
-		return 1
-	}
-
-	report := coverage.Compare(profile, baseline, opts.Tolerance)
-	if err := coverage.WriteReport(os.Stdout, report); err != nil {
-		log.Errorf("Failed to write the report: %v", err)
-		return 1
-	}
-
-	if opts.Markdown != "" {
-		if err := writeMarkdown(opts.Markdown, suite.Dir, report); err != nil {
-			log.Errorf("Failed to write the markdown report: %v", err)
-			return 1
-		}
-		log.Infof("Markdown report written to %s", opts.Markdown)
-	}
-
 	if opts.Profile != "" {
 		log.Infof("Coverage profile written to %s", profilePath)
 		log.Infof("Browse it with: go tool cover -html=%s", profilePath)
 	}
 
-	if improvements := report.Improvements(); len(improvements) > 0 {
-		log.Infof("%d package(s) rose above the baseline. Lock the gain in with: ods coverage %s --update",
-			len(improvements), suite.Name)
-	}
-
-	if !opts.Check || baseline == nil {
-		return 0
-	}
-	regressions := report.Regressions()
-	if len(regressions) == 0 {
-		log.Infof("Coverage holds at or above the baseline in %s", baselinePath)
-		return 0
-	}
-	for _, regression := range regressions {
-		log.Errorf("%s fell to %.1f%%, below its %.1f%% floor", regression.Package, regression.Percent, regression.Floor)
-	}
-	log.Errorf("Coverage regressed in %d package(s). Add tests, or justify the drop and run: ods coverage %s --update",
-		len(regressions), suite.Name)
-	return 1
-}
-
-func writeBaseline(baselinePath string, profile *coverage.Profile) int {
-	baseline := coverage.NewBaseline(profile)
-	if err := baseline.Save(baselinePath); err != nil {
-		log.Errorf("Failed to write the baseline: %v", err)
-		return 1
-	}
-	// Report the floor that was recorded, not the raw measurement, so the
-	// number here matches the file.
-	log.Infof("Wrote %s with a %.1f%% total coverage floor across %d packages",
-		baselinePath, baseline.Total, len(baseline.Packages))
-	return 0
-}
-
-func writeMarkdown(path, name string, report *coverage.Report) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return err
-	}
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = f.Close() }()
-	return coverage.WriteMarkdown(f, name, report)
-}
-
-// profileTarget resolves where the coverage profile is written. Without an
-// explicit path it goes to a temporary file that is removed afterwards. A
-// requested path is made absolute, since go test writes it relative to the
-// module directory while we read it relative to the caller's.
-func profileTarget(requested string) (string, func()) {
-	if requested != "" {
-		absolute, err := filepath.Abs(requested)
-		if err != nil {
-			log.Fatalf("Failed to resolve the profile path %q: %v", requested, err)
-		}
-		return absolute, func() {}
-	}
-	dir, err := os.MkdirTemp("", "ods-coverage")
-	if err != nil {
-		log.Fatalf("Failed to create a temporary directory: %v", err)
-	}
-	return filepath.Join(dir, "coverage.out"), func() { _ = os.RemoveAll(dir) }
+	return runCoverageGate(coverageGate{
+		Kind:         coverage.GoTests,
+		Profile:      profile,
+		BaselinePath: coverage.GoTests.BaselinePath(moduleDir),
+		Name:         suite.Dir,
+		Command:      "ods coverage " + suite.Name,
+		Check:        opts.Check,
+		Update:       opts.Update,
+		Markdown:     opts.Markdown,
+		Tolerance:    opts.Tolerance,
+	})
 }
 
 // coverageSuite resolves a suite from a suite name or a module directory,

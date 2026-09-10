@@ -344,6 +344,57 @@ Without a baseline the tests still run and the report prints, but nothing is
 gated. A module opts into the gate by committing a baseline, so `cli` and
 `terraform-provider-onyx` join by running `ods coverage <suite> --update` once.
 
+### `type-coverage` - Measure Type Coverage Against a Baseline
+
+Measure type coverage per directory and hold it against a committed baseline.
+Type coverage is the share of identifiers whose type is not `any`.
+
+```shell
+ods type-coverage <checker> [flags]
+```
+
+The only checker is `typescript` (alias `ts`), which measures `web/`. Python is
+not supported yet, because `ty` does not report types.
+
+`ods web types:coverage` does the measurement with `type-coverage-core` and
+writes the counts for each file. This command groups the files into directories
+three levels deep, such as `src/app/admin`, and compares each directory with its
+floor in `web/.type-coverage-baseline.yaml`. The flags and the baseline format
+are the same as for `ods coverage`.
+
+The default tolerance is `0`, because the measurement does not change between
+runs. A `// type-coverage:ignore-next-line` comment removes a line from the
+counts, so check for it in reviews.
+
+**Flags:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--check` | `false` | Fail when a directory drops below its baseline floor |
+| `--update` | `false` | Rewrite the baseline from this run |
+| `--output` | | Keep the per-file counts as JSON at this path |
+| `--markdown` | | Write the changed directories as a markdown table at this path, for a PR comment |
+| `--tolerance` | `0` | Percentage points a directory may drop below its floor without failing |
+
+**Examples:**
+
+```shell
+# Report where each directory stands
+ods type-coverage ts
+
+# Fail on a regression (what CI runs)
+ods type-coverage ts --check
+
+# Record the new floors after you remove `any` types
+ods type-coverage ts --update
+
+# Print the total only
+ods web types:coverage
+```
+
+`pr-type-coverage.yml` runs `--check` on every PR. It adds the report to the
+job summary and updates one PR comment when a directory moves.
+
 In CI, each module's `--markdown` report goes to the job summary, and its
 `--html` page is uploaded as an artifact and published to the reports bucket.
 One PR comment, updated in place, lists the modules with a baseline where a

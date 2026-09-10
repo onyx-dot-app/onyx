@@ -1,0 +1,124 @@
+name: TypeScript Type Coverage
+concurrency:
+  group: TypeScript-Type-Coverage-${{ github.workflow }}-${{ github.head_ref || github.event.workflow_run.head_branch || github.run_id }}
+  cancel-in-progress: true
+
+on:
+  merge_group:
+  pull_request:
+    branches:
+      - main
+      - "release/**"
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read # needed to checkout the repo on private repos (no-op on public)
+
+env:
+  GO_VERSION: "1.26.5"
+
+jobs:
+  type-coverage:
+    name: Type Coverage
+    runs-on: ubuntu-latest
+    # The measurement takes about 1 minute, and ods installs the web
+    # dependencies first.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # zizmor: ignore[cache-poisoning]
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: tools/ods/go.sum
+      - name: Setup bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # ratchet:oven-sh/setup-bun@v2 # zizmor: ignore[cache-poisoning] test-only workflow; no deploy artifacts
+        with:
+          bun-version: "1.3.13"
+
+      - name: Build ods
+        run: go build -o "${RUNNER_TEMP}/ods" .
+        working-directory: tools/ods
+
+      # ods installs the web dependencies, runs `bun run types:coverage`, and
+      # fails when a directory drops below its floor in
+      # web/.type-coverage-baseline.yaml. Raise the floors after removing `any`
+      # types with `ods type-coverage typescript --update`.
+      - name: Check type coverage
+        run: |
+          "${RUNNER_TEMP}/ods" type-coverage typescript --check \
+            --markdown "${RUNNER_TEMP}/type-coverage/report.md"
+
+      # The report goes to the job summary here, and to the PR comment below.
+      - name: Publish the type coverage report
+        if: ${{ !cancelled() }}
+        run: |
+          if [ -f "${RUNNER_TEMP}/type-coverage/report.md" ]; then
+            cat "${RUNNER_TEMP}/type-coverage/report.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # ratchet:actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: type-coverage
+          path: ${{ runner.temp }}/type-coverage
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # One comment per PR, updated in place, when a directory moved against its
+  # baseline. When nothing moved, an existing comment is updated to say so and
+  # no new one is posted. Fork PRs get a read-only token, so they only get the
+  # job summary.
+  type-coverage-comment:
+    needs: type-coverage
+    if: >-
+      !cancelled() &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.fork == false
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # ratchet:actions/download-artifact@v4
+        with:
+          pattern: type-coverage
+          path: reports
+      - name: Post the type coverage comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          MARKER="<!-- typescript-type-coverage -->"
+          REPORT="reports/type-coverage/report.md"
+
+          HEADER="${MARKER}"$'\n'"### TypeScript type coverage"$'\n'
+          BODY="${HEADER}"
+          # ods opens the report with a marker: changed, unchanged, or no-baseline.
+          if [ -f "${REPORT}" ] && head -1 "${REPORT}" | grep -qx '<!-- ods-coverage: changed -->'; then
+            BODY+=$'\n'"$(cat "${REPORT}")"$'\n'
+          fi
+
+          # Upsert: find the existing comment with the marker, or create one.
+          # --paginate: on a long PR the marker can sit past the first page.
+          EXISTING_COMMENT_ID=$(gh api --paginate "repos/${REPO}/issues/${PR_NUMBER}/comments" \
+            --jq ".[] | select(.body | startswith(\"${MARKER}\")) | .id" | head -1)
+
+          if [ "${BODY}" = "${HEADER}" ]; then
+            if [ -z "${EXISTING_COMMENT_ID}" ]; then
+              echo "No directory changed type coverage -- skipping the PR comment."
+              exit 0
+            fi
+            BODY+=$'\n'"No directory moved against its baseline in the latest run."$'\n'
+          fi
+
+          if [ -n "${EXISTING_COMMENT_ID}" ]; then
+            gh api --method PATCH "repos/${REPO}/issues/comments/${EXISTING_COMMENT_ID}" -f body="${BODY}" >/dev/null
+          else
+            gh api --method POST "repos/${REPO}/issues/${PR_NUMBER}/comments" -f body="${BODY}" >/dev/null
+          fi
