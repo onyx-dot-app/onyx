@@ -1213,7 +1213,7 @@ class SharepointConnector(
 
         while page_url:
             try:
-                data = self._graph_api_get_json(page_url, params)
+                data = self.graph_api.get_json(page_url, params)
             except HTTPError as e:
                 if e.response is not None and e.response.status_code == 404:
                     logger.warning("Site page not found: %s", page_url)
@@ -1275,7 +1275,7 @@ class SharepointConnector(
 
         while page_url:
             try:
-                data = self._graph_api_get_json(page_url)
+                data = self.graph_api.get_json(page_url)
             except HTTPError as e:
                 if e.response is not None and e.response.status_code == 404:
                     break
@@ -1316,7 +1316,7 @@ class SharepointConnector(
         pages_collection = site_pages_base.removesuffix("/microsoft.graph.sitePage")
         single_url = f"{pages_collection}/{page_id}/microsoft.graph.sitePage"
         try:
-            return self._graph_api_get_json(single_url, {"$expand": "canvasLayout"})
+            return self.graph_api.get_json(single_url, {"$expand": "canvasLayout"})
         except HTTPError as e:
             if (
                 e.response is not None
@@ -1341,7 +1341,7 @@ class SharepointConnector(
         """
         pages_collection = f"{self.graph_api_base}/sites/{site_id}/pages"
         site_pages_base = f"{pages_collection}/microsoft.graph.sitePage"
-        metadata = self._graph_api_get_json(
+        metadata = self.graph_api.get_json(
             f"{pages_collection}/{page_id}/microsoft.graph.sitePage"
         )
         return self._try_expand_single_page(site_pages_base, page_id, metadata)
@@ -1364,18 +1364,8 @@ class SharepointConnector(
 
     @property
     def graph_api(self) -> GraphApiClient:
-        """The raw Graph REST surface, bound to this connector's token source.
-
-        Built per access so it always reflects the current graph_api_base.
-        """
+        """The raw Graph REST surface, bound to this connector's token source."""
         return GraphApiClient(self._get_graph_access_token, self.graph_api_base)
-
-    def _graph_api_get_json(
-        self,
-        url: str,
-        params: dict[str, str] | None = None,
-    ) -> dict[str, Any]:
-        return self.graph_api.get_json(url, params)
 
     @staticmethod
     def _clear_drive_checkpoint_state(
@@ -2129,10 +2119,10 @@ class SharepointConnector(
             # checkpointing.  Build the initial URL and fall through to 3b.
             if not site_descriptor.folder_path:
                 checkpoint.current_drive_delta_next_link = build_delta_start_url(
-                    self.graph_api, drive_id, start_dt
+                    self.graph_api_base, drive_id, start_dt
                 )
-            # else: BFS path — delta_next_link stays None;
-            # Phase 3b will use _iter_drive_items_paged.
+            # else: BFS path, delta_next_link stays None and
+            # Phase 3b walks with iter_drive_items_paged.
 
         # Phase 3b: Process items from the current drive
         if (
@@ -2462,7 +2452,7 @@ class SharepointConnector(
                 f"{self.graph_api_base}/drives/{drive.drive_id}/items/{document_id}"
             )
             try:
-                item_json = self._graph_api_get_json(item_url)
+                item_json = self.graph_api.get_json(item_url)
             except HTTPError as e:
                 if e.response is not None and e.response.status_code == 404:
                     continue

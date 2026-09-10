@@ -1,9 +1,9 @@
 """The shared MSAL builder must not validate the client and directory ids.
 
-Teams passes its credential straight through and expects a plain MSAL failure.
-Raising ``ConnectorValidationError`` here would cancel the index attempt and
-mark the credential invalid, which is SharePoint's behaviour, not Teams'.
-SharePoint keeps its own presence checks in ``load_credentials``.
+Teams passes its credential straight through and expects an ordinary failure.
+Raising ``ConnectorValidationError`` here would cancel the index attempt for
+every caller, which is SharePoint's behaviour, not Teams'. SharePoint keeps its
+own presence checks in ``load_credentials``.
 """
 
 from __future__ import annotations

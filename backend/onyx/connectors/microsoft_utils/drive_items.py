@@ -288,7 +288,7 @@ def redact_url_for_logging(url: str, max_len: int = 120) -> str:
 
     Microsoft's ``@microsoft.graph.downloadUrl`` is a pre-authenticated link
     whose query string carries a ``tempauth=`` JWT (and similar credential
-    parameters). Logging the raw URL — even truncated — can leak a working
+    parameters). Logging the raw URL, even truncated, can leak a working
     download credential into log aggregators. Strip query and fragment, keep
     just ``scheme://host/path`` truncated to ``max_len`` for grep-ability.
     """
@@ -327,9 +327,6 @@ def probe_remote_size(url: str, timeout: int) -> int | None:
     except requests.RequestException:
         pass
 
-    # If both HEAD and a range GET failed to reveal a size, signal unknown size.
-    # Callers should treat None as "size unavailable" and proceed with a safe
-    # streaming path that enforces a hard cap to avoid excessive memory usage.
     return None
 
 
@@ -342,8 +339,8 @@ def stream_response_to_buffer_with_cap(
     """Stream a GET response into memory with a byte cap, retrying on transient
     transport-level failures.
 
-    SharePoint / Graph occasionally drop the TCP connection mid-body (surfaces
-    as `ChunkedEncodingError: IncompleteRead`). Each retry calls
+    Graph occasionally drops the TCP connection mid-body (surfaces as
+    `ChunkedEncodingError: IncompleteRead`). Each retry calls
     ``request_factory`` again to obtain a fresh ``Response`` -- this also
     avoids reusing a stale socket from urllib3's connection pool.
 
@@ -356,7 +353,7 @@ def stream_response_to_buffer_with_cap(
 
     Raises:
         SizeCapExceeded: when ``cap`` is exceeded (never retried).
-        requests.RequestException: when retries are exhausted; HTTPError from
+        requests.RequestException: when retries are exhausted. HTTPError from
             ``raise_for_status`` is not retried here.
     """
     for attempt in range(max_retries + 1):
@@ -441,7 +438,7 @@ def download_via_graph_api(
     access_token: str,
     drive_id: str,
     item_id: str,
-    bytes_allowed: int,
+    cap: int,
     graph_api_base: str,
 ) -> bytes:
     """Download a drive item via the Graph API /content endpoint with a byte cap.
@@ -459,7 +456,7 @@ def download_via_graph_api(
 
     return stream_response_to_buffer_with_cap(
         _factory,
-        bytes_allowed,
+        cap,
         description=f"graph_api(drive={drive_id},item={item_id})",
     )
 
@@ -605,6 +602,17 @@ def extract_drive_item_content(
     return DriveItemContent(sections=sections, staged_file_id=staged_file_id)
 
 
+def _delta_item_is_indexable(
+    item: dict[str, Any],
+    start: datetime | None,
+    end: datetime | None,
+) -> bool:
+    """Folders and tombstones carry no content, so only files in window index."""
+    if DRIVE_ITEM_FOLDER_PROPERTY in item or DRIVE_ITEM_DELETED_PROPERTY in item:
+        return False
+    return drive_item_in_time_window(item, start, end)
+
+
 def iter_drive_items_paged(
     client: GraphApiClient,
     drive_id: str,
@@ -735,15 +743,8 @@ def iter_delta_pages(
         params = None  # nextLink/deltaLink already embed query params
 
         for item in data.get("value", []):
-            if (
-                DRIVE_ITEM_FOLDER_PROPERTY in item
-                or DRIVE_ITEM_DELETED_PROPERTY in item
-            ):
+            if not _delta_item_is_indexable(item, start, end):
                 continue
-
-            if not drive_item_in_time_window(item, start, end):
-                continue
-
             yield DriveItemData.from_graph_json(item)
 
         page_url = data.get("@odata.nextLink")
@@ -752,7 +753,7 @@ def iter_delta_pages(
 
 
 def build_delta_start_url(
-    client: GraphApiClient,
+    graph_api_base: str,
     drive_id: str,
     start: datetime | None = None,
     page_size: int = 200,
@@ -762,7 +763,7 @@ def build_delta_start_url(
     Embeds ``$top``, ``$select``, and optionally ``token`` so the URL can be
     stored in a checkpoint without a separate params dict.
     """
-    base_url = f"{client.graph_api_base}/drives/{drive_id}/root/delta"
+    base_url = f"{graph_api_base}/drives/{drive_id}/root/delta"
     params = [
         f"$top={page_size}",
         f"$select={DRIVE_ITEM_SELECT_FIELDS}",
@@ -807,9 +808,7 @@ def fetch_one_delta_page(
 
     items: list[DriveItemData] = []
     for item in data.get("value", []):
-        if DRIVE_ITEM_FOLDER_PROPERTY in item or DRIVE_ITEM_DELETED_PROPERTY in item:
-            continue
-        if not drive_item_in_time_window(item, start, end):
+        if not _delta_item_is_indexable(item, start, end):
             continue
         items.append(DriveItemData.from_graph_json(item))
 

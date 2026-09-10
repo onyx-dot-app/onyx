@@ -108,7 +108,7 @@ def test_download_via_graph_api_retries_on_chunked_encoding_error(
         access_token="tok",
         drive_id="drive-1",
         item_id="item-1",
-        bytes_allowed=CAP,
+        cap=CAP,
         graph_api_base="https://graph.microsoft.com/v1.0",
     )
 

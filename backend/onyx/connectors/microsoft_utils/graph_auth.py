@@ -4,10 +4,11 @@ Connectors map their own credential field names onto :func:`build_msal_app`,
 which takes explicit values so the package never has to know whether a field is
 called ``sp_client_id`` or ``teams_client_id``.
 
-Callers keep their own "app is not initialized" / "token acquisition failed"
-guards: SharePoint raises ``ConnectorValidationError`` there, which cancels the
-index attempt and marks the credential invalid, while Teams raises
-``RuntimeError``, which only fails the attempt. Those differ on purpose.
+Callers keep their own "app is not initialized" and "token acquisition failed"
+guards, and they do not agree on the exception type. Raising
+``ConnectorValidationError`` cancels the index attempt and counts toward the
+threshold that marks a credential invalid, so it is not interchangeable with
+``RuntimeError``.
 """
 
 import base64
@@ -58,7 +59,7 @@ def load_certificate_from_pfx(pfx_data: bytes, password: str) -> CertificateData
 
         return CertificateData(
             private_key=key_pem,
-            thumbprint=certificate.fingerprint(hashes.SHA1()).hex(),  # noqa: S303 — MSAL certificate auth requires the SHA1 thumbprint per RFC 5280
+            thumbprint=certificate.fingerprint(hashes.SHA1()).hex(),  # noqa: S303 MSAL certificate auth requires the SHA1 thumbprint per RFC 5280
         )
     except Exception as e:
         logger.error("Error loading certificate: %s", e)
@@ -80,10 +81,9 @@ def build_msal_app(
     ``private_key_b64`` is the base64-encoded PFX bundle as stored on the
     credential, not a PEM key.
 
-    Callers own presence checks on the client and directory ids. Validating
-    them here would turn Teams' plain MSAL failure into a
-    ``ConnectorValidationError``, which cancels the attempt and marks the
-    credential invalid.
+    Callers own presence checks on the ids. Validating them here would give
+    every caller SharePoint's ``ConnectorValidationError``, which cancels the
+    index attempt, where Teams surfaces an ordinary failure instead.
     """
     authority_url = f"{authority_host}/{directory_id}"
 

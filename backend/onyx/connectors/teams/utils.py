@@ -32,8 +32,8 @@ def execute_query_with_retry(
     """Execute an ``office365`` SDK query, retrying transient Graph errors
     (rate limits + 5xx gateway/server hiccups) with capped backoff.
 
-    Mirrors the SharePoint connector's ``sleep_and_retry`` so the two Microsoft
-    Graph connectors behave consistently. Non-retryable statuses (e.g. 401/403/
+    Kept separate from the shared ``sleep_and_retry`` because it retries the
+    wider 5xx set and allows more attempts. Non-retryable statuses (e.g. 401/403/
     404, or a malformed OData filter 400) and exhausted retries are re-raised
     for the caller to handle.
     """

@@ -1,7 +1,7 @@
 """Tests for resilience wrappers added to SharepointConnector._load_from_checkpoint.
 
 Covers three failure modes that previously aborted the whole attempt:
-- G1: BFS-mode generator (`_iter_drive_items_paged`) raising mid-iteration.
+- G1: BFS-mode generator (`iter_drive_items_paged`) raising mid-iteration.
 - G2: `_fetch_site_pages` raising a non-Graph 4xx in Phase 5.
 - G3: A single site page failing to convert in Phase 5.
 
@@ -165,7 +165,7 @@ def _build_phase5_checkpoint() -> SharepointConnectorCheckpoint:
 
 
 class TestBfsIterationFailure:
-    """When `_iter_drive_items_paged` (BFS path) raises after yielding some
+    """When `iter_drive_items_paged` (BFS path) raises after yielding some
     items, items emitted before the raise are kept, an EntityFailure is
     yielded for the drive, the drive checkpoint state is cleared, and the
     generator returns cleanly instead of aborting the attempt."""
