@@ -155,8 +155,8 @@ class TraceProvider(ABC):
         trace_id: str | None = None,
         group_id: str | None = None,
         metadata: dict[str, Any] | None = None,
-        content_mode: TraceContentMode = TraceContentMode.FULL,
         disabled: bool = False,
+        content_mode: TraceContentMode = TraceContentMode.FULL,
     ) -> Trace:
         """Create a new trace."""
 
@@ -166,8 +166,8 @@ class TraceProvider(ABC):
         span_data: TSpanData,
         span_id: str | None = None,
         parent: Trace | Span[Any] | None = None,
-        content_mode: TraceContentMode | None = None,
         disabled: bool = False,
+        content_mode: TraceContentMode | None = None,
     ) -> Span[TSpanData]:
         """Create a new span."""
 
@@ -226,8 +226,8 @@ class DefaultTraceProvider(TraceProvider):
         trace_id: str | None = None,
         group_id: str | None = None,
         metadata: dict[str, Any] | None = None,
-        content_mode: TraceContentMode = TraceContentMode.FULL,
         disabled: bool = False,
+        content_mode: TraceContentMode = TraceContentMode.FULL,
     ) -> Trace:
         """
         Create a new trace.
@@ -254,8 +254,8 @@ class DefaultTraceProvider(TraceProvider):
         span_data: TSpanData,
         span_id: str | None = None,
         parent: Trace | Span[Any] | None = None,
-        content_mode: TraceContentMode | None = None,
         disabled: bool = False,
+        content_mode: TraceContentMode | None = None,
     ) -> Span[TSpanData]:
         """
         Create a new span.

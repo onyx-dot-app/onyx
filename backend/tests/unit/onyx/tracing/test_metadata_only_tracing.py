@@ -10,7 +10,7 @@ from onyx.tracing.framework.provider import DefaultTraceProvider
 from onyx.tracing.framework.setup import get_trace_provider, set_trace_provider
 from onyx.tracing.framework.span_data import GenerationSpanData
 from onyx.tracing.framework.spans import NoOpSpan, Span
-from onyx.tracing.framework.traces import Trace, TraceContentMode
+from onyx.tracing.framework.traces import NoOpTrace, Trace, TraceContentMode
 from onyx.tracing.llm_utils import (
     llm_generation_span,
     record_llm_span_output,
@@ -120,6 +120,21 @@ def test_metadata_only_span_without_trace_remains_redacted_noop() -> None:
     assert span.span_data.output is None
     assert span.span_data.usage == {"input_tokens": 5, "output_tokens": 2}
     assert processor.ended_spans == []
+
+
+def test_provider_preserves_positional_disabled_arguments() -> None:
+    provider = DefaultTraceProvider()
+
+    disabled_trace = provider.create_trace("disabled", None, None, None, True)
+    with provider.create_trace("active"):
+        disabled_span = provider.create_span(
+            GenerationSpanData(model="claude-sonnet"), None, None, True
+        )
+
+    assert isinstance(disabled_trace, NoOpTrace)
+    assert disabled_trace.content_mode == TraceContentMode.FULL
+    assert isinstance(disabled_span, NoOpSpan)
+    assert disabled_span.content_mode == TraceContentMode.FULL
 
 
 def test_llm_helper_inherits_metadata_only_trace() -> None:

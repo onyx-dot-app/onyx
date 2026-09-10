@@ -31,8 +31,8 @@ def trace(
     trace_id: str | None = None,
     group_id: str | None = None,
     metadata: dict[str, Any] | None = None,
-    content_mode: TraceContentMode = TraceContentMode.FULL,
     disabled: bool = False,
+    content_mode: TraceContentMode = TraceContentMode.FULL,
 ) -> Trace:
     """
     Create a new trace. The trace will not be started automatically; you should either use
@@ -79,8 +79,8 @@ def ensure_trace(
     trace_id: str | None = None,
     group_id: str | None = None,
     metadata: dict[str, Any] | None = None,
-    content_mode: TraceContentMode = TraceContentMode.FULL,
     disabled: bool = False,
+    content_mode: TraceContentMode = TraceContentMode.FULL,
 ) -> Iterator[Trace | None]:
     """
     Ensure a trace exists. If a trace is already active, reuse it.
@@ -194,8 +194,8 @@ def generation_span(
     tools: Sequence[Mapping[str, Any]] | None = None,
     span_id: str | None = None,
     parent: Trace | Span[Any] | None = None,
-    content_mode: TraceContentMode | None = None,
     disabled: bool = False,
+    content_mode: TraceContentMode | None = None,
 ) -> Span[GenerationSpanData]:
     """Create a new generation span. The span will not be started automatically, you should either
     do `with generation_span() ...` or call `span.start()` + `span.finish()` manually.
