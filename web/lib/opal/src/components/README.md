@@ -22,6 +22,11 @@ The barrel file at `index.ts` re-exports each component and its prop types. Each
 | [Tag](./tag/)                                  | Small colored label for status/category metadata             | [README](./tag/README.md)                      |
 | [DateRangePicker](./inputs/date-range-picker/) | Preset date-range strip with a custom-range calendar popover | [README](./inputs/date-range-picker/README.md) |
 | [InputFile](./inputs/input-file/)              | Text field that doubles as a file picker                     | [README](./inputs/input-file/README.md)        |
+| [InputAvatar](./inputs/input-avatar/)          | Avatar frame with primary input chrome                       | [README](./inputs/input-avatar/README.md)      |
+| [InputComboBox](./inputs/input-combo-box/)     | Filterable input/select hybrid with create-new support       | [README](./inputs/input-combo-box/README.md)   |
+| [InputImage](./inputs/input-image/)            | Circular image dropzone with edit overlay                    | [README](./inputs/input-image/README.md)       |
+| [InputKeyValue](./inputs/input-key-value/)     | Key/value pair editor with validation                        | [README](./inputs/input-key-value/README.md)   |
+| [InputNumber](./inputs/input-number/)          | Number field with steppers and reset                         | [README](./inputs/input-number/README.md)      |
 | [ListFieldInput](./inputs/list-field-input/)   | Type-and-Enter list builder with removable chips below       | [README](./inputs/list-field-input/README.md)  |
 
 ## Adding new components
