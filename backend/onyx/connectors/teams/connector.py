@@ -102,7 +102,7 @@ class TeamsConnector(
             directory_id=credentials["teams_directory_id"],
             authority_host=self.authority_host,
             client_secret=credentials["teams_client_secret"],
-        )
+        ).app
 
         def _acquire_token_func() -> dict[str, Any]:
             """

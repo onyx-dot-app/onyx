@@ -639,6 +639,7 @@ class SharepointConnector(
         )
         self._graph_client: GraphClient | None = None
         self.msal_app: msal.ConfidentialClientApplication | None = None
+        self.auth_method: MicrosoftAuthMethod | None = None
         self.include_site_pages = include_site_pages
         self.include_site_documents = include_site_documents
         self.sp_tenant_domain: str | None = None
@@ -700,6 +701,18 @@ class SharepointConnector(
         """
         if not (self.msal_app and self.sp_tenant_domain and self.sites):
             return
+
+        # SharePoint blocks app-only REST tokens that came from a client
+        # secret, so no permission grant can make this credential work.
+        if self.auth_method is MicrosoftAuthMethod.CLIENT_SECRET:
+            raise ConnectorValidationError(
+                "Permission sync needs the SharePoint REST API, which only accepts "
+                "app-only tokens from certificate authentication. This credential "
+                "uses a client secret, so SharePoint denies the request no matter "
+                "which permissions are granted. Recreate the credential with "
+                "Certificate Authentication, or turn permission sync off."
+            )
+
         try:
             token_response = acquire_token_for_rest(
                 self.msal_app,
@@ -1570,7 +1583,7 @@ class SharepointConnector(
         if not sp_directory_id:
             raise ConnectorValidationError("Directory (tenant) ID is required")
 
-        self.msal_app = build_msal_app(
+        auth = build_msal_app(
             client_id=sp_client_id,
             directory_id=sp_directory_id,
             authority_host=self.authority_host,
@@ -1579,6 +1592,8 @@ class SharepointConnector(
             private_key_b64=credentials.get("sp_private_key"),
             certificate_password=credentials.get("sp_certificate_password"),
         )
+        self.msal_app = auth.app
+        self.auth_method = auth.method
 
         def _acquire_token_for_graph() -> dict[str, Any]:
             """
