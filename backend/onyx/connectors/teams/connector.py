@@ -26,7 +26,15 @@ from onyx.connectors.interfaces import (
     SecondsSinceUnixEpoch,
     SlimConnectorWithPermSync,
 )
-from onyx.connectors.microsoft_graph_env import resolve_microsoft_environment
+from onyx.connectors.microsoft_utils.graph_auth import (
+    acquire_graph_token,
+    build_msal_app,
+)
+from onyx.connectors.microsoft_utils.graph_env import (
+    DEFAULT_AUTHORITY_HOST,
+    DEFAULT_GRAPH_API_HOST,
+    resolve_microsoft_environment,
+)
 from onyx.connectors.models import (
     ConnectorCheckpoint,
     ConnectorFailure,
@@ -59,10 +67,6 @@ class TeamsCheckpoint(ConnectorCheckpoint):
     todo_team_ids: list[str] | None = None
 
 
-DEFAULT_AUTHORITY_HOST = "https://login.microsoftonline.com"
-DEFAULT_GRAPH_API_HOST = "https://graph.microsoft.com"
-
-
 class TeamsConnector(
     CheckpointedConnectorWithPermSync[TeamsCheckpoint],
     SlimConnectorWithPermSync,
@@ -93,15 +97,11 @@ class TeamsConnector(
     # impls for BaseConnector
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        teams_client_id = credentials["teams_client_id"]
-        teams_client_secret = credentials["teams_client_secret"]
-        teams_directory_id = credentials["teams_directory_id"]
-
-        authority_url = f"{self.authority_host}/{teams_directory_id}"
-        self.msal_app = msal.ConfidentialClientApplication(
-            authority=authority_url,
-            client_id=teams_client_id,
-            client_credential=teams_client_secret,
+        self.msal_app = build_msal_app(
+            client_id=credentials["teams_client_id"],
+            directory_id=credentials["teams_directory_id"],
+            authority_host=self.authority_host,
+            client_secret=credentials["teams_client_secret"],
         )
 
         def _acquire_token_func() -> dict[str, Any]:
@@ -111,9 +111,7 @@ class TeamsConnector(
             if self.msal_app is None:
                 raise RuntimeError("MSAL app is not initialized")
 
-            token = self.msal_app.acquire_token_for_client(
-                scopes=[f"{self.graph_api_host}/.default"]
-            )
+            token = acquire_graph_token(self.msal_app, self.graph_api_host)
 
             if not isinstance(token, dict):
                 raise RuntimeError("`token` instance must be of type dict")

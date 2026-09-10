@@ -63,7 +63,7 @@ def test_client_secret_without_site_pages_still_sets_tenant_domain(
     assert connector.sp_tenant_domain == EXPECTED_TENANT_DOMAIN
 
 
-@patch("onyx.connectors.sharepoint.connector.load_certificate_from_pfx")
+@patch("onyx.connectors.microsoft_utils.graph_auth.load_certificate_from_pfx")
 @patch("onyx.connectors.sharepoint.connector.msal.ConfidentialClientApplication")
 @patch("onyx.connectors.sharepoint.connector.GraphClient")
 def test_certificate_with_site_pages_sets_tenant_domain(
@@ -81,7 +81,7 @@ def test_certificate_with_site_pages_sets_tenant_domain(
     assert connector.sp_tenant_domain == EXPECTED_TENANT_DOMAIN
 
 
-@patch("onyx.connectors.sharepoint.connector.load_certificate_from_pfx")
+@patch("onyx.connectors.microsoft_utils.graph_auth.load_certificate_from_pfx")
 @patch("onyx.connectors.sharepoint.connector.msal.ConfidentialClientApplication")
 @patch("onyx.connectors.sharepoint.connector.GraphClient")
 def test_certificate_without_site_pages_sets_tenant_domain(

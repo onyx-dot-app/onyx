@@ -16,6 +16,10 @@ from pydantic import BaseModel
 
 from onyx.connectors.exceptions import ConnectorValidationError
 
+DEFAULT_AUTHORITY_HOST = "https://login.microsoftonline.com"
+DEFAULT_GRAPH_API_HOST = "https://graph.microsoft.com"
+DEFAULT_SHAREPOINT_DOMAIN_SUFFIX = "sharepoint.com"
+
 
 class MicrosoftGraphEnvironment(BaseModel):
     """One row of the inverse mapping."""

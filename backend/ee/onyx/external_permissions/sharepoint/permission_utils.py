@@ -24,14 +24,16 @@ from onyx.access.models import ExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.sharepoint.connector import (
+from onyx.connectors.microsoft_utils.drive_items import (
+    LIST_ITEM_ID_PROPERTY,
+    SHAREPOINT_IDS_PROPERTY,
+)
+from onyx.connectors.microsoft_utils.graph_client import (
     GRAPH_API_MAX_RETRIES,
     GRAPH_API_RETRYABLE_STATUSES,
-    LIST_ITEM_ID_PROPERTY,
-    SHARED_DOCUMENTS_MAP_REVERSE,
-    SHAREPOINT_IDS_PROPERTY,
     sleep_and_retry,
 )
+from onyx.connectors.sharepoint.connector import SHARED_DOCUMENTS_MAP_REVERSE
 from onyx.connectors.sharepoint.connector_utils import (
     SharepointGroup,
     SharepointGroupExpansion,

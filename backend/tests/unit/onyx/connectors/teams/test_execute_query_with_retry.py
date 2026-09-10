@@ -14,7 +14,7 @@ from office365.runtime.client_request_exception import ClientRequestException
 
 from onyx.connectors.teams.utils import (
     GRAPH_API_RETRYABLE_STATUSES,
-    _backoff_seconds,
+    backoff_seconds,
     execute_query_with_retry,
 )
 
@@ -112,23 +112,23 @@ def test_does_not_retry_when_response_is_missing() -> None:
 
 def test_backoff_honors_numeric_retry_after() -> None:
     # An explicit Retry-After is used verbatim, not jittered.
-    assert _backoff_seconds(attempt=0, retry_after="7") == 7.0
+    assert backoff_seconds(attempt=0, retry_after="7") == 7.0
 
 
 def test_backoff_falls_back_to_capped_jittered_exponential() -> None:
     # Without a Retry-After, sleep stays within [base/2, base] for base=min(30, 5*2^n).
     for attempt, base in [(0, 5), (1, 10), (2, 20), (3, 30), (10, 30)]:
-        delay = _backoff_seconds(attempt=attempt, retry_after=None)
+        delay = backoff_seconds(attempt=attempt, retry_after=None)
         assert base / 2 <= delay <= base
 
 
 def test_backoff_honors_http_date_retry_after() -> None:
     # An already-elapsed HTTP-date Retry-After is honored verbatim (0s wait),
     # not treated as unparseable.
-    assert _backoff_seconds(attempt=0, retry_after="Wed, 21 Oct 2015 07:28:00 GMT") == 0
+    assert backoff_seconds(attempt=0, retry_after="Wed, 21 Oct 2015 07:28:00 GMT") == 0
 
 
 def test_backoff_ignores_unparseable_retry_after() -> None:
     # Genuinely unparseable values fall through to jittered exponential backoff.
-    delay = _backoff_seconds(attempt=0, retry_after="not-a-date")
+    delay = backoff_seconds(attempt=0, retry_after="not-a-date")
     assert 2.5 <= delay <= 5
