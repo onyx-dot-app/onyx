@@ -53,7 +53,7 @@ const FieldMessageRoot: React.FC<FieldMessageRootProps> = ({
   );
 };
 
-interface FieldMessageContentProps extends React.HTMLAttributes<HTMLParagraphElement> {
+interface FieldMessageContentProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
 }
 

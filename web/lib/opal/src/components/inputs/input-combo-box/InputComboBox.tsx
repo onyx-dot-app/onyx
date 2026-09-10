@@ -92,18 +92,7 @@ import {
   size,
 } from "@floating-ui/react-dom";
 import { useOpalStrings } from "@opal/strings";
-
-// Stops a click on the chevron reaching the field wrapper, which would
-// re-toggle the dropdown.
-function noProp(
-  f?: (event: React.MouseEvent) => void
-): React.MouseEventHandler {
-  return (event) => {
-    event.stopPropagation();
-    f?.(event);
-  };
-}
-import { cn } from "@opal/utils";
+import { cn, noProp } from "@opal/utils";
 import { InputTypeIn } from "@opal/components";
 import { FieldContext } from "@opal/form";
 import { Button } from "@opal/components";

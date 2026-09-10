@@ -18,6 +18,11 @@
   box-shadow: inset 0px 0px 0px 2px var(--background-tint-04);
 }
 
+.opal-input-number[data-variant="internal"] {
+  background-color: transparent;
+  border: 1px solid transparent;
+}
+
 .opal-input-number[data-variant="error"] {
   background-color: var(--background-neutral-00);
   border: 1px solid var(--status-error-05);

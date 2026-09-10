@@ -339,9 +339,13 @@ export default function KeyValueInput({
             Since we're using a `grid` template, the padding below *one* item in a row applies additional height to *all* items in that row.
           */}
           <div className="pb-1">
-            <Text font="main-ui-action">{keyTitle}</Text>
+            <Text font="main-ui-action" color="text-05">
+              {keyTitle}
+            </Text>
           </div>
-          <Text font="main-ui-action">{valueTitle}</Text>
+          <Text font="main-ui-action" color="text-05">
+            {valueTitle}
+          </Text>
           <div aria-hidden />
 
           {items.map((item, index) => (

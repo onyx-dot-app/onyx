@@ -19,7 +19,7 @@ const INNER_CLASSES: Record<InputNumberVariant, string | null> = {
     "text-text-04 placeholder:!font-main-ui-muted placeholder:text-text-02",
   internal: "text-text-04",
   error: "text-text-04",
-  disabled: "text-text-02",
+  disabled: "text-text-01",
   readOnly: "text-text-01",
 };
 
