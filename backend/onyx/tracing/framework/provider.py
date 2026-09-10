@@ -266,6 +266,12 @@ class DefaultTraceProvider(TraceProvider):
         if not parent:
             current_span = Scope.get_current_span()
             current_trace = Scope.get_current_trace()
+            if (
+                current_span
+                and current_trace
+                and current_span.trace_id != current_trace.trace_id
+            ):
+                current_span = None
             if current_trace is None:
                 logger.debug("No active trace; returning NoOpSpan for %s", span_data)
                 inherited_content_mode = (

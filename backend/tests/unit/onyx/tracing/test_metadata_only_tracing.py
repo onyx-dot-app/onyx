@@ -80,6 +80,26 @@ def test_metadata_only_trace_removes_generation_content() -> None:
     assert span.span_data.usage == {"input_tokens": 5, "output_tokens": 2}
 
 
+def test_new_trace_ignores_stale_noop_span() -> None:
+    provider = DefaultTraceProvider()
+    stale_span = NoOpSpan(GenerationSpanData(model="claude-sonnet"))
+    stale_span.start(mark_as_current=True)
+    stale_span.__exit__(GeneratorExit, GeneratorExit(), None)
+
+    try:
+        with provider.create_trace(
+            "background_llm_call", content_mode=TraceContentMode.METADATA_ONLY
+        ) as trace:
+            span = provider.create_span(GenerationSpanData(model="claude-sonnet"))
+    finally:
+        stale_span.finish(reset_current=True)
+
+    assert not isinstance(span, NoOpSpan)
+    assert span.trace_id == trace.trace_id
+    assert span.parent_id is None
+    assert span.content_mode == TraceContentMode.METADATA_ONLY
+
+
 def test_full_span_overrides_metadata_only_trace() -> None:
     provider = DefaultTraceProvider()
 
