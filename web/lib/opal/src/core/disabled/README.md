@@ -8,21 +8,21 @@ descendants. Works with any children — DOM elements, React components, or frag
 
 ## Props
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `disabled` | `boolean` | `false` | Applies disabled styling when truthy |
-| `allowClick` | `boolean` | `false` | Re-enables pointer events while keeping disabled visuals |
-| `tooltip` | `string \| RichStr` | — | Tooltip shown on hover when disabled (implies `allowClick`). Supports `markdown()`. |
-| `tooltipSide` | `"top" \| "bottom" \| "left" \| "right"` | `"right"` | Which side the tooltip appears on |
+| Prop          | Type                                     | Default   | Description                                                                         |
+| ------------- | ---------------------------------------- | --------- | ----------------------------------------------------------------------------------- |
+| `disabled`    | `boolean`                                | `false`   | Applies disabled styling when truthy                                                |
+| `allowClick`  | `boolean`                                | `false`   | Re-enables pointer events while keeping disabled visuals                            |
+| `tooltip`     | `string \| RichStr`                      | —         | Tooltip shown on hover when disabled (implies `allowClick`). Supports `markdown()`. |
+| `tooltipSide` | `"top" \| "bottom" \| "left" \| "right"` | `"right"` | Which side the tooltip appears on                                                   |
 
 ## CSS behavior
 
-| Selector | Effect |
-|----------|--------|
-| `[data-opal-disabled]` | `cursor-not-allowed`, `select-none`, `pointer-events: none` |
-| `[data-opal-disabled]:not(.interactive)` | `opacity-50` (non-Interactive elements only) |
-| `[data-opal-disabled].interactive` | `pointer-events: auto` (Interactive elements handle their own disabled colors) |
-| `[data-opal-disabled][data-allow-click]` | `pointer-events: auto` |
+| Selector                                 | Effect                                                                         |
+| ---------------------------------------- | ------------------------------------------------------------------------------ |
+| `[data-opal-disabled]`                   | `cursor-not-allowed`, `select-none`, `pointer-events: none`                    |
+| `[data-opal-disabled]:not(.interactive)` | `opacity-50` (non-Interactive elements only)                                   |
+| `[data-opal-disabled].interactive`       | `pointer-events: auto` (Interactive elements handle their own disabled colors) |
+| `[data-opal-disabled][data-allow-click]` | `pointer-events: auto`                                                         |
 
 ## Usage
 

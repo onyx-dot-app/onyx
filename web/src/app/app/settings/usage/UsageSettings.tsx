@@ -1,6 +1,6 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { Section } from "@/layouts/general-layouts";
 import { Content } from "@opal/layouts";
@@ -30,7 +30,7 @@ import {
   DateRangePicker,
   rangeForInclusiveDays,
   type DateRange,
-} from "@/refresh-components/DateRangePicker";
+} from "@opal/components";
 import { formatCalendarDay } from "@/lib/dateUtils";
 import {
   formatCurrencyFromCents as formatDollars,
@@ -169,8 +169,11 @@ function WindowCostSection({ windowCostCents, rows }: WindowCostSectionProps) {
                           count: formatTokens(row.cache_creation_tokens),
                         }),
                     ]
-                      .filter(Boolean)
-                      .join(" · ")}
+                      .filter((label): label is string => label !== false)
+                      // One pair message per join so translators own the separator.
+                      .reduce((first, rest) =>
+                        t("modelUsage.joined", { first, rest })
+                      )}
                   </Text>
                 </Section>
               </div>
@@ -333,11 +336,13 @@ function ModelPriceSection({ prices, defaultPrice }: ModelPriceSectionProps) {
                             color="text-03"
                             wordWrap="whitespace-nowrap"
                           >
-                            {`${formatMtok(price.input_per_mtok)} in · ${formatMtok(
-                              price.output_per_mtok
-                            )} out · ${formatMtok(
-                              price.cache_per_mtok ?? price.input_per_mtok
-                            )} cache`}
+                            {t("modelPrices.priceRow", {
+                              input: formatMtok(price.input_per_mtok),
+                              output: formatMtok(price.output_per_mtok),
+                              cache: formatMtok(
+                                price.cache_per_mtok ?? price.input_per_mtok
+                              ),
+                            })}
                           </Text>
                         </div>
                       ))}
@@ -365,6 +370,7 @@ function BudgetSection({
   budgetResetAt,
 }: BudgetSectionProps) {
   const t = useTranslations("settings.usage");
+  const locale = useLocale();
   // budget_* are null when the user has no cost limit; show a graceful empty state.
   const hasBudget = budgetCents !== null;
   const remaining = budgetRemainingCents ?? 0;
@@ -373,7 +379,7 @@ function BudgetSection({
     hasBudget && budgetCents > 0 ? Math.min(1, spent / budgetCents) : 0;
   const budgetReset = budgetResetAt
     ? t("budget.resetsOn", {
-        date: formatCalendarDay(budgetResetAt.slice(0, 10)),
+        date: formatCalendarDay(budgetResetAt.slice(0, 10), locale),
       })
     : null;
 

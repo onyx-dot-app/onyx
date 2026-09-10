@@ -80,7 +80,7 @@ export default function PreApprovalPicker({
 
   if ((appsLoading || mcpLoading) && !hasOptions) {
     return (
-      <Card background="none" border="dashed" rounding={4}>
+      <Card color="transparent" border="dashed" rounding={4}>
         <Text font="secondary-body" color="text-03">
           {t("loading.label")}
         </Text>
@@ -90,7 +90,7 @@ export default function PreApprovalPicker({
 
   if ((appsError || mcpError) && !hasOptions) {
     return (
-      <Card background="none" border="dashed" rounding={4}>
+      <Card color="transparent" border="dashed" rounding={4}>
         <Text font="secondary-body" color="text-03">
           {t("errors.loadFailed")}
         </Text>
@@ -100,7 +100,7 @@ export default function PreApprovalPicker({
 
   if (!hasOptions) {
     return (
-      <Card background="none" border="dashed" rounding={4}>
+      <Card color="transparent" border="dashed" rounding={4}>
         <Text font="secondary-body" color="text-03">
           {t("empty.label")}
         </Text>
@@ -114,7 +114,7 @@ export default function PreApprovalPicker({
       data-testid="pre-approval-picker"
     >
       {(appsError || mcpError) && (
-        <Card background="none" border="dashed" rounding={4}>
+        <Card color="transparent" border="dashed" rounding={4}>
           <Text font="secondary-body" color="text-03">
             {t("errors.partialLoadFailed")}
           </Text>
@@ -201,7 +201,7 @@ function PreApprovalRow({ option, checked, onToggle }: PreApprovalRowProps) {
       )}
       data-testid={option.testId}
     >
-      <Card background="light" border="solid" rounding={4}>
+      <Card color="background-tint-00" border="solid" rounding={4}>
         <label
           className="flex w-full cursor-pointer items-center gap-3"
           htmlFor={checkboxId}

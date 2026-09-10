@@ -12,9 +12,10 @@ import Text from "@/refresh-components/texts/Text";
 import {
   isBuiltInGroup,
   buildGroupDescription,
+  displayGroupName,
   formatMemberCount,
-} from "./utils";
-import { refreshGroupLists, renameGroup } from "./svc";
+} from "@/views/admin/GroupsPage/utils";
+import { refreshGroupLists, renameGroup } from "@/views/admin/GroupsPage/svc";
 import { useSWRConfig } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { can } from "@/lib/permissions/resource-actions";
@@ -52,8 +53,8 @@ function GroupCard({ group }: GroupCardProps) {
       <Section alignItems="start" height="fit">
         <ContentAction
           icon={isAdmin ? SvgUserManage : SvgUsers}
-          title={group.name}
-          description={buildGroupDescription(group)}
+          title={displayGroupName(group, t)}
+          description={buildGroupDescription(group, t)}
           sizePreset="main-content"
           variant="section"
           tag={builtIn ? { title: t("card.defaultTag.label") } : undefined}
@@ -64,7 +65,8 @@ function GroupCard({ group }: GroupCardProps) {
               <div className="py-1">
                 <Text mainUiBody text03>
                   {formatMemberCount(
-                    group.users.filter((u) => u.is_active).length
+                    group.users.filter((u) => u.is_active).length,
+                    t
                   )}
                 </Text>
               </div>

@@ -13,7 +13,7 @@ import {
 } from "@opal/components";
 import Preview from "@/app/ee/admin/theme/Preview";
 import CharacterCount from "@/refresh-components/CharacterCount";
-import InputImage from "@/refresh-components/inputs/InputImage";
+import { InputImage } from "@opal/components";
 import { Disabled } from "@opal/core";
 import { useFormikContext } from "formik";
 import {

@@ -19,7 +19,7 @@ import {
   THIRTY_DAYS,
   type DateRangePickerValue,
   rangeForInclusiveDays,
-} from "@/refresh-components/DateRangePicker";
+} from "@opal/components";
 
 export function useTimeRange() {
   return useState<DateRangePickerValue>({

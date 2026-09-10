@@ -26,7 +26,7 @@ import useFilter from "@/hooks/useFilter";
 import { Button } from "@opal/components";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 import { timeAgo } from "@opal/time";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 
 function getIcon(
   file: ProjectFile,
@@ -72,6 +72,7 @@ function FileAttachment({
   onDelete,
 }: FileAttachmentProps) {
   const t = useTranslations("chat.modals.userFiles");
+  const locale = useLocale();
   const isProcessing =
     String(file.status) === UserFileStatus.PROCESSING ||
     String(file.status) === UserFileStatus.UPLOADING ||
@@ -84,7 +85,7 @@ function FileAttachment({
     deleting: t("fileStatus.deleting.label"),
   });
   const rightText = file.last_accessed_at
-    ? (timeAgo(file.last_accessed_at) ?? "")
+    ? (timeAgo(file.last_accessed_at, locale) ?? "")
     : "";
 
   return (

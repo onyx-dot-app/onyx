@@ -7,7 +7,7 @@ import React, {
   useCallback,
   useRef,
 } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
 import {
@@ -190,6 +190,7 @@ export default function SourceHierarchyBrowser({
   initialNodeId,
 }: SourceHierarchyBrowserProps) {
   const t = useTranslations("knowledge");
+  const locale = useLocale();
 
   // State for hierarchy nodes (loaded once per source)
   const [allNodes, setAllNodes] = useState<HierarchyNodeSummary[]>([]);
@@ -1023,7 +1024,8 @@ export default function SourceHierarchyBrowser({
                       {isFolder
                         ? "—"
                         : timeAgo(
-                            (item.data as DocumentSummary).last_modified
+                            (item.data as DocumentSummary).last_modified,
+                            locale
                           ) || "—"}
                     </Text>
                   </TableLayouts.TableCell>

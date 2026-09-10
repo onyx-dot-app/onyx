@@ -8,16 +8,13 @@ import { markdown } from "@opal/utils";
 import { Divider, Text } from "@opal/components";
 import type { RichStr } from "@opal/types";
 import { InputHorizontal, InputVertical } from "@opal/layouts";
-import type { EmbeddingProvider } from "@/lib/indexing/types";
+import type {
+  EmbeddingProvider,
+  IndexSettingsTranslator,
+} from "@/lib/indexing/types";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
-
-/** Translator for the `admin.indexSettings` namespace, threaded into helpers
- *  that live outside a component and so cannot call the hook themselves. */
-export type IndexSettingsTranslator = ReturnType<
-  typeof useTranslations<"admin.indexSettings">
->;
 
 // ---------------------------------------------------------------------------
 // Formik-aware field components

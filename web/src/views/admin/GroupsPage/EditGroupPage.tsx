@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import useSWR, { useSWRConfig } from "swr";
 import useGroupMemberCandidates from "./useGroupMemberCandidates";
+import { displayGroupName } from "@/views/admin/GroupsPage/utils";
 import {
   Button,
   Card,
@@ -649,7 +650,9 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                 </Text>
                 <InputTypeIn
                   placeholder={t("form.name.placeholder")}
-                  value={groupName}
+                  value={
+                    isDefaultGroup ? displayGroupName(group, t) : groupName
+                  }
                   variant={canManage ? "primary" : "readOnly"}
                   onChange={(e) => setGroupName(e.target.value)}
                 />

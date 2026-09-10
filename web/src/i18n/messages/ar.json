@@ -3881,7 +3881,15 @@
         },
         "viewGroup": {
           "label": "عرض المجموعة"
-        }
+        },
+        "resourceCounts": {
+          "connectors": "{count, plural, zero {# موصّل} one {موصّل واحد} two {موصّلان} few {# موصّلات} many {# موصّلًا} other {# موصّل}}",
+          "documentSets": "{count, plural, zero {# مجموعة مستندات} one {مجموعة مستندات واحدة} two {مجموعتا مستندات} few {# مجموعات مستندات} many {# مجموعة مستندات} other {# مجموعة مستندات}}",
+          "agents": "{count, plural, zero {# وكيل} one {وكيل واحد} two {وكيلان} few {# وكلاء} many {# وكيلًا} other {# وكيل}}",
+          "noPrivateResources": "لا توجد موصّلات / مجموعات مستندات / وكلاء خاصة",
+          "joined": "{first} · {rest}"
+        },
+        "memberCount": "{count, plural, zero {# أعضاء} one {عضو واحد} two {عضوان} few {# أعضاء} many {# عضوًا} other {# عضو}}"
       },
       "create": {
         "header": {
@@ -4130,6 +4138,16 @@
           "header": "حد الرموز",
           "placeholder": "حد الرموز (بالآلاف)",
           "unit": "(بالآلاف)"
+        }
+      },
+      "builtIn": {
+        "admin": {
+          "name": "المشرفون",
+          "description": "مجموعة مشرفين مضمّنة بصلاحية كاملة لإدارة جميع الأذونات."
+        },
+        "basic": {
+          "name": "أساسي",
+          "description": "المجموعة الافتراضية لجميع المستخدمين بأذونات أساسية."
         }
       }
     },
@@ -4389,6 +4407,20 @@
         },
         "validationFailed": {
           "message": "فشل التحقق: {status}"
+        }
+      },
+      "points": {
+        "documentIngestion": {
+          "name": "استيعاب المستندات",
+          "description": "يعمل على كل مستند قبل دخوله مسار الفهرسة. يتيح تصفية المستندات أو إعادة كتابتها أو إسقاطها."
+        },
+        "documentPush": {
+          "name": "دفع المستندات",
+          "description": "يُشغَّل بعد فهرسة كل مستند بنجاح. يدفع المستندات المفهرسة إلى وجهة خارجية مثل ويكي أو مستودع بيانات. يُشغَّل فقط للموصّلات العامة في عمليات النشر أحادية المستأجر."
+        },
+        "queryProcessing": {
+          "name": "معالجة الاستعلامات",
+          "description": "يعمل على كل استعلام مستخدم قبل دخوله المسار. يتيح إعادة كتابة الاستعلامات أو تصفيتها أو رفضها."
         }
       }
     },
@@ -4958,6 +4990,24 @@
         "statusPaused": "متوقف مؤقتًا",
         "submit": "حذف وإعادة الفهرسة",
         "title": "{count, plural, one {سيُحذف هذا الموصل} other {ستُحذف هذه الموصلات (#)}}"
+      },
+      "modelDescriptions": {
+        "cohereEmbedEnglishV3": "نموذج التضمين الإنجليزي من Cohere. أداء جيد للمهام باللغة الإنجليزية.",
+        "cohereEmbedEnglishLightV3": "نموذج التضمين الإنجليزي الخفيف من Cohere. أسرع وأكثر كفاءة للمهام الأبسط.",
+        "cohereEmbedV4": "أحدث نموذج تضمين متعدد اللغات من Cohere بمخرجات افتراضية بأبعاد 1536 لجودة استرجاع أعلى.",
+        "openaiTextEmbedding3Large": "نموذج التضمين الكبير من OpenAI. أفضل أداء لكنه أعلى تكلفة.",
+        "openaiTextEmbedding3Small": "نموذج التضمين الأحدث والأكثر كفاءة من OpenAI. توازن جيد بين الأداء والتكلفة.",
+        "googleGeminiEmbedding001": "نموذج تضمين Gemini من Google. قوي وفعّال.",
+        "googleTextEmbedding005": "نموذج تضمين أصغر وأخف من Google.",
+        "googleGeminiEmbedding2": "أحدث نموذج تضمين متعدد الوسائط من Google (متاح للعموم). أعلى جودة استرجاع بمخرجات بأبعاد 3072.",
+        "googleGeminiEmbedding2Preview": "الإصدار التجريبي من Gemini Embedding 2. حلّ محله gemini-embedding-2 في عمليات الإعداد الجديدة.",
+        "voyageLarge2Instruct": "نموذج التضمين الكبير من Voyage. أداء عالٍ مع ضبط دقيق بالتعليمات.",
+        "voyageLight2Instruct": "نموذج التضمين الخفيف من Voyage. توازن جيد بين الأداء والكفاءة.",
+        "nomicEmbedTextV1": "نموذج التضمين من Nomic المتخصص في الاسترجاع والتشابه والتجميع والتصنيف.",
+        "e5BaseV2": "نموذج أصغر وأسرع من النموذج الافتراضي. أسرع بنحو مرتين من النموذج الافتراضي على حساب جودة بحث أقل.",
+        "e5SmallV2": "أصغر وأسرع إصدار من سلسلة نماذج E5. إذا كنت تشغّل Onyx على نظام محدود الموارد فقد يكون هذا خيارًا جيدًا.",
+        "multilingualE5Base": "للمجموعات النصية بلغات غير الإنجليزية، هذا هو الخيار المناسب.",
+        "multilingualE5Small": "للمجموعات النصية بلغات غير الإنجليزية مع نظام محدود الموارد، هذا هو الخيار المناسب."
       }
     },
     "indexing": {
@@ -6271,6 +6321,7 @@
         },
         "name": {
           "placeholder": "أدخل اسمًا",
+          "required": "الاسم مطلوب",
           "title": "الاسم"
         },
         "submitButton": {
@@ -6799,7 +6850,9 @@
         "gatedTooltip": "تفعيل عدة موفري SSO متاح في خطة Business أو Enterprise."
       },
       "copyRedirectUri": {
-        "tooltip": "نسخ عنوان إعادة التوجيه"
+        "tooltip": "نسخ عنوان إعادة التوجيه",
+        "successToast": "تم نسخ عنوان URI لإعادة التوجيه",
+        "errorToast": "تعذّر النسخ"
       },
       "editProvider": {
         "tooltip": "تعديل"
@@ -6911,6 +6964,75 @@
       },
       "toasts": {
         "unexpectedError": "حدث خطأ غير متوقع."
+      },
+      "providerTypes": {
+        "googleOauth": {
+          "description": "استخدام Google كموفّر هوية."
+        },
+        "oidc": {
+          "description": "ربط موفّر OpenID Connect عام."
+        },
+        "saml": {
+          "description": "ربط موفّر هوية SAML."
+        }
+      },
+      "configFields": {
+        "clientId": {
+          "label": "معرّف العميل",
+          "description": "معرّف عميل OAuth من وحدة تحكم موفّرك.",
+          "placeholder": "معرّف العميل"
+        },
+        "clientSecret": {
+          "label": "سر العميل",
+          "description": "سر عميل OAuth. يُخزَّن مشفّرًا.",
+          "placeholder": "سر العميل"
+        },
+        "pkceEnabled": {
+          "label": "تفعيل PKCE",
+          "description": "إرسال تحدي رمز PKCE مع تدفق تسجيل الدخول لهذا الموفّر. قد يفرض إعداد على مستوى النشر تفعيله."
+        },
+        "scopes": {
+          "label": "النطاقات",
+          "description": "تجاوز نطاقات OAuth المطلوبة عند تسجيل الدخول. الفارغ يستخدم الإعدادات الافتراضية للنشر.",
+          "placeholder": "أضف نطاقًا (مثل openid)"
+        },
+        "openidConfigUrl": {
+          "label": "عنوان URL لإعدادات OpenID",
+          "description": "عنوان URL لمستند اكتشاف OpenID Connect الخاص بموفّر الهوية."
+        },
+        "requireVerifiedEmail": {
+          "label": "اشتراط مطالبة البريد الإلكتروني الموثّق",
+          "description": "رفض تسجيل الدخول عندما يحذف موفّر الهوية مطالبة email_verified الاختيارية. اتركه معطّلًا لموفّري الهوية الذين لا يرسلونها، مثل Microsoft Entra ID."
+        },
+        "idpEntityId": {
+          "label": "معرّف كيان موفّر الهوية",
+          "description": "معرّف كيان موفّر الهوية (المُصدِر)."
+        },
+        "idpSsoUrl": {
+          "label": "عنوان URL لتسجيل الدخول الموحّد لموفّر الهوية",
+          "description": "نقطة نهاية موفّر الهوية التي تستقبل طلبات تسجيل الدخول."
+        },
+        "idpX509Cert": {
+          "label": "شهادة X.509 لموفّر الهوية",
+          "description": "شهادة التوقيع لموفّر الهوية، تُستخدم للتحقق من التأكيدات."
+        },
+        "spEntityId": {
+          "label": "معرّف كيان موفّر الخدمة",
+          "description": "معرّف كيان هذا المثيل، المسجّل لدى موفّر الهوية."
+        },
+        "spX509Cert": {
+          "label": "شهادة X.509 لموفّر الخدمة",
+          "description": "فقط إذا كان هذا المثيل يوقّع الطلبات أو يفكّ تشفير التأكيدات."
+        },
+        "spPrivateKey": {
+          "label": "المفتاح الخاص لموفّر الخدمة",
+          "description": "المفتاح الخاص المرتبط بشهادة موفّر الخدمة. يُخزَّن مشفّرًا."
+        },
+        "emailAttribute": {
+          "label": "سمة البريد الإلكتروني",
+          "description": "سمة SAML التي تحوي بريد المستخدم الإلكتروني. الافتراضي هو المفاتيح الشائعة.",
+          "placeholder": "email"
+        }
       }
     },
     "standardAnswers": {
@@ -7448,6 +7570,42 @@
         "connected": "تم الاتصال بـ {label}",
         "disconnected": "تم قطع الاتصال بـ {label}",
         "unexpectedError": "حدث خطأ غير متوقع."
+      },
+      "providers": {
+        "braintrust": {
+          "description": "تقييم ومراقبة نماذج اللغة الكبيرة",
+          "fields": {
+            "apiKey": {
+              "label": "مفتاح API",
+              "description": "الصق [مفتاح API](https://www.braintrust.dev/app) من Braintrust."
+            },
+            "project": {
+              "label": "اسم المشروع",
+              "description": "اسم مشروع Braintrust الذي تُسجَّل فيه التتبعات."
+            },
+            "apiUrl": {
+              "label": "عنوان URL لواجهة API",
+              "description": "الافتراضي هو منطقة الولايات المتحدة. الصق عنوان URL لواجهة Braintrust API للمناطق الأخرى أو الاستضافة الذاتية."
+            }
+          }
+        },
+        "langfuse": {
+          "description": "منصة مراقبة مفتوحة المصدر سحابية أو مستضافة ذاتيًا",
+          "fields": {
+            "secretKey": {
+              "label": "المفتاح السري",
+              "description": "الصق [مفتاح API](https://cloud.langfuse.com) من Langfuse."
+            },
+            "publicKey": {
+              "label": "المفتاح العام",
+              "placeholder": "المفتاح العام"
+            },
+            "host": {
+              "label": "عنوان URL الأساسي لواجهة API",
+              "description": "الافتراضي هو منطقة الاتحاد الأوروبي. الصق عنوان URL الأساسي لـ Langfuse للمناطق الأخرى أو الاستضافة الذاتية."
+            }
+          }
+        }
       }
     },
     "usage": {
@@ -8073,6 +8231,35 @@
       },
       "unexpectedError": {
         "message": "حدث خطأ غير متوقع."
+      },
+      "contentProviders": {
+        "onyxWebCrawler": {
+          "subtitle": "زاحف ويب مضمّن. يعمل مع معظم الصفحات لكنه أقل كفاءة في الحالات الاستثنائية."
+        },
+        "firecrawl": {
+          "subtitle": "زاحف مفتوح المصدر رائد."
+        },
+        "exa": {
+          "subtitle": "Exa.ai"
+        },
+        "tavily": {
+          "subtitle": "Tavily AI"
+        }
+      },
+      "configFields": {
+        "searchEngineId": {
+          "label": "معرّف محرك البحث",
+          "placeholder": "أدخل معرّف محرك البحث",
+          "description": "الصق [معرّف محرك البحث](https://programmablesearchengine.google.com/controlpanel/all) لاستخدامه في البحث على الويب."
+        },
+        "searxngBaseUrl": {
+          "label": "عنوان URL الأساسي لـ SearXNG",
+          "description": "الصق عنوان URL الأساسي لـ [مثيل SearXNG](https://docs.searxng.org/admin/installation.html) الخاص بك."
+        },
+        "firecrawlBaseUrl": {
+          "label": "عنوان URL الأساسي لواجهة API",
+          "description": "عنوان URL الأساسي لواجهة Firecrawl API الخاصة بك."
+        }
       }
     }
   },
@@ -9816,6 +10003,17 @@
           },
           "reading": {
             "status": "جارٍ القراءة"
+          },
+          "header": {
+            "default": "جارٍ البحث في المستندات الداخلية",
+            "sources": "جارٍ البحث في {sources}",
+            "sourcesOverflow": "{sources} +{count} أخرى",
+            "withTimeWindow": "{header} ({timeWindow})"
+          },
+          "timeWindow": {
+            "since": "منذ {date}",
+            "before": "قبل {date}",
+            "between": "من {start} إلى {end}"
           }
         },
         "interruptedThinking": {
@@ -10595,22 +10793,6 @@
         "text": "اب"
       }
     },
-    "comboBox": {
-      "createOption": {
-        "ariaLabel": "{prefix} \"{value}\"",
-        "defaultPrefix": "إنشاء"
-      },
-      "dropdown": {
-        "closeAriaLabel": "إغلاق القائمة المنسدلة",
-        "openAriaLabel": "فتح القائمة المنسدلة"
-      },
-      "options": {
-        "empty": "لم يتم العثور على خيارات"
-      },
-      "separator": {
-        "label": "خيارات أخرى"
-      }
-    },
     "commandMenu": {
       "closeButton": {
         "ariaLabel": "إغلاق القائمة"
@@ -10664,29 +10846,11 @@
       "anyTime": {
         "text": "أي وقت..."
       },
-      "chooseCustom": {
-        "ariaLabel": "اختيار نطاق مخصص"
-      },
       "clearButton": {
         "ariaLabel": "مسح"
       },
-      "custom": {
-        "label": "مخصص"
-      },
-      "customRange": {
-        "ariaLabel": "نطاق مخصص: من {from} إلى {to}"
-      },
       "date": {
         "label": "التاريخ"
-      },
-      "group": {
-        "ariaLabel": "النطاق الزمني"
-      },
-      "preset": {
-        "oneDay": "يوم",
-        "oneMonth": "شهر",
-        "sevenDays": "7 أيام",
-        "threeMonths": "3 أشهر"
       }
     },
     "deleteButton": {
@@ -10985,34 +11149,6 @@
         "tooltip": "إزالة"
       }
     },
-    "inputFile": {
-      "attachButton": {
-        "ariaLabel": "إرفاق ملف"
-      },
-      "clearButton": {
-        "ariaLabel": "مسح الملف"
-      }
-    },
-    "inputImage": {
-      "dropRejected": {
-        "fallback": "تم رفض الملف"
-      },
-      "editButton": {
-        "ariaLabel": "تعديل الصورة"
-      },
-      "editOverlay": {
-        "label": "تعديل"
-      },
-      "image": {
-        "altFallback": "صورة"
-      },
-      "removeButton": {
-        "ariaLabel": "إزالة الصورة"
-      },
-      "uploadButton": {
-        "ariaLabel": "رفع صورة"
-      }
-    },
     "inputSelect": {
       "placeholder": {
         "fallback": "حدد خيارًا"
@@ -11036,40 +11172,6 @@
       },
       "usersFallback": {
         "text": "المستخدمون"
-      }
-    },
-    "keyValue": {
-      "addButton": {
-        "ariaLabel": "إضافة زوج {keyTitle} و{valueTitle}",
-        "label": "إضافة سطر"
-      },
-      "empty": {
-        "title": "لم تتم إضافة أي عناصر بعد."
-      },
-      "error": {
-        "duplicateKey": "مفتاح مكرر",
-        "duplicateSummary": "{count, plural, one {تم العثور على مفتاح مكرر واحد} other {تم العثور على # من المفاتيح المكررة}}",
-        "emptyKey": "لا يمكن ترك المفتاح فارغًا",
-        "emptySummary": "{count, plural, one {تم العثور على مفتاح فارغ واحد} other {تم العثور على # من المفاتيح الفارغة}}",
-        "validationSummary": "{count, plural, one {تم العثور على خطأ تحقق واحد} other {تم العثور على # من أخطاء التحقق}}"
-      },
-      "group": {
-        "ariaLabel": "أزواج {keyTitle} و{valueTitle}"
-      },
-      "input": {
-        "ariaLabel": "{label} {index}"
-      },
-      "keyColumn": {
-        "title": "المفتاح"
-      },
-      "pair": {
-        "fallbackLabel": "مفتاح-قيمة"
-      },
-      "removeButton": {
-        "ariaLabel": "إزالة زوج {label} رقم {index}"
-      },
-      "valueColumn": {
-        "title": "القيمة"
       }
     },
     "logo": {
@@ -12582,6 +12684,113 @@
       }
     }
   },
+  "opal": {
+    "comboBox": {
+      "close": "إغلاق القائمة المنسدلة",
+      "create": "إنشاء",
+      "createOption": "{prefix} \"{value}\"",
+      "noOptions": "لم يتم العثور على خيارات",
+      "open": "فتح القائمة المنسدلة",
+      "otherOptions": "خيارات أخرى"
+    },
+    "common": {
+      "clear": "مسح",
+      "clearFilter": "مسح الفلتر",
+      "close": "إغلاق",
+      "copied": "تم النسخ!",
+      "copy": "نسخ",
+      "copyCode": "نسخ الكود",
+      "date": "التاريخ",
+      "edit": "تعديل",
+      "loading": "جارٍ التحميل",
+      "loadingPage": "جارٍ التحميل…",
+      "openCalendar": "فتح التقويم",
+      "progress": "التقدم",
+      "remove": "إزالة",
+      "removeItem": "إزالة {title}",
+      "search": "بحث...",
+      "selectAnOption": "اختر خيارًا",
+      "showFullMessage": "عرض الرسالة كاملة",
+      "time": "الوقت"
+    },
+    "dateRange": {
+      "chooseCustom": "اختيار نطاق مخصص",
+      "custom": "مخصص",
+      "customRange": "نطاق مخصص: من {from} إلى {to}",
+      "label": "النطاق الزمني",
+      "oneDay": "يوم",
+      "oneMonth": "شهر",
+      "sevenDays": "7 أيام",
+      "threeMonths": "3 أشهر"
+    },
+    "input": {
+      "day": "اليوم",
+      "hidePassword": "إخفاء كلمة المرور",
+      "hours": "الساعات",
+      "minutes": "الدقائق",
+      "month": "الشهر",
+      "seconds": "الثواني",
+      "showPassword": "إظهار كلمة المرور",
+      "valueCannotBeRevealed": "لا يمكن إظهار القيمة",
+      "year": "السنة"
+    },
+    "inputFile": {
+      "attachFile": "إرفاق ملف",
+      "clearFile": "مسح الملف"
+    },
+    "inputImage": {
+      "alt": "صورة",
+      "dropRejected": "تم رفض الملف",
+      "edit": "تعديل الصورة",
+      "remove": "إزالة الصورة",
+      "upload": "رفع صورة"
+    },
+    "keyValue": {
+      "addLine": "إضافة سطر",
+      "addPair": "إضافة زوج {keyTitle} و{valueTitle}",
+      "duplicateKey": "مفتاح مكرر",
+      "duplicateSummary": "{count, plural, one {تم العثور على مفتاح مكرر واحد} other {تم العثور على # من المفاتيح المكررة}}",
+      "empty": "لم تتم إضافة أي عناصر بعد.",
+      "emptyKey": "لا يمكن ترك المفتاح فارغًا",
+      "emptySummary": "{count, plural, one {تم العثور على مفتاح فارغ واحد} other {تم العثور على # من المفاتيح الفارغة}}",
+      "group": "أزواج {keyTitle} و{valueTitle}",
+      "input": "{label} {index}",
+      "key": "المفتاح",
+      "pairFallback": "مفتاح-قيمة",
+      "removePair": "إزالة زوج {label} رقم {index}",
+      "validationSummary": "{count, plural, one {تم العثور على خطأ تحقق واحد} other {تم العثور على # من أخطاء التحقق}}",
+      "value": "القيمة"
+    },
+    "pagination": {
+      "goToPage": "الانتقال إلى صفحة",
+      "nextPage": "الصفحة التالية",
+      "previousPage": "الصفحة السابقة",
+      "rangeOfTotal": "<range></range> من <total></total>"
+    },
+    "table": {
+      "alwaysShown": "معروض دائمًا",
+      "ascending": "تصاعدي",
+      "columns": "الأعمدة",
+      "descending": "تنازلي",
+      "deselectAll": "إلغاء تحديد الكل",
+      "dragToReorder": "اسحب لإعادة الترتيب",
+      "manualOrdering": "ترتيب يدوي",
+      "selectAnItemToContinue": "حدد عنصرًا للمتابعة",
+      "selectedItemCount": "{count, plural, zero {لم يتم تحديد أي عنصر} one {تم تحديد عنصر واحد} two {تم تحديد عنصرين} few {تم تحديد # عناصر} many {تم تحديد # عنصرًا} other {تم تحديد # عنصر}}",
+      "selectItemsToContinue": "حدد عناصر للمتابعة",
+      "showing": "عرض <range></range> من <total></total>",
+      "shownColumns": "الأعمدة المعروضة",
+      "singleItemSelected": "تم تحديد عنصر",
+      "sort": "ترتيب",
+      "sortBy": "ترتيب حسب",
+      "sortingOrder": "اتجاه الترتيب",
+      "viewSelected": "عرض المحدد"
+    },
+    "tabs": {
+      "scrollLeft": "تمرير التبويبات لليسار",
+      "scrollRight": "تمرير التبويبات لليمين"
+    }
+  },
   "settings": {
     "accounts": {
       "email": {
@@ -12869,6 +13078,9 @@
         "maxReached": "تم بلوغ الحد الأقصى البالغ {count} من الذكريات"
       },
       "empty": {
+        "addButton": {
+          "ariaLabel": "إضافة ذكرى"
+        },
         "description": "أضف ملاحظة شخصية أو ذكرى يجب أن يتذكرها Onyx.",
         "getStarted": "لا توجد ذكريات بعد. انقر على \"إضافة سطر\" للبدء.",
         "noMatches": "لا توجد ذكريات تطابق بحثك."
@@ -12976,7 +13188,8 @@
           "label": "أخرى"
         },
         "title": "أسعار النماذج",
-        "unavailable": "الأسعار غير متاحة"
+        "unavailable": "الأسعار غير متاحة",
+        "priceRow": "{input} إدخال · {output} إخراج · {cache} ذاكرة مؤقتة"
       },
       "modelUsage": {
         "cacheReads": {
@@ -12990,7 +13203,8 @@
         },
         "tokensOut": {
           "label": "{count} إخراج"
-        }
+        },
+        "joined": "{first} · {rest}"
       },
       "showFewerModels": {
         "ariaLabel": "عرض نماذج أقل"
