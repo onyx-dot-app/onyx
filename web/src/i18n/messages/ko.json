@@ -10793,22 +10793,6 @@
         "text": "가"
       }
     },
-    "comboBox": {
-      "createOption": {
-        "ariaLabel": "{prefix} \"{value}\"",
-        "defaultPrefix": "만들기"
-      },
-      "dropdown": {
-        "closeAriaLabel": "드롭다운 닫기",
-        "openAriaLabel": "드롭다운 열기"
-      },
-      "options": {
-        "empty": "옵션을 찾을 수 없습니다"
-      },
-      "separator": {
-        "label": "기타 옵션"
-      }
-    },
     "commandMenu": {
       "closeButton": {
         "ariaLabel": "메뉴 닫기"
@@ -12721,6 +12705,14 @@
     }
   },
   "opal": {
+    "comboBox": {
+      "close": "드롭다운 닫기",
+      "create": "만들기",
+      "createOption": "{prefix} \"{value}\"",
+      "noOptions": "옵션을 찾을 수 없습니다",
+      "open": "드롭다운 열기",
+      "otherOptions": "기타 옵션"
+    },
     "common": {
       "clear": "지우기",
       "clearFilter": "필터 지우기",

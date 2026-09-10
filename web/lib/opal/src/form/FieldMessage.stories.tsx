@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { FieldMessage } from "./FieldMessage";
+import { FieldMessage } from "@opal/form";
 
 const meta: Meta<typeof FieldMessage> = {
-  title: "refresh-components/messages/FieldMessage",
+  title: "opal/form/FieldMessage",
   component: FieldMessage,
   tags: ["autodocs"],
 };

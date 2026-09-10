@@ -78,6 +78,13 @@ export default function OpalStringsBridge({
       selectAnItemToContinue: t("table.selectAnItemToContinue"),
       singleItemSelected: t("table.singleItemSelected"),
       selectedItemCount: (count) => t("table.selectedItemCount", { count }),
+      comboBoxOpen: t("comboBox.open"),
+      comboBoxClose: t("comboBox.close"),
+      comboBoxNoOptions: t("comboBox.noOptions"),
+      comboBoxOtherOptions: t("comboBox.otherOptions"),
+      comboBoxCreate: t("comboBox.create"),
+      comboBoxCreateOption: (prefix, value) =>
+        t("comboBox.createOption", { prefix, value }),
       keyValueKey: t("keyValue.key"),
       keyValueValue: t("keyValue.value"),
       keyValueAddLine: t("keyValue.addLine"),

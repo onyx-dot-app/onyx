@@ -10793,22 +10793,6 @@
         "text": "Aa"
       }
     },
-    "comboBox": {
-      "createOption": {
-        "ariaLabel": "{prefix} \"{value}\"",
-        "defaultPrefix": "Crear"
-      },
-      "dropdown": {
-        "closeAriaLabel": "Cerrar desplegable",
-        "openAriaLabel": "Abrir desplegable"
-      },
-      "options": {
-        "empty": "No se encontraron opciones"
-      },
-      "separator": {
-        "label": "Otras opciones"
-      }
-    },
     "commandMenu": {
       "closeButton": {
         "ariaLabel": "Cerrar menú"
@@ -12721,6 +12705,14 @@
     }
   },
   "opal": {
+    "comboBox": {
+      "close": "Cerrar desplegable",
+      "create": "Crear",
+      "createOption": "{prefix} \"{value}\"",
+      "noOptions": "No se encontraron opciones",
+      "open": "Abrir desplegable",
+      "otherOptions": "Otras opciones"
+    },
     "common": {
       "clear": "Borrar",
       "clearFilter": "Quitar filtro",

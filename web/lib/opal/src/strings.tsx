@@ -64,6 +64,12 @@ export type OpalStrings = {
   selectAnItemToContinue: string;
   singleItemSelected: string;
   selectedItemCount: (count: number) => string;
+  comboBoxOpen: string;
+  comboBoxClose: string;
+  comboBoxNoOptions: string;
+  comboBoxOtherOptions: string;
+  comboBoxCreate: string;
+  comboBoxCreateOption: (prefix: string, value: string) => string;
   keyValueKey: string;
   keyValueValue: string;
   keyValueAddLine: string;
@@ -149,6 +155,12 @@ export const defaultOpalStrings: OpalStrings = {
   singleItemSelected: "Item selected",
   selectedItemCount: (count) =>
     `${count} item${count !== 1 ? "s" : ""} selected`,
+  comboBoxOpen: "Open dropdown",
+  comboBoxClose: "Close dropdown",
+  comboBoxNoOptions: "No options found",
+  comboBoxOtherOptions: "Other options",
+  comboBoxCreate: "Create",
+  comboBoxCreateOption: (prefix, value) => `${prefix} "${value}"`,
   keyValueKey: "Key",
   keyValueValue: "Value",
   keyValueAddLine: "Add Line",

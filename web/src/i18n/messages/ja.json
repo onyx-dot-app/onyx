@@ -10793,22 +10793,6 @@
         "text": "あア"
       }
     },
-    "comboBox": {
-      "createOption": {
-        "ariaLabel": "{prefix}「{value}」",
-        "defaultPrefix": "作成"
-      },
-      "dropdown": {
-        "closeAriaLabel": "ドロップダウンを閉じる",
-        "openAriaLabel": "ドロップダウンを開く"
-      },
-      "options": {
-        "empty": "オプションが見つかりません"
-      },
-      "separator": {
-        "label": "その他のオプション"
-      }
-    },
     "commandMenu": {
       "closeButton": {
         "ariaLabel": "メニューを閉じる"
@@ -12721,6 +12705,14 @@
     }
   },
   "opal": {
+    "comboBox": {
+      "close": "ドロップダウンを閉じる",
+      "create": "作成",
+      "createOption": "{prefix}「{value}」",
+      "noOptions": "オプションが見つかりません",
+      "open": "ドロップダウンを開く",
+      "otherOptions": "その他のオプション"
+    },
     "common": {
       "clear": "クリア",
       "clearFilter": "フィルターをクリア",

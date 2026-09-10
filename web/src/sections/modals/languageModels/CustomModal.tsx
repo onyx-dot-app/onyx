@@ -31,7 +31,7 @@ import {
   InputKeyValue as KeyValueInput,
   type KeyValue,
 } from "@opal/components";
-import InputComboBox from "@/refresh-components/inputs/InputComboBox";
+import { InputComboBox } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Text from "@/refresh-components/texts/Text";

@@ -1,7 +1,16 @@
 "use client";
 
 import { createContext, useContext } from "react";
-import { FieldContextType } from "./types";
+
+export type FormFieldState = "idle" | "success" | "error";
+
+export interface FieldContextType {
+  baseId: string;
+  name?: string;
+  required?: boolean;
+  state: FormFieldState;
+  describedByIds: string[];
+}
 
 export const FieldContext = createContext<FieldContextType | undefined>(
   undefined

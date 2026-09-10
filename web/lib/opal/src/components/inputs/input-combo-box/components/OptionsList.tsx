@@ -1,6 +1,6 @@
 import React from "react";
-import { useTranslations } from "next-intl";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components/text/components";
+import { useOpalStrings } from "@opal/strings";
 import { OptionItem } from "./OptionItem";
 import { ComboBoxOption } from "../types";
 import { cn, clickOnKeyDown } from "@opal/utils";
@@ -50,7 +50,7 @@ export const OptionsList: React.FC<OptionsListProps> = ({
   showCreateOption,
   createPrefix,
 }) => {
-  const t = useTranslations("common.comboBox");
+  const strings = useOpalStrings();
   // Index offset for other options when create option is shown
   const indexOffset = showCreateOption ? 1 : 0;
 
@@ -61,7 +61,7 @@ export const OptionsList: React.FC<OptionsListProps> = ({
   ) {
     return (
       <div className="px-3 py-2 text-text-02 font-secondary-body">
-        {t("options.empty")}
+        {strings.comboBoxNoOptions}
       </div>
     );
   }
@@ -76,10 +76,10 @@ export const OptionsList: React.FC<OptionsListProps> = ({
           role="option"
           tabIndex={-1}
           aria-selected={false}
-          aria-label={t("createOption.ariaLabel", {
-            prefix: createPrefix ?? t("createOption.defaultPrefix"),
-            value: inputValue,
-          })}
+          aria-label={strings.comboBoxCreateOption(
+            createPrefix ?? strings.comboBoxCreate,
+            inputValue
+          )}
           onClick={(e) => {
             e.stopPropagation();
             onSelect({ value: inputValue, label: inputValue });
@@ -129,7 +129,7 @@ export const OptionsList: React.FC<OptionsListProps> = ({
         (matchedOptions.length > 0 ||
           (!hasSearchTerm && unmatchedOptions.length > 0)) && (
           <div className="px-3 py-1">
-            <Text as="p" text03 secondaryBody>
+            <Text as="p" color="text-03" font="secondary-body">
               {separatorLabel}
             </Text>
           </div>

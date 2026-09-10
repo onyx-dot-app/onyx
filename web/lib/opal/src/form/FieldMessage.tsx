@@ -1,12 +1,15 @@
-import { cn } from "@opal/utils";
+"use client";
+
 import React from "react";
-import Text from "../texts/Text";
+import { cn, richNodes } from "@opal/utils";
+import { Text } from "@opal/components/text/components";
 import {
   SvgAlertCircle,
   SvgCheckCircle,
   SvgLoader,
   SvgXOctagon,
 } from "@opal/icons";
+
 type MessageVariant =
   | "error"
   | "success"
@@ -54,21 +57,18 @@ interface FieldMessageContentProps extends React.HTMLAttributes<HTMLParagraphEle
   children: React.ReactNode;
 }
 
+// The layout classes sit on a wrapper because Opal's Text takes no className.
 const FieldMessageContent: React.FC<FieldMessageContentProps> = ({
   className,
   children,
   ...props
 }) => {
   return (
-    <Text
-      as="p"
-      text03
-      secondaryBody
-      className={cn("ms-0.5", className)}
-      {...props}
-    >
-      {children}
-    </Text>
+    <div className={cn("ms-0.5", className)} {...props}>
+      <Text as="p" color="text-03" font="secondary-body">
+        {richNodes(children)}
+      </Text>
+    </div>
   );
 };
 

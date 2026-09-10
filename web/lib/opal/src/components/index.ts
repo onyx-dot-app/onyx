@@ -73,6 +73,13 @@ export {
   type KeyValueInputProps,
 } from "@opal/components/inputs/input-key-value/components";
 
+/* InputComboBox */
+export {
+  default as InputComboBox,
+  type InputComboBoxProps,
+  type ComboBoxOption,
+} from "@opal/components/inputs/input-combo-box/index";
+
 /* InputNumber */
 export {
   default as InputNumber,

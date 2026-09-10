@@ -10793,22 +10793,6 @@
         "text": "اب"
       }
     },
-    "comboBox": {
-      "createOption": {
-        "ariaLabel": "{prefix} \"{value}\"",
-        "defaultPrefix": "إنشاء"
-      },
-      "dropdown": {
-        "closeAriaLabel": "إغلاق القائمة المنسدلة",
-        "openAriaLabel": "فتح القائمة المنسدلة"
-      },
-      "options": {
-        "empty": "لم يتم العثور على خيارات"
-      },
-      "separator": {
-        "label": "خيارات أخرى"
-      }
-    },
     "commandMenu": {
       "closeButton": {
         "ariaLabel": "إغلاق القائمة"
@@ -12721,6 +12705,14 @@
     }
   },
   "opal": {
+    "comboBox": {
+      "close": "إغلاق القائمة المنسدلة",
+      "create": "إنشاء",
+      "createOption": "{prefix} \"{value}\"",
+      "noOptions": "لم يتم العثور على خيارات",
+      "open": "فتح القائمة المنسدلة",
+      "otherOptions": "خيارات أخرى"
+    },
     "common": {
       "clear": "مسح",
       "clearFilter": "مسح الفلتر",

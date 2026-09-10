@@ -18,3 +18,4 @@ export {
   default as useScreenSize,
   type ScreenSize,
 } from "@opal/hooks/useScreenSize";
+export { useClickOutside } from "@opal/hooks/useClickOutside";

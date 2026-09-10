@@ -10793,22 +10793,6 @@
         "text": "文"
       }
     },
-    "comboBox": {
-      "createOption": {
-        "ariaLabel": "{prefix}“{value}”",
-        "defaultPrefix": "创建"
-      },
-      "dropdown": {
-        "closeAriaLabel": "关闭下拉菜单",
-        "openAriaLabel": "打开下拉菜单"
-      },
-      "options": {
-        "empty": "未找到选项"
-      },
-      "separator": {
-        "label": "其他选项"
-      }
-    },
     "commandMenu": {
       "closeButton": {
         "ariaLabel": "关闭菜单"
@@ -12721,6 +12705,14 @@
     }
   },
   "opal": {
+    "comboBox": {
+      "close": "关闭下拉菜单",
+      "create": "创建",
+      "createOption": "{prefix}“{value}”",
+      "noOptions": "未找到选项",
+      "open": "打开下拉菜单",
+      "otherOptions": "其他选项"
+    },
     "common": {
       "clear": "清除",
       "clearFilter": "清除筛选",
