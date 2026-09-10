@@ -92,10 +92,11 @@ class IdAllowlistSource(DiscoverySource):
         self, meeting_ids: list[str], webinar_ids: list[str] | None = None
     ) -> None:
         self._refs: list[tuple[ZoomSessionType, str]] = [
-            (ZoomSessionType.MEETING, meeting_id) for meeting_id in meeting_ids
-        ]
-        self._refs += [
-            (ZoomSessionType.WEBINAR, webinar_id) for webinar_id in webinar_ids or []
+            *((ZoomSessionType.MEETING, meeting_id) for meeting_id in meeting_ids),
+            *(
+                (ZoomSessionType.WEBINAR, webinar_id)
+                for webinar_id in webinar_ids or []
+            ),
         ]
 
     def discover_step(
