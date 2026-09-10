@@ -1573,9 +1573,16 @@ class SharepointConnector(
         auth_method = credentials.get(
             "authentication_method", MicrosoftAuthMethod.CLIENT_SECRET.value
         )
+        sp_client_id = credentials.get("sp_client_id")
+        sp_directory_id = credentials.get("sp_directory_id")
+        if not sp_client_id:
+            raise ConnectorValidationError("Client ID is required")
+        if not sp_directory_id:
+            raise ConnectorValidationError("Directory (tenant) ID is required")
+
         self.msal_app = build_msal_app(
-            client_id=credentials.get("sp_client_id"),
-            directory_id=credentials.get("sp_directory_id"),
+            client_id=sp_client_id,
+            directory_id=sp_directory_id,
             authority_host=self.authority_host,
             auth_method=auth_method,
             client_secret=credentials.get("sp_client_secret"),

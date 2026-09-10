@@ -5,6 +5,9 @@ from __future__ import annotations
 import base64
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.sharepoint.connector import SharepointConnector
 
 SITE_URL = "https://mytenant.sharepoint.com/sites/MySite"
@@ -98,3 +101,19 @@ def test_certificate_without_site_pages_sets_tenant_domain(
     connector.load_credentials(CERTIFICATE_CREDS)
 
     assert connector.sp_tenant_domain == EXPECTED_TENANT_DOMAIN
+
+
+@pytest.mark.parametrize("missing_field", ["sp_client_id", "sp_directory_id"])
+def test_missing_id_is_a_validation_error(missing_field: str) -> None:
+    """SharePoint owns these checks, so an absent or blank id must still cancel
+    the attempt rather than reach MSAL."""
+    for blank in ("", None):
+        creds = dict(CLIENT_SECRET_CREDS)
+        if blank is None:
+            del creds[missing_field]
+        else:
+            creds[missing_field] = blank
+
+        connector = SharepointConnector(sites=[SITE_URL])
+        with pytest.raises(ConnectorValidationError):
+            connector.load_credentials(creds)

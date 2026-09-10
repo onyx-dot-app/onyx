@@ -67,8 +67,8 @@ def load_certificate_from_pfx(pfx_data: bytes, password: str) -> CertificateData
 
 def build_msal_app(
     *,
-    client_id: str | None,
-    directory_id: str | None,
+    client_id: str,
+    directory_id: str,
     authority_host: str,
     auth_method: str = MicrosoftAuthMethod.CLIENT_SECRET.value,
     client_secret: str | None = None,
@@ -79,12 +79,12 @@ def build_msal_app(
 
     ``private_key_b64`` is the base64-encoded PFX bundle as stored on the
     credential, not a PEM key.
-    """
-    if not client_id:
-        raise ConnectorValidationError("Client ID is required")
-    if not directory_id:
-        raise ConnectorValidationError("Directory (tenant) ID is required")
 
+    Callers own presence checks on the client and directory ids. Validating
+    them here would turn Teams' plain MSAL failure into a
+    ``ConnectorValidationError``, which cancels the attempt and marks the
+    credential invalid.
+    """
     authority_url = f"{authority_host}/{directory_id}"
 
     if auth_method == MicrosoftAuthMethod.CERTIFICATE.value:
