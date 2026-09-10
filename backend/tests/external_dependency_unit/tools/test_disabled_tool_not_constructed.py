@@ -20,7 +20,9 @@ from onyx.db.models import Persona, Tool, User
 from onyx.llm.factory import get_default_llm
 from onyx.tools.tool_constructor import construct_tools
 from tests.external_dependency_unit.answer.conftest import ensure_default_llm_provider
-from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
+
+USER_EMAIL_PREFIX = "disabled_tool_check_user"
 
 OPENAPI_SCHEMA: dict[str, Any] = {
     "openapi": "3.0.0",
@@ -47,7 +49,8 @@ def _default_llm_provider(db_session: Session) -> None:
 @pytest.fixture(autouse=True)
 def _cleanup(db_session: Session) -> Generator[None, None, None]:
     """These rows are public and listed, so leaving them behind would widen what
-    other tests see in persona and action listings."""
+    other tests see in persona and action listings. Ordered by foreign key:
+    personas reference both, and tool.user_id references the user."""
     yield
     db_session.rollback()
     for persona in (
@@ -62,6 +65,14 @@ def _cleanup(db_session: Session) -> Generator[None, None, None]:
 
     db_session.query(Tool).filter(Tool.name.like("disabled-tool-check-%")).delete(
         synchronize_session=False
+    )
+    db_session.commit()
+
+    delete_test_user(
+        db_session,
+        *db_session.query(User)
+        .filter(User.__table__.c.email.like(f"{USER_EMAIL_PREFIX}_%@example.com"))
+        .all(),
     )
     db_session.commit()
 
@@ -105,7 +116,7 @@ def _create_persona(db_session: Session, user: User, tools: list[Tool]) -> Perso
 
 def test_disabled_tool_is_not_constructed(db_session: Session) -> None:
     """Without a whitelist nothing else filters, so `enabled` has to."""
-    user = create_test_user(db_session, "disabled_tool_user")
+    user = create_test_user(db_session, USER_EMAIL_PREFIX)
     disabled_tool = _create_tool(db_session, user, enabled=False)
     enabled_tool = _create_tool(db_session, user, enabled=True)
     persona = _create_persona(db_session, user, [disabled_tool, enabled_tool])
@@ -127,7 +138,7 @@ def test_disabled_tool_is_not_constructed_even_when_whitelisted(
 ) -> None:
     """`allowed_tool_ids` is built from what the frontend can see, which is not
     filtered on `enabled` — so a whitelist must not resurrect a disabled tool."""
-    user = create_test_user(db_session, "disabled_tool_whitelist_user")
+    user = create_test_user(db_session, USER_EMAIL_PREFIX)
     disabled_tool = _create_tool(db_session, user, enabled=False)
     persona = _create_persona(db_session, user, [disabled_tool])
 
