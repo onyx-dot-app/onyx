@@ -9,7 +9,9 @@ right slot.
 
 ## Props
 
-Extends `InputTypeInProps` (minus `value`/`onChange` internals), plus:
+Extends `InputTypeInProps` minus the props the component owns itself —
+`type`, `rightChildren`, `value`, `onChange`, `readOnly`, `clearButton` —
+plus:
 
 | Prop                 | Type                            | Description                                            |
 | -------------------- | ------------------------------- | ------------------------------------------------------ |

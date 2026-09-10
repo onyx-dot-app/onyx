@@ -2,12 +2,8 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { Card, Text } from "@opal/components";
+import { Card, DateRange, DateRangePicker, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
-import {
-  DateRangePicker,
-  DateRange,
-} from "@opal/components";
 import { useAgents } from "@/lib/agents/hooks";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import {
