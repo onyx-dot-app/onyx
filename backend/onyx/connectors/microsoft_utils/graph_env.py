@@ -8,17 +8,14 @@ internals.
 
 This module bridges the gap: given the two host URLs the user configured, it
 resolves the matching ``AzureEnvironment`` value (and the implied SharePoint
-domain suffix) so callers can pass ``environment=…`` to ``GraphClient``.
+domain suffix) so callers can pass ``environment=…`` to ``GraphClient``. It also
+owns the commercial-cloud defaults the connector forms start from.
 """
 
 from office365.graph_client import AzureEnvironment
 from pydantic import BaseModel
 
 from onyx.connectors.exceptions import ConnectorValidationError
-
-DEFAULT_AUTHORITY_HOST = "https://login.microsoftonline.com"
-DEFAULT_GRAPH_API_HOST = "https://graph.microsoft.com"
-DEFAULT_SHAREPOINT_DOMAIN_SUFFIX = "sharepoint.com"
 
 
 class MicrosoftGraphEnvironment(BaseModel):
@@ -66,6 +63,13 @@ _ENVIRONMENTS: list[MicrosoftGraphEnvironment] = [
 _GRAPH_HOST_INDEX: dict[str, MicrosoftGraphEnvironment] = {
     env.graph_host: env for env in _ENVIRONMENTS
 }
+
+# Connector form defaults, read off the commercial cloud so they cannot drift
+# from the table above.
+_COMMERCIAL = next(e for e in _ENVIRONMENTS if e.environment == AzureEnvironment.Global)
+DEFAULT_AUTHORITY_HOST = _COMMERCIAL.authority_host
+DEFAULT_GRAPH_API_HOST = _COMMERCIAL.graph_host
+DEFAULT_SHAREPOINT_DOMAIN_SUFFIX = _COMMERCIAL.sharepoint_domain_suffix
 
 
 def resolve_microsoft_environment(

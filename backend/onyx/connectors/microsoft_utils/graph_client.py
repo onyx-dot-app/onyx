@@ -1,13 +1,12 @@
-"""Microsoft Graph transport: the retry policy and the authenticated GET.
+"""Microsoft Graph transport: the retry policies and the authenticated GET.
 
-Two call paths exist because the Microsoft connectors use two clients. The
-office365 SDK path goes through :func:`sleep_and_retry`, and the raw REST path
-goes through :class:`GraphApiClient`. They retry different status sets on
-purpose: the SDK path has always retried only 429 and 503, while the raw path
-also retries 500/502/504.
+Two status sets live here because callers disagree about 5xx.
+:data:`RETRYABLE_HTTP_STATUSES` is the narrow set, used only by
+:func:`sleep_and_retry`. :data:`GRAPH_API_RETRYABLE_STATUSES` adds the gateway
+5xx codes and is what every other caller uses. Reach for the narrow one only when
+matching ``sleep_and_retry``.
 
-This layer has no source identity, so a connector's capability-check gateway
-composes it rather than inheriting from it.
+This layer carries no source identity, so a connector composes it.
 """
 
 import random
@@ -27,11 +26,10 @@ logger = setup_logger()
 
 GRAPH_API_MAX_RETRIES = 5
 
-# Transient Graph statuses worth retrying on the raw REST path: rate limits
-# (429) plus gateway/server-side hiccups.
+# Rate limits plus the gateway 5xx codes. The default choice.
 GRAPH_API_RETRYABLE_STATUSES: frozenset[int] = frozenset({429, 500, 502, 503, 504})
 
-# The office365 SDK path retries a narrower set.
+# The narrow set, for sleep_and_retry only.
 RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({429, 503})
 
 # Transient transport failures, seen both bare and as the cause of a
@@ -54,7 +52,7 @@ def backoff_seconds(attempt: int, retry_after: str | None) -> float:
     from ``[base/2, base]`` so that many documents failing at the same instant
     (e.g. during a Graph throttling window) don't all retry on the same tick
     and re-create the thundering herd. Server-provided Retry-After values are
-    used verbatim — those are an explicit instruction, not a guess.
+    used verbatim, since those are an explicit instruction rather than a guess.
 
     ``attempt`` is 0-indexed (0 for the first retry).
     """
@@ -212,7 +210,7 @@ def graph_api_get_json(
 
 
 class GraphApiClient:
-    """The raw Graph REST surface: a token source plus the tenant's Graph host.
+    """The raw Graph REST surface: a token source plus the versioned Graph base.
 
     Held by a connector and passed to the drive-item helpers so they can call
     Graph without knowing how the token was obtained.

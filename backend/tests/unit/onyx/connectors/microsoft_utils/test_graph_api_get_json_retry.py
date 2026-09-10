@@ -2,9 +2,9 @@
 
 Covers the empty/non-JSON 2xx body case: Microsoft Graph intermittently returns
 a body-less response under load (gateway-shed throttling, backend list-view
-timeouts on large libraries, mid-response connection drops). The bare
-response.json() used to raise an unretried JSONDecodeError that aborted indexing
-of large (>2K file) libraries; it must now be retried like any transient error.
+timeouts on large libraries, mid-response connection drops). An empty body must
+be retried like any other transient error, or indexing of a large library aborts
+on a bare JSONDecodeError.
 """
 
 from __future__ import annotations

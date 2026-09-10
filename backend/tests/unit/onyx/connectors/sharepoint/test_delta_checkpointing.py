@@ -414,7 +414,7 @@ class TestDelta410GoneResync:
 
 
 class TestDeltaPageFetchFailure:
-    """If _fetch_one_delta_page raises, the drive should be abandoned with a
+    """If fetch_one_delta_page raises, the drive should be abandoned with a
     ConnectorFailure and the checkpoint should be cleared for the next drive."""
 
     def test_page_fetch_error_yields_failure_and_clears_state(
