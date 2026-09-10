@@ -12,7 +12,7 @@ import { createCheckoutSession } from "@/lib/billing/svc";
 import { useUser } from "@/providers/UserProvider";
 import { formatDateShort } from "@/lib/dateUtils";
 import type { PlanType } from "@/lib/billing/interfaces";
-import InputNumber from "@/refresh-components/inputs/InputNumber";
+import { InputNumber } from "@opal/components";
 import useUsers from "@/hooks/useUsers";
 
 // ----------------------------------------------------------------------------

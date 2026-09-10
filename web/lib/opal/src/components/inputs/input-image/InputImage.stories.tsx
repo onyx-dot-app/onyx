@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import React from "react";
-import InputImage from "./InputImage";
+import InputImage from "@opal/components/inputs/input-image/components";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
 const meta: Meta<typeof InputImage> = {
-  title: "refresh-components/inputs/InputImage",
+  title: "opal/components/InputImage",
   component: InputImage,
   tags: ["autodocs"],
   decorators: [

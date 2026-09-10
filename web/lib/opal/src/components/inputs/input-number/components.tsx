@@ -1,15 +1,27 @@
 "use client";
 
 import * as React from "react";
+import "@opal/components/inputs/input-number/styles.css";
 import { cn } from "@opal/utils";
-import { Button } from "@opal/components";
-import {
-  Variants,
-  wrapperClasses,
-  innerClasses,
-  textClasses,
-} from "@/refresh-components/inputs/styles";
+import { Button } from "@opal/components/buttons/button/components";
 import { SvgChevronUp, SvgChevronDown, SvgRevert } from "@opal/icons";
+
+type InputNumberVariant =
+  | "primary"
+  | "internal"
+  | "error"
+  | "disabled"
+  | "readOnly";
+
+// Inner text styling per variant; the wrapper chrome lives in styles.css.
+const INNER_CLASSES: Record<InputNumberVariant, string | null> = {
+  primary:
+    "text-text-04 placeholder:!font-main-ui-muted placeholder:text-text-02",
+  internal: "text-text-04",
+  error: "text-text-04",
+  disabled: "text-text-01",
+  readOnly: "text-text-01",
+};
 
 /**
  * InputNumber Component
@@ -51,9 +63,8 @@ export interface InputNumberProps {
   decimalPlaces?: number;
   defaultValue?: number;
   showReset?: boolean;
-  variant?: Variants;
+  variant?: InputNumberVariant;
   disabled?: boolean;
-  className?: string;
   placeholder?: string;
 }
 
@@ -68,7 +79,6 @@ export default function InputNumber({
   showReset = false,
   variant = "primary",
   disabled = false,
-  className,
   placeholder,
 }: InputNumberProps) {
   const inputRef = React.useRef<HTMLInputElement | null>(null);
@@ -151,11 +161,8 @@ export default function InputNumber({
     // already keyboard reachable.
     <div
       role="presentation"
-      className={cn(
-        "flex flex-row items-center justify-between w-full h-fit pe-1.5 ps-1.5 rounded-08",
-        wrapperClasses[variant],
-        className
-      )}
+      className="opal-input-number flex flex-row items-center justify-between w-full h-fit pe-1.5 ps-1.5 rounded-08"
+      data-variant={variant}
       onClick={() => inputRef.current?.focus()}
     >
       <input
@@ -170,8 +177,7 @@ export default function InputNumber({
         onBlur={handleBlur}
         className={cn(
           "w-full h-6 bg-transparent p-0.5 focus:outline-hidden",
-          innerClasses[variant],
-          textClasses[variant]
+          INNER_CLASSES[variant]
         )}
       />
 

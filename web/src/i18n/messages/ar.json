@@ -10793,22 +10793,6 @@
         "text": "اب"
       }
     },
-    "comboBox": {
-      "createOption": {
-        "ariaLabel": "{prefix} \"{value}\"",
-        "defaultPrefix": "إنشاء"
-      },
-      "dropdown": {
-        "closeAriaLabel": "إغلاق القائمة المنسدلة",
-        "openAriaLabel": "فتح القائمة المنسدلة"
-      },
-      "options": {
-        "empty": "لم يتم العثور على خيارات"
-      },
-      "separator": {
-        "label": "خيارات أخرى"
-      }
-    },
     "commandMenu": {
       "closeButton": {
         "ariaLabel": "إغلاق القائمة"
@@ -11165,26 +11149,6 @@
         "tooltip": "إزالة"
       }
     },
-    "inputImage": {
-      "dropRejected": {
-        "fallback": "تم رفض الملف"
-      },
-      "editButton": {
-        "ariaLabel": "تعديل الصورة"
-      },
-      "editOverlay": {
-        "label": "تعديل"
-      },
-      "image": {
-        "altFallback": "صورة"
-      },
-      "removeButton": {
-        "ariaLabel": "إزالة الصورة"
-      },
-      "uploadButton": {
-        "ariaLabel": "رفع صورة"
-      }
-    },
     "inputSelect": {
       "placeholder": {
         "fallback": "حدد خيارًا"
@@ -11208,40 +11172,6 @@
       },
       "usersFallback": {
         "text": "المستخدمون"
-      }
-    },
-    "keyValue": {
-      "addButton": {
-        "ariaLabel": "إضافة زوج {keyTitle} و{valueTitle}",
-        "label": "إضافة سطر"
-      },
-      "empty": {
-        "title": "لم تتم إضافة أي عناصر بعد."
-      },
-      "error": {
-        "duplicateKey": "مفتاح مكرر",
-        "duplicateSummary": "{count, plural, one {تم العثور على مفتاح مكرر واحد} other {تم العثور على # من المفاتيح المكررة}}",
-        "emptyKey": "لا يمكن ترك المفتاح فارغًا",
-        "emptySummary": "{count, plural, one {تم العثور على مفتاح فارغ واحد} other {تم العثور على # من المفاتيح الفارغة}}",
-        "validationSummary": "{count, plural, one {تم العثور على خطأ تحقق واحد} other {تم العثور على # من أخطاء التحقق}}"
-      },
-      "group": {
-        "ariaLabel": "أزواج {keyTitle} و{valueTitle}"
-      },
-      "input": {
-        "ariaLabel": "{label} {index}"
-      },
-      "keyColumn": {
-        "title": "المفتاح"
-      },
-      "pair": {
-        "fallbackLabel": "مفتاح-قيمة"
-      },
-      "removeButton": {
-        "ariaLabel": "إزالة زوج {label} رقم {index}"
-      },
-      "valueColumn": {
-        "title": "القيمة"
       }
     },
     "logo": {
@@ -12755,6 +12685,14 @@
     }
   },
   "opal": {
+    "comboBox": {
+      "close": "إغلاق القائمة المنسدلة",
+      "create": "إنشاء",
+      "createOption": "{prefix} \"{value}\"",
+      "noOptions": "لم يتم العثور على خيارات",
+      "open": "فتح القائمة المنسدلة",
+      "otherOptions": "خيارات أخرى"
+    },
     "common": {
       "clear": "مسح",
       "clearFilter": "مسح الفلتر",
@@ -12799,6 +12737,29 @@
     "inputFile": {
       "attachFile": "إرفاق ملف",
       "clearFile": "مسح الملف"
+    },
+    "inputImage": {
+      "alt": "صورة",
+      "dropRejected": "تم رفض الملف",
+      "edit": "تعديل الصورة",
+      "remove": "إزالة الصورة",
+      "upload": "رفع صورة"
+    },
+    "keyValue": {
+      "addLine": "إضافة سطر",
+      "addPair": "إضافة زوج {keyTitle} و{valueTitle}",
+      "duplicateKey": "مفتاح مكرر",
+      "duplicateSummary": "{count, plural, one {تم العثور على مفتاح مكرر واحد} other {تم العثور على # من المفاتيح المكررة}}",
+      "empty": "لم تتم إضافة أي عناصر بعد.",
+      "emptyKey": "لا يمكن ترك المفتاح فارغًا",
+      "emptySummary": "{count, plural, one {تم العثور على مفتاح فارغ واحد} other {تم العثور على # من المفاتيح الفارغة}}",
+      "group": "أزواج {keyTitle} و{valueTitle}",
+      "input": "{label} {index}",
+      "key": "المفتاح",
+      "pairFallback": "مفتاح-قيمة",
+      "removePair": "إزالة زوج {label} رقم {index}",
+      "validationSummary": "{count, plural, one {تم العثور على خطأ تحقق واحد} other {تم العثور على # من أخطاء التحقق}}",
+      "value": "القيمة"
     },
     "pagination": {
       "goToPage": "الانتقال إلى صفحة",

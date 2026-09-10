@@ -10793,22 +10793,6 @@
         "text": "Aa"
       }
     },
-    "comboBox": {
-      "createOption": {
-        "ariaLabel": "{prefix} « {value} »",
-        "defaultPrefix": "Créer"
-      },
-      "dropdown": {
-        "closeAriaLabel": "Fermer la liste déroulante",
-        "openAriaLabel": "Ouvrir la liste déroulante"
-      },
-      "options": {
-        "empty": "Aucune option trouvée"
-      },
-      "separator": {
-        "label": "Autres options"
-      }
-    },
     "commandMenu": {
       "closeButton": {
         "ariaLabel": "Fermer le menu"
@@ -11165,26 +11149,6 @@
         "tooltip": "Supprimer"
       }
     },
-    "inputImage": {
-      "dropRejected": {
-        "fallback": "Fichier refusé"
-      },
-      "editButton": {
-        "ariaLabel": "Modifier l'image"
-      },
-      "editOverlay": {
-        "label": "Modifier"
-      },
-      "image": {
-        "altFallback": "Image"
-      },
-      "removeButton": {
-        "ariaLabel": "Supprimer l'image"
-      },
-      "uploadButton": {
-        "ariaLabel": "Téléverser une image"
-      }
-    },
     "inputSelect": {
       "placeholder": {
         "fallback": "Sélectionnez une option"
@@ -11208,40 +11172,6 @@
       },
       "usersFallback": {
         "text": "Utilisateurs"
-      }
-    },
-    "keyValue": {
-      "addButton": {
-        "ariaLabel": "Ajouter une paire {keyTitle} et {valueTitle}",
-        "label": "Ajouter une ligne"
-      },
-      "empty": {
-        "title": "Aucun élément ajouté pour le moment."
-      },
-      "error": {
-        "duplicateKey": "Clé en double",
-        "duplicateSummary": "{count, plural, one {# clé en double trouvée} other {# clés en double trouvées}}",
-        "emptyKey": "La clé ne peut pas être vide",
-        "emptySummary": "{count, plural, one {# clé vide trouvée} other {# clés vides trouvées}}",
-        "validationSummary": "{count, plural, one {# erreur de validation trouvée} other {# erreurs de validation trouvées}}"
-      },
-      "group": {
-        "ariaLabel": "Paires {keyTitle} et {valueTitle}"
-      },
-      "input": {
-        "ariaLabel": "{label} {index}"
-      },
-      "keyColumn": {
-        "title": "Clé"
-      },
-      "pair": {
-        "fallbackLabel": "clé-valeur"
-      },
-      "removeButton": {
-        "ariaLabel": "Supprimer la paire {label} {index}"
-      },
-      "valueColumn": {
-        "title": "Valeur"
       }
     },
     "logo": {
@@ -12755,6 +12685,14 @@
     }
   },
   "opal": {
+    "comboBox": {
+      "close": "Fermer la liste déroulante",
+      "create": "Créer",
+      "createOption": "{prefix} « {value} »",
+      "noOptions": "Aucune option trouvée",
+      "open": "Ouvrir la liste déroulante",
+      "otherOptions": "Autres options"
+    },
     "common": {
       "clear": "Effacer",
       "clearFilter": "Effacer le filtre",
@@ -12799,6 +12737,29 @@
     "inputFile": {
       "attachFile": "Joindre un fichier",
       "clearFile": "Effacer le fichier"
+    },
+    "inputImage": {
+      "alt": "Image",
+      "dropRejected": "Fichier refusé",
+      "edit": "Modifier l'image",
+      "remove": "Supprimer l'image",
+      "upload": "Téléverser une image"
+    },
+    "keyValue": {
+      "addLine": "Ajouter une ligne",
+      "addPair": "Ajouter une paire {keyTitle} et {valueTitle}",
+      "duplicateKey": "Clé en double",
+      "duplicateSummary": "{count, plural, one {# clé en double trouvée} other {# clés en double trouvées}}",
+      "empty": "Aucun élément ajouté pour le moment.",
+      "emptyKey": "La clé ne peut pas être vide",
+      "emptySummary": "{count, plural, one {# clé vide trouvée} other {# clés vides trouvées}}",
+      "group": "Paires {keyTitle} et {valueTitle}",
+      "input": "{label} {index}",
+      "key": "Clé",
+      "pairFallback": "clé-valeur",
+      "removePair": "Supprimer la paire {label} {index}",
+      "validationSummary": "{count, plural, one {# erreur de validation trouvée} other {# erreurs de validation trouvées}}",
+      "value": "Valeur"
     },
     "pagination": {
       "goToPage": "Aller à la page",

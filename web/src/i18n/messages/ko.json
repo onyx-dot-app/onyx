@@ -10793,22 +10793,6 @@
         "text": "가"
       }
     },
-    "comboBox": {
-      "createOption": {
-        "ariaLabel": "{prefix} \"{value}\"",
-        "defaultPrefix": "만들기"
-      },
-      "dropdown": {
-        "closeAriaLabel": "드롭다운 닫기",
-        "openAriaLabel": "드롭다운 열기"
-      },
-      "options": {
-        "empty": "옵션을 찾을 수 없습니다"
-      },
-      "separator": {
-        "label": "기타 옵션"
-      }
-    },
     "commandMenu": {
       "closeButton": {
         "ariaLabel": "메뉴 닫기"
@@ -11165,26 +11149,6 @@
         "tooltip": "제거"
       }
     },
-    "inputImage": {
-      "dropRejected": {
-        "fallback": "파일이 거부되었습니다"
-      },
-      "editButton": {
-        "ariaLabel": "이미지 편집"
-      },
-      "editOverlay": {
-        "label": "편집"
-      },
-      "image": {
-        "altFallback": "이미지"
-      },
-      "removeButton": {
-        "ariaLabel": "이미지 제거"
-      },
-      "uploadButton": {
-        "ariaLabel": "이미지 업로드"
-      }
-    },
     "inputSelect": {
       "placeholder": {
         "fallback": "옵션 선택"
@@ -11208,40 +11172,6 @@
       },
       "usersFallback": {
         "text": "사용자"
-      }
-    },
-    "keyValue": {
-      "addButton": {
-        "ariaLabel": "{keyTitle} 및 {valueTitle} 쌍 추가",
-        "label": "줄 추가"
-      },
-      "empty": {
-        "title": "아직 추가된 항목이 없습니다."
-      },
-      "error": {
-        "duplicateKey": "중복된 키",
-        "duplicateSummary": "{count, plural, one {중복된 키 #개 발견} other {중복된 키 #개 발견}}",
-        "emptyKey": "키는 비워 둘 수 없습니다",
-        "emptySummary": "{count, plural, one {빈 키 #개 발견} other {빈 키 #개 발견}}",
-        "validationSummary": "{count, plural, one {유효성 검사 오류 #개 발견} other {유효성 검사 오류 #개 발견}}"
-      },
-      "group": {
-        "ariaLabel": "{keyTitle} 및 {valueTitle} 쌍"
-      },
-      "input": {
-        "ariaLabel": "{label} {index}"
-      },
-      "keyColumn": {
-        "title": "키"
-      },
-      "pair": {
-        "fallbackLabel": "키-값"
-      },
-      "removeButton": {
-        "ariaLabel": "{label} 쌍 {index} 제거"
-      },
-      "valueColumn": {
-        "title": "값"
       }
     },
     "logo": {
@@ -12755,6 +12685,14 @@
     }
   },
   "opal": {
+    "comboBox": {
+      "close": "드롭다운 닫기",
+      "create": "만들기",
+      "createOption": "{prefix} \"{value}\"",
+      "noOptions": "옵션을 찾을 수 없습니다",
+      "open": "드롭다운 열기",
+      "otherOptions": "기타 옵션"
+    },
     "common": {
       "clear": "지우기",
       "clearFilter": "필터 지우기",
@@ -12799,6 +12737,29 @@
     "inputFile": {
       "attachFile": "파일 첨부",
       "clearFile": "파일 지우기"
+    },
+    "inputImage": {
+      "alt": "이미지",
+      "dropRejected": "파일이 거부되었습니다",
+      "edit": "이미지 편집",
+      "remove": "이미지 제거",
+      "upload": "이미지 업로드"
+    },
+    "keyValue": {
+      "addLine": "줄 추가",
+      "addPair": "{keyTitle} 및 {valueTitle} 쌍 추가",
+      "duplicateKey": "중복된 키",
+      "duplicateSummary": "{count, plural, one {중복된 키 #개 발견} other {중복된 키 #개 발견}}",
+      "empty": "아직 추가된 항목이 없습니다.",
+      "emptyKey": "키는 비워 둘 수 없습니다",
+      "emptySummary": "{count, plural, one {빈 키 #개 발견} other {빈 키 #개 발견}}",
+      "group": "{keyTitle} 및 {valueTitle} 쌍",
+      "input": "{label} {index}",
+      "key": "키",
+      "pairFallback": "키-값",
+      "removePair": "{label} 쌍 {index} 제거",
+      "validationSummary": "{count, plural, one {유효성 검사 오류 #개 발견} other {유효성 검사 오류 #개 발견}}",
+      "value": "값"
     },
     "pagination": {
       "goToPage": "페이지로 이동",

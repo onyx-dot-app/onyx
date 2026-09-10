@@ -10793,22 +10793,6 @@
         "text": "Aa"
       }
     },
-    "comboBox": {
-      "createOption": {
-        "ariaLabel": "{prefix} „{value}“",
-        "defaultPrefix": "Erstellen"
-      },
-      "dropdown": {
-        "closeAriaLabel": "Dropdown schließen",
-        "openAriaLabel": "Dropdown öffnen"
-      },
-      "options": {
-        "empty": "Keine Optionen gefunden"
-      },
-      "separator": {
-        "label": "Weitere Optionen"
-      }
-    },
     "commandMenu": {
       "closeButton": {
         "ariaLabel": "Menü schließen"
@@ -11165,26 +11149,6 @@
         "tooltip": "Entfernen"
       }
     },
-    "inputImage": {
-      "dropRejected": {
-        "fallback": "Datei abgelehnt"
-      },
-      "editButton": {
-        "ariaLabel": "Bild bearbeiten"
-      },
-      "editOverlay": {
-        "label": "Bearbeiten"
-      },
-      "image": {
-        "altFallback": "Bild"
-      },
-      "removeButton": {
-        "ariaLabel": "Bild entfernen"
-      },
-      "uploadButton": {
-        "ariaLabel": "Bild hochladen"
-      }
-    },
     "inputSelect": {
       "placeholder": {
         "fallback": "Option auswählen"
@@ -11208,40 +11172,6 @@
       },
       "usersFallback": {
         "text": "Benutzer"
-      }
-    },
-    "keyValue": {
-      "addButton": {
-        "ariaLabel": "Paar aus {keyTitle} und {valueTitle} hinzufügen",
-        "label": "Zeile hinzufügen"
-      },
-      "empty": {
-        "title": "Noch keine Einträge hinzugefügt."
-      },
-      "error": {
-        "duplicateKey": "Doppelter Schlüssel",
-        "duplicateSummary": "{count, plural, one {# doppelter Schlüssel gefunden} other {# doppelte Schlüssel gefunden}}",
-        "emptyKey": "Der Schlüssel darf nicht leer sein",
-        "emptySummary": "{count, plural, one {# leerer Schlüssel gefunden} other {# leere Schlüssel gefunden}}",
-        "validationSummary": "{count, plural, one {# Validierungsfehler gefunden} other {# Validierungsfehler gefunden}}"
-      },
-      "group": {
-        "ariaLabel": "Paare aus {keyTitle} und {valueTitle}"
-      },
-      "input": {
-        "ariaLabel": "{label} {index}"
-      },
-      "keyColumn": {
-        "title": "Schlüssel"
-      },
-      "pair": {
-        "fallbackLabel": "Schlüssel-Wert"
-      },
-      "removeButton": {
-        "ariaLabel": "{label}-Paar {index} entfernen"
-      },
-      "valueColumn": {
-        "title": "Wert"
       }
     },
     "logo": {
@@ -12755,6 +12685,14 @@
     }
   },
   "opal": {
+    "comboBox": {
+      "close": "Dropdown schließen",
+      "create": "Erstellen",
+      "createOption": "{prefix} „{value}“",
+      "noOptions": "Keine Optionen gefunden",
+      "open": "Dropdown öffnen",
+      "otherOptions": "Weitere Optionen"
+    },
     "common": {
       "clear": "Leeren",
       "clearFilter": "Filter zurücksetzen",
@@ -12799,6 +12737,29 @@
     "inputFile": {
       "attachFile": "Datei anhängen",
       "clearFile": "Datei entfernen"
+    },
+    "inputImage": {
+      "alt": "Bild",
+      "dropRejected": "Datei abgelehnt",
+      "edit": "Bild bearbeiten",
+      "remove": "Bild entfernen",
+      "upload": "Bild hochladen"
+    },
+    "keyValue": {
+      "addLine": "Zeile hinzufügen",
+      "addPair": "Paar aus {keyTitle} und {valueTitle} hinzufügen",
+      "duplicateKey": "Doppelter Schlüssel",
+      "duplicateSummary": "{count, plural, one {# doppelter Schlüssel gefunden} other {# doppelte Schlüssel gefunden}}",
+      "empty": "Noch keine Einträge hinzugefügt.",
+      "emptyKey": "Der Schlüssel darf nicht leer sein",
+      "emptySummary": "{count, plural, one {# leerer Schlüssel gefunden} other {# leere Schlüssel gefunden}}",
+      "group": "Paare aus {keyTitle} und {valueTitle}",
+      "input": "{label} {index}",
+      "key": "Schlüssel",
+      "pairFallback": "Schlüssel-Wert",
+      "removePair": "{label}-Paar {index} entfernen",
+      "validationSummary": "{count, plural, one {# Validierungsfehler gefunden} other {# Validierungsfehler gefunden}}",
+      "value": "Wert"
     },
     "pagination": {
       "goToPage": "Zu Seite springen",

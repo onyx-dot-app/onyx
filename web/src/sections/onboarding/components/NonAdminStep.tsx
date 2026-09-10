@@ -7,7 +7,7 @@ import { InputTypeIn } from "@opal/components";
 import { updateUserPersonalization } from "@/lib/users/svc";
 import { useUser } from "@/providers/UserProvider";
 import { Button } from "@opal/components";
-import InputAvatar from "@/refresh-components/inputs/InputAvatar";
+import { InputAvatar } from "@opal/components";
 import { cn, clickOnKeyDown } from "@opal/utils";
 import { SvgCheckCircle, SvgEdit, SvgUser, SvgX } from "@opal/icons";
 import { ContentAction, InputHorizontal, toast } from "@opal/layouts";

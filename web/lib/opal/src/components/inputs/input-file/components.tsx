@@ -6,17 +6,8 @@ import InputTypeIn, {
 } from "@opal/components/inputs/input-type-in/components";
 import { Button } from "@opal/components/buttons/button/components";
 import { SvgPaperclip, SvgX } from "@opal/icons";
+import { noProp } from "@opal/utils";
 import { useOpalStrings } from "@opal/strings";
-
-// Stops the click reaching the input chrome, which would re-open the picker.
-function noProp(
-  f?: (event: React.MouseEvent) => void
-): React.MouseEventHandler {
-  return (event) => {
-    event.stopPropagation();
-    f?.(event);
-  };
-}
 
 export interface InputFileProps extends Omit<
   InputTypeInProps,

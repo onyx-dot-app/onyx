@@ -69,12 +69,12 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
-import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
 import { InputTypeIn } from "@opal/components";
 import { Button, EmptyMessageCard } from "@opal/components";
 import type { WithoutStyles } from "@opal/types";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components/text/components";
+import { useOpalStrings } from "@opal/strings";
 import { InputErrorText } from "@opal/layouts";
 import { SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 
@@ -118,7 +118,7 @@ function KeyValueInputItem({
   canRemove,
   index,
 }: KeyValueInputItemProps) {
-  const t = useTranslations("common.keyValue");
+  const strings = useOpalStrings();
   return (
     <>
       <div className="flex flex-col gap-y-0.5">
@@ -126,10 +126,10 @@ function KeyValueInputItem({
           placeholder={keyPlaceholder}
           value={item.key}
           onChange={(e) => onChange({ ...item, key: e.target.value })}
-          aria-label={t("input.ariaLabel", {
-            label: keyPlaceholder || t("keyColumn.title"),
-            index: index + 1,
-          })}
+          aria-label={strings.keyValueInput(
+            keyPlaceholder || strings.keyValueKey,
+            index + 1
+          )}
           aria-invalid={!!error?.key}
         />
         {error?.key && <InputErrorText>{error.key}</InputErrorText>}
@@ -139,10 +139,10 @@ function KeyValueInputItem({
           placeholder={valuePlaceholder}
           value={item.value}
           onChange={(e) => onChange({ ...item, value: e.target.value })}
-          aria-label={t("input.ariaLabel", {
-            label: valuePlaceholder || t("valueColumn.title"),
-            index: index + 1,
-          })}
+          aria-label={strings.keyValueInput(
+            valuePlaceholder || strings.keyValueValue,
+            index + 1
+          )}
           aria-invalid={!!error?.value}
         />
         {error?.value && <InputErrorText>{error.value}</InputErrorText>}
@@ -152,10 +152,10 @@ function KeyValueInputItem({
         prominence="tertiary"
         icon={SvgMinusCircle}
         onClick={onRemove}
-        aria-label={t("removeButton.ariaLabel", {
-          label: keyPlaceholder || t("pair.fallbackLabel"),
-          index: index + 1,
-        })}
+        aria-label={strings.keyValueRemovePair(
+          keyPlaceholder || strings.keyValuePairFallback,
+          index + 1
+        )}
       />
     </>
   );
@@ -208,14 +208,14 @@ export default function KeyValueInput({
   addButtonLabel: addButtonLabelProp,
   ...rest
 }: KeyValueInputProps) {
-  const t = useTranslations("common.keyValue");
-  const keyTitle = keyTitleProp ?? t("keyColumn.title");
-  const valueTitle = valueTitleProp ?? t("valueColumn.title");
-  const addButtonLabel = addButtonLabelProp ?? t("addButton.label");
+  const strings = useOpalStrings();
+  const keyTitle = keyTitleProp ?? strings.keyValueKey;
+  const valueTitle = valueTitleProp ?? strings.keyValueValue;
+  const addButtonLabel = addButtonLabelProp ?? strings.keyValueAddLine;
   // Row errors and the summary both compare against these translated
   // messages, so the strings stay consistent within a render.
-  const emptyKeyMessage = t("error.emptyKey");
-  const duplicateKeyMessage = t("error.duplicateKey");
+  const emptyKeyMessage = strings.keyValueEmptyKey;
+  const duplicateKeyMessage = strings.keyValueDuplicateKey;
 
   // Validation logic
   const errors = useMemo((): KeyValueError[] => {
@@ -271,12 +271,12 @@ export default function KeyValueInput({
     const emptyCount = errors.filter((e) => e.key === emptyKeyMessage).length;
 
     if (duplicateCount > 0) {
-      return t("error.duplicateSummary", { count: duplicateCount });
+      return strings.keyValueDuplicateSummary(duplicateCount);
     } else if (emptyCount > 0) {
-      return t("error.emptySummary", { count: emptyCount });
+      return strings.keyValueEmptySummary(emptyCount);
     }
-    return t("error.validationSummary", { count: errorCount });
-  }, [hasAnyError, errors, duplicateKeyMessage, emptyKeyMessage, t]);
+    return strings.keyValueValidationSummary(errorCount);
+  }, [hasAnyError, errors, duplicateKeyMessage, emptyKeyMessage, strings]);
 
   // Notify parent of validation changes
   const onValidationErrorRef = useRef(onValidationError);
@@ -328,7 +328,7 @@ export default function KeyValueInput({
     <div
       className="w-full flex flex-col gap-y-2"
       role="group"
-      aria-label={t("group.ariaLabel", { keyTitle, valueTitle })}
+      aria-label={strings.keyValueGroup(keyTitle, valueTitle)}
       {...rest}
     >
       {items && items.length > 0 ? (
@@ -339,9 +339,13 @@ export default function KeyValueInput({
             Since we're using a `grid` template, the padding below *one* item in a row applies additional height to *all* items in that row.
           */}
           <div className="pb-1">
-            <Text mainUiAction>{keyTitle}</Text>
+            <Text font="main-ui-action" color="text-05">
+              {keyTitle}
+            </Text>
           </div>
-          <Text mainUiAction>{valueTitle}</Text>
+          <Text font="main-ui-action" color="text-05">
+            {valueTitle}
+          </Text>
           <div aria-hidden />
 
           {items.map((item, index) => (
@@ -360,7 +364,7 @@ export default function KeyValueInput({
         </div>
       ) : (
         <EmptyMessageCard
-          title={t("empty.title")}
+          title={strings.keyValueEmpty}
           padding={2}
           sizePreset="secondary"
         />
@@ -370,7 +374,7 @@ export default function KeyValueInput({
         prominence="secondary"
         onClick={handleAdd}
         icon={SvgPlusCircle}
-        aria-label={t("addButton.ariaLabel", { keyTitle, valueTitle })}
+        aria-label={strings.keyValueAddPair(keyTitle, valueTitle)}
         type="button"
       >
         {addButtonLabel}

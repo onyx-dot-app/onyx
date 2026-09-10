@@ -10793,22 +10793,6 @@
         "text": "Aa"
       }
     },
-    "comboBox": {
-      "createOption": {
-        "ariaLabel": "{prefix} \"{value}\"",
-        "defaultPrefix": "Crear"
-      },
-      "dropdown": {
-        "closeAriaLabel": "Cerrar desplegable",
-        "openAriaLabel": "Abrir desplegable"
-      },
-      "options": {
-        "empty": "No se encontraron opciones"
-      },
-      "separator": {
-        "label": "Otras opciones"
-      }
-    },
     "commandMenu": {
       "closeButton": {
         "ariaLabel": "Cerrar menú"
@@ -11165,26 +11149,6 @@
         "tooltip": "Eliminar"
       }
     },
-    "inputImage": {
-      "dropRejected": {
-        "fallback": "Archivo rechazado"
-      },
-      "editButton": {
-        "ariaLabel": "Editar imagen"
-      },
-      "editOverlay": {
-        "label": "Editar"
-      },
-      "image": {
-        "altFallback": "Imagen"
-      },
-      "removeButton": {
-        "ariaLabel": "Quitar imagen"
-      },
-      "uploadButton": {
-        "ariaLabel": "Subir imagen"
-      }
-    },
     "inputSelect": {
       "placeholder": {
         "fallback": "Selecciona una opción"
@@ -11208,40 +11172,6 @@
       },
       "usersFallback": {
         "text": "Usuarios"
-      }
-    },
-    "keyValue": {
-      "addButton": {
-        "ariaLabel": "Añadir par de {keyTitle} y {valueTitle}",
-        "label": "Añadir línea"
-      },
-      "empty": {
-        "title": "Aún no se han añadido elementos."
-      },
-      "error": {
-        "duplicateKey": "Clave duplicada",
-        "duplicateSummary": "{count, plural, one {# clave duplicada encontrada} other {# claves duplicadas encontradas}}",
-        "emptyKey": "La clave no puede estar vacía",
-        "emptySummary": "{count, plural, one {# clave vacía encontrada} other {# claves vacías encontradas}}",
-        "validationSummary": "{count, plural, one {# error de validación encontrado} other {# errores de validación encontrados}}"
-      },
-      "group": {
-        "ariaLabel": "Pares de {keyTitle} y {valueTitle}"
-      },
-      "input": {
-        "ariaLabel": "{label} {index}"
-      },
-      "keyColumn": {
-        "title": "Clave"
-      },
-      "pair": {
-        "fallbackLabel": "clave-valor"
-      },
-      "removeButton": {
-        "ariaLabel": "Eliminar par de {label} {index}"
-      },
-      "valueColumn": {
-        "title": "Valor"
       }
     },
     "logo": {
@@ -12755,6 +12685,14 @@
     }
   },
   "opal": {
+    "comboBox": {
+      "close": "Cerrar desplegable",
+      "create": "Crear",
+      "createOption": "{prefix} \"{value}\"",
+      "noOptions": "No se encontraron opciones",
+      "open": "Abrir desplegable",
+      "otherOptions": "Otras opciones"
+    },
     "common": {
       "clear": "Borrar",
       "clearFilter": "Quitar filtro",
@@ -12799,6 +12737,29 @@
     "inputFile": {
       "attachFile": "Adjuntar archivo",
       "clearFile": "Quitar archivo"
+    },
+    "inputImage": {
+      "alt": "Imagen",
+      "dropRejected": "Archivo rechazado",
+      "edit": "Editar imagen",
+      "remove": "Quitar imagen",
+      "upload": "Subir imagen"
+    },
+    "keyValue": {
+      "addLine": "Añadir línea",
+      "addPair": "Añadir par de {keyTitle} y {valueTitle}",
+      "duplicateKey": "Clave duplicada",
+      "duplicateSummary": "{count, plural, one {# clave duplicada encontrada} other {# claves duplicadas encontradas}}",
+      "empty": "Aún no se han añadido elementos.",
+      "emptyKey": "La clave no puede estar vacía",
+      "emptySummary": "{count, plural, one {# clave vacía encontrada} other {# claves vacías encontradas}}",
+      "group": "Pares de {keyTitle} y {valueTitle}",
+      "input": "{label} {index}",
+      "key": "Clave",
+      "pairFallback": "clave-valor",
+      "removePair": "Eliminar par de {label} {index}",
+      "validationSummary": "{count, plural, one {# error de validación encontrado} other {# errores de validación encontrados}}",
+      "value": "Valor"
     },
     "pagination": {
       "goToPage": "Ir a la página",

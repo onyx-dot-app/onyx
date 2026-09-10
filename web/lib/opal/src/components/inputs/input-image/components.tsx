@@ -1,14 +1,12 @@
 "use client";
 
-import { useTranslations } from "next-intl";
-import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import { SvgPlus, SvgX } from "@opal/icons";
 import { Hoverable } from "@opal/core";
-import IconButton from "@/refresh-components/buttons/IconButton";
-import { Tooltip } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
-import { useImageDropzone } from "@/hooks/useImageDropzone";
+import { Tooltip } from "@opal/components/tooltip/components";
+import { Text } from "@opal/components/text/components";
+import { useOpalStrings } from "@opal/strings";
+import { useImageDropzone } from "@opal/hooks/useImageDropzone";
 
 type ImageState = "empty" | "withImage" | "dragActive";
 type AbledState = "enabled" | "disabled";
@@ -135,7 +133,7 @@ export default function InputImage({
   size = 120,
   className,
 }: InputImageProps) {
-  const t = useTranslations("common.inputImage");
+  const strings = useOpalStrings();
   const isInteractive = !disabled && (onEdit || onDrop);
   const hasImage = !!src;
 
@@ -147,7 +145,7 @@ export default function InputImage({
       onImageRejected: (rejections) => {
         const firstRejection = rejections[0];
         const reason =
-          firstRejection?.errors[0]?.message || t("dropRejected.fallback");
+          firstRejection?.errors[0]?.message || strings.imageDropRejected;
         onDropRejected?.(reason);
       },
       disabled: disabled || !onDrop,
@@ -200,8 +198,8 @@ export default function InputImage({
           aria-label={
             isInteractive
               ? hasImage
-                ? t("editButton.ariaLabel")
-                : t("uploadButton.ariaLabel")
+                ? strings.imageEdit
+                : strings.imageUpload
               : undefined
           }
         >
@@ -209,7 +207,7 @@ export default function InputImage({
           {hasImage ? (
             <img
               src={src}
-              alt={alt ?? t("image.altFallback")}
+              alt={alt ?? strings.image}
               className="absolute inset-0 w-full h-full object-cover pointer-events-none"
             />
           ) : (
@@ -238,18 +236,15 @@ export default function InputImage({
                   )}
                 >
                   <div className="pointer-events-auto">
-                    <Tooltip tooltip={t("editOverlay.label")} side="top">
+                    <Tooltip tooltip={strings.edit} side="top">
                       <div
                         className={cn(
                           "flex items-center justify-center",
                           "px-1 py-0.5 rounded-08"
                         )}
                       >
-                        <Text
-                          className="text-text-03 font-secondary-action"
-                          style={{ fontSize: "12px", lineHeight: "16px" }}
-                        >
-                          {t("editOverlay.label")}
+                        <Text color="text-03" font="secondary-action">
+                          {strings.edit}
                         </Text>
                       </div>
                     </Tooltip>
@@ -264,15 +259,24 @@ export default function InputImage({
         {isInteractive && hasImage && onRemove && (
           <div className="absolute top-1 start-1">
             <Hoverable.Item group="inputImage" variant="appear-on-hover">
-              {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-              <IconButton
-                icon={SvgX}
-                onClick={noProp(onRemove)}
+              {/* raw-ok: a 20px compact square none of the Button size
+                  presets offer — the old IconButton TODO, resolved by owning
+                  the element. */}
+              <button
                 type="button"
-                primary
-                className="w-5! h-5! p-0.5! rounded-04!"
-                aria-label={t("removeButton.ariaLabel")}
-              />
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onRemove();
+                }}
+                aria-label={strings.imageRemove}
+                className={cn(
+                  "flex h-5 w-5 items-center justify-center rounded-04 p-0.5",
+                  "bg-theme-primary-05 hover:bg-theme-primary-04",
+                  "active:bg-theme-primary-06"
+                )}
+              >
+                <SvgX className="h-4 w-4 stroke-text-inverted-05" />
+              </button>
             </Hoverable.Item>
           </div>
         )}

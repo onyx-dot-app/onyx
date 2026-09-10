@@ -64,6 +64,32 @@ export type OpalStrings = {
   selectAnItemToContinue: string;
   singleItemSelected: string;
   selectedItemCount: (count: number) => string;
+  image: string;
+  imageUpload: string;
+  imageEdit: string;
+  imageRemove: string;
+  imageDropRejected: string;
+  comboBoxOpen: string;
+  comboBoxClose: string;
+  comboBoxNoOptions: string;
+  comboBoxOtherOptions: string;
+  comboBoxCreate: string;
+  comboBoxCreateOption: (prefix: string, value: string) => string;
+  keyValueKey: string;
+  keyValueValue: string;
+  keyValueAddLine: string;
+  keyValueAddPair: (keyTitle: string, valueTitle: string) => string;
+  keyValueEmpty: string;
+  keyValueEmptyKey: string;
+  keyValueDuplicateKey: string;
+  keyValueEmptySummary: (count: number) => string;
+  keyValueDuplicateSummary: (count: number) => string;
+  keyValueValidationSummary: (count: number) => string;
+  keyValueGroup: (keyTitle: string, valueTitle: string) => string;
+  keyValueInput: (label: string, index: number) => string;
+  keyValuePairFallback: string;
+  keyValueRemovePair: (label: string, index: number) => string;
+
   /** Locale digits, no grouping, for the counts Opal renders itself (footer range, page numbers). */
   formatNumber: (value: number) => string;
   /** Inverse of formatNumber for typed input: a whole number in the locale digits (ASCII always accepted), else null. */
@@ -134,6 +160,38 @@ export const defaultOpalStrings: OpalStrings = {
   singleItemSelected: "Item selected",
   selectedItemCount: (count) =>
     `${count} item${count !== 1 ? "s" : ""} selected`,
+  image: "Image",
+  imageUpload: "Upload image",
+  imageEdit: "Edit image",
+  imageRemove: "Remove image",
+  imageDropRejected: "File rejected",
+  comboBoxOpen: "Open dropdown",
+  comboBoxClose: "Close dropdown",
+  comboBoxNoOptions: "No options found",
+  comboBoxOtherOptions: "Other options",
+  comboBoxCreate: "Create",
+  comboBoxCreateOption: (prefix, value) => `${prefix} "${value}"`,
+  keyValueKey: "Key",
+  keyValueValue: "Value",
+  keyValueAddLine: "Add Line",
+  keyValueAddPair: (keyTitle, valueTitle) =>
+    `Add ${keyTitle} and ${valueTitle} pair`,
+  keyValueEmpty: "No items added yet.",
+  keyValueEmptyKey: "Key cannot be empty",
+  keyValueDuplicateKey: "Duplicate key",
+  keyValueEmptySummary: (count) =>
+    count === 1 ? "1 empty key found" : `${count} empty keys found`,
+  keyValueDuplicateSummary: (count) =>
+    count === 1 ? "1 duplicate key found" : `${count} duplicate keys found`,
+  keyValueValidationSummary: (count) =>
+    count === 1
+      ? "1 validation error found"
+      : `${count} validation errors found`,
+  keyValueGroup: (keyTitle, valueTitle) =>
+    `${keyTitle} and ${valueTitle} pairs`,
+  keyValueInput: (label, index) => `${label} ${index}`,
+  keyValuePairFallback: "key-value",
+  keyValueRemovePair: (label, index) => `Remove ${label} pair ${index}`,
   formatNumber: (value) => String(value),
   parseNumber: (text) => (/^\d+$/.test(text) ? Number(text) : null),
   showing: (range, total) => ["Showing ", range, " of ", total],

@@ -10793,22 +10793,6 @@
         "text": "文"
       }
     },
-    "comboBox": {
-      "createOption": {
-        "ariaLabel": "{prefix}“{value}”",
-        "defaultPrefix": "创建"
-      },
-      "dropdown": {
-        "closeAriaLabel": "关闭下拉菜单",
-        "openAriaLabel": "打开下拉菜单"
-      },
-      "options": {
-        "empty": "未找到选项"
-      },
-      "separator": {
-        "label": "其他选项"
-      }
-    },
     "commandMenu": {
       "closeButton": {
         "ariaLabel": "关闭菜单"
@@ -11165,26 +11149,6 @@
         "tooltip": "移除"
       }
     },
-    "inputImage": {
-      "dropRejected": {
-        "fallback": "文件被拒绝"
-      },
-      "editButton": {
-        "ariaLabel": "编辑图片"
-      },
-      "editOverlay": {
-        "label": "编辑"
-      },
-      "image": {
-        "altFallback": "图片"
-      },
-      "removeButton": {
-        "ariaLabel": "移除图片"
-      },
-      "uploadButton": {
-        "ariaLabel": "上传图片"
-      }
-    },
     "inputSelect": {
       "placeholder": {
         "fallback": "选择一个选项"
@@ -11208,40 +11172,6 @@
       },
       "usersFallback": {
         "text": "用户"
-      }
-    },
-    "keyValue": {
-      "addButton": {
-        "ariaLabel": "添加{keyTitle}与{valueTitle}对",
-        "label": "添加行"
-      },
-      "empty": {
-        "title": "尚未添加任何条目。"
-      },
-      "error": {
-        "duplicateKey": "键重复",
-        "duplicateSummary": "{count, plural, one {发现 # 个重复的键} other {发现 # 个重复的键}}",
-        "emptyKey": "键不能为空",
-        "emptySummary": "{count, plural, one {发现 # 个空键} other {发现 # 个空键}}",
-        "validationSummary": "{count, plural, one {发现 # 个验证错误} other {发现 # 个验证错误}}"
-      },
-      "group": {
-        "ariaLabel": "{keyTitle}与{valueTitle}对"
-      },
-      "input": {
-        "ariaLabel": "{label} {index}"
-      },
-      "keyColumn": {
-        "title": "键"
-      },
-      "pair": {
-        "fallbackLabel": "键值"
-      },
-      "removeButton": {
-        "ariaLabel": "移除{label}对 {index}"
-      },
-      "valueColumn": {
-        "title": "值"
       }
     },
     "logo": {
@@ -12755,6 +12685,14 @@
     }
   },
   "opal": {
+    "comboBox": {
+      "close": "关闭下拉菜单",
+      "create": "创建",
+      "createOption": "{prefix}“{value}”",
+      "noOptions": "未找到选项",
+      "open": "打开下拉菜单",
+      "otherOptions": "其他选项"
+    },
     "common": {
       "clear": "清除",
       "clearFilter": "清除筛选",
@@ -12799,6 +12737,29 @@
     "inputFile": {
       "attachFile": "附加文件",
       "clearFile": "清除文件"
+    },
+    "inputImage": {
+      "alt": "图片",
+      "dropRejected": "文件被拒绝",
+      "edit": "编辑图片",
+      "remove": "移除图片",
+      "upload": "上传图片"
+    },
+    "keyValue": {
+      "addLine": "添加行",
+      "addPair": "添加{keyTitle}与{valueTitle}对",
+      "duplicateKey": "键重复",
+      "duplicateSummary": "{count, plural, one {发现 # 个重复的键} other {发现 # 个重复的键}}",
+      "empty": "尚未添加任何条目。",
+      "emptyKey": "键不能为空",
+      "emptySummary": "{count, plural, one {发现 # 个空键} other {发现 # 个空键}}",
+      "group": "{keyTitle}与{valueTitle}对",
+      "input": "{label} {index}",
+      "key": "键",
+      "pairFallback": "键值",
+      "removePair": "移除{label}对 {index}",
+      "validationSummary": "{count, plural, one {发现 # 个验证错误} other {发现 # 个验证错误}}",
+      "value": "值"
     },
     "pagination": {
       "goToPage": "跳转到页面",

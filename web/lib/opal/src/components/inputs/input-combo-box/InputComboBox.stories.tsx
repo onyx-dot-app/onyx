@@ -4,7 +4,7 @@ import InputComboBox from "./InputComboBox";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
 const meta: Meta<typeof InputComboBox> = {
-  title: "refresh-components/inputs/InputComboBox",
+  title: "opal/components/InputComboBox",
   component: InputComboBox,
   tags: ["autodocs"],
   decorators: [

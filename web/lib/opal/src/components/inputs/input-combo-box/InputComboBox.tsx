@@ -91,13 +91,12 @@ import {
   shift,
   size,
 } from "@floating-ui/react-dom";
-import { useTranslations } from "next-intl";
-import { noProp } from "@/lib/utils";
-import { cn } from "@opal/utils";
+import { useOpalStrings } from "@opal/strings";
+import { cn, noProp } from "@opal/utils";
 import { InputTypeIn } from "@opal/components";
-import { FieldContext } from "../../form/FieldContext";
+import { FieldContext } from "@opal/form";
 import { Button } from "@opal/components";
-import { FieldMessage } from "../../messages/FieldMessage";
+import { FieldMessage } from "@opal/form";
 
 // Hooks
 import {
@@ -105,7 +104,7 @@ import {
   useComboBoxKeyboard,
   useOptionFiltering,
 } from "./hooks";
-import { useClickOutside } from "@/hooks/useClickOutside";
+import { useClickOutside } from "@opal/hooks/useClickOutside";
 import { useValidation } from "./utils/validation";
 import { buildAriaAttributes } from "./utils/aria";
 
@@ -136,7 +135,7 @@ const InputComboBox = ({
   dropdownMaxHeight,
   ...rest
 }: WithoutStyles<InputComboBoxProps>) => {
-  const t = useTranslations("common.comboBox");
+  const strings = useOpalStrings();
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const fieldContext = useContext(FieldContext);
@@ -413,9 +412,7 @@ const InputComboBox = ({
                   onClick={noProp(toggleDropdown)}
                   icon={isOpen ? SvgChevronUp : SvgChevronDown}
                   aria-label={
-                    isOpen
-                      ? t("dropdown.closeAriaLabel")
-                      : t("dropdown.openAriaLabel")
+                    isOpen ? strings.comboBoxClose : strings.comboBoxOpen
                   }
                   tabIndex={-1}
                   type="button"
@@ -439,7 +436,7 @@ const InputComboBox = ({
           matchedOptions={matchedOptions}
           unmatchedOptions={visibleUnmatchedOptions}
           hasSearchTerm={hasSearchTerm}
-          separatorLabel={separatorLabel ?? t("separator.label")}
+          separatorLabel={separatorLabel ?? strings.comboBoxOtherOptions}
           value={value}
           highlightedIndex={highlightedIndex}
           onSelect={handleOptionSelect}

@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import InputAvatar from "./InputAvatar";
+import InputAvatar from "@opal/components/inputs/input-avatar/components";
 import * as AvatarPrimitive from "@radix-ui/react-avatar";
 
 const meta: Meta<typeof InputAvatar> = {
-  title: "refresh-components/inputs/InputAvatar",
+  title: "opal/components/InputAvatar",
   component: InputAvatar,
   tags: ["autodocs"],
   decorators: [
