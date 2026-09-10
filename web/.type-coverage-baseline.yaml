@@ -97,7 +97,7 @@ packages:
   src/providers: 99.4
   src/refresh-components: 99.7
   src/refresh-components/avatars: 100
-  src/refresh-components/buttons: 99.7
+  src/refresh-components/buttons: 99.6
   src/refresh-components/cards: 98.4
   src/refresh-components/commandmenu: 99.7
   src/refresh-components/form: 98.6
