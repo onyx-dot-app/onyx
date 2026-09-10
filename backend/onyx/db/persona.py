@@ -2148,11 +2148,9 @@ def update_default_assistant_configuration(
             if not should_expose_tool_to_fe(tool):
                 raise ValueError(f"Tool with ID {tool_id} cannot be assigned")
 
-            if not tool.enabled:
-                raise ValueError(
-                    f"Enable tool {tool.display_name or tool.name} before assigning it"
-                )
-
+            # A disabled tool may stay attached: attaching makes a tool available to
+            # the persona, not usable by it (see Persona__Tool). Rejecting one here
+            # would block every toggle, since the caller resends the whole list.
             persona.tools.append(tool)
 
     db_session.commit()
