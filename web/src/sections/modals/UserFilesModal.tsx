@@ -111,7 +111,7 @@ function FileAttachment({
         }
         rightChildren={
           <Hoverable.Item group="user-file-row">
-            <Section flexDirection="row" gap={0}>
+            <Section flexDirection="row" gap={0} padding={1.5}>
               {onView && (
                 <Button
                   icon={SvgExternalLink}
