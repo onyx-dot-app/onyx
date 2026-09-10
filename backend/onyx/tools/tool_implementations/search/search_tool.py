@@ -68,6 +68,7 @@ from onyx.db.connector import (
     check_federated_connectors_exist,
     fetch_unique_document_sources,
 )
+from onyx.db.connector_credential_pair import fetch_searchable_document_sources
 from onyx.db.document_set import filter_document_set_names_by_user_access
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.federated import (
@@ -745,7 +746,13 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
             # Project mode ignores user filters, so source scoping doesn't apply.
             if self.project_id_filter is None:
-                connected_sources = fetch_unique_document_sources(db_session)
+                # An ACL-bypassing search (Slack bot, API) runs on everyone's
+                # behalf, so every connector source is in play.
+                connected_sources = (
+                    fetch_unique_document_sources(db_session)
+                    if self.bypass_acl
+                    else fetch_searchable_document_sources(db_session, self.user)
+                )
 
             # Slack tokens and entity config — only prefetch when Slack
             # search is enabled or we're in a Slack bot context.
@@ -784,10 +791,24 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         )
         user_info = override_kwargs.user_info
 
+        # A restriction naming every searchable source is a client default, not a
+        # filter — the chat UI enables all sources and sends them as a list. It
+        # narrows nothing, so drop it rather than scope and label the search by it.
+        user_selected_filters = self.user_selected_filters
+        if (
+            user_selected_filters
+            and user_selected_filters.source_type
+            and connected_sources
+            and set(connected_sources).issubset(user_selected_filters.source_type)
+        ):
+            user_selected_filters = user_selected_filters.model_copy(
+                update={"source_type": None}
+            )
+
         # A persona/user source restriction is the outer bound the decision works within.
         user_source_restriction: list[DocumentSource] | None = (
-            list(self.user_selected_filters.source_type)
-            if self.user_selected_filters and self.user_selected_filters.source_type
+            list(user_selected_filters.source_type)
+            if user_selected_filters and user_selected_filters.source_type
             else None
         )
         if user_source_restriction is not None:
@@ -883,11 +904,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         )
         scope_note = _build_scope_note(resolved_scope, queries_run)
 
-        effective_filters = self.user_selected_filters
+        effective_filters = user_selected_filters
         if resolved_scope is not None:
-            effective_filters = (
-                self.user_selected_filters or BaseFilters()
-            ).model_copy(update={"source_type": resolved_scope})
+            effective_filters = (user_selected_filters or BaseFilters()).model_copy(
+                update={"source_type": resolved_scope}
+            )
             federated_retrieval_infos = [
                 info
                 for info in federated_retrieval_infos

@@ -60,6 +60,8 @@ import {
   updateCurrentMessageFIFO,
 } from "@/app/app/services/currentMessageFIFO";
 import { buildFilters } from "@/lib/searchFilters/utils";
+import { useAvailableSources } from "@/lib/connectors/hooks";
+import { getConfiguredSources } from "@/lib/sources";
 import { toast } from "@opal/layouts";
 import {
   ReadonlyURLSearchParams,
@@ -149,6 +151,13 @@ export default function useChatController({
   resetInputBar,
 }: UseChatControllerProps) {
   const searchFilters = useSharedSearchFilters();
+  // What the source selection was made from — a selection covering all of it
+  // means "no source filter", not a filter naming every connector.
+  const { availableSources } = useAvailableSources();
+  const configuredSources = useMemo(
+    () => getConfiguredSources(availableSources),
+    [availableSources]
+  );
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1065,6 +1074,7 @@ export default function useChatController({
           chatSessionId: currChatSessionId,
           filters: buildFilters(
             searchFilters.selectedSources,
+            configuredSources,
             searchFilters.selectedDocumentSets,
             searchFilters.timeRange,
             searchFilters.selectedTags
@@ -1484,6 +1494,7 @@ export default function useChatController({
     [
       // Narrow to stable fields from managers to avoid re-creation
       searchFilters.selectedSources,
+      configuredSources,
       searchFilters.selectedDocumentSets,
       searchFilters.selectedTags,
       searchFilters.timeRange,

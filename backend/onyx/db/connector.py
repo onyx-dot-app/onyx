@@ -240,7 +240,7 @@ def fetch_latest_index_attempts_by_status(
     return query.all()
 
 
-_INTERNAL_ONLY_SOURCES = {
+INTERNAL_ONLY_SOURCES = {
     # Used by the ingestion API, not a user-created connector.
     DocumentSource.INGESTION_API,
     # Backs the user library / build feature, not a connector users filter by.
@@ -254,7 +254,7 @@ def fetch_unique_document_sources(db_session: Session) -> list[DocumentSource]:
     sources = [
         source[0]
         for source in distinct_sources
-        if source[0] not in _INTERNAL_ONLY_SOURCES
+        if source[0] not in INTERNAL_ONLY_SOURCES
     ]
 
     return sources

@@ -60,7 +60,8 @@ def _run(
         patch(f"{MODULE}.EmbeddingModel"),
         patch(f"{MODULE}.get_federated_retrieval_functions", return_value=[]),
         patch(
-            f"{MODULE}.fetch_unique_document_sources", return_value=connected_sources
+            f"{MODULE}.fetch_searchable_document_sources",
+            return_value=connected_sources,
         ),
         patch(f"{MODULE}.semantic_query_rephrase", return_value="rephrased query"),
         patch(f"{MODULE}.keyword_query_expansion", return_value=[]),
@@ -149,6 +150,21 @@ def test_no_filter_delta_when_scope_covers_all_sources() -> None:
     connected = [DocumentSource.CONFLUENCE, DocumentSource.GITHUB]
     _run(tool, decision=connected, connected_sources=connected)
     assert _emitted_filter_sources(tool) == []
+
+
+def test_selection_covering_every_source_is_not_a_filter() -> None:
+    """The chat UI enables every source by default and sends them as an explicit
+    list. That narrows nothing, so the search stays unscoped and the UI is told of
+    no filter — it keeps its default 'internal documents' label."""
+    connected = [DocumentSource.CONFLUENCE, DocumentSource.GITHUB]
+    tool = _make_tool(BaseFilters(source_type=list(connected)))
+    mock_search_pipeline = _run(tool, decision=None, connected_sources=connected)
+
+    assert _emitted_filter_sources(tool) == []
+    filters = _filters_passed_to_search(mock_search_pipeline)
+    assert filters, "search_pipeline was never called"
+    for applied in filters:
+        assert applied is None or applied.source_type is None
 
 
 def test_no_decided_scope_leaves_search_unscoped() -> None:
