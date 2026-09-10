@@ -1,4 +1,4 @@
-"""[start, end] filtering of drive items in the SharePoint connector.
+"""[start, end] filtering of drive items in the shared Graph package.
 
 Graph preserves a file's original ``lastModifiedDateTime`` when it is copied or
 synced in, setting only ``createdDateTime`` to the arrival time, so filtering on
@@ -14,13 +14,16 @@ from typing import Any
 
 import pytest
 
-from onyx.connectors.sharepoint.connector import (
-    GRAPH_API_BASE,
+from onyx.connectors.microsoft_utils.drive_items import (
     DriveItemData,
-    SharepointConnector,
-    _parse_sharepoint_datetime,
+    fetch_one_delta_page,
+    iter_delta_pages,
+    iter_drive_items_paged,
+    parse_graph_datetime,
 )
+from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
 
+GRAPH_API_BASE = "https://graph.microsoft.com/v1.0"
 DRIVE_ID = "fake-drive-id"
 
 # The incremental window: "everything that changed since the last run".
@@ -76,41 +79,42 @@ ALL_ITEMS = [
 ]
 
 Window = tuple[datetime | None, datetime | None]
-Collector = Callable[[SharepointConnector, Window], list[str]]
+Collector = Callable[[GraphApiClient, Window], list[str]]
 
 
-def _connector(
-    monkeypatch: pytest.MonkeyPatch, payload: dict[str, Any]
-) -> SharepointConnector:
-    """A connector whose Graph calls always return ``payload``."""
-    connector = SharepointConnector()
+class _FakeGraphClient(GraphApiClient):
+    """A Graph client whose every call returns a canned payload."""
 
-    def fake_get_json(
-        self: SharepointConnector,  # noqa: ARG001
-        url: str,  # noqa: ARG001
-        params: dict[str, str] | None = None,  # noqa: ARG001
+    def __init__(self, get_json: Callable[..., dict[str, Any]]) -> None:
+        super().__init__(lambda: "fake-token", GRAPH_API_BASE)
+        self._fake_get_json = get_json
+
+    def get_json(
+        self, url: str, params: dict[str, str] | None = None
     ) -> dict[str, Any]:
-        return payload
-
-    monkeypatch.setattr(SharepointConnector, "_graph_api_get_json", fake_get_json)
-    return connector
+        return self._fake_get_json(url, params)
 
 
-def _paged_ids(connector: SharepointConnector, window: Window) -> list[str]:
+def _client(payload: dict[str, Any]) -> GraphApiClient:
+    return _FakeGraphClient(lambda _url, _params=None: payload)
+
+
+def _paged_ids(client: GraphApiClient, window: Window) -> list[str]:
     start, end = window
     return [
         item.id
-        for item in connector._iter_drive_items_paged(
-            drive_id=DRIVE_ID, start=start, end=end
+        for item in iter_drive_items_paged(
+            client, drive_id=DRIVE_ID, start=start, end=end
         )
     ]
 
 
-def _delta_pages_ids(connector: SharepointConnector, window: Window) -> list[str]:
+def _delta_pages_ids(client: GraphApiClient, window: Window) -> list[str]:
     start, end = window
     return [
         item.id
-        for item in connector._iter_delta_pages(
+        for item in iter_delta_pages(
+            client,
             initial_url=f"{GRAPH_API_BASE}/drives/{DRIVE_ID}/root/delta",
             drive_id=DRIVE_ID,
             start=start,
@@ -121,9 +125,10 @@ def _delta_pages_ids(connector: SharepointConnector, window: Window) -> list[str
     ]
 
 
-def _one_delta_page_ids(connector: SharepointConnector, window: Window) -> list[str]:
+def _one_delta_page_ids(client: GraphApiClient, window: Window) -> list[str]:
     start, end = window
-    items, _ = connector._fetch_one_delta_page(
+    items, _ = fetch_one_delta_page(
+        client,
         page_url=f"{GRAPH_API_BASE}/drives/{DRIVE_ID}/root/delta",
         drive_id=DRIVE_ID,
         start=start,
@@ -174,40 +179,37 @@ WINDOW_CASES = [
 @pytest.mark.parametrize("collect_ids", ITEM_SOURCES)
 @pytest.mark.parametrize("window,expected_ids", WINDOW_CASES)
 def test_window_filter_matches_contract(
-    monkeypatch: pytest.MonkeyPatch,
     collect_ids: Collector,
     window: Window,
     expected_ids: list[str],
 ) -> None:
     """Bounds are inclusive, either bound may be absent, items with no timestamp
     stay, and the later of the two timestamps places an item."""
-    connector = _connector(monkeypatch, {"value": ALL_ITEMS})
+    client = _client({"value": ALL_ITEMS})
 
-    assert collect_ids(connector, window) == expected_ids
+    assert collect_ids(client, window) == expected_ids
 
 
 @pytest.mark.parametrize("collect_ids", ITEM_SOURCES)
 def test_file_synced_in_during_window_is_returned(
-    monkeypatch: pytest.MonkeyPatch,
     collect_ids: Collector,
 ) -> None:
     """A file added during the window counts as new even when its
     lastModifiedDateTime was back-dated by the sync client."""
-    connector = _connector(monkeypatch, {"value": [SYNCED_IN_ITEM]})
+    client = _client({"value": [SYNCED_IN_ITEM]})
 
-    assert collect_ids(connector, (START, END)) == ["synced-in"]
+    assert collect_ids(client, (START, END)) == ["synced-in"]
 
 
 @pytest.mark.parametrize("collect_ids", ITEM_SOURCES)
 def test_file_modified_after_window_waits_for_the_next_window(
-    monkeypatch: pytest.MonkeyPatch,
     collect_ids: Collector,
 ) -> None:
     """Only the latest change places an item, so a file created in this window
     but modified after it belongs to the next poll window."""
-    connector = _connector(monkeypatch, {"value": [STRADDLING_ITEM]})
+    client = _client({"value": [STRADDLING_ITEM]})
 
-    assert collect_ids(connector, (START, END)) == []
+    assert collect_ids(client, (START, END)) == []
 
 
 def test_created_datetime_is_parsed_onto_drive_item_data() -> None:
@@ -224,10 +226,10 @@ def test_parse_sharepoint_datetime_returns_aware_utc() -> None:
     """The window bounds are aware UTC, so parsed values must be too."""
     expected = datetime(2026, 3, 1, 10, 0, tzinfo=timezone.utc)
 
-    assert _parse_sharepoint_datetime("2026-03-01T10:00:00Z") == expected
-    assert _parse_sharepoint_datetime("2026-03-01T10:00:00") == expected
-    assert _parse_sharepoint_datetime("2026-03-01T12:00:00+02:00") == expected
-    assert _parse_sharepoint_datetime(datetime(2026, 3, 1, 10, 0)) == expected
-    assert _parse_sharepoint_datetime(None) is None
+    assert parse_graph_datetime("2026-03-01T10:00:00Z") == expected
+    assert parse_graph_datetime("2026-03-01T10:00:00") == expected
+    assert parse_graph_datetime("2026-03-01T12:00:00+02:00") == expected
+    assert parse_graph_datetime(datetime(2026, 3, 1, 10, 0)) == expected
+    assert parse_graph_datetime(None) is None
     with pytest.raises(TypeError):
-        _parse_sharepoint_datetime(1772359200)  # ty: ignore[invalid-argument-type]
+        parse_graph_datetime(1772359200)  # ty: ignore[invalid-argument-type]

@@ -2,17 +2,17 @@ from __future__ import annotations
 
 from collections import deque
 from collections.abc import Generator, Sequence
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 
 import pytest
 
+from onyx.connectors.microsoft_utils.drive_items import DriveItemData
+from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
 from onyx.connectors.models import Document, DocumentSource, TextSection
+from onyx.connectors.sharepoint import connector as sp_connector
 from onyx.connectors.sharepoint.connector import (
-    DRIVE_ITEM_DOWNLOAD_URL_SELECT,
-    DRIVE_ITEM_SELECT_FIELDS,
     SHARED_DOCUMENTS_MAP,
-    DriveItemData,
     SharepointConnector,
     SharepointConnectorCheckpoint,
     SiteDescriptor,
@@ -77,7 +77,7 @@ def _build_connector(drives: Sequence[_FakeDrive]) -> SharepointConnector:
 
 
 def _fake_iter_drive_items_paged(
-    self: SharepointConnector,  # noqa: ARG001
+    client: GraphApiClient,  # noqa: ARG001
     drive_id: str,  # noqa: ARG001
     folder_path: str | None = None,  # noqa: ARG001
     start: datetime | None = None,  # noqa: ARG001
@@ -88,7 +88,7 @@ def _fake_iter_drive_items_paged(
 
 
 def _fake_iter_drive_items_delta(
-    self: SharepointConnector,  # noqa: ARG001
+    client: GraphApiClient,  # noqa: ARG001
     drive_id: str,  # noqa: ARG001
     start: datetime | None = None,  # noqa: ARG001
     end: datetime | None = None,  # noqa: ARG001
@@ -118,8 +118,8 @@ def test_fetch_driveitems_matches_international_drive_names(
     )
 
     monkeypatch.setattr(
-        SharepointConnector,
-        "_iter_drive_items_delta",
+        sp_connector,
+        "iter_drive_items_delta",
         _fake_iter_drive_items_delta,
     )
 
@@ -153,8 +153,8 @@ def test_get_drive_items_for_drive_id_matches_map(
     )
 
     monkeypatch.setattr(
-        SharepointConnector,
-        "_iter_drive_items_delta",
+        sp_connector,
+        "iter_drive_items_delta",
         _fake_iter_drive_items_delta,
     )
 
@@ -194,7 +194,7 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
         )
 
     def fake_fetch_one_delta_page(
-        self: SharepointConnector,  # noqa: ARG001
+        client: Any,  # noqa: ARG001
         page_url: str,  # noqa: ARG001
         drive_id: str,  # noqa: ARG001
         start: datetime | None = None,  # noqa: ARG001
@@ -234,8 +234,8 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
         fake_resolve_drive,
     )
     monkeypatch.setattr(
-        SharepointConnector,
-        "_fetch_one_delta_page",
+        sp_connector,
+        "fetch_one_delta_page",
         fake_fetch_one_delta_page,
     )
     monkeypatch.setattr(
@@ -358,7 +358,7 @@ def test_get_drive_items_uses_delta_when_no_folder_path(
     called_method: list[str] = []
 
     def fake_delta(
-        self: SharepointConnector,  # noqa: ARG001
+        client: GraphApiClient,  # noqa: ARG001
         drive_id: str,  # noqa: ARG001
         start: datetime | None = None,  # noqa: ARG001
         end: datetime | None = None,  # noqa: ARG001
@@ -368,7 +368,7 @@ def test_get_drive_items_uses_delta_when_no_folder_path(
         yield _SAMPLE_ITEM
 
     def fake_paged(
-        self: SharepointConnector,  # noqa: ARG001
+        client: GraphApiClient,  # noqa: ARG001
         drive_id: str,  # noqa: ARG001
         folder_path: str | None = None,  # noqa: ARG001
         start: datetime | None = None,  # noqa: ARG001
@@ -378,8 +378,8 @@ def test_get_drive_items_uses_delta_when_no_folder_path(
         called_method.append("paged")
         yield _SAMPLE_ITEM
 
-    monkeypatch.setattr(SharepointConnector, "_iter_drive_items_delta", fake_delta)
-    monkeypatch.setattr(SharepointConnector, "_iter_drive_items_paged", fake_paged)
+    monkeypatch.setattr(sp_connector, "iter_drive_items_delta", fake_delta)
+    monkeypatch.setattr(sp_connector, "iter_drive_items_paged", fake_paged)
 
     items = connector._get_drive_items_for_drive_id(site, "fake-drive-id")
     list(items)
@@ -401,7 +401,7 @@ def test_get_drive_items_uses_paged_when_folder_path_set(
     called_method: list[str] = []
 
     def fake_delta(
-        self: SharepointConnector,  # noqa: ARG001
+        client: GraphApiClient,  # noqa: ARG001
         drive_id: str,  # noqa: ARG001
         start: datetime | None = None,  # noqa: ARG001
         end: datetime | None = None,  # noqa: ARG001
@@ -411,7 +411,7 @@ def test_get_drive_items_uses_paged_when_folder_path_set(
         yield _SAMPLE_ITEM
 
     def fake_paged(
-        self: SharepointConnector,  # noqa: ARG001
+        client: GraphApiClient,  # noqa: ARG001
         drive_id: str,  # noqa: ARG001
         folder_path: str | None = None,  # noqa: ARG001
         start: datetime | None = None,  # noqa: ARG001
@@ -421,172 +421,10 @@ def test_get_drive_items_uses_paged_when_folder_path_set(
         called_method.append("paged")
         yield _SAMPLE_ITEM
 
-    monkeypatch.setattr(SharepointConnector, "_iter_drive_items_delta", fake_delta)
-    monkeypatch.setattr(SharepointConnector, "_iter_drive_items_paged", fake_paged)
+    monkeypatch.setattr(sp_connector, "iter_drive_items_delta", fake_delta)
+    monkeypatch.setattr(sp_connector, "iter_drive_items_paged", fake_paged)
 
     items = connector._get_drive_items_for_drive_id(site, "fake-drive-id")
     list(items)
 
     assert called_method == ["paged"]
-
-
-def test_iter_drive_items_delta_uses_timestamp_token(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Delta iteration should pass the start time as a URL token for incremental sync."""
-    connector = SharepointConnector()
-
-    captured_urls: list[str] = []
-    captured_params: list[dict[str, str] | None] = []
-
-    def fake_graph_api_get_json(
-        self: SharepointConnector,  # noqa: ARG001
-        url: str,
-        params: dict[str, str] | None = None,
-    ) -> dict[str, Any]:
-        captured_urls.append(url)
-        captured_params.append(params)
-        return {
-            "value": [
-                {
-                    "id": "file-1",
-                    "name": "report.docx",
-                    "webUrl": "https://example.sharepoint.com/report.docx",
-                    "file": {
-                        "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    },
-                    "lastModifiedDateTime": "2025-06-15T12:00:00Z",
-                    "parentReference": {"path": "/drives/d1/root:", "driveId": "d1"},
-                }
-            ],
-            "@odata.deltaLink": "https://graph.microsoft.com/v1.0/drives/d1/root/delta?token=final",
-        }
-
-    monkeypatch.setattr(
-        SharepointConnector, "_graph_api_get_json", fake_graph_api_get_json
-    )
-
-    start = datetime(2025, 6, 1, 0, 0, 0, tzinfo=timezone.utc)
-    items = list(connector._iter_drive_items_delta("d1", start=start))
-
-    assert len(items) == 1
-    assert items[0].id == "file-1"
-    assert len(captured_urls) == 1
-    assert "token=2025-06-01T00%3A00%3A00%2B00%3A00" in captured_urls[0]
-    assert captured_params == [{"$top": "200", "$select": DRIVE_ITEM_SELECT_FIELDS}]
-    assert DRIVE_ITEM_DOWNLOAD_URL_SELECT in DRIVE_ITEM_SELECT_FIELDS.split(",")
-
-
-def test_iter_drive_items_delta_full_crawl_when_no_start(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Delta iteration without a start time should do a full enumeration (no token)."""
-    connector = SharepointConnector()
-
-    captured_urls: list[str] = []
-
-    def fake_graph_api_get_json(
-        self: SharepointConnector,  # noqa: ARG001
-        url: str,
-        params: dict[str, str] | None = None,  # noqa: ARG001
-    ) -> dict[str, Any]:
-        captured_urls.append(url)
-        return {
-            "value": [],
-            "@odata.deltaLink": "https://graph.microsoft.com/v1.0/drives/d1/root/delta?token=final",
-        }
-
-    monkeypatch.setattr(
-        SharepointConnector, "_graph_api_get_json", fake_graph_api_get_json
-    )
-
-    list(connector._iter_drive_items_delta("d1"))
-
-    assert len(captured_urls) == 1
-    assert "token=" not in captured_urls[0]
-    assert captured_urls[0].endswith("/drives/d1/root/delta")
-
-
-def test_iter_drive_items_delta_skips_folders_and_deleted(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Delta results with folder or deleted facets should be skipped."""
-    connector = SharepointConnector()
-
-    def fake_graph_api_get_json(
-        self: SharepointConnector,  # noqa: ARG001
-        url: str,  # noqa: ARG001
-        params: dict[str, str] | None = None,  # noqa: ARG001
-    ) -> dict[str, Any]:
-        return {
-            "value": [
-                {"id": "folder-1", "name": "Docs", "folder": {"childCount": 5}},
-                {"id": "deleted-1", "name": "old.txt", "deleted": {"state": "deleted"}},
-                {
-                    "id": "file-1",
-                    "name": "keep.pdf",
-                    "webUrl": "https://example.sharepoint.com/keep.pdf",
-                    "file": {"mimeType": "application/pdf"},
-                    "lastModifiedDateTime": "2025-06-15T12:00:00Z",
-                    "parentReference": {"path": "/drives/d1/root:", "driveId": "d1"},
-                },
-            ],
-            "@odata.deltaLink": "https://graph.microsoft.com/v1.0/drives/d1/root/delta?token=final",
-        }
-
-    monkeypatch.setattr(
-        SharepointConnector, "_graph_api_get_json", fake_graph_api_get_json
-    )
-
-    items = list(connector._iter_drive_items_delta("d1"))
-    assert len(items) == 1
-    assert items[0].id == "file-1"
-
-
-def test_iter_drive_items_delta_handles_410_gone(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """On 410 Gone, delta should fall back to full enumeration."""
-    import requests as req
-
-    connector = SharepointConnector()
-
-    call_count = 0
-
-    def fake_graph_api_get_json(
-        self: SharepointConnector,  # noqa: ARG001
-        url: str,
-        params: dict[str, str] | None = None,  # noqa: ARG001
-    ) -> dict[str, Any]:
-        nonlocal call_count
-        call_count += 1
-
-        if call_count == 1 and "token=" in url:
-            response = req.Response()
-            response.status_code = 410
-            raise req.HTTPError(response=response)
-
-        return {
-            "value": [
-                {
-                    "id": "file-1",
-                    "name": "doc.pdf",
-                    "webUrl": "https://example.sharepoint.com/doc.pdf",
-                    "file": {"mimeType": "application/pdf"},
-                    "lastModifiedDateTime": "2025-06-15T12:00:00Z",
-                    "parentReference": {"path": "/drives/d1/root:", "driveId": "d1"},
-                }
-            ],
-            "@odata.deltaLink": "https://graph.microsoft.com/v1.0/drives/d1/root/delta?token=final",
-        }
-
-    monkeypatch.setattr(
-        SharepointConnector, "_graph_api_get_json", fake_graph_api_get_json
-    )
-
-    start = datetime(2025, 6, 1, 0, 0, 0, tzinfo=timezone.utc)
-    items = list(connector._iter_drive_items_delta("d1", start=start))
-
-    assert len(items) == 1
-    assert items[0].id == "file-1"
-    assert call_count == 2
