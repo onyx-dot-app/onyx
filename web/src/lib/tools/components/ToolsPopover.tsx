@@ -22,9 +22,12 @@ import {
 import { MinimalAgent } from "@/lib/agents/types";
 import { useUser } from "@/providers/UserProvider";
 import { hasPermission } from "@/lib/permissions";
-import { useSourcePreferences } from "@/lib/searchFilters/hooks";
+import {
+  useAgentAvailableSources,
+  useSourcePreferences,
+} from "@/lib/searchFilters/hooks";
 import MCPApiKeyModal from "@/components/chat/MCPApiKeyModal";
-import { Permission, ValidSources } from "@/lib/types";
+import { Permission } from "@/lib/types";
 import { getAdminConfigureInfo, getToolTooltip } from "@/lib/tools/utils";
 import { getConfiguredSources } from "@/lib/sources";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
@@ -32,7 +35,6 @@ import { SourceMetadata } from "@/lib/search/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";
 import { useAvailableTools } from "@/lib/tools/hooks";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
-import { useAvailableSources } from "@/lib/connectors/hooks";
 import useCCPairs from "@/hooks/useCCPairs";
 import { useLLMProviders } from "@/lib/languageModels/hooks";
 import { useSettings } from "@/lib/settings/hooks";
@@ -41,7 +43,6 @@ import LineItem from "@/refresh-components/buttons/LineItem";
 import ActionLineItem from "@/lib/tools/components/ActionLineItem";
 import MCPLineItem, { MCPServer } from "@/lib/tools/components/MCPLineItem";
 import { useProjectsContext } from "@/lib/projects/providers";
-import { isAssistant } from "@/lib/agents/utils";
 import {
   getMCPUserOAuthNavigationUrl,
   saveMCPUserCredentials,
@@ -108,7 +109,6 @@ export default function ToolsPopover({
     }),
     [t]
   );
-  const { availableSources } = useAvailableSources();
   const [open, setOpen] = useState(false);
   const [secondaryView, setSecondaryView] = useState<SecondaryViewState | null>(
     null
@@ -125,36 +125,11 @@ export default function ToolsPopover({
   // Use the OAuth hook
   const { getToolAuthStatus, authenticateTool } = useToolOAuthStatus(agent.id);
 
-  const agentIsAssistant = isAssistant(agent);
-
-  const hasSearchTool = agent.tools.some(
-    (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
-  );
-
-  // knowledge_sources from the backend is the complete set of source types this agent
-  // can search over (doc sets, federated, hierarchy nodes, attached docs, user files).
-  // Default agent is special-cased to show everything available.
-  const agentAccessibleSources = useMemo(() => {
-    if (agentIsAssistant) {
-      return null; // null means "all accessible"
-    }
-
-    const sources = agent.knowledge_sources ?? [];
-    if (sources.length === 0 && hasSearchTool) {
-      return null;
-    }
-
-    return new Set<string>(sources);
-  }, [agentIsAssistant, agent.knowledge_sources, hasSearchTool]);
-
-  // Scope availableSources to only what this agent can access. This ensures
-  // that (a) agent-only sources like user_file appear in the toggle list and
-  // (b) stale sources from localStorage (e.g. Web on an agent with only Notion)
-  // don't leak into selectedSources / the YQL query.
-  const effectiveAvailableSources = useMemo(() => {
-    if (agentAccessibleSources === null) return availableSources;
-    return Array.from(agentAccessibleSources) as ValidSources[];
-  }, [agentAccessibleSources, availableSources]);
+  // Scoped to what this agent can reach, so that (a) agent-only sources like
+  // user_file appear in the toggle list and (b) stale sources from localStorage
+  // (e.g. Web on an agent with only Notion) don't leak into selectedSources /
+  // the YQL query. The send path measures the selection against the same set.
+  const effectiveAvailableSources = useAgentAvailableSources(agent);
 
   const {
     sourcesInitialized,

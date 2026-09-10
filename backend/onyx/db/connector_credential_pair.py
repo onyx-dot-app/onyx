@@ -27,6 +27,7 @@ from onyx.db.enums import (
     ProcessingMode,
     SwitchoverType,
 )
+from onyx.db.federated import fetch_all_federated_connectors
 from onyx.db.models import (
     Connector,
     ConnectorCredentialPair,
@@ -305,28 +306,38 @@ def get_connector_credential_pairs_for_user(
 def fetch_searchable_document_sources(
     db_session: Session, user: User | None
 ) -> list[DocumentSource]:
-    """The source types *user* can search.
+    """The source types *user* can search: indexed pairs plus federated ones.
 
-    Built the same way as the `/manage/connector-status` list the source picker
-    in the UI is drawn from, so "every source" means the same set on both sides.
+    Built from the same two lists the source picker in the UI is drawn from
+    (`/manage/connector-status` and `/federated`), so "every source" means the
+    same set on both sides — a selection covering it is a default, not a filter.
+    Leaving federated sources out would read a selection that omits one as
+    complete, and drop a restriction the user meant.
+
     Without a user (auth disabled, bot contexts) every connector source counts.
     """
     if user is None:
-        return fetch_unique_document_sources(db_session)
+        indexed_sources = fetch_unique_document_sources(db_session)
+    else:
+        cc_pairs = get_connector_credential_pairs_for_user(
+            db_session=db_session,
+            user=user,
+            get_editable=False,
+            eager_load_connector=True,
+            defer_connector_config=True,
+        )
+        indexed_sources = [
+            cc_pair.connector.source
+            for cc_pair in cc_pairs
+            if cc_pair.connector.source not in INTERNAL_ONLY_SOURCES
+        ]
 
-    cc_pairs = get_connector_credential_pairs_for_user(
-        db_session=db_session,
-        user=user,
-        get_editable=False,
-        eager_load_connector=True,
-        defer_connector_config=True,
-    )
-    sources = [
-        cc_pair.connector.source
-        for cc_pair in cc_pairs
-        if cc_pair.connector.source not in INTERNAL_ONLY_SOURCES
+    federated_sources = [
+        source
+        for connector in fetch_all_federated_connectors(db_session)
+        if (source := connector.source.to_non_federated_source()) is not None
     ]
-    return list(dict.fromkeys(sources))
+    return list(dict.fromkeys([*indexed_sources, *federated_sources]))
 
 
 # For use with our thread-level parallelism utils. Note that any relationships

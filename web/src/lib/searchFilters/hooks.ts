@@ -8,6 +8,10 @@ import type { Tag, ValidSources } from "@/lib/types";
 import type { SourceMetadata } from "@/lib/search/interfaces";
 import type { DateRangePickerValue } from "@/refresh-components/DateRangePicker";
 import { getConfiguredSources } from "@/lib/sources";
+import { useAvailableSources } from "@/lib/connectors/hooks";
+import { isAssistant } from "@/lib/agents/utils";
+import type { MinimalAgent } from "@/lib/agents/types";
+import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
 import type { SearchFilters } from "@/lib/searchFilters/types";
 
 export function useSearchFilters(): SearchFilters {
@@ -48,6 +52,39 @@ export function useSearchFilters(): SearchFilters {
       selectedTags,
     ]
   );
+}
+
+/**
+ * The sources a search on `agent` can reach: what the picker offers, and what a
+ * selection is measured against to decide whether it filters anything.
+ *
+ * The default agent reaches everything the workspace has connected. Any other
+ * agent is bounded by its knowledge sources, which can name agent-only sources
+ * (user files) that no connector provides and omit connected ones. An agent
+ * with a search tool and no declared knowledge reaches everything.
+ *
+ * Both the picker and the send path read this, so a source the user turned off
+ * cannot look like part of an "everything is selected" default.
+ */
+export function useAgentAvailableSources(
+  agent: MinimalAgent | undefined
+): ValidSources[] {
+  const { availableSources } = useAvailableSources();
+  const agentIsAssistant = isAssistant(agent);
+  const knowledgeSources = agent?.knowledge_sources;
+  const tools = agent?.tools;
+
+  return useMemo(() => {
+    if (agentIsAssistant) return availableSources;
+
+    const sources = knowledgeSources ?? [];
+    const hasSearchTool = (tools ?? []).some(
+      (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
+    );
+    if (sources.length === 0 && hasSearchTool) return availableSources;
+
+    return Array.from(new Set(sources));
+  }, [agentIsAssistant, availableSources, knowledgeSources, tools]);
 }
 
 interface UseSourcePreferencesProps {

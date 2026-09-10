@@ -60,7 +60,7 @@ import {
   updateCurrentMessageFIFO,
 } from "@/app/app/services/currentMessageFIFO";
 import { buildFilters } from "@/lib/searchFilters/utils";
-import { useAvailableSources } from "@/lib/connectors/hooks";
+import { useAgentAvailableSources } from "@/lib/searchFilters/hooks";
 import { getConfiguredSources } from "@/lib/sources";
 import { toast } from "@opal/layouts";
 import {
@@ -152,11 +152,13 @@ export default function useChatController({
 }: UseChatControllerProps) {
   const searchFilters = useSharedSearchFilters();
   // What the source selection was made from — a selection covering all of it
-  // means "no source filter", not a filter naming every connector.
-  const { availableSources } = useAvailableSources();
+  // means "no source filter", not a filter naming every source. Scoped to the
+  // agent like the picker is, so a source the user turned off is never read as
+  // part of an "everything is selected" default.
+  const agentAvailableSources = useAgentAvailableSources(activeAgent);
   const configuredSources = useMemo(
-    () => getConfiguredSources(availableSources),
-    [availableSources]
+    () => getConfiguredSources(agentAvailableSources),
+    [agentAvailableSources]
   );
   const pathname = usePathname();
   const router = useRouter();

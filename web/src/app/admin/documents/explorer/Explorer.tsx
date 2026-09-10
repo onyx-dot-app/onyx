@@ -179,6 +179,7 @@ export function Explorer({
     setTimeoutId(newTimeoutId);
   }, [
     query,
+    configuredSources,
     filterManager.selectedDocumentSets,
     filterManager.selectedSources,
     filterManager.timeRange,
