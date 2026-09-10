@@ -1,8 +1,8 @@
 """Search tools for MCP server - document and web search."""
 
-import difflib
 import time
 from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
@@ -15,7 +15,6 @@ from onyx.configs.constants import DocumentSource
 from onyx.mcp_server.api import mcp_server
 from onyx.mcp_server.utils import (
     AgentEntry,
-    DocumentSetEntry,
     get_accessible_agents,
     get_accessible_document_sets,
     get_http_client,
@@ -104,11 +103,8 @@ def _error_payload(error: str) -> dict[str, Any]:
 
 _TIME_CUTOFF_ADAPTER: TypeAdapter[datetime | None] = TypeAdapter(datetime | None)
 
-# A full inventory duplicates the matching resource and costs tokens on every
-# failed call, so prefer near misses and only list everything when the
-# inventory is small enough to be cheap.
-_MAX_SUGGESTIONS = 5
-_SUGGESTION_CUTOFF = 0.6
+# Listing the whole inventory duplicates the matching resource and costs tokens
+# on every failed call, so only name the alternatives while that is cheap.
 _MAX_NAMES_IN_ERROR = 10
 
 
@@ -124,22 +120,14 @@ def _match_agents(agent: str, agents: list[AgentEntry]) -> list[AgentEntry]:
 def _unknown_value_error(
     kind: str, supplied: str, available: Iterable[str], discover: str
 ) -> str:
-    """Explain an unusable filter value without dumping the whole inventory.
+    """Explain an unusable filter value, naming the alternatives while cheap.
 
-    Near misses cover the common cause — a human-supplied name that is stale or
-    colloquial. When nothing is close the value has most likely been renamed or
-    removed, so say that instead. Either way the call fails rather than dropping
-    the filter, because a silently widened search reads as if it were scoped.
+    The call fails rather than dropping the filter, because a silently widened
+    search is indistinguishable from a correctly scoped one.
     """
     names = sorted(available)
     if not names:
         return f"{kind} '{supplied}' not found. None are accessible to this user."
-
-    suggestions = difflib.get_close_matches(
-        supplied, names, n=_MAX_SUGGESTIONS, cutoff=_SUGGESTION_CUTOFF
-    )
-    if suggestions:
-        return f"{kind} '{supplied}' not found. Did you mean: {', '.join(suggestions)}?"
 
     if len(names) <= _MAX_NAMES_IN_ERROR:
         return f"{kind} '{supplied}' not found. Available: {', '.join(names)}."
@@ -151,7 +139,18 @@ def _unknown_value_error(
 
 
 class _FilterError(Exception):
-    """An unusable filter value. The message is returned to the caller."""
+    """A filter value the caller supplied that cannot be honoured.
+
+    Carries a caller-facing message that goes back verbatim. Anything else —
+    a failed lookup, an unexpected error — falls through to the tool's generic
+    handler instead, which is what makes this type worth distinguishing.
+    """
+
+
+@dataclass
+class _ResolvedFilters:
+    persona_id: int | None
+    source_types: list[DocumentSource] | None
 
 
 class _NoIndexedSources(Exception):
@@ -160,12 +159,7 @@ class _NoIndexedSources(Exception):
 
 async def _resolve_agent(agent: str, access_token: AccessToken) -> int:
     """Resolve an agent name to its persona id."""
-    try:
-        accessible_agents = await get_accessible_agents(access_token)
-    except Exception as err:
-        logger.error("Onyx MCP Server: Error fetching agents: %s", err, exc_info=True)
-        raise _FilterError(f"Failed to look up agents: {str(err)}") from err
-
+    accessible_agents = await get_accessible_agents(access_token)
     matches = _match_agents(agent, accessible_agents)
     if not matches:
         raise _FilterError(
@@ -184,67 +178,41 @@ async def _resolve_agent(agent: str, access_token: AccessToken) -> int:
     return matches[0].id
 
 
-async def _load_indexed_sources(access_token: AccessToken) -> list[str]:
-    """The tenant's filterable sources.
-
-    Reachable by anything that can reach /search: both reads require
-    READ_SEARCH, so a caller authorized to search is authorized to list what
-    it may filter by.
-    """
-    try:
-        return await get_indexed_sources(access_token)
-    except Exception as err:
-        logger.error(
-            "Onyx MCP Server: Error checking indexed sources: %s", err, exc_info=True
-        )
-        raise _FilterError(f"Failed to check indexed sources: {str(err)}") from err
-
-
 def _resolve_source_types(
     source_types: list[str], available: set[str]
 ) -> list[DocumentSource]:
     """Convert supplied source names, rejecting any this tenant cannot filter on."""
-    resolved: list[DocumentSource] = []
-    for source_str in source_types:
-        canonical = source_str.lower()
-        if canonical not in available:
-            raise _FilterError(
-                _unknown_value_error(
-                    "Source type",
-                    source_str,
-                    available,
-                    "Read the `indexed_sources` resource for the current list.",
-                )
+    canonical = [source.lower() for source in source_types]
+    unknown = sorted(set(canonical) - available)
+    if unknown:
+        raise _FilterError(
+            _unknown_value_error(
+                "Source type",
+                unknown[0],
+                available,
+                "Read the `indexed_sources` resource for the current list.",
             )
-        # Membership in the inventory guarantees this parses.
-        resolved.append(DocumentSource(canonical))
-    return resolved
+        )
+    # Membership in the inventory guarantees these parse.
+    return [DocumentSource(source) for source in canonical]
 
 
 async def _validate_document_sets(
     document_set_names: list[str], access_token: AccessToken
 ) -> None:
     """Reject names the user cannot filter on, so the scope is never silently wider."""
-    accessible_sets: list[DocumentSetEntry]
-    try:
-        accessible_sets = await get_accessible_document_sets(access_token)
-    except Exception as err:
-        logger.error(
-            "Onyx MCP Server: Error fetching document sets: %s", err, exc_info=True
-        )
-        raise _FilterError(f"Failed to look up document sets: {str(err)}") from err
-
-    available_set_names: set[str] = {entry.name for entry in accessible_sets}
-    for set_name in document_set_names:
-        if set_name not in available_set_names:
-            raise _FilterError(
-                _unknown_value_error(
-                    "Document set",
-                    set_name,
-                    available_set_names,
-                    "Read the `document_sets` resource for the current list.",
-                )
+    accessible_sets = await get_accessible_document_sets(access_token)
+    available: set[str] = {entry.name for entry in accessible_sets}
+    unknown = sorted(set(document_set_names) - available)
+    if unknown:
+        raise _FilterError(
+            _unknown_value_error(
+                "Document set",
+                unknown[0],
+                available,
+                "Read the `document_sets` resource for the current list.",
             )
+        )
 
 
 async def _resolve_filters(
@@ -252,7 +220,7 @@ async def _resolve_filters(
     source_types: list[str] | None,
     document_set_names: list[str] | None,
     agent: str | None,
-) -> tuple[int | None, list[DocumentSource] | None]:
+) -> _ResolvedFilters:
     """Resolve every filter up front so an unusable value fails before searching.
 
     A value that cannot be honoured raises rather than being dropped: a silently
@@ -275,7 +243,7 @@ async def _resolve_filters(
 
     indexed_sources: list[str] = []
     if agent is None or source_types is not None:
-        indexed_sources = await _load_indexed_sources(access_token)
+        indexed_sources = await get_indexed_sources(access_token)
 
     if agent is None and not indexed_sources:
         raise _NoIndexedSources()
@@ -287,7 +255,7 @@ async def _resolve_filters(
     if document_set_names is not None:
         await _validate_document_sets(document_set_names, access_token)
 
-    return persona_id, source_type_enums
+    return _ResolvedFilters(persona_id=persona_id, source_types=source_type_enums)
 
 
 def _record_requested_sources(source_types: list[str] | None) -> None:
@@ -388,7 +356,7 @@ async def search_indexed_documents(
 
     try:
         try:
-            persona_id, source_type_enums = await _resolve_filters(
+            filters = await _resolve_filters(
                 access_token=access_token,
                 source_types=source_types,
                 document_set_names=document_set_names,
@@ -417,11 +385,11 @@ async def search_indexed_documents(
 
         request = SearchRequest(
             query=query,
-            sources=source_type_enums,
+            sources=filters.source_types,
             document_sets=document_set_names,
             time_cutoff=parsed_cutoff,
             skip_query_expansion=skip_query_expansion,
-            persona_id=persona_id,
+            persona_id=filters.persona_id,
         )
         endpoint = f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}/search"
         response = await _post_model(endpoint, request, access_token)

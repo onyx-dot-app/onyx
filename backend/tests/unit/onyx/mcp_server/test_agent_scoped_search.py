@@ -18,7 +18,6 @@ from fastmcp.server.auth.auth import AccessToken
 
 import onyx.mcp_server.tools.search as search_module
 import onyx.mcp_server.utils as utils_module
-from onyx.mcp_server.tools.search import _MAX_SUGGESTIONS
 
 _TOKEN = AccessToken(token="test-token", client_id="test", scopes=[])
 
@@ -118,18 +117,6 @@ async def test_unknown_agent_errors_without_searching(stub: _Stub) -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.usefixtures("stub")
-async def test_near_miss_agent_name_is_suggested() -> None:
-    """A stale or colloquial name is the common failure, so suggest the fix."""
-    payload = await search_module.search_indexed_documents(
-        query="anything", agent="Enginering Wiki"
-    )
-
-    assert "Did you mean" in payload["error"]
-    assert "Engineering Wiki" in payload["error"]
-
-
-@pytest.mark.asyncio
 async def test_unknown_agent_error_stays_small_for_large_tenants(
     stub: _Stub,
 ) -> None:
@@ -144,7 +131,8 @@ async def test_unknown_agent_error_stays_small_for_large_tenants(
 
     assert "renamed or removed" in payload["error"]
     assert "agents" in payload["error"]
-    assert payload["error"].count(",") <= _MAX_SUGGESTIONS
+    # The point of the cap: no agent name is enumerated at this size.
+    assert not any(entry["name"] in payload["error"] for entry in stub.agents)
 
 
 @pytest.mark.asyncio
@@ -221,13 +209,15 @@ async def test_unindexed_source_type_errors_instead_of_being_dropped(
 
 
 @pytest.mark.asyncio
-async def test_unknown_document_set_errors_with_a_suggestion(stub: _Stub) -> None:
+async def test_unknown_document_set_errors_and_names_the_valid_ones(
+    stub: _Stub,
+) -> None:
     payload = await search_module.search_indexed_documents(
         query="anything", document_set_names=["Enginering Wiki"]
     )
 
     assert payload["results"] == []
-    assert "Did you mean" in payload["error"]
+    assert "Enginering Wiki" in payload["error"]
     assert "Engineering Wiki" in payload["error"]
     assert stub.search_requests == []
 
@@ -243,7 +233,10 @@ async def test_inventory_failure_errors(stub: _Stub) -> None:
     )
 
     assert payload["results"] == []
-    assert "Failed to check indexed sources" in payload["error"]
+    # Not a _FilterError: the caller supplied nothing wrong, so it surfaces
+    # through the tool's generic handler rather than as filter feedback.
+    assert "Document search failed" in payload["error"]
+    assert "500" in payload["error"]
     assert stub.search_requests == []
 
 
