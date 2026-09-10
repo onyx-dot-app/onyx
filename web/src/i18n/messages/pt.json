@@ -5806,43 +5806,44 @@
     "systemUsage": {
       "categories": {
         "contextualRagChunkContext": {
-          "label": "Contextual RAG chunk context"
+          "label": "Contexto de trechos RAG contextuais"
         },
         "contextualRagDocumentSummary": {
-          "label": "Contextual RAG document summaries"
+          "label": "Resumos contextuais de documentos RAG"
         },
-        "imageSummarization": { "label": "Image summarization" },
-        "kgDeepExtraction": { "label": "Knowledge graph extraction" },
+        "imageSummarization": { "label": "Resumo de imagens" },
+        "kgDeepExtraction": { "label": "Extração do grafo de conhecimento" },
         "kgDocumentClassification": {
-          "label": "Knowledge graph classification"
+          "label": "Classificação do grafo de conhecimento"
         },
-        "unattributed": { "label": "Unattributed" }
+        "other": { "label": "Outros" },
+        "unattributed": { "label": "Não atribuído" }
       },
       "filters": {
-        "allModels": { "label": "All models" },
-        "allProviders": { "label": "All providers" }
+        "allModels": { "label": "Todos os modelos" },
+        "allProviders": { "label": "Todos os provedores" }
       },
       "panel": {
-        "description": "{start} – {end} · Background text generation without a user.",
-        "emptyDescription": "Background text-generation spend for the selected period.",
-        "error": { "title": "Failed to load system usage for this period." },
-        "title": "System usage"
+        "description": "{start} – {end} · Geração de texto em segundo plano sem usuário.",
+        "emptyDescription": "Gastos de geração de texto em segundo plano no período selecionado.",
+        "error": { "title": "Falha ao carregar o uso do sistema neste período." },
+        "title": "Uso do sistema"
       },
       "summary": {
-        "spend": { "label": "System spend" },
-        "tokens": { "label": "Total tokens" },
-        "unattributed": { "label": "Unattributed spend" }
+        "spend": { "label": "Gastos do sistema" },
+        "tokens": { "label": "Total de tokens" },
+        "unattributed": { "label": "Gastos não atribuídos" }
       },
       "table": {
         "columns": {
-          "category": { "header": "Category" },
-          "input": { "header": "Input" },
-          "output": { "header": "Output" },
-          "spend": { "header": "Spend" },
+          "category": { "header": "Categoria" },
+          "input": { "header": "Entrada" },
+          "output": { "header": "Saída" },
+          "spend": { "header": "Gastos" },
           "tokens": { "header": "Tokens" }
         },
         "empty": {
-          "description": "No system usage matches the current filters."
+          "description": "Nenhum uso do sistema corresponde aos filtros atuais."
         }
       }
     },

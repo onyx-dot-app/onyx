@@ -5806,43 +5806,44 @@
     "systemUsage": {
       "categories": {
         "contextualRagChunkContext": {
-          "label": "Contextual RAG chunk context"
+          "label": "سياق مقاطع RAG السياقية"
         },
         "contextualRagDocumentSummary": {
-          "label": "Contextual RAG document summaries"
+          "label": "ملخصات مستندات RAG السياقية"
         },
-        "imageSummarization": { "label": "Image summarization" },
-        "kgDeepExtraction": { "label": "Knowledge graph extraction" },
+        "imageSummarization": { "label": "تلخيص الصور" },
+        "kgDeepExtraction": { "label": "استخراج الرسم البياني المعرفي" },
         "kgDocumentClassification": {
-          "label": "Knowledge graph classification"
+          "label": "تصنيف الرسم البياني المعرفي"
         },
-        "unattributed": { "label": "Unattributed" }
+        "other": { "label": "أخرى" },
+        "unattributed": { "label": "غير منسوب" }
       },
       "filters": {
-        "allModels": { "label": "All models" },
-        "allProviders": { "label": "All providers" }
+        "allModels": { "label": "كل النماذج" },
+        "allProviders": { "label": "كل المزوّدين" }
       },
       "panel": {
-        "description": "{start} – {end} · Background text generation without a user.",
-        "emptyDescription": "Background text-generation spend for the selected period.",
-        "error": { "title": "Failed to load system usage for this period." },
-        "title": "System usage"
+        "description": "{start} – {end} · إنشاء نص في الخلفية بدون مستخدم.",
+        "emptyDescription": "تكلفة إنشاء النص في الخلفية للفترة المحددة.",
+        "error": { "title": "تعذر تحميل استخدام النظام لهذه الفترة." },
+        "title": "استخدام النظام"
       },
       "summary": {
-        "spend": { "label": "System spend" },
-        "tokens": { "label": "Total tokens" },
-        "unattributed": { "label": "Unattributed spend" }
+        "spend": { "label": "إنفاق النظام" },
+        "tokens": { "label": "إجمالي الرموز" },
+        "unattributed": { "label": "إنفاق غير منسوب" }
       },
       "table": {
         "columns": {
-          "category": { "header": "Category" },
-          "input": { "header": "Input" },
-          "output": { "header": "Output" },
-          "spend": { "header": "Spend" },
-          "tokens": { "header": "Tokens" }
+          "category": { "header": "الفئة" },
+          "input": { "header": "الإدخال" },
+          "output": { "header": "الإخراج" },
+          "spend": { "header": "الإنفاق" },
+          "tokens": { "header": "الرموز" }
         },
         "empty": {
-          "description": "No system usage matches the current filters."
+          "description": "لا يوجد استخدام للنظام يطابق عوامل التصفية الحالية."
         }
       }
     },

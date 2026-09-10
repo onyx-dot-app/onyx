@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import {
   Card,
+  type DateRange,
   InputSelect,
   MessageCard,
   Table,
@@ -13,16 +14,14 @@ import {
 import { SvgCpu, SvgX } from "@opal/icons";
 import { PageLoader, Section } from "@opal/layouts";
 import { formatCalendarDay } from "@/lib/dateUtils";
-import type { DateRange } from "@/refresh-components/DateRangePicker";
-import {
-  type SystemUsageCategory,
-  useSystemUsage,
-} from "@/lib/usage/systemUsage";
+import { useSystemUsage } from "@/lib/usage/hooks";
+import type { SystemUsageCategory } from "@/lib/usage/systemUsage";
 import type { UsageExportTotals } from "@/lib/usage/userUsage";
 import { formatCost, formatTokens } from "@/lib/utils";
 
 const ALL_FILTER = "__all__";
 const UNATTRIBUTED_CATEGORY = "unattributed";
+const OTHER_CATEGORY = "other";
 const IMAGE_SUMMARIZATION_FLOW = "image_summarization";
 const CONTEXTUAL_RAG_DOC_SUMMARY_FLOW = "contextual_rag_doc_summary";
 const CONTEXTUAL_RAG_CHUNK_CONTEXT_FLOW = "contextual_rag_chunk_context";
@@ -62,6 +61,8 @@ function categoryLabel(category: string, t: SystemUsageTranslate): string {
       return t("categories.kgDeepExtraction.label");
     case UNATTRIBUTED_CATEGORY:
       return t("categories.unattributed.label");
+    case OTHER_CATEGORY:
+      return t("categories.other.label");
     default:
       return category;
   }
@@ -181,13 +182,15 @@ export default function SystemUsagePanel({ timeRange }: SystemUsagePanelProps) {
     [records]
   );
   useEffect(() => {
-    if (model !== ALL_FILTER && !models.includes(model)) setModel(ALL_FILTER);
-  }, [model, models]);
+    if (usage && model !== ALL_FILTER && !models.includes(model)) {
+      setModel(ALL_FILTER);
+    }
+  }, [usage, model, models]);
   useEffect(() => {
-    if (provider !== ALL_FILTER && !providers.includes(provider)) {
+    if (usage && provider !== ALL_FILTER && !providers.includes(provider)) {
       setProvider(ALL_FILTER);
     }
-  }, [provider, providers]);
+  }, [usage, provider, providers]);
   const rows = useMemo(
     () =>
       (usage?.categories ?? []).flatMap((category) => {
@@ -207,8 +210,8 @@ export default function SystemUsagePanel({ timeRange }: SystemUsagePanelProps) {
       <Text font="secondary-body" color="text-03">
         {usage
           ? t("panel.description", {
-              start: formatCalendarDay(usage.start, { withYear: true }),
-              end: formatCalendarDay(usage.end, { withYear: true }),
+              start: formatCalendarDay(usage.start, locale, { withYear: true }),
+              end: formatCalendarDay(usage.end, locale, { withYear: true }),
             })
           : t("panel.emptyDescription")}
       </Text>

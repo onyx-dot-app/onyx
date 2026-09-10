@@ -5806,43 +5806,44 @@
     "systemUsage": {
       "categories": {
         "contextualRagChunkContext": {
-          "label": "Contextual RAG chunk context"
+          "label": "컨텍스트 RAG 청크 문맥"
         },
         "contextualRagDocumentSummary": {
-          "label": "Contextual RAG document summaries"
+          "label": "컨텍스트 RAG 문서 요약"
         },
-        "imageSummarization": { "label": "Image summarization" },
-        "kgDeepExtraction": { "label": "Knowledge graph extraction" },
+        "imageSummarization": { "label": "이미지 요약" },
+        "kgDeepExtraction": { "label": "지식 그래프 추출" },
         "kgDocumentClassification": {
-          "label": "Knowledge graph classification"
+          "label": "지식 그래프 분류"
         },
-        "unattributed": { "label": "Unattributed" }
+        "other": { "label": "기타" },
+        "unattributed": { "label": "미귀속" }
       },
       "filters": {
-        "allModels": { "label": "All models" },
-        "allProviders": { "label": "All providers" }
+        "allModels": { "label": "모든 모델" },
+        "allProviders": { "label": "모든 제공업체" }
       },
       "panel": {
-        "description": "{start} – {end} · Background text generation without a user.",
-        "emptyDescription": "Background text-generation spend for the selected period.",
-        "error": { "title": "Failed to load system usage for this period." },
-        "title": "System usage"
+        "description": "{start} – {end} · 사용자 없이 실행된 백그라운드 텍스트 생성.",
+        "emptyDescription": "선택한 기간의 백그라운드 텍스트 생성 비용입니다.",
+        "error": { "title": "이 기간의 시스템 사용량을 불러오지 못했습니다." },
+        "title": "시스템 사용량"
       },
       "summary": {
-        "spend": { "label": "System spend" },
-        "tokens": { "label": "Total tokens" },
-        "unattributed": { "label": "Unattributed spend" }
+        "spend": { "label": "시스템 비용" },
+        "tokens": { "label": "총 토큰" },
+        "unattributed": { "label": "미귀속 비용" }
       },
       "table": {
         "columns": {
-          "category": { "header": "Category" },
-          "input": { "header": "Input" },
-          "output": { "header": "Output" },
-          "spend": { "header": "Spend" },
-          "tokens": { "header": "Tokens" }
+          "category": { "header": "카테고리" },
+          "input": { "header": "입력" },
+          "output": { "header": "출력" },
+          "spend": { "header": "비용" },
+          "tokens": { "header": "토큰" }
         },
         "empty": {
-          "description": "No system usage matches the current filters."
+          "description": "현재 필터와 일치하는 시스템 사용량이 없습니다."
         }
       }
     },

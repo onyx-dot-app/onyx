@@ -5820,6 +5820,9 @@
         "kgDocumentClassification": {
           "label": "Knowledge graph classification"
         },
+        "other": {
+          "label": "Other"
+        },
         "unattributed": {
           "label": "Unattributed"
         }

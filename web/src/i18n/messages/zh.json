@@ -5806,43 +5806,44 @@
     "systemUsage": {
       "categories": {
         "contextualRagChunkContext": {
-          "label": "Contextual RAG chunk context"
+          "label": "上下文 RAG 分块上下文"
         },
         "contextualRagDocumentSummary": {
-          "label": "Contextual RAG document summaries"
+          "label": "上下文 RAG 文档摘要"
         },
-        "imageSummarization": { "label": "Image summarization" },
-        "kgDeepExtraction": { "label": "Knowledge graph extraction" },
+        "imageSummarization": { "label": "图像摘要" },
+        "kgDeepExtraction": { "label": "知识图谱提取" },
         "kgDocumentClassification": {
-          "label": "Knowledge graph classification"
+          "label": "知识图谱分类"
         },
-        "unattributed": { "label": "Unattributed" }
+        "other": { "label": "其他" },
+        "unattributed": { "label": "未归属" }
       },
       "filters": {
-        "allModels": { "label": "All models" },
-        "allProviders": { "label": "All providers" }
+        "allModels": { "label": "所有模型" },
+        "allProviders": { "label": "所有提供商" }
       },
       "panel": {
-        "description": "{start} – {end} · Background text generation without a user.",
-        "emptyDescription": "Background text-generation spend for the selected period.",
-        "error": { "title": "Failed to load system usage for this period." },
-        "title": "System usage"
+        "description": "{start} – {end} · 无用户参与的后台文本生成。",
+        "emptyDescription": "所选期间的后台文本生成支出。",
+        "error": { "title": "无法加载此期间的系统用量。" },
+        "title": "系统用量"
       },
       "summary": {
-        "spend": { "label": "System spend" },
-        "tokens": { "label": "Total tokens" },
-        "unattributed": { "label": "Unattributed spend" }
+        "spend": { "label": "系统支出" },
+        "tokens": { "label": "总 Token 数" },
+        "unattributed": { "label": "未归属支出" }
       },
       "table": {
         "columns": {
-          "category": { "header": "Category" },
-          "input": { "header": "Input" },
-          "output": { "header": "Output" },
-          "spend": { "header": "Spend" },
-          "tokens": { "header": "Tokens" }
+          "category": { "header": "类别" },
+          "input": { "header": "输入" },
+          "output": { "header": "输出" },
+          "spend": { "header": "支出" },
+          "tokens": { "header": "Token" }
         },
         "empty": {
-          "description": "No system usage matches the current filters."
+          "description": "没有符合当前筛选条件的系统用量。"
         }
       }
     },
