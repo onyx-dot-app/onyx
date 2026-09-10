@@ -6,7 +6,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource, DocumentSourceDescription
-from onyx.db.connector import _INTERNAL_ONLY_SOURCES
+from onyx.db.connector import INTERNAL_ONLY_SOURCES
 from onyx.db.connector_credential_pair import get_connector_credential_pairs_for_user
 from onyx.db.enums import EndpointPolicy, ExternalAppType
 from onyx.db.models import User
@@ -55,7 +55,7 @@ def build_available_sources_section(
     seen: set[str] = set()
     for cc_pair in cc_pairs:
         source = cc_pair.connector.source
-        if source in _INTERNAL_ONLY_SOURCES:
+        if source in INTERNAL_ONLY_SOURCES:
             continue
         source_value = (
             source.value if isinstance(source, DocumentSource) else str(source)

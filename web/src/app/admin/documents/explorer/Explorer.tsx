@@ -1,7 +1,7 @@
 "use client";
 
 import { adminSearch } from "@/lib/searchFilters/svc";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
@@ -13,6 +13,7 @@ import { ScoreSection } from "../ScoreEditor";
 import { useRouter } from "next/navigation";
 import { useSearchFilters } from "@/lib/searchFilters/hooks";
 import { buildFilters } from "@/lib/searchFilters/utils";
+import { getConfiguredSources } from "@/lib/sources";
 import { DocumentUpdatedAtBadge } from "@/components/search/DocumentUpdatedAtBadge";
 import { DocumentSetSummary } from "@/lib/types";
 import { SourceIcon } from "@/components/SourceIcon";
@@ -132,6 +133,10 @@ export function Explorer({
   const [isLoading, setIsLoading] = useState(false);
 
   const filterManager = useSearchFilters();
+  const configuredSources = useMemo(
+    () => getConfiguredSources(connectors.map((connector) => connector.source)),
+    [connectors]
+  );
 
   const onSearch = useCallback(
     async (query: string) => {
@@ -139,6 +144,7 @@ export function Explorer({
       try {
         const filters = buildFilters(
           filterManager.selectedSources,
+          configuredSources,
           filterManager.selectedDocumentSets,
           filterManager.timeRange,
           filterManager.selectedTags
@@ -153,6 +159,7 @@ export function Explorer({
       }
     },
     [
+      configuredSources,
       filterManager.selectedDocumentSets,
       filterManager.selectedSources,
       filterManager.timeRange,

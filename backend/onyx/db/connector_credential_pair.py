@@ -11,7 +11,11 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from onyx.auth.permissions import get_effective_permissions
 from onyx.configs.constants import DEFAULT_CC_PAIR_ID, DocumentSource, NotificationType
-from onyx.db.connector import fetch_connector_by_id
+from onyx.db.connector import (
+    INTERNAL_ONLY_SOURCES,
+    fetch_connector_by_id,
+    fetch_unique_document_sources,
+)
 from onyx.db.connector_alerts import clear_connector_alerts__no_commit
 from onyx.db.credentials import fetch_credential_by_id, fetch_credential_by_id_for_user
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -296,6 +300,33 @@ def get_connector_credential_pairs_for_user(
         stmt = stmt.order_by(desc(ConnectorCredentialPair.id))
 
     return list(db_session.scalars(stmt).unique().all())
+
+
+def fetch_searchable_document_sources(
+    db_session: Session, user: User | None
+) -> list[DocumentSource]:
+    """The source types *user* can search.
+
+    Built the same way as the `/manage/connector-status` list the source picker
+    in the UI is drawn from, so "every source" means the same set on both sides.
+    Without a user (auth disabled, bot contexts) every connector source counts.
+    """
+    if user is None:
+        return fetch_unique_document_sources(db_session)
+
+    cc_pairs = get_connector_credential_pairs_for_user(
+        db_session=db_session,
+        user=user,
+        get_editable=False,
+        eager_load_connector=True,
+        defer_connector_config=True,
+    )
+    sources = [
+        cc_pair.connector.source
+        for cc_pair in cc_pairs
+        if cc_pair.connector.source not in INTERNAL_ONLY_SOURCES
+    ]
+    return list(dict.fromkeys(sources))
 
 
 # For use with our thread-level parallelism utils. Note that any relationships

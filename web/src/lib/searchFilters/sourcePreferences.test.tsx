@@ -3,6 +3,7 @@ import { ValidSources } from "@/lib/types";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { useSourcePreferences } from "@/lib/searchFilters/hooks";
 import { buildFilters } from "@/lib/searchFilters/utils";
+import { getConfiguredSources } from "@/lib/sources";
 
 beforeEach(() => {
   localStorage.clear();
@@ -134,27 +135,41 @@ describe("useSourcePreferences — localStorage persistence across agents", () =
 });
 
 describe("buildFilters — source_type payload", () => {
-  test("enabled sources produce a source_type array", () => {
-    const { state } = setup([ValidSources.Notion, ValidSources.UserFile]);
+  const available = [ValidSources.Notion, ValidSources.UserFile];
+  const configured = getConfiguredSources(available);
 
-    const filters = buildFilters(state.selected, [], null, []);
-    expect(filters.source_type?.sort()).toEqual(["notion", "user_file"]);
+  test("every source enabled produces null source_type", () => {
+    const { state } = setup(available);
+
+    // The default selection. Sending it as a list would have the backend
+    // report an applied filter and the UI name every connector it searched.
+    const filters = buildFilters(state.selected, configured, [], null, []);
+    expect(filters.source_type).toBeNull();
   });
 
   test("no sources produces null source_type", () => {
-    const filters = buildFilters([], [], null, []);
+    const filters = buildFilters([], configured, [], null, []);
     expect(filters.source_type).toBeNull();
   });
 
   test("toggled-off source excluded from payload", () => {
-    const { hook, state } = setup([ValidSources.Notion, ValidSources.UserFile]);
+    const { hook, state } = setup(available);
 
     act(() => {
       hook.result.current.toggleSource("notion");
     });
 
-    const filters = buildFilters(state.selected, [], null, []);
+    const filters = buildFilters(state.selected, configured, [], null, []);
     expect(filters.source_type).toEqual(["user_file"]);
+  });
+
+  test("selection covering an unknown universe still filters", () => {
+    const { state } = setup(available);
+
+    // No universe to compare against — send what is selected rather than
+    // silently widening the search to everything.
+    const filters = buildFilters(state.selected, [], [], null, []);
+    expect(filters.source_type?.sort()).toEqual(["notion", "user_file"]);
   });
 });
 
