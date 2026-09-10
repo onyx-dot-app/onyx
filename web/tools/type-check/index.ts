@@ -7,6 +7,7 @@ import {
   isAsExpression,
   isIdentifier,
   isNonNullExpression,
+  isParenthesizedTypeNode,
   isPrivateIdentifier,
   isTypeAssertion,
   SyntaxKind,
@@ -46,7 +47,7 @@ const configFile = resolve(root, "tsconfig.types.json");
 //   files web/ imports are in the program, so the rows would move with imports.
 // - Tests and their helpers are not gated.
 const UNMEASURED =
-  /^(node_modules|\.next|lib|tests)\/|(^|\/)__tests__\/|\.(test|spec)\.tsx?$/;
+  /^(node_modules|\.next|lib)\/|(^|\/)(tests|__tests__)\/|\.(test|spec)\.[cm]?[jt]sx?$/;
 
 const api = new API({ cwd: root });
 try {
@@ -168,7 +169,9 @@ async function countFile(
     } else if (isAsExpression(node) || isTypeAssertion(node)) {
       // A cast overrides the checker, so it counts as uncovered. `as const`
       // only narrows literals and `as unknown` only widens, so they are safe.
-      const target = node.type.getText(sourceFile);
+      let type = node.type;
+      while (isParenthesizedTypeNode(type)) type = type.type;
+      const target = type.getText(sourceFile);
       if (target !== "const" && target !== "unknown") casts++;
     } else if (isNonNullExpression(node)) {
       // `x!` removes null and undefined without a check, so it is a cast too.
