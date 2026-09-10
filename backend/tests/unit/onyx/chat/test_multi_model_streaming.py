@@ -20,6 +20,7 @@ from onyx.chat.models import StreamingError
 from onyx.configs.constants import MessageType
 from onyx.db.chat import set_preferred_response
 from onyx.db.models import ChatMessage
+from onyx.llm.exceptions import InputBudgetExceededError
 from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.models import SendMessageRequest
@@ -447,16 +448,27 @@ class TestRunModels:
         assert errors[0].error_code == "UNKNOWN_ERROR"
         assert "intentional test failure" in errors[0].error
 
-    def test_context_window_overflow_surfaces_as_context_too_long(self) -> None:
-        """A provider context-window rejection in a worker surfaces as
-        CONTEXT_TOO_LONG and non-retryable through the _run_model -> drain path."""
+    @pytest.mark.parametrize(
+        "overflow_error",
+        [
+            pytest.param(
+                ContextWindowExceededError(
+                    "This model's maximum context length is 8192 tokens",
+                    model="gpt-4",
+                    llm_provider="openai",
+                ),
+                id="provider",
+            ),
+            pytest.param(InputBudgetExceededError(), id="local-input-budget"),
+        ],
+    )
+    def test_context_window_overflow_surfaces_as_context_too_long(
+        self, overflow_error: Exception
+    ) -> None:
+        """Provider and local input limits use the same streaming error."""
 
         def overflow(**_kwargs: Any) -> None:
-            raise ContextWindowExceededError(
-                "This model's maximum context length is 8192 tokens",
-                model="gpt-4",
-                llm_provider="openai",
-            )
+            raise overflow_error
 
         with (
             patch("onyx.chat.process_message.run_llm_loop", side_effect=overflow),

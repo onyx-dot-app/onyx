@@ -24,6 +24,7 @@ from onyx.chat.models import (
 )
 from onyx.configs.constants import MessageType
 from onyx.file_store.models import ChatFileType
+from onyx.llm.exceptions import InputBudgetExceededError
 from onyx.llm.interfaces import LLMConfig, ToolChoiceOptions
 from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER, OPEN_URL_REMINDER
 from onyx.server.query_and_chat.placement import Placement
@@ -521,7 +522,7 @@ class TestConstructMessageHistory:
 
         # Total required: 50 (system) + 50 (custom) + 100 (project) + 50 (user) = 250
         # But only 200 available
-        with pytest.raises(ValueError, match="Not enough tokens"):
+        with pytest.raises(InputBudgetExceededError, match="Not enough tokens"):
             construct_message_history(
                 system_prompt=system_prompt,
                 custom_agent_prompt=custom_agent,
@@ -545,7 +546,8 @@ class TestConstructMessageHistory:
         # Required: 10 (system) + 30 (user2) + 30 (assistant_with_tool) = 70 tokens
         # After subtracting system: 40 tokens available, but need 60 for user2 + assistant_with_tool
         with pytest.raises(
-            ValueError, match="Not enough tokens to include the last user message"
+            InputBudgetExceededError,
+            match="Not enough tokens to include the last user message",
         ):
             construct_message_history(
                 system_prompt=system_prompt,
