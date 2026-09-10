@@ -42,62 +42,20 @@ _BASELINE_APP_STAGE = {"fastapi_users", "boto3", "opensearchpy"}
 _ALLOWED_WATCHLIST: dict[str, set[str]] = {
     "primary": _BASELINE_APP_STAGE
     | {
-        "openai",
-        "braintrust",
-        "exa_py",
-        "playwright",
-        "langchain_core",
-        "chonkie",
-        "tokenizers",
-        "slack_sdk",
-        "docx",
-        "dns",
-        "onyx.chat.process_message",
-        "onyx.tools.built_in_tools",
-        "onyx.indexing.indexing_pipeline",
-        "onyx.connectors.factory",
-        "onyx.evals.eval",
-    },
-    "light": _BASELINE_APP_STAGE
-    | {
         "chonkie",
         "tokenizers",
         "slack_sdk",
         "onyx.indexing.indexing_pipeline",
         "onyx.connectors.factory",
     },
-    "heavy": _BASELINE_APP_STAGE
-    | {"tokenizers", "slack_sdk", "onyx.connectors.factory"},
-    "docprocessing": _BASELINE_APP_STAGE
-    | {
-        "chonkie",
-        "tokenizers",
-        "onyx.indexing.indexing_pipeline",
-        "onyx.connectors.factory",
-    },
-    "docfetching": _BASELINE_APP_STAGE
-    | {
-        "chonkie",
-        "tokenizers",
-        "onyx.indexing.indexing_pipeline",
-        "onyx.connectors.factory",
-    },
+    "light": _BASELINE_APP_STAGE | {"onyx.connectors.factory"},
+    "heavy": _BASELINE_APP_STAGE | {"slack_sdk", "onyx.connectors.factory"},
+    "docprocessing": _BASELINE_APP_STAGE | {"chonkie", "tokenizers"},
+    "docfetching": _BASELINE_APP_STAGE | {"onyx.connectors.factory"},
     "user_file_processing": _BASELINE_APP_STAGE
     | {"chonkie", "tokenizers", "onyx.indexing.indexing_pipeline"},
-    "scheduled_tasks": _BASELINE_APP_STAGE | {"tokenizers", "docx"},
-    "monitoring": _BASELINE_APP_STAGE
-    | {
-        "openai",
-        "exa_py",
-        "playwright",
-        "langchain_core",
-        "chonkie",
-        "tokenizers",
-        "slack_sdk",
-        "onyx.tools.built_in_tools",
-        "onyx.connectors.factory",
-        "onyx.setup",
-    },
+    "scheduled_tasks": _BASELINE_APP_STAGE,
+    "monitoring": _BASELINE_APP_STAGE,
     "beat": _BASELINE_APP_STAGE,
 }
 

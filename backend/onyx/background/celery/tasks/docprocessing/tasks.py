@@ -109,7 +109,6 @@ from onyx.db.search_settings import (
     get_secondary_search_settings,
 )
 from onyx.db.swap_index import check_and_perform_index_swap
-from onyx.document_index.factory import get_all_document_indices
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.document_batch_storage import (
     DocumentBatchStorage,
@@ -117,19 +116,6 @@ from onyx.file_store.document_batch_storage import (
 )
 from onyx.file_store.staging import cleanup_staged_files_for_attempt
 from onyx.httpx.httpx_pool import HttpxPool
-from onyx.indexing.adapters.document_indexing_adapter import (
-    DocumentIndexingBatchAdapter,
-)
-from onyx.indexing.embedder import DefaultIndexingEmbedder
-from onyx.indexing.indexing_pipeline import run_indexing_pipeline
-from onyx.indexing.persistent_indexing import (
-    build_generic_connector_failure,
-    record_generic_failure,
-)
-from onyx.natural_language_processing.search_nlp_models import (
-    EmbeddingModel,
-    warm_up_bi_encoder,
-)
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_docprocessing import RedisDocprocessing
 from onyx.redis.redis_pool import (
@@ -878,6 +864,11 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
     w.r.t previous failed attempt, checkpointing, etc is handled in the docfetching task.
     """
 
+    from onyx.natural_language_processing.search_nlp_models import (
+        EmbeddingModel,
+        warm_up_bi_encoder,
+    )
+
     time_start = time.monotonic()
     task_logger.warning("check_for_indexing - Starting")
 
@@ -1552,6 +1543,11 @@ def _record_docprocessing_failure_persistent(
 
     Every step is wrapped so a follow-on error here does not re-raise out of
     the Celery task — we have already swallowed the original exception."""
+    from onyx.indexing.persistent_indexing import (
+        build_generic_connector_failure,
+        record_generic_failure,
+    )
+
     task_logger.info(
         "PERSISTENT_INDEXING enabled; recording docprocessing failure for "
         "attempt=%s batch=%s",
@@ -1639,6 +1635,13 @@ def _docprocessing_task(
     batch_num: int,
     enqueue_time_ms: int | None = None,
 ) -> None:
+    from onyx.document_index.factory import get_all_document_indices
+    from onyx.indexing.adapters.document_indexing_adapter import (
+        DocumentIndexingBatchAdapter,
+    )
+    from onyx.indexing.embedder import DefaultIndexingEmbedder
+    from onyx.indexing.indexing_pipeline import run_indexing_pipeline
+
     start_time = time.monotonic()
 
     if tenant_id:
