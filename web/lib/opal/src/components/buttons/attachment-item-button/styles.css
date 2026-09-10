@@ -1,0 +1,50 @@
+@reference "#reference.css";
+
+/* ============================================================================
+   AttachmentItemButton — layout only
+
+   Colors come from the Interactive.Stateful palette (`--interactive-foreground`
+   / `--interactive-foreground-icon`) via the `select-heavy` / `select-tinted`
+   variants; nothing here sets a state color.
+
+   Structure: root → title (tile + Content) / center / action.
+   ============================================================================ */
+
+.opal-attachment-item-button {
+  @apply flex w-full min-w-0 flex-row items-center gap-2 p-1;
+}
+
+.opal-attachment-item-button-title {
+  @apply flex min-w-0 flex-1 flex-row items-center gap-2;
+}
+
+/* The signature square: its rounding (radius-08) complements the row's own
+   container rounding (radius-12) at the shared inset. Sized by the same
+   token as the action slot so the row's two fixed-width regions agree. */
+.opal-attachment-item-button-tile {
+  @apply flex shrink-0 items-center justify-center overflow-hidden;
+  height: var(--spacing-block-36);
+  width: var(--spacing-block-36);
+  background-color: var(--background-tint-01);
+  border-radius: var(--radius-08);
+}
+
+.opal-attachment-item-button-icon {
+  @apply h-4 w-4;
+  stroke: var(--interactive-foreground-icon, var(--text-02));
+}
+
+.opal-attachment-item-button-image {
+  @apply h-full w-full object-cover;
+}
+
+.opal-attachment-item-button-center {
+  @apply min-w-0 flex-1;
+}
+
+/* Reserved even when empty: rows with and without actions align, and
+   hover-revealed buttons cause no layout shift. */
+.opal-attachment-item-button-action {
+  @apply flex shrink-0 flex-row items-center justify-end gap-2 self-stretch;
+  min-width: var(--spacing-block-36);
+}
