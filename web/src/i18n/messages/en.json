@@ -12631,6 +12631,9 @@
       "providerCard": {
         "connect": {
           "label": "Connect"
+        },
+        "settingsButton": {
+          "ariaLabel": "Provider settings"
         }
       },
       "title": "Connect your LLM models"
