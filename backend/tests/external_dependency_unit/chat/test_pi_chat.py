@@ -4,6 +4,8 @@ import json
 from queue import Queue
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import ChatMessageSimple, ExtractedContextFiles
@@ -43,7 +45,8 @@ def test_host_search_citations_and_usage_across_callbacks() -> None:
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "queries": {"type": "array", "items": {"type": "string"}}
+                    "queries": {"type": "array", "items": {"type": "string"}},
+                    "limit": {"type": "integer"},
                 },
                 "required": ["queries"],
             },
@@ -117,7 +120,7 @@ def test_host_search_citations_and_usage_across_callbacks() -> None:
             PiToolCall(
                 id=f"call_{index}",
                 name="internal_search",
-                arguments={"queries": [query]},
+                arguments={"queries": [query], "limit": 2},
             )
             for index, query in enumerate(["alpha", "beta"])
         ]
@@ -135,7 +138,9 @@ def test_host_search_citations_and_usage_across_callbacks() -> None:
                                     index=index,
                                     function=FunctionCall(
                                         name=call.name,
-                                        arguments=json.dumps(call.arguments),
+                                        arguments=json.dumps(
+                                            {**call.arguments, "limit": "2"}
+                                        ),
                                     ),
                                 )
                                 for index, call in enumerate(calls)
@@ -209,3 +214,37 @@ def test_host_search_citations_and_usage_across_callbacks() -> None:
         isinstance(packet, Packet) and packet.obj.type == "message_delta"
         for packet in packets
     )
+
+
+@pytest.mark.parametrize("mutation", ["name", "unknown", "duplicate", "unavailable"])
+def test_tool_callbacks_cannot_change_recorded_tool_calls(mutation: str) -> None:
+    from onyx.server.query_and_chat.placement import Placement
+    from onyx.tools.models import ToolCallKickoff
+
+    host = MagicMock(spec=ChatHost)
+    tool = MagicMock(spec=Tool)
+    tool.name = "internal_search"
+    host.final_tools = [] if mutation == "unavailable" else [tool]
+    host.state_container = ChatStateContainer()
+    host.citation_processor = MagicMock()
+    host.llm_step_result = MagicMock()
+    host.llm_step_result.tool_calls = [
+        ToolCallKickoff(
+            tool_call_id="call-1",
+            tool_name="internal_search",
+            tool_args={"queries": ["original query"]},
+            placement=Placement(turn_index=0),
+        )
+    ]
+    call = PiToolCall(
+        id="call-1", name="internal_search", arguments={"queries": ["original query"]}
+    )
+    if mutation == "name":
+        call.name = "different_tool"
+    elif mutation == "unknown":
+        call.id = "unknown"
+    calls = [call, call] if mutation == "duplicate" else [call]
+    with patch("onyx.chat.pi.chat.run_tool_calls") as execute:
+        with pytest.raises(ValueError, match="Pi requested"):
+            ChatHost.execute_tools(host, calls)
+        execute.assert_not_called()

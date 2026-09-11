@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const startSchema = z.object({
   type: z.literal("start"),
+  allowWorkloadIdentity: z.boolean().default(false),
   config: z.object({
     model_provider: z.string(),
     model_name: z.string(),

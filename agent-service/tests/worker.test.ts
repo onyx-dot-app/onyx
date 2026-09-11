@@ -113,7 +113,8 @@ function fixture(concurrency = 2, drainTimeoutMs = 3000) {
   const worker = new AgentWorker({
     redisUrl: process.env.ONYX_AGENT_TEST_REDIS_URL!,
     apiUrl: server.url.toString().slice(0, -1),
-    token: "secret",
+    token: "test-worker-token-".repeat(4),
+    allowInsecureHttp: true,
     concurrency,
     runTimeoutMs: 5000,
     drainTimeoutMs,

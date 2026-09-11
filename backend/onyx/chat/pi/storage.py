@@ -9,7 +9,7 @@ from contextlib import suppress
 from functools import lru_cache
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from redis import BlockingConnectionPool, Redis
 from redis.asyncio import BlockingConnectionPool as AsyncBlockingConnectionPool
 from redis.asyncio import Redis as AsyncRedis
@@ -84,7 +84,11 @@ def load_state[Model: BaseModel](
     value = state_redis().get(run_key(run_id, suffix))
     if not isinstance(value, bytes):
         raise ValueError("Agent context expired; start a new run")
-    return model.model_validate_json(zlib.decompress(value))
+    try:
+        return model.model_validate_json(zlib.decompress(value))
+    except (ValidationError, zlib.error):
+        # Validation errors include source values, including provider credentials.
+        raise ValueError("Invalid agent checkpoint") from None
 
 
 _APPEND = """

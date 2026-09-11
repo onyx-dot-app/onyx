@@ -11,6 +11,8 @@ from onyx.db.chat import get_chat_session_by_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import record_mode_persists_content
 from onyx.db.models import AgentRun, ChatMessage, ChatSession, Persona, User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 
 ACTIVE = ("queued", "running", "finishing")
 TERMINAL = ("completed", "cancelled", "failed", "interrupted")
@@ -26,7 +28,7 @@ def get_run(run_id: UUID) -> AgentRun:
     with get_session_with_current_tenant() as session:
         run = session.get(AgentRun, run_id)
         if run is None:
-            raise ValueError("Unknown agent run")
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Unknown agent run")
         session.expunge(run)
         return run
 
@@ -82,7 +84,9 @@ def require_owner(run_id: UUID, attempt_id: UUID) -> AgentRun:
         or run.cancel_requested
         or run.expires_at <= datetime.now(timezone.utc)
     ):
-        raise ValueError("Agent execution no longer owns this run")
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT, "Agent execution no longer owns this run"
+        )
     return run
 
 
@@ -121,7 +125,7 @@ def begin_finish(
 def _lock_run_for_completion(session: Session, run_id: UUID) -> AgentRun:
     run = session.get(AgentRun, run_id)
     if run is None:
-        raise ValueError("Unknown agent run")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Unknown agent run")
     # Serialize all model completions before changing any run row. Otherwise two
     # transactions can each observe the other model as unfinished and lose done.
     session.execute(
@@ -301,7 +305,7 @@ def claim_operation(run_id: UUID, attempt_id: UUID, sequence: int) -> AgentRun:
         )
         if result.scalar_one_or_none() is None:
             session.rollback()
-            raise ValueError("Duplicate or stale agent callback")
+            raise OnyxError(OnyxErrorCode.CONFLICT, "Duplicate or stale agent callback")
         session.commit()
     return require_owner(run_id, attempt_id)
 

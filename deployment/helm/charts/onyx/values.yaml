@@ -405,7 +405,7 @@ nginx:
     # The ingress-nginx subchart doesn't auto-detect our custom ConfigMap changes.
     # Workaround: Helm upgrade will restart if the following annotation value changes.
     podAnnotations:
-      onyx.app/nginx-config-version: "7"
+      onyx.app/nginx-config-version: "8"
 
     # Propagate DOMAIN into nginx so server_name continues to use the same env var
     extraEnvs:
@@ -638,6 +638,8 @@ api:
     customTriggers: []
 
   # Additional volumes on the output Deployment definition.
+  # Optional deployment-managed sidecars, such as an internal TLS terminator.
+  extraContainers: []
   volumes: []
   # - name: foo
   #   secret:
@@ -1808,8 +1810,20 @@ extraManifests: []
 # ONYX_AGENT_SERVICE_TOKEN comes from the generated agent-auth Secret.
 agent:
   replicaCount: 2
+  # Tenant credentials never fall back to the worker identity unless explicitly enabled.
+  # Use a dedicated, least-privileged cloud identity; do not reuse the API service account.
+  allowWorkloadIdentity: false
+  serviceAccount:
+    create: true
+    # Empty creates a release-scoped agent account, without Kubernetes API token mounts.
+    name: ""
+    # For explicitly approved IRSA or GKE workload identity configuration.
+    annotations: {}
   # Override when the API has a nonempty API_PREFIX or a custom address.
   apiUrl: ""
+  # HTTPS is required unless transport is independently protected or this is local development.
+  # HTTP carries provider credentials; private addressing alone does not encrypt it.
+  allowInsecureHttp: false
   image:
     repository: onyxdotapp/onyx-agent
     tag: ""

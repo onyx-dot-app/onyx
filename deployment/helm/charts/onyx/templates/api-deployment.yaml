@@ -106,6 +106,7 @@ spec:
               value: "{{ .Values.api.threadpoolSize }}"
             {{- end }}
             {{- include "onyx.envSecrets" . | nindent 12}}
+            {{- include "onyx.agentServiceAuthEnv" . | nindent 12 }}
             {{- include "onyx.envSecretsRestricted" . | nindent 12}}
             {{- include "onyx.metricsAuthEnv" . | nindent 12}}
             {{- with include "onyx.customCACerts.env" . }}
@@ -118,6 +119,9 @@ spec:
           {{- if $apiVolumeMounts }}
           {{- $apiVolumeMounts | nindent 10 }}
           {{- end }}
+      {{- with .Values.api.extraContainers }}
+      {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- $apiVolumes := include "onyx.renderVolumes" (dict "ctx" . "volumes" .Values.api.volumes) }}
       {{- if $apiVolumes }}
       {{- $apiVolumes | nindent 6 }}

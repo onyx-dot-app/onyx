@@ -17,6 +17,7 @@ from sqlalchemy.schema import CreateSchema, DropSchema
 from onyx.db import agent_runs
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.models import AgentRun
+from onyx.error_handling.exceptions import OnyxError
 
 
 @pytest.fixture
@@ -128,20 +129,20 @@ def test_callbacks_deduplicate_and_reject_gaps_cancellation_and_wrong_owner(
         try:
             agent_runs.claim_operation(run.id, attempt, 1)
             return True
-        except ValueError:
+        except OnyxError:
             return False
 
     with ThreadPoolExecutor(max_workers=8) as executor:
         assert list(executor.map(callback, range(8))).count(True) == 1
-    with pytest.raises(ValueError):
+    with pytest.raises(OnyxError):
         agent_runs.claim_operation(run.id, attempt, 3)
-    with pytest.raises(ValueError):
+    with pytest.raises(OnyxError):
         agent_runs.claim_operation(run.id, uuid4(), 2)
     assert agent_runs.claim_operation(run.id, attempt, 2).last_sequence == 2
     agent_runs.cancel_session_runs(run.chat_session_id)
-    with pytest.raises(ValueError):
+    with pytest.raises(OnyxError):
         agent_runs.claim_operation(run.id, attempt, 3)
-    with pytest.raises(ValueError):
+    with pytest.raises(OnyxError):
         agent_runs.require_owner(run.id, attempt)
     assert not agent_runs.heartbeat_run(run.id, attempt)
     assert agent_runs.get_run(run.id).last_sequence == 2
@@ -326,3 +327,81 @@ def test_bulk_heartbeat_cannot_renew_another_tenants_run(
     finally:
         with engine.begin() as connection:
             connection.execute(DropSchema(schema, cascade=True))
+
+
+@pytest.mark.parametrize(
+    "rejection", ["attempt", "sequence", "cancelled", "expired", "public", "tenant"]
+)
+def test_http_tool_callback_checks_authority_before_tool_execution(
+    run_factory: Callable[..., list[AgentRun]],
+    monkeypatch: pytest.MonkeyPatch,
+    rejection: str,
+) -> None:
+    import asyncio
+    from unittest.mock import MagicMock
+
+    from anyio import CapacityLimiter
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+
+    from onyx.chat.pi import auth, runtime
+    from onyx.chat.pi.api import router
+    from onyx.error_handling.exceptions import register_onyx_exception_handlers
+    from shared_configs.contextvars import get_current_tenant_id
+
+    run = run_factory()[0]
+    attempt = uuid4()
+    assert agent_runs.claim_run(run.id, attempt)
+    if rejection == "cancelled":
+        agent_runs.cancel_session_runs(run.chat_session_id)
+    if rejection == "expired":
+        with agent_runs.get_session_with_current_tenant() as session:
+            session.execute(
+                update(AgentRun)
+                .where(AgentRun.id == run.id)
+                .values(expires_at=datetime.now(timezone.utc) - timedelta(seconds=1))
+            )
+            session.commit()
+    load = MagicMock(
+        side_effect=AssertionError(
+            "Rejected requests must not load credentials or tools"
+        )
+    )
+    monkeypatch.setattr(runtime, "load_run_inputs", load)
+    monkeypatch.setenv("ONYX_AGENT_SERVICE_TOKEN", "test-worker-token")
+    monkeypatch.setattr(auth, "MULTI_TENANT", False)
+    monkeypatch.setattr(auth, "POSTGRES_DEFAULT_SCHEMA", get_current_tenant_id())
+    headers = {
+        "authorization": "Bearer test-worker-token",
+        "x-onyx-tenant-id": get_current_tenant_id(),
+    }
+    if rejection == "public":
+        headers["x-onyx-public-request"] = "true"
+    elif rejection == "tenant":
+        headers["x-onyx-tenant-id"] = "other_tenant"
+    app = FastAPI()
+    app.include_router(router)
+    register_onyx_exception_handlers(app)
+
+    async def exercise() -> None:
+        app.state.agent_tool_limiter = CapacityLimiter(1)
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as http:
+            response = await http.post(
+                f"/internal/agent/runs/{run.id}/callback",
+                headers=headers,
+                json={
+                    "attemptId": str(uuid4() if rejection == "attempt" else attempt),
+                    "sequence": 2 if rejection == "sequence" else 1,
+                    "type": "tools",
+                    "payload": {"calls": []},
+                },
+            )
+            assert response.status_code == {"public": 404, "tenant": 400}.get(
+                rejection, 409
+            )
+        load.assert_not_called()
+        assert agent_runs.get_run(run.id).last_sequence == 0
+
+    asyncio.run(exercise())

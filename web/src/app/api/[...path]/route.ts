@@ -92,6 +92,8 @@ async function handleRequest(request: NextRequest, path: string[]) {
 
     // Build headers, optionally injecting debug auth cookie
     const headers = new Headers(request.headers);
+    // Overwrite client input: internal worker routes reject public proxy traffic.
+    headers.set("X-Onyx-Public-Request", "true");
     if (
       process.env.DEBUG_AUTH_COOKIE &&
       process.env.NODE_ENV === "development"

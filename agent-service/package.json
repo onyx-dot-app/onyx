@@ -12,6 +12,7 @@
     "@anthropic-ai/vertex-sdk": "0.19.8",
     "@earendil-works/pi-agent-core": "0.85.1",
     "@earendil-works/pi-ai": "0.85.1",
+    "@google/genai": "1.52.0",
     "bullmq": "6.3.4",
     "google-auth-library": "10",
     "ioredis": "6.0.0",
@@ -23,5 +24,8 @@
     "start": "bun src/server.ts",
     "check": "tsc --noEmit",
     "test": "bun test"
+  },
+  "patchedDependencies": {
+    "@earendil-works/pi-ai@0.85.1": "patches/@earendil-works%2Fpi-ai@0.85.1.patch"
   }
 }

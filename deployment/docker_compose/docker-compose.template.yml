@@ -54,6 +54,10 @@ services:
     image: ${ONYX_AGENT_IMAGE:-onyxdotapp/onyx-agent:${IMAGE_TAG:-latest}}
     build:
       context: ../../agent-service
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
     scale: ${ONYX_AGENT_REPLICAS:-1}
     stop_grace_period: ${ONYX_AGENT_STOP_GRACE_PERIOD:-1830s}
@@ -65,14 +69,16 @@ services:
     environment:
       - ONYX_CHAT_ENGINE=${ONYX_CHAT_ENGINE:-pi}
       - ONYX_AGENT_REDIS_URL=${ONYX_AGENT_REDIS_URL:-redis://agent_redis:6379/0}
-      - ONYX_AGENT_STATE_REDIS_URL=${ONYX_AGENT_STATE_REDIS_URL:-redis://cache:6379/0}
+      - ONYX_AGENT_ALLOW_WORKLOAD_IDENTITY=${ONYX_AGENT_ALLOW_WORKLOAD_IDENTITY:-false}
       - ONYX_AGENT_RUN_TIMEOUT_SECONDS=${ONYX_AGENT_RUN_TIMEOUT_SECONDS:-1800}
+      #!value prod,no-letsencrypt: - ONYX_AGENT_ALLOW_INSECURE_HTTP=${ONYX_AGENT_ALLOW_INSECURE_HTTP:-false}
+      - ONYX_AGENT_ALLOW_INSECURE_HTTP=${ONYX_AGENT_ALLOW_INSECURE_HTTP:-true}
       - ONYX_AGENT_API_URL=${ONYX_AGENT_API_URL:-http://api_server:8080/internal/agent}
       - ONYX_AGENT_MAX_CONCURRENT_RUNS=${ONYX_AGENT_MAX_CONCURRENT_RUNS:-64}
       - ONYX_AGENT_DRAIN_TIMEOUT_SECONDS=${ONYX_AGENT_DRAIN_TIMEOUT_SECONDS:-1800}
       - ONYX_AGENT_SERVICE_HOST=0.0.0.0
       #!value prod,no-letsencrypt: - ONYX_AGENT_SERVICE_TOKEN=${ONYX_AGENT_SERVICE_TOKEN:-}
-      - ONYX_AGENT_SERVICE_TOKEN=${ONYX_AGENT_SERVICE_TOKEN:-onyx-local-agent}
+      - ONYX_AGENT_SERVICE_TOKEN=${ONYX_AGENT_SERVICE_TOKEN:-}
     healthcheck:
       test: ["CMD", "bun", "-e", "fetch('http://localhost:8091/health').then(r => process.exit(r.ok ? 0 : 1))"]
       interval: 10s
@@ -139,7 +145,7 @@ services:
       - ONYX_AGENT_STATE_REDIS_URL=${ONYX_AGENT_STATE_REDIS_URL:-redis://cache:6379/0}
       - ONYX_AGENT_RUN_TIMEOUT_SECONDS=${ONYX_AGENT_RUN_TIMEOUT_SECONDS:-1800}
       #!value prod,no-letsencrypt: - ONYX_AGENT_SERVICE_TOKEN=${ONYX_AGENT_SERVICE_TOKEN:-}
-      - ONYX_AGENT_SERVICE_TOKEN=${ONYX_AGENT_SERVICE_TOKEN:-onyx-local-agent}
+      - ONYX_AGENT_SERVICE_TOKEN=${ONYX_AGENT_SERVICE_TOKEN:-}
       # Auth Settings
       #!value prod,no-letsencrypt: - AUTH_TYPE=${AUTH_TYPE:-oidc}
       - AUTH_TYPE=${AUTH_TYPE:-basic}
@@ -237,8 +243,6 @@ services:
       - ONYX_AGENT_REDIS_URL=${ONYX_AGENT_REDIS_URL:-redis://agent_redis:6379/0}
       - ONYX_AGENT_STATE_REDIS_URL=${ONYX_AGENT_STATE_REDIS_URL:-redis://cache:6379/0}
       - ONYX_AGENT_RUN_TIMEOUT_SECONDS=${ONYX_AGENT_RUN_TIMEOUT_SECONDS:-1800}
-      #!value prod,no-letsencrypt: - ONYX_AGENT_SERVICE_TOKEN=${ONYX_AGENT_SERVICE_TOKEN:-}
-      - ONYX_AGENT_SERVICE_TOKEN=${ONYX_AGENT_SERVICE_TOKEN:-onyx-local-agent}
       #!for prod,no-letsencrypt
       - AUTH_TYPE=${AUTH_TYPE:-oidc}
       #!endfor

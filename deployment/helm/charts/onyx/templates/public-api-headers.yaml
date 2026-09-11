@@ -1,0 +1,8 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "onyx.resourceName" (list . "public-api-headers") }}
+data:
+  X-Onyx-Public-Request: "true"
+{{- end }}

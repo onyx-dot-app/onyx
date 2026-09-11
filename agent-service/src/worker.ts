@@ -1,4 +1,5 @@
 import { Queue, Worker, type ConnectionOptions } from "bullmq";
+import { validateWorkerConnection } from "./config";
 import { z } from "zod";
 import { startSchema } from "./protocol";
 import { ChatRun } from "./run";
@@ -14,6 +15,7 @@ export interface WorkerConfig {
   redisUrl: string;
   apiUrl: string;
   token: string;
+  allowInsecureHttp?: boolean;
   concurrency: number;
   runTimeoutMs: number;
   drainTimeoutMs: number;
@@ -55,6 +57,7 @@ export class AgentWorker {
   private stopping = false;
 
   constructor(readonly config: WorkerConfig) {
+    validateWorkerConnection(config);
     const connection = redisConnection(config.redisUrl);
     const name = config.queueName ?? "onyx-agent";
     this.queue = new Queue(name, {

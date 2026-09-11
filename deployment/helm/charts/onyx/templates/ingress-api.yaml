@@ -8,6 +8,7 @@ metadata:
     kubernetes.io/ingress.class: nginx
     {{- end }}
     nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/proxy-set-headers: {{ printf "%s/%s" .Release.Namespace (include "onyx.resourceName" (list . "public-api-headers")) | quote }}
     nginx.ingress.kubernetes.io/use-regex: "true"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "{{ .Values.nginx.timeouts.read }}"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "{{ .Values.nginx.timeouts.send }}"

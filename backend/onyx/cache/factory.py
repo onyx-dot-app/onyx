@@ -1,7 +1,9 @@
 from collections.abc import Callable
 
+from onyx.cache.encryption import CacheValueCodec, EncryptedCache
 from onyx.cache.interface import CacheBackend, CacheBackendType
 from onyx.configs.app_configs import CACHE_BACKEND
+from shared_configs.contextvars import get_current_tenant_id
 
 
 def _build_redis_backend(tenant_id: str) -> CacheBackend:
@@ -30,8 +32,6 @@ def get_cache_backend(*, tenant_id: str | None = None) -> CacheBackend:
     thread-local context variable (same behaviour as ``get_redis_client``).
     """
     if tenant_id is None:
-        from shared_configs.contextvars import get_current_tenant_id
-
         tenant_id = get_current_tenant_id()
 
     builder = _BACKEND_BUILDERS.get(CACHE_BACKEND)
@@ -47,3 +47,15 @@ def get_shared_cache_backend() -> CacheBackend:
     from shared_configs.configs import DEFAULT_REDIS_PREFIX
 
     return get_cache_backend(tenant_id=DEFAULT_REDIS_PREFIX)
+
+
+def get_encrypted_cache_backend(
+    *, purpose: str, tenant_id: str | None = None
+) -> EncryptedCache:
+    """Capture the same tenant for both cache routing and edition-aware values."""
+    if tenant_id is None:
+        tenant_id = get_current_tenant_id()
+    return EncryptedCache(
+        get_cache_backend(tenant_id=tenant_id),
+        CacheValueCodec(tenant_id=tenant_id, purpose=purpose),
+    )

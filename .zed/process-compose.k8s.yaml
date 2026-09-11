@@ -39,7 +39,18 @@ processes:
     shutdown:
       signal: 15
       timeout_seconds: 1830
-    command: bun install --frozen-lockfile && bun run dev
+    # Read the shared dev file only in the launcher; do not pass API secrets to Bun.
+    command: >-
+      env -i PATH="$PATH" HOME="$HOME"
+      ONYX_AGENT_SERVICE_TOKEN="$ONYX_AGENT_SERVICE_TOKEN"
+      ONYX_AGENT_REDIS_URL="$ONYX_AGENT_REDIS_URL"
+      ONYX_AGENT_ALLOW_INSECURE_HTTP="${ONYX_AGENT_ALLOW_INSECURE_HTTP:-true}"
+      ONYX_AGENT_API_URL="${ONYX_AGENT_API_URL:-http://127.0.0.1:8080/internal/agent}"
+      ONYX_AGENT_ALLOW_WORKLOAD_IDENTITY="${ONYX_AGENT_ALLOW_WORKLOAD_IDENTITY:-false}"
+      ONYX_AGENT_MAX_CONCURRENT_RUNS="${ONYX_AGENT_MAX_CONCURRENT_RUNS:-64}"
+      ONYX_AGENT_RUN_TIMEOUT_SECONDS="${ONYX_AGENT_RUN_TIMEOUT_SECONDS:-1800}"
+      ONYX_AGENT_DRAIN_TIMEOUT_SECONDS="${ONYX_AGENT_DRAIN_TIMEOUT_SECONDS:-1800}"
+      /bin/sh -c 'bun install --frozen-lockfile && bun run dev'
     working_dir: ${ONYX_ZED_ROOT}/agent-service
     env_file: ${ONYX_ZED_ROOT}/.vscode/.env.k8s
     environment:

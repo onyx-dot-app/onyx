@@ -399,14 +399,23 @@ class ChatHost:
         tool_responses: list[ToolResponse] = []
         requested = {call.id: call for call in calls}
         tool_calls = [
+            # Pi normalizes arguments during schema validation (for example "2" -> 2).
             call.model_copy(
                 update={"tool_args": requested[call.tool_call_id].arguments}
             )
             for call in self.llm_step_result.tool_calls or []
             if call.tool_call_id in requested
         ]
-        if len(tool_calls) != len(calls):
+        if len(requested) != len(calls) or len(tool_calls) != len(calls):
             raise ValueError("Pi requested a tool call outside the current model step")
+        for call in tool_calls:
+            requested_call = requested[call.tool_call_id]
+            if requested_call.name != call.tool_name or call.tool_name not in {
+                tool.name for tool in self.final_tools
+            }:
+                raise ValueError(
+                    "Pi requested a tool call that differs from the model step"
+                )
         if INTEGRATION_TESTS_MODE and tool_calls:
             for tool_call in tool_calls:
                 self.emitter.emit(

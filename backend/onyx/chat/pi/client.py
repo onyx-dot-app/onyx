@@ -8,6 +8,7 @@ from onyx.llm.api_surfaces import resolve_api_surface
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.models import ReasoningEffort, resolve_reasoning_effort
 from onyx.llm.utils import build_litellm_passthrough_kwargs
+from shared_configs.configs import MULTI_TENANT
 
 
 def build_start(
@@ -47,4 +48,6 @@ def build_start(
         "maxTurns": MAX_LLM_CYCLES,
         "sessionId": chat_session_id if SEND_USER_METADATA_TO_LLM_PROVIDER else None,
         "mockResponse": mock_response,
+        # Tenant-controlled provider options cannot grant the worker's cloud identity.
+        "allowWorkloadIdentity": not MULTI_TENANT,
     }

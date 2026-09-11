@@ -5,7 +5,14 @@
 {{- if le (int .Values.agent.terminationGracePeriodSeconds) (add (int .Values.agent.drainTimeoutSeconds) 20) }}
 {{- fail "agent.terminationGracePeriodSeconds must exceed agent.drainTimeoutSeconds plus 20 seconds for cleanup" }}
 {{- end }}
+{{- if and (not .Values.agent.allowInsecureHttp) (not (hasPrefix "https://" .Values.agent.apiUrl)) }}
+{{- fail "Pi requires agent.apiUrl=https://<private-api>/internal/agent; set agent.allowInsecureHttp=true only for local development or independently protected transport" }}
+{{- end }}
 {{- $name := include "onyx.resourceName" (list . "agent") }}
+{{- $serviceAccount := .Values.agent.serviceAccount.name | default $name }}
+{{- if and (not .Values.agent.serviceAccount.create) (not .Values.agent.serviceAccount.name) }}
+{{- fail "agent.serviceAccount.name is required when agent.serviceAccount.create is false" }}
+{{- end }}
 {{- $secretName := .Values.agent.existingSecret | default (include "onyx.resourceName" (list . "agent-auth")) }}
 {{- if not .Values.agent.existingSecret }}
 {{- $existing := lookup "v1" "Secret" .Release.Namespace $secretName }}
@@ -22,6 +29,20 @@ data:
   {{- else }}
   token: {{ randAlphaNum 64 | b64enc | quote }}
   {{- end }}
+---
+{{- end }}
+{{- if .Values.agent.serviceAccount.create }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $serviceAccount }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+  {{- with .Values.agent.serviceAccount.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+automountServiceAccountToken: false
 ---
 {{- end }}
 apiVersion: v1
@@ -67,7 +88,14 @@ spec:
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
       terminationGracePeriodSeconds: {{ .Values.agent.terminationGracePeriodSeconds }}
-      serviceAccountName: {{ include "onyx.serviceAccountName" . }}
+      serviceAccountName: {{ $serviceAccount }}
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -76,12 +104,20 @@ spec:
         - name: agent
           image: "{{ .Values.agent.image.repository }}:{{ .Values.agent.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.agent.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
           ports:
             - name: agent
               containerPort: 8091
           env:
             {{- include "onyx.agentRedisEnv" . | nindent 12 }}
-            {{- include "onyx.agentStateRedisEnv" . | nindent 12 }}
+            - name: ONYX_AGENT_ALLOW_WORKLOAD_IDENTITY
+              value: {{ .Values.agent.allowWorkloadIdentity | quote }}
+            - name: ONYX_AGENT_ALLOW_INSECURE_HTTP
+              value: {{ .Values.agent.allowInsecureHttp | quote }}
             - name: ONYX_AGENT_API_URL
               value: {{ .Values.agent.apiUrl | default (printf "http://%s:%v/internal/agent" (include "onyx.resourceName" (list . "api-service")) .Values.api.service.servicePort) | quote }}
             - name: ONYX_AGENT_RUN_TIMEOUT_SECONDS

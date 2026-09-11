@@ -101,7 +101,7 @@ def test_queued_cancellation_saves_stop_without_requiring_uncreated_host_snapsho
             "onyx.chat.pi.runtime.agent_runs.complete_run", return_value=False
         ) as complete,
         patch("onyx.chat.pi.runtime.agent_runs.load_message"),
-        patch("onyx.chat.pi.runtime.load_state", return_value=inputs),
+        patch("onyx.chat.pi.runtime.load_run_inputs", return_value=inputs),
         patch("onyx.chat.pi.runtime.input_context", return_value=nullcontext()),
         patch("onyx.chat.pi.runtime.state_redis") as redis,
         patch("onyx.chat.pi.runtime.save_state"),
@@ -127,7 +127,7 @@ def test_finalization_failure_identifies_model_when_inputs_are_unavailable() -> 
         patch("onyx.chat.pi.runtime.agent_runs.complete_run", return_value=False),
         patch("onyx.chat.pi.runtime.agent_runs.save_failure"),
         patch(
-            "onyx.chat.pi.runtime.load_state",
+            "onyx.chat.pi.runtime.load_run_inputs",
             side_effect=ValueError("sensitive internal failure"),
         ),
         patch("onyx.chat.pi.runtime.state_redis"),

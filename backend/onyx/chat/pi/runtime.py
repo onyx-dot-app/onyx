@@ -17,6 +17,7 @@ from onyx.chat.models import StreamingError
 from onyx.chat.pi.chat import ChatHost
 from onyx.chat.pi.client import build_start
 from onyx.chat.pi.host_state import ChatHostSnapshot
+from onyx.chat.pi.input_storage import load_run_inputs
 from onyx.chat.pi.inputs import RunInputs
 from onyx.chat.pi.models import PiToolCall, PiToolResult
 from onyx.chat.pi.projection import ProjectionSnapshot
@@ -106,8 +107,8 @@ def claim(run_id: UUID, attempt_id: UUID) -> dict[str, Any]:
     if not agent_runs.claim_run(run_id, attempt_id):
         return {"status": "unavailable"}
     try:
-        inputs = load_state(run_id, "inputs", RunInputs)
         run = agent_runs.get_run(run_id)
+        inputs = load_run_inputs(run)
         with input_context(inputs):
             host = inputs.build_host(StreamEmitter(run))
             save_state(run_id, "host", host.snapshot())
@@ -187,7 +188,7 @@ class ModelStreamProjection:
         if not self.ended:
             save_state(self.run.id, "projection", projection)
             return
-        inputs = load_state(self.run.id, "inputs", RunInputs)
+        inputs = load_run_inputs(self.run)
         with input_context(inputs):
             host = inputs.build_host(self.emitter)
             host.restore(load_state(self.run.id, "host", ChatHostSnapshot))
@@ -219,7 +220,7 @@ def apply_operation(
     if event_type == "events":
         _apply_events(run, payload)
         return None
-    inputs = load_state(run_id, "inputs", RunInputs)
+    inputs = load_run_inputs(run)
     with input_context(inputs):
         host = inputs.build_host(StreamEmitter(run))
         host.restore(load_state(run_id, "host", ChatHostSnapshot))
@@ -317,7 +318,7 @@ def finish(
     content_free = True
     error_details: dict[str, str | int] = {"model_index": run.model_index}
     try:
-        inputs = load_state(run_id, "inputs", RunInputs)
+        inputs = load_run_inputs(run)
         content_free = not record_mode_persists_content(inputs.record_mode)
         error_details.update(
             model=inputs.model.model_name, provider=inputs.model.model_provider

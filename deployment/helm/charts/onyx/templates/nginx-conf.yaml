@@ -102,6 +102,7 @@ data:
             proxy_connect_timeout {{ .Values.nginx.timeouts.connect }}s;
             proxy_send_timeout {{ .Values.nginx.timeouts.send }}s;
             proxy_read_timeout {{ .Values.nginx.timeouts.read }}s;
+            proxy_set_header X-Onyx-Public-Request "true";
             proxy_pass http://api_server;
         }
 
@@ -118,6 +119,7 @@ data:
             proxy_connect_timeout {{ .Values.nginx.timeouts.connect }}s;
             proxy_send_timeout {{ .Values.nginx.timeouts.send }}s;
             proxy_read_timeout {{ .Values.nginx.timeouts.read }}s;
+            proxy_set_header X-Onyx-Public-Request "true";
             proxy_pass http://api_server;
         }
 
@@ -137,6 +139,7 @@ data:
             proxy_connect_timeout {{ .Values.nginx.timeouts.connect }}s;
             proxy_send_timeout {{ .Values.nginx.timeouts.send }}s;
             proxy_read_timeout {{ .Values.nginx.timeouts.read }}s;
+            proxy_set_header X-Onyx-Public-Request "true";
             proxy_pass http://api_server;
         }
 

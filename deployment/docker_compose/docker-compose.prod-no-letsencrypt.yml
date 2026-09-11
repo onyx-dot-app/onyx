@@ -11,6 +11,10 @@ services:
     image: ${ONYX_AGENT_IMAGE:-onyxdotapp/onyx-agent:${IMAGE_TAG:-latest}}
     build:
       context: ../../agent-service
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
     scale: ${ONYX_AGENT_REPLICAS:-1}
     stop_grace_period: ${ONYX_AGENT_STOP_GRACE_PERIOD:-1830s}
@@ -22,8 +26,9 @@ services:
     environment:
       - ONYX_CHAT_ENGINE=${ONYX_CHAT_ENGINE:-pi}
       - ONYX_AGENT_REDIS_URL=${ONYX_AGENT_REDIS_URL:-redis://agent_redis:6379/0}
-      - ONYX_AGENT_STATE_REDIS_URL=${ONYX_AGENT_STATE_REDIS_URL:-redis://cache:6379/0}
+      - ONYX_AGENT_ALLOW_WORKLOAD_IDENTITY=${ONYX_AGENT_ALLOW_WORKLOAD_IDENTITY:-false}
       - ONYX_AGENT_RUN_TIMEOUT_SECONDS=${ONYX_AGENT_RUN_TIMEOUT_SECONDS:-1800}
+      - ONYX_AGENT_ALLOW_INSECURE_HTTP=${ONYX_AGENT_ALLOW_INSECURE_HTTP:-false}
       - ONYX_AGENT_API_URL=${ONYX_AGENT_API_URL:-http://api_server:8080/internal/agent}
       - ONYX_AGENT_MAX_CONCURRENT_RUNS=${ONYX_AGENT_MAX_CONCURRENT_RUNS:-64}
       - ONYX_AGENT_DRAIN_TIMEOUT_SECONDS=${ONYX_AGENT_DRAIN_TIMEOUT_SECONDS:-1800}
@@ -167,7 +172,6 @@ services:
       - ONYX_AGENT_REDIS_URL=${ONYX_AGENT_REDIS_URL:-redis://agent_redis:6379/0}
       - ONYX_AGENT_STATE_REDIS_URL=${ONYX_AGENT_STATE_REDIS_URL:-redis://cache:6379/0}
       - ONYX_AGENT_RUN_TIMEOUT_SECONDS=${ONYX_AGENT_RUN_TIMEOUT_SECONDS:-1800}
-      - ONYX_AGENT_SERVICE_TOKEN=${ONYX_AGENT_SERVICE_TOKEN:-}
       - AUTH_TYPE=${AUTH_TYPE:-oidc}
       - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
       - OPENSEARCH_HOST=${OPENSEARCH_HOST:-opensearch}

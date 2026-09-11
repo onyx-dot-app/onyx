@@ -113,8 +113,13 @@ async def recover() -> None:
 
 
 async def start(app: FastAPI) -> None:
-    if not os.environ.get("ONYX_AGENT_SERVICE_TOKEN", "").strip():
-        raise ValueError("ONYX_AGENT_SERVICE_TOKEN is required for Pi chat")
+    service_token = os.environ.get("ONYX_AGENT_SERVICE_TOKEN", "")
+    if len(service_token) < 32 or any(
+        character.isspace() for character in service_token
+    ):
+        raise ValueError(
+            "ONYX_AGENT_SERVICE_TOKEN must contain at least 32 characters; generate a random deployment secret"
+        )
     run_timeout = int(os.environ.get("ONYX_AGENT_RUN_TIMEOUT_SECONDS", "1800"))
     if not 1 <= run_timeout <= 1800:
         raise ValueError("ONYX_AGENT_RUN_TIMEOUT_SECONDS must be between 1 and 1800")

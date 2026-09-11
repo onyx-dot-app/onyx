@@ -14,3 +14,7 @@ auth:
       s3_aws_secret_access_key: "placeholder"
       rootUser: "placeholder"
       rootPassword: "placeholder"
+
+# Isolated chart-test cluster uses HTTP without production credentials.
+agent:
+  allowInsecureHttp: true

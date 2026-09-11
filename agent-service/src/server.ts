@@ -14,6 +14,10 @@ const runtime = new AgentWorker({
     process.env.ONYX_AGENT_API_URL ?? "http://127.0.0.1:8080/internal/agent"
   ).replace(/\/$/, ""),
   token,
+  allowInsecureHttp:
+    z
+      .enum(["true", "false"])
+      .parse(process.env.ONYX_AGENT_ALLOW_INSECURE_HTTP ?? "false") === "true",
   eventBatchMs: positive
     .max(1000)
     .parse(process.env.ONYX_AGENT_EVENT_BATCH_MS ?? 200),

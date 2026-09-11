@@ -5,6 +5,7 @@ import type { Host, Start } from "../src/protocol";
 function config(base: string): Start {
   return {
     type: "start",
+    allowWorkloadIdentity: false,
     config: {
       model_provider: "openai",
       model_name: "gpt-5-mini",

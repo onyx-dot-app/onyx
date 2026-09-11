@@ -1,0 +1,71 @@
+diff --git a/dist/api/bedrock-converse-stream.js b/dist/api/bedrock-converse-stream.js
+index 6bc6312906ec3d75f31d190994d21c87f1d0767d..24eb6dcc2e4f3f3d65638413c76b8bfb354f09ab 100644
+--- a/dist/api/bedrock-converse-stream.js
++++ b/dist/api/bedrock-converse-stream.js
+@@ -48,7 +48,7 @@ export const stream = (model, context, options = {}) => {
+             profile: optionsProfile || getProviderEnvValue("AWS_PROFILE", options.env),
+         };
+         const configuredRegion = getConfiguredBedrockRegion(options);
+-        const hasAmbientConfiguredProfile = Boolean(getProviderEnvValue("AWS_PROFILE"));
++        const hasAmbientConfiguredProfile = Boolean(getProviderEnvValue("AWS_PROFILE", options.env));
+         const endpointRegion = getStandardBedrockEndpointRegion(model.baseUrl);
+         const useExplicitEndpoint = shouldUseExplicitBedrockEndpoint(model.baseUrl, configuredRegion, hasAmbientConfiguredProfile);
+         // Only pin standard AWS Bedrock runtime endpoints when no region or ambient AWS_PROFILE is configured.
+diff --git a/dist/api/google-vertex.d.ts b/dist/api/google-vertex.d.ts
+index 9ef58caf6a76cdece4643120045ba995307ce0f2..0ba0ea9c57672a11eaad400fda87b01e05c1f765 100644
+--- a/dist/api/google-vertex.d.ts
++++ b/dist/api/google-vertex.d.ts
+@@ -1,6 +1,8 @@
++import type { GoogleGenAI } from "@google/genai";
+ import type { SimpleStreamOptions, StreamFunction, StreamOptions } from "../types.ts";
+ import type { GoogleApiThinkingLevel } from "./google-shared.ts";
+ export interface GoogleVertexOptions extends StreamOptions {
++    client?: GoogleGenAI;
+     toolChoice?: "auto" | "none" | "any";
+     thinking?: {
+         enabled: boolean;
+@@ -11,5 +13,5 @@ export interface GoogleVertexOptions extends StreamOptions {
+     location?: string;
+ }
+ export declare const stream: StreamFunction<"google-vertex", GoogleVertexOptions>;
+-export declare const streamSimple: StreamFunction<"google-vertex", SimpleStreamOptions>;
++export declare const streamSimple: StreamFunction<"google-vertex", SimpleStreamOptions & Pick<GoogleVertexOptions, "client">>;
+ //# sourceMappingURL=google-vertex.d.ts.map
+\ No newline at end of file
+diff --git a/dist/api/google-vertex.js b/dist/api/google-vertex.js
+index 71b489759f10c39842693555019598848fbae141..37b1f30000cafae89a999a56bfe451f0656e8c0c 100644
+--- a/dist/api/google-vertex.js
++++ b/dist/api/google-vertex.js
+@@ -45,9 +45,9 @@ export const stream = (model, context, options) => {
+             }
+             const apiKey = resolveApiKey(options);
+             // Create the client using either a Vertex API key, if provided, or ADC with project and location
+-            const client = apiKey
++            const client = options?.client ?? (apiKey
+                 ? createClientWithApiKey(model, apiKey, options?.headers)
+-                : createClient(model, resolveProject(options), resolveLocation(options), options?.headers, options?.env);
++                : createClient(model, resolveProject(options), resolveLocation(options), options?.headers, options?.env));
+             let params = buildParams(model, context, options);
+             const nextParams = await options?.onPayload?.(params, model);
+             if (nextParams !== undefined) {
+@@ -241,6 +241,7 @@ export const stream = (model, context, options) => {
+ export const streamSimple = (model, context, options) => {
+     const base = {
+         ...buildBaseOptions(model, context, options, undefined),
++        client: options?.client,
+         toolChoice: options?.toolChoice,
+     };
+     if (!options?.reasoning) {
+diff --git a/dist/utils/provider-env.js b/dist/utils/provider-env.js
+index c50f7d233be7a6470a9e98bf4c85fa062065bf12..0869c0804e980f1148356c5a6e93bf2fb12cb6a0 100644
+--- a/dist/utils/provider-env.js
++++ b/dist/utils/provider-env.js
+@@ -36,6 +36,8 @@ function getBunSandboxEnvValue(name) {
+  * the duplicated Bun sandbox fallback for direct pi-ai consumers.
+  */
+ export function getProviderEnvValue(name, env) {
++    // A supplied scope must never inherit another identity from the worker.
++    if (env !== undefined) return env[name] || undefined;
+     return (env?.[name] ||
+         (typeof process !== "undefined" ? process.env[name] : undefined) ||
+         getBunSandboxEnvValue(name) ||

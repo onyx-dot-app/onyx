@@ -18,7 +18,6 @@ import {
 } from "./protocol";
 import { resolveProvider } from "./providers";
 import { ModelFailure } from "./errors";
-import { prepareCredentials } from "./credentials";
 import { importContext } from "./context";
 
 /** A run owns its model, credentials, transcript, tools and cancellation signal. */
@@ -36,16 +35,7 @@ export class ChatRun {
   }
 
   async execute() {
-    const resolved = resolveProvider(this.start);
-    const cleanup =
-      resolved.model.api === "google-vertex"
-        ? await prepareCredentials(this.start, resolved.options)
-        : async () => {};
-    try {
-      await this.runAgent(resolved);
-    } finally {
-      await cleanup();
-    }
+    await this.runAgent(resolveProvider(this.start));
   }
 
   private async runAgent({

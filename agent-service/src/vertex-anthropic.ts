@@ -1,6 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { AnthropicVertex } from "@anthropic-ai/vertex-sdk";
-import { GoogleAuth, OAuth2Client } from "google-auth-library";
+import { GoogleAuth } from "google-auth-library";
 import type {
   Api,
   Model,
@@ -18,42 +18,29 @@ import {
 } from "@earendil-works/pi-ai/api/simple-options";
 import { z } from "zod";
 import type { Start } from "./protocol";
+import { googleAuthentication, vertexBaseUrl } from "./google-auth";
 
 /** Use Vertex authentication with Pi's native Anthropic messages and event parser. */
 export function vertexAnthropic(
   start: Start,
 ): StreamFunction<Api, SimpleStreamOptions> {
   const raw = start.options;
-  const credentials =
-    typeof raw.vertex_credentials === "string"
-      ? z
-          .record(z.string(), z.unknown())
-          .parse(JSON.parse(raw.vertex_credentials))
-      : undefined;
-  const googleAuth = new GoogleAuth({
-    credentials,
-    scopes: ["https://www.googleapis.com/auth/cloud-platform"],
-  });
-  const project = raw.vertex_project ?? credentials?.project_id;
-  const accessToken =
-    typeof raw.vertex_access_token === "string"
-      ? raw.vertex_access_token
-      : undefined;
-  const tokenClient = accessToken ? new OAuth2Client() : undefined;
-  tokenClient?.setCredentials({ access_token: accessToken });
+  const auth = googleAuthentication(start);
   let client: AnthropicVertex | undefined;
   return (inputModel, context, options) => {
     client ??= new AnthropicVertex({
-      ...(tokenClient ? { authClient: tokenClient } : { googleAuth }),
+      ...(auth.authClient
+        ? { authClient: auth.authClient }
+        : { googleAuth: new GoogleAuth({ scopes: auth.scopes }) }),
       defaultHeaders: z
         .record(z.string(), z.string())
         .parse(raw.extra_headers ?? {}),
-      projectId: typeof project === "string" ? project : undefined,
-      region:
-        typeof raw.vertex_location === "string"
-          ? raw.vertex_location
-          : "global",
-      baseURL: start.config.api_base ?? undefined,
+      projectId: auth.project,
+      region: auth.location,
+      baseURL:
+        (typeof raw.api_base === "string" ? raw.api_base : undefined) ||
+        start.config.api_base ||
+        `${vertexBaseUrl(auth.location)}/v1`,
       maxRetries: 2,
       timeout: 120000,
     });

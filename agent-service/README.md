@@ -123,7 +123,8 @@ redelivery is not durable agent continuation and never authorizes tool replay.
 | ---------------------------------- | -------------------------------------- | -------------------------------------------------------------- |
 | `ONYX_AGENT_REDIS_URL`             | `redis://127.0.0.1:6381/0`             | Persistent BullMQ queue Redis; supports `rediss://`            |
 | `ONYX_AGENT_API_URL`               | `http://127.0.0.1:8080/internal/agent` | Internal Python API root                                       |
-| `ONYX_AGENT_SERVICE_TOKEN`         | none                                   | Shared internal service credential; configure on both services |
+| `ONYX_AGENT_SERVICE_TOKEN`         | none                                   | Random secret of at least 32 characters; API and worker only |
+| `ONYX_AGENT_ALLOW_INSECURE_HTTP` | `false` | Explicit exception for local development or separately protected transport |
 | `ONYX_AGENT_SERVICE_HOST`          | `127.0.0.1`                            | Health/metrics HTTP bind address                               |
 | `ONYX_AGENT_SERVICE_PORT`          | `8091`                                 | Health/metrics HTTP port                                       |
 | `ONYX_AGENT_MAX_CONCURRENT_RUNS`   | `64`                                   | Per-process execution slots                                    |
@@ -136,6 +137,22 @@ its own bounded storage and retention policy in the Python service. Do not rely 
 separate Redis database numbers for memory isolation. Production should provision
 independent queue and transient-state memory budgets.
 
+Run snapshots separate ordinary chat inputs from connection credentials. Chat
+inputs retain their existing JSON serialization and compression. API keys,
+credential-bearing provider settings/options, and tool/MCP headers use Onyx's
+shared cache codec and edition-aware encryption functions. Provider extension
+maps stay together because their credential keys are not fixed. Only the
+credential blob needs binary-to-JSON encoding; both parts share one Redis record
+for atomic admission, expiration, and cleanup. **CE does not encrypt.** EE encrypts when
+`ENCRYPTION_KEY_SECRET` is configured, using Onyx's existing key management.
+No key derives from the service token, and no credential file is created.
+Tenant, purpose, and key metadata reject misplaced credential blobs. The existing EE
+AES-CBC format does not provide authenticated encryption.
+Drain queued and active runs before deploying the new snapshot format or
+rotating the EE encryption key. Old input records are rejected. Chat output and
+tool-result snapshots retain their existing storage policy and can contain
+sensitive content.
+
 `GET /health` checks process liveness; `/ready` also checks worker readiness and
 Redis connectivity. `/metrics` exposes global outstanding jobs, local active runs,
 configured capacity, and drain state. Redis failures return HTTP 503 for metrics,
@@ -144,10 +161,36 @@ and belong on the internal service network.
 
 Provider credentials are scoped to each run. Pi supplies native provider adapters;
 Claude on Vertex uses the official Anthropic Vertex client with Pi's stream parser.
-Gemini Vertex credentials use private temporary files only when required by the
-adapter and remove them on normal completion or cancellation. Provider requests
-have a two-minute timeout and at most two retries; this does not retry the agent
-run or tool execution.
+Gemini and Claude on Vertex use in-memory authentication. Supplied Google JSON
+credentials must contain service-account key material; external-account, local-file,
+and executable credential configurations are not accepted. Missing credentials do
+not enable ambient authentication. Workload identity requires host authorization
+in single-tenant mode and explicit deployment opt-in. Provider requests have a
+two-minute timeout and at most two retries; this does not retry the agent run or
+tool execution.
+
+The pinned Pi patch adds Google client injection and makes a supplied provider
+environment authoritative. Keep the patch and security tests when updating Pi.
+See [SECURITY.md](SECURITY.md) for the audit and remaining trust boundaries.
+
+## Worker deployment security
+
+Workers use a dedicated Kubernetes service account, without Kubernetes API token mounts.
+They run as UID/GID 1000, with a read-only root filesystem and all capabilities dropped.
+Compose applies the same filesystem and privilege restrictions.
+No worker receives the API's transient-state Redis credentials.
+
+`agent.allowWorkloadIdentity` defaults to `false` in Helm.
+Explicitly approved deployments can enable it and configure `agent.serviceAccount.annotations`
+for a dedicated, least-privileged cloud identity. Never reuse the API's cloud role.
+Compose exposes the equivalent `ONYX_AGENT_ALLOW_WORKLOAD_IDENTITY` setting.
+An enabled worker identity is shared by its runs; it is not tenant isolation.
+
+The worker still holds a shared internal API service token and queue access.
+A compromised worker process can cross tenant boundaries; concurrency does not provide a sandbox.
+The worker requires HTTPS by default. Bundled queue Redis has no authentication or TLS.
+Keep these endpoints on trusted, restricted networks. Configure HTTPS and authenticated
+`rediss://` endpoints when the network trust boundary requires transport protection.
 
 ## Development and validation
 
@@ -186,3 +229,41 @@ tests must include realistic context sizes, model token rates, tool latency, slo
 browser readers, API failures, and worker termination. Streaming uploads remove
 per-frame HTTP request overhead, but projection, Redis publication, checkpoints,
 and heartbeats still consume shared API and database capacity.
+
+
+## Worker trust boundary
+
+Workers are trusted backend services, like the shared API processes on main.
+One deployment token authenticates the worker service; it is not a tenant or
+per-worker identity. The API checks tenant routing, active attempt, expiry,
+cancellation, and callback sequence before execution. Stored inputs must match
+the run session; Onyx loads the user and checks session ownership when building
+tools. Tool callbacks must reference unique recorded calls with matching names
+and currently available tools. Pi's schema-normalized arguments remain supported.
+
+Public nginx/Ingress and development Next.js proxies overwrite
+`X-Onyx-Public-Request`. The agent API rejects marked requests with 404 even when
+they carry a valid service token. Custom proxies must set this header or block
+the agent routes themselves. Do not expose the API service port directly to
+untrusted networks. Worker requests go directly to the private API endpoint.
+
+Set `agent.apiUrl` (Helm) or `ONYX_AGENT_API_URL` (Compose) to a private HTTPS
+endpoint with a valid certificate. Existing proxy or mesh transport can be reused;
+public API ingress deliberately rejects worker callbacks. The TLS termination
+hop must also have a protected path to the API. Mount a trusted CA bundle through
+the existing worker volume settings when required; do not disable certificate
+verification. No new certificate service or TLS proxy is included.
+
+For local development, use `ONYX_AGENT_ALLOW_INSECURE_HTTP=true`. Helm requires
+`agent.allowInsecureHttp=true` for an HTTP exception. Development Compose opts in;
+production variants do not. An HTTP exception does not encrypt traffic. Only use
+it for local development or when the transport is protected independently.
+Generate a deployment token with `openssl rand -hex 32` and configure the same
+value on the API and workers. Compose no longer supplies a known default token;
+Helm generates a release-specific Secret or uses `agent.existingSecret`.
+
+Before upgrading an existing Pi deployment, configure transport and replace any
+short development token on both services. Drain active runs before rotating the
+shared token. Deploy public-proxy changes together with the API changes. Celery
+queue producers no longer receive the callback token. None of these controls
+provide isolation between runs after complete worker-process compromise.

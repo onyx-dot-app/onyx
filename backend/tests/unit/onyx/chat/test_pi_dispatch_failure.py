@@ -33,7 +33,7 @@ def test_rejected_preparation_releases_its_fence(
         "database": database,
     }[stage].side_effect = ValueError("Rejected preparation")
     monkeypatch.setattr(dispatch.RunInputs, "capture", capture)
-    monkeypatch.setattr(dispatch, "save_inputs", snapshot)
+    monkeypatch.setattr(dispatch, "save_run_inputs", snapshot)
     monkeypatch.setattr(dispatch, "append_packet", packets)
     monkeypatch.setattr(dispatch, "create_runs", database)
     monkeypatch.setattr(dispatch, "any_runs_exist", lambda _: False)
@@ -78,7 +78,7 @@ def test_uncertain_commit_preserves_dispatch_state_for_reconciliation(
     setup.reserved_messages = [MagicMock(id=1)]
     set_processing_status(session_id, cache, True, run_id=41)
     monkeypatch.setattr(dispatch.RunInputs, "capture", MagicMock())
-    monkeypatch.setattr(dispatch, "save_inputs", MagicMock())
+    monkeypatch.setattr(dispatch, "save_run_inputs", MagicMock())
     monkeypatch.setattr(dispatch, "get_cache_backend", lambda: cache)
     monkeypatch.setattr(
         dispatch,

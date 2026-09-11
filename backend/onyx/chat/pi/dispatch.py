@@ -10,11 +10,11 @@ from onyx.cache.factory import get_cache_backend
 from onyx.chat.chat_processing_checker import release_processing_run
 from onyx.chat.chat_state import ChatTurnSetup
 from onyx.chat.models import AnswerStreamPart
+from onyx.chat.pi.input_storage import save_run_inputs
 from onyx.chat.pi.inputs import RunInputs
 from onyx.chat.pi.storage import (
     append_packet,
     run_key,
-    save_inputs,
     state_redis,
     stream_key,
 )
@@ -81,7 +81,9 @@ def prepare_dispatch(
             run_id = uuid4()
             prepared_ids.append(run_id)
             inputs = RunInputs.capture(setup, user_id, index)
-            save_inputs(run_id, setup.chat_session_id, setup.processing_run_id, inputs)
+            save_run_inputs(
+                run_id, setup.chat_session_id, setup.processing_run_id, inputs
+            )
             runs.append(
                 AgentRun(
                     id=run_id,

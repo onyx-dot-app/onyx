@@ -142,11 +142,6 @@ Create env vars from secrets (global secrets only — skips entries with allPods
 {{ include "onyx.agentStateRedisEnv" . }}
 - name: ONYX_AGENT_RUN_TIMEOUT_SECONDS
   value: {{ .Values.agent.runTimeoutSeconds | quote }}
-- name: ONYX_AGENT_SERVICE_TOKEN
-  valueFrom:
-    secretKeyRef:
-      name: {{ .Values.agent.existingSecret | default (include "onyx.resourceName" (list . "agent-auth")) }}
-      key: token
 {{- end }}
 
     {{- range $secretSuffix, $secretContent := .Values.auth }}
@@ -633,4 +628,15 @@ volumes:
 {{ $redisTls | nindent 2 }}
 {{- end }}
 {{- end -}}
+{{- end }}
+
+{{/* Only API pods authenticate worker callbacks. Queue producers do not need this token. */}}
+{{- define "onyx.agentServiceAuthEnv" -}}
+{{- if eq .Values.chatEngine "pi" }}
+- name: ONYX_AGENT_SERVICE_TOKEN
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.agent.existingSecret | default (include "onyx.resourceName" (list . "agent-auth")) }}
+      key: token
+{{- end }}
 {{- end }}

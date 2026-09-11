@@ -9,6 +9,7 @@
         "@anthropic-ai/vertex-sdk": "0.19.8",
         "@earendil-works/pi-agent-core": "0.85.1",
         "@earendil-works/pi-ai": "0.85.1",
+        "@google/genai": "1.52.0",
         "bullmq": "6.3.4",
         "google-auth-library": "10",
         "ioredis": "6.0.0",
@@ -21,6 +22,9 @@
         "typescript": "7.0.2",
       },
     },
+  },
+  "patchedDependencies": {
+    "@earendil-works/pi-ai@0.85.1": "patches/@earendil-works%2Fpi-ai@0.85.1.patch",
   },
   "packages": {
     "@anthropic-ai/sdk": ["@anthropic-ai/sdk@0.123.0", "", { "dependencies": { "json-schema-to-ts": "^3.1.1", "standardwebhooks": "^1.0.0" }, "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" }, "optionalPeers": ["zod"], "bin": { "anthropic-ai-sdk": "bin/cli" } }, "sha512-Y9oX9mPNGZClHQOFqrWRk43Srcu/UHuPq3rfxxOq7JgW0gi+lJA2MAOK4Ul3k/+AUrwRWFJvd0tK3oC0Pw25dw=="],

@@ -10,7 +10,6 @@ import { streamSimple as responses } from "@earendil-works/pi-ai/api/openai-resp
 import { streamSimple as anthropic } from "@earendil-works/pi-ai/api/anthropic-messages";
 import { streamSimple as azure } from "@earendil-works/pi-ai/api/azure-openai-responses";
 import { streamSimple as google } from "@earendil-works/pi-ai/api/google-generative-ai";
-import { streamSimple as vertex } from "@earendil-works/pi-ai/api/google-vertex";
 import { streamSimple as bedrock } from "@earendil-works/pi-ai/api/bedrock-converse-stream";
 import { z } from "zod";
 import {
@@ -19,6 +18,8 @@ import {
 } from "@earendil-works/pi-ai/providers/faux";
 import type { Start } from "./protocol";
 import { vertexAnthropic } from "./vertex-anthropic";
+import { vertexGoogle } from "./vertex-google";
+import { providerEnvironment, validateProviderAuth } from "./provider-auth";
 
 const catalog = builtinModels();
 const dispatch: StreamFunction<Api, SimpleStreamOptions> = (
@@ -41,8 +42,6 @@ const dispatch: StreamFunction<Api, SimpleStreamOptions> = (
       return azure(model as Model<"azure-openai-responses">, context, options);
     case "google-generative-ai":
       return google(model as Model<"google-generative-ai">, context, options);
-    case "google-vertex":
-      return vertex(model as Model<"google-vertex">, context, options);
     case "bedrock-converse-stream":
       return bedrock(
         model as Model<"bedrock-converse-stream">,
@@ -136,31 +135,13 @@ export function resolveProvider(start: Start) {
     !model.baseUrl.endsWith("/v1")
   )
     model.baseUrl = model.baseUrl.replace(/\/$/, "") + "/v1";
-  const stream = isVertexAnthropic ? vertexAnthropic(start) : dispatch;
+  const stream = isVertexAnthropic
+    ? vertexAnthropic(start)
+    : api === "google-vertex"
+      ? vertexGoogle(start)
+      : dispatch;
   const raw = start.options;
-  const env = { ...config.custom_config };
-  const envKeys: Record<string, string> = {
-    aws_access_key_id: "AWS_ACCESS_KEY_ID",
-    aws_secret_access_key: "AWS_SECRET_ACCESS_KEY",
-    aws_session_token: "AWS_SESSION_TOKEN",
-    aws_region_name: "AWS_REGION",
-    vertex_project: "GOOGLE_CLOUD_PROJECT",
-    vertex_location: "GOOGLE_CLOUD_LOCATION",
-  };
-  for (const [key, target] of Object.entries(envKeys))
-    if (typeof raw[key] === "string") env[target] = raw[key];
-  if (provider === "google-vertex") env.GOOGLE_CLOUD_LOCATION ??= "global";
-  if (
-    provider === "amazon-bedrock" &&
-    (typeof raw.api_key === "string" || config.api_key)
-  )
-    env.AWS_BEARER_TOKEN_BEDROCK =
-      typeof raw.api_key === "string" ? raw.api_key : config.api_key!;
-  if (config.api_version) env.AZURE_OPENAI_API_VERSION = config.api_version;
-  if (config.api_base && provider === "azure-openai-responses")
-    env.AZURE_OPENAI_BASE_URL = config.api_base;
-  if (config.deployment_name && provider === "azure-openai-responses")
-    env.AZURE_OPENAI_DEPLOYMENT_NAME = config.deployment_name;
+  const env = providerEnvironment(start, provider);
   const options: SimpleStreamOptions = {
     apiKey:
       typeof raw.api_key === "string"
@@ -182,6 +163,7 @@ export function resolveProvider(start: Start) {
     timeoutMs: 120000,
     sessionId: start.sessionId ?? undefined,
   };
+  validateProviderAuth(start, api, options);
   // Mandatory policy overrides are applied after provider payload construction.
   const body = {
     ...z.record(z.string(), z.unknown()).parse(raw.extra_body ?? {}),
