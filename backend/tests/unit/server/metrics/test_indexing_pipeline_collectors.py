@@ -1,11 +1,15 @@
 """Tests for indexing pipeline Prometheus collectors."""
 
-from collections.abc import Iterator
+import threading
+import time
+from collections.abc import Callable, Iterator
 from unittest.mock import MagicMock, patch
 
 import pytest
+from prometheus_client.core import GaugeMetricFamily
 
-from onyx.server.metrics.indexing_pipeline import QueueDepthCollector
+import onyx.server.metrics.indexing_pipeline as indexing_pipeline
+from onyx.server.metrics.indexing_pipeline import QueueDepthCollector, _CachedCollector
 
 
 @pytest.fixture(autouse=True)
@@ -16,6 +20,77 @@ def _mock_broker_client() -> Iterator[None]:
         return_value=MagicMock(),
     ):
         yield
+
+
+class _GatedCollector(_CachedCollector):
+    """Collection blocks until ``release`` is set, so a stall can be staged."""
+
+    def __init__(self, cache_ttl: float, collect_timeout: float) -> None:
+        super().__init__(cache_ttl=cache_ttl, collect_timeout=collect_timeout)
+        self.release = threading.Event()
+        self.calls = 0
+
+    def _collect_fresh(self) -> list[GaugeMetricFamily]:
+        self.calls += 1
+        # Bounded so a never-released gate cannot hang the executor thread at exit.
+        self.release.wait(timeout=5)
+        gauge = GaugeMetricFamily("gated", "gated")
+        gauge.add_metric([], self.calls)
+        return [gauge]
+
+
+def _wait_until(predicate: Callable[[], bool], timeout: float = 2.0) -> None:
+    deadline = time.monotonic() + timeout
+    while not predicate():
+        assert time.monotonic() < deadline, "condition not met in time"
+        time.sleep(0.005)
+
+
+def _inflight_done(collector: _CachedCollector) -> bool:
+    return collector._inflight is not None and collector._inflight.done()
+
+
+class TestCachedCollector:
+    def test_scrape_during_stalled_collection_returns_stale_at_once(self) -> None:
+        collector = _GatedCollector(cache_ttl=60, collect_timeout=2.0)
+        starter_results: list[list[GaugeMetricFamily]] = []
+        starter = threading.Thread(
+            target=lambda: starter_results.append(collector.collect())
+        )
+        starter.start()
+        _wait_until(lambda: collector._inflight is not None)
+
+        began = time.monotonic()
+        during_stall = collector.collect()
+        elapsed = time.monotonic() - began
+
+        # No cache yet and a collection in flight: empty, without waiting on it.
+        assert during_stall == []
+        assert elapsed < 0.5
+        starter.join(timeout=4)
+        assert starter_results == [[]]
+        assert collector.calls == 1
+
+        # The late result is banked by the next scrape rather than re-collected.
+        collector.release.set()
+        _wait_until(lambda: _inflight_done(collector))
+        banked = collector.collect()
+        assert banked[0].samples[0].value == 1
+        assert collector.calls == 1
+        collector._executor.shutdown(wait=False)
+
+    def test_stall_warning_is_throttled(self) -> None:
+        collector = _GatedCollector(cache_ttl=60, collect_timeout=0.1)
+        assert collector.collect() == []  # starter times out
+        with patch.object(indexing_pipeline.logger, "warning") as warning:
+            for _ in range(3):
+                assert collector.collect() == []
+        stall_lines = [
+            call for call in warning.call_args_list if "still running" in call.args[0]
+        ]
+        assert len(stall_lines) == 1
+        collector.release.set()
+        collector._executor.shutdown(wait=False)
 
 
 class TestQueueDepthCollector:
