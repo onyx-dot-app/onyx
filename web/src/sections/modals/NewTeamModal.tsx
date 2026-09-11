@@ -121,6 +121,7 @@ export default function NewTeamModal() {
 
   const handleContinueToNewOrg = () => {
     const newUrl = window.location.pathname;
+    // SAFETY: the current pathname is a route of this app.
     router.replace(newUrl as Route);
     setShowNewTeamModal(false);
   };

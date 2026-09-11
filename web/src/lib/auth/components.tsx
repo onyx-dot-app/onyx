@@ -3,7 +3,6 @@
 import { useState, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import type { Route } from "next";
 import { useSessionWatcher } from "@/lib/auth/hooks";
 import { getExtensionContext } from "@/lib/extension/utils";
 import { Modal } from "@opal/components";
@@ -65,7 +64,7 @@ export function AuthenticationShell({ children }: AuthenticationShellProps) {
     );
     router.push(
       returnTo
-        ? (`/auth/login?next=${encodeURIComponent(returnTo)}` as Route)
+        ? `/auth/login?next=${encodeURIComponent(returnTo)}`
         : "/auth/login"
     );
   }

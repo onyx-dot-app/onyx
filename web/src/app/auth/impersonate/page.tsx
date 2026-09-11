@@ -3,7 +3,6 @@
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 
 import { useRouter } from "next/navigation";
-import type { Route } from "next";
 import { Formik, Form, FormikHelpers } from "formik";
 import * as Yup from "yup";
 import { toast } from "@opal/layouts";
@@ -47,7 +46,7 @@ export default function ImpersonatePage() {
         helpers.setSubmitting(false);
       } else {
         helpers.setSubmitting(false);
-        router.push("/app" as Route);
+        router.push("/app");
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : genericError);

@@ -17,14 +17,14 @@ packages:
   src/app/anonymous: 100
   src/app/api: 100
   src/app/app: 98.4
-  src/app/auth: 98.7
+  src/app/auth: 98.8
   src/app/components: 100
   src/app/config: 100
   src/app/connector: 100
   src/app/craft: 99.2
-  src/app/ee: 95.7
+  src/app/ee: 95.8
   src/app/federated: 97
-  src/app/mcp: 99.3
+  src/app/mcp: 99.5
   src/app/nrf: 99.2
   src/app/oauth-config: 100
   src/components: 97.7
@@ -58,9 +58,9 @@ packages:
   src/interfaces: 100
   src/layouts: 100
   src/layouts/chromes: 99.8
-  src/layouts/craft: 92.5
+  src/layouts/craft: 96.1
   src/lib: 98.8
-  src/lib/agents: 99.1
+  src/lib/agents: 99.2
   src/lib/analytics: 99.4
   src/lib/app: 100
   src/lib/auth: 98
@@ -82,7 +82,7 @@ packages:
   src/lib/notifications: 99.3
   src/lib/oauth: 100
   src/lib/permissions: 100
-  src/lib/position: 98.6
+  src/lib/position: 100
   src/lib/projects: 99.7
   src/lib/search: 99.1
   src/lib/searchFilters: 95.3
@@ -99,7 +99,7 @@ packages:
   src/providers: 99.5
   src/refresh-components: 99.7
   src/refresh-components/avatars: 99.7
-  src/refresh-components/buttons: 99.6
+  src/refresh-components/buttons: 99.7
   src/refresh-components/cards: 98.4
   src/refresh-components/commandmenu: 99.7
   src/refresh-components/form: 98.6
@@ -113,7 +113,7 @@ packages:
   src/sections: 100
   src/sections/actions: 99.1
   src/sections/admin: 100
-  src/sections/agents: 99.6
+  src/sections/agents: 99.8
   src/sections/banners: 98.5
   src/sections/cards: 100
   src/sections/chat: 99.7
@@ -122,11 +122,11 @@ packages:
   src/sections/knowledge: 99.7
   src/sections/modals: 99.5
   src/sections/model-selector: 99.6
-  src/sections/onboarding: 99.7
+  src/sections/onboarding: 99.8
   src/sections/settings: 100
   src/sections/sidebar: 99.4
   src/sections/skills: 99.8
   src/sections/usage: 99.6
-  src/views: 99.2
+  src/views: 99.3
   src/views/admin: 99.3
   types: 100

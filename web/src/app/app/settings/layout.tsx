@@ -94,6 +94,7 @@ export default function Layout({ children }: LayoutProps) {
             <InputSelect
               value={pathname}
               onValueChange={(href) =>
+                // SAFETY: the options are the static hrefs in `tabs`.
                 router.push(href as Route, { scroll: false })
               }
             >

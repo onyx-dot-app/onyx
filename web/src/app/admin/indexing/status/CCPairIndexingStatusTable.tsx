@@ -18,7 +18,6 @@ import {
   ConnectorIndexingStatusLite,
   FederatedConnectorStatus,
 } from "@/lib/types";
-import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import Truncated from "@/refresh-components/texts/Truncated";
 import {
@@ -47,13 +46,13 @@ import { can } from "@/lib/permissions/resource-actions";
 // row to not navigate as expected.
 function navigateWithModifier(
   e: React.MouseEvent,
-  url: string,
+  url: `/admin/connector/${number}` | `/admin/federated/${number}`,
   router: ReturnType<typeof useRouter>
 ) {
   if (e.metaKey || e.ctrlKey) {
     window.open(url, "_blank");
   } else {
-    router.push(url as Route);
+    router.push(url);
   }
 }
 
@@ -159,7 +158,7 @@ function ConnectorRow({
   const router = useRouter();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
 
-  const connectorUrl = `/admin/connector/${ccPairsIndexingStatus.cc_pair_id}`;
+  const connectorUrl: `/admin/connector/${number}` = `/admin/connector/${ccPairsIndexingStatus.cc_pair_id}`;
 
   const handleRowClick = (e: React.MouseEvent) => {
     navigateWithModifier(e, connectorUrl, router);
@@ -243,7 +242,7 @@ function FederatedConnectorRow({
   const router = useRouter();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
 
-  const federatedUrl = `/admin/federated/${federatedConnector.id}`;
+  const federatedUrl: `/admin/federated/${number}` = `/admin/federated/${federatedConnector.id}`;
 
   const handleRowClick = (e: React.MouseEvent) => {
     navigateWithModifier(e, federatedUrl, router);
