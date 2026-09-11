@@ -5824,8 +5824,8 @@
         "allProviders": { "label": "Tous les fournisseurs" }
       },
       "panel": {
-        "description": "{start} – {end} · Génération de texte en arrière-plan sans utilisateur.",
-        "emptyDescription": "Dépenses de génération de texte en arrière-plan pour la période sélectionnée.",
+        "description": "{start} – {end} · L’utilisation système correspond à l’activité LLM exécutée par Onyx en arrière-plan plutôt que pour un utilisateur spécifique. Cela inclut les résumés d’images, le traitement RAG contextuel et l’extraction du graphe de connaissances.",
+        "emptyDescription": "L’utilisation système correspond à l’activité LLM exécutée par Onyx en arrière-plan plutôt que pour un utilisateur spécifique. Cela inclut les résumés d’images, le traitement RAG contextuel et l’extraction du graphe de connaissances.",
         "error": { "title": "Échec du chargement de l'utilisation système pour cette période." },
         "title": "Utilisation système"
       },

@@ -5824,8 +5824,8 @@
         "allProviders": { "label": "Todos os provedores" }
       },
       "panel": {
-        "description": "{start} – {end} · Geração de texto em segundo plano sem usuário.",
-        "emptyDescription": "Gastos de geração de texto em segundo plano no período selecionado.",
+        "description": "{start} – {end} · O uso do sistema é a atividade de LLM que o Onyx executa em segundo plano, e não para um usuário específico. Alguns exemplos são resumos de imagens, processamento RAG contextual e extração do grafo de conhecimento.",
+        "emptyDescription": "O uso do sistema é a atividade de LLM que o Onyx executa em segundo plano, e não para um usuário específico. Alguns exemplos são resumos de imagens, processamento RAG contextual e extração do grafo de conhecimento.",
         "error": { "title": "Falha ao carregar o uso do sistema neste período." },
         "title": "Uso do sistema"
       },
