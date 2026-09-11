@@ -6,9 +6,6 @@ concurrency:
 on:
   merge_group:
   pull_request:
-    branches:
-      - main
-      - "release/**"
     # NOTE: Intentionally no `paths:` filter. We always trigger and let the
     # `changes` job below decide whether the real test matrix runs. This
     # avoids the dual-workflow skip pattern where a `paths-ignore`'d skip
@@ -695,6 +692,9 @@ jobs:
     timeout-minutes: 5
     needs: [changes, integration-tests, onyx-lite-tests, multitenant-tests]
     if: ${{ always() }}
+    # Writes the tested-base commit status in the last step.
+    permissions:
+      statuses: write
     steps:
       - name: Check job status
         env:
@@ -723,3 +723,26 @@ jobs:
             exit 1
           fi
           echo "All tests passed."
+      # Record which base tip this verdict used. merge-group.yml refuses to
+      # merge a PR whose verdict used a base that is in neither the target
+      # branch nor the PR's own history (see .github/actions/check-tested-base).
+      # Fork and Dependabot runs have a read-only token and cannot record.
+      - name: Record tested base
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          github.actor != 'dependabot[bot]'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          DESCRIPTION="${BASE_SHA} ${BASE_REF}"
+          gh api --method POST "repos/${REPO}/statuses/${HEAD_SHA}" \
+            -f state=success \
+            -f context=ci/tested-base/integration \
+            -f description="${DESCRIPTION:0:140}" \
+            -f target_url="${RUN_URL}"

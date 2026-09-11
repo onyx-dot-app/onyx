@@ -38,8 +38,9 @@ a mechanical fix was expected).
   `pr-playwright-tests.yml`) are aggregate `needs: [...]` + `if: always()`
   jobs over the slow integration/playwright matrices. If either is *absent*
   from `gh pr checks`, its matrix is still running — the PR isn't blocked.
-  (`merge-group.yml` provides instant-pass stubs of the same names inside the
-  queue itself.)
+  (`merge-group.yml` provides fast same-named jobs inside the queue itself;
+  they only check that the PR run's verdict used a base that landed, and skip
+  that check for Dependabot PRs, which cannot record it.)
 - `mergeStateStatus`/`autoMergeRequest` are unreliable for "is it actually
   queued" — query the queue directly: [references/graphql-queries.md](references/graphql-queries.md).
 

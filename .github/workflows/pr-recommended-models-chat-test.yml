@@ -13,7 +13,6 @@ concurrency:
 
 on:
   pull_request:
-    branches: [main]
     paths:
       - "backend/onyx/llm/well_known_providers/recommended-models.json"
       - ".github/workflows/pr-recommended-models-chat-test.yml"
