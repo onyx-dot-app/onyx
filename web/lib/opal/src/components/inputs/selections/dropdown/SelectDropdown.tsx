@@ -1,6 +1,7 @@
 import React, { useEffect, forwardRef } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@opal/utils";
+import { ShadowDiv } from "@opal/components/shadow-div/components";
 import { OptionsList } from "./OptionsList";
 import { SelectOption, SelectSection } from "../types";
 
@@ -105,16 +106,8 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
         role="listbox"
         tabIndex={-1}
         aria-label={placeholder}
-        className={cn(
-          "z-10000 flex flex-col gap-1 bg-background-neutral-00 border rounded-12 shadow-box-01 overflow-y-auto overflow-x-hidden p-1 pointer-events-auto touch-auto",
-          !dropdownMaxHeight && "max-h-60"
-        )}
-        style={{
-          ...floatingStyles,
-          // Ensure the dropdown can scroll independently
-          overscrollBehavior: "contain",
-          ...(dropdownMaxHeight ? { maxHeight: dropdownMaxHeight } : {}),
-        }}
+        className="z-10000 bg-background-neutral-00 border rounded-12 shadow-box-01 overflow-hidden p-1 pointer-events-auto touch-auto"
+        style={floatingStyles}
         onMouseLeave={onMouseLeave}
         onMouseDown={(e) => {
           // Clicks on padding, gaps, or dividers must not steal focus from
@@ -130,22 +123,35 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
           e.stopPropagation();
         }}
       >
-        <OptionsList
-          sections={sections}
-          value={value}
-          selectedValues={selectedValues}
-          markAllMatches={markAllMatches}
-          highlightedIndex={highlightedIndex}
-          fieldId={fieldId}
-          onSelect={onSelect}
-          onMouseEnter={onMouseEnter}
-          onMouseMove={onMouseMove}
-          isExactMatch={isExactMatch}
-          inputValue={inputValue}
-          allowCreate={allowCreate}
-          showCreateOption={showCreateOption}
-          createPrefix={createPrefix}
-        />
+        <ShadowDiv
+          shadowHeight="0.75rem"
+          className={cn(
+            "flex flex-col gap-1 overflow-x-hidden",
+            !dropdownMaxHeight && "max-h-60"
+          )}
+          style={{
+            // Scroll independently of whatever sits behind the portal.
+            overscrollBehavior: "contain",
+            ...(dropdownMaxHeight ? { maxHeight: dropdownMaxHeight } : {}),
+          }}
+        >
+          <OptionsList
+            sections={sections}
+            value={value}
+            selectedValues={selectedValues}
+            markAllMatches={markAllMatches}
+            highlightedIndex={highlightedIndex}
+            fieldId={fieldId}
+            onSelect={onSelect}
+            onMouseEnter={onMouseEnter}
+            onMouseMove={onMouseMove}
+            isExactMatch={isExactMatch}
+            inputValue={inputValue}
+            allowCreate={allowCreate}
+            showCreateOption={showCreateOption}
+            createPrefix={createPrefix}
+          />
+        </ShadowDiv>
       </div>,
       document.body
     );
