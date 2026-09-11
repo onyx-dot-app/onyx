@@ -2397,7 +2397,7 @@ function AccountsAccessSettings() {
                             title={pat.name}
                             description={pat.token_display}
                             centerChildren={
-                              <div className="flex flex-row justify-end">
+                              <div className="flex h-full min-w-0 flex-row items-center justify-end">
                                 {/* min-w-0: a flex item's min-width defaults
                                     to auto, which defeats truncation. */}
                                 <div className="min-w-0">

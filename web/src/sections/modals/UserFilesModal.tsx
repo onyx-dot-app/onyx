@@ -100,15 +100,15 @@ function FileAttachment({
         description={description}
         state={isSelected ? "selected" : undefined}
         centerChildren={
-          <Section flexDirection="row" justifyContent="between">
-            {rightText ? (
-              <Section alignItems="end" className="min-w-0">
+          rightText ? (
+            <div className="flex h-full min-w-0 flex-row items-center justify-end">
+              <div className="min-w-0">
                 <OpalText font="secondary-body" color="text-03" maxLines={1}>
                   {rightText}
                 </OpalText>
-              </Section>
-            ) : undefined}
-          </Section>
+              </div>
+            </div>
+          ) : undefined
         }
         rightChildren={
           <Hoverable.Item group="user-file-row">
