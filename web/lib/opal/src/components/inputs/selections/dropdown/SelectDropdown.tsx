@@ -106,7 +106,7 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
         tabIndex={-1}
         aria-label={placeholder}
         className={cn(
-          "z-10000 flex flex-col gap-1 bg-background-neutral-00 border rounded-12 shadow-md overflow-y-auto overflow-x-hidden p-1 pointer-events-auto touch-auto",
+          "z-10000 flex flex-col gap-1 bg-background-neutral-00 border rounded-12 shadow-box-01 overflow-y-auto overflow-x-hidden p-1 pointer-events-auto touch-auto",
           !dropdownMaxHeight && "max-h-60"
         )}
         style={{
