@@ -5,6 +5,7 @@ import pytest
 from onyx.db.models import VoiceProvider
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.voice.api import (
+    _fetch_provider_for_stored_secret,
     activate_tts_provider_endpoint,
     upsert_voice_provider_endpoint,
 )
@@ -147,3 +148,14 @@ def test_activate_tts_allows_provider_with_tts_models(
     assert view.is_default_tts is True
     db_session.execute.assert_called_once()
     db_session.commit.assert_called_once()
+
+
+def test_stored_secret_lookup_ignores_legacy_provider_type_case() -> None:
+    existing_provider = _make_provider(provider_type="Zoom")
+    db_session = MagicMock()
+    db_session.get.return_value = existing_provider
+    db_session.scalar.return_value = existing_provider
+
+    provider = _fetch_provider_for_stored_secret(db_session, 1, "zoom")
+
+    assert provider is existing_provider
