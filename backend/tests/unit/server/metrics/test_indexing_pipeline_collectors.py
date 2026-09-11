@@ -125,12 +125,12 @@ class TestCachedCollector:
 
     def test_failed_collection_frees_the_slot_and_is_retried(self) -> None:
         collector = _FailingCollector()
-        with patch.object(indexing_pipeline.logger, "exception") as exception:
+        with patch.object(indexing_pipeline.logger, "error") as error_log:
             assert collector.collect() == []
             assert collector.collect() == []
         assert collector._inflight is None
         assert collector.calls == 2
-        assert exception.call_count == 2
+        assert error_log.call_count == 2
         collector._executor.shutdown(wait=False)
 
     def test_done_future_is_banked_once(self) -> None:
@@ -141,10 +141,10 @@ class TestCachedCollector:
         future.set_exception(RuntimeError("redis down"))
         collector._inflight = future
         # The starter and a concurrent scrape can both reach a done future.
-        with patch.object(indexing_pipeline.logger, "exception") as exception:
+        with patch.object(indexing_pipeline.logger, "error") as error_log:
             assert collector._bank(future, 0.0) is None
             assert collector._bank(future, 0.0) is None
-        assert exception.call_count == 1
+        assert error_log.call_count == 1
         assert collector._inflight is None
         collector._executor.shutdown(wait=False)
 
