@@ -93,6 +93,7 @@ function FileAttachment({
   return (
     <Hoverable.Root group="user-file-row">
       <AttachmentItemButton
+        prominence="secondary"
         onClick={onClick}
         icon={Icon}
         title={file.name}
