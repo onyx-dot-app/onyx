@@ -11,16 +11,16 @@ import type { WithoutStyles } from "@opal/types";
  * - Controlled: pass `checked` + `onCheckedChange`.
  * - Uncontrolled: pass `defaultChecked` (defaults to `false`).
  */
-interface InputSwitchProps extends WithoutStyles<
+type InputSwitchProps = WithoutStyles<
   Omit<React.ComponentPropsWithoutRef<"button">, "onChange" | "type">
-> {
+> & {
   disabled?: boolean;
   checked?: boolean;
   defaultChecked?: boolean;
   onCheckedChange?: (checked: boolean) => void;
   /** Ref to the switch `<button>`. */
   ref?: React.Ref<HTMLButtonElement>;
-}
+};
 function InputSwitch({
   ref,
   disabled,
@@ -49,6 +49,9 @@ function InputSwitch({
 
   return (
     <button
+      // Spread first: type/role/aria-checked/disabled/onClick are this
+      // control's contract and must not be overridable through the spread.
+      {...props}
       ref={ref}
       type="button"
       role="switch"
@@ -65,7 +68,6 @@ function InputSwitch({
       )}
       disabled={disabled}
       onClick={handleClick}
-      {...props}
     >
       <span
         className={cn(

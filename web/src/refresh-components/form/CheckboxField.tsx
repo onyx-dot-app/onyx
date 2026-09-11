@@ -17,6 +17,10 @@ export default function UnlabeledCheckboxField({
   const onChange = useOnChangeValue(name, onCheckedChange);
 
   return (
-    <InputCheckbox checked={field.value} onCheckedChange={onChange} {...props} />
+    <InputCheckbox
+      checked={field.value}
+      onCheckedChange={onChange}
+      {...props}
+    />
   );
 }

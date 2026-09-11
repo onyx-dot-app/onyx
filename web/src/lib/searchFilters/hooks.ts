@@ -11,7 +11,9 @@ import { getConfiguredSources } from "@/lib/sources";
 import type { SearchFilters } from "@/lib/searchFilters/types";
 
 export function useSearchFilters(): SearchFilters {
-  const [timeRange, setTimeRange] = useState<InputDateRangePickerValue | null>(null);
+  const [timeRange, setTimeRange] = useState<InputDateRangePickerValue | null>(
+    null
+  );
   const [selectedSources, setSelectedSources] = useState<SourceMetadata[]>([]);
   const [selectedDocumentSets, setSelectedDocumentSets] = useState<string[]>(
     []
