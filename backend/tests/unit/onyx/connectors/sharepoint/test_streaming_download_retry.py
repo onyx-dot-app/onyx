@@ -21,6 +21,7 @@ from onyx.connectors.sharepoint.connector import (
     _download_via_graph_api,
     _download_with_cap,
     _redact_url_for_logging,
+    _scrub_url_credentials,
 )
 
 CAP = 10 * 1024 * 1024  # 10 MiB cap; well above the byte payloads used in tests
@@ -267,6 +268,23 @@ def test_redact_url_strips_query_string_with_tempauth() -> None:
     assert _FAKE_TEMPAUTH not in safe
     assert "?" not in safe
     assert safe.startswith("https://tenant.sharepoint.com/sites/Foo/")
+
+
+def test_scrub_url_credentials_redacts_only_a_real_url_query() -> None:
+    """A question mark in prose stays; a query on an http(s) URL is dropped."""
+    plain = "Connection aborted, is the host reachable?"
+    assert _scrub_url_credentials(plain) == plain
+
+    text = (
+        "HTTPSConnectionPool: Read timed out for "
+        f"https://tenant.sharepoint.com/download.aspx?tempauth={_FAKE_TEMPAUTH} "
+        "after 30s?"
+    )
+    scrubbed = _scrub_url_credentials(text)
+
+    assert _FAKE_TEMPAUTH not in scrubbed
+    assert "download.aspx?<redacted>" in scrubbed
+    assert scrubbed.endswith("after 30s?")
 
 
 def test_redact_url_truncates_overly_long_paths() -> None:

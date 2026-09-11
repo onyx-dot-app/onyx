@@ -1,17 +1,12 @@
 from collections.abc import Generator
 
-from office365.sharepoint.client_context import ClientContext
-
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.sharepoint.permission_utils import (
     get_sharepoint_external_groups,
 )
 from ee.onyx.external_permissions.utils import credential_json
 from onyx.configs.app_configs import SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION
-from onyx.connectors.sharepoint.connector import (
-    SharepointConnector,
-    acquire_token_for_rest,
-)
+from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.utils.logger import setup_logger
 
@@ -49,15 +44,12 @@ def sharepoint_group_sync(
         "exhaustive_ad_enumeration", SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION
     )
 
-    msal_app = connector.msal_app
-    sp_tenant_domain = connector.sp_tenant_domain
-    sp_domain_suffix = connector.sharepoint_domain_suffix
     for site_descriptor in site_descriptors:
         logger.debug("Processing site: %s", site_descriptor.url)
 
-        ctx = ClientContext(site_descriptor.url).with_access_token(
-            lambda: acquire_token_for_rest(msal_app, sp_tenant_domain, sp_domain_suffix)
-        )
+        # Goes through the connector so the site host is checked against the
+        # tenant the REST token is minted for.
+        ctx = connector._create_rest_client_context(site_descriptor.url)
 
         external_groups = get_sharepoint_external_groups(
             ctx,
