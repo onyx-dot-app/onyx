@@ -22,6 +22,7 @@ import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import { InputTextArea, InputTypeIn } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import ModelSelector from "@/sections/model-selector/ModelSelector";
+import type { LLMOption } from "@/lib/languageModels/options";
 import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
 import {
   SvgAddLines,
@@ -697,14 +698,12 @@ export default function ChatPreferencesPage() {
   }, [llmProviders, defaultChatNaming]);
 
   const handleChatNamingModelChange = useCallback(
-    async ({
-      modelName,
-      providerName,
-    }: {
-      modelName: string;
-      providerName: string | null;
-    }) => {
-      const provider = llmProviders?.find((p) => p.name === providerName);
+    async (option: LLMOption) => {
+      const provider = llmProviders?.find((p) =>
+        p.model_configurations.some(
+          (mc) => mc.id === option.modelConfigurationId
+        )
+      );
       if (!provider) {
         toast.error(t("toasts.providerResolveFailed"));
         return;
@@ -715,7 +714,7 @@ export default function ChatPreferencesPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             provider_id: provider.id,
-            model_name: modelName,
+            model_name: option.modelName,
           }),
         });
         if (!response.ok) {
@@ -1070,11 +1069,9 @@ export default function ChatPreferencesPage() {
                   )}
                   <ModelSelector
                     value={chatNamingModelConfigId}
+                    providerOptions={llmProviders}
                     onChange={(opt) =>
-                      void handleChatNamingModelChange({
-                        modelName: opt.modelName,
-                        providerName: opt.name,
-                      })
+                      void handleChatNamingModelChange(opt)
                     }
                   />
                 </div>
