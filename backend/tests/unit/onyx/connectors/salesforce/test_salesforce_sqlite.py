@@ -7,7 +7,7 @@ import time
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import pytest
 
@@ -20,7 +20,7 @@ from onyx.connectors.salesforce.salesforce_calls import (
     _bulk_retrieve_from_salesforce,
     _make_time_filter_for_sf_type,
     _make_time_filtered_query,
-    get_object_by_id_query,
+    get_object_by_id_queries,
 )
 from onyx.connectors.salesforce.sqlite_functions import OnyxSalesforceSQLite
 from onyx.connectors.salesforce.utils import (
@@ -1050,10 +1050,9 @@ def test_salesforce_connector_single() -> None:
     sections: list[TextSection] = []
 
     queryable_fields = sf_client.get_queryable_fields_by_type(parent_type)
-    query = get_object_by_id_query(parent_id, parent_type, queryable_fields)
-    result = sf_client.query(query)
-    records = result["records"]
-    record = records[0]
+    record: dict[str, Any] = {}
+    for query in get_object_by_id_queries(parent_id, parent_type, queryable_fields):
+        record.update(sf_client.query(query)["records"][0])
     assert record["attributes"]["type"] == ACCOUNT_OBJECT_TYPE
     parent_last_modified_date = record.get(MODIFIED_FIELD, "")
     parent_semantic_identifier = record.get("Name", "Unknown Object")
@@ -1182,11 +1181,11 @@ def test_salesforce_connector_single() -> None:
     primary_owner_list = None
     if parent_last_modified_by_id:
         queryable_user_fields = sf_client.get_queryable_fields_by_type(USER_OBJECT_TYPE)
-        query = get_object_by_id_query(
+        user_record: dict[str, Any] = {}
+        for query in get_object_by_id_queries(
             parent_last_modified_by_id, USER_OBJECT_TYPE, queryable_user_fields
-        )
-        result = sf_client.query(query)
-        user_record = result["records"][0]
+        ):
+            user_record.update(sf_client.query(query)["records"][0])
         expert_info = BasicExpertInfo(
             first_name=user_record.get("FirstName"),
             last_name=user_record.get("LastName"),

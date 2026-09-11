@@ -3,9 +3,12 @@ from __future__ import annotations
 import gc
 import os
 import time
+from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from itertools import zip_longest
 from typing import TYPE_CHECKING
+from urllib.parse import quote_plus
 
 from pytz import UTC
 from simple_salesforce import Salesforce
@@ -18,7 +21,13 @@ from simple_salesforce.format import format_soql
 
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.salesforce.utils import MODIFIED_FIELD, validate_sf_identifier
+from onyx.connectors.salesforce.models import SalesforceChildQueryPlan
+from onyx.connectors.salesforce.utils import (
+    CREATED_FIELD,
+    ID_FIELD,
+    MODIFIED_FIELD,
+    validate_sf_identifier,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 
@@ -26,6 +35,17 @@ if TYPE_CHECKING:
     from onyx.connectors.salesforce.onyx_salesforce import OnyxSalesforce
 
 logger = setup_logger()
+
+# Salesforce returns HTTP 431 once URI plus headers pass 16,384 bytes, and SOQL
+# travels in the GET query string. Room is left for the base URL and headers.
+SOQL_MAX_URL_ENCODED_LENGTH = 12_000
+SOQL_SELECT_PREFIX = "SELECT "
+SOQL_FIELD_SEPARATOR = ", "
+# parent-to-child subqueries Salesforce accepts in one query
+SOQL_MAX_SUBQUERIES = 20
+# child rows per relationship, kept small to bound the parent document
+SOQL_SUBQUERY_ROW_LIMIT = 10
+_SF_ID_LENGTH = 18
 
 
 def is_salesforce_rate_limit_error(exception: Exception) -> bool:
@@ -76,24 +96,200 @@ def _make_time_filtered_query(
     # type and field names are validated against a strict regex before being
     # interpolated. time_filter is built internally from datetime.isoformat().
     validate_sf_identifier(sf_type)
-    fields = ", ".join(validate_sf_identifier(f) for f in queryable_fields)
+    fields = SOQL_FIELD_SEPARATOR.join(
+        validate_sf_identifier(f) for f in queryable_fields
+    )
     query = f"SELECT {fields} FROM {sf_type}{time_filter}"  # noqa: S608
     return query
 
 
-def get_object_by_id_query(
-    object_id: str, sf_type: str, queryable_fields: set[str]
-) -> str:
-    # SOQL has no parameter binding for table/column identifiers; validate them.
+def _url_encoded_length(text: str) -> int:
+    # requests encodes the q= parameter with quote_plus
+    return len(quote_plus(text))
+
+
+def _pack_for_url(
+    items: Iterable[str],
+    separator: str,
+    max_encoded_length: int,
+    max_items: int | None = None,
+) -> list[list[str]]:
+    """Greedily group items so each group, joined by separator, fits the URL
+    budget. A group is never empty, so an item that alone exceeds the budget
+    still goes through and lets Salesforce report the problem."""
+    separator_length = _url_encoded_length(separator)
+    groups: list[list[str]] = []
+    current: list[str] = []
+    current_length = 0
+    for item in items:
+        item_length = _url_encoded_length(item)
+        added_length = item_length + (separator_length if current else 0)
+        too_long = current_length + added_length > max_encoded_length
+        too_many = max_items is not None and len(current) >= max_items
+        if current and (too_long or too_many):
+            groups.append(current)
+            current = []
+            current_length = 0
+            added_length = item_length
+        current.append(item)
+        current_length += added_length
+    if current:
+        groups.append(current)
+    return groups
+
+
+def _object_by_id_suffix(object_id: str, sf_type: str) -> str:
+    """FROM/WHERE clause that follows a field list."""
+    # SOQL has no parameter binding for identifiers, so sf_type is regex-validated.
     # object_id is an SF-issued record ID from an earlier SOQL response, but
     # we still quote-escape it via format_soql for safety.
     validate_sf_identifier(sf_type)
-    fields = ", ".join(validate_sf_identifier(f) for f in queryable_fields)
-    query = format_soql(
-        f"SELECT {fields} FROM {sf_type} WHERE Id = {{object_id}}",  # noqa: S608
+    return format_soql(
+        f" FROM {sf_type} WHERE Id = {{object_id}}",  # noqa: S608
         object_id=object_id,
     )
-    return query
+
+
+def _field_budget(suffix: str) -> int:
+    return SOQL_MAX_URL_ENCODED_LENGTH - _url_encoded_length(
+        SOQL_SELECT_PREFIX + suffix
+    )
+
+
+def get_object_by_id_queries(
+    object_id: str, sf_type: str, queryable_fields: set[str]
+) -> list[str]:
+    """SOQL queries that together select every field of one record.
+
+    Each query fits the URL budget. The caller merges the results. Fields are
+    sorted so a field set always produces the same queries."""
+    suffix = _object_by_id_suffix(object_id, sf_type)
+    fields = sorted(validate_sf_identifier(f) for f in queryable_fields)
+    return [
+        SOQL_SELECT_PREFIX + SOQL_FIELD_SEPARATOR.join(chunk) + suffix
+        for chunk in _pack_for_url(fields, SOQL_FIELD_SEPARATOR, _field_budget(suffix))
+    ]
+
+
+def _child_window_selection(queryable_fields: set[str]) -> str:
+    # newest children first so a recently changed child makes the window, with
+    # Id as tiebreaker so the order is total
+    for field in (MODIFIED_FIELD, CREATED_FIELD):
+        if field in queryable_fields:
+            return f"ORDER BY {field} DESC, {ID_FIELD} DESC LIMIT {SOQL_SUBQUERY_ROW_LIMIT}"
+    return f"ORDER BY {ID_FIELD} DESC LIMIT {SOQL_SUBQUERY_ROW_LIMIT}"
+
+
+def _child_ids_selection(ids: list[str]) -> str:
+    # later field chunks are pinned to the rows the window returned, so a child
+    # changed between two chunk queries cannot shift the window
+    return format_soql(f"WHERE {ID_FIELD} IN {{ids}}", ids=ids)
+
+
+def _make_child_subquery(
+    child_relationship: str, fields: list[str], selection: str
+) -> str:
+    # NOTE: fields must be listed explicitly. These shortcuts don't work:
+    #   FIELDS(ALL) can include binary fields, so don't use that
+    #   FIELDS(CUSTOM) can include aggregate queries, so don't use that
+    validate_sf_identifier(child_relationship)
+    fields_fragment = SOQL_FIELD_SEPARATOR.join(
+        validate_sf_identifier(f) for f in fields
+    )
+    return f"(SELECT {fields_fragment} FROM {child_relationship} {selection})"  # noqa: S608
+
+
+def _child_subquery_overhead(
+    child_relationship: str, queryable_fields: set[str]
+) -> int:
+    """Encoded bytes a subquery needs beyond its field chunk, for the longer selection."""
+    placeholder_ids = ["0" * _SF_ID_LENGTH] * SOQL_SUBQUERY_ROW_LIMIT
+    return max(
+        _url_encoded_length(
+            _make_child_subquery(child_relationship, [ID_FIELD], selection)
+            + SOQL_FIELD_SEPARATOR
+        )
+        for selection in (
+            _child_window_selection(queryable_fields),
+            _child_ids_selection(placeholder_ids),
+        )
+    )
+
+
+def _pack_subqueries(subqueries: list[str], budget: int, suffix: str) -> list[str]:
+    return [
+        SOQL_SELECT_PREFIX + SOQL_FIELD_SEPARATOR.join(group) + suffix
+        for group in _pack_for_url(
+            subqueries, SOQL_FIELD_SEPARATOR, budget, SOQL_MAX_SUBQUERIES
+        )
+    ]
+
+
+def plan_child_queries(
+    object_id: str,
+    sf_type: str,
+    child_relationships: list[str],
+    relationships_to_fields: dict[str, set[str]],
+) -> SalesforceChildQueryPlan:
+    """Window queries select each relationship's newest rows with its first field
+    chunk. Every query fits the URL budget and the subquery cap."""
+    suffix = _object_by_id_suffix(object_id, sf_type)
+    budget = _field_budget(suffix)
+
+    window_subqueries: list[str] = []
+    remaining_chunks: dict[str, list[list[str]]] = {}
+    for child_relationship in child_relationships:
+        queryable_fields = relationships_to_fields[child_relationship]
+        fields = sorted(f for f in queryable_fields if f != ID_FIELD)
+        overhead = _child_subquery_overhead(child_relationship, queryable_fields)
+        first_chunk, *rest = _pack_for_url(
+            fields, SOQL_FIELD_SEPARATOR, budget - overhead
+        ) or [[]]
+        window_subqueries.append(
+            _make_child_subquery(
+                child_relationship,
+                [ID_FIELD, *first_chunk],
+                _child_window_selection(queryable_fields),
+            )
+        )
+        if rest:
+            remaining_chunks[child_relationship] = rest
+
+    return SalesforceChildQueryPlan(
+        window_queries=_pack_subqueries(window_subqueries, budget, suffix),
+        remaining_chunks=remaining_chunks,
+    )
+
+
+def pinned_child_queries(
+    object_id: str,
+    sf_type: str,
+    remaining_chunks: dict[str, list[list[str]]],
+    ids_by_relationship: dict[str, list[str]],
+) -> list[str]:
+    """Queries for the remaining field chunks, each pinned to the Ids its
+    relationship's window returned. A relationship never appears twice in one
+    query because the response keys rows by relationship name."""
+    suffix = _object_by_id_suffix(object_id, sf_type)
+    budget = _field_budget(suffix)
+
+    subqueries_by_relationship: dict[str, list[str]] = {}
+    for child_relationship, chunks in remaining_chunks.items():
+        ids = ids_by_relationship.get(child_relationship)
+        if not ids:
+            continue
+        selection = _child_ids_selection(ids)
+        subqueries_by_relationship[child_relationship] = [
+            _make_child_subquery(child_relationship, [ID_FIELD, *chunk], selection)
+            for chunk in chunks
+        ]
+
+    # round k holds chunk k of every relationship
+    queries: list[str] = []
+    for round_chunks in zip_longest(*subqueries_by_relationship.values()):
+        subqueries = [subquery for subquery in round_chunks if subquery is not None]
+        queries.extend(_pack_subqueries(subqueries, budget, suffix))
+    return queries
 
 
 @retry_builder(
