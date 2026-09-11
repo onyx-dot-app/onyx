@@ -157,7 +157,7 @@ router = APIRouter(prefix="/chat")
 # Uploads keep the MIME type the client declared, so anything outside this set is
 # served as an attachment: a text/html or image/svg+xml file rendered inline would
 # run script on the app origin with the viewer's session. Keep to inert types.
-_INLINE_SAFE_MIME_TYPES = frozenset(
+_INLINE_SAFE_MIME_TYPES: frozenset[str] = frozenset(
     {
         "image/png",
         "image/jpg",
