@@ -1274,3 +1274,63 @@ class TestPlaceholderUpgradeRace:
             is False
         )
         mock_promote.assert_not_called()
+
+
+class TestStandardUpgradeVerification:
+    """Registering over a placeholder row runs the upgrade with the request body.
+    On the public register path that body is untrusted, so it cannot self-verify."""
+
+    @staticmethod
+    def _run_upgrade(
+        mock_get_session: MagicMock, is_verified: bool, safe: bool
+    ) -> MagicMock:
+        user_manager = UserManager(MagicMock())
+        user_manager.password_helper = MagicMock()
+        sync_user = MagicMock(
+            is_active=True,
+            is_verified=False,
+            account_type=AccountType.EXT_PERM_USER,
+        )
+        sync_db = MagicMock()
+        sync_db.query.return_value.filter.return_value.first.return_value = sync_user
+        mock_get_session.return_value.__enter__.return_value = sync_db
+
+        user_manager._upgrade_user_to_standard__sync(
+            uuid4(),
+            UserCreate(
+                email="placeholder@corp.com",
+                password="SecurePassword123!",
+                is_verified=is_verified,
+            ),
+            is_admin=False,
+            safe=safe,
+        )
+        return sync_user
+
+    @patch("onyx.auth.users.assign_user_to_default_groups__no_commit")
+    @patch("onyx.auth.users._upgrade_will_add_seat", return_value=False)
+    @patch("onyx.auth.users.get_session_with_current_tenant")
+    def test_safe_upgrade_ignores_client_supplied_verification(
+        self,
+        mock_get_session: MagicMock,
+        mock_will_add_seat: MagicMock,  # noqa: ARG002
+        mock_assign_groups: MagicMock,  # noqa: ARG002
+    ) -> None:
+        sync_user = self._run_upgrade(mock_get_session, is_verified=True, safe=True)
+
+        assert sync_user.is_verified is False
+        assert sync_user.account_type == AccountType.STANDARD
+
+    @patch("onyx.auth.users.assign_user_to_default_groups__no_commit")
+    @patch("onyx.auth.users._upgrade_will_add_seat", return_value=False)
+    @patch("onyx.auth.users.get_session_with_current_tenant")
+    def test_trusted_upgrade_keeps_caller_supplied_verification(
+        self,
+        mock_get_session: MagicMock,
+        mock_will_add_seat: MagicMock,  # noqa: ARG002
+        mock_assign_groups: MagicMock,  # noqa: ARG002
+    ) -> None:
+        sync_user = self._run_upgrade(mock_get_session, is_verified=True, safe=False)
+
+        assert sync_user.is_verified is True
+        assert sync_user.account_type == AccountType.STANDARD
