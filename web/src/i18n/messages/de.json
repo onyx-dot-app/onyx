@@ -5824,8 +5824,8 @@
         "allProviders": { "label": "Alle Anbieter" }
       },
       "panel": {
-        "description": "{start} – {end} · Texterzeugung im Hintergrund ohne Benutzer.",
-        "emptyDescription": "Ausgaben für die Texterzeugung im Hintergrund im ausgewählten Zeitraum.",
+        "description": "{start} – {end} · Systemnutzung ist LLM-Aktivität, die Onyx im Hintergrund statt für einen bestimmten Benutzer ausführt. Beispiele sind Bildzusammenfassungen, kontextbezogene RAG-Verarbeitung und Knowledge-Graph-Extraktion.",
+        "emptyDescription": "Systemnutzung ist LLM-Aktivität, die Onyx im Hintergrund statt für einen bestimmten Benutzer ausführt. Beispiele sind Bildzusammenfassungen, kontextbezogene RAG-Verarbeitung und Knowledge-Graph-Extraktion.",
         "error": { "title": "Die Systemnutzung für diesen Zeitraum konnte nicht geladen werden." },
         "title": "Systemnutzung"
       },

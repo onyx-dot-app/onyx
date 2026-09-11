@@ -5836,8 +5836,8 @@
         }
       },
       "panel": {
-        "description": "{start} – {end} · Background text generation without a user.",
-        "emptyDescription": "Background text-generation spend for the selected period.",
+        "description": "{start} – {end} · System usage is LLM activity that Onyx runs in the background rather than for a specific user. Examples include image summaries, contextual RAG processing, and knowledge graph extraction.",
+        "emptyDescription": "System usage is LLM activity that Onyx runs in the background rather than for a specific user. Examples include image summaries, contextual RAG processing, and knowledge graph extraction.",
         "error": {
           "title": "Failed to load system usage for this period."
         },

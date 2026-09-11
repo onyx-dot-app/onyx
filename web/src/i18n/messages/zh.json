@@ -5824,8 +5824,8 @@
         "allProviders": { "label": "所有提供商" }
       },
       "panel": {
-        "description": "{start} – {end} · 无用户参与的后台文本生成。",
-        "emptyDescription": "所选期间的后台文本生成支出。",
+        "description": "{start} – {end} · 系统用量是 Onyx 在后台运行而非为特定用户运行的 LLM 活动。例如图像摘要、上下文 RAG 处理和知识图谱提取。",
+        "emptyDescription": "系统用量是 Onyx 在后台运行而非为特定用户运行的 LLM 活动。例如图像摘要、上下文 RAG 处理和知识图谱提取。",
         "error": { "title": "无法加载此期间的系统用量。" },
         "title": "系统用量"
       },

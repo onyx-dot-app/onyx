@@ -160,6 +160,8 @@ def test_pdf_includes_system_spend_section() -> None:
     text = "\n".join(page.extract_text() for page in reader.pages)
 
     assert "System spend by flow" in text
+    assert "System usage is LLM activity" in text
+    assert "image summaries" in text
     assert "image_summarization" in text
 
 

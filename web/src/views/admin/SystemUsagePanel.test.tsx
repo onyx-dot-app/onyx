@@ -88,6 +88,7 @@ test("shows system and unattributed spend by category", () => {
   render(<SystemUsagePanel />);
 
   expect(screen.getByText("System usage")).toBeInTheDocument();
+  expect(screen.getByText(/System usage is LLM activity/)).toBeInTheDocument();
   expect(screen.getByText("Image summarization")).toBeInTheDocument();
   expect(screen.getAllByText("Unattributed").length).toBeGreaterThan(0);
   expect(
