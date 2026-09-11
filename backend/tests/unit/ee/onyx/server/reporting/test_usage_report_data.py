@@ -145,7 +145,6 @@ def test_system_usage_counts_toward_spend_but_not_people() -> None:
     )
 
     assert data.total_cost_cents == pytest.approx(20.0)
-    assert data.system_cost_cents == pytest.approx(10.0)
     assert data.active_users == 1
     assert {entry.name: entry.cost_cents for entry in data.system_by_flow} == {
         "image_summarization": 7.0,

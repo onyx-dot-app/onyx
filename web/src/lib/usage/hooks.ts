@@ -37,7 +37,7 @@ export function useSystemUsage(range?: DateRange) {
     start: range?.from ? formatDateForApiParam(range.from) : undefined,
     end: range?.to ? formatDateForApiParam(range.to) : undefined,
   });
-  const { data, error, isLoading, mutate } = useSWR<SystemUsageResponse>(
+  const { data, error, isLoading, mutate } = useSWR<SystemUsageResponse, Error>(
     url,
     errorHandlingFetcher,
     { revalidateOnFocus: false }
