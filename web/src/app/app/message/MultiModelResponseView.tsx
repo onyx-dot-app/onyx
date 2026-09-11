@@ -651,16 +651,19 @@ export default function MultiModelResponseView({
       )
     );
 
-    const selectionWidths = responses.map((r, i) => {
+    const selectionWidthFor = (r: (typeof responses)[number], i: number) => {
       if (hiddenPanels.has(r.modelIndex)) return HIDDEN_PANEL_W;
       if (i === preferredIdx) return dynamicPrefW;
       return uniformPanelW;
-    });
+    };
+    const selectionWidths = responses.map(selectionWidthFor);
 
-    const panelLeftEdges = selectionWidths.reduce<number[]>((acc, w, i) => {
-      acc.push(i === 0 ? 0 : acc[i - 1]! + selectionWidths[i - 1]! + PANEL_GAP);
-      return acc;
-    }, []);
+    const panelLeftEdges: number[] = [];
+    let nextLeftEdge = 0;
+    for (const w of selectionWidths) {
+      panelLeftEdges.push(nextLeftEdge);
+      nextLeftEdge += w + PANEL_GAP;
+    }
 
     const preferredCenterInTrack =
       panelLeftEdges[preferredIdx]! + selectionWidths[preferredIdx]! / 2;
@@ -707,7 +710,7 @@ export default function MultiModelResponseView({
             const isHidden = hiddenPanels.has(r.modelIndex);
             const isPref = r.modelIndex === preferredIndex;
             const isNonPref = !isHidden && !isPref && preferredIndex !== null;
-            const finalW = selectionWidths[i]!;
+            const finalW = selectionWidthFor(r, i);
             const startW = isHidden ? HIDDEN_PANEL_W : uniformPanelW;
             const capped = isNonPref && preferredPanelHeight != null;
             const overflows = capped && overflowingPanels.has(r.modelIndex);

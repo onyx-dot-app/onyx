@@ -1,6 +1,7 @@
 import { IndexAttemptStage, IndexAttemptStageMetric } from "@/lib/types";
 import { PIPELINE_ORDER, STAGE_BAR_COLORS } from "./constants";
 import { SortMode } from "./interfaces";
+import { expectDefined } from "@/lib/utils";
 
 // Sort per-batch stages according to the current sort mode. Pipeline order is
 // the canonical enum declaration order; time-taken sorts descending by
@@ -22,5 +23,8 @@ export function sortPerBatchStages(
 
 export function colorClassForStage(stage: IndexAttemptStage): string {
   const idx = PIPELINE_ORDER[stage] ?? 0;
-  return STAGE_BAR_COLORS[idx % STAGE_BAR_COLORS.length]!;
+  return expectDefined(
+    STAGE_BAR_COLORS[idx % STAGE_BAR_COLORS.length],
+    `No stage bar color for index ${idx}.`
+  );
 }

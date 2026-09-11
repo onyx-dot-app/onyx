@@ -182,7 +182,8 @@ export function groupLlmOptions(
         ? `${instanceKey}/${option.vendor.toLowerCase()}`
         : instanceKey;
 
-    if (!groups.has(groupKey)) {
+    let group = groups.get(groupKey);
+    if (!group) {
       let displayName: string;
       if (isAggregator && option.vendor) {
         // vendor arrives display-cased from the backend (e.g. "OpenAI", "xAI")
@@ -190,22 +191,22 @@ export function groupLlmOptions(
       } else {
         displayName = option.providerDisplayName;
       }
-      groups.set(groupKey, {
+      group = {
         displayName,
         options: [],
         Icon: getModelIcon(provider),
-      });
+      };
+      groups.set(groupKey, group);
     }
 
-    groups.get(groupKey)!.options.push(option);
+    group.options.push(option);
   });
 
-  const sortedKeys = Array.from(groups.keys()).sort((a, b) =>
-    groups.get(a)!.displayName.localeCompare(groups.get(b)!.displayName)
+  const sortedGroups = Array.from(groups.entries()).sort(([, a], [, b]) =>
+    a.displayName.localeCompare(b.displayName)
   );
 
-  return sortedKeys.map((key) => {
-    const group = groups.get(key)!;
+  return sortedGroups.map(([key, group]) => {
     return {
       key,
       displayName: group.displayName,

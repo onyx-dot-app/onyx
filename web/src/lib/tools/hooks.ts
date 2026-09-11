@@ -207,12 +207,12 @@ function withToolState(
   const next = change(configuration[toolId] ?? null);
 
   const updated: Record<number, ToolState> = {};
-  for (const key of Object.keys(configuration)) {
+  for (const [key, state] of Object.entries(configuration)) {
     const id = Number(key);
     if (id === toolId) continue;
     // Forcing this tool releases whatever was forced before it.
-    if (next === "forced" && configuration[id] === "forced") continue;
-    updated[id] = configuration[id]!;
+    if (next === "forced" && state === "forced") continue;
+    updated[id] = state;
   }
   if (next !== null) updated[toolId] = next;
 

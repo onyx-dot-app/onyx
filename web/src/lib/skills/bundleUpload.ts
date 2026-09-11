@@ -1,3 +1,5 @@
+import { expectDefined } from "@/lib/utils";
+
 const ZIP_MIME_TYPE = "application/zip";
 const IGNORED_FILE_NAMES = new Set([".DS_Store", "Thumbs.db"]);
 
@@ -88,31 +90,36 @@ async function packageFiles(
 export async function prepareSkillBundleUpload(
   files: readonly SkillUploadFile[]
 ): Promise<PreparedSkillBundle> {
-  if (files.length === 1) {
-    const [file] = files;
-    const parts = pathParts(file!);
-    if (parts.length === 1 && isZipFile(file!)) {
+  const [singleFile] = files;
+  if (files.length === 1 && singleFile) {
+    const parts = pathParts(singleFile);
+    if (parts.length === 1 && isZipFile(singleFile)) {
       return {
-        file: file!,
-        displayName: file!.name,
+        file: singleFile,
+        displayName: singleFile.name,
         source: "zip",
       };
     }
-    if (parts.length === 1 && isSkillMd(file!)) {
+    if (parts.length === 1 && isSkillMd(singleFile)) {
       return {
-        file: file!,
-        displayName: file!.name,
+        file: singleFile,
+        displayName: singleFile.name,
         source: "skill-md",
       };
     }
   }
 
   const filesWithParts = selectedFilesWithParts(files);
-  if (filesWithParts.length === 0) {
+  const [firstFile] = filesWithParts;
+  if (!firstFile) {
     throw new Error("The selected folder is empty.");
   }
 
-  const directoryName = filesWithParts[0]!.parts[0]!;
+  // pathParts never returns an empty array: "".split("/") is [""].
+  const directoryName = expectDefined(
+    firstFile.parts[0],
+    "Selected file has no path parts."
+  );
   const entries = filesWithParts.map(({ file, parts }) => {
     if (parts.length < 2 || parts[0] !== directoryName) {
       throw new Error("Upload one ZIP, SKILL.md, or skill folder at a time.");
@@ -149,12 +156,13 @@ export async function prepareSkillFilesUpload(
     path: parts.join("/"),
   }));
 
-  if (entries.length === 0) {
+  const [firstEntry] = entries;
+  if (!firstEntry) {
     throw new Error("The selected upload is empty.");
   }
 
-  if (entries.length === 1 && entries[0]!.path === entries[0]!.file.name) {
-    const entry = entries[0]!;
+  if (entries.length === 1 && firstEntry.path === firstEntry.file.name) {
+    const entry = firstEntry;
     let containsSkillMd = isSkillMd(entry.file);
     if (isZipFile(entry.file)) {
       const { BlobReader, ZipReader } = await import("@zip.js/zip.js");
@@ -197,7 +205,7 @@ export async function prepareSkillFilesUpload(
     file: await packageFiles("skill-files.zip", entries),
     displayName:
       entries.length === 1
-        ? entries[0]!.path
+        ? firstEntry.path
         : `${entries.length} items selected`,
     entries: entries.map((entry) => ({
       path: entry.path,

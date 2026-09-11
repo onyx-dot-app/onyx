@@ -2614,14 +2614,16 @@ function ConnectorsSettings() {
   const groupedConnectors = ccPairs.reduce<
     Record<string, { source: ValidSources; hasActiveConnector: boolean }>
   >((acc, ccPair) => {
-    if (!acc[ccPair.source]) {
-      acc[ccPair.source] = {
+    let group = acc[ccPair.source];
+    if (!group) {
+      group = {
         source: ccPair.source,
         hasActiveConnector: false,
       };
+      acc[ccPair.source] = group;
     }
     if (ACTIVE_STATUSES.includes(ccPair.status)) {
-      acc[ccPair.source]!.hasActiveConnector = true;
+      group.hasActiveConnector = true;
     }
     return acc;
   }, {});

@@ -392,8 +392,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // pin `userHasManuallyOverriddenLLM=true` with whatever was resolved
   // first (often the default model before the session's alt_model loads).
   useEffect(() => {
-    if (multiModel.selectedModels.length === 1) {
-      const model = multiModel.selectedModels[0]!;
+    const [model] = multiModel.selectedModels;
+    if (multiModel.selectedModels.length === 1 && model) {
       const current = llmManager.currentLlm;
       if (
         model.provider !== current.provider ||
@@ -801,32 +801,35 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     }
                     className="h-full w-full flex flex-col items-center"
                   >
-                    <ChatScrollContainer
-                      ref={scrollContainerRef}
-                      sessionId={currentChatSessionId!}
-                      anchorSelector={anchorSelector}
-                      autoScroll={autoScrollEnabled}
-                      isStreaming={isStreaming}
-                      onScrollButtonVisibilityChange={setShowScrollButton}
-                      fullWidth={fullWidthActive}
-                    >
-                      <ChatUI
-                        activeAgent={activeAgent!}
-                        llmManager={llmManager}
-                        deepResearchEnabled={
-                          deepResearchEnabledForCurrentWorkflow
-                        }
-                        currentMessageFiles={currentMessageFiles}
-                        setPresentingDocument={setPresentingDocument}
-                        onSubmit={onSubmit}
-                        onMessageSelection={onMessageSelection}
-                        stopGenerating={stopGenerating}
-                        onResubmit={handleResubmitLastMessage}
-                        anchorNodeId={anchorNodeId}
-                        selectedModels={multiModel.selectedModels}
-                        fullWidthChat={fullWidthActive}
-                      />
-                    </ChatScrollContainer>
+                    {/* Fade shows only when both values are set; this narrows them. */}
+                    {currentChatSessionId && activeAgent ? (
+                      <ChatScrollContainer
+                        ref={scrollContainerRef}
+                        sessionId={currentChatSessionId}
+                        anchorSelector={anchorSelector}
+                        autoScroll={autoScrollEnabled}
+                        isStreaming={isStreaming}
+                        onScrollButtonVisibilityChange={setShowScrollButton}
+                        fullWidth={fullWidthActive}
+                      >
+                        <ChatUI
+                          activeAgent={activeAgent}
+                          llmManager={llmManager}
+                          deepResearchEnabled={
+                            deepResearchEnabledForCurrentWorkflow
+                          }
+                          currentMessageFiles={currentMessageFiles}
+                          setPresentingDocument={setPresentingDocument}
+                          onSubmit={onSubmit}
+                          onMessageSelection={onMessageSelection}
+                          stopGenerating={stopGenerating}
+                          onResubmit={handleResubmitLastMessage}
+                          anchorNodeId={anchorNodeId}
+                          selectedModels={multiModel.selectedModels}
+                          fullWidthChat={fullWidthActive}
+                        />
+                      </ChatScrollContainer>
+                    ) : null}
                   </Fade>
 
                   {/* Session fetch error (404 / 403) */}

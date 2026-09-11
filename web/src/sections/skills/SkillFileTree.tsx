@@ -64,7 +64,7 @@ function SkillFileTreeNodes({
     ) : (
       <div className="flex items-center gap-1">
         <Text font="secondary-body" color="text-02">
-          {formatBytes(node.size!, 1)}
+          {formatBytes(node.size ?? undefined, 1)}
         </Text>
         {onRemove && (
           <Button

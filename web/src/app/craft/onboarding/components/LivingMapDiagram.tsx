@@ -26,6 +26,7 @@ import {
 import type { IconFunctionComponent } from "@opal/types";
 import { cn } from "@opal/utils";
 import CometEdge from "@/app/craft/components/CometEdge";
+import { expectDefined } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // The Living Map, filmed by a camera. The whole Craft system is one fixed
@@ -424,7 +425,12 @@ export default function LivingMapDiagram({
     return () => onSelectStage(GROUP_STAGE[group]);
   }
 
-  const examplePrompt = t(`examplePrompts.${EXAMPLE_PROMPT_KEYS[promptIdx]!}`);
+  const examplePrompt = t(
+    `examplePrompts.${expectDefined(
+      EXAMPLE_PROMPT_KEYS[promptIdx],
+      `Example prompt index ${promptIdx} is out of range.`
+    )}`
+  );
 
   return (
     <div

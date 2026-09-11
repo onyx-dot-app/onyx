@@ -282,14 +282,16 @@ export default function ModifyCredential({
             <Button
               disabled={selectedCredential == null}
               onClick={() => {
+                // The button is disabled while no credential is selected.
+                if (!selectedCredential) return;
                 if (onSwap && attachedConnector) {
-                  onSwap(selectedCredential!, attachedConnector.id, accessType);
+                  onSwap(selectedCredential, attachedConnector.id, accessType);
                   if (close) {
                     close();
                   }
                 }
                 if (onSwitch) {
-                  onSwitch(selectedCredential!);
+                  onSwitch(selectedCredential);
                 }
               }}
               icon={SvgArrowExchange}

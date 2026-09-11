@@ -12,6 +12,7 @@ import { useUser } from "@/providers/UserProvider";
 import { useVoiceStatus } from "@/hooks/useVoiceStatus";
 import { INTERNAL_URL, IS_DEV } from "@/lib/constants";
 import { stripMarkdownForTTS as cleanTextForTTS } from "@/lib/voice/utils";
+import { expectDefined } from "@/lib/utils";
 
 // --- TTS Configuration Constants ---
 
@@ -382,8 +383,10 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
 
       mediaSourceRef.current.onsourceopen = () => {
         try {
-          sourceBufferRef.current =
-            mediaSourceRef.current!.addSourceBuffer("audio/mpeg");
+          sourceBufferRef.current = expectDefined(
+            mediaSourceRef.current,
+            "MediaSource was cleared before sourceopen."
+          ).addSourceBuffer("audio/mpeg");
           sourceBufferRef.current.mode = "sequence";
 
           sourceBufferRef.current.onupdateend = () => {

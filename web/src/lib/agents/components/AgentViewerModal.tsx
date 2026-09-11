@@ -239,12 +239,10 @@ export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
 
   const mcpServersWithTools = useMemo(
     () =>
-      mcpServers
-        .filter((server) => mcpToolsByServerId.has(server.id))
-        .map((server) => ({
-          server,
-          tools: mcpToolsByServerId.get(server.id)!,
-        })),
+      mcpServers.flatMap((server) => {
+        const tools = mcpToolsByServerId.get(server.id);
+        return tools ? [{ server, tools }] : [];
+      }),
     [mcpServers, mcpToolsByServerId]
   );
 

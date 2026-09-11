@@ -402,8 +402,9 @@ const AppInputBar = React.memo(
       prevChatStateRef.current = chatState;
       prevRenderCompleteRef.current = latestMessageRenderComplete;
 
-      if (!wasReady && isReady && queuedMessages.length > 0) {
-        const nextMessage = queuedMessages[0]!.text;
+      const [nextQueued] = queuedMessages;
+      if (!wasReady && isReady && nextQueued) {
+        const nextMessage = nextQueued.text;
         isAutoSending.current = true;
         stopTTS();
         onSubmit(nextMessage);

@@ -133,8 +133,8 @@ export function usePacedTurnGroups(
   const revealNextPendingStep = useCallback(() => {
     const state = stateRef.current;
 
-    if (state.pendingSteps.length > 0) {
-      const stepToReveal = state.pendingSteps.shift()!;
+    const stepToReveal = state.pendingSteps.shift();
+    if (stepToReveal) {
       state.revealedStepKeys.add(stepToReveal.key);
       state.lastRevealedPacketType = getStepPacketType(stepToReveal);
 
@@ -339,17 +339,20 @@ export function usePacedTurnGroups(
     const prev = hasNodeChanged ? [] : prevPacedRef.current;
     if (prev.length === result.length) {
       let allMatch = true;
-      for (let i = 0; i < result.length; i++) {
-        const oldGroup = prev[i]!;
-        const newGroup = result[i]!;
+      for (const [i, newGroup] of result.entries()) {
+        const oldGroup = prev[i];
         if (
+          oldGroup &&
           oldGroup.turnIndex === newGroup.turnIndex &&
           oldGroup.steps.length === newGroup.steps.length &&
-          oldGroup.steps.every(
-            (s, j) =>
-              s.key === newGroup.steps[j]!.key &&
-              s.packets.length === newGroup.steps[j]!.packets.length
-          )
+          oldGroup.steps.every((s, j) => {
+            const newStep = newGroup.steps[j];
+            return (
+              newStep !== undefined &&
+              s.key === newStep.key &&
+              s.packets.length === newStep.packets.length
+            );
+          })
         ) {
           // Reuse old object reference for this group
           result[i] = oldGroup;

@@ -84,10 +84,12 @@ export const ResearchAgentRenderer: MessageRenderer<
       if (subTurnIndex === undefined || subTurnIndex === null) {
         parent.push(packet);
       } else {
-        if (!nestedBySubTurn.has(subTurnIndex)) {
-          nestedBySubTurn.set(subTurnIndex, []);
+        let subTurnPackets = nestedBySubTurn.get(subTurnIndex);
+        if (!subTurnPackets) {
+          subTurnPackets = [];
+          nestedBySubTurn.set(subTurnIndex, subTurnPackets);
         }
-        nestedBySubTurn.get(subTurnIndex)!.push(packet);
+        subTurnPackets.push(packet);
       }
     });
 

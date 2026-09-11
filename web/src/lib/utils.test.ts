@@ -1,4 +1,31 @@
-import { ensureHrefProtocol, transformLinkUri } from "./utils";
+import { ensureHrefProtocol, expectDefined, transformLinkUri } from "./utils";
+
+describe("expectDefined", () => {
+  it("returns defined values unchanged", () => {
+    const obj = { a: 1 };
+    expect(expectDefined(obj, "missing")).toBe(obj);
+    expect(expectDefined("value", "missing")).toBe("value");
+  });
+
+  it("returns falsy values that are not null or undefined", () => {
+    expect(expectDefined(0, "missing")).toBe(0);
+    expect(expectDefined("", "missing")).toBe("");
+    expect(expectDefined(false, "missing")).toBe(false);
+    expect(Number.isNaN(expectDefined(NaN, "missing"))).toBe(true);
+  });
+
+  it("throws with the message for null", () => {
+    expect(() => expectDefined(null, "value is null")).toThrow(
+      new Error("value is null")
+    );
+  });
+
+  it("throws with the message for undefined", () => {
+    expect(() => expectDefined(undefined, "value is undefined")).toThrow(
+      new Error("value is undefined")
+    );
+  });
+});
 
 describe("ensureHrefProtocol", () => {
   it("adds https protocol to bare domains", () => {

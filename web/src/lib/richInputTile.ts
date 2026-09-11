@@ -65,18 +65,20 @@ interface TileSpec {
   icon: IconSpec;
 }
 
+const PASTE_TILE_SPEC: TileSpec = {
+  tagColor: "gray",
+  icon: {
+    paths: [CLIPBOARD_PATH],
+    viewBox: "0 0 16 16",
+    size: 14,
+    strokeWidth: 1.5,
+    strokeLinecap: "round",
+  },
+};
+
 // Spec per tile type. Keyed by RichTileConfig.type; falls back to "paste".
 const TILE_SPECS: Record<string, TileSpec> = {
-  paste: {
-    tagColor: "gray",
-    icon: {
-      paths: [CLIPBOARD_PATH],
-      viewBox: "0 0 16 16",
-      size: 14,
-      strokeWidth: 1.5,
-      strokeLinecap: "round",
-    },
-  },
+  paste: PASTE_TILE_SPEC,
   skill: {
     tagColor: "blue",
     icon: {
@@ -137,7 +139,7 @@ export function createRichInputTileNode(
     tile.setAttribute("data-skill-slug", config.skillSlug);
   }
   tile.className = "rich-input-tile";
-  const spec = TILE_SPECS[config.type] ?? TILE_SPECS.paste!;
+  const spec = TILE_SPECS[config.type] ?? PASTE_TILE_SPEC;
   const tagColor = TAG_COLORS[spec.tagColor];
   tile.classList.add(...tagColor.bg.split(" "));
   tile.title = isSkill

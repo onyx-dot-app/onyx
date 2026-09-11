@@ -33,6 +33,7 @@ import { TableHeader } from "@/components/ui/table";
 import { SvgEdit, SvgPlusCircle, SvgTrash } from "@opal/icons";
 import { Button } from "@opal/components";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import { expectDefined } from "@/lib/utils";
 const NUM_RESULTS_PER_PAGE = 10;
 
 const route = ADMIN_ROUTES.STANDARD_ANSWERS;
@@ -274,9 +275,12 @@ const StandardAnswersTable = ({
           selected={selectedCategories.map((category) => category.name)}
           handleSelect={(option) => {
             handleCategorySelect(
-              standardAnswerCategories.find(
-                (category) => category.name === option.key
-              )!
+              expectDefined(
+                standardAnswerCategories.find(
+                  (category) => category.name === option.key
+                ),
+                `Unknown standard answer category "${option.key}".`
+              )
             );
           }}
           icon={

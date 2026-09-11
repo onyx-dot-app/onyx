@@ -114,7 +114,8 @@ export const parseLlmDescriptor = (value: string): LlmDescriptor => {
     name: displayName,
     provider: parts[1] ?? "",
     modelName,
-    modelConfigurationId: hasId ? parseInt(last!.slice(3), 10) : undefined,
+    modelConfigurationId:
+      hasId && last !== undefined ? parseInt(last.slice(3), 10) : undefined,
   };
 };
 
