@@ -81,14 +81,21 @@ class TestCachedCollector:
 
     def test_stall_warning_is_throttled(self) -> None:
         collector = _GatedCollector(cache_ttl=60, collect_timeout=0.1)
-        assert collector.collect() == []  # starter times out
-        with patch.object(indexing_pipeline.logger, "warning") as warning:
-            for _ in range(3):
-                assert collector.collect() == []
-        stall_lines = [
-            call for call in warning.call_args_list if "still running" in call.args[0]
-        ]
-        assert len(stall_lines) == 1
+        assert collector.collect() == []  # starter times out and warns
+
+        def stall_lines_from(scrapes: int) -> int:
+            with patch.object(indexing_pipeline.logger, "warning") as warning:
+                for _ in range(scrapes):
+                    assert collector.collect() == []
+            return sum(
+                1 for call in warning.call_args_list if "still running" in call.args[0]
+            )
+
+        # The starter's own warning opened the window, so nothing more is logged.
+        assert stall_lines_from(3) == 0
+        # Once the window has passed, exactly one line per window.
+        collector._last_stall_log -= indexing_pipeline._STALL_WARNING_INTERVAL
+        assert stall_lines_from(3) == 1
         collector.release.set()
         collector._executor.shutdown(wait=False)
 

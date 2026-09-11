@@ -136,6 +136,9 @@ class _CachedCollector(Collector):
                     type(self).__name__,
                     self._collect_timeout,
                 )
+                # This line opens the throttle window for the stall warnings.
+                with self._lock:
+                    self._last_stall_log = time.monotonic()
                 return self._cached_or_empty()
             logger.exception("Error in %s._collect_fresh()", type(self).__name__)
             with self._lock:
