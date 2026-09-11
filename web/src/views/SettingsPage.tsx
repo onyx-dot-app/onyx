@@ -2392,7 +2392,7 @@ function AccountsAccessSettings() {
                           <AttachmentItemButton
                             key={pat.id}
                             presentational
-                            prominence="primary"
+                            prominence="secondary"
                             icon={SvgKey}
                             title={pat.name}
                             description={pat.token_display}
