@@ -325,6 +325,10 @@ async def test_close_cleans_up_when_remainder_send_fails() -> None:
 
     assert ws.closed is True
     assert session.closed is True
+    failure = transcriber._transcript_queue.get_nowait()
+    assert failure is not None
+    assert failure.error is not None
+    assert failure.text == "kept"
 
 
 @pytest.mark.asyncio

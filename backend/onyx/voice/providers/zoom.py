@@ -313,7 +313,12 @@ class ZoomStreamingTranscriber(StreamingTranscriberProtocol):
             except asyncio.TimeoutError:
                 logger.warning("Timed out waiting for Zoom Scribe session close.")
             except Exception:
-                logger.debug("Zoom Scribe session close request failed", exc_info=True)
+                # Zoom never finalized the in-flight audio, so the caller must
+                # not treat the partial transcript as a successful result.
+                logger.warning(
+                    "Zoom Scribe session close request failed", exc_info=True
+                )
+                await self._signal_error("Zoom Scribe stream failed.")
             return self._accumulated_transcript
         finally:
             await self._cleanup()
