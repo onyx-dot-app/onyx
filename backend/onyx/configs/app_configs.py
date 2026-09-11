@@ -986,24 +986,16 @@ REDIS_HEALTH_CHECK_INTERVAL = int(os.environ.get("REDIS_HEALTH_CHECK_INTERVAL", 
 REDIS_POOL_MAX_CONNECTIONS = int(os.environ.get("REDIS_POOL_MAX_CONNECTIONS", 128))
 
 # Per-recv and connect deadlines in seconds for our redis client, not celery's.
-# Unset, redis-py waits forever on a peer that keeps the TCP session open without
-# replying. Connect unset inherits the read value. The read value caps BLPOP too.
-REDIS_SOCKET_CONNECT_TIMEOUT: float | None = (
-    float(os.environ["REDIS_SOCKET_CONNECT_TIMEOUT"])
-    if os.environ.get("REDIS_SOCKET_CONNECT_TIMEOUT")
-    else None
+# A peer that keeps the TCP session open without replying raises after this
+# instead of holding the thread until restart. The read value caps BLPOP too.
+REDIS_SOCKET_CONNECT_TIMEOUT = float(
+    os.environ.get("REDIS_SOCKET_CONNECT_TIMEOUT") or 10
 )
-REDIS_SOCKET_TIMEOUT: float | None = (
-    float(os.environ["REDIS_SOCKET_TIMEOUT"])
-    if os.environ.get("REDIS_SOCKET_TIMEOUT")
-    else None
-)
-# redis-py kwargs for the above, omitted when unset so the library default applies.
-REDIS_SOCKET_TIMEOUT_KWARGS: dict[str, float] = {}
-if REDIS_SOCKET_CONNECT_TIMEOUT is not None:
-    REDIS_SOCKET_TIMEOUT_KWARGS["socket_connect_timeout"] = REDIS_SOCKET_CONNECT_TIMEOUT
-if REDIS_SOCKET_TIMEOUT is not None:
-    REDIS_SOCKET_TIMEOUT_KWARGS["socket_timeout"] = REDIS_SOCKET_TIMEOUT
+REDIS_SOCKET_TIMEOUT = float(os.environ.get("REDIS_SOCKET_TIMEOUT") or 30)
+REDIS_SOCKET_TIMEOUT_KWARGS: dict[str, float] = {
+    "socket_connect_timeout": REDIS_SOCKET_CONNECT_TIMEOUT,
+    "socket_timeout": REDIS_SOCKET_TIMEOUT,
+}
 
 # https://docs.celeryq.dev/en/stable/userguide/configuration.html#redis-backend-settings
 # should be one of "required", "optional", or "none"

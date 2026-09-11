@@ -1,23 +1,36 @@
-"""Socket deadlines on the app Redis client are opt-in and reach every pool."""
+"""Socket deadlines on the app Redis client default on and reach every pool."""
 
+import importlib
+import os
 from collections.abc import Mapping
 from contextlib import ExitStack
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import onyx.background.celery.celery_redis as celery_redis
+import onyx.configs.app_configs as app_configs
 import onyx.redis.redis_pool as redis_pool
 
 _DEADLINES = {"socket_timeout": 30.0, "socket_connect_timeout": 10.0}
 
 
-def _direct_pool_patches(stack: ExitStack) -> None:
-    stack.enter_context(patch.object(redis_pool, "REDIS_SENTINEL_HOSTS", []))
-    stack.enter_context(patch.object(redis_pool, "USE_REDIS_IAM_AUTH", False))
-    stack.enter_context(patch.object(redis_pool, "REDIS_SSL", False))
+def test_defaults_are_thirty_second_read_and_ten_second_connect() -> None:
+    env = {k: v for k, v in os.environ.items() if not k.startswith("REDIS_SOCKET_")}
+    try:
+        with patch.dict(os.environ, env, clear=True):
+            importlib.reload(app_configs)
+            assert app_configs.REDIS_SOCKET_TIMEOUT_KWARGS == _DEADLINES
+        with patch.dict(os.environ, {"REDIS_SOCKET_TIMEOUT": "5", **env}, clear=True):
+            importlib.reload(app_configs)
+            assert app_configs.REDIS_SOCKET_TIMEOUT_KWARGS["socket_timeout"] == 5.0
+    finally:
+        importlib.reload(app_configs)
 
 
 def _every_connection_kwargs(stack: ExitStack) -> list[Mapping[str, Any]]:
+    stack.enter_context(patch.object(redis_pool, "REDIS_SENTINEL_HOSTS", []))
+    stack.enter_context(patch.object(redis_pool, "USE_REDIS_IAM_AUTH", False))
+    stack.enter_context(patch.object(redis_pool, "REDIS_SSL", False))
     pool_cls = stack.enter_context(
         patch.object(redis_pool.redis, "BlockingConnectionPool")
     )
@@ -33,21 +46,11 @@ def _every_connection_kwargs(stack: ExitStack) -> list[Mapping[str, Any]]:
     ]
 
 
-def test_unset_deadlines_leave_every_pool_on_library_defaults() -> None:
-    with ExitStack() as stack:
-        stack.enter_context(patch.object(redis_pool, "REDIS_SOCKET_TIMEOUT_KWARGS", {}))
-        _direct_pool_patches(stack)
-        for kwargs in _every_connection_kwargs(stack):
-            assert "socket_timeout" not in kwargs
-            assert "socket_connect_timeout" not in kwargs
-
-
 def test_deadlines_apply_to_sentinel_direct_and_async_connections() -> None:
     with ExitStack() as stack:
         stack.enter_context(
             patch.object(redis_pool, "REDIS_SOCKET_TIMEOUT_KWARGS", _DEADLINES)
         )
-        _direct_pool_patches(stack)
         # The sentinel nodes get the deadlines too: a hung sentinel would
         # otherwise stall master discovery on every new connection.
         for kwargs in _every_connection_kwargs(stack):

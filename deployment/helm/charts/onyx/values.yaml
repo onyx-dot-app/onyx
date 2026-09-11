@@ -1526,9 +1526,9 @@ configMap:
   # model Services; set them here to point at external model servers instead
   # (the chart defaults are then not rendered).
   # See deployment/helm/README.md for the external-Redis / ElastiCache path.
-  # Redis socket deadlines in seconds for the app client (not Celery). Unset, a
-  # peer that stops replying but keeps the TCP session open holds a thread until
-  # the pod restarts. Connect unset inherits the read value.
+  # Redis socket deadlines in seconds for the app client (not Celery), default
+  # 30 and 10. A peer that stops replying but keeps the TCP session open raises
+  # after this instead of holding a thread until the pod restarts.
   REDIS_SOCKET_TIMEOUT: ""
   REDIS_SOCKET_CONNECT_TIMEOUT: ""
 
