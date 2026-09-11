@@ -1,7 +1,8 @@
 import os
 from io import BytesIO
-from typing import IO, Any, cast
+from typing import Any, cast
 
+import puremagic
 from fastapi import HTTPException, UploadFile
 
 from ee.onyx.server.enterprise_settings.models import (
@@ -24,6 +25,10 @@ logger = setup_logger()
 
 _LOGO_FILENAME = "__logo__"
 _LOGOTYPE_FILENAME = "__logotype__"
+
+# The logo is served unauthenticated from the app origin, so only inert raster
+# types are stored. An SVG or HTML body would otherwise run as script there.
+ALLOWED_LOGO_MIME_TYPES = {"image/png", "image/jpeg"}
 
 
 def _clamp_appearance_fields(stored: dict[str, Any]) -> dict[str, Any]:
@@ -119,17 +124,22 @@ def is_valid_file_type(filename: str) -> bool:
     return filename.endswith(valid_extensions)
 
 
-def guess_file_type(filename: str) -> str:
-    if filename.lower().endswith(".png"):
-        return "image/png"
-    elif filename.lower().endswith(".jpg") or filename.lower().endswith(".jpeg"):
-        return "image/jpeg"
-    return "application/octet-stream"
+def sniff_logo_mime_type(data: bytes) -> str | None:
+    """The allowed raster type of these bytes, or None if they are not one.
+
+    The filename suffix says nothing about the body, and the file store sniffs
+    the served MIME type back out of the bytes, so the content decides.
+    """
+    try:
+        matches = puremagic.magic_string(data)
+    except (puremagic.PureError, ValueError):
+        # PureError: nothing matched. ValueError: the body is empty.
+        return None
+    mime_type = matches[0].mime_type if matches else None
+    return mime_type if mime_type in ALLOWED_LOGO_MIME_TYPES else None
 
 
 def upload_logo(file: UploadFile | str, is_logotype: bool = False) -> bool:
-    content: IO[Any]
-
     if isinstance(file, str):
         logger.notice("Uploading logo from local path %s", file)
         if not os.path.isfile(file) or not is_valid_file_type(file):
@@ -140,9 +150,7 @@ def upload_logo(file: UploadFile | str, is_logotype: bool = False) -> bool:
 
         with open(file, "rb") as file_handle:
             file_content = file_handle.read()
-        content = BytesIO(file_content)
         display_name = file
-        file_type = guess_file_type(file)
 
     else:
         logger.notice("Uploading logo from uploaded file")
@@ -151,13 +159,22 @@ def upload_logo(file: UploadFile | str, is_logotype: bool = False) -> bool:
                 status_code=400,
                 detail="Invalid file type- only .png, .jpg, and .jpeg files are allowed",
             )
-        content = file.file
+        file_content = file.file.read()
         display_name = file.filename
-        file_type = file.content_type or "image/jpeg"
+
+    file_type = sniff_logo_mime_type(file_content)
+    if file_type is None:
+        if isinstance(file, str):
+            logger.error("Logo at %s is not a PNG or JPEG image", file)
+            return False
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid file contents- only PNG and JPEG images are allowed",
+        )
 
     file_store = get_default_file_store()
     file_store.save_file(
-        content=content,
+        content=BytesIO(file_content),
         display_name=display_name,
         file_origin=FileOrigin.OTHER,
         file_type=file_type,

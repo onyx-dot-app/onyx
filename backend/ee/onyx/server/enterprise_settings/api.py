@@ -12,6 +12,7 @@ from ee.onyx.server.enterprise_settings.models import (
     EnterpriseSettings,
 )
 from ee.onyx.server.enterprise_settings.store import (
+    ALLOWED_LOGO_MIME_TYPES,
     get_logo_filename,
     get_logotype_filename,
     load_analytics_script,
@@ -74,6 +75,27 @@ async def refresh_access_token(
     user: User = Depends(current_user_with_expired_token),
     user_manager: UserManager = Depends(get_user_manager),
 ) -> None:
+    # The userinfo is caller-supplied. Bind it to the authenticated user before
+    # oauth_callback links that identity to this account and renames it.
+    custom_account_ids = {
+        account.account_id
+        for account in user.oauth_accounts
+        if account.oauth_name == "custom"
+    }
+    email_matches = (
+        str(refresh_token.userinfo["email"]).strip().lower()
+        == (user.email or "").strip().lower()
+    )
+    account_matches = (
+        not custom_account_ids
+        or str(refresh_token.userinfo["userId"]) in custom_account_ids
+    )
+    if not email_matches or not account_matches:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "refresh-token userinfo does not match the authenticated user",
+        )
+
     try:
         logger.debug("Received response from Meechum auth URL for user %s", user.id)
 
@@ -175,6 +197,19 @@ def put_logo(
     upload_logo(file=file, is_logotype=is_logotype)
 
 
+# These routes are public and share the app origin, so the body is always
+# served as an inert raster image. A sniffed image/svg+xml or text/html would
+# otherwise render as an active document there.
+_LOGO_INERT_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "Content-Disposition": 'inline; filename="logo.png"',
+}
+
+
+def _logo_media_type(mime_type: str) -> str:
+    return mime_type if mime_type in ALLOWED_LOGO_MIME_TYPES else "image/png"
+
+
 def fetch_logo_helper(db_session: Session) -> Response:  # noqa: ARG001
     try:
         file_store = get_default_file_store()
@@ -190,8 +225,8 @@ def fetch_logo_helper(db_session: Session) -> Response:  # noqa: ARG001
     else:
         return Response(
             content=onyx_file.data,
-            media_type=onyx_file.mime_type,
-            headers={"Cache-Control": "no-cache"},
+            media_type=_logo_media_type(onyx_file.mime_type),
+            headers={"Cache-Control": "no-cache", **_LOGO_INERT_HEADERS},
         )
 
 
@@ -207,7 +242,11 @@ def fetch_logotype_helper(db_session: Session) -> Response:  # noqa: ARG001
             detail="No logotype file found",
         )
     else:
-        return Response(content=onyx_file.data, media_type=onyx_file.mime_type)
+        return Response(
+            content=onyx_file.data,
+            media_type=_logo_media_type(onyx_file.mime_type),
+            headers=_LOGO_INERT_HEADERS,
+        )
 
 
 @basic_router.get("/logotype")
