@@ -4,7 +4,11 @@ import { TextFormField } from "@/components/Field";
 import { useTranslations } from "next-intl";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
-import { createSlackBot, updateSlackBot } from "./new/lib";
+import {
+  createSlackBot,
+  parseSlackBotErrorMessage,
+  updateSlackBot,
+} from "./new/lib";
 import { Button, Divider } from "@opal/components";
 import { useEffect } from "react";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
@@ -67,8 +71,11 @@ export const SlackTokensForm = ({
           );
           router.push(`/admin/bots/${encodeURIComponent(botId)}`);
         } else {
-          const responseJson = await response.json();
-          let errorMsg = responseJson.detail || responseJson.message;
+          let errorMsg =
+            (await parseSlackBotErrorMessage(response)) ??
+            t("tokensForm.unexpectedResponse.message", {
+              status: response.status,
+            });
 
           if (errorMsg.includes("Invalid bot token:")) {
             errorMsg = t("tokensForm.invalidBotToken.message");

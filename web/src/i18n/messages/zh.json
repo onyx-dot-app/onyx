@@ -6843,6 +6843,9 @@
         "name": {
           "label": "为此 Slack 机器人命名："
         },
+        "unexpectedResponse": {
+          "message": "服务器返回了意外的响应 (HTTP {status})"
+        },
         "updateButton": {
           "label": "更新"
         },

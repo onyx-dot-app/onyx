@@ -13,7 +13,7 @@ packages:
   .: 100
   src: 99.4
   src/app: 99.5
-  src/app/admin: 96.2
+  src/app/admin: 96.3
   src/app/anonymous: 100
   src/app/api: 98.4
   src/app/app: 98.2

@@ -6843,6 +6843,9 @@
         "name": {
           "label": "이 Slack 봇의 이름:"
         },
+        "unexpectedResponse": {
+          "message": "예기치 않은 서버 응답 (HTTP {status})"
+        },
         "updateButton": {
           "label": "업데이트"
         },
