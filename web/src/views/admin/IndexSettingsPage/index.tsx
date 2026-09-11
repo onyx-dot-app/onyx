@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { mutate } from "swr";
 import { PageLoader } from "@opal/layouts";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import type { ErrorResponseBody } from "@/lib/fetcher";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
 import type { ConnectorIndexingStatusLite } from "@/lib/types";
 import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
@@ -1021,7 +1022,7 @@ export default function IndexSettingsPage() {
                 // reload; a generic failure would lose that.
                 const detail = await response
                   .json()
-                  .then((body) => body?.detail as string | undefined)
+                  .then((body: ErrorResponseBody) => body?.detail)
                   .catch((parseError) => {
                     console.error(
                       "Failed to parse set-new-search-settings error response",
