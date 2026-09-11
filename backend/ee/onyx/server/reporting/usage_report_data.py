@@ -60,9 +60,6 @@ class UsageReportData(BaseModel):
     top_users: list[NamedSpend]
     by_model: list[NamedSpend]
     by_flow: list[NamedSpend]
-    system_cost_cents: float
-    system_input_tokens: int
-    system_output_tokens: int
     system_by_flow: list[NamedSpend]
     daily: list[DailySpend]
 
@@ -121,9 +118,6 @@ def build_usage_report_data(
     total_cache_read = 0
     total_cache_creation = 0
     active_emails: set[str] = set()
-    system_cost = 0.0
-    system_input = 0
-    system_output = 0
 
     for row in rows:
         for bucket, key in (
@@ -182,9 +176,6 @@ def build_usage_report_data(
         total_output += row.output_tokens
         total_cache_read += row.cache_read_tokens
         total_cache_creation += row.cache_creation_tokens
-        system_cost += row.cost_cents
-        system_input += row.input_tokens
-        system_output += row.output_tokens
         daily_cost[row.day] += row.cost_cents
 
     # Must match license enforcement, or this disagrees with what is billed.
@@ -216,9 +207,6 @@ def build_usage_report_data(
         top_users=_top_n(by_user, TOP_USER_LIMIT),
         by_model=_top_n(by_model, TOP_ENTRY_LIMIT),
         by_flow=_top_n(by_flow, TOP_ENTRY_LIMIT),
-        system_cost_cents=system_cost,
-        system_input_tokens=system_input,
-        system_output_tokens=system_output,
         system_by_flow=_top_n(system_by_flow, TOP_ENTRY_LIMIT),
         daily=daily,
     )

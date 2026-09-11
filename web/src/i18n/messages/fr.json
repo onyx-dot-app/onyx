@@ -5803,6 +5803,50 @@
         "description": "Connectez des serveurs OpenAPI pour ajouter des actions et des outils personnalisés à vos agents."
       }
     },
+    "systemUsage": {
+      "categories": {
+        "contextualRagChunkContext": {
+          "label": "Contexte des fragments RAG contextuels"
+        },
+        "contextualRagDocumentSummary": {
+          "label": "Résumés contextuels des documents RAG"
+        },
+        "imageSummarization": { "label": "Résumé des images" },
+        "kgDeepExtraction": { "label": "Extraction du graphe de connaissances" },
+        "kgDocumentClassification": {
+          "label": "Classification du graphe de connaissances"
+        },
+        "other": { "label": "Autres" },
+        "unattributed": { "label": "Non attribué" }
+      },
+      "filters": {
+        "allModels": { "label": "Tous les modèles" },
+        "allProviders": { "label": "Tous les fournisseurs" }
+      },
+      "panel": {
+        "description": "{start} – {end} · Génération de texte en arrière-plan sans utilisateur.",
+        "emptyDescription": "Dépenses de génération de texte en arrière-plan pour la période sélectionnée.",
+        "error": { "title": "Échec du chargement de l'utilisation système pour cette période." },
+        "title": "Utilisation système"
+      },
+      "summary": {
+        "spend": { "label": "Dépenses système" },
+        "tokens": { "label": "Total des jetons" },
+        "unattributed": { "label": "Dépenses non attribuées" }
+      },
+      "table": {
+        "columns": {
+          "category": { "header": "Catégorie" },
+          "input": { "header": "Entrée" },
+          "output": { "header": "Sortie" },
+          "spend": { "header": "Dépenses" },
+          "tokens": { "header": "Jetons" }
+        },
+        "empty": {
+          "description": "Aucune utilisation système ne correspond aux filtres actuels."
+        }
+      }
+    },
     "perUserUsage": {
       "panel": {
         "description": "{start} – {end} · Les coûts sont calculés à partir de l'utilisation enregistrée des modèles.",

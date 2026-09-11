@@ -5803,6 +5803,50 @@
         "description": "Conecta servidores de OpenAPI para añadir acciones y herramientas personalizadas a tus agentes."
       }
     },
+    "systemUsage": {
+      "categories": {
+        "contextualRagChunkContext": {
+          "label": "Contexto de fragmentos RAG contextuales"
+        },
+        "contextualRagDocumentSummary": {
+          "label": "Resúmenes contextuales de documentos RAG"
+        },
+        "imageSummarization": { "label": "Resumen de imágenes" },
+        "kgDeepExtraction": { "label": "Extracción del grafo de conocimiento" },
+        "kgDocumentClassification": {
+          "label": "Clasificación del grafo de conocimiento"
+        },
+        "other": { "label": "Otros" },
+        "unattributed": { "label": "Sin atribuir" }
+      },
+      "filters": {
+        "allModels": { "label": "Todos los modelos" },
+        "allProviders": { "label": "Todos los proveedores" }
+      },
+      "panel": {
+        "description": "{start} – {end} · Generación de texto en segundo plano sin usuario.",
+        "emptyDescription": "Gasto de generación de texto en segundo plano durante el periodo seleccionado.",
+        "error": { "title": "No se pudo cargar el uso del sistema de este periodo." },
+        "title": "Uso del sistema"
+      },
+      "summary": {
+        "spend": { "label": "Gasto del sistema" },
+        "tokens": { "label": "Tokens totales" },
+        "unattributed": { "label": "Gasto sin atribuir" }
+      },
+      "table": {
+        "columns": {
+          "category": { "header": "Categoría" },
+          "input": { "header": "Entrada" },
+          "output": { "header": "Salida" },
+          "spend": { "header": "Gasto" },
+          "tokens": { "header": "Tokens" }
+        },
+        "empty": {
+          "description": "Ningún uso del sistema coincide con los filtros actuales."
+        }
+      }
+    },
     "perUserUsage": {
       "panel": {
         "description": "{start} – {end} · Los costes se calculan a partir del uso registrado de los modelos.",

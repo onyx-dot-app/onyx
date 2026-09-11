@@ -5803,6 +5803,50 @@
         "description": "Verbinden Sie OpenAPI-Server, um benutzerdefinierte Aktionen und Tools für Ihre Agenten hinzuzufügen."
       }
     },
+    "systemUsage": {
+      "categories": {
+        "contextualRagChunkContext": {
+          "label": "Kontext für kontextbezogene RAG-Abschnitte"
+        },
+        "contextualRagDocumentSummary": {
+          "label": "Kontextbezogene RAG-Dokumentzusammenfassungen"
+        },
+        "imageSummarization": { "label": "Bildzusammenfassung" },
+        "kgDeepExtraction": { "label": "Knowledge-Graph-Extraktion" },
+        "kgDocumentClassification": {
+          "label": "Knowledge-Graph-Klassifizierung"
+        },
+        "other": { "label": "Sonstige" },
+        "unattributed": { "label": "Nicht zugeordnet" }
+      },
+      "filters": {
+        "allModels": { "label": "Alle Modelle" },
+        "allProviders": { "label": "Alle Anbieter" }
+      },
+      "panel": {
+        "description": "{start} – {end} · Texterzeugung im Hintergrund ohne Benutzer.",
+        "emptyDescription": "Ausgaben für die Texterzeugung im Hintergrund im ausgewählten Zeitraum.",
+        "error": { "title": "Die Systemnutzung für diesen Zeitraum konnte nicht geladen werden." },
+        "title": "Systemnutzung"
+      },
+      "summary": {
+        "spend": { "label": "Systemausgaben" },
+        "tokens": { "label": "Token insgesamt" },
+        "unattributed": { "label": "Nicht zugeordnete Ausgaben" }
+      },
+      "table": {
+        "columns": {
+          "category": { "header": "Kategorie" },
+          "input": { "header": "Eingabe" },
+          "output": { "header": "Ausgabe" },
+          "spend": { "header": "Ausgaben" },
+          "tokens": { "header": "Token" }
+        },
+        "empty": {
+          "description": "Keine Systemnutzung entspricht den aktuellen Filtern."
+        }
+      }
+    },
     "perUserUsage": {
       "panel": {
         "description": "{start} – {end} · Die Kosten werden aus der erfassten Modellnutzung berechnet.",

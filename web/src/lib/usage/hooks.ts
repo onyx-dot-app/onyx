@@ -7,7 +7,9 @@ import { buildApiPath } from "@/lib/urlBuilder";
 import {
   convertDateToEndOfDay,
   convertDateToStartOfDay,
+  formatDateForApiParam,
 } from "@/lib/dateUtils";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   OnyxBotAnalytics,
   PersonaMessageAnalytics,
@@ -15,8 +17,10 @@ import {
   QueryAnalytics,
   UserAnalytics,
 } from "@/lib/usage/interfaces";
+import type { SystemUsageResponse } from "@/lib/usage/systemUsage";
 import {
   THIRTY_DAYS,
+  type DateRange,
   type DateRangePickerValue,
   rangeForInclusiveDays,
 } from "@opal/components";
@@ -26,6 +30,20 @@ export function useTimeRange() {
     ...rangeForInclusiveDays(30),
     selectValue: THIRTY_DAYS,
   });
+}
+
+export function useSystemUsage(range?: DateRange) {
+  const url = buildApiPath(SWR_KEYS.adminSystemUsage, {
+    start: range?.from ? formatDateForApiParam(range.from) : undefined,
+    end: range?.to ? formatDateForApiParam(range.to) : undefined,
+  });
+  const { data, error, isLoading, mutate } = useSWR<SystemUsageResponse, Error>(
+    url,
+    errorHandlingFetcher,
+    { revalidateOnFocus: false }
+  );
+
+  return { usage: data, isLoading, error, refetch: mutate };
 }
 
 function analyticsRange(timeRange: DateRangePickerValue) {

@@ -5803,6 +5803,50 @@
         "description": "اربط خوادم OpenAPI لإضافة إجراءات وأدوات مخصصة لوكلائك."
       }
     },
+    "systemUsage": {
+      "categories": {
+        "contextualRagChunkContext": {
+          "label": "سياق مقاطع RAG السياقية"
+        },
+        "contextualRagDocumentSummary": {
+          "label": "ملخصات مستندات RAG السياقية"
+        },
+        "imageSummarization": { "label": "تلخيص الصور" },
+        "kgDeepExtraction": { "label": "استخراج الرسم البياني المعرفي" },
+        "kgDocumentClassification": {
+          "label": "تصنيف الرسم البياني المعرفي"
+        },
+        "other": { "label": "أخرى" },
+        "unattributed": { "label": "غير منسوب" }
+      },
+      "filters": {
+        "allModels": { "label": "كل النماذج" },
+        "allProviders": { "label": "كل المزوّدين" }
+      },
+      "panel": {
+        "description": "{start} – {end} · إنشاء نص في الخلفية بدون مستخدم.",
+        "emptyDescription": "تكلفة إنشاء النص في الخلفية للفترة المحددة.",
+        "error": { "title": "تعذر تحميل استخدام النظام لهذه الفترة." },
+        "title": "استخدام النظام"
+      },
+      "summary": {
+        "spend": { "label": "إنفاق النظام" },
+        "tokens": { "label": "إجمالي الرموز" },
+        "unattributed": { "label": "إنفاق غير منسوب" }
+      },
+      "table": {
+        "columns": {
+          "category": { "header": "الفئة" },
+          "input": { "header": "الإدخال" },
+          "output": { "header": "الإخراج" },
+          "spend": { "header": "الإنفاق" },
+          "tokens": { "header": "الرموز" }
+        },
+        "empty": {
+          "description": "لا يوجد استخدام للنظام يطابق عوامل التصفية الحالية."
+        }
+      }
+    },
     "perUserUsage": {
       "panel": {
         "description": "{start} – {end} · تُحسب التكاليف من استخدام النماذج المسجل.",

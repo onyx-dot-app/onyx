@@ -5803,6 +5803,50 @@
         "description": "Conecte servidores OpenAPI para adicionar ações e ferramentas personalizadas aos seus agentes."
       }
     },
+    "systemUsage": {
+      "categories": {
+        "contextualRagChunkContext": {
+          "label": "Contexto de trechos RAG contextuais"
+        },
+        "contextualRagDocumentSummary": {
+          "label": "Resumos contextuais de documentos RAG"
+        },
+        "imageSummarization": { "label": "Resumo de imagens" },
+        "kgDeepExtraction": { "label": "Extração do grafo de conhecimento" },
+        "kgDocumentClassification": {
+          "label": "Classificação do grafo de conhecimento"
+        },
+        "other": { "label": "Outros" },
+        "unattributed": { "label": "Não atribuído" }
+      },
+      "filters": {
+        "allModels": { "label": "Todos os modelos" },
+        "allProviders": { "label": "Todos os provedores" }
+      },
+      "panel": {
+        "description": "{start} – {end} · Geração de texto em segundo plano sem usuário.",
+        "emptyDescription": "Gastos de geração de texto em segundo plano no período selecionado.",
+        "error": { "title": "Falha ao carregar o uso do sistema neste período." },
+        "title": "Uso do sistema"
+      },
+      "summary": {
+        "spend": { "label": "Gastos do sistema" },
+        "tokens": { "label": "Total de tokens" },
+        "unattributed": { "label": "Gastos não atribuídos" }
+      },
+      "table": {
+        "columns": {
+          "category": { "header": "Categoria" },
+          "input": { "header": "Entrada" },
+          "output": { "header": "Saída" },
+          "spend": { "header": "Gastos" },
+          "tokens": { "header": "Tokens" }
+        },
+        "empty": {
+          "description": "Nenhum uso do sistema corresponde aos filtros atuais."
+        }
+      }
+    },
     "perUserUsage": {
       "panel": {
         "description": "{start} – {end} · Os custos são calculados a partir do uso registrado do modelo.",

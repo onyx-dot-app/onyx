@@ -5803,6 +5803,50 @@
         "description": "OpenAPI サーバーを接続して、エージェント用のカスタムアクションとツールを追加します。"
       }
     },
+    "systemUsage": {
+      "categories": {
+        "contextualRagChunkContext": {
+          "label": "コンテキスト RAG チャンクの文脈"
+        },
+        "contextualRagDocumentSummary": {
+          "label": "コンテキスト RAG ドキュメント要約"
+        },
+        "imageSummarization": { "label": "画像要約" },
+        "kgDeepExtraction": { "label": "ナレッジグラフ抽出" },
+        "kgDocumentClassification": {
+          "label": "ナレッジグラフ分類"
+        },
+        "other": { "label": "その他" },
+        "unattributed": { "label": "未帰属" }
+      },
+      "filters": {
+        "allModels": { "label": "すべてのモデル" },
+        "allProviders": { "label": "すべてのプロバイダー" }
+      },
+      "panel": {
+        "description": "{start} – {end} · ユーザーを伴わないバックグラウンドでのテキスト生成。",
+        "emptyDescription": "選択した期間のバックグラウンドテキスト生成費用。",
+        "error": { "title": "この期間のシステム使用状況を読み込めませんでした。" },
+        "title": "システム使用状況"
+      },
+      "summary": {
+        "spend": { "label": "システム費用" },
+        "tokens": { "label": "合計トークン" },
+        "unattributed": { "label": "未帰属の費用" }
+      },
+      "table": {
+        "columns": {
+          "category": { "header": "カテゴリー" },
+          "input": { "header": "入力" },
+          "output": { "header": "出力" },
+          "spend": { "header": "費用" },
+          "tokens": { "header": "トークン" }
+        },
+        "empty": {
+          "description": "現在のフィルターに一致するシステム使用状況はありません。"
+        }
+      }
+    },
     "perUserUsage": {
       "panel": {
         "description": "{start} – {end} · コストは記録されたモデル使用量から算出されます。",
