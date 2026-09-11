@@ -568,23 +568,3 @@ export function buildChatUrl(
 
   return `/${search ? "search" : "app"}`;
 }
-
-export async function uploadFilesForChat(
-  files: File[]
-): Promise<[FileDescriptor[], string | null]> {
-  const formData = new FormData();
-  files.forEach((file) => {
-    formData.append("files", file);
-  });
-
-  const response = await fetch("/api/chat/file", {
-    method: "POST",
-    body: formData,
-  });
-  if (!response.ok) {
-    return [[], `Failed to upload files - ${(await response.json()).detail}`];
-  }
-  const responseJson = await response.json();
-
-  return [responseJson.files as FileDescriptor[], null];
-}
