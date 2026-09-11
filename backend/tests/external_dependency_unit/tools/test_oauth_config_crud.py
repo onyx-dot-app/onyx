@@ -77,6 +77,7 @@ class TestOAuthConfigCRUD:
         assert oauth_config.token_url == "https://github.com/login/oauth/access_token"
         assert oauth_config.scopes == ["repo", "user"]
         assert oauth_config.additional_params == {"test_param": "test_value"}
+        assert oauth_config.supports_pkce is False
         assert oauth_config.created_at is not None
         assert oauth_config.updated_at is not None
 
@@ -288,6 +289,7 @@ class TestOAuthConfigCRUD:
             scopes=new_scopes,
             additional_params=new_params,
             client_id=new_client_id,
+            supports_pkce=True,
         )
 
         assert updated_config.name == new_name
@@ -295,6 +297,7 @@ class TestOAuthConfigCRUD:
         assert updated_config.token_url == new_token_url
         assert updated_config.scopes == new_scopes
         assert updated_config.additional_params == new_params
+        assert updated_config.supports_pkce is True
         assert updated_config.client_id is not None
         assert updated_config.client_id.get_value(apply_mask=False) == new_client_id
 

@@ -276,8 +276,14 @@ class OAuthTokenManager:
         # Add 60 second buffer to avoid race conditions
         return int(time.time()) + 60 >= expires_at
 
-    def exchange_code_for_token(self, code: str, redirect_uri: str) -> dict[str, Any]:
-        """Exchange authorization code for access token"""
+    def exchange_code_for_token(
+        self,
+        code: str,
+        redirect_uri: str,
+        *,
+        code_verifier: str | None = None,
+    ) -> dict[str, Any]:
+        """Exchange an authorization code, including a PKCE verifier when supplied."""
         if (
             self.oauth_config.client_id is None
             or self.oauth_config.client_secret is None
@@ -287,22 +293,33 @@ class OAuthTokenManager:
             )
 
         return exchange_oauth_code_for_token(
-            self._flow_params(self.oauth_config), code, redirect_uri
+            self.flow_params(self.oauth_config),
+            code,
+            redirect_uri,
+            code_verifier=code_verifier,
         )
 
     @staticmethod
     def build_authorization_url(
-        oauth_config: OAuthConfig, redirect_uri: str, state: str
+        oauth_config: OAuthConfig,
+        redirect_uri: str,
+        state: str,
+        *,
+        code_challenge: str | None = None,
     ) -> str:
-        """Build OAuth authorization URL"""
+        """Build an authorization URL, including a PKCE challenge when supplied."""
         if oauth_config.client_id is None:
             raise ValueError("OAuth client_id is required to build authorization URL")
         return build_oauth_authorization_url(
-            OAuthTokenManager._flow_params(oauth_config), redirect_uri, state
+            OAuthTokenManager.flow_params(oauth_config),
+            redirect_uri,
+            state,
+            code_challenge=code_challenge,
         )
 
     @staticmethod
-    def _flow_params(oauth_config: OAuthConfig) -> OAuthFlowParams:
+    def flow_params(oauth_config: OAuthConfig) -> OAuthFlowParams:
+        """Return the protocol inputs represented by an OAuthConfig."""
         if oauth_config.client_id is None:
             raise ValueError("OAuth client_id is required")
         client_secret = (
