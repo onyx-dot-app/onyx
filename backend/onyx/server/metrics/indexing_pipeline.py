@@ -109,52 +109,80 @@ class _CachedCollector(Collector):
         self._last_stall_log: float = 0.0
 
     def collect(self) -> list[GaugeMetricFamily]:
+        self._bank_finished()
+
+        own_future: concurrent.futures.Future[list[GaugeMetricFamily]] | None = None
         with self._lock:
-            self._absorb_finished_locked()
             now = time.monotonic()
             if (
                 self._cached_result is not None
                 and now - self._last_collect_time < self._cache_ttl
             ):
                 return self._cached_result
-            if self._inflight is not None:
-                self._log_stall_locked(now)
-                return self._cached_or_empty()
-            future = self._executor.submit(self._collect_fresh)
-            self._inflight = future
-            self._inflight_started = now
+            if self._inflight is None:
+                own_future = self._executor.submit(self._collect_fresh)
+                self._inflight = own_future
+                self._inflight_started = now
+                stalled_for = None
+            else:
+                stalled_for = self._claim_stall_warning_locked(now)
 
-        # Wait outside the lock so a slow collection blocks only its starter.
-        try:
-            result = future.result(timeout=self._collect_timeout)
-        except Exception:
-            # A collection may itself raise TimeoutError, so the future's state,
-            # not the exception type, tells a stalled wait from a failed run.
-            if not future.done():
+        # Nothing below runs under the lock: a slow log handler or collection
+        # must never convoy the other scrapes behind it.
+        if own_future is None:
+            if stalled_for is not None:
                 logger.warning(
-                    "%s._collect_fresh() timed out after %ss, returning stale cache",
+                    "%s._collect_fresh() still running after %.0fs, returning stale cache",
                     type(self).__name__,
-                    self._collect_timeout,
+                    stalled_for,
                 )
-                # This line opens the throttle window for the stall warnings.
-                with self._lock:
-                    self._last_stall_log = time.monotonic()
-                return self._cached_or_empty()
-            logger.exception("Error in %s._collect_fresh()", type(self).__name__)
-            with self._lock:
-                if self._inflight is future:
-                    self._inflight = None
-            # Stale cache beats nothing: metrics should not vanish on a blip.
             return self._cached_or_empty()
 
-        with self._lock:
-            if self._inflight is future:
-                self._inflight = None
-            self._store_locked(result, now)
-        return result
+        concurrent.futures.wait([own_future], timeout=self._collect_timeout)
+        if not own_future.done():
+            logger.warning(
+                "%s._collect_fresh() timed out after %ss, returning stale cache",
+                type(self).__name__,
+                self._collect_timeout,
+            )
+            # This line opens the throttle window for the stall warnings.
+            with self._lock:
+                self._last_stall_log = time.monotonic()
+            return self._cached_or_empty()
+        result = self._bank(own_future, now)
+        return result if result is not None else self._cached_or_empty()
 
     def _cached_or_empty(self) -> list[GaugeMetricFamily]:
         return self._cached_result if self._cached_result is not None else []
+
+    def _bank_finished(self) -> None:
+        """Bank a collection that finished after its starter stopped waiting."""
+        with self._lock:
+            future, started = self._inflight, self._inflight_started
+        if future is not None and future.done():
+            self._bank(future, started)
+
+    def _bank(
+        self,
+        future: concurrent.futures.Future[list[GaugeMetricFamily]],
+        started: float,
+    ) -> list[GaugeMetricFamily] | None:
+        """Store a done collection and free its in-flight slot.
+
+        ``result()`` never blocks here because the future is done. Returns None
+        when the collection raised, so callers fall back to the stale cache.
+        """
+        try:
+            result = future.result()
+        except Exception:
+            logger.exception("Error in %s._collect_fresh()", type(self).__name__)
+            result = None
+        with self._lock:
+            if self._inflight is future:
+                self._inflight = None
+            if result is not None:
+                self._store_locked(result, started)
+        return result
 
     def _store_locked(self, result: list[GaugeMetricFamily], started: float) -> None:
         # A result is stamped with its start time, so a slow one that lands
@@ -164,31 +192,15 @@ class _CachedCollector(Collector):
         self._cached_result = result
         self._last_collect_time = started
 
-    def _absorb_finished_locked(self) -> None:
-        """Bank a collection that finished after its starter stopped waiting."""
-        future, started = self._inflight, self._inflight_started
-        if future is None or not future.done():
-            return
-        self._inflight = None
-        try:
-            result = future.result()
-        except Exception:
-            logger.exception("Error in %s._collect_fresh()", type(self).__name__)
-            return
-        self._store_locked(result, started)
-
-    def _log_stall_locked(self, now: float) -> None:
+    def _claim_stall_warning_locked(self, now: float) -> float | None:
+        """Seconds the collection has run when a warning is due, else None."""
         running_for = now - self._inflight_started
         if running_for < self._collect_timeout:
-            return
+            return None
         if now - self._last_stall_log < _STALL_WARNING_INTERVAL:
-            return
+            return None
         self._last_stall_log = now
-        logger.warning(
-            "%s._collect_fresh() still running after %.0fs, returning stale cache",
-            type(self).__name__,
-            running_for,
-        )
+        return running_for
 
     def _collect_fresh(self) -> list[GaugeMetricFamily]:
         raise NotImplementedError

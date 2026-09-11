@@ -7,9 +7,11 @@ from celery import Celery
 from redis import Redis
 
 from onyx.background.celery.configs.base import CELERY_SEPARATOR
-from onyx.configs.app_configs import REDIS_HEALTH_CHECK_INTERVAL
+from onyx.configs.app_configs import (
+    REDIS_HEALTH_CHECK_INTERVAL,
+    REDIS_SOCKET_TIMEOUT_KWARGS,
+)
 from onyx.configs.constants import REDIS_SOCKET_KEEPALIVE_OPTIONS, OnyxCeleryPriority
-from onyx.redis.redis_pool import redis_socket_timeout_kwargs
 
 _broker_client: Redis | None = None
 _broker_url: str | None = None
@@ -57,7 +59,7 @@ def celery_get_broker_client(app: Celery) -> Redis:
             socket_keepalive=True,
             socket_keepalive_options=REDIS_SOCKET_KEEPALIVE_OPTIONS,
             retry_on_timeout=True,
-            **redis_socket_timeout_kwargs(),
+            **REDIS_SOCKET_TIMEOUT_KWARGS,
         )
         return _broker_client
 
