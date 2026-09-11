@@ -16,6 +16,7 @@ import {
 } from "@opal/components";
 import { SvgCheck, SvgX } from "@opal/icons";
 import { useOpalStrings } from "@opal/strings";
+import { toPlainString } from "@opal/components/text/InlineMarkdown";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -40,10 +41,10 @@ interface InputMultiSelectItem {
  * not listed below is DOM and reaches the search input (so `data-*` hooks
  * land on the element tests actually drive).
  */
-interface InputMultiSelectProps extends Omit<
+type InputMultiSelectProps = Omit<
   WithoutStyles<React.InputHTMLAttributes<HTMLInputElement>>,
   "value" | "onChange" | "disabled" | "children"
-> {
+> & {
   /** Full option set; the component filters it by title as the user types. */
   items: InputMultiSelectItem[];
 
@@ -71,7 +72,7 @@ interface InputMultiSelectProps extends Omit<
 
   /** Portal container for the dropdown (e.g. a modal's content element). */
   container?: HTMLElement | null;
-}
+};
 
 // ---------------------------------------------------------------------------
 // InputMultiSelect
@@ -110,7 +111,7 @@ function InputMultiSelect({
     const trimmed = query.trim().toLowerCase();
     if (!trimmed) return items;
     return items.filter((item) =>
-      String(item.title).toLowerCase().includes(trimmed)
+      toPlainString(item.title).toLowerCase().includes(trimmed)
     );
   }, [items, query]);
 
