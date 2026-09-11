@@ -3,6 +3,7 @@ import { useOpalStrings } from "@opal/strings";
 import { OptionItem } from "./OptionItem";
 import { SelectOption, SelectSection } from "../types";
 import { Divider } from "@opal/components/divider/components";
+import { EmptyMessageCard } from "@opal/components/cards/empty-message-card/components";
 import { cn, clickOnKeyDown } from "@opal/utils";
 import { SvgPlus } from "@opal/icons";
 import { sanitizeOptionId } from "./aria";
@@ -10,6 +11,8 @@ import { sanitizeOptionId } from "./aria";
 interface OptionsListProps {
   /** Post-filter, non-empty sections in render order. */
   sections: SelectSection[];
+  /** The supplied set itself is empty (options={[]}), not merely filtered out. */
+  emptySet?: boolean;
   value: string;
   /** Multi-select: the chosen values. Overrides single-value selection. */
   selectedValues?: ReadonlySet<string>;
@@ -40,6 +43,7 @@ interface OptionsListProps {
  */
 export const OptionsList: React.FC<OptionsListProps> = ({
   sections,
+  emptySet,
   value,
   selectedValues,
   markAllMatches = false,
@@ -64,6 +68,11 @@ export const OptionsList: React.FC<OptionsListProps> = ({
   );
 
   if (totalOptions === 0 && !showCreateOption) {
+    // An empty SET gets the empty-state card; a filter that matched nothing
+    // keeps the lightweight text row.
+    if (emptySet) {
+      return <EmptyMessageCard padding={2} title={strings.comboBoxNoOptions} />;
+    }
     return (
       <div className="px-3 py-2 text-text-02 font-secondary-body">
         {strings.comboBoxNoOptions}
