@@ -1281,8 +1281,8 @@ jobs:
           fi
           echo "All tests passed."
       # Record which base tip this verdict used. merge-group.yml refuses to
-      # merge a PR whose verdict used a base that is in neither the target
-      # branch nor the PR's own history (see .github/actions/check-tested-base).
+      # merge a PR whose verdict used a base that never landed in the target
+      # (see .github/actions/check-tested-base).
       # Fork and Dependabot runs have a read-only token and cannot record.
       - name: Record tested base
         if: >-
