@@ -984,7 +984,7 @@ export default function AgentEditorPage({
               groups: values.shared_group_ids,
             }),
         default_model_configuration_id:
-          (values as any).default_model_configuration_id ?? null,
+          values.default_model_configuration_id ?? null,
         starter_messages: finalAgentStarterMessages,
         tool_ids: toolIds,
         // uploaded_image: null, // Already uploaded separately

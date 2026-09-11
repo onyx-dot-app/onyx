@@ -181,9 +181,9 @@ export default function ToolsPopover({
           setMcpServers(servers);
           // Seed auth/loading state based on response
           setMcpServerData((prev) => {
-            const next = { ...prev } as any;
-            servers.forEach((s: any) => {
-              next[s.id as number] = {
+            const next: typeof prev = { ...prev };
+            servers.forEach((s: MCPServer) => {
+              next[s.id] = {
                 isAuthenticated: !!s.user_can_authenticate,
                 isLoading: false,
               };
