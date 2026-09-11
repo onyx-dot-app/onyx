@@ -34,7 +34,6 @@ inside a Formik form:
 | `onChange`    | `(next: string[]) => void`    | —        | Next selected-id set on every toggle or removal                   |
 | `placeholder` | `string`                      | —        | Search input placeholder                                          |
 | `disabled`    | `boolean`                     | —        | Disables the input, dropdown, and rows                            |
-| `loading`     | `boolean`                     | —        | Loading row in the dropdown instead of options                    |
 | `removeIcon`  | `IconFunctionComponent`       | `SvgX`   | Trailing icon on selected rows (e.g. `SvgLogOut` for memberships) |
 | `container`   | `HTMLElement \| null`         | —        | Dropdown portal container (a modal's content element)             |
 

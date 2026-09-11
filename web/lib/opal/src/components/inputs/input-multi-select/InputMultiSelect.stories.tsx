@@ -49,20 +49,3 @@ export const WithSelection: Story = {
 export const Disabled: Story = {
   render: () => <Controlled initial={["2"]} disabled />,
 };
-
-export const Loading: Story = {
-  render: () => {
-    const [value, setValue] = useState<string[]>([]);
-    return (
-      <div className="w-96">
-        <InputMultiSelect
-          items={[]}
-          value={value}
-          onChange={setValue}
-          placeholder="Search groups…"
-          loading
-        />
-      </div>
-    );
-  },
-};

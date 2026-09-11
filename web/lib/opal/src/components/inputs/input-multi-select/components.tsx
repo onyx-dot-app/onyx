@@ -1,13 +1,14 @@
 "use client";
 
 import "@opal/components/inputs/input-multi-select/styles.css";
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import type {
   IconFunctionComponent,
   RichStr,
   WithoutStyles,
 } from "@opal/types";
 import {
+  Card,
   EmptyMessageCard,
   InputTypeIn,
   LineItemButton,
@@ -60,9 +61,6 @@ type InputMultiSelectProps = Omit<
   /** Disables the search input, the dropdown, and every row. */
   disabled?: boolean;
 
-  /** Shows a loading row in the dropdown instead of options. */
-  loading?: boolean;
-
   /**
    * Trailing icon on selected-list rows; clicking the row removes the item.
    *
@@ -92,14 +90,16 @@ function InputMultiSelect({
   onChange,
   placeholder,
   disabled,
-  loading,
   removeIcon: RemoveIcon = SvgX,
   container,
+  onFocus,
+  onClick,
   ...inputProps
 }: InputMultiSelectProps) {
   const strings = useOpalStrings();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
+  const anchorRef = useRef<HTMLDivElement>(null);
 
   const selectedIds = useMemo(() => new Set(value), [value]);
   const selectedItems = useMemo(
@@ -124,66 +124,69 @@ function InputMultiSelect({
   }
 
   return (
-    <div className="opal-input-multi-select">
+    <Card color="background-tint-01" padding={1} rounding={3}>
       <Popover
         open={!disabled && open}
         onOpenChange={(next) => !disabled && setOpen(next)}
       >
-        <Popover.Trigger asChild>
-          {/* A plain div: the trigger would otherwise nest a <button> around
-              the input. */}
-          <div>
+        {/* Anchor, not Trigger: a trigger moves focus into the content on
+            open and toggles closed when the input is clicked again. The
+            input opens the dropdown on focus and keeps the caret. */}
+        <Popover.Anchor asChild>
+          <div ref={anchorRef}>
             <InputTypeIn
               {...inputProps}
               searchIcon
               placeholder={placeholder}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              onFocus={(e) => {
+                setOpen(true);
+                onFocus?.(e);
+              }}
+              onClick={(e) => {
+                setOpen(true);
+                onClick?.(e);
+              }}
               variant={disabled ? "disabled" : undefined}
             />
           </div>
-        </Popover.Trigger>
-        <Popover.Content width="trigger" align="start" container={container}>
-          {loading ? (
-            <LineItemButton
-              presentational
-              sizePreset="main-ui"
-              variant="section"
-              color="muted"
-              title={strings.loading}
-            />
-          ) : filteredItems.length === 0 ? (
-            <LineItemButton
-              presentational
-              sizePreset="main-ui"
-              variant="section"
-              color="muted"
-              title={strings.multiSelectNoResults}
-            />
-          ) : (
-            <ShadowDiv
-              shadowHeight="0.75rem"
-              className="opal-input-multi-select-dropdown"
-            >
-              {filteredItems.map((item) => {
-                const selected = selectedIds.has(item.id);
-                return (
-                  <LineItemButton
-                    key={item.id}
-                    sizePreset="main-ui"
-                    variant="section"
-                    icon={selected ? SvgCheck : item.icon}
-                    title={item.title}
-                    titleMaxLines={1}
-                    description={item.description}
-                    descriptionMaxLines={1}
-                    state={selected ? "selected" : "empty"}
-                    onClick={() => toggle(item.id)}
-                  />
-                );
-              })}
-            </ShadowDiv>
-          )}
+        </Popover.Anchor>
+        <Popover.Content
+          width="trigger"
+          align="start"
+          container={container}
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          onInteractOutside={(e) => {
+            if (anchorRef.current?.contains(e.target as Node)) {
+              e.preventDefault();
+            }
+          }}
+        >
+          <ShadowDiv
+            shadowHeight="0.75rem"
+            className="opal-input-multi-select-dropdown"
+          >
+            {filteredItems.map((item) => {
+              const selected = selectedIds.has(item.id);
+              return (
+                <LineItemButton
+                  key={item.id}
+                  sizePreset="main-ui"
+                  variant="section"
+                  icon={selected ? SvgCheck : item.icon}
+                  title={item.title}
+                  titleMaxLines={1}
+                  description={item.description}
+                  descriptionMaxLines={1}
+                  state={selected ? "selected" : undefined}
+                  selectVariant="select-heavy"
+                  rounding={2}
+                  onClick={() => toggle(item.id)}
+                />
+              );
+            })}
+          </ShadowDiv>
         </Popover.Content>
       </Popover>
 
@@ -217,7 +220,7 @@ function InputMultiSelect({
           ))
         )}
       </ShadowDiv>
-    </div>
+    </Card>
   );
 }
 
