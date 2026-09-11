@@ -312,7 +312,8 @@ def _validate_opencode_history_archive(archive_bytes: bytes) -> None:
     try:
         with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:gz") as tar:
             members = tar.getmembers()
-    except tarfile.TarError as e:
+    except (tarfile.TarError, EOFError) as e:
+        # A truncated gzip stream raises EOFError, not TarError.
         raise RuntimeError(f"Opencode history archive is unreadable: {e}") from e
 
     for member in members:
