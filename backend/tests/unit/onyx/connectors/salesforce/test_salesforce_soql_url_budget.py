@@ -2,6 +2,8 @@ import re
 from typing import Any
 from unittest.mock import patch
 
+import pytest
+
 from onyx.connectors.salesforce.onyx_salesforce import OnyxSalesforce
 from onyx.connectors.salesforce.salesforce_calls import (
     SOQL_FIELD_SEPARATOR,
@@ -12,14 +14,18 @@ from onyx.connectors.salesforce.salesforce_calls import (
     get_child_objects_by_id_queries,
     get_object_by_id_queries,
 )
-from onyx.connectors.salesforce.utils import ID_FIELD
+from onyx.connectors.salesforce.utils import (
+    CREATED_FIELD,
+    ID_FIELD,
+    MODIFIED_FIELD,
+)
 
 _ACCOUNT_ID = "001bm00000fd9Z3AAI"
 _RECORD_QUERY = re.compile(
     r"^SELECT (?P<fields>.+) FROM (?P<type>\w+) WHERE Id = '(?P<id>\w+)'$"
 )
 _SUBQUERY = re.compile(
-    r"\(SELECT (?P<fields>[^()]+) FROM (?P<rel>\w+) ORDER BY Id DESC LIMIT 10\)"
+    r"\(SELECT (?P<fields>[^()]+) FROM (?P<rel>\w+) (?P<order>ORDER BY [^()]+?) LIMIT 10\)"
 )
 
 
@@ -111,14 +117,14 @@ class TestGetChildObjectsByIdQueries:
         )
         assert len(queries) > 1
         covered: dict[str, set[str]] = {}
-        for child_query in queries:
-            assert _url_encoded_length(child_query.soql) <= SOQL_MAX_URL_ENCODED_LENGTH
-            subqueries = list(_SUBQUERY.finditer(child_query.soql))
+        for query in queries:
+            assert _url_encoded_length(query) <= SOQL_MAX_URL_ENCODED_LENGTH
+            subqueries = list(_SUBQUERY.finditer(query))
             assert 0 < len(subqueries) <= SOQL_MAX_SUBQUERIES
             relationships = [match["rel"] for match in subqueries]
-            assert len(relationships) == len(set(relationships)), child_query.soql
-            assert relationships == child_query.relationships
+            assert len(relationships) == len(set(relationships)), query
             for match in subqueries:
+                assert match["order"] == f"ORDER BY {ID_FIELD} DESC"
                 covered.setdefault(match["rel"], set()).update(
                     match["fields"].split(SOQL_FIELD_SEPARATOR)
                 )
@@ -131,11 +137,34 @@ class TestGetChildObjectsByIdQueries:
         queries = get_child_objects_by_id_queries(
             _ACCOUNT_ID, "Account", ["Notes"], {"Notes": {ID_FIELD}}
         )
-        assert [child_query.soql for child_query in queries] == [
+        assert queries == [
             "SELECT (SELECT Id FROM Notes ORDER BY Id DESC LIMIT 10) "
             f"FROM Account WHERE Id = '{_ACCOUNT_ID}'"
         ]
-        assert queries[0].relationships == ["Notes"]
+
+    @pytest.mark.parametrize(
+        ("fields", "order"),
+        [
+            (
+                {ID_FIELD, "Name", CREATED_FIELD, MODIFIED_FIELD},
+                f"ORDER BY {MODIFIED_FIELD} DESC, {ID_FIELD} DESC",
+            ),
+            (
+                {ID_FIELD, CREATED_FIELD},
+                f"ORDER BY {CREATED_FIELD} DESC, {ID_FIELD} DESC",
+            ),
+            ({ID_FIELD, "Name"}, f"ORDER BY {ID_FIELD} DESC"),
+        ],
+    )
+    def test_orders_by_recency_with_id_tiebreaker(
+        self, fields: set[str], order: str
+    ) -> None:
+        queries = get_child_objects_by_id_queries(
+            _ACCOUNT_ID, "Account", ["Contacts"], {"Contacts": fields}
+        )
+        match = _SUBQUERY.search(queries[0])
+        assert match, queries[0]
+        assert match["order"] == order
 
 
 class TestQueryObject:
@@ -196,7 +225,7 @@ class TestGetChildObjectsById:
         assert set(children["Opportunities:c1"]) - {"attributes"} == wide
         assert set(children["Contacts:c2"]) - {"attributes"} == narrow
 
-    def test_failed_chunk_drops_the_relationship(self) -> None:
+    def test_failed_chunk_propagates(self) -> None:
         wide = _wide_fields(600, "Opp") | {ID_FIELD}
         relationships_to_fields = {"Opportunities": wide, "Contacts": {ID_FIELD}}
         first_field = min(wide - {ID_FIELD})
@@ -208,13 +237,15 @@ class TestGetChildObjectsById:
                 raise RuntimeError("boom")
             return _fake_children_result(query)
 
-        with patch.object(
-            OnyxSalesforce, "safe_query", side_effect=fail_later_opportunity_chunks
+        with (
+            patch.object(
+                OnyxSalesforce, "safe_query", side_effect=fail_later_opportunity_chunks
+            ),
+            pytest.raises(RuntimeError),
         ):
-            children = _client().get_child_objects_by_id(
+            _client().get_child_objects_by_id(
                 _ACCOUNT_ID,
                 "Account",
                 list(relationships_to_fields),
                 relationships_to_fields,
             )
-        assert set(children) == {"Contacts:c1", "Contacts:c2"}

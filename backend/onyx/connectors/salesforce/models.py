@@ -137,13 +137,6 @@ class SalesforceSessionCredentials(BaseModel):
     sf_instance_host: str = Field(min_length=1)
 
 
-class SalesforceChildQuery(BaseModel):
-    """One SOQL query over a parent record and the child relationships it covers."""
-
-    relationships: list[str]
-    soql: str
-
-
 def parse_salesforce_credentials(credentials: dict[str, Any]) -> SalesforceCredentials:
     authentication_method = credentials.get(AUTHENTICATION_METHOD_FIELD)
     if authentication_method in (None, SalesforceAuthenticationMethod.PASSWORD):

@@ -21,8 +21,8 @@ from simple_salesforce.format import format_soql
 
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.salesforce.models import SalesforceChildQuery
 from onyx.connectors.salesforce.utils import (
+    CREATED_FIELD,
     ID_FIELD,
     MODIFIED_FIELD,
     validate_sf_identifier,
@@ -169,7 +169,18 @@ def get_object_by_id_queries(
     ]
 
 
-def _make_child_subquery(child_relationship: str, fields: list[str]) -> str:
+def _child_order_by(queryable_fields: set[str]) -> str:
+    # newest children first so a recently changed child makes the window, with
+    # Id as tiebreaker so every field chunk of one relationship sees the same rows
+    for field in (MODIFIED_FIELD, CREATED_FIELD):
+        if field in queryable_fields:
+            return f"ORDER BY {field} DESC, {ID_FIELD} DESC"
+    return f"ORDER BY {ID_FIELD} DESC"
+
+
+def _make_child_subquery(
+    child_relationship: str, fields: list[str], order_by: str
+) -> str:
     # NOTE: fields must be listed explicitly. These shortcuts don't work:
     #   FIELDS(ALL) can include binary fields, so don't use that
     #   FIELDS(CUSTOM) can include aggregate queries, so don't use that
@@ -177,11 +188,9 @@ def _make_child_subquery(child_relationship: str, fields: list[str]) -> str:
     fields_fragment = SOQL_FIELD_SEPARATOR.join(
         validate_sf_identifier(f) for f in fields
     )
-    # newest children first, so a recently added child makes the window and
-    # every field chunk of one relationship sees the same rows
     return (
         f"(SELECT {fields_fragment} FROM {child_relationship} "  # noqa: S608
-        f"ORDER BY {ID_FIELD} DESC LIMIT {SOQL_SUBQUERY_ROW_LIMIT})"
+        f"{order_by} LIMIT {SOQL_SUBQUERY_ROW_LIMIT})"
     )
 
 
@@ -190,7 +199,7 @@ def get_child_objects_by_id_queries(
     sf_type: str,
     child_relationships: list[str],
     relationships_to_fields: dict[str, set[str]],
-) -> list[SalesforceChildQuery]:
+) -> list[str]:
     """SOQL queries whose subqueries together fetch every child relationship.
 
     Each query fits the URL budget and the subquery cap and names a relationship
@@ -200,42 +209,31 @@ def get_child_objects_by_id_queries(
 
     chunks_by_relationship: dict[str, list[str]] = {}
     for child_relationship in child_relationships:
-        fields = sorted(
-            f for f in relationships_to_fields[child_relationship] if f != ID_FIELD
-        )
+        queryable_fields = relationships_to_fields[child_relationship]
+        order_by = _child_order_by(queryable_fields)
+        fields = sorted(f for f in queryable_fields if f != ID_FIELD)
         # the subquery wrapper plus "Id, " is overhead a field chunk must leave room for
         wrapper_length = _url_encoded_length(
-            _make_child_subquery(child_relationship, [ID_FIELD]) + SOQL_FIELD_SEPARATOR
+            _make_child_subquery(child_relationship, [ID_FIELD], order_by)
+            + SOQL_FIELD_SEPARATOR
         )
         field_chunks = _pack_for_url(
             fields, SOQL_FIELD_SEPARATOR, budget - wrapper_length
         ) or [[]]
         chunks_by_relationship[child_relationship] = [
-            _make_child_subquery(child_relationship, [ID_FIELD, *chunk])
+            _make_child_subquery(child_relationship, [ID_FIELD, *chunk], order_by)
             for chunk in field_chunks
         ]
 
     # round k holds chunk k of every relationship, so one query never carries
     # two subqueries on the same relationship (the response keys rows by it)
-    queries: list[SalesforceChildQuery] = []
+    queries: list[str] = []
     for round_chunks in zip_longest(*chunks_by_relationship.values()):
-        relationship_by_subquery = {
-            subquery: relationship
-            for relationship, subquery in zip(
-                chunks_by_relationship, round_chunks, strict=True
-            )
-            if subquery is not None
-        }
+        subqueries = [subquery for subquery in round_chunks if subquery is not None]
         queries.extend(
-            SalesforceChildQuery(
-                relationships=[relationship_by_subquery[s] for s in group],
-                soql=SOQL_SELECT_PREFIX + SOQL_FIELD_SEPARATOR.join(group) + suffix,
-            )
+            SOQL_SELECT_PREFIX + SOQL_FIELD_SEPARATOR.join(group) + suffix
             for group in _pack_for_url(
-                relationship_by_subquery,
-                SOQL_FIELD_SEPARATOR,
-                budget,
-                SOQL_MAX_SUBQUERIES,
+                subqueries, SOQL_FIELD_SEPARATOR, budget, SOQL_MAX_SUBQUERIES
             )
         )
     return queries
