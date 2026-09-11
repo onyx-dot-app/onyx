@@ -153,6 +153,8 @@ def _build_item_relative_path(parent_reference_path: str | None, item_name: str)
 DEFAULT_AUTHORITY_HOST = "https://login.microsoftonline.com"
 DEFAULT_GRAPH_API_HOST = "https://graph.microsoft.com"
 DEFAULT_SHAREPOINT_DOMAIN_SUFFIX = "sharepoint.com"
+# OneDrive sites live on '<tenant>-my.<suffix>' instead of '<tenant>.<suffix>'.
+_ONEDRIVE_HOST_SUFFIX = "-my"
 
 GRAPH_API_BASE = f"{DEFAULT_GRAPH_API_HOST}/v1.0"
 GRAPH_API_MAX_RETRIES = 5
@@ -750,15 +752,18 @@ def _redact_url_for_logging(url: str, max_len: int = 120) -> str:
     return safe
 
 
+_URL_QUERY_RE = re.compile(r"(https?://[^\s'\")?]*)\?[^\s'\")]*")
+
+
 def _scrub_url_credentials(text: str) -> str:
     """Strip query strings out of URLs embedded in arbitrary text.
 
     Transport errors from requests/urllib3 quote the request target, so a
     pre-authenticated ``@microsoft.graph.downloadUrl`` reaches the logs with its
-    ``tempauth=`` JWT intact. Drop everything from ``?`` up to the next
-    whitespace, quote or closing paren before the text is logged or stored.
+    ``tempauth=`` JWT intact. Only a query that follows an http(s) URL is
+    redacted, so an ordinary question mark in a message survives.
     """
-    return re.sub(r"\?[^\s'\")]*", "?<redacted>", text)
+    return _URL_QUERY_RE.sub(r"\1?<redacted>", text)
 
 
 def _stream_response_to_buffer_with_cap(
@@ -1372,17 +1377,38 @@ class SharepointConnector(
                 ) from e
             self._validate_site_url_host(site_url)
 
-    def _validate_site_url_host(self, site_url: str) -> None:
-        """Reject a site URL outside the tenant's SharePoint domain.
+    def _expected_site_hostnames(self) -> set[str] | None:
+        """Hosts the REST token is valid for, or None before credentials load.
 
-        The REST token is minted for the tenant, so a host like
-        'tenant.attacker.example/sites/x' would leak it to the attacker.
+        ``acquire_token_for_rest`` mints the token for
+        ``{sp_tenant_domain}.{suffix}``. OneDrive lives on the ``-my`` sibling of
+        that host, so both forms of the tenant label are accepted.
+        """
+        if not self.sp_tenant_domain:
+            return None
+        tenant = self.sp_tenant_domain.lower().removesuffix(_ONEDRIVE_HOST_SUFFIX)
+        suffix = self.sharepoint_domain_suffix.lower()
+        return {f"{tenant}.{suffix}", f"{tenant}{_ONEDRIVE_HOST_SUFFIX}.{suffix}"}
+
+    def _validate_site_url_host(self, site_url: str) -> None:
+        """Reject a site URL the REST token must not be sent to.
+
+        The token is minted for one tenant, so a host like
+        'tenant.attacker.example/sites/x' would leak it to the attacker, and
+        another tenant under the same cloud suffix would receive a token it has
+        no claim to.
         """
         suffix = self.sharepoint_domain_suffix.lower()
         hostname = (urlsplit(site_url).hostname or "").lower()
         if hostname != suffix and not hostname.endswith(f".{suffix}"):
             raise ConnectorValidationError(
                 f"Site URL '{site_url}' must be on the '{suffix}' domain."
+            )
+        expected = self._expected_site_hostnames()
+        if expected is not None and hostname not in expected:
+            raise ConnectorValidationError(
+                f"Site URL '{site_url}' is not on this tenant's SharePoint host "
+                f"(expected one of: {', '.join(sorted(expected))})."
             )
 
     def probe_role_assignments_permission(self) -> None:
