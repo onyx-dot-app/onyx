@@ -16,7 +16,7 @@ import {
   PopoverMenu,
   Tooltip,
   useCreateModal,
-  InputTags,
+  InputMultiSelect,
 } from "@opal/components";
 import { Hoverable, Disabled } from "@opal/core";
 import { FullAgent, PersonaSharingStatus } from "@/lib/agents/types";
@@ -1608,7 +1608,7 @@ export default function AgentEditorPage({
                               gap={1}
                               alignItems="stretch"
                             >
-                              <InputTags
+                              <InputMultiSelect
                                 tags={(allLabels ?? [])
                                   .filter((label) =>
                                     values.label_ids.includes(label.id)

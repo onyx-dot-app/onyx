@@ -5,8 +5,8 @@
 import { useState } from "react";
 import {
   InputComboBox,
-  InputSelect,
-  InputTags,
+  InputSingleSelect,
+  InputMultiSelect,
   Text,
   type TagItem,
 } from "@opal/components";
@@ -46,7 +46,7 @@ function InputTagsDemo() {
   const [text, setText] = useState("");
 
   return (
-    <InputTags
+    <InputMultiSelect
       tags={tags}
       value={text}
       onChange={setText}
@@ -70,21 +70,21 @@ function InputSelectDemo() {
   const [value, setValue] = useState<string>("");
 
   return (
-    <InputSelect value={value} onValueChange={setValue}>
-      <InputSelect.Trigger placeholder="Choose a group" />
-      <InputSelect.Content>
+    <InputSingleSelect value={value} onValueChange={setValue}>
+      <InputSingleSelect.Trigger placeholder="Choose a group" />
+      <InputSingleSelect.Content>
         {OPTIONS.map((opt) => (
-          <InputSelect.Item
+          <InputSingleSelect.Item
             key={opt.value}
             value={opt.value}
             icon={SvgUsers}
             description={opt.description}
           >
             {opt.label}
-          </InputSelect.Item>
+          </InputSingleSelect.Item>
         ))}
-      </InputSelect.Content>
-    </InputSelect>
+      </InputSingleSelect.Content>
+    </InputSingleSelect>
   );
 }
 
@@ -107,11 +107,11 @@ function InputComboBoxDemo({ strict }: { strict: boolean }) {
 export default function DbgPage() {
   return (
     <div className="mx-auto flex w-[32rem] flex-col gap-8 p-8 bg-background-tint-00 min-h-screen">
-      <Block label="InputTags — free-text chips inline in the input (multi, open set)">
+      <Block label="InputMultiSelect — free-text chips inline in the input (multi, open set)">
         <InputTagsDemo />
       </Block>
 
-      <Block label="InputSelect — Radix dropdown, pick exactly one (single, closed set)">
+      <Block label="InputSingleSelect — Radix dropdown, pick exactly one (single, closed set)">
         <InputSelectDemo />
       </Block>
 
@@ -125,9 +125,9 @@ export default function DbgPage() {
 
       <div className="flex flex-col gap-1">
         <Text font="secondary-body" color="text-03">
-          The grid: InputSelect = single/closed · InputComboBox = single, closed
-          (strict) or open (loose) · InputTags = multi/open. The empty cell is
-          multi/closed — what the revamp adds to InputTags.
+          The grid: InputSingleSelect = single/closed · InputComboBox = single,
+          closed (strict) or open (loose) · InputMultiSelect = multi/open. The
+          empty cell is multi/closed — what the revamp adds to InputMultiSelect.
         </Text>
       </div>
     </div>

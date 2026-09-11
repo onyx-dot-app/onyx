@@ -11,7 +11,7 @@
  * - Full accessibility with ARIA support
  * - Integrates with FormField and form libraries
  * - Based on InputTypeIn with dropdown functionality
- * - **InputSelect API compatible**: Can be used as a drop-in replacement for InputSelect
+ * - **InputSingleSelect API compatible**: Can be used as a drop-in replacement for InputSingleSelect
  *
  * @example Basic Usage - Input Mode (no options)
  * ```tsx
@@ -40,9 +40,9 @@
  * />
  * ```
  *
- * @example InputSelect-compatible API (drop-in replacement)
+ * @example InputSingleSelect-compatible API (drop-in replacement)
  * ```tsx
- * // Works exactly like InputSelect but with filtering capability
+ * // Works exactly like InputSingleSelect but with filtering capability
  * // onValueChange is only called when user selects from dropdown
  * <InputComboBox
  *   value={model}

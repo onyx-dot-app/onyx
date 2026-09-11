@@ -3,7 +3,7 @@
 @import "../../../core/interactive/shared.css";
 
 /* ---------------------------------------------------------------------------
-   InputSelect (Figma Input/Select)
+   InputSingleSelect (Figma Input/Select)
 
    Trigger on the .opal-input chrome plus an open-state border. Items are
    pure layout rows: Radix owns interaction, so highlight and selection are

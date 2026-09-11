@@ -8,7 +8,7 @@ import {
   Button,
   Card,
   CopyButton,
-  InputTags,
+  InputMultiSelect,
   type TagItem,
   Text,
 } from "@opal/components";
@@ -181,7 +181,7 @@ interface TagListFieldProps {
   transform?: (value: string) => string;
 }
 
-// Formik-bound Opal InputTags for string[] values. Always writes an array, so
+// Formik-bound Opal InputMultiSelect for string[] values. Always writes an array, so
 // clearing every tag stores [] rather than leaving the previous value.
 function TagListField({ name, placeholder, transform }: TagListFieldProps) {
   const [field, meta, helpers] = useField<string[]>(name);
@@ -190,7 +190,7 @@ function TagListField({ name, placeholder, transform }: TagListFieldProps) {
   const tags: TagItem[] = values.map((value) => ({ id: value, label: value }));
   return (
     <>
-      <InputTags
+      <InputMultiSelect
         tags={tags}
         onRemoveTag={(id) => {
           void helpers.setValue(values.filter((value) => value !== id));

@@ -251,21 +251,21 @@ export {
   type InputDatePickerProps,
 } from "@opal/components/inputs/input-date-picker/components";
 
-/* InputSelect */
+/* InputSingleSelect */
 export {
-  InputSelect,
-  type InputSelectRootProps,
-  type InputSelectTriggerProps,
-  type InputSelectItemProps,
-  type InputSelectSearchProps,
-} from "@opal/components/inputs/input-select/components";
+  InputSingleSelect,
+  type InputSingleSelectRootProps,
+  type InputSingleSelectTriggerProps,
+  type InputSingleSelectItemProps,
+  type InputSingleSelectSearchProps,
+} from "@opal/components/inputs/input-select/input-single-select/components";
 
-/* InputTags */
+/* InputMultiSelect */
 export {
-  InputTags,
-  type InputTagsProps,
+  InputMultiSelect,
+  type InputMultiSelectProps,
   type TagItem,
-} from "@opal/components/inputs/input-tags/components";
+} from "@opal/components/inputs/input-select/input-multi-select/components";
 
 /* InputPasswordTypeIn */
 export {

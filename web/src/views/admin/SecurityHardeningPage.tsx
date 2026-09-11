@@ -21,7 +21,7 @@ import {
 } from "@opal/layouts";
 import {
   Card,
-  InputTags,
+  InputMultiSelect,
   InputTypeIn,
   InputSwitch,
   Text,
@@ -430,7 +430,7 @@ export default function SecurityHardeningPage() {
                       )}
                       withLabel
                     >
-                      <InputTags
+                      <InputMultiSelect
                         tags={validDomains}
                         onRemoveTag={removeDomain}
                         onAdd={addDomain}

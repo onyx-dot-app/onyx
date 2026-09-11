@@ -93,6 +93,6 @@ import { InputVertical, InputHorizontal } from "@opal/layouts";
   description="Control what is shown in query history"
   fillInput
 >
-  <InputSelect ... />
+  <InputSingleSelect ... />
 </InputHorizontal>
 ```

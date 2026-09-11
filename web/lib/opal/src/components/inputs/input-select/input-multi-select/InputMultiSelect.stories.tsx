@@ -1,19 +1,19 @@
 import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { InputTags, type TagItem } from "@opal/components";
+import { InputMultiSelect, type TagItem } from "@opal/components";
 import { SvgTag } from "@opal/icons";
 
-const meta: Meta<typeof InputTags> = {
-  title: "opal/components/InputTags",
-  component: InputTags,
+const meta: Meta<typeof InputMultiSelect> = {
+  title: "opal/components/InputMultiSelect",
+  component: InputMultiSelect,
   tags: ["autodocs"],
 };
 
 export default meta;
-type Story = StoryObj<typeof InputTags>;
+type Story = StoryObj<typeof InputMultiSelect>;
 
 function ControlledInputTags(
-  props: Partial<React.ComponentProps<typeof InputTags>>
+  props: Partial<React.ComponentProps<typeof InputMultiSelect>>
 ) {
   const [tags, setTags] = useState<TagItem[]>([
     { id: "1", label: "Tag" },
@@ -23,7 +23,7 @@ function ControlledInputTags(
 
   return (
     <div className="w-80">
-      <InputTags
+      <InputMultiSelect
         tags={tags}
         onRemoveTag={(id) => setTags((prev) => prev.filter((t) => t.id !== id))}
         onAdd={(label) => {
@@ -59,7 +59,7 @@ export const WithError: Story = {
     ];
     return (
       <div className="w-80">
-        <InputTags
+        <InputMultiSelect
           tags={tags}
           onRemoveTag={() => {}}
           onAdd={() => {}}

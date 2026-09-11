@@ -27,6 +27,8 @@ The barrel file at `index.ts` re-exports each component and its prop types. Each
 | [InputComboBox](./inputs/input-combo-box/)     | Filterable input/select hybrid with create-new support       | [README](./inputs/input-combo-box/README.md)   |
 | [InputImage](./inputs/input-image/)            | Circular image dropzone with edit overlay                    | [README](./inputs/input-image/README.md)       |
 | [InputKeyValue](./inputs/input-key-value/)     | Key/value pair editor with validation                        | [README](./inputs/input-key-value/README.md)   |
+| [InputSingleSelect](./inputs/input-select/input-single-select/) | Styled dropdown on Radix Select, pick exactly one | [README](./inputs/input-select/input-single-select/README.md) |
+| [InputMultiSelect](./inputs/input-select/input-multi-select/) | Chips-in-input multi selection (Figma Input/Tags) | [README](./inputs/input-select/input-multi-select/README.md) |
 | [InputNumber](./inputs/input-number/)          | Number field with steppers and reset                         | [README](./inputs/input-number/README.md)      |
 | [InputList](./inputs/input-list/)   | Type-and-Enter list builder with removable chips below       | [README](./inputs/input-list/README.md)  |
 

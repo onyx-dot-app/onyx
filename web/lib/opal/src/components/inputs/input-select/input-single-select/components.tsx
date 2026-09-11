@@ -1,7 +1,7 @@
 "use client";
 
 import "@opal/components/inputs/shared.css";
-import "@opal/components/inputs/input-select/styles.css";
+import "@opal/components/inputs/input-select/input-single-select/styles.css";
 import React from "react";
 import * as SelectPrimitive from "@radix-ui/react-select";
 import { cn } from "@opal/utils";
@@ -48,7 +48,7 @@ const useInputSelectContext = () => {
   const context = React.useContext(InputSelectContext);
   if (!context) {
     throw new Error(
-      "InputSelect compound components must be used within InputSelect"
+      "InputSingleSelect compound components must be used within InputSingleSelect"
     );
   }
   return context;
@@ -122,7 +122,7 @@ function TruncatedDisplay({
 // Root
 // ---------------------------------------------------------------------------
 
-interface InputSelectRootProps extends WithoutStyles<
+interface InputSingleSelectRootProps extends WithoutStyles<
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Root>
 > {
   /** Error chrome on the trigger. */
@@ -141,7 +141,7 @@ function InputSelectRoot({
   children,
   ref,
   ...props
-}: InputSelectRootProps) {
+}: InputSingleSelectRootProps) {
   const variant: InputVariants = disabled
     ? "disabled"
     : error
@@ -212,7 +212,7 @@ function InputSelectRoot({
 // Trigger
 // ---------------------------------------------------------------------------
 
-interface InputSelectTriggerProps extends WithoutStyles<
+interface InputSingleSelectTriggerProps extends WithoutStyles<
   React.ComponentProps<typeof SelectPrimitive.Trigger>
 > {
   /** Shown when no value is selected. Falsy values fall back to "Select an option". */
@@ -228,7 +228,7 @@ function InputSelectTrigger({
   children,
   ref,
   ...props
-}: InputSelectTriggerProps) {
+}: InputSingleSelectTriggerProps) {
   const { variant, currentValue, selectedItemDisplay } =
     useInputSelectContext();
   const strings = useOpalStrings();
@@ -346,7 +346,7 @@ function InputSelectContent({
 // Item
 // ---------------------------------------------------------------------------
 
-interface InputSelectItemProps {
+interface InputSingleSelectItemProps {
   /** Unique option value. */
   value: string;
 
@@ -369,7 +369,7 @@ function InputSelectItem({
   wrapDescription,
   icon,
   ref,
-}: InputSelectItemProps) {
+}: InputSingleSelectItemProps) {
   const { currentValue, setSelectedItemDisplay } = useInputSelectContext();
   const isSelected = value === currentValue;
 
@@ -476,7 +476,7 @@ function InputSelectSeparator({
 // Search
 // ---------------------------------------------------------------------------
 
-interface InputSelectSearchProps {
+interface InputSingleSelectSearchProps {
   /** Controlled query. The consumer filters its own Items from it. */
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -494,7 +494,7 @@ function InputSelectSearch({
   value,
   onChange,
   placeholder,
-}: InputSelectSearchProps) {
+}: InputSingleSelectSearchProps) {
   const strings = useOpalStrings();
   const rowRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -561,12 +561,12 @@ function InputSelectSearch({
 // ---------------------------------------------------------------------------
 
 /**
- * InputSelect (Figma Input/Select): styled dropdown on Radix Select.
+ * InputSingleSelect (Figma Input/Select): styled dropdown on Radix Select.
  * Compound: Trigger opens the popper Content, Items are Radix options
  * rendered as ContentAction rows, Group/Label/Separator organize them, and
  * Search makes the list filterable.
  */
-const InputSelect = Object.assign(InputSelectRoot, {
+const InputSingleSelect = Object.assign(InputSelectRoot, {
   Trigger: InputSelectTrigger,
   Content: InputSelectContent,
   Item: InputSelectItem,
@@ -577,9 +577,9 @@ const InputSelect = Object.assign(InputSelectRoot, {
 });
 
 export {
-  InputSelect,
-  type InputSelectRootProps,
-  type InputSelectTriggerProps,
-  type InputSelectItemProps,
-  type InputSelectSearchProps,
+  InputSingleSelect,
+  type InputSingleSelectRootProps,
+  type InputSingleSelectTriggerProps,
+  type InputSingleSelectItemProps,
+  type InputSingleSelectSearchProps,
 };
