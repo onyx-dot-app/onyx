@@ -37,7 +37,7 @@ import {
  * render as standalone, non-collapsible rows.
  */
 type RenderBlock =
-  | { kind: "tools"; tools: ToolCallState[] }
+  | { kind: "tools"; tools: [ToolCallState, ...ToolCallState[]] }
   | { kind: "item"; item: Exclude<StreamItem, { type: "tool_call" }> };
 
 interface BuildMessageListProps {
@@ -164,7 +164,7 @@ export default function BuildMessageList({
       if (
         tool.kind !== "task" &&
         last?.kind === "tools" &&
-        last.tools[0]!.kind !== "task"
+        last.tools[0].kind !== "task"
       ) {
         last.tools.push(tool);
       } else {
@@ -177,7 +177,7 @@ export default function BuildMessageList({
         const { tools } = block;
         // A single tool (incl. every task) is a plain, non-collapsible card.
         if (tools.length === 1) {
-          return <CraftToolCard key={tools[0]!.id} toolCall={tools[0]!} />;
+          return <CraftToolCard key={tools[0].id} toolCall={tools[0]} />;
         }
         // The group folds closed once an assistant message follows it.
         const followedByMessage = blocks
@@ -185,7 +185,7 @@ export default function BuildMessageList({
           .some((b) => b.kind === "item" && b.item.type === "text");
         return (
           <CraftToolGroup
-            key={`group-${tools[0]!.id}`}
+            key={`group-${tools[0].id}`}
             toolCalls={tools}
             autoCollapse={followedByMessage}
           />

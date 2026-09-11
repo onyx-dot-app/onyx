@@ -132,10 +132,12 @@ export function groupPacketsByTurnIndex(
       const turn_index = packet.placement.turn_index;
       const tab_index = packet.placement.tab_index ?? 0;
       const key = `${turn_index}-${tab_index}`;
-      if (!acc.has(key)) {
-        acc.set(key, { turn_index, tab_index, packets: [] });
+      let group = acc.get(key);
+      if (!group) {
+        group = { turn_index, tab_index, packets: [] };
+        acc.set(key, group);
       }
-      acc.get(key)!.packets.push(packet);
+      group.packets.push(packet);
       return acc;
     },
     new Map()

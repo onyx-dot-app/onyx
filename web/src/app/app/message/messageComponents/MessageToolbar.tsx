@@ -371,8 +371,8 @@ export default function MessageToolbar({
                       const rawName =
                         ownModelName ??
                         currentModelName ??
-                        llmManager!.currentLlm.modelName;
-                      const mc = llmManager!.llmProviders
+                        llmManager.currentLlm.modelName;
+                      const mc = llmManager.llmProviders
                         ?.flatMap((p) => p.model_configurations)
                         .find(
                           (m) =>

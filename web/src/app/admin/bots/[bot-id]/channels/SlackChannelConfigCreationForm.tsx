@@ -204,9 +204,9 @@ export const SlackChannelConfigCreationForm = ({
             }
           }
 
-          const response = isUpdate
+          const response = existingSlackChannelConfig
             ? await updateSlackChannelConfig(
-                existingSlackChannelConfig!.id,
+                existingSlackChannelConfig.id,
                 cleanedValues
               )
             : await createSlackChannelConfig(cleanedValues);

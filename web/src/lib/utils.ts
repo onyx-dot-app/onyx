@@ -81,6 +81,20 @@ export function transformLinkUri(href: string): string | null {
   }
 }
 
+/**
+ * Returns `value` when it is not null or undefined. Throws an `Error` with
+ * `message` otherwise. Use it instead of a `!` non-null assertion.
+ */
+export function expectDefined<T>(
+  value: T | null | undefined,
+  message: string
+): T {
+  if (value === null || value === undefined) {
+    throw new Error(message);
+  }
+  return value;
+}
+
 export function isSubset(parent: string[], child: string[]): boolean {
   const parentSet = new Set(parent);
   return Array.from(new Set(child)).every((item) => parentSet.has(item));

@@ -51,9 +51,10 @@ function periodLabel(
   allTimeLabel: string,
   locale: string
 ): string {
-  return report.period_from
+  // The backend sets period_from and period_to together.
+  return report.period_from && report.period_to
     ? `${humanReadableFormat(report.period_from, locale)} – ${humanReadableFormat(
-        report.period_to!,
+        report.period_to,
         locale
       )}`
     : allTimeLabel;

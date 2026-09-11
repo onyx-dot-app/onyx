@@ -146,24 +146,24 @@ export function BuildLLMPopover({
     modelOptions.forEach((option) => {
       const groupKey = option.groupKey;
 
-      if (!groups.has(groupKey)) {
-        groups.set(groupKey, {
+      let group = groups.get(groupKey);
+      if (!group) {
+        group = {
           groupKey,
           providerKey: option.providerKey,
           displayName: option.groupDisplayName,
           options: [],
-        });
+        };
+        groups.set(groupKey, group);
       }
 
-      groups.get(groupKey)!.options.push(option);
+      group.options.push(option);
     });
 
     // Sort groups alphabetically
-    const sortedKeys = Array.from(groups.keys()).sort((a, b) =>
-      groups.get(a)!.displayName.localeCompare(groups.get(b)!.displayName)
+    return Array.from(groups.values()).sort((a, b) =>
+      a.displayName.localeCompare(b.displayName)
     );
-
-    return sortedKeys.map((key) => groups.get(key)!);
   }, [modelOptions]);
 
   // Determine current group for auto-expand

@@ -16,6 +16,7 @@ import {
 } from "@/app/app/message/multiModel";
 import { getMaxSelectedDocumentTokens } from "@/lib/projects/svc";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
+import { expectDefined } from "@/lib/utils";
 import { StreamStopInfo } from "@/lib/search/interfaces";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "next";
@@ -856,7 +857,10 @@ export default function useChatController({
         overrides?: Partial<Message>
       ): Message {
         return {
-          ...initialAssistantNodes[idx]!,
+          ...expectDefined(
+            initialAssistantNodes[idx],
+            `No assistant node for model index ${idx}.`
+          ),
           messageId: assistantMessageIds[idx] ?? undefined,
           message: "",
           type: "assistant" as const,
@@ -901,7 +905,7 @@ export default function useChatController({
         pendingFlush = false;
 
         parentMessage =
-          parentMessage || currentMessageTreeLocal!.get(SYSTEM_NODE_ID)!;
+          parentMessage || currentMessageTreeLocal.get(SYSTEM_NODE_ID);
 
         let messagesToUpsert: Message[];
 
@@ -973,7 +977,7 @@ export default function useChatController({
         currentMessageTreeLocal = upsertToCompleteMessageTree({
           messages: messagesToUpsert,
           completeMessageTreeOverride: currentMessageTreeLocal,
-          chatSessionId: frozenSessionId!,
+          chatSessionId: frozenSessionId,
         });
       }
 
@@ -1108,14 +1112,15 @@ export default function useChatController({
           forcedToolId: effectiveForcedToolId,
           origin: messageOrigin,
           additionalContext,
-          llmOverrides: isMultiModel
-            ? selectedModels!.map((m) => ({
-                model_provider: m.name,
-                model_version: m.modelName,
-                display_name: m.displayName,
-                model_configuration_id: m.modelConfigurationId ?? undefined,
-              }))
-            : undefined,
+          llmOverrides:
+            isMultiModel && selectedModels
+              ? selectedModels.map((m) => ({
+                  model_provider: m.name,
+                  model_version: m.modelName,
+                  display_name: m.displayName,
+                  model_configuration_id: m.modelConfigurationId ?? undefined,
+                }))
+              : undefined,
         });
 
         const delay = (ms: number) => {
@@ -1186,8 +1191,7 @@ export default function useChatController({
               const multiPacket = packet as MultiModelMessageResponseIDInfo;
               newUserMessageId =
                 multiPacket.user_message_id ?? newUserMessageId;
-              for (let mi = 0; mi < multiPacket.responses.length; mi++) {
-                const slot = multiPacket.responses[mi]!;
+              for (const [mi, slot] of multiPacket.responses.entries()) {
                 assistantMessageIds[mi] = slot.message_id;
                 if (slot.model_name) {
                   modelDisplayNames[mi] = slot.model_name;
@@ -1232,12 +1236,13 @@ export default function useChatController({
                 const errorModelIndex = streamingError.details?.model_index as
                   | number
                   | undefined;
-                if (
+                const errorNode =
                   errorModelIndex != null &&
                   errorModelIndex >= 0 &&
                   errorModelIndex < initialAssistantNodes.length
-                ) {
-                  const errorNode = initialAssistantNodes[errorModelIndex]!;
+                    ? initialAssistantNodes[errorModelIndex]
+                    : undefined;
+                if (errorModelIndex != null && errorNode) {
                   erroredModelIndices.add(errorModelIndex);
                   dirtyModelIndices.delete(errorModelIndex);
                   currentMessageTreeLocal = upsertToCompleteMessageTree({
@@ -1264,7 +1269,7 @@ export default function useChatController({
                       },
                     ],
                     completeMessageTreeOverride: currentMessageTreeLocal,
-                    chatSessionId: frozenSessionId!,
+                    chatSessionId: frozenSessionId,
                   });
                 } else {
                   // Error without model_index in multi-model — can't route
@@ -1312,9 +1317,9 @@ export default function useChatController({
                   typedPacket.placement?.model_index == null;
 
                 if (isGlobalStop) {
-                  for (let mi = 0; mi < packetsPerModel.length; mi++) {
+                  for (const [mi, modelPackets] of packetsPerModel.entries()) {
                     // Mutated in place — change detection uses packetCount, not array identity.
-                    packetsPerModel[mi]!.push(typedPacket);
+                    modelPackets.push(typedPacket);
                     if (!erroredModelIndices.has(mi)) {
                       dirtyModelIndices.add(mi);
                     }
@@ -1322,12 +1327,14 @@ export default function useChatController({
                 }
 
                 const modelIndex = typedPacket.placement?.model_index ?? 0;
-                if (
+                const modelPackets =
                   !isGlobalStop &&
                   modelIndex >= 0 &&
                   modelIndex < packetsPerModel.length
-                ) {
-                  packetsPerModel[modelIndex]!.push(typedPacket);
+                    ? packetsPerModel[modelIndex]
+                    : undefined;
+                if (modelPackets) {
+                  modelPackets.push(typedPacket);
                   if (!erroredModelIndices.has(modelIndex)) {
                     dirtyModelIndices.add(modelIndex);
                   }
@@ -1463,7 +1470,7 @@ export default function useChatController({
         upsertToCompleteMessageTree({
           messages: buildNonErroredNodes({ is_generating: false }),
           completeMessageTreeOverride: currentMessageTreeLocal,
-          chatSessionId: frozenSessionId!,
+          chatSessionId: frozenSessionId,
         });
       }
 

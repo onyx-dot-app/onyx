@@ -47,7 +47,7 @@ export const Highlighted: Story = {
 
 export const SingleMessage: Story = {
   args: {
-    messages: [SAMPLE_MESSAGES[0]!],
+    messages: SAMPLE_MESSAGES.slice(0, 1),
   },
 };
 

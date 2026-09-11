@@ -42,12 +42,15 @@ export default function ExternalAppsOAuthCallbackPage() {
     }
     if (hasExchanged.current) return;
     hasExchanged.current = true;
+    // Capture the narrowed values; the hoisted function below loses narrowing.
+    const authCode = code;
+    const authState = state;
 
     async function exchange() {
       try {
         const { external_app_id } = await completeExternalAppOAuthCallback(
-          code!,
-          state!
+          authCode,
+          authState
         );
         setStatus("success");
         // Launched from the in-chat SetupCard popup: signal the opener and close

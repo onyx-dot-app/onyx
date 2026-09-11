@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 
 import { INTERNAL_URL, IS_DEV } from "@/lib/constants";
+import { expectDefined } from "@/lib/utils";
 
 // Target format for OpenAI Realtime API
 const TARGET_SAMPLE_RATE = 24000;
@@ -156,8 +157,8 @@ class VoiceRecorderSession {
 
       // Compute RMS audio level (0-1) for waveform visualization
       let sum = 0;
-      for (let i = 0; i < inputData.length; i++) {
-        sum += inputData[i]! * inputData[i]!;
+      for (const sample of inputData) {
+        sum += sample * sample;
       }
       const rms = Math.sqrt(sum / inputData.length);
       // Scale RMS to a more visible range (raw RMS is usually very small)
@@ -206,10 +207,11 @@ class VoiceRecorderSession {
     this.isActive = false;
 
     // Get final transcript from server
-    if (this.websocket?.readyState === WebSocket.OPEN) {
+    const websocket = this.websocket;
+    if (websocket?.readyState === WebSocket.OPEN) {
       return new Promise((resolve) => {
         this.stopResolver = resolve;
-        this.websocket!.send(JSON.stringify({ type: "end" }));
+        websocket.send(JSON.stringify({ type: "end" }));
 
         // Timeout fallback
         setTimeout(() => {
@@ -420,7 +422,9 @@ class VoiceRecorderSession {
       const floor = Math.floor(srcIndex);
       const ceil = Math.min(floor + 1, input.length - 1);
       const fraction = srcIndex - floor;
-      output[i] = input[floor]! * (1 - fraction) + input[ceil]! * fraction;
+      const low = expectDefined(input[floor], "Resample index out of range.");
+      const high = expectDefined(input[ceil], "Resample index out of range.");
+      output[i] = low * (1 - fraction) + high * fraction;
     }
 
     return output;
@@ -428,8 +432,8 @@ class VoiceRecorderSession {
 
   private float32ToInt16(float32: Float32Array): Int16Array<ArrayBuffer> {
     const int16 = new Int16Array(float32.length);
-    for (let i = 0; i < float32.length; i++) {
-      const s = Math.max(-1, Math.min(1, float32[i]!));
+    for (const [i, sample] of float32.entries()) {
+      const s = Math.max(-1, Math.min(1, sample));
       int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
     }
     return int16;

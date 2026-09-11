@@ -111,7 +111,7 @@ export const AllImported: Story = {
     repository: "https://github.com/anthropics/skills",
     preview: {
       ...preview,
-      skills: [preview.skills[0]!],
+      skills: preview.skills.slice(0, 1),
     },
     selectedPaths: ["skills/research"],
     result: {

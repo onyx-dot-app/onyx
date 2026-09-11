@@ -9,6 +9,7 @@ import { Button, Divider } from "@opal/components";
 import { useEffect } from "react";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
 import { toast } from "@opal/layouts";
+import { expectDefined } from "@/lib/utils";
 
 export const SlackTokensForm = ({
   isUpdate,
@@ -49,7 +50,13 @@ export const SlackTokensForm = ({
 
         let response;
         if (isUpdate) {
-          response = await updateSlackBot(existingSlackBotId!, values);
+          response = await updateSlackBot(
+            expectDefined(
+              existingSlackBotId,
+              "existingSlackBotId is required when isUpdate is true."
+            ),
+            values
+          );
         } else {
           response = await createSlackBot(values);
         }

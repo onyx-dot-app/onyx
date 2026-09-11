@@ -508,12 +508,12 @@ export function processRawChatHistory(
     messages.set(messageInfo.message_id, message);
 
     if (messageInfo.parent_message !== null) {
-      if (!parentMessageChildrenMap.has(messageInfo.parent_message)) {
-        parentMessageChildrenMap.set(messageInfo.parent_message, []);
+      let childIds = parentMessageChildrenMap.get(messageInfo.parent_message);
+      if (!childIds) {
+        childIds = [];
+        parentMessageChildrenMap.set(messageInfo.parent_message, childIds);
       }
-      parentMessageChildrenMap
-        .get(messageInfo.parent_message)!
-        .push(messageInfo.message_id);
+      childIds.push(messageInfo.message_id);
     }
   });
 

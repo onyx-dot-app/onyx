@@ -704,8 +704,8 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
           const map = new Map(prev.map((f) => [f.id, f]));
           for (const latest of statuses) {
             const id = latest.id;
-            if (map.has(id)) {
-              const prevVal = map.get(id)!;
+            const prevVal = map.get(id);
+            if (prevVal) {
               if (
                 latest.status !== prevVal.status ||
                 latest.name !== prevVal.name ||

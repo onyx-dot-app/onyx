@@ -32,6 +32,11 @@ export interface ExpandableTextDisplayProps {
   isStreaming?: boolean;
 }
 
+/** Returns the element's child when it has exactly one child element. */
+function onlyElementChild(element: Element): Element | null {
+  return element.children.length === 1 ? element.firstElementChild : null;
+}
+
 type ExpandableTextTranslator = ReturnType<
   typeof useTranslations<"common.expandableText">
 >;
@@ -169,11 +174,10 @@ export default function ExpandableTextDisplay({
 
     if (overflow > 0) {
       let blockParent: Element = contentInnerRef.current;
-      while (
-        blockParent.children.length === 1 &&
-        blockParent.children[0]!.children.length > 0
-      ) {
-        blockParent = blockParent.children[0]!;
+      let onlyChild = onlyElementChild(blockParent);
+      while (onlyChild && onlyChild.children.length > 0) {
+        blockParent = onlyChild;
+        onlyChild = onlyElementChild(blockParent);
       }
 
       contentInnerRef.current.style.transform = "translateY(0)";
@@ -234,7 +238,9 @@ export default function ExpandableTextDisplay({
 
   // Single container for renderContent mode (both streaming and static)
   // Keeps scrollRef alive across the streaming → static transition
-  const renderContentWithRef = () => {
+  const renderContentWithRef = (
+    render: NonNullable<ExpandableTextDisplayProps["renderContent"]>
+  ) => {
     const textToDisplay = displayContent ?? content;
 
     if (isStreaming) {
@@ -254,9 +260,7 @@ export default function ExpandableTextDisplay({
             className="overflow-hidden"
             style={{ maxHeight: `calc(${maxLines} * 1.5rem)` }}
           >
-            <div ref={contentInnerRef}>
-              {renderContent!(textToDisplay, false)}
-            </div>
+            <div ref={contentInnerRef}>{render(textToDisplay, false)}</div>
           </div>
         </div>
       );
@@ -265,7 +269,7 @@ export default function ExpandableTextDisplay({
     // Static mode: use CSS line-clamp for bottom truncation
     return (
       <div ref={scrollRef} className={cn("overflow-hidden", lineClampClass)}>
-        {renderContent!(textToDisplay, false)}
+        {render(textToDisplay, false)}
       </div>
     );
   };
@@ -304,7 +308,7 @@ export default function ExpandableTextDisplay({
       <div className={cn("w-full flex", className)}>
         <div className="flex-1 min-w-0">
           {renderContent
-            ? renderContentWithRef()
+            ? renderContentWithRef(renderContent)
             : isStreaming
               ? renderPlainTextStreaming()
               : renderPlainTextStatic()}

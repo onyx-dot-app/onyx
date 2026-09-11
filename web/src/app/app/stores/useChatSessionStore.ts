@@ -232,8 +232,8 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
       }
 
       // Update last accessed for the new current session
-      if (sessionId && state.sessions.has(sessionId)) {
-        const session = state.sessions.get(sessionId)!;
+      const session = sessionId ? state.sessions.get(sessionId) : undefined;
+      if (sessionId && session) {
         const updatedSession = { ...session, lastAccessed: new Date() };
         const newSessions = new Map(state.sessions);
         newSessions.set(sessionId, updatedSession);

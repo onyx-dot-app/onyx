@@ -262,9 +262,11 @@ function Main({ ccPairId }: { ccPairId: number }) {
   ]);
 
   const handleUpdateName = async (newName: string) => {
+    // The name editor only renders after ccPair loads.
+    if (!ccPair) return;
     try {
       const response = await updateConnectorCredentialPairName(
-        ccPair!.id,
+        ccPair.id,
         newName
       );
       if (!response.ok) {

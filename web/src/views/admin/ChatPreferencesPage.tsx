@@ -1484,10 +1484,11 @@ export default function ChatPreferencesPage() {
                     <FileSizeLimitFields
                       saveSettings={saveSettings}
                       initialUploadSizeMb={
-                        (s.user_file_max_upload_size_mb ?? 0) <= 0
+                        s.user_file_max_upload_size_mb == null ||
+                        s.user_file_max_upload_size_mb <= 0
                           ? (s.default_user_file_max_upload_size_mb?.toString() ??
                             "100")
-                          : s.user_file_max_upload_size_mb!.toString()
+                          : s.user_file_max_upload_size_mb.toString()
                       }
                       defaultUploadSizeMb={
                         s.default_user_file_max_upload_size_mb?.toString() ??

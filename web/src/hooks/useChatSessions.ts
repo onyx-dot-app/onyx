@@ -16,6 +16,7 @@ import { useAppPosition } from "@/lib/position/hooks";
 import { useAgents } from "@/lib/agents/hooks";
 import { useActiveProject } from "@/lib/projects/hooks";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
+import { expectDefined } from "@/lib/utils";
 
 const PAGE_SIZE = 50;
 const MIN_LOADING_DURATION_MS = 500;
@@ -153,8 +154,12 @@ export default function useChatSessions(): UseChatSessionsOutput {
     }
 
     // Subsequent pages — cursor from the last session of the previous page
-    const lastSession =
-      previousPageData!.sessions[previousPageData!.sessions.length - 1];
+    // SWR passes the previous page for every page after the first.
+    const { sessions } = expectDefined(
+      previousPageData,
+      "Previous chat sessions page is missing."
+    );
+    const lastSession = sessions[sessions.length - 1];
     if (!lastSession) return null;
 
     const params = new URLSearchParams({

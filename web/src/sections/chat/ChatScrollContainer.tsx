@@ -296,13 +296,14 @@ const ChatScrollContainer = React.memo(
           (scrolledForSessionRef.current !== sessionId || isNewAnchor) &&
           anchorSelector;
 
-        if (!shouldScroll) {
+        // shouldScroll already implies anchorSelector; the check narrows it.
+        if (!shouldScroll || !anchorSelector) {
           prevAnchorSelectorRef.current = anchorSelector ?? null;
           return;
         }
 
         const anchorElement = container.querySelector(
-          anchorSelector!
+          anchorSelector
         ) as HTMLElement;
         if (!anchorElement || !endDivRef.current) {
           setIsScrollReady(true);

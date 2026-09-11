@@ -189,7 +189,7 @@ export function getLatestMessageChain(messages: MessageTreeState): Message[] {
     // Use Array.from to fix linter error
     const potentialRoots = Array.from(messages.values()).filter(
       (message) =>
-        message.parentNodeId === null || !messages.has(message.parentNodeId!)
+        message.parentNodeId === null || !messages.has(message.parentNodeId)
     );
     if (potentialRoots.length > 0) {
       // Prefer non-system message if multiple roots found somehow

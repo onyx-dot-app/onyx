@@ -1,3 +1,5 @@
+import { expectDefined } from "@/lib/utils";
+
 // ─── Cursor Utilities ───────────────────────────────────────────────────────
 
 export function setCursorToEnd(element: HTMLElement): void {
@@ -135,9 +137,7 @@ function resolveFlatOffset(
   let remaining = target;
 
   function walk(parent: Node): { node: Node; offset: number } | null {
-    const children = parent.childNodes;
-    for (let i = 0; i < children.length; i++) {
-      const child = children[i]!;
+    for (const [i, child] of Array.from(parent.childNodes).entries()) {
       if (child.nodeType === Node.TEXT_NODE) {
         const len = child.textContent?.length ?? 0;
         if (remaining <= len) return { node: child, offset: remaining };
@@ -240,7 +240,8 @@ export function pushBoundedSnapshot(
   if (stack.length > MAX_UNDO_ENTRIES) stack.shift();
   let total = 0;
   for (let i = stack.length - 1; i >= 0; i--) {
-    total += stack[i]!.html.length;
+    total += expectDefined(stack[i], "Undo stack index out of range.").html
+      .length;
     if (total > MAX_UNDO_TOTAL_CHARS) {
       // Drop the entry that crossed the cap and everything older, but always
       // retain the newest entry even if it alone exceeds the cap.
@@ -267,9 +268,7 @@ const BLOCK_TAGS = new Set([
 
 export function getTextContent(element: HTMLElement): string {
   const parts: string[] = [];
-  const nodes = Array.from(element.childNodes);
-  for (let i = 0; i < nodes.length; i++) {
-    const node = nodes[i]!;
+  for (const [i, node] of Array.from(element.childNodes).entries()) {
     if (node.nodeType === Node.TEXT_NODE) {
       parts.push(node.textContent ?? "");
     } else if (node.nodeType === Node.ELEMENT_NODE) {

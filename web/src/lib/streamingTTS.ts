@@ -5,6 +5,7 @@
 
 import type { ErrorResponseBody } from "@/lib/fetcher";
 import { INTERNAL_URL, IS_DEV } from "@/lib/constants";
+import { expectDefined } from "@/lib/utils";
 
 /**
  * HTTPStreamingTTSPlayer - Uses HTTP streaming with MediaSource Extensions
@@ -103,7 +104,10 @@ export class HTTPStreamingTTSPlayer {
       this.mediaSource.onsourceopen = () => {
         try {
           // Create SourceBuffer for MP3
-          this.sourceBuffer = this.mediaSource!.addSourceBuffer("audio/mpeg");
+          this.sourceBuffer = expectDefined(
+            this.mediaSource,
+            "MediaSource was cleared before sourceopen."
+          ).addSourceBuffer("audio/mpeg");
           this.sourceBuffer.mode = "sequence";
 
           this.sourceBuffer.onupdateend = () => {
@@ -416,9 +420,10 @@ export class WebSocketStreamingTTSPlayer {
     }
 
     // Create MediaSource and audio element
-    this.mediaSource = new MediaSource();
+    const mediaSource = new MediaSource();
+    this.mediaSource = mediaSource;
     this.audioElement = new Audio();
-    this.mediaSourceUrl = URL.createObjectURL(this.mediaSource);
+    this.mediaSourceUrl = URL.createObjectURL(mediaSource);
     this.audioElement.src = this.mediaSourceUrl;
 
     this.audioElement.onplay = () => {
@@ -435,9 +440,12 @@ export class WebSocketStreamingTTSPlayer {
 
     // Wait for MediaSource to be ready
     await new Promise<void>((resolve, reject) => {
-      this.mediaSource!.onsourceopen = () => {
+      mediaSource.onsourceopen = () => {
         try {
-          this.sourceBuffer = this.mediaSource!.addSourceBuffer("audio/mpeg");
+          this.sourceBuffer = expectDefined(
+            this.mediaSource,
+            "MediaSource was cleared before sourceopen."
+          ).addSourceBuffer("audio/mpeg");
           this.sourceBuffer.mode = "sequence";
           this.sourceBuffer.onupdateend = () => {
             this.isAppending = false;
