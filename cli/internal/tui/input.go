@@ -18,7 +18,7 @@ type slashCommand struct {
 var slashCommands = []slashCommand{
 	{"/help", "Show help message"},
 	{"/clear", "Clear chat and start a new session"},
-	{"/agent", "List and switch agents"},
+	{"/agent", "List and switch agents (by ID or name)"},
 	{"/model", "List and switch models"},
 	{"/attach", "Attach a file to next message"},
 	{"/sessions", "Browse and resume previous sessions"},
