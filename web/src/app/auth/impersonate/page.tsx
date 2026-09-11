@@ -11,6 +11,7 @@ import { TextFormField } from "@/components/Field";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { useTranslations } from "next-intl";
+import type { ErrorResponseBody } from "@/lib/fetcher";
 
 export default function ImpersonatePage() {
   const t = useTranslations("auth");
@@ -41,7 +42,7 @@ export default function ImpersonatePage() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData: ErrorResponseBody = await response.json();
         toast.error(errorData.detail || genericError);
         helpers.setSubmitting(false);
       } else {

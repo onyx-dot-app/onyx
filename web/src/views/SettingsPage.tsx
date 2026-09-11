@@ -98,6 +98,7 @@ import { findModelConfigId } from "@/lib/languageModels/options";
 import { useLLMProviders } from "@/lib/languageModels/hooks";
 import { DOCS_BASE_URL } from "@/lib/constants";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
+import type { ErrorResponseBody } from "@/lib/fetcher";
 
 interface PAT {
   id: number;
@@ -107,6 +108,11 @@ interface PAT {
   expires_at: string | null;
   last_used_at: string | null;
   scopes: string[] | null;
+}
+
+// Mirrors backend `CreatedTokenResponse`.
+interface CreatedPAT extends PAT {
+  token: string;
 }
 
 interface PatScopeOption {
@@ -481,7 +487,7 @@ function usePATCreation({
       });
 
       if (response.ok) {
-        const data = await response.json();
+        const data: CreatedPAT = await response.json();
         setNewlyCreatedToken({
           id: data.id,
           token: data.token,
@@ -490,7 +496,7 @@ function usePATCreation({
         toast.success(t("apiKeys.toasts.created"));
         await onCreateSuccess?.();
       } else {
-        const errorData = await response.json();
+        const errorData: ErrorResponseBody = await response.json();
         toast.error(errorData.detail || t("apiKeys.toasts.createFailed"));
       }
     } catch (error) {
@@ -2090,7 +2096,7 @@ function AccountsAccessSettings() {
           toast.success(t("accounts.passwordModal.toasts.updated"));
           setShowPasswordModal(false);
         } else {
-          const errorData = await response.json();
+          const errorData: ErrorResponseBody = await response.json();
           toast.error(
             errorData.detail || t("accounts.passwordModal.toasts.updateFailed")
           );
