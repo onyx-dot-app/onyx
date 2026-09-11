@@ -124,7 +124,7 @@ function InputMultiSelect({
   }
 
   return (
-    <Card color="background-tint-01" padding={1} rounding={3}>
+    <Card color="background-tint-01" padding={1.5} rounding={3}>
       <Popover
         open={!disabled && open}
         onOpenChange={(next) => !disabled && setOpen(next)}
