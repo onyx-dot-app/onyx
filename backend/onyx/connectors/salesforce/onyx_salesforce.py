@@ -19,8 +19,9 @@ from onyx.connectors.salesforce.blacklist import (
 )
 from onyx.connectors.salesforce.models import SalesforceSessionCredentials
 from onyx.connectors.salesforce.salesforce_calls import (
-    get_child_objects_by_id_queries,
     get_object_by_id_queries,
+    pinned_child_queries,
+    plan_child_queries,
 )
 from onyx.connectors.salesforce.utils import ID_FIELD
 from onyx.utils.logger import setup_logger
@@ -266,32 +267,66 @@ class OnyxSalesforce(Salesforce):
         relationships_to_fields: dict[str, set[str]],
     ) -> dict[str, dict[str, Any]]:
         child_records: dict[str, dict[str, Any]] = {}
+        chunks_seen: dict[str, int] = {}
+        ids_by_relationship: dict[str, list[str]] = {}
 
         # Attachments hold binary content, skip them
         relationships = [r for r in child_relationships if r != "Attachments"]
-        for query in get_child_objects_by_id_queries(
+        plan = plan_child_queries(
             object_id, sf_type, relationships, relationships_to_fields
+        )
+        for query in plan.window_queries:
+            for relationship, child_id in self._merge_child_rows(
+                query, child_records, chunks_seen
+            ):
+                ids_by_relationship.setdefault(relationship, []).append(child_id)
+
+        for query in pinned_child_queries(
+            object_id, sf_type, plan.remaining_chunks, ids_by_relationship
         ):
-            result = self.safe_query(query)
-            if not result["records"]:
-                continue
+            self._merge_child_rows(query, child_records, chunks_seen)
 
-            for child_record_key, child_result in result["records"][0].items():
-                if child_record_key == "attributes" or not child_result:
-                    continue
-
-                for child_record in child_result["records"]:
-                    child_record_id = child_record[ID_FIELD]
-                    if not child_record_id:
-                        logger.warning("Child record has no id")
-                        continue
-
-                    # field chunks of one relationship merge into one record
-                    child_records.setdefault(
-                        f"{child_record_key}:{child_record_id}", {}
-                    ).update(child_record)
+        # a child deleted between two chunk queries would otherwise index partially
+        expected_chunks = {
+            relationship: 1 + len(chunks)
+            for relationship, chunks in plan.remaining_chunks.items()
+        }
+        for key, seen in chunks_seen.items():
+            if seen < expected_chunks.get(key.split(":", 1)[0], 1):
+                logger.warning("Dropping partial child record %s", key)
+                del child_records[key]
 
         return child_records
+
+    def _merge_child_rows(
+        self,
+        query: str,
+        child_records: dict[str, dict[str, Any]],
+        chunks_seen: dict[str, int],
+    ) -> list[tuple[str, str]]:
+        """Runs one child query, merges its rows, returns (relationship, Id) pairs."""
+        merged: list[tuple[str, str]] = []
+        result = self.safe_query(query)
+        if not result["records"]:
+            return merged
+
+        for child_record_key, child_result in result["records"][0].items():
+            if child_record_key == "attributes" or not child_result:
+                continue
+
+            for child_record in child_result["records"]:
+                child_record_id = child_record[ID_FIELD]
+                if not child_record_id:
+                    logger.warning("Child record has no id")
+                    continue
+
+                key = f"{child_record_key}:{child_record_id}"
+                # field chunks of one relationship merge into one record
+                child_records.setdefault(key, {}).update(child_record)
+                chunks_seen[key] = chunks_seen.get(key, 0) + 1
+                merged.append((child_record_key, child_record_id))
+
+        return merged
 
     @retry_builder(
         tries=3,

@@ -21,6 +21,7 @@ from simple_salesforce.format import format_soql
 
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.salesforce.models import SalesforceChildQueryPlan
 from onyx.connectors.salesforce.utils import (
     CREATED_FIELD,
     ID_FIELD,
@@ -44,6 +45,7 @@ SOQL_FIELD_SEPARATOR = ", "
 SOQL_MAX_SUBQUERIES = 20
 # child rows per relationship, kept small to bound the parent document
 SOQL_SUBQUERY_ROW_LIMIT = 10
+_SF_ID_LENGTH = 18
 
 
 def is_salesforce_rate_limit_error(exception: Exception) -> bool:
@@ -169,17 +171,23 @@ def get_object_by_id_queries(
     ]
 
 
-def _child_order_by(queryable_fields: set[str]) -> str:
+def _child_window_selection(queryable_fields: set[str]) -> str:
     # newest children first so a recently changed child makes the window, with
-    # Id as tiebreaker so every field chunk of one relationship sees the same rows
+    # Id as tiebreaker so the order is total
     for field in (MODIFIED_FIELD, CREATED_FIELD):
         if field in queryable_fields:
-            return f"ORDER BY {field} DESC, {ID_FIELD} DESC"
-    return f"ORDER BY {ID_FIELD} DESC"
+            return f"ORDER BY {field} DESC, {ID_FIELD} DESC LIMIT {SOQL_SUBQUERY_ROW_LIMIT}"
+    return f"ORDER BY {ID_FIELD} DESC LIMIT {SOQL_SUBQUERY_ROW_LIMIT}"
+
+
+def _child_ids_selection(ids: list[str]) -> str:
+    # later field chunks are pinned to the rows the window returned, so a child
+    # changed between two chunk queries cannot shift the window
+    return format_soql(f"WHERE {ID_FIELD} IN {{ids}}", ids=ids)
 
 
 def _make_child_subquery(
-    child_relationship: str, fields: list[str], order_by: str
+    child_relationship: str, fields: list[str], selection: str
 ) -> str:
     # NOTE: fields must be listed explicitly. These shortcuts don't work:
     #   FIELDS(ALL) can include binary fields, so don't use that
@@ -188,54 +196,99 @@ def _make_child_subquery(
     fields_fragment = SOQL_FIELD_SEPARATOR.join(
         validate_sf_identifier(f) for f in fields
     )
-    return (
-        f"(SELECT {fields_fragment} FROM {child_relationship} "  # noqa: S608
-        f"{order_by} LIMIT {SOQL_SUBQUERY_ROW_LIMIT})"
+    return f"(SELECT {fields_fragment} FROM {child_relationship} {selection})"  # noqa: S608
+
+
+def _child_subquery_overhead(
+    child_relationship: str, queryable_fields: set[str]
+) -> int:
+    """Encoded bytes a subquery needs beyond its field chunk, for the longer selection."""
+    placeholder_ids = ["0" * _SF_ID_LENGTH] * SOQL_SUBQUERY_ROW_LIMIT
+    return max(
+        _url_encoded_length(
+            _make_child_subquery(child_relationship, [ID_FIELD], selection)
+            + SOQL_FIELD_SEPARATOR
+        )
+        for selection in (
+            _child_window_selection(queryable_fields),
+            _child_ids_selection(placeholder_ids),
+        )
     )
 
 
-def get_child_objects_by_id_queries(
+def _pack_subqueries(subqueries: list[str], budget: int, suffix: str) -> list[str]:
+    return [
+        SOQL_SELECT_PREFIX + SOQL_FIELD_SEPARATOR.join(group) + suffix
+        for group in _pack_for_url(
+            subqueries, SOQL_FIELD_SEPARATOR, budget, SOQL_MAX_SUBQUERIES
+        )
+    ]
+
+
+def plan_child_queries(
     object_id: str,
     sf_type: str,
     child_relationships: list[str],
     relationships_to_fields: dict[str, set[str]],
-) -> list[str]:
-    """SOQL queries whose subqueries together fetch every child relationship.
-
-    Each query fits the URL budget and the subquery cap and names a relationship
-    at most once, so the caller can merge field chunks of a relationship by Id."""
+) -> SalesforceChildQueryPlan:
+    """Window queries select each relationship's newest rows with its first field
+    chunk. Every query fits the URL budget and the subquery cap."""
     suffix = _object_by_id_suffix(object_id, sf_type)
     budget = _field_budget(suffix)
 
-    chunks_by_relationship: dict[str, list[str]] = {}
+    window_subqueries: list[str] = []
+    remaining_chunks: dict[str, list[list[str]]] = {}
     for child_relationship in child_relationships:
         queryable_fields = relationships_to_fields[child_relationship]
-        order_by = _child_order_by(queryable_fields)
         fields = sorted(f for f in queryable_fields if f != ID_FIELD)
-        # the subquery wrapper plus "Id, " is overhead a field chunk must leave room for
-        wrapper_length = _url_encoded_length(
-            _make_child_subquery(child_relationship, [ID_FIELD], order_by)
-            + SOQL_FIELD_SEPARATOR
-        )
-        field_chunks = _pack_for_url(
-            fields, SOQL_FIELD_SEPARATOR, budget - wrapper_length
+        overhead = _child_subquery_overhead(child_relationship, queryable_fields)
+        first_chunk, *rest = _pack_for_url(
+            fields, SOQL_FIELD_SEPARATOR, budget - overhead
         ) or [[]]
-        chunks_by_relationship[child_relationship] = [
-            _make_child_subquery(child_relationship, [ID_FIELD, *chunk], order_by)
-            for chunk in field_chunks
-        ]
-
-    # round k holds chunk k of every relationship, so one query never carries
-    # two subqueries on the same relationship (the response keys rows by it)
-    queries: list[str] = []
-    for round_chunks in zip_longest(*chunks_by_relationship.values()):
-        subqueries = [subquery for subquery in round_chunks if subquery is not None]
-        queries.extend(
-            SOQL_SELECT_PREFIX + SOQL_FIELD_SEPARATOR.join(group) + suffix
-            for group in _pack_for_url(
-                subqueries, SOQL_FIELD_SEPARATOR, budget, SOQL_MAX_SUBQUERIES
+        window_subqueries.append(
+            _make_child_subquery(
+                child_relationship,
+                [ID_FIELD, *first_chunk],
+                _child_window_selection(queryable_fields),
             )
         )
+        if rest:
+            remaining_chunks[child_relationship] = rest
+
+    return SalesforceChildQueryPlan(
+        window_queries=_pack_subqueries(window_subqueries, budget, suffix),
+        remaining_chunks=remaining_chunks,
+    )
+
+
+def pinned_child_queries(
+    object_id: str,
+    sf_type: str,
+    remaining_chunks: dict[str, list[list[str]]],
+    ids_by_relationship: dict[str, list[str]],
+) -> list[str]:
+    """Queries for the remaining field chunks, each pinned to the Ids its
+    relationship's window returned. A relationship never appears twice in one
+    query because the response keys rows by relationship name."""
+    suffix = _object_by_id_suffix(object_id, sf_type)
+    budget = _field_budget(suffix)
+
+    subqueries_by_relationship: dict[str, list[str]] = {}
+    for child_relationship, chunks in remaining_chunks.items():
+        ids = ids_by_relationship.get(child_relationship)
+        if not ids:
+            continue
+        selection = _child_ids_selection(ids)
+        subqueries_by_relationship[child_relationship] = [
+            _make_child_subquery(child_relationship, [ID_FIELD, *chunk], selection)
+            for chunk in chunks
+        ]
+
+    # round k holds chunk k of every relationship
+    queries: list[str] = []
+    for round_chunks in zip_longest(*subqueries_by_relationship.values()):
+        subqueries = [subquery for subquery in round_chunks if subquery is not None]
+        queries.extend(_pack_subqueries(subqueries, budget, suffix))
     return queries
 
 
