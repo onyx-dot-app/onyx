@@ -3,7 +3,8 @@ import { useOpalStrings } from "@opal/strings";
 import { OptionItem } from "./OptionItem";
 import { SelectOption, SelectSection } from "../types";
 import { Divider } from "@opal/components/divider/components";
-import { EmptyMessageCard } from "@opal/components/cards/empty-message-card/components";
+import { Content } from "@opal/layouts";
+import { SvgEmpty } from "@opal/icons";
 import { cn, clickOnKeyDown } from "@opal/utils";
 import { SvgPlus } from "@opal/icons";
 import { sanitizeOptionId } from "./aria";
@@ -68,10 +69,21 @@ export const OptionsList: React.FC<OptionsListProps> = ({
   );
 
   if (totalOptions === 0 && !showCreateOption) {
-    // An empty SET gets the empty-state card; a filter that matched nothing
-    // keeps the lightweight text row.
+    // An empty SET gets the icon'd empty state; a filter that matched
+    // nothing keeps the lightweight text row.
     if (emptySet) {
-      return <EmptyMessageCard padding={2} title={strings.comboBoxNoOptions} />;
+      return (
+        <div className="px-3 py-2">
+          <Content
+            sizePreset="main-ui"
+            variant="section"
+            icon={SvgEmpty}
+            title={strings.selectEmptySet}
+            color="muted"
+            width="full"
+          />
+        </div>
+      );
     }
     return (
       <div className="px-3 py-2 text-text-02 font-secondary-body">
