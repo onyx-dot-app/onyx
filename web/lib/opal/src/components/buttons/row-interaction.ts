@@ -70,8 +70,9 @@ const NESTED_INTERACTIVE_SELECTOR =
 
 // Ignore clicks originating from nested interactive children (e.g.
 // `rightChildren` action buttons) so they don't also activate the row.
-// preventDefault matters for the anchor mode: without it the row's native
-// link still navigates after the nested action runs.
+// An anchor row also needs preventDefault, or its native link navigates
+// after the nested action runs; on other rows the default stays, so nested
+// labels and form controls keep their native behavior.
 function guardNestedInteractiveClick(
   onClick: React.MouseEventHandler<HTMLElement> | undefined
 ): React.MouseEventHandler<HTMLElement> | undefined {
@@ -81,7 +82,9 @@ function guardNestedInteractiveClick(
       NESTED_INTERACTIVE_SELECTOR
     );
     if (nested && nested !== e.currentTarget) {
-      e.preventDefault();
+      if (e.currentTarget instanceof HTMLAnchorElement) {
+        e.preventDefault();
+      }
       return;
     }
     onClick(e);
