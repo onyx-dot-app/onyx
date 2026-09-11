@@ -33,6 +33,7 @@ from onyx.db.connector_credential_pair import (
     user_owns_groupless_cc_pair,
     verify_user_can_edit_all_cc_pairs,
 )
+from onyx.db.credentials import fetch_credential_by_id_for_user
 from onyx.db.document import get_document_counts_for_cc_pairs, get_documents_for_cc_pair
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
@@ -840,6 +841,14 @@ def associate_credential_to_connector(
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "Connection not found for current user's permissions",
+        )
+
+    # GATE 2 on the credential: validate_ccpair_for_user builds and probes the
+    # connector, so ownership has to be settled before it runs.
+    if fetch_credential_by_id_for_user(credential_id, user, db_session) is None:
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            f"Credential {credential_id} does not exist or does not belong to user",
         )
 
     try:

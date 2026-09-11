@@ -16,14 +16,18 @@ denied actions go through the shared ``_access_matrix`` helpers, which verify th
 
 import os
 from typing import Any, NamedTuple
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
 from onyx.auth.permissions import SCOPED_MANAGER_PERMISSIONS_EXPANDED
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
-from onyx.db.models import User__UserGroup, UserGroup__ConnectorCredentialPair
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    User__UserGroup,
+    UserGroup__ConnectorCredentialPair,
+)
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from tests.integration.common_utils.constants import ADMIN_USER_NAME, API_SERVER_URL
 from tests.integration.common_utils.http_client import client
@@ -179,6 +183,19 @@ def _settled_cc_pair_ids(env: "_ScopedEnv") -> set[int]:
         user_groups_to_check=[env.managed_group, env.other_group],
     )
     return _current_cc_pair_ids(env.managed_group.id)
+
+
+def _set_cc_pair_creator(cc_pair_id: int, user_id: str) -> None:
+    """Re-own a cc_pair. A scoped manager can't create a groupless one through the
+    API (the create gate needs a group), so the creator edge is set directly."""
+    with get_session_with_current_tenant() as db_session:
+        updated = (
+            db_session.query(ConnectorCredentialPair)
+            .filter(ConnectorCredentialPair.id == cc_pair_id)
+            .update({ConnectorCredentialPair.creator_id: UUID(user_id)})
+        )
+        assert updated == 1, f"no cc_pair {cc_pair_id}"
+        db_session.commit()
 
 
 def _insert_stale_cc_pair_junction(group_id: int, cc_pair_id: int) -> None:
@@ -479,26 +496,45 @@ def test_manager_cannot_reattach_removed_public_cc_pair(
 
 
 def test_manager_attaches_groupless_private_cc_pair(isolated_env: _ScopedEnv) -> None:
-    # A private cc_pair in no group lands only in managed scope when attached —
-    # so the manager may pull it into their group.
-    groupless_cc_pair = CCPairManager.create_from_scratch(
+    # A groupless private cc_pair has no current group for the scope check to judge,
+    # so only its creator may pull it into a group. Another creator's pair is not
+    # the manager's to reach.
+    others_cc_pair = CCPairManager.create_from_scratch(
         user_performing_action=isolated_env.admin,
         access_type=AccessType.PRIVATE,
         groups=[],
     )
-    _settled_cc_pair_ids(isolated_env)
+    own_cc_pair = CCPairManager.create_from_scratch(
+        user_performing_action=isolated_env.admin,
+        access_type=AccessType.PRIVATE,
+        groups=[],
+    )
+    _set_cc_pair_creator(own_cc_pair.id, isolated_env.manager.id)
+    before = _settled_cc_pair_ids(isolated_env)
     path = f"/manage/admin/user-group/{isolated_env.managed_group.id}"
     resp = call_endpoint(
         "PATCH",
         path,
         _patch_group_body(
-            [isolated_env.manager.id, isolated_env.member.id], [groupless_cc_pair.id]
+            [isolated_env.manager.id, isolated_env.member.id], [others_cc_pair.id]
+        ),
+        isolated_env.manager.headers,
+        isolated_env.manager.cookies,
+    )
+    assert_response(resp, "PATCH", path, "manager", "denied")
+    assert _current_cc_pair_ids(isolated_env.managed_group.id) == before
+
+    resp = call_endpoint(
+        "PATCH",
+        path,
+        _patch_group_body(
+            [isolated_env.manager.id, isolated_env.member.id], [own_cc_pair.id]
         ),
         isolated_env.manager.headers,
         isolated_env.manager.cookies,
     )
     assert resp.status_code == 200, resp.text
-    assert groupless_cc_pair.id in _current_cc_pair_ids(isolated_env.managed_group.id)
+    assert own_cc_pair.id in _current_cc_pair_ids(isolated_env.managed_group.id)
 
 
 def test_manager_group_list_only_managed(env: _ScopedEnv) -> None:
