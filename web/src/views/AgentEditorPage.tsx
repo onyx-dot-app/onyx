@@ -1037,7 +1037,8 @@ export default function AgentEditorPage({
       }
 
       // Success
-      const agent: Agent = await personaResponse.json();
+      const agent: Omit<Agent, "user_permission"> =
+        await personaResponse.json();
 
       // clear() (not clearDraft) so an in-flight debounced write is cancelled too.
       clearAgentDraftRef.current?.();
