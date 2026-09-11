@@ -750,6 +750,15 @@ def _assert_group_update_within_scope(
                 OnyxErrorCode.INVALID_INPUT,
                 f"Connector credential pair '{cc_pair_id}' not found.",
             )
+        # A groupless cc_pair has no current group for within_scope to judge, so it
+        # would pass on the requested group alone. Only its creator may attach it —
+        # the same fallback that makes it editable at all (see _add_user_filters).
+        if not current_groups_by_cc_pair[cc_pair_id] and cc_pair.creator_id != user.id:
+            raise OnyxError(
+                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                "Group managers can only act on private resources they created "
+                "or that already sit in a group they manage.",
+            )
         assert_within_scope(
             user,
             db_session,
