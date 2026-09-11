@@ -107,6 +107,7 @@ import { useUser } from "@/providers/UserProvider";
 import { hasPermission } from "@/lib/permissions";
 import { can } from "@/lib/permissions/resource-actions";
 import { useDraft, draftKey } from "@/hooks/useDraft";
+import type { Agent } from "@/lib/agents/types";
 
 // Length of the translated starterExamples array, which is local to
 // AgentStarterMessages, shared here so the editor can size against it.
@@ -181,7 +182,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
         return;
       }
 
-      const { file_id } = await response.json();
+      const { file_id }: { file_id: string } = await response.json();
       setFieldValue("uploaded_image_id", file_id);
       setPopoverOpen(false);
     } catch (error) {
@@ -1036,7 +1037,8 @@ export default function AgentEditorPage({
       }
 
       // Success
-      const agent = await personaResponse.json();
+      const agent: Omit<Agent, "user_permission"> =
+        await personaResponse.json();
 
       // clear() (not clearDraft) so an in-flight debounced write is cancelled too.
       clearAgentDraftRef.current?.();

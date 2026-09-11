@@ -8,21 +8,21 @@
 # `ods type-coverage typescript --update`.
 #
 # Generated file: do not edit by hand.
-total: 98.6
+total: 98.7
 packages:
   .: 100
   src: 99.4
   src/app: 99.5
   src/app/admin: 96.5
   src/app/anonymous: 100
-  src/app/api: 98.4
-  src/app/app: 98.7
-  src/app/auth: 98.1
+  src/app/api: 100
+  src/app/app: 98.9
+  src/app/auth: 98.8
   src/app/components: 100
   src/app/config: 100
-  src/app/connector: 90
-  src/app/craft: 99
-  src/app/ee: 95.7
+  src/app/connector: 100
+  src/app/craft: 99.2
+  src/app/ee: 95.8
   src/app/federated: 97
   src/app/mcp: 99.5
   src/app/nrf: 99.2
@@ -51,8 +51,8 @@ packages:
   src/ee/lib: 99
   src/ee/providers: 99.3
   src/ee/sections: 99.7
-  src/ee/views: 99
-  src/hooks: 98.3
+  src/ee/views: 99.7
+  src/hooks: 98.5
   src/i18n: 99
   src/i18n/messages: 100
   src/interfaces: 100
@@ -96,7 +96,7 @@ packages:
   src/lib/users: 99
   src/lib/voice: 98.3
   src/lib/webSearch: 97.3
-  src/providers: 99.4
+  src/providers: 99.5
   src/refresh-components: 99.7
   src/refresh-components/avatars: 99.7
   src/refresh-components/buttons: 99.7
@@ -120,13 +120,13 @@ packages:
   src/sections/document-sidebar: 99.5
   src/sections/input: 99.8
   src/sections/knowledge: 99.7
-  src/sections/modals: 99.2
+  src/sections/modals: 99.5
   src/sections/model-selector: 99.6
   src/sections/onboarding: 99.8
   src/sections/settings: 100
   src/sections/sidebar: 99.4
   src/sections/skills: 99.8
   src/sections/usage: 99.6
-  src/views: 99.1
+  src/views: 99.3
   src/views/admin: 99.3
   types: 100

@@ -87,7 +87,7 @@ export function AgentStats({ agentId }: AgentStatsProps) {
           throw new Error(t("agentStats.fetchFailed.message"));
         }
 
-        const data = (await res.json()) as AgentStatsResponse;
+        const data: AgentStatsResponse = await res.json();
         setAgentStats(data);
       } catch (err) {
         setError(

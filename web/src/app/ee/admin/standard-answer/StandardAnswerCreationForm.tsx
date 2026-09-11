@@ -229,8 +229,8 @@ export const StandardAnswerCreationForm = ({
                       );
                       return;
                     }
-                    const newCategory =
-                      (await response.json()) as StandardAnswerCategory;
+                    const newCategory: StandardAnswerCategory =
+                      await response.json();
                     setFieldValue("categories", [
                       ...values.categories,
                       newCategory,

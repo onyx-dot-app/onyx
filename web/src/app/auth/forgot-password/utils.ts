@@ -1,3 +1,5 @@
+import type { ErrorResponseBody } from "@/lib/fetcher";
+
 export const forgotPassword = async (
   email: string,
   fallbackErrorMessage: string
@@ -11,7 +13,7 @@ export const forgotPassword = async (
   });
 
   if (!response.ok) {
-    const error = await response.json();
+    const error: ErrorResponseBody | null = await response.json();
     const errorMessage = error?.detail || fallbackErrorMessage;
     throw new Error(errorMessage);
   }
