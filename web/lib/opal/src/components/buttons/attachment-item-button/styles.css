@@ -45,6 +45,6 @@
 /* Reserved even when empty: rows with and without actions align, and
    hover-revealed buttons cause no layout shift. */
 .opal-attachment-item-button-action {
-  @apply flex shrink-0 flex-row items-center justify-end gap-2 self-stretch;
+  @apply flex shrink-0 flex-row items-center justify-center gap-2 self-stretch;
   min-width: var(--spacing-block-36);
 }
