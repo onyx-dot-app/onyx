@@ -27,6 +27,7 @@ The barrel file at `index.ts` re-exports each component and its prop types. Each
 | [InputComboBox](./inputs/input-combo-box/)     | Filterable input/select hybrid with create-new support       | [README](./inputs/input-combo-box/README.md)   |
 | [InputImage](./inputs/input-image/)            | Circular image dropzone with edit overlay                    | [README](./inputs/input-image/README.md)       |
 | [InputKeyValue](./inputs/input-key-value/)     | Key/value pair editor with validation                        | [README](./inputs/input-key-value/README.md)   |
+| [InputMultiSelect](./inputs/input-multi-select/) | Searchable multi-select with a selected-items list below | [README](./inputs/input-multi-select/README.md) |
 | [InputNumber](./inputs/input-number/)          | Number field with steppers and reset                         | [README](./inputs/input-number/README.md)      |
 | [ListFieldInput](./inputs/list-field-input/)   | Type-and-Enter list builder with removable chips below       | [README](./inputs/list-field-input/README.md)  |
 
