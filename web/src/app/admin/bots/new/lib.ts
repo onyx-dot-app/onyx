@@ -52,3 +52,24 @@ export const deleteSlackBot = async (id: number) => {
     },
   });
 };
+
+/**
+ * Reads the error message from a failed Slack bot response. The backend sends
+ * `{ detail }`; a proxy may send `{ message }` or a non-JSON page. Returns
+ * `null` when the body is not JSON or has neither field as a string.
+ */
+export const parseSlackBotErrorMessage = async (
+  response: Response
+): Promise<string | null> => {
+  const body: unknown = await response.json().catch(() => null);
+  if (typeof body !== "object" || body === null) {
+    return null;
+  }
+  if ("detail" in body && typeof body.detail === "string") {
+    return body.detail;
+  }
+  if ("message" in body && typeof body.message === "string") {
+    return body.message;
+  }
+  return null;
+};

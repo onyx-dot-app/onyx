@@ -6843,6 +6843,9 @@
         "name": {
           "label": "سمِّ بوت Slack هذا:"
         },
+        "unexpectedResponse": {
+          "message": "استجابة غير متوقعة من الخادم (HTTP {status})"
+        },
         "updateButton": {
           "label": "تحديث"
         },

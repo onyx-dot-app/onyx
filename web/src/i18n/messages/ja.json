@@ -6843,6 +6843,9 @@
         "name": {
           "label": "この Slack ボットの名前:"
         },
+        "unexpectedResponse": {
+          "message": "予期しないサーバー応答 (HTTP {status})"
+        },
         "updateButton": {
           "label": "更新"
         },

@@ -6843,6 +6843,9 @@
         "name": {
           "label": "Nommez ce bot Slack :"
         },
+        "unexpectedResponse": {
+          "message": "Réponse inattendue du serveur (HTTP {status})"
+        },
         "updateButton": {
           "label": "Mettre à jour"
         },
