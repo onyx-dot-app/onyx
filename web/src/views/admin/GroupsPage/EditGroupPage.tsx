@@ -471,9 +471,9 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     }
 
     // Re-fetch group to check sync status before saving
-    const freshGroups = await fetch(SWR_KEYS.adminUserGroupsWithDefault).then(
-      (r) => r.json()
-    );
+    const freshGroups: UserGroup[] = await fetch(
+      SWR_KEYS.adminUserGroupsWithDefault
+    ).then((r) => r.json());
     const freshGroup = freshGroups.find((g: UserGroup) => g.id === groupId);
     if (freshGroup && !freshGroup.is_up_to_date) {
       toast.error(t("edit.toasts.syncing"));
