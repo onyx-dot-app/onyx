@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -276,6 +278,43 @@ func TestSelectAgentFromPickerUsesIDWhenNameMatches(t *testing.T) {
 	m, _ = cmdSelectAgentByID(m, "1")
 	if m.agentID != 1 {
 		t.Errorf("agentID = %d, want 1", m.agentID)
+	}
+}
+
+func TestAttachRefusedInRemoteMode(t *testing.T) {
+	RemoteMode = true
+	t.Cleanup(func() { RemoteMode = false })
+
+	m := NewModel(config.DefaultConfig(), nil)
+	m, cmd := cmdAttach(m, "/etc/passwd")
+
+	if cmd != nil {
+		t.Fatal("expected no upload command in remote mode")
+	}
+	if len(m.viewport.entries) == 0 {
+		t.Fatal("expected a warning entry")
+	}
+	got := m.viewport.entries[len(m.viewport.entries)-1].content
+	if !strings.Contains(got, "disabled over SSH") {
+		t.Errorf("warning = %q, want a refusal mentioning SSH", got)
+	}
+}
+
+func TestDetectFileDropIgnoredInRemoteMode(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "secret.txt")
+	if err := os.WriteFile(path, []byte("secret"), 0o600); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+
+	if got := detectFileDrop(path); got != path {
+		t.Fatalf("local detectFileDrop = %q, want %q", got, path)
+	}
+
+	RemoteMode = true
+	t.Cleanup(func() { RemoteMode = false })
+
+	if got := detectFileDrop(path); got != "" {
+		t.Errorf("remote detectFileDrop = %q, want no match", got)
 	}
 }
 

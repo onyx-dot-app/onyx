@@ -267,6 +267,10 @@ func cmdSelectModel(m Model, idxStr string) (Model, tea.Cmd) {
 }
 
 func cmdAttach(m Model, pathStr string) (Model, tea.Cmd) {
+	if RemoteMode {
+		m.viewport.addWarning("/attach is disabled over SSH: paths resolve on the server host, not yours.")
+		return m, nil
+	}
 	if pathStr == "" {
 		m.viewport.addWarning("Usage: /attach <file_path>")
 		return m, nil

@@ -204,8 +204,12 @@ type fileDropMsg struct {
 	path string
 }
 
-// detectFileDrop checks if the text looks like a file path.
+// detectFileDrop checks if the text looks like a file path. It never matches
+// in remote mode, where the path would resolve on the server host.
 func detectFileDrop(text string) string {
+	if RemoteMode {
+		return ""
+	}
 	cleaned := strings.Trim(text, "'\"")
 	if cleaned == "" {
 		return ""
