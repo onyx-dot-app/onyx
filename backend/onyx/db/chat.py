@@ -61,7 +61,12 @@ def get_chat_session_by_id(
         )
 
     if is_shared:
-        stmt = stmt.where(ChatSession.shared_status == ChatSessionSharedStatus.PUBLIC)
+        # Deleting does not unshare, so a shared reader must never see a tombstone.
+        # `include_deleted` is for the owner/admin path only.
+        stmt = stmt.where(
+            ChatSession.shared_status == ChatSessionSharedStatus.PUBLIC,
+            ChatSession.deleted.is_(False),
+        )
     else:
         # if user_id is None, assume this is an admin who should be able
         # to view all chat sessions

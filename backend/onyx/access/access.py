@@ -1,8 +1,8 @@
 from collections.abc import Callable
 from typing import cast
 
+from sqlalchemy import and_, or_, select
 from sqlalchemy import cast as sa_cast
-from sqlalchemy import or_, select
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
@@ -255,7 +255,10 @@ def user_can_access_chat_file(file_id: str, user: User, db_session: Session) -> 
         .where(
             or_(
                 ChatSession.user_id == user.id,
-                ChatSession.shared_status == ChatSessionSharedStatus.PUBLIC,
+                and_(
+                    ChatSession.shared_status == ChatSessionSharedStatus.PUBLIC,
+                    ChatSession.deleted.is_(False),
+                ),
             )
         )
         .limit(1)
@@ -264,8 +267,10 @@ def user_can_access_chat_file(file_id: str, user: User, db_session: Session) -> 
         return True
 
     # TODO: CHAT_IMAGE_GEN files are public because the bytes land in the
-    # store before the linking tool-call row is written; tightening this
-    # requires reordering the streaming/tool-call writes. Kept above the
+    # store before the linking tool-call row is written, and code-interpreter
+    # outputs share the origin without ever getting a linking row. No query
+    # can tell an in-flight file from a finished one, so tightening this needs
+    # the file -> session link written with the bytes. Kept above the
     # connector branch so previews hit a PK lookup, not the JSONB scan.
     is_chat_image_gen = db_session.query(
         select(FileRecord.file_id)
