@@ -36,7 +36,7 @@ interface InteractiveStatefulProps extends WithoutStyles<
    * - `"select-light"` — transparent selected background (for inline toggles)
    * - `"select-heavy"` — tinted selected background (for list rows, model pickers)
    * - `"select-card"` — like select-heavy but filled state has a visible background (for cards/larger surfaces)
-   * - `"select-input"` — rests at neutral-00 (matches input bar), hover/open shows neutral-03 + border-01
+   * - `"select-input"` — rests at neutral-00 (matches input bar), hover/active shows neutral-03
    * - `"select-filter"` — empty/filled rest on tint-01; selected state uses inverted tint backgrounds and inverted text (for filter buttons)
    * - `"sidebar-heavy"` — sidebar navigation items: muted when unselected (text-03/text-02), bold when selected (text-04/text-03)
    * - `"sidebar-light"` — sidebar navigation items: uniformly muted across all states (text-02/text-02)
