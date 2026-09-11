@@ -825,6 +825,12 @@ class LitellmLLM(LLM):
                                 "type": "enabled",
                                 "budget_tokens": budget_tokens,
                             }
+                        else:
+                            logger.warning(
+                                "Skipping Anthropic thinking: max_tokens=%s cannot "
+                                "fit the minimum thinking budget and answer reserve",
+                                max_tokens,
+                            )
 
             else:
                 # Hope for the best from LiteLLM
