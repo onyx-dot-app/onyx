@@ -42,7 +42,7 @@ Three modes, same contract as `LineItemButton`:
   semantics of its own and defers them to the primitive that owns it.
 
 `prominence` sets the intensity at rest: `"primary"` rests on
-`background-tint-00`, `"secondary"` on `background-neutral-01`, and
+`background-tint-00`, `"secondary"` on `background-tint-01`, and
 `"tertiary"` (default) is transparent. Hover / selected / disabled palettes
 come from `Interactive.Stateful` and are shared across all three.
 

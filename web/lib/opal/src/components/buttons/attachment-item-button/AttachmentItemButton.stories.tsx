@@ -67,7 +67,7 @@ export const Prominences: Story = {
         prominence="secondary"
         icon={SvgFileText}
         title="secondary"
-        description="Rests on background-neutral-01"
+        description="Rests on background-tint-01"
       />
       <AttachmentItemButton
         icon={SvgFileText}

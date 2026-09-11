@@ -112,7 +112,7 @@ type AttachmentItemButtonOwnProps = Pick<
      * stay the same across all three.
      *
      * - `"primary"` — rests on `background-tint-00` (elevated rows on a card)
-     * - `"secondary"` — rests on `background-neutral-01` (rows on a plain page surface)
+     * - `"secondary"` — rests on `background-tint-01` (rows on a plain page surface)
      * - `"tertiary"` — transparent at rest
      *
      * @default "tertiary"
