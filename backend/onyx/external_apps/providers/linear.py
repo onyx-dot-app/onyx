@@ -106,6 +106,7 @@ class LinearProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
             token_url="https://api.linear.app/oauth/token",
             scope="read,write",
             scope_param="scope",
+            supports_pkce=True,
             # actor=user is Linear's default but explicit — actor=application
             # would mint an app-acting token instead of user-acting.
             extra_authorize_params={
