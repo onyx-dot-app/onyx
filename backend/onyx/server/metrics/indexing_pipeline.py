@@ -1,12 +1,12 @@
 """Prometheus collectors for Celery queue depths and infrastructure health.
 
-These collectors query Redis at scrape time (the Collector pattern),
-so metrics are always fresh when Prometheus scrapes /metrics. They run inside the
-monitoring celery worker which already has Redis access.
+The concrete collectors here run in the monitoring celery worker, registered by
+indexing_pipeline_setup.py. ``_CachedCollector`` is also the base of the API
+server's license collector, so it must behave under both the worker's
+thread-per-request WSGI server and the API server's request threadpool.
 
-To avoid hammering Redis on every 15s scrape, results are cached with
-a configurable TTL (default 30s). This means metrics may be up to TTL seconds
-stale, which is fine for monitoring dashboards.
+Results are cached for a configurable TTL (default 30s) so a 15s scrape cadence
+does not hammer Redis. Dashboards tolerate that staleness.
 
 Note: connector health and index attempt metrics are push-based (emitted by
 workers at state-change time) and live in connector_health_metrics.py.
@@ -38,10 +38,14 @@ logger = setup_logger()
 # the previous result without re-querying Redis/Postgres.
 _DEFAULT_CACHE_TTL = 30.0
 
-# Maximum time (seconds) a single _collect_fresh() call may take before
-# the collector gives up and returns stale/empty results. Prevents the
-# /metrics endpoint from hanging indefinitely when a DB or Redis query stalls.
-_DEFAULT_COLLECT_TIMEOUT = 120.0
+# Seconds the scrape that starts a collection waits before returning the stale
+# cache. Under Prometheus's default 10s scrape timeout, so no thread outlives the
+# scrape it serves. The collection keeps running and is banked when it lands.
+_DEFAULT_COLLECT_TIMEOUT = 8.0
+
+# Seconds between "still running" warnings for a wedged collection, so the log
+# holds one line per window rather than one per scrape.
+_STALL_WARNING_INTERVAL = 120.0
 
 _QUEUE_LABEL_MAP: dict[str, str] = {
     OnyxCeleryQueues.PRIMARY: "primary",
@@ -75,15 +79,15 @@ _UNACKED_QUEUES: list[str] = [
 
 
 class _CachedCollector(Collector):
-    """Base collector with TTL-based caching and timeout protection.
+    """Base collector with a TTL cache and bounded waiting.
 
-    Subclasses implement ``_collect_fresh()`` to query the actual data source.
-    The base ``collect()`` returns cached results if the TTL hasn't expired,
-    avoiding repeated queries when Prometheus scrapes frequently.
-
-    A per-collection timeout prevents a slow DB or Redis query from blocking
-    the /metrics endpoint indefinitely. If _collect_fresh() exceeds the
-    timeout, stale cached results are returned instead.
+    Subclasses implement ``_collect_fresh()``. Inside the TTL ``collect()`` returns
+    the cache. Past it, the scrape that finds no collection running starts one and
+    waits at most ``collect_timeout``. Every other scrape returns the cache (or
+    nothing) at once, so a stalled query pins one request thread, not one per
+    scrape. A collection that never returns keeps the single executor worker and
+    leaves the collector on stale data, so ``_collect_fresh`` must rely on its own
+    I/O deadlines.
     """
 
     def __init__(
@@ -100,45 +104,108 @@ class _CachedCollector(Collector):
             max_workers=1,
             thread_name_prefix=type(self).__name__,
         )
-        self._inflight: concurrent.futures.Future | None = None
+        self._inflight: concurrent.futures.Future[list[GaugeMetricFamily]] | None = None
+        self._inflight_started: float = 0.0
+        self._last_stall_log: float = 0.0
 
     def collect(self) -> list[GaugeMetricFamily]:
+        self._bank_finished()
+
+        own_future: concurrent.futures.Future[list[GaugeMetricFamily]] | None = None
         with self._lock:
             now = time.monotonic()
             if (
-                now - self._last_collect_time < self._cache_ttl
-                and self._cached_result is not None
+                self._cached_result is not None
+                and now - self._last_collect_time < self._cache_ttl
             ):
                 return self._cached_result
-
-            # If a previous _collect_fresh() is still running, wait on it
-            # rather than queuing another. This prevents unbounded task
-            # accumulation in the executor during extended DB outages.
-            if self._inflight is not None and not self._inflight.done():
-                future = self._inflight
+            if self._inflight is None:
+                own_future = self._executor.submit(self._collect_fresh)
+                self._inflight = own_future
+                self._inflight_started = now
+                stalled_for = None
             else:
-                future = self._executor.submit(self._collect_fresh)
-                self._inflight = future
+                stalled_for = self._claim_stall_warning_locked(now)
 
-            try:
-                result = future.result(timeout=self._collect_timeout)
-                self._inflight = None
-                self._cached_result = result
-                self._last_collect_time = now
-                return result
-            except concurrent.futures.TimeoutError:
+        # Nothing below runs under the lock: a slow log handler or collection
+        # must never convoy the other scrapes behind it.
+        if own_future is None:
+            if stalled_for is not None:
                 logger.warning(
-                    "%s._collect_fresh() timed out after %ss, returning stale cache",
+                    "%s._collect_fresh() still running after %.0fs, returning stale cache",
                     type(self).__name__,
-                    self._collect_timeout,
+                    stalled_for,
                 )
-                return self._cached_result if self._cached_result is not None else []
-            except Exception:
-                self._inflight = None
-                logger.exception("Error in %s.collect()", type(self).__name__)
-                # Return stale cache on error rather than nothing — avoids
-                # metrics disappearing during transient failures.
-                return self._cached_result if self._cached_result is not None else []
+            return self._cached_or_empty()
+
+        concurrent.futures.wait([own_future], timeout=self._collect_timeout)
+        if not own_future.done():
+            logger.warning(
+                "%s._collect_fresh() timed out after %ss, returning stale cache",
+                type(self).__name__,
+                self._collect_timeout,
+            )
+            # This line opens the throttle window for the stall warnings.
+            with self._lock:
+                self._last_stall_log = time.monotonic()
+            return self._cached_or_empty()
+        result = self._bank(own_future, now)
+        return result if result is not None else self._cached_or_empty()
+
+    def _cached_or_empty(self) -> list[GaugeMetricFamily]:
+        return self._cached_result if self._cached_result is not None else []
+
+    def _bank_finished(self) -> None:
+        """Bank a collection that finished after its starter stopped waiting."""
+        with self._lock:
+            future, started = self._inflight, self._inflight_started
+        if future is not None and future.done():
+            self._bank(future, started)
+
+    def _bank(
+        self,
+        future: concurrent.futures.Future[list[GaugeMetricFamily]],
+        started: float,
+    ) -> list[GaugeMetricFamily] | None:
+        """Bank a done collection once, by whichever scrape claims it first.
+
+        Claiming the slot, reading the future, and storing happen under one lock
+        hold, so no scrape can find an empty slot and a stale cache in between and
+        start a redundant collection. Neither read blocks on a done future. The
+        failure log waits until the lock is released. Returns None when another
+        scrape already banked it or the collection raised.
+        """
+        with self._lock:
+            if self._inflight is not future:
+                return None
+            self._inflight = None
+            error = future.exception()
+            result = future.result() if error is None else None
+            if result is not None:
+                self._store_locked(result, started)
+        if error is not None:
+            logger.error(
+                "Error in %s._collect_fresh()", type(self).__name__, exc_info=error
+            )
+        return result
+
+    def _store_locked(self, result: list[GaugeMetricFamily], started: float) -> None:
+        # A result is stamped with its start time, so a slow one that lands
+        # after a newer collection cannot replace it.
+        if started < self._last_collect_time:
+            return
+        self._cached_result = result
+        self._last_collect_time = started
+
+    def _claim_stall_warning_locked(self, now: float) -> float | None:
+        """Seconds the collection has run when a warning is due, else None."""
+        running_for = now - self._inflight_started
+        if running_for < self._collect_timeout:
+            return None
+        if now - self._last_stall_log < _STALL_WARNING_INTERVAL:
+            return None
+        self._last_stall_log = now
+        return running_for
 
     def _collect_fresh(self) -> list[GaugeMetricFamily]:
         raise NotImplementedError
