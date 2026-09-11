@@ -62,7 +62,7 @@ const InputSingleSelect = ({
   value,
   onChange,
   onValueChange,
-  options: optionsProp = [],
+  options: optionsProp,
   mode = "closed",
   disabled = false,
   placeholder,
@@ -78,14 +78,20 @@ const InputSingleSelect = ({
   ...rest
 }: WithoutStyles<InputSingleSelectProps>) => {
   const strict = mode !== "open";
-  const sections = useMemo(() => normalizeSections(optionsProp), [optionsProp]);
+  const sections = useMemo(
+    () => normalizeSections(optionsProp ?? []),
+    [optionsProp]
+  );
   const options = useMemo(() => flattenSections(sections), [sections]);
   const strings = useOpalStrings();
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const fieldContext = useContext(FieldContext);
 
-  const hasOptions = options.length > 0;
+  // The prop's PRESENCE drives the select machinery (chevron, dropdown,
+  // combobox aria): an empty or still-loading set is still a select. Only
+  // an absent prop degrades to a plain input.
+  const hasOptionSet = optionsProp !== undefined;
 
   //State Management Hook
   const {
@@ -221,7 +227,7 @@ const InputSingleSelect = ({
       onChange?.(e);
 
       // Open dropdown when user starts typing and there are options
-      if (hasOptions && !isOpen) {
+      if (hasOptionSet && !isOpen) {
         setIsOpen(true);
       }
 
@@ -231,7 +237,7 @@ const InputSingleSelect = ({
     },
     [
       onChange,
-      hasOptions,
+      hasOptionSet,
       isOpen,
       setInputValue,
       setIsOpen,
@@ -275,7 +281,7 @@ const InputSingleSelect = ({
     setIsKeyboardNav,
     allVisibleOptions,
     onSelect: handleOptionSelect,
-    hasOptions,
+    hasOptions: hasOptionSet,
   });
 
   // Click Outside Hook
@@ -299,7 +305,7 @@ const InputSingleSelect = ({
   }, [options, value]);
 
   const handleFocus = useCallback(() => {
-    if (hasOptions) {
+    if (hasOptionSet) {
       setInputValue(selectedLabel);
       setIsOpen(true);
       setHighlightedIndex(-1);
@@ -311,7 +317,7 @@ const InputSingleSelect = ({
       });
     }
   }, [
-    hasOptions,
+    hasOptionSet,
     selectedLabel,
     setInputValue,
     setIsOpen,
@@ -320,7 +326,7 @@ const InputSingleSelect = ({
   ]);
 
   const toggleDropdown = useCallback(() => {
-    if (!disabled && hasOptions) {
+    if (!disabled && hasOptionSet) {
       setIsOpen((prev) => {
         const newOpen = !prev;
         if (newOpen) {
@@ -331,14 +337,14 @@ const InputSingleSelect = ({
       });
       inputRef.current?.focus();
     }
-  }, [disabled, hasOptions, setIsOpen, setInputValue, setHighlightedIndex]);
+  }, [disabled, hasOptionSet, setIsOpen, setInputValue, setHighlightedIndex]);
 
   const autoId = useId();
   const fieldId = fieldContext?.baseId || name || `combo-box-${autoId}`;
 
   // ARIA Attributes Builder
   const ariaProps = buildAriaAttributes({
-    hasOptions,
+    hasOptions: hasOptionSet,
     isOpen,
     isValid,
     highlightedIndex,
@@ -353,10 +359,10 @@ const InputSingleSelect = ({
     if (isOpen) return inputValue;
 
     // When closed, show the matched option label or the value
-    if (!value || !hasOptions) return inputValue;
+    if (!value || !hasOptionSet) return inputValue;
     const option = options.find((opt) => opt.value === value);
     return option ? option.label : inputValue;
-  }, [isOpen, inputValue, value, options, hasOptions]);
+  }, [isOpen, inputValue, value, options, hasOptionSet]);
 
   return (
     <div ref={refs.setReference} className="relative w-full">
@@ -371,7 +377,7 @@ const InputSingleSelect = ({
           onClick={() => {
             // Reopen on click while already focused (e.g. after Escape) —
             // focus alone won't fire again. The text stays for editing.
-            if (hasOptions && !isOpen) {
+            if (hasOptionSet && !isOpen) {
               setIsOpen(true);
               setHighlightedIndex(-1);
             }
@@ -397,7 +403,7 @@ const InputSingleSelect = ({
                   {rightChildren}
                 </div>
               )}
-              {hasOptions && (
+              {hasOptionSet && (
                 <span data-dropdown-open={isOpen} className="contents">
                   <Button
                     disabled={disabled}
