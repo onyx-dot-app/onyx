@@ -70,6 +70,7 @@ from onyx.chat.save_chat import save_chat_turn
 from onyx.chat.stop_signal_checker import is_connected as check_stop_signal
 from onyx.chat.stop_signal_checker import reset_cancel_status
 from onyx.chat.stream_buffer import StreamBufferWriter
+from onyx.chat.token_budget import resolve_chat_token_budget
 from onyx.configs.app_configs import DISABLE_VECTOR_DB, INTEGRATION_TESTS_MODE
 from onyx.configs.chat_configs import CHAT_HEARTBEAT_INTERVAL_S
 from onyx.configs.constants import (
@@ -375,8 +376,7 @@ def _extract_text_from_in_memory_file(f: InMemoryChatFile) -> str | None:
 
 def extract_context_files(
     user_files: list[UserFile],
-    llm_max_context_window: int,
-    reserved_token_count: int,
+    input_token_budget: int,
     db_session: Session,
     # Because the tokenizer is a generic tokenizer, the token count may be incorrect.
     # to account for this, the maximum context that is allowed for this function is
@@ -393,8 +393,7 @@ def extract_context_files(
     Args:
         project_id: The project ID to load files from
         user_id: The user ID for authorization
-        llm_max_context_window: Maximum tokens allowed in the LLM context window
-        reserved_token_count: Number of tokens to reserve for other content
+        input_token_budget: Output-reserved input tokens available to the model.
         db_session: Database session
         max_llm_context_percentage: Maximum percentage of the LLM context window to use.
     Returns:
@@ -418,9 +417,7 @@ def extract_context_files(
         for uf in user_files
         if not mime_type_to_chat_file_type(uf.file_type).use_metadata_only()
     )
-    max_actual_tokens = (
-        llm_max_context_window - reserved_token_count
-    ) * max_llm_context_percentage
+    max_actual_tokens = max(0, input_token_budget) * max_llm_context_percentage
 
     if aggregate_tokens >= max_actual_tokens:
         use_as_search_filter = not DISABLE_VECTOR_DB
@@ -891,13 +888,15 @@ def build_chat_turn(
         db_session=db_session,
     )
 
-    # Use the smallest context window across models for safety (harmless for N=1).
-    llm_max_context_window = min(llm.config.max_input_tokens for llm in llms)
+    # Use the smallest usable input budget across models for safety (harmless for N=1).
+    input_token_budget = min(
+        resolve_chat_token_budget(llm).input_tokens for llm in llms
+    )
+    project_input_token_budget = max(0, input_token_budget - reserved_token_count)
 
     extracted_context_files = extract_context_files(
         user_files=context_user_files,
-        llm_max_context_window=llm_max_context_window,
-        reserved_token_count=reserved_token_count,
+        input_token_budget=project_input_token_budget,
         db_session=db_session,
     )
 
@@ -1210,10 +1209,11 @@ def _run_models(
     model_error_info: list[LLMErrorInfo | None] = [None] * n_models
     persist_lock = threading.Lock()
     persisted: list[bool] = [False] * n_models
-    # All models share one mainline chain, so exactly one completion should
-    # run history compression — the first non-errored one to persist, not a
-    # fixed index (model 0 may have errored). Guarded by persist_lock.
-    compression_claimed = False
+    persistence_settled: list[bool] = [False] * n_models
+    model_finished: list[bool] = [False] * n_models
+    # All models share one mainline chain, so history compression runs once,
+    # after every model has a persisted outcome.
+    compression_done = False
     post_steps_done = threading.Event()
 
     # Set only on stop-button: workers can't be interrupted, so their remaining
@@ -1251,51 +1251,83 @@ def _run_models(
                 return
             persisted[model_idx] = True
 
-        if errored:
-            _save_errored_message(model_idx, context)
-            return
+        try:
+            if errored:
+                _save_errored_message(model_idx, context)
+                return
 
-        completed_normally = succeeded if stop_button else True
+            completed_normally = succeeded if stop_button else True
 
-        def _is_connected(value: bool = completed_normally) -> bool:
-            return value
+            def _is_connected(value: bool = completed_normally) -> bool:
+                return value
 
-        nonlocal compression_claimed
+            try:
+                llm_loop_completion_handle(
+                    state_container=state_containers[model_idx],
+                    is_connected=_is_connected,
+                    assistant_message=setup.reserved_messages[model_idx],
+                    llm=setup.llms[model_idx],
+                    reserved_tokens=setup.reserved_token_count,
+                    run_compression=False,
+                )
+            except Exception:
+                logger.exception(
+                    "%s completion failed for model %d (%s)",
+                    context.value,
+                    model_idx,
+                    setup.model_display_names[model_idx],
+                )
+        finally:
+            with persist_lock:
+                persistence_settled[model_idx] = True
+
+    def _run_compression_after_all_persisted(context: _PersistContext) -> None:
+        nonlocal compression_done
         with persist_lock:
-            run_compression = not compression_claimed
-            compression_claimed = True
+            if (
+                compression_done
+                or drain_done.is_set()
+                or not all(model_finished)
+                or not all(persistence_settled)
+            ):
+                return
+            compression_done = True
+            compression_model_idx = next(
+                (i for i in range(n_models) if persisted[i] and not model_errored[i]),
+                None,
+            )
+            if compression_model_idx is None:
+                return
+            measured_overheads = [
+                state_container.get_reserved_input_tokens()
+                for state_container in state_containers
+            ]
+            max_reserved_input_tokens = max(
+                overhead if overhead is not None else setup.reserved_token_count
+                for overhead in measured_overheads
+            )
+        compression_input_token_budget = max(
+            0,
+            min(
+                resolve_chat_token_budget(model_llm).input_tokens
+                for model_llm in setup.llms
+            )
+            - max_reserved_input_tokens,
+        )
 
         try:
-            llm_loop_completion_handle(
-                state_container=state_containers[model_idx],
-                is_connected=_is_connected,
-                assistant_message=setup.reserved_messages[model_idx],
-                llm=setup.llms[model_idx],
+            run_chat_history_compression(
+                state_container=state_containers[compression_model_idx],
+                assistant_message=setup.reserved_messages[compression_model_idx],
+                llm=setup.llms[compression_model_idx],
                 reserved_tokens=setup.reserved_token_count,
-                run_compression=run_compression,
-                # The single compression check must still protect the
-                # smallest-window model, so it measures against the min
-                # window across the turn's models.
-                compression_max_input_tokens=min(
-                    model_llm.config.max_input_tokens for model_llm in setup.llms
-                ),
+                compression_input_token_budget=compression_input_token_budget,
             )
         except Exception:
             logger.exception(
-                "%s completion failed for model %d (%s)",
+                "%s compression failed after multi-model completion",
                 context.value,
-                model_idx,
-                setup.model_display_names[model_idx],
             )
-            if run_compression:
-                # The handle failed before compression could have run
-                # (compress_chat_history swallows its own errors), so let a
-                # later model's completion pick it up. If every other model
-                # already persisted while the claim was held, this turn ends
-                # uncompressed — acceptable, since the next turn's completion
-                # re-evaluates the trigger and compresses then.
-                with persist_lock:
-                    compression_claimed = False
 
     def _run_post_steps() -> None:
         with persist_lock:
@@ -1305,6 +1337,7 @@ def _run_models(
 
         for i in range(n_models):
             _persist_model_outcome(i, _PersistContext.POST_STEPS)
+        _run_compression_after_all_persisted(_PersistContext.POST_STEPS)
 
         # The writer thread is the run's authoritative end — it owns the fence
         # reset so the session never sticks at (or prematurely leaves)
@@ -1426,6 +1459,8 @@ def _run_models(
 
         finally:
             _persist_model_outcome(model_idx, _PersistContext.WORKER)
+            with persist_lock:
+                model_finished[model_idx] = True
             merged_queue.put((model_idx, _MODEL_DONE))
 
     def _save_errored_message(model_idx: int, context: _PersistContext) -> None:
@@ -1518,6 +1553,9 @@ def _run_models(
                             _persist_model_outcome(
                                 i, _PersistContext.STOP_BUTTON, stop_button=True
                             )
+                        _run_compression_after_all_persisted(
+                            _PersistContext.STOP_BUTTON
+                        )
                         _publish(
                             Packet(
                                 placement=Placement(turn_index=0),
@@ -1570,6 +1608,7 @@ def _run_models(
 
             for i in range(n_models):
                 _persist_model_outcome(i, _PersistContext.NORMAL)
+            _run_compression_after_all_persisted(_PersistContext.NORMAL)
         except Exception:
             logger.exception("chat stream writer crashed")
             # With the writer dead, merged_queue has no consumer — flip the
@@ -1975,6 +2014,66 @@ def handle_multi_model_stream(
     )
 
 
+def run_chat_history_compression(
+    state_container: ChatStateContainer,
+    assistant_message: ChatMessage,
+    llm: LLM,
+    reserved_tokens: int,
+    compression_input_token_budget: int | None = None,
+) -> None:
+    chat_session_id: UUID = assistant_message.chat_session_id
+    with get_session_with_current_tenant() as db_session:
+        incognito_session = db_session.get(ChatSession, chat_session_id)
+        incognito_mode = (
+            incognito_session.incognito_record_mode if incognito_session else None
+        )
+        if not record_mode_persists_content(incognito_mode):
+            return
+
+        updated_chat_history = create_chat_history_chain(
+            chat_session_id=chat_session_id,
+            db_session=db_session,
+        )
+
+        # Measure what the next turn will replay: the branch summary, if any,
+        # plus messages after its cutoff.
+        summary_message = find_summary_for_branch(db_session, updated_chat_history)
+        effective_history = updated_chat_history
+        summary_tokens = 0
+        if summary_message and summary_message.last_summarized_message_id:
+            cutoff_id = summary_message.last_summarized_message_id
+            effective_history = [m for m in updated_chat_history if m.id > cutoff_id]
+            summary_tokens = summary_message.token_count or 0
+        total_tokens = summary_tokens + calculate_total_history_tokens(
+            effective_history
+        )
+
+    reserved_input_tokens = state_container.get_reserved_input_tokens()
+    legacy_input_token_budget = max(
+        0,
+        resolve_chat_token_budget(llm).input_tokens
+        - (
+            reserved_input_tokens
+            if reserved_input_tokens is not None
+            else reserved_tokens
+        ),
+    )
+    compression_params = get_compression_params(
+        input_token_budget=(
+            compression_input_token_budget
+            if compression_input_token_budget is not None
+            else legacy_input_token_budget
+        ),
+        current_history_tokens=total_tokens,
+    )
+    if compression_params.should_compress:
+        compress_chat_history(
+            chat_history=updated_chat_history,
+            llm=llm,
+            compression_params=compression_params,
+        )
+
+
 def llm_loop_completion_handle(
     state_container: ChatStateContainer,
     is_connected: Callable[[], bool],
@@ -1982,7 +2081,7 @@ def llm_loop_completion_handle(
     llm: LLM,
     reserved_tokens: int,
     run_compression: bool = True,
-    compression_max_input_tokens: int | None = None,
+    compression_input_token_budget: int | None = None,
 ) -> None:
     # Snapshot all state under the container's lock before any DB write.
     # Worker threads may still be running (e.g. user-cancellation path), so
@@ -2061,40 +2160,16 @@ def llm_loop_completion_handle(
             )
             return
 
-        updated_chat_history = create_chat_history_chain(
-            chat_session_id=chat_session_id,
-            db_session=db_session,
-        )
-
-        # Measure what the next turn will actually replay: the branch summary
-        # (if any) plus messages after its cutoff. The full chain only grows,
-        # so counting it would keep the trigger on permanently once crossed
-        # and inflate tokens_for_recent until compression stalls.
-        summary_message = find_summary_for_branch(db_session, updated_chat_history)
-        effective_history = updated_chat_history
-        summary_tokens = 0
-        if summary_message and summary_message.last_summarized_message_id:
-            cutoff_id = summary_message.last_summarized_message_id
-            effective_history = [m for m in updated_chat_history if m.id > cutoff_id]
-            summary_tokens = summary_message.token_count or 0
-        total_tokens = summary_tokens + calculate_total_history_tokens(
-            effective_history
-        )
-
     if not run_compression:
         return
 
-    compression_params = get_compression_params(
-        max_input_tokens=compression_max_input_tokens or llm.config.max_input_tokens,
-        current_history_tokens=total_tokens,
+    run_chat_history_compression(
+        state_container=state_container,
+        assistant_message=assistant_message,
+        llm=llm,
         reserved_tokens=reserved_tokens,
+        compression_input_token_budget=compression_input_token_budget,
     )
-    if compression_params.should_compress:
-        compress_chat_history(
-            chat_history=updated_chat_history,
-            llm=llm,
-            compression_params=compression_params,
-        )
 
 
 _CITATION_LINK_START_PATTERN = re.compile(r"\s*\[\[\d+\]\]\(")

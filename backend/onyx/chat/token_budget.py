@@ -55,11 +55,21 @@ def resolve_chat_token_budget(llm: LLM) -> ChatTokenBudget:
         model_input = _positive_int(model_obj.get("max_input_tokens"))
         model_output = _positive_int(model_obj.get("max_output_tokens"))
         if model_input is not None and model_output is not None:
+            context_tokens = (
+                _positive_int(model_obj.get("max_context_tokens")) or model_input
+            )
+            reserved_input = min(
+                raw_input_tokens, model_input, context_tokens - model_output
+            )
+            if reserved_input <= 0:
+                break
+            input_tokens = max(
+                0, int(reserved_input * (1 - GEN_AI_INPUT_TOKEN_SAFETY_MARGIN))
+            )
             return ChatTokenBudget(
                 input_tokens=input_tokens,
                 max_output_tokens=model_output,
-                context_tokens=_positive_int(model_obj.get("max_context_tokens"))
-                or model_input,
-                safety_tokens=safety_tokens,
+                context_tokens=context_tokens,
+                safety_tokens=reserved_input - input_tokens,
             )
     return ChatTokenBudget(input_tokens, None, None, safety_tokens)

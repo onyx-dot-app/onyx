@@ -20,21 +20,53 @@ The LLM receives older messages, a cutoff marker, then recent messages. It summa
 
 ## Token Budget
 
-Context window breakdown:
-- `max_context_tokens` — LLM's total context window
-- `reserved_tokens` — space for system prompt, tools, files, etc.
-- Available for chat history = `max_context_tokens - reserved_tokens`
-Note: If there is a lot of reserved tokens, chat compression may happen fairly frequently which is costly, slow, and leads to a bad user experience. Possible area of future improvement.
+Resolve each selected model's budget through `resolve_chat_token_budget`:
+
+```text
+raw_input = min(configured_input_cap, model_input_max,
+                model_context_capacity - model_output_reserve)
+safe_input = floor(raw_input * (1 - tokenizer_safety_margin))
+history_capacity = max(0, safe_input - other_replayed_input)
+trigger = floor(history_capacity * COMPRESSION_TRIGGER_RATIO)
+```
+
+The output reserve uses the model's explicit output maximum and includes reasoning.
+The configured input cap is independent of the model's total context capacity.
+Use explicit context metadata when available. Otherwise, use the model metadata's
+input maximum as a conservative context bound. Never infer context capacity from
+the ambiguous legacy `max_tokens` field.
+
+If usable model specifications are missing, preserve the existing configured/default
+input allowance and provider-default output behavior. The default input lookup
+already holds back `GEN_AI_NUM_RESERVED_OUTPUT_TOKENS`, so do not subtract it again.
+
+The tokenizer safety margin defaults to 5%. It protects against estimation errors.
+The compression buffer is separate and leaves space for continued work.
+
+`other_replayed_input` includes system/custom prompts, reminders, tool definitions,
+project context, and replay content absent from stored message token counts.
+The latter includes file payloads, image payloads or markers, and tool results.
+Count each contribution once. Use the actual replay cost for the selected model.
+
+Multi-model chats share the smallest safe input allowance and greatest measured
+overhead. The shared compression decision waits for participating models and their
+persistence to finish, so a fast model cannot hide a slower model's larger overhead.
 
 Configurable ratios:
-- `COMPRESSION_TRIGGER_RATIO` (default 0.75) — compress when chat history exceeds this ratio of available space
-- `RECENT_MESSAGES_RATIO` (default 0.2) — portion of chat history to keep verbatim when compressing
+
+- `COMPRESSION_TRIGGER_RATIO` defaults to `0.90`. An environment override still takes precedence.
+- `RECENT_MESSAGES_RATIO` is `0.2`. Bound the recent-history token budget by this fraction of available history capacity.
+
+Compression retains its post-answer lifecycle. Each model call still fits history
+to the hard input allowance; compression does not run inside the tool loop.
+Cancelled or crashed in-flight turns do not start compression after the processing
+fence is released. The next completed turn can check compression again.
 
 ## Flow
 
-1. Trigger when `history_tokens > available * 0.75`
+1. After response persistence, trigger when `history_tokens > history_capacity * COMPRESSION_TRIGGER_RATIO`.
 2. Find existing summary for branch (if any)
-3. Split messages: older (summarize) / recent (keep 25%)
+3. Split messages: older messages to summarize and recent messages within their token budget.
 4. Generate summary via LLM
 5. Save as `ChatMessage` with `parent_message_id` + `last_summarized_message_id`
 
@@ -42,6 +74,8 @@ Configurable ratios:
 
 | Function | Purpose |
 |----------|---------|
+| `resolve_chat_token_budget` | Resolve model-specific input, output, context, and safety limits |
+| `run_chat_history_compression` | Check the saved branch and run shared compression after persistence |
 | `get_compression_params` | Check if compression needed based on token counts |
 | `find_summary_for_branch` | Find applicable summary by checking `parent_message_id` membership |
 | `get_messages_to_summarize` | Split messages at token budget boundary |

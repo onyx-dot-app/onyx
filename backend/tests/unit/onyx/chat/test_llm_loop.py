@@ -815,6 +815,7 @@ class TestNonVisionImageBudgeting:
         )
         older_user = create_message("Old input", MessageType.USER, 20000)
         older_answer = create_message("Old answer", MessageType.ASSISTANT, 5)
+        state = Mock()
         with (
             patch("onyx.chat.llm_loop.trace", return_value=nullcontext()),
             patch("onyx.llm.litellm_singleton.config.initialize_litellm"),
@@ -844,7 +845,7 @@ class TestNonVisionImageBudgeting:
         ):
             run_llm_loop(
                 emitter=Mock(),
-                state_container=Mock(),
+                state_container=state,
                 simple_chat_history=[older_user, older_answer, image_msg],
                 tools=[],
                 custom_agent_prompt=None,
@@ -855,16 +856,9 @@ class TestNonVisionImageBudgeting:
                 token_counter=lambda _: 10,
             )
 
-        if configured_input_limit == 8000:
-            assert step.call_args.kwargs["history"] == [older_answer, image_msg]
-            assert step.call_args.kwargs["max_tokens"] == 16000
-        else:
-            assert step.call_args.kwargs["history"] == [
-                older_user,
-                older_answer,
-                image_msg,
-            ]
-            assert step.call_args.kwargs["max_tokens"] == 2780
+        assert step.call_args.kwargs["history"] == [older_answer, image_msg]
+        assert step.call_args.kwargs["max_tokens"] == 16000
+        state.set_reserved_input_tokens.assert_called_once_with(10)
         assert (
             count_message_replay_tokens(
                 image_msg,

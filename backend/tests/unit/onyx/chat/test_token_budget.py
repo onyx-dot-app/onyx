@@ -42,17 +42,17 @@ def llm() -> Mock:
         ),
         (
             (200_000, 64_000, None),
-            (200_000, 0.05, 190_000, 10_000),
-            {120_000: 64_000, 180_000: 10_000},
+            (200_000, 0.05, 129_200, 6_800),
+            {120_000: 64_000, 180_000: 13_200},
         ),
         ((200_000, 64_000, None), (8_000, 0.05, 7_600, 400), {7_600: 64_000}),
-        ((100_000, 10_000, "100000"), (1_000_000, 0, 1_000_000, 0), {98_000: 2_000}),
+        ((100_000, 10_000, "100000"), (1_000_000, 0, 90_000, 0), {98_000: 2_000}),
         (
             (100_000, 10_000, 50_000),
-            (1_000_000, 0, 1_000_000, 0),
+            (1_000_000, 0, 40_000, 0),
             {40_000: 10_000, 48_000: 2_000},
         ),
-        ((4_000, 4_000, None), (4_000, 0.05, 3_800, 200), {2_000: 1_800}),
+        ((4_000, 4_000, None), (4_000, 0.05, 3_800, 200), {2_000: None}),
     ],
     ids=[
         "separate-limits",
@@ -69,7 +69,7 @@ def test_model_budget(
     monkeypatch: pytest.MonkeyPatch,
     limits: tuple[object, object, object],
     input_config: tuple[int, float, int, int],
-    outputs: dict[int, int],
+    outputs: dict[int, int | None],
 ) -> None:
     model_map["openai/model"] = {
         "max_input_tokens": limits[0],
@@ -122,7 +122,7 @@ def test_deployment_alias(model_map: ModelMap, llm: Mock) -> None:
         "max_output_tokens": 16_000,
     }
     assert resolve_chat_token_budget(llm) == ChatTokenBudget(
-        950_000, 16_000, 128_000, 50_000
+        106_400, 16_000, 128_000, 5_600
     )
 
 
@@ -140,9 +140,7 @@ def test_provider_precedes_bare_model(
             "model": {"max_input_tokens": 200_000, "max_output_tokens": 20_000},
         }
     )
-    assert resolve_chat_token_budget(llm) == ChatTokenBudget(
-        1_000_000, 10_000, 100_000, 0
-    )
+    assert resolve_chat_token_budget(llm) == ChatTokenBudget(90_000, 10_000, 100_000, 0)
 
 
 def test_partial_metadata_uses_complete_alias(
