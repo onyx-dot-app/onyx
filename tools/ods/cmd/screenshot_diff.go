@@ -38,12 +38,6 @@ func getS3Bucket() string {
 	return DefaultS3Bucket
 }
 
-// sanitizeRev normalises a git ref for use as an S3 path segment.
-// Slashes are replaced with dashes (e.g. "release/2.5" → "release-2.5").
-func sanitizeRev(rev string) string {
-	return strings.ReplaceAll(rev, "/", "-")
-}
-
 // ScreenshotDiffCompareOptions holds options for the compare subcommand.
 type ScreenshotDiffCompareOptions struct {
 	Project      string
@@ -242,11 +236,11 @@ func resolveCompareDefaults(opts *ScreenshotDiffCompareOptions) {
 		if opts.FromRev != "" && opts.ToRev != "" {
 			if opts.Baseline == "" {
 				opts.Baseline = fmt.Sprintf("s3://%s/baselines/%s/%s/",
-					bucket, opts.Project, sanitizeRev(opts.FromRev))
+					bucket, opts.Project, s3.SanitizeKeySegment(opts.FromRev))
 			}
 			if opts.Current == "" {
 				opts.Current = fmt.Sprintf("s3://%s/baselines/%s/%s/",
-					bucket, opts.Project, sanitizeRev(opts.ToRev))
+					bucket, opts.Project, s3.SanitizeKeySegment(opts.ToRev))
 			}
 		} else {
 			// Standard mode: compare local screenshots against a revision
@@ -256,7 +250,7 @@ func resolveCompareDefaults(opts *ScreenshotDiffCompareOptions) {
 			}
 			if opts.Baseline == "" {
 				opts.Baseline = fmt.Sprintf("s3://%s/baselines/%s/%s/",
-					bucket, opts.Project, sanitizeRev(rev))
+					bucket, opts.Project, s3.SanitizeKeySegment(rev))
 			}
 			if opts.Current == "" {
 				opts.Current = DefaultScreenshotDir
@@ -288,7 +282,7 @@ func resolveUploadDefaults(opts *ScreenshotDiffUploadOptions) {
 		}
 		if opts.Dest == "" {
 			opts.Dest = fmt.Sprintf("s3://%s/baselines/%s/%s/",
-				bucket, opts.Project, sanitizeRev(rev))
+				bucket, opts.Project, s3.SanitizeKeySegment(rev))
 		}
 	}
 }

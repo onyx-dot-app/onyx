@@ -69,7 +69,7 @@ func checkCloudTag(tag string) error {
 
 	base := cloudTagRe.FindStringSubmatch(tag)[1]
 
-	sha, err := ResolveCommit(tag)
+	sha, err := git.ResolveCommit(tag)
 	if err != nil {
 		return err
 	}
@@ -112,7 +112,7 @@ func checkStableTag(tag string) error {
 		return fmt.Errorf("failed to fetch v%s.* tags: %w", minor, err)
 	}
 
-	sha, err := ResolveCommit(tag)
+	sha, err := git.ResolveCommit(tag)
 	if err != nil {
 		return err
 	}
@@ -161,7 +161,7 @@ func checkBetaTag(tag string) error {
 		return fmt.Errorf("failed to fetch %s* tags: %w", base, err)
 	}
 
-	sha, err := ResolveCommit(tag)
+	sha, err := git.ResolveCommit(tag)
 	if err != nil {
 		return err
 	}

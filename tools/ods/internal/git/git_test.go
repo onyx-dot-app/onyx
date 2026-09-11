@@ -29,6 +29,8 @@ func newTestRepo(t *testing.T) *testRepo {
 	r.Git("init", "-b", "main")
 	r.Git("config", "user.email", "test@test.com")
 	r.Git("config", "user.name", "Test")
+	// A global commit.gpgsign would break every commit made here.
+	r.Git("config", "commit.gpgsign", "false")
 	r.Commit("initial commit", "README.md", "init")
 
 	return r

@@ -54,7 +54,7 @@ func ComputeBetaTag(ref, overrideVersion string) (tag, sha string, err error) {
 	if ref == "" {
 		ref = "origin/" + branch
 	}
-	sha, err = ResolveCommit(ref)
+	sha, err = git.ResolveCommit(ref)
 	if err != nil {
 		return "", "", err
 	}
@@ -157,7 +157,7 @@ func ComputeNewBetaBranch(ref string) (branch, tag, sha string, err error) {
 	if ref == "" {
 		ref = "origin/main"
 	}
-	sha, err = ResolveCommit(ref)
+	sha, err = git.ResolveCommit(ref)
 	if err != nil {
 		return "", "", "", err
 	}

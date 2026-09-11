@@ -10,15 +10,20 @@ on:
       - main
       - "release/**"
   push:
+    branches:
+      - "release/**"
     tags:
       - "v*.*.*"
+  # Manual run, to publish the first coverage snapshots on a branch.
+  workflow_dispatch:
 
 permissions:
   contents: read # needed to checkout the repo on private repos (no-op on public)
 
 env:
   GO_VERSION: "1.26.5"
-  # HTML coverage pages for PR comments go next to the playwright reports.
+  # HTML coverage pages for PR comments, and the coverage snapshots, go next
+  # to the playwright reports.
   REPORTS_S3_BUCKET: onyx-playwright-artifacts
 
 jobs:
@@ -40,7 +45,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      id-token: write # OIDC-based AWS credential exchange, to publish the HTML page
+      id-token: write # OIDC-based AWS credential exchange, for the coverage snapshots and the HTML page
     strategy:
       matrix:
         modules: ${{ fromJSON(needs.detect-modules.outputs.modules) }}
@@ -62,18 +67,109 @@ jobs:
         run: go build -o "${RUNNER_TEMP}/ods" .
         working-directory: tools/ods
 
+      # The base commit to report against, and whether this run records the
+      # snapshot of the commit that lands. Publishing mirrors the "Update S3
+      # baselines" condition in pr-playwright-tests.yml. A fork PR cannot
+      # assume the role, so it never asks for credentials.
+      - name: Choose the coverage base
+        id: coverage-flags
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GH_REF: ${{ github.ref }}
+          IS_FORK: ${{ github.event.pull_request.head.repo.fork }}
+          MERGE_GROUP_BASE_REF: ${{ github.event.merge_group.base_ref }}
+          MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+
+          BASE_SHA=""
+          PUBLISH=false
+          case "${EVENT_NAME}" in
+            pull_request)
+              BASE_SHA="${PR_BASE_SHA}"
+              ;;
+            merge_group)
+              BASE_SHA="${MERGE_GROUP_BASE_SHA}"
+              if [ "${MERGE_GROUP_BASE_REF}" = "refs/heads/main" ] ||
+                 [ "${MERGE_GROUP_BASE_REF#refs/heads/release/}" != "${MERGE_GROUP_BASE_REF}" ]; then
+                PUBLISH=true
+              fi
+              ;;
+            push | workflow_dispatch)
+              if [ "${GH_REF}" = "refs/heads/main" ] ||
+                 [ "${GH_REF#refs/heads/release/}" != "${GH_REF}" ]; then
+                PUBLISH=true
+              fi
+              ;;
+          esac
+
+          # Credentials are needed to read a snapshot and to publish one.
+          AWS=false
+          if [ "${PUBLISH}" = "true" ] || [ "${EVENT_NAME}" = "merge_group" ]; then
+            AWS=true
+          elif [ "${EVENT_NAME}" = "pull_request" ] && [ "${IS_FORK}" = "false" ]; then
+            AWS=true
+          fi
+
+          {
+            echo "base_sha=${BASE_SHA}"
+            echo "publish=${PUBLISH}"
+            echo "aws=${AWS}"
+          } >> "$GITHUB_OUTPUT"
+          echo "event=${EVENT_NAME} base=${BASE_SHA:-none} publish=${PUBLISH} aws=${AWS}"
+
       # `ods coverage --check` runs `go test -race ./...` with a coverage profile.
       # A module opts into the gate by committing a .coverage-baseline.yaml; the
-      # check then fails when a package drops below its floor. Without one the
-      # tests still run and nothing is gated. Raise the floors after adding
-      # tests with `ods coverage <suite> --update`.
+      # floors in that file are the only gate, and the check fails when a package
+      # drops below its floor. Raise the floors after adding tests with
+      # `ods coverage <suite> --update`.
+      #
+      # The tests run before any AWS credential exists in the job: the test code
+      # comes from the PR, and a process can read the environment it starts
+      # with. The profile is kept for the report step below.
       - name: Test
         env:
           MODULE: ${{ matrix.modules }}
         run: |
           "${RUNNER_TEMP}/ods" coverage "${MODULE}" --check \
-            --html "${RUNNER_TEMP}/coverage/coverage.html" \
+            --profile "${RUNNER_TEMP}/coverage/coverage.out"
+
+      - name: Configure AWS credentials
+        if: ${{ steps.coverage-flags.outputs.aws == 'true' }}
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+
+      # The report compares against the coverage snapshot of the base commit,
+      # which main and release runs record in S3, so a PR sees only what it
+      # changed. Without a snapshot -- a fork PR, or a module before the first
+      # publish -- the report falls back to the floors. A merge_group run on
+      # main, and a push to a release branch, publish the snapshot of the commit
+      # that lands.
+      - name: Report against the base and publish the snapshot
+        env:
+          BASE_SHA: ${{ steps.coverage-flags.outputs.base_sha }}
+          MODULE: ${{ matrix.modules }}
+          PUBLISH: ${{ steps.coverage-flags.outputs.publish }}
+        run: |
+          set -euo pipefail
+
+          ARGS=(
+            --from-profile "${RUNNER_TEMP}/coverage/coverage.out"
+            --html "${RUNNER_TEMP}/coverage/coverage.html"
             --markdown "${RUNNER_TEMP}/coverage/report.md"
+            --snapshot-bucket "${REPORTS_S3_BUCKET}"
+          )
+          if [ -n "${BASE_SHA}" ]; then
+            ARGS+=(--base "${BASE_SHA}")
+          fi
+          if [ "${PUBLISH}" = "true" ]; then
+            ARGS+=(--publish)
+          fi
+
+          "${RUNNER_TEMP}/ods" coverage "${MODULE}" "${ARGS[@]}"
 
       # The report goes to the job summary here, and to the PR comment below.
       # Artifact names cannot contain "/", so "./tools/ods" becomes "tools-ods".
@@ -96,13 +192,8 @@ jobs:
           retention-days: 14
 
       # The HTML page is published where a browser can open it, for the PR
-      # comment. Fork PRs cannot assume the role, so they keep the artifact only.
-      - name: Configure AWS credentials
-        if: ${{ !cancelled() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork }}
-        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
-        with:
-          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
-          aws-region: us-east-2
+      # comment. It uses the credentials configured after the tests. Fork PRs
+      # cannot assume the role, so they keep the artifact only.
       - name: Publish the HTML page
         if: ${{ !cancelled() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork }}
         env:
@@ -118,8 +209,8 @@ jobs:
             "s3://${REPORTS_S3_BUCKET}/reports/pr-${PR_NUMBER}/${RUN_ID}/${NAME}/coverage.html" \
             --content-type text/html
 
-  # One comment per PR, updated in place, listing the modules with a baseline
-  # where a package moved, each with a link to its HTML page. When nothing
+  # One comment per PR, updated in place, listing the modules where a package
+  # moved against the PR's base, each with a link to its HTML page. When nothing
   # moved, an existing comment is updated to say so and no new one is posted.
   # Fork PRs get a read-only token, so they only get the job summary.
   coverage-comment:
@@ -168,10 +259,10 @@ jobs:
 
           if [ "${BODY}" = "${HEADER}" ]; then
             if [ -z "${EXISTING_COMMENT_ID}" ]; then
-              echo "No module with a baseline changed coverage -- skipping the PR comment."
+              echo "No module changed coverage -- skipping the PR comment."
               exit 0
             fi
-            BODY+=$'\n'"No package moved against its baseline in the latest run."$'\n'
+            BODY+=$'\n'"No package moved against the base in the latest run."$'\n'
           fi
 
           if [ -n "${EXISTING_COMMENT_ID}" ]; then
