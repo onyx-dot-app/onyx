@@ -516,14 +516,12 @@ export default function AddConnector({
             return;
           })();
 
-          const result = (await Promise.race([
+          const result = await Promise.race([
             connectorCreationPromise,
             timeoutPromise,
-          ])) as {
-            isTimeout?: true;
-          };
+          ]);
 
-          if (result.isTimeout) {
+          if (result && result.isTimeout) {
             timeoutErrorHappenedRef.current = true;
             toast.error(
               t("add.timeout.toast", {

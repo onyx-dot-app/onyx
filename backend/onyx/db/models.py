@@ -2122,7 +2122,7 @@ class CredentialCapabilityReportRow(Base):
     )
     # Denormalized for support queries by source.
     source: Mapped[DocumentSource] = mapped_column(
-        Enum(DocumentSource, native_enum=False), nullable=False
+        Enum(DocumentSource, native_enum=False, length=50), nullable=False
     )
     # sha256 of the canonical config JSON the report ran with; staleness signal
     # for connector-scoped reports.

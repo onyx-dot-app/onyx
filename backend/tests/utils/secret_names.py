@@ -42,6 +42,7 @@ class TestSecret(StrEnum):
     CONFLUENCE_ACCESS_TOKEN = "confluence-access-token"
     CONFLUENCE_ACCESS_TOKEN_SCOPED = "confluence-access-token-scoped"
     JIRA_BASE_URL = "jira-base-url"
+    JSM_PROJECT_KEY = "jsm-project-key"
     JIRA_ADMIN_USER_EMAIL = "jira-admin-user-email"
     JIRA_USER_EMAIL = "jira-user-email"
     JIRA_API_TOKEN = "jira-api-token"

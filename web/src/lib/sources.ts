@@ -257,6 +257,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
   },
 
   // Ticketing & Task Management
+  jira_service_management: {
+    icon: SvgJira,
+    displayName: "Jira Service Management",
+    category: SourceCategory.TicketingAndTaskManagement,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/jira_service_management`,
+  },
   jira: {
     icon: SvgJira,
     displayName: "Jira",

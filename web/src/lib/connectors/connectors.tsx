@@ -777,6 +777,42 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  jira_service_management: {
+    description: "Configure Jira Service Management",
+    subtext:
+      "Index tickets from one service project using an agent account. Access is managed in Onyx; Jira customer permissions are not synced. Ticket comments visible to the account are included.",
+    values: [
+      {
+        type: "text",
+        label: "Jira Base URL",
+        name: "jira_base_url",
+        optional: false,
+        description: "For example, https://your-domain.atlassian.net",
+      },
+      {
+        type: "text",
+        label: "Service Project Key",
+        name: "project_key",
+        optional: false,
+        description: "The key of the service project to index, such as HELP.",
+      },
+      {
+        type: "checkbox",
+        label: "Using scoped token",
+        name: "scoped_token",
+        optional: true,
+        default: false,
+      },
+      {
+        type: "list",
+        label: "Comment Email Blacklist",
+        name: "comment_email_blacklist",
+        optional: true,
+        description: "Exclude comments from these email addresses.",
+      },
+    ],
+    advanced_values: [],
+  },
   jira: {
     description: "Configure Jira connector",
     subtext: `Configure which Jira content to index. You can index everything or specify a particular project.`,
