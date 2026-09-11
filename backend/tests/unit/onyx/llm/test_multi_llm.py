@@ -854,6 +854,7 @@ def test_legacy_claude_thinking_budget_fits_inside_max_tokens(
     with (
         patch("litellm.completion") as mock_completion,
         patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=False),
+        patch("onyx.llm.multi_llm.logger.warning") as warning,
     ):
         mock_completion.return_value = []
 
@@ -868,8 +869,12 @@ def test_legacy_claude_thinking_budget_fits_inside_max_tokens(
         assert kwargs["max_tokens"] == max_tokens
         if expected_thinking is None:
             assert "thinking" not in kwargs
+            warning.assert_called_once()
+            assert "Skipping Anthropic thinking" in warning.call_args.args[0]
+            assert warning.call_args.args[1] == max_tokens
         else:
             assert kwargs["thinking"] == expected_thinking
+            warning.assert_not_called()
 
 
 def test_openai_chat_omits_reasoning_params() -> None:
