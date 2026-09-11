@@ -291,15 +291,28 @@ const InputSingleSelect = ({
     isOpen
   );
 
+  // The selection's visible text, used to seed editing: focusing must not
+  // wipe what the user picked, and the raw value would filter wrongly.
+  const selectedLabel = useMemo(() => {
+    if (!value) return "";
+    return options.find((opt) => opt.value === value)?.label ?? value;
+  }, [options, value]);
+
   const handleFocus = useCallback(() => {
     if (hasOptions) {
-      setInputValue("");
+      setInputValue(selectedLabel);
       setIsOpen(true);
       setHighlightedIndex(-1);
       setIsKeyboardNav(false);
+      // Caret at the end, ready to modify.
+      requestAnimationFrame(() => {
+        const el = inputRef.current;
+        if (el) el.setSelectionRange(el.value.length, el.value.length);
+      });
     }
   }, [
     hasOptions,
+    selectedLabel,
     setInputValue,
     setIsOpen,
     setHighlightedIndex,
@@ -357,9 +370,8 @@ const InputSingleSelect = ({
           onFocus={handleFocus}
           onClick={() => {
             // Reopen on click while already focused (e.g. after Escape) —
-            // focus alone won't fire again.
+            // focus alone won't fire again. The text stays for editing.
             if (hasOptions && !isOpen) {
-              setInputValue("");
               setIsOpen(true);
               setHighlightedIndex(-1);
             }

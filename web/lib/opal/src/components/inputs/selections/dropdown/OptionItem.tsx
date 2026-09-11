@@ -107,7 +107,12 @@ export const OptionItem = React.memo(
               )}
             />
           )}
-          {highlightMatch(option.label, searchTerm)}
+          {/* Inner span: the highlight splits the label into segments, and
+              they must stay inline — as direct flex children the row's gap
+              would space them apart mid-word. */}
+          <span className="min-w-0 truncate">
+            {highlightMatch(option.label, searchTerm)}
+          </span>
         </span>
         {option.description && (
           <span
