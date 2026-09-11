@@ -1,8 +1,8 @@
 from collections.abc import Callable
 from typing import cast
 
+from sqlalchemy import and_, or_, select
 from sqlalchemy import cast as sa_cast
-from sqlalchemy import or_, select
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
@@ -255,7 +255,10 @@ def user_can_access_chat_file(file_id: str, user: User, db_session: Session) -> 
         .where(
             or_(
                 ChatSession.user_id == user.id,
-                ChatSession.shared_status == ChatSessionSharedStatus.PUBLIC,
+                and_(
+                    ChatSession.shared_status == ChatSessionSharedStatus.PUBLIC,
+                    ChatSession.deleted.is_(False),
+                ),
             )
         )
         .limit(1)
