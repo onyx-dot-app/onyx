@@ -1,3 +1,6 @@
+# Core chat engine: pi (queued workers) or legacy (in-process LiteLLM).
+chatEngine: pi
+
 # Default values for onyx.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
@@ -1799,3 +1802,67 @@ extraManifests: []
 #       podSelector: {}
 #       policyTypes:
 #         - Ingress
+
+# Pi runtime for core chat. Scale independently of API workers.
+# Python APIs enqueue runs; Pi workers execute them and call internal tool APIs.
+# ONYX_AGENT_SERVICE_TOKEN comes from the generated agent-auth Secret.
+agent:
+  replicaCount: 2
+  # Override when the API has a nonempty API_PREFIX or a custom address.
+  apiUrl: ""
+  image:
+    repository: onyxdotapp/onyx-agent
+    tag: ""
+    pullPolicy: IfNotPresent
+  # Existing secret must contain a `token` key. Empty creates a release-scoped secret.
+  existingSecret: ""
+  # Provisional limits. Measure provider, tool, and memory capacity before increasing.
+  # Set configMap.ONYX_AGENT_TOOL_CONCURRENCY (default16) for tool callbacks per API process.
+  maxConcurrentRuns: 64
+  # Total run budget, including queue wait. Supported range: 1–1800 seconds.
+  runTimeoutSeconds: 1800
+  drainTimeoutSeconds: 1800
+  terminationGracePeriodSeconds: 1830
+  autoscaling:
+    enabled: false
+    # KEDA is required when enabled. It creates the only HPA for this Deployment.
+    minReplicas: 2
+    maxReplicas: 32
+    targetRunsPerWorker: 40
+    prometheusAddress: ""
+    # Required query must select this release's global queue gauge, using max, not sum.
+    query: ""
+    scaleDownStabilizationSeconds: 300
+    fallbackReplicas: 2
+    targetCPUUtilizationPercentage: null
+  # Chat payloads must never enter the persistent job queue, including incognito chat.
+  # Defaults to the existing nonpersistent application Redis.
+  stateRedis:
+    existingSecret: ""
+    secretKey: url
+  redis:
+    enabled: true
+    # For managed Redis, disable the bundled instance and supply a Secret with a URL.
+    # Configure persistence and noeviction on the managed instance.
+    existingSecret: ""
+    secretKey: url
+    image: redis:7.4-alpine
+    storageSize: 8Gi
+    storageClassName: null
+    maxMemory: 512mb
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        memory: 1Gi
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      memory: 2Gi
+  # Additional provider proxy settings or a mounted custom CA bundle.
+  extraEnv: []
+  extraVolumeMounts: []
+  extraVolumes: []

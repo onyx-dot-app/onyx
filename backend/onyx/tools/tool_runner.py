@@ -250,6 +250,9 @@ def run_tool_calls(
     # When False, don't pass memory context to search tools for query expansion
     # (but still pass it to the memory tool for persistence)
     inject_memories_in_prompt: bool = True,
+    *,
+    preserve_call_ids: bool = False,
+    execution_concurrency: int | None = None,
 ) -> ParallelToolCallResponse:
     """Run (optionally merged) tool calls in parallel and update citation mappings.
 
@@ -291,7 +294,9 @@ def run_tool_calls(
     # Merge tool calls for SearchTool, WebSearchTool, and OpenURLTool
     if url_snippet_map is None:
         url_snippet_map = {}
-    merged_tool_calls = _merge_tool_calls(tool_calls)
+    merged_tool_calls = (
+        tool_calls if preserve_call_ids else _merge_tool_calls(tool_calls)
+    )
 
     if not merged_tool_calls:
         return ParallelToolCallResponse(
@@ -431,7 +436,9 @@ def run_tool_calls(
     tool_run_results: list[ToolResponse | None] = run_functions_tuples_in_parallel(
         functions_with_args,
         allow_failures=True,  # Continue even if some tools fail
-        max_workers=max_concurrent_tools,
+        max_workers=execution_concurrency
+        if execution_concurrency is not None
+        else max_concurrent_tools,
         timeout=TOOL_EXECUTION_TIMEOUT_SECONDS,
     )
 

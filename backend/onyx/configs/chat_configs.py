@@ -1,4 +1,14 @@
 import os
+from enum import Enum
+
+
+class ChatEngine(str, Enum):
+    PI = "pi"
+    LEGACY = "legacy"
+
+
+# Deployment-wide selection. Invalid values fail startup instead of changing engines silently.
+CHAT_ENGINE = ChatEngine(os.environ.get("ONYX_CHAT_ENGINE", "pi"))
 
 NUM_RETURNED_HITS = 50
 

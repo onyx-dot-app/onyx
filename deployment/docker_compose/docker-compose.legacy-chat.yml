@@ -1,0 +1,20 @@
+# Use with the base Compose file to run core chat without Pi workers or queue Redis.
+services:
+  api_server:
+    environment:
+      ONYX_CHAT_ENGINE: legacy
+    depends_on:
+      agent_redis:
+        condition: service_healthy
+        required: false
+  background:
+    environment:
+      ONYX_CHAT_ENGINE: legacy
+    depends_on:
+      agent_redis:
+        condition: service_healthy
+        required: false
+  agent_service:
+    profiles: [pi]
+  agent_redis:
+    profiles: [pi]

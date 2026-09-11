@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Any, Callable, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from onyx.chat.emitter import Emitter
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT, NUM_RETURNED_HITS
@@ -199,6 +199,7 @@ class ChatFile(BaseModel):
 
     filename: str
     content: bytes
+    source_file_id: str | None = Field(default=None, exclude=True)
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -208,6 +209,7 @@ class ChatFile(BaseModel):
         *,
         filename: str,
         loader: Callable[[], bytes],
+        source_file_id: str | None = None,
     ) -> "ChatFile":
         """Construct a ChatFile whose ``content`` is loaded on first access.
 
@@ -215,7 +217,7 @@ class ChatFile(BaseModel):
         is unchanged. PythonTool's ``.content`` access transparently triggers
         the loader and memoizes the result.
         """
-        inst = cls(filename=filename, content=b"")
+        inst = cls(filename=filename, content=b"", source_file_id=source_file_id)
         install_lazy_content_loader(inst, loader)
         return inst
 

@@ -57,6 +57,12 @@ class _MemoryCacheBackend(CacheBackend):
     def delete(self, key: str) -> None:
         self._store.pop(key, None)
 
+    def delete_if_value(self, key: str, expected: bytes) -> bool:
+        if self.get(key) != expected:
+            return False
+        self.delete(key)
+        return True
+
     def exists(self, key: str) -> bool:
         return key in self._store
 

@@ -77,6 +77,16 @@ class RedisCacheBackend(CacheBackend):
     def delete(self, key: str) -> None:
         self._r.delete(key)
 
+    def delete_if_value(self, key: str, expected: bytes) -> bool:
+        return bool(
+            self._r.eval(
+                "if redis.call('GET', KEYS[1]) == ARGV[1] then "
+                "return redis.call('DEL', KEYS[1]) end return 0",
+                keys=[key],
+                args=[expected],
+            )
+        )
+
     def exists(self, key: str) -> bool:
         return bool(self._r.exists(key))
 

@@ -5,6 +5,7 @@ from collections.abc import Generator
 from datetime import timedelta
 from uuid import UUID
 
+from anyio import to_thread
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -52,9 +53,11 @@ from onyx.chat.stop_signal_checker import set_fence
 from onyx.chat.stream_buffer import has_stream_buffer, read_stream_chunks
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.chat_configs import (
+    CHAT_ENGINE,
     CHAT_HEARTBEAT_INTERVAL_S,
     CHAT_RESUME_POLL_INTERVAL_S,
     HARD_DELETE_CHATS,
+    ChatEngine,
 )
 from onyx.configs.constants import (
     PUBLIC_API_TAGS,
@@ -792,7 +795,7 @@ def end_incognito_session(
         }
     },
 )
-def handle_send_chat_message(
+async def handle_send_chat_message(
     chat_message_req: SendMessageRequest,
     request: Request,
     user: User = Depends(
@@ -834,6 +837,41 @@ def handle_send_chat_message(
     if get_hashed_api_key_from_request(request) or get_hashed_pat_from_request(request):
         chat_message_req.origin = MessageOrigin.API
 
+    if not chat_message_req.stream:
+        if is_usage_limits_enabled():
+            with get_session_with_current_tenant() as usage_db_session:
+                check_usage_and_raise(
+                    db_session=usage_db_session,
+                    usage_type=UsageType.NON_STREAMING_API_CALLS,
+                    tenant_id=tenant_id,
+                    pending_amount=1,
+                )
+                increment_usage(
+                    db_session=usage_db_session,
+                    usage_type=UsageType.NON_STREAMING_API_CALLS,
+                    amount=1,
+                )
+                usage_db_session.commit()
+
+    if CHAT_ENGINE == ChatEngine.PI and not chat_message_req.deep_research:
+        from onyx.chat.pi.service import chat_response
+
+        if (
+            chat_message_req.llm_overrides
+            and len(chat_message_req.llm_overrides) > 1
+            and not chat_message_req.stream
+        ):
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT, "Multi-model mode requires stream=True."
+            )
+        return await chat_response(
+            request,
+            chat_message_req,
+            user,
+            extract_headers(request.headers, LITELLM_PASS_THROUGH_HEADERS),
+            get_custom_tool_additional_request_headers(request.headers),
+        )
+
     # Multi-model streaming path: 2-3 LLMs in parallel (streaming only)
     is_multi_model = (
         chat_message_req.llm_overrides is not None
@@ -874,21 +912,6 @@ def handle_send_chat_message(
 
     # Non-streaming path: consume all packets and return complete response
     if not chat_message_req.stream:
-        if is_usage_limits_enabled():
-            with get_session_with_current_tenant() as usage_db_session:
-                check_usage_and_raise(
-                    db_session=usage_db_session,
-                    usage_type=UsageType.NON_STREAMING_API_CALLS,
-                    tenant_id=tenant_id,
-                    pending_amount=1,
-                )
-                increment_usage(
-                    db_session=usage_db_session,
-                    usage_type=UsageType.NON_STREAMING_API_CALLS,
-                    amount=1,
-                )
-                usage_db_session.commit()
-
         state_container = ChatStateContainer()
         packets = handle_stream_message_objects(
             new_msg_req=chat_message_req,
@@ -903,7 +926,7 @@ def handle_send_chat_message(
             additional_context=chat_message_req.additional_context,
             external_state_container=state_container,
         )
-        result = gather_stream_full(packets, state_container)
+        result = await to_thread.run_sync(gather_stream_full, packets, state_container)
         # CreateChatSessionID is only yielded for newly-created sessions, so for
         # follow-up messages on an existing session the aggregated response would
         # otherwise omit chat_session_id. Backfill it from the request so the
@@ -1278,8 +1301,9 @@ _RESUME_MAX_CHUNKS_PER_READ = 32
 
 
 @router.get("/chat-session/{session_id}/resume-stream")
-def resume_chat_stream(
+async def resume_chat_stream(
     session_id: UUID,
+    request: Request,
     cursor: int = Query(0, ge=0),
     user: User = Depends(
         require_permission(Permission.READ_CHAT, allow_anonymous=True)
@@ -1289,21 +1313,41 @@ def resume_chat_stream(
     live until the run completes. Serves any pod: the buffer lives in the
     shared cache. 404 when the session has no resumable run — the client
     falls back to refetching the session."""
-    # Short-lived session: a Depends(get_session) would stay checked out (idle
-    # in transaction) for the lifetime of the SSE response.
-    with get_session_with_current_tenant() as db_session:
-        try:
-            get_chat_session_by_id(
-                chat_session_id=session_id,
-                user_id=user.id,
-                db_session=db_session,
-            )
-        except ValueError:
-            raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND)
+    from anyio import to_thread
 
+    from onyx.chat.pi.storage import StreamHub, stream_key
+    from onyx.db.agent_runs import latest_group
+
+    def authorize() -> None:
+        with get_session_with_current_tenant() as db_session:
+            try:
+                get_chat_session_by_id(
+                    chat_session_id=session_id, user_id=user.id, db_session=db_session
+                )
+            except ValueError:
+                raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND)
+
+    await to_thread.run_sync(authorize)
     cache = get_cache_backend()
-    run_id = get_processing_run_id(session_id, cache)
-    if run_id is None or not has_stream_buffer(cache, session_id, run_id):
+    run_id = await to_thread.run_sync(get_processing_run_id, session_id, cache)
+    group = (
+        await to_thread.run_sync(latest_group, session_id)
+        if CHAT_ENGINE == ChatEngine.PI
+        else None
+    )
+    if group is not None and (run_id is None or run_id == group):
+        hub: StreamHub = request.app.state.agent_stream_hub
+        key = stream_key(session_id, group)
+        if not await hub.redis.exists(key) or await hub.redis.exists(key + ":gap"):
+            raise OnyxError(
+                OnyxErrorCode.NOT_FOUND, "No resumable run for this chat session"
+            )
+        return StreamingResponse(
+            hub.stream(key, cursor), media_type="text/event-stream"
+        )
+    if run_id is None or not await to_thread.run_sync(
+        has_stream_buffer, cache, session_id, run_id
+    ):
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND, "No resumable run for this chat session"
         )
@@ -1376,5 +1420,9 @@ def stop_chat_session(
     except ValueError:
         raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Chat session not found")
 
+    from onyx.db.agent_runs import cancel_session_runs
+
+    if CHAT_ENGINE == ChatEngine.PI:
+        cancel_session_runs(chat_session_id)
     set_fence(chat_session_id, get_cache_backend(), True)
     return {"message": "Chat session stopped"}

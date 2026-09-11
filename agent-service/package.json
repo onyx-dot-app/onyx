@@ -1,0 +1,27 @@
+{
+  "name": "@onyx/agent-service",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "1.4.2",
+    "prettier": "3.9.6",
+    "typescript": "7.0.2"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.123.0",
+    "@anthropic-ai/vertex-sdk": "0.19.8",
+    "@earendil-works/pi-agent-core": "0.85.1",
+    "@earendil-works/pi-ai": "0.85.1",
+    "bullmq": "6.3.4",
+    "google-auth-library": "10",
+    "ioredis": "6.0.0",
+    "typebox": "1.3.7",
+    "zod": "4.6.2"
+  },
+  "scripts": {
+    "dev": "bun --watch src/server.ts",
+    "start": "bun src/server.ts",
+    "check": "tsc --noEmit",
+    "test": "bun test"
+  }
+}

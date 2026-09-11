@@ -27,6 +27,7 @@ dependencies = [
 
 [dependency-groups]
 backend = [
+    "bullmq==2.15.0",
     "aiohttp==3.14.3",
     "alembic==1.18.4",
     "asyncpg==0.30.0",
@@ -130,6 +131,7 @@ backend = [
     "opentelemetry-proto>=1.42.1",
     "python3-saml==1.15.0",
     "xmlsec==1.3.17",
+    "websockets==15.0.1",
 ]
 
 # Dev tools
@@ -363,7 +365,8 @@ known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 "backend/onyx/background/celery/tasks/port/tasks.py" = ["C901"] # 27
 "backend/onyx/background/indexing/run_docfetching.py" = ["C901"] # 33
 "backend/onyx/chat/citation_processor.py" = ["C901"] # 30
-"backend/onyx/chat/llm_loop.py" = ["C901"] # 46
+"backend/onyx/chat/message_history.py" = ["C901"] # 31
+"backend/onyx/chat/llm_loop.py" = ["C901"] # 46 (legacy loop)
 "backend/onyx/chat/llm_step.py" = ["C901"] # 51
 "backend/onyx/chat/process_message.py" = ["C901"] # 47
 "backend/onyx/connectors/blob/connector.py" = ["C901"] # 24

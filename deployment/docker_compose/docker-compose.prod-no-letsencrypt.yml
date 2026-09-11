@@ -7,6 +7,47 @@
 name: onyx
 
 services:
+  agent_service:
+    image: ${ONYX_AGENT_IMAGE:-onyxdotapp/onyx-agent:${IMAGE_TAG:-latest}}
+    build:
+      context: ../../agent-service
+    restart: unless-stopped
+    scale: ${ONYX_AGENT_REPLICAS:-1}
+    stop_grace_period: ${ONYX_AGENT_STOP_GRACE_PERIOD:-1830s}
+    depends_on:
+      agent_redis:
+        condition: service_healthy
+      api_server:
+        condition: service_healthy
+    environment:
+      - ONYX_CHAT_ENGINE=${ONYX_CHAT_ENGINE:-pi}
+      - ONYX_AGENT_REDIS_URL=${ONYX_AGENT_REDIS_URL:-redis://agent_redis:6379/0}
+      - ONYX_AGENT_STATE_REDIS_URL=${ONYX_AGENT_STATE_REDIS_URL:-redis://cache:6379/0}
+      - ONYX_AGENT_RUN_TIMEOUT_SECONDS=${ONYX_AGENT_RUN_TIMEOUT_SECONDS:-1800}
+      - ONYX_AGENT_API_URL=${ONYX_AGENT_API_URL:-http://api_server:8080/internal/agent}
+      - ONYX_AGENT_MAX_CONCURRENT_RUNS=${ONYX_AGENT_MAX_CONCURRENT_RUNS:-64}
+      - ONYX_AGENT_DRAIN_TIMEOUT_SECONDS=${ONYX_AGENT_DRAIN_TIMEOUT_SECONDS:-1800}
+      - ONYX_AGENT_SERVICE_HOST=0.0.0.0
+      - ONYX_AGENT_SERVICE_TOKEN=${ONYX_AGENT_SERVICE_TOKEN:-}
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://localhost:8091/health').then(r => process.exit(r.ok ? 0 : 1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Agent jobs must not share the evicting application cache.
+  agent_redis:
+    image: ${BASE_IMAGE_REGISTRY:-docker.io}/library/redis:7.4-alpine
+    command: redis-server --appendonly yes --appendfsync everysec --maxmemory 512mb --maxmemory-policy noeviction
+    restart: unless-stopped
+    volumes:
+      - agent_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   api_server:
     image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
     build:
@@ -23,6 +64,8 @@ services:
       - path: .env
         required: false
     depends_on:
+      agent_redis:
+        condition: service_healthy
       relational_db:
         condition: service_started
       opensearch:
@@ -35,6 +78,11 @@ services:
         condition: service_started
     restart: unless-stopped
     environment:
+      - ONYX_CHAT_ENGINE=${ONYX_CHAT_ENGINE:-pi}
+      - ONYX_AGENT_REDIS_URL=${ONYX_AGENT_REDIS_URL:-redis://agent_redis:6379/0}
+      - ONYX_AGENT_STATE_REDIS_URL=${ONYX_AGENT_STATE_REDIS_URL:-redis://cache:6379/0}
+      - ONYX_AGENT_RUN_TIMEOUT_SECONDS=${ONYX_AGENT_RUN_TIMEOUT_SECONDS:-1800}
+      - ONYX_AGENT_SERVICE_TOKEN=${ONYX_AGENT_SERVICE_TOKEN:-}
       # Auth Settings
       - AUTH_TYPE=${AUTH_TYPE:-oidc}
       - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
@@ -101,6 +149,8 @@ services:
       - path: .env
         required: false
     depends_on:
+      agent_redis:
+        condition: service_healthy
       relational_db:
         condition: service_started
       opensearch:
@@ -113,6 +163,11 @@ services:
         condition: service_started
     restart: unless-stopped
     environment:
+      - ONYX_CHAT_ENGINE=${ONYX_CHAT_ENGINE:-pi}
+      - ONYX_AGENT_REDIS_URL=${ONYX_AGENT_REDIS_URL:-redis://agent_redis:6379/0}
+      - ONYX_AGENT_STATE_REDIS_URL=${ONYX_AGENT_STATE_REDIS_URL:-redis://cache:6379/0}
+      - ONYX_AGENT_RUN_TIMEOUT_SECONDS=${ONYX_AGENT_RUN_TIMEOUT_SECONDS:-1800}
+      - ONYX_AGENT_SERVICE_TOKEN=${ONYX_AGENT_SERVICE_TOKEN:-}
       - AUTH_TYPE=${AUTH_TYPE:-oidc}
       - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
       - OPENSEARCH_HOST=${OPENSEARCH_HOST:-opensearch}
@@ -509,6 +564,7 @@ services:
     # privileged: true
 
 volumes:
+  agent_redis_data:
   # Necessary for persisting data for use
   db_volume:
   minio_data:

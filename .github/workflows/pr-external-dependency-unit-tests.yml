@@ -9,6 +9,7 @@ on:
     branches: [main]
     paths:
       - "backend/**"
+      - "agent-service/**"
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/pr-external-dependency-unit-tests.yml"
@@ -113,6 +114,21 @@ jobs:
             backend/requirements/dev.txt
             backend/requirements/ee.txt
 
+      - name: Setup Bun
+        if: matrix.test-dir == 'chat'
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+          no-cache: true
+
+      - name: Install and check agent service
+        if: matrix.test-dir == 'chat'
+        working-directory: agent-service
+        run: |
+          bun install --frozen-lockfile
+          bun run check
+          bun test
+
       - name: Setup Helm
         if: matrix.test-dir == 'craft_helm'
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # ratchet:azure/setup-helm@v5.0.1
@@ -161,6 +177,14 @@ jobs:
         working-directory: backend
         run: |
           alembic upgrade head
+
+      - name: Verify agent queue interoperability and recovery
+        if: matrix.test-dir == 'chat'
+        working-directory: agent-service
+        env:
+          ONYX_AGENT_TEST_REDIS_URL: redis://localhost:6379/15
+          ONYX_AGENT_TEST_PYTHON: python
+        run: bun test tests/worker.test.ts
 
       # A real OIDC server for the live multi-provider login test. Auth leg only.
       # Fail if it never becomes ready, otherwise the live tests would silently skip.

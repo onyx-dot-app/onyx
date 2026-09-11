@@ -15,8 +15,8 @@ from onyx.chat.citation_utils import (
     update_citation_processor_from_tool_response,
 )
 from onyx.chat.emitter import Emitter
-from onyx.chat.llm_loop import construct_message_history
 from onyx.chat.llm_step import run_llm_step, run_llm_step_pkt_generator
+from onyx.chat.message_history import construct_message_history
 from onyx.chat.models import ChatMessageSimple, LlmStepResult, ToolCallSimple
 from onyx.chat.prompt_utils import build_language_section, with_language_section
 from onyx.configs.chat_configs import DR_REPORT_LLM_TIMEOUT_S

@@ -1,8 +1,8 @@
 # =============================================================================
 # ONYX LITE — MINIMAL DEPLOYMENT OVERLAY
 # =============================================================================
-# Overlay to run Onyx in a minimal configuration: no vector database, no Redis,
-# no model servers, and no background workers. Only PostgreSQL is required. In
+# Overlay to run Onyx in a minimal configuration: no vector database,
+# no model servers, and no background workers. PostgreSQL and both Redis services are required. In
 # this mode, connectors and RAG search are disabled, but the core chat
 # experience (LLM conversations, tools, user file uploads, Projects, Agent
 # knowledge, code interpreter) still works.
@@ -15,18 +15,17 @@
 #                  -f docker-compose.dev.yml up -d --wait
 #
 # This overlay:
-#   - Moves both model servers, OpenSearch, MinIO, Redis (cache), and the
+#   - Moves both model servers, OpenSearch, MinIO, and the
 #     background worker to profiles so they do not start by default
 #   - Makes depends_on references to removed services optional
 #   - Sets DISABLE_VECTOR_DB=true on the api_server
-#   - Uses PostgreSQL for caching and auth instead of Redis
+#   - Keeps agent Redis for chat dispatch; uses PostgreSQL for caching and auth
 #   - Uses PostgreSQL for file storage instead of S3/MinIO
 #
 # To selectively bring services back:
 #   --profile vectordb          Indexing model server
 #   --profile inference         Inference model server
 #   --profile background        Background worker (Celery) — also needs redis
-#   --profile redis             Redis cache
 #   --profile opensearch        OpenSearch
 #   --profile s3-filestore      MinIO (S3-compatible file store)
 # =============================================================================
@@ -66,10 +65,7 @@ services:
         condition: service_started
         required: false
 
-  # Move Redis to a profile so it does not start by default.
-  # The Postgres cache backend replaces Redis in lite mode.
-  cache:
-    profiles: ["redis"]
+  # Redis stays enabled for transient agent state, including incognito chat.
 
   # Move indexing model server to a profile so it does not start.
   indexing_model_server:

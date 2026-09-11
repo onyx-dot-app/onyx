@@ -77,3 +77,10 @@ def is_chat_session_processing(chat_session_id: UUID, cache: CacheBackend) -> bo
         True if the chat session is processing a message, False otherwise
     """
     return cache.exists(_get_fence_key(chat_session_id))
+
+
+def release_processing_run(
+    chat_session_id: UUID, cache: CacheBackend, run_id: int
+) -> bool:
+    """A late completion must never clear a newer run's processing fence."""
+    return cache.delete_if_value(_get_fence_key(chat_session_id), str(run_id).encode())

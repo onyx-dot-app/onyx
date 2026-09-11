@@ -185,7 +185,7 @@ are:
 - Prepares all of the tools for the LLM
 - Creates the state container objects for use in the loop
 
-### Execution (`_run_models` function):
+### Legacy and deep-research execution (`_run_models` function):
 
 Each model runs in its own worker thread inside a `ThreadPoolExecutor`. Workers write packets to a shared
 `merged_queue` via an `Emitter`; the main thread drains the queue and yields packets in arrival order. This
@@ -213,29 +213,36 @@ the database. The state container can be added to by any of the underlying layer
 
 ### Stopping Generation
 
-The drain loop in `_run_models` checks `check_is_connected()` every 50 ms (on queue timeout). The signal itself
-is stored in Redis and is set by the user calling the stop endpoint. On disconnect, the drain loop saves
-partial state for every model, yields an `OverallStop(stop_reason="user_cancelled")` packet, and returns.
-A `drain_done` event signals emitters to stop blocking so worker threads can exit quickly. Workers that
-already completed successfully will self-complete (persist their response) if the drain loop exited before
-reaching the normal completion path.
+The legacy writer checks the shared stop signal while waiting for model packets.
+It saves partial state when the user stops generation.
+Closing the browser stream does not set this signal. The writer continues and saves packets for reconnect replay.
 
-## 2. LLM Loop (run_llm_loop function)
+## 2. Pi agent runtime
 
-This function handles the logic of the Turn. It's essentially a while loop where context is added and modified (according what
-is outlined in the first half of this doc). Its main functionality is:
+With `ONYX_CHAT_ENGINE=pi`, core chat runs through `pi/chat.py` and the TypeScript [agent service](../../../agent-service/README.md).
+Pi owns model inference, tool validation, tool scheduling, and continuation.
+The API admits runs through `pi/service.py` and records dispatch intent in Postgres.
+Python publishes run IDs to BullMQ. Independent TypeScript workers claim them through authenticated HTTP.
+`ChatHost` supplies context and tools through stateless callbacks on any API replica.
+Typed transient snapshots retain history, citations, and partial output between callbacks.
+Each model response uses one bounded HTTP upload. Token projection holds no idle Python thread.
+The browser tails Redis replay through an async stream and can reconnect to another API replica.
 
-- Translate and truncate the context for the LLM inference
-- Add context modifiers like reminders, updates to the system prompts, etc.
-- Run tool calls and gather results
-- Build some of the objects stored in the state container.
+Postgres fences run attempts and duplicate tool callbacks. Queue redelivery never replays a claimed agent.
+Expired execution becomes interrupted; partial output is saved when its checkpoint remains available.
+Persistent job Redis contains IDs only. Conversation state uses a separate transient Redis with bounded storage.
 
-## 3. LLM Step (run_llm_step function)
+Workers drain active runs on shutdown. Helm supports KEDA scaling; Compose supports manual replicas.
+See the agent service README for limits, deployment settings, and validation.
+Its context callback applies token budgets, prompts, and reminders before each inference.
+Its tool callback executes Onyx tools with the originating user's authorization and persists their effects.
+Pi reports every result, including validation errors, before requesting the next context.
 
-This function is a single inference of the LLM. It's a wrapper around the LLM stream function which handles packet translations
-so that the Emitter can emit individual tokens as soon as they arrive. It also keeps track of the different sections since they
-do not all come at once (reasoning, answers, tool calls are all built up token by token). This layer also tracks the different
-tool calls and returns that to the LLM Loop to execute.
+## 3. Chat presentation
+
+`pi/presentation.py` converts Pi output into existing Onyx packets and partial-save state.
+It handles reasoning, text, citations, and streamed tool arguments.
+`llm_step.py` handles legacy inference and supplies shared history formatting.
 
 ## Things to know
 
@@ -243,9 +250,18 @@ tool calls and returns that to the LLM Loop to execute.
   concept of a turn. The turn_index for the frontend is which block does this packet belong to. So while a reasoning + tool call
   comes from the same LLM inference (same backend LLM step), they are 2 turns to the frontend because that's how it's rendered.
 
-- There are 3 representations of a message, each scoped to a different layer:
+- Message representations are scoped to each layer:
   1. **ChatMessage** — The database model. Should be converted into ChatMessageSimple early and never passed deep into the flow.
   2. **ChatMessageSimple** — The canonical data model used throughout the codebase. This is the rich, full-featured representation
      of a message. Any modifications or additions to message structure should be made here.
   3. **LanguageModelInput** — The LLM-facing representation. Intentionally minimal so the LLM interface layer stays clean and
      easy to maintain/extend.
+
+  4. **Pi Message** — The runtime transcript. Native assistant messages retain provider signatures during tool continuations.
+
+## Deployment engine selection
+
+`ONYX_CHAT_ENGINE=pi` (default) sends core chat turns to Pi workers.
+`ONYX_CHAT_ENGINE=legacy` uses `llm_loop.run_llm_loop` through the original threaded runner.
+Both paths share context construction and error classification. Deep research keeps its own loop.
+Use the same setting on API and background services. Drain active chats before changing it.

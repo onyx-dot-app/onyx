@@ -10,8 +10,8 @@ from typing import cast
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
 from onyx.chat.emitter import Emitter
-from onyx.chat.llm_loop import construct_message_history
 from onyx.chat.llm_step import run_llm_step, run_llm_step_pkt_generator
+from onyx.chat.message_history import construct_message_history
 from onyx.chat.models import (
     ChatMessageSimple,
     FileToolMetadata,

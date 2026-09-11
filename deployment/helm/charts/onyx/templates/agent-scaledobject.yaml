@@ -1,0 +1,44 @@
+{{- if eq .Values.chatEngine "pi" }}
+{{- if .Values.agent.autoscaling.enabled }}
+{{- if ge (int .Values.agent.autoscaling.targetRunsPerWorker) (int .Values.agent.maxConcurrentRuns) }}
+{{- fail "agent.autoscaling.targetRunsPerWorker must be below agent.maxConcurrentRuns" }}
+{{- end }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "onyx.resourceName" (list . "agent") }}
+spec:
+  scaleTargetRef:
+    name: {{ include "onyx.resourceName" (list . "agent") }}
+  minReplicaCount: {{ .Values.agent.autoscaling.minReplicas }}
+  maxReplicaCount: {{ .Values.agent.autoscaling.maxReplicas }}
+  pollingInterval: 15
+  fallback:
+    failureThreshold: 3
+    replicas: {{ .Values.agent.autoscaling.fallbackReplicas }}
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: {{ .Values.agent.autoscaling.scaleDownStabilizationSeconds }}
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 60
+  triggers:
+    - type: prometheus
+      metricType: AverageValue
+      metadata:
+        serverAddress: {{ required "agent.autoscaling.prometheusAddress is required" .Values.agent.autoscaling.prometheusAddress | quote }}
+        query: {{ required "agent.autoscaling.query must select this release's global queue gauge with max()" .Values.agent.autoscaling.query | quote }}
+        threshold: {{ .Values.agent.autoscaling.targetRunsPerWorker | quote }}
+        ignoreNullValues: "false"
+    {{- with .Values.agent.autoscaling.targetCPUUtilizationPercentage }}
+    - type: cpu
+      metricType: Utilization
+      metadata:
+        value: {{ . | quote }}
+    {{- end }}
+{{- end }}
+
+{{- end }}

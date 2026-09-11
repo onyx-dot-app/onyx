@@ -102,3 +102,42 @@ Every image publishes a `-dev` twin for each of its tags (e.g. `latest-dev`, `v1
 its `-dev` twin adds interactive debugging tools (vim, nano, curl, ps, psql) that the default image leaves out to stay
 minimal. The web-server, model-server, and sandbox `-dev` tags are identical to their plain counterparts and exist so
 that one version string covers every image.
+
+## Pi agent workers
+
+The API submits chat runs to Redis. Pi workers execute runs and call tools on the API servers.
+Set `ONYX_AGENT_REPLICAS` to change worker capacity. To scale a running installation:
+
+```sh
+docker compose up -d --scale agent_service=4
+```
+
+Each worker accepts at most `ONYX_AGENT_MAX_CONCURRENT_RUNS` active runs (default 64).
+Measure memory, model quotas, and tool capacity before increasing this limit.
+`ONYX_AGENT_RUN_TIMEOUT_SECONDS` accepts 1–1800 seconds, including queue wait.
+Runs cannot exceed 30 minutes.
+Compose replicas share one host. Use Kubernetes for automatic scaling across hosts.
+
+Workers stop accepting jobs during shutdown and drain existing runs.
+Keep `ONYX_AGENT_STOP_GRACE_PERIOD` longer than `ONYX_AGENT_DRAIN_TIMEOUT_SECONDS`.
+The defaults allow 30 minutes for draining. Forced termination can interrupt a run.
+Interrupted tool calls are not automatically replayed.
+
+`agent_redis` stores job identifiers with AOF persistence and the `noeviction` policy.
+The separate `cache` Redis holds transient chat state with persistence disabled.
+Both services are required for core chat, including Onyx Lite.
+To use managed Redis, set `ONYX_AGENT_REDIS_URL` and `ONYX_AGENT_STATE_REDIS_URL`.
+Do not enable persistence for state Redis: it can contain incognito chat content.
+Do not point both URLs at the same Redis instance.
+
+### Legacy chat deployment
+
+Use `ONYX_CHAT_ENGINE=legacy` on API and background services to select the original LiteLLM chat loop.
+Drain active chats and restart those services when changing engines. Pi remains the default.
+To also omit Pi workers and queue Redis, use:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.legacy-chat.yml up -d
+```
+
+Stop existing Pi workers and queue Redis after their runs drain. The overlay does not stop already running containers.

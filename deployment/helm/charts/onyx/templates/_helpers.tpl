@@ -94,7 +94,61 @@ Set secret name
 {{/*
 Create env vars from secrets (global secrets only — skips entries with allPods: false)
 */}}
+{{- define "onyx.agentRedisEnv" -}}
+- name: ONYX_AGENT_REDIS_URL
+  {{- if .Values.agent.redis.existingSecret }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.agent.redis.existingSecret }}
+      key: {{ .Values.agent.redis.secretKey }}
+  {{- else if .Values.agent.redis.enabled }}
+  value: "redis://{{ include "onyx.resourceName" (list . "agent-redis") }}:6379/0"
+  {{- else }}
+  {{- fail "agent.redis.existingSecret is required when agent.redis.enabled=false" }}
+  {{- end }}
+{{- end }}
+
+{{- define "onyx.agentStateRedisEnv" -}}
+- name: ONYX_AGENT_STATE_REDIS_URL
+  {{- if .Values.agent.stateRedis.existingSecret }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.agent.stateRedis.existingSecret }}
+      key: {{ .Values.agent.stateRedis.secretKey }}
+  {{- else if index .Values.configMap "ONYX_AGENT_STATE_REDIS_URL" }}
+  value: {{ index .Values.configMap "ONYX_AGENT_STATE_REDIS_URL" | quote }}
+  {{- else if .Values.redis.enabled }}
+  value: "redis://{{ .Values.redis.redisStandalone.name | default .Release.Name }}:6379/0"
+  {{- with .Values.redis.redisStandalone.redisSecret }}
+- name: ONYX_AGENT_STATE_REDIS_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: {{ .secretName }}
+      key: {{ .secretKey }}
+  {{- end }}
+  {{- else }}
+  {{- fail "agent.stateRedis.existingSecret must reference nonpersistent Redis when redis.enabled=false" }}
+  {{- end }}
+{{- end }}
+
 {{- define "onyx.envSecrets" -}}
+{{- if not (has .Values.chatEngine (list "pi" "legacy")) }}
+{{- fail "chatEngine must be pi or legacy" }}
+{{- end }}
+- name: ONYX_CHAT_ENGINE
+  value: {{ .Values.chatEngine | quote }}
+{{- if eq .Values.chatEngine "pi" }}
+{{ include "onyx.agentRedisEnv" . }}
+{{ include "onyx.agentStateRedisEnv" . }}
+- name: ONYX_AGENT_RUN_TIMEOUT_SECONDS
+  value: {{ .Values.agent.runTimeoutSeconds | quote }}
+- name: ONYX_AGENT_SERVICE_TOKEN
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.agent.existingSecret | default (include "onyx.resourceName" (list . "agent-auth")) }}
+      key: token
+{{- end }}
+
     {{- range $secretSuffix, $secretContent := .Values.auth }}
     {{- $allPods := or (not (hasKey $secretContent "allPods")) (ne (toString $secretContent.allPods) "false") }}
     {{- if and (ne $secretSuffix "metricsAuth") (ne (toString $secretContent.enabled) "false") ($secretContent.secretKeys) $allPods }}

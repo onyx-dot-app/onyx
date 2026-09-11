@@ -4,8 +4,8 @@ from contextlib import contextmanager
 from typing import Callable
 
 from onyx.chat.emitter import Emitter
-from onyx.chat.llm_loop import construct_message_history
 from onyx.chat.llm_step import run_llm_step_pkt_generator
+from onyx.chat.message_history import construct_message_history
 from onyx.chat.models import ChatMessageSimple, ToolCallSimple
 from onyx.coding_agent.mock_tools import (
     BASH_TOOL_CMD_KEY,

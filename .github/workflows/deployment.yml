@@ -1017,6 +1017,219 @@ jobs:
             $(printf '%s\n%s\n' "${META_TAGS}" "${META_DEV_TAGS}" | sed '/^$/d' | xargs -I {} echo -t {}) \
             $IMAGES
 
+  build-agent-amd64:
+    needs:
+      - determine-builds
+      - audit-gate
+    if: needs.determine-builds.outputs.build-backend == 'true'
+    runs-on:
+      - runs-on
+      - runner=2cpu-linux-x64
+      - run-id=${{ github.run_id }}-agent-amd64
+      - extras=ecr-cache
+    timeout-minutes: 90
+    environment: release
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    env:
+      REGISTRY_IMAGE: onyxdotapp/onyx-agent
+    steps:
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - name: Get AWS Secrets
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
+        with:
+          secret-ids: |
+            DOCKER_USERNAME, deploy/docker-username
+            DOCKER_TOKEN, deploy/docker-token
+          parse-json-secrets: true
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302
+        with:
+          images: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+          flavor: |
+            latest=false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_TOKEN }}
+
+      - name: Build and push AMD64
+        id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        with:
+          context: ./agent-service
+          file: ./agent-service/Dockerfile
+          platforms: linux/amd64
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: |
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
+          cache-to: type=inline
+          outputs: type=image,name=${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
+
+
+  build-agent-arm64:
+    needs:
+      - determine-builds
+      - audit-gate
+    if: needs.determine-builds.outputs.build-backend == 'true'
+    runs-on:
+      - runs-on
+      - runner=2cpu-linux-arm64
+      - run-id=${{ github.run_id }}-agent-arm64
+      - extras=ecr-cache
+    timeout-minutes: 90
+    environment: release
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    env:
+      REGISTRY_IMAGE: onyxdotapp/onyx-agent
+    steps:
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - name: Get AWS Secrets
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
+        with:
+          secret-ids: |
+            DOCKER_USERNAME, deploy/docker-username
+            DOCKER_TOKEN, deploy/docker-token
+          parse-json-secrets: true
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302
+        with:
+          images: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+          flavor: |
+            latest=false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_TOKEN }}
+
+      - name: Build and push ARM64
+        id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        with:
+          context: ./agent-service
+          file: ./agent-service/Dockerfile
+          platforms: linux/arm64
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: |
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
+          cache-to: type=inline
+          outputs: type=image,name=${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
+
+
+  merge-agent:
+    needs:
+      - determine-builds
+      - build-agent-amd64
+      - build-agent-arm64
+      - image-audit
+    if: always() && needs.build-agent-amd64.result == 'success' && needs.build-agent-arm64.result == 'success' && needs.image-audit.result == 'success'
+    runs-on:
+      - runs-on
+      - runner=2cpu-linux-x64
+      - run-id=${{ github.run_id }}-merge-agent
+      - extras=ecr-cache
+    timeout-minutes: 90
+    environment: release
+    env:
+      REGISTRY_IMAGE: onyxdotapp/onyx-agent
+    steps:
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - name: Get AWS Secrets
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
+        with:
+          secret-ids: |
+            DOCKER_USERNAME, deploy/docker-username
+            DOCKER_TOKEN, deploy/docker-token
+          parse-json-secrets: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_TOKEN }}
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302
+        with:
+          images: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run == 'true' && format('agent-{0}', needs.determine-builds.outputs.sanitized-tag) || github.ref_name }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-latest == 'true' && 'latest' || '' }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && env.EDGE_TAG == 'true' && 'edge' || '' }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-beta-standalone == 'true' && 'beta' || '' }}
+            type=semver,pattern={{version}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+            type=semver,pattern={{major}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+
+      - name: Create and push manifest
+        env:
+          IMAGE_REPO: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+          AMD64_DIGEST: ${{ needs.build-agent-amd64.outputs.digest }}
+          ARM64_DIGEST: ${{ needs.build-agent-arm64.outputs.digest }}
+          META_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          IMAGES="${IMAGE_REPO}@${AMD64_DIGEST} ${IMAGE_REPO}@${ARM64_DIGEST}"
+          docker buildx imagetools create \
+            $(printf '%s\n' "${META_TAGS}" | xargs -I {} echo -t {}) \
+            $IMAGES
+
+
   build-backend-amd64:
     needs:
       - determine-builds
@@ -1913,12 +2126,14 @@ jobs:
       - determine-builds
       - merge-web-cloud
       - merge-backend
+      - merge-agent
       - merge-model-server
       - merge-sandbox
     if: >-
       always()
       && needs.merge-web-cloud.result == 'success'
       && needs.merge-backend.result == 'success'
+      && needs.merge-agent.result == 'success'
       && needs.merge-model-server.result == 'success'
       && needs.merge-sandbox.result == 'success'
       && needs.determine-builds.outputs.is-cloud-tag == 'true'
@@ -1971,12 +2186,14 @@ jobs:
       - build-web-amd64
       - build-web-cloud-amd64
       - build-backend-amd64
+      - build-agent-amd64
       - build-model-server-amd64
     if: >-
       always() && !cancelled() &&
       (needs.build-web-amd64.result == 'success' ||
        needs.build-web-cloud-amd64.result == 'success' ||
        needs.build-backend-amd64.result == 'success' ||
+       needs.build-agent-amd64.result == 'success' ||
        needs.build-model-server-amd64.result == 'success')
     runs-on:
       - runs-on
@@ -2001,6 +2218,8 @@ jobs:
             registry-image: onyxdotapp/onyx-web-server
           - component: web-cloud
             registry-image: onyxdotapp/onyx-web-server
+          - component: agent
+            registry-image: onyxdotapp/onyx-agent
           - component: backend
             registry-image: onyxdotapp/onyx-backend
           - component: model-server
@@ -2012,6 +2231,7 @@ jobs:
           case "$COMPONENT" in
             web) RESULT="$BUILD_WEB" ;;
             web-cloud) RESULT="$BUILD_WEB_CLOUD" ;;
+            agent) RESULT="$BUILD_AGENT" ;;
             backend) RESULT="$BUILD_BACKEND" ;;
             model-server) RESULT="$BUILD_MODEL_SERVER" ;;
           esac
@@ -2024,6 +2244,7 @@ jobs:
           COMPONENT: ${{ matrix.component }}
           BUILD_WEB: ${{ needs.build-web-amd64.result }}
           BUILD_WEB_CLOUD: ${{ needs.build-web-cloud-amd64.result }}
+          BUILD_AGENT: ${{ needs.build-agent-amd64.result }}
           BUILD_BACKEND: ${{ needs.build-backend-amd64.result }}
           BUILD_MODEL_SERVER: ${{ needs.build-model-server-amd64.result }}
 
@@ -2071,6 +2292,7 @@ jobs:
           case "$COMPONENT" in
             web) DIGEST="$DIGEST_WEB" ;;
             web-cloud) DIGEST="$DIGEST_WEB_CLOUD" ;;
+            agent) DIGEST="$DIGEST_AGENT" ;;
             backend) DIGEST="$DIGEST_BACKEND" ;;
             model-server) DIGEST="$DIGEST_MODEL_SERVER" ;;
           esac
@@ -2085,6 +2307,7 @@ jobs:
           REGISTRY_IMAGE: ${{ matrix.registry-image }}
           DIGEST_WEB: ${{ needs.build-web-amd64.outputs.digest }}
           DIGEST_WEB_CLOUD: ${{ needs.build-web-cloud-amd64.outputs.digest }}
+          DIGEST_AGENT: ${{ needs.build-agent-amd64.outputs.digest }}
           DIGEST_BACKEND: ${{ needs.build-backend-amd64.outputs.digest }}
           DIGEST_MODEL_SERVER: ${{ needs.build-model-server-amd64.outputs.digest }}
 
@@ -2141,6 +2364,9 @@ jobs:
       - build-backend-amd64
       - build-backend-arm64
       - merge-backend
+      - build-agent-amd64
+      - build-agent-arm64
+      - merge-agent
       - build-model-server-amd64
       - build-model-server-arm64
       - merge-model-server
@@ -2149,7 +2375,7 @@ jobs:
       - build-sandbox-arm64
       - merge-sandbox
       - image-audit
-    if: always() && (needs.audit-gate.result == 'failure' || needs.create-release.result == 'failure' || needs.build-desktop.result == 'failure' || needs.build-web-amd64.result == 'failure' || needs.build-web-arm64.result == 'failure' || needs.merge-web.result == 'failure' || needs.build-web-cloud-amd64.result == 'failure' || needs.build-web-cloud-arm64.result == 'failure' || needs.merge-web-cloud.result == 'failure' || needs.build-backend-amd64.result == 'failure' || needs.build-backend-arm64.result == 'failure' || needs.merge-backend.result == 'failure' || needs.build-model-server-amd64.result == 'failure' || needs.build-model-server-arm64.result == 'failure' || needs.merge-model-server.result == 'failure' || needs.prepare-sandbox.result == 'failure' || needs.build-sandbox-amd64.result == 'failure' || needs.build-sandbox-arm64.result == 'failure' || needs.merge-sandbox.result == 'failure' || needs.image-audit.result == 'failure') && needs.determine-builds.outputs.is-test-run != 'true'
+    if: always() && (needs.audit-gate.result == 'failure' || needs.create-release.result == 'failure' || needs.build-desktop.result == 'failure' || needs.build-web-amd64.result == 'failure' || needs.build-web-arm64.result == 'failure' || needs.merge-web.result == 'failure' || needs.build-web-cloud-amd64.result == 'failure' || needs.build-web-cloud-arm64.result == 'failure' || needs.merge-web-cloud.result == 'failure' || needs.build-backend-amd64.result == 'failure' || needs.build-backend-arm64.result == 'failure' || needs.merge-backend.result == 'failure' || needs.build-agent-amd64.result == 'failure' || needs.build-agent-arm64.result == 'failure' || needs.merge-agent.result == 'failure' || needs.build-model-server-amd64.result == 'failure' || needs.build-model-server-arm64.result == 'failure' || needs.merge-model-server.result == 'failure' || needs.prepare-sandbox.result == 'failure' || needs.build-sandbox-amd64.result == 'failure' || needs.build-sandbox-arm64.result == 'failure' || needs.merge-sandbox.result == 'failure' || needs.image-audit.result == 'failure') && needs.determine-builds.outputs.is-test-run != 'true'
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
     timeout-minutes: 90
@@ -2201,6 +2427,15 @@ jobs:
           if [ "${NEEDS_MERGE_BACKEND_RESULT}" == "failure" ]; then
             FAILED_JOBS="${FAILED_JOBS}• merge-backend\\n"
           fi
+          if [ "${NEEDS_BUILD_AGENT_AMD64_RESULT}" == "failure" ]; then
+            FAILED_JOBS="${FAILED_JOBS}• build-agent-amd64\\n"
+          fi
+          if [ "${NEEDS_BUILD_AGENT_ARM64_RESULT}" == "failure" ]; then
+            FAILED_JOBS="${FAILED_JOBS}• build-agent-arm64\\n"
+          fi
+          if [ "${NEEDS_MERGE_AGENT_RESULT}" == "failure" ]; then
+            FAILED_JOBS="${FAILED_JOBS}• merge-agent\\n"
+          fi
           if [ "${NEEDS_BUILD_MODEL_SERVER_AMD64_RESULT}" == "failure" ]; then
             FAILED_JOBS="${FAILED_JOBS}• build-model-server-amd64\\n"
           fi
@@ -2238,6 +2473,9 @@ jobs:
           NEEDS_BUILD_BACKEND_AMD64_RESULT: ${{ needs.build-backend-amd64.result }}
           NEEDS_BUILD_BACKEND_ARM64_RESULT: ${{ needs.build-backend-arm64.result }}
           NEEDS_MERGE_BACKEND_RESULT: ${{ needs.merge-backend.result }}
+          NEEDS_BUILD_AGENT_AMD64_RESULT: ${{ needs.build-agent-amd64.result }}
+          NEEDS_BUILD_AGENT_ARM64_RESULT: ${{ needs.build-agent-arm64.result }}
+          NEEDS_MERGE_AGENT_RESULT: ${{ needs.merge-agent.result }}
           NEEDS_BUILD_MODEL_SERVER_AMD64_RESULT: ${{ needs.build-model-server-amd64.result }}
           NEEDS_BUILD_MODEL_SERVER_ARM64_RESULT: ${{ needs.build-model-server-arm64.result }}
           NEEDS_MERGE_MODEL_SERVER_RESULT: ${{ needs.merge-model-server.result }}

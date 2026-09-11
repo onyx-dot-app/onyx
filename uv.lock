@@ -814,6 +814,20 @@ wheels = [
 ]
 
 [[package]]
+name = "bullmq"
+version = "2.15.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "msgpack" },
+    { name = "redis" },
+    { name = "semver" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d1/de/ca12bdab8ed898e6f4efd375a9d4790c4dfd1e594cec958b5e08240efe5d/bullmq-2.15.0.tar.gz", hash = "sha256:a184d3e7278b4ef6b2cb493efe9322ee4f4939030bf851131255b8a60fa04050", size = 64546, upload-time = "2025-05-13T11:55:16.378Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1e/fb/b151481f9e7219af2e1fa177d195ebbca5d1f205e1ac61e3415a6a3f436d/bullmq-2.15.0-py3-none-any.whl", hash = "sha256:bcde18f00fccc0df5e11aedf416fbfaa7cf2a3087bccc08860e382f046d60ffc", size = 113462, upload-time = "2025-05-13T11:55:15.019Z" },
+]
+
+[[package]]
 name = "cachetools"
 version = "6.2.2"
 source = { registry = "https://pypi.org/simple" }
@@ -4197,6 +4211,7 @@ backend = [
     { name = "boto3" },
     { name = "boxsdk" },
     { name = "braintrust" },
+    { name = "bullmq" },
     { name = "celery" },
     { name = "chardet" },
     { name = "chonkie" },
@@ -4274,6 +4289,7 @@ backend = [
     { name = "trafilatura" },
     { name = "unstructured-client" },
     { name = "urllib3" },
+    { name = "websockets" },
     { name = "xmlsec" },
     { name = "zulip" },
 ]
@@ -4375,6 +4391,7 @@ backend = [
     { name = "boto3", specifier = "==1.39.11" },
     { name = "boxsdk", specifier = "==10.12.0" },
     { name = "braintrust", specifier = "==0.37.0" },
+    { name = "bullmq", specifier = "==2.15.0" },
     { name = "celery", specifier = "==5.5.1" },
     { name = "chardet", specifier = "==5.2.0" },
     { name = "chonkie", specifier = "==1.0.10" },
@@ -4452,6 +4469,7 @@ backend = [
     { name = "trafilatura", specifier = "==1.12.2" },
     { name = "unstructured-client", specifier = "==0.42.6" },
     { name = "urllib3", specifier = "==2.7.0" },
+    { name = "websockets", specifier = "==15.0.1" },
     { name = "xmlsec", specifier = "==1.3.17" },
     { name = "zulip", specifier = "==0.8.2" },
 ]
@@ -6503,6 +6521,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/1c/03/e834bcd866f2f8a49a85eaff47340affa3bfa391ee9912a952a1faa68c7b/secretstorage-3.5.0.tar.gz", hash = "sha256:f04b8e4689cbce351744d5537bf6b1329c6fc68f91fa666f60a380edddcd11be", size = 19884, upload-time = "2025-11-23T19:02:53.191Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b7/46/f5af3402b579fd5e11573ce652019a67074317e18c1935cc0b4ba9b35552/secretstorage-3.5.0-py3-none-any.whl", hash = "sha256:0ce65888c0725fcb2c5bc0fdb8e5438eece02c523557ea40ce0703c266248137", size = 15554, upload-time = "2025-11-23T19:02:51.545Z" },
+]
+
+[[package]]
+name = "semver"
+version = "2.13.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/31/a9/b61190916030ee9af83de342e101f192bbb436c59be20a4cb0cdb7256ece/semver-2.13.0.tar.gz", hash = "sha256:fa0fe2722ee1c3f57eac478820c3a5ae2f624af8264cbdf9000c980ff7f75e3f", size = 45816, upload-time = "2020-10-20T20:16:54.454Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0b/70/b84f9944a03964a88031ef6ac219b6c91e8ba2f373362329d8770ef36f02/semver-2.13.0-py2.py3-none-any.whl", hash = "sha256:ced8b23dceb22134307c1b8abfa523da14198793d9787ac838e70e29e77458d4", size = 12901, upload-time = "2020-10-20T20:16:52.583Z" },
 ]
 
 [[package]]

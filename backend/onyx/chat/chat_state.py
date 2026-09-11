@@ -194,7 +194,7 @@ class AvailableFiles(BaseModel):
 
 @dataclass(frozen=True)
 class ChatTurnSetup:
-    """Immutable context produced by ``build_chat_turn`` and consumed by ``_run_models``.
+    """Immutable admission context consumed by the selected chat engine.
 
     **Detached-safety contract:** instances of this class travel outside the DB
     session that built them. The ORM objects still reachable from this dataclass

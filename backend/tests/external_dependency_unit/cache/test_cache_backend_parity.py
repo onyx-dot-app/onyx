@@ -96,3 +96,49 @@ class TestListParity:
     def test_blpop_timeout(self, cache: CacheBackend) -> None:
         result = cache.blpop([f"parity_empty_{uuid4().hex[:8]}"], timeout=1)
         assert result is None
+
+
+class TestConditionalDeleteParity:
+    def test_delayed_completion_preserves_a_newer_processing_fence(
+        self, cache: CacheBackend
+    ) -> None:
+        from onyx.chat.chat_processing_checker import (
+            get_processing_run_id,
+            release_processing_run,
+            set_processing_status,
+        )
+
+        session_id = uuid4()
+        set_processing_status(session_id, cache, True, run_id=41)
+        assert get_processing_run_id(session_id, cache) == 41
+        # One completion releases the fence; the next chat starts before a
+        # second completion, which had observed the old value, resumes.
+        assert release_processing_run(session_id, cache, 41)
+        set_processing_status(session_id, cache, True, run_id=42)
+        assert not release_processing_run(session_id, cache, 41)
+        assert get_processing_run_id(session_id, cache) == 42
+        assert release_processing_run(session_id, cache, 42)
+        assert not release_processing_run(session_id, cache, 42)
+
+    def test_concurrent_conditional_deletes_have_one_winner(
+        self, cache: CacheBackend
+    ) -> None:
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Barrier
+
+        key = _key()
+        cache.set(key, b"owner", ex=30)
+        barrier = Barrier(6)
+
+        def release(_: int) -> bool:
+            barrier.wait()
+            return cache.delete_if_value(key, b"owner")
+
+        with ThreadPoolExecutor(max_workers=6) as executor:
+            assert list(executor.map(release, range(6))).count(True) == 1
+
+    def test_expired_value_does_not_match(self, cache: CacheBackend) -> None:
+        key = _key()
+        cache.set(key, b"owner", ex=30)
+        cache.expire(key, -1)
+        assert not cache.delete_if_value(key, b"owner")

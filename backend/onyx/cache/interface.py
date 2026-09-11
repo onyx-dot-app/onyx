@@ -109,6 +109,11 @@ class CacheBackend(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
+    def delete_if_value(self, key: str, expected: bytes) -> bool:
+        """Atomically remove an unexpired key only if its value still matches."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
     def exists(self, key: str) -> bool:
         raise NotImplementedError
 

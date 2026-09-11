@@ -40,6 +40,7 @@ from onyx.chat.compression import (
     get_compression_params,
 )
 from onyx.chat.emitter import Emitter
+from onyx.chat.errors import EmptyLLMResponseError
 from onyx.chat.incognito import (
     content_free_file_descriptors,
     incognito_llm_request_policy,
@@ -49,7 +50,7 @@ from onyx.chat.incognito_context import (
     incognito_session_ended,
     load_incognito_context,
 )
-from onyx.chat.llm_loop import EmptyLLMResponseError, run_llm_loop
+from onyx.chat.llm_loop import run_llm_loop
 from onyx.chat.models import (
     AnswerStream,
     AnswerStreamPart,
@@ -71,7 +72,7 @@ from onyx.chat.stop_signal_checker import is_connected as check_stop_signal
 from onyx.chat.stop_signal_checker import reset_cancel_status
 from onyx.chat.stream_buffer import StreamBufferWriter
 from onyx.configs.app_configs import DISABLE_VECTOR_DB, INTEGRATION_TESTS_MODE
-from onyx.configs.chat_configs import CHAT_HEARTBEAT_INTERVAL_S
+from onyx.configs.chat_configs import CHAT_ENGINE, CHAT_HEARTBEAT_INTERVAL_S, ChatEngine
 from onyx.configs.constants import (
     DEFAULT_PERSONA_ID,
     DocumentSource,
@@ -240,6 +241,7 @@ def _convert_loaded_files_to_chat_files(
             ChatFile.lazy_from_filename(
                 filename=filename,
                 loader=lambda lf=loaded_file: lf.content,
+                source_file_id=loaded_file.file_id,
             )
         )
     return chat_files
@@ -305,7 +307,13 @@ def _load_context_user_files_for_tools(
                 )
                 return b""
 
-        chat_files.append(ChatFile.lazy_from_filename(filename=filename, loader=_load))
+        chat_files.append(
+            ChatFile.lazy_from_filename(
+                filename=filename,
+                loader=_load,
+                source_file_id=user_file.file_id,
+            )
+        )
 
     return chat_files
 
@@ -851,7 +859,7 @@ def build_chat_turn(
 
     user_memory_context = get_memories(user, db_session)
 
-    # This prompt may come from the Agent or Project. Fetched here (before run_llm_loop)
+    # This prompt may come from the Agent or Project. Fetched here (before dispatch)
     # because the inner loop shouldn't need to access the DB-form chat history, but we
     # need it early for token reservation.
     custom_agent_prompt = get_custom_agent_prompt(persona, chat_session)
@@ -867,7 +875,7 @@ def build_chat_turn(
 
     # ── Token reservation ────────────────────────────────────────────────────
     # Reserve against the placeholder-substituted text — the same final form
-    # run_llm_loop sends to the model — so long directory values can't
+    # Pi sends to the model — so long directory values can't
     # invalidate the reservation.
     max_reserved_system_prompt_tokens_str = substitute_user_placeholders(
         (persona.system_prompt or "") + (custom_agent_prompt or ""),
@@ -1771,6 +1779,14 @@ def _stream_chat_turn(
             # Set for the whole turn so a blob any tool saves carries the
             # session on its record, which is what teardown deletes by.
             CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR.set(str(setup.chat_session_id))
+        if CHAT_ENGINE == ChatEngine.PI and not setup.new_msg_req.deep_research:
+            from onyx.chat.pi.service import queued_sync
+
+            run_started = True
+            yield from queued_sync(
+                setup, user, pre_run_packets, external_state_container
+            )
+            return
         stream_buffer = StreamBufferWriter(
             cache=setup.cache,
             chat_session_id=setup.chat_session_id,

@@ -249,6 +249,11 @@ class PostgresCacheBackend(CacheBackend):
             session.execute(delete(CacheStore).where(CacheStore.key == key))
             session.commit()
 
+    def delete_if_value(self, key: str, expected: bytes) -> bool:
+        from onyx.db.cache_store import delete_cache_value
+
+        return delete_cache_value(self._tenant_id, key, expected)
+
     def exists(self, key: str) -> bool:
         from onyx.db.engine.sql_engine import get_session_with_tenant
 

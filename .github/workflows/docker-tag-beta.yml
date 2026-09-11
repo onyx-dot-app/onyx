@@ -55,3 +55,9 @@ jobs:
           VERSION: ${{ github.event.inputs.version }}
         run: |
           docker buildx imagetools create -t onyxdotapp/sandbox:beta onyxdotapp/sandbox:${VERSION}
+
+      - name: Pull, Tag and Push Agent Service Image
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          docker buildx imagetools create -t onyxdotapp/onyx-agent:beta onyxdotapp/onyx-agent:${VERSION}

@@ -15,6 +15,14 @@
 #                                  (default: generated, printed at the end)
 #   --skip-cluster-create          skip kind create (use an existing cluster)
 #   --skip-helm                    only create the cluster, don't install Onyx
+#
+# Environment:
+#   ONYX_DEV_CA_DIR   directory of extra root CAs to trust inside the nodes,
+#                     one PEM certificate per .crt file. Needed behind a
+#                     TLS-intercepting proxy, which makes image pulls fail
+#                     with "x509: certificate signed by unknown authority".
+#                     On macOS the script populates this from the System
+#                     keychain automatically.
 
 set -euo pipefail
 
@@ -29,6 +37,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHART_DIR="$(cd "$SCRIPT_DIR/../charts/onyx" && pwd)"
 VALUES_OVERLAY="$CHART_DIR/values-localdev.yaml"
 
+# Private root CAs to trust inside the nodes. A TLS-intercepting corporate
+# proxy re-signs registry traffic with its own root: the host trusts it, but
+# containerd in the node ships only the stock Debian bundle, so image pulls
+# fail with `x509: certificate signed by unknown authority`. Set ONYX_DEV_CA_DIR
+# to curate the set by hand — one PEM certificate per `.crt` file.
+CA_DIR="${ONYX_DEV_CA_DIR:-$HOME/.onyx-dev/ca-certificates}"
+NODE_CA_DIR="/usr/local/share/ca-certificates"
+
 require() {
   local bin="$1"
   if ! command -v "$bin" >/dev/null 2>&1; then
@@ -36,6 +52,92 @@ require() {
     echo "see docs/craft/dev/local-kubernetes.md for installation" >&2
     exit 1
   fi
+}
+
+# Copy the machine's installed root CAs into CA_DIR, one certificate per file.
+# Reads only the System keychain, which holds admin/MDM-installed certs — the
+# public roots live in SystemRootCertificates.keychain and the node has those
+# already.
+collect_host_ca_certs() {
+  mkdir -p "$CA_DIR"
+
+  if [[ "$(uname -s)" != "Darwin" ]]; then
+    return 0
+  fi
+
+  local work part fingerprint target added=0
+  work="$(mktemp -d -t onyx-dev-ca-XXXXXX)"
+
+  security find-certificate -a -p /Library/Keychains/System.keychain \
+    >"$work/bundle" 2>/dev/null || true
+
+  # update-ca-certificates skips any file holding more than one certificate.
+  awk -v dir="$work" \
+    '/^-----BEGIN CERTIFICATE-----$/ { n += 1 } n { print >> (dir "/part-" n) }' \
+    "$work/bundle"
+
+  for part in "$work"/part-*; do
+    [[ -f "$part" ]] || continue
+    # Trust anchors only. The keychain also holds leaf identities (MDM, device)
+    # which must not become roots. macOS ships LibreSSL, which has no `-ext`.
+    if ! openssl x509 -in "$part" -noout -text 2>/dev/null | grep -q "CA:TRUE"; then
+      continue
+    fi
+    fingerprint="$(openssl x509 -in "$part" -noout -fingerprint -sha256 2>/dev/null |
+      tr -d ':' | cut -d= -f2 | cut -c1-16)"
+    [[ -n "$fingerprint" ]] || continue
+    target="$CA_DIR/host-$fingerprint.crt"
+    if ! cmp -s "$part" "$target"; then
+      cp "$part" "$target"
+      added=$((added + 1))
+    fi
+  done
+
+  rm -rf "$work"
+  if [[ "$added" -gt 0 ]]; then
+    echo "collected $added host root CA(s) into $CA_DIR"
+  fi
+}
+
+# extraMounts put the certificates in the node, but only update-ca-certificates
+# writes them into the bundle containerd actually reads. Also covers clusters
+# created before this mount existed, by copying the files in directly.
+trust_host_ca_certs_in_nodes() {
+  local node cert before after
+
+  if ! compgen -G "$CA_DIR/*.crt" >/dev/null; then
+    return 0
+  fi
+
+  for node in $(kind get nodes --name "$CLUSTER_NAME"); do
+    for cert in "$CA_DIR"/*.crt; do
+      docker exec "$node" test -f "$NODE_CA_DIR/$(basename "$cert")" 2>/dev/null \
+        || docker cp "$cert" "$node:$NODE_CA_DIR/" >/dev/null
+    done
+
+    before="$(docker exec "$node" sha256sum /etc/ssl/certs/ca-certificates.crt 2>/dev/null | cut -d' ' -f1)"
+    docker exec "$node" update-ca-certificates >/dev/null 2>&1 || true
+    after="$(docker exec "$node" sha256sum /etc/ssl/certs/ca-certificates.crt 2>/dev/null | cut -d' ' -f1)"
+
+    # containerd reads the bundle once at start, so it needs a restart to pick
+    # up new anchors. Skip it when the bundle did not change.
+    if [[ "$before" != "$after" ]]; then
+      echo "trusting host root CAs in $node; restarting containerd ..."
+      docker exec "$node" systemctl restart containerd
+    fi
+  done
+}
+
+write_kind_config() {
+  cat >"$1" <<EOF
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    extraMounts:
+      - hostPath: ${CA_DIR}
+        containerPath: ${NODE_CA_DIR}
+EOF
 }
 
 while [[ $# -gt 0 ]]; do
@@ -62,14 +164,24 @@ require kubectl
 
 # ---- 1. kind cluster ----
 
+collect_host_ca_certs
+
 if [[ "$SKIP_CLUSTER_CREATE" -eq 0 ]]; then
   if kind get clusters 2>/dev/null | grep -qx "$CLUSTER_NAME"; then
     echo "kind cluster '$CLUSTER_NAME' already exists; skipping create"
   else
     echo "creating kind cluster '$CLUSTER_NAME' with node image '$KIND_NODE_IMAGE' ..."
-    kind create cluster --name "$CLUSTER_NAME" --image "$KIND_NODE_IMAGE"
+    KIND_CONFIG="$(mktemp -t onyx-dev-kind-XXXXXX)"
+    write_kind_config "$KIND_CONFIG"
+    kind create cluster \
+      --name "$CLUSTER_NAME" \
+      --image "$KIND_NODE_IMAGE" \
+      --config "$KIND_CONFIG"
+    rm -f "$KIND_CONFIG"
   fi
 fi
+
+trust_host_ca_certs_in_nodes
 
 kubectl config use-context "kind-$CLUSTER_NAME" >/dev/null
 

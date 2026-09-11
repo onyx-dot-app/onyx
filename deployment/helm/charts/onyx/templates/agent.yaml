@@ -1,0 +1,122 @@
+{{- if eq .Values.chatEngine "pi" }}
+{{- if or (not (regexMatch "^[0-9]+$" (toString .Values.agent.runTimeoutSeconds))) (lt (int .Values.agent.runTimeoutSeconds) 1) (gt (int .Values.agent.runTimeoutSeconds) 1800) }}
+{{- fail "agent.runTimeoutSeconds must be an integer between 1 and 1800" }}
+{{- end }}
+{{- if le (int .Values.agent.terminationGracePeriodSeconds) (add (int .Values.agent.drainTimeoutSeconds) 20) }}
+{{- fail "agent.terminationGracePeriodSeconds must exceed agent.drainTimeoutSeconds plus 20 seconds for cleanup" }}
+{{- end }}
+{{- $name := include "onyx.resourceName" (list . "agent") }}
+{{- $secretName := .Values.agent.existingSecret | default (include "onyx.resourceName" (list . "agent-auth")) }}
+{{- if not .Values.agent.existingSecret }}
+{{- $existing := lookup "v1" "Secret" .Release.Namespace $secretName }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $secretName }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+type: Opaque
+data:
+  {{- if $existing }}
+  token: {{ index $existing.data "token" }}
+  {{- else }}
+  token: {{ randAlphaNum 64 | b64enc | quote }}
+  {{- end }}
+---
+{{- end }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - port: 8091
+      targetPort: agent
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+spec:
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  {{- if not .Values.agent.autoscaling.enabled }}
+  replicas: {{ .Values.agent.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: agent
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8091"
+        prometheus.io/path: /metrics
+      labels:
+        app.kubernetes.io/component: agent
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      terminationGracePeriodSeconds: {{ .Values.agent.terminationGracePeriodSeconds }}
+      serviceAccountName: {{ include "onyx.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: agent
+          image: "{{ .Values.agent.image.repository }}:{{ .Values.agent.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.agent.image.pullPolicy }}
+          ports:
+            - name: agent
+              containerPort: 8091
+          env:
+            {{- include "onyx.agentRedisEnv" . | nindent 12 }}
+            {{- include "onyx.agentStateRedisEnv" . | nindent 12 }}
+            - name: ONYX_AGENT_API_URL
+              value: {{ .Values.agent.apiUrl | default (printf "http://%s:%v/internal/agent" (include "onyx.resourceName" (list . "api-service")) .Values.api.service.servicePort) | quote }}
+            - name: ONYX_AGENT_RUN_TIMEOUT_SECONDS
+              value: {{ .Values.agent.runTimeoutSeconds | quote }}
+            - name: ONYX_AGENT_DRAIN_TIMEOUT_SECONDS
+              value: {{ .Values.agent.drainTimeoutSeconds | quote }}
+            - name: ONYX_AGENT_SERVICE_HOST
+              value: "0.0.0.0"
+            - name: ONYX_AGENT_MAX_CONCURRENT_RUNS
+              value: {{ .Values.agent.maxConcurrentRuns | quote }}
+            - name: ONYX_AGENT_SERVICE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: token
+            {{- with .Values.agent.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.agent.extraVolumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: agent
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: agent
+          resources:
+            {{- toYaml .Values.agent.resources | nindent 12 }}
+      {{- with .Values.agent.extraVolumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+{{- end }}

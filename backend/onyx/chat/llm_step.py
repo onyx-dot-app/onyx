@@ -854,6 +854,8 @@ def _select_recent_image_indices(
 def translate_history_to_llm_format(
     history: list[ChatMessageSimple],
     llm_config: LLMConfig,
+    *,
+    native_tool_messages: bool = False,
 ) -> LanguageModelInput:
     """Convert a list of ChatMessageSimple to LanguageModelInput format.
 
@@ -861,7 +863,11 @@ def translate_history_to_llm_format(
     handling different message types and image files for multimodal support.
     """
     messages: list[ChatCompletionMessage] = []
-    history_message_formatter = _get_history_message_formatter(llm_config)
+    history_message_formatter = (
+        _DefaultHistoryMessageFormatter()
+        if native_tool_messages
+        else _get_history_message_formatter(llm_config)
+    )
     # Note: cacheability is computed from pre-translation ChatMessageSimple types.
     # Some providers flatten tool history into plain assistant/user text, so this split
     # may be less semantically meaningful, but it remains safe and order-preserving.

@@ -229,6 +229,11 @@ def teardown_incognito_session(chat_session_id: UUID) -> None:
     """End the session now: tombstone the context so an in-flight turn cannot
     recreate it (a missing key reads as version zero), and delete the buffered
     stream chunks holding the streamed answer NDJSON."""
+    from onyx.chat.pi.cleanup import delete_session_state
+    from onyx.configs.chat_configs import CHAT_ENGINE, ChatEngine
+
+    if CHAT_ENGINE == ChatEngine.PI:
+        delete_session_state(chat_session_id)
     client = get_redis_client()
     client.set(_context_key(chat_session_id), _TOMBSTONE, ex=_TOMBSTONE_TTL_SECONDS)
     buffered = list(client.scan_iter(match=stream_buffer_key_pattern(chat_session_id)))

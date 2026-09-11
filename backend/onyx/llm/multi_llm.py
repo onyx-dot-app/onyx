@@ -572,6 +572,10 @@ class LitellmLLM(LLM):
 
         self._model_kwargs = model_kwargs
 
+    @property
+    def request_options(self) -> dict[str, Any]:
+        return dict(self._model_kwargs)
+
     def _safe_model_config(self) -> dict:
         dump = self.config.model_dump()
         dump["api_key"] = mask_string(dump.get("api_key") or "")
@@ -583,6 +587,9 @@ class LitellmLLM(LLM):
                 masked_config[k] = mask_string(v) if v else v
             dump["custom_config"] = masked_config
         return dump
+
+    def record_usage(self, usage: Usage) -> None:
+        self._track_llm_cost(usage)
 
     def _track_llm_cost(self, usage: Usage) -> None:
         """

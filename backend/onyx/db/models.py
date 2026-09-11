@@ -7486,3 +7486,37 @@ class SSOProvider(Base):
         onupdate=func.now(),
         nullable=False,
     )
+
+
+class AgentRun(Base):
+    """Durable dispatch and execution ownership. Conversation content stays elsewhere."""
+
+    __tablename__ = "agent_run"
+    __table_args__ = (
+        Index("ix_agent_run_status_updated", "status", "updated_at"),
+        Index("ix_agent_run_pending_stream", "stream_closed", "status", "updated_at"),
+        Index("ix_agent_run_session_group", "chat_session_id", "group_id"),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    chat_session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("chat_session.id", ondelete="CASCADE")
+    )
+    message_id: Mapped[int] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="CASCADE")
+    )
+    group_id: Mapped[int] = mapped_column(BigInteger)
+    model_index: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(24), default="queued")
+    attempt_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    stream_closed: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
+    last_sequence: Mapped[int] = mapped_column(Integer, default=0)
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    expires_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True))

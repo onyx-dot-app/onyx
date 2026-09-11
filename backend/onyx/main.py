@@ -52,6 +52,7 @@ from onyx.configs.app_configs import (
     USER_AUTH_SECRET,
     WEB_DOMAIN,
 )
+from onyx.configs.chat_configs import CHAT_ENGINE, ChatEngine
 from onyx.configs.constants import POSTGRES_WEB_APP_NAME
 from onyx.db.engine.async_sql_engine import (
     get_sqlalchemy_async_engine,
@@ -449,7 +450,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
         recover_stuck_user_files(POSTGRES_DEFAULT_SCHEMA)
         start_periodic_poller(POSTGRES_DEFAULT_SCHEMA)
 
-    yield
+    from onyx.chat.pi.lifecycle import start as start_agent_runtime
+    from onyx.chat.pi.lifecycle import stop as stop_agent_runtime
+
+    if CHAT_ENGINE == ChatEngine.PI:
+        await start_agent_runtime(app)
+    try:
+        yield
+    finally:
+        if CHAT_ENGINE == ChatEngine.PI:
+            await stop_agent_runtime(app)
 
     # Flush buffered per-user usage before disposing the DB engines its drain
     # thread writes through.
@@ -550,6 +560,10 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     register_onyx_exception_handlers(application)
 
     include_router_with_global_prefix_prepended(application, password_router)
+    from onyx.chat.pi.api import router as agent_router
+
+    if CHAT_ENGINE == ChatEngine.PI:
+        include_router_with_global_prefix_prepended(application, agent_router)
     include_router_with_global_prefix_prepended(application, chat_router)
     include_router_with_global_prefix_prepended(application, query_router)
     include_router_with_global_prefix_prepended(application, document_router)

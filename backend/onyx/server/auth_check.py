@@ -144,6 +144,8 @@ def check_router_auth(
     (2) are explicitly marked as a public endpoint
     """
 
+    from onyx.chat.pi.auth import worker_identity
+
     control_plane_dep = fetch_ee_implementation_or_noop(
         "onyx.server.tenants.access", "control_plane_dep"
     )
@@ -168,7 +170,8 @@ def check_router_auth(
             for dependency in route_dependant_obj.dependencies:
                 depends_fn = dependency.call
                 if (
-                    depends_fn == current_limited_user
+                    depends_fn == worker_identity
+                    or depends_fn == current_limited_user
                     or depends_fn == current_user
                     or depends_fn == current_user_with_expired_token
                     or depends_fn == current_chat_accessible_user

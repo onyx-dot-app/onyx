@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from onyx.llm.model_response import ModelResponse, ModelResponseStream
+from onyx.llm.model_response import ModelResponse, ModelResponseStream, Usage
 from onyx.llm.models import (
     LanguageModelInput,
     ReasoningEffort,
@@ -86,6 +86,15 @@ class LLM(abc.ABC):
     @abc.abstractmethod
     def config(self) -> LLMConfig:
         raise NotImplementedError
+
+    @property
+    def request_options(self) -> dict[str, Any]:
+        """Effective provider options, including mandatory request policy."""
+        return {}
+
+    def record_usage(self, usage: Usage) -> None:
+        """Account for inference executed by an external agent runtime."""
+        del usage
 
     def invoke(
         self,
