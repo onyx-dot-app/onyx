@@ -21,9 +21,9 @@ import {
 } from "@opal/layouts";
 import {
   Card,
-  InputTags,
+  InputMultiSelect,
   InputTypeIn,
-  Switch,
+  InputSwitch,
   Text,
   type TagItem,
 } from "@opal/components";
@@ -69,7 +69,7 @@ function ToggleRow({
 }: ToggleRowProps) {
   return (
     <InputHorizontal title={title} description={description} withLabel>
-      <Switch
+      <InputSwitch
         checked={checked}
         onCheckedChange={onCheckedChange}
         disabled={disabled}
@@ -430,7 +430,7 @@ export default function SecurityHardeningPage() {
                       )}
                       withLabel
                     >
-                      <InputTags
+                      <InputMultiSelect
                         tags={validDomains}
                         onRemoveTag={removeDomain}
                         onAdd={addDomain}

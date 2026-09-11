@@ -26,7 +26,7 @@ import {
   MessageCard,
   SelectCard,
   Spacer,
-  Switch,
+  InputSwitch,
   Tabs,
   Text,
 } from "@opal/components";
@@ -1761,7 +1761,7 @@ export default function IndexSettingsPage() {
                               }}
                               withLabel
                             >
-                              <Switch
+                              <InputSwitch
                                 checked={
                                   searchSettings?.multipass_indexing ?? false
                                 }
@@ -1871,7 +1871,7 @@ export default function IndexSettingsPage() {
                                 description={t("imageExtraction.description")}
                                 withLabel
                               >
-                                <Switch
+                                <InputSwitch
                                   checked={imageProcessingEnabled}
                                   onCheckedChange={(checked) => {
                                     void saveSettings({

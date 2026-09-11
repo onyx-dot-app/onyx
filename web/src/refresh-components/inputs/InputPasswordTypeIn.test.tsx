@@ -1,5 +1,5 @@
 /**
- * Component tests for PasswordInputTypeIn.
+ * Component tests for InputPasswordTypeIn.
  *
  * The field renders a native <input type="password"> (toggled to "text" when
  * revealed) so browsers / password managers recognize it for autofill. These
@@ -9,7 +9,7 @@
  */
 import React from "react";
 import { render, screen, setupUser } from "@tests/setup/test-utils";
-import { PasswordInputTypeIn } from "@opal/components";
+import { InputPasswordTypeIn } from "@opal/components";
 
 interface ControlledPasswordProps {
   initialValue?: string;
@@ -25,7 +25,7 @@ function ControlledPassword({
 }: ControlledPasswordProps) {
   const [value, setValue] = React.useState(initialValue);
   return (
-    <PasswordInputTypeIn
+    <InputPasswordTypeIn
       data-testid="pw"
       value={value}
       onChange={(e) => setValue(e.target.value)}
@@ -37,7 +37,7 @@ function ControlledPassword({
 
 const MASKED_SECRET = "✱".repeat(6);
 
-describe("PasswordInputTypeIn", () => {
+describe("InputPasswordTypeIn", () => {
   test("renders a native password input by default", () => {
     render(<ControlledPassword initialValue="secret" />);
     expect(screen.getByTestId("pw")).toHaveAttribute("type", "password");

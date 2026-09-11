@@ -24,7 +24,7 @@ import { useMcpServers } from "@/lib/tools/hooks";
 import { getActionIcon } from "@/lib/tools/utils";
 import { MCPServer, ToolSnapshot } from "@/lib/tools/types";
 import { EmptyMessageCard } from "@opal/components";
-import { Switch } from "@opal/components";
+import { InputSwitch } from "@opal/components";
 import { Button } from "@opal/components";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import AppInputBar from "@/sections/input/AppInputBar";
@@ -399,7 +399,10 @@ export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
                   title={t("viewer.overwritePrompts.title")}
                   description={t("viewer.overwritePrompts.description")}
                 >
-                  <Switch disabled checked={agent.replace_base_system_prompt} />
+                  <InputSwitch
+                    disabled
+                    checked={agent.replace_base_system_prompt}
+                  />
                 </InputHorizontal>
               </Section>
             </SimpleCollapsible.Content>

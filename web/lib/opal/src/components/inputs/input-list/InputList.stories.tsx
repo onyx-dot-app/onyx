@@ -1,11 +1,11 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import React from "react";
-import { ListFieldInput } from "@opal/components";
+import { InputList } from "@opal/components";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
-const meta: Meta<typeof ListFieldInput> = {
-  title: "opal/components/ListFieldInput",
-  component: ListFieldInput,
+const meta: Meta<typeof InputList> = {
+  title: "opal/components/InputList",
+  component: InputList,
   tags: ["autodocs"],
   decorators: [
     (Story) => (
@@ -19,13 +19,13 @@ const meta: Meta<typeof ListFieldInput> = {
 };
 
 export default meta;
-type Story = StoryObj<typeof ListFieldInput>;
+type Story = StoryObj<typeof InputList>;
 
 export const Default: Story = {
   render: function DefaultStory() {
     const [values, setValues] = React.useState<string[]>([]);
     return (
-      <ListFieldInput
+      <InputList
         values={values}
         onChange={setValues}
         placeholder="Type and press Enter..."
@@ -42,7 +42,7 @@ export const WithValues: Story = {
       "dev@example.com",
     ]);
     return (
-      <ListFieldInput
+      <InputList
         values={values}
         onChange={setValues}
         placeholder="Add email..."
@@ -53,7 +53,7 @@ export const WithValues: Story = {
 
 export const Disabled: Story = {
   render: () => (
-    <ListFieldInput
+    <InputList
       values={["locked-item"]}
       onChange={() => {}}
       placeholder="Cannot edit"
@@ -66,7 +66,7 @@ export const ErrorState: Story = {
   render: function ErrorStory() {
     const [values, setValues] = React.useState(["invalid"]);
     return (
-      <ListFieldInput
+      <InputList
         values={values}
         onChange={setValues}
         placeholder="Add value..."

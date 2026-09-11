@@ -7,7 +7,7 @@ import {
   Button,
   Card,
   InputTypeIn,
-  Switch,
+  InputSwitch,
   Table,
   createTableColumns,
 } from "@opal/components";
@@ -205,7 +205,7 @@ export default function CraftPage() {
               }
               withLabel
             >
-              <Switch
+              <InputSwitch
                 checked={defaultEnabled}
                 disabled={isSavingDefault}
                 onCheckedChange={(checked) => setPendingDefault(checked)}

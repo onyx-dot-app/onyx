@@ -14,7 +14,7 @@ import {
   Text,
   Tooltip,
 } from "@opal/components";
-import { InputKeyValue, ListFieldInput, type KeyValue } from "@opal/components";
+import { InputKeyValue, InputList, type KeyValue } from "@opal/components";
 import { ExternalAppAdminResponse } from "@/app/craft/v1/apps/registry";
 import {
   createCustomExternalApp,
@@ -304,7 +304,7 @@ export default function CreateCustomAppModal({
                   <Text font="secondary-body" color="text-03">
                     {t("fields.upstreamPatterns.description")}
                   </Text>
-                  <ListFieldInput
+                  <InputList
                     values={upstreamPatterns}
                     onChange={setUpstreamPatterns}
                     placeholder="https://api.example.com/*"

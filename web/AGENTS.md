@@ -76,11 +76,11 @@ state, aria-label — anything not passed in by the caller) rides the `OpalStrin
 
 1. Add a typed key to `OpalStrings` in `web/lib/opal/src/strings.tsx`, with an English default in
    `defaultOpalStrings` right below. Prefix component-scoped keys with the component name
-   (`comboBoxNoOptions`, `multiSelectEmptyTitle`). A string with arguments is a function-valued
+   (`comboBoxNoOptions`, `keyValueDuplicateKey`). A string with arguments is a function-valued
    entry (`(count) => string`).
 2. Read it in the component with `useOpalStrings()` from `@opal/strings`.
 3. Map it in `web/src/i18n/OpalStringsBridge.tsx` from the `opal.*` catalog namespace
-   (`t("multiSelect.emptyTitle")`) — the bridge wraps the app in `layout.tsx` and feeds Opal the
+   (`t("comboBox.noOptions")`) — the bridge wraps the app in `layout.tsx` and feeds Opal the
    host translations.
 4. Add the key under `opal.<component>.<name>` in `en.json` and every other locale file.
 

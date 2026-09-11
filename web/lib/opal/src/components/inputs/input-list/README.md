@@ -1,9 +1,9 @@
-# ListFieldInput
+# InputList
 
-**Import:** `import { ListFieldInput, type ListFieldInputProps } from "@opal/components";`
+**Import:** `import { InputList, type InputListProps } from "@opal/components";`
 
 A list-of-strings input: type a value, press Enter, and it lands as a removable `Tag` chip below
-the field. Duplicates are ignored; IME composition is respected. Unlike `InputTags`, the chips
+the field. Duplicates are ignored; IME composition is respected. Unlike `InputMultiSelect`, the chips
 render _under_ the input rather than inline within it — use this when the list is the content and
 the field is just the entry point (e.g. a list of domains or scopes in a form).
 

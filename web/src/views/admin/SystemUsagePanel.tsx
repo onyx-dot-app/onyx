@@ -5,7 +5,7 @@ import { useLocale, useTranslations } from "next-intl";
 import {
   Card,
   type DateRange,
-  InputSelect,
+  InputSingleSelect,
   MessageCard,
   Table,
   Text,
@@ -284,38 +284,40 @@ export default function SystemUsagePanel({ timeRange }: SystemUsagePanelProps) {
       >
         {models.length > 0 && (
           <Section width={12} height="fit">
-            <InputSelect value={model} onValueChange={setModel}>
-              <InputSelect.Trigger placeholder={t("filters.allModels.label")} />
-              <InputSelect.Content>
-                <InputSelect.Item value={ALL_FILTER}>
+            <InputSingleSelect value={model} onValueChange={setModel}>
+              <InputSingleSelect.Trigger
+                placeholder={t("filters.allModels.label")}
+              />
+              <InputSingleSelect.Content>
+                <InputSingleSelect.Item value={ALL_FILTER}>
                   {t("filters.allModels.label")}
-                </InputSelect.Item>
+                </InputSingleSelect.Item>
                 {models.map((option) => (
-                  <InputSelect.Item key={option} value={option}>
+                  <InputSingleSelect.Item key={option} value={option}>
                     {option}
-                  </InputSelect.Item>
+                  </InputSingleSelect.Item>
                 ))}
-              </InputSelect.Content>
-            </InputSelect>
+              </InputSingleSelect.Content>
+            </InputSingleSelect>
           </Section>
         )}
         {providers.length > 0 && (
           <Section width={12} height="fit">
-            <InputSelect value={provider} onValueChange={setProvider}>
-              <InputSelect.Trigger
+            <InputSingleSelect value={provider} onValueChange={setProvider}>
+              <InputSingleSelect.Trigger
                 placeholder={t("filters.allProviders.label")}
               />
-              <InputSelect.Content>
-                <InputSelect.Item value={ALL_FILTER}>
+              <InputSingleSelect.Content>
+                <InputSingleSelect.Item value={ALL_FILTER}>
                   {t("filters.allProviders.label")}
-                </InputSelect.Item>
+                </InputSingleSelect.Item>
                 {providers.map((option) => (
-                  <InputSelect.Item key={option} value={option}>
+                  <InputSingleSelect.Item key={option} value={option}>
                     {option}
-                  </InputSelect.Item>
+                  </InputSingleSelect.Item>
                 ))}
-              </InputSelect.Content>
-            </InputSelect>
+              </InputSingleSelect.Content>
+            </InputSingleSelect>
           </Section>
         )}
       </Section>

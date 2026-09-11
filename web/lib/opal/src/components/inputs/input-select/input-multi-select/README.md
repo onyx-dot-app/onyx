@@ -1,6 +1,6 @@
-# InputTags
+# InputMultiSelect
 
-**Import:** `import { InputTags, type InputTagsProps, type TagItem } from "@opal/components";`
+**Import:** `import { InputMultiSelect, type InputMultiSelectProps, type TagItem } from "@opal/components";`
 
 Chips-in-input, the Figma `Input/Tags` component: editable `Tag`s rendered inline with a text input on the `.opal-input` chrome.
 
@@ -35,12 +35,12 @@ Interaction model:
 ## Usage
 
 ```tsx
-import { InputTags, type TagItem } from "@opal/components";
+import { InputMultiSelect, type TagItem } from "@opal/components";
 
 const [tags, setTags] = useState<TagItem[]>([]);
 const [draft, setDraft] = useState("");
 
-<InputTags
+<InputMultiSelect
   tags={tags}
   onRemoveTag={(id) => setTags(tags.filter((t) => t.id !== id))}
   onAdd={(label) => {

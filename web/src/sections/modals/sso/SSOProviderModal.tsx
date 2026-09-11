@@ -8,7 +8,7 @@ import {
   Button,
   Card,
   CopyButton,
-  InputTags,
+  InputMultiSelect,
   type TagItem,
   Text,
 } from "@opal/components";
@@ -126,7 +126,7 @@ function buildValidationSchema(t: SSOTranslate) {
 
 // The backend masks every config string on read and restores any value sent
 // back unchanged, so the form sends its current values as-is. Blank optional
-// keys are omitted rather than sent as empty strings. Switch values are always
+// keys are omitted rather than sent as empty strings. InputSwitch values are always
 // sent: the update endpoint overlays only the keys present, so turning a flag
 // off must send an explicit false.
 function buildConfig(
@@ -181,7 +181,7 @@ interface TagListFieldProps {
   transform?: (value: string) => string;
 }
 
-// Formik-bound Opal InputTags for string[] values. Always writes an array, so
+// Formik-bound Opal InputMultiSelect for string[] values. Always writes an array, so
 // clearing every tag stores [] rather than leaving the previous value.
 function TagListField({ name, placeholder, transform }: TagListFieldProps) {
   const [field, meta, helpers] = useField<string[]>(name);
@@ -190,7 +190,7 @@ function TagListField({ name, placeholder, transform }: TagListFieldProps) {
   const tags: TagItem[] = values.map((value) => ({ id: value, label: value }));
   return (
     <>
-      <InputTags
+      <InputMultiSelect
         tags={tags}
         onRemoveTag={(id) => {
           void helpers.setValue(values.filter((value) => value !== id));

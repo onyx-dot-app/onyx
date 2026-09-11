@@ -11,7 +11,7 @@ import {
   Card,
   Divider,
   MessageCard,
-  Switch,
+  InputSwitch,
   Table,
 } from "@opal/components";
 import { IllustrationContent, InputHorizontal, toast } from "@opal/layouts";
@@ -780,7 +780,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                       description={t("edit.incognito.description")}
                       withLabel
                     >
-                      <Switch
+                      <InputSwitch
                         checked={incognitoEnabled}
                         onCheckedChange={setIncognitoEnabled}
                       />

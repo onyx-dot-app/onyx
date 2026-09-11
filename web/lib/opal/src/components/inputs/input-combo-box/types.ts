@@ -13,7 +13,7 @@ export interface InputComboBoxProps extends Omit<
   value: string;
   /** Change handler (React event style) - Called on every keystroke */
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  /** Change handler (direct value style, for InputSelect compatibility) - Only called when option is selected from dropdown */
+  /** Change handler (direct value style, for InputSingleSelect compatibility) - Only called when option is selected from dropdown */
   onValueChange?: (value: string) => void;
   /** Array of options for select mode */
   options?: ComboBoxOption[];
@@ -27,7 +27,7 @@ export interface InputComboBoxProps extends Omit<
   disabled?: boolean;
   /** Placeholder text */
   placeholder: string;
-  /** External error state (for InputSelect compatibility) - overrides internal validation */
+  /** External error state (for InputSingleSelect compatibility) - overrides internal validation */
   isError?: boolean;
   /** Callback to handle validation errors - integrates with form libraries */
   onValidationError?: (errorMessage: string | null) => void;

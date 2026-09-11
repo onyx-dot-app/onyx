@@ -3,7 +3,7 @@
 import "@opal/components/inputs/shared.css";
 // The inner field reuses InputTypeIn's .opal-input-field styling.
 import "@opal/components/inputs/input-type-in/styles.css";
-import "@opal/components/inputs/input-tags/styles.css";
+import "@opal/components/inputs/input-select/input-multi-select/styles.css";
 import { useEffect, useRef } from "react";
 import type { IconFunctionComponent } from "@opal/types";
 import { Button, Tag, TAG_REMOVE_CLASS } from "@opal/components";
@@ -22,7 +22,7 @@ interface TagItem {
   error?: boolean;
 }
 
-interface InputTagsProps {
+interface InputMultiSelectProps {
   /** Tags rendered before the text input. */
   tags: TagItem[];
 
@@ -61,7 +61,7 @@ interface InputTagsProps {
 }
 
 // ---------------------------------------------------------------------------
-// InputTags
+// InputMultiSelect
 // ---------------------------------------------------------------------------
 
 /**
@@ -70,7 +70,7 @@ interface InputTagsProps {
  * last tag (its dark keyboard-selection state), and Backspace or Delete on
  * an armed tag removes it and returns focus to the input.
  */
-function InputTags({
+function InputMultiSelect({
   tags,
   onRemoveTag,
   onAdd,
@@ -83,7 +83,7 @@ function InputTags({
   onClear,
   minRows = 1,
   focusOnMount = false,
-}: InputTagsProps) {
+}: InputMultiSelectProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const strings = useOpalStrings();
@@ -128,22 +128,24 @@ function InputTags({
     <div
       ref={rootRef}
       role="presentation"
-      className="opal-input opal-input-tags"
+      className="opal-input opal-input-multi-select"
       data-variant={disabled ? "disabled" : variant}
       onKeyDown={handleRootKeyDown}
       onClick={() => inputRef.current?.focus()}
     >
       {Icon && (
-        <div className="opal-input-tags-icon-container">
-          <Icon className="opal-input-tags-icon" />
+        <div className="opal-input-multi-select-icon-container">
+          <Icon className="opal-input-multi-select-icon" />
         </div>
       )}
       <div
-        className="opal-input-tags-tags"
+        className="opal-input-multi-select-tags"
         data-multi-row={minRows > 1 || undefined}
         style={
           minRows > 1
-            ? ({ "--opal-input-tags-rows": minRows } as React.CSSProperties)
+            ? ({
+                "--opal-input-multi-select-rows": minRows,
+              } as React.CSSProperties)
             : undefined
         }
       >
@@ -164,7 +166,7 @@ function InputTags({
         <input
           ref={inputRef}
           type="text"
-          className="opal-input-field opal-input-tags-field"
+          className="opal-input-field opal-input-multi-select-field"
           disabled={disabled}
           value={value}
           onChange={(event) => onChange(event.target.value)}
@@ -188,4 +190,4 @@ function InputTags({
   );
 }
 
-export { InputTags, type InputTagsProps, type TagItem };
+export { InputMultiSelect, type InputMultiSelectProps, type TagItem };

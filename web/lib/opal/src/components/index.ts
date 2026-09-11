@@ -36,13 +36,6 @@ export {
   type AttachmentItemButtonProps,
 } from "@opal/components/buttons/attachment-item-button/components";
 
-/* InputMultiSelect */
-export {
-  InputMultiSelect,
-  type InputMultiSelectProps,
-  type InputMultiSelectItem,
-} from "@opal/components/inputs/input-multi-select/components";
-
 /* LineItemButton */
 export {
   LineItemButton,
@@ -111,11 +104,11 @@ export {
   type InputFileProps,
 } from "@opal/components/inputs/input-file/components";
 
-/* ListFieldInput */
+/* InputList */
 export {
-  ListFieldInput,
-  type ListFieldInputProps,
-} from "@opal/components/inputs/list-field-input/components";
+  InputList,
+  type InputListProps,
+} from "@opal/components/inputs/input-list/components";
 
 /* Text */
 export {
@@ -258,27 +251,27 @@ export {
   type InputDatePickerProps,
 } from "@opal/components/inputs/input-date-picker/components";
 
-/* InputSelect */
+/* InputSingleSelect */
 export {
-  InputSelect,
-  type InputSelectRootProps,
-  type InputSelectTriggerProps,
-  type InputSelectItemProps,
-  type InputSelectSearchProps,
-} from "@opal/components/inputs/input-select/components";
+  InputSingleSelect,
+  type InputSingleSelectRootProps,
+  type InputSingleSelectTriggerProps,
+  type InputSingleSelectItemProps,
+  type InputSingleSelectSearchProps,
+} from "@opal/components/inputs/input-select/input-single-select/components";
 
-/* InputTags */
+/* InputMultiSelect */
 export {
-  InputTags,
-  type InputTagsProps,
+  InputMultiSelect,
+  type InputMultiSelectProps,
   type TagItem,
-} from "@opal/components/inputs/input-tags/components";
+} from "@opal/components/inputs/input-select/input-multi-select/components";
 
-/* PasswordInputTypeIn */
+/* InputPasswordTypeIn */
 export {
-  PasswordInputTypeIn,
-  type PasswordInputTypeInProps,
-} from "@opal/components/inputs/password-input-type-in/components";
+  InputPasswordTypeIn,
+  type InputPasswordTypeInProps,
+} from "@opal/components/inputs/input-password-type-in/components";
 
 /* InputTextArea */
 export {
@@ -296,11 +289,11 @@ export {
 /* Spacer */
 export { Spacer, type SpacerProps } from "@opal/components/spacer/components";
 
-/* Switch */
+/* InputSwitch */
 export {
-  Switch,
-  type SwitchProps,
-} from "@opal/components/inputs/switch/components";
+  InputSwitch,
+  type InputSwitchProps,
+} from "@opal/components/inputs/input-switch/components";
 
 /* CopyButton */
 export {
