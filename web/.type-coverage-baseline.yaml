@@ -13,18 +13,18 @@ packages:
   .: 100
   src: 99.4
   src/app: 99.5
-  src/app/admin: 96.2
+  src/app/admin: 96.3
   src/app/anonymous: 100
   src/app/api: 98.4
   src/app/app: 98.2
-  src/app/auth: 98
+  src/app/auth: 98.1
   src/app/components: 100
   src/app/config: 100
   src/app/connector: 90
   src/app/craft: 99
-  src/app/ee: 95.6
+  src/app/ee: 95.7
   src/app/federated: 97
-  src/app/mcp: 99.3
+  src/app/mcp: 99.5
   src/app/nrf: 99.2
   src/app/oauth-config: 100
   src/components: 97.7
@@ -58,9 +58,9 @@ packages:
   src/interfaces: 100
   src/layouts: 100
   src/layouts/chromes: 99.8
-  src/layouts/craft: 92.5
+  src/layouts/craft: 96.1
   src/lib: 98.4
-  src/lib/agents: 99.1
+  src/lib/agents: 99.2
   src/lib/analytics: 99.4
   src/lib/app: 100
   src/lib/auth: 95.4
@@ -82,7 +82,7 @@ packages:
   src/lib/notifications: 97.3
   src/lib/oauth: 84.8
   src/lib/permissions: 100
-  src/lib/position: 98.6
+  src/lib/position: 100
   src/lib/projects: 99.3
   src/lib/search: 97.2
   src/lib/searchFilters: 95.3
@@ -92,14 +92,14 @@ packages:
   src/lib/sso: 99.2
   src/lib/tools: 97.4
   src/lib/tracing: 96.9
-  src/lib/usage: 97.4
+  src/lib/usage: 97.9
   src/lib/users: 97.8
   src/lib/voice: 98.3
   src/lib/webSearch: 97.3
   src/providers: 99.4
   src/refresh-components: 99.7
   src/refresh-components/avatars: 99.7
-  src/refresh-components/buttons: 99.6
+  src/refresh-components/buttons: 99.7
   src/refresh-components/cards: 98.4
   src/refresh-components/commandmenu: 99.7
   src/refresh-components/form: 98.6
@@ -113,7 +113,7 @@ packages:
   src/sections: 100
   src/sections/actions: 99.1
   src/sections/admin: 100
-  src/sections/agents: 99.6
+  src/sections/agents: 99.8
   src/sections/banners: 98.5
   src/sections/cards: 100
   src/sections/chat: 99.7
@@ -122,7 +122,7 @@ packages:
   src/sections/knowledge: 99.7
   src/sections/modals: 99.2
   src/sections/model-selector: 99.6
-  src/sections/onboarding: 99.7
+  src/sections/onboarding: 99.8
   src/sections/settings: 100
   src/sections/sidebar: 99.4
   src/sections/skills: 99.8

@@ -3,7 +3,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import type { Route } from "next";
 import { FullAgent } from "@/lib/agents/types";
 import { Modal } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
@@ -205,7 +204,7 @@ export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
         [SEARCH_PARAM_NAMES.USER_PROMPT]: message,
         [SEARCH_PARAM_NAMES.SEND_ON_LOAD]: "true",
       });
-      router.push(`/app?${params.toString()}` as Route);
+      router.push(`/app?${params.toString()}`);
     },
     [agent.id, router]
   );

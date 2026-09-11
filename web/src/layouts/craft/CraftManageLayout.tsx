@@ -22,7 +22,7 @@ export function createCraftManageLayout(required: Permission) {
       return redirect(authResult.redirect as Route);
     }
     if (!hasPermission(authResult.user?.admin_capabilities ?? [], required)) {
-      return redirect("/craft/v1" as Route);
+      return redirect("/craft/v1");
     }
     return <>{children}</>;
   };
