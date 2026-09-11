@@ -154,6 +154,21 @@ logger = setup_logger()
 
 router = APIRouter(prefix="/chat")
 
+# Uploads keep the MIME type the client declared, so anything outside this set is
+# served as an attachment: a text/html or image/svg+xml file rendered inline would
+# run script on the app origin with the viewer's session. Keep to inert types.
+_INLINE_SAFE_MIME_TYPES = frozenset(
+    {
+        "image/png",
+        "image/jpg",
+        "image/jpeg",
+        "image/gif",
+        "image/webp",
+        "application/pdf",
+        "text/plain",
+    }
+)
+
 
 def _get_available_tokens_for_persona(
     persona: Persona,
@@ -1174,6 +1189,8 @@ def fetch_chat_file(
         "Cache-Control": "private, max-age=31536000, immutable",
         "ETag": etag,
         "Vary": "Cookie",
+        "X-Content-Type-Options": "nosniff",
+        "Content-Security-Policy": "sandbox",
     }
 
     if request.headers.get("if-none-match") == etag:
@@ -1188,8 +1205,13 @@ def fetch_chat_file(
             )
         return JSONResponse(content=preview.model_dump(), headers=cache_headers)
 
+    file_headers = dict(cache_headers)
+    if media_type.split(";")[0].strip().lower() not in _INLINE_SAFE_MIME_TYPES:
+        media_type = "application/octet-stream"
+        file_headers["Content-Disposition"] = "attachment"
+
     file_io = file_store.read_file(file_id, mode="b")
-    return StreamingResponse(file_io, media_type=media_type, headers=cache_headers)
+    return StreamingResponse(file_io, media_type=media_type, headers=file_headers)
 
 
 @router.get("/search", tags=PUBLIC_API_TAGS)
