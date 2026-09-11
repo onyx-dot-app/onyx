@@ -18,10 +18,10 @@ export type SelectSection = {
   options: SelectOption[];
 };
 
-export interface InputSingleSelectProps extends Omit<
+export type InputSingleSelectProps = Omit<
   React.InputHTMLAttributes<HTMLInputElement>,
   "onChange" | "value"
-> {
+> & {
   /** Current value */
   value: string;
   /** Change handler (React event style) - Called on every keystroke */
@@ -61,4 +61,4 @@ export interface InputSingleSelectProps extends Omit<
   showOtherOptions?: boolean;
   /** Max height of the dropdown in CSS units. Defaults to "15rem". */
   dropdownMaxHeight?: string;
-}
+};

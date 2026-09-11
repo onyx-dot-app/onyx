@@ -47,7 +47,49 @@ interface TagItem {
   error?: boolean;
 }
 
-interface InputMultiSelectProps {
+/**
+ * Supplying `options` requires `onSelectOption`: without a handler a chosen
+ * option would vanish (nothing writes it into `tags`), so the pairing is
+ * enforced where it can't be forgotten — the types.
+ */
+type InputMultiSelectOptionsProps =
+  | {
+      options?: never;
+      onSelectOption?: never;
+      mode?: never;
+      createPrefix?: never;
+      dropdownMaxHeight?: never;
+    }
+  | {
+      /**
+       * The selectable set; enables the family dropdown. Flat or sectioned —
+       * sections render with a Divider between them. Convention: a chosen
+       * option becomes a tag whose `id` is the option's `value`, so the
+       * dropdown can show it selected and toggle it off.
+       */
+      options: SelectOption[] | SelectSection[];
+
+      /**
+       * Called when a dropdown option is chosen. Choosing an already-selected
+       * option calls `onRemoveTag(option.value)` instead — one removal path.
+       */
+      onSelectOption: (option: SelectOption) => void;
+
+      /**
+       * Set openness:
+       * - "closed" (default): only options can be chosen; typing filters.
+       * - "open": typing filters AND the raw text commits via the create row.
+       */
+      mode?: "closed" | "open";
+
+      /** Prefix shown before the typed value in the create row (e.g. "Add"). */
+      createPrefix?: string;
+
+      /** Max height of the dropdown in CSS units. Defaults to "15rem". */
+      dropdownMaxHeight?: string;
+    };
+
+interface InputMultiSelectBaseProps {
   /** Tags rendered before the text input. */
   tags: TagItem[];
 
@@ -60,29 +102,6 @@ interface InputMultiSelectProps {
   value: string;
 
   onChange: (value: string) => void;
-
-  /**
-   * The selectable set; presence enables the family dropdown. Flat or
-   * sectioned — sections render with a Divider between them. Convention:
-   * a chosen option becomes a tag whose `id` is the option's `value`, so
-   * the dropdown can show it selected and toggle it off.
-   */
-  options?: SelectOption[] | SelectSection[];
-
-  /**
-   * Set openness (only meaningful with `options`):
-   * - "closed" (default): only options can be chosen; typing filters.
-   * - "open": typing filters AND the raw text commits via the create row.
-   *
-   * Without `options` the input is inherently open (plain free tagging).
-   */
-  mode?: "closed" | "open";
-
-  /**
-   * Called when a dropdown option is chosen. Choosing an already-selected
-   * option calls `onRemoveTag(option.value)` instead — one removal path.
-   */
-  onSelectOption?: (option: SelectOption) => void;
 
   placeholder?: string;
 
@@ -106,13 +125,10 @@ interface InputMultiSelectProps {
 
   /** Focuses the text input on mount. */
   focusOnMount?: boolean;
-
-  /** Prefix shown before the typed value in the create row (e.g. "Add"). */
-  createPrefix?: string;
-
-  /** Max height of the dropdown in CSS units. Defaults to "15rem". */
-  dropdownMaxHeight?: string;
 }
+
+type InputMultiSelectProps = InputMultiSelectBaseProps &
+  InputMultiSelectOptionsProps;
 
 // ---------------------------------------------------------------------------
 // InputMultiSelect
@@ -156,8 +172,10 @@ function InputMultiSelect({
   );
   const flatOptions = useMemo(() => flattenSections(sections), [sections]);
   const hasOptions = flatOptions.length > 0;
-  // Without a set the input is inherently open — the legacy free-tags input.
-  const freeEntry = mode === "open" || !hasOptions;
+  // The prop's PRESENCE is the contract: an empty or still-loading closed
+  // set must not fall open. Only an absent prop means legacy free tagging.
+  const hasOptionSet = optionsProp !== undefined;
+  const freeEntry = mode === "open" || !hasOptionSet;
 
   const selectedValues = useMemo(
     () => new Set(tags.map((tag) => tag.id)),
@@ -180,7 +198,16 @@ function InputMultiSelect({
     () => filterSections(sections, value),
     [sections, value]
   );
-  const showCreateOption = mode === "open" && hasOptions && hasSearchTerm;
+  const trimmedValue = value.trim().toLowerCase();
+  // An exact match means Enter should pick the option, not fork a free-form
+  // duplicate of it.
+  const exactOptionMatch = flatOptions.some(
+    (option) =>
+      option.value.toLowerCase() === trimmedValue ||
+      option.label.toLowerCase() === trimmedValue
+  );
+  const showCreateOption =
+    mode === "open" && hasOptions && hasSearchTerm && !exactOptionMatch;
 
   const allVisibleOptions = useMemo(() => {
     const baseOptions = flattenSections(visibleSections);
@@ -272,9 +299,10 @@ function InputMultiSelect({
     if (event.key === "Enter") {
       event.preventDefault();
       event.stopPropagation();
-      // With a dropdown, Enter belongs to it (the create row covers
-      // free-form commits); the plain add only serves the optionless input.
-      if (hasOptions) return;
+      // With an option set, Enter belongs to the dropdown (the create row
+      // covers free-form commits); the plain add only serves the optionless
+      // input.
+      if (hasOptionSet) return;
       if (!freeEntry) return;
       const trimmed = value.trim();
       if (trimmed) onAdd(trimmed);
@@ -410,6 +438,7 @@ function InputMultiSelect({
           if (!isKeyboardNav) setHighlightedIndex(-1);
         }}
         isExactMatch={(option) => selectedValues.has(option.value)}
+        markAllMatches
         inputValue={value}
         allowCreate={freeEntry}
         showCreateOption={showCreateOption}

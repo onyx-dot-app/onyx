@@ -13,6 +13,11 @@ interface OptionsListProps {
   value: string;
   /** Multi-select: the chosen values. Overrides single-value selection. */
   selectedValues?: ReadonlySet<string>;
+  /**
+   * Paint every isExactMatch hit (multi marks all selected rows); without
+   * it only the first hit paints, single-select's one-value semantics.
+   */
+  markAllMatches?: boolean;
   highlightedIndex: number;
   fieldId: string;
   onSelect: (option: SelectOption) => void;
@@ -37,6 +42,7 @@ export const OptionsList: React.FC<OptionsListProps> = ({
   sections,
   value,
   selectedValues,
+  markAllMatches = false,
   highlightedIndex,
   fieldId,
   onSelect,
@@ -126,9 +132,10 @@ export const OptionsList: React.FC<OptionsListProps> = ({
       {/* Sections: a Divider between each, an optional heading per section */}
       {(() => {
         let globalIndex = indexOffset;
+        let exactSeen = false;
         return sections.map((section, sectionIdx) => {
           const rows = (
-            <React.Fragment key={section.label ?? `section-${sectionIdx}`}>
+            <React.Fragment key={sectionIdx}>
               {section.label ? (
                 <Divider title={section.label} />
               ) : (
@@ -138,7 +145,9 @@ export const OptionsList: React.FC<OptionsListProps> = ({
               )}
               {section.options.map((option) => {
                 const index = globalIndex++;
-                const isExact = isExactMatch(option);
+                const isExact =
+                  (markAllMatches || !exactSeen) && isExactMatch(option);
+                if (isExact) exactSeen = true;
                 return (
                   <OptionItem
                     key={option.value}

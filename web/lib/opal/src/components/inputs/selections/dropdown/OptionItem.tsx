@@ -92,12 +92,21 @@ export const OptionItem = React.memo(
       >
         <span
           className={cn(
+            "flex flex-row items-center gap-1.5",
             "font-main-ui-action",
             isExact && "text-action-selection-05 font-medium",
             !isExact && "text-text-04",
             !isExact && isSelected && "font-medium"
           )}
         >
+          {option.icon && (
+            <option.icon
+              className={cn(
+                "h-4 w-4 shrink-0",
+                isExact ? "stroke-action-selection-05" : "stroke-text-03"
+              )}
+            />
+          )}
           {highlightMatch(option.label, searchTerm)}
         </span>
         {option.description && (

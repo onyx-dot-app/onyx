@@ -14,6 +14,7 @@ interface SelectDropdownProps {
   sections: SelectSection[];
   value: string;
   selectedValues?: ReadonlySet<string>;
+  markAllMatches?: boolean;
   highlightedIndex: number;
   onSelect: (option: SelectOption) => void;
   onMouseEnter: (index: number) => void;
@@ -49,6 +50,7 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
       sections,
       value,
       selectedValues,
+      markAllMatches,
       highlightedIndex,
       onSelect,
       onMouseEnter,
@@ -114,6 +116,11 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
           ...(dropdownMaxHeight ? { maxHeight: dropdownMaxHeight } : {}),
         }}
         onMouseLeave={onMouseLeave}
+        onMouseDown={(e) => {
+          // Clicks on padding, gaps, or dividers must not steal focus from
+          // the combobox input (the listbox is tabIndex={-1} for AT only).
+          e.preventDefault();
+        }}
         onWheel={(e) => {
           // Prevent event from bubbling to prevent any parent scroll blocking
           e.stopPropagation();
@@ -127,6 +134,7 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
           sections={sections}
           value={value}
           selectedValues={selectedValues}
+          markAllMatches={markAllMatches}
           highlightedIndex={highlightedIndex}
           fieldId={fieldId}
           onSelect={onSelect}

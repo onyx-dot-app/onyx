@@ -350,10 +350,19 @@ const InputSingleSelect = ({
       <>
         <InputTypeIn
           ref={inputRef}
+          name={name}
           placeholder={placeholder}
           value={displayLabel}
           onChange={handleInputChange}
           onFocus={handleFocus}
+          onClick={() => {
+            // Reopen on click while already focused (e.g. after Escape) —
+            // focus alone won't fire again.
+            if (hasOptions && !isOpen) {
+              setIsOpen(true);
+              setHighlightedIndex(-1);
+            }
+          }}
           onKeyDown={handleKeyDown}
           variant={disabled ? "disabled" : !isValid ? "error" : undefined}
           searchIcon={searchIcon}
