@@ -49,12 +49,27 @@ class ZoomTranscript(BaseModel):
         )
 
 
-class ZoomPastMeetingDetails(BaseModel):
-    """Response shape of `GET /past_meetings/{meetingId}`."""
+class ZoomSessionDetails(BaseModel):
+    """The two fields both details endpoints always carry. Meetings and webinars
+    answer with different shapes, so each gets its own subclass below.
+    """
+
+    topic: str
+    start_time: str | None = None
+
+
+class ZoomPastMeetingDetails(ZoomSessionDetails):
+    """Response shape of `GET /past_meetings/{meetingId}` — every documented field.
+
+    Zoom documents all of them as always sent, so a missing one means Zoom
+    changed the contract. Failing here says so, where a default would instead
+    index the meeting under a title nobody chose.
+    """
 
     uuid: str
     id: int
-    topic: str
+    # A past meeting has already ended, so it always carries both timestamps
+    # where a scheduled one may not.
     start_time: str
     end_time: str
     duration: int
@@ -69,8 +84,49 @@ class ZoomPastMeetingDetails(BaseModel):
     user_name: str
 
 
-class ZoomMeetingOccurrence(BaseModel):
-    """One entry from `GET /past_meetings/{meetingId}/instances`."""
+class ZoomWebinarDetails(ZoomSessionDetails):
+    """Response shape of `GET /webinars/{webinarId}` — every documented scalar
+    field.
+
+    This endpoint answers with the webinar's configuration, so most fields
+    arrive only when the host turned that feature on. Only the fields that
+    identify the webinar are required.
+
+    Zoom also returns `occurrences`, `recurrence`, `settings`,
+    `simulive_delay_start` and `tracking_fields`. Nothing here reads them and
+    `settings` alone nests 77 more fields, so they are left off rather than
+    half-modelled. `occurrences` cannot stand in for
+    `/past_webinars/{id}/instances` anyway: it carries `occurrence_id` and the
+    transcript call needs the `uuid`.
+    """
+
+    id: int
+    uuid: str
+    host_id: str
+    type: int
+
+    agenda: str | None = None
+    created_at: str | None = None
+    creation_source: str | None = None
+    duration: int | None = None
+    encrypted_passcode: str | None = None
+    h323_passcode: str | None = None
+    host_email: str | None = None
+    is_simulive: bool | None = None
+    join_url: str | None = None
+    password: str | None = None
+    record_file_id: str | None = None
+    registration_url: str | None = None
+    start_url: str | None = None
+    template_id: str | None = None
+    timezone: str | None = None
+    transition_to_live: bool | None = None
+
+
+class ZoomSessionOccurrence(BaseModel):
+    """One entry from `GET /past_meetings/{meetingId}/instances` or
+    `GET /past_webinars/{webinarId}/instances` — identical shapes under
+    different response keys."""
 
     uuid: str
     start_time: str
