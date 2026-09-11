@@ -13,7 +13,7 @@ packages:
   .: 100
   src: 99.4
   src/app: 99.5
-  src/app/admin: 96.4
+  src/app/admin: 96.5
   src/app/anonymous: 100
   src/app/api: 100
   src/app/app: 98.4
@@ -48,7 +48,7 @@ packages:
   src/components/ui: 99.9
   src/components/voice: 100
   src/ee/hooks: 93.5
-  src/ee/lib: 99
+  src/ee/lib: 100
   src/ee/providers: 99.3
   src/ee/sections: 99.7
   src/ee/views: 99.7
@@ -68,9 +68,9 @@ packages:
   src/lib/billing: 100
   src/lib/build: 100
   src/lib/chat: 98.5
-  src/lib/connectors: 96.4
+  src/lib/connectors: 98.4
   src/lib/constants: 100
-  src/lib/credentials: 97.2
+  src/lib/credentials: 97.3
   src/lib/extension: 100
   src/lib/externalApps: 100
   src/lib/headers: 100
@@ -83,7 +83,7 @@ packages:
   src/lib/oauth: 100
   src/lib/permissions: 100
   src/lib/position: 98.6
-  src/lib/projects: 99.6
+  src/lib/projects: 99.7
   src/lib/search: 99.1
   src/lib/searchFilters: 95.3
   src/lib/settings: 96.6

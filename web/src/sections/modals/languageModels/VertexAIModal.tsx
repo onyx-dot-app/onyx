@@ -213,7 +213,7 @@ export default function VertexAIModal({
       vertex_project:
         (existingLlmProvider?.custom_config?.vertex_project as string) ?? "",
     },
-  } as VertexAIModalValues;
+  };
 
   const validationSchema = buildValidationSchema(t, isOnboarding, {
     extra: {

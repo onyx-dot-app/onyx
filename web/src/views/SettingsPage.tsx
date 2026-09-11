@@ -2611,27 +2611,20 @@ function ConnectorsSettings() {
   ];
 
   // Group indexed connectors by source
-  const groupedConnectors = ccPairs.reduce(
-    (acc, ccPair) => {
-      if (!acc[ccPair.source]) {
-        acc[ccPair.source] = {
-          source: ccPair.source,
-          hasActiveConnector: false,
-        };
-      }
-      if (ACTIVE_STATUSES.includes(ccPair.status)) {
-        acc[ccPair.source]!.hasActiveConnector = true;
-      }
-      return acc;
-    },
-    {} as Record<
-      string,
-      {
-        source: ValidSources;
-        hasActiveConnector: boolean;
-      }
-    >
-  );
+  const groupedConnectors = ccPairs.reduce<
+    Record<string, { source: ValidSources; hasActiveConnector: boolean }>
+  >((acc, ccPair) => {
+    if (!acc[ccPair.source]) {
+      acc[ccPair.source] = {
+        source: ccPair.source,
+        hasActiveConnector: false,
+      };
+    }
+    if (ACTIVE_STATUSES.includes(ccPair.status)) {
+      acc[ccPair.source]!.hasActiveConnector = true;
+    }
+    return acc;
+  }, {});
 
   const hasConnectors =
     Object.keys(groupedConnectors).length > 0 || federatedConnectors.length > 0;

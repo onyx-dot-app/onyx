@@ -75,7 +75,7 @@ export async function updateToolsStatus(
     body: JSON.stringify({
       tool_ids: toolIds,
       enabled: enabled,
-    } as ToolStatusUpdateRequest),
+    } satisfies ToolStatusUpdateRequest),
   });
 
   if (!response.ok) {
