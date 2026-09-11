@@ -171,7 +171,6 @@ function InputMultiSelect({
     [optionsProp]
   );
   const flatOptions = useMemo(() => flattenSections(sections), [sections]);
-  const hasOptions = flatOptions.length > 0;
   // The prop's PRESENCE is the contract: an empty or still-loading closed
   // set must not fall open. Only an absent prop means legacy free tagging.
   const hasOptionSet = optionsProp !== undefined;
@@ -207,7 +206,7 @@ function InputMultiSelect({
       option.label.toLowerCase() === trimmedValue
   );
   const showCreateOption =
-    mode === "open" && hasOptions && hasSearchTerm && !exactOptionMatch;
+    mode === "open" && hasOptionSet && hasSearchTerm && !exactOptionMatch;
 
   const allVisibleOptions = useMemo(() => {
     const baseOptions = flattenSections(visibleSections);
@@ -265,7 +264,7 @@ function InputMultiSelect({
     setIsKeyboardNav,
     allVisibleOptions,
     onSelect: handleOptionSelect,
-    hasOptions,
+    hasOptions: hasOptionSet,
   });
 
   useClickOutside<HTMLElement>(
@@ -291,7 +290,7 @@ function InputMultiSelect({
     // edits the composition. Neither may add or arm tags.
     if (event.nativeEvent.isComposing) return;
 
-    if (hasOptions) {
+    if (hasOptionSet) {
       handleDropdownKeyDown(event);
       if (event.defaultPrevented) return;
     }
@@ -330,7 +329,7 @@ function InputMultiSelect({
   const autoId = useId();
   const fieldId = `multi-select-${autoId}`;
   const ariaProps = buildAriaAttributes({
-    hasOptions,
+    hasOptions: hasOptionSet,
     isOpen,
     isValid: true,
     highlightedIndex,
@@ -389,12 +388,12 @@ function InputMultiSelect({
           value={value}
           onChange={(event) => {
             onChange(event.target.value);
-            if (hasOptions && !isOpen) setIsOpen(true);
+            if (hasOptionSet && !isOpen) setIsOpen(true);
             setHighlightedIndex(0);
             setIsKeyboardNav(false);
           }}
           onFocus={() => {
-            if (hasOptions) setIsOpen(true);
+            if (hasOptionSet) setIsOpen(true);
           }}
           onKeyDown={handleInputKeyDown}
           placeholder={placeholder}
@@ -416,7 +415,7 @@ function InputMultiSelect({
 
       <SelectDropdown
         ref={dropdownRef}
-        isOpen={isOpen && hasOptions}
+        isOpen={isOpen && hasOptionSet}
         disabled={disabled}
         floatingStyles={floatingStyles}
         setFloatingRef={refs.setFloating}

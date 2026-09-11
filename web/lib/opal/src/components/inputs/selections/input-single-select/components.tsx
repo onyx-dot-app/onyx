@@ -359,6 +359,7 @@ const InputSingleSelect = ({
             // Reopen on click while already focused (e.g. after Escape) —
             // focus alone won't fire again.
             if (hasOptions && !isOpen) {
+              setInputValue("");
               setIsOpen(true);
               setHighlightedIndex(-1);
             }
