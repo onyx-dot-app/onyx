@@ -1937,10 +1937,8 @@ class FastAPIUserWithRefreshRouter(FastAPIUsers[models.UP, models.ID]):
         )
 
         refresh_responses: OpenAPIResponseType = {
-            **{
-                status.HTTP_401_UNAUTHORIZED: {
-                    "description": "Missing token or inactive user."
-                }
+            status.HTTP_401_UNAUTHORIZED: {
+                "description": "Missing token or inactive user."
             },
             **backend.transport.get_openapi_login_responses_success(),
         }

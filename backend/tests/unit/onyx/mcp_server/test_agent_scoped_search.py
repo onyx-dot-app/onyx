@@ -55,8 +55,8 @@ async def stub(monkeypatch: pytest.MonkeyPatch) -> AsyncGenerator[_Stub, None]:
 
     def _handler(request: httpx.Request) -> httpx.Response:
         path = request.url.path
-        is_inventory = path.endswith("/manage/indexed-sources") or path.endswith(
-            "/manage/document-set"
+        is_inventory = path.endswith(
+            ("/manage/indexed-sources", "/manage/document-set")
         )
         if is_inventory and state.inventory_status is not None:
             return httpx.Response(state.inventory_status, json={"detail": "boom"})

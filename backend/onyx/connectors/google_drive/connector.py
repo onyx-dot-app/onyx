@@ -411,10 +411,7 @@ class GoogleDriveConnector(
         parsed = urlparse(url)
         netloc = parsed.netloc.lower()
 
-        if not (
-            netloc.startswith("docs.google.com")
-            or netloc.startswith("drive.google.com")
-        ):
+        if not netloc.startswith(("docs.google.com", "drive.google.com")):
             return NormalizationResult(normalized_url=None, use_default=False)
 
         file_id = _extract_drive_file_id(parsed)
