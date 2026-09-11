@@ -32,6 +32,7 @@ from ee.onyx.utils.license import (
     LicenseRejectedError,
     claim_cooldown_is_active,
     license_from_control_plane_response,
+    load_verified_license,
     normalize_license_file,
     reclaim_license_from_control_plane,
     verify_and_store_license,
@@ -118,6 +119,9 @@ async def claim_license(
 
     try:
         if session_id:
+            # A claim is driven by a caller-supplied checkout id, so a licence for
+            # another tenant must not replace the one this instance already holds.
+            stored = load_verified_license(db_session)
             response = requests.post(
                 f"{CLOUD_DATA_PLANE_URL}/proxy/claim-license",
                 json={"session_id": session_id},
@@ -126,7 +130,9 @@ async def claim_license(
             )
             response.raise_for_status()
             payload = verify_and_store_license(
-                db_session, license_from_control_plane_response(response)
+                db_session,
+                license_from_control_plane_response(response),
+                expected_tenant_id=stored.payload.tenant_id if stored else None,
             )
         else:
             if claim_cooldown_is_active():

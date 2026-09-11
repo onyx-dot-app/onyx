@@ -10,6 +10,10 @@ from ee.onyx.server.tenants.models import (
     PendingUserSnapshot,
     RequestInviteRequest,
 )
+from ee.onyx.server.tenants.provisioning import get_tenant_by_domain_from_control_plane
+from ee.onyx.server.tenants.tenant_management_api import (
+    FORBIDDEN_COMMON_EMAIL_SUBSTRINGS,
+)
 from onyx.auth.invited_users import (
     get_pending_users,
     write_pending_users,
@@ -17,6 +21,8 @@ from onyx.auth.invited_users import (
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import User
 from onyx.db.enums import Permission
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import (
     CURRENT_TENANT_ID_CONTEXTVAR,
@@ -40,18 +46,32 @@ def invite_self_to_tenant(email: str, tenant_id: str) -> None:
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
+def _assert_tenant_is_joinable(email: str, tenant_id: str) -> None:
+    """Re-derive the same-domain gate the join flow shows in the UI. Without it the
+    body's tenant_id is an unchecked write into any tenant's pending list."""
+    domain = email.split("@")[-1]
+    tenant = None
+    if not any(substring in domain for substring in FORBIDDEN_COMMON_EMAIL_SUBSTRINGS):
+        tenant = get_tenant_by_domain_from_control_plane(
+            domain, get_current_tenant_id()
+        )
+    if tenant is None or tenant.tenant_id != tenant_id:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "No team found for this email domain")
+
+
 @router.post("/users/invite/request")
 async def request_invite(
     invite_request: RequestInviteRequest,
     user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> None:
+    _assert_tenant_is_joinable(user.email, invite_request.tenant_id)
     try:
         invite_self_to_tenant(user.email, invite_request.tenant_id)
     except Exception as e:
         logger.exception(
             "Failed to invite self to tenant %s: %s", invite_request.tenant_id, e
         )
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to request invitation")
 
 
 @router.get("/users/pending")
@@ -67,8 +87,16 @@ async def approve_user(
     approve_user_request: ApproveUserRequest,
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> None:
+    # Approving rewrites the catalog row for this email in every tenant, so only
+    # act on an address that asked to join this one.
+    email = approve_user_request.email.lower()
+    if email not in {pending.lower() for pending in get_pending_users()}:
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST, "No pending join request for this email"
+        )
+
     tenant_id = get_current_tenant_id()
-    approve_user_invite(approve_user_request.email, tenant_id)
+    approve_user_invite(email, tenant_id)
 
 
 @router.post("/users/invite/accept")
