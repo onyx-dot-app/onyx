@@ -5,27 +5,41 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
+  statuses: read
 
 jobs:
-  # This job immediately succeeds to satisfy branch protection rules on merge_group events.
-  # There is a similarly named "required" job in pr-integration-tests.yml which runs the actual
-  # integration tests. That job runs on both pull_request and merge_group events, and this job
-  # exists solely to provide a fast-passing check with the same name for branch protection.
-  # The actual tests remain enforced on presubmit (pull_request events).
+  # `required` and `playwright-required` are required checks on main. Their
+  # real verdicts come from the pull_request runs of pr-integration-tests.yml
+  # and pr-playwright-tests.yml. The same-named jobs there also run on
+  # merge_group, but the queue does not wait for them: these two jobs satisfy
+  # the ruleset in seconds. Before passing, each one checks that the
+  # pull_request verdict was computed against a base that landed, so a PR that
+  # was retargeted or stacked on an abandoned branch cannot merge on a stale
+  # verdict (see .github/actions/check-tested-base).
   required:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 5
     steps:
-      - name: Success
-        run: echo "Success"
-  # This job immediately succeeds to satisfy branch protection rules on merge_group events.
-  # There is a similarly named "playwright-required" job in pr-playwright-tests.yml which runs
-  # the actual playwright tests. That job runs on both pull_request and merge_group events, and
-  # this job exists solely to provide a fast-passing check with the same name for branch protection.
-  # The actual tests remain enforced on presubmit (pull_request events).
+      - name: Checkout check-tested-base action
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/actions/check-tested-base
+      - name: Check the integration verdict was computed against a landed base
+        uses: ./.github/actions/check-tested-base
+        with:
+          context: ci/tested-base/integration
   playwright-required:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 5
     steps:
-      - name: Success
-        run: echo "Success"
+      - name: Checkout check-tested-base action
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/actions/check-tested-base
+      - name: Check the playwright verdict was computed against a landed base
+        uses: ./.github/actions/check-tested-base
+        with:
+          context: ci/tested-base/playwright

@@ -24,7 +24,6 @@ on:
     - cron: "0 7 * * *"   # 07:00 UTC nightly
   merge_group:
   pull_request:
-    branches: [main]
     # NOTE: Intentionally no `paths:` filter. We always trigger and let the
     # `changes` job below decide whether the real test job runs.
   push:

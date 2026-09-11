@@ -9,7 +9,6 @@ concurrency:
 # triggered ONLY when the prompt (or the flow/suite around it) changes.
 on:
   pull_request:
-    branches: [main]
     paths:
       - "backend/onyx/prompts/filter_extration.py"
       - "backend/onyx/secondary_llm_flows/source_filter.py"

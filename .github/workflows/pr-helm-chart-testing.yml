@@ -6,7 +6,6 @@ concurrency:
 on:
   merge_group:
   pull_request:
-    branches: [main]
   push:
     tags:
       - "v*.*.*"
@@ -45,13 +44,16 @@ jobs:
           uv_version: "0.11.25"
 
       # even though we specify chart-dirs in ct.yaml, it isn't used by ct for the list-changed command...
+      # Diff against the PR's own base so a stacked PR only lists its own chart
+      # changes. `github.base_ref` is empty outside pull_request, so merge_group,
+      # tag pushes, and manual runs fall back to the default branch.
       - name: Run chart-testing (list-changed)
         id: list-changed
         env:
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          TARGET_BRANCH: ${{ github.base_ref || github.event.repository.default_branch }}
         run: |
-          echo "default_branch: ${DEFAULT_BRANCH}"
-          changed=$(ct list-changed --remote origin --target-branch ${DEFAULT_BRANCH} --chart-dirs deployment/helm/charts)
+          echo "target_branch: ${TARGET_BRANCH}"
+          changed=$(ct list-changed --remote origin --target-branch "${TARGET_BRANCH}" --chart-dirs deployment/helm/charts)
           echo "list-changed output: $changed"
           if [[ -n "$changed" ]]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
