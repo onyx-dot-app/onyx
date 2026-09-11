@@ -1,6 +1,7 @@
 import json
 import time
 from collections.abc import Callable
+from functools import partial
 from typing import Any, Literal
 
 from onyx.chat.chat_state import ChatStateContainer
@@ -34,10 +35,10 @@ from onyx.chat.prompt_utils import (
     get_default_base_system_prompt,
     process_prompt_template,
 )
+from onyx.chat.token_budget import resolve_chat_token_budget
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.chat_configs import MAX_LLM_CYCLES
 from onyx.configs.constants import DocumentSource, MessageType
-from onyx.configs.model_configs import GEN_AI_INPUT_TOKEN_SAFETY_MARGIN
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.memory import UserMemoryContext, add_memory, update_memory_at_index
@@ -377,6 +378,29 @@ def _build_project_message(
     return messages
 
 
+def count_message_replay_tokens(
+    msg: ChatMessageSimple,
+    *,
+    image_files_replayed_as_markers: bool = False,
+    token_counter: Callable[[str], int] | None = None,
+) -> int:
+    if not image_files_replayed_as_markers:
+        return msg.token_count
+    # Include images whose stored cost is zero, such as project images.
+    num_images = sum(
+        1 for f in msg.image_files or [] if f.file_type == ChatFileType.IMAGE
+    )
+    if not num_images:
+        return msg.token_count
+    sample_marker = NON_VISION_IMAGE_MARKER.format(file_id="0" * 36)
+    marker_tokens = (
+        token_counter(sample_marker)
+        if token_counter
+        else _NON_VISION_MARKER_TOKEN_FALLBACK
+    )
+    return max(0, msg.token_count - msg.image_token_count) + num_images * marker_tokens
+
+
 def construct_message_history(
     system_prompt: ChatMessageSimple | None,
     custom_agent_prompt: ChatMessageSimple | None,
@@ -395,33 +419,11 @@ def construct_message_history(
                 "filtering chat history by last N user messages must be a value greater than 0"
             )
 
-    # Budget each message at its replay cost: when the model takes no image
-    # input, translate_history_to_llm_format sends short text markers instead
-    # of the images, so charging the stored image token cost would evict
-    # history that actually fits.
-    marker_tokens = 0
-    if image_files_replayed_as_markers:
-        sample_marker = NON_VISION_IMAGE_MARKER.format(file_id="0" * 36)
-        marker_tokens = (
-            token_counter(sample_marker)
-            if token_counter
-            else _NON_VISION_MARKER_TOKEN_FALLBACK
-        )
-
-    def _replay_token_count(msg: ChatMessageSimple) -> int:
-        if not image_files_replayed_as_markers:
-            return msg.token_count
-        # Charge markers for every IMAGE entry, including ones whose stored
-        # token contribution is zero (project/context images are never
-        # counted) — the marker text is still sent for them.
-        num_images = sum(
-            1 for f in msg.image_files or [] if f.file_type == ChatFileType.IMAGE
-        )
-        if not num_images:
-            return msg.token_count
-        return (
-            max(0, msg.token_count - msg.image_token_count) + num_images * marker_tokens
-        )
+    _replay_token_count = partial(
+        count_message_replay_tokens,
+        image_files_replayed_as_markers=image_files_replayed_as_markers,
+        token_counter=token_counter,
+    )
 
     # Build the project / file-metadata messages up front so we can use their
     # actual token counts for the budget.
@@ -808,11 +810,8 @@ def run_llm_loop(
             finish_reason=None,
         )
 
-        # Hold back a margin below max_input_tokens: our tiktoken estimate can
-        # undercount the provider's tokenizer and overflow the context window.
-        available_tokens = int(
-            llm.config.max_input_tokens * (1 - GEN_AI_INPUT_TOKEN_SAFETY_MARGIN)
-        )
+        token_budget = resolve_chat_token_budget(llm)
+        available_tokens = token_budget.input_tokens
         # When the model takes no image input, history images are replayed as
         # short text markers (translate_history_to_llm_format) — budget them
         # as markers too, not at their stored image token cost.
@@ -1034,6 +1033,18 @@ def run_llm_loop(
                 image_files_replayed_as_markers=image_files_replayed_as_markers,
             )
 
+            max_output_tokens = token_budget.output_allowance(
+                estimated_input_tokens=tool_token_budget
+                + sum(
+                    count_message_replay_tokens(
+                        msg,
+                        image_files_replayed_as_markers=image_files_replayed_as_markers,
+                        token_counter=token_counter,
+                    )
+                    for msg in truncated_message_history
+                ),
+            )
+
             # This calls the LLM, yields packets (reasoning, answers, etc.) and returns the result
             # It also pre-processes the tool calls in preparation for running them
             tool_defs = [tool.tool_definition() for tool in final_tools]
@@ -1058,6 +1069,7 @@ def run_llm_loop(
                 user_identity=user_identity,
                 pre_answer_processing_time=pre_answer_processing_time,
                 reasoning_effort=reasoning_effort,
+                max_tokens=max_output_tokens,
             )
             if has_reasoned:
                 reasoning_cycles += 1

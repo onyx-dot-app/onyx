@@ -827,6 +827,56 @@ def test_aliased_claude_model_still_reasons() -> None:
         assert kwargs["thinking"] == {"type": "enabled", "budget_tokens": 4096}
 
 
+@pytest.mark.parametrize(
+    "max_tokens, expected_thinking",
+    [
+        (None, {"type": "enabled", "budget_tokens": 4096}),
+        (8000, {"type": "enabled", "budget_tokens": 4096}),
+        (5000, {"type": "enabled", "budget_tokens": 3976}),
+        (2048, {"type": "enabled", "budget_tokens": 1024}),
+        (2000, None),
+    ],
+)
+def test_legacy_claude_thinking_budget_fits_inside_max_tokens(
+    max_tokens: int | None,
+    expected_thinking: dict[str, int | str] | None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("onyx.llm.multi_llm.GEN_AI_NUM_RESERVED_OUTPUT_TOKENS", 1024)
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.VERTEX_AI,
+        model_name="claude-sonnet-4-5",
+        max_input_tokens=100000,
+    )
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=False),
+        patch("onyx.llm.multi_llm.logger.warning") as warning,
+    ):
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(
+            llm.stream(
+                messages, reasoning_effort=ReasoningEffort.HIGH, max_tokens=max_tokens
+            )
+        )
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["max_tokens"] == max_tokens
+        if expected_thinking is None:
+            assert "thinking" not in kwargs
+            warning.assert_called_once()
+            assert "Skipping Anthropic thinking" in warning.call_args.args[0]
+            assert warning.call_args.args[1] == max_tokens
+        else:
+            assert kwargs["thinking"] == expected_thinking
+            warning.assert_not_called()
+
+
 def test_openai_chat_omits_reasoning_params() -> None:
     llm = LitellmLLM(
         api_key="test_key",
