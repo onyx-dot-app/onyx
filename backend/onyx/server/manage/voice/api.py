@@ -158,7 +158,7 @@ def _fetch_provider_for_stored_secret(
     if provider is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Voice provider not found.")
 
-    if provider.provider_type != provider_type:
+    if provider.provider_type.lower() != provider_type.lower():
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
             "Stored API secret provider does not match the requested provider type.",
