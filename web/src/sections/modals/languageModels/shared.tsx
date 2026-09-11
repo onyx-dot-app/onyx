@@ -21,7 +21,7 @@ import { InputTypeIn } from "@opal/components";
 import { InputComboBox } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
-import { Switch } from "@opal/components";
+import { InputSwitch } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
 import { BaseLLMFormValues } from "@/sections/modals/languageModels/utils";
@@ -971,7 +971,7 @@ export function ModelSelectionField({
             description={t("models.autoUpdate.description")}
             withLabel
           >
-            <Switch
+            <InputSwitch
               checked={isAutoMode}
               onCheckedChange={handleToggleAutoMode}
             />

@@ -1,4 +1,4 @@
-# Switch
+# InputSwitch
 
 An accessible toggle switch with hover, focus, and disabled states.
 
@@ -7,16 +7,16 @@ Supports both **controlled** and **uncontrolled** modes.
 ## Usage
 
 ```tsx
-import { Switch } from "@opal/components";
+import { InputSwitch } from "@opal/components";
 
 // Uncontrolled
-<Switch defaultChecked onCheckedChange={(checked) => console.log(checked)} />
+<InputSwitch defaultChecked onCheckedChange={(checked) => console.log(checked)} />
 
 // Controlled
-<Switch checked={value} onCheckedChange={setValue} />
+<InputSwitch checked={value} onCheckedChange={setValue} />
 
 // Disabled
-<Switch disabled />
+<InputSwitch disabled />
 ```
 
 ## Props

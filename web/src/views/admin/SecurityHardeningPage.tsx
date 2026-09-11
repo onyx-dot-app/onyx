@@ -23,7 +23,7 @@ import {
   Card,
   InputTags,
   InputTypeIn,
-  Switch,
+  InputSwitch,
   Text,
   type TagItem,
 } from "@opal/components";
@@ -69,7 +69,7 @@ function ToggleRow({
 }: ToggleRowProps) {
   return (
     <InputHorizontal title={title} description={description} withLabel>
-      <Switch
+      <InputSwitch
         checked={checked}
         onCheckedChange={onCheckedChange}
         disabled={disabled}

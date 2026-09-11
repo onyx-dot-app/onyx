@@ -23,7 +23,7 @@ function isBackendPlaceholder(value: string): boolean {
   return !!value && BACKEND_PLACEHOLDER_PATTERN.test(value);
 }
 
-interface PasswordInputTypeInProps extends Omit<
+interface InputPasswordTypeInProps extends Omit<
   InputTypeInProps,
   "type" | "rightChildren" | "searchIcon" | "variant"
 > {
@@ -53,7 +53,7 @@ interface PasswordInputTypeInProps extends Omit<
 }
 
 /**
- * PasswordInputTypeIn Component
+ * InputPasswordTypeIn Component
  *
  * A native password input (`type="password"`, toggled to `"text"` when
  * revealed) with a reveal/hide toggle. Built on top of InputTypeIn for
@@ -70,7 +70,7 @@ interface PasswordInputTypeInProps extends Omit<
  * - When hidden, the toggle icon uses the default tertiary style (muted)
  * - Optional `isNonRevealable` prop to disable reveal (for stored backend values)
  */
-function PasswordInputTypeIn({
+function InputPasswordTypeIn({
   ref,
   isNonRevealable = false,
   mask = "asterisk",
@@ -82,7 +82,7 @@ function PasswordInputTypeIn({
   error,
   clearButton = false,
   ...props
-}: PasswordInputTypeInProps) {
+}: InputPasswordTypeInProps) {
   const [isPasswordVisible, setIsPasswordVisible] = React.useState(false);
   const [isFocused, setIsFocused] = React.useState(false);
   const containerRef = React.useRef<HTMLDivElement>(null);
@@ -197,4 +197,4 @@ function PasswordInputTypeIn({
   );
 }
 
-export { PasswordInputTypeIn, type PasswordInputTypeInProps };
+export { InputPasswordTypeIn, type InputPasswordTypeInProps };

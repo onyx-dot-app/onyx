@@ -126,7 +126,7 @@ function buildValidationSchema(t: SSOTranslate) {
 
 // The backend masks every config string on read and restores any value sent
 // back unchanged, so the form sends its current values as-is. Blank optional
-// keys are omitted rather than sent as empty strings. Switch values are always
+// keys are omitted rather than sent as empty strings. InputSwitch values are always
 // sent: the update endpoint overlays only the keys present, so turning a flag
 // off must send an explicit false.
 function buildConfig(

@@ -24,7 +24,7 @@ import type { ProjectFile } from "@/lib/projects/types";
 import type { DocumentSetSummary, ValidSources } from "@/lib/types";
 import { searchDocuments } from "@/ee/lib/search/svc";
 import { Disabled } from "@opal/core";
-import { Card, Switch } from "@opal/components";
+import { Card, InputSwitch } from "@opal/components";
 import { Content, InputHorizontal, Section } from "@opal/layouts";
 
 import { KnowledgeAddView } from "@/sections/knowledge/agent-knowledge/KnowledgeAddView";
@@ -533,7 +533,7 @@ export default function AgentKnowledgePane({
               description={t("pane.useKnowledge.description")}
               withLabel
             >
-              <Switch
+              <InputSwitch
                 name="enable_knowledge"
                 checked={enableKnowledge}
                 onCheckedChange={onEnableKnowledgeChange}

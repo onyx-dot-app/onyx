@@ -8,7 +8,7 @@ import {
   LineItemButton,
   Popover,
   PopoverMenu,
-  Switch,
+  InputSwitch,
   Tag,
   Text,
 } from "@opal/components";
@@ -95,7 +95,7 @@ export default function IntegrationCard({ integration }: IntegrationCardProps) {
                 {t("card.availableInCraft.label")}
               </Text>
             </Hoverable.Item>
-            <Switch
+            <InputSwitch
               checked={enabled}
               onCheckedChange={() =>
                 run(

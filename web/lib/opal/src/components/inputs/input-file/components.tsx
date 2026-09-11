@@ -115,7 +115,7 @@ export default function InputFile({
   function handlePaste(e: React.ClipboardEvent<HTMLInputElement>) {
     // Don't allow paste when non-editable
     if (isNonEditable) return;
-    // Switch to editable mode and use pasted text as the value
+    // InputSwitch to editable mode and use pasted text as the value
     const pastedText = e.clipboardData.getData("text");
     if (!pastedText) return;
     e.preventDefault();

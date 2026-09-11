@@ -1,11 +1,11 @@
-# PasswordInputTypeIn
+# InputPasswordTypeIn
 
-**Import:** `import { PasswordInputTypeIn } from "@opal/components";`
+**Import:** `import { InputPasswordTypeIn } from "@opal/components";`
 
 A native password field on `InputTypeIn` with a reveal/hide toggle. The native `type="password"` (toggled to `"text"` when revealed) is what lets browsers and password managers recognize the field for autofill and save-password. Defaults `autoComplete` to `"new-password"` so managers do not autofill saved logins into secret fields (connector credentials, API keys). Login forms should override with `"current-password"`.
 
 ```tsx
-<PasswordInputTypeIn
+<InputPasswordTypeIn
   value={secret}
   onChange={(e) => setSecret(e.target.value)}
   placeholder="Your long-term API key"

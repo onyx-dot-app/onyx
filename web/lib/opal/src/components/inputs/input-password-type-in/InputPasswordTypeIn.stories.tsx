@@ -1,15 +1,15 @@
 import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { PasswordInputTypeIn } from "@opal/components";
+import { InputPasswordTypeIn } from "@opal/components";
 
-const meta: Meta<typeof PasswordInputTypeIn> = {
-  title: "opal/components/PasswordInputTypeIn",
-  component: PasswordInputTypeIn,
+const meta: Meta<typeof InputPasswordTypeIn> = {
+  title: "opal/components/InputPasswordTypeIn",
+  component: InputPasswordTypeIn,
   tags: ["autodocs"],
 };
 
 export default meta;
-type Story = StoryObj<typeof PasswordInputTypeIn>;
+type Story = StoryObj<typeof InputPasswordTypeIn>;
 
 function Harness(props: {
   initialValue?: string;
@@ -23,7 +23,7 @@ function Harness(props: {
   const [value, setValue] = useState(initialValue);
   return (
     <div className="w-72">
-      <PasswordInputTypeIn
+      <InputPasswordTypeIn
         value={value}
         onChange={(e) => setValue(e.target.value)}
         {...rest}

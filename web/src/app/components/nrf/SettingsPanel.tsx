@@ -1,6 +1,6 @@
 "use client";
 
-import { Switch } from "@opal/components";
+import { InputSwitch } from "@opal/components";
 import { useNRFPreferences } from "@/components/context/NRFPreferencesContext";
 import Text from "@/refresh-components/texts/Text";
 import { SvgX, SvgSettings, SvgSun, SvgMoon, SvgCheck } from "@opal/icons";
@@ -214,7 +214,7 @@ export const SettingsPanel = ({
             </Text>
             <div className="flex flex-col gap-1 bg-background-tint-01 rounded-2xl px-4">
               <SettingRow label={t("nrf.settingsPanel.newTabToggle.label")}>
-                <Switch
+                <InputSwitch
                   checked={useOnyxAsNewTab}
                   onCheckedChange={handleUseOnyxToggle}
                 />

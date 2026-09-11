@@ -1,14 +1,14 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { Switch } from "./components";
+import { InputSwitch } from "./components";
 
-const meta: Meta<typeof Switch> = {
-  title: "opal/Inputs/Switch",
-  component: Switch,
+const meta: Meta<typeof InputSwitch> = {
+  title: "opal/Inputs/InputSwitch",
+  component: InputSwitch,
   tags: ["autodocs"],
 };
 
 export default meta;
-type Story = StoryObj<typeof Switch>;
+type Story = StoryObj<typeof InputSwitch>;
 
 export const Default: Story = {
   args: {},

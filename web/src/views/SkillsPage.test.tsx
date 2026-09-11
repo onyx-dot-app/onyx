@@ -350,7 +350,7 @@ describe("SkillsPage preference toggles", () => {
 
     expect(mockSetSkillEnabled).not.toHaveBeenCalled();
     expect(
-      screen.getByText("Switch “report-writer” skill?")
+      screen.getByText("InputSwitch “report-writer” skill?")
     ).toBeInTheDocument();
     expect(
       screen.getAllByText(
@@ -367,7 +367,7 @@ describe("SkillsPage preference toggles", () => {
     expect(mockSetSkillEnabled).not.toHaveBeenCalled();
 
     await user.click(switches[1]!);
-    await user.click(screen.getByRole("button", { name: "Switch skill" }));
+    await user.click(screen.getByRole("button", { name: "InputSwitch skill" }));
 
     await waitFor(() =>
       expect(mockSetSkillEnabled).toHaveBeenCalledWith("second-id", true, true)
@@ -377,7 +377,7 @@ describe("SkillsPage preference toggles", () => {
       expect(switches[1]).toHaveAttribute("aria-checked", "true");
     });
     expect(
-      screen.queryByText("Switch “report-writer” skill?")
+      screen.queryByText("InputSwitch “report-writer” skill?")
     ).not.toBeInTheDocument();
   });
 
@@ -396,11 +396,11 @@ describe("SkillsPage preference toggles", () => {
     await user.click(
       screen.getAllByRole("switch", { name: "report-writer" })[1]!
     );
-    await user.click(screen.getByRole("button", { name: "Switch skill" }));
+    await user.click(screen.getByRole("button", { name: "InputSwitch skill" }));
 
     expect(screen.getByRole("button", { name: "Switching..." })).toBeDisabled();
     expect(
-      screen.getByText("Switch “report-writer” skill?")
+      screen.getByText("InputSwitch “report-writer” skill?")
     ).toBeInTheDocument();
 
     await act(async () => {
@@ -409,10 +409,12 @@ describe("SkillsPage preference toggles", () => {
     });
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Switch skill" })).toBeEnabled()
+      expect(
+        screen.getByRole("button", { name: "InputSwitch skill" })
+      ).toBeEnabled()
     );
     expect(
-      screen.getByText("Switch “report-writer” skill?")
+      screen.getByText("InputSwitch “report-writer” skill?")
     ).toBeInTheDocument();
     expect(mockToastError).toHaveBeenCalledWith("Replacement failed");
   });
@@ -430,11 +432,11 @@ describe("SkillsPage preference toggles", () => {
     await user.click(screen.getByRole("switch", { name: "first-skill" }));
 
     expect(
-      await screen.findByText("Switch “first-skill” skill?")
+      await screen.findByText("InputSwitch “first-skill” skill?")
     ).toBeInTheDocument();
     expect(mockToastError).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole("button", { name: "Switch skill" }));
+    await user.click(screen.getByRole("button", { name: "InputSwitch skill" }));
     await waitFor(() =>
       expect(mockSetSkillEnabled).toHaveBeenLastCalledWith(
         "first-id",
@@ -444,7 +446,7 @@ describe("SkillsPage preference toggles", () => {
     );
     await waitFor(() =>
       expect(
-        screen.queryByText("Switch “first-skill” skill?")
+        screen.queryByText("InputSwitch “first-skill” skill?")
       ).not.toBeInTheDocument()
     );
   });

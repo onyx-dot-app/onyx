@@ -4,7 +4,7 @@ import { useState, KeyboardEvent } from "react";
 import InputTypeIn from "@opal/components/inputs/input-type-in/components";
 import { Tag } from "@opal/components/tag/components";
 
-export interface ListFieldInputProps {
+export interface InputListProps {
   values: string[];
   onChange: (values: string[]) => void;
   placeholder?: string;
@@ -13,7 +13,7 @@ export interface ListFieldInputProps {
 }
 
 /**
- * ListFieldInput is a component that allows the user to input a list of values by typing and pressing Enter.
+ * InputList is a component that allows the user to input a list of values by typing and pressing Enter.
  * It displays the values in a list of chips, and allows the user to add and remove values.
 
  * @param values - The array of values to display in the input field.
@@ -21,13 +21,13 @@ export interface ListFieldInputProps {
  * @param placeholder - The placeholder text to display in the input field.
  * @param disabled - Whether the input field is disabled.
  **/
-export function ListFieldInput({
+export function InputList({
   values,
   onChange,
   placeholder = "",
   disabled = false,
   error = false,
-}: ListFieldInputProps) {
+}: InputListProps) {
   const [inputValue, setInputValue] = useState("");
 
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {

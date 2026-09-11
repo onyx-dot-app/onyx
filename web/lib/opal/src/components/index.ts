@@ -104,11 +104,11 @@ export {
   type InputFileProps,
 } from "@opal/components/inputs/input-file/components";
 
-/* ListFieldInput */
+/* InputList */
 export {
-  ListFieldInput,
-  type ListFieldInputProps,
-} from "@opal/components/inputs/list-field-input/components";
+  InputList,
+  type InputListProps,
+} from "@opal/components/inputs/input-list/components";
 
 /* Text */
 export {
@@ -267,11 +267,11 @@ export {
   type TagItem,
 } from "@opal/components/inputs/input-tags/components";
 
-/* PasswordInputTypeIn */
+/* InputPasswordTypeIn */
 export {
-  PasswordInputTypeIn,
-  type PasswordInputTypeInProps,
-} from "@opal/components/inputs/password-input-type-in/components";
+  InputPasswordTypeIn,
+  type InputPasswordTypeInProps,
+} from "@opal/components/inputs/input-password-type-in/components";
 
 /* InputTextArea */
 export {
@@ -289,11 +289,11 @@ export {
 /* Spacer */
 export { Spacer, type SpacerProps } from "@opal/components/spacer/components";
 
-/* Switch */
+/* InputSwitch */
 export {
-  Switch,
-  type SwitchProps,
-} from "@opal/components/inputs/switch/components";
+  InputSwitch,
+  type InputSwitchProps,
+} from "@opal/components/inputs/input-switch/components";
 
 /* CopyButton */
 export {

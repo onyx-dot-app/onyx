@@ -1,6 +1,6 @@
 "use client";
 
-import "@opal/components/inputs/switch/styles.css";
+import "@opal/components/inputs/input-switch/styles.css";
 import React, { useState } from "react";
 import { cn } from "@opal/utils";
 import type { WithoutStyles } from "@opal/types";
@@ -9,7 +9,7 @@ import type { WithoutStyles } from "@opal/types";
 // Types
 // ---------------------------------------------------------------------------
 
-export interface SwitchProps extends WithoutStyles<
+export interface InputSwitchProps extends WithoutStyles<
   Omit<React.ComponentPropsWithoutRef<"button">, "onChange">
 > {
   disabled?: boolean;
@@ -28,7 +28,7 @@ export interface SwitchProps extends WithoutStyles<
  * - Controlled: pass `checked` + `onCheckedChange`.
  * - Uncontrolled: pass `defaultChecked` (defaults to `false`).
  */
-const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
+const InputSwitch = React.forwardRef<HTMLButtonElement, InputSwitchProps>(
   (
     {
       disabled,
@@ -91,7 +91,7 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
     );
   }
 );
-Switch.displayName = "Switch";
+InputSwitch.displayName = "InputSwitch";
 
-export default Switch;
-export { Switch };
+export default InputSwitch;
+export { InputSwitch };

@@ -9,7 +9,7 @@ import {
   Button,
   Divider,
   MessageCard,
-  PasswordInputTypeIn,
+  InputPasswordTypeIn,
 } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { InputTypeIn } from "@opal/components";
@@ -543,7 +543,7 @@ export default function OpenAPIAuthenticationModal({
                             {t("openApiAuthModal.clientSecret.label")}
                           </FormField.Label>
                           <FormField.Control asChild>
-                            <PasswordInputTypeIn
+                            <InputPasswordTypeIn
                               name="clientSecret"
                               value={values.clientSecret}
                               onChange={handleChange}

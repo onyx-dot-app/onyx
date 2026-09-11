@@ -2,7 +2,7 @@
 
 import { useCallback, type MouseEvent } from "react";
 import { useTranslations } from "next-intl";
-import { Button, Switch, Tag, Tooltip } from "@opal/components";
+import { Button, InputSwitch, Tag, Tooltip } from "@opal/components";
 import { Content } from "@opal/layouts";
 import { SvgBlocks, SvgEdit, SvgPlug, SvgUser } from "@opal/icons";
 import { CardItemLayout } from "@/layouts/general-layouts";
@@ -195,7 +195,7 @@ export default function SkillCard({
                   role="presentation"
                   onClick={(event) => event.stopPropagation()}
                 >
-                  <Switch
+                  <InputSwitch
                     checked={item.enabled}
                     onCheckedChange={handleEnabledChange}
                     disabled={enablementPending || isInvalid}

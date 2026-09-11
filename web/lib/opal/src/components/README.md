@@ -28,7 +28,7 @@ The barrel file at `index.ts` re-exports each component and its prop types. Each
 | [InputImage](./inputs/input-image/)            | Circular image dropzone with edit overlay                    | [README](./inputs/input-image/README.md)       |
 | [InputKeyValue](./inputs/input-key-value/)     | Key/value pair editor with validation                        | [README](./inputs/input-key-value/README.md)   |
 | [InputNumber](./inputs/input-number/)          | Number field with steppers and reset                         | [README](./inputs/input-number/README.md)      |
-| [ListFieldInput](./inputs/list-field-input/)   | Type-and-Enter list builder with removable chips below       | [README](./inputs/list-field-input/README.md)  |
+| [InputList](./inputs/input-list/)   | Type-and-Enter list builder with removable chips below       | [README](./inputs/input-list/README.md)  |
 
 ## Adding new components
 

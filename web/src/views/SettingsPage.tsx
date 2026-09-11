@@ -28,10 +28,10 @@ import {
   Card,
   InputTextArea,
   InputTypeIn,
-  PasswordInputTypeIn,
+  InputPasswordTypeIn,
 } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
-import { Switch } from "@opal/components";
+import { InputSwitch } from "@opal/components";
 import { useUser } from "@/providers/UserProvider";
 import { useTheme } from "next-themes";
 import { MemoryItem, Permission, ThemePreference } from "@/lib/types";
@@ -1441,7 +1441,7 @@ function ChatPreferencesSettings() {
               description={t("chats.autoScroll.description")}
               withLabel
             >
-              <Switch
+              <InputSwitch
                 checked={user?.preferences.auto_scroll}
                 onCheckedChange={(checked) => {
                   updateUserAutoScroll(checked);
@@ -1454,7 +1454,7 @@ function ChatPreferencesSettings() {
               description={t("chats.smoothStreaming.description")}
               withLabel
             >
-              <Switch
+              <InputSwitch
                 checked={smoothStreamingEnabled}
                 onCheckedChange={setSmoothStreamingEnabled}
               />
@@ -1465,7 +1465,7 @@ function ChatPreferencesSettings() {
               description={t("chats.collapseLargePastes.description")}
               withLabel
             >
-              <Switch
+              <InputSwitch
                 checked={user?.preferences?.paste_as_tile ?? false}
                 onCheckedChange={(checked) => {
                   updateUserPasteAsTile(checked);
@@ -1547,7 +1547,7 @@ function ChatPreferencesSettings() {
               description={t("memory.referenceStoredMemories.description")}
               withLabel
             >
-              <Switch
+              <InputSwitch
                 checked={personalizationValues.use_memories}
                 onCheckedChange={(checked) => {
                   toggleUseMemories(checked);
@@ -1560,7 +1560,7 @@ function ChatPreferencesSettings() {
               description={t("memory.updateMemories.description")}
               withLabel
             >
-              <Switch
+              <InputSwitch
                 checked={personalizationValues.enable_memory_tool}
                 onCheckedChange={(checked) => {
                   toggleEnableMemoryTool(checked);
@@ -1597,7 +1597,7 @@ function ChatPreferencesSettings() {
               description={t("promptShortcuts.toggle.description")}
               withLabel
             >
-              <Switch
+              <InputSwitch
                 checked={user?.preferences?.shortcut_enabled}
                 onCheckedChange={(checked) => {
                   updateUserShortcuts(checked);
@@ -1624,7 +1624,7 @@ function ChatPreferencesSettings() {
               description={t("voice.autoSend.description")}
               withLabel
             >
-              <Switch
+              <InputSwitch
                 checked={user?.preferences.voice_auto_send ?? false}
                 onCheckedChange={(checked) => {
                   void saveVoiceSettings({ auto_send: checked });
@@ -1637,7 +1637,7 @@ function ChatPreferencesSettings() {
               description={t("voice.autoPlayback.description")}
               withLabel
             >
-              <Switch
+              <InputSwitch
                 checked={user?.preferences.voice_auto_playback ?? false}
                 onCheckedChange={(checked) => {
                   void saveVoiceSettings({ auto_playback: checked });
@@ -2203,7 +2203,7 @@ function AccountsAccessSettings() {
                       withLabel="currentPassword"
                       title={t("accounts.passwordModal.currentPassword.title")}
                     >
-                      <PasswordInputTypeIn
+                      <InputPasswordTypeIn
                         name="currentPassword"
                         value={values.currentPassword}
                         onChange={handleChange}
@@ -2219,7 +2219,7 @@ function AccountsAccessSettings() {
                       withLabel="newPassword"
                       title={t("accounts.passwordModal.newPassword.title")}
                     >
-                      <PasswordInputTypeIn
+                      <InputPasswordTypeIn
                         name="newPassword"
                         value={values.newPassword}
                         onChange={handleChange}
@@ -2233,7 +2233,7 @@ function AccountsAccessSettings() {
                       withLabel="confirmPassword"
                       title={t("accounts.passwordModal.confirmPassword.title")}
                     >
-                      <PasswordInputTypeIn
+                      <InputPasswordTypeIn
                         name="confirmPassword"
                         value={values.confirmPassword}
                         onChange={handleChange}

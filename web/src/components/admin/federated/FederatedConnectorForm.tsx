@@ -29,7 +29,7 @@ import { DropdownMenuItemWithTooltip } from "@/components/ui/dropdown-menu-with-
 import { toast } from "@opal/layouts";
 
 import { Badge } from "@/components/ui/badge";
-import { ListFieldInput } from "@opal/components";
+import { InputList } from "@opal/components";
 import { SvgSettings, SvgSimpleLoader } from "@opal/icons";
 
 export interface FederatedConnectorFormProps {
@@ -700,7 +700,7 @@ export function FederatedConnectorForm({
                             <span className="text-red-500 ms-1">*</span>
                           )}
                         </Text>
-                        <ListFieldInput
+                        <InputList
                           values={
                             Array.isArray(formState.config[fieldKey])
                               ? (formState.config[fieldKey] as string[])
