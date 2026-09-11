@@ -589,6 +589,14 @@ def render_usage_report_pdf(data: UsageReportData, branding: ReportBranding) -> 
     story += _section("Spend by surface", "Where the work happens.", styles)
     story += [_spend_table("Flow", data.by_flow)]
 
+    if data.system_by_flow:
+        story += _section(
+            "System spend by flow",
+            "Background text generation without a user principal.",
+            styles,
+        )
+        story += [_spend_table("Flow", data.system_by_flow)]
+
     story += _section(
         "Seats not in use",
         "Licensed people who sent nothing this period. Reclaim, retrain, or "
@@ -617,9 +625,8 @@ def render_usage_report_pdf(data: UsageReportData, branding: ReportBranding) -> 
         _Rule(_CONTENT_WIDTH),
         Spacer(1, 8),
         Paragraph(
-            "Spend from deleted users and API keys is included in every total "
-            "and attributed separately. Neither counts as a person or a seat. "
-            "Days are UTC.",
+            "System, deleted-user, and API-key spend is included in every total. "
+            "None counts as a person or a seat. Days are UTC.",
             styles["note"],
         ),
     ]

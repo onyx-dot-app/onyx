@@ -1,6 +1,7 @@
 """Aggregates behind the usage report review pack."""
 
 from collections import defaultdict
+from collections.abc import Sequence
 from datetime import datetime
 
 from pydantic import BaseModel
@@ -8,6 +9,11 @@ from sqlalchemy.orm import Session
 
 from ee.onyx.db.license import user_counts_toward_seats
 from onyx.db.api_key import is_api_key_email_address
+from onyx.db.enums import SystemUsageAttribution
+from onyx.db.system_usage import (
+    UNATTRIBUTED_SYSTEM_USAGE_CATEGORY,
+    SystemUsageExportRow,
+)
 from onyx.db.user_usage import DELETED_USER_EXPORT_EMAIL, UsageExportRow
 from onyx.db.users import get_all_users
 
@@ -54,6 +60,10 @@ class UsageReportData(BaseModel):
     top_users: list[NamedSpend]
     by_model: list[NamedSpend]
     by_flow: list[NamedSpend]
+    system_cost_cents: float
+    system_input_tokens: int
+    system_output_tokens: int
+    system_by_flow: list[NamedSpend]
     daily: list[DailySpend]
 
     @property
@@ -95,12 +105,13 @@ def build_usage_report_data(
     rows: list[UsageExportRow],
     period_start: datetime,
     period_end: datetime,
+    system_rows: Sequence[SystemUsageExportRow] = (),
 ) -> UsageReportData:
-    """`rows` is the list written to usage_by_user.csv, so the two cannot
-    diverge. The period is the admin's requested bounds, for display."""
+    """Build totals from the same rows written to both usage CSV files."""
     by_user: dict[str, NamedSpend] = {}
     by_model: dict[str, NamedSpend] = {}
     by_flow: dict[str, NamedSpend] = {}
+    system_by_flow: dict[str, NamedSpend] = {}
     daily_cost: dict[str, float] = defaultdict(float)
     daily_users: dict[str, set[str]] = defaultdict(set)
 
@@ -110,6 +121,9 @@ def build_usage_report_data(
     total_cache_read = 0
     total_cache_creation = 0
     active_emails: set[str] = set()
+    system_cost = 0.0
+    system_input = 0
+    system_output = 0
 
     for row in rows:
         for bucket, key in (
@@ -142,6 +156,37 @@ def build_usage_report_data(
             active_emails.add(row.email)
             daily_users[row.day].add(row.email)
 
+    for row in system_rows:
+        flow = (
+            UNATTRIBUTED_SYSTEM_USAGE_CATEGORY
+            if row.attribution == SystemUsageAttribution.UNATTRIBUTED
+            else row.flow or UNLABELED_FLOW
+        )
+        for bucket, key in (
+            (by_model, row.model),
+            (by_flow, flow),
+            (system_by_flow, flow),
+        ):
+            entry = bucket.get(key)
+            if entry is None:
+                entry = NamedSpend(
+                    name=key, cost_cents=0.0, input_tokens=0, output_tokens=0
+                )
+                bucket[key] = entry
+            entry.cost_cents += row.cost_cents
+            entry.input_tokens += row.input_tokens
+            entry.output_tokens += row.output_tokens
+
+        total_cost += row.cost_cents
+        total_input += row.input_tokens
+        total_output += row.output_tokens
+        total_cache_read += row.cache_read_tokens
+        total_cache_creation += row.cache_creation_tokens
+        system_cost += row.cost_cents
+        system_input += row.input_tokens
+        system_output += row.output_tokens
+        daily_cost[row.day] += row.cost_cents
+
     # Must match license enforcement, or this disagrees with what is billed.
     users = get_all_users(db_session, include_api_key_users=False)
     seat_emails = {user.email for user in users if user_counts_toward_seats(user)}
@@ -171,5 +216,9 @@ def build_usage_report_data(
         top_users=_top_n(by_user, TOP_USER_LIMIT),
         by_model=_top_n(by_model, TOP_ENTRY_LIMIT),
         by_flow=_top_n(by_flow, TOP_ENTRY_LIMIT),
+        system_cost_cents=system_cost,
+        system_input_tokens=system_input,
+        system_output_tokens=system_output,
+        system_by_flow=_top_n(system_by_flow, TOP_ENTRY_LIMIT),
         daily=daily,
     )
