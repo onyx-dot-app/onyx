@@ -63,8 +63,8 @@ export default function GroupsCell({
     let used = 0;
     let count = 0;
 
-    for (let i = 0; i < tags.length; i++) {
-      const tagWidth = tags[i]!.offsetWidth;
+    for (const [i, tag] of Array.from(tags).entries()) {
+      const tagWidth = tag.offsetWidth;
       const gapBefore = count > 0 ? gap : 0;
       const hasMore = i < tags.length - 1;
       const reserve = hasMore ? gap + counterWidth : 0;

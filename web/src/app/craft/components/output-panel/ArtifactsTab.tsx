@@ -87,13 +87,18 @@ export default function ArtifactsTab({
     }
 
     let cancelled = false;
+    // Capture the narrowed value; the hoisted function below loses narrowing.
+    const activeSessionId = sessionId;
 
     async function filterEmptyDirs() {
       const results = await Promise.all(
         rawEntries.map(async (entry) => {
           if (!entry.is_directory) return entry;
           try {
-            const listing = await fetchDirectoryListing(sessionId!, entry.path);
+            const listing = await fetchDirectoryListing(
+              activeSessionId,
+              entry.path
+            );
             if (listing && listing.entries.length > 0) return entry;
           } catch {
             return entry;
@@ -211,7 +216,7 @@ export default function ArtifactsTab({
             <OutputEntryRow
               key={entry.path}
               entry={entry}
-              sessionId={sessionId!}
+              sessionId={sessionId}
               depth={0}
               onDownload={handleOutputDownload}
               onFileOpen={handleFileOpen}

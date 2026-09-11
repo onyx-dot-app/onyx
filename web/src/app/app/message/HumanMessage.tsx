@@ -63,7 +63,7 @@ function MessageEditing({
           style={{ scrollbarWidth: "thin" }}
           onChange={(e) => {
             setEditedContent(e.target.value);
-            textareaRef.current!.style.height = "auto";
+            e.target.style.height = "auto";
             e.target.style.height = `${e.target.scrollHeight}px`;
           }}
           onKeyDown={(e) => {

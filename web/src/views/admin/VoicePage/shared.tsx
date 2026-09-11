@@ -40,6 +40,7 @@ import {
   STT_LOCALE_PATTERN,
   type ProviderMode,
 } from "@/lib/voice/utils";
+import { expectDefined } from "@/lib/utils";
 
 export { type ProviderMode } from "@/lib/voice/utils";
 
@@ -121,7 +122,10 @@ export function VoiceProviderSetupModal({
               if (!value) return true;
               const languages = parseSttLanguages(value);
               const bases = languages.map((lang) =>
-                lang.split("-")[0]!.toLowerCase()
+                expectDefined(
+                  lang.split("-")[0],
+                  "String.split returns at least one part."
+                ).toLowerCase()
               );
               if (
                 new Set(bases).size !== bases.length ||
@@ -320,27 +324,29 @@ export function VoiceProviderSetupModal({
                     </InputVertical>
                   )}
 
-                  {mode === "stt" && (detail.sttModels?.length ?? 0) > 1 && (
-                    <InputVertical
-                      title={t("setupModal.sttModel.label")}
-                      withLabel="stt_model"
-                    >
-                      <InputSelectField name="stt_model">
-                        <InputSelect.Trigger />
-                        <InputSelect.Content>
-                          {detail.sttModels!.map((m) => (
-                            <InputSelect.Item key={m.id} value={m.id}>
-                              {m.name}
-                            </InputSelect.Item>
-                          ))}
-                        </InputSelect.Content>
-                      </InputSelectField>
-                    </InputVertical>
-                  )}
+                  {mode === "stt" &&
+                    detail.sttModels &&
+                    detail.sttModels.length > 1 && (
+                      <InputVertical
+                        title={t("setupModal.sttModel.label")}
+                        withLabel="stt_model"
+                      >
+                        <InputSelectField name="stt_model">
+                          <InputSelect.Trigger />
+                          <InputSelect.Content>
+                            {detail.sttModels.map((m) => (
+                              <InputSelect.Item key={m.id} value={m.id}>
+                                {m.name}
+                              </InputSelect.Item>
+                            ))}
+                          </InputSelect.Content>
+                        </InputSelectField>
+                      </InputVertical>
+                    )}
 
                   {mode === "tts" && (
                     <>
-                      {(detail.ttsModels?.length ?? 0) > 1 && (
+                      {detail.ttsModels && detail.ttsModels.length > 1 && (
                         <InputVertical
                           title={t("setupModal.ttsModel.label")}
                           subDescription={t("setupModal.ttsModel.description")}
@@ -349,7 +355,7 @@ export function VoiceProviderSetupModal({
                           <InputSelectField name="tts_model">
                             <InputSelect.Trigger />
                             <InputSelect.Content>
-                              {detail.ttsModels!.map((m) => (
+                              {detail.ttsModels.map((m) => (
                                 <InputSelect.Item key={m.id} value={m.id}>
                                   {m.name}
                                 </InputSelect.Item>

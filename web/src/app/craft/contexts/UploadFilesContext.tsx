@@ -17,6 +17,7 @@ import {
   fetchDirectoryListing,
 } from "@/app/craft/services/apiServices";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
+import { expectDefined } from "@/lib/utils";
 
 /**
  * Upload File Status - tracks the state of files being uploaded
@@ -82,10 +83,7 @@ function formatBytes(bytes: number): string {
 }
 
 /** Validation result for a single file */
-interface FileValidationResult {
-  valid: boolean;
-  error?: string;
-}
+type FileValidationResult = { valid: true } | { valid: false; error: string };
 
 /** Translator bound to the craft.uploadFiles namespace */
 type UploadTranslate = ReturnType<typeof useTranslations<"craft.uploadFiles">>;
@@ -362,7 +360,11 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
         const results = await Promise.all(
           pendingFiles.map(async (file) => {
             try {
-              const result = await uploadFileApi(sessionId, file.file!);
+              // pendingFiles keeps only entries with a File.
+              const result = await uploadFileApi(
+                sessionId,
+                expectDefined(file.file, `Pending file ${file.id} has no File.`)
+              );
               return { id: file.id, success: true as const, result };
             } catch (error) {
               const { message } = classifyError(error, t);
@@ -603,10 +605,9 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
       // Validate batch constraints first
       const batchValidation = validateBatch(files, existingFiles, t);
       if (!batchValidation.valid) {
+        const { error } = batchValidation;
         // Create failed files for all with the batch error
-        const failedFiles = files.map((f) =>
-          createFailedFile(f, batchValidation.error!)
-        );
+        const failedFiles = files.map((f) => createFailedFile(f, error));
         setCurrentMessageFiles((prev) => [...prev, ...failedFiles]);
         return failedFiles;
       }
@@ -620,7 +621,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
         if (validation.valid) {
           validFiles.push(file);
         } else {
-          failedFiles.push(createFailedFile(file, validation.error!));
+          failedFiles.push(createFailedFile(file, validation.error));
         }
       }
 
@@ -646,7 +647,13 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
         // Session available - upload immediately
         const uploadPromises = optimisticFiles.map(async (optimisticFile) => {
           try {
-            const result = await uploadFileApi(sessionId, optimisticFile.file!);
+            const result = await uploadFileApi(
+              sessionId,
+              expectDefined(
+                optimisticFile.file,
+                `Optimistic file ${optimisticFile.id} has no File.`
+              )
+            );
             return {
               id: optimisticFile.id,
               success: true as const,

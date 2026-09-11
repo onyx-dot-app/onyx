@@ -49,9 +49,10 @@ function approvalHeadline(
   approval: ApprovalView,
   t: ApprovalsTranslate
 ): string {
-  if (approval.actions.length === 1) {
+  const [onlyAction] = approval.actions;
+  if (approval.actions.length === 1 && onlyAction) {
     return t("headline.singleAction", {
-      action: approval.actions[0]!.display_name,
+      action: onlyAction.display_name,
       app: approval.app_name,
     });
   }

@@ -12,6 +12,7 @@ import LivingMapDiagram, {
   LIVING_MAP_STAGES,
   LivingMapStageId,
 } from "@/app/craft/onboarding/components/LivingMapDiagram";
+import { expectDefined } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // The Living Map tour — one fixed "Meet Craft" title, four camera framings of
@@ -62,7 +63,10 @@ export default function LivingMapModal({
 
   if (!open) return null;
 
-  const stage = LIVING_MAP_STAGES[stageIdx]!;
+  const stage = expectDefined(
+    LIVING_MAP_STAGES[stageIdx],
+    `Living map stage index ${stageIdx} is out of range.`
+  );
   const isFirstStage = stageIdx === 0;
   const isLastStage = stageIdx === LIVING_MAP_STAGES.length - 1;
 

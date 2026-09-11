@@ -502,13 +502,15 @@ export function useContentEditable({
       el.focus();
       // Restore the caret if it's still in the input; a caret on the now-detached
       // tile (or in the popover) fails this and falls back to the text end.
+      // caret is only non-null when sel is non-null.
       if (
         caret &&
+        sel &&
         el.contains(caret.startContainer) &&
         el.contains(caret.endContainer)
       ) {
-        sel!.removeAllRanges();
-        sel!.addRange(caret);
+        sel.removeAllRanges();
+        sel.addRange(caret);
       } else {
         setCursorAfterNode(textNode);
         el.normalize();
@@ -669,8 +671,8 @@ export function useContentEditable({
           setCursorBeforeNode(next);
         } else if (prev) {
           setCursorAfterNode(prev);
-        } else {
-          setCursorToEndUtil(ref.current!);
+        } else if (ref.current) {
+          setCursorToEndUtil(ref.current);
         }
         ref.current?.normalize();
         return;

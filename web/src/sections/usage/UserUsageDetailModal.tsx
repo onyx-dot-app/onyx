@@ -51,10 +51,10 @@ function dailySpend(user: UsageExportUser): DailySpend[] {
     byDay.set(record.day, (byDay.get(record.day) ?? 0) + record.cost_cents);
   }
   const days = Array.from(byDay.keys()).sort();
-  if (days.length === 0) return [];
+  const first = days[0];
+  const last = days.at(-1);
+  if (first === undefined || last === undefined) return [];
   const filled: DailySpend[] = [];
-  const first = days[0]!;
-  const last = days[days.length - 1]!;
   const cursor = new Date(`${first}T00:00:00Z`);
   const end = new Date(`${last}T00:00:00Z`);
   while (cursor <= end && filled.length < MAX_DAILY_COLUMNS + 1) {
@@ -175,7 +175,15 @@ function DailySpendStrip({ days }: { days: DailySpend[] }) {
   const t = useTranslations("admin.usage");
   const locale = useLocale();
   const max = Math.max(...days.map((day) => day.cost_cents));
-  if (days.length < 2 || max <= 0 || days.length > MAX_DAILY_COLUMNS) {
+  const firstDay = days[0];
+  const lastDay = days.at(-1);
+  if (
+    days.length < 2 ||
+    max <= 0 ||
+    days.length > MAX_DAILY_COLUMNS ||
+    firstDay === undefined ||
+    lastDay === undefined
+  ) {
     return null;
   }
   return (
@@ -244,10 +252,10 @@ function DailySpendStrip({ days }: { days: DailySpend[] }) {
         height="fit"
       >
         <Text font="secondary-body" color="text-03">
-          {formatCalendarDay(days[0]!.day, locale)}
+          {formatCalendarDay(firstDay.day, locale)}
         </Text>
         <Text font="secondary-body" color="text-03">
-          {formatCalendarDay(days[days.length - 1]!.day, locale)}
+          {formatCalendarDay(lastDay.day, locale)}
         </Text>
       </Section>
     </Section>

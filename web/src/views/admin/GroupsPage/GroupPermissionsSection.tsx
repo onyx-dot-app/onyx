@@ -90,8 +90,7 @@ function GroupPermissionsSection({
         ) : (
           <Card>
             {registry.map((entry, index) => {
-              const prevGroup =
-                index > 0 ? registry[index - 1]!.group : entry.group;
+              const prevGroup = registry[index - 1]?.group ?? entry.group;
               const icon = ICON_MAP[entry.id] ?? SvgShield;
               return (
                 <Fragment key={entry.id}>

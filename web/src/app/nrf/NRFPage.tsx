@@ -115,8 +115,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   // Skip when unchanged — otherwise the initial [] -> [currentLlmModel]
   // sync would flag a manual override before the agent's default loads.
   useEffect(() => {
-    if (multiModel.selectedModels.length === 1) {
-      const model = multiModel.selectedModels[0]!;
+    const [model] = multiModel.selectedModels;
+    if (multiModel.selectedModels.length === 1 && model) {
       const current = llmManager.currentLlm;
       if (
         model.provider !== current.provider ||
@@ -276,14 +276,14 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       activeAgent,
       existingChatSessionId,
       selectedDocuments: [],
-      searchParams: searchParams!,
+      searchParams,
       resetInputBar,
     });
 
   // Chat session controller for loading sessions
   const { currentSessionFileTokenCount } = useChatSessionController({
     existingChatSessionId,
-    searchParams: searchParams!,
+    searchParams,
     firstMessage: undefined,
     setSelectedDocuments: () => {}, // No-op: NRF doesn't support document selection
     setCurrentMessageFiles,

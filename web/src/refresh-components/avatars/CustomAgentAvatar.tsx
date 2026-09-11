@@ -133,10 +133,7 @@ export default function CustomAgentAvatar({
 
   // Display first letter of name if available, otherwise fall back to two-line-small icon
   const trimmedName = name?.trim();
-  const firstLetter =
-    trimmedName && trimmedName.length > 0
-      ? trimmedName[0]!.toUpperCase()
-      : undefined;
+  const firstLetter = trimmedName?.[0]?.toUpperCase();
   const validFirstLetter = !!firstLetter && /^[a-zA-Z]$/.test(firstLetter);
   if (validFirstLetter) {
     return (

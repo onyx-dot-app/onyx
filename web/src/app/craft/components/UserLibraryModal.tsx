@@ -29,6 +29,7 @@ import { Button, InputTypeIn, ShadowDiv, Text } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
+import { expectDefined } from "@/lib/utils";
 
 /**
  * Build a hierarchical tree from a flat list of library entries.
@@ -47,7 +48,10 @@ function buildTreeFromFlatList(flatList: LibraryEntry[]): LibraryEntry[] {
   const rootEntries: LibraryEntry[] = [];
 
   for (const entry of flatList) {
-    const entryWithChildren = pathToEntry.get(entry.path)!;
+    const entryWithChildren = expectDefined(
+      pathToEntry.get(entry.path),
+      `Library entry "${entry.path}" was not indexed.`
+    );
 
     // Find parent path by removing the last segment
     const pathParts = entry.path.split("/");

@@ -1,6 +1,7 @@
 "use client";
 
 import { create } from "zustand";
+import { expectDefined } from "@/lib/utils";
 
 import {
   ApiSessionResponse,
@@ -1019,7 +1020,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       }
 
       // If session doesn't exist, create it and inherit output panel state
-      if (!state.sessions.has(sessionId)) {
+      const session = state.sessions.get(sessionId);
+      if (!session) {
         const newSession = createInitialSessionData(sessionId, {
           outputPanelOpen: state.noSessionOutputPanelOpen,
         });
@@ -1033,7 +1035,6 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       }
 
       // Update last accessed for existing session and reset no-session panel state
-      const session = state.sessions.get(sessionId)!;
       const updatedSession = { ...session, lastAccessed: new Date() };
       const newSessions = new Map(state.sessions);
       newSessions.set(sessionId, updatedSession);
@@ -1506,8 +1507,11 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
     // Set as current and mark as loading
     setCurrentSession(sessionId);
-    const skillsStaleRevision =
-      get().sessions.get(sessionId)!.skillsStaleRevision;
+    // setCurrentSession creates the session when it is missing.
+    const skillsStaleRevision = expectDefined(
+      get().sessions.get(sessionId),
+      `Build session ${sessionId} is missing after setCurrentSession.`
+    ).skillsStaleRevision;
     const canApplySkillsStale = () =>
       get().sessions.get(sessionId)?.skillsStaleRevision ===
       skillsStaleRevision;
@@ -1553,13 +1557,19 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const currentSessionIsLive =
         currentSession?.status === "running" ||
         currentSession?.status === "creating";
-      const hasOptimisticMessages =
-        (currentSession?.messages?.length ?? 0) > 0 && currentSessionIsLive;
-      const isStreaming = hasOptimisticMessages;
+      // Non-null only when the session has optimistic messages.
+      const streamingSession =
+        currentSession &&
+        (currentSession.messages?.length ?? 0) > 0 &&
+        currentSessionIsLive
+          ? currentSession
+          : null;
       // settle() (the only preferPersisted caller) runs on a live "running"
-      // session, so the isStreaming status branch below already keeps status live,
+      // session, so the streaming status branch below already keeps status live,
       // leaving settle the sole owner of the flip to "active" (else auto-send races).
-      const useDbMessages = !isStreaming || options?.preferPersisted === true;
+      // Non-null only when the live messages are kept instead of DB messages.
+      const liveSession =
+        options?.preferPersisted === true ? null : streamingSession;
 
       // Construct webapp URL
       let webappUrl: string | null = null;
@@ -1571,36 +1581,35 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       }
 
       const resolvedActiveTurnId =
-        activeTurn?.turn_id ??
-        (useDbMessages ? null : currentSession!.activeTurnId);
+        activeTurn?.turn_id ?? (liveSession ? liveSession.activeTurnId : null);
       const resolvedActiveTurnIndex =
         activeTurn?.turn_index ??
-        (useDbMessages ? null : currentSession!.activeTurnIndex);
+        (liveSession ? liveSession.activeTurnIndex : null);
 
-      const status = isStreaming
-        ? currentSession!.status
+      const status = streamingSession
+        ? streamingSession.status
         : activeTurn
           ? "running"
           : needsRestore
             ? "creating"
             : mapApiSessionStatus(sessionData.status);
-      const persistedMessages = useDbMessages
-        ? consolidateMessagesIntoTurns(messages)
-        : currentSession!.messages;
-      const restoredActiveTurn = useDbMessages
-        ? splitActiveTurnTranscript(persistedMessages, resolvedActiveTurnIndex)
-        : {
+      const persistedMessages = liveSession
+        ? liveSession.messages
+        : consolidateMessagesIntoTurns(messages);
+      const restoredActiveTurn = liveSession
+        ? {
             messages: persistedMessages,
-            streamItems: currentSession!.streamItems,
-          };
+            streamItems: liveSession.streamItems,
+          }
+        : splitActiveTurnTranscript(persistedMessages, resolvedActiveTurnIndex);
       const resolvedMessages = restoredActiveTurn.messages;
       const streamItems = restoredActiveTurn.streamItems;
       // Reconstruct subagents from the raw (un-consolidated) messages — they
       // carry the per-packet _meta needed for classification. Preserve the
       // live map if actively streaming.
-      const subagents = useDbMessages
-        ? buildSubagentsFromMessages(messages)
-        : currentSession!.subagents;
+      const subagents = liveSession
+        ? liveSession.subagents
+        : buildSubagentsFromMessages(messages);
       const sandbox =
         needsRestore && sessionData.sandbox
           ? { ...sessionData.sandbox, status: "restoring" as const }
@@ -1621,12 +1630,12 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         origin: sessionData.origin,
         activeTurnId: resolvedActiveTurnId,
         activeTurnIndex: resolvedActiveTurnIndex,
-        activeTurnLocalOwner: useDbMessages
-          ? false
-          : currentSession!.activeTurnLocalOwner,
-        contextUsage: useDbMessages
-          ? deriveContextUsage(messages)
-          : currentSession!.contextUsage,
+        activeTurnLocalOwner: liveSession
+          ? liveSession.activeTurnLocalOwner
+          : false,
+        contextUsage: liveSession
+          ? liveSession.contextUsage
+          : deriveContextUsage(messages),
         error: null,
         isLoaded: true,
       });

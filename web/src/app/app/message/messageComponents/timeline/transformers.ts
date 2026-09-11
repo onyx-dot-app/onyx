@@ -92,10 +92,9 @@ export function groupStepsByTurn(steps: TransformedStep[]): TurnGroup[] {
   }
 
   const result: TurnGroup[] = [];
-  const sortedTurnIndices = Array.from(turnMap.keys()).sort((a, b) => a - b);
+  const sortedTurns = Array.from(turnMap.entries()).sort(([a], [b]) => a - b);
 
-  for (const turnIndex of sortedTurnIndices) {
-    const stepsForTurn = turnMap.get(turnIndex)!;
+  for (const [turnIndex, stepsForTurn] of sortedTurns) {
     stepsForTurn.sort((a, b) => a.tabIndex - b.tabIndex);
 
     result.push({

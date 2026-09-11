@@ -70,6 +70,7 @@ import { SvgKey, SvgAlertCircle } from "@opal/icons";
 import { Tooltip } from "@opal/components";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
+import { expectDefined } from "@/lib/utils";
 
 export interface AdvancedConfig {
   refreshFreq: number;
@@ -490,7 +491,10 @@ export default function AddConnector({
                 liveGmailCredential;
               const linkCredentialResponse = await linkCredential(
                 response.id,
-                credential!.id,
+                expectDefined(
+                  credential,
+                  "No credential is selected to link to the connector."
+                ).id,
                 name,
                 access_type,
                 groups,
@@ -592,7 +596,7 @@ export default function AddConnector({
                 <ModifyCredential
                   showIfEmpty
                   accessType={formikProps.values.access_type}
-                  defaultedCredential={currentCredential!}
+                  defaultedCredential={currentCredential ?? undefined}
                   credentials={credentials}
                   editableCredentials={editableCredentials}
                   onDeleteCredential={onDeleteCredential}
