@@ -85,9 +85,9 @@ export default function CreateCredential({
 
   // Special handlers
   onClose?: () => void;
-  // InputSwitch currently selected credential
+  // Switch currently selected credential
   onSwitch?: (selectedCredential: Credential<any>) => Promise<void>;
-  // InputSwitch currently selected credential + link with connector
+  // Switch currently selected credential + link with connector
   onSwap?: (
     selectedCredential: Credential<any>,
     connectorId: number,

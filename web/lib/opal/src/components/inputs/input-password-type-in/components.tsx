@@ -23,10 +23,10 @@ function isBackendPlaceholder(value: string): boolean {
   return !!value && BACKEND_PLACEHOLDER_PATTERN.test(value);
 }
 
-interface InputPasswordTypeInProps extends Omit<
+type InputPasswordTypeInProps = Omit<
   InputTypeInProps,
   "type" | "rightChildren" | "searchIcon" | "variant"
-> {
+> & {
   disabled?: boolean;
   error?: boolean;
   /**
@@ -50,7 +50,7 @@ interface InputPasswordTypeInProps extends Omit<
    *   caret and dots never change size on reveal. For the login flow.
    */
   mask?: "asterisk" | "native";
-}
+};
 
 /**
  * InputPasswordTypeIn Component

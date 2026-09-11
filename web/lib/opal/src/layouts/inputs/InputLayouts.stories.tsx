@@ -137,7 +137,7 @@ export const HorizontalCentered: Story = {
       <Horizontal
         withLabel
         title="Dark Mode"
-        description="InputSwitch between light and dark themes."
+        description="Switch between light and dark themes."
         center
       >
         <MockSwitch />
