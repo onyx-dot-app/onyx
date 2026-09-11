@@ -3587,7 +3587,9 @@
           "label": "Appliquer aux documents nouveaux et mis à jour"
         },
         "applyReindex": {
-          "label": "Appliquer et réindexer"
+          "label": "Appliquer et réindexer",
+          "statusesLoading": "Chargement de l'état des connecteurs…",
+          "statusesFailed": "Impossible de charger l'état des connecteurs — réessayez avant de réindexer."
         },
         "rebuildAll": {
           "label": "Reconstruire tous les documents existants"
@@ -3963,6 +3965,15 @@
         "serviceAccountJsonRequired": "Le JSON du compte de service est obligatoire",
         "targetUrlRequired": "L'URL cible est obligatoire",
         "urlInvalid": "Doit être une URL valide"
+      },
+      "wontPortConsentModal": {
+        "title": "{count, plural, one {Ce connecteur sera supprimé} other {Ces # connecteurs seront supprimés}}",
+        "submit": "Supprimer et réindexer",
+        "description": "{count, plural, one {La réindexation ignore les connecteurs en pause et non valides : celui-ci ne sera donc pas repris dans le nouvel index. Onyx le supprime, ainsi que les documents qu'il a indexés :} other {La réindexation ignore les connecteurs en pause et non valides : ces # ne seront donc pas repris dans le nouvel index. Onyx les supprime, ainsi que les documents qu'ils ont indexés :}}",
+        "connector": "{name} — {status}",
+        "statusInvalid": "non valide",
+        "statusPaused": "en pause",
+        "restoreHint": "Pour conserver un connecteur, annulez ici, reprenez-le ou corrigez-le, puis relancez la réindexation : il sera alors repris. Sinon, rajoutez-le une fois la réindexation terminée."
       }
     },
     "indexing": {
