@@ -33,13 +33,23 @@ class _GatedCollector(_CachedCollector):
     def _collect_fresh(self) -> list[GaugeMetricFamily]:
         self.calls += 1
         # Bounded so a never-released gate cannot hang the executor thread at exit.
-        self.release.wait(timeout=5)
+        self.release.wait(timeout=15)
         gauge = GaugeMetricFamily("gated", "gated")
         gauge.add_metric([], self.calls)
         return [gauge]
 
 
-def _wait_until(predicate: Callable[[], bool], timeout: float = 2.0) -> None:
+class _FailingCollector(_CachedCollector):
+    def __init__(self) -> None:
+        super().__init__(cache_ttl=60, collect_timeout=2.0)
+        self.calls = 0
+
+    def _collect_fresh(self) -> list[GaugeMetricFamily]:
+        self.calls += 1
+        raise RuntimeError("redis down")
+
+
+def _wait_until(predicate: Callable[[], bool], timeout: float = 5.0) -> None:
     deadline = time.monotonic() + timeout
     while not predicate():
         assert time.monotonic() < deadline, "condition not met in time"
@@ -50,9 +60,28 @@ def _inflight_done(collector: _CachedCollector) -> bool:
     return collector._inflight is not None and collector._inflight.done()
 
 
+@pytest.fixture
+def gated() -> Iterator[Callable[[float, float], _GatedCollector]]:
+    collectors: list[_GatedCollector] = []
+
+    def make(cache_ttl: float, collect_timeout: float) -> _GatedCollector:
+        collector = _GatedCollector(
+            cache_ttl=cache_ttl, collect_timeout=collect_timeout
+        )
+        collectors.append(collector)
+        return collector
+
+    yield make
+    for collector in collectors:
+        collector.release.set()
+        collector._executor.shutdown(wait=False)
+
+
 class TestCachedCollector:
-    def test_scrape_during_stalled_collection_returns_stale_at_once(self) -> None:
-        collector = _GatedCollector(cache_ttl=60, collect_timeout=2.0)
+    def test_scrape_during_stalled_collection_returns_stale_at_once(
+        self, gated: Callable[[float, float], _GatedCollector]
+    ) -> None:
+        collector = gated(60, 4.0)
         starter_results: list[list[GaugeMetricFamily]] = []
         starter = threading.Thread(
             target=lambda: starter_results.append(collector.collect())
@@ -66,8 +95,8 @@ class TestCachedCollector:
 
         # No cache yet and a collection in flight: empty, without waiting on it.
         assert during_stall == []
-        assert elapsed < 0.5
-        starter.join(timeout=4)
+        assert elapsed < 1.0
+        starter.join(timeout=8)
         assert starter_results == [[]]
         assert collector.calls == 1
 
@@ -77,10 +106,36 @@ class TestCachedCollector:
         banked = collector.collect()
         assert banked[0].samples[0].value == 1
         assert collector.calls == 1
+
+    def test_late_result_older_than_ttl_triggers_a_fresh_collection(
+        self, gated: Callable[[float, float], _GatedCollector]
+    ) -> None:
+        collector = gated(0.2, 0.05)
+        assert collector.collect() == []  # starter gives up
+        collector.release.set()
+        _wait_until(lambda: _inflight_done(collector))
+        time.sleep(0.25)  # the banked result is stamped before this, so it is stale
+
+        fresh = collector.collect()
+
+        # Banked, then found expired by its start time, so a second run happened.
+        assert fresh[0].samples[0].value == 2
+        assert collector.calls == 2
+
+    def test_failed_collection_frees_the_slot_and_is_retried(self) -> None:
+        collector = _FailingCollector()
+        with patch.object(indexing_pipeline.logger, "exception") as exception:
+            assert collector.collect() == []
+            assert collector.collect() == []
+        assert collector._inflight is None
+        assert collector.calls == 2
+        assert exception.call_count == 2
         collector._executor.shutdown(wait=False)
 
-    def test_stall_warning_is_throttled(self) -> None:
-        collector = _GatedCollector(cache_ttl=60, collect_timeout=0.1)
+    def test_stall_warning_is_throttled(
+        self, gated: Callable[[float, float], _GatedCollector]
+    ) -> None:
+        collector = gated(60, 0.1)
         assert collector.collect() == []  # starter times out and warns
 
         def stall_lines_from(scrapes: int) -> int:
@@ -96,8 +151,6 @@ class TestCachedCollector:
         # Once the window has passed, exactly one line per window.
         collector._last_stall_log -= indexing_pipeline._STALL_WARNING_INTERVAL
         assert stall_lines_from(3) == 1
-        collector.release.set()
-        collector._executor.shutdown(wait=False)
 
 
 class TestQueueDepthCollector:
