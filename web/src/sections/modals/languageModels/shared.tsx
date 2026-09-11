@@ -15,7 +15,7 @@ import type {
   LLMProviderView,
   ModelConfiguration,
 } from "@/lib/languageModels/types";
-import { Checkbox } from "@opal/components";
+import { InputCheckbox } from "@opal/components";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import { InputTypeIn } from "@opal/components";
 import { InputComboBox } from "@opal/components";
@@ -641,7 +641,7 @@ function ModelRow({
               variant="section"
               sizePreset="main-ui"
               center
-              icon={() => <Checkbox checked={isSelected} />}
+              icon={() => <InputCheckbox checked={isSelected} />}
               title={displayName}
               description={buildModelDescription(model)}
               rightChildren={

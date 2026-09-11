@@ -1,13 +1,13 @@
 import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import {
-  DateRangePicker,
+  InputDateRangePicker,
   type DateRange,
-} from "@opal/components/inputs/date-range-picker/components";
+} from "@opal/components/inputs/chrono/input-date-range-picker/components";
 
-const meta: Meta<typeof DateRangePicker> = {
-  title: "components/DateRangePicker",
-  component: DateRangePicker,
+const meta: Meta<typeof InputDateRangePicker> = {
+  title: "components/InputDateRangePicker",
+  component: InputDateRangePicker,
   tags: ["autodocs"],
   parameters: {
     layout: "centered",
@@ -22,12 +22,12 @@ const meta: Meta<typeof DateRangePicker> = {
 };
 
 export default meta;
-type Story = StoryObj<typeof DateRangePicker>;
+type Story = StoryObj<typeof InputDateRangePicker>;
 
 function ControlledRange({ initialValue }: { initialValue: DateRange }) {
   const [value, setValue] = useState<DateRange>(initialValue);
 
-  return <DateRangePicker value={value} onValueChange={setValue} />;
+  return <InputDateRangePicker value={value} onValueChange={setValue} />;
 }
 
 export const Default: Story = {

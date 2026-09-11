@@ -1,8 +1,8 @@
 import { render, screen } from "@tests/setup/test-utils";
 import userEvent from "@testing-library/user-event";
-import { DateRangePicker } from "@opal/components";
+import { InputDateRangePicker } from "@opal/components";
 
-describe("DateRangePicker", () => {
+describe("InputDateRangePicker", () => {
   beforeEach(() => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date(2026, 7, 4, 12));
@@ -17,7 +17,7 @@ describe("DateRangePicker", () => {
     const onValueChange = jest.fn();
 
     render(
-      <DateRangePicker
+      <InputDateRangePicker
         value={{
           from: new Date(2026, 7, 1),
           to: new Date(2026, 7, 4),
@@ -55,7 +55,7 @@ describe("DateRangePicker", () => {
     const onValueChange = jest.fn();
 
     render(
-      <DateRangePicker
+      <InputDateRangePicker
         value={{
           from: new Date(2026, 6, 5),
           to: new Date(2026, 7, 4),
@@ -77,7 +77,7 @@ describe("DateRangePicker", () => {
     const onValueChange = jest.fn();
 
     render(
-      <DateRangePicker
+      <InputDateRangePicker
         value={{
           from: new Date(2026, 6, 6),
           to: new Date(2026, 7, 4),
@@ -99,7 +99,7 @@ describe("DateRangePicker", () => {
     const onValueChange = jest.fn();
 
     render(
-      <DateRangePicker
+      <InputDateRangePicker
         value={{
           from: new Date(2026, 6, 6),
           to: new Date(2026, 7, 4),
@@ -121,7 +121,7 @@ describe("DateRangePicker", () => {
     const onValueChange = jest.fn();
 
     render(
-      <DateRangePicker
+      <InputDateRangePicker
         value={{
           from: new Date(2026, 6, 6),
           to: new Date(2026, 7, 4),
@@ -142,7 +142,7 @@ describe("DateRangePicker", () => {
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
 
     render(
-      <DateRangePicker
+      <InputDateRangePicker
         value={{
           from: new Date(2026, 6, 10),
           to: new Date(2026, 6, 15),

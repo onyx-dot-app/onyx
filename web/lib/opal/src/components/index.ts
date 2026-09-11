@@ -60,14 +60,14 @@ export {
   type TextButtonProps,
 } from "@opal/components/buttons/text-button/components";
 
-/* DateRangePicker */
+/* InputDateRangePicker */
 export {
-  DateRangePicker,
+  InputDateRangePicker,
   rangeForInclusiveDays,
   THIRTY_DAYS,
   type DateRange,
-  type DateRangePickerValue,
-} from "@opal/components/inputs/date-range-picker/components";
+  type InputDateRangePickerValue,
+} from "@opal/components/inputs/chrono/input-date-range-picker/components";
 
 /* InputAvatar */
 export { default as InputAvatar } from "@opal/components/inputs/input-avatar/components";
@@ -84,7 +84,7 @@ export {
   default as InputComboBox,
   type InputComboBoxProps,
   type ComboBoxOption,
-} from "@opal/components/inputs/input-combo-box/index";
+} from "@opal/components/inputs/selections/input-combo-box/index";
 
 /* InputImage */
 export {
@@ -195,11 +195,11 @@ export {
   type CalendarProps,
 } from "@opal/components/calendar/components";
 
-/* Checkbox */
+/* InputCheckbox */
 export {
-  Checkbox,
-  type CheckboxProps,
-} from "@opal/components/checkbox/components";
+  InputCheckbox,
+  type InputCheckboxProps,
+} from "@opal/components/inputs/booleans/input-checkbox/components";
 
 /* Table */
 export { Table } from "@opal/components/table/components";
@@ -249,7 +249,7 @@ export {
 export {
   InputDatePicker,
   type InputDatePickerProps,
-} from "@opal/components/inputs/input-date-picker/components";
+} from "@opal/components/inputs/chrono/input-date-picker/components";
 
 /* InputSingleSelect */
 export {
@@ -258,14 +258,14 @@ export {
   type InputSingleSelectTriggerProps,
   type InputSingleSelectItemProps,
   type InputSingleSelectSearchProps,
-} from "@opal/components/inputs/input-select/input-single-select/components";
+} from "@opal/components/inputs/selections/input-single-select/components";
 
 /* InputMultiSelect */
 export {
   InputMultiSelect,
   type InputMultiSelectProps,
   type TagItem,
-} from "@opal/components/inputs/input-select/input-multi-select/components";
+} from "@opal/components/inputs/selections/input-multi-select/components";
 
 /* InputPasswordTypeIn */
 export {
@@ -284,7 +284,7 @@ export {
   InputTime,
   type InputTimeProps,
   type TimeValue,
-} from "@opal/components/inputs/input-time/components";
+} from "@opal/components/inputs/chrono/input-time/components";
 
 /* Spacer */
 export { Spacer, type SpacerProps } from "@opal/components/spacer/components";
@@ -293,7 +293,7 @@ export { Spacer, type SpacerProps } from "@opal/components/spacer/components";
 export {
   InputSwitch,
   type InputSwitchProps,
-} from "@opal/components/inputs/input-switch/components";
+} from "@opal/components/inputs/booleans/input-switch/components";
 
 /* CopyButton */
 export {

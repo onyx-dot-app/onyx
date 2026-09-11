@@ -1,8 +1,7 @@
 "use client";
 
-import "@opal/components/checkbox/styles.css";
+import "@opal/components/inputs/booleans/input-checkbox/styles.css";
 import React, { useEffect, useRef, useState } from "react";
-import { cn } from "@opal/utils";
 import { SvgCheck, SvgMinus } from "@opal/icons";
 import type { WithoutStyles } from "@opal/types";
 
@@ -12,17 +11,8 @@ import type { WithoutStyles } from "@opal/types";
 
 type CheckboxState = "unchecked" | "checked" | "indeterminate";
 
-interface CheckboxProps extends WithoutStyles<
-  Omit<React.ComponentPropsWithoutRef<"input">, "type" | "size">
-> {
-  checked?: boolean;
-  defaultChecked?: boolean;
-  onCheckedChange?: (checked: boolean) => void;
-  indeterminate?: boolean;
-}
-
 // ---------------------------------------------------------------------------
-// Checkbox
+// InputCheckbox
 // ---------------------------------------------------------------------------
 
 /**
@@ -35,23 +25,31 @@ interface CheckboxProps extends WithoutStyles<
  *
  * All visual states are driven by CSS in `styles.css`.
  */
-function CheckboxInner(
-  {
-    checked: controlledChecked,
-    defaultChecked,
-    onCheckedChange,
-    indeterminate = false,
-    disabled,
-    onChange,
-    id,
-    name,
-    "aria-label": ariaLabel,
-    "aria-labelledby": ariaLabelledby,
-    "aria-describedby": ariaDescribedby,
-    ...props
-  }: CheckboxProps,
-  ref: React.ForwardedRef<HTMLInputElement>
-) {
+type InputCheckboxProps = WithoutStyles<
+  Omit<React.ComponentPropsWithoutRef<"input">, "type" | "size">
+> & {
+  checked?: boolean;
+  defaultChecked?: boolean;
+  onCheckedChange?: (checked: boolean) => void;
+  indeterminate?: boolean;
+  /** Ref to the hidden `<input>`. */
+  ref?: React.Ref<HTMLInputElement>;
+};
+function InputCheckbox({
+  checked: controlledChecked,
+  defaultChecked,
+  onCheckedChange,
+  indeterminate = false,
+  disabled,
+  onChange,
+  id,
+  name,
+  "aria-label": ariaLabel,
+  "aria-labelledby": ariaLabelledby,
+  "aria-describedby": ariaDescribedby,
+  ref,
+  ...props
+}: InputCheckboxProps) {
   const [uncontrolledChecked, setUncontrolledChecked] = useState(
     defaultChecked ?? false
   );
@@ -161,7 +159,4 @@ function CheckboxInner(
   );
 }
 
-const Checkbox = React.forwardRef(CheckboxInner);
-Checkbox.displayName = "Checkbox";
-export default Checkbox;
-export { Checkbox, type CheckboxProps };
+export { InputCheckbox, type InputCheckboxProps, type CheckboxState };

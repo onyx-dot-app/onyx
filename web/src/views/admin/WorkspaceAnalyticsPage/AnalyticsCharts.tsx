@@ -10,11 +10,11 @@ import {
   resolveChartState,
   useLoggedChartError,
 } from "@/sections/usage/AnalyticsChart";
-import { DateRangePickerValue } from "@opal/components";
+import { InputDateRangePickerValue } from "@opal/components";
 import { formatTokenCount } from "@/lib/format";
 
 interface TimeRangeProps {
-  timeRange: DateRangePickerValue;
+  timeRange: InputDateRangePickerValue;
 }
 
 export function UsageChart({ timeRange }: TimeRangeProps) {

@@ -1,6 +1,6 @@
-# DateRangePicker
+# InputDateRangePicker
 
-**Import:** `import { DateRangePicker, rangeForInclusiveDays, type DateRange } from "@opal/components";`
+**Import:** `import { InputDateRangePicker, rangeForInclusiveDays, type DateRange } from "@opal/components";`
 
 A preset-strip date-range control: 1D / 7D / 1M / 3M buttons plus a "Custom" trigger that opens
 the Opal `Calendar` in a popover for an arbitrary range. The active custom range renders as its

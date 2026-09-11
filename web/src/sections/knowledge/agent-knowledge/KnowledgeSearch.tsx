@@ -15,7 +15,7 @@ import type { SearchDocWithContent } from "@/lib/search/interfaces";
 import type { ValidSources } from "@/lib/types";
 import {
   Button,
-  Checkbox,
+  InputCheckbox,
   Divider,
   InputTypeIn,
   LineItemButton,
@@ -305,7 +305,7 @@ export function KnowledgeSearchResultsPanel({
                   aria-label={`search-node-${node.id}`}
                 >
                   <TableLayouts.CheckboxCell>
-                    <Checkbox
+                    <InputCheckbox
                       checked={isSelected}
                       onCheckedChange={() => onToggleFolder(node.id)}
                     />
@@ -370,7 +370,7 @@ export function KnowledgeSearchResultsPanel({
                 aria-label={`search-doc-${doc.document_id}`}
               >
                 <TableLayouts.CheckboxCell>
-                  <Checkbox
+                  <InputCheckbox
                     checked={isSelected}
                     onCheckedChange={() => onToggleDocument(doc.document_id)}
                   />

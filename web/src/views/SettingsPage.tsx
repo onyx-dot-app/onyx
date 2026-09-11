@@ -56,7 +56,7 @@ import {
   AttachmentItemButton,
   Button,
   Divider,
-  Checkbox,
+  InputCheckbox,
   Text,
 } from "@opal/components";
 import useFederatedOAuthStatus from "@/hooks/useFederatedOAuthStatus";
@@ -198,7 +198,7 @@ function ScopeSelector({
             const locked = lockReason !== undefined;
             return (
               <div key={option.scope} className="flex items-start gap-2 ps-2">
-                <Checkbox
+                <InputCheckbox
                   checked={selectedScopes.includes(option.scope) || locked}
                   disabled={disabled || locked}
                   onCheckedChange={() => toggleScope(option.scope)}

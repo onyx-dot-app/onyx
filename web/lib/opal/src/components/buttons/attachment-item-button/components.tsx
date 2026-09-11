@@ -6,7 +6,7 @@ import type {
   IconFunctionComponent,
   RichStr,
 } from "@opal/types";
-import { Checkbox, Tooltip, type TooltipSide } from "@opal/components";
+import { InputCheckbox, Tooltip, type TooltipSide } from "@opal/components";
 import {
   composeKeyHandler,
   guardNestedInteractiveClick,
@@ -253,7 +253,7 @@ function AttachmentItemButton({
                    the event flow — the row alone owns activation, and its
                    own selected styling carries the state for AT. */
                 <span inert aria-hidden className="contents">
-                  <Checkbox checked readOnly />
+                  <InputCheckbox checked readOnly />
                 </span>
               ) : imageSrc ? (
                 <img

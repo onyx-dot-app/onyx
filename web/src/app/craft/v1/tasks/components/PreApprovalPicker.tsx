@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Card, Checkbox, Text } from "@opal/components";
+import { Card, InputCheckbox, Text } from "@opal/components";
 import { SvgMcp } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import { cn } from "@opal/utils";
@@ -213,7 +213,7 @@ function PreApprovalRow({ option, checked, onToggle }: PreApprovalRowProps) {
               {option.status}
             </Text>
           </div>
-          <Checkbox
+          <InputCheckbox
             id={checkboxId}
             aria-label={option.name}
             aria-describedby={statusId}

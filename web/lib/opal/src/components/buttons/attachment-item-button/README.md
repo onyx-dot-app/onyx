@@ -12,7 +12,7 @@ rounding (`--radius-12`).
 ```
 root                      Interactive.Stateful + Interactive.Container
 ├─ title                  tile + icon-less Content (main-ui / section, frozen)
-│   ├─ tile               icon on tint, or image cover-filling; Checkbox when selected
+│   ├─ tile               icon on tint, or image cover-filling; InputCheckbox when selected
 │   └─ Content            title, description, optional inline editing
 ├─ center                 centerChildren — flex-1, caller-aligned
 └─ action                 rightChildren — min-width --spacing-block-36, always reserved
@@ -26,7 +26,7 @@ Exactly one of two arms, enforced at the type level:
 - `imageSrc` + `imageAlt` — image fills the tile (`object-fit: cover`).
   `imageAlt` is mandatory: the image is content, not chrome.
 
-When `state="selected"`, the tile swaps its content for a checked `Checkbox`.
+When `state="selected"`, the tile swaps its content for a checked `InputCheckbox`.
 
 ## Interactivity
 

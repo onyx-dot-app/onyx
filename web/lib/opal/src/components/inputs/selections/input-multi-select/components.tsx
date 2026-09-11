@@ -3,7 +3,7 @@
 import "@opal/components/inputs/shared.css";
 // The inner field reuses InputTypeIn's .opal-input-field styling.
 import "@opal/components/inputs/input-type-in/styles.css";
-import "@opal/components/inputs/input-select/input-multi-select/styles.css";
+import "@opal/components/inputs/selections/input-multi-select/styles.css";
 import { useEffect, useRef } from "react";
 import type { IconFunctionComponent } from "@opal/types";
 import { Button, Tag, TAG_REMOVE_CLASS } from "@opal/components";

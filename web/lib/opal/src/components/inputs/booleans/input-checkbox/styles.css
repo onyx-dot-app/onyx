@@ -1,7 +1,7 @@
 @reference "#reference.css";
 
 /* ============================================================================
-   Checkbox — state x disabled color matrix
+   InputCheckbox — state x disabled color matrix
 
    Visual styling is driven by two data attributes on the root element:
      - `data-state`: "unchecked" | "checked" | "indeterminate"
