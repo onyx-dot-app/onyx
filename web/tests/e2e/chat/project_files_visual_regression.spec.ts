@@ -1,12 +1,10 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { ProjectFilesSection } from "@tests/e2e/pages/ProjectFilesSection";
 import { loginAsWorkerUser } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 
 const PROJECT_NAME = "E2E-PROJECT-FILES-VISUAL";
-// The file row is an Opal AttachmentItemButton; its tile has no testid, role
-// or text, so a class locator is the documented last resort.
-const ATTACHMENT_TILE_SELECTOR = ".opal-attachment-item-button-tile";
 const LONG_FILE_NAME =
   "CSE_202_Final_Project_Solution_Regression_Check_Long_Name.txt";
 const FILE_CONTENT = "Visual regression test content for long filename cards.";
@@ -23,14 +21,6 @@ type Geometry = {
   cardTop: number;
   cardBottom: number;
 };
-
-function getFilesSection(page: Page): Locator {
-  return page
-    .locator("div")
-    .filter({ has: page.getByRole("button", { name: "Add Files" }) })
-    .filter({ hasText: "Chats in this project can access these files." })
-    .first();
-}
 
 async function uploadFileToProject(
   page: Page,
@@ -147,24 +137,24 @@ test.describe("Project Files visual regression", () => {
   test("long underscore filename stays visually contained in file card", async ({
     page,
   }) => {
-    const filesSection = getFilesSection(page);
-    await expect(filesSection).toBeVisible();
+    const files = new ProjectFilesSection(page);
+    await expect(files.section).toBeVisible();
 
-    const fileTitle = filesSection.getByText(LONG_FILE_NAME).first();
+    const fileTitle = files.fileTitle(LONG_FILE_NAME);
     await expect(fileTitle).toBeVisible();
 
     // Wait for deterministic post-processing state before geometry
     // checks/screenshot. Title and description are separate elements now, so
     // the state text is asserted on the whole files section.
-    await expect(filesSection).not.toContainText("Processing...", {
+    await expect(files.section).not.toContainText("Processing...", {
       timeout: 30_000,
     });
-    await expect(filesSection).not.toContainText("Uploading...", {
+    await expect(files.section).not.toContainText("Uploading...", {
       timeout: 30_000,
     });
-    await expect(filesSection).toContainText("TXT", { timeout: 30_000 });
+    await expect(files.section).toContainText("TXT", { timeout: 30_000 });
 
-    const iconWrapper = filesSection.locator(ATTACHMENT_TILE_SELECTOR).first();
+    const iconWrapper = files.attachmentTile;
     await expect(iconWrapper).toBeVisible();
 
     const container = page.locator("[data-main-container]");
