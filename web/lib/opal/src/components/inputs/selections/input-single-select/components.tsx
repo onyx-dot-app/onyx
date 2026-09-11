@@ -435,6 +435,7 @@ const InputSingleSelect = ({
           fieldId={fieldId}
           placeholder={placeholder}
           sections={visibleSections}
+          emptySet={hasOptionSet && options.length === 0}
           value={value}
           highlightedIndex={highlightedIndex}
           onSelect={handleOptionSelect}

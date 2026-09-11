@@ -13,6 +13,8 @@ interface SelectDropdownProps {
   fieldId: string;
   placeholder: string;
   sections: SelectSection[];
+  /** The supplied set itself is empty (options={[]}), not merely filtered out. */
+  emptySet?: boolean;
   value: string;
   selectedValues?: ReadonlySet<string>;
   markAllMatches?: boolean;
@@ -49,6 +51,7 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
       fieldId,
       placeholder,
       sections,
+      emptySet,
       value,
       selectedValues,
       markAllMatches,
@@ -137,6 +140,7 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
         >
           <OptionsList
             sections={sections}
+            emptySet={emptySet}
             value={value}
             selectedValues={selectedValues}
             markAllMatches={markAllMatches}

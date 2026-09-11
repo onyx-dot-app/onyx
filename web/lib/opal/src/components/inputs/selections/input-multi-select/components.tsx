@@ -448,6 +448,7 @@ function InputMultiSelect({
         fieldId={fieldId}
         placeholder={placeholder ?? ""}
         sections={visibleSections}
+        emptySet={hasOptionSet && flatOptions.length === 0}
         value=""
         selectedValues={selectedValues}
         highlightedIndex={highlightedIndex}
