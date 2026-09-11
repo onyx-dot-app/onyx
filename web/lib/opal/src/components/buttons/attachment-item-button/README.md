@@ -41,10 +41,10 @@ Three modes, same contract as `LineItemButton`:
 - **Presentational** — pass `presentational`; the row renders no control
   semantics of its own and defers them to the primitive that owns it.
 
-`selectVariant` sets the loudness at rest: `"select-heavy"` is transparent
-(list rows in a modal), `"select-tinted"` rests on `background-tint-01`
-(rows on a plain page surface). Hover / selected / disabled palettes come
-from `Interactive.Stateful`.
+`prominence` sets the intensity at rest: `"primary"` rests on
+`background-neutral-01`, `"secondary"` on `background-tint-01`, and
+`"tertiary"` (default) is transparent. Hover / selected / disabled palettes
+come from `Interactive.Stateful` and are shared across all three.
 
 ## Content
 
@@ -71,7 +71,7 @@ Content's inline title editing.
 // Static token row on a page surface
 <AttachmentItemButton
   presentational
-  selectVariant="select-tinted"
+  prominence="primary"
   icon={SvgKey}
   title={token.name}
   description={token.display}

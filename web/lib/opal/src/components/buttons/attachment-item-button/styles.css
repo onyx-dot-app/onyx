@@ -4,8 +4,8 @@
    AttachmentItemButton — layout only
 
    Colors come from the Interactive.Stateful palette (`--interactive-foreground`
-   / `--interactive-foreground-icon`) via the `select-heavy` / `select-tinted`
-   variants; nothing here sets a state color.
+   / `--interactive-foreground-icon`) via the `select-heavy` variant and its
+   prominence cells; nothing here sets a state color.
 
    Structure: root → title (tile + Content) / center / action.
    ============================================================================ */

@@ -51,23 +51,28 @@ export const States: Story = {
 };
 
 /**
- * `select-heavy` rests transparent (list rows in a modal); `select-tinted`
- * rests on `background-tint-01` (rows on a plain page surface). Hover and
- * selected palettes come from `Interactive.Stateful` in both.
+ * Prominence sets only the rest intensity; hover and selected palettes come
+ * from `Interactive.Stateful` in all three.
  */
-export const SelectVariants: Story = {
+export const Prominences: Story = {
   render: () => (
     <div className="flex w-[32rem] flex-col gap-1">
       <AttachmentItemButton
+        prominence="primary"
         icon={SvgFileText}
-        title="select-heavy"
-        description="Transparent at rest"
+        title="primary"
+        description="Rests on background-neutral-01"
       />
       <AttachmentItemButton
-        selectVariant="select-tinted"
+        prominence="secondary"
         icon={SvgFileText}
-        title="select-tinted"
-        description="Tinted at rest"
+        title="secondary"
+        description="Rests on background-tint-01"
+      />
+      <AttachmentItemButton
+        icon={SvgFileText}
+        title="tertiary (default)"
+        description="Transparent at rest"
       />
     </div>
   ),
@@ -126,7 +131,7 @@ export const Presentational: Story = {
     <div className="w-[32rem]">
       <AttachmentItemButton
         presentational
-        selectVariant="select-tinted"
+        prominence="primary"
         icon={SvgKey}
         title="Production key"
         description="sk-...4f2a"

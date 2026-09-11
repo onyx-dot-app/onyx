@@ -88,7 +88,7 @@ type AttachmentItemButtonModeProps =
       /**
        * Render the row as plain markup inside another interactive primitive:
        * no button role, no tab stop, no Enter/Space activation. The row keeps
-       * its interactive palette — drive it with `state` / `selectVariant` /
+       * its interactive palette — drive it with `state` / `prominence` /
        * `interaction` from the owning control. `role`, `tabIndex` and the key
        * handlers still pass through, so the owner can substitute its own
        * semantics.
@@ -108,14 +108,16 @@ type AttachmentItemButtonOwnProps = Pick<
 > &
   AttachmentItemButtonModeProps & {
     /**
-     * Interactive select variant — the row's loudness at rest.
+     * Surface intensity at rest — hover, selected and disabled palettes
+     * stay the same across all three.
      *
-     * - `"select-heavy"` — transparent at rest (list rows in a modal)
-     * - `"select-tinted"` — tinted at rest (rows on a plain page surface)
+     * - `"primary"` — rests on `background-neutral-01` (rows on a plain page surface)
+     * - `"secondary"` — rests on `background-tint-01` (list rows on a tinted surface)
+     * - `"tertiary"` — transparent at rest
      *
-     * @default "select-heavy"
+     * @default "tertiary"
      */
-    selectVariant?: "select-heavy" | "select-tinted";
+    prominence?: "primary" | "secondary" | "tertiary";
 
     /** Container width. @default "full" */
     width?: ExtremaSizeVariants;
@@ -158,7 +160,7 @@ type AttachmentItemButtonProps = AttachmentItemButtonOwnProps &
 
 function AttachmentItemButton({
   // Interactive surface
-  selectVariant = "select-heavy",
+  prominence = "tertiary",
   state,
   interaction,
   onClick,
@@ -224,7 +226,8 @@ function AttachmentItemButton({
 
   const item = (
     <Interactive.Stateful
-      variant={selectVariant}
+      variant="select-heavy"
+      prominence={prominence}
       state={state}
       interaction={interaction}
       onClick={guardNestedInteractiveClick(onClick)}

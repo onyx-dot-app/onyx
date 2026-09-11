@@ -14,11 +14,11 @@ type InteractiveStatefulVariant =
   | "select-light"
   | "select-heavy"
   | "select-card"
-  | "select-tinted"
   | "select-input"
   | "select-filter"
   | "sidebar-heavy"
   | "sidebar-light";
+type InteractiveStatefulProminence = "primary" | "secondary" | "tertiary";
 type InteractiveStatefulState = "empty" | "filled" | "selected";
 type InteractiveStatefulInteraction = "rest" | "hover" | "active";
 
@@ -36,15 +36,29 @@ interface InteractiveStatefulProps extends WithoutStyles<
    * - `"select-light"` — transparent selected background (for inline toggles)
    * - `"select-heavy"` — tinted selected background (for list rows, model pickers)
    * - `"select-card"` — like select-heavy but filled state has a visible background (for cards/larger surfaces)
-   * - `"select-tinted"` — like select-heavy but with a tinted rest background
    * - `"select-input"` — rests at neutral-00 (matches input bar), hover/open shows neutral-03 + border-01
-   * - `"select-filter"` — like select-tinted for empty/filled; selected state uses inverted tint backgrounds and inverted text (for filter buttons)
+   * - `"select-filter"` — empty/filled rest on tint-01; selected state uses inverted tint backgrounds and inverted text (for filter buttons)
    * - `"sidebar-heavy"` — sidebar navigation items: muted when unselected (text-03/text-02), bold when selected (text-04/text-03)
    * - `"sidebar-light"` — sidebar navigation items: uniformly muted across all states (text-02/text-02)
    *
    * @default "select-heavy"
    */
   variant?: InteractiveStatefulVariant;
+
+  /**
+   * Surface intensity at rest. Only the `select-heavy` family defines
+   * prominence cells; other variants have a single look and ignore it.
+   *
+   * - `"primary"` — rests on `background-neutral-01`
+   * - `"secondary"` — rests on `background-tint-01`
+   * - `"tertiary"` — transparent at rest
+   *
+   * Prominence affects only the at-rest empty/filled backgrounds: hover,
+   * active, selected and disabled cells stay the variant's own.
+   *
+   * @default "tertiary"
+   */
+  prominence?: InteractiveStatefulProminence;
 
   /**
    * The current value state of this element.
@@ -112,6 +126,7 @@ interface InteractiveStatefulProps extends WithoutStyles<
 function InteractiveStateful({
   ref,
   variant = "select-heavy",
+  prominence = "tertiary",
   state = "empty",
   interaction = "rest",
   group,
@@ -133,6 +148,7 @@ function InteractiveStateful({
 
   const dataAttrs = {
     "data-interactive-variant": variant,
+    "data-interactive-prominence": prominence,
     "data-interactive-state": state,
     "data-interaction": interaction !== "rest" ? interaction : undefined,
     "data-disabled": isDisabled ? "true" : undefined,
@@ -171,6 +187,7 @@ export {
   InteractiveStateful,
   type InteractiveStatefulProps,
   type InteractiveStatefulVariant,
+  type InteractiveStatefulProminence,
   type InteractiveStatefulState,
   type InteractiveStatefulInteraction,
 };
