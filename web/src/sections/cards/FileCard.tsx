@@ -232,10 +232,3 @@ export function FileCard({
     </Removable>
   );
 }
-
-// Skeleton loading component for file cards
-export function FileCardSkeleton() {
-  return (
-    <div className="min-w-[120px] max-w-[240px] h-11 rounded-08 bg-background-tint-02 animate-pulse" />
-  );
-}
