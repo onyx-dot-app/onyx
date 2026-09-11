@@ -862,6 +862,48 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  jira_service_management: {
+    description: "Configure Jira Service Management connector",
+    subtext: `Configure which Jira Service Management project to index. Uses the same credentials as the regular Jira connector.`,
+    values: [
+      {
+        type: "text",
+        query: "Enter the Jira base URL:",
+        label: "Jira Base URL",
+        name: "jira_base_url",
+        optional: false,
+        description:
+          "The base URL of your Jira instance (e.g., https://your-domain.atlassian.net)",
+      },
+      {
+        type: "checkbox",
+        query: "Using scoped token?",
+        label: "Using scoped token",
+        name: "scoped_token",
+        optional: true,
+        default: false,
+      },
+      {
+        type: "text",
+        query: "Enter the service desk project key:",
+        label: "Project Key",
+        name: "project_key",
+        optional: false,
+        description:
+          "The key of the Jira Service Management project to index (e.g., 'ITSM'). Must be a service desk project — regular Jira projects will be rejected.",
+      },
+      {
+        type: "list",
+        query: "Enter email addresses to blacklist from comments:",
+        label: "Comment Email Blacklist",
+        name: "comment_email_blacklist",
+        description:
+          "This is generally useful to ignore certain bots. Add user emails which comments should NOT be indexed.",
+        optional: true,
+      },
+    ],
+    advanced_values: [],
+  },
   salesforce: {
     description: "Configure Salesforce connector",
     values: [
@@ -2196,6 +2238,13 @@ export interface JiraConfig {
   project_key?: string;
   comment_email_blacklist?: string[];
   jql_query?: string;
+}
+
+export interface JiraServiceManagementConfig {
+  jira_base_url: string;
+  project_key: string;
+  scoped_token?: boolean;
+  comment_email_blacklist?: string[];
 }
 
 export interface SalesforceConfig {
