@@ -133,7 +133,7 @@ export default function LMStudioModal({
     custom_config: {
       LM_STUDIO_API_KEY: existingLlmProvider?.custom_config?.LM_STUDIO_API_KEY,
     },
-  } as LMStudioModalValues;
+  };
 
   const validationSchema = buildValidationSchema(t, isOnboarding, {
     apiBase: true,
