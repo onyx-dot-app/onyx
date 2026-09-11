@@ -36,13 +36,6 @@ export {
   type AttachmentItemButtonProps,
 } from "@opal/components/buttons/attachment-item-button/components";
 
-/* InputMultiSelect */
-export {
-  InputMultiSelect,
-  type InputMultiSelectProps,
-  type InputMultiSelectItem,
-} from "@opal/components/inputs/input-multi-select/components";
-
 /* LineItemButton */
 export {
   LineItemButton,

@@ -12816,11 +12816,6 @@
       "validationSummary": "{count, plural, one {# erreur de validation trouvée} other {# erreurs de validation trouvées}}",
       "value": "Valeur"
     },
-    "multiSelect": {
-      "emptyDescription": "Recherchez ci-dessus pour ajouter des éléments",
-      "emptyTitle": "Rien de sélectionné pour le moment",
-      "noResults": "Aucune option correspondante"
-    },
     "pagination": {
       "goToPage": "Aller à la page",
       "nextPage": "Page suivante",
