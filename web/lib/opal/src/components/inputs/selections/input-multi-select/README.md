@@ -68,8 +68,9 @@ or on the chip — removes it through `onRemoveTag`. Sections render with a
 - **`mode="open"`**: the raw text can also be committed via the create row
   (`createPrefix` labels it), landing in `onAdd` like a plain tag.
 
-Without `options` the input stays the plain free-tagging field, whatever the
-mode.
+Without `options` the input is the plain free-tagging field — an open set
+by definition, so the types accept only `mode="open"` there (`"closed"`
+without a set is a contradiction and does not compile).
 
 ```tsx
 <InputMultiSelect

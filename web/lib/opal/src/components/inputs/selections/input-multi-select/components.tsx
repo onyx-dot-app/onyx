@@ -57,7 +57,12 @@ type InputMultiSelectOptionsProps =
   | {
       options?: never;
       onSelectOption?: never;
-      mode?: never;
+      /**
+       * Without a set the input is free tagging — an open set by
+       * definition — so only `"open"` may be stated. A closed set with no
+       * options to close over is a contradiction the types reject.
+       */
+      mode?: "open";
       createPrefix?: never;
       dropdownMaxHeight?: never;
     }
