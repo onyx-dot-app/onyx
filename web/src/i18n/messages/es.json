@@ -12772,11 +12772,6 @@
       "validationSummary": "{count, plural, one {# error de validación encontrado} other {# errores de validación encontrados}}",
       "value": "Valor"
     },
-    "multiSelect": {
-      "emptyDescription": "Busca arriba para añadir elementos",
-      "emptyTitle": "Aún no hay nada seleccionado",
-      "noResults": "No hay opciones coincidentes"
-    },
     "pagination": {
       "goToPage": "Ir a la página",
       "nextPage": "Página siguiente",

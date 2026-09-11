@@ -12772,11 +12772,6 @@
       "validationSummary": "{count, plural, one {#件の検証エラーが見つかりました} other {#件の検証エラーが見つかりました}}",
       "value": "値"
     },
-    "multiSelect": {
-      "emptyDescription": "上の検索欄から項目を追加してください",
-      "emptyTitle": "まだ何も選択されていません",
-      "noResults": "一致するオプションがありません"
-    },
     "pagination": {
       "goToPage": "ページへ移動",
       "nextPage": "次のページ",

@@ -12772,11 +12772,6 @@
       "validationSummary": "{count, plural, one {تم العثور على خطأ تحقق واحد} other {تم العثور على # من أخطاء التحقق}}",
       "value": "القيمة"
     },
-    "multiSelect": {
-      "emptyDescription": "ابحث في الأعلى لإضافة عناصر",
-      "emptyTitle": "لم يتم تحديد أي شيء بعد",
-      "noResults": "لا توجد خيارات مطابقة"
-    },
     "pagination": {
       "goToPage": "الانتقال إلى صفحة",
       "nextPage": "الصفحة التالية",

@@ -12772,11 +12772,6 @@
       "validationSummary": "{count, plural, one {发现 # 个验证错误} other {发现 # 个验证错误}}",
       "value": "值"
     },
-    "multiSelect": {
-      "emptyDescription": "在上方搜索以添加项目",
-      "emptyTitle": "尚未选择任何内容",
-      "noResults": "没有匹配的选项"
-    },
     "pagination": {
       "goToPage": "跳转到页面",
       "nextPage": "下一页",
