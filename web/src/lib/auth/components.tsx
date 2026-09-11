@@ -8,7 +8,7 @@ import { getExtensionContext } from "@/lib/extension/utils";
 import { Modal } from "@opal/components";
 import { Button, Text } from "@opal/components";
 import { SvgLogOut, SvgCheckCircle, SvgXCircle } from "@opal/icons";
-import { SessionEndReason } from "@/lib/auth/types";
+import { SessionEndReason, type FastApiUsersErrorBody } from "@/lib/auth/types";
 import { SvgGoogle } from "@opal/logos";
 import { useCaptcha } from "@/lib/hooks/useCaptcha";
 import { verifyCaptchaForOAuth } from "@/lib/auth/svc";
@@ -363,7 +363,9 @@ export function EmailPasswordForm({
       );
 
       if (!response.ok) {
-        const errorBody: any = await response.json().catch(() => ({}));
+        const errorBody: FastApiUsersErrorBody = await response
+          .json()
+          .catch(() => ({}));
         const errorDetail = errorBody.detail;
         let errorMsg = tCommon("errors.unknown.message");
         if (response.status === 429) {
@@ -405,7 +407,9 @@ export function EmailPasswordForm({
         validatedNextUrl ??
         `/app${isSignup && !isJoin ? "?new_team=true" : ""}`;
     } else {
-      const errorBody: any = await loginResponse.json().catch(() => ({}));
+      const errorBody: FastApiUsersErrorBody = await loginResponse
+        .json()
+        .catch(() => ({}));
       const errorDetail = errorBody.detail;
       let errorMsg = tCommon("errors.unknown.message");
       if (loginResponse.status === 429) {

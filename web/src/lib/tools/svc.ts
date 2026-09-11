@@ -359,7 +359,8 @@ export async function validateToolDefinition(toolData: {
       return { data: null, error: errorDetail };
     }
 
-    const responseJson = await response.json();
+    // Mirrors `ValidateToolResponse` in backend/onyx/server/features/tool/api.py.
+    const responseJson: { methods: MethodSpec[] } = await response.json();
     return { data: responseJson.methods, error: null };
   } catch (error) {
     console.error("Error validating tool:", error);
