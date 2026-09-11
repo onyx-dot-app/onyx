@@ -81,7 +81,7 @@ export const OptionItem = React.memo(
         onMouseMove={onMouseMove}
         className={cn(
           "px-3 py-2 cursor-pointer transition-colors",
-          "flex flex-col rounded-08",
+          "flex flex-col rounded-04",
           isExact && "bg-action-selection-01",
           !isExact && isHighlighted && "bg-background-tint-02",
           !isExact && isSelected && "bg-background-tint-02",

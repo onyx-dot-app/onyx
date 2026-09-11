@@ -99,7 +99,7 @@ export const OptionsList: React.FC<OptionsListProps> = ({
           onMouseMove={onMouseMove}
           className={cn(
             "cursor-pointer transition-colors",
-            "flex items-center justify-between rounded-08",
+            "flex items-center justify-between rounded-04",
             highlightedIndex === 0 && "bg-background-tint-02",
             "hover:bg-background-tint-02",
             createPrefix ? "px-1.5 py-1.5" : "px-3 py-2"
