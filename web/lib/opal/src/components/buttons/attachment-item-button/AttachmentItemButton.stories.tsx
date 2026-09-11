@@ -61,13 +61,13 @@ export const Prominences: Story = {
         prominence="primary"
         icon={SvgFileText}
         title="primary"
-        description="Rests on background-neutral-01"
+        description="Rests on background-tint-00"
       />
       <AttachmentItemButton
         prominence="secondary"
         icon={SvgFileText}
         title="secondary"
-        description="Rests on background-tint-01"
+        description="Rests on background-neutral-01"
       />
       <AttachmentItemButton
         icon={SvgFileText}
@@ -131,7 +131,7 @@ export const Presentational: Story = {
     <div className="w-[32rem]">
       <AttachmentItemButton
         presentational
-        prominence="primary"
+        prominence="secondary"
         icon={SvgKey}
         title="Production key"
         description="sk-...4f2a"

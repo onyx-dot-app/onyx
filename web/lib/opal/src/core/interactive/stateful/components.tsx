@@ -49,8 +49,8 @@ interface InteractiveStatefulProps extends WithoutStyles<
    * Surface intensity at rest. Only the `select-heavy` family defines
    * prominence cells; other variants have a single look and ignore it.
    *
-   * - `"primary"` — rests on `background-neutral-01`
-   * - `"secondary"` — rests on `background-tint-01`
+   * - `"primary"` — rests on `background-tint-00`
+   * - `"secondary"` — rests on `background-neutral-01`
    * - `"tertiary"` — transparent at rest
    *
    * Prominence affects only the at-rest empty/filled backgrounds: hover,

@@ -111,8 +111,8 @@ type AttachmentItemButtonOwnProps = Pick<
      * Surface intensity at rest — hover, selected and disabled palettes
      * stay the same across all three.
      *
-     * - `"primary"` — rests on `background-neutral-01` (rows on a plain page surface)
-     * - `"secondary"` — rests on `background-tint-01` (list rows on a tinted surface)
+     * - `"primary"` — rests on `background-tint-00` (elevated rows on a card)
+     * - `"secondary"` — rests on `background-neutral-01` (rows on a plain page surface)
      * - `"tertiary"` — transparent at rest
      *
      * @default "tertiary"
