@@ -864,14 +864,20 @@ async def websocket_transcribe(
                 return
 
         if use_streaming:
-            try:
+
+            async def stream_with_provider() -> None:
+                # Setup counts toward the Zoom cap, so a slow handshake cannot
+                # stretch the session past the Redis admission TTL.
+                nonlocal streaming_transcriber
                 streaming_transcriber = await provider.create_streaming_transcriber()
                 logger.info("WebSocket transcribe: streaming transcriber created")
+                await handle_streaming_transcription(
+                    websocket, streaming_transcriber, deadline=session_deadline
+                )
+
+            try:
                 if await _run_with_zoom_session_cap(
-                    provider_type,
-                    handle_streaming_transcription(
-                        websocket, streaming_transcriber, deadline=session_deadline
-                    ),
+                    provider_type, stream_with_provider()
                 ):
                     await _send_zoom_session_timeout(websocket)
                 return
