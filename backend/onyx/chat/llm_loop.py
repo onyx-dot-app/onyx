@@ -57,6 +57,8 @@ from onyx.prompts.chat_prompts import (
 from onyx.prompts.prompt_utils import substitute_user_placeholders
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
+    AgentResponseDelta,
+    AgentResponseStart,
     OverallStop,
     Packet,
     ToolCallDebug,
@@ -92,6 +94,11 @@ logger = setup_logger()
 # Used when no token_counter is available to measure the non-vision image
 # marker; intentionally generous so budgeting stays conservative.
 _NON_VISION_MARKER_TOKEN_FALLBACK = 40
+
+_EMPTY_SYNTHESIS_FALLBACK = (
+    "I found relevant sources, but I could not synthesize a reliable answer from "
+    "them. Please try asking a more specific question."
+)
 
 
 class EmptyLLMResponseError(ClassifiedLLMError):
@@ -299,6 +306,45 @@ def _try_fallback_tool_extraction(
         )
 
     return llm_step_result, True
+
+
+def _emit_empty_synthesis_fallback(
+    *,
+    emitter: Emitter,
+    state_container: ChatStateContainer,
+    gathered_documents: list[SearchDoc],
+    placement: Placement,
+    pre_answer_processing_time: float | None,
+    reasoning: str | None,
+    raw_answer: str | None,
+    finish_reason: str | None,
+) -> LlmStepResult:
+    """Emit a useful response when retrieval succeeded but synthesis was empty."""
+    if pre_answer_processing_time is not None:
+        state_container.set_pre_answer_processing_time(pre_answer_processing_time)
+    emitter.emit(
+        Packet(
+            placement=placement,
+            obj=AgentResponseStart(
+                final_documents=gathered_documents,
+                pre_answer_processing_seconds=pre_answer_processing_time,
+            ),
+        )
+    )
+    emitter.emit(
+        Packet(
+            placement=placement,
+            obj=AgentResponseDelta(content=_EMPTY_SYNTHESIS_FALLBACK),
+        )
+    )
+    state_container.set_answer_tokens(_EMPTY_SYNTHESIS_FALLBACK)
+    return LlmStepResult(
+        reasoning=reasoning,
+        answer=_EMPTY_SYNTHESIS_FALLBACK,
+        tool_calls=None,
+        raw_answer=raw_answer,
+        finish_reason=finish_reason,
+    )
 
 
 # Default 6 covers the common search → open_url pattern:
@@ -879,6 +925,8 @@ def run_llm_loop(
         )
 
         reasoning_cycles = 0
+        llm_cycle_count = 0
+        pre_answer_processing_time: float | None = None
         for llm_cycle_count in range(MAX_LLM_CYCLES):
             # Handling tool calls based on cycle count and past cycle conditions
             out_of_cycles = llm_cycle_count == MAX_LLM_CYCLES - 1
@@ -1387,11 +1435,29 @@ def run_llm_loop(
                 should_cite_documents = True
 
         if not llm_step_result.answer and not llm_step_result.tool_calls:
-            raise _build_empty_llm_response_error(
-                llm=llm,
-                llm_step_result=llm_step_result,
-                tool_choice=tool_choice,
-            )
+            if (
+                gathered_documents
+                and llm_step_result.finish_reason not in _REFUSAL_FINISH_REASONS
+            ):
+                # Retrieval succeeded, but the final synthesis can still be empty
+                # for some providers and broad questions. Keep the retrieved
+                # documents visible and give the user an actionable response.
+                llm_step_result = _emit_empty_synthesis_fallback(
+                    emitter=emitter,
+                    state_container=state_container,
+                    gathered_documents=gathered_documents,
+                    placement=Placement(turn_index=llm_cycle_count + reasoning_cycles),
+                    pre_answer_processing_time=pre_answer_processing_time,
+                    reasoning=llm_step_result.reasoning,
+                    raw_answer=llm_step_result.raw_answer,
+                    finish_reason=llm_step_result.finish_reason,
+                )
+            else:
+                raise _build_empty_llm_response_error(
+                    llm=llm,
+                    llm_step_result=llm_step_result,
+                    tool_choice=tool_choice,
+                )
 
         if not llm_step_result.answer:
             raise RuntimeError(
@@ -1402,10 +1468,7 @@ def run_llm_loop(
 
         emitter.emit(
             Packet(
-                placement=Placement(
-                    turn_index=llm_cycle_count  # ty: ignore[possibly-unresolved-reference]
-                    + reasoning_cycles
-                ),
+                placement=Placement(turn_index=llm_cycle_count + reasoning_cycles),
                 obj=OverallStop(type="stop"),
             )
         )

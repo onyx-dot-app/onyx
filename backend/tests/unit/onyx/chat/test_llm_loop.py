@@ -5,10 +5,13 @@ from unittest.mock import Mock
 
 import pytest
 
+from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.llm_loop import (
+    _EMPTY_SYNTHESIS_FALLBACK,
     _REFUSAL_FINISH_REASONS,
     EmptyLLMResponseError,
     _build_empty_llm_response_error,
+    _emit_empty_synthesis_fallback,
     _try_fallback_tool_extraction,
     construct_message_history,
     select_reminder_text,
@@ -22,11 +25,17 @@ from onyx.chat.models import (
     LlmStepResult,
     ToolCallSimple,
 )
-from onyx.configs.constants import MessageType
+from onyx.configs.constants import DocumentSource, MessageType
+from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import ChatFileType
 from onyx.llm.interfaces import LLMConfig, ToolChoiceOptions
 from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER, OPEN_URL_REMINDER
 from onyx.server.query_and_chat.placement import Placement
+from onyx.server.query_and_chat.streaming_models import (
+    AgentResponseDelta,
+    AgentResponseStart,
+    Packet,
+)
 from onyx.tools.models import ToolCallKickoff
 
 
@@ -1447,3 +1456,49 @@ class TestSelectReminderText:
             ran_image_gen=True, just_ran_web_search=True, has_open_url_tool=True
         )
         assert result == IMAGE_GEN_REMINDER
+
+
+class TestEmptySynthesisFallback:
+    def test_emits_answer_and_preserves_retrieved_documents(self) -> None:
+        emitter = Mock()
+        state_container = ChatStateContainer()
+        document = SearchDoc(
+            document_id="document-1",
+            chunk_ind=0,
+            semantic_identifier="Document 1",
+            blurb="Relevant content",
+            source_type=DocumentSource.WEB,
+            boost=1,
+            hidden=False,
+            metadata={},
+            match_highlights=[],
+        )
+
+        result = _emit_empty_synthesis_fallback(
+            emitter=emitter,
+            state_container=state_container,
+            gathered_documents=[document],
+            placement=Placement(turn_index=2),
+            pre_answer_processing_time=1.25,
+            reasoning=None,
+            raw_answer=None,
+            finish_reason="stop",
+        )
+
+        assert result.answer == _EMPTY_SYNTHESIS_FALLBACK
+        assert state_container.get_answer_tokens() == _EMPTY_SYNTHESIS_FALLBACK
+        assert state_container.get_pre_answer_processing_time() == 1.25
+        emitted_packets = [call.args[0] for call in emitter.emit.call_args_list]
+        assert emitted_packets == [
+            Packet(
+                placement=Placement(turn_index=2),
+                obj=AgentResponseStart(
+                    final_documents=[document],
+                    pre_answer_processing_seconds=1.25,
+                ),
+            ),
+            Packet(
+                placement=Placement(turn_index=2),
+                obj=AgentResponseDelta(content=_EMPTY_SYNTHESIS_FALLBACK),
+            ),
+        ]
