@@ -22,7 +22,8 @@ import {
 } from "@floating-ui/react-dom";
 import type { IconFunctionComponent } from "@opal/types";
 import { Button, Tag, TAG_REMOVE_CLASS } from "@opal/components";
-import { SvgChevronDown, SvgChevronUp, SvgX } from "@opal/icons";
+import { SvgX } from "@opal/icons";
+import { RotatingChevron } from "../chevron";
 import { useOpalStrings } from "@opal/strings";
 import { useClickOutside } from "@opal/hooks/useClickOutside";
 import {
@@ -413,22 +414,24 @@ function InputMultiSelect({
         />
       )}
       {hasOptionSet && (
-        <Button
-          disabled={disabled}
-          prominence="tertiary"
-          size="sm"
-          icon={isOpen ? SvgChevronUp : SvgChevronDown}
-          aria-label={isOpen ? strings.comboBoxClose : strings.comboBoxOpen}
-          tabIndex={-1}
-          type="button"
-          onClick={(event) => {
-            // The field's own click handler focuses the input; the chevron
-            // toggles instead of always-opening.
-            event.stopPropagation();
-            setIsOpen((prev) => !prev);
-            inputRef.current?.focus();
-          }}
-        />
+        <span data-dropdown-open={isOpen} className="contents">
+          <Button
+            disabled={disabled}
+            prominence="tertiary"
+            size="sm"
+            icon={RotatingChevron}
+            aria-label={isOpen ? strings.comboBoxClose : strings.comboBoxOpen}
+            tabIndex={-1}
+            type="button"
+            onClick={(event) => {
+              // The field's own click handler focuses the input; the chevron
+              // toggles instead of always-opening.
+              event.stopPropagation();
+              setIsOpen((prev) => !prev);
+              inputRef.current?.focus();
+            }}
+          />
+        </span>
       )}
 
       <SelectDropdown
