@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from onyx.connectors.sharepoint.connector import (
+from onyx.connectors.microsoft_utils.drive_items import (
     DriveItemData,
+    build_item_relative_path,
+    is_path_excluded,
+)
+from onyx.connectors.sharepoint.connector import (
     SharepointConnector,
     SiteDescriptor,
-    _build_item_relative_path,
-    _is_path_excluded,
     _is_site_excluded,
 )
 
@@ -60,60 +62,58 @@ class TestIsSiteExcluded:
 
 class TestIsPathExcluded:
     def test_filename_glob(self) -> None:
-        assert _is_path_excluded("Engineering/report.tmp", ["*.tmp"])
+        assert is_path_excluded("Engineering/report.tmp", ["*.tmp"])
 
     def test_filename_only(self) -> None:
-        assert _is_path_excluded("report.tmp", ["*.tmp"])
+        assert is_path_excluded("report.tmp", ["*.tmp"])
 
     def test_office_lock_files(self) -> None:
-        assert _is_path_excluded("Docs/~$document.docx", ["~$*"])
+        assert is_path_excluded("Docs/~$document.docx", ["~$*"])
 
     def test_folder_glob(self) -> None:
-        assert _is_path_excluded("Archive/old/report.docx", ["Archive/*"])
+        assert is_path_excluded("Archive/old/report.docx", ["Archive/*"])
 
     def test_nested_folder_glob(self) -> None:
-        assert _is_path_excluded("Projects/Archive/report.docx", ["*/Archive/*"])
+        assert is_path_excluded("Projects/Archive/report.docx", ["*/Archive/*"])
 
     def test_no_match(self) -> None:
-        assert not _is_path_excluded("Engineering/report.docx", ["*.tmp"])
+        assert not is_path_excluded("Engineering/report.docx", ["*.tmp"])
 
     def test_empty_patterns(self) -> None:
-        assert not _is_path_excluded("anything.docx", [])
+        assert not is_path_excluded("anything.docx", [])
 
     def test_multiple_patterns(self) -> None:
         patterns = ["*.tmp", "~$*", "Archive/*"]
-        assert _is_path_excluded("test.tmp", patterns)
-        assert _is_path_excluded("~$doc.docx", patterns)
-        assert _is_path_excluded("Archive/old.pdf", patterns)
-        assert not _is_path_excluded("Engineering/report.docx", patterns)
+        assert is_path_excluded("test.tmp", patterns)
+        assert is_path_excluded("~$doc.docx", patterns)
+        assert is_path_excluded("Archive/old.pdf", patterns)
+        assert not is_path_excluded("Engineering/report.docx", patterns)
 
 
 class TestBuildItemRelativePath:
     def test_with_folder(self) -> None:
         assert (
-            _build_item_relative_path(
-                "/drives/abc/root:/Engineering/API", "report.docx"
-            )
+            build_item_relative_path("/drives/abc/root:/Engineering/API", "report.docx")
             == "Engineering/API/report.docx"
         )
 
     def test_root_level(self) -> None:
         assert (
-            _build_item_relative_path("/drives/abc/root:", "report.docx")
+            build_item_relative_path("/drives/abc/root:", "report.docx")
             == "report.docx"
         )
 
     def test_none_parent(self) -> None:
-        assert _build_item_relative_path(None, "report.docx") == "report.docx"
+        assert build_item_relative_path(None, "report.docx") == "report.docx"
 
     def test_percent_encoded_folder(self) -> None:
         assert (
-            _build_item_relative_path("/drives/abc/root:/My%20Documents", "report.docx")
+            build_item_relative_path("/drives/abc/root:/My%20Documents", "report.docx")
             == "My Documents/report.docx"
         )
 
     def test_no_root_marker(self) -> None:
-        assert _build_item_relative_path("/drives/abc", "report.docx") == "report.docx"
+        assert build_item_relative_path("/drives/abc", "report.docx") == "report.docx"
 
 
 class TestFilterExcludedSites:

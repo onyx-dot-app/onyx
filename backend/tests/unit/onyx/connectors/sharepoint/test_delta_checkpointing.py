@@ -24,6 +24,7 @@ from onyx.connectors.models import (
     DocumentSource,
     TextSection,
 )
+from onyx.connectors.sharepoint import connector as sp_connector
 from onyx.connectors.sharepoint.connector import (
     DriveItemData,
     SharepointConnector,
@@ -182,7 +183,7 @@ class TestDeltaPerPageCheckpointing:
         call_count = 0
 
         def fake_fetch_page(
-            self: SharepointConnector,  # noqa: ARG001
+            client: Any,  # noqa: ARG001
             page_url: str,  # noqa: ARG001
             drive_id: str,  # noqa: ARG001
             start: datetime | None = None,  # noqa: ARG001
@@ -197,9 +198,7 @@ class TestDeltaPerPageCheckpointing:
                 return items_p2, "https://graph.microsoft.com/next3"
             return items_p3, None
 
-        monkeypatch.setattr(
-            SharepointConnector, "_fetch_one_delta_page", fake_fetch_page
-        )
+        monkeypatch.setattr(sp_connector, "fetch_one_delta_page", fake_fetch_page)
 
         checkpoint = _build_ready_checkpoint()
 
@@ -249,7 +248,7 @@ class TestDeltaPerPageCheckpointing:
         call_count = 0
 
         def fake_fetch_page(
-            self: SharepointConnector,  # noqa: ARG001
+            client: Any,  # noqa: ARG001
             page_url: str,
             drive_id: str,  # noqa: ARG001
             start: datetime | None = None,  # noqa: ARG001
@@ -263,9 +262,7 @@ class TestDeltaPerPageCheckpointing:
                 return [_make_item("a")], "https://graph.microsoft.com/next2"
             return [_make_item("b")], None
 
-        monkeypatch.setattr(
-            SharepointConnector, "_fetch_one_delta_page", fake_fetch_page
-        )
+        monkeypatch.setattr(sp_connector, "fetch_one_delta_page", fake_fetch_page)
 
         # Process page 1
         checkpoint = _build_ready_checkpoint()
@@ -285,9 +282,7 @@ class TestDeltaPerPageCheckpointing:
         # New connector instance (as if process restarted)
         connector2 = _setup_connector(monkeypatch)
         _mock_convert(monkeypatch)
-        monkeypatch.setattr(
-            SharepointConnector, "_fetch_one_delta_page", fake_fetch_page
-        )
+        monkeypatch.setattr(sp_connector, "fetch_one_delta_page", fake_fetch_page)
 
         # Resume — should pick up from next2
         gen = connector2._load_from_checkpoint(
@@ -311,7 +306,7 @@ class TestDeltaPerPageCheckpointing:
         _mock_convert(monkeypatch)
 
         def fake_fetch_page(
-            self: SharepointConnector,  # noqa: ARG001
+            client: Any,  # noqa: ARG001
             page_url: str,  # noqa: ARG001
             drive_id: str,  # noqa: ARG001
             start: datetime | None = None,  # noqa: ARG001
@@ -320,9 +315,7 @@ class TestDeltaPerPageCheckpointing:
         ) -> tuple[list[DriveItemData], str | None]:
             return [_make_item("only")], None
 
-        monkeypatch.setattr(
-            SharepointConnector, "_fetch_one_delta_page", fake_fetch_page
-        )
+        monkeypatch.setattr(sp_connector, "fetch_one_delta_page", fake_fetch_page)
 
         checkpoint = _build_ready_checkpoint()
         gen = connector._load_from_checkpoint(
@@ -347,7 +340,7 @@ class TestBfsPathNoCheckpointing:
         items = [_make_item("x"), _make_item("y"), _make_item("z")]
 
         def fake_iter_paged(
-            self: SharepointConnector,  # noqa: ARG001
+            client: Any,  # noqa: ARG001
             drive_id: str,  # noqa: ARG001
             folder_path: str | None = None,  # noqa: ARG001
             start: datetime | None = None,  # noqa: ARG001
@@ -356,9 +349,7 @@ class TestBfsPathNoCheckpointing:
         ) -> Generator[DriveItemData, None, None]:
             yield from items
 
-        monkeypatch.setattr(
-            SharepointConnector, "_iter_drive_items_paged", fake_iter_paged
-        )
+        monkeypatch.setattr(sp_connector, "iter_drive_items_paged", fake_iter_paged)
 
         checkpoint = _build_ready_checkpoint(folder_path="Engineering/Docs")
         gen = connector._load_from_checkpoint(
@@ -383,7 +374,7 @@ class TestDelta410GoneResync:
         call_count = 0
 
         def fake_fetch_page(
-            self: SharepointConnector,  # noqa: ARG001
+            client: Any,  # noqa: ARG001
             page_url: str,  # noqa: ARG001
             drive_id: str,
             start: datetime | None = None,  # noqa: ARG001
@@ -398,9 +389,7 @@ class TestDelta410GoneResync:
                 return [], full_url
             return [_make_item("recovered")], None
 
-        monkeypatch.setattr(
-            SharepointConnector, "_fetch_one_delta_page", fake_fetch_page
-        )
+        monkeypatch.setattr(sp_connector, "fetch_one_delta_page", fake_fetch_page)
 
         checkpoint = _build_ready_checkpoint()
 
@@ -425,7 +414,7 @@ class TestDelta410GoneResync:
 
 
 class TestDeltaPageFetchFailure:
-    """If _fetch_one_delta_page raises, the drive should be abandoned with a
+    """If fetch_one_delta_page raises, the drive should be abandoned with a
     ConnectorFailure and the checkpoint should be cleared for the next drive."""
 
     def test_page_fetch_error_yields_failure_and_clears_state(
@@ -435,7 +424,7 @@ class TestDeltaPageFetchFailure:
         _mock_convert(monkeypatch)
 
         def fake_fetch_page(
-            self: SharepointConnector,  # noqa: ARG001
+            client: Any,  # noqa: ARG001
             page_url: str,  # noqa: ARG001
             drive_id: str,  # noqa: ARG001
             start: datetime | None = None,  # noqa: ARG001
@@ -444,9 +433,7 @@ class TestDeltaPageFetchFailure:
         ) -> tuple[list[DriveItemData], str | None]:
             raise RuntimeError("network blip")
 
-        monkeypatch.setattr(
-            SharepointConnector, "_fetch_one_delta_page", fake_fetch_page
-        )
+        monkeypatch.setattr(sp_connector, "fetch_one_delta_page", fake_fetch_page)
 
         checkpoint = _build_ready_checkpoint()
         gen = connector._load_from_checkpoint(
@@ -478,7 +465,7 @@ class TestDeltaDuplicateDocumentDedup:
         call_count = 0
 
         def fake_fetch_page(
-            self: SharepointConnector,  # noqa: ARG001
+            client: Any,  # noqa: ARG001
             page_url: str,  # noqa: ARG001
             drive_id: str,  # noqa: ARG001
             start: datetime | None = None,  # noqa: ARG001
@@ -491,9 +478,7 @@ class TestDeltaDuplicateDocumentDedup:
                 return [_make_item("a"), _make_item("dup")], "https://next2"
             return [_make_item("dup"), _make_item("b")], None
 
-        monkeypatch.setattr(
-            SharepointConnector, "_fetch_one_delta_page", fake_fetch_page
-        )
+        monkeypatch.setattr(sp_connector, "fetch_one_delta_page", fake_fetch_page)
 
         checkpoint = _build_ready_checkpoint()
 
@@ -523,7 +508,7 @@ class TestDeltaDuplicateDocumentDedup:
         _mock_convert(monkeypatch)
 
         def fake_fetch_page(
-            self: SharepointConnector,  # noqa: ARG001
+            client: Any,  # noqa: ARG001
             page_url: str,  # noqa: ARG001
             drive_id: str,  # noqa: ARG001
             start: datetime | None = None,  # noqa: ARG001
@@ -532,9 +517,7 @@ class TestDeltaDuplicateDocumentDedup:
         ) -> tuple[list[DriveItemData], str | None]:
             return [_make_item("x"), _make_item("x"), _make_item("y")], None
 
-        monkeypatch.setattr(
-            SharepointConnector, "_fetch_one_delta_page", fake_fetch_page
-        )
+        monkeypatch.setattr(sp_connector, "fetch_one_delta_page", fake_fetch_page)
 
         checkpoint = _build_ready_checkpoint()
         gen = connector._load_from_checkpoint(
@@ -555,7 +538,7 @@ class TestDeltaDuplicateDocumentDedup:
         call_count = 0
 
         def fake_fetch_page(
-            self: SharepointConnector,  # noqa: ARG001
+            client: Any,  # noqa: ARG001
             page_url: str,  # noqa: ARG001
             drive_id: str,  # noqa: ARG001
             start: datetime | None = None,  # noqa: ARG001
@@ -568,9 +551,7 @@ class TestDeltaDuplicateDocumentDedup:
                 return [_make_item("a")], "https://next2"
             return [_make_item("a"), _make_item("b")], None
 
-        monkeypatch.setattr(
-            SharepointConnector, "_fetch_one_delta_page", fake_fetch_page
-        )
+        monkeypatch.setattr(sp_connector, "fetch_one_delta_page", fake_fetch_page)
 
         checkpoint = _build_ready_checkpoint()
 
@@ -590,9 +571,7 @@ class TestDeltaDuplicateDocumentDedup:
         # Page 2 with restored checkpoint: 'a' should be skipped
         connector2 = _setup_connector(monkeypatch)
         _mock_convert(monkeypatch)
-        monkeypatch.setattr(
-            SharepointConnector, "_fetch_one_delta_page", fake_fetch_page
-        )
+        monkeypatch.setattr(sp_connector, "fetch_one_delta_page", fake_fetch_page)
 
         gen = connector2._load_from_checkpoint(
             _START_TS, _END_TS, restored, include_permissions=False
@@ -610,7 +589,7 @@ class TestDeltaDuplicateDocumentDedup:
         _mock_convert(monkeypatch)
 
         def fake_fetch_page(
-            self: SharepointConnector,  # noqa: ARG001
+            client: Any,  # noqa: ARG001
             page_url: str,  # noqa: ARG001
             drive_id: str,  # noqa: ARG001
             start: datetime | None = None,  # noqa: ARG001
@@ -619,9 +598,7 @@ class TestDeltaDuplicateDocumentDedup:
         ) -> tuple[list[DriveItemData], str | None]:
             return [_make_item("a")], None
 
-        monkeypatch.setattr(
-            SharepointConnector, "_fetch_one_delta_page", fake_fetch_page
-        )
+        monkeypatch.setattr(sp_connector, "fetch_one_delta_page", fake_fetch_page)
 
         # First run
         cp1 = _build_ready_checkpoint()
@@ -650,7 +627,7 @@ class TestDeltaDuplicateDocumentDedup:
         _mock_convert(monkeypatch)
 
         def fake_fetch_page(
-            self: SharepointConnector,  # noqa: ARG001
+            client: Any,  # noqa: ARG001
             page_url: str,  # noqa: ARG001
             drive_id: str,  # noqa: ARG001
             start: datetime | None = None,  # noqa: ARG001
@@ -659,9 +636,7 @@ class TestDeltaDuplicateDocumentDedup:
         ) -> tuple[list[DriveItemData], str | None]:
             return [_make_item("shared-id")], None
 
-        monkeypatch.setattr(
-            SharepointConnector, "_fetch_one_delta_page", fake_fetch_page
-        )
+        monkeypatch.setattr(sp_connector, "fetch_one_delta_page", fake_fetch_page)
 
         checkpoint = _build_ready_checkpoint(drive_names=["DriveA", "DriveB"])
 

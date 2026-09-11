@@ -18,6 +18,7 @@ from office365.runtime.client_request_exception import ClientRequestException
 from requests import Response
 from requests.exceptions import HTTPError
 
+from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
 from onyx.connectors.sharepoint.connector import (
     GRAPH_INVALID_REQUEST_CODE,
     PER_SITE_GRAPH_FAILURE_STATUSES,
@@ -96,7 +97,8 @@ def _patch_graph_api_get_json(
     monkeypatch: pytest.MonkeyPatch,
     fake_fn: Any,
 ) -> None:
-    monkeypatch.setattr(SharepointConnector, "_graph_api_get_json", fake_fn)
+    """Site pages go through the shared Graph client, so intercept it there."""
+    monkeypatch.setattr(GraphApiClient, "get_json", fake_fn)
 
 
 class TestFetchSitePages404:

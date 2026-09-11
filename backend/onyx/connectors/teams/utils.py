@@ -1,4 +1,3 @@
-import random
 import time
 from collections.abc import Generator
 from datetime import datetime, timezone
@@ -11,38 +10,18 @@ from office365.teams.channels.channel import Channel, ConversationMember
 
 from onyx.access.models import ExternalAccess
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.microsoft_utils.graph_client import (
+    GRAPH_API_RETRYABLE_STATUSES,
+    backoff_seconds,
+)
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.teams.models import Message
 from onyx.utils.logger import setup_logger
-from onyx.utils.retry_after import parse_retry_after_seconds
 
 logger = setup_logger()
 
 
 _PUBLIC_MEMBERSHIP_TYPE = "standard"  # public teams channel
-
-
-# Transient Microsoft Graph statuses worth retrying: rate limits (429) plus
-# gateway/server-side hiccups (500/502/503/504). Shared by both the raw
-# `execute_request_direct` path (`_retry`) and the SDK `execute_query` path
-# (`execute_query_with_retry`) so the two can't drift. Mirrors the SharePoint
-# connector's `GRAPH_API_RETRYABLE_STATUSES`.
-GRAPH_API_RETRYABLE_STATUSES: frozenset[int] = frozenset({429, 500, 502, 503, 504})
-
-
-def _backoff_seconds(attempt: int, retry_after: str | None) -> float:
-    """Honor a server-provided ``Retry-After`` header (numeric seconds or
-    HTTP-date) when present, otherwise capped exponential backoff (5s, 10s,
-    20s, capped at 30s) with equal jitter so many concurrent failures don't all
-    retry on the same tick.
-
-    ``attempt`` is 0-indexed (0 for the first retry).
-    """
-    parsed = parse_retry_after_seconds(retry_after)
-    if parsed is not None:
-        return parsed
-    base = min(30, (2**attempt) * 5)
-    return base / 2 + random.uniform(0, base / 2)
 
 
 def execute_query_with_retry(
@@ -53,8 +32,8 @@ def execute_query_with_retry(
     """Execute an ``office365`` SDK query, retrying transient Graph errors
     (rate limits + 5xx gateway/server hiccups) with capped backoff.
 
-    Mirrors the SharePoint connector's ``sleep_and_retry`` so the two Microsoft
-    Graph connectors behave consistently. Non-retryable statuses (e.g. 401/403/
+    Kept separate from the shared ``sleep_and_retry`` because it retries the
+    wider 5xx set and allows more attempts. Non-retryable statuses (e.g. 401/403/
     404, or a malformed OData filter 400) and exhausted retries are re-raised
     for the caller to handle.
     """
@@ -71,7 +50,7 @@ def execute_query_with_retry(
                 if e.response is not None
                 else None
             )
-            cooldown = _backoff_seconds(attempt=attempt, retry_after=retry_after)
+            cooldown = backoff_seconds(attempt=attempt, retry_after=retry_after)
             logger.warning(
                 "Retryable Graph error on %s (status=%s, attempt %s/%s); "
                 "sleeping %.1fs before retry.",
@@ -124,7 +103,7 @@ def _retry(
         # Transient Graph errors (rate limits + 5xx gateway/server hiccups) are
         # retried with backoff; any other status is surfaced immediately.
         if response.status_code in GRAPH_API_RETRYABLE_STATUSES:
-            cooldown = _backoff_seconds(
+            cooldown = backoff_seconds(
                 attempt=retry_number,
                 retry_after=response.headers.get("Retry-After"),
             )

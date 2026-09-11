@@ -1,4 +1,4 @@
-"""Unit tests for streaming-download retry behavior in the SharePoint connector.
+"""Unit tests for the shared streaming-download retry behavior.
 
 SharePoint and the Microsoft Graph API occasionally drop the TCP connection
 mid-body (surfaces as ``ChunkedEncodingError: IncompleteRead``). The download
@@ -15,12 +15,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-from onyx.connectors.sharepoint import connector as sp_connector
-from onyx.connectors.sharepoint.connector import (
+from onyx.connectors.microsoft_utils import drive_items as drive_items_module
+from onyx.connectors.microsoft_utils import graph_client as graph_client_module
+from onyx.connectors.microsoft_utils.drive_items import (
     SizeCapExceeded,
-    _download_via_graph_api,
-    _download_with_cap,
-    _redact_url_for_logging,
+    download_via_graph_api,
+    download_with_cap,
+    redact_url_for_logging,
 )
 
 CAP = 10 * 1024 * 1024  # 10 MiB cap; well above the byte payloads used in tests
@@ -66,8 +67,8 @@ def _make_response(
     return resp
 
 
-@patch("onyx.connectors.sharepoint.connector.time")
-@patch("onyx.connectors.sharepoint.connector.requests.get")
+@patch("onyx.connectors.microsoft_utils.drive_items.time")
+@patch("onyx.connectors.microsoft_utils.drive_items.requests.get")
 def test_download_with_cap_retries_on_chunked_encoding_error(
     mock_get: MagicMock, mock_time: MagicMock
 ) -> None:
@@ -81,7 +82,7 @@ def test_download_with_cap_retries_on_chunked_encoding_error(
 
     mock_get.side_effect = [failing_resp, succeeding_resp]
 
-    result = _download_with_cap("https://example/download", timeout=60, cap=CAP)
+    result = download_with_cap("https://example/download", timeout=60, cap=CAP)
 
     assert result == b"helloworld"
     # Two HTTP requests means a fresh socket on retry, not a reused stale one.
@@ -89,8 +90,8 @@ def test_download_with_cap_retries_on_chunked_encoding_error(
     mock_time.sleep.assert_called_once()
 
 
-@patch("onyx.connectors.sharepoint.connector.time")
-@patch("onyx.connectors.sharepoint.connector.requests.get")
+@patch("onyx.connectors.microsoft_utils.drive_items.time")
+@patch("onyx.connectors.microsoft_utils.drive_items.requests.get")
 def test_download_via_graph_api_retries_on_chunked_encoding_error(
     mock_get: MagicMock, mock_time: MagicMock
 ) -> None:
@@ -103,11 +104,11 @@ def test_download_via_graph_api_retries_on_chunked_encoding_error(
     succeeding_resp = _make_response(chunks=[b"docbytes"])
     mock_get.side_effect = [failing_resp, succeeding_resp]
 
-    result = _download_via_graph_api(
+    result = download_via_graph_api(
         access_token="tok",
         drive_id="drive-1",
         item_id="item-1",
-        bytes_allowed=CAP,
+        cap=CAP,
         graph_api_base="https://graph.microsoft.com/v1.0",
     )
 
@@ -116,8 +117,8 @@ def test_download_via_graph_api_retries_on_chunked_encoding_error(
     mock_time.sleep.assert_called_once()
 
 
-@patch("onyx.connectors.sharepoint.connector.time")
-@patch("onyx.connectors.sharepoint.connector.requests.get")
+@patch("onyx.connectors.microsoft_utils.drive_items.time")
+@patch("onyx.connectors.microsoft_utils.drive_items.requests.get")
 def test_download_with_cap_reraises_after_max_retries(
     mock_get: MagicMock, mock_time: MagicMock
 ) -> None:
@@ -126,19 +127,19 @@ def test_download_with_cap_reraises_after_max_retries(
         _make_response(
             raise_during_iter=requests.exceptions.ChunkedEncodingError("boom")
         )
-        for _ in range(sp_connector.STREAM_DOWNLOAD_MAX_RETRIES + 1)
+        for _ in range(drive_items_module.STREAM_DOWNLOAD_MAX_RETRIES + 1)
     ]
 
     with pytest.raises(requests.exceptions.ChunkedEncodingError):
-        _download_with_cap("https://example/download", timeout=60, cap=CAP)
+        download_with_cap("https://example/download", timeout=60, cap=CAP)
 
-    assert mock_get.call_count == sp_connector.STREAM_DOWNLOAD_MAX_RETRIES + 1
+    assert mock_get.call_count == drive_items_module.STREAM_DOWNLOAD_MAX_RETRIES + 1
     # Sleep is invoked between attempts only, not after the final failure.
-    assert mock_time.sleep.call_count == sp_connector.STREAM_DOWNLOAD_MAX_RETRIES
+    assert mock_time.sleep.call_count == drive_items_module.STREAM_DOWNLOAD_MAX_RETRIES
 
 
-@patch("onyx.connectors.sharepoint.connector.time")
-@patch("onyx.connectors.sharepoint.connector.requests.get")
+@patch("onyx.connectors.microsoft_utils.drive_items.time")
+@patch("onyx.connectors.microsoft_utils.drive_items.requests.get")
 def test_size_cap_exceeded_is_not_retried_pre_download(
     mock_get: MagicMock, mock_time: MagicMock
 ) -> None:
@@ -149,14 +150,14 @@ def test_size_cap_exceeded_is_not_retried_pre_download(
     )
 
     with pytest.raises(SizeCapExceeded):
-        _download_with_cap("https://example/download", timeout=60, cap=CAP)
+        download_with_cap("https://example/download", timeout=60, cap=CAP)
 
     assert mock_get.call_count == 1
     mock_time.sleep.assert_not_called()
 
 
-@patch("onyx.connectors.sharepoint.connector.time")
-@patch("onyx.connectors.sharepoint.connector.requests.get")
+@patch("onyx.connectors.microsoft_utils.drive_items.time")
+@patch("onyx.connectors.microsoft_utils.drive_items.requests.get")
 def test_size_cap_exceeded_is_not_retried_during_download(
     mock_get: MagicMock, mock_time: MagicMock
 ) -> None:
@@ -164,14 +165,14 @@ def test_size_cap_exceeded_is_not_retried_during_download(
     mock_get.return_value = _make_response(chunks=[b"x" * (CAP + 1)])
 
     with pytest.raises(SizeCapExceeded):
-        _download_with_cap("https://example/download", timeout=60, cap=CAP)
+        download_with_cap("https://example/download", timeout=60, cap=CAP)
 
     assert mock_get.call_count == 1
     mock_time.sleep.assert_not_called()
 
 
-@patch("onyx.connectors.sharepoint.connector.time")
-@patch("onyx.connectors.sharepoint.connector.requests.get")
+@patch("onyx.connectors.microsoft_utils.drive_items.time")
+@patch("onyx.connectors.microsoft_utils.drive_items.requests.get")
 def test_http_error_from_raise_for_status_is_not_retried(
     mock_get: MagicMock, mock_time: MagicMock
 ) -> None:
@@ -179,14 +180,14 @@ def test_http_error_from_raise_for_status_is_not_retried(
     mock_get.return_value = _make_response(status=404)
 
     with pytest.raises(requests.HTTPError):
-        _download_with_cap("https://example/download", timeout=60, cap=CAP)
+        download_with_cap("https://example/download", timeout=60, cap=CAP)
 
     assert mock_get.call_count == 1
     mock_time.sleep.assert_not_called()
 
 
-@patch("onyx.connectors.sharepoint.connector.time")
-@patch("onyx.connectors.sharepoint.connector.requests.get")
+@patch("onyx.connectors.microsoft_utils.drive_items.time")
+@patch("onyx.connectors.microsoft_utils.drive_items.requests.get")
 def test_connection_error_before_iter_content_is_retried(
     mock_get: MagicMock, mock_time: MagicMock
 ) -> None:
@@ -196,7 +197,7 @@ def test_connection_error_before_iter_content_is_retried(
         _make_response(chunks=[b"ok"]),
     ]
 
-    result = _download_with_cap("https://example/download", timeout=60, cap=CAP)
+    result = download_with_cap("https://example/download", timeout=60, cap=CAP)
 
     assert result == b"ok"
     assert mock_get.call_count == 2
@@ -212,7 +213,8 @@ def test_backoff_seconds_uses_equal_jitter() -> None:
     expected_bases = [5, 10, 20, 30, 30]
     for attempt, base in enumerate(expected_bases):
         samples = [
-            sp_connector._backoff_seconds(attempt, retry_after=None) for _ in range(50)
+            graph_client_module.backoff_seconds(attempt, retry_after=None)
+            for _ in range(50)
         ]
         for s in samples:
             assert base / 2 <= s <= base, (
@@ -230,13 +232,15 @@ def test_backoff_seconds_respects_retry_after_header_verbatim() -> None:
     for raw in ("0", "1", "12", "120"):
         # Repeat to make sure we don't accidentally jitter on this path.
         for _ in range(10):
-            assert sp_connector._backoff_seconds(0, retry_after=raw) == float(raw)
+            assert graph_client_module.backoff_seconds(0, retry_after=raw) == float(raw)
 
 
 def test_backoff_seconds_honors_http_date_retry_after() -> None:
     """An already-elapsed HTTP-date Retry-After is honored verbatim (0s wait)."""
     assert (
-        sp_connector._backoff_seconds(0, retry_after="Wed, 21 Oct 2015 07:28:00 GMT")
+        graph_client_module.backoff_seconds(
+            0, retry_after="Wed, 21 Oct 2015 07:28:00 GMT"
+        )
         == 0
     )
 
@@ -245,7 +249,7 @@ def test_backoff_seconds_falls_back_when_retry_after_unparseable() -> None:
     """Genuinely unparseable Retry-After values fall through to jittered backoff."""
     base = 5  # attempt=0
     for _ in range(20):
-        s = sp_connector._backoff_seconds(0, retry_after="not-a-date")
+        s = graph_client_module.backoff_seconds(0, retry_after="not-a-date")
         assert base / 2 <= s <= base
 
 
@@ -262,7 +266,7 @@ def test_redact_url_strips_query_string_with_tempauth() -> None:
         "https://tenant.sharepoint.com/sites/Foo/_layouts/15/download.aspx"
         f"?UniqueId=abc&Translate=false&tempauth={_FAKE_TEMPAUTH}&ApiVersion=2.1"
     )
-    safe = _redact_url_for_logging(raw)
+    safe = redact_url_for_logging(raw)
     assert "tempauth" not in safe
     assert _FAKE_TEMPAUTH not in safe
     assert "?" not in safe
@@ -272,14 +276,14 @@ def test_redact_url_strips_query_string_with_tempauth() -> None:
 def test_redact_url_truncates_overly_long_paths() -> None:
     """Even after stripping the query, a runaway path is bounded for log size."""
     raw = "https://tenant.sharepoint.com/" + "a" * 500
-    safe = _redact_url_for_logging(raw, max_len=80)
+    safe = redact_url_for_logging(raw, max_len=80)
     assert len(safe) <= 80 + len("...")
     assert safe.endswith("...")
 
 
-@patch("onyx.connectors.sharepoint.connector.time")
-@patch("onyx.connectors.sharepoint.connector.logger")
-@patch("onyx.connectors.sharepoint.connector.requests.get")
+@patch("onyx.connectors.microsoft_utils.drive_items.time")
+@patch("onyx.connectors.microsoft_utils.drive_items.logger")
+@patch("onyx.connectors.microsoft_utils.drive_items.requests.get")
 def test_download_with_cap_does_not_log_tempauth_token(
     mock_get: MagicMock,
     mock_logger: MagicMock,
@@ -299,11 +303,11 @@ def test_download_with_cap_does_not_log_tempauth_token(
         _make_response(
             raise_during_iter=requests.exceptions.ChunkedEncodingError("boom")
         )
-        for _ in range(sp_connector.STREAM_DOWNLOAD_MAX_RETRIES + 1)
+        for _ in range(drive_items_module.STREAM_DOWNLOAD_MAX_RETRIES + 1)
     ]
 
     with pytest.raises(requests.exceptions.ChunkedEncodingError):
-        _download_with_cap(raw_url, timeout=60, cap=CAP)
+        download_with_cap(raw_url, timeout=60, cap=CAP)
 
     # Flatten every positional/keyword arg from every logger call into one blob
     # and assert no credential material made it through.
