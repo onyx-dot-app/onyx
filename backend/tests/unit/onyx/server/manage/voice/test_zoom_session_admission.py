@@ -311,3 +311,44 @@ async def test_zoom_handshake_timeout_reports_streaming_failure(
         {"type": "error", "message": websocket_api.STREAM_FAILED_ERROR}
     ]
     release.assert_awaited_once()
+
+
+class _SlowSetupZoomProvider(_StreamingZoomProvider):
+    async def create_streaming_transcriber(self) -> _FakeStreamingTranscriber:
+        await asyncio.sleep(60)
+        return self.transcriber
+
+
+@pytest.mark.asyncio
+async def test_zoom_hard_cap_includes_transcriber_setup(monkeypatch) -> None:
+    websocket = _FakeWebSocket()
+    provider_db = SimpleNamespace(id=42, provider_type="zoom", api_key="api-key")
+    acquire = AsyncMock(return_value="session-member-1")
+    release = AsyncMock()
+
+    monkeypatch.setattr(websocket_api, "get_sqlalchemy_engine", lambda: object())
+    monkeypatch.setattr(websocket_api, "Session", lambda _engine: _FakeSession())
+    monkeypatch.setattr(
+        websocket_api, "fetch_default_stt_provider", lambda _db_session: provider_db
+    )
+    monkeypatch.setattr(
+        websocket_api,
+        "get_voice_provider",
+        lambda _provider_db: _SlowSetupZoomProvider(),
+    )
+    monkeypatch.setattr(websocket_api, "acquire_zoom_voice_session", acquire)
+    monkeypatch.setattr(websocket_api, "release_zoom_voice_session", release)
+    monkeypatch.setattr(websocket_api, "ZOOM_VOICE_SESSION_MAX_SECONDS", 0.01)
+
+    await websocket_api.websocket_transcribe(
+        cast(WebSocket, websocket),
+        _user=cast(User, SimpleNamespace(id="user-7")),
+    )
+
+    assert websocket.sent_json == [
+        {
+            "type": "error",
+            "message": websocket_api.ZOOM_STREAMING_SESSION_TIMEOUT_MESSAGE,
+        }
+    ]
+    release.assert_awaited_once()
