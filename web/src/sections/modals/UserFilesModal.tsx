@@ -101,13 +101,11 @@ function FileAttachment({
         state={isSelected ? "selected" : undefined}
         centerChildren={
           rightText ? (
-            <div className="flex h-full min-w-0 flex-row items-center justify-end">
-              <div className="min-w-0">
-                <OpalText font="secondary-body" color="text-03" maxLines={1}>
-                  {rightText}
-                </OpalText>
-              </div>
-            </div>
+            <Section alignItems="end">
+              <OpalText font="secondary-body" color="text-03" maxLines={1}>
+                {rightText}
+              </OpalText>
+            </Section>
           ) : undefined
         }
         rightChildren={
