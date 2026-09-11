@@ -69,6 +69,24 @@ Never import from `web/src/components/`. It is legacy and being deleted. The one
 - Dates and numbers: `useFormatter` and `useLocale`, not hard-coded `"en-US"`.
 - New styles use logical properties (`ms-`, `pe-`, `start-`) instead of `ml-`, `pr-`, `left-`.
 
+### Opal i18n
+
+Opal has no next-intl. A label an Opal component renders itself (a built-in placeholder, empty
+state, aria-label — anything not passed in by the caller) rides the `OpalStrings` contract:
+
+1. Add a typed key to `OpalStrings` in `web/lib/opal/src/strings.tsx`, with an English default in
+   `defaultOpalStrings` right below. Prefix component-scoped keys with the component name
+   (`comboBoxNoOptions`, `multiSelectEmptyTitle`). A string with arguments is a function-valued
+   entry (`(count) => string`).
+2. Read it in the component with `useOpalStrings()` from `@opal/strings`.
+3. Map it in `web/src/i18n/OpalStringsBridge.tsx` from the `opal.*` catalog namespace
+   (`t("multiSelect.emptyTitle")`) — the bridge wraps the app in `layout.tsx` and feeds Opal the
+   host translations.
+4. Add the key under `opal.<component>.<name>` in `en.json` and every other locale file.
+
+Never hard-code a user-facing string inside an Opal component, and never import next-intl there —
+the contract keeps Opal host-agnostic while the app supplies real translations.
+
 ## Tests
 
 - Component tests (Jest + React Testing Library): `web/tests/README.md`.

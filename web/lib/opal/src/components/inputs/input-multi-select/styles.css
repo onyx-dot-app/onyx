@@ -1,0 +1,26 @@
+@reference "#reference.css";
+
+/* ============================================================================
+   InputMultiSelect — layout only
+
+   Search input (dropdown anchor) above the selected-items list, on a tinted
+   container. Row colors come from LineItemButton's Interactive palette.
+   ============================================================================ */
+
+.opal-input-multi-select {
+  @apply flex w-full flex-col gap-2 rounded-08 bg-background-tint-02 p-1;
+}
+
+.opal-input-multi-select-dropdown {
+  @apply flex max-h-[15rem] flex-col gap-1 rounded-08;
+}
+
+.opal-input-multi-select-selected {
+  @apply flex max-h-[11rem] flex-col gap-1 rounded-08;
+}
+
+/* Selected rows rest on their own surface so they read against the tinted
+   container. */
+.opal-input-multi-select-row {
+  @apply rounded-08 bg-background-tint-01;
+}
