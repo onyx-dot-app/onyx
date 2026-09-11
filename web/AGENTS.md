@@ -67,12 +67,25 @@ Never import from `web/src/components/`. It is legacy and being deleted. The one
   `settings.appearance.colorMode.title`. Rewording the English never changes the key.
 - Use ICU for arguments and plurals. Never concatenate translated fragments.
 - Dates and numbers: `useFormatter` and `useLocale`, not hard-coded `"en-US"`.
-- **Opal built-in strings**: Opal has no next-intl. A label an Opal component renders itself rides
-  the `OpalStrings` contract instead: add a typed key with an English default in
-  `web/lib/opal/src/strings.tsx`, read it in the component via `useOpalStrings()`, map it from the
-  `opal.*` catalog namespace in `web/src/i18n/OpalStringsBridge.tsx`, and add the key to every
-  locale file. Never hard-code a user-facing string inside an Opal component.
 - New styles use logical properties (`ms-`, `pe-`, `start-`) instead of `ml-`, `pr-`, `left-`.
+
+### Opal i18n
+
+Opal has no next-intl. A label an Opal component renders itself (a built-in placeholder, empty
+state, aria-label — anything not passed in by the caller) rides the `OpalStrings` contract:
+
+1. Add a typed key to `OpalStrings` in `web/lib/opal/src/strings.tsx`, with an English default in
+   `defaultOpalStrings` right below. Prefix component-scoped keys with the component name
+   (`comboBoxNoOptions`, `multiSelectEmptyTitle`). A string with arguments is a function-valued
+   entry (`(count) => string`).
+2. Read it in the component with `useOpalStrings()` from `@opal/strings`.
+3. Map it in `web/src/i18n/OpalStringsBridge.tsx` from the `opal.*` catalog namespace
+   (`t("multiSelect.emptyTitle")`) — the bridge wraps the app in `layout.tsx` and feeds Opal the
+   host translations.
+4. Add the key under `opal.<component>.<name>` in `en.json` and every other locale file.
+
+Never hard-code a user-facing string inside an Opal component, and never import next-intl there —
+the contract keeps Opal host-agnostic while the app supplies real translations.
 
 ## Tests
 
