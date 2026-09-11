@@ -169,22 +169,24 @@ class _CachedCollector(Collector):
     ) -> list[GaugeMetricFamily] | None:
         """Bank a done collection once, by whichever scrape claims it first.
 
-        The in-flight slot is claimed under the lock before the result is read,
-        so a failure is logged once. ``result()`` never blocks on a done future.
-        Returns None when another scrape already banked it or the collection
-        raised, so callers fall back to the stale cache.
+        Claiming the slot, reading the future, and storing happen under one lock
+        hold, so no scrape can find an empty slot and a stale cache in between and
+        start a redundant collection. Neither read blocks on a done future. The
+        failure log waits until the lock is released. Returns None when another
+        scrape already banked it or the collection raised.
         """
         with self._lock:
             if self._inflight is not future:
                 return None
             self._inflight = None
-        try:
-            result = future.result()
-        except Exception:
-            logger.exception("Error in %s._collect_fresh()", type(self).__name__)
-            return None
-        with self._lock:
-            self._store_locked(result, started)
+            error = future.exception()
+            result = future.result() if error is None else None
+            if result is not None:
+                self._store_locked(result, started)
+        if error is not None:
+            logger.error(
+                "Error in %s._collect_fresh()", type(self).__name__, exc_info=error
+            )
         return result
 
     def _store_locked(self, result: list[GaugeMetricFamily], started: float) -> None:
