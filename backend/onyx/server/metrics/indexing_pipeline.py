@@ -167,21 +167,24 @@ class _CachedCollector(Collector):
         future: concurrent.futures.Future[list[GaugeMetricFamily]],
         started: float,
     ) -> list[GaugeMetricFamily] | None:
-        """Store a done collection and free its in-flight slot.
+        """Bank a done collection once, by whichever scrape claims it first.
 
-        ``result()`` never blocks here because the future is done. Returns None
-        when the collection raised, so callers fall back to the stale cache.
+        The in-flight slot is claimed under the lock before the result is read,
+        so a failure is logged once. ``result()`` never blocks on a done future.
+        Returns None when another scrape already banked it or the collection
+        raised, so callers fall back to the stale cache.
         """
+        with self._lock:
+            if self._inflight is not future:
+                return None
+            self._inflight = None
         try:
             result = future.result()
         except Exception:
             logger.exception("Error in %s._collect_fresh()", type(self).__name__)
-            result = None
+            return None
         with self._lock:
-            if self._inflight is future:
-                self._inflight = None
-            if result is not None:
-                self._store_locked(result, started)
+            self._store_locked(result, started)
         return result
 
     def _store_locked(self, result: list[GaugeMetricFamily], started: float) -> None:

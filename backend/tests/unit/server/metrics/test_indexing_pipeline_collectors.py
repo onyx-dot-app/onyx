@@ -1,5 +1,6 @@
 """Tests for indexing pipeline Prometheus collectors."""
 
+import concurrent.futures
 import threading
 import time
 from collections.abc import Callable, Iterator
@@ -130,6 +131,21 @@ class TestCachedCollector:
         assert collector._inflight is None
         assert collector.calls == 2
         assert exception.call_count == 2
+        collector._executor.shutdown(wait=False)
+
+    def test_done_future_is_banked_once(self) -> None:
+        collector = _FailingCollector()
+        future: concurrent.futures.Future[list[GaugeMetricFamily]] = (
+            concurrent.futures.Future()
+        )
+        future.set_exception(RuntimeError("redis down"))
+        collector._inflight = future
+        # The starter and a concurrent scrape can both reach a done future.
+        with patch.object(indexing_pipeline.logger, "exception") as exception:
+            assert collector._bank(future, 0.0) is None
+            assert collector._bank(future, 0.0) is None
+        assert exception.call_count == 1
+        assert collector._inflight is None
         collector._executor.shutdown(wait=False)
 
     def test_stall_warning_is_throttled(
