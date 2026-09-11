@@ -294,7 +294,19 @@ ignore = [
     "B904", # raise-without-from-inside-except (~465 existing violations).
 ]
 # G004: f-strings in logging break Sentry's message-pattern grouping.
-select = ["ARG", "B", "C901", "E", "F", "G004", "I", "PERF", "S", "W"]
+select = [
+  "ARG",
+  "B",
+  "C901",
+  "E",
+  "F",
+  "G004",
+  "I",
+  "PERF",
+  "PIE",
+  "S",
+  "W",
+]
 
 [tool.ruff.lint.mccabe]
 # Ruff's default is 10, which flags 429 functions. 20 is a ratchet: it stops new

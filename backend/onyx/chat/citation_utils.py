@@ -176,11 +176,7 @@ def collapse_citations(
         citation_str = match.group()
 
         # Determine bracket style
-        if (
-            citation_str.startswith("[[")
-            or citation_str.startswith("【【")
-            or citation_str.startswith("［［")
-        ):
+        if citation_str.startswith(("[[", "【【", "［［")):
             open_bracket = citation_str[:2]
             close_bracket = citation_str[-2:]
             content = citation_str[2:-2]
