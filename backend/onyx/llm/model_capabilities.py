@@ -49,19 +49,6 @@ CUSTOM_LITELLM_MODEL_OVERRIDES: dict[str, dict[str, Any]] = {
     for model_name in _TWELVE_LABS_PEGASUS_MODEL_NAMES
 }
 
-# These input limits exclude output space; LiteLLM has no total-context field.
-# https://developers.openai.com/api/docs/models/gpt-5.6-sol
-# https://developers.openai.com/api/docs/models/gpt-5.6-terra
-# https://developers.openai.com/api/docs/models/gpt-5.6-luna
-_MODEL_CONTEXT_WINDOWS = {
-    "gpt-5.6-sol": 1_050_000,
-    "openai/gpt-5.6-sol": 1_050_000,
-    "gpt-5.6-terra": 1_050_000,
-    "openai/gpt-5.6-terra": 1_050_000,
-    "gpt-5.6-luna": 1_050_000,
-    "openai/gpt-5.6-luna": 1_050_000,
-}
-
 
 @lru_cache(maxsize=1)  # the copy.deepcopy is expensive, so we cache the result
 def get_model_map() -> dict:
@@ -92,13 +79,6 @@ def get_model_map() -> dict:
         if model_name in starting_map:
             continue
         starting_map[model_name] = copy.deepcopy(model_metadata)
-
-    for model_name, context_window in _MODEL_CONTEXT_WINDOWS.items():
-        if model_name in starting_map:
-            starting_map[model_name] = {
-                "max_context_tokens": context_window,
-                **starting_map[model_name],
-            }
 
     # NOTE: outside of the explicit CUSTOM_LITELLM_MODEL_OVERRIDES,
     # we avoid hard-coding additional models here. Ollama, for example,

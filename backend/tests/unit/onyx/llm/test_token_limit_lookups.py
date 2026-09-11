@@ -12,7 +12,7 @@ from onyx.llm.model_capabilities import (
 )
 
 
-def test_native_context_enrichment_preserves_provider_specific_limits() -> None:
+def test_model_context_metadata_is_not_inferred_or_overwritten() -> None:
     metadata = {
         "gpt-5.6-sol": {"max_input_tokens": 922000, "max_output_tokens": 128000},
         "gpt-5.6-luna": {"max_input_tokens": 922000, "max_output_tokens": 128000},
@@ -30,15 +30,10 @@ def test_native_context_enrichment_preserves_provider_specific_limits() -> None:
     try:
         with patch("litellm.model_cost", metadata):
             model_map = get_model_map()
-        assert model_map["gpt-5.6-sol"]["max_context_tokens"] == 1050000
-        assert model_map["gpt-5.6-luna"]["max_context_tokens"] == 1050000
-        assert model_map["gpt-5.6-terra"]["max_context_tokens"] == 1048000
+        for name, limits in metadata.items():
+            assert model_map[name] == limits
         assert "gpt-5.6" not in model_map
         assert "openai/gpt-5.6" not in model_map
-        assert (
-            model_map["openrouter/openai/gpt-5.6-sol"]
-            == metadata["openrouter/openai/gpt-5.6-sol"]
-        )
         assert "max_context_tokens" not in metadata["gpt-5.6-sol"]
     finally:
         get_model_map.cache_clear()
