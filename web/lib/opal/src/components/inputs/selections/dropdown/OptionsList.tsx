@@ -73,7 +73,7 @@ export const OptionsList: React.FC<OptionsListProps> = ({
     // nothing keeps the lightweight text row.
     if (emptySet) {
       return (
-        <div className="px-3 py-2">
+        <div className="p-1.5">
           <Content
             sizePreset="main-ui"
             variant="section"
