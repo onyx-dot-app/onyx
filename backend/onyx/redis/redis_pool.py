@@ -33,6 +33,8 @@ from onyx.configs.app_configs import (
     REDIS_SENTINEL_HOSTS,
     REDIS_SENTINEL_MASTER_NAME,
     REDIS_SENTINEL_PASSWORD,
+    REDIS_SOCKET_CONNECT_TIMEOUT,
+    REDIS_SOCKET_TIMEOUT,
     REDIS_SSL,
     REDIS_SSL_CA_CERTS,
     REDIS_SSL_CERT_REQS,
@@ -93,20 +95,33 @@ def _redis_ssl_connect_kwargs() -> dict[str, Any]:
     return kwargs
 
 
+def redis_socket_timeout_kwargs() -> dict[str, Any]:
+    """Socket deadline kwargs, omitted when unset so redis-py's defaults apply."""
+    kwargs: dict[str, Any] = {}
+    if REDIS_SOCKET_CONNECT_TIMEOUT is not None:
+        kwargs["socket_connect_timeout"] = REDIS_SOCKET_CONNECT_TIMEOUT
+    if REDIS_SOCKET_TIMEOUT is not None:
+        kwargs["socket_timeout"] = REDIS_SOCKET_TIMEOUT
+    return kwargs
+
+
 def _sentinel_connection_kwargs() -> tuple[dict[str, Any], dict[str, Any]]:
     """Build (connection_kwargs, sentinel_kwargs) for a Sentinel.
 
     connection_kwargs apply to the master/replica data connections;
     sentinel_kwargs apply to the connections to the sentinel nodes themselves.
-    TLS (when enabled) and the relevant auth apply to both.
+    TLS (when enabled), socket deadlines, and the relevant auth apply to both.
     """
     connection_kwargs: dict[str, Any] = {
         "password": REDIS_PASSWORD or None,
         "socket_keepalive": True,
         "socket_keepalive_options": REDIS_SOCKET_KEEPALIVE_OPTIONS,
         "health_check_interval": REDIS_HEALTH_CHECK_INTERVAL,
+        **redis_socket_timeout_kwargs(),
     }
-    sentinel_kwargs: dict[str, Any] = {}
+    # Passing sentinel_kwargs (needed for sentinel auth and TLS) disables redis-py's
+    # copy of socket_* options from connection_kwargs, so seed the deadlines here too.
+    sentinel_kwargs: dict[str, Any] = redis_socket_timeout_kwargs()
     if REDIS_SENTINEL_PASSWORD:
         sentinel_kwargs["password"] = REDIS_SENTINEL_PASSWORD
     if REDIS_SSL:
@@ -219,6 +234,7 @@ class RedisPool:
                 socket_keepalive_options=REDIS_SOCKET_KEEPALIVE_OPTIONS,
                 connection_class=redis.SSLConnection,
                 ssl_context=ssl_context,  # Use IAM auth SSL context
+                **redis_socket_timeout_kwargs(),
             )
 
         if ssl:
@@ -238,6 +254,7 @@ class RedisPool:
                 ssl_check_hostname=ssl_check_hostname,
                 ssl_certfile=ssl_certfile,
                 ssl_keyfile=ssl_keyfile,
+                **redis_socket_timeout_kwargs(),
             )
 
         return redis.BlockingConnectionPool(
@@ -250,6 +267,7 @@ class RedisPool:
             health_check_interval=REDIS_HEALTH_CHECK_INTERVAL,
             socket_keepalive=True,
             socket_keepalive_options=REDIS_SOCKET_KEEPALIVE_OPTIONS,
+            **redis_socket_timeout_kwargs(),
         )
 
     @staticmethod
@@ -422,6 +440,7 @@ def _build_async_redis_connection() -> aioredis.Redis:
         "health_check_interval": REDIS_HEALTH_CHECK_INTERVAL,
         "socket_keepalive": True,
         "socket_keepalive_options": REDIS_SOCKET_KEEPALIVE_OPTIONS,
+        **redis_socket_timeout_kwargs(),
     }
 
     if USE_REDIS_IAM_AUTH:
