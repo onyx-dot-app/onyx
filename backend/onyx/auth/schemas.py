@@ -51,8 +51,18 @@ class UserCreate(schemas.BaseUserCreate):
 
 
 class UserUpdate(schemas.BaseUserUpdate):
-    """Intentionally empty: keeps account_type and permissions out of the
-    fastapi-users PATCH endpoints."""
+    """Keeps account_type and permissions out of the fastapi-users PATCH
+    endpoints, and strips the identity/credential fields the stock PATCH /users/me
+    would otherwise change with no ownership proof and no re-auth."""
+
+    @override
+    def create_update_dict(self) -> dict[str, Any]:
+        d = super().create_update_dict()
+        # Email changes must go through the verification flow, password changes
+        # through /password/change-password, which requires the old password.
+        d.pop("email", None)
+        d.pop("password", None)
+        return d
 
 
 class AuthBackend(str, Enum):
