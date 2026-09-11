@@ -750,6 +750,17 @@ def _redact_url_for_logging(url: str, max_len: int = 120) -> str:
     return safe
 
 
+def _scrub_url_credentials(text: str) -> str:
+    """Strip query strings out of URLs embedded in arbitrary text.
+
+    Transport errors from requests/urllib3 quote the request target, so a
+    pre-authenticated ``@microsoft.graph.downloadUrl`` reaches the logs with its
+    ``tempauth=`` JWT intact. Drop everything from ``?`` up to the next
+    whitespace, quote or closing paren before the text is logged or stored.
+    """
+    return re.sub(r"\?[^\s'\")]*", "?<redacted>", text)
+
+
 def _stream_response_to_buffer_with_cap(
     request_factory: Callable[[], requests.Response],
     cap: int,
@@ -812,7 +823,7 @@ def _stream_response_to_buffer_with_cap(
                     description,
                     max_retries + 1,
                     type(e).__name__,
-                    e,
+                    _scrub_url_credentials(str(e)),
                 )
                 raise
             sleep_time = _backoff_seconds(attempt, retry_after=None)
@@ -823,7 +834,7 @@ def _stream_response_to_buffer_with_cap(
                 attempt + 1,
                 max_retries + 1,
                 type(e).__name__,
-                e,
+                _scrub_url_credentials(str(e)),
                 sleep_time,
             )
             time.sleep(sleep_time)
@@ -964,11 +975,14 @@ def _convert_driveitem_to_document_with_permissions(
             )
             return None
         except Exception as e:
+            scrubbed = _scrub_url_credentials(str(e))
             logger.warning(
-                "Failed to download via Graph API for '%s': %s", driveitem.name, e
+                "Failed to download via Graph API for '%s': %s",
+                driveitem.name,
+                scrubbed,
             )
             return _create_document_failure(
-                driveitem, f"Failed to download via graph api: {e}", e
+                driveitem, f"Failed to download via graph api: {scrubbed}", e
             )
 
     sections: list[TextSection | ImageSection | TabularSection] = []
@@ -1356,6 +1370,20 @@ class SharepointConnector(
                 raise ConnectorValidationError(
                     f"Invalid site URL '{site_url}': {e}"
                 ) from e
+            self._validate_site_url_host(site_url)
+
+    def _validate_site_url_host(self, site_url: str) -> None:
+        """Reject a site URL outside the tenant's SharePoint domain.
+
+        The REST token is minted for the tenant, so a host like
+        'tenant.attacker.example/sites/x' would leak it to the attacker.
+        """
+        suffix = self.sharepoint_domain_suffix.lower()
+        hostname = (urlsplit(site_url).hostname or "").lower()
+        if hostname != suffix and not hostname.endswith(f".{suffix}"):
+            raise ConnectorValidationError(
+                f"Site URL '{site_url}' must be on the '{suffix}' domain."
+            )
 
     def probe_role_assignments_permission(self) -> None:
         """Verify the Azure AD app can read SharePoint RoleAssignments.
@@ -1511,6 +1539,9 @@ class SharepointConnector(
         ``_REST_CTX_MAX_AGE_S``.  On recreation we also call
         ``load_credentials`` to build a fresh MSAL app with an empty token
         cache, guaranteeing a brand-new token from Azure AD."""
+        # Re-checked here because callers reach this without validation.
+        self._validate_site_url_host(site_url)
+
         elapsed = time.monotonic() - self._cached_rest_ctx_created_at
         if (
             self._cached_rest_ctx is not None
