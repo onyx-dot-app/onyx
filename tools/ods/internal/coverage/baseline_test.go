@@ -36,7 +36,7 @@ func TestBaseline_saveAndLoadRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), BaselineFile)
 	original := NewBaseline(profileOf(map[string][2]int{"cmd": {1, 4}, "internal/audit": {1, 2}}))
 
-	if err := original.Save(path); err != nil {
+	if err := original.Save(path, GoTests); err != nil {
 		t.Fatalf("failed to save the baseline: %v", err)
 	}
 	loaded, err := LoadBaseline(path)
@@ -65,10 +65,10 @@ func TestBaseline_saveIsDeterministic(t *testing.T) {
 
 	first := filepath.Join(dir, "first.yaml")
 	second := filepath.Join(dir, "second.yaml")
-	if err := baseline.Save(first); err != nil {
+	if err := baseline.Save(first, GoTests); err != nil {
 		t.Fatalf("failed to save the baseline: %v", err)
 	}
-	if err := baseline.Save(second); err != nil {
+	if err := baseline.Save(second, GoTests); err != nil {
 		t.Fatalf("failed to save the baseline: %v", err)
 	}
 
@@ -80,6 +80,23 @@ func TestBaseline_saveIsDeterministic(t *testing.T) {
 	}
 	if !strings.Contains(firstData, "# Minimum statement coverage") {
 		t.Fatalf("expected the explanatory header, got:\n%s", firstData)
+	}
+}
+
+func TestBaseline_saveUsesTheKindHeader(t *testing.T) {
+	path := filepath.Join(t.TempDir(), TypeBaselineFile)
+	baseline := NewBaseline(profileOf(map[string][2]int{"src/app": {1, 2}}))
+
+	if err := baseline.Save(path, TypeScript); err != nil {
+		t.Fatalf("failed to save the baseline: %v", err)
+	}
+
+	data := readFile(t, path)
+	if !strings.HasPrefix(data, "# Minimum TypeScript type coverage per directory") {
+		t.Fatalf("expected the TypeScript header, got:\n%s", data)
+	}
+	if _, err := LoadBaseline(path); err != nil {
+		t.Fatalf("failed to load the baseline: %v", err)
 	}
 }
 
