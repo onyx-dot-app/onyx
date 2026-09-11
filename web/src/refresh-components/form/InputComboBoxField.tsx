@@ -1,16 +1,19 @@
 "use client";
 
 import { useField } from "formik";
-import { InputComboBox, type InputComboBoxProps } from "@opal/components";
+import {
+  InputSingleSelect,
+  type InputSingleSelectProps,
+} from "@opal/components";
 import { useOnChangeEvent, useOnChangeValue } from "@/hooks/formHooks";
 
 /**
- * Formik-bound version of `InputComboBox`. Use this inside a `<Formik>` form
+ * Formik-bound version of `InputSingleSelect`. Use this inside a `<Formik>` form
  * when you need a combo box (free-text input with dropdown suggestions).
- * For a plain combo box without Formik binding, use `InputComboBox` directly.
+ * For a plain combo box without Formik binding, use `InputSingleSelect` directly.
  */
 export interface InputComboBoxFieldProps extends Omit<
-  InputComboBoxProps,
+  InputSingleSelectProps,
   "value"
 > {
   name: string;
@@ -28,7 +31,7 @@ export default function InputComboBoxField({
   const hasError = meta.touched && meta.error;
 
   return (
-    <InputComboBox
+    <InputSingleSelect
       {...inputProps}
       name={name}
       value={field.value ?? ""}

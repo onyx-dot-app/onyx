@@ -54,3 +54,38 @@ const [draft, setDraft] = useState("");
 ```
 
 Deferred from the Figma spec: the `resizable` corner handle and the extra `action` button slot.
+
+## The option set (family dropdown)
+
+Passing `options` (flat `SelectOption[]` or sectioned `SelectSection[]`)
+enables the family's unified dropdown under the field: typing filters, arrows
+navigate, Enter picks. A chosen option becomes a tag whose `id` is the
+option's `value` (via `onSelectOption`); choosing it again — in the dropdown
+or on the chip — removes it through `onRemoveTag`. Sections render with a
+`Divider` between them.
+
+- **`mode="closed"`** (default): only options can be chosen.
+- **`mode="open"`**: the raw text can also be committed via the create row
+  (`createPrefix` labels it), landing in `onAdd` like a plain tag.
+
+Without `options` the input stays the plain free-tagging field, whatever the
+mode.
+
+```tsx
+<InputMultiSelect
+  tags={tags}
+  value={query}
+  onChange={setQuery}
+  options={groups.map((g) => ({
+    value: String(g.id),
+    label: g.name,
+    description: t("memberCount", { count: g.users.length }),
+  }))}
+  onSelectOption={(option) =>
+    setTags((prev) => [...prev, { id: option.value, label: option.label }])
+  }
+  onRemoveTag={(id) => setTags((prev) => prev.filter((t) => t.id !== id))}
+  onAdd={() => {}}
+  placeholder={t("search.placeholder")}
+/>
+```

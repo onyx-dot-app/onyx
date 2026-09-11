@@ -4,11 +4,36 @@ import "@opal/components/inputs/shared.css";
 // The inner field reuses InputTypeIn's .opal-input-field styling.
 import "@opal/components/inputs/input-type-in/styles.css";
 import "@opal/components/inputs/selections/input-multi-select/styles.css";
-import { useEffect, useRef } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  useFloating,
+  autoUpdate,
+  flip,
+  offset,
+  shift,
+  size,
+} from "@floating-ui/react-dom";
 import type { IconFunctionComponent } from "@opal/types";
 import { Button, Tag, TAG_REMOVE_CLASS } from "@opal/components";
 import { SvgX } from "@opal/icons";
 import { useOpalStrings } from "@opal/strings";
+import { useClickOutside } from "@opal/hooks/useClickOutside";
+import {
+  filterSections,
+  flattenSections,
+  normalizeSections,
+  useSelectKeyboard,
+} from "../shared";
+import { SelectDropdown } from "../dropdown/SelectDropdown";
+import { buildAriaAttributes } from "../dropdown/aria";
+import type { SelectOption, SelectSection } from "../types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -36,6 +61,29 @@ interface InputMultiSelectProps {
 
   onChange: (value: string) => void;
 
+  /**
+   * The selectable set; presence enables the family dropdown. Flat or
+   * sectioned — sections render with a Divider between them. Convention:
+   * a chosen option becomes a tag whose `id` is the option's `value`, so
+   * the dropdown can show it selected and toggle it off.
+   */
+  options?: SelectOption[] | SelectSection[];
+
+  /**
+   * Set openness (only meaningful with `options`):
+   * - "closed" (default): only options can be chosen; typing filters.
+   * - "open": typing filters AND the raw text commits via the create row.
+   *
+   * Without `options` the input is inherently open (plain free tagging).
+   */
+  mode?: "closed" | "open";
+
+  /**
+   * Called when a dropdown option is chosen. Choosing an already-selected
+   * option calls `onRemoveTag(option.value)` instead — one removal path.
+   */
+  onSelectOption?: (option: SelectOption) => void;
+
   placeholder?: string;
 
   /**
@@ -58,6 +106,12 @@ interface InputMultiSelectProps {
 
   /** Focuses the text input on mount. */
   focusOnMount?: boolean;
+
+  /** Prefix shown before the typed value in the create row (e.g. "Add"). */
+  createPrefix?: string;
+
+  /** Max height of the dropdown in CSS units. Defaults to "15rem". */
+  dropdownMaxHeight?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -65,10 +119,12 @@ interface InputMultiSelectProps {
 // ---------------------------------------------------------------------------
 
 /**
- * Chips-in-input (Figma `Input/Tags`): editable Tags inline with a text
- * input. Enter adds the trimmed text. Backspace on an empty input arms the
- * last tag (its dark keyboard-selection state), and Backspace or Delete on
- * an armed tag removes it and returns focus to the input.
+ * The multi-arity member of the input-select family: chips-in-input (Figma
+ * `Input/Tags`) over the family's unified dropdown. Typing filters the
+ * option set; chosen options render as Tags. Backspace on an empty input
+ * arms the last tag, and Backspace or Delete on an armed tag removes it.
+ *
+ * Without `options` it is the plain free-tagging input it always was.
  */
 function InputMultiSelect({
   tags,
@@ -76,6 +132,9 @@ function InputMultiSelect({
   onAdd,
   value,
   onChange,
+  options: optionsProp,
+  mode = "closed",
+  onSelectOption,
   placeholder,
   variant = "primary",
   disabled = false,
@@ -83,10 +142,116 @@ function InputMultiSelect({
   onClear,
   minRows = 1,
   focusOnMount = false,
+  createPrefix,
+  dropdownMaxHeight,
 }: InputMultiSelectProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const strings = useOpalStrings();
+
+  const sections = useMemo(
+    () => normalizeSections(optionsProp ?? []),
+    [optionsProp]
+  );
+  const flatOptions = useMemo(() => flattenSections(sections), [sections]);
+  const hasOptions = flatOptions.length > 0;
+  // Without a set the input is inherently open — the legacy free-tags input.
+  const freeEntry = mode === "open" || !hasOptions;
+
+  const selectedValues = useMemo(
+    () => new Set(tags.map((tag) => tag.id)),
+    [tags]
+  );
+
+  // Dropdown state (local: the input text itself is caller-controlled).
+  const [isOpen, setIsOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const [isKeyboardNav, setIsKeyboardNav] = useState(false);
+  useEffect(() => {
+    if (!isOpen) {
+      setHighlightedIndex(-1);
+      setIsKeyboardNav(false);
+    }
+  }, [isOpen]);
+
+  const hasSearchTerm = value.trim() !== "";
+  const visibleSections = useMemo(
+    () => filterSections(sections, value),
+    [sections, value]
+  );
+  const showCreateOption = mode === "open" && hasOptions && hasSearchTerm;
+
+  const allVisibleOptions = useMemo(() => {
+    const baseOptions = flattenSections(visibleSections);
+    if (showCreateOption) {
+      return [{ value, label: value }, ...baseOptions];
+    }
+    return baseOptions;
+  }, [visibleSections, showCreateOption, value]);
+
+  const { refs, floatingStyles } = useFloating({
+    open: isOpen,
+    placement: "bottom-start",
+    middleware: [
+      offset(4),
+      flip(),
+      shift({ padding: 8 }),
+      size({
+        apply({ rects, elements }) {
+          Object.assign(elements.floating.style, {
+            width: `${rects.reference.width}px`,
+          });
+        },
+      }),
+    ],
+    whileElementsMounted: autoUpdate,
+  });
+
+  const handleOptionSelect = useCallback(
+    (option: SelectOption) => {
+      if (option.disabled) return;
+      const real = flatOptions.find((o) => o.value === option.value);
+      if (real) {
+        if (selectedValues.has(real.value)) {
+          onRemoveTag(real.value);
+        } else {
+          onSelectOption?.(real);
+        }
+      } else {
+        // The create row: commit the raw text as a free-form tag.
+        const trimmed = option.value.trim();
+        if (trimmed) onAdd(trimmed);
+      }
+      // Stay open for further picks; reset the filter.
+      onChange("");
+      inputRef.current?.focus();
+    },
+    [flatOptions, selectedValues, onRemoveTag, onSelectOption, onAdd, onChange]
+  );
+
+  const { handleKeyDown: handleDropdownKeyDown } = useSelectKeyboard({
+    isOpen,
+    setIsOpen,
+    highlightedIndex,
+    setHighlightedIndex,
+    setIsKeyboardNav,
+    allVisibleOptions,
+    onSelect: handleOptionSelect,
+    hasOptions,
+  });
+
+  useClickOutside<HTMLElement>(
+    [
+      rootRef as React.RefObject<HTMLElement>,
+      dropdownRef as React.RefObject<HTMLElement>,
+    ],
+    useCallback(() => {
+      setIsOpen(false);
+      setIsKeyboardNav(false);
+    }, []),
+    isOpen
+  );
 
   useEffect(() => {
     if (focusOnMount) inputRef.current?.focus();
@@ -98,9 +263,19 @@ function InputMultiSelect({
     // During IME composition, Enter confirms the candidate and Backspace
     // edits the composition. Neither may add or arm tags.
     if (event.nativeEvent.isComposing) return;
+
+    if (hasOptions) {
+      handleDropdownKeyDown(event);
+      if (event.defaultPrevented) return;
+    }
+
     if (event.key === "Enter") {
       event.preventDefault();
       event.stopPropagation();
+      // With a dropdown, Enter belongs to it (the create row covers
+      // free-form commits); the plain add only serves the optionless input.
+      if (hasOptions) return;
+      if (!freeEntry) return;
       const trimmed = value.trim();
       if (trimmed) onAdd(trimmed);
       return;
@@ -124,9 +299,24 @@ function InputMultiSelect({
     target.click();
   }
 
+  const autoId = useId();
+  const fieldId = `multi-select-${autoId}`;
+  const ariaProps = buildAriaAttributes({
+    hasOptions,
+    isOpen,
+    isValid: true,
+    highlightedIndex,
+    fieldId,
+    allVisibleOptions,
+    placeholder: placeholder ?? "",
+  });
+
   return (
     <div
-      ref={rootRef}
+      ref={(node) => {
+        rootRef.current = node;
+        refs.setReference(node);
+      }}
       role="presentation"
       className="opal-input opal-input-multi-select"
       data-variant={disabled ? "disabled" : variant}
@@ -169,9 +359,18 @@ function InputMultiSelect({
           className="opal-input-field opal-input-multi-select-field"
           disabled={disabled}
           value={value}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={(event) => {
+            onChange(event.target.value);
+            if (hasOptions && !isOpen) setIsOpen(true);
+            setHighlightedIndex(0);
+            setIsKeyboardNav(false);
+          }}
+          onFocus={() => {
+            if (hasOptions) setIsOpen(true);
+          }}
           onKeyDown={handleInputKeyDown}
           placeholder={placeholder}
+          {...ariaProps}
         />
       </div>
       {onClear !== undefined && !disabled && (
@@ -186,6 +385,37 @@ function InputMultiSelect({
           }}
         />
       )}
+
+      <SelectDropdown
+        ref={dropdownRef}
+        isOpen={isOpen && hasOptions}
+        disabled={disabled}
+        floatingStyles={floatingStyles}
+        setFloatingRef={refs.setFloating}
+        fieldId={fieldId}
+        placeholder={placeholder ?? ""}
+        sections={visibleSections}
+        value=""
+        selectedValues={selectedValues}
+        highlightedIndex={highlightedIndex}
+        onSelect={handleOptionSelect}
+        onMouseEnter={(index) => {
+          setIsKeyboardNav(false);
+          setHighlightedIndex(index);
+        }}
+        onMouseMove={() => {
+          if (isKeyboardNav) setIsKeyboardNav(false);
+        }}
+        onMouseLeave={() => {
+          if (!isKeyboardNav) setHighlightedIndex(-1);
+        }}
+        isExactMatch={(option) => selectedValues.has(option.value)}
+        inputValue={value}
+        allowCreate={freeEntry}
+        showCreateOption={showCreateOption}
+        createPrefix={createPrefix}
+        dropdownMaxHeight={dropdownMaxHeight}
+      />
     </div>
   );
 }

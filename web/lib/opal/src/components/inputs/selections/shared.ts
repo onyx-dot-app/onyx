@@ -1,20 +1,62 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { ComboBoxOption } from "./types";
+import { SelectOption, SelectSection } from "./types";
 
 // =============================================================================
-// HOOK: useComboBoxState
+// Section helpers
 // =============================================================================
 
-interface UseComboBoxStateProps {
+/** Accepts flat options or sections; flat becomes one anonymous section. */
+export function normalizeSections(
+  options: SelectOption[] | SelectSection[] = []
+): SelectSection[] {
+  const first = options[0];
+  if (!first) return [];
+  return "options" in first
+    ? (options as SelectSection[])
+    : [{ options: options as SelectOption[] }];
+}
+
+/** Flat option list in render order. */
+export function flattenSections(sections: SelectSection[]): SelectOption[] {
+  return sections.flatMap((section) => section.options);
+}
+
+/**
+ * Filters each section's options by the search term; sections left empty
+ * disappear, so the dropdown's dividers never dangle.
+ */
+export function filterSections(
+  sections: SelectSection[],
+  inputValue: string
+): SelectSection[] {
+  const searchTerm = inputValue.trim().toLowerCase();
+  if (!searchTerm) return sections.filter((s) => s.options.length > 0);
+  return sections
+    .map((section) => ({
+      ...section,
+      options: section.options.filter(
+        (option) =>
+          option.label.toLowerCase().includes(searchTerm) ||
+          option.value.toLowerCase().includes(searchTerm)
+      ),
+    }))
+    .filter((section) => section.options.length > 0);
+}
+
+// =============================================================================
+// HOOK: useSelectState
+// =============================================================================
+
+interface UseSelectStateProps {
   value: string;
-  options: ComboBoxOption[];
+  options: SelectOption[];
 }
 
 /**
  * Manages the internal state of the ComboBox component
  * Handles state synchronization between external value prop and internal input state
  */
-export function useComboBoxState({ value, options }: UseComboBoxStateProps) {
+export function useSelectState({ value, options }: UseSelectStateProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [inputValue, setInputValue] = useState(value);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
@@ -63,17 +105,17 @@ export function useComboBoxState({ value, options }: UseComboBoxStateProps) {
 }
 
 // =============================================================================
-// HOOK: useComboBoxKeyboard
+// HOOK: useSelectKeyboard
 // =============================================================================
 
-interface UseComboBoxKeyboardProps {
+interface UseSelectKeyboardProps {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
   highlightedIndex: number;
   setHighlightedIndex: (index: number | ((prev: number) => number)) => void;
   setIsKeyboardNav: (isKeyboard: boolean) => void;
-  allVisibleOptions: ComboBoxOption[];
-  onSelect: (option: ComboBoxOption) => void;
+  allVisibleOptions: SelectOption[];
+  onSelect: (option: SelectOption) => void;
   hasOptions: boolean;
 }
 
@@ -81,7 +123,7 @@ interface UseComboBoxKeyboardProps {
  * Manages keyboard navigation for the ComboBox
  * Handles arrow keys, Enter, Escape, and Tab
  */
-export function useComboBoxKeyboard({
+export function useSelectKeyboard({
   isOpen,
   setIsOpen,
   highlightedIndex,
@@ -90,7 +132,7 @@ export function useComboBoxKeyboard({
   allVisibleOptions,
   onSelect,
   hasOptions,
-}: UseComboBoxKeyboardProps) {
+}: UseSelectKeyboardProps) {
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (!hasOptions) return;
@@ -160,63 +202,4 @@ export function useComboBoxKeyboard({
   );
 
   return { handleKeyDown };
-}
-
-// =============================================================================
-// HOOK: useOptionFiltering
-// =============================================================================
-
-interface UseOptionFilteringProps {
-  options: ComboBoxOption[];
-  inputValue: string;
-}
-
-interface FilterResult {
-  matchedOptions: ComboBoxOption[];
-  unmatchedOptions: ComboBoxOption[];
-  hasSearchTerm: boolean;
-}
-
-/**
- * Filters options based on input value
- * Splits options into matched and unmatched for better UX
- */
-export function useOptionFiltering({
-  options,
-  inputValue,
-}: UseOptionFilteringProps): FilterResult {
-  return useMemo(() => {
-    if (!options.length) {
-      return { matchedOptions: [], unmatchedOptions: [], hasSearchTerm: false };
-    }
-
-    if (!inputValue || !inputValue.trim()) {
-      return {
-        matchedOptions: options,
-        unmatchedOptions: [],
-        hasSearchTerm: false,
-      };
-    }
-
-    const searchTerm = inputValue.toLowerCase().trim();
-    const matched: ComboBoxOption[] = [];
-    const unmatched: ComboBoxOption[] = [];
-
-    options.forEach((option) => {
-      const matchesLabel = option.label.toLowerCase().includes(searchTerm);
-      const matchesValue = option.value.toLowerCase().includes(searchTerm);
-
-      if (matchesLabel || matchesValue) {
-        matched.push(option);
-      } else {
-        unmatched.push(option);
-      }
-    });
-
-    return {
-      matchedOptions: matched,
-      unmatchedOptions: unmatched,
-      hasSearchTerm: true,
-    };
-  }, [options, inputValue]);
 }

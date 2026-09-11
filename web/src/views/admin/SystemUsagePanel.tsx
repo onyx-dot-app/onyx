@@ -284,40 +284,34 @@ export default function SystemUsagePanel({ timeRange }: SystemUsagePanelProps) {
       >
         {models.length > 0 && (
           <Section width={12} height="fit">
-            <InputSingleSelect value={model} onValueChange={setModel}>
-              <InputSingleSelect.Trigger
-                placeholder={t("filters.allModels.label")}
-              />
-              <InputSingleSelect.Content>
-                <InputSingleSelect.Item value={ALL_FILTER}>
-                  {t("filters.allModels.label")}
-                </InputSingleSelect.Item>
-                {models.map((option) => (
-                  <InputSingleSelect.Item key={option} value={option}>
-                    {option}
-                  </InputSingleSelect.Item>
-                ))}
-              </InputSingleSelect.Content>
-            </InputSingleSelect>
+            <InputSingleSelect
+              value={model}
+              onValueChange={setModel}
+              placeholder={t("filters.allModels.label")}
+              options={[
+                { value: ALL_FILTER, label: t("filters.allModels.label") },
+                ...models.map((option) => ({
+                  value: option,
+                  label: option,
+                })),
+              ]}
+            />
           </Section>
         )}
         {providers.length > 0 && (
           <Section width={12} height="fit">
-            <InputSingleSelect value={provider} onValueChange={setProvider}>
-              <InputSingleSelect.Trigger
-                placeholder={t("filters.allProviders.label")}
-              />
-              <InputSingleSelect.Content>
-                <InputSingleSelect.Item value={ALL_FILTER}>
-                  {t("filters.allProviders.label")}
-                </InputSingleSelect.Item>
-                {providers.map((option) => (
-                  <InputSingleSelect.Item key={option} value={option}>
-                    {option}
-                  </InputSingleSelect.Item>
-                ))}
-              </InputSingleSelect.Content>
-            </InputSingleSelect>
+            <InputSingleSelect
+              value={provider}
+              onValueChange={setProvider}
+              placeholder={t("filters.allProviders.label")}
+              options={[
+                { value: ALL_FILTER, label: t("filters.allProviders.label") },
+                ...providers.map((option) => ({
+                  value: option,
+                  label: option,
+                })),
+              ]}
+            />
           </Section>
         )}
       </Section>

@@ -1,24 +1,24 @@
 import React from "react";
-import { Text } from "@opal/components/text/components";
 import { useOpalStrings } from "@opal/strings";
 import { OptionItem } from "./OptionItem";
-import { ComboBoxOption } from "../types";
+import { SelectOption, SelectSection } from "../types";
+import { Divider } from "@opal/components/divider/components";
 import { cn, clickOnKeyDown } from "@opal/utils";
 import { SvgPlus } from "@opal/icons";
-import { sanitizeOptionId } from "../utils/aria";
+import { sanitizeOptionId } from "./aria";
 
 interface OptionsListProps {
-  matchedOptions: ComboBoxOption[];
-  unmatchedOptions: ComboBoxOption[];
-  hasSearchTerm: boolean;
-  separatorLabel: string;
+  /** Post-filter, non-empty sections in render order. */
+  sections: SelectSection[];
   value: string;
+  /** Multi-select: the chosen values. Overrides single-value selection. */
+  selectedValues?: ReadonlySet<string>;
   highlightedIndex: number;
   fieldId: string;
-  onSelect: (option: ComboBoxOption) => void;
+  onSelect: (option: SelectOption) => void;
   onMouseEnter: (index: number) => void;
   onMouseMove: () => void;
-  isExactMatch: (option: ComboBoxOption) => boolean;
+  isExactMatch: (option: SelectOption) => boolean;
   /** Current input value for creating new option */
   inputValue: string;
   /** Whether to show create option when no exact match */
@@ -30,15 +30,13 @@ interface OptionsListProps {
 }
 
 /**
- * Renders the list of options with matched/unmatched sections
- * Includes divider between sections when filtering
+ * Renders the sectioned option list: a Divider between sections, an optional
+ * muted heading per section, and the create row pinned first in open mode.
  */
 export const OptionsList: React.FC<OptionsListProps> = ({
-  matchedOptions,
-  unmatchedOptions,
-  hasSearchTerm,
-  separatorLabel,
+  sections,
   value,
+  selectedValues,
   highlightedIndex,
   fieldId,
   onSelect,
@@ -54,11 +52,12 @@ export const OptionsList: React.FC<OptionsListProps> = ({
   // Index offset for other options when create option is shown
   const indexOffset = showCreateOption ? 1 : 0;
 
-  if (
-    matchedOptions.length === 0 &&
-    unmatchedOptions.length === 0 &&
-    !showCreateOption
-  ) {
+  const totalOptions = sections.reduce(
+    (count, section) => count + section.options.length,
+    0
+  );
+
+  if (totalOptions === 0 && !showCreateOption) {
     return (
       <div className="px-3 py-2 text-text-02 font-secondary-body">
         {strings.comboBoxNoOptions}
@@ -124,60 +123,47 @@ export const OptionsList: React.FC<OptionsListProps> = ({
         </div>
       )}
 
-      {/* Separator - show when there are options to display */}
-      {separatorLabel &&
-        (matchedOptions.length > 0 ||
-          (!hasSearchTerm && unmatchedOptions.length > 0)) && (
-          <div className="px-3 py-1">
-            <Text as="p" color="text-03" font="secondary-body">
-              {separatorLabel}
-            </Text>
-          </div>
-        )}
-
-      {/* Matched/Filtered Options */}
-      {matchedOptions.map((option, idx) => {
-        const globalIndex = idx + indexOffset;
-        // Only highlight first exact match, not all matches
-        const isExact = idx === 0 && isExactMatch(option);
-        return (
-          <OptionItem
-            key={option.value}
-            option={option}
-            index={globalIndex}
-            fieldId={fieldId}
-            isHighlighted={globalIndex === highlightedIndex}
-            isSelected={value === option.value}
-            isExact={isExact}
-            onSelect={onSelect}
-            onMouseEnter={onMouseEnter}
-            onMouseMove={onMouseMove}
-            searchTerm={inputValue}
-          />
-        );
-      })}
-
-      {/* Unmatched Options - only show when NOT searching */}
-      {!hasSearchTerm &&
-        unmatchedOptions.map((option, idx) => {
-          const globalIndex = matchedOptions.length + idx + indexOffset;
-          const isExact = isExactMatch(option);
-          return (
-            <OptionItem
-              key={option.value}
-              option={option}
-              index={globalIndex}
-              fieldId={fieldId}
-              isHighlighted={globalIndex === highlightedIndex}
-              isSelected={value === option.value}
-              isExact={isExact}
-              onSelect={onSelect}
-              onMouseEnter={onMouseEnter}
-              onMouseMove={onMouseMove}
-              searchTerm={inputValue}
-            />
+      {/* Sections: a Divider between each, an optional heading per section */}
+      {(() => {
+        let globalIndex = indexOffset;
+        return sections.map((section, sectionIdx) => {
+          const rows = (
+            <React.Fragment key={section.label ?? `section-${sectionIdx}`}>
+              {section.label ? (
+                <Divider title={section.label} />
+              ) : (
+                sectionIdx > 0 && (
+                  <Divider paddingParallel={0} paddingPerpendicular={0} />
+                )
+              )}
+              {section.options.map((option) => {
+                const index = globalIndex++;
+                const isExact = isExactMatch(option);
+                return (
+                  <OptionItem
+                    key={option.value}
+                    option={option}
+                    index={index}
+                    fieldId={fieldId}
+                    isHighlighted={index === highlightedIndex}
+                    isSelected={
+                      selectedValues
+                        ? selectedValues.has(option.value)
+                        : value === option.value
+                    }
+                    isExact={isExact}
+                    onSelect={onSelect}
+                    onMouseEnter={onMouseEnter}
+                    onMouseMove={onMouseMove}
+                    searchTerm={inputValue}
+                  />
+                );
+              })}
+            </React.Fragment>
           );
-        })}
+          return rows;
+        });
+      })()}
     </>
   );
 };

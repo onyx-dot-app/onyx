@@ -1,11 +1,24 @@
-export type ComboBoxOption = {
+import type { IconFunctionComponent } from "@opal/types";
+
+export type SelectOption = {
   value: string;
   label: string;
   description?: string;
+  icon?: IconFunctionComponent;
   disabled?: boolean;
 };
 
-export interface InputComboBoxProps extends Omit<
+/**
+ * A titled slice of the dropdown. Sections render in order with a Divider
+ * between each; a section whose options all filter out disappears, so
+ * separators never dangle.
+ */
+export type SelectSection = {
+  label?: string;
+  options: SelectOption[];
+};
+
+export interface InputSingleSelectProps extends Omit<
   React.InputHTMLAttributes<HTMLInputElement>,
   "onChange" | "value"
 > {
@@ -15,14 +28,14 @@ export interface InputComboBoxProps extends Omit<
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   /** Change handler (direct value style, for InputSingleSelect compatibility) - Only called when option is selected from dropdown */
   onValueChange?: (value: string) => void;
-  /** Array of options for select mode */
-  options?: ComboBoxOption[];
+  /** Options, flat or sectioned. Sections render with a Divider between them. */
+  options?: SelectOption[] | SelectSection[];
   /**
-   * Strict mode:
-   * - true: Only option values allowed (if options exist)
-   * - false: User can type anything
+   * Set openness:
+   * - "closed" (default): only option values are allowed; typing filters.
+   * - "open": typing filters AND the raw text can be committed as a value.
    */
-  strict?: boolean;
+  mode?: "closed" | "open";
   /** Disabled state */
   disabled?: boolean;
   /** Placeholder text */

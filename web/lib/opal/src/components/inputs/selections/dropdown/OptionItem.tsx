@@ -1,16 +1,16 @@
 import React from "react";
 import { cn, clickOnKeyDown } from "@opal/utils";
-import { ComboBoxOption } from "../types";
-import { sanitizeOptionId } from "../utils/aria";
+import { SelectOption } from "../types";
+import { sanitizeOptionId } from "./aria";
 
 interface OptionItemProps {
-  option: ComboBoxOption;
+  option: SelectOption;
   index: number;
   fieldId: string;
   isHighlighted: boolean;
   isSelected: boolean;
   isExact: boolean;
-  onSelect: (option: ComboBoxOption) => void;
+  onSelect: (option: SelectOption) => void;
   onMouseEnter: (index: number) => void;
   onMouseMove: () => void;
   /** Search term to highlight in the label */

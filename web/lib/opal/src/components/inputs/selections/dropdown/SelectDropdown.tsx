@@ -2,25 +2,25 @@ import React, { useEffect, forwardRef } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@opal/utils";
 import { OptionsList } from "./OptionsList";
-import { ComboBoxOption } from "../types";
+import { SelectOption, SelectSection } from "../types";
 
-interface ComboBoxDropdownProps {
+interface SelectDropdownProps {
   isOpen: boolean;
   disabled: boolean;
   floatingStyles: React.CSSProperties;
   setFloatingRef: (node: HTMLDivElement | null) => void;
   fieldId: string;
   placeholder: string;
-  matchedOptions: ComboBoxOption[];
-  unmatchedOptions: ComboBoxOption[];
-  hasSearchTerm: boolean;
-  separatorLabel: string;
+  sections: SelectSection[];
   value: string;
+  selectedValues?: ReadonlySet<string>;
   highlightedIndex: number;
-  onSelect: (option: ComboBoxOption) => void;
+  onSelect: (option: SelectOption) => void;
   onMouseEnter: (index: number) => void;
   onMouseMove: () => void;
-  isExactMatch: (option: ComboBoxOption) => boolean;
+  /** Pointer left the listbox — clear the pointer-driven highlight. */
+  onMouseLeave: () => void;
+  isExactMatch: (option: SelectOption) => boolean;
   /** Current input value for creating new option */
   inputValue: string;
   /** Whether to show create option when no exact match */
@@ -37,10 +37,7 @@ interface ComboBoxDropdownProps {
  * Renders the dropdown menu in a portal
  * Handles scroll-into-view for highlighted options
  */
-export const ComboBoxDropdown = forwardRef<
-  HTMLDivElement,
-  ComboBoxDropdownProps
->(
+export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
   (
     {
       isOpen,
@@ -49,15 +46,14 @@ export const ComboBoxDropdown = forwardRef<
       setFloatingRef,
       fieldId,
       placeholder,
-      matchedOptions,
-      unmatchedOptions,
-      hasSearchTerm,
-      separatorLabel,
+      sections,
       value,
+      selectedValues,
       highlightedIndex,
       onSelect,
       onMouseEnter,
       onMouseMove,
+      onMouseLeave,
       isExactMatch,
       inputValue,
       allowCreate,
@@ -105,9 +101,10 @@ export const ComboBoxDropdown = forwardRef<
         }}
         id={`${fieldId}-listbox`}
         role="listbox"
+        tabIndex={-1}
         aria-label={placeholder}
         className={cn(
-          "z-10000 bg-background-neutral-00 border border-border-02 rounded-12 shadow-box-02 overflow-y-auto overflow-x-hidden p-1 pointer-events-auto touch-auto",
+          "z-10000 flex flex-col gap-1 bg-background-neutral-00 border rounded-12 shadow-md overflow-y-auto overflow-x-hidden p-1 pointer-events-auto touch-auto",
           !dropdownMaxHeight && "max-h-60"
         )}
         style={{
@@ -116,6 +113,7 @@ export const ComboBoxDropdown = forwardRef<
           overscrollBehavior: "contain",
           ...(dropdownMaxHeight ? { maxHeight: dropdownMaxHeight } : {}),
         }}
+        onMouseLeave={onMouseLeave}
         onWheel={(e) => {
           // Prevent event from bubbling to prevent any parent scroll blocking
           e.stopPropagation();
@@ -126,11 +124,9 @@ export const ComboBoxDropdown = forwardRef<
         }}
       >
         <OptionsList
-          matchedOptions={matchedOptions}
-          unmatchedOptions={unmatchedOptions}
-          hasSearchTerm={hasSearchTerm}
-          separatorLabel={separatorLabel}
+          sections={sections}
           value={value}
+          selectedValues={selectedValues}
           highlightedIndex={highlightedIndex}
           fieldId={fieldId}
           onSelect={onSelect}
@@ -148,4 +144,4 @@ export const ComboBoxDropdown = forwardRef<
   }
 );
 
-ComboBoxDropdown.displayName = "ComboBoxDropdown";
+SelectDropdown.displayName = "SelectDropdown";
