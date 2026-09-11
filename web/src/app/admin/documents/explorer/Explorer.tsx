@@ -190,7 +190,7 @@ export function Explorer({
             if (
               event.key === "Enter" &&
               !event.shiftKey &&
-              !(event.nativeEvent as any).isComposing
+              !event.nativeEvent.isComposing
             ) {
               onSearch(query);
               event.preventDefault();
