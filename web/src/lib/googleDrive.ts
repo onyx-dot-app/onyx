@@ -29,8 +29,7 @@ export const setupGoogleDriveOAuth = async ({
       `Failed to create credential - ${credentialCreationResponse.status}`,
     ];
   }
-  const credential =
-    (await credentialCreationResponse.json()) as Credential<{}>;
+  const credential: Credential<{}> = await credentialCreationResponse.json();
 
   const authorizationUrlResponse = await fetch(
     `/api/manage/connector/google-drive/authorize/${credential.id}`
@@ -42,9 +41,8 @@ export const setupGoogleDriveOAuth = async ({
     ];
   }
 
-  const authorizationUrlJson = (await authorizationUrlResponse.json()) as {
-    auth_url: string;
-  };
+  const authorizationUrlJson: { auth_url: string } =
+    await authorizationUrlResponse.json();
 
   return [authorizationUrlJson.auth_url, ""];
 };

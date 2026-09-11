@@ -28,7 +28,7 @@ export async function getConnectorOauthRedirectUrl(
       throw new Error(await parseErrorDetail(response, OAUTH_REDIRECT_ERROR));
     }
 
-    const data = (await response.json()) as OAuthRedirectResponse;
+    const data: OAuthRedirectResponse = await response.json();
     return data.redirect_url;
   } catch (error) {
     console.error(`${OAUTH_REDIRECT_LOG_ERROR} for ${connector}:`, error);

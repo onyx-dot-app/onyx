@@ -8,7 +8,7 @@
 # `ods type-coverage typescript --update`.
 #
 # Generated file: do not edit by hand.
-total: 98.4
+total: 98.5
 packages:
   .: 100
   src: 99.4
@@ -59,41 +59,41 @@ packages:
   src/layouts: 100
   src/layouts/chromes: 99.8
   src/layouts/craft: 92.5
-  src/lib: 98.4
+  src/lib: 98.8
   src/lib/agents: 99.1
   src/lib/analytics: 99.4
   src/lib/app: 100
-  src/lib/auth: 95.4
+  src/lib/auth: 98
   src/lib/banner: 99.3
-  src/lib/billing: 93.8
+  src/lib/billing: 100
   src/lib/build: 100
-  src/lib/chat: 97.9
+  src/lib/chat: 98.5
   src/lib/connectors: 96.4
   src/lib/constants: 100
-  src/lib/credentials: 96.9
+  src/lib/credentials: 97.2
   src/lib/extension: 100
   src/lib/externalApps: 100
   src/lib/headers: 100
-  src/lib/hierarchy: 96.6
+  src/lib/hierarchy: 100
   src/lib/hooks: 95.7
-  src/lib/indexing: 98.3
-  src/lib/languageModels: 96.8
+  src/lib/indexing: 99.4
+  src/lib/languageModels: 98.8
   src/lib/multiModel: 100
-  src/lib/notifications: 97.3
-  src/lib/oauth: 84.8
+  src/lib/notifications: 99.3
+  src/lib/oauth: 100
   src/lib/permissions: 100
   src/lib/position: 98.6
-  src/lib/projects: 99.3
-  src/lib/search: 97.2
+  src/lib/projects: 99.6
+  src/lib/search: 99.1
   src/lib/searchFilters: 95.3
   src/lib/settings: 96.6
   src/lib/sidebar: 100
-  src/lib/skills: 97.3
+  src/lib/skills: 97.4
   src/lib/sso: 99.2
-  src/lib/tools: 97.4
+  src/lib/tools: 97.5
   src/lib/tracing: 96.9
-  src/lib/usage: 97.4
-  src/lib/users: 97.8
+  src/lib/usage: 97.9
+  src/lib/users: 99
   src/lib/voice: 98.3
   src/lib/webSearch: 97.3
   src/providers: 99.4
@@ -128,5 +128,5 @@ packages:
   src/sections/skills: 99.8
   src/sections/usage: 99.6
   src/views: 99
-  src/views/admin: 99
+  src/views/admin: 99.1
   types: 100
