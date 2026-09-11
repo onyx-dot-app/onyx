@@ -422,7 +422,7 @@ if [ -f "$web_dir/bun.lock" ]; then
     ) 9>"$BUN_CACHE_DIR.lock"
     cd "$web_dir"
     BUN_INSTALL_CACHE_DIR="$BUN_CACHE_DIR" \\
-        bun install --frozen-lockfile --backend=hardlink
+        bun install --frozen-lockfile --ignore-scripts --backend=hardlink
 fi
 """
 
