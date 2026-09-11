@@ -1,8 +1,8 @@
 // Zed port of .vscode/tasks.json, plus the .vscode/launch.json entries that
 // were never really debug targets (docker, uv, db, openapi, dev servers).
 //
-// "ods-env" is referenced by the `build` field of configs in .zed/debug.json.
-// Keep that label in sync.
+// "ods-env" and "k8s-env" are referenced by `build` fields in .zed/debug.json.
+// Keep those labels in sync.
 //
 // Run these with `task: spawn` from the command palette.
 [
@@ -11,6 +11,13 @@
     "label": "ods-env",
     "command": "uv",
     "args": ["run", "--with", "onyx-devtools", "ods", "env"],
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "reveal": "no_focus",
+    "hide": "on_success",
+  },
+  {
+    "label": "k8s-env",
+    "command": "deployment/helm/dev/k8s-intercept-api.sh",
     "cwd": "$ZED_WORKTREE_ROOT",
     "reveal": "no_focus",
     "hide": "on_success",
