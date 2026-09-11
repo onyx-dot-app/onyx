@@ -27,6 +27,7 @@ import {
   fetchProjects as svcFetchProjects,
   createProject as svcCreateProject,
   uploadFiles as svcUploadFiles,
+  indexFile as svcIndexFile,
   getRecentFiles as svcGetRecentFiles,
   getFilesInProject as svcGetFilesInProject,
   getProject as svcGetProject,
@@ -114,6 +115,7 @@ interface ProjectsContextType {
     files: File[],
     projectId?: number | null
   ) => Promise<CategorizedFiles>;
+  indexFile: (fileId: string, name?: string) => Promise<ProjectFile>;
   getRecentFiles: () => Promise<ProjectFile[]>;
   getFilesInProject: (projectId: number) => Promise<ProjectFile[]>;
   refreshCurrentProjectDetails: () => Promise<void>;
@@ -547,6 +549,23 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     ]
   );
 
+  const indexFile = useCallback(
+    async (fileId: string, name?: string): Promise<ProjectFile> => {
+      const created = await svcIndexFile(fileId, name);
+      setAllRecentFiles((prev) =>
+        prev.some((file) => file.id === created.id) ? prev : [created, ...prev]
+      );
+      setTrackedUploadIds((prev) => {
+        const next = new Set(prev);
+        next.add(created.id);
+        return next;
+      });
+      await refreshRecentFiles();
+      return created;
+    },
+    [refreshRecentFiles]
+  );
+
   const getFilesInProject = useCallback(
     async (projectId: number): Promise<ProjectFile[]> => {
       try {
@@ -800,6 +819,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       renameProject,
       deleteProject,
       uploadFiles,
+      indexFile,
       getRecentFiles,
       getFilesInProject,
       refreshCurrentProjectDetails,
@@ -873,6 +893,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       renameProject,
       deleteProject,
       uploadFiles,
+      indexFile,
       getRecentFiles,
       getFilesInProject,
       refreshCurrentProjectDetails,

@@ -1,5 +1,4 @@
 import { memo, useState } from "react";
-import { useSWRConfig } from "swr";
 import {
   SvgCheck,
   SvgDownload,
@@ -9,7 +8,7 @@ import {
 import { ImageShape } from "@/app/app/services/streamingModels";
 import { FullImageModal } from "@/app/app/components/files/images/FullImageModal";
 import { buildImgUrl } from "@/app/app/components/files/images/utils";
-import { indexFile } from "@/lib/projects/svc";
+import { useProjectsContext } from "@/lib/projects/providers";
 import { Button } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { toast } from "@opal/layouts";
@@ -51,7 +50,7 @@ export const InMessageImage = memo(function InMessageImage({
   canIndex = false,
 }: InMessageImageProps) {
   const t = useTranslations("chat.files");
-  const { mutate } = useSWRConfig();
+  const { indexFile } = useProjectsContext();
   const [fullImageShowing, setFullImageShowing] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(loadedImages.has(fileId));
   const [isIndexing, setIsIndexing] = useState(false);
@@ -94,7 +93,6 @@ export const InMessageImage = memo(function InMessageImage({
     try {
       await indexFile(fileId, fileName);
       setIsIndexed(true);
-      await mutate("/api/user/files/recent");
       toast.success(t("inMessageImage.indexButton.success.toast"));
     } catch (error) {
       console.error("Failed to index image:", error);
