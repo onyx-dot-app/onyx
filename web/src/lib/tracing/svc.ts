@@ -1,20 +1,9 @@
+import { parseErrorDetail } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type { TracingProviderType } from "@/lib/tracing/types";
 
 const TRACING_PROVIDERS_URL = SWR_KEYS.tracingProviders;
 const JSON_HEADERS = { "Content-Type": "application/json" };
-
-async function parseErrorDetail(
-  res: Response,
-  fallback: string
-): Promise<string> {
-  try {
-    const body = await res.json();
-    return body?.detail ?? fallback;
-  } catch {
-    return fallback;
-  }
-}
 
 export interface ConnectTracingProviderArgs {
   providerType: TracingProviderType;

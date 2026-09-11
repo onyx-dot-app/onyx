@@ -1,16 +1,5 @@
+import { parseErrorDetail } from "@/lib/fetcher";
 import { Settings } from "@/lib/settings/types";
-
-async function parseErrorDetail(
-  res: Response,
-  fallback: string
-): Promise<string> {
-  try {
-    const body = await res.json();
-    return body?.detail ?? fallback;
-  } catch {
-    return fallback;
-  }
-}
 
 // The endpoint merges only the fields sent, so a partial patch leaves the
 // rest of the stored settings untouched.

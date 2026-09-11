@@ -23,18 +23,37 @@ export class RedirectError extends FetchError {
   }
 }
 
+/** Read the JSON body of a failed Response, or null when it isn't JSON. */
+async function readErrorResponseBody(
+  res: Response
+): Promise<ErrorResponseBody | null> {
+  try {
+    const body: ErrorResponseBody | null = await res.json();
+    return body;
+  } catch {
+    return null;
+  }
+}
+
 /** Extract the backend error `detail` from a failed Response, falling back
- * to `fallback` when the body isn't JSON or carries no detail. */
+ * to `fallback` when the body isn't JSON or carries no detail. A non-string
+ * `detail` (such as fastapi-users' `{ code, reason }`) is returned as-is. */
 export async function parseErrorDetail(
   res: Response,
   fallback: string
 ): Promise<string> {
-  try {
-    const body = await res.json();
-    return body?.detail ?? fallback;
-  } catch {
-    return fallback;
-  }
+  const body = await readErrorResponseBody(res);
+  return body?.detail ?? fallback;
+}
+
+/** Like `parseErrorDetail`, but falls back when `detail` isn't a string. */
+export async function parseStringErrorDetail(
+  res: Response,
+  fallback: string
+): Promise<string> {
+  const body = await readErrorResponseBody(res);
+  // fastapi-users routes send an object `detail`, so check the runtime type.
+  return typeof body?.detail === "string" ? body.detail : fallback;
 }
 
 const DEFAULT_AUTH_ERROR_MSG =

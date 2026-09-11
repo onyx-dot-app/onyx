@@ -3,6 +3,7 @@ import {
   AgentUpsertRequest,
   PersonaSharePermission,
 } from "@/lib/agents/types";
+import { parseStringErrorDetail } from "@/lib/fetcher";
 
 /**
  * Maps client-facing AgentUpsertParameters to the wire shape expected by the
@@ -38,16 +39,6 @@ function buildAgentUpsertRequest(
     hierarchy_node_ids: params.hierarchy_node_ids ?? [],
     document_ids: params.document_ids ?? [],
   };
-}
-
-/** Extracts `detail` from a non-OK JSON response body, falling back to `fallback`. */
-export async function parseErrorDetail(res: Response, fallback: string) {
-  try {
-    const body = await res.json();
-    return typeof body?.detail === "string" ? body.detail : fallback;
-  } catch {
-    return fallback;
-  }
 }
 
 // ── Agent CRUD ───────────────────────────────────────────────────────────────
@@ -90,7 +81,9 @@ export async function deleteAgent(agentId: number): Promise<void> {
     credentials: "include",
   });
   if (!res.ok) {
-    throw new Error(await parseErrorDetail(res, "Failed to delete agent"));
+    throw new Error(
+      await parseStringErrorDetail(res, "Failed to delete agent")
+    );
   }
 }
 
@@ -197,7 +190,7 @@ export async function updateAgentShares(
         : null;
     }
 
-    return await parseErrorDetail(res, "Failed to update agent shares");
+    return await parseStringErrorDetail(res, "Failed to update agent shares");
   } catch {
     return "Network error. Please check your connection and try again.";
   }
@@ -221,7 +214,7 @@ export async function transferAgentOwnership(
       return null;
     }
 
-    return await parseErrorDetail(res, "Failed to transfer ownership");
+    return await parseStringErrorDetail(res, "Failed to transfer ownership");
   } catch {
     return "Network error. Please check your connection and try again.";
   }
@@ -240,7 +233,7 @@ export async function removeSelfFromAgentShares(
       return null;
     }
 
-    return await parseErrorDetail(res, "Failed to remove access");
+    return await parseStringErrorDetail(res, "Failed to remove access");
   } catch {
     return "Network error. Please check your connection and try again.";
   }
@@ -284,7 +277,7 @@ export async function toggleAgentFeatured(
   });
   if (!res.ok) {
     throw new Error(
-      await parseErrorDetail(res, "Failed to toggle featured status")
+      await parseStringErrorDetail(res, "Failed to toggle featured status")
     );
   }
 }
@@ -304,7 +297,9 @@ export async function toggleAgentListed(
     credentials: "include",
   });
   if (!res.ok) {
-    throw new Error(await parseErrorDetail(res, "Failed to toggle visibility"));
+    throw new Error(
+      await parseStringErrorDetail(res, "Failed to toggle visibility")
+    );
   }
 }
 
@@ -322,7 +317,7 @@ export async function updateAgentDisplayPriorities(
   });
   if (!res.ok) {
     throw new Error(
-      await parseErrorDetail(res, "Failed to update agent order")
+      await parseStringErrorDetail(res, "Failed to update agent order")
     );
   }
 }

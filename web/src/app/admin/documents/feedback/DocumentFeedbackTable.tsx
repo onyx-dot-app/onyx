@@ -133,7 +133,7 @@ export const DocumentFeedbackTable = ({
                         } else {
                           toast.error(
                             t("feedback.updateHiddenFailed.toast", {
-                              detail: await getErrorMsg(response),
+                              detail: (await getErrorMsg(response)) ?? "",
                             })
                           );
                         }

@@ -41,7 +41,7 @@ const DocumentDisplay = ({
     } else {
       toast.error(
         t("explorer.updateFailed.toast", {
-          detail: await getErrorMsg(response),
+          detail: (await getErrorMsg(response)) ?? "",
         })
       );
     }
