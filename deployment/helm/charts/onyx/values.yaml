@@ -1526,6 +1526,11 @@ configMap:
   # model Services; set them here to point at external model servers instead
   # (the chart defaults are then not rendered).
   # See deployment/helm/README.md for the external-Redis / ElastiCache path.
+  # Redis socket deadlines in seconds for the app client (not Celery). Unset, a
+  # peer that stops replying but keeps the TCP session open holds a thread until
+  # the pod restarts. Connect unset inherits the read value.
+  REDIS_SOCKET_TIMEOUT: ""
+  REDIS_SOCKET_CONNECT_TIMEOUT: ""
 
   # Authentication is always enabled (email/password). SSO (Google/OIDC/SAML)
   # and its per-provider options are configured in the admin panel (Admin
