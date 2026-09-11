@@ -294,6 +294,7 @@ def _construct_tools_impl(
                         model=img_generation_llm_config.model_name,
                         tool_id=db_tool_model.id,
                         emitter=emitter,
+                        llm=llm,
                     )
                 ]
 

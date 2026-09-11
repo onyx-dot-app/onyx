@@ -1,4 +1,5 @@
 import datetime
+import uuid
 from uuid import UUID
 
 from sqlalchemy import exists, func, select, update
@@ -102,6 +103,49 @@ def update_last_accessed_at_for_user_files(
         .update({UserFile.last_accessed_at: now}, synchronize_session=False)
     )
     db_session.commit()
+
+
+def get_user_file_by_storage_file_id(
+    file_id: str,
+    user_id: UUID,
+    db_session: Session,
+) -> UserFile | None:
+    """Return the latest non-deleting UserFile for this store file and user."""
+    return (
+        db_session.query(UserFile)
+        .filter(
+            UserFile.file_id == file_id,
+            UserFile.user_id == user_id,
+            UserFile.status != UserFileStatus.DELETING,
+        )
+        .order_by(UserFile.created_at.desc())
+        .first()
+    )
+
+
+def create_user_file_for_existing_store_file(
+    *,
+    user_id: UUID,
+    file_id: str,
+    name: str,
+    content_type: str,
+    db_session: Session,
+) -> UserFile:
+    """Create a UserFile that points at an existing file-store object."""
+    new_file = UserFile(
+        id=uuid.uuid4(),
+        user_id=user_id,
+        file_id=file_id,
+        name=name,
+        token_count=None,
+        content_type=content_type,
+        file_type=content_type,
+        status=UserFileStatus.PROCESSING,
+        last_accessed_at=datetime.datetime.now(datetime.timezone.utc),
+    )
+    db_session.add(new_file)
+    db_session.commit()
+    return new_file
 
 
 def get_user_file_by_id(

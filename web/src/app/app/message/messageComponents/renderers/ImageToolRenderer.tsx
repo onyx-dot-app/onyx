@@ -106,7 +106,14 @@ export const ImageToolRenderer: MessageRenderer<
                       {image.file_id && (
                         <InMessageImage
                           fileId={image.file_id}
+                          fileName={
+                            image.file_name ||
+                            (image.revised_prompt
+                              ? `${image.revised_prompt.slice(0, 60)}.png`
+                              : undefined)
+                          }
                           shape={image.shape}
+                          canIndex
                         />
                       )}
                     </div>

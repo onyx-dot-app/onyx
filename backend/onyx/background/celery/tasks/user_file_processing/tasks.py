@@ -38,6 +38,7 @@ from onyx.configs.constants import (
     USER_FILE_PROCESSING_MAX_QUEUE_DEPTH,
     USER_FILE_PROJECT_SYNC_MAX_QUEUE_DEPTH,
     DocumentSource,
+    FileOrigin,
     OnyxCeleryPriority,
     OnyxCeleryQueues,
     OnyxCeleryTask,
@@ -953,7 +954,16 @@ def delete_user_file_impl(
         file_store = get_default_file_store()
         blob_deleted = True
         try:
-            file_store.delete_file(file_id, error_on_missing=False)
+            # Keep the store object when this user-file only points at a blob
+            # that still has another use (chat preview, connector, upload).
+            skip_source_blob = False
+            try:
+                file_record = file_store.read_file_record(file_id)
+                skip_source_blob = file_record.file_origin != FileOrigin.USER_FILE
+            except Exception:
+                skip_source_blob = False
+            if not skip_source_blob:
+                file_store.delete_file(file_id, error_on_missing=False)
             file_store.delete_file(
                 user_file_id_to_plaintext_file_name(_as_uuid(user_file_id)),
                 error_on_missing=False,

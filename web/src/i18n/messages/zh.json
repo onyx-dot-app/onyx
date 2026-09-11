@@ -9218,6 +9218,16 @@
         "downloadButton": {
           "tooltip": "下载"
         },
+        "indexButton": {
+          "doneTooltip": "已保存",
+          "error": {
+            "toast": "无法保存此图片"
+          },
+          "success": {
+            "toast": "图片已保存。您可以在之后的对话中使用它。"
+          },
+          "tooltip": "保存以便稍后使用"
+        },
         "image": {
           "alt": "聊天附件"
         },

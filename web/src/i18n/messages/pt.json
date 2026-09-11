@@ -9218,6 +9218,16 @@
         "downloadButton": {
           "tooltip": "Baixar"
         },
+        "indexButton": {
+          "doneTooltip": "Salva",
+          "error": {
+            "toast": "Não foi possível salvar esta imagem"
+          },
+          "success": {
+            "toast": "Imagem salva. Você pode usá-la em chats posteriores."
+          },
+          "tooltip": "Salvar para depois"
+        },
         "image": {
           "alt": "Anexo do chat"
         },

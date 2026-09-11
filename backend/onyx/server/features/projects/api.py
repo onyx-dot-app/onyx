@@ -14,11 +14,13 @@ from fastapi import (
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from onyx.access.access import user_can_access_chat_file
 from onyx.auth.permissions import require_permission
 from onyx.chat.incognito import incognito_allowed_for_user
 from onyx.chat.incognito_context import incognito_session_torn_down
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import (
+    CELERY_USER_FILE_PROCESSING_TASK_EXPIRES,
     PUBLIC_API_TAGS,
     USER_FILE_PROJECT_SYNC_MAX_QUEUE_DEPTH,
     OnyxCeleryPriority,
@@ -27,6 +29,7 @@ from onyx.configs.constants import (
 )
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission, UserFileStatus
+from onyx.db.file_record import FileRecordNotFoundError
 from onyx.db.incognito import mark_incognito_user_files_deleting
 from onyx.db.models import ChatSession, Project__UserFile, User, UserFile, UserProject
 from onyx.db.persona import get_personas_by_ids
@@ -35,11 +38,17 @@ from onyx.db.projects import (
     get_project_token_count,
     upload_files_to_user_files_with_indexing,
 )
+from onyx.db.user_file import (
+    create_user_file_for_existing_store_file,
+    get_user_file_by_storage_file_id,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.projects.models import (
     CategorizedFilesSnapshot,
     ChatSessionRequest,
+    IndexFileRequest,
     TokenCountResponse,
     UserFileSnapshot,
     UserProjectSnapshot,
@@ -232,6 +241,53 @@ def upload_user_files(
         # Rows are committed before the indexing hand-off, which can still
         # fail, so this runs on every exit.
         _claim_upload_if_session_ended(db_session, incognito_session_id, user.id)
+
+
+@router.post("/file/index", tags=PUBLIC_API_TAGS)
+def index_file(
+    request: IndexFileRequest,
+    bg_tasks: BackgroundTasks,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> UserFileSnapshot:
+    """Index an already-stored file so later chats can reference it."""
+    if not user_can_access_chat_file(request.file_id, user, db_session):
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")
+
+    user_file = get_user_file_by_storage_file_id(request.file_id, user.id, db_session)
+    if user_file is None:
+        file_store = get_default_file_store()
+        try:
+            file_record = file_store.read_file_record(request.file_id)
+        except FileRecordNotFoundError:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")
+        mime_type = (file_record.file_type or "application/octet-stream").split(";", 1)[
+            0
+        ]
+        user_file = create_user_file_for_existing_store_file(
+            user_id=user.id,
+            file_id=request.file_id,
+            name=request.name or file_record.display_name or "file",
+            content_type=mime_type,
+            db_session=db_session,
+        )
+
+    tenant_id = get_current_tenant_id()
+    if DISABLE_VECTOR_DB:
+        from onyx.background.task_utils import drain_processing_loop
+
+        bg_tasks.add_task(drain_processing_loop, tenant_id)
+    else:
+        from onyx.background.celery.versioned_apps.client import app as client_app
+
+        client_app.send_task(
+            OnyxCeleryTask.PROCESS_SINGLE_USER_FILE,
+            kwargs={"user_file_id": user_file.id, "tenant_id": tenant_id},
+            queue=OnyxCeleryQueues.USER_FILE_PROCESSING,
+            priority=OnyxCeleryPriority.HIGH,
+            expires=CELERY_USER_FILE_PROCESSING_TASK_EXPIRES,
+        )
+    return UserFileSnapshot.from_model(user_file)
 
 
 @router.get("/{project_id}", tags=PUBLIC_API_TAGS)

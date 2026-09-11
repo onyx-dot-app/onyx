@@ -9218,6 +9218,16 @@
         "downloadButton": {
           "tooltip": "Télécharger"
         },
+        "indexButton": {
+          "doneTooltip": "Enregistrée",
+          "error": {
+            "toast": "Impossible d'enregistrer cette image"
+          },
+          "success": {
+            "toast": "Image enregistrée. Vous pouvez l'utiliser dans des discussions ultérieures."
+          },
+          "tooltip": "Enregistrer pour plus tard"
+        },
         "image": {
           "alt": "Pièce jointe de la discussion"
         },

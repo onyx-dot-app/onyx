@@ -416,6 +416,47 @@ def test_non_owner_can_download_image_gen_file_in_public_session(
     assert response.content == _IMAGE_GEN_PNG_BYTES
 
 
+def test_owner_can_index_image_gen_file(
+    image_gen_setup: ImageGenSetup,
+) -> None:
+    """Indexing a generated image creates a user-file row on the existing blob."""
+    response = client.post(
+        f"{API_SERVER_URL}/user/projects/file/index",
+        json={
+            "file_id": image_gen_setup.file_id,
+            "name": "a-cat-sitting-on-a-windowsill.png",
+        },
+        headers=image_gen_setup.owner.headers,
+    )
+    assert response.status_code == 200, (
+        f"Owner should index image-gen file, got {response.status_code}: "
+        f"{response.text}"
+    )
+    payload = response.json()
+    assert payload["file_id"] == image_gen_setup.file_id
+    assert payload["name"] == "a-cat-sitting-on-a-windowsill.png"
+    assert payload["user_id"] == image_gen_setup.owner.id
+
+    second = client.post(
+        f"{API_SERVER_URL}/user/projects/file/index",
+        json={"file_id": image_gen_setup.file_id},
+        headers=image_gen_setup.owner.headers,
+    )
+    assert second.status_code == 200
+    assert second.json()["id"] == payload["id"]
+
+
+def test_index_unknown_file_returns_not_found(
+    image_gen_setup: ImageGenSetup,
+) -> None:
+    response = client.post(
+        f"{API_SERVER_URL}/user/projects/file/index",
+        json={"file_id": "missing-generated-image"},
+        headers=image_gen_setup.owner.headers,
+    )
+    assert response.status_code == 404
+
+
 _CONNECTOR_FILE_BYTES = b"connector-ingested document contents"
 
 

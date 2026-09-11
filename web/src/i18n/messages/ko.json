@@ -9218,6 +9218,16 @@
         "downloadButton": {
           "tooltip": "다운로드"
         },
+        "indexButton": {
+          "doneTooltip": "저장됨",
+          "error": {
+            "toast": "이 이미지를 저장할 수 없습니다"
+          },
+          "success": {
+            "toast": "이미지가 저장되었습니다. 이후 채팅에서 사용할 수 있습니다."
+          },
+          "tooltip": "나중에 쓰도록 저장"
+        },
         "image": {
           "alt": "채팅 첨부 파일"
         },
