@@ -4333,6 +4333,9 @@ model-server = [
     { name = "torch" },
     { name = "transformers" },
 ]
+ods = [
+    { name = "onyx-devtools", extra = ["audit"] },
+]
 zizmor = [
     { name = "zizmor" },
 ]
@@ -4506,6 +4509,7 @@ model-server = [
     { name = "torch", specifier = "==2.9.1" },
     { name = "transformers", specifier = "==5.14.1" },
 ]
+ods = [{ name = "onyx-devtools", extras = ["audit"], specifier = "==0.13.6" }]
 zizmor = [{ name = "zizmor", specifier = "==1.25.2" }]
 
 [[package]]
