@@ -11,11 +11,14 @@
    ============================================================================ */
 
 .opal-attachment-item-button {
-  @apply flex w-full min-w-0 flex-row items-center gap-2 p-1;
+  @apply flex w-full min-w-0 flex-row items-center justify-between gap-2 p-1;
 }
 
+/* Natural width (shrinkable for truncation, but no grow): the center slot is
+   the one that expands, and justify-between keeps the action slot trailing
+   when there is no center. */
 .opal-attachment-item-button-title {
-  @apply flex min-w-0 flex-1 flex-row items-center gap-2;
+  @apply flex min-w-0 flex-row items-center gap-2;
 }
 
 /* The signature square: its rounding (radius-08) complements the row's own

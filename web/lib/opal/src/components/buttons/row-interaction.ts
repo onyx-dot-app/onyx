@@ -8,6 +8,12 @@ import type React from "react";
 // helpers restore the native-control behavior that choice gives up.
 // ---------------------------------------------------------------------------
 
+// A caller's preventDefault() on Space arrives on keydown, but the click
+// fires on keyup — a different event, so `defaultPrevented` can't carry the
+// cancellation across. The composed keydown wrapper records it here instead,
+// and the keyup handler honors and clears it.
+const SPACE_CANCELED = "rowSpaceCanceled";
+
 // Mirrors native <button> activation (Enter fires on keydown, Space on keyup).
 // Guarded so keystrokes on nested interactive children (e.g. `rightChildren`
 // action buttons) don't also activate the row.
@@ -18,6 +24,7 @@ function handleRowKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     e.currentTarget.click();
   } else if (e.key === " ") {
     e.preventDefault();
+    delete e.currentTarget.dataset[SPACE_CANCELED];
   }
 }
 
@@ -25,6 +32,10 @@ function handleRowKeyUp(e: React.KeyboardEvent<HTMLDivElement>) {
   if (e.target !== e.currentTarget) return;
   if (e.key === " ") {
     e.preventDefault();
+    if (e.currentTarget.dataset[SPACE_CANCELED]) {
+      delete e.currentTarget.dataset[SPACE_CANCELED];
+      return;
+    }
     e.currentTarget.click();
   }
 }
@@ -40,21 +51,39 @@ function composeKeyHandler(
   if (!caller) return row;
   return (e) => {
     caller(e);
-    if (!e.defaultPrevented) row(e);
+    if (e.defaultPrevented) {
+      if (e.key === " " && e.type === "keydown") {
+        e.currentTarget.dataset[SPACE_CANCELED] = "true";
+      }
+      return;
+    }
+    row(e);
   };
 }
 
+// Everything a click may legitimately land on without meaning "activate the
+// row": nested action buttons and links, and the form controls an inline
+// editor renders.
+const NESTED_INTERACTIVE_SELECTOR =
+  "button, a, input, textarea, select, label, " +
+  '[role="button"], [role="checkbox"], [contenteditable="true"]';
+
 // Ignore clicks originating from nested interactive children (e.g.
 // `rightChildren` action buttons) so they don't also activate the row.
+// preventDefault matters for the anchor mode: without it the row's native
+// link still navigates after the nested action runs.
 function guardNestedInteractiveClick(
   onClick: React.MouseEventHandler<HTMLElement> | undefined
 ): React.MouseEventHandler<HTMLElement> | undefined {
   if (!onClick) return undefined;
   return (e) => {
     const nested = (e.target as HTMLElement).closest(
-      'button, a, [role="button"]'
+      NESTED_INTERACTIVE_SELECTOR
     );
-    if (nested && nested !== e.currentTarget) return;
+    if (nested && nested !== e.currentTarget) {
+      e.preventDefault();
+      return;
+    }
     onClick(e);
   };
 }

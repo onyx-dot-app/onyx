@@ -248,7 +248,13 @@ function AttachmentItemButton({
           <div className="opal-attachment-item-button-title">
             <div className="opal-attachment-item-button-tile">
               {state === "selected" ? (
-                <Checkbox checked readOnly />
+                /* Purely a visual indicator. `inert` + aria-hidden take the
+                   checkbox out of the tab order, the accessibility tree and
+                   the event flow — the row alone owns activation, and its
+                   own selected styling carries the state for AT. */
+                <span inert aria-hidden className="contents">
+                  <Checkbox checked readOnly />
+                </span>
               ) : imageSrc ? (
                 <img
                   src={imageSrc}
@@ -272,7 +278,7 @@ function AttachmentItemButton({
               width="full"
             />
           </div>
-          {centerChildren && (
+          {centerChildren != null && (
             <div className="opal-attachment-item-button-center">
               {centerChildren}
             </div>
