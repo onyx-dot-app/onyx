@@ -1284,14 +1284,14 @@ class TestStandardUpgradeVerification:
     def _run_upgrade(
         mock_get_session: MagicMock, is_verified: bool, safe: bool
     ) -> MagicMock:
-        user_manager = UserManager(MagicMock())
+        user_manager: UserManager = UserManager(MagicMock())
         user_manager.password_helper = MagicMock()
-        sync_user = MagicMock(
+        sync_user: MagicMock = MagicMock(
             is_active=True,
             is_verified=False,
             account_type=AccountType.EXT_PERM_USER,
         )
-        sync_db = MagicMock()
+        sync_db: MagicMock = MagicMock()
         sync_db.query.return_value.filter.return_value.first.return_value = sync_user
         mock_get_session.return_value.__enter__.return_value = sync_db
 
@@ -1316,7 +1316,9 @@ class TestStandardUpgradeVerification:
         mock_will_add_seat: MagicMock,  # noqa: ARG002
         mock_assign_groups: MagicMock,  # noqa: ARG002
     ) -> None:
-        sync_user = self._run_upgrade(mock_get_session, is_verified=True, safe=True)
+        sync_user: MagicMock = self._run_upgrade(
+            mock_get_session, is_verified=True, safe=True
+        )
 
         assert sync_user.is_verified is False
         assert sync_user.account_type == AccountType.STANDARD
@@ -1330,7 +1332,9 @@ class TestStandardUpgradeVerification:
         mock_will_add_seat: MagicMock,  # noqa: ARG002
         mock_assign_groups: MagicMock,  # noqa: ARG002
     ) -> None:
-        sync_user = self._run_upgrade(mock_get_session, is_verified=True, safe=False)
+        sync_user: MagicMock = self._run_upgrade(
+            mock_get_session, is_verified=True, safe=False
+        )
 
         assert sync_user.is_verified is True
         assert sync_user.account_type == AccountType.STANDARD

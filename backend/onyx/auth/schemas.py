@@ -57,7 +57,7 @@ class UserUpdate(schemas.BaseUserUpdate):
 
     @override
     def create_update_dict(self) -> dict[str, Any]:
-        d = super().create_update_dict()
+        d: dict[str, Any] = super().create_update_dict()
         # Email changes must go through the verification flow, password changes
         # through /password/change-password, which requires the old password.
         d.pop("email", None)
