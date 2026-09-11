@@ -102,7 +102,7 @@ function FileAttachment({
         centerChildren={
           <Section flexDirection="row" justifyContent="between">
             {rightText ? (
-              <Section alignItems="end">
+              <Section alignItems="end" className="min-w-0">
                 <OpalText font="secondary-body" color="text-03" maxLines={1}>
                   {rightText}
                 </OpalText>
