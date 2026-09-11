@@ -15,6 +15,7 @@ import {
   ShadowDiv,
 } from "@opal/components";
 import { SvgCheck, SvgX } from "@opal/icons";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -95,6 +96,7 @@ function InputMultiSelect({
   container,
   ...inputProps
 }: InputMultiSelectProps) {
+  const strings = useOpalStrings();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
 
@@ -147,7 +149,7 @@ function InputMultiSelect({
               sizePreset="main-ui"
               variant="section"
               color="muted"
-              title="Loading …"
+              title={strings.loading}
             />
           ) : filteredItems.length === 0 ? (
             <LineItemButton
@@ -155,7 +157,7 @@ function InputMultiSelect({
               sizePreset="main-ui"
               variant="section"
               color="muted"
-              title="No matching options."
+              title={strings.multiSelectNoResults}
             />
           ) : (
             <ShadowDiv
@@ -189,13 +191,11 @@ function InputMultiSelect({
         className="opal-input-multi-select-selected"
       >
         {selectedItems.length === 0 ? (
-          // NOTE: plain English on purpose — Opal's i18n pattern for these
-          // built-in strings lands in a follow-up.
           <EmptyMessageCard
             sizePreset="main-ui"
             padding={2}
-            title="Nothing selected yet."
-            description="Search above to add items."
+            title={strings.multiSelectEmptyTitle}
+            description={strings.multiSelectEmptyDescription}
           />
         ) : (
           selectedItems.map((item) => (

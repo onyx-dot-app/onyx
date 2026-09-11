@@ -67,6 +67,11 @@ Never import from `web/src/components/`. It is legacy and being deleted. The one
   `settings.appearance.colorMode.title`. Rewording the English never changes the key.
 - Use ICU for arguments and plurals. Never concatenate translated fragments.
 - Dates and numbers: `useFormatter` and `useLocale`, not hard-coded `"en-US"`.
+- **Opal built-in strings**: Opal has no next-intl. A label an Opal component renders itself rides
+  the `OpalStrings` contract instead: add a typed key with an English default in
+  `web/lib/opal/src/strings.tsx`, read it in the component via `useOpalStrings()`, map it from the
+  `opal.*` catalog namespace in `web/src/i18n/OpalStringsBridge.tsx`, and add the key to every
+  locale file. Never hard-code a user-facing string inside an Opal component.
 - New styles use logical properties (`ms-`, `pe-`, `start-`) instead of `ml-`, `pr-`, `left-`.
 
 ## Tests

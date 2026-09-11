@@ -12772,6 +12772,11 @@
       "validationSummary": "{count, plural, one {유효성 검사 오류 #개 발견} other {유효성 검사 오류 #개 발견}}",
       "value": "값"
     },
+    "multiSelect": {
+      "emptyDescription": "위에서 검색하여 항목을 추가하세요",
+      "emptyTitle": "아직 선택된 항목이 없습니다",
+      "noResults": "일치하는 옵션이 없습니다"
+    },
     "pagination": {
       "goToPage": "페이지로 이동",
       "nextPage": "다음 페이지",
