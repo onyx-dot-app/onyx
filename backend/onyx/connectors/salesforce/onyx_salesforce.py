@@ -266,24 +266,13 @@ class OnyxSalesforce(Salesforce):
         relationships_to_fields: dict[str, set[str]],
     ) -> dict[str, dict[str, Any]]:
         child_records: dict[str, dict[str, Any]] = {}
-        failed_relationships: set[str] = set()
 
         # Attachments hold binary content, skip them
         relationships = [r for r in child_relationships if r != "Attachments"]
-        for child_query in get_child_objects_by_id_queries(
+        for query in get_child_objects_by_id_queries(
             object_id, sf_type, relationships, relationships_to_fields
         ):
-            try:
-                result = self.safe_query(child_query.soql)
-            except Exception:
-                logger.exception(
-                    "Child query failed: parent=%s relationships=%s",
-                    object_id,
-                    child_query.relationships,
-                )
-                failed_relationships.update(child_query.relationships)
-                continue
-
+            result = self.safe_query(query)
             if not result["records"]:
                 continue
 
@@ -302,12 +291,7 @@ class OnyxSalesforce(Salesforce):
                         f"{child_record_key}:{child_record_id}", {}
                     ).update(child_record)
 
-        # a relationship with a failed chunk would otherwise index as partial records
-        return {
-            key: record
-            for key, record in child_records.items()
-            if key.split(":", 1)[0] not in failed_relationships
-        }
+        return child_records
 
     @retry_builder(
         tries=3,
