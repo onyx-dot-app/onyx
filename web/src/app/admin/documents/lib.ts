@@ -1,4 +1,9 @@
-export const updateBoost = async (documentId: string, boost: number) => {
+import type { ErrorResponseBody } from "@/lib/fetcher";
+
+export const updateBoost = async (
+  documentId: string,
+  boost: number
+): Promise<string | null> => {
   const response = await fetch("/api/manage/admin/doc-boosts", {
     method: "POST",
     headers: {
@@ -12,7 +17,7 @@ export const updateBoost = async (documentId: string, boost: number) => {
   if (response.ok) {
     return null;
   }
-  const responseJson = await response.json();
+  const responseJson: ErrorResponseBody = await response.json();
   return responseJson.message || responseJson.detail || "Unknown error";
 };
 

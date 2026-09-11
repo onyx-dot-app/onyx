@@ -107,7 +107,7 @@ export default function ServiceAccountsPage() {
         );
         return;
       }
-      const newKey = (await response.json()) as APIKey;
+      const newKey: APIKey = await response.json();
       setFullApiKey(newKey.api_key);
       mutate(API_KEY_SWR_KEY);
     } catch (e) {

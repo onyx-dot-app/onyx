@@ -8,12 +8,12 @@
 # `ods type-coverage typescript --update`.
 #
 # Generated file: do not edit by hand.
-total: 98.5
+total: 98.6
 packages:
   .: 100
   src: 99.4
   src/app: 99.5
-  src/app/admin: 96.3
+  src/app/admin: 96.5
   src/app/anonymous: 100
   src/app/api: 98.4
   src/app/app: 98.2
@@ -128,5 +128,5 @@ packages:
   src/sections/skills: 99.8
   src/sections/usage: 99.6
   src/views: 99
-  src/views/admin: 99.1
+  src/views/admin: 99.3
   types: 100
