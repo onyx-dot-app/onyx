@@ -15,9 +15,15 @@ import pytest
 from fastapi import Request, Response
 
 from onyx.db.models import User
-from onyx.server.query_and_chat.chat_backend import fetch_chat_file
+from onyx.server.query_and_chat.chat_backend import (
+    _RESPONSE_POLICY_VERSION,
+    fetch_chat_file,
+)
 
 FILE_ID = "chat-file-1"
+CURRENT_ETAG = f'"{FILE_ID}-{_RESPONSE_POLICY_VERSION}"'
+# What the endpoint returned before it gained the security headers.
+PRE_POLICY_ETAG = f'"{FILE_ID}"'
 
 
 def _setup(monkeypatch: pytest.MonkeyPatch, file_type: str) -> MagicMock:
@@ -128,9 +134,36 @@ def test_security_headers_on_the_not_modified_response(
 ) -> None:
     file_store = _setup(monkeypatch, "text/html")
 
-    response = _call(if_none_match=f'"{FILE_ID}"')
+    response = _call(if_none_match=CURRENT_ETAG)
 
     assert response.status_code == 304
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["content-security-policy"] == "sandbox"
     file_store.read_file.assert_not_called()
+
+
+def test_pre_policy_etag_is_not_revalidated(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A client holding a response cached before the fix must be sent a fresh one.
+    _setup(monkeypatch, "text/html")
+
+    response = _call(if_none_match=PRE_POLICY_ETAG)
+
+    assert response.status_code == 200
+    assert response.headers["etag"] == CURRENT_ETAG
+    assert response.headers["content-disposition"] == "attachment"
+
+
+def test_parsed_spreadsheet_etag_is_versioned(monkeypatch: pytest.MonkeyPatch) -> None:
+    _setup(
+        monkeypatch,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    monkeypatch.setattr(
+        "onyx.server.query_and_chat.chat_backend.parse_spreadsheet_for_preview",
+        lambda *_: SimpleNamespace(model_dump=lambda: {"rows": []}),
+    )
+
+    response = _call(if_none_match=f'"{FILE_ID}-parsed"', parsed=True)
+
+    assert response.status_code == 200
+    assert response.headers["etag"] == f'"{FILE_ID}-parsed-{_RESPONSE_POLICY_VERSION}"'

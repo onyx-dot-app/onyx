@@ -169,6 +169,11 @@ _INLINE_SAFE_MIME_TYPES: frozenset[str] = frozenset(
     }
 )
 
+# Mixed into the `fetch_chat_file` ETag. Responses are cached `immutable` for a
+# year, so bump this whenever the response security policy changes: it is the only
+# way to make clients drop entries cached under the old policy.
+_RESPONSE_POLICY_VERSION: str = "v2"
+
 
 def _get_available_tokens_for_persona(
     persona: Persona,
@@ -1184,7 +1189,8 @@ def fetch_chat_file(
 
     # Files served here are immutable (content-addressed by file_id), so allow long-lived caching.
     # Use `private` because this is behind auth / tenant scoping.
-    etag = f'"{file_id}-parsed"' if parse_spreadsheet else f'"{file_id}"'
+    etag_variant: str = "-parsed" if parse_spreadsheet else ""
+    etag: str = f'"{file_id}{etag_variant}-{_RESPONSE_POLICY_VERSION}"'
     cache_headers = {
         "Cache-Control": "private, max-age=31536000, immutable",
         "ETag": etag,
