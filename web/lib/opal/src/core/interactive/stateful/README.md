@@ -8,7 +8,8 @@ Stateful interactive surface primitive for elements that maintain a value state 
 
 | Prop          | Type                                                                                                                            | Default          | Description                              |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------- | ---------------- | ---------------------------------------- |
-| `variant`     | `"select-light" \| "select-heavy" \| "select-card" \| "select-tinted" \| "select-filter" \| "sidebar-heavy" \| "sidebar-light"` | `"select-heavy"` | Color variant                            |
+| `variant`     | `"select-light" \| "select-heavy" \| "select-card" \| "select-input" \| "select-filter" \| "sidebar-heavy" \| "sidebar-light"` | `"select-heavy"` | Color variant                            |
+| `prominence`  | `"primary" \| "secondary" \| "tertiary"` | `"tertiary"` | Rest intensity — select-heavy only: `primary` rests on `background-tint-00`, `secondary` on `background-neutral-01`, `tertiary` transparent. Affects only the at-rest empty/filled backgrounds; other variants ignore it. |
 | `state`       | `"empty" \| "filled" \| "selected"`                                                                                             | `"empty"`        | Current value state                      |
 | `interaction` | `"rest" \| "hover" \| "active"`                                                                                                 | `"rest"`         | JS-controlled interaction override       |
 | `group`       | `string`                                                                                                                        | —                | Tailwind group class for `group-hover:*` |
@@ -21,8 +22,8 @@ Stateful interactive surface primitive for elements that maintain a value state 
 - **`select-light`** — Transparent selected background. For inline toggles.
 - **`select-heavy`** — Tinted selected background (`action-selection-01`). For list rows, model pickers, buttons.
 - **`select-card`** — Like `select-heavy`, but the filled state gets a visible background (`background-tint-00`) with neutral foreground. Designed for larger surfaces (cards) where background carries more of the visual distinction than foreground color alone.
-- **`select-tinted`** — Like `select-heavy` but with a tinted rest background (`background-tint-01`).
-- **`select-filter`** — Like `select-tinted` for empty/filled; selected state uses inverted backgrounds and inverted text.
+- **`select-input`** — Rests at `background-neutral-00` (matches the input bar); hover/active shows `neutral-03`.
+- **`select-filter`** — Empty/filled rest on tint-01; selected state uses inverted backgrounds and inverted text.
 - **`sidebar-heavy`** — Sidebar navigation: muted when unselected, bold when selected.
 - **`sidebar-light`** — Sidebar navigation: uniformly muted across all states.
 

@@ -17,6 +17,7 @@ The barrel file at `index.ts` re-exports each component and its prop types. Each
 | Component                                      | Description                                                  | Docs                                           |
 | ---------------------------------------------- | ------------------------------------------------------------ | ---------------------------------------------- |
 | [Button](./buttons/button/)                    | Label and/or icon-only stateless button                      | [README](./buttons/button/README.md)           |
+| [AttachmentItemButton](./buttons/attachment-item-button/) | File-like resource row: icon/image tile, content, center and action slots | [README](./buttons/attachment-item-button/README.md) |
 | [SelectButton](./buttons/select-button/)       | Stateful toggle button with optional foldable content        | [README](./buttons/select-button/README.md)    |
 | [OpenButton](./buttons/open-button/)           | Trigger button with rotating chevron for popovers            | [README](./buttons/open-button/README.md)      |
 | [Tag](./tag/)                                  | Small colored label for status/category metadata             | [README](./tag/README.md)                      |

@@ -30,6 +30,12 @@ export {
   type FilterButtonProps,
 } from "@opal/components/buttons/filter-button/components";
 
+/* AttachmentItemButton */
+export {
+  AttachmentItemButton,
+  type AttachmentItemButtonProps,
+} from "@opal/components/buttons/attachment-item-button/components";
+
 /* LineItemButton */
 export {
   LineItemButton,
