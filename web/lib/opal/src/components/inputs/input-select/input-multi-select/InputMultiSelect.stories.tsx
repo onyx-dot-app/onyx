@@ -12,7 +12,7 @@ const meta: Meta<typeof InputMultiSelect> = {
 export default meta;
 type Story = StoryObj<typeof InputMultiSelect>;
 
-function ControlledInputTags(
+function ControlledInputMultiSelect(
   props: Partial<React.ComponentProps<typeof InputMultiSelect>>
 ) {
   const [tags, setTags] = useState<TagItem[]>([
@@ -40,15 +40,15 @@ function ControlledInputTags(
 }
 
 export const Default: Story = {
-  render: () => <ControlledInputTags />,
+  render: () => <ControlledInputMultiSelect />,
 };
 
 export const WithIcon: Story = {
-  render: () => <ControlledInputTags icon={SvgTag} />,
+  render: () => <ControlledInputMultiSelect icon={SvgTag} />,
 };
 
 export const WithClear: Story = {
-  render: () => <ControlledInputTags onClear={() => {}} />,
+  render: () => <ControlledInputMultiSelect onClear={() => {}} />,
 };
 
 export const WithError: Story = {
@@ -73,9 +73,9 @@ export const WithError: Story = {
 };
 
 export const Subtle: Story = {
-  render: () => <ControlledInputTags variant="internal" />,
+  render: () => <ControlledInputMultiSelect variant="internal" />,
 };
 
 export const Disabled: Story = {
-  render: () => <ControlledInputTags disabled />,
+  render: () => <ControlledInputMultiSelect disabled />,
 };

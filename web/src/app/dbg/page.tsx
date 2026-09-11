@@ -37,7 +37,7 @@ function Block({
   );
 }
 
-function InputTagsDemo() {
+function InputMultiSelectDemo() {
   const [tags, setTags] = useState<TagItem[]>([
     { id: "1", label: "engineering" },
     { id: "2", label: "design" },
@@ -108,7 +108,7 @@ export default function DbgPage() {
   return (
     <div className="mx-auto flex w-[32rem] flex-col gap-8 p-8 bg-background-tint-00 min-h-screen">
       <Block label="InputMultiSelect — free-text chips inline in the input (multi, open set)">
-        <InputTagsDemo />
+        <InputMultiSelectDemo />
       </Block>
 
       <Block label="InputSingleSelect — Radix dropdown, pick exactly one (single, closed set)">
