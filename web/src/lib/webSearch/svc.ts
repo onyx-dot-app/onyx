@@ -1,3 +1,4 @@
+import { parseErrorDetail, parseStringErrorDetail } from "@/lib/fetcher";
 import { CONTENT_PROVIDER_DETAILS } from "@/lib/webSearch/utils";
 import type {
   WebProviderCategory,
@@ -5,20 +6,6 @@ import type {
   ProviderTestPayload,
   ProviderUpsertPayload,
 } from "@/lib/webSearch/types";
-
-// ── Internal helpers ──────────────────────────────────────────────────────────
-
-async function parseErrorDetail(
-  res: Response,
-  fallback: string
-): Promise<string> {
-  try {
-    const body = await res.json();
-    return body?.detail ?? fallback;
-  } catch {
-    return fallback;
-  }
-}
 
 const WEB_SEARCH_PROVIDER_ENDPOINTS = {
   search: {
@@ -240,11 +227,11 @@ export async function connectProviderFlow({
       });
 
       if (!testResponse.ok) {
-        const errorBody = await testResponse.json().catch(() => ({}));
         throw new Error(
-          typeof (errorBody as { detail?: unknown })?.detail === "string"
-            ? (errorBody as { detail: string }).detail
-            : msg.validationFailedFallback
+          await parseStringErrorDetail(
+            testResponse,
+            msg.validationFailedFallback
+          )
         );
       }
 
@@ -270,11 +257,8 @@ export async function connectProviderFlow({
     });
 
     if (!upsertResponse.ok) {
-      const errorBody = await upsertResponse.json().catch(() => ({}));
       throw new Error(
-        typeof (errorBody as { detail?: unknown })?.detail === "string"
-          ? (errorBody as { detail: string }).detail
-          : msg.activateFailedFallback
+        await parseStringErrorDetail(upsertResponse, msg.activateFailedFallback)
       );
     }
 

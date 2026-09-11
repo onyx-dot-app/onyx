@@ -59,8 +59,8 @@ packages:
   src/layouts: 100
   src/layouts/chromes: 99.8
   src/layouts/craft: 96.1
-  src/lib: 98.9
-  src/lib/agents: 99.2
+  src/lib: 99
+  src/lib/agents: 99.4
   src/lib/analytics: 99.4
   src/lib/app: 100
   src/lib/auth: 98
@@ -86,16 +86,16 @@ packages:
   src/lib/projects: 99.7
   src/lib/search: 99.1
   src/lib/searchFilters: 95.3
-  src/lib/settings: 96.6
+  src/lib/settings: 97.3
   src/lib/sidebar: 100
   src/lib/skills: 98.4
   src/lib/sso: 99.2
   src/lib/tools: 97.9
-  src/lib/tracing: 96.9
+  src/lib/tracing: 98.3
   src/lib/usage: 97.9
   src/lib/users: 99
   src/lib/voice: 98.3
-  src/lib/webSearch: 97.3
+  src/lib/webSearch: 98.8
   src/providers: 99.5
   src/refresh-components: 99.7
   src/refresh-components/avatars: 100

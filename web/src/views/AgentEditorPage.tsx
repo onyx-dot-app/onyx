@@ -92,10 +92,10 @@ import { useAppPosition } from "@/lib/position/hooks";
 import { isDateInFuture } from "@/lib/dateUtils";
 import {
   deleteAgent,
-  parseErrorDetail,
   toggleAgentListed,
   updateAgentShares,
 } from "@/lib/agents/svc";
+import { parseStringErrorDetail } from "@/lib/fetcher";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { ConfirmationModalLayout } from "@opal/layouts";
@@ -1020,7 +1020,7 @@ export default function AgentEditorPage({
       // Handle response
       if (!personaResponse || !personaResponse.ok) {
         const detail = personaResponse
-          ? await parseErrorDetail(
+          ? await parseStringErrorDetail(
               personaResponse,
               t("editor.toasts.unknownDetail")
             )
