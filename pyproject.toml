@@ -142,9 +142,6 @@ dev = [
     "manygo==0.2.0",
     "matplotlib==3.10.8",
     "ty==0.0.63",
-    # Keep in sync with the pinned `onyx-devtools==` in the `ods` hooks in
-    # .pre-commit-config.yaml, which install ods into an isolated overlay.
-    "onyx-devtools[audit]==0.13.6",
     "openapi-generator-cli==7.17.0",
     "pre-commit==4.6.2",
     "pytest-alembic==0.12.1",
@@ -173,8 +170,15 @@ dev = [
     "types-pytz==2023.3.1.1",
     "types-regex==2023.3.23.1",
     "types-requests==2.32.0.20250328",
+    { include-group = "ods" },
     { include-group = "zizmor" },
 ]
+
+# Isolated group so CI can `uv sync --only-group ods` and run ods from
+# hash-verified uv.lock artifacts instead of an unlocked `uv run --with`.
+# Keep in sync with the pinned `onyx-devtools==` in the `ods` hooks in
+# .pre-commit-config.yaml, which install ods into an isolated overlay.
+ods = ["onyx-devtools[audit]==0.13.6"]
 
 # Isolated group so CI can `uv sync --only-group zizmor` without pulling
 # the rest of the dev toolchain.
