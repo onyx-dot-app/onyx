@@ -3,7 +3,6 @@
 import { useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter, useSearchParams } from "next/navigation";
-import type { Route } from "next";
 import {
   Button,
   InputTypeIn,
@@ -77,7 +76,7 @@ export default function SkillsPage() {
   });
 
   function handleEdit(item: CustomSkillCardItem) {
-    router.push(`/craft/v1/skills/edit/${item.id}` as Route);
+    router.push(`/craft/v1/skills/edit/${item.id}`);
   }
 
   async function updateSkillEnabled(
@@ -306,7 +305,7 @@ export default function SkillsPage() {
                   description={t("page.createMenu.scratch.description")}
                   onClick={() => {
                     setCreateMenuOpen(false);
-                    router.push("/craft/v1/skills/new" as Route);
+                    router.push("/craft/v1/skills/new");
                   }}
                   title={t("page.createMenu.scratch.title")}
                 />
@@ -430,7 +429,7 @@ export default function SkillsPage() {
         onContinue={(draft) => {
           const draftId = stageSkillCreationDraft(draft);
           setCreateOpen(false);
-          router.push(`/craft/v1/skills/new?draft=${draftId}` as Route);
+          router.push(`/craft/v1/skills/new?draft=${draftId}`);
         }}
       />
 

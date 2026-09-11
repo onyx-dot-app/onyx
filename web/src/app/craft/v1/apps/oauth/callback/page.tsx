@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter, useSearchParams } from "next/navigation";
-import type { Route } from "next";
 import { mutate as globalMutate } from "swr";
 import { SettingsLayouts } from "@opal/layouts";
 import { Button, Card, Text } from "@opal/components";
@@ -66,7 +65,7 @@ export default function ExternalAppsOAuthCallbackPage() {
           return;
         }
         await globalMutate(SWR_KEYS.buildExternalApps);
-        setTimeout(() => router.push(CRAFT_APPS_PATH as Route), 800);
+        setTimeout(() => router.push(CRAFT_APPS_PATH), 800);
       } catch (e) {
         setStatus("error");
         setErrorMessage(e instanceof Error ? e.message : String(e));
@@ -101,7 +100,7 @@ export default function ExternalAppsOAuthCallbackPage() {
                   </Text>
                 )}
                 <div className="pt-2">
-                  <Button onClick={() => router.push(CRAFT_APPS_PATH as Route)}>
+                  <Button onClick={() => router.push(CRAFT_APPS_PATH)}>
                     {t("backButton")}
                   </Button>
                 </div>

@@ -23,7 +23,6 @@ import { RadioGroup } from "@/components/ui/radio-group";
 import { RadioGroupItemField } from "@/components/ui/RadioGroupItemField";
 import { AlertCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
-import type { Route } from "next";
 import { Tooltip } from "@opal/components";
 import { SourceIcon } from "@/components/SourceIcon";
 import Link from "next/link";
@@ -380,7 +379,7 @@ export function SlackChannelConfigFormFields({
                     <button
                       type="button"
                       onClick={() =>
-                        router.push(`/app/agents/edit/${persona.id}` as Route)
+                        router.push(`/app/agents/edit/${persona.id}`)
                       }
                       key={persona.id}
                       className="p-2 bg-background-100 cursor-pointer rounded-md flex items-center gap-2"
