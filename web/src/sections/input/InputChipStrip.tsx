@@ -50,7 +50,11 @@ function InputChip({
     <>
       {icon}
       <span className="max-w-[120px] truncate">
-        <Text font="secondary-body" color="inherit" nowrap>
+        <Text
+          font="secondary-body"
+          color="inherit"
+          wordWrap="whitespace-nowrap"
+        >
           {label}
         </Text>
       </span>

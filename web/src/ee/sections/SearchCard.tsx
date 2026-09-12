@@ -13,6 +13,7 @@ import { Interactive } from "@opal/core";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { timeAgo } from "@opal/time";
 import { useMemo } from "react";
+import { useLocale } from "next-intl";
 
 export interface SearchResultCardProps {
   /** The search result document to display */
@@ -33,6 +34,7 @@ export default function SearchCard({
   document,
   onDocumentClick,
 }: SearchResultCardProps) {
+  const locale = useLocale();
   const isWebSource =
     document.is_internet || document.source_type === ValidSources.Web;
 
@@ -92,7 +94,7 @@ export default function SearchCard({
                 {document.updated_at &&
                   !isNaN(new Date(document.updated_at).getTime()) && (
                     <Text secondaryBody text02>
-                      {timeAgo(document.updated_at)}
+                      {timeAgo(document.updated_at, locale)}
                     </Text>
                   )}
               </Section>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import {
   Table,
   TableHead,
@@ -17,10 +17,9 @@ import { Section } from "@/layouts/general-layouts";
 import { timestampToReadableDate } from "@/lib/dateUtils";
 import { Dispatch, SetStateAction, useState } from "react";
 import { Feedback, TaskStatus } from "@/lib/types";
-import { DateRange } from "@/refresh-components/DateRangePicker";
+import { DateRange } from "@opal/components";
 import { PageSelector } from "@/components/PageSelector";
 import Link from "next/link";
-import type { Route } from "next";
 import { FeedbackBadge } from "@/app/ee/admin/performance/query-history/FeedbackBadge";
 import KickoffCSVExport from "@/app/ee/admin/performance/query-history/KickoffCSVExport";
 import CardSection from "@/components/admin/CardSection";
@@ -37,7 +36,10 @@ import {
   ITEMS_PER_PAGE,
   PAGES_PER_BATCH,
 } from "@/app/ee/admin/performance/query-history/constants";
-import { humanReadableFormatWithTime } from "@opal/time";
+import {
+  humanReadableFormatShort,
+  humanReadableFormatWithTime,
+} from "@opal/time";
 import { Modal } from "@opal/components";
 import { Button, Divider } from "@opal/components";
 import { Badge } from "@/components/ui/badge";
@@ -86,9 +88,7 @@ function QueryHistoryTableRow({
       {/* Wrapping in <td> to avoid console warnings */}
       <td className="w-0 p-0">
         <Link
-          href={
-            `/ee/admin/performance/query-history/${chatSessionMinimal.id}` as Route
-          }
+          href={`/ee/admin/performance/query-history/${chatSessionMinimal.id}`}
           className="absolute w-full h-full start-0 top-0"
         ></Link>
       </td>
@@ -155,6 +155,7 @@ function PreviousQueryHistoryExportsModal({
   setShowModal: Dispatch<SetStateAction<boolean>>;
 }) {
   const t = useTranslations("admin.queryHistory");
+  const locale = useLocale();
   const { data: queryHistoryTasks } = useSWR<TaskQueueState[]>(
     LIST_QUERY_HISTORY_URL,
     errorHandlingFetcher,
@@ -208,10 +209,14 @@ function PreviousQueryHistoryExportsModal({
               {paginatedTasks.map((task, index) => (
                 <TableRow key={index}>
                   <TableCell>
-                    {humanReadableFormatWithTime(task.startTime)}
+                    {humanReadableFormatWithTime(task.startTime, locale)}
                   </TableCell>
-                  <TableCell>{task.start.toDateString()}</TableCell>
-                  <TableCell>{task.end.toDateString()}</TableCell>
+                  <TableCell>
+                    {humanReadableFormatShort(task.start, locale)}
+                  </TableCell>
+                  <TableCell>
+                    {humanReadableFormatShort(task.end, locale)}
+                  </TableCell>
                   <TableCell>
                     <ExportBadge status={task.status} />
                   </TableCell>

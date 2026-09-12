@@ -335,13 +335,14 @@ def handle_regular_answer(
 
         # Slack answers should be grounded in retrieval (pre-#7399 behavior):
         # force the search tool on the first LLM cycle, but only when the
-        # channel persona actually has a usable one — non-search personas and
-        # deployments without connectors keep the unforced behavior.
+        # channel persona actually has a usable one — non-search personas,
+        # disabled search tools and deployments without connectors keep the
+        # unforced behavior.
         forced_search_tool_id = next(
             (
                 tool.id
                 for tool in persona.tools
-                if tool.in_code_tool_id == SEARCH_TOOL_ID
+                if tool.in_code_tool_id == SEARCH_TOOL_ID and tool.enabled
             ),
             None,
         )

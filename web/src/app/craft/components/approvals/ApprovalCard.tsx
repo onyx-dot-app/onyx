@@ -202,7 +202,11 @@ export default function ApprovalCard({
                 ) : (
                   <SvgLoader className="size-4 shrink-0 stroke-status-info-05 animate-spin" />
                 )}
-                <Text font="main-ui-muted" color="text-04" nowrap>
+                <Text
+                  font="main-ui-muted"
+                  color="text-04"
+                  wordWrap="whitespace-nowrap"
+                >
                   {headerText}
                 </Text>
               </button>
@@ -214,7 +218,11 @@ export default function ApprovalCard({
                   approved ? "text-status-success-05" : "text-status-error-05"
                 )}
               >
-                <Text font="main-ui-action" color="inherit" nowrap>
+                <Text
+                  font="main-ui-action"
+                  color="inherit"
+                  wordWrap="whitespace-nowrap"
+                >
                   {approved ? t("status.approved") : t("status.rejected")}
                 </Text>
               </div>

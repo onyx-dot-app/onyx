@@ -16,13 +16,13 @@ const (
 
 // WriteMarkdown renders a report as a GitHub-flavored markdown section for a
 // PR comment or job summary. A marker line comes first, then a one-line
-// verdict. The table lists only the packages that moved, plus the total, so a
+// verdict. The table lists only the rows that moved, plus the total, so a
 // comment covering several modules stays short.
-func WriteMarkdown(w io.Writer, name string, report *Report) error {
+func WriteMarkdown(w io.Writer, name string, report *Report, kind Kind) error {
 	var b strings.Builder
 
-	fmt.Fprintf(&b, "%s\n#### `%s`\n\n%s\n\n", markdownMarker(report), name, markdownSummary(report))
-	b.WriteString("| Package | Coverage | Floor | Change |\n| --- | ---: | ---: | --- |\n")
+	fmt.Fprintf(&b, "%s\n#### `%s`\n\n%s\n\n", markdownMarker(report), name, markdownSummary(report, kind))
+	fmt.Fprintf(&b, "| %s | Coverage | Floor | Change |\n| --- | ---: | ---: | --- |\n", capitalize(kind.Unit))
 	for _, pkg := range report.Packages {
 		if pkg.Status != StatusOK {
 			b.WriteString(markdownRow(pkg))
@@ -46,9 +46,9 @@ func markdownMarker(report *Report) string {
 }
 
 // markdownSummary is the one line a reader needs: what moved, and the total.
-func markdownSummary(report *Report) string {
+func markdownSummary(report *Report, kind Kind) string {
 	if report.Total.Status == StatusNew {
-		return fmt.Sprintf("No baseline, so nothing to compare. Total coverage is %.1f%%.", report.Total.Percent)
+		return fmt.Sprintf("No baseline, so nothing to compare. Total %s is %.1f%%.", kind.Name, report.Total.Percent)
 	}
 
 	counts := map[Status]int{}
@@ -62,12 +62,12 @@ func markdownSummary(report *Report) string {
 		}
 	}
 
-	total := fmt.Sprintf("Total coverage is %.1f%% (%+.1f against the baseline).",
-		report.Total.Percent, report.Total.Percent-report.Total.Floor)
+	total := fmt.Sprintf("Total %s is %.1f%% (%+.1f against the baseline).",
+		kind.Name, report.Total.Percent, report.Total.Percent-report.Total.Floor)
 	if len(parts) == 0 {
-		return "Every package holds at its floor. " + total
+		return fmt.Sprintf("Every %s holds at its floor. %s", kind.Unit, total)
 	}
-	return fmt.Sprintf("Packages: %s. %s", strings.Join(parts, ", "), total)
+	return fmt.Sprintf("%s: %s. %s", capitalize(kind.Units), strings.Join(parts, ", "), total)
 }
 
 func markdownRow(result Result) string {

@@ -10,6 +10,7 @@ import { useHookExecutionLogs } from "@/ee/hooks/useHookExecutionLogs";
 import { formatDateTimeLog } from "@/lib/dateUtils";
 import { downloadFile } from "@/lib/download";
 import { Section } from "@/layouts/general-layouts";
+import { hookPointName } from "@/ee/views/admin/HooksPage/hookPoints";
 import type {
   HookExecutionRecord,
   HookPointMeta,
@@ -55,7 +56,11 @@ function LogRow({ log, group }: { log: HookExecutionRecord; group: string }) {
       >
         {/* 1. Timestamp */}
         <span className="shrink-0 text-code-code">
-          <Text font="secondary-mono-label" color="inherit" nowrap>
+          <Text
+            font="secondary-mono-label"
+            color="inherit"
+            wordWrap="whitespace-nowrap"
+          >
             {formatDateTimeLog(log.created_at)}
           </Text>
         </span>
@@ -111,7 +116,7 @@ export default function HookLogsModal({ hook, spec }: HookLogsModalProps) {
           title={t("logs.header.title")}
           description={t("logs.header.description", {
             name: hook.name,
-            point: spec?.display_name ?? hook.hook_point,
+            point: spec ? hookPointName(spec, t) : hook.hook_point,
           })}
           onClose={onClose}
         />

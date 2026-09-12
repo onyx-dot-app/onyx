@@ -37,7 +37,7 @@ const ToolItemSkeleton: React.FC<ToolItemSkeletonProps> = ({ className }) => {
         </div>
       </div>
 
-      {/* Right Section: Switch Skeleton */}
+      {/* Right Section: InputSwitch Skeleton */}
       <div className="flex gap-2 items-start justify-end shrink-0">
         <div className="flex items-center justify-center gap-1 h-5 px-0.5 py-0.5">
           <div className="h-5 w-9 rounded-full bg-background-tint-02 animate-pulse" />

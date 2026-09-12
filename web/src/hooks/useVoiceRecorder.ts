@@ -251,7 +251,7 @@ class VoiceRecorderSession {
     if (!tokenResponse.ok) {
       throw new Error("Failed to get WebSocket authentication token");
     }
-    const { token } = await tokenResponse.json();
+    const { token }: { token: string } = await tokenResponse.json();
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const host = IS_DEV ? new URL(INTERNAL_URL).host : window.location.host;

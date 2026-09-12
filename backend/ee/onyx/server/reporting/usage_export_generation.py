@@ -25,6 +25,7 @@ from ee.onyx.server.reporting.usage_report_data import build_usage_report_data
 from ee.onyx.server.reporting.usage_report_pdf import render_usage_report_pdf
 from onyx.configs.constants import FileOrigin
 from onyx.db.models import User
+from onyx.db.system_usage import SystemUsageExportRow, iter_system_usage_export
 from onyx.db.user_usage import UsageExportRow, iter_usage_export
 from onyx.db.users import get_all_users
 from onyx.file_store.constants import MAX_IN_MEMORY_SIZE
@@ -192,12 +193,63 @@ def generate_usage_breakdown_report(
     return file_id
 
 
+def generate_system_usage_report(
+    file_store: FileStore,
+    report_id: str,
+    rows: Iterable[SystemUsageExportRow],
+) -> str:
+    file_name = f"{report_id}_usage_by_system"
+
+    with tempfile.SpooledTemporaryFile(
+        max_size=MAX_IN_MEMORY_SIZE, mode="w+"
+    ) as temp_file:
+        csvwriter = csv.writer(temp_file, delimiter=",")
+        csvwriter.writerow(
+            [
+                "attribution",
+                "day",
+                "model",
+                "flow",
+                "provider",
+                "input_tokens",
+                "output_tokens",
+                "cache_read_tokens",
+                "cache_creation_tokens",
+                "cost_cents",
+            ]
+        )
+        for row in rows:
+            csvwriter.writerow(
+                [
+                    row.attribution.value,
+                    row.day,
+                    sanitize_csv_cell_or_none(row.model),
+                    sanitize_csv_cell_or_none(row.flow),
+                    sanitize_csv_cell_or_none(row.provider),
+                    row.input_tokens,
+                    row.output_tokens,
+                    row.cache_read_tokens,
+                    row.cache_creation_tokens,
+                    row.cost_cents,
+                ]
+            )
+
+        temp_file.seek(0)
+        return file_store.save_file(
+            content=temp_file,
+            display_name=file_name,
+            file_origin=FileOrigin.GENERATED_REPORT,
+            file_type="text/csv",
+        )
+
+
 def generate_usage_report_pdf(
     db_session: Session,
     file_store: FileStore,
     report_id: str,
     period: tuple[datetime, datetime] | None,
     rows: list[UsageExportRow],
+    system_rows: list[SystemUsageExportRow],
 ) -> str:
     """Render the review pack PDF and store it. Returns the file id."""
     file_name = f"{report_id}_review_pack"
@@ -205,7 +257,9 @@ def generate_usage_report_pdf(
     # The queried bounds are half-open; only a given period gets the extra day.
     display_start, display_end = period if period else _normalize_period(None)
 
-    data = build_usage_report_data(db_session, rows, display_start, display_end)
+    data = build_usage_report_data(
+        db_session, rows, display_start, display_end, system_rows
+    )
     branding = load_report_branding(file_store)
     pdf_bytes = render_usage_report_pdf(data, branding)
 
@@ -239,16 +293,28 @@ def create_new_usage_report(
         query_start, query_end = normalized_period
         # The CSV and PDF must use the same rows so their totals reconcile.
         usage_rows = list(iter_usage_export(db_session, query_start, query_end))
+        system_usage_rows = list(
+            iter_system_usage_export(db_session, query_start, query_end)
+        )
         usage_breakdown_file_id = generate_usage_breakdown_report(
             file_store, report_id, usage_rows
         )
         intermediate_file_ids.append(usage_breakdown_file_id)
+        system_usage_file_id = generate_system_usage_report(
+            file_store, report_id, system_usage_rows
+        )
+        intermediate_file_ids.append(system_usage_file_id)
 
         # A render failure must not cost the admin their CSV export.
         pdf_file_id: str | None = None
         try:
             pdf_file_id = generate_usage_report_pdf(
-                db_session, file_store, report_id, period, usage_rows
+                db_session,
+                file_store,
+                report_id,
+                period,
+                usage_rows,
+                system_usage_rows,
             )
         except Exception:
             logger.exception("Failed to render usage report PDF; continuing without it")
@@ -283,6 +349,11 @@ def create_new_usage_report(
                     usage_breakdown_file_id, mode="b", use_tempfile=True
                 )
                 zip_file.writestr("usage_by_user.csv", usage_breakdown_tmpfile.read())
+
+                system_usage_tmpfile = file_store.read_file(
+                    system_usage_file_id, mode="b", use_tempfile=True
+                )
+                zip_file.writestr("usage_by_system.csv", system_usage_tmpfile.read())
 
                 if pdf_file_id is not None:
                     pdf_tmpfile = file_store.read_file(

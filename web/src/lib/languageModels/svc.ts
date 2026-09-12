@@ -12,6 +12,7 @@
  */
 
 import { SWR_KEYS } from "@/lib/swr-keys";
+import type { ErrorResponseBody } from "@/lib/fetcher";
 import {
   LLMProviderName,
   type ModelConfiguration,
@@ -189,7 +190,7 @@ export const fetchBedrockModels = async (
     if (!response.ok) {
       let errorMessage = "Failed to fetch models";
       try {
-        const errorData = await response.json();
+        const errorData: ErrorResponseBody = await response.json();
         errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch {
         // ignore JSON parsing errors
@@ -244,7 +245,7 @@ export const fetchOllamaModels = async (
     if (!response.ok) {
       let errorMessage = "Failed to fetch models";
       try {
-        const errorData = await response.json();
+        const errorData: ErrorResponseBody = await response.json();
         errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch {
         // ignore JSON parsing errors
@@ -303,7 +304,7 @@ export const fetchOpenRouterModels = async (
     if (!response.ok) {
       let errorMessage = "Failed to fetch models";
       try {
-        const errorData = await response.json();
+        const errorData: ErrorResponseBody = await response.json();
         errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch (jsonError) {
         console.warn(
@@ -363,7 +364,7 @@ export const fetchLMStudioModels = async (
     if (!response.ok) {
       let errorMessage = "Failed to fetch models";
       try {
-        const errorData = await response.json();
+        const errorData: ErrorResponseBody = await response.json();
         errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch (jsonError) {
         console.warn(
@@ -422,7 +423,7 @@ export const fetchBifrostModels = async (
     if (!response.ok) {
       let errorMessage = "Failed to fetch models";
       try {
-        const errorData = await response.json();
+        const errorData: ErrorResponseBody = await response.json();
         errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch (jsonError) {
         console.warn(
@@ -484,7 +485,7 @@ export const fetchOpenAICompatibleModels = async (
     if (!response.ok) {
       let errorMessage = "Failed to fetch models";
       try {
-        const errorData = await response.json();
+        const errorData: ErrorResponseBody = await response.json();
         errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch {
         // ignore JSON parsing errors
@@ -544,7 +545,7 @@ export const fetchLiteLLMProxyModels = async (
     if (!response.ok) {
       let errorMessage = "Failed to fetch models";
       try {
-        const errorData = await response.json();
+        const errorData: ErrorResponseBody = await response.json();
         errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch {
         // ignore JSON parsing errors
@@ -691,7 +692,7 @@ export const fetchNebiusTokenfactoryModels = async (
     if (!response.ok) {
       let errorMessage = "Failed to fetch models";
       try {
-        const errorData = await response.json();
+        const errorData: ErrorResponseBody = await response.json();
         errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch (jsonError) {
         console.warn(
@@ -751,7 +752,7 @@ export const fetchPortkeyModels = async (
     if (!response.ok) {
       let errorMessage = "Failed to fetch models";
       try {
-        const errorData = await response.json();
+        const errorData: ErrorResponseBody = await response.json();
         errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch (jsonError) {
         console.warn(

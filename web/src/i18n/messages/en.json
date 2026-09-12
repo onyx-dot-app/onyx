@@ -3881,7 +3881,15 @@
         },
         "viewGroup": {
           "label": "View group"
-        }
+        },
+        "resourceCounts": {
+          "connectors": "{count, plural, one {# connector} other {# connectors}}",
+          "documentSets": "{count, plural, one {# document set} other {# document sets}}",
+          "agents": "{count, plural, one {# agent} other {# agents}}",
+          "noPrivateResources": "No private connectors / document sets / agents",
+          "joined": "{first} · {rest}"
+        },
+        "memberCount": "{count, plural, one {# Member} other {# Members}}"
       },
       "create": {
         "header": {
@@ -4130,6 +4138,16 @@
           "header": "Token Limit",
           "placeholder": "Token limit (thousands)",
           "unit": "(thousands)"
+        }
+      },
+      "builtIn": {
+        "admin": {
+          "name": "Admin",
+          "description": "Built-in admin group with full access to manage all permissions."
+        },
+        "basic": {
+          "name": "Basic",
+          "description": "Default group for all users with basic permissions."
         }
       }
     },
@@ -4389,6 +4407,20 @@
         },
         "validationFailed": {
           "message": "Validation failed: {status}"
+        }
+      },
+      "points": {
+        "documentIngestion": {
+          "name": "Document Ingestion",
+          "description": "Runs on every document before it enters the indexing pipeline. Allows filtering, rewriting, or dropping documents."
+        },
+        "documentPush": {
+          "name": "Document Push",
+          "description": "Fires after each document is successfully indexed. Push indexed documents to an external destination such as a wiki or data warehouse. Only fires for public connectors in single-tenant deployments."
+        },
+        "queryProcessing": {
+          "name": "Query Processing",
+          "description": "Runs on every user query before it enters the pipeline. Allows rewriting, filtering, or rejecting queries."
         }
       }
     },
@@ -4958,6 +4990,24 @@
         "statusInvalid": "invalid",
         "statusPaused": "paused",
         "restoreHint": "To keep a connector, cancel here, resume or fix it, then re-index — it will be carried over. Otherwise, add it back once the re-index finishes."
+      },
+      "modelDescriptions": {
+        "cohereEmbedEnglishV3": "Cohere's English embedding model. Good performance for English-language tasks.",
+        "cohereEmbedEnglishLightV3": "Cohere's lightweight English embedding model. Faster and more efficient for simpler tasks.",
+        "cohereEmbedV4": "Cohere's latest multilingual embedding model with the default 1536-dim output for stronger retrieval quality.",
+        "openaiTextEmbedding3Large": "OpenAI's large embedding model. Best performance, but more expensive.",
+        "openaiTextEmbedding3Small": "OpenAI's newer, more efficient embedding model. Good balance of performance and cost.",
+        "googleGeminiEmbedding001": "Google's Gemini embedding model. Powerful and efficient.",
+        "googleTextEmbedding005": "Smaller, lighter-weight embedding model from Google.",
+        "googleGeminiEmbedding2": "Google's latest multimodal embedding model (GA). Highest-quality retrieval with a 3072-dim output.",
+        "googleGeminiEmbedding2Preview": "Preview version of Gemini Embedding 2. Superseded by gemini-embedding-2 for new setups.",
+        "voyageLarge2Instruct": "Voyage's large embedding model. High performance with instruction fine-tuning.",
+        "voyageLight2Instruct": "Voyage's lightweight embedding model. Good balance of performance and efficiency.",
+        "nomicEmbedTextV1": "Nomic's embedding model specialized for retrieval, similarity, clustering and classification.",
+        "e5BaseV2": "A smaller and faster model than the default. It is around 2x faster than the default model at the cost of lower search quality.",
+        "e5SmallV2": "The smallest and fastest version of the E5 line of models. If you're running Onyx on a resource constrained system, then this may be a good choice.",
+        "multilingualE5Base": "For corpora in other languages besides English, this is the one to choose.",
+        "multilingualE5Small": "For corpora in other languages besides English, as well as being on a resource constrained system, this is the one to choose."
       }
     },
     "indexing": {
@@ -5753,6 +5803,80 @@
         "description": "Connect OpenAPI servers to add custom actions and tools for your agents."
       }
     },
+    "systemUsage": {
+      "categories": {
+        "contextualRagChunkContext": {
+          "label": "Contextual RAG chunk context"
+        },
+        "contextualRagDocumentSummary": {
+          "label": "Contextual RAG document summaries"
+        },
+        "imageSummarization": {
+          "label": "Image summarization"
+        },
+        "kgDeepExtraction": {
+          "label": "Knowledge graph extraction"
+        },
+        "kgDocumentClassification": {
+          "label": "Knowledge graph classification"
+        },
+        "other": {
+          "label": "Other"
+        },
+        "unattributed": {
+          "label": "Unattributed"
+        }
+      },
+      "filters": {
+        "allModels": {
+          "label": "All models"
+        },
+        "allProviders": {
+          "label": "All providers"
+        }
+      },
+      "panel": {
+        "description": "{start} – {end} · System usage is LLM activity that Onyx runs in the background rather than for a specific user. Examples include image summaries, contextual RAG processing, and knowledge graph extraction.",
+        "emptyDescription": "System usage is LLM activity that Onyx runs in the background rather than for a specific user. Examples include image summaries, contextual RAG processing, and knowledge graph extraction.",
+        "error": {
+          "title": "Failed to load system usage for this period."
+        },
+        "title": "System usage"
+      },
+      "summary": {
+        "spend": {
+          "label": "System spend"
+        },
+        "tokens": {
+          "label": "Total tokens"
+        },
+        "unattributed": {
+          "label": "Unattributed spend"
+        }
+      },
+      "table": {
+        "columns": {
+          "category": {
+            "header": "Category"
+          },
+          "input": {
+            "header": "Input"
+          },
+          "output": {
+            "header": "Output"
+          },
+          "spend": {
+            "header": "Spend"
+          },
+          "tokens": {
+            "header": "Tokens"
+          }
+        },
+        "empty": {
+          "description": "No system usage matches the current filters."
+        }
+      }
+    },
     "perUserUsage": {
       "panel": {
         "description": "{start} – {end} · Costs are calculated from recorded model usage.",
@@ -6271,6 +6395,7 @@
         },
         "name": {
           "placeholder": "Enter a name",
+          "required": "Name is required",
           "title": "Name"
         },
         "submitButton": {
@@ -6799,7 +6924,9 @@
         "gatedTooltip": "Multiple enabled SSO providers are available on the Business or Enterprise plan."
       },
       "copyRedirectUri": {
-        "tooltip": "Copy redirect URI"
+        "tooltip": "Copy redirect URI",
+        "successToast": "Redirect URI copied",
+        "errorToast": "Could not copy"
       },
       "editProvider": {
         "tooltip": "Edit"
@@ -6911,6 +7038,75 @@
       },
       "toasts": {
         "unexpectedError": "Unexpected error occurred."
+      },
+      "providerTypes": {
+        "googleOauth": {
+          "description": "Use Google as the identity provider."
+        },
+        "oidc": {
+          "description": "Connect a generic OpenID Connect provider."
+        },
+        "saml": {
+          "description": "Connect a SAML identity provider."
+        }
+      },
+      "configFields": {
+        "clientId": {
+          "label": "Client ID",
+          "description": "The OAuth client ID from your provider's console.",
+          "placeholder": "Client ID"
+        },
+        "clientSecret": {
+          "label": "Client Secret",
+          "description": "The OAuth client secret. Stored encrypted.",
+          "placeholder": "Client secret"
+        },
+        "pkceEnabled": {
+          "label": "Enable PKCE",
+          "description": "Send a PKCE code challenge with this provider's login flow. A deployment-wide setting may force this on."
+        },
+        "scopes": {
+          "label": "Scopes",
+          "description": "Override the OAuth scopes requested at login. Empty uses the deployment defaults.",
+          "placeholder": "Add a scope (e.g. openid)"
+        },
+        "openidConfigUrl": {
+          "label": "OpenID Configuration URL",
+          "description": "The IdP's OpenID Connect discovery document URL."
+        },
+        "requireVerifiedEmail": {
+          "label": "Require Verified Email Claim",
+          "description": "Reject sign-ins when the IdP omits the optional email_verified claim. Leave off for IdPs that do not send it, such as Microsoft Entra ID."
+        },
+        "idpEntityId": {
+          "label": "IdP Entity ID",
+          "description": "The identity provider's entity ID (issuer)."
+        },
+        "idpSsoUrl": {
+          "label": "IdP SSO URL",
+          "description": "The IdP endpoint that receives sign-in requests."
+        },
+        "idpX509Cert": {
+          "label": "IdP X.509 Certificate",
+          "description": "The IdP's signing certificate, used to verify assertions."
+        },
+        "spEntityId": {
+          "label": "SP Entity ID",
+          "description": "This instance's entity ID, registered with the IdP."
+        },
+        "spX509Cert": {
+          "label": "SP X.509 Certificate",
+          "description": "Only if this instance signs requests or decrypts assertions."
+        },
+        "spPrivateKey": {
+          "label": "SP Private Key",
+          "description": "Private key paired with the SP certificate. Stored encrypted."
+        },
+        "emailAttribute": {
+          "label": "Email Attribute",
+          "description": "SAML attribute holding the user's email. Defaults to common keys.",
+          "placeholder": "email"
+        }
       }
     },
     "standardAnswers": {
@@ -7448,6 +7644,42 @@
         "connected": "{label} connected",
         "disconnected": "{label} disconnected",
         "unexpectedError": "Unexpected error occurred."
+      },
+      "providers": {
+        "braintrust": {
+          "description": "LLM evaluation and monitoring",
+          "fields": {
+            "apiKey": {
+              "label": "API Key",
+              "description": "Paste your [API key](https://www.braintrust.dev/app) from Braintrust."
+            },
+            "project": {
+              "label": "Project Name",
+              "description": "Braintrust project name traces are logged to."
+            },
+            "apiUrl": {
+              "label": "API URL",
+              "description": "Default to the US region. Paste your Braintrust API URL for other regions or self-hosting."
+            }
+          }
+        },
+        "langfuse": {
+          "description": "Cloud or self-hosted open-source observability platform",
+          "fields": {
+            "secretKey": {
+              "label": "Secret Key",
+              "description": "Paste your [API key](https://cloud.langfuse.com) from Langfuse."
+            },
+            "publicKey": {
+              "label": "Public Key",
+              "placeholder": "Public Key"
+            },
+            "host": {
+              "label": "API Base URL",
+              "description": "Default to EU region. Paste your Langfuse base URL for other regions or self-hosting."
+            }
+          }
+        }
       }
     },
     "usage": {
@@ -8073,6 +8305,35 @@
       },
       "unexpectedError": {
         "message": "Unexpected error occurred."
+      },
+      "contentProviders": {
+        "onyxWebCrawler": {
+          "subtitle": "Built-in web crawler. Works for most pages but less performant in edge cases."
+        },
+        "firecrawl": {
+          "subtitle": "Leading open-source crawler."
+        },
+        "exa": {
+          "subtitle": "Exa.ai"
+        },
+        "tavily": {
+          "subtitle": "Tavily AI"
+        }
+      },
+      "configFields": {
+        "searchEngineId": {
+          "label": "Search Engine ID",
+          "placeholder": "Enter your search engine ID",
+          "description": "Paste your [search engine ID](https://programmablesearchengine.google.com/controlpanel/all) to use for web search."
+        },
+        "searxngBaseUrl": {
+          "label": "SearXNG Base URL",
+          "description": "Paste the base URL of your [SearXNG instance](https://docs.searxng.org/admin/installation.html)."
+        },
+        "firecrawlBaseUrl": {
+          "label": "API Base URL",
+          "description": "Your Firecrawl API base URL."
+        }
       }
     }
   },
@@ -9816,6 +10077,17 @@
           },
           "reading": {
             "status": "Reading"
+          },
+          "header": {
+            "default": "Searching internal documents",
+            "sources": "Searching {sources}",
+            "sourcesOverflow": "{sources} +{count} more",
+            "withTimeWindow": "{header} ({timeWindow})"
+          },
+          "timeWindow": {
+            "since": "since {date}",
+            "before": "before {date}",
+            "between": "from {start} to {end}"
           }
         },
         "interruptedThinking": {
@@ -10197,6 +10469,14 @@
         },
         "fileCount": {
           "label": "{count, plural, one {# File} other {# Files}}"
+        },
+        "fileRow": {
+          "deleteButton": {
+            "ariaLabel": "Delete file"
+          },
+          "viewButton": {
+            "ariaLabel": "Open file"
+          }
         },
         "fileStatus": {
           "deleting": {
@@ -10595,22 +10875,6 @@
         "text": "Aa"
       }
     },
-    "comboBox": {
-      "createOption": {
-        "ariaLabel": "{prefix} \"{value}\"",
-        "defaultPrefix": "Create"
-      },
-      "dropdown": {
-        "closeAriaLabel": "Close dropdown",
-        "openAriaLabel": "Open dropdown"
-      },
-      "options": {
-        "empty": "No options found"
-      },
-      "separator": {
-        "label": "Other options"
-      }
-    },
     "commandMenu": {
       "closeButton": {
         "ariaLabel": "Close menu"
@@ -10664,29 +10928,11 @@
       "anyTime": {
         "text": "Any time..."
       },
-      "chooseCustom": {
-        "ariaLabel": "Choose a custom range"
-      },
       "clearButton": {
         "ariaLabel": "Clear"
       },
-      "custom": {
-        "label": "Custom"
-      },
-      "customRange": {
-        "ariaLabel": "Custom range: {from} to {to}"
-      },
       "date": {
         "label": "Date"
-      },
-      "group": {
-        "ariaLabel": "Date range"
-      },
-      "preset": {
-        "oneDay": "1D",
-        "oneMonth": "1M",
-        "sevenDays": "7D",
-        "threeMonths": "3M"
       }
     },
     "deleteButton": {
@@ -10729,6 +10975,9 @@
       "save": {
         "ariaLabel": "Save"
       }
+    },
+    "enabledCount": {
+      "label": "<value>{enabled}</value> of {total}"
     },
     "errorPages": {
       "accessRestricted": {
@@ -10982,34 +11231,6 @@
         "tooltip": "Remove"
       }
     },
-    "inputFile": {
-      "attachButton": {
-        "ariaLabel": "Attach file"
-      },
-      "clearButton": {
-        "ariaLabel": "Clear file"
-      }
-    },
-    "inputImage": {
-      "dropRejected": {
-        "fallback": "File rejected"
-      },
-      "editButton": {
-        "ariaLabel": "Edit image"
-      },
-      "editOverlay": {
-        "label": "Edit"
-      },
-      "image": {
-        "altFallback": "Image"
-      },
-      "removeButton": {
-        "ariaLabel": "Remove image"
-      },
-      "uploadButton": {
-        "ariaLabel": "Upload image"
-      }
-    },
     "inputSelect": {
       "placeholder": {
         "fallback": "Select an option"
@@ -11033,40 +11254,6 @@
       },
       "usersFallback": {
         "text": "Users"
-      }
-    },
-    "keyValue": {
-      "addButton": {
-        "ariaLabel": "Add {keyTitle} and {valueTitle} pair",
-        "label": "Add Line"
-      },
-      "empty": {
-        "title": "No items added yet."
-      },
-      "error": {
-        "duplicateKey": "Duplicate key",
-        "duplicateSummary": "{count, plural, one {# duplicate key found} other {# duplicate keys found}}",
-        "emptyKey": "Key cannot be empty",
-        "emptySummary": "{count, plural, one {# empty key found} other {# empty keys found}}",
-        "validationSummary": "{count, plural, one {# validation error found} other {# validation errors found}}"
-      },
-      "group": {
-        "ariaLabel": "{keyTitle} and {valueTitle} pairs"
-      },
-      "input": {
-        "ariaLabel": "{label} {index}"
-      },
-      "keyColumn": {
-        "title": "Key"
-      },
-      "pair": {
-        "fallbackLabel": "key-value"
-      },
-      "removeButton": {
-        "ariaLabel": "Remove {label} pair {index}"
-      },
-      "valueColumn": {
-        "title": "Value"
       }
     },
     "logo": {
@@ -12526,6 +12713,9 @@
       "providerCard": {
         "connect": {
           "label": "Connect"
+        },
+        "settingsButton": {
+          "ariaLabel": "Provider settings"
         }
       },
       "title": "Connect your LLM models"
@@ -12577,6 +12767,113 @@
         },
         "title": "Let's take a moment to get you set up."
       }
+    }
+  },
+  "opal": {
+    "comboBox": {
+      "close": "Close dropdown",
+      "create": "Create",
+      "createOption": "{prefix} \"{value}\"",
+      "noOptions": "No options found",
+      "open": "Open dropdown",
+      "otherOptions": "Other options"
+    },
+    "common": {
+      "clear": "Clear",
+      "clearFilter": "Clear filter",
+      "close": "Close",
+      "copied": "Copied!",
+      "copy": "Copy",
+      "copyCode": "Copy code",
+      "date": "Date",
+      "edit": "Edit",
+      "loading": "Loading",
+      "loadingPage": "Loading …",
+      "openCalendar": "Open calendar",
+      "progress": "Progress",
+      "remove": "Remove",
+      "removeItem": "Remove {title}",
+      "search": "Search...",
+      "selectAnOption": "Select an option",
+      "showFullMessage": "Show the full message",
+      "time": "Time"
+    },
+    "dateRange": {
+      "chooseCustom": "Choose a custom range",
+      "custom": "Custom",
+      "customRange": "Custom range: {from} to {to}",
+      "label": "Date range",
+      "oneDay": "1D",
+      "oneMonth": "1M",
+      "sevenDays": "7D",
+      "threeMonths": "3M"
+    },
+    "input": {
+      "day": "Day",
+      "hidePassword": "Hide password",
+      "hours": "Hours",
+      "minutes": "Minutes",
+      "month": "Month",
+      "seconds": "Seconds",
+      "showPassword": "Show password",
+      "valueCannotBeRevealed": "Value cannot be revealed",
+      "year": "Year"
+    },
+    "inputFile": {
+      "attachFile": "Attach file",
+      "clearFile": "Clear file"
+    },
+    "inputImage": {
+      "alt": "Image",
+      "dropRejected": "File rejected",
+      "edit": "Edit image",
+      "remove": "Remove image",
+      "upload": "Upload image"
+    },
+    "keyValue": {
+      "addLine": "Add Line",
+      "addPair": "Add {keyTitle} and {valueTitle} pair",
+      "duplicateKey": "Duplicate key",
+      "duplicateSummary": "{count, plural, one {# duplicate key found} other {# duplicate keys found}}",
+      "empty": "No items added yet.",
+      "emptyKey": "Key cannot be empty",
+      "emptySummary": "{count, plural, one {# empty key found} other {# empty keys found}}",
+      "group": "{keyTitle} and {valueTitle} pairs",
+      "input": "{label} {index}",
+      "key": "Key",
+      "pairFallback": "key-value",
+      "removePair": "Remove {label} pair {index}",
+      "validationSummary": "{count, plural, one {# validation error found} other {# validation errors found}}",
+      "value": "Value"
+    },
+    "pagination": {
+      "goToPage": "Go to page",
+      "nextPage": "Next page",
+      "previousPage": "Previous page",
+      "rangeOfTotal": "<range></range> of <total></total>"
+    },
+    "table": {
+      "alwaysShown": "Always Shown",
+      "ascending": "Ascending",
+      "columns": "Columns",
+      "descending": "Descending",
+      "deselectAll": "Deselect all",
+      "dragToReorder": "Drag to reorder",
+      "manualOrdering": "Manual Ordering",
+      "selectAnItemToContinue": "Select an item to continue",
+      "selectedItemCount": "{count, plural, one {# item selected} other {# items selected}}",
+      "selectItemsToContinue": "Select items to continue",
+      "showing": "Showing <range></range> of <total></total>",
+      "shownColumns": "Shown Columns",
+      "singleItemSelected": "Item selected",
+      "sort": "Sort",
+      "sortBy": "Sort by",
+      "sortingOrder": "Sorting Order",
+      "viewSelected": "View selected"
+    },
+    "tabs": {
+      "scrollLeft": "Scroll tabs left",
+      "scrollRight": "Scroll tabs right"
     }
   },
   "settings": {
@@ -12866,6 +13163,9 @@
         "maxReached": "Maximum of {count} memories reached"
       },
       "empty": {
+        "addButton": {
+          "ariaLabel": "Add memory"
+        },
         "description": "Add personal note or memory that Onyx should remember.",
         "getStarted": "No memories yet. Click \"Add Line\" to get started.",
         "noMatches": "No memories match your search."
@@ -12973,7 +13273,8 @@
           "label": "Other"
         },
         "title": "Model prices",
-        "unavailable": "Prices unavailable"
+        "unavailable": "Prices unavailable",
+        "priceRow": "{input} in · {output} out · {cache} cache"
       },
       "modelUsage": {
         "cacheReads": {
@@ -12987,7 +13288,8 @@
         },
         "tokensOut": {
           "label": "{count} out"
-        }
+        },
+        "joined": "{first} · {rest}"
       },
       "showFewerModels": {
         "ariaLabel": "Show fewer models"

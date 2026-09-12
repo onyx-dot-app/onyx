@@ -32,7 +32,6 @@ import {
   toggleAgentListed,
 } from "@/lib/agents/svc";
 import type { Agent } from "@/lib/agents/types";
-import type { Route } from "next";
 import { ShareAgentModal } from "@/lib/agents/components";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
@@ -122,9 +121,7 @@ export default function AgentRowActions({
               data-testid={`edit-agent-${agent.id}`}
               onClick={() =>
                 router.push(
-                  `/app/agents/edit/${
-                    agent.id
-                  }?u=${Date.now()}&admin=true` as Route
+                  `/app/agents/edit/${agent.id}?u=${Date.now()}&admin=true`
                 )
               }
             />
@@ -239,7 +236,7 @@ export default function AgentRowActions({
                       icon={SvgBarChart}
                       onClick={() => {
                         setPopoverOpen(false);
-                        router.push(`/ee/agents/stats/${agent.id}` as Route);
+                        router.push(`/ee/agents/stats/${agent.id}`);
                       }}
                       title={t("rowActions.statsItem.title")}
                     />

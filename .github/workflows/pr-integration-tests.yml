@@ -592,24 +592,24 @@ jobs:
         with:
           ecr-registry: ${{ vars.ECR_REGISTRY }}
 
-      # NOTE: `indexing_model_server` is intentionally not started. See the
-      # integration-tests job above.
-      - name: Start Docker containers for multi-tenant tests
+      # Only infrastructure containers start here, so the multi-tenant app
+      # settings live on the test-runner container below, not in this .env.
+      - name: Create .env file for Docker Compose
         env:
           ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
           RUN_ID: ${{ github.run_id }}
         run: |
+          cat <<EOF > deployment/docker_compose/.env
+          COMPOSE_PROFILES=s3-filestore
+          ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID}
+          EOF
+
+      # NOTE: `indexing_model_server` is intentionally not started. See the
+      # integration-tests job above.
+      - name: Start Docker containers for multi-tenant tests
+        run: |
           cd deployment/docker_compose
-          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
-          LICENSE_ENFORCEMENT_ENABLED=false \
-          MULTI_TENANT=true \
-          AUTH_TYPE=cloud \
-          REQUIRE_EMAIL_VERIFICATION=false \
-          DISABLE_TELEMETRY=true \
-          OPENAI_DEFAULT_API_KEY=${OPENAI_API_KEY} \
-          ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID} \
-          DEV_MODE=true \
-          docker compose -f docker-compose.multitenant-dev.yml up -d \
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d \
             --wait --wait-timeout 300 \
             relational_db \
             opensearch \
@@ -670,7 +670,7 @@ jobs:
         if: always()
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.multitenant-dev.yml logs --no-color > $GITHUB_WORKSPACE/docker-compose-multitenant.log || true
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --no-color > $GITHUB_WORKSPACE/docker-compose-multitenant.log || true
 
       - name: Upload logs (multi-tenant)
         if: always()
@@ -683,7 +683,7 @@ jobs:
         if: always()
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.multitenant-dev.yml down -v
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml down -v
 
   required:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.

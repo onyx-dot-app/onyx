@@ -1632,6 +1632,7 @@ configMap:
   BOX_PERMISSION_DOC_SYNC_FREQUENCY: ""
   BOX_PERMISSION_GROUP_SYNC_FREQUENCY: ""
   GONG_CONNECTOR_START_TIME: ""
+  ZOOM_TRANSCRIPT_LAG_BUFFER_HOURS: ""
   NOTION_CONNECTOR_DISABLE_RECURSIVE_PAGE_LOOKUP: ""
   # Push every successfully indexed public-connector document to an external
   # HTTP endpoint (failures never fail indexing). Intended for non-EE

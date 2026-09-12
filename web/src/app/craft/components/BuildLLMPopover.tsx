@@ -4,7 +4,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { SvgCheck, SvgChevronDown, SvgChevronRight } from "@opal/icons";
 import { Text, Popover, PopoverMenu, LineItemButton } from "@opal/components";
-import { Switch } from "@opal/components";
+import { InputSwitch } from "@opal/components";
 import {
   LLMProviderDescriptor,
   ModelConfiguration,
@@ -291,7 +291,7 @@ export function BuildLLMPopover({
               <Text font="secondary-body" color="text-03">
                 {t("recommendedOnly.label")}
               </Text>
-              <Switch
+              <InputSwitch
                 checked={showRecommendedOnly}
                 onCheckedChange={handleRecommendedOnlyChange}
               />
@@ -335,7 +335,7 @@ export function BuildLLMPopover({
                                   <Text
                                     font="secondary-body"
                                     color="text-03"
-                                    nowrap
+                                    wordWrap="whitespace-nowrap"
                                   >
                                     {group.displayName}
                                   </Text>

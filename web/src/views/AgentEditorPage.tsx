@@ -16,6 +16,7 @@ import {
   PopoverMenu,
   Tooltip,
   useCreateModal,
+  InputMultiSelect,
 } from "@opal/components";
 import { Hoverable, Disabled } from "@opal/core";
 import { FullAgent, PersonaSharingStatus } from "@/lib/agents/types";
@@ -75,11 +76,10 @@ import {
 import CustomAgentAvatar, {
   agentAvatarIconMap,
 } from "@/refresh-components/avatars/CustomAgentAvatar";
-import InputAvatar from "@/refresh-components/inputs/InputAvatar";
+import { InputAvatar } from "@opal/components";
 import SquareButton from "@/refresh-components/buttons/SquareButton";
 import { useAgents, useAgentLabels } from "@/lib/agents/hooks";
 import { createAgent, updateAgent } from "@/lib/agents/svc";
-import InputChipField from "@/refresh-components/inputs/InputChipField";
 import { AgentUpsertParameters } from "@/lib/agents/types";
 import { useMcpServersForAgent } from "@/lib/tools/hooks";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
@@ -87,7 +87,7 @@ import { useAvailableTools } from "@/lib/tools/hooks";
 import { getActionIcon } from "@/lib/tools/utils";
 import { AgentEditorMCPServer, MCPTool, ToolSnapshot } from "@/lib/tools/types";
 import useFilter from "@/hooks/useFilter";
-import EnabledCount from "@/refresh-components/EnabledCount";
+import EnabledCount from "@/lib/tools/components/EnabledCount";
 import { useAppPosition } from "@/lib/position/hooks";
 import { isDateInFuture } from "@/lib/dateUtils";
 import {
@@ -107,6 +107,7 @@ import { useUser } from "@/providers/UserProvider";
 import { hasPermission } from "@/lib/permissions";
 import { can } from "@/lib/permissions/resource-actions";
 import { useDraft, draftKey } from "@/hooks/useDraft";
+import type { Agent } from "@/lib/agents/types";
 
 // Length of the translated starterExamples array, which is local to
 // AgentStarterMessages, shared here so the editor can size against it.
@@ -181,7 +182,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
         return;
       }
 
-      const { file_id } = await response.json();
+      const { file_id }: { file_id: string } = await response.json();
       setFieldValue("uploaded_image_id", file_id);
       setPopoverOpen(false);
     } catch (error) {
@@ -984,7 +985,7 @@ export default function AgentEditorPage({
               groups: values.shared_group_ids,
             }),
         default_model_configuration_id:
-          (values as any).default_model_configuration_id ?? null,
+          values.default_model_configuration_id ?? null,
         starter_messages: finalAgentStarterMessages,
         tool_ids: toolIds,
         // uploaded_image: null, // Already uploaded separately
@@ -1036,7 +1037,8 @@ export default function AgentEditorPage({
       }
 
       // Success
-      const agent = await personaResponse.json();
+      const agent: Omit<Agent, "user_permission"> =
+        await personaResponse.json();
 
       // clear() (not clearDraft) so an in-flight debounced write is cancelled too.
       clearAgentDraftRef.current?.();
@@ -1608,8 +1610,8 @@ export default function AgentEditorPage({
                               gap={1}
                               alignItems="stretch"
                             >
-                              <InputChipField
-                                chips={(allLabels ?? [])
+                              <InputMultiSelect
+                                tags={(allLabels ?? [])
                                   .filter((label) =>
                                     values.label_ids.includes(label.id)
                                   )
@@ -1617,7 +1619,7 @@ export default function AgentEditorPage({
                                     id: String(label.id),
                                     label: label.name,
                                   }))}
-                                onRemoveChip={(id) =>
+                                onRemoveTag={(id) =>
                                   setFieldValue(
                                     "label_ids",
                                     values.label_ids.filter(

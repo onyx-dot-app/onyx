@@ -6,5 +6,5 @@ export async function fetchBackendChatSessionSS(
 ): Promise<BackendChatSession | null> {
   const response = await fetchSS(`/chat/get-chat-session/${chatId}`);
   if (!response.ok) return null;
-  return (await response.json()) as BackendChatSession;
+  return await response.json();
 }

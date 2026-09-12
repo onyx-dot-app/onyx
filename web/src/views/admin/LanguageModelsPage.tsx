@@ -12,7 +12,7 @@ import {
   Divider,
   MessageCard,
   SelectCard,
-  Switch,
+  InputSwitch,
   Text,
   Card,
 } from "@opal/components";
@@ -494,7 +494,7 @@ export default function LanguageModelsPage() {
                   description={t("hideProviderGrouping.description")}
                   withLabel
                 >
-                  <Switch
+                  <InputSwitch
                     checked={
                       pendingHideGrouping ??
                       settings.hide_provider_grouping ??

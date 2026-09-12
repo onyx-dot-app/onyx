@@ -11,19 +11,19 @@ Tailwind uses. So `gap={2}` is the same distance as `gap-2`.
 
 ## Props
 
-| Prop             | Type                                        | Default    | Description                  |
-| ---------------- | ------------------------------------------- | ---------- | ---------------------------- |
-| `flexDirection`  | `"row" \| "column"`                         | `"column"` | Flex direction               |
-| `justifyContent` | `"start" \| "center" \| "end" \| "between"` | `"center"` | Main-axis justification      |
-| `alignItems`     | `"start" \| "center" \| "end" \| "stretch"` | `"center"` | Cross-axis alignment         |
-| `width`          | `"auto" \| "fit" \| "full" \| number`       | `"full"`   | Width. `number` = rem.       |
-| `height`         | `"auto" \| "fit" \| "full" \| number`       | `"full"`   | Height. `number` = rem.      |
+| Prop             | Type                                        | Default    | Description                                           |
+| ---------------- | ------------------------------------------- | ---------- | ----------------------------------------------------- |
+| `flexDirection`  | `"row" \| "column"`                         | `"column"` | Flex direction                                        |
+| `justifyContent` | `"start" \| "center" \| "end" \| "between"` | `"center"` | Main-axis justification                               |
+| `alignItems`     | `"start" \| "center" \| "end" \| "stretch"` | `"center"` | Cross-axis alignment                                  |
+| `width`          | `"auto" \| "fit" \| "full" \| number`       | `"full"`   | Width. `number` = rem.                                |
+| `height`         | `"auto" \| "fit" \| "full" \| number`       | `"full"`   | Height. `number` = rem.                               |
 | `gap`            | `Spacing`                                   | `4`        | Gap between children, as a spacing step (`N / 4` rem) |
 | `padding`        | `Spacing`                                   | `0`        | Padding, as a spacing step (`N / 4` rem)              |
-| `wrap`           | `boolean`                                   | `false`    | Enables `flex-wrap`          |
-| `dbg`            | `boolean`                                   | `false`    | Adds a red debug border      |
-| `className`      | `string`                                    | —          | Additional classes           |
-| `ref`            | `Ref<HTMLDivElement>`                       | —          | Forwarded ref                |
+| `wrap`           | `boolean`                                   | `false`    | Enables `flex-wrap`                                   |
+| `dbg`            | `boolean`                                   | `false`    | Adds a red debug border                               |
+| `className`      | `string`                                    | —          | Additional classes                                    |
+| `ref`            | `Ref<HTMLDivElement>`                       | —          | Forwarded ref                                         |
 
 ## Usage
 

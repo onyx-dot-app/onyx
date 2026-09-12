@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { mutate } from "swr";
 import { PageLoader } from "@opal/layouts";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import type { ErrorResponseBody } from "@/lib/fetcher";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
 import type { ConnectorIndexingStatusLite } from "@/lib/types";
 import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
@@ -26,7 +27,7 @@ import {
   MessageCard,
   SelectCard,
   Spacer,
-  Switch,
+  InputSwitch,
   Tabs,
   Text,
 } from "@opal/components";
@@ -66,6 +67,7 @@ import {
   CLOUD_BASED_PROVIDERS,
   CUSTOM_PROVIDER,
   SELF_HOSTED_PROVIDERS,
+  embeddingModelDescription,
   findProvider,
   findRegistryModel,
   isCloudBased,
@@ -584,7 +586,7 @@ function EmbeddingModelCard({
           <Content
             icon={provider.icon}
             title={model.modelName}
-            description={model.description}
+            description={embeddingModelDescription(model, t)}
             sizePreset="main-ui"
             variant="section"
           />
@@ -717,7 +719,6 @@ export default function IndexSettingsPage() {
       normalize: currentEmbeddingModel.normalize,
       queryPrefix: currentEmbeddingModel.query_prefix,
       passagePrefix: currentEmbeddingModel.passage_prefix,
-      description: "",
     };
   }, [currentEmbeddingModel]);
 
@@ -1021,7 +1022,7 @@ export default function IndexSettingsPage() {
                 // reload; a generic failure would lose that.
                 const detail = await response
                   .json()
-                  .then((body) => body?.detail as string | undefined)
+                  .then((body: ErrorResponseBody) => body?.detail)
                   .catch((parseError) => {
                     console.error(
                       "Failed to parse set-new-search-settings error response",
@@ -1345,7 +1346,7 @@ export default function IndexSettingsPage() {
                                 <Text
                                   font="secondary-body"
                                   color="text-03"
-                                  nowrap
+                                  wordWrap="whitespace-nowrap"
                                 >
                                   {t("changesBanner.orSeparator.label")}
                                 </Text>
@@ -1665,11 +1666,12 @@ export default function IndexSettingsPage() {
                                           currentProvider?.icon ?? SvgServer
                                         }
                                         title={currentEmbeddingModel.model_name}
-                                        description={
+                                        description={embeddingModelDescription(
                                           findRegistryModel(
                                             currentEmbeddingModel.model_name
-                                          )?.description
-                                        }
+                                          ),
+                                          t
+                                        )}
                                         sizePreset="main-ui"
                                         variant="section"
                                       />
@@ -1760,7 +1762,7 @@ export default function IndexSettingsPage() {
                               }}
                               withLabel
                             >
-                              <Switch
+                              <InputSwitch
                                 checked={
                                   searchSettings?.multipass_indexing ?? false
                                 }
@@ -1870,7 +1872,7 @@ export default function IndexSettingsPage() {
                                 description={t("imageExtraction.description")}
                                 withLabel
                               >
-                                <Switch
+                                <InputSwitch
                                   checked={imageProcessingEnabled}
                                   onCheckedChange={(checked) => {
                                     void saveSettings({

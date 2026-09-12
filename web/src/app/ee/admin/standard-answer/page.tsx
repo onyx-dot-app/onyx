@@ -16,7 +16,6 @@ import {
 } from "@/components/ui/table";
 
 import Link from "next/link";
-import type { Route } from "next";
 import { StandardAnswer, StandardAnswerCategory } from "@/lib/types";
 import { SvgSearch } from "@opal/icons";
 import { useState, JSX } from "react";
@@ -117,7 +116,7 @@ const StandardAnswersTableRow = ({
       entries={[
         <Link
           key={`edit-${standardAnswer.id}`}
-          href={`/ee/admin/standard-answer/${standardAnswer.id}` as Route}
+          href={`/ee/admin/standard-answer/${standardAnswer.id}`}
         >
           <SvgEdit size={16} />
         </Link>,
@@ -338,7 +337,6 @@ const StandardAnswersTable = ({
                 currentPage={currentPage}
                 totalPages={totalPages}
                 onPageChange={handlePageChange}
-                shouldScroll={true}
               />
             </div>
           </>

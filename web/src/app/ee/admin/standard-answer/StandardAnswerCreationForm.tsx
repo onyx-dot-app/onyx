@@ -7,7 +7,6 @@ import { StandardAnswerCategory, StandardAnswer } from "@/lib/types";
 import CardSection from "@/components/admin/CardSection";
 import { Form, Formik, ErrorMessage } from "formik";
 import { useRouter } from "next/navigation";
-import type { Route } from "next";
 import * as Yup from "yup";
 import {
   createStandardAnswer,
@@ -22,8 +21,7 @@ import {
   SelectorFormField,
   Label,
 } from "@/components/Field";
-import InputChipField from "@/refresh-components/inputs/InputChipField";
-import { Button, Text } from "@opal/components";
+import { Button, InputMultiSelect, Text } from "@opal/components";
 
 function mapKeywordSelectToMatchAny(keywordSelect: "any" | "all"): boolean {
   return keywordSelect == "any";
@@ -100,7 +98,7 @@ export const StandardAnswerCreationForm = ({
             }
             formikHelpers.setSubmitting(false);
             if (response.ok) {
-              router.push(`/ee/admin/standard-answer?u=${Date.now()}` as Route);
+              router.push(`/ee/admin/standard-answer?u=${Date.now()}`);
             } else {
               const responseJson = await response.json();
               const errorMsg = responseJson.detail || responseJson.message;
@@ -173,15 +171,15 @@ export const StandardAnswerCreationForm = ({
               </div>
               <div className="w-4/12 flex flex-col gap-2">
                 <Label>{t("form.categories.label")}</Label>
-                <InputChipField
+                <InputMultiSelect
                   placeholder={t("form.categories.placeholder")}
                   value={categoryInput}
                   onChange={setCategoryInput}
-                  chips={values.categories.map((category) => ({
+                  tags={values.categories.map((category) => ({
                     id: category.id.toString(),
                     label: category.name,
                   }))}
-                  onRemoveChip={(id) =>
+                  onRemoveTag={(id) =>
                     setFieldValue(
                       "categories",
                       values.categories.filter((c) => c.id.toString() !== id)
@@ -231,8 +229,8 @@ export const StandardAnswerCreationForm = ({
                       );
                       return;
                     }
-                    const newCategory =
-                      (await response.json()) as StandardAnswerCategory;
+                    const newCategory: StandardAnswerCategory =
+                      await response.json();
                     setFieldValue("categories", [
                       ...values.categories,
                       newCategory,
