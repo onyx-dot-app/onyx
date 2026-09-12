@@ -75,7 +75,7 @@ export const OptionsList: React.FC<OptionsListProps> = ({
       return (
         <div className="p-2">
           <Content
-            sizePreset="main-ui"
+            sizePreset="secondary"
             variant="body"
             icon={SvgEmpty}
             title={strings.selectEmptySet}
