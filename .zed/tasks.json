@@ -609,4 +609,14 @@
     },
     "reevaluate_context": true,
   },
+
+  // --- 7. Run against the local kind cluster (see .zed/README.md) ---
+  {
+    "label": "run: all services (k8s)",
+    "command": "$ZED_WORKTREE_ROOT/.zed/run-all-k8s.sh",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+  },
 ]
