@@ -3,6 +3,7 @@ import { DEFAULT_AVATAR_SIZE_PX } from "@/lib/constants";
 import { getUserEmail, getUserInitials } from "@/lib/users/svc";
 import Text from "@/refresh-components/texts/Text";
 import type { User } from "@/lib/types";
+import { isSingleGrapheme } from "@/lib/nameInitials";
 
 export interface UserAvatarProps {
   user: User | null;
@@ -44,7 +45,11 @@ export default function UserAvatar({
         secondaryAction
         text05
         className="select-none"
-        style={{ fontSize: size * 0.4 }}
+        // A lone grapheme fills the circle like the agent letter does,
+        // while two initials keep the width-driven size.
+        style={{
+          fontSize: size * (isSingleGrapheme(userInitials) ? 0.5 : 0.4),
+        }}
       >
         {userInitials}
       </Text>
