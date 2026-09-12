@@ -90,23 +90,11 @@
 .opal-select-create[data-highlighted] {
   @apply bg-background-tint-02;
 }
-.opal-select-create[data-prefixed] {
-  @apply px-1.5 py-1.5;
-}
 
 .opal-select-create-label {
   @apply min-w-0 truncate text-text-04 font-main-ui-action;
 }
-.opal-select-create[data-prefixed] .opal-select-create-label {
-  @apply px-1;
-}
-.opal-select-create-prefix {
-  @apply text-text-03;
-}
 
 .opal-select-create-icon {
   @apply ms-2 h-4 w-4 shrink-0 text-text-03;
-}
-.opal-select-create[data-prefixed] .opal-select-create-icon {
-  @apply mx-1 ms-0 text-text-04;
 }

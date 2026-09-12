@@ -32,8 +32,6 @@ interface SelectDropdownProps {
   allowCreate: boolean;
   /** Whether to show create option (pre-computed by parent) */
   showCreateOption: boolean;
-  /** Prefix shown before the typed value in the create option (e.g., "Use", "Add") */
-  createPrefix?: string;
   /** Max height of the dropdown in CSS units. Defaults to "15rem". */
   dropdownMaxHeight?: string;
 }
@@ -65,7 +63,6 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
       inputValue,
       allowCreate,
       showCreateOption,
-      createPrefix,
       dropdownMaxHeight,
     },
     ref
@@ -154,7 +151,6 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
             inputValue={inputValue}
             allowCreate={allowCreate}
             showCreateOption={showCreateOption}
-            createPrefix={createPrefix}
           />
         </ShadowDiv>
       </div>,

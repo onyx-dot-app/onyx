@@ -56,7 +56,6 @@ type InputMultiSelectOptionsProps =
        * options to close over is a contradiction the types reject.
        */
       mode?: "open";
-      createPrefix?: never;
       dropdownMaxHeight?: never;
     }
   | {
@@ -80,9 +79,6 @@ type InputMultiSelectOptionsProps =
        * - "open": typing filters AND the raw text commits via the create row.
        */
       mode?: "closed" | "open";
-
-      /** Prefix shown before the typed value in the create row (e.g. "Add"). */
-      createPrefix?: string;
 
       /** Max height of the dropdown in CSS units. Defaults to "15rem". */
       dropdownMaxHeight?: string;
@@ -157,7 +153,6 @@ function InputMultiSelect({
   onClear,
   minRows = 1,
   focusOnMount = false,
-  createPrefix,
   dropdownMaxHeight,
 }: InputMultiSelectProps) {
   const strings = useOpalStrings();
@@ -443,7 +438,6 @@ function InputMultiSelect({
         inputValue={value}
         allowCreate={freeEntry}
         showCreateOption={showCreateOption}
-        createPrefix={createPrefix}
         dropdownMaxHeight={dropdownMaxHeight}
       />
     </div>

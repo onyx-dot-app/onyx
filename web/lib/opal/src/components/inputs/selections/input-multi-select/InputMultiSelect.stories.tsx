@@ -18,11 +18,7 @@ function ControlledInputMultiSelect(
   props: Partial<
     Omit<
       React.ComponentProps<typeof InputMultiSelect>,
-      | "options"
-      | "onSelectOption"
-      | "mode"
-      | "createPrefix"
-      | "dropdownMaxHeight"
+      "options" | "onSelectOption" | "mode" | "dropdownMaxHeight"
     >
   >
 ) {
@@ -109,7 +105,6 @@ function ControlledWithOptions({ mode }: { mode?: "closed" | "open" }) {
         mode={mode}
         options={GROUP_OPTIONS}
         placeholder="Pick groups…"
-        createPrefix="Add"
         onSelectOption={(option) =>
           setTags((prev) => [
             ...prev,

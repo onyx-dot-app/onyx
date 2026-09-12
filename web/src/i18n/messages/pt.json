@@ -5361,7 +5361,6 @@
             "title": "Modelos"
           },
           "providerField": {
-            "createPrefix": "Usar",
             "description": "Veja a lista completa de provedores de LLM compatíveis no [LiteLLM](https://docs.litellm.ai/docs/providers).",
             "placeholder": "String do ID do provedor conforme mostrado no LiteLLM",
             "title": "Provedor"

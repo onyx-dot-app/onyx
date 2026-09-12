@@ -5361,7 +5361,6 @@
             "title": "Modelle"
           },
           "providerField": {
-            "createPrefix": "Verwenden",
             "description": "Die vollständige Liste der unterstützten LLM-Anbieter finden Sie bei [LiteLLM](https://docs.litellm.ai/docs/providers).",
             "placeholder": "Anbieter-ID wie bei LiteLLM angegeben",
             "title": "Anbieter"

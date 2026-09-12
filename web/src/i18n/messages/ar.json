@@ -5361,7 +5361,6 @@
             "title": "النماذج"
           },
           "providerField": {
-            "createPrefix": "استخدم",
             "description": "راجع القائمة الكاملة لموفري LLM المدعومين في [LiteLLM](https://docs.litellm.ai/docs/providers).",
             "placeholder": "معرّف الموفر كما يظهر في LiteLLM",
             "title": "الموفر"

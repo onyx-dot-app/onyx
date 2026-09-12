@@ -13,7 +13,7 @@ The set-openness axis:
   shows the selected option's label at rest; a value outside the set shows a
   validation error.
 - **`mode="open"`** — typing filters AND the raw text can be committed as a
-  value via the create row (prefix it with `createPrefix`, e.g. "Use").
+  value via the create row.
 
 Options are flat or sectioned. Sections render in order with a `Divider`
 between each and an optional muted heading; a section whose options all
@@ -40,7 +40,6 @@ filter out disappears.
   onValueChange={setModel}
   options={modelOptions}
   placeholder="Select or enter model"
-  createPrefix="Use"
 />
 ```
 
@@ -56,7 +55,6 @@ Key props (`InputSingleSelectProps` also passes DOM input attributes through):
 | `options`       | `SelectOption[] \| SelectSection[]`    | `[]`       | The set; sectioned options render with Dividers      |
 | `mode`          | `"closed" \| "open"`                   | `"closed"` | Set openness                                         |
 | `placeholder`   | `string`                               | —          | Trigger placeholder (required)                       |
-| `createPrefix`  | `string`                               | —          | Prefix on the open-mode create row (e.g. "Use")      |
 | `isError`       | `boolean`                              | —          | External error state (overrides internal validation) |
 | `rightChildren` | `React.ReactNode`                      | —          | Extra trigger-side controls                          |
 

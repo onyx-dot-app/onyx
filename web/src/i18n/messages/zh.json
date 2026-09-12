@@ -5361,7 +5361,6 @@
             "title": "模型"
           },
           "providerField": {
-            "createPrefix": "使用",
             "description": "支持的 LLM 提供商完整列表请参见 [LiteLLM](https://docs.litellm.ai/docs/providers)。",
             "placeholder": "LiteLLM 上显示的提供商 ID 字符串",
             "title": "提供商"

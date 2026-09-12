@@ -5361,7 +5361,6 @@
             "title": "Modèles"
           },
           "providerField": {
-            "createPrefix": "Utiliser",
             "description": "Consultez la liste complète des fournisseurs de LLM pris en charge sur [LiteLLM](https://docs.litellm.ai/docs/providers).",
             "placeholder": "Chaîne d'ID du fournisseur telle qu'affichée sur LiteLLM",
             "title": "Fournisseur"

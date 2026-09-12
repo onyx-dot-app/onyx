@@ -249,7 +249,6 @@ function ProviderNameSelect({ disabled }: { disabled?: boolean }) {
       options={options}
       placeholder={t("custom.providerField.placeholder")}
       disabled={disabled}
-      createPrefix={t("custom.providerField.createPrefix")}
       dropdownMaxHeight="60vh"
     />
   );

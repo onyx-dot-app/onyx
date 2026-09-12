@@ -65,7 +65,6 @@ const InputSingleSelect = ({
   searchIcon = false,
   rightChildren,
   separatorLabel,
-  createPrefix,
   showOtherOptions = false,
   dropdownMaxHeight,
   ...rest
@@ -442,7 +441,6 @@ const InputSingleSelect = ({
           inputValue={inputValue}
           allowCreate={!strict}
           showCreateOption={showCreateOption}
-          createPrefix={createPrefix}
           dropdownMaxHeight={dropdownMaxHeight}
         />
       </>

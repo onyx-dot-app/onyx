@@ -65,8 +65,8 @@ or on the chip — removes it through `onRemoveTag`. Sections render with a
 `Divider` between them.
 
 - **`mode="closed"`** (default): only options can be chosen.
-- **`mode="open"`**: the raw text can also be committed via the create row
-  (`createPrefix` labels it), landing in `onAdd` like a plain tag.
+- **`mode="open"`**: the raw text can also be committed via the create row,
+  landing in `onAdd` like a plain tag.
 
 Without `options` the input is the plain free-tagging field — an open set
 by definition, so the types accept only `mode="open"` there (`"closed"`

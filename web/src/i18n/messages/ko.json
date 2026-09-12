@@ -5361,7 +5361,6 @@
             "title": "모델"
           },
           "providerField": {
-            "createPrefix": "사용",
             "description": "지원되는 LLM 제공자 전체 목록은 [LiteLLM](https://docs.litellm.ai/docs/providers)에서 확인하세요.",
             "placeholder": "LiteLLM에 표시된 제공자 ID 문자열",
             "title": "제공자"

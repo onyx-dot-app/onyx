@@ -5361,7 +5361,6 @@
             "title": "Modelos"
           },
           "providerField": {
-            "createPrefix": "Usar",
             "description": "Consulta la lista completa de proveedores de LLM admitidos en [LiteLLM](https://docs.litellm.ai/docs/providers).",
             "placeholder": "Cadena del ID del proveedor tal como aparece en LiteLLM",
             "title": "Proveedor"

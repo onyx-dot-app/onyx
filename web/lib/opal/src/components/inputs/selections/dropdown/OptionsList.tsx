@@ -33,8 +33,6 @@ interface OptionsListProps {
   allowCreate: boolean;
   /** Whether to show create option (pre-computed by parent) */
   showCreateOption: boolean;
-  /** Prefix shown before the typed value in the create option (e.g., "Use", "Add") */
-  createPrefix?: string;
 }
 
 /**
@@ -56,7 +54,6 @@ export const OptionsList: React.FC<OptionsListProps> = ({
   inputValue,
   allowCreate,
   showCreateOption,
-  createPrefix,
 }) => {
   const strings = useOpalStrings();
   // Index offset for other options when create option is shown
@@ -95,7 +92,7 @@ export const OptionsList: React.FC<OptionsListProps> = ({
           tabIndex={-1}
           aria-selected={false}
           aria-label={strings.comboBoxCreateOption(
-            createPrefix ?? strings.comboBoxCreate,
+            strings.comboBoxCreate,
             inputValue
           )}
           onClick={(e) => {
@@ -112,20 +109,8 @@ export const OptionsList: React.FC<OptionsListProps> = ({
           onMouseMove={onMouseMove}
           className="opal-select-create"
           data-highlighted={highlightedIndex === 0 || undefined}
-          data-prefixed={createPrefix ? true : undefined}
         >
-          <span className="opal-select-create-label">
-            {createPrefix ? (
-              <>
-                <span className="opal-select-create-prefix">
-                  {createPrefix}
-                </span>
-                {` ${inputValue}`}
-              </>
-            ) : (
-              inputValue
-            )}
-          </span>
+          <span className="opal-select-create-label">{inputValue}</span>
           <SvgPlus className="opal-select-create-icon" />
         </div>
       )}

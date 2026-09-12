@@ -5361,7 +5361,6 @@
             "title": "モデル"
           },
           "providerField": {
-            "createPrefix": "使用",
             "description": "対応する LLM プロバイダーの全一覧は [LiteLLM](https://docs.litellm.ai/docs/providers) を参照してください。",
             "placeholder": "LiteLLM に表示されるプロバイダー ID 文字列",
             "title": "プロバイダー"
