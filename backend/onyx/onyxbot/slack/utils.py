@@ -252,13 +252,18 @@ def respond_in_thread_or_channel(
     receiver_ids: list[str] | None = None,
     metadata: Metadata | None = None,
     unfurl: bool = True,
-    send_as_ephemeral: bool | None = True,  # noqa: ARG001
+    send_as_ephemeral: bool | None = True,
 ) -> list[str]:
     if not text and not blocks:
         raise ValueError("One of `text` or `blocks` must be provided")
 
     message_ids: list[str] = []
-    if not receiver_ids:
+    # Post a single public message when there are no receivers, or when the
+    # caller explicitly opted out of ephemeral delivery. Without the
+    # `send_as_ephemeral is False` check, any non-empty `receiver_ids` (e.g. a
+    # channel allowlist) forced ephemeral delivery, making channel answers
+    # invisible to everyone even though the caller asked for a public post.
+    if not receiver_ids or send_as_ephemeral is False:
         try:
             response = client.chat_postMessage(
                 channel=channel,
