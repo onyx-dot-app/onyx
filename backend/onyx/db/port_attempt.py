@@ -436,6 +436,34 @@ def port_backfill_has_pending_work(
     return bool(set(in_scope_cc_pair_ids) - settled_cc_pairs)
 
 
+def latest_port_bounds_by_user(
+    db_session: Session,
+    search_settings_id: int,
+    user_ids: Collection[UUID],
+) -> dict[UUID, str | None]:
+    """Latest attempt's snapshot bound per user, in one pass rather than one query per
+    user. Users with no attempt are absent from the result."""
+    if not user_ids:
+        return {}
+    return {
+        user_id: up_to_doc_id
+        for user_id, up_to_doc_id in db_session.execute(
+            select(PortAttempt.port_user_id, PortAttempt.up_to_doc_id)
+            .where(
+                PortAttempt.search_settings_id == search_settings_id,
+                PortAttempt.port_user_id.in_(user_ids),
+            )
+            .distinct(PortAttempt.port_user_id)
+            .order_by(
+                PortAttempt.port_user_id,
+                PortAttempt.time_created.desc(),
+                PortAttempt.id.desc(),
+            )
+        )
+        if user_id is not None
+    }
+
+
 def all_user_scopes_ported(
     db_session: Session, search_settings_id: int, user_ids: list[UUID]
 ) -> bool:

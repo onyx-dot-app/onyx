@@ -239,10 +239,12 @@ def seed_cc_pair_documents(
     *,
     prefix: str = "portdoc-",
     unique: bool = False,
+    chunk_count: int | None = None,
 ) -> list[str]:
     """Create `count` documents linked to the cc_pair; returns their ids, sorted.
     `unique=True` adds a random suffix so a test seeding a real index across runs
-    never collides."""
+    never collides. `chunk_count` sets how many chunks each document claims to have,
+    which the pre-swap sample check reads to decide a document is worth looking up."""
     if unique:
         doc_ids = sorted(
             f"{prefix}{i:03d}-{uuid4().hex[:6]}" for i in range(1, count + 1)
@@ -251,7 +253,12 @@ def seed_cc_pair_documents(
         doc_ids = [f"{prefix}{i:03d}" for i in range(1, count + 1)]
     for doc_id in doc_ids:
         db_session.add(
-            DBDocument(id=doc_id, semantic_id=doc_id, kg_stage=KGStage.NOT_STARTED)
+            DBDocument(
+                id=doc_id,
+                semantic_id=doc_id,
+                kg_stage=KGStage.NOT_STARTED,
+                chunk_count=chunk_count,
+            )
         )
     db_session.flush()
     for doc_id in doc_ids:

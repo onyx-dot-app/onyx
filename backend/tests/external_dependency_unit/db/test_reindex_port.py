@@ -101,6 +101,7 @@ from onyx.db.port_orphan_candidate import (
 )
 from onyx.db.search_settings import create_search_settings, get_current_search_settings
 from onyx.db.swap_index import _port_swap_ready
+from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch import port_copy
 from onyx.document_index.opensearch.port_copy import copy_present_chunks_to_future
 from onyx.indexing.port_reembed import ReembedStrategy
@@ -115,6 +116,8 @@ from tests.external_dependency_unit.indexing_helpers import (
 from tests.external_dependency_unit.indexing_helpers import (
     seed_cc_pair_documents as _seed_cc_pair_documents,
 )
+
+_PORT_TENANT_STATE = TenantState(tenant_id="public", multitenant=False)
 
 
 def _run_check_for_port(
@@ -697,12 +700,15 @@ def test_copy_present_chunks_to_future_orchestration() -> None:
             ["d1", "d2"],
             strategy,
             embedder,
+            tenant_state=_PORT_TENANT_STATE,
             present_tokenizer=MagicMock(),
         )
 
     assert written == 3
     assert aborted is False
-    present_client.iter_chunks_for_doc_ids.assert_called_once_with(["d1", "d2"])
+    present_client.iter_chunks_for_doc_ids.assert_called_once_with(
+        ["d1", "d2"], _PORT_TENANT_STATE
+    )
     # re-embed once per page, with that page's chunks + prebuilt strategy/embedder
     assert mock_reembed.call_count == 2
     assert mock_reembed.call_args_list[0].args == (["c1", "c2"], strategy, embedder)

@@ -23,7 +23,7 @@ from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
 
-def _build_tenant_state() -> TenantState:
+def build_tenant_state() -> TenantState:
     return TenantState(tenant_id=get_current_tenant_id(), multitenant=MULTI_TENANT)
 
 
@@ -38,7 +38,7 @@ def build_opensearch_document_index(
     """
     indexing_setting = IndexingSetting.from_db_model(search_settings)
     return OpenSearchDocumentIndex(
-        tenant_state=_build_tenant_state(),
+        tenant_state=build_tenant_state(),
         index_name=search_settings.index_name,
         embedding_dim=indexing_setting.final_embedding_dim,
         embedding_precision=indexing_setting.embedding_precision,
@@ -75,7 +75,7 @@ def _build_vespa_pair(
     secondary_search_settings: SearchSettings | None,
     httpx_client: httpx.Client | None,
 ) -> VespaIndexPair:
-    tenant_state = _build_tenant_state()
+    tenant_state = build_tenant_state()
     primary = VespaDocumentIndex(
         index_name=search_settings.index_name,
         tenant_state=tenant_state,

@@ -569,6 +569,53 @@ class OpenSearchDocumentIndex(DocumentIndex):
 
         return self._client.delete_by_query(query_body)
 
+    def get_documents_with_any_chunk(self, document_ids: list[str]) -> set[str]:
+        """Which of these documents have at least one chunk here, whatever its position.
+
+        Scans instead of probing chunk 0, so it can tell a document that is really
+        absent from one that only lost its first chunk. Excusing a document on the
+        cheaper answer would wave that second case through as never indexed.
+
+        Refreshes first, because the scan is a search and a search cannot see a write
+        that has not been refreshed yet. Reporting a just-written document as absent is
+        the one answer a caller must never get from this, since it excuses on absence.
+        """
+        if not document_ids:
+            return set()
+        self._client.refresh_index()
+        found: set[str] = set()
+        for page in self._client.iter_chunks_for_doc_ids(
+            document_ids, self._tenant_state
+        ):
+            found.update(chunk.document_id for chunk in page)
+        return found
+
+    def get_documents_missing_chunks(self, document_ids: list[str]) -> list[str]:
+        """Which of these documents have no chunks in this index, in the order given.
+
+        Only chunk 0 is checked, which answers whether the document is here at all.
+        Counting every chunk would be worse: chunk_count in Postgres tracks the live
+        index, so a document re-indexed mid-port disagrees with what the port copied and
+        the difference would look like loss.
+        """
+        unique_ids = list(dict.fromkeys(document_ids))
+        if not unique_ids:
+            return []
+        chunk_id_to_doc_id = {
+            get_opensearch_doc_chunk_id(
+                tenant_state=self._tenant_state,
+                document_id=document_id,
+                chunk_index=0,
+            ): document_id
+            for document_id in unique_ids
+        }
+        found = self._client.get_existing_chunk_ids(list(chunk_id_to_doc_id.keys()))
+        return [
+            doc_id
+            for chunk_id, doc_id in chunk_id_to_doc_id.items()
+            if chunk_id not in found
+        ]
+
     def delete_port_written_chunks(self, document_ids: list[str]) -> int:
         """Delete only port-written chunks (written_by_port=true) for the given docs.
 
