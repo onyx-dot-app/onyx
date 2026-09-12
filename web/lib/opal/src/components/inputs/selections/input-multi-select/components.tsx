@@ -23,7 +23,7 @@ import {
 import type { IconFunctionComponent } from "@opal/types";
 import { Button, Tag, TAG_REMOVE_CLASS } from "@opal/components";
 import { SvgX } from "@opal/icons";
-import { RotatingChevron } from "../chevron";
+import { ChevronIcon } from "@opal/components/buttons/chevron";
 import { useOpalStrings } from "@opal/strings";
 import { useClickOutside } from "@opal/hooks/useClickOutside";
 import {
@@ -419,24 +419,23 @@ function InputMultiSelect({
         />
       )}
       {hasOptionSet && (
-        <span data-dropdown-open={isOpen} className="contents">
-          <Button
-            disabled={disabled}
-            prominence="tertiary"
-            size="sm"
-            icon={RotatingChevron}
-            aria-label={isOpen ? strings.comboBoxClose : strings.comboBoxOpen}
-            tabIndex={-1}
-            type="button"
-            onClick={(event) => {
-              // The field's own click handler focuses the input; the chevron
-              // toggles instead of always-opening.
-              event.stopPropagation();
-              setIsOpen((prev) => !prev);
-              inputRef.current?.focus();
-            }}
-          />
-        </span>
+        <Button
+          disabled={disabled}
+          prominence="tertiary"
+          size="sm"
+          icon={ChevronIcon}
+          interaction={isOpen ? "hover" : undefined}
+          aria-label={isOpen ? strings.comboBoxClose : strings.comboBoxOpen}
+          tabIndex={-1}
+          type="button"
+          onClick={(event) => {
+            // The field's own click handler focuses the input; the chevron
+            // toggles instead of always-opening.
+            event.stopPropagation();
+            setIsOpen((prev) => !prev);
+            inputRef.current?.focus();
+          }}
+        />
       )}
 
       <SelectDropdown

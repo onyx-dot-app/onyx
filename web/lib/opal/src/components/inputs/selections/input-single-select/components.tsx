@@ -56,7 +56,7 @@ import { SelectDropdown } from "../dropdown/SelectDropdown";
 
 // Types
 import { InputSingleSelectProps, SelectOption } from "../types";
-import { RotatingChevron } from "../chevron";
+import { ChevronIcon } from "@opal/components/buttons/chevron";
 import type { WithoutStyles } from "@opal/types";
 
 const InputSingleSelect = ({
@@ -405,20 +405,19 @@ const InputSingleSelect = ({
                 </div>
               )}
               {hasOptionSet && (
-                <span data-dropdown-open={isOpen} className="contents">
-                  <Button
-                    disabled={disabled}
-                    prominence="tertiary"
-                    size="sm"
-                    onClick={noProp(toggleDropdown)}
-                    icon={RotatingChevron}
-                    aria-label={
-                      isOpen ? strings.comboBoxClose : strings.comboBoxOpen
-                    }
-                    tabIndex={-1}
-                    type="button"
-                  />
-                </span>
+                <Button
+                  disabled={disabled}
+                  prominence="tertiary"
+                  size="sm"
+                  onClick={noProp(toggleDropdown)}
+                  icon={ChevronIcon}
+                  interaction={isOpen ? "hover" : undefined}
+                  aria-label={
+                    isOpen ? strings.comboBoxClose : strings.comboBoxOpen
+                  }
+                  tabIndex={-1}
+                  type="button"
+                />
               )}
             </>
           }
