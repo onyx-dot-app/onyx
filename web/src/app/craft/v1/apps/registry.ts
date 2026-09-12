@@ -7,6 +7,7 @@ import {
   SvgGoogleDrive,
   SvgHubspot,
   SvgNotion,
+  SvgJira,
 } from "@opal/logos";
 import { SvgPlug } from "@opal/icons";
 import { IconFunctionComponent } from "@opal/types";
@@ -21,6 +22,7 @@ export type ExternalAppType =
   | "GITHUB"
   | "HUBSPOT"
   | "NOTION"
+  | "JIRA"
   | "CUSTOM";
 
 const _BUILT_IN_LOGOS: Partial<Record<ExternalAppType, IconFunctionComponent>> =
@@ -33,6 +35,7 @@ const _BUILT_IN_LOGOS: Partial<Record<ExternalAppType, IconFunctionComponent>> =
     GITHUB: SvgGithub,
     HUBSPOT: SvgHubspot,
     NOTION: SvgNotion,
+    JIRA: SvgJira,
   };
 
 /** Logo for a known `app_type`, with a generic fallback for CUSTOM /
