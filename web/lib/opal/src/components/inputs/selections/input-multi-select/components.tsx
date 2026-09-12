@@ -12,27 +12,20 @@ import {
   useRef,
   useState,
 } from "react";
-import {
-  useFloating,
-  autoUpdate,
-  flip,
-  offset,
-  shift,
-  size,
-} from "@floating-ui/react-dom";
 import type { IconFunctionComponent } from "@opal/types";
 import { Button, Tag, TAG_REMOVE_CLASS } from "@opal/components";
 import { SvgX } from "@opal/icons";
 import { ChevronIcon } from "@opal/components/buttons/chevron";
 import { useOpalStrings } from "@opal/strings";
-import { useClickOutside } from "@opal/hooks/useClickOutside";
 import {
   filterSections,
   flattenSections,
   normalizeSections,
   useSelectKeyboard,
+  useSelectOverlay,
 } from "../shared";
 import { SelectDropdown } from "../dropdown/SelectDropdown";
+import { SelectChevron } from "../dropdown/SelectChevron";
 import { buildAriaAttributes } from "../dropdown/aria";
 import type { SelectOption, SelectSection } from "../types";
 
@@ -167,10 +160,21 @@ function InputMultiSelect({
   createPrefix,
   dropdownMaxHeight,
 }: InputMultiSelectProps) {
-  const rootRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const strings = useOpalStrings();
+  const {
+    isOpen,
+    setIsOpen,
+    highlightedIndex,
+    setHighlightedIndex,
+    isKeyboardNav,
+    setIsKeyboardNav,
+    rootRef,
+    setRootRef,
+    inputRef,
+    dropdownRef,
+    setFloatingRef,
+    floatingStyles,
+  } = useSelectOverlay();
 
   const sections = useMemo(
     () => normalizeSections(optionsProp ?? []),
@@ -186,17 +190,6 @@ function InputMultiSelect({
     () => new Set(tags.map((tag) => tag.id)),
     [tags]
   );
-
-  // Dropdown state (local: the input text itself is caller-controlled).
-  const [isOpen, setIsOpen] = useState(false);
-  const [highlightedIndex, setHighlightedIndex] = useState(-1);
-  const [isKeyboardNav, setIsKeyboardNav] = useState(false);
-  useEffect(() => {
-    if (!isOpen) {
-      setHighlightedIndex(-1);
-      setIsKeyboardNav(false);
-    }
-  }, [isOpen]);
 
   const hasSearchTerm = value.trim() !== "";
   const visibleSections = useMemo(
@@ -221,24 +214,6 @@ function InputMultiSelect({
     }
     return baseOptions;
   }, [visibleSections, showCreateOption, value]);
-
-  const { refs, floatingStyles } = useFloating({
-    open: isOpen,
-    placement: "bottom-start",
-    middleware: [
-      offset(4),
-      flip(),
-      shift({ padding: 8 }),
-      size({
-        apply({ rects, elements }) {
-          Object.assign(elements.floating.style, {
-            width: `${rects.reference.width}px`,
-          });
-        },
-      }),
-    ],
-    whileElementsMounted: autoUpdate,
-  });
 
   const handleOptionSelect = useCallback(
     (option: SelectOption) => {
@@ -272,18 +247,6 @@ function InputMultiSelect({
     onSelect: handleOptionSelect,
     hasOptions: hasOptionSet,
   });
-
-  useClickOutside<HTMLElement>(
-    [
-      rootRef as React.RefObject<HTMLElement>,
-      dropdownRef as React.RefObject<HTMLElement>,
-    ],
-    useCallback(() => {
-      setIsOpen(false);
-      setIsKeyboardNav(false);
-    }, []),
-    isOpen
-  );
 
   useEffect(() => {
     if (focusOnMount) inputRef.current?.focus();
@@ -346,10 +309,7 @@ function InputMultiSelect({
 
   return (
     <div
-      ref={(node) => {
-        rootRef.current = node;
-        refs.setReference(node);
-      }}
+      ref={setRootRef}
       role="presentation"
       className="opal-input opal-input-multi-select"
       data-variant={disabled ? "disabled" : variant}
@@ -419,22 +379,10 @@ function InputMultiSelect({
         />
       )}
       {hasOptionSet && (
-        <Button
+        <SelectChevron
+          isOpen={isOpen}
           disabled={disabled}
-          prominence="tertiary"
-          size="sm"
-          // Keep focus in the input so the toggle isn't undone by
-          // focus() re-opening through onFocus.
-          onMouseDown={(event) => event.preventDefault()}
-          icon={ChevronIcon}
-          interaction={isOpen ? "hover" : undefined}
-          aria-label={isOpen ? strings.comboBoxClose : strings.comboBoxOpen}
-          tabIndex={-1}
-          type="button"
-          onClick={(event) => {
-            // The field's own click handler focuses the input; the chevron
-            // toggles instead of always-opening.
-            event.stopPropagation();
+          onToggle={() => {
             setIsOpen((prev) => !prev);
             inputRef.current?.focus();
           }}
@@ -446,7 +394,7 @@ function InputMultiSelect({
         isOpen={isOpen && hasOptionSet}
         disabled={disabled}
         floatingStyles={floatingStyles}
-        setFloatingRef={refs.setFloating}
+        setFloatingRef={setFloatingRef}
         fieldId={fieldId}
         placeholder={placeholder ?? ""}
         sections={visibleSections}

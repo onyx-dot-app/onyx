@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import React from "react";
-import InputSingleSelect from "./InputSingleSelect";
+import { InputSingleSelect } from "./components";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
 const meta: Meta<typeof InputSingleSelect> = {

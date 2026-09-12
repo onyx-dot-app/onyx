@@ -1,4 +1,13 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import {
+  useFloating,
+  autoUpdate,
+  flip,
+  offset,
+  shift,
+  size,
+} from "@floating-ui/react-dom";
+import { useClickOutside } from "@opal/hooks/useClickOutside";
 import { SelectOption, SelectSection } from "./types";
 
 // =============================================================================
@@ -41,67 +50,6 @@ export function filterSections(
       ),
     }))
     .filter((section) => section.options.length > 0);
-}
-
-// =============================================================================
-// HOOK: useSelectState
-// =============================================================================
-
-interface UseSelectStateProps {
-  value: string;
-  options: SelectOption[];
-}
-
-/**
- * Manages the internal state of the ComboBox component
- * Handles state synchronization between external value prop and internal input state
- */
-export function useSelectState({ value, options }: UseSelectStateProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [inputValue, setInputValue] = useState(value);
-  const [highlightedIndex, setHighlightedIndex] = useState(-1);
-  const [isKeyboardNav, setIsKeyboardNav] = useState(false);
-  const prevIsOpenRef = useRef(false);
-
-  // Sync inputValue with the external value prop.
-  // When the dropdown is closed, always reflect the controlled value.
-  // When the dropdown is open, only sync if the *value prop itself* changes
-  // (e.g. parent programmatically updates it), not when inputValue changes
-  // (e.g. user clears the field on focus to browse all options).
-  useEffect(() => {
-    if (!isOpen) {
-      setInputValue(value);
-    }
-  }, [value, isOpen]);
-
-  useEffect(() => {
-    if (isOpen) {
-      const isExactOptionMatch = options.some((opt) => opt.value === value);
-      if (isExactOptionMatch) {
-        setInputValue(value);
-      }
-    }
-    // Only react to value prop changes while open, not inputValue changes
-  }, [value]);
-
-  // Reset highlight and keyboard nav when closing dropdown
-  useEffect(() => {
-    if (!isOpen) {
-      setHighlightedIndex(-1);
-      setIsKeyboardNav(false);
-    }
-  }, [isOpen]);
-
-  return {
-    isOpen,
-    setIsOpen,
-    inputValue,
-    setInputValue,
-    highlightedIndex,
-    setHighlightedIndex,
-    isKeyboardNav,
-    setIsKeyboardNav,
-  };
 }
 
 // =============================================================================
@@ -202,4 +150,93 @@ export function useSelectKeyboard({
   );
 
   return { handleKeyDown };
+}
+
+// =============================================================================
+// HOOK: useSelectOverlay
+// =============================================================================
+
+interface UseSelectOverlayProps {
+  isOpen: boolean;
+  setIsOpen: React.Dispatch<React.SetStateAction<boolean>>;
+}
+
+/**
+ * Everything the family's dropdown overlay shares between the single and
+ * multi selects: open/highlight/keyboard-nav state with its close-reset,
+ * the floating-ui positioning (trigger-width, flip/shift), the refs, and
+ * outside-click dismissal scoped to the whole trigger root plus the portal.
+ *
+ * Selection semantics (what a pick means) stay in the components.
+ */
+export function useSelectOverlay() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const [isKeyboardNav, setIsKeyboardNav] = useState(false);
+
+  const rootRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Reset highlight and keyboard nav when closing
+  useEffect(() => {
+    if (!isOpen) {
+      setHighlightedIndex(-1);
+      setIsKeyboardNav(false);
+    }
+  }, [isOpen]);
+
+  const { refs, floatingStyles } = useFloating({
+    open: isOpen,
+    placement: "bottom-start",
+    middleware: [
+      offset(4),
+      flip(),
+      shift({ padding: 8 }),
+      size({
+        apply({ rects, elements }) {
+          Object.assign(elements.floating.style, {
+            width: `${rects.reference.width}px`,
+          });
+        },
+      }),
+    ],
+    whileElementsMounted: autoUpdate,
+  });
+
+  // The trigger root doubles as the floating reference.
+  const setRootRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      rootRef.current = node;
+      refs.setReference(node);
+    },
+    [refs]
+  );
+
+  useClickOutside<HTMLElement>(
+    [
+      rootRef as React.RefObject<HTMLElement>,
+      dropdownRef as React.RefObject<HTMLElement>,
+    ],
+    useCallback(() => {
+      setIsOpen(false);
+      setIsKeyboardNav(false);
+    }, []),
+    isOpen
+  );
+
+  return {
+    isOpen,
+    setIsOpen,
+    highlightedIndex,
+    setHighlightedIndex,
+    isKeyboardNav,
+    setIsKeyboardNav,
+    rootRef,
+    setRootRef,
+    inputRef,
+    dropdownRef,
+    setFloatingRef: refs.setFloating,
+    floatingStyles,
+  };
 }

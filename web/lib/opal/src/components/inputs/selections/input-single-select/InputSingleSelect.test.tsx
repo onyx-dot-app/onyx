@@ -2,7 +2,7 @@ import React from "react";
 import { render, screen, fireEvent, waitFor } from "@tests/setup/test-utils";
 import "@testing-library/jest-dom";
 import userEvent from "@testing-library/user-event";
-import InputSingleSelect from "./InputSingleSelect";
+import { InputSingleSelect } from "./components";
 
 // Mock createPortal for dropdown rendering
 jest.mock("react-dom", () => ({
@@ -243,7 +243,9 @@ describe("InputSingleSelect", () => {
       expect(options.length).toBe(2);
       expect(screen.getByLabelText('Create "app"')).toBeInTheDocument();
       expect(
-        options.some((option) => option.textContent?.includes("Apple"))
+        options.some((option: HTMLElement) =>
+          option.textContent?.includes("Apple")
+        )
       ).toBe(true);
       expect(screen.queryByText("Banana")).not.toBeInTheDocument();
     });
@@ -519,7 +521,9 @@ describe("InputSingleSelect", () => {
 
       // Get the Apple option by role and click it
       const options = screen.getAllByRole("option");
-      const appleOption = options.find((opt) => opt.textContent === "Apple");
+      const appleOption = options.find(
+        (opt: HTMLElement) => opt.textContent === "Apple"
+      );
       expect(appleOption).toBeDefined();
       await user.click(appleOption!);
       expect(handleValueChange).toHaveBeenCalledWith("apple");

@@ -13,7 +13,18 @@ export default meta;
 type Story = StoryObj<typeof InputMultiSelect>;
 
 function ControlledInputMultiSelect(
-  props: Partial<React.ComponentProps<typeof InputMultiSelect>>
+  // Base-arm props only: spreading a Partial of the options-pairing union
+  // doesn't typecheck, and these stories exercise the optionless input.
+  props: Partial<
+    Omit<
+      React.ComponentProps<typeof InputMultiSelect>,
+      | "options"
+      | "onSelectOption"
+      | "mode"
+      | "createPrefix"
+      | "dropdownMaxHeight"
+    >
+  >
 ) {
   const [tags, setTags] = useState<TagItem[]>([
     { id: "1", label: "Tag" },

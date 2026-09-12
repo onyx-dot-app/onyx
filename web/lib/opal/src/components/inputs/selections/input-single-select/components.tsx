@@ -20,18 +20,10 @@ import React, {
   useCallback,
   useContext,
   useMemo,
-  useRef,
+  useState,
   useId,
   useEffect,
 } from "react";
-import {
-  useFloating,
-  autoUpdate,
-  flip,
-  offset,
-  shift,
-  size,
-} from "@floating-ui/react-dom";
 import { useOpalStrings } from "@opal/strings";
 import { cn, noProp } from "@opal/utils";
 import { InputTypeIn } from "@opal/components";
@@ -41,18 +33,18 @@ import { FieldMessage } from "@opal/form";
 
 // Hooks
 import {
-  useSelectState,
   useSelectKeyboard,
+  useSelectOverlay,
   filterSections,
   flattenSections,
   normalizeSections,
 } from "../shared";
-import { useClickOutside } from "@opal/hooks/useClickOutside";
 import { useValidation } from "./validation";
 import { buildAriaAttributes } from "../dropdown/aria";
 
 // Components
 import { SelectDropdown } from "../dropdown/SelectDropdown";
+import { SelectChevron } from "../dropdown/SelectChevron";
 
 // Types
 import { InputSingleSelectProps, SelectOption } from "../types";
@@ -85,9 +77,19 @@ const InputSingleSelect = ({
   );
   const options = useMemo(() => flattenSections(sections), [sections]);
   const strings = useOpalStrings();
-  const inputRef = useRef<HTMLInputElement>(null);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const {
+    isOpen,
+    setIsOpen,
+    highlightedIndex,
+    setHighlightedIndex,
+    isKeyboardNav,
+    setIsKeyboardNav,
+    setRootRef,
+    inputRef,
+    dropdownRef,
+    setFloatingRef,
+    floatingStyles,
+  } = useSelectOverlay();
   const fieldContext = useContext(FieldContext);
 
   // The prop's PRESENCE drives the select machinery (chevron, dropdown,
@@ -95,17 +97,19 @@ const InputSingleSelect = ({
   // an absent prop degrades to a plain input.
   const hasOptionSet = optionsProp !== undefined;
 
-  //State Management Hook
-  const {
-    isOpen,
-    setIsOpen,
-    inputValue,
-    setInputValue,
-    highlightedIndex,
-    setHighlightedIndex,
-    isKeyboardNav,
-    setIsKeyboardNav,
-  } = useSelectState({ value, options });
+  // Trigger text. Closed, it mirrors the controlled value; open, it is the
+  // user's filter (only a value-prop change may overwrite it then).
+  const [inputValue, setInputValue] = useState(value);
+  useEffect(() => {
+    if (!isOpen) setInputValue(value);
+  }, [value, isOpen]);
+  useEffect(() => {
+    if (isOpen && options.some((opt) => opt.value === value)) {
+      setInputValue(value);
+    }
+    // Only react to value prop changes while open, not inputValue changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
 
   // Filtering: each section filters independently; empty ones disappear.
   const hasSearchTerm = inputValue.trim() !== "";
@@ -152,25 +156,6 @@ const InputSingleSelect = ({
     }
     return baseOptions;
   }, [visibleSections, showCreateOption, inputValue]);
-
-  // Floating UI for dropdown positioning
-  const { refs, floatingStyles } = useFloating({
-    open: isOpen,
-    placement: "bottom-start",
-    middleware: [
-      offset(4),
-      flip(),
-      shift({ padding: 8 }),
-      size({
-        apply({ rects, elements }) {
-          Object.assign(elements.floating.style, {
-            width: `${rects.reference.width}px`,
-          });
-        },
-      }),
-    ],
-    whileElementsMounted: autoUpdate,
-  });
 
   // Check if an option is an exact match
   const isExactMatch = useCallback(
@@ -286,21 +271,6 @@ const InputSingleSelect = ({
     hasOptions: hasOptionSet,
   });
 
-  // Click Outside Hook
-  useClickOutside<HTMLElement>(
-    [
-      // The whole trigger, not just the <input>: the chevron and any
-      // rightChildren are inside — clicking them must not read as outside.
-      rootRef as React.RefObject<HTMLElement>,
-      dropdownRef as React.RefObject<HTMLElement>,
-    ],
-    useCallback(() => {
-      setIsOpen(false);
-      setIsKeyboardNav(false);
-    }, [setIsOpen, setIsKeyboardNav]),
-    isOpen
-  );
-
   // The selection's visible text, used to seed editing: focusing must not
   // wipe what the user picked, and the raw value would filter wrongly.
   const selectedLabel = useMemo(() => {
@@ -369,13 +339,7 @@ const InputSingleSelect = ({
   }, [isOpen, inputValue, value, options, hasOptionSet]);
 
   return (
-    <div
-      ref={(node) => {
-        rootRef.current = node;
-        refs.setReference(node);
-      }}
-      className="opal-input-single-select"
-    >
+    <div ref={setRootRef} className="opal-input-single-select">
       <>
         <InputTypeIn
           ref={inputRef}
@@ -414,22 +378,10 @@ const InputSingleSelect = ({
                 </div>
               )}
               {hasOptionSet && (
-                <Button
+                <SelectChevron
+                  isOpen={isOpen}
                   disabled={disabled}
-                  prominence="tertiary"
-                  size="sm"
-                  // Keep focus in the input: without this, mousedown blurs
-                  // it, and toggling closed is undone by the focus() call
-                  // re-opening via onFocus — a close/open flash.
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={noProp(toggleDropdown)}
-                  icon={ChevronIcon}
-                  interaction={isOpen ? "hover" : undefined}
-                  aria-label={
-                    isOpen ? strings.comboBoxClose : strings.comboBoxOpen
-                  }
-                  tabIndex={-1}
-                  type="button"
+                  onToggle={toggleDropdown}
                 />
               )}
             </>
@@ -444,7 +396,7 @@ const InputSingleSelect = ({
           isOpen={isOpen}
           disabled={disabled}
           floatingStyles={floatingStyles}
-          setFloatingRef={refs.setFloating}
+          setFloatingRef={setFloatingRef}
           fieldId={fieldId}
           placeholder={placeholder}
           sections={visibleSections}
