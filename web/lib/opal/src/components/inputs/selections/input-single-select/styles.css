@@ -1,0 +1,12 @@
+@reference "#reference.css";
+
+/* ---------------------------------------------------------------------------
+   InputSingleSelect — layout only
+
+   The trigger chrome comes from InputTypeIn (.opal-input) and the listbox
+   from the family dropdown; this file carries just the root wrapper.
+   --------------------------------------------------------------------------- */
+
+.opal-input-single-select {
+  @apply relative w-full;
+}

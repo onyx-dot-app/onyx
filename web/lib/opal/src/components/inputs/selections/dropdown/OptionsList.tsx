@@ -4,7 +4,7 @@ import { OptionItem } from "./OptionItem";
 import { SelectOption, SelectSection } from "../types";
 import { Divider } from "@opal/components/divider/components";
 import { Text } from "@opal/components/text/components";
-import { cn, clickOnKeyDown } from "@opal/utils";
+import { clickOnKeyDown } from "@opal/utils";
 import { SvgPlus } from "@opal/icons";
 import { sanitizeOptionId } from "./aria";
 
@@ -72,7 +72,7 @@ export const OptionsList: React.FC<OptionsListProps> = ({
     // nothing keeps the lightweight text row.
     if (emptySet) {
       return (
-        <div className="p-2.5">
+        <div className="opal-select-empty-set">
           <Text as="p" color="text-03" font="secondary-body">
             {strings.selectEmptySet}
           </Text>
@@ -80,9 +80,7 @@ export const OptionsList: React.FC<OptionsListProps> = ({
       );
     }
     return (
-      <div className="px-3 py-2 text-text-02 font-secondary-body">
-        {strings.comboBoxNoOptions}
-      </div>
+      <div className="opal-select-no-match">{strings.comboBoxNoOptions}</div>
     );
   }
 
@@ -112,35 +110,23 @@ export const OptionsList: React.FC<OptionsListProps> = ({
           }}
           onMouseEnter={() => onMouseEnter(0)}
           onMouseMove={onMouseMove}
-          className={cn(
-            "cursor-pointer transition-colors",
-            "flex items-center justify-between rounded-08",
-            highlightedIndex === 0 && "bg-background-tint-02",
-            "hover:bg-background-tint-02",
-            createPrefix ? "px-1.5 py-1.5" : "px-3 py-2"
-          )}
+          className="opal-select-create"
+          data-highlighted={highlightedIndex === 0 || undefined}
+          data-prefixed={createPrefix ? true : undefined}
         >
-          <span
-            className={cn(
-              "font-main-ui-action truncate min-w-0",
-              createPrefix ? "px-1" : ""
-            )}
-          >
+          <span className="opal-select-create-label">
             {createPrefix ? (
               <>
-                <span className="text-text-03">{createPrefix}</span>
-                <span className="text-text-04">{` ${inputValue}`}</span>
+                <span className="opal-select-create-prefix">
+                  {createPrefix}
+                </span>
+                {` ${inputValue}`}
               </>
             ) : (
-              <span className="text-text-04">{inputValue}</span>
+              inputValue
             )}
           </span>
-          <SvgPlus
-            className={cn(
-              "w-4 h-4 shrink-0",
-              createPrefix ? "text-text-04 mx-1" : "text-text-03 ms-2"
-            )}
-          />
+          <SvgPlus className="opal-select-create-icon" />
         </div>
       )}
 

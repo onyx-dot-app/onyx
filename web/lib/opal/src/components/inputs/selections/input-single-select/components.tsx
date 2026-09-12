@@ -15,6 +15,7 @@
  * With no options it degrades to a plain input.
  */
 
+import "@opal/components/inputs/selections/input-single-select/styles.css";
 import React, {
   useCallback,
   useContext,
@@ -365,7 +366,7 @@ const InputSingleSelect = ({
   }, [isOpen, inputValue, value, options, hasOptionSet]);
 
   return (
-    <div ref={refs.setReference} className="relative w-full">
+    <div ref={refs.setReference} className="opal-input-single-select">
       <>
         <InputTypeIn
           ref={inputRef}

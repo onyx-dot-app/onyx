@@ -1,5 +1,5 @@
 import React from "react";
-import { cn, clickOnKeyDown } from "@opal/utils";
+import { clickOnKeyDown } from "@opal/utils";
 import { SelectOption } from "../types";
 import { sanitizeOptionId } from "./aria";
 
@@ -35,7 +35,7 @@ const highlightMatch = (text: string, searchTerm: string): React.ReactNode => {
 
   return parts.map((part, i) =>
     part.toLowerCase() === searchTerm.toLowerCase() ? (
-      <span key={i} className="font-semibold">
+      <span key={i} className="opal-select-match">
         {part}
       </span>
     ) : (
@@ -79,48 +79,20 @@ export const OptionItem = React.memo(
         }}
         onMouseEnter={() => onMouseEnter(index)}
         onMouseMove={onMouseMove}
-        className={cn(
-          "px-3 py-2 cursor-pointer transition-colors",
-          "flex flex-col rounded-08",
-          isExact && "bg-action-selection-01",
-          !isExact && isHighlighted && "bg-background-tint-02",
-          !isExact && isSelected && "bg-background-tint-02",
-          option.disabled &&
-            "opacity-50 cursor-not-allowed bg-background-neutral-02",
-          !option.disabled && !isExact && "hover:bg-background-tint-02"
-        )}
+        className="opal-select-option"
+        data-exact={isExact || undefined}
+        data-highlighted={isHighlighted || undefined}
+        data-selected={isSelected || undefined}
+        data-disabled={option.disabled || undefined}
       >
-        <span
-          className={cn(
-            "flex flex-row items-center gap-1.5",
-            "font-main-ui-action",
-            isExact && "text-action-selection-05 font-medium",
-            !isExact && "text-text-04",
-            !isExact && isSelected && "font-medium"
-          )}
-        >
-          {option.icon && (
-            <option.icon
-              className={cn(
-                "h-4 w-4 shrink-0",
-                isExact ? "stroke-action-selection-05" : "stroke-text-03"
-              )}
-            />
-          )}
-          {/* Inner span: the highlight splits the label into segments, and
-              they must stay inline — as direct flex children the row's gap
-              would space them apart mid-word. */}
-          <span className="min-w-0 truncate">
+        <span className="opal-select-option-label">
+          {option.icon && <option.icon className="opal-select-option-icon" />}
+          <span className="opal-select-option-text">
             {highlightMatch(option.label, searchTerm)}
           </span>
         </span>
         {option.description && (
-          <span
-            className={cn(
-              "mt-0.5 font-secondary-body",
-              isExact ? "text-action-selection-04" : "text-text-03"
-            )}
-          >
+          <span className="opal-select-option-description">
             {option.description}
           </span>
         )}

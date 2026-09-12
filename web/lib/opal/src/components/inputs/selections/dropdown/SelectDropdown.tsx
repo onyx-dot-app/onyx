@@ -1,5 +1,6 @@
 import React, { useEffect, forwardRef } from "react";
 import { createPortal } from "react-dom";
+import "@opal/components/inputs/selections/dropdown/styles.css";
 import { cn } from "@opal/utils";
 import { ShadowDiv } from "@opal/components/shadow-div/components";
 import { OptionsList } from "./OptionsList";
@@ -109,7 +110,7 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
         role="listbox"
         tabIndex={-1}
         aria-label={placeholder}
-        className="z-10000 bg-background-neutral-00 border rounded-12 shadow-box-01 overflow-hidden p-1 pointer-events-auto touch-auto"
+        className="opal-select-dropdown"
         style={floatingStyles}
         onMouseLeave={onMouseLeave}
         onMouseDown={(e) => {
@@ -129,7 +130,7 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
         <ShadowDiv
           shadowHeight="0.75rem"
           className={cn(
-            "flex flex-col gap-1 overflow-x-hidden",
+            "opal-select-dropdown-scroll",
             !dropdownMaxHeight && "max-h-60"
           )}
           style={{
