@@ -70,6 +70,7 @@ Wraps children in standard `p-2 w-full` padding.
 
 ```tsx
 import { InputVertical, InputHorizontal } from "@opal/layouts";
+import { InputSwitch, InputSingleSelect } from "@opal/components";
 
 // Vertical with Formik field binding
 <InputVertical withLabel="email" title="Email" description="Your email address">

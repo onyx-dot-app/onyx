@@ -4,11 +4,30 @@ import "@opal/components/inputs/shared.css";
 // The inner field reuses InputTypeIn's .opal-input-field styling.
 import "@opal/components/inputs/input-type-in/styles.css";
 import "@opal/components/inputs/selections/input-multi-select/styles.css";
-import { useEffect, useRef } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { IconFunctionComponent } from "@opal/types";
 import { Button, Tag, TAG_REMOVE_CLASS } from "@opal/components";
 import { SvgX } from "@opal/icons";
+import { ChevronIcon } from "@opal/components/buttons/chevron";
 import { useOpalStrings } from "@opal/strings";
+import {
+  filterSections,
+  flattenSections,
+  normalizeSections,
+  useSelectKeyboard,
+  useSelectOverlay,
+} from "../shared";
+import { SelectDropdown } from "../dropdown/SelectDropdown";
+import { SelectChevron } from "../dropdown/SelectChevron";
+import { buildAriaAttributes } from "../dropdown/aria";
+import type { SelectOption, SelectSection } from "../types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -22,7 +41,54 @@ interface TagItem {
   error?: boolean;
 }
 
-interface InputMultiSelectProps {
+/**
+ * Supplying `options` requires `onSelectOption`: without a handler a chosen
+ * option would vanish (nothing writes it into `tags`), so the pairing is
+ * enforced where it can't be forgotten — the types.
+ */
+type InputMultiSelectOptionsProps =
+  | {
+      options?: never;
+      onSelectOption?: never;
+      /**
+       * Without a set the input is free tagging — an open set by
+       * definition — so only `"open"` may be stated. A closed set with no
+       * options to close over is a contradiction the types reject.
+       */
+      mode?: "open";
+      createPrefix?: never;
+      dropdownMaxHeight?: never;
+    }
+  | {
+      /**
+       * The selectable set; enables the family dropdown. Flat or sectioned —
+       * sections render with a Divider between them. Convention: a chosen
+       * option becomes a tag whose `id` is the option's `value`, so the
+       * dropdown can show it selected and toggle it off.
+       */
+      options: SelectOption[] | SelectSection[];
+
+      /**
+       * Called when a dropdown option is chosen. Choosing an already-selected
+       * option calls `onRemoveTag(option.value)` instead — one removal path.
+       */
+      onSelectOption: (option: SelectOption) => void;
+
+      /**
+       * Set openness:
+       * - "closed" (default): only options can be chosen; typing filters.
+       * - "open": typing filters AND the raw text commits via the create row.
+       */
+      mode?: "closed" | "open";
+
+      /** Prefix shown before the typed value in the create row (e.g. "Add"). */
+      createPrefix?: string;
+
+      /** Max height of the dropdown in CSS units. Defaults to "15rem". */
+      dropdownMaxHeight?: string;
+    };
+
+interface InputMultiSelectBaseProps {
   /** Tags rendered before the text input. */
   tags: TagItem[];
 
@@ -60,15 +126,20 @@ interface InputMultiSelectProps {
   focusOnMount?: boolean;
 }
 
+type InputMultiSelectProps = InputMultiSelectBaseProps &
+  InputMultiSelectOptionsProps;
+
 // ---------------------------------------------------------------------------
 // InputMultiSelect
 // ---------------------------------------------------------------------------
 
 /**
- * Chips-in-input (Figma `Input/Tags`): editable Tags inline with a text
- * input. Enter adds the trimmed text. Backspace on an empty input arms the
- * last tag (its dark keyboard-selection state), and Backspace or Delete on
- * an armed tag removes it and returns focus to the input.
+ * The multi-arity member of the input-select family: chips-in-input (Figma
+ * `Input/Tags`) over the family's unified dropdown. Typing filters the
+ * option set; chosen options render as Tags. Backspace on an empty input
+ * arms the last tag, and Backspace or Delete on an armed tag removes it.
+ *
+ * Without `options` it is the plain free-tagging input it always was.
  */
 function InputMultiSelect({
   tags,
@@ -76,6 +147,9 @@ function InputMultiSelect({
   onAdd,
   value,
   onChange,
+  options: optionsProp,
+  mode = "closed",
+  onSelectOption,
   placeholder,
   variant = "primary",
   disabled = false,
@@ -83,10 +157,96 @@ function InputMultiSelect({
   onClear,
   minRows = 1,
   focusOnMount = false,
+  createPrefix,
+  dropdownMaxHeight,
 }: InputMultiSelectProps) {
-  const rootRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
   const strings = useOpalStrings();
+  const {
+    isOpen,
+    setIsOpen,
+    highlightedIndex,
+    setHighlightedIndex,
+    isKeyboardNav,
+    setIsKeyboardNav,
+    rootRef,
+    setRootRef,
+    inputRef,
+    dropdownRef,
+    setFloatingRef,
+    floatingStyles,
+  } = useSelectOverlay();
+
+  const sections = useMemo(
+    () => normalizeSections(optionsProp ?? []),
+    [optionsProp]
+  );
+  const flatOptions = useMemo(() => flattenSections(sections), [sections]);
+  // The prop's PRESENCE is the contract: an empty or still-loading closed
+  // set must not fall open. Only an absent prop means legacy free tagging.
+  const hasOptionSet = optionsProp !== undefined;
+  const freeEntry = mode === "open" || !hasOptionSet;
+
+  const selectedValues = useMemo(
+    () => new Set(tags.map((tag) => tag.id)),
+    [tags]
+  );
+
+  const hasSearchTerm = value.trim() !== "";
+  const visibleSections = useMemo(
+    () => filterSections(sections, value),
+    [sections, value]
+  );
+  const trimmedValue = value.trim().toLowerCase();
+  // An exact match means Enter should pick the option, not fork a free-form
+  // duplicate of it.
+  const exactOptionMatch = flatOptions.some(
+    (option) =>
+      option.value.toLowerCase() === trimmedValue ||
+      option.label.toLowerCase() === trimmedValue
+  );
+  const showCreateOption =
+    mode === "open" && hasOptionSet && hasSearchTerm && !exactOptionMatch;
+
+  const allVisibleOptions = useMemo(() => {
+    const baseOptions = flattenSections(visibleSections);
+    if (showCreateOption) {
+      return [{ value, label: value }, ...baseOptions];
+    }
+    return baseOptions;
+  }, [visibleSections, showCreateOption, value]);
+
+  const handleOptionSelect = useCallback(
+    (option: SelectOption) => {
+      if (option.disabled) return;
+      const real = flatOptions.find((o) => o.value === option.value);
+      if (real) {
+        if (selectedValues.has(real.value)) {
+          onRemoveTag(real.value);
+        } else {
+          onSelectOption?.(real);
+        }
+      } else {
+        // The create row: commit the raw text as a free-form tag.
+        const trimmed = option.value.trim();
+        if (trimmed) onAdd(trimmed);
+      }
+      // Stay open for further picks; reset the filter.
+      onChange("");
+      inputRef.current?.focus();
+    },
+    [flatOptions, selectedValues, onRemoveTag, onSelectOption, onAdd, onChange]
+  );
+
+  const { handleKeyDown: handleDropdownKeyDown } = useSelectKeyboard({
+    isOpen,
+    setIsOpen,
+    highlightedIndex,
+    setHighlightedIndex,
+    setIsKeyboardNav,
+    allVisibleOptions,
+    onSelect: handleOptionSelect,
+    hasOptions: hasOptionSet,
+  });
 
   useEffect(() => {
     if (focusOnMount) inputRef.current?.focus();
@@ -98,9 +258,20 @@ function InputMultiSelect({
     // During IME composition, Enter confirms the candidate and Backspace
     // edits the composition. Neither may add or arm tags.
     if (event.nativeEvent.isComposing) return;
+
+    if (hasOptionSet) {
+      handleDropdownKeyDown(event);
+      if (event.defaultPrevented) return;
+    }
+
     if (event.key === "Enter") {
       event.preventDefault();
       event.stopPropagation();
+      // With an option set, Enter belongs to the dropdown (the create row
+      // covers free-form commits); the plain add only serves the optionless
+      // input.
+      if (hasOptionSet) return;
+      if (!freeEntry) return;
       const trimmed = value.trim();
       if (trimmed) onAdd(trimmed);
       return;
@@ -124,9 +295,21 @@ function InputMultiSelect({
     target.click();
   }
 
+  const autoId = useId();
+  const fieldId = `multi-select-${autoId}`;
+  const ariaProps = buildAriaAttributes({
+    hasOptions: hasOptionSet,
+    isOpen,
+    isValid: true,
+    highlightedIndex,
+    fieldId,
+    allVisibleOptions,
+    placeholder: placeholder ?? "",
+  });
+
   return (
     <div
-      ref={rootRef}
+      ref={setRootRef}
       role="presentation"
       className="opal-input opal-input-multi-select"
       data-variant={disabled ? "disabled" : variant}
@@ -169,9 +352,18 @@ function InputMultiSelect({
           className="opal-input-field opal-input-multi-select-field"
           disabled={disabled}
           value={value}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={(event) => {
+            onChange(event.target.value);
+            if (hasOptionSet && !isOpen) setIsOpen(true);
+            setHighlightedIndex(0);
+            setIsKeyboardNav(false);
+          }}
+          onFocus={() => {
+            if (hasOptionSet) setIsOpen(true);
+          }}
           onKeyDown={handleInputKeyDown}
           placeholder={placeholder}
+          {...ariaProps}
         />
       </div>
       {onClear !== undefined && !disabled && (
@@ -186,6 +378,49 @@ function InputMultiSelect({
           }}
         />
       )}
+      {hasOptionSet && (
+        <SelectChevron
+          isOpen={isOpen}
+          disabled={disabled}
+          onToggle={() => {
+            setIsOpen((prev) => !prev);
+            inputRef.current?.focus();
+          }}
+        />
+      )}
+
+      <SelectDropdown
+        ref={dropdownRef}
+        isOpen={isOpen && hasOptionSet}
+        disabled={disabled}
+        floatingStyles={floatingStyles}
+        setFloatingRef={setFloatingRef}
+        fieldId={fieldId}
+        placeholder={placeholder ?? ""}
+        sections={visibleSections}
+        emptySet={hasOptionSet && flatOptions.length === 0}
+        value=""
+        selectedValues={selectedValues}
+        highlightedIndex={highlightedIndex}
+        onSelect={handleOptionSelect}
+        onMouseEnter={(index) => {
+          setIsKeyboardNav(false);
+          setHighlightedIndex(index);
+        }}
+        onMouseMove={() => {
+          if (isKeyboardNav) setIsKeyboardNav(false);
+        }}
+        onMouseLeave={() => {
+          if (!isKeyboardNav) setHighlightedIndex(-1);
+        }}
+        isExactMatch={(option) => selectedValues.has(option.value)}
+        markAllMatches
+        inputValue={value}
+        allowCreate={freeEntry}
+        showCreateOption={showCreateOption}
+        createPrefix={createPrefix}
+        dropdownMaxHeight={dropdownMaxHeight}
+      />
     </div>
   );
 }

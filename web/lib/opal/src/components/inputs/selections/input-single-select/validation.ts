@@ -1,9 +1,9 @@
 import { useMemo, useEffect } from "react";
-import { ComboBoxOption } from "../types";
+import { SelectOption } from "../types";
 
 interface UseValidationProps {
   value: string;
-  options: ComboBoxOption[];
+  options: SelectOption[];
   strict: boolean;
   externalIsError?: boolean;
   onValidationError?: (errorMessage: string | null) => void;

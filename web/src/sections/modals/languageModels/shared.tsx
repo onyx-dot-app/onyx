@@ -18,7 +18,7 @@ import type {
 import { InputCheckbox } from "@opal/components";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import { InputTypeIn } from "@opal/components";
-import { InputComboBox } from "@opal/components";
+import { InputSingleSelect } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { InputSwitch } from "@opal/components";
@@ -305,13 +305,12 @@ export function ModelAccessField() {
       {!isPublic && (
         <Card color="background-tint-00" border="none" padding={2}>
           <Section gap={2}>
-            <InputComboBox
+            <InputSingleSelect
               placeholder={t("access.comboBox.placeholder")}
               value=""
               onChange={() => {}}
               onValueChange={handleSelect}
               options={availableOptions}
-              strict
               searchIcon
             />
 

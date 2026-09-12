@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { InputComboBox } from "@opal/components";
+import { InputSingleSelect } from "@opal/components";
 import { MinimalUserGroupSnapshot } from "@/hooks/useShareableGroups";
 import { PersonaOwnerGroup } from "@/lib/agents/types";
 import { MinimalUserSnapshot } from "@/lib/types";
@@ -103,7 +103,7 @@ export function TransferOwnershipView({
           {t("transferOwnership.targetInput.label")}
         </Text>
 
-        <InputComboBox
+        <InputSingleSelect
           onChange={(event) => {
             setInputValue(event.target.value);
             onSelectedTargetChange(null);
@@ -111,7 +111,6 @@ export function TransferOwnershipView({
           onValueChange={handleValueChange}
           options={options}
           placeholder={t("transferOwnership.targetInput.placeholder")}
-          strict
           value={inputValue}
         />
       </div>

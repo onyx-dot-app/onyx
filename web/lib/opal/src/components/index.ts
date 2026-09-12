@@ -79,13 +79,6 @@ export {
   type KeyValueInputProps,
 } from "@opal/components/inputs/input-key-value/components";
 
-/* InputComboBox */
-export {
-  default as InputComboBox,
-  type InputComboBoxProps,
-  type ComboBoxOption,
-} from "@opal/components/inputs/selections/input-combo-box/index";
-
 /* InputImage */
 export {
   default as InputImage,
@@ -252,13 +245,12 @@ export {
 } from "@opal/components/inputs/chrono/input-date-picker/components";
 
 /* InputSingleSelect */
+export { InputSingleSelect } from "@opal/components/inputs/selections/input-single-select/components";
 export {
-  InputSingleSelect,
-  type InputSingleSelectRootProps,
-  type InputSingleSelectTriggerProps,
-  type InputSingleSelectItemProps,
-  type InputSingleSelectSearchProps,
-} from "@opal/components/inputs/selections/input-single-select/components";
+  type InputSingleSelectProps,
+  type SelectOption,
+  type SelectSection,
+} from "@opal/components/inputs/selections/types";
 
 /* InputMultiSelect */
 export {

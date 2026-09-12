@@ -1,0 +1,112 @@
+@reference "#reference.css";
+
+/* ============================================================================
+   Select dropdown — the family-internal listbox
+
+   State styling rides data attributes set by the components:
+     .opal-select-option: data-exact, data-highlighted, data-selected,
+     data-disabled. Layout-only values; colors come from the tokens.
+   ============================================================================ */
+
+.opal-select-dropdown {
+  @apply z-10000 overflow-hidden border bg-background-neutral-00 p-1 rounded-12 shadow-box-01 pointer-events-auto touch-auto;
+}
+
+.opal-select-dropdown-scroll {
+  @apply flex flex-col gap-1 overflow-x-hidden;
+}
+
+.opal-select-empty-set {
+  @apply p-2;
+}
+
+.opal-select-no-match {
+  @apply px-3 py-2 text-text-02 font-secondary-body;
+}
+
+/* ---------------------------------------------------------------------------
+   Option rows
+   --------------------------------------------------------------------------- */
+
+.opal-select-option {
+  @apply flex cursor-pointer flex-col px-3 py-2 rounded-08 transition-colors;
+}
+.opal-select-option[data-exact] {
+  @apply bg-[var(--action-selection-01)];
+}
+.opal-select-option:not([data-exact])[data-highlighted],
+.opal-select-option:not([data-exact])[data-selected] {
+  @apply bg-background-tint-02;
+}
+.opal-select-option:not([data-disabled]):not([data-exact]):hover {
+  @apply bg-background-tint-02;
+}
+.opal-select-option[data-disabled] {
+  @apply cursor-not-allowed bg-background-neutral-02 opacity-50;
+}
+
+.opal-select-option-label {
+  @apply flex flex-row items-center gap-1.5 text-text-04 font-main-ui-action;
+}
+.opal-select-option[data-exact] .opal-select-option-label {
+  @apply font-medium;
+  color: var(--action-selection-05);
+}
+.opal-select-option:not([data-exact])[data-selected] .opal-select-option-label {
+  @apply font-medium;
+}
+
+.opal-select-option-icon {
+  @apply h-4 w-4 shrink-0;
+  stroke: var(--text-03);
+}
+.opal-select-option[data-exact] .opal-select-option-icon {
+  stroke: var(--action-selection-05);
+}
+
+/* The highlight splits the label into segments; they must stay inline —
+   as direct flex children the label's gap would space them mid-word. */
+.opal-select-option-text {
+  @apply min-w-0 truncate;
+}
+.opal-select-match {
+  @apply font-semibold;
+}
+
+.opal-select-option-description {
+  @apply mt-0.5 text-text-03 font-secondary-body;
+}
+.opal-select-option[data-exact] .opal-select-option-description {
+  color: var(--action-selection-04);
+}
+
+/* ---------------------------------------------------------------------------
+   Create row (open mode)
+   --------------------------------------------------------------------------- */
+
+.opal-select-create {
+  @apply flex cursor-pointer items-center justify-between px-3 py-2 rounded-08 transition-colors hover:bg-background-tint-02;
+}
+.opal-select-create[data-highlighted] {
+  @apply bg-background-tint-02;
+}
+.opal-select-create[data-prefixed] {
+  @apply px-1.5 py-1.5;
+}
+
+.opal-select-create-label {
+  @apply min-w-0 truncate text-text-04 font-main-ui-action;
+}
+.opal-select-create[data-prefixed] .opal-select-create-label {
+  @apply px-1;
+}
+.opal-select-create-prefix {
+  @apply text-text-03;
+}
+
+.opal-select-create-icon {
+  @apply ms-2 h-4 w-4 shrink-0 text-text-03;
+}
+.opal-select-create[data-prefixed] .opal-select-create-icon {
+  @apply mx-1 ms-0 text-text-04;
+}

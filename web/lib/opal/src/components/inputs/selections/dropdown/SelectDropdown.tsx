@@ -1,26 +1,31 @@
 import React, { useEffect, forwardRef } from "react";
 import { createPortal } from "react-dom";
+import "@opal/components/inputs/selections/dropdown/styles.css";
 import { cn } from "@opal/utils";
+import { ShadowDiv } from "@opal/components/shadow-div/components";
 import { OptionsList } from "./OptionsList";
-import { ComboBoxOption } from "../types";
+import { SelectOption, SelectSection } from "../types";
 
-interface ComboBoxDropdownProps {
+interface SelectDropdownProps {
   isOpen: boolean;
   disabled: boolean;
   floatingStyles: React.CSSProperties;
   setFloatingRef: (node: HTMLDivElement | null) => void;
   fieldId: string;
   placeholder: string;
-  matchedOptions: ComboBoxOption[];
-  unmatchedOptions: ComboBoxOption[];
-  hasSearchTerm: boolean;
-  separatorLabel: string;
+  sections: SelectSection[];
+  /** The supplied set itself is empty (options={[]}), not merely filtered out. */
+  emptySet?: boolean;
   value: string;
+  selectedValues?: ReadonlySet<string>;
+  markAllMatches?: boolean;
   highlightedIndex: number;
-  onSelect: (option: ComboBoxOption) => void;
+  onSelect: (option: SelectOption) => void;
   onMouseEnter: (index: number) => void;
   onMouseMove: () => void;
-  isExactMatch: (option: ComboBoxOption) => boolean;
+  /** Pointer left the listbox — clear the pointer-driven highlight. */
+  onMouseLeave: () => void;
+  isExactMatch: (option: SelectOption) => boolean;
   /** Current input value for creating new option */
   inputValue: string;
   /** Whether to show create option when no exact match */
@@ -37,10 +42,7 @@ interface ComboBoxDropdownProps {
  * Renders the dropdown menu in a portal
  * Handles scroll-into-view for highlighted options
  */
-export const ComboBoxDropdown = forwardRef<
-  HTMLDivElement,
-  ComboBoxDropdownProps
->(
+export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
   (
     {
       isOpen,
@@ -49,15 +51,16 @@ export const ComboBoxDropdown = forwardRef<
       setFloatingRef,
       fieldId,
       placeholder,
-      matchedOptions,
-      unmatchedOptions,
-      hasSearchTerm,
-      separatorLabel,
+      sections,
+      emptySet,
       value,
+      selectedValues,
+      markAllMatches,
       highlightedIndex,
       onSelect,
       onMouseEnter,
       onMouseMove,
+      onMouseLeave,
       isExactMatch,
       inputValue,
       allowCreate,
@@ -105,16 +108,15 @@ export const ComboBoxDropdown = forwardRef<
         }}
         id={`${fieldId}-listbox`}
         role="listbox"
+        tabIndex={-1}
         aria-label={placeholder}
-        className={cn(
-          "z-10000 bg-background-neutral-00 border border-border-02 rounded-12 shadow-box-02 overflow-y-auto overflow-x-hidden p-1 pointer-events-auto touch-auto",
-          !dropdownMaxHeight && "max-h-60"
-        )}
-        style={{
-          ...floatingStyles,
-          // Ensure the dropdown can scroll independently
-          overscrollBehavior: "contain",
-          ...(dropdownMaxHeight ? { maxHeight: dropdownMaxHeight } : {}),
+        className="opal-select-dropdown"
+        style={floatingStyles}
+        onMouseLeave={onMouseLeave}
+        onMouseDown={(e) => {
+          // Clicks on padding, gaps, or dividers must not steal focus from
+          // the combobox input (the listbox is tabIndex={-1} for AT only).
+          e.preventDefault();
         }}
         onWheel={(e) => {
           // Prevent event from bubbling to prevent any parent scroll blocking
@@ -125,27 +127,40 @@ export const ComboBoxDropdown = forwardRef<
           e.stopPropagation();
         }}
       >
-        <OptionsList
-          matchedOptions={matchedOptions}
-          unmatchedOptions={unmatchedOptions}
-          hasSearchTerm={hasSearchTerm}
-          separatorLabel={separatorLabel}
-          value={value}
-          highlightedIndex={highlightedIndex}
-          fieldId={fieldId}
-          onSelect={onSelect}
-          onMouseEnter={onMouseEnter}
-          onMouseMove={onMouseMove}
-          isExactMatch={isExactMatch}
-          inputValue={inputValue}
-          allowCreate={allowCreate}
-          showCreateOption={showCreateOption}
-          createPrefix={createPrefix}
-        />
+        <ShadowDiv
+          shadowHeight="0.75rem"
+          className={cn(
+            "opal-select-dropdown-scroll",
+            !dropdownMaxHeight && "max-h-60"
+          )}
+          style={{
+            // Scroll independently of whatever sits behind the portal.
+            overscrollBehavior: "contain",
+            ...(dropdownMaxHeight ? { maxHeight: dropdownMaxHeight } : {}),
+          }}
+        >
+          <OptionsList
+            sections={sections}
+            emptySet={emptySet}
+            value={value}
+            selectedValues={selectedValues}
+            markAllMatches={markAllMatches}
+            highlightedIndex={highlightedIndex}
+            fieldId={fieldId}
+            onSelect={onSelect}
+            onMouseEnter={onMouseEnter}
+            onMouseMove={onMouseMove}
+            isExactMatch={isExactMatch}
+            inputValue={inputValue}
+            allowCreate={allowCreate}
+            showCreateOption={showCreateOption}
+            createPrefix={createPrefix}
+          />
+        </ShadowDiv>
       </div>,
       document.body
     );
   }
 );
 
-ComboBoxDropdown.displayName = "ComboBoxDropdown";
+SelectDropdown.displayName = "SelectDropdown";

@@ -2,7 +2,7 @@ import React from "react";
 import { render, screen, fireEvent, waitFor } from "@tests/setup/test-utils";
 import "@testing-library/jest-dom";
 import userEvent from "@testing-library/user-event";
-import InputComboBox from "./InputComboBox";
+import { InputSingleSelect } from "./components";
 
 // Mock createPortal for dropdown rendering
 jest.mock("react-dom", () => ({
@@ -28,11 +28,11 @@ function setupUser() {
   return userEvent.setup({ delay: null });
 }
 
-describe("InputComboBox", () => {
+describe("InputSingleSelect", () => {
   describe("Rendering", () => {
     test("renders with placeholder", () => {
       render(
-        <InputComboBox
+        <InputSingleSelect
           placeholder="Select an option"
           value=""
           options={mockOptions}
@@ -44,7 +44,7 @@ describe("InputComboBox", () => {
 
     test("renders with initial value", () => {
       render(
-        <InputComboBox
+        <InputSingleSelect
           placeholder="Select"
           value="apple"
           options={mockOptions}
@@ -55,14 +55,16 @@ describe("InputComboBox", () => {
     });
 
     test("renders without options (input mode)", () => {
-      render(<InputComboBox placeholder="Type here" value="" options={[]} />);
+      render(
+        <InputSingleSelect placeholder="Type here" value="" options={[]} />
+      );
       const input = screen.getByPlaceholderText("Type here");
       expect(input).toBeInTheDocument();
     });
 
     test("renders disabled state", () => {
       render(
-        <InputComboBox
+        <InputSingleSelect
           placeholder="Select"
           value=""
           options={mockOptions}
@@ -75,7 +77,7 @@ describe("InputComboBox", () => {
 
     test("renders with options that have descriptions", () => {
       render(
-        <InputComboBox
+        <InputSingleSelect
           placeholder="Select"
           value=""
           options={mockOptionsWithDescriptions}
@@ -90,7 +92,11 @@ describe("InputComboBox", () => {
   describe("Dropdown Behavior", () => {
     test("opens dropdown on focus when options exist", () => {
       render(
-        <InputComboBox placeholder="Select" value="" options={mockOptions} />
+        <InputSingleSelect
+          placeholder="Select"
+          value=""
+          options={mockOptions}
+        />
       );
       const input = screen.getByPlaceholderText("Select");
       fireEvent.focus(input);
@@ -98,7 +104,7 @@ describe("InputComboBox", () => {
     });
 
     test("does not open dropdown on focus when no options", () => {
-      render(<InputComboBox placeholder="Select" value="" options={[]} />);
+      render(<InputSingleSelect placeholder="Select" value="" options={[]} />);
       const input = screen.getByPlaceholderText("Select");
       fireEvent.focus(input);
       expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
@@ -107,7 +113,11 @@ describe("InputComboBox", () => {
     test("closes dropdown on escape", async () => {
       const user = setupUser();
       render(
-        <InputComboBox placeholder="Select" value="" options={mockOptions} />
+        <InputSingleSelect
+          placeholder="Select"
+          value=""
+          options={mockOptions}
+        />
       );
       const input = screen.getByPlaceholderText("Select");
 
@@ -120,7 +130,7 @@ describe("InputComboBox", () => {
 
     test("shows all options on focus when a value is already selected", () => {
       render(
-        <InputComboBox
+        <InputSingleSelect
           placeholder="Select"
           value="apple"
           options={mockOptions}
@@ -136,7 +146,11 @@ describe("InputComboBox", () => {
     test("closes dropdown on tab", async () => {
       const user = setupUser();
       render(
-        <InputComboBox placeholder="Select" value="" options={mockOptions} />
+        <InputSingleSelect
+          placeholder="Select"
+          value=""
+          options={mockOptions}
+        />
       );
       const input = screen.getByPlaceholderText("Select");
 
@@ -152,7 +166,11 @@ describe("InputComboBox", () => {
     test("ArrowDown opens dropdown and highlights first option", async () => {
       const user = setupUser();
       render(
-        <InputComboBox placeholder="Select" value="" options={mockOptions} />
+        <InputSingleSelect
+          placeholder="Select"
+          value=""
+          options={mockOptions}
+        />
       );
       const input = screen.getByPlaceholderText("Select");
 
@@ -166,7 +184,11 @@ describe("InputComboBox", () => {
     test("ArrowUp moves highlight up through options", async () => {
       const user = setupUser();
       render(
-        <InputComboBox placeholder="Select" value="" options={mockOptions} />
+        <InputSingleSelect
+          placeholder="Select"
+          value=""
+          options={mockOptions}
+        />
       );
       const input = screen.getByPlaceholderText("Select");
 
@@ -183,7 +205,7 @@ describe("InputComboBox", () => {
       const handleValueChange = jest.fn();
       const user = setupUser();
       render(
-        <InputComboBox
+        <InputSingleSelect
           placeholder="Select"
           value=""
           options={mockOptions}
@@ -204,7 +226,11 @@ describe("InputComboBox", () => {
     test("filters options based on input value", async () => {
       const user = setupUser();
       render(
-        <InputComboBox placeholder="Select" value="" options={mockOptions} />
+        <InputSingleSelect
+          placeholder="Select"
+          value=""
+          options={mockOptions}
+        />
       );
       const input = screen.getByPlaceholderText("Select");
 
@@ -217,7 +243,9 @@ describe("InputComboBox", () => {
       expect(options.length).toBe(2);
       expect(screen.getByLabelText('Create "app"')).toBeInTheDocument();
       expect(
-        options.some((option) => option.textContent?.includes("Apple"))
+        options.some((option: HTMLElement) =>
+          option.textContent?.includes("Apple")
+        )
       ).toBe(true);
       expect(screen.queryByText("Banana")).not.toBeInTheDocument();
     });
@@ -225,11 +253,11 @@ describe("InputComboBox", () => {
     test("shows 'No options found' when no matches and strict mode", async () => {
       const user = setupUser();
       render(
-        <InputComboBox
+        <InputSingleSelect
           placeholder="Select"
           value=""
           options={mockOptions}
-          strict
+          mode="closed"
         />
       );
       const input = screen.getByPlaceholderText("Select");
@@ -242,7 +270,7 @@ describe("InputComboBox", () => {
     test("shows divider between matched and unmatched options when enabled", async () => {
       const user = setupUser();
       render(
-        <InputComboBox
+        <InputSingleSelect
           placeholder="Select"
           value=""
           options={mockOptions}
@@ -264,7 +292,7 @@ describe("InputComboBox", () => {
       const handleValueChange = jest.fn();
       const user = setupUser();
       render(
-        <InputComboBox
+        <InputSingleSelect
           placeholder="Select"
           value=""
           options={mockOptions}
@@ -285,7 +313,7 @@ describe("InputComboBox", () => {
 
     test("displays label instead of value when closed", () => {
       render(
-        <InputComboBox
+        <InputSingleSelect
           placeholder="Select"
           value="apple"
           options={mockOptions}
@@ -299,11 +327,11 @@ describe("InputComboBox", () => {
   describe("Strict Mode", () => {
     test("strict=true shows error when value not in options", () => {
       render(
-        <InputComboBox
+        <InputSingleSelect
           placeholder="Select"
           value="invalid"
           options={mockOptions}
-          strict
+          mode="closed"
         />
       );
       expect(
@@ -313,11 +341,11 @@ describe("InputComboBox", () => {
 
     test("strict=false allows custom values", () => {
       render(
-        <InputComboBox
+        <InputSingleSelect
           placeholder="Select"
           value="custom-value"
           options={mockOptions}
-          strict={false}
+          mode="open"
         />
       );
       expect(
@@ -328,11 +356,11 @@ describe("InputComboBox", () => {
     test("strict=false shows create option when no matches", async () => {
       const user = setupUser();
       render(
-        <InputComboBox
+        <InputSingleSelect
           placeholder="Select"
           value=""
           options={mockOptions}
-          strict={false}
+          mode="open"
         />
       );
       const input = screen.getByPlaceholderText("Select");
@@ -347,7 +375,7 @@ describe("InputComboBox", () => {
   describe("External Error State", () => {
     test("shows error styling when isError is true", () => {
       const { container } = render(
-        <InputComboBox
+        <InputSingleSelect
           placeholder="Select"
           value=""
           options={mockOptions}
@@ -360,11 +388,11 @@ describe("InputComboBox", () => {
 
     test("does not show internal error when isError is provided", () => {
       render(
-        <InputComboBox
+        <InputSingleSelect
           placeholder="Select"
           value="invalid"
           options={mockOptions}
-          strict
+          mode="closed"
           isError={false}
         />
       );
@@ -378,7 +406,11 @@ describe("InputComboBox", () => {
   describe("Accessibility", () => {
     test("has correct ARIA attributes", () => {
       render(
-        <InputComboBox placeholder="Select" value="" options={mockOptions} />
+        <InputSingleSelect
+          placeholder="Select"
+          value=""
+          options={mockOptions}
+        />
       );
       const input = screen.getByRole("combobox");
       expect(input).toHaveAttribute("aria-autocomplete", "list");
@@ -387,7 +419,11 @@ describe("InputComboBox", () => {
 
     test("aria-expanded is true when dropdown is open", () => {
       render(
-        <InputComboBox placeholder="Select" value="" options={mockOptions} />
+        <InputSingleSelect
+          placeholder="Select"
+          value=""
+          options={mockOptions}
+        />
       );
       const input = screen.getByRole("combobox");
       fireEvent.focus(input);
@@ -396,7 +432,11 @@ describe("InputComboBox", () => {
 
     test("options have role option", () => {
       render(
-        <InputComboBox placeholder="Select" value="" options={mockOptions} />
+        <InputSingleSelect
+          placeholder="Select"
+          value=""
+          options={mockOptions}
+        />
       );
       const input = screen.getByPlaceholderText("Select");
       fireEvent.focus(input);
@@ -407,7 +447,7 @@ describe("InputComboBox", () => {
 
     test("listbox has correct aria-label", () => {
       render(
-        <InputComboBox
+        <InputSingleSelect
           placeholder="Select a fruit"
           value=""
           options={mockOptions}
@@ -425,7 +465,11 @@ describe("InputComboBox", () => {
     test("matching text is highlighted in option labels", async () => {
       const user = setupUser();
       const { container } = render(
-        <InputComboBox placeholder="Select" value="" options={mockOptions} />
+        <InputSingleSelect
+          placeholder="Select"
+          value=""
+          options={mockOptions}
+        />
       );
       const input = screen.getByPlaceholderText("Select");
 
@@ -443,7 +487,7 @@ describe("InputComboBox", () => {
       const handleChange = jest.fn();
       const user = setupUser();
       render(
-        <InputComboBox
+        <InputSingleSelect
           placeholder="Select"
           value=""
           options={mockOptions}
@@ -462,7 +506,7 @@ describe("InputComboBox", () => {
       const handleValueChange = jest.fn();
       const user = setupUser();
       render(
-        <InputComboBox
+        <InputSingleSelect
           placeholder="Select"
           value=""
           options={mockOptions}
@@ -477,7 +521,9 @@ describe("InputComboBox", () => {
 
       // Get the Apple option by role and click it
       const options = screen.getAllByRole("option");
-      const appleOption = options.find((opt) => opt.textContent === "Apple");
+      const appleOption = options.find(
+        (opt: HTMLElement) => opt.textContent === "Apple"
+      );
       expect(appleOption).toBeDefined();
       await user.click(appleOption!);
       expect(handleValueChange).toHaveBeenCalledWith("apple");
@@ -493,7 +539,7 @@ describe("InputComboBox", () => {
         { value: "banana", label: "Banana", disabled: true },
       ];
       render(
-        <InputComboBox
+        <InputSingleSelect
           placeholder="Select"
           value=""
           options={optionsWithDisabled}
