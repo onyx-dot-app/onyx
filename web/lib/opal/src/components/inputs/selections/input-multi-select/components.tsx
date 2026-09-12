@@ -200,6 +200,22 @@ function InputMultiSelect({
     return tags.some((tag) => !optionValues.has(tag.id));
   }, [mode, hasOptionSet, flatOptions, tags]);
 
+  // The filter is transient UI state, like the single's: closing the
+  // dropdown drops whatever was typed (the caller owns the text, so the
+  // component clears it through onChange). Optionless free-tagging keeps
+  // its draft — that text is a half-typed tag, not a filter.
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const valueRef = useRef(value);
+  valueRef.current = value;
+  const wasOpenRef = useRef(false);
+  useEffect(() => {
+    if (wasOpenRef.current && !isOpen && hasOptionSet) {
+      if (valueRef.current !== "") onChangeRef.current("");
+    }
+    wasOpenRef.current = isOpen;
+  }, [isOpen, hasOptionSet]);
+
   const hasSearchTerm = value.trim() !== "";
   const visibleSections = useMemo(
     () => filterSections(sections, value),
