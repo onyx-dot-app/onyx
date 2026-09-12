@@ -74,13 +74,8 @@ class TestOpenURLToolAvailability:
 
 
 class TestFileReaderToolAvailability:
-    @patch(f"{FILE_READER_MODULE}.DISABLE_VECTOR_DB", True)
-    def test_available_when_vector_db_disabled(self) -> None:
+    def test_always_available(self) -> None:
         assert FileReaderTool.is_available(MagicMock()) is True
-
-    @patch(f"{FILE_READER_MODULE}.DISABLE_VECTOR_DB", False)
-    def test_unavailable_when_vector_db_enabled(self) -> None:
-        assert FileReaderTool.is_available(MagicMock()) is False
 
 
 # ------------------------------------------------------------------
