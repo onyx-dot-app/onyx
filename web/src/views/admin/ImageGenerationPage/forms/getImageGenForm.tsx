@@ -1,6 +1,7 @@
 import React from "react";
 import { ImageGenFormBaseProps } from "@/views/admin/ImageGenerationPage/forms/types";
 import { OpenAIImageGenForm } from "@/views/admin/ImageGenerationPage/forms/OpenAIImageGenForm";
+import { OpenAICompatibleImageGenForm } from "@/views/admin/ImageGenerationPage/forms/OpenAICompatibleImageGenForm";
 import { AzureImageGenForm } from "@/views/admin/ImageGenerationPage/forms/AzureImageGenForm";
 import { VertexImageGenForm } from "@/views/admin/ImageGenerationPage/forms/VertexImageGenForm";
 
@@ -13,6 +14,9 @@ export function getImageGenForm(props: ImageGenFormBaseProps): React.ReactNode {
 
   switch (providerName) {
     case "openai":
+      if (props.imageProvider.image_provider_id === "openai_compatible") {
+        return <OpenAICompatibleImageGenForm {...props} />;
+      }
       return <OpenAIImageGenForm {...props} />;
     case "azure":
       return <AzureImageGenForm {...props} />;
