@@ -99,9 +99,11 @@ def set_new_search_settings(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> IdReturn:
-    """
-    Creates a new SearchSettings row and cancels the previous secondary indexing
-    if any exists.
+    """Create the new SearchSettings row that the port flow re-embeds into.
+
+    Only one re-index runs at a time. This raises CONFLICT instead of superseding an
+    existing one: either a secondary FUTURE is already in flight, or an INSTANT
+    switchover is still backfilling the live index. Cancel the running re-index first.
     """
     if search_settings_new.index_name:
         logger.warning("Index name was specified by request, this is not suggested")
@@ -307,7 +309,7 @@ def _guard_index_name_reuse(db_session: Session, index_name: str) -> None:
     for occupant in occupants:
         enqueue_index_reclaim(client_app, tenant_id, occupant.id)
     raise OnyxError(
-        OnyxErrorCode.CONFLICT,
+        OnyxErrorCode.INDEX_NAME_RECLAIMING,
         "An index of the same name from an earlier re-index still holds data; it's being "
         "cleaned up now. Start the re-index again in a moment.",
     )
