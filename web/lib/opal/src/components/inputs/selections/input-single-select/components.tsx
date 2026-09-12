@@ -86,6 +86,7 @@ const InputSingleSelect = ({
   const options = useMemo(() => flattenSections(sections), [sections]);
   const strings = useOpalStrings();
   const inputRef = useRef<HTMLInputElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const fieldContext = useContext(FieldContext);
 
@@ -288,7 +289,9 @@ const InputSingleSelect = ({
   // Click Outside Hook
   useClickOutside<HTMLElement>(
     [
-      inputRef as React.RefObject<HTMLElement>,
+      // The whole trigger, not just the <input>: the chevron and any
+      // rightChildren are inside — clicking them must not read as outside.
+      rootRef as React.RefObject<HTMLElement>,
       dropdownRef as React.RefObject<HTMLElement>,
     ],
     useCallback(() => {
@@ -366,7 +369,13 @@ const InputSingleSelect = ({
   }, [isOpen, inputValue, value, options, hasOptionSet]);
 
   return (
-    <div ref={refs.setReference} className="opal-input-single-select">
+    <div
+      ref={(node) => {
+        rootRef.current = node;
+        refs.setReference(node);
+      }}
+      className="opal-input-single-select"
+    >
       <>
         <InputTypeIn
           ref={inputRef}
