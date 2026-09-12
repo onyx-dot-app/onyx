@@ -8,8 +8,14 @@ in text to use the smallest possible numbers while respecting existing mappings.
 from datetime import datetime
 
 from onyx.chat.citation_processor import CitationMapping
+from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.citation_utils import collapse_citations
+from onyx.chat.citation_utils import strip_rendered_citation_links
+from onyx.chat.llm_step import _OLLAMA_HISTORY_MESSAGE_FORMATTER
+from onyx.chat.models import ChatMessageSimple
+from onyx.chat.models import ToolCallSimple
 from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 
 # ============================================================================
@@ -482,3 +488,116 @@ class TestCollapseCitationsComplexScenarios:
         assert "[50]" not in result_text
         assert "[51]" not in result_text
         assert len(mapping) == 6
+
+
+class TestStripRenderedCitationLinks:
+    """Tests for strip_rendered_citation_links.
+
+    Regression coverage for nested "[ [[n]](url) ](url)" citations that appear on
+    follow-up turns: assistant history is persisted in rendered "[[n]](url)" form,
+    and replaying that form trains the model to emit links the processor re-wraps.
+    """
+
+    def test_single_rendered_citation_becomes_bare_marker(self) -> None:
+        assert (
+            strip_rendered_citation_links(
+                "Sunny today [[1]](https://example.com/weather)."
+            )
+            == "Sunny today [1]."
+        )
+
+    def test_multiple_rendered_citations(self) -> None:
+        text = "High 91F [[1]](https://a.com) and low 75F [[2]](https://b.com)."
+        assert (
+            strip_rendered_citation_links(text) == "High 91F [1] and low 75F [2]."
+        )
+
+    def test_url_with_path_and_query(self) -> None:
+        text = "Forecast [[5]](https://wu.com/hourly/us/tx/granbury/date/2026-6-11)."
+        assert strip_rendered_citation_links(text) == "Forecast [5]."
+
+    def test_bare_markers_unchanged(self) -> None:
+        # Model output already using bare markers must pass through untouched.
+        assert strip_rendered_citation_links("See [1] and [2].") == "See [1] and [2]."
+
+    def test_text_without_citations_unchanged(self) -> None:
+        assert (
+            strip_rendered_citation_links("No citations here.") == "No citations here."
+        )
+
+    def test_round_trip_through_processor_does_not_nest(self) -> None:
+        """The core fix: normalizing history prevents re-wrapping.
+
+        If the model echoes the (normalized) history verbatim, the citation
+        processor re-renders it to exactly one citation — the link appears once.
+        Without normalization the same echo double-wraps (see the contrast test).
+        """
+        link = "https://example.com/doc"
+        doc = create_test_search_doc(document_id="d1", link=link)
+        rendered = f"Answer [[1]]({link})."
+
+        normalized = strip_rendered_citation_links(rendered)
+        assert normalized == "Answer [1]."
+
+        processor = DynamicCitationProcessor()
+        processor.update_citation_mapping({1: doc})
+        out = "".join(
+            piece
+            for token in [normalized, None]
+            for piece in processor.process_token(token)
+            if isinstance(piece, str)
+        )
+        assert out == f"Answer [[1]]({link})."
+        assert out.count(link) == 1  # exactly one link, no nesting
+
+    def test_unstripped_history_double_wraps(self) -> None:
+        """Demonstrates the bug strip_rendered_citation_links prevents.
+
+        Re-processing the rendered form (as if the model echoed un-normalized
+        history) leaves the model's trailing "(url)" dangling next to a freshly
+        rendered citation, so the link appears twice.
+        """
+        link = "https://example.com/doc"
+        doc = create_test_search_doc(document_id="d1", link=link)
+        rendered = f"Answer [[1]]({link})."
+
+        processor = DynamicCitationProcessor()
+        processor.update_citation_mapping({1: doc})
+        out = "".join(
+            piece
+            for token in [rendered, None]
+            for piece in processor.process_token(token)
+            if isinstance(piece, str)
+        )
+        assert out.count(link) == 2  # duplicated link == malformed/nested citation
+
+
+class TestOllamaFormatterStripsCitations:
+    """The Ollama assistant formatter's tool-call branch must normalize citations.
+
+    _OllamaHistoryMessageFormatter.format_assistant_message builds content directly
+    from msg.message when the turn carries tool calls, bypassing the default
+    formatter. Without stripping, replayed Ollama turns that mix tool calls with
+    cited answers would still trigger the nested-citation bug.
+    """
+
+    def test_tool_call_branch_strips_rendered_citations(self) -> None:
+        msg = ChatMessageSimple(
+            message="Answer [[1]](https://example.com/doc).",
+            token_count=0,
+            message_type=MessageType.ASSISTANT,
+            tool_calls=[
+                ToolCallSimple(
+                    tool_call_id="call_1",
+                    tool_name="search",
+                    tool_arguments={"query": "weather"},
+                )
+            ],
+        )
+
+        result = _OLLAMA_HISTORY_MESSAGE_FORMATTER.format_assistant_message(msg)
+
+        assert result.content is not None
+        assert "Answer [1]." in result.content
+        assert "[[1]]" not in result.content
+        assert "https://example.com/doc" not in result.content
