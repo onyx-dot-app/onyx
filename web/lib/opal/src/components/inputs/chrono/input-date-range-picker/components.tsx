@@ -8,7 +8,7 @@ import { useOpalStrings, type OpalStrings } from "@opal/strings";
 
 export const THIRTY_DAYS = "1M";
 
-export type DateRangePickerValue = DateRange & {
+export type InputDateRangePickerValue = DateRange & {
   selectValue: string;
 };
 
@@ -85,7 +85,7 @@ function presetDisplayLabel(strings: OpalStrings, preset: DatePreset): string {
   }
 }
 
-export const DateRangePicker = memo(function DateRangePicker({
+export const InputDateRangePicker = memo(function InputDateRangePicker({
   value,
   onValueChange,
   size = "md",

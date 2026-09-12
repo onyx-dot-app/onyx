@@ -1,13 +1,13 @@
 import type { Tag } from "@/lib/types";
 import type { SourceMetadata } from "@/lib/search/interfaces";
-import type { DateRangePickerValue } from "@opal/components";
+import type { InputDateRangePickerValue } from "@opal/components";
 import type { SearchFiltersRequest } from "@/lib/searchFilters/types";
 
 /** Freezes a live selection into the shape the backend receives. */
 export function buildFilters(
   sources: SourceMetadata[],
   documentSets: string[],
-  timeRange: DateRangePickerValue | null,
+  timeRange: InputDateRangePickerValue | null,
   tags: Tag[]
 ): SearchFiltersRequest {
   return {

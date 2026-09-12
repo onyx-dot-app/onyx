@@ -21,12 +21,12 @@ import type { SystemUsageResponse } from "@/lib/usage/systemUsage";
 import {
   THIRTY_DAYS,
   type DateRange,
-  type DateRangePickerValue,
+  type InputDateRangePickerValue,
   rangeForInclusiveDays,
 } from "@opal/components";
 
 export function useTimeRange() {
-  return useState<DateRangePickerValue>({
+  return useState<InputDateRangePickerValue>({
     ...rangeForInclusiveDays(30),
     selectValue: THIRTY_DAYS,
   });
@@ -46,14 +46,14 @@ export function useSystemUsage(range?: DateRange) {
   return { usage: data, isLoading, error, refetch: mutate };
 }
 
-function analyticsRange(timeRange: DateRangePickerValue) {
+function analyticsRange(timeRange: InputDateRangePickerValue) {
   return {
     start: convertDateToStartOfDay(timeRange.from)?.toISOString(),
     end: convertDateToEndOfDay(timeRange.to)?.toISOString(),
   };
 }
 
-export function useQueryAnalytics(timeRange: DateRangePickerValue) {
+export function useQueryAnalytics(timeRange: InputDateRangePickerValue) {
   const url = buildApiPath(
     "/api/analytics/admin/query",
     analyticsRange(timeRange)
@@ -66,7 +66,7 @@ export function useQueryAnalytics(timeRange: DateRangePickerValue) {
   };
 }
 
-export function useUserAnalytics(timeRange: DateRangePickerValue) {
+export function useUserAnalytics(timeRange: InputDateRangePickerValue) {
   const url = buildApiPath(
     "/api/analytics/admin/user",
     analyticsRange(timeRange)
@@ -79,7 +79,7 @@ export function useUserAnalytics(timeRange: DateRangePickerValue) {
   };
 }
 
-export function useOnyxBotAnalytics(timeRange: DateRangePickerValue) {
+export function useOnyxBotAnalytics(timeRange: InputDateRangePickerValue) {
   const url = buildApiPath(
     "/api/analytics/admin/onyxbot",
     analyticsRange(timeRange)
@@ -94,7 +94,7 @@ export function useOnyxBotAnalytics(timeRange: DateRangePickerValue) {
 
 export function usePersonaMessages(
   personaId: number | undefined,
-  timeRange: DateRangePickerValue
+  timeRange: InputDateRangePickerValue
 ) {
   const url = buildApiPath("/api/analytics/admin/persona/messages", {
     persona_id: personaId?.toString(),
@@ -116,7 +116,7 @@ export function usePersonaMessages(
 
 export function usePersonaUniqueUsers(
   personaId: number | undefined,
-  timeRange: DateRangePickerValue
+  timeRange: InputDateRangePickerValue
 ) {
   const url = buildApiPath("/api/analytics/admin/persona/unique-users", {
     persona_id: personaId?.toString(),

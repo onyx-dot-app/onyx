@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
-import { Button, Checkbox, Divider, Tooltip } from "@opal/components";
+import { Button, InputCheckbox, Divider, Tooltip } from "@opal/components";
 import {
   ConfigurableSources,
   CredentialFieldSpec,
@@ -662,7 +662,7 @@ export function FederatedConnectorForm({
               <div key={fieldKey} className="space-y-2 w-full">
                 {isBoolType ? (
                   <div className="flex items-center gap-3 py-2">
-                    <Checkbox
+                    <InputCheckbox
                       checked={
                         formState.config[fieldKey] !== undefined
                           ? Boolean(formState.config[fieldKey])

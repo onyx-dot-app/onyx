@@ -1,6 +1,6 @@
-# Checkbox
+# InputCheckbox
 
-**Import:** `import { Checkbox, type CheckboxProps } from "@opal/components";`
+**Import:** `import { InputCheckbox, type InputCheckboxProps } from "@opal/components";`
 
 A dual-element checkbox with custom styling. Uses a hidden native `<input>` for form state and a visible `<div>` for the visual surface. Supports controlled, uncontrolled, indeterminate, and disabled modes.
 
@@ -50,23 +50,23 @@ defined in `styles.css`:
 ## Usage Examples
 
 ```tsx
-import { Checkbox } from "@opal/components";
+import { InputCheckbox } from "@opal/components";
 
 // Uncontrolled
-<Checkbox onCheckedChange={(checked) => console.log(checked)} />
+<InputCheckbox onCheckedChange={(checked) => console.log(checked)} />
 
 // Controlled
-<Checkbox checked={isChecked} onCheckedChange={setIsChecked} />
+<InputCheckbox checked={isChecked} onCheckedChange={setIsChecked} />
 
 // With label
 <div className="flex items-center gap-2">
-  <Checkbox id="terms" />
+  <InputCheckbox id="terms" />
   <label htmlFor="terms">Accept terms</label>
 </div>
 
 // Indeterminate (e.g. "select all" with partial selection)
-<Checkbox indeterminate />
+<InputCheckbox indeterminate />
 
 // Disabled
-<Checkbox disabled checked />
+<InputCheckbox disabled checked />
 ```

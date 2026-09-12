@@ -1,10 +1,10 @@
 import type { Tag } from "@/lib/types";
 import type { SourceMetadata } from "@/lib/search/interfaces";
-import type { DateRangePickerValue } from "@opal/components";
+import type { InputDateRangePickerValue } from "@opal/components";
 
 /** What is selected, without the means to change it. */
 export interface SearchFiltersSelection {
-  timeRange: DateRangePickerValue | null;
+  timeRange: InputDateRangePickerValue | null;
   selectedSources: SourceMetadata[];
   selectedDocumentSets: string[];
   selectedTags: Tag[];
@@ -13,7 +13,7 @@ export interface SearchFiltersSelection {
 /** The live selection a user edits: which sources, sets, tags and dates to search. */
 export interface SearchFilters extends SearchFiltersSelection {
   setTimeRange: React.Dispatch<
-    React.SetStateAction<DateRangePickerValue | null>
+    React.SetStateAction<InputDateRangePickerValue | null>
   >;
   setSelectedSources: React.Dispatch<React.SetStateAction<SourceMetadata[]>>;
   setSelectedDocumentSets: React.Dispatch<React.SetStateAction<string[]>>;

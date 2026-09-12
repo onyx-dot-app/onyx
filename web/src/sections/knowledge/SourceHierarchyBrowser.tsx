@@ -12,7 +12,7 @@ import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
 import {
   Button,
-  Checkbox,
+  InputCheckbox,
   CopyButton,
   Divider as OpalDivider,
   InputTypeIn,
@@ -721,7 +721,7 @@ export default function SourceHierarchyBrowser({
       return <SvgFolder size={16} />;
     }
     if (isSelected) {
-      return <Checkbox checked={true} />;
+      return <InputCheckbox checked={true} />;
     }
     return <SvgFileText size={16} />;
   };
@@ -803,7 +803,7 @@ export default function SourceHierarchyBrowser({
       <TableLayouts.TableRow>
         <TableLayouts.CheckboxCell>
           {filteredItems.length > 0 && (
-            <Checkbox
+            <InputCheckbox
               checked={allVisibleSelected}
               indeterminate={someVisibleSelected}
               onCheckedChange={handleHeaderCheckboxClick}

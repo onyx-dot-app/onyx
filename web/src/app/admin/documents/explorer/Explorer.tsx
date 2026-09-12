@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
-import { Checkbox } from "@opal/components";
+import { InputCheckbox } from "@opal/components";
 import { updateHiddenStatus } from "../lib";
 import { toast } from "@opal/layouts";
 import { getErrorMsg } from "@/lib/fetchUtils";
@@ -98,7 +98,7 @@ const DocumentDisplay = ({
             )}
           </div>
           <div className="ms-1 my-auto">
-            <Checkbox checked={!document.hidden} />
+            <InputCheckbox checked={!document.hidden} />
           </div>
         </div>
       </div>

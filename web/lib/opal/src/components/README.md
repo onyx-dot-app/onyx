@@ -21,14 +21,16 @@ The barrel file at `index.ts` re-exports each component and its prop types. Each
 | [SelectButton](./buttons/select-button/)       | Stateful toggle button with optional foldable content        | [README](./buttons/select-button/README.md)    |
 | [OpenButton](./buttons/open-button/)           | Trigger button with rotating chevron for popovers            | [README](./buttons/open-button/README.md)      |
 | [Tag](./tag/)                                  | Small colored label for status/category metadata             | [README](./tag/README.md)                      |
-| [DateRangePicker](./inputs/date-range-picker/) | Preset date-range strip with a custom-range calendar popover | [README](./inputs/date-range-picker/README.md) |
+| [InputDateRangePicker](./inputs/chrono/input-date-range-picker/) | Preset date-range strip with a custom-range calendar popover | [README](./inputs/chrono/input-date-range-picker/README.md) |
 | [InputFile](./inputs/input-file/)              | Text field that doubles as a file picker                     | [README](./inputs/input-file/README.md)        |
 | [InputAvatar](./inputs/input-avatar/)          | Avatar frame with primary input chrome                       | [README](./inputs/input-avatar/README.md)      |
-| [InputComboBox](./inputs/input-combo-box/)     | Filterable input/select hybrid with create-new support       | [README](./inputs/input-combo-box/README.md)   |
+| [InputComboBox](./inputs/selections/input-combo-box/)     | Filterable input/select hybrid with create-new support       | [README](./inputs/selections/input-combo-box/README.md)   |
 | [InputImage](./inputs/input-image/)            | Circular image dropzone with edit overlay                    | [README](./inputs/input-image/README.md)       |
 | [InputKeyValue](./inputs/input-key-value/)     | Key/value pair editor with validation                        | [README](./inputs/input-key-value/README.md)   |
-| [InputSingleSelect](./inputs/input-select/input-single-select/) | Styled dropdown on Radix Select, pick exactly one | [README](./inputs/input-select/input-single-select/README.md) |
-| [InputMultiSelect](./inputs/input-select/input-multi-select/) | Chips-in-input multi selection (Figma Input/Tags) | [README](./inputs/input-select/input-multi-select/README.md) |
+| [InputSingleSelect](./inputs/selections/input-single-select/) | Styled dropdown on Radix Select, pick exactly one | [README](./inputs/selections/input-single-select/README.md) |
+| [InputMultiSelect](./inputs/selections/input-multi-select/) | Chips-in-input multi selection (Figma Input/Tags) | [README](./inputs/selections/input-multi-select/README.md) |
+| [InputCheckbox](./inputs/booleans/input-checkbox/) | Checkbox with checked/indeterminate states | [README](./inputs/booleans/input-checkbox/README.md) |
+| [InputSwitch](./inputs/booleans/input-switch/) | On/off toggle switch | [README](./inputs/booleans/input-switch/README.md) |
 | [InputNumber](./inputs/input-number/)          | Number field with steppers and reset                         | [README](./inputs/input-number/README.md)      |
 | [InputList](./inputs/input-list/)   | Type-and-Enter list builder with removable chips below       | [README](./inputs/input-list/README.md)  |
 

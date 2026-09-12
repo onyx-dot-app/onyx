@@ -1,14 +1,14 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { Checkbox, Text } from "@opal/components";
+import { InputCheckbox, Text } from "@opal/components";
 
 const meta = {
-  title: "Components/Checkbox",
-  component: Checkbox,
+  title: "opal/Inputs/InputCheckbox",
+  component: InputCheckbox,
   tags: ["autodocs"],
   parameters: {
     layout: "centered",
   },
-} satisfies Meta<typeof Checkbox>;
+} satisfies Meta<typeof InputCheckbox>;
 
 export default meta;
 
@@ -54,7 +54,7 @@ export const DisabledChecked: Story = {
 export const WithLabel: StoryObj = {
   render: () => (
     <div className="flex items-center gap-2">
-      <Checkbox id="terms" />
+      <InputCheckbox id="terms" />
       <label htmlFor="terms" className="cursor-pointer">
         <Text font="main-ui-body" color="text-04">
           Accept terms and conditions
@@ -82,7 +82,7 @@ export const AllStates: StoryObj = {
         ] as const
       ).map(([label, props]) => (
         <div key={label} className="flex items-center gap-3">
-          <Checkbox {...props} />
+          <InputCheckbox {...props} />
           <Text font="secondary-body" color="text-03">
             {label}
           </Text>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { Card, DateRange, DateRangePicker, Text } from "@opal/components";
+import { Card, DateRange, InputDateRangePicker, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { useAgents } from "@/lib/agents/hooks";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
@@ -136,7 +136,7 @@ export function AgentStats({ agentId }: AgentStatsProps) {
       {/* sm:flex-row / sm:items-center / sm:justify-between have no Section equivalent, kept as a raw div */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <Text font="heading-h2">{t("analytics.agentChart.title")}</Text>
-        <DateRangePicker value={dateRange} onValueChange={setDateRange} />
+        <InputDateRangePicker value={dateRange} onValueChange={setDateRange} />
       </div>
 
       <Section

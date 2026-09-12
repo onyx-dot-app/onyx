@@ -1,7 +1,7 @@
 "use client";
 
 import "@opal/components/inputs/shared.css";
-import "@opal/components/inputs/input-select/input-single-select/styles.css";
+import "@opal/components/inputs/selections/input-single-select/styles.css";
 import React from "react";
 import * as SelectPrimitive from "@radix-ui/react-select";
 import { cn } from "@opal/utils";

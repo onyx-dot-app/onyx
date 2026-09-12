@@ -28,7 +28,7 @@ import { InputSwitch } from "@opal/components";
 | `onCheckedChange` | `(checked: boolean) => void` | `undefined` | Called with the new value when toggled.        |
 | `disabled`        | `boolean`                    | `false`     | Disables interaction and applies muted styles. |
 
-All other `<button>` attributes (except `style`, `className`, and `onChange`) are forwarded.
+All other `<button>` attributes (except `style`, `className`, `onChange`, and `type` — the switch is always `type="button"`) are forwarded.
 
 ## Visual States
 
