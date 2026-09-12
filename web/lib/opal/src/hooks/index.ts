@@ -18,3 +18,9 @@ export {
   default as useScreenSize,
   type ScreenSize,
 } from "@opal/hooks/useScreenSize";
+export { useClickOutside } from "@opal/hooks/useClickOutside";
+export {
+  useImageDropzone,
+  type UseImageDropzoneOptions,
+  type UseImageDropzoneReturn,
+} from "@opal/hooks/useImageDropzone";

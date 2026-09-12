@@ -26,24 +26,24 @@ Radix Dialog compound, the Figma Modal. `Modal` is the Radix root (`open`, `onOp
 
 ## Modal.Content
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `width` | `"full" \| "xl" \| "lg" \| "md" \| "sm"` | `"xl"` | Card width (`80dvw`, 60rem, 50rem, 40rem, 30rem) |
-| `height` | `"fit" \| "sm" \| "lg" \| "full"` | `"fit"` | Card height and scroll behavior |
-| `position` | `"center" \| "top"` | `"center"` | `"top"` pins near the viewport top (command-menu position) |
-| `preventAccidentalClose` | `boolean` | `true` | After the user types in any text input, the first Escape/outside-click focuses the close button and the second closes |
-| `skipOverlay` | `boolean` | `false` | Omit the scrim |
-| `background` | `"default" \| "gray"` | `"default"` | Card background (`tint-00` or `tint-01`) |
-| `bottomSlot` | `ReactNode` | — | Rendered below the card, inside the dialog's focus scope |
+| Prop                     | Type                                     | Default     | Description                                                                                                           |
+| ------------------------ | ---------------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------- |
+| `width`                  | `"full" \| "xl" \| "lg" \| "md" \| "sm"` | `"xl"`      | Card width (`80dvw`, 60rem, 50rem, 40rem, 30rem)                                                                      |
+| `height`                 | `"fit" \| "sm" \| "lg" \| "full"`        | `"fit"`     | Card height and scroll behavior                                                                                       |
+| `position`               | `"center" \| "top"`                      | `"center"`  | `"top"` pins near the viewport top (command-menu position)                                                            |
+| `preventAccidentalClose` | `boolean`                                | `true`      | After the user types in any text input, the first Escape/outside-click focuses the close button and the second closes |
+| `skipOverlay`            | `boolean`                                | `false`     | Omit the scrim                                                                                                        |
+| `background`             | `"default" \| "gray"`                    | `"default"` | Card background (`tint-00` or `tint-01`)                                                                              |
+| `bottomSlot`             | `ReactNode`                              | —           | Rendered below the card, inside the dialog's focus scope                                                              |
 
 ## Modal.Header
 
-| Prop | Type | Description |
-|---|---|---|
+| Prop                             | Type                    | Description                                                          |
+| -------------------------------- | ----------------------- | -------------------------------------------------------------------- |
 | `icon`, `moreIcon1`, `moreIcon2` | `IconFunctionComponent` | Heading icons. Omitting `icon` gives the minimal (icon-less) variant |
-| `title` | `string \| RichStr` | Required |
-| `description` | `string \| RichStr` | Optional, also wired to `aria-describedby` |
-| `onClose` | `() => void` | Renders the close button |
+| `title`                          | `string \| RichStr`     | Required                                                             |
+| `description`                    | `string \| RichStr`     | Optional, also wired to `aria-describedby`                           |
+| `onClose`                        | `() => void`            | Renders the close button                                             |
 
 `children` render below the title stack (e.g. a search input).
 
@@ -61,4 +61,4 @@ When a `[data-main-container]` element is present (the content area beside the s
 
 ## Deferred
 
-The remaining Figma header/footer content variants (Search, Card, Panel, Checkbox, Message) are follow-ups.
+The remaining Figma header/footer content variants (Search, Card, Panel, InputCheckbox, Message) are follow-ups.

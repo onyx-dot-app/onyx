@@ -1,0 +1,214 @@
+"use client";
+
+import * as React from "react";
+import "@opal/components/inputs/input-number/styles.css";
+import { cn } from "@opal/utils";
+import { Button } from "@opal/components/buttons/button/components";
+import { SvgChevronUp, SvgChevronDown, SvgRevert } from "@opal/icons";
+
+type InputNumberVariant =
+  | "primary"
+  | "internal"
+  | "error"
+  | "disabled"
+  | "readOnly";
+
+// Inner text styling per variant; the wrapper chrome lives in styles.css.
+const INNER_CLASSES: Record<InputNumberVariant, string | null> = {
+  primary:
+    "text-text-04 placeholder:!font-main-ui-muted placeholder:text-text-02",
+  internal: "text-text-04",
+  error: "text-text-04",
+  disabled: "text-text-01",
+  readOnly: "text-text-01",
+};
+
+/**
+ * InputNumber Component
+ *
+ * A number input with increment/decrement stepper buttons and optional reset.
+ *
+ * @example
+ * ```tsx
+ * // Basic usage
+ * <InputNumber
+ *   value={count}
+ *   onChange={setCount}
+ *   min={0}
+ *   max={100}
+ * />
+ *
+ * // With reset button
+ * <InputNumber
+ *   value={count}
+ *   onChange={setCount}
+ *   defaultValue={10}
+ *   showReset
+ * />
+ *
+ * // With step
+ * <InputNumber
+ *   value={count}
+ *   onChange={setCount}
+ *   step={5}
+ * />
+ * ```
+ */
+export interface InputNumberProps {
+  value: number | null;
+  onChange: (value: number | null) => void;
+  min?: number;
+  max?: number;
+  step?: number;
+  decimalPlaces?: number;
+  defaultValue?: number;
+  showReset?: boolean;
+  variant?: InputNumberVariant;
+  disabled?: boolean;
+  placeholder?: string;
+}
+
+export default function InputNumber({
+  value,
+  onChange,
+  min,
+  max,
+  step = 1,
+  decimalPlaces = 0,
+  defaultValue,
+  showReset = false,
+  variant = "primary",
+  disabled = false,
+  placeholder,
+}: InputNumberProps) {
+  const inputRef = React.useRef<HTMLInputElement | null>(null);
+  const [inputValue, setInputValue] = React.useState(
+    value === null ? "" : String(value)
+  );
+  const isDisabled = disabled || variant === "disabled";
+  const inputPattern =
+    decimalPlaces === 0 ? "[0-9]*" : `[0-9]*[.]?[0-9]{0,${decimalPlaces}}`;
+
+  // Sync input value when external value changes (e.g., from stepper buttons or reset)
+  React.useEffect(() => {
+    setInputValue(value === null ? "" : String(value));
+  }, [value]);
+
+  const effectiveValue = value ?? 0;
+  const canIncrement = max === undefined || effectiveValue < max;
+  const canDecrement =
+    value !== null && (min === undefined || effectiveValue > min);
+  const canReset =
+    showReset && defaultValue !== undefined && value !== defaultValue;
+  const normalizePrecision = (newValue: number) =>
+    Number(newValue.toFixed(decimalPlaces));
+
+  const handleIncrement = () => {
+    if (canIncrement) {
+      const newValue = normalizePrecision(effectiveValue + step);
+      onChange(max !== undefined ? Math.min(newValue, max) : newValue);
+    }
+  };
+
+  const handleDecrement = () => {
+    if (canDecrement) {
+      const newValue = normalizePrecision(effectiveValue - step);
+      onChange(min !== undefined ? Math.max(newValue, min) : newValue);
+    }
+  };
+
+  const handleReset = () => {
+    if (defaultValue !== undefined) {
+      onChange(defaultValue);
+    }
+  };
+
+  const handleBlur = () => {
+    // On blur, if empty, keep as null so placeholder shows
+    if (inputValue.trim() === "") {
+      onChange(null);
+    } else {
+      setInputValue(value === null ? "" : String(value));
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawValue = e.target.value;
+
+    if (rawValue !== "" && !new RegExp(`^${inputPattern}$`).test(rawValue)) {
+      return;
+    }
+
+    setInputValue(rawValue);
+
+    // Allow empty input while typing (fallback applied on blur)
+    if (rawValue === "") {
+      return;
+    }
+
+    const val = Number(rawValue);
+    if (!Number.isFinite(val)) {
+      return;
+    }
+    let newValue = val;
+    if (min !== undefined) newValue = Math.max(newValue, min);
+    if (max !== undefined) newValue = Math.min(newValue, max);
+    onChange(newValue);
+  };
+
+  return (
+    // Pointer convenience only — this forwards a click to the input, which is
+    // already keyboard reachable.
+    <div
+      role="presentation"
+      className="opal-input-number flex flex-row items-center justify-between w-full h-fit pe-1.5 ps-1.5 rounded-08"
+      data-variant={variant}
+      onClick={() => inputRef.current?.focus()}
+    >
+      <input
+        ref={inputRef}
+        type="text"
+        inputMode={decimalPlaces === 0 ? "numeric" : "decimal"}
+        pattern={inputPattern}
+        disabled={isDisabled}
+        value={inputValue}
+        placeholder={placeholder}
+        onChange={handleInputChange}
+        onBlur={handleBlur}
+        className={cn(
+          "w-full h-6 bg-transparent p-0.5 focus:outline-hidden",
+          INNER_CLASSES[variant]
+        )}
+      />
+
+      <div className="flex flex-row items-center gap-1">
+        {showReset && (
+          <Button
+            disabled={!canReset || isDisabled}
+            icon={SvgRevert}
+            onClick={handleReset}
+            prominence="tertiary"
+          />
+        )}
+        <div className="flex flex-col">
+          <button
+            type="button"
+            onClick={handleIncrement}
+            disabled={!canIncrement || isDisabled}
+            className="p-0.5 text-text-03 hover:text-text-04 disabled:text-text-02 disabled:cursor-not-allowed transition-colors"
+          >
+            <SvgChevronUp size={14} />
+          </button>
+          <button
+            type="button"
+            onClick={handleDecrement}
+            disabled={!canDecrement || isDisabled}
+            className="p-0.5 text-text-03 hover:text-text-04 disabled:text-text-02 disabled:cursor-not-allowed transition-colors"
+          >
+            <SvgChevronDown size={14} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

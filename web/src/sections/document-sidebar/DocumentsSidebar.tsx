@@ -35,7 +35,7 @@ const buildOnyxDocumentFromFile = (
     metadata: {},
     updated_at: null,
     is_internet: false,
-  } as any;
+  };
 };
 
 interface HeaderProps {

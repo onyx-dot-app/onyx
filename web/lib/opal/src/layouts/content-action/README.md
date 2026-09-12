@@ -12,11 +12,11 @@ A row layout that pairs a [`Content`](../content/README.md) block with optional 
 
 Inherits **all** props from [`Content`](../content/README.md) (same discriminated-union API) plus:
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `rightChildren` | `ReactNode` | `undefined` | Content rendered on the right side. Wrapper stretches to the full height of the row. |
-| `padding` | `0 \| 0.5 \| 1 \| 2` | `2` | Padding around the `Content` area, as a spacing step (`N / 4` rem). Narrowed to the paddings `Interactive.Container` uses. |
-| `fillRight` | `boolean` | `false` | When `true`, the `rightChildren` column grows to fill the row (capped at `--block-width-form-input-column-max`, 240px) instead of hugging its content. Use for full-width form inputs; leave off for compact controls like toggles/buttons. Ignored in the `responsive` branch. |
+| Prop            | Type                 | Default     | Description                                                                                                                                                                                                                                                                     |
+| --------------- | -------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rightChildren` | `ReactNode`          | `undefined` | Content rendered on the right side. Wrapper stretches to the full height of the row.                                                                                                                                                                                            |
+| `padding`       | `0 \| 0.5 \| 1 \| 2` | `2`         | Padding around the `Content` area, as a spacing step (`N / 4` rem). Narrowed to the paddings `Interactive.Container` uses.                                                                                                                                                      |
+| `fillRight`     | `boolean`            | `false`     | When `true`, the `rightChildren` column grows to fill the row (capped at `--block-width-form-input-column-max`, 240px) instead of hugging its content. Use for full-width form inputs; leave off for compact controls like toggles/buttons. Ignored in the `responsive` branch. |
 
 ### `padding` reference
 
@@ -26,7 +26,7 @@ and the default `2` is 0.5rem (8px).
 `Interactive.Container` still derives its padding from its `size` preset, and matching
 those paddings is the point of this prop — it is what makes a `ContentAction` label line
 up with an adjacent button of the same size. The equivalents are `lg` → `2`,
-`md` and `sm` → `1`, `xs` and `2xs` → `0.5`, `fit` → `0`. Note this is a *different*
+`md` and `sm` → `1`, `xs` and `2xs` → `0.5`, `fit` → `0`. Note this is a _different_
 scale from `Card`, where `lg` was 24px rather than 8px.
 
 ## Layout Structure
@@ -63,7 +63,7 @@ import SvgSettings from "@opal/icons/settings";
   rightChildren={
     <Button icon={SvgSettings} prominence="tertiary" onClick={handleEdit} />
   }
-/>
+/>;
 ```
 
 ### Card header with connect action
@@ -85,7 +85,7 @@ import { SvgArrowExchange, SvgCloud } from "@opal/icons";
       Connect
     </Button>
   }
-/>
+/>;
 ```
 
 ### Full-width form input (`fillRight`)
@@ -105,7 +105,7 @@ import { InputSelect } from "@/refresh-components/inputs/InputSelect";
 ```
 
 The select grows to fill the row (up to 240px) instead of sitting at its content width. Compact
-controls like `Switch`/`Button` should omit `fillRight` so they keep hugging the right edge.
+controls like `InputSwitch`/`Button` should omit `fillRight` so they keep hugging the right edge.
 
 ### No right children (padding-only wrapper)
 

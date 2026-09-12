@@ -17,7 +17,7 @@ func TestWriteReport_showsEachStatus(t *testing.T) {
 	}
 
 	var out strings.Builder
-	if err := WriteReport(&out, Compare(profile, baseline, DefaultTolerance)); err != nil {
+	if err := WriteReport(&out, Compare(profile, baseline, DefaultTolerance), GoTests); err != nil {
 		t.Fatalf("failed to write the report: %v", err)
 	}
 	report := out.String()
@@ -42,7 +42,7 @@ func TestWriteReport_totalDropIsNotLabelledARegression(t *testing.T) {
 	baseline := &Baseline{Total: 50, Packages: map[string]float64{"cmd": 50}}
 
 	var out strings.Builder
-	if err := WriteReport(&out, Compare(profile, baseline, DefaultTolerance)); err != nil {
+	if err := WriteReport(&out, Compare(profile, baseline, DefaultTolerance), GoTests); err != nil {
 		t.Fatalf("failed to write the report: %v", err)
 	}
 
@@ -59,7 +59,7 @@ func TestWriteReport_totalDropIsNotLabelledARegression(t *testing.T) {
 func TestWriteReport_newPackageHasNoFloorValue(t *testing.T) {
 	var out strings.Builder
 	report := Compare(profileOf(map[string][2]int{"internal/new": {1, 3}}), nil, DefaultTolerance)
-	if err := WriteReport(&out, report); err != nil {
+	if err := WriteReport(&out, report, GoTests); err != nil {
 		t.Fatalf("failed to write the report: %v", err)
 	}
 
@@ -69,5 +69,17 @@ func TestWriteReport_newPackageHasNoFloorValue(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "33.3%") {
 		t.Fatalf("expected the measured coverage:\n%s", out.String())
+	}
+}
+
+func TestWriteReport_namesTheKindUnit(t *testing.T) {
+	var out strings.Builder
+	report := Compare(profileOf(map[string][2]int{"src/app": {1, 2}}), nil, TypeScript.DefaultTolerance)
+	if err := WriteReport(&out, report, TypeScript); err != nil {
+		t.Fatalf("failed to write the report: %v", err)
+	}
+
+	if !strings.HasPrefix(out.String(), "DIRECTORY") {
+		t.Fatalf("expected a DIRECTORY column:\n%s", out.String())
 	}
 }

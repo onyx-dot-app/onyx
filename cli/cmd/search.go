@@ -396,6 +396,7 @@ func newSearchCmd(ios *iostreams.IOStreams) *cobra.Command {
 		searchSources          string
 		searchDays             int
 		searchAgentID          int
+		searchAgentName        string
 		searchRaw              bool
 		searchNoQueryExpansion bool
 		maxOutput              int
@@ -436,6 +437,7 @@ result sets pass through whole.`,
   onyx-cli search --source slack "auth migration status"
   onyx-cli search --days 30 "recent production incidents"
   onyx-cli search --agent-id 5 "engineering roadmap"
+  onyx-cli search --agent-name "Support Agent" "engineering roadmap"
   onyx-cli search --raw "API documentation" | jq '.results[].title'
   onyx-cli search --no-query-expansion "exact error message text"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -469,18 +471,32 @@ result sets pass through whole.`,
 			if cmd.Flags().Changed("source") {
 				sources = strings.Split(searchSources, ",")
 			}
+
+			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+			defer stop()
+
+			resolvedAgentID, agentExplicit, err := resolveAgentSelection(
+				ctx,
+				client,
+				searchAgentID,
+				cmd.Flags().Changed("agent-id"),
+				searchAgentName,
+				cmd.Flags().Changed("agent-name"),
+				cfg.DefaultAgentID,
+			)
+			if err != nil {
+				return err
+			}
+
 			baseFlags := searchFlags{
 				sources:          sources,
 				days:             searchDays,
 				daysSet:          cmd.Flags().Changed("days"),
-				agentID:          searchAgentID,
-				agentIDSet:       cmd.Flags().Changed("agent-id"),
+				agentID:          resolvedAgentID,
+				agentIDSet:       agentExplicit,
 				defaultAgentID:   cfg.DefaultAgentID,
 				noQueryExpansion: searchNoQueryExpansion,
 			}
-
-			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
-			defer stop()
 
 			// All-single-word args often mean one unquoted query; the shell
 			// strips quotes before argv, so a hint is all this can be.
@@ -603,6 +619,7 @@ result sets pass through whole.`,
 	cmd.Flags().StringVar(&searchSources, "source", "", "Filter by source type (comma-separated: slack,google_drive)")
 	cmd.Flags().IntVar(&searchDays, "days", 0, "Only return results from the last N days")
 	cmd.Flags().IntVar(&searchAgentID, "agent-id", 0, "Agent ID for scoped search")
+	cmd.Flags().StringVar(&searchAgentName, "agent-name", "", "Agent name for scoped search (exact or unique substring)")
 	cmd.Flags().BoolVar(&searchRaw, "raw", false, "Output full API response (adds per-result citation_id)")
 	cmd.Flags().BoolVar(&searchNoQueryExpansion, "no-query-expansion", false, "Skip LLM query expansion (faster, less comprehensive)")
 	cmd.Flags().IntVar(&maxOutput, "max-output", defaultMaxOutputBytes,

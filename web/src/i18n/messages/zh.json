@@ -3881,7 +3881,15 @@
         },
         "viewGroup": {
           "label": "查看用户组"
-        }
+        },
+        "resourceCounts": {
+          "connectors": "{count, plural, other {# 个连接器}}",
+          "documentSets": "{count, plural, other {# 个文档集}}",
+          "agents": "{count, plural, other {# 个智能体}}",
+          "noPrivateResources": "没有私有连接器 / 文档集 / 智能体",
+          "joined": "{first}・{rest}"
+        },
+        "memberCount": "{count, plural, other {# 名成员}}"
       },
       "create": {
         "header": {
@@ -4130,6 +4138,16 @@
           "header": "Token 上限",
           "placeholder": "Token 上限（千）",
           "unit": "(千)"
+        }
+      },
+      "builtIn": {
+        "admin": {
+          "name": "管理员",
+          "description": "内置管理员组，拥有管理所有权限的完整访问权。"
+        },
+        "basic": {
+          "name": "基本",
+          "description": "所有用户的默认组，拥有基本权限。"
         }
       }
     },
@@ -4389,6 +4407,20 @@
         },
         "validationFailed": {
           "message": "验证失败:{status}"
+        }
+      },
+      "points": {
+        "documentIngestion": {
+          "name": "文档摄取",
+          "description": "在每个文档进入索引管道之前运行。允许过滤、重写或丢弃文档。"
+        },
+        "documentPush": {
+          "name": "文档推送",
+          "description": "在每个文档成功索引后触发。将已索引的文档推送到外部目标，如 wiki 或数据仓库。仅在单租户部署中的公共连接器上触发。"
+        },
+        "queryProcessing": {
+          "name": "查询处理",
+          "description": "在每个用户查询进入管道之前运行。允许重写、过滤或拒绝查询。"
         }
       }
     },
@@ -4958,6 +4990,24 @@
         "statusInvalid": "无效",
         "statusPaused": "已暂停",
         "restoreHint": "如需保留某个连接器，请在此取消，先恢复或修复它，然后重新索引，它就会被迁移过去。否则请在重新索引完成后重新添加。"
+      },
+      "modelDescriptions": {
+        "cohereEmbedEnglishV3": "Cohere 的英语嵌入模型。在英语任务上表现良好。",
+        "cohereEmbedEnglishLightV3": "Cohere 的轻量级英语嵌入模型。处理简单任务更快、更高效。",
+        "cohereEmbedV4": "Cohere 最新的多语言嵌入模型，默认 1536 维输出，检索质量更高。",
+        "openaiTextEmbedding3Large": "OpenAI 的大型嵌入模型。性能最佳，但成本更高。",
+        "openaiTextEmbedding3Small": "OpenAI 更新、更高效的嵌入模型。性能与成本平衡良好。",
+        "googleGeminiEmbedding001": "Google 的 Gemini 嵌入模型。强大且高效。",
+        "googleTextEmbedding005": "Google 更小、更轻量的嵌入模型。",
+        "googleGeminiEmbedding2": "Google 最新的多模态嵌入模型（GA）。3072 维输出，检索质量最高。",
+        "googleGeminiEmbedding2Preview": "Gemini Embedding 2 的预览版。新部署已由 gemini-embedding-2 取代。",
+        "voyageLarge2Instruct": "Voyage 的大型嵌入模型。经过指令微调，性能出色。",
+        "voyageLight2Instruct": "Voyage 的轻量级嵌入模型。性能与效率平衡良好。",
+        "nomicEmbedTextV1": "Nomic 的嵌入模型，专注于检索、相似度、聚类和分类。",
+        "e5BaseV2": "比默认模型更小、更快的模型。速度约为默认模型的 2 倍，但搜索质量较低。",
+        "e5SmallV2": "E5 系列模型中最小、最快的版本。如果您在资源受限的系统上运行 Onyx，这是一个不错的选择。",
+        "multilingualE5Base": "如果语料库包含英语以外的语言，请选择此模型。",
+        "multilingualE5Small": "如果语料库包含英语以外的语言，且系统资源受限，请选择此模型。"
       }
     },
     "indexing": {
@@ -5753,6 +5803,50 @@
         "description": "连接 OpenAPI 服务器，为您的智能体添加自定义操作和工具。"
       }
     },
+    "systemUsage": {
+      "categories": {
+        "contextualRagChunkContext": {
+          "label": "上下文 RAG 分块上下文"
+        },
+        "contextualRagDocumentSummary": {
+          "label": "上下文 RAG 文档摘要"
+        },
+        "imageSummarization": { "label": "图像摘要" },
+        "kgDeepExtraction": { "label": "知识图谱提取" },
+        "kgDocumentClassification": {
+          "label": "知识图谱分类"
+        },
+        "other": { "label": "其他" },
+        "unattributed": { "label": "未归属" }
+      },
+      "filters": {
+        "allModels": { "label": "所有模型" },
+        "allProviders": { "label": "所有提供商" }
+      },
+      "panel": {
+        "description": "{start} – {end} · 系统用量是 Onyx 在后台运行而非为特定用户运行的 LLM 活动。例如图像摘要、上下文 RAG 处理和知识图谱提取。",
+        "emptyDescription": "系统用量是 Onyx 在后台运行而非为特定用户运行的 LLM 活动。例如图像摘要、上下文 RAG 处理和知识图谱提取。",
+        "error": { "title": "无法加载此期间的系统用量。" },
+        "title": "系统用量"
+      },
+      "summary": {
+        "spend": { "label": "系统支出" },
+        "tokens": { "label": "总 Token 数" },
+        "unattributed": { "label": "未归属支出" }
+      },
+      "table": {
+        "columns": {
+          "category": { "header": "类别" },
+          "input": { "header": "输入" },
+          "output": { "header": "输出" },
+          "spend": { "header": "支出" },
+          "tokens": { "header": "Token" }
+        },
+        "empty": {
+          "description": "没有符合当前筛选条件的系统用量。"
+        }
+      }
+    },
     "perUserUsage": {
       "panel": {
         "description": "{start} – {end} · 费用根据记录的模型用量计算。",
@@ -6271,6 +6365,7 @@
         },
         "name": {
           "placeholder": "输入名称",
+          "required": "名称为必填项",
           "title": "名称"
         },
         "submitButton": {
@@ -6799,7 +6894,9 @@
         "gatedTooltip": "同时启用多个 SSO 提供商需要 Business 或 Enterprise 方案。"
       },
       "copyRedirectUri": {
-        "tooltip": "复制重定向 URI"
+        "tooltip": "复制重定向 URI",
+        "successToast": "已复制重定向 URI",
+        "errorToast": "无法复制"
       },
       "editProvider": {
         "tooltip": "编辑"
@@ -6911,6 +7008,75 @@
       },
       "toasts": {
         "unexpectedError": "发生意外错误。"
+      },
+      "providerTypes": {
+        "googleOauth": {
+          "description": "使用 Google 作为身份提供方。"
+        },
+        "oidc": {
+          "description": "连接通用的 OpenID Connect 提供方。"
+        },
+        "saml": {
+          "description": "连接 SAML 身份提供方。"
+        }
+      },
+      "configFields": {
+        "clientId": {
+          "label": "客户端 ID",
+          "description": "来自提供方控制台的 OAuth 客户端 ID。",
+          "placeholder": "客户端 ID"
+        },
+        "clientSecret": {
+          "label": "客户端密钥",
+          "description": "OAuth 客户端密钥。加密存储。",
+          "placeholder": "客户端密钥"
+        },
+        "pkceEnabled": {
+          "label": "启用 PKCE",
+          "description": "在此提供方的登录流程中发送 PKCE code challenge。部署级设置可能会强制启用。"
+        },
+        "scopes": {
+          "label": "作用域",
+          "description": "覆盖登录时请求的 OAuth 作用域。留空则使用部署默认值。",
+          "placeholder": "添加作用域（例如 openid）"
+        },
+        "openidConfigUrl": {
+          "label": "OpenID 配置 URL",
+          "description": "IdP 的 OpenID Connect 发现文档 URL。"
+        },
+        "requireVerifiedEmail": {
+          "label": "要求已验证邮箱声明",
+          "description": "当 IdP 省略可选的 email_verified 声明时拒绝登录。对于不发送该声明的 IdP（如 Microsoft Entra ID），请保持关闭。"
+        },
+        "idpEntityId": {
+          "label": "IdP 实体 ID",
+          "description": "身份提供方的实体 ID（颁发者）。"
+        },
+        "idpSsoUrl": {
+          "label": "IdP SSO URL",
+          "description": "接收登录请求的 IdP 端点。"
+        },
+        "idpX509Cert": {
+          "label": "IdP X.509 证书",
+          "description": "IdP 的签名证书，用于验证断言。"
+        },
+        "spEntityId": {
+          "label": "SP 实体 ID",
+          "description": "此实例在 IdP 注册的实体 ID。"
+        },
+        "spX509Cert": {
+          "label": "SP X.509 证书",
+          "description": "仅当此实例对请求签名或解密断言时需要。"
+        },
+        "spPrivateKey": {
+          "label": "SP 私钥",
+          "description": "与 SP 证书配对的私钥。加密存储。"
+        },
+        "emailAttribute": {
+          "label": "邮箱属性",
+          "description": "包含用户邮箱的 SAML 属性。默认使用常见键名。",
+          "placeholder": "email"
+        }
       }
     },
     "standardAnswers": {
@@ -7448,6 +7614,42 @@
         "connected": "{label} 已连接",
         "disconnected": "{label} 已断开连接",
         "unexpectedError": "发生意外错误。"
+      },
+      "providers": {
+        "braintrust": {
+          "description": "LLM 评估与监控",
+          "fields": {
+            "apiKey": {
+              "label": "API 密钥",
+              "description": "粘贴您在 Braintrust 的 [API 密钥](https://www.braintrust.dev/app)。"
+            },
+            "project": {
+              "label": "项目名称",
+              "description": "记录跟踪数据的 Braintrust 项目名称。"
+            },
+            "apiUrl": {
+              "label": "API URL",
+              "description": "默认为美国区域。其他区域或自托管请粘贴您的 Braintrust API URL。"
+            }
+          }
+        },
+        "langfuse": {
+          "description": "云端或自托管的开源可观测性平台",
+          "fields": {
+            "secretKey": {
+              "label": "密钥",
+              "description": "粘贴您在 Langfuse 的 [API 密钥](https://cloud.langfuse.com)。"
+            },
+            "publicKey": {
+              "label": "公钥",
+              "placeholder": "公钥"
+            },
+            "host": {
+              "label": "API 基础 URL",
+              "description": "默认为欧盟区域。其他区域或自托管请粘贴您的 Langfuse 基础 URL。"
+            }
+          }
+        }
       }
     },
     "usage": {
@@ -8073,6 +8275,35 @@
       },
       "unexpectedError": {
         "message": "发生意外错误。"
+      },
+      "contentProviders": {
+        "onyxWebCrawler": {
+          "subtitle": "内置网页爬虫。适用于大多数页面，但在特殊情况下性能较低。"
+        },
+        "firecrawl": {
+          "subtitle": "领先的开源爬虫。"
+        },
+        "exa": {
+          "subtitle": "Exa.ai"
+        },
+        "tavily": {
+          "subtitle": "Tavily AI"
+        }
+      },
+      "configFields": {
+        "searchEngineId": {
+          "label": "搜索引擎 ID",
+          "placeholder": "输入您的搜索引擎 ID",
+          "description": "粘贴用于网页搜索的[搜索引擎 ID](https://programmablesearchengine.google.com/controlpanel/all)。"
+        },
+        "searxngBaseUrl": {
+          "label": "SearXNG 基础 URL",
+          "description": "粘贴您的 [SearXNG 实例](https://docs.searxng.org/admin/installation.html)的基础 URL。"
+        },
+        "firecrawlBaseUrl": {
+          "label": "API 基础 URL",
+          "description": "您的 Firecrawl API 基础 URL。"
+        }
       }
     }
   },
@@ -9816,6 +10047,17 @@
           },
           "reading": {
             "status": "正在读取"
+          },
+          "header": {
+            "default": "正在搜索内部文档",
+            "sources": "正在搜索 {sources}",
+            "sourcesOverflow": "{sources} 及另外 {count} 个",
+            "withTimeWindow": "{header}({timeWindow})"
+          },
+          "timeWindow": {
+            "since": "自 {date} 起",
+            "before": "{date} 之前",
+            "between": "从 {start} 到 {end}"
           }
         },
         "interruptedThinking": {
@@ -10197,6 +10439,14 @@
         },
         "fileCount": {
           "label": "{count, plural, one {# 个文件} other {# 个文件}}"
+        },
+        "fileRow": {
+          "deleteButton": {
+            "ariaLabel": "删除文件"
+          },
+          "viewButton": {
+            "ariaLabel": "打开文件"
+          }
         },
         "fileStatus": {
           "deleting": {
@@ -10595,22 +10845,6 @@
         "text": "文"
       }
     },
-    "comboBox": {
-      "createOption": {
-        "ariaLabel": "{prefix}“{value}”",
-        "defaultPrefix": "创建"
-      },
-      "dropdown": {
-        "closeAriaLabel": "关闭下拉菜单",
-        "openAriaLabel": "打开下拉菜单"
-      },
-      "options": {
-        "empty": "未找到选项"
-      },
-      "separator": {
-        "label": "其他选项"
-      }
-    },
     "commandMenu": {
       "closeButton": {
         "ariaLabel": "关闭菜单"
@@ -10664,29 +10898,11 @@
       "anyTime": {
         "text": "任何时间..."
       },
-      "chooseCustom": {
-        "ariaLabel": "选择自定义范围"
-      },
       "clearButton": {
         "ariaLabel": "清除"
       },
-      "custom": {
-        "label": "自定义"
-      },
-      "customRange": {
-        "ariaLabel": "自定义范围：{from}至{to}"
-      },
       "date": {
         "label": "日期"
-      },
-      "group": {
-        "ariaLabel": "日期范围"
-      },
-      "preset": {
-        "oneDay": "1天",
-        "oneMonth": "1个月",
-        "sevenDays": "7天",
-        "threeMonths": "3个月"
       }
     },
     "deleteButton": {
@@ -10729,6 +10945,9 @@
       "save": {
         "ariaLabel": "保存"
       }
+    },
+    "enabledCount": {
+      "label": "{total} 个中的 <value>{enabled}</value> 个"
     },
     "errorPages": {
       "accessRestricted": {
@@ -10982,34 +11201,6 @@
         "tooltip": "移除"
       }
     },
-    "inputFile": {
-      "attachButton": {
-        "ariaLabel": "附加文件"
-      },
-      "clearButton": {
-        "ariaLabel": "清除文件"
-      }
-    },
-    "inputImage": {
-      "dropRejected": {
-        "fallback": "文件被拒绝"
-      },
-      "editButton": {
-        "ariaLabel": "编辑图片"
-      },
-      "editOverlay": {
-        "label": "编辑"
-      },
-      "image": {
-        "altFallback": "图片"
-      },
-      "removeButton": {
-        "ariaLabel": "移除图片"
-      },
-      "uploadButton": {
-        "ariaLabel": "上传图片"
-      }
-    },
     "inputSelect": {
       "placeholder": {
         "fallback": "选择一个选项"
@@ -11033,40 +11224,6 @@
       },
       "usersFallback": {
         "text": "用户"
-      }
-    },
-    "keyValue": {
-      "addButton": {
-        "ariaLabel": "添加{keyTitle}与{valueTitle}对",
-        "label": "添加行"
-      },
-      "empty": {
-        "title": "尚未添加任何条目。"
-      },
-      "error": {
-        "duplicateKey": "键重复",
-        "duplicateSummary": "{count, plural, one {发现 # 个重复的键} other {发现 # 个重复的键}}",
-        "emptyKey": "键不能为空",
-        "emptySummary": "{count, plural, one {发现 # 个空键} other {发现 # 个空键}}",
-        "validationSummary": "{count, plural, one {发现 # 个验证错误} other {发现 # 个验证错误}}"
-      },
-      "group": {
-        "ariaLabel": "{keyTitle}与{valueTitle}对"
-      },
-      "input": {
-        "ariaLabel": "{label} {index}"
-      },
-      "keyColumn": {
-        "title": "键"
-      },
-      "pair": {
-        "fallbackLabel": "键值"
-      },
-      "removeButton": {
-        "ariaLabel": "移除{label}对 {index}"
-      },
-      "valueColumn": {
-        "title": "值"
       }
     },
     "logo": {
@@ -12526,6 +12683,9 @@
       "providerCard": {
         "connect": {
           "label": "连接"
+        },
+        "settingsButton": {
+          "ariaLabel": "提供商设置"
         }
       },
       "title": "连接您的 LLM 模型"
@@ -12577,6 +12737,113 @@
         },
         "title": "花点时间来完成设置吧。"
       }
+    }
+  },
+  "opal": {
+    "comboBox": {
+      "close": "关闭下拉菜单",
+      "create": "创建",
+      "createOption": "{prefix}“{value}”",
+      "noOptions": "未找到选项",
+      "open": "打开下拉菜单",
+      "otherOptions": "其他选项"
+    },
+    "common": {
+      "clear": "清除",
+      "clearFilter": "清除筛选",
+      "close": "关闭",
+      "copied": "已复制！",
+      "copy": "复制",
+      "copyCode": "复制代码",
+      "date": "日期",
+      "edit": "编辑",
+      "loading": "加载中",
+      "loadingPage": "加载中…",
+      "openCalendar": "打开日历",
+      "progress": "进度",
+      "remove": "移除",
+      "removeItem": "移除 {title}",
+      "search": "搜索...",
+      "selectAnOption": "选择一个选项",
+      "showFullMessage": "显示完整消息",
+      "time": "时间"
+    },
+    "dateRange": {
+      "chooseCustom": "选择自定义范围",
+      "custom": "自定义",
+      "customRange": "自定义范围：{from}至{to}",
+      "label": "日期范围",
+      "oneDay": "1天",
+      "oneMonth": "1个月",
+      "sevenDays": "7天",
+      "threeMonths": "3个月"
+    },
+    "input": {
+      "day": "日",
+      "hidePassword": "隐藏密码",
+      "hours": "小时",
+      "minutes": "分钟",
+      "month": "月",
+      "seconds": "秒",
+      "showPassword": "显示密码",
+      "valueCannotBeRevealed": "无法显示该值",
+      "year": "年"
+    },
+    "inputFile": {
+      "attachFile": "附加文件",
+      "clearFile": "清除文件"
+    },
+    "inputImage": {
+      "alt": "图片",
+      "dropRejected": "文件被拒绝",
+      "edit": "编辑图片",
+      "remove": "移除图片",
+      "upload": "上传图片"
+    },
+    "keyValue": {
+      "addLine": "添加行",
+      "addPair": "添加{keyTitle}与{valueTitle}对",
+      "duplicateKey": "键重复",
+      "duplicateSummary": "{count, plural, one {发现 # 个重复的键} other {发现 # 个重复的键}}",
+      "empty": "尚未添加任何条目。",
+      "emptyKey": "键不能为空",
+      "emptySummary": "{count, plural, one {发现 # 个空键} other {发现 # 个空键}}",
+      "group": "{keyTitle}与{valueTitle}对",
+      "input": "{label} {index}",
+      "key": "键",
+      "pairFallback": "键值",
+      "removePair": "移除{label}对 {index}",
+      "validationSummary": "{count, plural, one {发现 # 个验证错误} other {发现 # 个验证错误}}",
+      "value": "值"
+    },
+    "pagination": {
+      "goToPage": "跳转到页面",
+      "nextPage": "下一页",
+      "previousPage": "上一页",
+      "rangeOfTotal": "<range></range> / <total></total>"
+    },
+    "table": {
+      "alwaysShown": "始终显示",
+      "ascending": "升序",
+      "columns": "列",
+      "descending": "降序",
+      "deselectAll": "取消全选",
+      "dragToReorder": "拖动以重新排序",
+      "manualOrdering": "手动排序",
+      "selectAnItemToContinue": "选择一个项目以继续",
+      "selectedItemCount": "{count, plural, one {已选择 # 个项目} other {已选择 # 个项目}}",
+      "selectItemsToContinue": "选择项目以继续",
+      "showing": "显示 <range></range>，共 <total></total>",
+      "shownColumns": "显示的列",
+      "singleItemSelected": "已选择项目",
+      "sort": "排序",
+      "sortBy": "排序依据",
+      "sortingOrder": "排序方向",
+      "viewSelected": "查看已选"
+    },
+    "tabs": {
+      "scrollLeft": "向左滚动标签",
+      "scrollRight": "向右滚动标签"
     }
   },
   "settings": {
@@ -12866,6 +13133,9 @@
         "maxReached": "已达到 {count} 条记忆的上限"
       },
       "empty": {
+        "addButton": {
+          "ariaLabel": "添加记忆"
+        },
         "description": "添加希望 Onyx 记住的个人笔记或记忆。",
         "getStarted": "还没有记忆。点击“添加行”开始。",
         "noMatches": "没有与搜索匹配的记忆。"
@@ -12973,7 +13243,8 @@
           "label": "其他"
         },
         "title": "模型价格",
-        "unavailable": "价格不可用"
+        "unavailable": "价格不可用",
+        "priceRow": "输入 {input} · 输出 {output} · 缓存 {cache}"
       },
       "modelUsage": {
         "cacheReads": {
@@ -12987,7 +13258,8 @@
         },
         "tokensOut": {
           "label": "输出 {count}"
-        }
+        },
+        "joined": "{first}・{rest}"
       },
       "showFewerModels": {
         "ariaLabel": "显示更少模型"
