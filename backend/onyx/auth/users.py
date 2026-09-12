@@ -1,3 +1,4 @@
+import asyncio
 import contextvars
 import hashlib
 import os
@@ -1928,7 +1929,10 @@ class FastAPIUserWithRefreshRouter(FastAPIUsers[models.UP, models.ID]):
         Provide a router for session token refreshing.
         """
         # Import the oauth_refresher here to avoid circular imports
-        from onyx.auth.oauth_refresher import check_and_refresh_oauth_tokens
+        from onyx.auth.oauth_refresher import (
+            OAUTH_REFRESH_TOTAL_TIMEOUT_SECONDS,
+            check_and_refresh_oauth_tokens,
+        )
 
         router = APIRouter()
 
@@ -1958,12 +1962,26 @@ class FastAPIUserWithRefreshRouter(FastAPIUsers[models.UP, models.ID]):
                 user, token = user_token
                 logger.info("Processing token refresh request for user %s", user.email)
 
-                # Check if user has OAuth accounts that need refreshing
-                await check_and_refresh_oauth_tokens(
-                    user=cast(User, user),
-                    db_session=db_session,
-                    user_manager=cast(Any, user_manager),
-                )
+                # Check if user has OAuth accounts that need refreshing.
+                # Bounded so a slow IdP cannot hold this request's DB session
+                # open. Refreshing the IdP token is opportunistic here, so a
+                # timeout still lets the session token refresh below proceed.
+                try:
+                    await asyncio.wait_for(
+                        check_and_refresh_oauth_tokens(
+                            user=cast(User, user),
+                            db_session=db_session,
+                            user_manager=cast(Any, user_manager),
+                        ),
+                        timeout=OAUTH_REFRESH_TOTAL_TIMEOUT_SECONDS,
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        "OAuth token refresh for %s exceeded %ss - continuing "
+                        "with the session token refresh",
+                        user.email,
+                        OAUTH_REFRESH_TOTAL_TIMEOUT_SECONDS,
+                    )
 
                 # Check if strategy supports refreshing
                 supports_refresh = hasattr(strategy, "refresh_token") and callable(
@@ -2162,13 +2180,19 @@ async def _maybe_refresh_oauth_tokens(
     """
     # Local import mirrors the pattern at `get_refresh_router` to keep the auth
     # module's load order resilient.
-    from onyx.auth.oauth_refresher import check_and_refresh_oauth_tokens
+    from onyx.auth.oauth_refresher import (
+        OAUTH_REFRESH_TOTAL_TIMEOUT_SECONDS,
+        check_and_refresh_oauth_tokens,
+    )
 
     try:
-        await check_and_refresh_oauth_tokens(
-            user=user,
-            db_session=async_db_session,
-            user_manager=cast(Any, user_manager),
+        await asyncio.wait_for(
+            check_and_refresh_oauth_tokens(
+                user=user,
+                db_session=async_db_session,
+                user_manager=cast(Any, user_manager),
+            ),
+            timeout=OAUTH_REFRESH_TOTAL_TIMEOUT_SECONDS,
         )
     except Exception:
         logger.exception(

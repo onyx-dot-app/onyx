@@ -55,6 +55,10 @@ DR_REPORT_LLM_TIMEOUT_S = int(os.environ.get("DR_REPORT_LLM_TIMEOUT_S") or "60")
 SECONDARY_LLM_FLOW_TIMEOUT_S = int(
     os.environ.get("SECONDARY_LLM_FLOW_TIMEOUT_S") or "60"
 )
+# Timeout for the chat session auto-naming call. Naming is cosmetic and already
+# falls back to a title derived from the first user message, so it fails fast
+# rather than holding a serving thread while an overloaded provider stalls.
+CHAT_NAMING_TIMEOUT_S = int(os.environ.get("CHAT_NAMING_TIMEOUT_S") or "20")
 # Live buffer TTL. Refreshed per write.
 CHAT_STREAM_BUFFER_TTL_S = int(os.environ.get("CHAT_STREAM_BUFFER_TTL_S") or 3600)
 # Retention after the run is done.

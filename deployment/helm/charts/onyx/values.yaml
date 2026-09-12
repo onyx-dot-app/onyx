@@ -1535,6 +1535,11 @@ configMap:
   # Set auth.userauth.enabled=true and provide auth.userauth.values.user_auth_secret
   # (signs password reset and email verification tokens and OAuth login state).
   AUTH_TYPE: "basic"
+  # Per-call timeout on OAuth/OIDC HTTP requests to the IdP.
+  OAUTH_HTTP_TIMEOUT_SECONDS: "10"
+  # Budget for the token refresh an authenticated request performs before it is
+  # served. Bounds how long a slow IdP can hold a DB session.
+  OAUTH_REFRESH_TOTAL_TIMEOUT_SECONDS: "15"
   # Opt-in: capture IdP directory claims at OAuth/OIDC login and use them to
   # enrich chat prompts and resolve {{user.<key>}} agent placeholders. Sends
   # directory data to the configured LLM, so off by default.
@@ -1587,6 +1592,9 @@ configMap:
   LLM_SOCKET_READ_TIMEOUT: "60"
   IMAGE_SUMMARIZATION_TIMEOUT: "300"
   CONTEXTUAL_RAG_LLM_TIMEOUT: "180"
+  # Timeout on the chat auto-naming call. Naming falls back to a title from the
+  # first user message, so it fails fast.
+  CHAT_NAMING_TIMEOUT_S: "20"
   MAX_CHUNKS_FED_TO_CHAT: ""
   # Usage / cost accounting
   # Records priced generation spans into the per-user usage ledger (default on).
