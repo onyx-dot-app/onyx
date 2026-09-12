@@ -2,7 +2,11 @@ import datetime
 
 import pytest
 
-from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
+    basic_expert_info_representation,
+    time_str_to_utc,
+)
+from onyx.connectors.models import BasicExpertInfo
 
 
 def test_time_str_to_utc() -> None:
@@ -51,3 +55,30 @@ def test_time_str_to_utc_raises_on_impossible_dates() -> None:
     ):
         with pytest.raises(ValueError):
             time_str_to_utc(bad)
+
+
+def test_basic_expert_info_representation() -> None:
+    # first + last with no middle initial must not interpolate a literal "None"
+    assert (
+        basic_expert_info_representation(
+            BasicExpertInfo(first_name="John", last_name="Doe")
+        )
+        == "John Doe"
+    )
+    # the middle initial is included when present
+    assert (
+        basic_expert_info_representation(
+            BasicExpertInfo(first_name="John", middle_initial="Q", last_name="Doe")
+        )
+        == "John Q Doe"
+    )
+    # display_name fallback when the name is incomplete
+    assert (
+        basic_expert_info_representation(BasicExpertInfo(display_name="Team Inbox"))
+        == "Team Inbox"
+    )
+    # email fallback
+    assert (
+        basic_expert_info_representation(BasicExpertInfo(email="owner@example.com"))
+        == "owner@example.com"
+    )
