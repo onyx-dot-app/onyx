@@ -97,15 +97,22 @@ const InputSingleSelect = ({
   // an absent prop degrades to a plain input.
   const hasOptionSet = optionsProp !== undefined;
 
-  // Trigger text. Closed, it mirrors the controlled value; open, it is the
-  // user's filter (only a value-prop change may overwrite it then).
-  const [inputValue, setInputValue] = useState(value);
+  // The selection's visible text — the ONLY value-to-text crossing point.
+  const selectedLabel = useMemo(() => {
+    if (!value) return "";
+    return options.find((opt) => opt.value === value)?.label ?? value;
+  }, [options, value]);
+
+  // Trigger text is ALWAYS display text (a label or the user's filter);
+  // `value` is the only value-typed state. Closed, the text mirrors the
+  // selection's label; open, only a value-prop change may overwrite it.
+  const [inputValue, setInputValue] = useState(selectedLabel);
   useEffect(() => {
-    if (!isOpen) setInputValue(value);
-  }, [value, isOpen]);
+    if (!isOpen) setInputValue(selectedLabel);
+  }, [selectedLabel, isOpen]);
   useEffect(() => {
     if (isOpen && options.some((opt) => opt.value === value)) {
-      setInputValue(value);
+      setInputValue(selectedLabel);
     }
     // Only react to value prop changes while open, not inputValue changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -237,7 +244,7 @@ const InputSingleSelect = ({
     (option: SelectOption) => {
       if (option.disabled) return;
 
-      setInputValue(option.value);
+      setInputValue(option.label);
 
       // Support both onChange (event) and onValueChange (value) patterns
       if (onChange) {
@@ -270,13 +277,6 @@ const InputSingleSelect = ({
     onSelect: handleOptionSelect,
     hasOptions: hasOptionSet,
   });
-
-  // The selection's visible text, used to seed editing: focusing must not
-  // wipe what the user picked, and the raw value would filter wrongly.
-  const selectedLabel = useMemo(() => {
-    if (!value) return "";
-    return options.find((opt) => opt.value === value)?.label ?? value;
-  }, [options, value]);
 
   const handleFocus = useCallback(() => {
     if (hasOptionSet) {
@@ -327,17 +327,6 @@ const InputSingleSelect = ({
     placeholder,
   });
 
-  // Get display label for the current value
-  const displayLabel = useMemo(() => {
-    // If dropdown is open, show what user is typing
-    if (isOpen) return inputValue;
-
-    // When closed, show the matched option label or the value
-    if (!value || !hasOptionSet) return inputValue;
-    const option = options.find((opt) => opt.value === value);
-    return option ? option.label : inputValue;
-  }, [isOpen, inputValue, value, options, hasOptionSet]);
-
   return (
     <div ref={setRootRef} className="opal-input-single-select">
       <>
@@ -345,13 +334,14 @@ const InputSingleSelect = ({
           ref={inputRef}
           name={name}
           placeholder={placeholder}
-          value={displayLabel}
+          value={inputValue}
           onChange={handleInputChange}
           onFocus={handleFocus}
           onClick={() => {
             // Reopen on click while already focused (e.g. after Escape) —
             // focus alone won't fire again. The text stays for editing.
             if (hasOptionSet && !isOpen) {
+              setInputValue(selectedLabel);
               setIsOpen(true);
               setHighlightedIndex(-1);
             }
