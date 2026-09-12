@@ -82,6 +82,8 @@ configMap:
   # Full base URL, path prefix included — the Next dev server proxies the API under /api.
   ONYX_SERVER_URL: "http://host.docker.internal:3000/api"
   ENABLE_PAID_ENTERPRISE_EDITION_FEATURES: "true"
+  # Allow the local API to start without USER_AUTH_SECRET.
+  DEV_MODE: "true"
 
 sandboxProxy:
   replicaCount: 1
@@ -134,10 +136,7 @@ sandboxPushPolicy:
 
 # ---- App pods ----
 #
-# Scaled to 0 since you run these locally via telepresence intercept.
-# api stays at 1: `telepresence intercept onyx-api-server` needs a Deployment
-# with a running pod template to inject the traffic-agent sidecar (the main
-# container is free to CrashLoopBackOff).
+# Run app services locally. Keep one API pod for the Telepresence traffic agent.
 
 api:
   replicaCount: 1

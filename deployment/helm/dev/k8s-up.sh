@@ -15,6 +15,11 @@
 #                                  (default: generated, printed at the end)
 #   --skip-cluster-create          skip kind create (use an existing cluster)
 #   --skip-helm                    only create the cluster, don't install Onyx
+#
+# Environment:
+#   ONYX_DEV_CA_DIR   extra root CAs for registry access, one PEM per .crt file.
+#                     Defaults to ~/.onyx-dev/ca-certificates. On macOS, the
+#                     script also imports CAs from the System keychain.
 
 set -euo pipefail
 
@@ -27,7 +32,10 @@ KIND_NODE_IMAGE="${KIND_NODE_IMAGE:-kindest/node:v1.33.1}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHART_DIR="$(cd "$SCRIPT_DIR/../charts/onyx" && pwd)"
-VALUES_OVERLAY="$CHART_DIR/values-localdev.yaml"
+VALUES_OVERLAY="$SCRIPT_DIR/values-localdev.yaml"
+
+CA_DIR="${ONYX_DEV_CA_DIR:-$HOME/.onyx-dev/ca-certificates}"
+NODE_CA_DIR="/usr/local/share/ca-certificates"
 
 require() {
   local bin="$1"
@@ -36,6 +44,85 @@ require() {
     echo "see docs/craft/dev/local-kubernetes.md for installation" >&2
     exit 1
   fi
+}
+
+# The System keychain holds installed CAs; nodes already include the public roots.
+collect_host_ca_certs() {
+  mkdir -p "$CA_DIR"
+
+  if [[ "$(uname -s)" != "Darwin" ]]; then
+    return 0
+  fi
+
+  local work part fingerprint target added=0
+  work="$(mktemp -d -t onyx-dev-ca-XXXXXX)"
+
+  security find-certificate -a -p /Library/Keychains/System.keychain \
+    >"$work/bundle" 2>/dev/null || true
+
+  # update-ca-certificates skips any file holding more than one certificate.
+  awk -v dir="$work" \
+    '/^-----BEGIN CERTIFICATE-----$/ { n += 1 } n { print >> (dir "/part-" n) }' \
+    "$work/bundle"
+
+  for part in "$work"/part-*; do
+    [[ -f "$part" ]] || continue
+    # Exclude leaf certificates. Use -text for macOS LibreSSL compatibility.
+    if ! openssl x509 -in "$part" -noout -text 2>/dev/null | grep -q "CA:TRUE"; then
+      continue
+    fi
+    fingerprint="$(openssl x509 -in "$part" -noout -fingerprint -sha256 2>/dev/null |
+      tr -d ':' | cut -d= -f2 | cut -c1-16)"
+    [[ -n "$fingerprint" ]] || continue
+    target="$CA_DIR/host-$fingerprint.crt"
+    if ! cmp -s "$part" "$target"; then
+      cp "$part" "$target"
+      added=$((added + 1))
+    fi
+  done
+
+  rm -rf "$work"
+  if [[ "$added" -gt 0 ]]; then
+    echo "collected $added host root CA(s) into $CA_DIR"
+  fi
+}
+
+# Update the trust bundle, including on existing nodes without the CA mount.
+trust_host_ca_certs_in_nodes() {
+  local node cert before after
+
+  if ! compgen -G "$CA_DIR/*.crt" >/dev/null; then
+    return 0
+  fi
+
+  for node in $(kind get nodes --name "$CLUSTER_NAME"); do
+    for cert in "$CA_DIR"/*.crt; do
+      docker exec "$node" test -f "$NODE_CA_DIR/$(basename "$cert")" 2>/dev/null \
+        || docker cp "$cert" "$node:$NODE_CA_DIR/" >/dev/null
+    done
+
+    before="$(docker exec "$node" sha256sum /etc/ssl/certs/ca-certificates.crt 2>/dev/null | cut -d' ' -f1)"
+    docker exec "$node" update-ca-certificates >/dev/null 2>&1 || true
+    after="$(docker exec "$node" sha256sum /etc/ssl/certs/ca-certificates.crt 2>/dev/null | cut -d' ' -f1)"
+
+    # Restart containerd to load the changed trust bundle.
+    if [[ "$before" != "$after" ]]; then
+      echo "trusting host root CAs in $node; restarting containerd ..."
+      docker exec "$node" systemctl restart containerd
+    fi
+  done
+}
+
+write_kind_config() {
+  cat >"$1" <<EOF
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    extraMounts:
+      - hostPath: ${CA_DIR}
+        containerPath: ${NODE_CA_DIR}
+EOF
 }
 
 while [[ $# -gt 0 ]]; do
@@ -62,14 +149,24 @@ require kubectl
 
 # ---- 1. kind cluster ----
 
+collect_host_ca_certs
+
 if [[ "$SKIP_CLUSTER_CREATE" -eq 0 ]]; then
   if kind get clusters 2>/dev/null | grep -qx "$CLUSTER_NAME"; then
     echo "kind cluster '$CLUSTER_NAME' already exists; skipping create"
   else
     echo "creating kind cluster '$CLUSTER_NAME' with node image '$KIND_NODE_IMAGE' ..."
-    kind create cluster --name "$CLUSTER_NAME" --image "$KIND_NODE_IMAGE"
+    KIND_CONFIG="$(mktemp -t onyx-dev-kind-XXXXXX)"
+    write_kind_config "$KIND_CONFIG"
+    kind create cluster \
+      --name "$CLUSTER_NAME" \
+      --image "$KIND_NODE_IMAGE" \
+      --config "$KIND_CONFIG"
+    rm -f "$KIND_CONFIG"
   fi
 fi
+
+trust_host_ca_certs_in_nodes
 
 kubectl config use-context "kind-$CLUSTER_NAME" >/dev/null
 
