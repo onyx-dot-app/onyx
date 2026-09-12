@@ -1,3 +1,4 @@
+import type { ErrorResponseBody } from "@/lib/fetcher";
 import type { Settings } from "@/lib/settings/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
@@ -78,7 +79,7 @@ export async function connectEmbeddingProvider({
     });
 
     if (!testResponse.ok) {
-      const err = await testResponse.json();
+      const err: ErrorResponseBody = await testResponse.json();
       throw new Error(err.detail ?? "Embedding test failed");
     }
   }
@@ -103,7 +104,7 @@ export async function connectEmbeddingProvider({
   });
 
   if (!saveResponse.ok) {
-    const err = await saveResponse.json();
+    const err: ErrorResponseBody = await saveResponse.json();
     throw new Error(err.detail ?? "Failed to save provider");
   }
 }
@@ -121,7 +122,7 @@ export async function disconnectEmbeddingProvider(
   );
 
   if (!response.ok) {
-    const err = await response.json();
+    const err: ErrorResponseBody = await response.json();
     throw new Error(err.detail ?? "Failed to disconnect provider");
   }
 }

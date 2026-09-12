@@ -7,8 +7,8 @@ of a list or form flow (e.g. an "or" between an SSO button and an email/password
 
 ## Props
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
+| Prop    | Type                | Default        | Description                             |
+| ------- | ------------------- | -------------- | --------------------------------------- |
 | `title` | `string \| RichStr` | **(required)** | Label rendered between the two dividers |
 
 ## Usage Examples

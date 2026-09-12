@@ -1,4 +1,4 @@
-import { DateRangePickerValue } from "@/refresh-components/DateRangePicker";
+import { InputDateRangePickerValue } from "@opal/components";
 import { Tag, ValidSources } from "../types";
 import { Agent } from "@/lib/agents/types";
 
@@ -159,7 +159,7 @@ export interface SearchRequestArgs {
   agentic?: boolean;
   sources: SourceMetadata[];
   documentSets: string[];
-  timeRange: DateRangePickerValue | null;
+  timeRange: InputDateRangePickerValue | null;
   tags: Tag[];
   persona: Agent;
   updateDocumentRelevance: (relevance: any) => void;

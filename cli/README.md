@@ -48,23 +48,28 @@ Environment variables override config file values:
 ```shell
 onyx-cli chat
 onyx-cli chat --no-stream-markdown
+onyx-cli chat --agent-name "Support Agent"
 ```
 
 | Flag | Description |
 |------|-------------|
 | `--no-stream-markdown` | Disable progressive markdown rendering during streaming |
+| `--agent-id <int>` | Agent ID to use for this session |
+| `--agent-name <string>` | Agent name to use for this session (exact or unique substring; mutually exclusive with `--agent-id`) |
 
 ### One-shot question
 
 ```shell
 onyx-cli ask "What is our company's PTO policy?"
 onyx-cli ask --agent-id 5 "Summarize this topic"
+onyx-cli ask --agent-name "Support Agent" "hello"
 onyx-cli ask --json "Hello"
 ```
 
 | Flag | Description |
 |------|-------------|
 | `--agent-id <int>` | Agent ID to use (overrides default) |
+| `--agent-name <string>` | Agent name to use (exact or unique substring; mutually exclusive with `--agent-id`) |
 | `--json` | Output NDJSON stream events instead of plain text |
 | `--prompt <string>` | Question text (use with piped stdin context) |
 | `--quiet` | Buffer output and print once at end |
@@ -180,7 +185,7 @@ onyx-cli install-skill --agent claude-code
 |---------|-------------|
 | `/help` | Show help message |
 | `/clear` | Clear chat and start a new session |
-| `/agent` | List and switch agents |
+| `/agent` | List and switch agents (by ID or name) |
 | `/attach <path>` | Attach a file to next message |
 | `/sessions` | List recent chat sessions |
 | `/configure` | Re-run connection setup |

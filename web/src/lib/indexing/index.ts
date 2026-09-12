@@ -13,6 +13,7 @@ import {
   EmbeddingModel,
   EmbeddingProvider,
   EmbeddingProviderName,
+  IndexSettingsTranslator,
 } from "@/lib/indexing/types";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
 
@@ -35,8 +36,7 @@ export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
         normalize: false,
         queryPrefix: "",
         passagePrefix: "",
-        description:
-          "Cohere's English embedding model. Good performance for English-language tasks.",
+        descriptionKey: "modelDescriptions.cohereEmbedEnglishV3",
       },
       {
         modelName: "embed-english-light-v3.0",
@@ -44,8 +44,7 @@ export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
         normalize: false,
         queryPrefix: "",
         passagePrefix: "",
-        description:
-          "Cohere's lightweight English embedding model. Faster and more efficient for simpler tasks.",
+        descriptionKey: "modelDescriptions.cohereEmbedEnglishLightV3",
       },
       {
         modelName: "embed-v4.0",
@@ -53,8 +52,7 @@ export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
         normalize: false,
         queryPrefix: "",
         passagePrefix: "",
-        description:
-          "Cohere's latest multilingual embedding model with the default 1536-dim output for stronger retrieval quality.",
+        descriptionKey: "modelDescriptions.cohereEmbedV4",
       },
     ],
   },
@@ -72,8 +70,7 @@ export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
         normalize: false,
         queryPrefix: "",
         passagePrefix: "",
-        description:
-          "OpenAI's large embedding model. Best performance, but more expensive.",
+        descriptionKey: "modelDescriptions.openaiTextEmbedding3Large",
       },
       {
         modelName: "text-embedding-3-small",
@@ -81,8 +78,7 @@ export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
         normalize: false,
         queryPrefix: "",
         passagePrefix: "",
-        description:
-          "OpenAI's newer, more efficient embedding model. Good balance of performance and cost.",
+        descriptionKey: "modelDescriptions.openaiTextEmbedding3Small",
       },
     ],
   },
@@ -100,7 +96,7 @@ export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
         normalize: false,
         queryPrefix: "",
         passagePrefix: "",
-        description: "Google's Gemini embedding model. Powerful and efficient.",
+        descriptionKey: "modelDescriptions.googleGeminiEmbedding001",
       },
       {
         modelName: "text-embedding-005",
@@ -108,7 +104,7 @@ export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
         normalize: false,
         queryPrefix: "",
         passagePrefix: "",
-        description: "Smaller, lighter-weight embedding model from Google.",
+        descriptionKey: "modelDescriptions.googleTextEmbedding005",
       },
       {
         modelName: "gemini-embedding-2",
@@ -116,8 +112,7 @@ export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
         normalize: false,
         queryPrefix: "",
         passagePrefix: "",
-        description:
-          "Google's latest multimodal embedding model (GA). Highest-quality retrieval with a 3072-dim output.",
+        descriptionKey: "modelDescriptions.googleGeminiEmbedding2",
       },
       {
         modelName: "gemini-embedding-2-preview",
@@ -125,8 +120,7 @@ export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
         normalize: false,
         queryPrefix: "",
         passagePrefix: "",
-        description:
-          "Preview version of Gemini Embedding 2. Superseded by gemini-embedding-2 for new setups.",
+        descriptionKey: "modelDescriptions.googleGeminiEmbedding2Preview",
       },
     ],
   },
@@ -145,8 +139,7 @@ export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
         normalize: false,
         queryPrefix: "",
         passagePrefix: "",
-        description:
-          "Voyage's large embedding model. High performance with instruction fine-tuning.",
+        descriptionKey: "modelDescriptions.voyageLarge2Instruct",
       },
       {
         modelName: "voyage-light-2-instruct",
@@ -154,8 +147,7 @@ export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
         normalize: false,
         queryPrefix: "",
         passagePrefix: "",
-        description:
-          "Voyage's lightweight embedding model. Good balance of performance and efficiency.",
+        descriptionKey: "modelDescriptions.voyageLight2Instruct",
       },
     ],
   },
@@ -191,8 +183,7 @@ export const SELF_HOSTED_PROVIDERS: EmbeddingProvider[] = [
         normalize: true,
         queryPrefix: "search_query: ",
         passagePrefix: "search_document: ",
-        description:
-          "Nomic's embedding model specialized for retrieval, similarity, clustering and classification.",
+        descriptionKey: "modelDescriptions.nomicEmbedTextV1",
       },
     ],
   },
@@ -208,8 +199,7 @@ export const SELF_HOSTED_PROVIDERS: EmbeddingProvider[] = [
         normalize: true,
         queryPrefix: "query: ",
         passagePrefix: "passage: ",
-        description:
-          "A smaller and faster model than the default. It is around 2x faster than the default model at the cost of lower search quality.",
+        descriptionKey: "modelDescriptions.e5BaseV2",
       },
       {
         modelName: "intfloat/e5-small-v2",
@@ -217,8 +207,7 @@ export const SELF_HOSTED_PROVIDERS: EmbeddingProvider[] = [
         normalize: true,
         queryPrefix: "query: ",
         passagePrefix: "passage: ",
-        description:
-          "The smallest and fastest version of the E5 line of models. If you're running Onyx on a resource constrained system, then this may be a good choice.",
+        descriptionKey: "modelDescriptions.e5SmallV2",
       },
       {
         modelName: "intfloat/multilingual-e5-base",
@@ -226,8 +215,7 @@ export const SELF_HOSTED_PROVIDERS: EmbeddingProvider[] = [
         normalize: true,
         queryPrefix: "query: ",
         passagePrefix: "passage: ",
-        description:
-          "For corpora in other languages besides English, this is the one to choose.",
+        descriptionKey: "modelDescriptions.multilingualE5Base",
       },
       {
         modelName: "intfloat/multilingual-e5-small",
@@ -235,8 +223,7 @@ export const SELF_HOSTED_PROVIDERS: EmbeddingProvider[] = [
         normalize: true,
         queryPrefix: "query: ",
         passagePrefix: "passage: ",
-        description:
-          "For corpora in other languages besides English, as well as being on a resource constrained system, this is the one to choose.",
+        descriptionKey: "modelDescriptions.multilingualE5Small",
       },
     ],
   },
@@ -303,6 +290,14 @@ export function findRegistryModel(modelName: string): EmbeddingModel | null {
     if (m) return m;
   }
   return null;
+}
+
+/** Translated registry description, undefined without a key. */
+export function embeddingModelDescription(
+  model: EmbeddingModel | null | undefined,
+  t: IndexSettingsTranslator
+): string | undefined {
+  return model?.descriptionKey ? t(model.descriptionKey) : undefined;
 }
 
 /**

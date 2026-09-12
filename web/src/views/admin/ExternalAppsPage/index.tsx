@@ -4,7 +4,6 @@ import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter, useSearchParams } from "next/navigation";
-import type { Route } from "next";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -174,7 +173,7 @@ function AppsAdminContent({
     setModalState(null);
     if (deepLinkedAppId) {
       setDismissedDeepLink(deepLinkedAppId);
-      router.replace("/admin/craft/apps" as Route);
+      router.replace("/admin/craft/apps");
     }
   }
 
@@ -388,7 +387,7 @@ function AppsAdminContent({
 function LoadingCard() {
   const t = useTranslations("admin.externalApps");
   return (
-    <Card background="none" border="dashed" rounding={4}>
+    <Card color="transparent" border="dashed" rounding={4}>
       <Text font="main-content-body">{t("loading.label")}</Text>
     </Card>
   );

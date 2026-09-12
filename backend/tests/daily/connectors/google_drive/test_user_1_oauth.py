@@ -80,7 +80,7 @@ def test_all(
         + FOLDER_1_1_FILE_IDS
         + FOLDER_1_2_FILE_IDS
         + ADMIN_FOLDER_3_FILE_IDS
-        + list(range(0, 2))
+        + list(range(2))
     )
 
     retrieved_docs = _check_for_error(output, expected_file_ids)
@@ -157,7 +157,7 @@ def test_shared_with_me_only(
     )
     output = load_connector_outputs(connector)
 
-    expected_file_ids = ADMIN_FOLDER_3_FILE_IDS + list(range(0, 2))
+    expected_file_ids = ADMIN_FOLDER_3_FILE_IDS + list(range(2))
     assert_expected_docs_in_retrieved_docs(
         retrieved_docs=output.documents,
         expected_file_ids=expected_file_ids,

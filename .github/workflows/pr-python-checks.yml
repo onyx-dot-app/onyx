@@ -78,3 +78,17 @@ jobs:
         env:
           TERM: xterm-256color
         run: ty check --output-format github
+
+  # Keeps the pull request in the merge queue while RunsOn reruns mypy-check
+  # after an EC2 Spot interruption. The gate fails when mypy-check fails for any
+  # other reason. Require "mypy-check-gate / pass" in the main ruleset, not
+  # "mypy-check".
+  mypy-check-gate:
+    if: ${{ always() && needs.changes.outputs.python == 'true' }}
+    needs: [changes, mypy-check]
+    permissions:
+      actions: read
+      checks: read
+    uses: runs-on/spot-retry-gate/.github/workflows/merge-queue.yml@451eea7c3d2c58d14a1f80f0bbb99eaa347b9471 # ratchet:runs-on/spot-retry-gate/.github/workflows/merge-queue.yml@v1.0.0
+    with:
+      job_results: ${{ toJSON(needs) }}

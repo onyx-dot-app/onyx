@@ -131,9 +131,10 @@ The chart pins images to the `:edge` tag in
 with `pullPolicy: Always`, so in-cluster pods track nightly builds off `main`
 rather than the released `:latest`.
 
-**2. Bootstrap `.vscode/.env.k8s`.** Copies `.vscode/.env.k8s.template` to
-`.vscode/.env.k8s` if absent. Existing files are never overwritten — your
-secrets stay intact across `craft-up` runs.
+**2. Bootstrap the vscode env files.** Copies `.vscode/.env.k8s.template` to
+`.vscode/.env.k8s`, and `.vscode/env.web_template.txt` to `.vscode/.env.web`
+(read by the `Web Server` launch). Only absent files are created — existing
+ones are never overwritten, so your secrets stay intact across `craft-up` runs.
 
 **3. Build and load the sandbox image.** The chart points sandbox pods at
 `onyxdotapp/sandbox:dev`, which is local-only. Skipping this is the most

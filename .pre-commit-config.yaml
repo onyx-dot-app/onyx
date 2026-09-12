@@ -63,13 +63,13 @@ repos:
         # Keep the pinned version in sync with `onyx-devtools` in the dev
         # dependency group in pyproject.toml, here and in every `ods` hook
         # below. Without the pin, `--with` resolves the latest published wheel.
-        args: ["--no-project", "--with=onyx-devtools==0.13.2", "ods", "check-getattr"]
+        args: ["--no-project", "--with=onyx-devtools==0.13.6", "ods", "check-getattr"]
         pass_filenames: true
         files: ^backend/.*\.py$
       - id: uv-run
         name: Check lazy imports
         args:
-          ["--no-project", "--with=onyx-devtools==0.13.2", "ods", "check-lazy-imports"]
+          ["--no-project", "--with=onyx-devtools==0.13.6", "ods", "check-lazy-imports"]
         pass_filenames: true
         files: ^backend/(?!\.venv/|scripts/).*\.py$
       - id: uv-run
@@ -84,7 +84,7 @@ repos:
         # release that adds the embedded-copy sync, the extra trigger paths below
         # are harmless no-ops (the cli module's drift test still gates staleness).
         args:
-          ["--no-project", "--with=onyx-devtools==0.13.2", "ods", "generate-compose", "--write"]
+          ["--no-project", "--with=onyx-devtools==0.13.6", "ods", "generate-compose", "--write"]
         pass_filenames: false
         files: >-
           (?x)^(
@@ -153,7 +153,7 @@ repos:
         # `--with=onyx-devtools==` resolves a published wheel, so both hooks
         # need an ods release and a version bump before they can run. Tag
         # `ods/` first.
-        args: ["--no-project", "--with=onyx-devtools==0.13.2", "ods", "fmt", "tf"]
+        args: ["--no-project", "--with=onyx-devtools==0.13.6", "ods", "fmt", "tf"]
         pass_filenames: true
         files: \.tf$
       - id: uv-run
@@ -163,9 +163,21 @@ repos:
         # an internal value can travel across by accident. Fails on account
         # ids, access key ids, routable IPv4 CIDRs, and email addresses.
         # Append '# public-safe: ok' to accept a line.
-        args: ["--no-project", "--with=onyx-devtools==0.13.2", "ods", "lint", "tf"]
+        args: ["--no-project", "--with=onyx-devtools==0.13.6", "ods", "lint", "tf"]
         pass_filenames: true
         files: ^deployment/terraform/.*\.tf$
+      - id: uv-run
+        alias: typescript-check
+        name: TypeScript type check and coverage
+        # Type-checks web/ with TypeScript 7 and fails when a web/ directory
+        # drops below its type coverage floor in web/.type-coverage-baseline.yaml.
+        # Raise the floors with `ods type-coverage typescript --update`.
+        args:
+          ["--no-project", "--with=onyx-devtools==0.13.6", "ods", "type-coverage", "typescript", "--check"]
+        pass_filenames: false
+        # The i18n catalogs are part of the type graph: keyParity.ts turns a
+        # missing or extra locale key into a compile error.
+        files: ^web/(.*\.(ts|tsx)|src/i18n/messages/.*\.json|package\.json|bun\.lock|tsconfig.*\.json|\.type-coverage-baseline\.yaml)$
       - id: uv-run
         alias: zizmor
         name: zizmor
@@ -342,20 +354,9 @@ repos:
         types_or: [javascript, ts, tsx]
 
       # Type checks with the native TypeScript compiler (~10x faster than classic
-      # tsc). web and web/lib/shared use the stable typescript@7 release (web
-      # aliases it as `typescript-7` since Next.js still needs typescript@5); the
-      # widget hooks below still use tsgo from @typescript/native-preview in the
-      # root workspace.
-      - id: typescript-check
-        name: TypeScript type check
-        entry: bash -c 'cd web && bun run types:check'
-
-        language: system
-        pass_filenames: false
-        # The i18n catalogs are part of the type graph: keyParity.ts turns a
-        # missing or extra locale key into a compile error.
-        files: ^web/(.*\.(ts|tsx)|src/i18n/messages/.*\.json)$
-
+      # tsc). web/ is checked by the `typescript-check` uv-run hook above. web/lib/shared
+      # uses the stable typescript@7 release; the widget hooks below still use
+      # tsgo from @typescript/native-preview in the root workspace.
       - id: widget-typescript-check
         name: widget TypeScript type check
         entry: bash -c 'cd widget && bunx tsgo --noEmit'

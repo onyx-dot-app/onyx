@@ -34,10 +34,6 @@ const getPaginationOptions = (
   return paginationOptions;
 };
 
-const scrollUp = () => {
-  setTimeout(() => window.scrollTo({ top: 0 }), 50);
-};
-
 type PageLinkProps = {
   linkText: string | number;
   pageChangeHandler?: () => void;
@@ -86,21 +82,14 @@ export interface PageSelectorProps {
   currentPage: number;
   totalPages: number;
   onPageChange: (newPage: number) => void;
-  shouldScroll?: boolean;
 }
 
 export const PageSelector = ({
   currentPage,
   totalPages,
   onPageChange,
-  shouldScroll = false,
 }: PageSelectorProps) => {
   const paginationOptions = getPaginationOptions(currentPage, totalPages);
-  const modifiedScrollUp = () => {
-    if (shouldScroll) {
-      scrollUp();
-    }
-  };
 
   return (
     <div style={{ display: "inline-block" }}>
@@ -109,7 +98,6 @@ export const PageSelector = ({
         unclickable={currentPage === 1}
         pageChangeHandler={() => {
           onPageChange(Math.max(currentPage - 1, 1));
-          modifiedScrollUp();
         }}
       />
       {!paginationOptions.includes(1) && (
@@ -119,7 +107,6 @@ export const PageSelector = ({
             active={currentPage === 1}
             pageChangeHandler={() => {
               onPageChange(1);
-              modifiedScrollUp();
             }}
           />
           <PageLink linkText="..." unclickable={true} />
@@ -136,7 +123,6 @@ export const PageSelector = ({
             linkText={page}
             pageChangeHandler={() => {
               onPageChange(page);
-              modifiedScrollUp();
             }}
           />
         );
@@ -146,7 +132,6 @@ export const PageSelector = ({
         unclickable={currentPage === totalPages}
         pageChangeHandler={() => {
           onPageChange(Math.min(currentPage + 1, totalPages));
-          modifiedScrollUp();
         }}
       />
     </div>

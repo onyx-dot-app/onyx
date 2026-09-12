@@ -120,7 +120,7 @@ export const TimelineRendererComponent = React.memo(
 
     return (
       <RendererFn
-        packets={packets as any}
+        packets={packets}
         state={chatState}
         onComplete={() => {}}
         animate={animate}

@@ -19,8 +19,11 @@
    SidebarRoot — desktop column
    --------------------------------------------------------------------------- */
 
+/* `h-full`, not `h-screen`: the root frame owns the viewport height, and a
+   column asserting `100vh` on its own is what let a leaf define the app's
+   geometry (and overflow the frame on mobile, where 100vh > 100dvh). */
 .opal-sidebar-root__column {
-  @apply h-screen flex flex-col bg-background-tint-02 pb-2 shrink-0;
+  @apply h-full min-h-0 flex flex-col bg-background-tint-02 pb-2 shrink-0;
   width: var(--sidebar-width-expanded);
   transition: width 200ms ease-in-out;
 }

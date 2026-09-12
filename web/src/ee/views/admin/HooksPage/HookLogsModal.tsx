@@ -10,6 +10,7 @@ import { useHookExecutionLogs } from "@/ee/hooks/useHookExecutionLogs";
 import { formatDateTimeLog } from "@/lib/dateUtils";
 import { downloadFile } from "@/lib/download";
 import { Section } from "@/layouts/general-layouts";
+import { hookPointName } from "@/ee/views/admin/HooksPage/hookPoints";
 import type {
   HookExecutionRecord,
   HookPointMeta,
@@ -115,7 +116,7 @@ export default function HookLogsModal({ hook, spec }: HookLogsModalProps) {
           title={t("logs.header.title")}
           description={t("logs.header.description", {
             name: hook.name,
-            point: spec?.display_name ?? hook.hook_point,
+            point: spec ? hookPointName(spec, t) : hook.hook_point,
           })}
           onClose={onClose}
         />

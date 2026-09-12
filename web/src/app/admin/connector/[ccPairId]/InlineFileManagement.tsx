@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Checkbox } from "@opal/components";
+import { InputCheckbox } from "@opal/components";
 import {
   updateConnectorFiles,
   type ConnectorFileInfo,
@@ -246,7 +246,7 @@ export default function InlineFileManagement({
                     >
                       {isEditing && (
                         <TableCell>
-                          <Checkbox
+                          <InputCheckbox
                             checked={isMarkedForRemoval}
                             onCheckedChange={() =>
                               toggleFileForRemoval(file.file_id)

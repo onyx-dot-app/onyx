@@ -1,7 +1,6 @@
 import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
-import { Content } from "@opal/layouts";
 import { IconProps } from "@opal/types";
 import React from "react";
 
@@ -17,61 +16,6 @@ export {
 } from "@opal/layouts/general/components";
 
 import { Section } from "@opal/layouts/general/components";
-
-export interface AttachmentItemLayoutProps {
-  title: string;
-  description: string;
-  icon: React.FunctionComponent<IconProps>;
-  middleText?: string;
-  rightChildren?: React.ReactNode;
-}
-function AttachmentItemLayout({
-  title,
-  description,
-  icon: Icon,
-  middleText,
-  rightChildren,
-}: AttachmentItemLayoutProps) {
-  return (
-    <Section flexDirection="row" justifyContent="start" gap={1} padding={1}>
-      <div className={cn("h-9 aspect-square rounded-08 shrink-0")}>
-        <Section>
-          <div
-            className="attachment-item__icon-wrapper"
-            data-testid="attachment-item-icon-wrapper"
-          >
-            <Icon className="attachment-item__icon" />
-          </div>
-        </Section>
-      </div>
-      <Section
-        flexDirection="row"
-        justifyContent="between"
-        alignItems="center"
-        gap={6}
-        className="min-w-0"
-      >
-        <div data-testid="attachment-item-title" className="flex-1 min-w-0">
-          <Content
-            title={title}
-            description={description}
-            sizePreset="main-ui"
-            variant="section"
-            width="full"
-          />
-        </div>
-        {middleText && (
-          <div className="flex-1 min-w-0">
-            <Truncated text03 secondaryBody>
-              {middleText}
-            </Truncated>
-          </div>
-        )}
-        {rightChildren && <div className="shrink-0 px-1">{rightChildren}</div>}
-      </Section>
-    </Section>
-  );
-}
 
 export interface CardItemLayoutProps {
   icon: React.FunctionComponent<IconProps>;
@@ -118,4 +62,4 @@ function CardItemLayout({
   );
 }
 
-export { CardItemLayout, AttachmentItemLayout };
+export { CardItemLayout };

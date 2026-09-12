@@ -40,7 +40,7 @@ backend = [
     "celery==5.5.1",
     "chardet==5.2.0",
     "chonkie==1.0.10",
-    "croniter==6.2.2",
+    "croniter==6.2.4",
     "cron-descriptor==2.0.8",
     "dask==2026.1.1",
     "discord.py==2.7.1",
@@ -68,7 +68,7 @@ backend = [
     # get_markitdown_converter in
     # backend/onyx/file_processing/extract_file_text.py and what impacts
     # updating might have on this behavior.
-    "markitdown[pdf, docx, pptx, xlsx, xls]==0.1.2",
+    "markitdown[pdf, docx, pptx, xlsx, xls]==0.1.7",
     "mcp[cli]==1.28.1",
     "msal==1.34.0",
     "msoffcrypto-tool==6.0.0",
@@ -136,17 +136,14 @@ backend = [
 dev = [
     "boto3-stubs[s3]==1.39.11",
     "celery-types==0.26.0",
-    "faker==40.1.2",
+    "faker==40.38.0",
     "hatchling==1.28.0",
     "ipykernel==6.29.5",
     "manygo==0.2.0",
     "matplotlib==3.10.8",
     "ty==0.0.63",
-    # Keep in sync with the pinned `onyx-devtools==` in the `ods` hooks in
-    # .pre-commit-config.yaml, which install ods into an isolated overlay.
-    "onyx-devtools[audit]==0.13.2",
     "openapi-generator-cli==7.17.0",
-    "pre-commit==3.2.2",
+    "pre-commit==4.6.2",
     "pytest-alembic==0.12.1",
     "pytest-asyncio==1.4.0",
     "pytest-dotenv==0.5.2",
@@ -173,8 +170,15 @@ dev = [
     "types-pytz==2023.3.1.1",
     "types-regex==2023.3.23.1",
     "types-requests==2.32.0.20250328",
+    { include-group = "ods" },
     { include-group = "zizmor" },
 ]
+
+# Isolated group so CI can `uv sync --only-group ods` and run ods from
+# hash-verified uv.lock artifacts instead of an unlocked `uv run --with`.
+# Keep in sync with the pinned `onyx-devtools==` in the `ods` hooks in
+# .pre-commit-config.yaml, which install ods into an isolated overlay.
+ods = ["onyx-devtools[audit]==0.13.6"]
 
 # Isolated group so CI can `uv sync --only-group zizmor` without pulling
 # the rest of the dev toolchain.
@@ -294,7 +298,19 @@ ignore = [
     "B904", # raise-without-from-inside-except (~465 existing violations).
 ]
 # G004: f-strings in logging break Sentry's message-pattern grouping.
-select = ["ARG", "B", "C901", "E", "F", "G004", "I", "PERF", "S", "W"]
+select = [
+  "ARG",
+  "B",
+  "C901",
+  "E",
+  "F",
+  "G004",
+  "I",
+  "PERF",
+  "PIE",
+  "S",
+  "W",
+]
 
 [tool.ruff.lint.mccabe]
 # Ruff's default is 10, which flags 429 functions. 20 is a ratchet: it stops new
