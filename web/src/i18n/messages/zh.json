@@ -12853,7 +12853,7 @@
       "rangeOfTotal": "<range></range> / <total></total>"
     },
     "select": {
-      "emptySet": "没有项目"
+      "emptySet": "未找到任何项目"
     },
     "table": {
       "alwaysShown": "始终显示",

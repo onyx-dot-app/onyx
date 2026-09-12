@@ -172,7 +172,7 @@ export const defaultOpalStrings: OpalStrings = {
   comboBoxOtherOptions: "Other options",
   comboBoxCreate: "Create",
   comboBoxCreateOption: (prefix, value) => `${prefix} "${value}"`,
-  selectEmptySet: "No items",
+  selectEmptySet: "No items found",
   keyValueKey: "Key",
   keyValueValue: "Value",
   keyValueAddLine: "Add Line",

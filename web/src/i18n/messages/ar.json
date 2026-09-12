@@ -12853,7 +12853,7 @@
       "rangeOfTotal": "<range></range> من <total></total>"
     },
     "select": {
-      "emptySet": "لا توجد عناصر"
+      "emptySet": "لم يتم العثور على عناصر"
     },
     "table": {
       "alwaysShown": "معروض دائمًا",

@@ -3,8 +3,7 @@ import { useOpalStrings } from "@opal/strings";
 import { OptionItem } from "./OptionItem";
 import { SelectOption, SelectSection } from "../types";
 import { Divider } from "@opal/components/divider/components";
-import { Content } from "@opal/layouts";
-import { SvgEmpty } from "@opal/icons";
+import { Text } from "@opal/components/text/components";
 import { cn, clickOnKeyDown } from "@opal/utils";
 import { SvgPlus } from "@opal/icons";
 import { sanitizeOptionId } from "./aria";
@@ -74,14 +73,9 @@ export const OptionsList: React.FC<OptionsListProps> = ({
     if (emptySet) {
       return (
         <div className="p-2">
-          <Content
-            sizePreset="secondary"
-            variant="body"
-            icon={SvgEmpty}
-            title={strings.selectEmptySet}
-            color="muted"
-            width="full"
-          />
+          <Text as="p" color="text-03" font="secondary-body">
+            {strings.selectEmptySet}
+          </Text>
         </div>
       );
     }
