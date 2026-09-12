@@ -82,9 +82,7 @@ configMap:
   # Full base URL, path prefix included — the Next dev server proxies the API under /api.
   ONYX_SERVER_URL: "http://host.docker.internal:3000/api"
   ENABLE_PAID_ENTERPRISE_EDITION_FEATURES: "true"
-  # Matches DEV_MODE in .vscode/.env.k8s, which the local processes already use.
-  # Without it the in-cluster api_server crash-loops: verify_user_auth_secret()
-  # only tolerates an empty USER_AUTH_SECRET in dev.
+  # Allow the local API to start without USER_AUTH_SECRET.
   DEV_MODE: "true"
 
 sandboxProxy:
@@ -138,11 +136,7 @@ sandboxPushPolicy:
 
 # ---- App pods ----
 #
-# Scaled to 0 since you run these locally via telepresence intercept.
-# api stays at 1: `telepresence intercept onyx-api-server` needs a Deployment
-# with a running pod template to inject the traffic-agent sidecar. The
-# intercept works even if the main container crash-loops, but it should start
-# cleanly — see DEV_MODE in configMap above.
+# Run app services locally. Keep one API pod for the Telepresence traffic agent.
 
 api:
   replicaCount: 1
