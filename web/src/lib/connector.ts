@@ -130,7 +130,7 @@ export async function deleteConnectorIfExistsAndIsUnlinked({
 }): Promise<string | null> {
   const connectorsResponse = await fetch("/api/manage/connector");
   if (connectorsResponse.ok) {
-    const connectors = (await connectorsResponse.json()) as Connector<any>[];
+    const connectors: Connector<any>[] = await connectorsResponse.json();
     const matchingConnectors = connectors.filter(
       (connector) =>
         connector.source === source && (!name || connector.name === name)

@@ -2,7 +2,7 @@ import { FC } from "react";
 import { useTranslations } from "next-intl";
 import { StandardAnswerCategoryResponse } from "./getStandardAnswerCategoriesIfEE";
 import { Label } from "@/components/Field";
-import InputComboBox from "@/refresh-components/inputs/InputComboBox/InputComboBox";
+import { InputComboBox } from "@opal/components";
 import Chip from "@/refresh-components/Chip";
 import { StandardAnswerCategory } from "@/lib/types";
 import { ErrorCallout } from "../ErrorCallout";

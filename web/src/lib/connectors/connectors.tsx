@@ -2085,23 +2085,20 @@ type ConnectorField = ConnectionConfiguration["values"][number];
 const buildInitialValuesForFields = (
   fields: ConnectorField[]
 ): Record<string, any> =>
-  fields.reduce(
-    (acc, field) => {
-      if (field.type === "select") {
-        acc[field.name] = null;
-      } else if (field.type === "list") {
-        acc[field.name] = field.default || [];
-      } else if (field.type === "multiselect") {
-        acc[field.name] = field.default || [];
-      } else if (field.type === "checkbox") {
-        acc[field.name] = field.default ?? false;
-      } else if (field.default !== undefined) {
-        acc[field.name] = field.default;
-      }
-      return acc;
-    },
-    {} as Record<string, any>
-  );
+  fields.reduce<Record<string, any>>((acc, field) => {
+    if (field.type === "select") {
+      acc[field.name] = null;
+    } else if (field.type === "list") {
+      acc[field.name] = field.default || [];
+    } else if (field.type === "multiselect") {
+      acc[field.name] = field.default || [];
+    } else if (field.type === "checkbox") {
+      acc[field.name] = field.default ?? false;
+    } else if (field.default !== undefined) {
+      acc[field.name] = field.default;
+    }
+    return acc;
+  }, {});
 
 export function createConnectorInitialValues(
   connector: ConfigurableSources
@@ -2133,32 +2130,31 @@ export function createConnectorValidationSchema(
           ? schema.min(1, "Select at least one group you manage")
           : schema
       ),
-    ...[...configuration.values, ...configuration.advanced_values].reduce(
-      (acc, field) => {
-        let schema: any =
-          field.type === "select"
-            ? Yup.string()
-            : field.type === "list"
+    ...[...configuration.values, ...configuration.advanced_values].reduce<
+      Record<string, any>
+    >((acc, field) => {
+      let schema: any =
+        field.type === "select"
+          ? Yup.string()
+          : field.type === "list"
+            ? Yup.array().of(Yup.string())
+            : field.type === "multiselect"
               ? Yup.array().of(Yup.string())
-              : field.type === "multiselect"
-                ? Yup.array().of(Yup.string())
-                : field.type === "string_pair_list"
-                  ? Yup.array().of(Yup.object())
-                  : field.type === "checkbox"
-                    ? Yup.boolean()
-                    : field.type === "file"
-                      ? Yup.mixed()
-                      : Yup.string();
+              : field.type === "string_pair_list"
+                ? Yup.array().of(Yup.object())
+                : field.type === "checkbox"
+                  ? Yup.boolean()
+                  : field.type === "file"
+                    ? Yup.mixed()
+                    : Yup.string();
 
-        if (!field.optional) {
-          schema = schema.required(`${field.label} is required`);
-        }
+      if (!field.optional) {
+        schema = schema.required(`${field.label} is required`);
+      }
 
-        acc[field.name] = schema;
-        return acc;
-      },
-      {} as Record<string, any>
-    ),
+      acc[field.name] = schema;
+      return acc;
+    }, {}),
     // These are advanced settings
     indexingStart: Yup.string().nullable(),
     pruneFreq: Yup.number().min(

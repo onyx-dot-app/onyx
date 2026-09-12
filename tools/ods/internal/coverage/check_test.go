@@ -86,6 +86,22 @@ func TestCompare_improvementIsReported(t *testing.T) {
 	}
 }
 
+// A fresh baseline rounds each floor down. With no tolerance, that rounding
+// must not show as an improvement.
+func TestCompare_roundingIsNotAnImprovement(t *testing.T) {
+	profile := profileOf(map[string][2]int{"cmd": {1985, 2000}}) // 99.25%
+	baseline := &Baseline{Total: 99.2, Packages: map[string]float64{"cmd": 99.2}}
+
+	report := Compare(profile, baseline, 0)
+
+	if got := statusOf(t, report, "cmd"); got != StatusOK {
+		t.Fatalf("expected the rounding ignored, got %q", got)
+	}
+	if report.Changed() {
+		t.Fatal("expected no change against a fresh baseline")
+	}
+}
+
 // A package added without tests has no floor. It is reported so it gets a floor,
 // but it cannot fail a check it was never measured for.
 func TestCompare_newPackageDoesNotFail(t *testing.T) {

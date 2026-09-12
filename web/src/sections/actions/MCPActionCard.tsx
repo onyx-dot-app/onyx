@@ -7,7 +7,7 @@ import React, {
   useRef,
   useCallback,
 } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import ActionCard from "@/sections/actions/ActionCard";
 import Actions from "@/sections/actions/Actions";
 import ToolItem from "@/sections/actions/ToolItem";
@@ -108,6 +108,7 @@ export default function MCPActionCard({
   className,
 }: MCPActionCardProps) {
   const t = useTranslations("actions");
+  const locale = useLocale();
   const [isToolsExpanded, setIsToolsExpanded] = useState(initialExpanded);
   const [searchQuery, setSearchQuery] = useState("");
   const [showOnlyEnabled, setShowOnlyEnabled] = useState(false);
@@ -261,7 +262,7 @@ export default function MCPActionCard({
 
   // Left action for ToolsList footer
   const leftAction = useMemo(() => {
-    const lastRefreshedText = timeAgo(server.last_refreshed_at);
+    const lastRefreshedText = timeAgo(server.last_refreshed_at, locale);
 
     return (
       <div className="flex items-center gap-2">
@@ -284,6 +285,7 @@ export default function MCPActionCard({
   }, [
     canManageStatus,
     server.last_refreshed_at,
+    locale,
     serverId,
     mutate,
     onRefreshTools,

@@ -2,8 +2,7 @@
 
 import { useEffect } from "react";
 import { useState } from "react";
-
-import { DEFAULT_LOCALE } from "@/i18n/config";
+import { humanReadableFormatShort } from "@opal/time";
 
 export const useNightTime = () => {
   const [isNight, setIsNight] = useState(false);
@@ -115,7 +114,7 @@ export const buildDateString = (date: Date | null) => {
 export const getFormattedDateRangeString = (
   from: Date | null,
   to: Date | null,
-  locale: string = DEFAULT_LOCALE
+  locale: string
 ) => {
   if (!from || !to) return null;
 
@@ -168,28 +167,19 @@ export const getTimeAgoString = (date: Date | null) => {
   return `${diffMonths}mo ago`;
 };
 
-/**
- * Format a date to short format like "Jan 27, 2026".
- * Always shows date, never time.
- */
+/** Short date like "Jan 27, 2026", or an em dash when there is no date. */
 export const formatDateShort = (
   dateStr: string | null | undefined,
-  locale: string = DEFAULT_LOCALE
-): string => {
-  if (!dateStr) return "—";
-  return new Date(dateStr).toLocaleDateString(locale, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-};
+  locale: string
+): string => (dateStr ? humanReadableFormatShort(dateStr, locale) : "—");
 
 // Parses at local midnight so the day never shifts the way `formatDateShort` can for callers west of UTC.
 export const formatCalendarDay = (
   dateStr: string,
+  locale: string,
   { withYear = false }: { withYear?: boolean } = {}
 ): string =>
-  new Date(`${dateStr}T00:00:00`).toLocaleDateString(undefined, {
+  new Date(`${dateStr}T00:00:00`).toLocaleDateString(locale, {
     month: "short",
     day: "numeric",
     ...(withYear && { year: "numeric" }),
@@ -236,10 +226,7 @@ export function formatElapsedTime(totalSeconds: number): string {
     .padStart(2, "0")}`;
 }
 
-export const getFormattedDateTime = (
-  date: Date | null,
-  locale: string = DEFAULT_LOCALE
-) => {
+export const getFormattedDateTime = (date: Date | null, locale: string) => {
   if (!date) return null;
 
   const now = new Date();

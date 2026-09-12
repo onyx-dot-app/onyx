@@ -1,13 +1,19 @@
+import type { useTranslations } from "next-intl";
 import { SvgGlobe, SvgUserKey } from "@opal/icons";
 import { SvgGoogle } from "@opal/logos";
 import type { IconFunctionComponent } from "@opal/types";
 import { toast } from "@opal/layouts";
 import { SSOProviderType } from "@/lib/sso/interfaces";
 
+export type SSOTranslate = ReturnType<
+  typeof useTranslations<"admin.ssoProviders">
+>;
+export type SSOMessageKey = Parameters<SSOTranslate>[0];
+
 interface SSOProviderDetail {
   label: string;
   icon: IconFunctionComponent;
-  description: string;
+  descriptionKey: SSOMessageKey;
 }
 
 export const SSO_PROVIDER_DETAILS: Record<SSOProviderType, SSOProviderDetail> =
@@ -15,17 +21,17 @@ export const SSO_PROVIDER_DETAILS: Record<SSOProviderType, SSOProviderDetail> =
     GOOGLE_OAUTH: {
       label: "Google",
       icon: SvgGoogle,
-      description: "Use Google as the identity provider.",
+      descriptionKey: "providerTypes.googleOauth.description",
     },
     OIDC: {
       label: "OIDC",
       icon: SvgGlobe,
-      description: "Connect a generic OpenID Connect provider.",
+      descriptionKey: "providerTypes.oidc.description",
     },
     SAML: {
       label: "SAML",
       icon: SvgUserKey,
-      description: "Connect a SAML identity provider.",
+      descriptionKey: "providerTypes.saml.description",
     },
   };
 
@@ -45,47 +51,45 @@ export type SSOConfigFieldKind =
 
 // One entry per admin-editable key in a provider type's backend config model.
 // `name` must match the backend config field exactly, since values are sent
-// as config.<name>.
+// as config.<name>. The user-facing text lives in "admin.ssoProviders".
 export interface SSOConfigField {
   name: string;
-  label: string;
+  labelKey: SSOMessageKey;
   kind: SSOConfigFieldKind;
-  description: string;
+  descriptionKey: SSOMessageKey;
   optional?: boolean;
+  placeholderKey?: SSOMessageKey;
+  // URLs, PEM markers and ids are not translated.
   placeholder?: string;
 }
 
 const CLIENT_ID_FIELD: SSOConfigField = {
   name: "client_id",
-  label: "Client ID",
+  labelKey: "configFields.clientId.label",
   kind: "text",
-  description: "The OAuth client ID from your provider's console.",
-  placeholder: "Client ID",
+  descriptionKey: "configFields.clientId.description",
+  placeholderKey: "configFields.clientId.placeholder",
 };
 const CLIENT_SECRET_FIELD: SSOConfigField = {
   name: "client_secret",
-  label: "Client Secret",
+  labelKey: "configFields.clientSecret.label",
   kind: "password",
-  description: "The OAuth client secret. Stored encrypted.",
-  placeholder: "Client secret",
+  descriptionKey: "configFields.clientSecret.description",
+  placeholderKey: "configFields.clientSecret.placeholder",
 };
 const PKCE_FIELD: SSOConfigField = {
   name: "pkce_enabled",
-  label: "Enable PKCE",
+  labelKey: "configFields.pkceEnabled.label",
   kind: "switch",
-  description:
-    "Send a PKCE code challenge with this provider's login flow. " +
-    "A deployment-wide setting may force this on.",
+  descriptionKey: "configFields.pkceEnabled.description",
 };
 const SCOPES_FIELD: SSOConfigField = {
   name: "scopes",
-  label: "Scopes",
+  labelKey: "configFields.scopes.label",
   kind: "chips",
   optional: true,
-  description:
-    "Override the OAuth scopes requested at login. " +
-    "Empty uses the deployment defaults.",
-  placeholder: "Add a scope (e.g. openid)",
+  descriptionKey: "configFields.scopes.description",
+  placeholderKey: "configFields.scopes.placeholder",
 };
 
 export const CONFIG_FIELDS_BY_TYPE: Record<SSOProviderType, SSOConfigField[]> =
@@ -101,19 +105,16 @@ export const CONFIG_FIELDS_BY_TYPE: Record<SSOProviderType, SSOConfigField[]> =
       CLIENT_SECRET_FIELD,
       {
         name: "openid_config_url",
-        label: "OpenID Configuration URL",
+        labelKey: "configFields.openidConfigUrl.label",
         kind: "text",
-        description: "The IdP's OpenID Connect discovery document URL.",
+        descriptionKey: "configFields.openidConfigUrl.description",
         placeholder: "https://example.com/.well-known/openid-configuration",
       },
       {
         name: "require_verified_email",
-        label: "Require Verified Email Claim",
+        labelKey: "configFields.requireVerifiedEmail.label",
         kind: "switch",
-        description:
-          "Reject sign-ins when the IdP omits the optional email_verified " +
-          "claim. Leave off for IdPs that do not send it, such as " +
-          "Microsoft Entra ID.",
+        descriptionKey: "configFields.requireVerifiedEmail.description",
       },
       PKCE_FIELD,
       SCOPES_FIELD,
@@ -121,68 +122,67 @@ export const CONFIG_FIELDS_BY_TYPE: Record<SSOProviderType, SSOConfigField[]> =
     SAML: [
       {
         name: "idp_entity_id",
-        label: "IdP Entity ID",
+        labelKey: "configFields.idpEntityId.label",
         kind: "text",
-        description: "The identity provider's entity ID (issuer).",
+        descriptionKey: "configFields.idpEntityId.description",
         placeholder: "https://idp.example.com/entity",
       },
       {
         name: "idp_sso_url",
-        label: "IdP SSO URL",
+        labelKey: "configFields.idpSsoUrl.label",
         kind: "text",
-        description: "The IdP endpoint that receives sign-in requests.",
+        descriptionKey: "configFields.idpSsoUrl.description",
         placeholder: "https://idp.example.com/sso",
       },
       {
         name: "idp_x509_cert",
-        label: "IdP X.509 Certificate",
+        labelKey: "configFields.idpX509Cert.label",
         kind: "textarea",
-        description:
-          "The IdP's signing certificate, used to verify assertions.",
+        descriptionKey: "configFields.idpX509Cert.description",
         placeholder: "-----BEGIN CERTIFICATE-----",
       },
       {
         name: "sp_entity_id",
-        label: "SP Entity ID",
+        labelKey: "configFields.spEntityId.label",
         kind: "text",
-        description: "This instance's entity ID, registered with the IdP.",
+        descriptionKey: "configFields.spEntityId.description",
         placeholder: "onyx",
       },
       {
         name: "sp_x509_cert",
-        label: "SP X.509 Certificate",
+        labelKey: "configFields.spX509Cert.label",
         kind: "textarea",
-        description:
-          "Only if this instance signs requests or decrypts assertions.",
+        descriptionKey: "configFields.spX509Cert.description",
         optional: true,
         placeholder: "-----BEGIN CERTIFICATE-----",
       },
       {
         name: "sp_private_key",
-        label: "SP Private Key",
+        labelKey: "configFields.spPrivateKey.label",
         kind: "password",
-        description:
-          "Private key paired with the SP certificate. Stored encrypted.",
+        descriptionKey: "configFields.spPrivateKey.description",
         optional: true,
         placeholder: "-----BEGIN PRIVATE KEY-----",
       },
       {
         name: "email_attribute",
-        label: "Email Attribute",
+        labelKey: "configFields.emailAttribute.label",
         kind: "text",
-        description:
-          "SAML attribute holding the user's email. Defaults to common keys.",
+        descriptionKey: "configFields.emailAttribute.description",
         optional: true,
-        placeholder: "email",
+        placeholderKey: "configFields.emailAttribute.placeholder",
       },
     ],
   };
 
-export async function copyRedirectUri(redirectUri: string): Promise<void> {
+export async function copyRedirectUri(
+  redirectUri: string,
+  t: SSOTranslate
+): Promise<void> {
   try {
     await navigator.clipboard.writeText(redirectUri);
-    toast.success("Redirect URI copied");
+    toast.success(t("copyRedirectUri.successToast"));
   } catch {
-    toast.error("Could not copy");
+    toast.error(t("copyRedirectUri.errorToast"));
   }
 }

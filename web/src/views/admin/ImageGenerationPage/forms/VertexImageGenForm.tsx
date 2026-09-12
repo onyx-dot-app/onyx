@@ -6,7 +6,7 @@ import * as Yup from "yup";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
 import { InputTypeIn } from "@opal/components";
-import InputFile from "@/refresh-components/inputs/InputFile";
+import { InputFile } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import InlineExternalLink from "@/refresh-components/InlineExternalLink";
 import { ImageGenFormWrapper } from "@/views/admin/ImageGenerationPage/forms/ImageGenFormWrapper";

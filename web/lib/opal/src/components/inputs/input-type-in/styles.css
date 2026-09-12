@@ -22,3 +22,9 @@
 .opal-input-field::placeholder {
   @apply font-main-ui-muted text-text-02;
 }
+
+/* dir="auto" resolves to LTR while the value is empty, which would pin the
+   placeholder to the wrong edge under RTL, so it follows the page instead. */
+.opal-input-field[dir="auto"]:placeholder-shown {
+  direction: inherit;
+}
