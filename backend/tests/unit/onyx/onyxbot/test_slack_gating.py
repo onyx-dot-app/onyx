@@ -9,6 +9,10 @@ import pytest
 from onyx.db.enums import AccountType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.manage.models import (
+    SlackBotResponseType,
+    SlackChannelConfigCreationRequest,
+)
 from onyx.server.settings.models import ApplicationStatus
 
 # ---------------------------------------------------------------------------
@@ -615,6 +619,36 @@ class TestHandleMessageInvocationAllowlist:
         mock_usage_report.assert_called_once()
 
     @pytest.mark.usefixtures("db_session")
+    @pytest.mark.parametrize(
+        "allowlist",
+        [[""], ["   "], ["", "  "]],
+        ids=["single_blank", "whitespace_only", "all_blank"],
+    )
+    @patch(f"{_HANDLE_MSG}.fetch_user_ids_from_groups")
+    @patch(f"{_HANDLE_MSG}.fetch_slack_user_ids_from_emails")
+    @patch(f"{_HANDLE_MSG}.slack_usage_report")
+    def test_all_blank_allowlist_is_not_a_gate(
+        self,
+        mock_usage_report: MagicMock,
+        mock_fetch_emails: MagicMock,
+        mock_fetch_groups: MagicMock,
+        allowlist: list[str],
+    ) -> None:
+        """An allowlist of only blank entries means "no allowlist", not "nobody".
+
+        A stored `[""]` used to resolve to zero user IDs while still counting as
+        configured, which silenced the bot for every sender in the channel.
+        """
+        _call_handle_message(
+            slack_channel_config=self._make_config(allowlist=allowlist)
+        )
+
+        mock_usage_report.assert_called_once()
+        # No lookup should be attempted for a blank entry
+        mock_fetch_emails.assert_not_called()
+        mock_fetch_groups.assert_not_called()
+
+    @pytest.mark.usefixtures("db_session")
     @patch(f"{_HANDLE_MSG}.fetch_user_ids_from_groups", return_value=([], []))
     @patch(f"{_HANDLE_MSG}.fetch_slack_user_ids_from_emails")
     @patch(f"{_HANDLE_MSG}.slack_usage_report")
@@ -727,3 +761,93 @@ class TestHandleMessageInvocationAllowlist:
         assert result is False
         mock_usage_report.assert_not_called()
         mock_add_user.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# respond_member_group_list normalization (write path)
+# ---------------------------------------------------------------------------
+
+
+class TestCleanRespondMemberGroupList:
+    """Blank `respond_member_group_list` entries are dropped before persisting."""
+
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            (None, []),
+            ([], []),
+            ([""], []),
+            (["   "], []),
+            (["", "  "], []),
+            (["user@test.com"], ["user@test.com"]),
+            ([" user@test.com "], ["user@test.com"]),
+            (["", "user@test.com"], ["user@test.com"]),
+        ],
+    )
+    def test_drops_blank_entries(
+        self, raw: list[str] | None, expected: list[str]
+    ) -> None:
+        from onyx.onyxbot.slack.config import clean_respond_member_group_list
+
+        assert clean_respond_member_group_list(raw) == expected
+
+
+class TestFormChannelConfigAllowlist:
+    """`_form_channel_config` must not persist a blank-only allowlist."""
+
+    @staticmethod
+    def _make_request(**overrides: Any) -> SlackChannelConfigCreationRequest:
+        return SlackChannelConfigCreationRequest(
+            slack_bot_id=1,
+            channel_name="general",
+            response_type=SlackBotResponseType.CITATIONS,
+            **overrides,
+        )
+
+    @patch("onyx.server.manage.slack_bot.validate_channel_name", return_value="general")
+    def test_blank_allowlist_is_not_persisted(self, _mock_validate: MagicMock) -> None:
+        from onyx.server.manage.slack_bot import _form_channel_config
+
+        channel_config = _form_channel_config(
+            db_session=MagicMock(),
+            slack_channel_config_creation_request=self._make_request(
+                respond_member_group_list=[""]
+            ),
+            current_slack_channel_config_id=None,
+        )
+
+        assert "respond_member_group_list" not in channel_config
+
+    @patch("onyx.server.manage.slack_bot.validate_channel_name", return_value="general")
+    def test_real_allowlist_is_persisted_trimmed(
+        self, _mock_validate: MagicMock
+    ) -> None:
+        from onyx.server.manage.slack_bot import _form_channel_config
+
+        channel_config = _form_channel_config(
+            db_session=MagicMock(),
+            slack_channel_config_creation_request=self._make_request(
+                respond_member_group_list=["", " user@test.com "]
+            ),
+            current_slack_channel_config_id=None,
+        )
+
+        assert channel_config["respond_member_group_list"] == ["user@test.com"]
+
+    @patch("onyx.server.manage.slack_bot.validate_channel_name", return_value="general")
+    def test_ephemeral_with_blank_allowlist_is_allowed(
+        self, _mock_validate: MagicMock
+    ) -> None:
+        """A blank members field must not trip the ephemeral/allowlist conflict."""
+        from onyx.server.manage.slack_bot import _form_channel_config
+
+        channel_config = _form_channel_config(
+            db_session=MagicMock(),
+            slack_channel_config_creation_request=self._make_request(
+                is_ephemeral=True, respond_member_group_list=[""]
+            ),
+            current_slack_channel_config_id=None,
+        )
+
+        assert channel_config["is_ephemeral"] is True
+        assert "respond_member_group_list" not in channel_config
