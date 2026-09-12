@@ -7,12 +7,12 @@ import React, {
   useCallback,
   useRef,
 } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
 import {
   Button,
-  Checkbox,
+  InputCheckbox,
   CopyButton,
   Divider as OpalDivider,
   InputTypeIn,
@@ -190,6 +190,7 @@ export default function SourceHierarchyBrowser({
   initialNodeId,
 }: SourceHierarchyBrowserProps) {
   const t = useTranslations("knowledge");
+  const locale = useLocale();
 
   // State for hierarchy nodes (loaded once per source)
   const [allNodes, setAllNodes] = useState<HierarchyNodeSummary[]>([]);
@@ -720,7 +721,7 @@ export default function SourceHierarchyBrowser({
       return <SvgFolder size={16} />;
     }
     if (isSelected) {
-      return <Checkbox checked={true} />;
+      return <InputCheckbox checked={true} />;
     }
     return <SvgFileText size={16} />;
   };
@@ -802,7 +803,7 @@ export default function SourceHierarchyBrowser({
       <TableLayouts.TableRow>
         <TableLayouts.CheckboxCell>
           {filteredItems.length > 0 && (
-            <Checkbox
+            <InputCheckbox
               checked={allVisibleSelected}
               indeterminate={someVisibleSelected}
               onCheckedChange={handleHeaderCheckboxClick}
@@ -1023,7 +1024,8 @@ export default function SourceHierarchyBrowser({
                       {isFolder
                         ? "—"
                         : timeAgo(
-                            (item.data as DocumentSummary).last_modified
+                            (item.data as DocumentSummary).last_modified,
+                            locale
                           ) || "—"}
                     </Text>
                   </TableLayouts.TableCell>

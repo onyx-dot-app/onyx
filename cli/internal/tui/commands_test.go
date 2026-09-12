@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -195,6 +197,124 @@ func TestFormatPickerLabelAlignsDetail(t *testing.T) {
 	}
 	if !strings.Contains(got, "...") || strings.Index(got, "Ollama") != col {
 		t.Errorf("long label must truncate and keep detail on column %d, got %q", col, got)
+	}
+}
+
+func TestSelectAgentByName(t *testing.T) {
+	m := NewModel(config.DefaultConfig(), nil)
+	m.agents = []models.AgentSummary{
+		{ID: 1, Name: "Support Agent"},
+		{ID: 2, Name: "Engineering Bot"},
+	}
+
+	m, _ = cmdSelectAgent(m, "support")
+	if m.agentID != 1 {
+		t.Errorf("agentID = %d, want 1", m.agentID)
+	}
+	if m.agentName != "Support Agent" {
+		t.Errorf("agentName = %q, want Support Agent", m.agentName)
+	}
+}
+
+func TestSelectAgentWithNoAgentsShowsHelpfulMessage(t *testing.T) {
+	m := NewModel(config.DefaultConfig(), nil)
+
+	m, _ = cmdSelectAgent(m, "support")
+
+	if len(m.viewport.entries) == 0 {
+		t.Fatal("expected a warning entry")
+	}
+	got := m.viewport.entries[len(m.viewport.entries)-1].content
+	want := "no agents available; run /agent to refresh the list"
+	if got != want {
+		t.Errorf("warning = %q, want %q", got, want)
+	}
+}
+
+func TestSelectAgentByID(t *testing.T) {
+	m := NewModel(config.DefaultConfig(), nil)
+	m.agents = []models.AgentSummary{
+		{ID: 1, Name: "Support Agent"},
+	}
+
+	m, _ = cmdSelectAgent(m, "1")
+	if m.agentID != 1 {
+		t.Errorf("agentID = %d, want 1", m.agentID)
+	}
+}
+
+func TestSelectAgentByNumericName(t *testing.T) {
+	m := NewModel(config.DefaultConfig(), nil)
+	m.agents = []models.AgentSummary{
+		{ID: 100, Name: "42"},
+		{ID: 1, Name: "Support Agent"},
+	}
+
+	m, _ = cmdSelectAgent(m, "42")
+	if m.agentID != 100 {
+		t.Errorf("agentID = %d, want 100 (match name before ID)", m.agentID)
+	}
+}
+
+func TestSelectAgentByNumericIDWhenNoNameMatch(t *testing.T) {
+	m := NewModel(config.DefaultConfig(), nil)
+	m.agents = []models.AgentSummary{
+		{ID: 5, Name: "Support Agent"},
+	}
+
+	m, _ = cmdSelectAgent(m, "5")
+	if m.agentID != 5 {
+		t.Errorf("agentID = %d, want 5", m.agentID)
+	}
+}
+
+func TestSelectAgentFromPickerUsesIDWhenNameMatches(t *testing.T) {
+	m := NewModel(config.DefaultConfig(), nil)
+	m.agents = []models.AgentSummary{
+		{ID: 1, Name: "Support Agent"},
+		{ID: 100, Name: "1"},
+	}
+
+	m, _ = cmdSelectAgentByID(m, "1")
+	if m.agentID != 1 {
+		t.Errorf("agentID = %d, want 1", m.agentID)
+	}
+}
+
+func TestAttachRefusedInRemoteMode(t *testing.T) {
+	RemoteMode = true
+	t.Cleanup(func() { RemoteMode = false })
+
+	m := NewModel(config.DefaultConfig(), nil)
+	m, cmd := cmdAttach(m, "/etc/passwd")
+
+	if cmd != nil {
+		t.Fatal("expected no upload command in remote mode")
+	}
+	if len(m.viewport.entries) == 0 {
+		t.Fatal("expected a warning entry")
+	}
+	got := m.viewport.entries[len(m.viewport.entries)-1].content
+	if !strings.Contains(got, "disabled over SSH") {
+		t.Errorf("warning = %q, want a refusal mentioning SSH", got)
+	}
+}
+
+func TestDetectFileDropIgnoredInRemoteMode(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "secret.txt")
+	if err := os.WriteFile(path, []byte("secret"), 0o600); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+
+	if got := detectFileDrop(path); got != path {
+		t.Fatalf("local detectFileDrop = %q, want %q", got, path)
+	}
+
+	RemoteMode = true
+	t.Cleanup(func() { RemoteMode = false })
+
+	if got := detectFileDrop(path); got != "" {
+		t.Errorf("remote detectFileDrop = %q, want no match", got)
 	}
 }
 

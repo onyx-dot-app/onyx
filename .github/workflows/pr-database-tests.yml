@@ -84,3 +84,17 @@ jobs:
       - name: Run Database Tests
         working-directory: ./backend
         run: pytest tests/integration/tests/migrations/
+
+  # Keeps the pull request in the merge queue while RunsOn reruns database-tests
+  # after an EC2 Spot interruption. The gate fails when database-tests fails for
+  # any other reason. Require "database-tests-gate / pass" in the main ruleset,
+  # not "database-tests".
+  database-tests-gate:
+    if: ${{ always() && needs.changes.outputs.db == 'true' }}
+    needs: [changes, database-tests]
+    permissions:
+      actions: read
+      checks: read
+    uses: runs-on/spot-retry-gate/.github/workflows/merge-queue.yml@451eea7c3d2c58d14a1f80f0bbb99eaa347b9471 # ratchet:runs-on/spot-retry-gate/.github/workflows/merge-queue.yml@v1.0.0
+    with:
+      job_results: ${{ toJSON(needs) }}

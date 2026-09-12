@@ -15,6 +15,7 @@ import { Content, Section, type SectionProps } from "@opal/layouts";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { SvgX } from "@opal/icons";
 import useContainerCenter from "@opal/hooks/useContainerCenter";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Root + Overlay
@@ -344,6 +345,7 @@ function ModalHeader({
   ...props
 }: ModalHeaderProps) {
   const { closeButtonRef, setHasDescription } = useModalContext();
+  const strings = useOpalStrings();
 
   React.useLayoutEffect(() => {
     setHasDescription(!!description);
@@ -357,7 +359,7 @@ function ModalHeader({
     >
       <DialogPrimitive.Close asChild>
         <Button
-          aria-label="Close"
+          aria-label={strings.close}
           icon={SvgX}
           prominence="tertiary"
           size="sm"

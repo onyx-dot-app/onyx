@@ -159,7 +159,7 @@ function AppConnections({ query }: AppConnectionsProps) {
 
   if (isLoading) {
     return (
-      <Card background="none" border="dashed" rounding={4}>
+      <Card color="transparent" border="dashed" rounding={4}>
         <Text font="main-content-body">{t("loading.label")}</Text>
       </Card>
     );
@@ -245,9 +245,9 @@ function KindSlot({ tab, panel, children }: KindSlotProps) {
             ) : active ? (
               <Tabs.Content value={kind}>{content}</Tabs.Content>
             ) : (
-              // Mirrors the top padding Tabs.Content applies, so the height an
-              // unselected kind holds matches what it occupies once selected.
-              <div className="w-full pt-4">{content}</div>
+              // Mirrors the w-full wrapper Tabs.Content applies, so the height
+              // an unselected kind holds matches what it occupies once selected.
+              <div className="w-full">{content}</div>
             )}
           </div>
         );
@@ -411,7 +411,7 @@ function ConnectableCard({
           highlight && "ring-2 ring-action-selection-04"
         )}
       >
-        <Card background="light" border="solid" rounding={4}>
+        <Card color="background-tint-00" border="solid" rounding={4}>
           <ContentAction
             sizePreset="main-ui"
             variant="section"

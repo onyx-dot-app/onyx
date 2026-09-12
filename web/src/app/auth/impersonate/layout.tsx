@@ -20,7 +20,7 @@ export default async function Layout({ children }: LayoutProps) {
   }
 
   if (!authResult.user?.is_cloud_superuser) {
-    redirect("/app" as Route);
+    redirect("/app");
   }
 
   return <>{children}</>;

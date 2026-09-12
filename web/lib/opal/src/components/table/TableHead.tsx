@@ -5,6 +5,7 @@ import type { WithoutStyles } from "@opal/types";
 import { Button } from "@opal/components";
 import { SvgChevronDown, SvgChevronUp, SvgHandle, SvgSort } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
+import { useOpalStrings } from "@opal/strings";
 
 export type SortDirection = "none" | "ascending" | "descending";
 
@@ -78,6 +79,7 @@ export default function TableHead({
 }: TableHeadProps) {
   const resolvedSize = useTableSize();
   const isSmall = resolvedSize === "md";
+  const strings = useOpalStrings();
   return (
     <th
       {...thProps}
@@ -113,7 +115,7 @@ export default function TableHead({
             <Button
               icon={iconFn(sorted ?? "none")}
               onClick={onSort}
-              tooltip="Sort"
+              tooltip={strings.sort}
               tooltipSide="top"
               prominence="internal"
               size="sm"

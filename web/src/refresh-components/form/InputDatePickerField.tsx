@@ -1,16 +1,15 @@
 "use client";
 
 import { useField } from "formik";
-import InputDatePicker, {
-  InputDatePickerProps,
-} from "@/refresh-components/inputs/InputDatePicker";
+import { InputDatePicker, type InputDatePickerProps } from "@opal/components";
 import { useOnChangeValue } from "@/hooks/formHooks";
 
 interface InputDatePickerFieldProps extends Omit<
   InputDatePickerProps,
-  "selectedDate" | "setSelectedDate"
+  "value" | "onChange" | "id" | "error"
 > {
   name: string;
+  /** Extra change listener alongside the Formik write. */
   setSelectedDate?: (date: Date | null) => void;
 }
 
@@ -19,15 +18,16 @@ export default function InputDatePickerField({
   setSelectedDate,
   ...props
 }: InputDatePickerFieldProps) {
-  const [field] = useField<Date | null>(name);
+  const [field, meta] = useField<Date | null>(name);
   const onChange = useOnChangeValue(name, setSelectedDate);
 
   return (
     <InputDatePicker
-      name={name}
-      selectedDate={field.value}
-      setSelectedDate={onChange}
       {...props}
+      id={name}
+      value={field.value}
+      onChange={onChange}
+      error={!!(meta.touched && meta.error)}
     />
   );
 }

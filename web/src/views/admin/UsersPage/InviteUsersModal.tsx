@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import {
   BasicModalFooter,
   Button,
-  InputTags,
+  InputMultiSelect,
   Modal,
   type TagItem,
 } from "@opal/components";
@@ -231,7 +231,7 @@ export default function InviteUsersModal({
         />
 
         <Modal.Body alignItems="stretch" gap={1}>
-          <InputTags
+          <InputMultiSelect
             tags={tags}
             onRemoveTag={removeTag}
             onAdd={handleAdd}

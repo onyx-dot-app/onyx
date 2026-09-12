@@ -8,7 +8,7 @@ import {
   Button,
   Card,
   CopyButton,
-  InputTags,
+  InputMultiSelect,
   type TagItem,
   Text,
 } from "@opal/components";
@@ -29,6 +29,7 @@ import {
   CREATABLE_SSO_PROVIDER_TYPES,
   SSO_PROVIDER_DETAILS,
   type SSOConfigField,
+  type SSOTranslate,
 } from "@/lib/sso/utils";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
@@ -64,8 +65,6 @@ const ALL_CONFIG_FIELDS: SSOConfigField[] = Array.from(
   ).values()
 );
 
-type SSOTranslate = ReturnType<typeof useTranslations<"admin.ssoProviders">>;
-
 function configSchemaForType(fields: SSOConfigField[], t: SSOTranslate) {
   const shape: Record<string, Yup.AnySchema> = {};
   for (const field of fields) {
@@ -80,7 +79,9 @@ function configSchemaForType(fields: SSOConfigField[], t: SSOTranslate) {
     shape[field.name] = field.optional
       ? Yup.string().optional()
       : Yup.string().required(
-          t("modals.provider.validation.fieldRequired", { field: field.label })
+          t("modals.provider.validation.fieldRequired", {
+            field: t(field.labelKey),
+          })
         );
   }
   return Yup.object(shape);
@@ -125,7 +126,7 @@ function buildValidationSchema(t: SSOTranslate) {
 
 // The backend masks every config string on read and restores any value sent
 // back unchanged, so the form sends its current values as-is. Blank optional
-// keys are omitted rather than sent as empty strings. Switch values are always
+// keys are omitted rather than sent as empty strings. InputSwitch values are always
 // sent: the update endpoint overlays only the keys present, so turning a flag
 // off must send an explicit false.
 function buildConfig(
@@ -180,7 +181,7 @@ interface TagListFieldProps {
   transform?: (value: string) => string;
 }
 
-// Formik-bound Opal InputTags for string[] values. Always writes an array, so
+// Formik-bound Opal InputMultiSelect for string[] values. Always writes an array, so
 // clearing every tag stores [] rather than leaving the previous value.
 function TagListField({ name, placeholder, transform }: TagListFieldProps) {
   const [field, meta, helpers] = useField<string[]>(name);
@@ -189,7 +190,7 @@ function TagListField({ name, placeholder, transform }: TagListFieldProps) {
   const tags: TagItem[] = values.map((value) => ({ id: value, label: value }));
   return (
     <>
-      <InputTags
+      <InputMultiSelect
         tags={tags}
         onRemoveTag={(id) => {
           void helpers.setValue(values.filter((value) => value !== id));
@@ -222,26 +223,30 @@ function ConfigInput({
   field: SSOConfigField;
   isEditing: boolean;
 }) {
+  const t = useTranslations("admin.ssoProviders");
   const name = `config.${field.name}`;
+  const placeholder = field.placeholderKey
+    ? t(field.placeholderKey)
+    : field.placeholder;
   if (field.kind === "switch") {
     return <SwitchField name={name} />;
   }
   if (field.kind === "chips") {
-    return <TagListField name={name} placeholder={field.placeholder} />;
+    return <TagListField name={name} placeholder={placeholder} />;
   }
   if (field.kind === "textarea") {
-    return <InputTextAreaField name={name} placeholder={field.placeholder} />;
+    return <InputTextAreaField name={name} placeholder={placeholder} />;
   }
   if (field.kind === "password") {
     return (
       <PasswordInputTypeInField
         name={name}
-        placeholder={field.placeholder}
+        placeholder={placeholder}
         isNonRevealable={isEditing}
       />
     );
   }
-  return <InputTypeInField name={name} placeholder={field.placeholder} />;
+  return <InputTypeInField name={name} placeholder={placeholder} />;
 }
 
 export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
@@ -375,7 +380,7 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                               key={type}
                               value={type}
                               icon={detail.icon}
-                              description={detail.description}
+                              description={t(detail.descriptionKey)}
                               wrapDescription
                             >
                               {detail.label}
@@ -419,11 +424,11 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                       title={
                         field.optional
                           ? t("modals.provider.configField.optionalTitle", {
-                              label: field.label,
+                              label: t(field.labelKey),
                             })
-                          : field.label
+                          : t(field.labelKey)
                       }
-                      description={field.description}
+                      description={t(field.descriptionKey)}
                       withLabel={`config.${field.name}`}
                     >
                       <ConfigInput field={field} isEditing={isEditing} />

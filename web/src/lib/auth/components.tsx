@@ -3,13 +3,12 @@
 import { useState, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import type { Route } from "next";
 import { useSessionWatcher } from "@/lib/auth/hooks";
 import { getExtensionContext } from "@/lib/extension/utils";
 import { Modal } from "@opal/components";
 import { Button, Text } from "@opal/components";
 import { SvgLogOut, SvgCheckCircle, SvgXCircle } from "@opal/icons";
-import { SessionEndReason } from "@/lib/auth/types";
+import { SessionEndReason, type FastApiUsersErrorBody } from "@/lib/auth/types";
 import { SvgGoogle } from "@opal/logos";
 import { useCaptcha } from "@/lib/hooks/useCaptcha";
 import { verifyCaptchaForOAuth } from "@/lib/auth/svc";
@@ -65,7 +64,7 @@ export function AuthenticationShell({ children }: AuthenticationShellProps) {
     );
     router.push(
       returnTo
-        ? (`/auth/login?next=${encodeURIComponent(returnTo)}` as Route)
+        ? `/auth/login?next=${encodeURIComponent(returnTo)}`
         : "/auth/login"
     );
   }
@@ -364,7 +363,9 @@ export function EmailPasswordForm({
       );
 
       if (!response.ok) {
-        const errorBody: any = await response.json().catch(() => ({}));
+        const errorBody: FastApiUsersErrorBody = await response
+          .json()
+          .catch(() => ({}));
         const errorDetail = errorBody.detail;
         let errorMsg = tCommon("errors.unknown.message");
         if (response.status === 429) {
@@ -406,7 +407,9 @@ export function EmailPasswordForm({
         validatedNextUrl ??
         `/app${isSignup && !isJoin ? "?new_team=true" : ""}`;
     } else {
-      const errorBody: any = await loginResponse.json().catch(() => ({}));
+      const errorBody: FastApiUsersErrorBody = await loginResponse
+        .json()
+        .catch(() => ({}));
       const errorDetail = errorBody.detail;
       let errorMsg = tCommon("errors.unknown.message");
       if (loginResponse.status === 429) {

@@ -54,7 +54,25 @@ export const RTL_LOCALES: readonly Locale[] = ["ar"];
 
 export type HtmlDir = "ltr" | "rtl";
 
-export function htmlDirForLocale(locale: string): HtmlDir {
-  // SAFETY: cast narrows only for the readonly-array `includes` signature.
-  return RTL_LOCALES.includes(locale as Locale) ? "rtl" : "ltr";
+export function htmlDirForLocale(locale: Locale): HtmlDir {
+  return RTL_LOCALES.includes(locale) ? "rtl" : "ltr";
+}
+
+// Arabic reads Eastern Arabic-Indic digits. The numbering system rides on the
+// runtime locale tag, so any Intl call given useLocale() shapes digits without
+// a numberingSystem option.
+const NUMBERING_SYSTEMS: Partial<Record<Locale, string>> = { ar: "arab" };
+
+export type RuntimeLocale = Locale | `${Locale}-u-nu-${string}`;
+
+/** The locale handed to next-intl and Intl for a stored language. */
+export function runtimeLocale(locale: Locale): RuntimeLocale {
+  const system = NUMBERING_SYSTEMS[locale];
+  return system ? `${locale}-u-nu-${system}` : locale;
+}
+
+/** The stored language behind a runtime tag ("ar-u-nu-arab" is "ar"). Unknown tags fall back to English. */
+export function messageLocale(locale: string): Locale {
+  const base = locale.split("-u-")[0] ?? locale;
+  return isSupportedLocale(base) ? base : DEFAULT_LOCALE;
 }

@@ -6,6 +6,7 @@ import { FeedbackType } from "@/app/app/interfaces";
 import { handleChatFeedback, removeChatFeedback } from "@/app/app/services/lib";
 import { getMessageByMessageId } from "@/app/app/services/messageTree";
 import { toast } from "@opal/layouts";
+import type { ErrorResponseBody } from "@/lib/fetcher";
 
 /**
  * Hook for managing chat message feedback (like/dislike)
@@ -59,7 +60,7 @@ export default function useFeedbackController() {
           if (!response.ok) {
             // Rollback on error
             updateCurrentMessageFeedback(messageId, previousFeedback);
-            const errorData = await response.json();
+            const errorData: ErrorResponseBody = await response.json();
             toast.error(
               `Failed to remove feedback - ${
                 errorData.detail || errorData.message
@@ -78,7 +79,7 @@ export default function useFeedbackController() {
           if (!response.ok) {
             // Rollback on error
             updateCurrentMessageFeedback(messageId, previousFeedback);
-            const errorData = await response.json();
+            const errorData: ErrorResponseBody = await response.json();
             toast.error(
               `Failed to submit feedback - ${
                 errorData.detail || errorData.message

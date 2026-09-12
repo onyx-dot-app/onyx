@@ -3,7 +3,7 @@
 import { AccessType, ValidSources } from "@/lib/types";
 import { useTranslations } from "next-intl";
 import useSWR, { mutate } from "swr";
-import { errorHandlingFetcher } from "@/lib/fetcher";
+import { errorHandlingFetcher, type ErrorResponseBody } from "@/lib/fetcher";
 import { useState } from "react";
 import {
   deleteCredential,
@@ -133,7 +133,7 @@ export default function CredentialSection({
 
       toast.success(t("credentials.swap.success.toast"));
     } else {
-      const errorData = await response.json();
+      const errorData: ErrorResponseBody = await response.json();
       toast.error(
         t("credentials.swap.error.toast", {
           detail:

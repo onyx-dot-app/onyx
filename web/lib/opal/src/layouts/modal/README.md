@@ -8,16 +8,16 @@ It renders open, so mount it inside the `Provider` from `useCreateModal`. Closin
 
 ## Props
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `icon` | `IconFunctionComponent` | **(required)** | Header icon |
-| `title` | `string \| RichStr` | **(required)** | Header title |
-| `description` | `string \| RichStr` | — | Header description |
-| `submit` | `ReactNode` | **(required)** | Confirm action, rendered in the footer after Cancel |
-| `children` | `ReactNode` | — | Body content. Plain strings render as `text-03` body copy |
-| `hideCancel` | `boolean` | `false` | Hides the Cancel button (leaves only `submit`) |
-| `onClose` | `() => void` | — | Runs when the modal closes, composed via `useModalClose` |
-| `twoTone` | `boolean` | `true` | Gray body background separating it from the header and footer |
+| Prop          | Type                    | Default        | Description                                                   |
+| ------------- | ----------------------- | -------------- | ------------------------------------------------------------- |
+| `icon`        | `IconFunctionComponent` | **(required)** | Header icon                                                   |
+| `title`       | `string \| RichStr`     | **(required)** | Header title                                                  |
+| `description` | `string \| RichStr`     | —              | Header description                                            |
+| `submit`      | `ReactNode`             | **(required)** | Confirm action, rendered in the footer after Cancel           |
+| `children`    | `ReactNode`             | —              | Body content. Plain strings render as `text-03` body copy     |
+| `hideCancel`  | `boolean`               | `false`        | Hides the Cancel button (leaves only `submit`)                |
+| `onClose`     | `() => void`            | —              | Runs when the modal closes, composed via `useModalClose`      |
+| `twoTone`     | `boolean`               | `true`         | Gray body background separating it from the header and footer |
 
 ## Usage
 

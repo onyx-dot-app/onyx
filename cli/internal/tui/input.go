@@ -18,7 +18,7 @@ type slashCommand struct {
 var slashCommands = []slashCommand{
 	{"/help", "Show help message"},
 	{"/clear", "Clear chat and start a new session"},
-	{"/agent", "List and switch agents"},
+	{"/agent", "List and switch agents (by ID or name)"},
 	{"/model", "List and switch models"},
 	{"/attach", "Attach a file to next message"},
 	{"/sessions", "Browse and resume previous sessions"},
@@ -204,8 +204,12 @@ type fileDropMsg struct {
 	path string
 }
 
-// detectFileDrop checks if the text looks like a file path.
+// detectFileDrop checks if the text looks like a file path. It never matches
+// in remote mode, where the path would resolve on the server host.
 func detectFileDrop(text string) string {
+	if RemoteMode {
+		return ""
+	}
 	cleaned := strings.Trim(text, "'\"")
 	if cleaned == "" {
 		return ""

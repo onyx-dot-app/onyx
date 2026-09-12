@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { format, startOfDay, subDays } from "date-fns";
 import useSWR from "swr";
 import {
@@ -46,10 +46,15 @@ const POLL_INTERVAL_MS = 3_000;
 const SLOW_REPORT_AFTER_MS = 20_000;
 const REPORT_TIMEOUT_MS = 5 * 60_000;
 
-function periodLabel(report: UsageReport, allTimeLabel: string): string {
+function periodLabel(
+  report: UsageReport,
+  allTimeLabel: string,
+  locale: string
+): string {
   return report.period_from
-    ? `${humanReadableFormat(report.period_from)} – ${humanReadableFormat(
-        report.period_to!
+    ? `${humanReadableFormat(report.period_from, locale)} – ${humanReadableFormat(
+        report.period_to!,
+        locale
       )}`
     : allTimeLabel;
 }
@@ -96,7 +101,8 @@ interface ReportRowProps {
 
 function ReportRow({ report, justArrived }: ReportRowProps) {
   const t = useTranslations("admin.analytics");
-  const label = periodLabel(report, t("reports.period.allTime.label"));
+  const locale = useLocale();
+  const label = periodLabel(report, t("reports.period.allTime.label"), locale);
   return (
     <div
       className={
@@ -112,7 +118,7 @@ function ReportRow({ report, justArrived }: ReportRowProps) {
         title={label}
         description={t("reports.row.description", {
           requestor: report.requestor ?? t("reports.row.systemRequestor.label"),
-          time: humanReadableFormatWithTime(report.time_created),
+          time: humanReadableFormatWithTime(report.time_created, locale),
         })}
         padding={1}
         center
