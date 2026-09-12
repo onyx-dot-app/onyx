@@ -191,6 +191,15 @@ function InputMultiSelect({
     [tags]
   );
 
+  // Closed-set doctrine, committed values only: a tag outside the supplied
+  // set (stale seed, options shrank) flags the input chrome's error variant.
+  // Open mode legitimately holds free-form tags, and typing never flags.
+  const hasInvalidTag = useMemo(() => {
+    if (mode === "open" || !hasOptionSet) return false;
+    const optionValues = new Set(flatOptions.map((option) => option.value));
+    return tags.some((tag) => !optionValues.has(tag.id));
+  }, [mode, hasOptionSet, flatOptions, tags]);
+
   const hasSearchTerm = value.trim() !== "";
   const visibleSections = useMemo(
     () => filterSections(sections, value),
@@ -312,7 +321,7 @@ function InputMultiSelect({
       ref={setRootRef}
       role="presentation"
       className="opal-input opal-input-multi-select"
-      data-variant={disabled ? "disabled" : variant}
+      data-variant={disabled ? "disabled" : hasInvalidTag ? "error" : variant}
       onKeyDown={handleRootKeyDown}
       onClick={() => inputRef.current?.focus()}
     >

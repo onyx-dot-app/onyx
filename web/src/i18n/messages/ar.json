@@ -12853,7 +12853,8 @@
       "rangeOfTotal": "<range></range> من <total></total>"
     },
     "select": {
-      "emptySet": "لم يتم العثور على عناصر"
+      "emptySet": "لم يتم العثور على عناصر",
+      "invalidOption": "يرجى اختيار خيار صالح من القائمة"
     },
     "table": {
       "alwaysShown": "معروض دائمًا",

@@ -91,6 +91,7 @@ export default function OpalStringsBridge({
       comboBoxCreateOption: (prefix, value) =>
         t("comboBox.createOption", { prefix, value }),
       selectEmptySet: t("select.emptySet"),
+      selectInvalidOption: t("select.invalidOption"),
       keyValueKey: t("keyValue.key"),
       keyValueValue: t("keyValue.value"),
       keyValueAddLine: t("keyValue.addLine"),

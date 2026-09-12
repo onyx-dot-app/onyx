@@ -182,6 +182,7 @@ const InputSingleSelect = ({
   const { isValid, errorMessage } = useValidation({
     value,
     options,
+    hasOptionSet,
     strict,
     externalIsError,
     onValidationError,

@@ -12853,7 +12853,8 @@
       "rangeOfTotal": "<range></range> de <total></total>"
     },
     "select": {
-      "emptySet": "No se encontraron elementos"
+      "emptySet": "No se encontraron elementos",
+      "invalidOption": "Selecciona una opción válida de la lista"
     },
     "table": {
       "alwaysShown": "Siempre visible",
