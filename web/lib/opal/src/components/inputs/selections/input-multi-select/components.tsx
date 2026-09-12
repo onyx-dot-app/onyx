@@ -217,13 +217,14 @@ function InputMultiSelect({
     [sections, value]
   );
   const trimmedValue = value.trim().toLowerCase();
-  // An exact match means Enter should pick the option, not fork a free-form
-  // duplicate of it.
-  const exactOptionMatch = flatOptions.some(
-    (option) =>
-      option.value.toLowerCase() === trimmedValue ||
-      option.label.toLowerCase() === trimmedValue
-  );
+  // An exact match means Enter should pick the option — or nothing, when
+  // the text already exists as a chip — never fork a duplicate.
+  const exactOptionMatch =
+    flatOptions.some(
+      (option) =>
+        option.value.toLowerCase() === trimmedValue ||
+        option.label.toLowerCase() === trimmedValue
+    ) || tags.some((tag) => tag.label.toLowerCase() === trimmedValue);
   const showCreateOption =
     mode === "open" && hasOptionSet && hasSearchTerm && !exactOptionMatch;
 

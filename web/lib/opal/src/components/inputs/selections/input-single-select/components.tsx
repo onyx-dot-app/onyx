@@ -117,10 +117,30 @@ const InputSingleSelect = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
+  // A committed free-form value (open mode, outside the set) appears in the
+  // dropdown as a real, selected row — not as a create-row impostor — and
+  // re-picking it routes through the toggle-off.
+  const customSelected = useMemo(() => {
+    if (strict || !value) return null;
+    if (options.some((opt) => opt.value === value)) return null;
+    return { value, label: value };
+  }, [strict, value, options]);
+
   // Filtering: each section filters independently; empty ones disappear.
   const hasSearchTerm = inputValue.trim() !== "";
   const visibleSections = useMemo(() => {
-    const filtered = filterSections(sections, inputValue);
+    const customSection =
+      customSelected &&
+      (!hasSearchTerm ||
+        customSelected.label
+          .toLowerCase()
+          .includes(inputValue.trim().toLowerCase()))
+        ? [{ options: [customSelected] }]
+        : [];
+    const filtered = [
+      ...customSection,
+      ...filterSections(sections, inputValue),
+    ];
     if (hasSearchTerm && showOtherOptions) {
       const visibleIds = new Set(
         flattenSections(filtered).map((option) => option.value)
@@ -140,6 +160,7 @@ const InputSingleSelect = ({
     }
     return filtered;
   }, [
+    customSelected,
     sections,
     inputValue,
     hasSearchTerm,
@@ -149,8 +170,18 @@ const InputSingleSelect = ({
     strings,
   ]);
 
-  // Whether to show the create option (always show when typing in non-strict mode)
-  const showCreateOption = !strict && hasSearchTerm && inputValue.trim() !== "";
+  // The create row offers what ISN'T already offerable: it hides when the
+  // text exactly matches an option or the committed free-form value.
+  const trimmedInput = inputValue.trim().toLowerCase();
+  const exactVisibleMatch = useMemo(() => {
+    const candidates = customSelected ? [customSelected, ...options] : options;
+    return candidates.some(
+      (opt) =>
+        opt.value.toLowerCase() === trimmedInput ||
+        opt.label.toLowerCase() === trimmedInput
+    );
+  }, [customSelected, options, trimmedInput]);
+  const showCreateOption = !strict && hasSearchTerm && !exactVisibleMatch;
 
   // Combined list for keyboard navigation (includes create option when shown)
   // Only show matched options when searching (hide unmatched)
