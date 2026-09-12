@@ -409,6 +409,10 @@ const InputSingleSelect = ({
                   disabled={disabled}
                   prominence="tertiary"
                   size="sm"
+                  // Keep focus in the input: without this, mousedown blurs
+                  // it, and toggling closed is undone by the focus() call
+                  // re-opening via onFocus — a close/open flash.
+                  onMouseDown={(event) => event.preventDefault()}
                   onClick={noProp(toggleDropdown)}
                   icon={ChevronIcon}
                   interaction={isOpen ? "hover" : undefined}

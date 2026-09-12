@@ -423,6 +423,9 @@ function InputMultiSelect({
           disabled={disabled}
           prominence="tertiary"
           size="sm"
+          // Keep focus in the input so the toggle isn't undone by
+          // focus() re-opening through onFocus.
+          onMouseDown={(event) => event.preventDefault()}
           icon={ChevronIcon}
           interaction={isOpen ? "hover" : undefined}
           aria-label={isOpen ? strings.comboBoxClose : strings.comboBoxOpen}
