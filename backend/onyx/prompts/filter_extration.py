@@ -17,9 +17,11 @@ context.
 
 ## Guidance
 
-Scope to a source when it is EXPLICITLY named — in this cycle's queries, or in an earlier \
-turn that this cycle continues. NEVER infer a source from the query's topic (e.g. an HR or \
-billing query is not a source). If no source is named, return [].
+Scope to a source ONLY when it is named as WHERE to look ("in X", "from X", "search X", \
+"check X", "my X") — in this cycle's queries, or in an earlier turn that this cycle \
+continues. A source that is the query's TOPIC — its subject or object — is not a \
+directive: do NOT scope to it, and NEVER infer a source from the topic (e.g. an HR or \
+billing query is not a source). If no source is named as a WHERE to look, return [].
 
 A source named in an earlier turn still applies to a same-topic follow-up that names no new \
 source — keep scoping to it.
@@ -58,6 +60,9 @@ none of the named sources are listed.
 {valid_sources}
 
 ## Guidance reminder
+
+Scope ONLY to a source named as WHERE to look ("in X", "search X") — a mere TOPIC mention \
+is not a directive.
 
 COMBINED ("A and B"): scope to all named sources, every cycle.
 BACKOFF ("A first, then B"): by DEFAULT ADVANCE to the first named source not in previous \
