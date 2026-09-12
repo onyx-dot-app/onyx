@@ -7,6 +7,7 @@ while cleanup/cancellation paths still see both.
 """
 
 from collections.abc import Generator
+from datetime import datetime, timezone
 
 import pytest
 from sqlalchemy.orm import Session
@@ -553,8 +554,6 @@ def test_get_last_successful_poll_range_end_skips_targeted(
 ) -> None:
     """The freshness scheduler reads `poll_range_end` from the latest
     successful full-run attempt, ignoring targeted reindexes."""
-    from datetime import datetime, timezone
-
     settings = get_current_search_settings(db_session)
     full_run_end = datetime(2026, 1, 1, tzinfo=timezone.utc)
     targeted_end = datetime(2026, 6, 1, tzinfo=timezone.utc)
@@ -584,3 +583,131 @@ def test_get_last_successful_poll_range_end_skips_targeted(
     )
 
     assert result == full_run_end.timestamp()
+
+
+def _make_attempt_with_times(
+    db_session: Session,
+    cc_pair_id: int,
+    search_settings_id: int,
+    *,
+    status: IndexingStatus,
+    time_created: datetime,
+) -> IndexAttempt:
+    """Create an attempt and pin its creation time, mirroring `_make_attempt`
+
+    but allowing control of `time_created` so tests can reproduce the
+    checkpoint-cleanup race without waiting 7 days.
+    """
+    attempt = _make_attempt(
+        db_session,
+        cc_pair_id,
+        search_settings_id,
+        status=status,
+    )
+    attempt.time_created = time_created
+    attempt.time_updated = time_created
+    db_session.commit()
+    db_session.refresh(attempt)
+    return attempt
+
+
+def test_get_last_attempt_orders_by_creation_not_mutated_updated(
+    db_session: Session, cc_pair: ConnectorCredentialPair
+) -> None:
+    """The scheduler must not be fooled by an old attempt whose `time_updated`
+    was bumped by hourly checkpoint cleanup (issue #14064).
+
+    Regression: `get_last_attempt_for_cc_pair` sorted by `time_updated`, which
+    `check_for_checkpoint_cleanup` refreshes on attempts older than 7 days.
+    A bumped 7-day-old attempt then looked like the newest, so
+    `should_index()` never saw a gap bigger than 1 hour for connectors with
+    `refresh_freq >= 3600`.
+    """
+    settings = get_current_search_settings(db_session)
+    real_latest = _make_attempt_with_times(
+        db_session,
+        cc_pair.id,
+        settings.id,
+        status=IndexingStatus.SUCCESS,
+        time_created=datetime(2026, 1, 10, tzinfo=timezone.utc),
+    )
+    # An older attempt that checkpoint cleanup later "touches", giving it a
+    # NEWER `time_updated` than the genuinely-latest attempt.
+    cleanup_bumped = _make_attempt_with_times(
+        db_session,
+        cc_pair.id,
+        settings.id,
+        status=IndexingStatus.SUCCESS,
+        time_created=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+    cleanup_bumped.time_updated = datetime(2026, 2, 1, tzinfo=timezone.utc)
+    db_session.commit()
+    db_session.refresh(cleanup_bumped)
+
+    result = get_last_attempt_for_cc_pair(cc_pair.id, settings.id, db_session)
+
+    assert result is not None
+    assert result.id == real_latest.id
+
+
+def test_get_recent_attempts_orders_by_creation_not_mutated_updated(
+    db_session: Session, cc_pair: ConnectorCredentialPair
+) -> None:
+    """The repeated-error detector also relies on these helpers; it must see
+    the genuinely-most-recent attempts, not rows the cleanup task touched."""
+    settings = get_current_search_settings(db_session)
+    newest = _make_attempt_with_times(
+        db_session,
+        cc_pair.id,
+        settings.id,
+        status=IndexingStatus.SUCCESS,
+        time_created=datetime(2026, 1, 10, tzinfo=timezone.utc),
+    )
+    older_bumped = _make_attempt_with_times(
+        db_session,
+        cc_pair.id,
+        settings.id,
+        status=IndexingStatus.FAILED,
+        time_created=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+    older_bumped.time_updated = datetime(2026, 2, 1, tzinfo=timezone.utc)
+    db_session.commit()
+    db_session.refresh(older_bumped)
+
+    results = get_recent_attempts_for_cc_pair(
+        cc_pair.id, settings.id, limit=10, db_session=db_session
+    )
+
+    assert [attempt.id for attempt in results] == [newest.id, older_bumped.id]
+
+
+def test_get_recent_completed_orders_by_creation_not_mutated_updated(
+    db_session: Session, cc_pair: ConnectorCredentialPair
+) -> None:
+    """Checkpoint candidate selection (`get_latest_valid_checkpoint`) consumes
+    `get_recent_completed_attempts_for_cc_pair`; like the others it must order
+    by creation so cleanup writes don't reorder the candidates."""
+    settings = get_current_search_settings(db_session)
+    newest = _make_attempt_with_times(
+        db_session,
+        cc_pair.id,
+        settings.id,
+        status=IndexingStatus.SUCCESS,
+        time_created=datetime(2026, 1, 10, tzinfo=timezone.utc),
+    )
+    older_bumped = _make_attempt_with_times(
+        db_session,
+        cc_pair.id,
+        settings.id,
+        status=IndexingStatus.SUCCESS,
+        time_created=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+    older_bumped.time_updated = datetime(2026, 2, 1, tzinfo=timezone.utc)
+    db_session.commit()
+    db_session.refresh(older_bumped)
+
+    results = get_recent_completed_attempts_for_cc_pair(
+        cc_pair.id, settings.id, limit=10, db_session=db_session
+    )
+
+    assert [attempt.id for attempt in results] == [newest.id, older_bumped.id]

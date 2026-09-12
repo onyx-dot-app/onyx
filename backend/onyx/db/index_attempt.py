@@ -39,7 +39,7 @@ def get_last_attempt_for_cc_pair(
     )
     if ignore_targeted_reindex:
         query = query.filter(IndexAttempt.targeted_reindex_job_id.is_(None))
-    return query.order_by(IndexAttempt.time_updated.desc()).first()
+    return query.order_by(IndexAttempt.time_created.desc()).first()
 
 
 def get_recent_completed_attempts_for_cc_pair(
@@ -59,7 +59,7 @@ def get_recent_completed_attempts_for_cc_pair(
     )
     if ignore_targeted_reindex:
         query = query.filter(IndexAttempt.targeted_reindex_job_id.is_(None))
-    return query.order_by(IndexAttempt.time_updated.desc()).limit(limit).all()
+    return query.order_by(IndexAttempt.time_created.desc()).limit(limit).all()
 
 
 def get_recent_attempts_for_cc_pair(
@@ -76,7 +76,7 @@ def get_recent_attempts_for_cc_pair(
     )
     if ignore_targeted_reindex:
         query = query.filter(IndexAttempt.targeted_reindex_job_id.is_(None))
-    return query.order_by(IndexAttempt.time_updated.desc()).limit(limit).all()
+    return query.order_by(IndexAttempt.time_created.desc()).limit(limit).all()
 
 
 def get_index_attempt(
