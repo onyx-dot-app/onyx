@@ -241,30 +241,45 @@ const InputSingleSelect = ({
     ]
   );
 
-  const handleOptionSelect = useCallback(
-    (option: SelectOption) => {
-      if (option.disabled) return;
-
-      setInputValue(option.label);
-
-      // Support both onChange (event) and onValueChange (value) patterns
+  // Support both onChange (event) and onValueChange (value) patterns
+  const emitValue = useCallback(
+    (next: string) => {
       if (onChange) {
         const syntheticEvent = {
-          target: { value: option.value },
-          currentTarget: { value: option.value },
+          target: { value: next },
+          currentTarget: { value: next },
           type: "change",
           bubbles: true,
           cancelable: true,
         } as React.ChangeEvent<HTMLInputElement>;
         onChange(syntheticEvent);
       }
+      onValueChange?.(next);
+    },
+    [onChange, onValueChange]
+  );
 
-      onValueChange?.(option.value);
+  const handleOptionSelect = useCallback(
+    (option: SelectOption) => {
+      if (option.disabled) return;
 
+      // The multi's symmetry: picking the already-selected option unselects
+      // it. The dropdown stays open with the filter cleared, ready for a
+      // different pick.
+      if (option.value === value && value !== "") {
+        setInputValue("");
+        emitValue("");
+        setHighlightedIndex(-1);
+        inputRef.current?.focus();
+        return;
+      }
+
+      setInputValue(option.label);
+      emitValue(option.value);
       setIsOpen(false);
       inputRef.current?.focus();
     },
-    [onChange, onValueChange, setInputValue, setIsOpen]
+    [value, emitValue, setInputValue, setIsOpen, setHighlightedIndex]
   );
 
   // Keyboard Navigation Hook
