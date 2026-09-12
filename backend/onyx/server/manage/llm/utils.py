@@ -365,7 +365,7 @@ def extract_vendor_from_model_name(model_name: str, provider: str) -> str | None
                 vendor_key = parts[0].lower()
             return PROVIDER_DISPLAY_NAMES.get(vendor_key, vendor_key.title())
 
-    elif provider == LlmProviderNames.OLLAMA_CHAT:
+    elif provider in (LlmProviderNames.OLLAMA_CHAT, LlmProviderNames.LLMMAN):
         # Format: "model-name:tag" e.g., "llama3:70b", "qwen2.5:7b"
         # Extract base name (before colon)
         base_name = model_name.split(":")[0].lower()
