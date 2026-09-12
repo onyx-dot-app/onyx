@@ -216,6 +216,7 @@ const InputSingleSelect = ({
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const newValue = e.target.value;
       setInputValue(newValue);
+      setInvalidCommit(false);
 
       // Only call onChange while typing (for controlled input behavior)
       // onValueChange is only called when selecting from dropdown
@@ -268,6 +269,15 @@ const InputSingleSelect = ({
   );
 
   // Keyboard Navigation Hook
+  // EXPERIMENT(commit-attempt errors): Enter on text matching no option in
+  // closed mode flags the error variant and keeps the dropdown open; any
+  // typing, selection, or close (blur/outside/Tab already close) clears it,
+  // and the close-sync effect drops the invalid text back to the selection.
+  const [invalidCommit, setInvalidCommit] = useState(false);
+  useEffect(() => {
+    if (!isOpen) setInvalidCommit(false);
+  }, [isOpen]);
+
   const { handleKeyDown } = useSelectKeyboard({
     isOpen,
     setIsOpen,
@@ -347,8 +357,29 @@ const InputSingleSelect = ({
               setHighlightedIndex(-1);
             }
           }}
-          onKeyDown={handleKeyDown}
-          variant={disabled ? "disabled" : !isValid ? "error" : undefined}
+          onKeyDown={(event) => {
+            if (
+              event.key === "Enter" &&
+              strict &&
+              isOpen &&
+              highlightedIndex < 0 &&
+              inputValue.trim() !== ""
+            ) {
+              // Commit attempt with nothing selectable: reject visibly.
+              event.preventDefault();
+              event.stopPropagation();
+              setInvalidCommit(true);
+              return;
+            }
+            handleKeyDown(event);
+          }}
+          variant={
+            disabled
+              ? "disabled"
+              : !isValid || invalidCommit
+                ? "error"
+                : undefined
+          }
           searchIcon={searchIcon}
           rightChildren={
             <>
