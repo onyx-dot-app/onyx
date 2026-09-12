@@ -13,6 +13,7 @@ interface SlackChannelConfigCreationRequest {
   is_ephemeral: boolean;
   respond_to_bots: boolean;
   show_continue_in_web_ui: boolean;
+  remove_feedback_buttons: boolean;
   respond_member_group_list: string[];
   follow_up_tags?: string[];
   usePersona: boolean;
@@ -44,6 +45,7 @@ const buildRequestBodyFromCreationRequest = (
     respond_to_bots: creationRequest.respond_to_bots,
     is_ephemeral: creationRequest.is_ephemeral,
     show_continue_in_web_ui: creationRequest.show_continue_in_web_ui,
+    remove_feedback_buttons: creationRequest.remove_feedback_buttons,
     enable_auto_filters: creationRequest.enable_auto_filters,
     respond_member_group_list: creationRequest.is_ephemeral
       ? []
