@@ -53,6 +53,27 @@ MAX_TOTAL_UPLOAD_SIZE_MB = int(os.environ.get("BUILD_MAX_TOTAL_UPLOAD_SIZE_MB", 
 MAX_TOTAL_UPLOAD_SIZE_BYTES = MAX_TOTAL_UPLOAD_SIZE_MB * 1024 * 1024
 ATTACHMENTS_DIRECTORY = "attachments"
 
+# Workspace names hidden from every user-facing surface: listings, zips, and
+# artifact derivation all share this one visibility rule.
+_HIDDEN_WORKSPACE_NAMES = {
+    ".venv",
+    ".git",
+    ".next",
+    "__pycache__",
+    "node_modules",
+    ".DS_Store",
+    "opencode.json",
+    ".env",
+    ".gitignore",
+    "nextjs.log",
+    "nextjs.pid",
+}
+
+
+def is_hidden_workspace_name(name: str) -> bool:
+    return name in _HIDDEN_WORKSPACE_NAMES or name.startswith(".")
+
+
 # ==============================================================================
 # Kubernetes sandbox (SANDBOX_BACKEND=kubernetes)
 # ==============================================================================
