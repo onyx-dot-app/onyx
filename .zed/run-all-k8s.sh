@@ -112,10 +112,7 @@ terminate_process_trees() {
   kill -KILL "${remaining_pids[@]}" 2>/dev/null || true
 }
 
-# Run a command, discard its output, and kill it if it outlives the deadline.
-# macOS has no `timeout`. Returns 124 on the deadline and 0 otherwise: the
-# command's own exit status is deliberately dropped, because every caller is a
-# best-effort cleanup that must never wedge the whole task.
+# Bound cleanup commands without macOS `timeout`. Ignore failures; return 124 on timeout.
 run_bounded() {
   local deadline_seconds="$1"
   shift
@@ -182,8 +179,7 @@ stop_managed_stack() {
     [[ -n "$pid" ]] && control_listener_pids+=("$pid")
   done < <(listener_pids "$ONYX_ZED_CONTROL_PORT")
 
-  # Bash 3.2 (the macOS system bash) treats "${empty[@]}" as an unbound
-  # variable under `set -u`, so guard every array expansion with a count check.
+  # Bash 3.2 requires a count check before expanding empty arrays under set -u.
   if [[ "${#control_listener_pids[@]}" -gt 0 ]]; then
     for pid in "${control_listener_pids[@]}"; do
       if ! is_managed_process_compose "$pid"; then
@@ -211,11 +207,7 @@ stop_managed_stack() {
   assert_port_available "$ONYX_ZED_API_PORT" "Onyx API"
 }
 
-# Python ignores the macOS keychain: httpx/requests verify against certifi, so
-# behind a TLS-intercepting proxy every LLM call dies with
-# `CERTIFICATE_VERIFY_FAILED ... self-signed certificate in certificate chain`.
-# Merge the private roots into a copy of certifi and point the child processes
-# at it. No-op when ONYX_ZED_CA_DIR holds nothing.
+# Add private CAs to certifi's roots for clients that do not use the macOS keychain.
 export_ca_bundle() {
   if ! compgen -G "$ONYX_ZED_CA_DIR/*.crt" >/dev/null; then
     return 0
@@ -342,8 +334,7 @@ stop_managed_stack
 assert_port_available "$ONYX_ZED_WEB_PORT" "Onyx web server"
 
 echo "==> connecting Telepresence to kind-onyx-dev"
-# Clears a daemon left pointing at another context. OSS 2.31.2 sometimes spins
-# here forever even with no daemon running, so never wait on it indefinitely.
+# Clear any previous context; bound the call because Telepresence can hang.
 if ! run_bounded 15 telepresence quit; then
   echo "    'telepresence quit' did not exit in 15s; killed it and continuing"
 fi
@@ -370,9 +361,7 @@ process_compose_args=(
   --config "$ONYX_ZED_COMPOSE_FILE"
 )
 
-# Every process in the compose file writes to .zed/logs, so nothing reaches
-# stdout. Without a terminal the TUI also draws nothing, and the stack looks
-# like it hung. Run headless in that case and say where the logs are.
+# Without a terminal, disable the TUI and show how to access service logs.
 if [[ -t 1 ]]; then
   echo "==> starting the service stack in Process Compose"
 else

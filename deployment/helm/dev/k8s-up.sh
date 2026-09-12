@@ -17,12 +17,9 @@
 #   --skip-helm                    only create the cluster, don't install Onyx
 #
 # Environment:
-#   ONYX_DEV_CA_DIR   directory of extra root CAs to trust inside the nodes,
-#                     one PEM certificate per .crt file. Needed behind a
-#                     TLS-intercepting proxy, which makes image pulls fail
-#                     with "x509: certificate signed by unknown authority".
-#                     On macOS the script populates this from the System
-#                     keychain automatically.
+#   ONYX_DEV_CA_DIR   extra root CAs for registry access, one PEM per .crt file.
+#                     Defaults to ~/.onyx-dev/ca-certificates. On macOS, the
+#                     script also imports CAs from the System keychain.
 
 set -euo pipefail
 
@@ -35,13 +32,8 @@ KIND_NODE_IMAGE="${KIND_NODE_IMAGE:-kindest/node:v1.33.1}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHART_DIR="$(cd "$SCRIPT_DIR/../charts/onyx" && pwd)"
-VALUES_OVERLAY="$CHART_DIR/values-localdev.yaml"
+VALUES_OVERLAY="$SCRIPT_DIR/values-localdev.yaml"
 
-# Private root CAs to trust inside the nodes. A TLS-intercepting corporate
-# proxy re-signs registry traffic with its own root: the host trusts it, but
-# containerd in the node ships only the stock Debian bundle, so image pulls
-# fail with `x509: certificate signed by unknown authority`. Set ONYX_DEV_CA_DIR
-# to curate the set by hand — one PEM certificate per `.crt` file.
 CA_DIR="${ONYX_DEV_CA_DIR:-$HOME/.onyx-dev/ca-certificates}"
 NODE_CA_DIR="/usr/local/share/ca-certificates"
 
@@ -54,10 +46,7 @@ require() {
   fi
 }
 
-# Copy the machine's installed root CAs into CA_DIR, one certificate per file.
-# Reads only the System keychain, which holds admin/MDM-installed certs — the
-# public roots live in SystemRootCertificates.keychain and the node has those
-# already.
+# The System keychain holds installed CAs; nodes already include the public roots.
 collect_host_ca_certs() {
   mkdir -p "$CA_DIR"
 
@@ -78,8 +67,7 @@ collect_host_ca_certs() {
 
   for part in "$work"/part-*; do
     [[ -f "$part" ]] || continue
-    # Trust anchors only. The keychain also holds leaf identities (MDM, device)
-    # which must not become roots. macOS ships LibreSSL, which has no `-ext`.
+    # Exclude leaf certificates. Use -text for macOS LibreSSL compatibility.
     if ! openssl x509 -in "$part" -noout -text 2>/dev/null | grep -q "CA:TRUE"; then
       continue
     fi
@@ -99,9 +87,7 @@ collect_host_ca_certs() {
   fi
 }
 
-# extraMounts put the certificates in the node, but only update-ca-certificates
-# writes them into the bundle containerd actually reads. Also covers clusters
-# created before this mount existed, by copying the files in directly.
+# Update the trust bundle, including on existing nodes without the CA mount.
 trust_host_ca_certs_in_nodes() {
   local node cert before after
 
@@ -119,8 +105,7 @@ trust_host_ca_certs_in_nodes() {
     docker exec "$node" update-ca-certificates >/dev/null 2>&1 || true
     after="$(docker exec "$node" sha256sum /etc/ssl/certs/ca-certificates.crt 2>/dev/null | cut -d' ' -f1)"
 
-    # containerd reads the bundle once at start, so it needs a restart to pick
-    # up new anchors. Skip it when the bundle did not change.
+    # Restart containerd to load the changed trust bundle.
     if [[ "$before" != "$after" ]]; then
       echo "trusting host root CAs in $node; restarting containerd ..."
       docker exec "$node" systemctl restart containerd

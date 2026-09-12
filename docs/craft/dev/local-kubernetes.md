@@ -127,7 +127,7 @@ kubectl -n onyx get pods -w
 ```
 
 The chart pins images to the `:edge` tag in
-[`values-localdev.yaml`](/deployment/helm/charts/onyx/values-localdev.yaml)
+[`values-localdev.yaml`](/deployment/helm/dev/values-localdev.yaml)
 with `pullPolicy: Always`, so in-cluster pods track nightly builds off `main`
 rather than the released `:latest`.
 
@@ -311,7 +311,7 @@ kind load docker-image onyxdotapp/onyx-backend:dev --name onyx-dev
 # so the nightly :edge tag refreshes.
 helm upgrade onyx deployment/helm/charts/onyx \
   -n onyx \
-  -f deployment/helm/charts/onyx/values-localdev.yaml \
+  -f deployment/helm/dev/values-localdev.yaml \
   --set global.pullPolicy=IfNotPresent \
   --set api.image.tag=dev \
   --set celery_shared.image.tag=dev
