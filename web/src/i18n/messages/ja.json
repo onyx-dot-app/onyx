@@ -12853,7 +12853,7 @@
       "rangeOfTotal": "<range></range> / <total></total>"
     },
     "select": {
-      "emptySet": "項目が見つかりません"
+      "emptySet": "項目がありません"
     },
     "table": {
       "alwaysShown": "常に表示",

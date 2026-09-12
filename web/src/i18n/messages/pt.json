@@ -12853,7 +12853,7 @@
       "rangeOfTotal": "<range></range> de <total></total>"
     },
     "select": {
-      "emptySet": "Nenhum item encontrado"
+      "emptySet": "Nenhum item"
     },
     "table": {
       "alwaysShown": "Sempre exibida",

@@ -3,7 +3,7 @@ import { useOpalStrings } from "@opal/strings";
 import { OptionItem } from "./OptionItem";
 import { SelectOption, SelectSection } from "../types";
 import { Divider } from "@opal/components/divider/components";
-import { Content } from "@opal/layouts";
+import { Text } from "@opal/components/text/components";
 import { SvgEmpty } from "@opal/icons";
 import { cn, clickOnKeyDown } from "@opal/utils";
 import { SvgPlus } from "@opal/icons";
@@ -73,15 +73,11 @@ export const OptionsList: React.FC<OptionsListProps> = ({
     // nothing keeps the lightweight text row.
     if (emptySet) {
       return (
-        <div className="p-2">
-          <Content
-            sizePreset="main-ui"
-            variant="section"
-            icon={SvgEmpty}
-            title={strings.selectEmptySet}
-            color="muted"
-            width="full"
-          />
+        <div className="flex flex-row items-center gap-1 p-2">
+          <SvgEmpty className="h-4 w-4 shrink-0 stroke-text-03" />
+          <Text as="p" color="text-03" font="main-ui-body">
+            {strings.selectEmptySet}
+          </Text>
         </div>
       );
     }

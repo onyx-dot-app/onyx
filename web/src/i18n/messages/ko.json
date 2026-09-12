@@ -12853,7 +12853,7 @@
       "rangeOfTotal": "<range></range> / <total></total>"
     },
     "select": {
-      "emptySet": "항목을 찾을 수 없습니다"
+      "emptySet": "항목 없음"
     },
     "table": {
       "alwaysShown": "항상 표시",
