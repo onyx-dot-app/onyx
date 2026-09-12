@@ -64,6 +64,7 @@ from onyx.db.persona_sharing import (
 from onyx.db.users import get_active_admin_count
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_processing.file_types import is_allowed_avatar_content_type
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType
 from onyx.server.documents.models import PaginatedReturn
@@ -327,6 +328,17 @@ def upload_file(
     file: UploadFile,
     _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> dict[str, str]:
+    # This endpoint only stores avatar images, so the client-supplied
+    # content type is checked against the image allowlist before it is
+    # stored. Without this, a value such as `text/html` or
+    # `image/svg+xml` is stored verbatim and later served back on the
+    # avatar route with that same content type.
+    if not is_allowed_avatar_content_type(file.content_type):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported avatar content type: {file.content_type}",
+        )
+
     file_store = get_default_file_store()
     file_type = ChatFileType.IMAGE
     file_id = file_store.save_file(
@@ -813,6 +825,10 @@ def get_persona_avatar(
         "Cache-Control": "private, max-age=31536000, immutable",
         "ETag": etag,
         "Vary": "Cookie",
+        # Belt-and-suspenders: the upload endpoint now rejects non-image
+        # content types, but this stops a browser from sniffing and
+        # rendering stored bytes as anything other than the declared type.
+        "X-Content-Type-Options": "nosniff",
     }
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers=cache_headers)
