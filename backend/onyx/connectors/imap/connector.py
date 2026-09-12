@@ -5,7 +5,7 @@ import os
 import re
 from datetime import datetime, timezone
 from email.message import Message
-from email.utils import parseaddr
+from email.utils import getaddresses
 from enum import Enum
 from typing import Any, cast
 
@@ -340,7 +340,7 @@ def _convert_email_headers_and_body_into_document(
     email_headers: EmailHeaders,
     include_perm_sync: bool,
 ) -> Document:
-    sender_name, sender_addr = _parse_singular_addr(raw_header=email_headers.sender)
+    sender_parsed = _parse_singular_addr(raw_header=email_headers.sender)
     parsed_recipients = (
         _parse_addrs(raw_header=email_headers.recipients)
         if email_headers.recipients
@@ -353,10 +353,18 @@ def _convert_email_headers_and_body_into_document(
         )
         for recipient_name, recipient_addr in parsed_recipients
     }
-    if sender_addr not in expert_info_map:
-        expert_info_map[sender_addr] = BasicExpertInfo(
-            display_name=sender_name, email=sender_addr
+    if sender_parsed is None:
+        logger.warning(
+            "Unable to parse sender header for email %s; indexing without sender attribution. raw_header=%r",
+            email_headers.id,
+            email_headers.sender,
         )
+    else:
+        sender_name, sender_addr = sender_parsed
+        if sender_addr not in expert_info_map:
+            expert_info_map[sender_addr] = BasicExpertInfo(
+                display_name=sender_name, email=sender_addr
+            )
 
     email_body = _parse_email_body(email_msg=email_msg, email_headers=email_headers)
     primary_owners = list(expert_info_map.values())
@@ -431,22 +439,31 @@ def _sanitize_mailbox_names(mailboxes: list[str]) -> list[str]:
 
 
 def _parse_addrs(raw_header: str) -> list[tuple[str, str]]:
-    addrs = raw_header.split(",")
-    name_addr_pairs = [parseaddr(addr=addr) for addr in addrs if addr]
-    return [(name, addr) for name, addr in name_addr_pairs if addr]
+    # email.utils.getaddresses honors RFC 5322 quoting, so display names that
+    # contain commas (e.g. ``"Doe, John" <john@example.com>``) are parsed as a
+    # single address instead of being split on the comma.
+    return [(name, addr) for name, addr in getaddresses([raw_header]) if addr]
 
 
-def _parse_singular_addr(raw_header: str) -> tuple[str, str]:
+def _parse_singular_addr(raw_header: str) -> tuple[str, str] | None:
+    """Parse a header expected to carry a single email address.
+
+    Returns ``None`` when no address can be recovered — callers skip
+    attribution rather than aborting the whole indexing run (#7620).
+    If multiple addresses are present (RFC 5322 §3.6.2 permits mailbox-list
+    in ``From`` when a ``Sender`` header disambiguates), returns the first
+    and logs a warning; dropping the email entirely would cost otherwise-
+    valid content.
+    """
     addrs = _parse_addrs(raw_header=raw_header)
     if not addrs:
-        raise RuntimeError(
-            f"Parsing email header resulted in no addresses being found; {raw_header=}"
+        return None
+    if len(addrs) >= 2:
+        logger.warning(
+            "Expected a singular address header but found %d; using the first. raw_header=%r",
+            len(addrs),
+            raw_header,
         )
-    elif len(addrs) >= 2:
-        raise RuntimeError(
-            f"Expected a singular address, but instead got multiple; {raw_header=} {addrs=}"
-        )
-
     return addrs[0]
 
 
