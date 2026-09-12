@@ -72,7 +72,7 @@ export const OptionsList: React.FC<OptionsListProps> = ({
     // nothing keeps the lightweight text row.
     if (emptySet) {
       return (
-        <div className="p-2">
+        <div className="p-2.5">
           <Text as="p" color="text-03" font="secondary-body">
             {strings.selectEmptySet}
           </Text>
