@@ -5,7 +5,7 @@ from onyx.configs.app_configs import (
     EXT_APP_NOTION_CLIENT_ID,
     EXT_APP_NOTION_CLIENT_SECRET,
 )
-from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.enums import ActionEffect, EndpointPolicy, ExternalAppType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.actions import (
@@ -133,60 +133,70 @@ _ENDPOINTS: list[EndpointSpec] = [
     ),
     EndpointSpec(
         id=NotionAction.PAGES_CREATE,
+        effect=ActionEffect.WRITE,
         normalised_name="Create a page",
         description="Create a new page under a page or data source parent.",
         matches=(RestRoute(method="POST", path="/v1/pages"),),
     ),
     EndpointSpec(
         id=NotionAction.PAGES_UPDATE,
+        effect=ActionEffect.WRITE,
         normalised_name="Update a page",
         description="Update a page's properties, icon, cover, or archive it.",
         matches=(RestRoute(method="PATCH", path="/v1/pages/{page_id}"),),
     ),
     EndpointSpec(
         id=NotionAction.BLOCKS_APPEND,
+        effect=ActionEffect.WRITE,
         normalised_name="Append blocks",
         description="Append child blocks (content) to a page or block.",
         matches=(RestRoute(method="PATCH", path="/v1/blocks/{block_id}/children"),),
     ),
     EndpointSpec(
         id=NotionAction.BLOCKS_UPDATE,
+        effect=ActionEffect.WRITE,
         normalised_name="Update a block",
         description="Update or archive an individual block's content.",
         matches=(RestRoute(method="PATCH", path="/v1/blocks/{block_id}"),),
     ),
     EndpointSpec(
         id=NotionAction.BLOCKS_DELETE,
+        effect=ActionEffect.WRITE,
         normalised_name="Delete a block",
         description="Delete (move to trash) an individual block.",
         matches=(RestRoute(method="DELETE", path="/v1/blocks/{block_id}"),),
     ),
     EndpointSpec(
         id=NotionAction.DATABASES_CREATE,
+        effect=ActionEffect.WRITE,
         normalised_name="Create a database",
         description="Create a new database (with an initial data source) under a page parent.",
         matches=(RestRoute(method="POST", path="/v1/databases"),),
     ),
     EndpointSpec(
         id=NotionAction.DATABASES_UPDATE,
+        effect=ActionEffect.WRITE,
         normalised_name="Update a database",
         description="Update a database container's title or move its data sources.",
         matches=(RestRoute(method="PATCH", path="/v1/databases/{database_id}"),),
     ),
     EndpointSpec(
         id=NotionAction.DATA_SOURCES_CREATE,
+        effect=ActionEffect.WRITE,
         normalised_name="Create a data source",
         description="Add a new data source to an existing database.",
         matches=(RestRoute(method="POST", path="/v1/data_sources"),),
     ),
     EndpointSpec(
         id=NotionAction.DATA_SOURCES_UPDATE,
+        effect=ActionEffect.WRITE,
         normalised_name="Update a data source",
         description="Update a data source's schema, title, or description.",
         matches=(RestRoute(method="PATCH", path="/v1/data_sources/{data_source_id}"),),
     ),
     EndpointSpec(
         id=NotionAction.COMMENTS_CREATE,
+        effect=ActionEffect.WRITE,
         normalised_name="Add a comment",
         description="Add a comment to a page or an existing discussion.",
         matches=(RestRoute(method="POST", path="/v1/comments"),),

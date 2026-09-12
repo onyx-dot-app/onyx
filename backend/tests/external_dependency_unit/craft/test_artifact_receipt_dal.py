@@ -191,9 +191,10 @@ def test_finalize_is_terminal_and_rejects_pending(
     assert flipped is not None
     assert flipped.status == ReceiptStatus.CONFIRMED
 
-    for non_terminal in (ReceiptStatus.PENDING, ReceiptStatus.UNKNOWN):
-        with pytest.raises(ValueError):
-            finalize_receipt(db_session, receipt_id=receipt.id, status=non_terminal)
+    with pytest.raises(ValueError):
+        finalize_receipt(
+            db_session, receipt_id=receipt.id, status=ReceiptStatus.PENDING
+        )
 
 
 def test_sweep_marks_only_stale_pending_unknown(

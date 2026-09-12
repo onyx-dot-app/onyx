@@ -29,6 +29,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from onyx.db.enums import ActionEffect, ReceiptStatus
+
 # =============================================================================
 # Base Packet Type
 # =============================================================================
@@ -89,6 +91,25 @@ class ConnectAppRequestPacket(BasePacket):
     reason: str | None = None
 
 
+class ReceiptPacket(BasePacket):
+    """An action receipt was recorded or reached its terminal state.
+
+    Carries the API-visible row so a consumer can render the receipt card
+    with no round trip. The receipt listing refetch is the completeness
+    guarantee, and clients ignore unknown packet types by design.
+    """
+
+    type: Literal["receipt"] = "receipt"
+    receipt_id: UUID
+    session_id: UUID
+    action_type: str
+    effect: ActionEffect
+    destination: str
+    link: str | None
+    status: ReceiptStatus
+    created_at: datetime
+
+
 class ContextUsagePacket(BasePacket):
     type: Literal["context_usage"] = "context_usage"
     used_tokens: int
@@ -109,6 +130,7 @@ BuildPacket = (
     | ApprovalRequestedPacket
     | SubagentStartedPacket
     | ConnectAppRequestPacket
+    | ReceiptPacket
     | ContextUsagePacket
     | CompactionPacket
 )

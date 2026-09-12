@@ -26,7 +26,7 @@ import pytest
 from mitmproxy import http
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import EndpointPolicy, ExternalAppType, GatedAppKind
+from onyx.db.enums import ActionEffect, EndpointPolicy, ExternalAppType, GatedAppKind
 from onyx.db.gated_app import get_or_create_gated_app_id
 from onyx.db.models import ExternalApp, GatedActionPolicy, User
 from onyx.external_apps.credentials import app_is_available
@@ -106,6 +106,7 @@ def test_match_stored_override_wins(
                 display_name="Post a message",
                 description="Post a message to a channel or conversation.",
                 policy=EndpointPolicy.ALWAYS,
+                effect=ActionEffect.WRITE,
             ),
         ),
         target=GatedTarget(kind=GatedAppKind.EXTERNAL_APP, id=app.id, app_name="Slack"),

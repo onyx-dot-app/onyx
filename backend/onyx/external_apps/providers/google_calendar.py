@@ -2,7 +2,7 @@ from onyx.configs.app_configs import (
     EXT_APP_GOOGLE_CALENDAR_CLIENT_ID,
     EXT_APP_GOOGLE_CALENDAR_CLIENT_SECRET,
 )
-from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.enums import ActionEffect, EndpointPolicy, ExternalAppType
 from onyx.external_apps.providers.actions import (
     EndpointSpec,
     ExternalAppAction,
@@ -58,12 +58,14 @@ _ENDPOINTS: list[EndpointSpec] = [
     ),
     EndpointSpec(
         id=GoogleCalendarAction.EVENTS_CREATE,
+        effect=ActionEffect.WRITE,
         normalised_name="Create an event",
         description="Create a new event on a calendar.",
         matches=(RestRoute(method="POST", path=_EVENTS_COLLECTION),),
     ),
     EndpointSpec(
         id=GoogleCalendarAction.EVENTS_UPDATE,
+        effect=ActionEffect.WRITE,
         normalised_name="Update an event",
         description="Modify an existing event.",
         matches=(
@@ -73,6 +75,7 @@ _ENDPOINTS: list[EndpointSpec] = [
     ),
     EndpointSpec(
         id=GoogleCalendarAction.EVENTS_DELETE,
+        effect=ActionEffect.WRITE,
         normalised_name="Delete an event",
         description="Permanently delete an event.",
         matches=(RestRoute(method="DELETE", path=_EVENT_ITEM),),

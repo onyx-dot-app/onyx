@@ -7,7 +7,13 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import POLICY_SEVERITY, EndpointPolicy, ExternalAppType, GatedAppKind
+from onyx.db.enums import (
+    POLICY_SEVERITY,
+    ActionEffect,
+    EndpointPolicy,
+    ExternalAppType,
+    GatedAppKind,
+)
 from onyx.db.gated_app import get_action_policies
 from onyx.db.models import ExternalApp
 from onyx.external_apps.matching.request import MatchContext, ProxiedRequest
@@ -32,6 +38,9 @@ class MatchedAction(BaseModel):
     display_name: str
     description: str
     policy: EndpointPolicy
+    # Defaulted so persisted matched-action lists that lack the field still
+    # parse. The whole-domain fallback and MCP tools count as writes.
+    effect: ActionEffect = ActionEffect.READ
 
 
 class GatedTarget(BaseModel):
@@ -159,6 +168,7 @@ def recognize_actions(
             display_name=endpoint.normalised_name,
             description=endpoint.description,
             policy=effective_policy(endpoint, stored),
+            effect=endpoint.effect,
         )
         for endpoint in catalog
         if any(rule_matches(rule, context) for rule in endpoint.matches)
@@ -205,6 +215,7 @@ def apply_credential_gate(
                 display_name="Perform action",
                 description=f"{request.method} {request.path}",
                 policy=EndpointPolicy.ASK,
+                effect=ActionEffect.WRITE,
             ),
         ),
         target=GatedTarget(

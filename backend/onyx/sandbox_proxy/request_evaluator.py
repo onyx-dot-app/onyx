@@ -17,7 +17,7 @@ from mitmproxy import http
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import EndpointPolicy, GatedAppKind
+from onyx.db.enums import ActionEffect, EndpointPolicy, GatedAppKind
 from onyx.db.external_app import get_external_apps
 from onyx.db.gated_app import get_action_policies
 from onyx.db.mcp import get_craft_enabled_mcp_servers
@@ -220,6 +220,7 @@ class McpRequestEvaluator(RequestEvaluator):
                         display_name="Unrecognized MCP request",
                         description="MCP gating failed; blocked.",
                         policy=EndpointPolicy.DENY,
+                        effect=ActionEffect.WRITE,
                     ),
                 )
 
@@ -246,6 +247,7 @@ def _mcp_tool_actions(
                     "as an MCP tool call or protocol message; blocked."
                 ),
                 policy=EndpointPolicy.DENY,
+                effect=ActionEffect.WRITE,
             ),
         )
     stored = get_action_policies(db, GatedAppKind.MCP_SERVER, server.id)
@@ -262,6 +264,9 @@ def _mcp_tool_actions(
                 + (f" This request invokes it {count} times." if count > 1 else "")
             ),
             policy=stored.get(tool_name, MCP_TOOL_DEFAULT_POLICY),
+            # MCP tools always count as writes, a server's own hints never
+            # downgrade one to a read.
+            effect=ActionEffect.WRITE,
         )
         for tool_name, count in counts.items()
     )
