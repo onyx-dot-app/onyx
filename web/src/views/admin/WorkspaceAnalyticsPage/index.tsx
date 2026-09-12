@@ -2,7 +2,7 @@
 
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useTranslations } from "next-intl";
-import { DateRangePicker } from "@/refresh-components/DateRangePicker";
+import { InputDateRangePicker } from "@opal/components";
 import { useTimeRange } from "@/lib/usage/hooks";
 import {
   FeedbackChart,
@@ -30,7 +30,7 @@ export default function WorkspaceAnalyticsPage() {
         description={t("page.description")}
         divider
         rightChildren={
-          <DateRangePicker
+          <InputDateRangePicker
             value={timeRange}
             onValueChange={(range) =>
               setTimeRange((previous) =>

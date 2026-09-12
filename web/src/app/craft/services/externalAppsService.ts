@@ -10,12 +10,13 @@ import {
   ExternalAppType,
 } from "@/app/craft/v1/apps/registry";
 import { BUILD_API_BASE } from "@/app/craft/v1/constants";
+import type { ErrorResponseBody } from "@/lib/fetcher";
 
 async function readErrorDetail(
   res: Response,
   fallback: string
 ): Promise<string> {
-  const data = (await res.json().catch(() => ({}))) as { detail?: string };
+  const data: ErrorResponseBody = await res.json().catch(() => ({}));
   return data.detail ?? `${fallback} (HTTP ${res.status}).`;
 }
 

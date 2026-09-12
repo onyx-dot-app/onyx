@@ -1,7 +1,9 @@
 import random
 import threading
 import time
+from contextlib import nullcontext
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from typing import Any, List, cast
 from unittest.mock import MagicMock, Mock, patch
 
@@ -14,6 +16,8 @@ from onyx.connectors.models import (
     TabularSection,
     TextSection,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.hooks.executor import HookSkipped, HookSoftFailed
 from onyx.hooks.points.document_ingestion import (
     DocumentIngestionResponse,
@@ -22,15 +26,22 @@ from onyx.hooks.points.document_ingestion import (
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import (
+    INDEXING_PIPELINE_TRACE_NAME,
+    DocumentBatchPrepareContext,
     _apply_document_ingestion_hook,
+    _partition_documents_blocked_by_llm_spend_limit,
+    _system_llm_enrichment_is_allowed,
     add_contextual_summaries,
     filter_documents,
     get_docs_to_update,
+    index_doc_batch,
     process_image_sections,
+    run_indexing_pipeline,
 )
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_capabilities import get_max_input_tokens
 from onyx.llm.model_response import Choice, Message, ModelResponse
+from onyx.tracing.framework.traces import TraceContentMode
 
 
 def create_test_document(
@@ -656,6 +667,64 @@ def test_document_ingestion_hook_mixed_batch() -> None:
 _PATCH_PREFIX = "onyx.indexing.indexing_pipeline"
 
 
+def test_run_pipeline_owns_llm_enrichment_trace() -> None:
+    search_settings = SimpleNamespace(enable_contextual_rag=False)
+    all_search_settings = SimpleNamespace(primary=search_settings, secondary=None)
+    expected_result = MagicMock()
+    vision_llm = MagicMock()
+    document = _make_image_doc("image-doc", [ImageSection(image_file_id="1")])
+
+    with (
+        patch(
+            f"{_PATCH_PREFIX}.get_active_search_settings",
+            return_value=all_search_settings,
+        ),
+        patch(f"{_PATCH_PREFIX}.get_multipass_config"),
+        patch(
+            f"{_PATCH_PREFIX}.get_image_extraction_and_analysis_enabled",
+            return_value=True,
+        ),
+        patch(
+            f"{_PATCH_PREFIX}.get_default_llm_with_vision",
+            return_value=vision_llm,
+        ),
+        patch(f"{_PATCH_PREFIX}._system_llm_enrichment_is_allowed", return_value=True),
+        patch(
+            f"{_PATCH_PREFIX}.index_doc_batch_with_handler",
+            return_value=expected_result,
+        ) as index_doc_batch_with_handler,
+        patch(f"{_PATCH_PREFIX}.ensure_trace", return_value=nullcontext()) as ensure,
+    ):
+        result = run_indexing_pipeline(
+            document_batch=[document],
+            request_id=None,
+            embedder=MagicMock(),
+            document_indices=[],
+            db_session=MagicMock(),
+            tenant_id="tenant",
+            adapter=MagicMock(),
+            chunker=MagicMock(),
+        )
+
+    assert result is expected_result
+    ensure.assert_called_once_with(
+        INDEXING_PIPELINE_TRACE_NAME,
+        content_mode=TraceContentMode.METADATA_ONLY,
+    )
+    assert (
+        index_doc_batch_with_handler.call_args.kwargs["image_summarization_llm"]
+        is vision_llm
+    )
+
+
+def test_system_llm_enrichment_stops_at_global_limit() -> None:
+    with patch(
+        f"{_PATCH_PREFIX}.check_global_token_rate_limits",
+        side_effect=OnyxError(OnyxErrorCode.RATE_LIMITED),
+    ):
+        assert not _system_llm_enrichment_is_allowed()
+
+
 def _mock_file_store(image_map: dict[str, bytes]) -> MagicMock:
     """Build a fake file store that serves images from a dict."""
     store = MagicMock()
@@ -689,6 +758,149 @@ def _make_image_doc(
         source=DocumentSource.FILE,
         metadata={},
     )
+
+
+def test_unavailable_vision_llm_does_not_enable_spend_gate() -> None:
+    search_settings = SimpleNamespace(enable_contextual_rag=False)
+    all_search_settings = SimpleNamespace(primary=search_settings, secondary=None)
+    expected_result = MagicMock()
+    document = _make_image_doc("image-doc", [ImageSection(image_file_id="1")])
+
+    with (
+        patch(
+            f"{_PATCH_PREFIX}.get_active_search_settings",
+            return_value=all_search_settings,
+        ),
+        patch(f"{_PATCH_PREFIX}.get_multipass_config"),
+        patch(
+            f"{_PATCH_PREFIX}.get_image_extraction_and_analysis_enabled",
+            return_value=True,
+        ),
+        patch(f"{_PATCH_PREFIX}.get_default_llm_with_vision", return_value=None),
+        patch(
+            f"{_PATCH_PREFIX}._system_llm_enrichment_is_allowed"
+        ) as enrichment_allowed,
+        patch(
+            f"{_PATCH_PREFIX}.index_doc_batch_with_handler",
+            return_value=expected_result,
+        ) as index_doc_batch_with_handler,
+        patch(f"{_PATCH_PREFIX}.ensure_trace") as ensure,
+    ):
+        result = run_indexing_pipeline(
+            document_batch=[document],
+            request_id=None,
+            embedder=MagicMock(),
+            document_indices=[],
+            db_session=MagicMock(),
+            tenant_id="tenant",
+            adapter=MagicMock(),
+            chunker=MagicMock(),
+        )
+
+    assert result is expected_result
+    enrichment_allowed.assert_not_called()
+    ensure.assert_not_called()
+    assert (
+        index_doc_batch_with_handler.call_args.kwargs["image_summarization_llm"] is None
+    )
+    assert index_doc_batch_with_handler.call_args.kwargs["llm_enrichment_allowed"]
+
+
+def test_spend_limit_blocks_only_documents_with_images() -> None:
+    image_doc = _make_image_doc(
+        "image-doc",
+        [TextSection(text="text", link="image-link"), ImageSection(image_file_id="1")],
+    )
+    text_doc = _make_image_doc("text-doc", [TextSection(text="text", link="text-link")])
+
+    result = _partition_documents_blocked_by_llm_spend_limit(
+        [image_doc, text_doc],
+        enable_contextual_rag=False,
+        enable_image_summarization=True,
+        llm_enrichment_allowed=False,
+    )
+
+    assert result.documents == [text_doc]
+    assert len(result.failures) == 1
+    failure = result.failures[0]
+    assert failure.failed_document is not None
+    assert failure.failed_document.document_id == "image-doc"
+    assert failure.failed_document.document_link == "image-link"
+    assert "image summarization" in failure.failure_message
+
+
+def test_spend_limit_blocks_all_contextual_rag_documents() -> None:
+    image_doc = _make_image_doc("image-doc", [ImageSection(image_file_id="1")])
+    text_doc = _make_image_doc("text-doc", [TextSection(text="text", link=None)])
+
+    result = _partition_documents_blocked_by_llm_spend_limit(
+        [image_doc, text_doc],
+        enable_contextual_rag=True,
+        enable_image_summarization=True,
+        llm_enrichment_allowed=False,
+    )
+
+    assert result.documents == []
+    assert {
+        failure.failed_document.document_id
+        for failure in result.failures
+        if failure.failed_document is not None
+    } == {"image-doc", "text-doc"}
+    assert (
+        "contextual RAG and image summarization" in result.failures[0].failure_message
+    )
+    assert "contextual RAG" in result.failures[1].failure_message
+
+
+def test_spend_limit_partition_preserves_documents_when_allowed() -> None:
+    document = _make_image_doc("doc", [ImageSection(image_file_id="1")])
+
+    result = _partition_documents_blocked_by_llm_spend_limit(
+        [document],
+        enable_contextual_rag=True,
+        enable_image_summarization=True,
+        llm_enrichment_allowed=True,
+    )
+
+    assert result.documents == [document]
+    assert result.failures == []
+
+
+def test_index_batch_returns_spend_limit_failures_before_contextual_rag() -> None:
+    document = _make_image_doc("doc", [TextSection(text="text", link="link")])
+    adapter = MagicMock()
+    adapter.connector_id = 1
+    adapter.credential_id = 2
+    adapter.index_attempt_metadata = None
+    adapter.prepare.return_value = DocumentBatchPrepareContext(
+        updatable_docs=[document],
+        id_to_boost_map={},
+    )
+    chunker = MagicMock()
+
+    with (
+        patch(
+            f"{_PATCH_PREFIX}._apply_document_ingestion_hook",
+            side_effect=lambda documents: documents,
+        ),
+    ):
+        result = index_doc_batch(
+            document_batch=[document],
+            chunker=chunker,
+            embedder=MagicMock(),
+            document_indices=[],
+            request_id=None,
+            tenant_id="tenant",
+            adapter=adapter,
+            enable_contextual_rag=True,
+            llm_enrichment_allowed=False,
+        )
+
+    assert result.total_docs == 1
+    assert len(result.failures) == 1
+    assert result.failures[0].failed_document is not None
+    assert result.failures[0].failed_document.document_id == "doc"
+    chunker.chunk.assert_not_called()
 
 
 def _make_tabular_doc(doc_id: str, section: TabularSection) -> Document:

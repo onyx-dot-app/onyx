@@ -19,7 +19,7 @@ export default function MarkdownFilePreview({ content }: FileRendererProps) {
           content={content}
           className="max-w-3xl mx-auto"
           components={{
-            a: ({ href, children }: any) => (
+            a: ({ href, children }) => (
               <a
                 href={href}
                 target="_blank"

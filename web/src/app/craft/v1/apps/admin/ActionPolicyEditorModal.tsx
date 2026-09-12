@@ -8,7 +8,7 @@ import {
   Button,
   InputTypeIn,
   Modal,
-  PasswordInputTypeIn,
+  InputPasswordTypeIn,
   Text,
 } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
@@ -195,7 +195,7 @@ export default function ActionPolicyEditorModal({
 
                 {fields.map((field) => {
                   const Input = field.secret
-                    ? PasswordInputTypeIn
+                    ? InputPasswordTypeIn
                     : InputTypeIn;
                   return (
                     <div key={field.key} className="flex flex-col gap-1">

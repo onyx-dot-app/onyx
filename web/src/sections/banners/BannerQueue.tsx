@@ -8,7 +8,7 @@
 // there is no content area.
 
 import { usePathname, useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Button, Text } from "@opal/components";
 import { cn, markdown } from "@opal/utils";
 import { timeAgo } from "@opal/time";
@@ -68,6 +68,7 @@ const CONNECTORS_LINK = "/admin/indexing/status";
 
 export default function BannerQueue() {
   const t = useTranslations("chat.banners");
+  const locale = useLocale();
   const pathname = usePathname();
   const router = useRouter();
   const { inlineStart: contentInlineStart } = useContainerCenter();
@@ -129,7 +130,7 @@ export default function BannerQueue() {
       link: notification.additional_data?.link ?? null,
       ctaLabel: config?.ctaLabel ?? defaultCtaLabel,
     };
-  const relativeTime = timeAgo(notification.last_shown);
+  const relativeTime = timeAgo(notification.last_shown, locale);
   const sourceLabel = config?.sourceLabel ?? t("defaultSource.label");
   // Disclose collapsed same-type siblings so dismissing the visible one
   // never surfaces the rest as a surprise.
