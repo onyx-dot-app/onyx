@@ -255,6 +255,9 @@ def handle_message(
         return False
 
     # Reuses the resolved allowlist as the ephemeral response-visibility scope.
+    # Whether the answer is actually delivered ephemerally is the caller's call
+    # via `send_as_ephemeral` -- an allowlist alone no longer forces it, so a
+    # bot DM and a non-ephemeral channel still get a normal post.
     send_to: list[str] | None = allowed_user_ids
 
     # If configured to respond to team members only, then cannot be used with a /OnyxBot command
