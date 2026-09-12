@@ -118,6 +118,22 @@ def test_build_folder_url_with_spaces() -> None:
     assert result == expected
 
 
+def test_build_folder_url_with_localized_drive_web_url() -> None:
+    """Test building folder URL when drive has localized display name vs server-relative web URL."""
+    connector = SharepointConnector()
+
+    site_url = "https://company.sharepoint.com/sites/marketing"
+    drive_name = "Dokumente"  # Localized display name in Graph API
+    drive_web_url = "https://company.sharepoint.com/sites/marketing/Freigegebene%20Dokumente"
+    folder_path = "Berichte/2026"
+
+    result = connector._build_folder_url(
+        site_url, drive_name, folder_path, drive_web_url=drive_web_url
+    )
+    expected = "https://company.sharepoint.com/sites/marketing/Freigegebene%20Dokumente/Berichte/2026"
+    assert result == expected
+
+
 @patch(
     "onyx.connectors.sharepoint.connector.get_sharepoint_hierarchy_node_external_access"
 )
