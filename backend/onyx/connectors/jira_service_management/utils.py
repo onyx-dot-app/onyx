@@ -257,7 +257,10 @@ def get_jsm_comment_strs(
             if not body_text or not body_text.strip():
                 continue
 
-            raw_comment = getattr(comment, "raw", None)
+            # Accessed directly (repo convention: no getattr). Comment
+            # resources always expose ``raw``; any malformed comment is
+            # handled by the except clause below.
+            raw_comment = comment.raw
             is_internal = (
                 isinstance(raw_comment, dict) and raw_comment.get("jsdPublic") is False
             )
