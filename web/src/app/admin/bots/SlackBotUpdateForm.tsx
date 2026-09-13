@@ -15,7 +15,7 @@ import { Button } from "@opal/components";
 import { cn } from "@opal/utils";
 import { SvgChevronDownSmall, SvgTrash } from "@opal/icons";
 
-function Checkbox({
+function InputCheckbox({
   label,
   checked,
   onChange,
@@ -30,7 +30,7 @@ function Checkbox({
         checked={checked}
         onChange={onChange}
         type="checkbox"
-        className="mr-2 w-3.5 h-3.5 my-auto"
+        className="me-2 w-3.5 h-3.5 my-auto"
       />
       <span className="block font-medium text-text-700 text-sm">{label}</span>
     </label>
@@ -125,7 +125,7 @@ export const ExistingSlackBotForm = ({
           </div>
 
           {isExpanded && (
-            <div className="bg-background border rounded-lg border-background-200 shadow-lg absolute mt-12 right-0 z-10 w-full md:w-3/4 lg:w-1/2">
+            <div className="bg-background border rounded-lg border-background-200 shadow-lg absolute mt-12 end-0 z-10 w-full md:w-3/4 lg:w-1/2">
               <div className="p-4">
                 <SlackTokensForm
                   isUpdate={true}
@@ -142,7 +142,7 @@ export const ExistingSlackBotForm = ({
       </div>
       <div className="mt-2">
         <div className="inline-block border rounded-lg border-background-200 p-2">
-          <Checkbox
+          <InputCheckbox
             label={t("updateForm.enabledCheckbox.label")}
             checked={formValues.enabled}
             onChange={(e) => handleUpdateField("enabled", e.target.checked)}

@@ -1,5 +1,6 @@
 "use client";
 
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR, { mutate } from "swr";
@@ -8,10 +9,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
-import InputNumber from "@/refresh-components/inputs/InputNumber";
-import InputChipField, {
-  type ChipItem,
-} from "@/refresh-components/inputs/InputChipField";
+import { InputNumber } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import {
   Content,
@@ -21,7 +19,14 @@ import {
   SettingsLayouts,
   toast,
 } from "@opal/layouts";
-import { Card, InputTypeIn, Switch, Text } from "@opal/components";
+import {
+  Card,
+  InputMultiSelect,
+  InputTypeIn,
+  InputSwitch,
+  Text,
+  type TagItem,
+} from "@opal/components";
 import { markdown } from "@opal/utils";
 import { useSettings } from "@/lib/settings/hooks";
 import { Settings, toSettings } from "@/lib/settings/types";
@@ -64,7 +69,7 @@ function ToggleRow({
 }: ToggleRowProps) {
   return (
     <InputHorizontal title={title} description={description} withLabel>
-      <Switch
+      <InputSwitch
         checked={checked}
         onCheckedChange={onCheckedChange}
         disabled={disabled}
@@ -150,6 +155,7 @@ function JwtTextRow({
 
 export default function SecurityHardeningPage() {
   const t = useTranslations("admin.security");
+  const adminRouteTitle = useAdminRouteTitle();
   const isMultiTenant = NEXT_PUBLIC_CLOUD_ENABLED;
   const { authTypeMetadata, isLoading: authTypeLoading } =
     useAuthTypeMetadata();
@@ -308,13 +314,17 @@ export default function SecurityHardeningPage() {
   if (settingsLoading || !draft) {
     return (
       <SettingsLayouts.Root>
-        <SettingsLayouts.Header icon={route.icon} title={route.title} divider />
+        <SettingsLayouts.Header
+          icon={route.icon}
+          title={adminRouteTitle(route)}
+          divider
+        />
         <SettingsLayouts.Body />
       </SettingsLayouts.Root>
     );
   }
 
-  const validDomains: ChipItem[] = draft.valid_email_domains.map((domain) => ({
+  const validDomains: TagItem[] = draft.valid_email_domains.map((domain) => ({
     id: domain,
     label: domain,
   }));
@@ -346,7 +356,7 @@ export default function SecurityHardeningPage() {
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={route.icon}
-        title={route.title}
+        title={adminRouteTitle(route)}
         description={t("page.description")}
         divider
       />
@@ -368,6 +378,17 @@ export default function SecurityHardeningPage() {
                 checked={draft.track_external_idp_expiry}
                 onCheckedChange={(checked) =>
                   void saveSettings({ track_external_idp_expiry: checked })
+                }
+              />
+
+              <ToggleRow
+                title={t("authentication.subjectRelink.title")}
+                description={t("authentication.subjectRelink.description")}
+                checked={draft.allow_same_provider_subject_relink}
+                onCheckedChange={(checked) =>
+                  void saveSettings({
+                    allow_same_provider_subject_relink: checked,
+                  })
                 }
               />
 
@@ -409,9 +430,9 @@ export default function SecurityHardeningPage() {
                       )}
                       withLabel
                     >
-                      <InputChipField
-                        chips={validDomains}
-                        onRemoveChip={removeDomain}
+                      <InputMultiSelect
+                        tags={validDomains}
+                        onRemoveTag={removeDomain}
                         onAdd={addDomain}
                         value={domainInput}
                         onChange={setDomainInput}

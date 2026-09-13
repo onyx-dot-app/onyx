@@ -26,7 +26,7 @@ const ActionCardSkeleton: React.FC<ActionCardSkeletonProps> = ({
         {/* Header Section */}
         <div className="flex items-start justify-between gap-2 p-3 w-full">
           {/* Left: Icon + Title / Description */}
-          <div className="flex gap-2 items-start flex-1 min-w-0 mr-2">
+          <div className="flex gap-2 items-start flex-1 min-w-0 me-2">
             {/* Icon */}
             <div className="flex items-center px-0 py-0.5 shrink-0">
               <div className="h-7 w-7 rounded-12 bg-background-tint-02 animate-pulse" />

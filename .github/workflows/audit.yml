@@ -19,6 +19,7 @@ on:
       - ".github/workflows/**"
       - ".github/actions/**"
       - "tools/ods/**"
+      - "tools/ods-audit/**"
   schedule:
     # Nightly at 09:00 UTC.
     - cron: "0 9 * * *"
@@ -47,6 +48,9 @@ jobs:
           version: "0.11.25"
           enable-cache: false
 
+      - name: Install ods from uv.lock
+        run: uv sync --frozen --no-install-project --only-group ods
+
       - name: Configure AWS credentials
         id: aws
         continue-on-error: true # the audit still runs (with no suppressions) if creds are unavailable
@@ -60,7 +64,7 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: uv run --no-sync --with onyx-devtools ods audit --fail-on=critical
+        run: uv run --no-sync ods audit --fail-on=critical
 
       - name: Run audit (SARIF report)
         if: github.event_name != 'pull_request'
@@ -69,7 +73,7 @@ jobs:
         # Don't fail the report job on findings; the SARIF upload surfaces them.
         # SARIF goes to stdout (the uploaded file); the text report goes to stderr
         # so the run's findings are also readable in the log.
-        run: uv run --no-sync --with onyx-devtools ods audit --format=sarif,text > audit.sarif || true
+        run: uv run --no-sync ods audit --format=sarif,text > audit.sarif || true
 
       - name: Upload SARIF file
         if: github.event_name != 'pull_request'

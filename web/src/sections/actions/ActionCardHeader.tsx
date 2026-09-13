@@ -53,7 +53,7 @@ function ActionCardHeader({
   };
 
   return (
-    <div className="flex gap-2 items-start flex-1 min-w-0 mr-2">
+    <div className="flex gap-2 items-start flex-1 min-w-0 me-2">
       <div
         className={cn(
           "flex items-center px-0 py-0.5 shrink-0",

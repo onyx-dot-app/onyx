@@ -1,7 +1,8 @@
 "use client";
 
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useTranslations } from "next-intl";
-import { DateRangePicker } from "@/refresh-components/DateRangePicker";
+import { InputDateRangePicker } from "@opal/components";
 import { useTimeRange } from "@/lib/usage/hooks";
 import {
   FeedbackChart,
@@ -18,17 +19,18 @@ const route = ADMIN_ROUTES.WORKSPACE_ANALYTICS;
 
 export default function WorkspaceAnalyticsPage() {
   const t = useTranslations("admin.analytics");
+  const adminRouteTitle = useAdminRouteTitle();
   const [timeRange, setTimeRange] = useTimeRange();
 
   return (
     <SettingsLayouts.Root width="lg">
       <SettingsLayouts.Header
         icon={route.icon}
-        title={route.title}
+        title={adminRouteTitle(route)}
         description={t("page.description")}
         divider
         rightChildren={
-          <DateRangePicker
+          <InputDateRangePicker
             value={timeRange}
             onValueChange={(range) =>
               setTimeRange((previous) =>

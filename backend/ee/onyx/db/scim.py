@@ -263,13 +263,18 @@ class ScimDAL(DAL):
         email: str | None = None,
         is_active: bool | None = None,
         personal_name: str | None = None,
-        account_type: AccountType | None = None,
+        promote_to_standard: bool = False,
     ) -> None:
         """Update user attributes. Only sets fields that are provided.
 
         A rename runs the same reconciliation a login-driven one does, so the
         replaced address keeps reaching documents whose indexed ACLs still name
         it and every other row keyed by the address moves with it.
+
+        Promotion turns a shadow EXT_PERM_USER into a STANDARD account and sets
+        ``is_verified``: the IdP vouches for the address, and SSO login never
+        touches the flag on a row that is already web-login, so the row would
+        otherwise sit behind REQUIRE_EMAIL_VERIFICATION.
         """
         if email is not None:
             reconcile_user_email__no_commit(user.id, email, self._session)
@@ -277,8 +282,9 @@ class ScimDAL(DAL):
             user.is_active = is_active
         if personal_name is not None:
             user.personal_name = personal_name
-        if account_type is not None:
-            user.account_type = account_type
+        if promote_to_standard:
+            user.account_type = AccountType.STANDARD
+            user.is_verified = True
 
     def deactivate_user(self, user: User) -> None:
         """Mark a user as inactive."""

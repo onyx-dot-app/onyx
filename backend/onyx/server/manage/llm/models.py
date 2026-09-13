@@ -151,6 +151,11 @@ class LLMProviderUpsertRequest(LLMProvider):
     id: int | None = None
     api_key_changed: bool = False
     custom_config_changed: bool = False
+    # The write replaces model_configurations, and the read hides obsolete and
+    # dated-duplicate models, so a read-modify-write drops the hidden rows. With
+    # this set, models absent from the request are left alone and the request
+    # only adds or updates.
+    keep_existing_models: bool = False
     model_configurations: list["ModelConfigurationUpsertRequest"] = []
 
     @field_validator("provider", mode="before")
@@ -636,6 +641,7 @@ class LLMProviderResponse(BaseModel, Generic[T]):
     default_text: DefaultModel | None = None
     default_vision: DefaultModel | None = None
     default_chat_naming: DefaultModel | None = None
+    default_craft: DefaultModel | None = None
 
     @classmethod
     def from_models(
@@ -644,12 +650,14 @@ class LLMProviderResponse(BaseModel, Generic[T]):
         default_text: DefaultModel | None = None,
         default_vision: DefaultModel | None = None,
         default_chat_naming: DefaultModel | None = None,
+        default_craft: DefaultModel | None = None,
     ) -> LLMProviderResponse[T]:
         return cls(
             providers=providers,
             default_text=default_text,
             default_vision=default_vision,
             default_chat_naming=default_chat_naming,
+            default_craft=default_craft,
         )
 
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import type { ErrorResponseBody } from "@/lib/fetcher";
 
 // Proxies browser callback to backend OAuth callback endpoint and then
 // redirects back to the chat UI.
@@ -40,7 +41,7 @@ export async function GET(req: NextRequest) {
     );
 
     if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}) as any);
+      const err: ErrorResponseBody = await resp.json().catch(() => ({}));
       return NextResponse.json(
         { error: err.detail || "OAuth callback failed" },
         { status: 400 }

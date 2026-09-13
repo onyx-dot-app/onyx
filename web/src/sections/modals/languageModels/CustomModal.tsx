@@ -27,10 +27,11 @@ import {
 import { ModelSettingsPopover } from "@/sections/modals/languageModels/ModelSettingsPopover";
 import { useCustomProviderNames } from "@/lib/languageModels/hooks";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import KeyValueInput, {
-  KeyValue,
-} from "@/refresh-components/inputs/InputKeyValue";
-import InputComboBox from "@/refresh-components/inputs/InputComboBox";
+import {
+  InputKeyValue as KeyValueInput,
+  type KeyValue,
+} from "@opal/components";
+import { InputComboBox } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Text from "@/refresh-components/texts/Text";
@@ -214,7 +215,7 @@ function CustomConfigKeyValue() {
   return (
     <KeyValueInput
       items={formikProps.values.custom_config_list}
-      keyPlaceholder="e.g. OPENAI_ORGANIZATION"
+      keyPlaceholder={t("custom.envVars.keyInput.placeholder")}
       onChange={(items) =>
         formikProps.setFieldValue("custom_config_list", items)
       }

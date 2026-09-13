@@ -9,19 +9,23 @@ Tests cover:
 """
 
 from collections.abc import Iterator
+from functools import partial
 from types import SimpleNamespace, TracebackType
-from typing import cast
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import uuid4
 
 import pytest
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi_users import exceptions
 
 from onyx.auth.schemas import UserCreate
-from onyx.auth.users import UserManager
+from onyx.auth.users import UserManager, _upgrade_placeholder_to_web_login__no_commit
 from onyx.db.enums import AccountType
+from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.security.store import _build_env_defaults
 from onyx.server.utils import BasicAuthenticationError
 
 # Note: Only async test methods are marked with @pytest.mark.asyncio individually
@@ -652,7 +656,9 @@ class TestOAuthNoAutoLinkExemptions:
     """With auto-link off, a web-login row refuses a same-email login once it is
     spoken for: a linked IdP (a second provider must not attach), a rename (a moved
     address stops proving whose row it is), or deactivation. A row with none of
-    those is claimed. Placeholders skip the checks and are promoted instead."""
+    those is claimed. Placeholders skip the checks and are promoted instead. A
+    stale link under the same provider is rewritten, but only inside the
+    admin-opened relink window for an IdP client change."""
 
     @staticmethod
     def _unclaimed(**attrs: object) -> MagicMock:
@@ -689,6 +695,7 @@ class TestOAuthNoAutoLinkExemptions:
         mock_user_db.get_by_email = AsyncMock(return_value=existing_user)
         mock_user_db.get = AsyncMock(return_value=existing_user)
         mock_user_db.add_oauth_account = AsyncMock(return_value=existing_user)
+        mock_user_db.update_oauth_account = AsyncMock(return_value=existing_user)
         mock_user_db.update = AsyncMock(return_value=existing_user)
         mock_user_db.session = MagicMock()
         user_manager.user_db = mock_user_db
@@ -706,14 +713,15 @@ class TestOAuthNoAutoLinkExemptions:
     @patch("onyx.auth.users.fetch_ee_implementation_or_noop")
     @patch("onyx.auth.users.get_async_session_context_manager")
     @patch("onyx.auth.users.remove_user_from_invited_users")
-    @patch("onyx.auth.users.assign_user_to_default_groups__no_commit")
+    # Patched where promote_placeholder_to_web_login__no_commit resolves it.
+    @patch("onyx.db.users.assign_user_to_default_groups__no_commit")
     @patch("onyx.auth.users._upgrade_will_add_seat", return_value=False)
-    @patch("onyx.auth.users.get_session_with_current_tenant")
+    @patch("onyx.auth.users.fetch_user_by_id")
     @patch("onyx.auth.users.SQLAlchemyUserDatabase")
     async def test_placeholder_promoted_without_auto_link(
         self,
         mock_user_db_cls: MagicMock,
-        mock_sync_session_factory: MagicMock,
+        mock_fetch_user_by_id: MagicMock,
         mock_will_add_seat: MagicMock,  # noqa: ARG002
         mock_assign_groups: MagicMock,
         mock_remove_invited: MagicMock,  # noqa: ARG002
@@ -741,15 +749,27 @@ class TestOAuthNoAutoLinkExemptions:
         user_manager = self._manager_with_existing(placeholder, mock_user_db_cls)
         mock_async_session.get = AsyncMock(return_value=placeholder)
 
-        sync_user = MagicMock(is_active=is_active)
+        # Still a placeholder under the lock: no concurrent login won the race.
+        sync_user = MagicMock(
+            is_active=is_active, account_type=AccountType.EXT_PERM_USER
+        )
         mock_sync_db = MagicMock()
-        mock_sync_db.query.return_value.filter.return_value.first.return_value = (
-            sync_user
-        )
-        mock_sync_session_factory.return_value.__enter__ = MagicMock(
-            return_value=mock_sync_db
-        )
-        mock_sync_session_factory.return_value.__exit__ = MagicMock(return_value=False)
+        # The row is re-locked through the db layer, so stub that lookup rather
+        # than the query chain behind it.
+        mock_fetch_user_by_id.return_value = sync_user
+
+        # The upgrade runs on the callback's own session, so drive the real
+        # helper through run_sync rather than a second session. Email
+        # reconciliation arrives here too and stays stubbed out.
+        def _upgrade_only(fn: Any) -> Any:
+            if (
+                isinstance(fn, partial)
+                and fn.func is _upgrade_placeholder_to_web_login__no_commit
+            ):
+                return fn(mock_sync_db)
+            return None
+
+        mock_async_session.run_sync = AsyncMock(side_effect=_upgrade_only)
 
         result = await user_manager.oauth_callback(
             oauth_name="okta",
@@ -769,7 +789,13 @@ class TestOAuthNoAutoLinkExemptions:
         # short-circuit a placeholder before it reaches the upgrade.
         assert sync_user.is_active is True
         mock_assign_groups.assert_called_once()
-        mock_sync_db.commit.assert_called_once()
+        # An email change commits the reconcile and drops its lock, so the
+        # upgrade has to take the row itself rather than assume it holds it.
+        mock_fetch_user_by_id.assert_called_once_with(
+            mock_sync_db, "placeholder-id", for_update=True
+        )
+        # Committed on the session holding the row lock, not a second one.
+        cast(AsyncMock, mock_async_session.commit).assert_awaited()
         assert result is placeholder
 
     @pytest.mark.asyncio
@@ -813,13 +839,34 @@ class TestOAuthNoAutoLinkExemptions:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        "overrides",
+        ("overrides", "relink_enabled"),
         [
-            # A second provider must not attach to a row an IdP already owns.
-            pytest.param({"oauth_accounts": [MagicMock()]}, id="already-linked"),
+            # A second provider must not attach to a row an IdP already owns,
+            # relink window or not.
+            pytest.param(
+                {"oauth_accounts": [MagicMock(oauth_name="okta")]},
+                True,
+                id="linked-to-other-provider",
+            ),
             # A rename moved this row onto the address, so the address no longer
             # proves whose row it is.
-            pytest.param({"prior_emails": ["old@corp.com"]}, id="renamed"),
+            pytest.param({"prior_emails": ["old@corp.com"]}, False, id="renamed"),
+            # The relink window does not reach past a rename.
+            pytest.param(
+                {
+                    "prior_emails": ["old@corp.com"],
+                    "oauth_accounts": [MagicMock(oauth_name="entra")],
+                },
+                True,
+                id="renamed-and-linked-to-same-provider",
+            ),
+            # The relink window is closed by default, so a same-provider link
+            # with a new subject is still spoken for.
+            pytest.param(
+                {"oauth_accounts": [MagicMock(oauth_name="entra")]},
+                False,
+                id="same-provider-relink-off",
+            ),
         ],
     )
     @patch("onyx.auth.users.MULTI_TENANT", False)
@@ -829,8 +876,10 @@ class TestOAuthNoAutoLinkExemptions:
     @patch("onyx.auth.users.get_async_session_context_manager")
     @patch("onyx.auth.users.remove_user_from_invited_users")
     @patch("onyx.auth.users.SQLAlchemyUserDatabase")
+    @patch("onyx.auth.users.get_security_settings")
     async def test_spoken_for_row_is_rejected(
         self,
+        mock_security_settings: MagicMock,
         mock_user_db_cls: MagicMock,
         mock_remove_invited: MagicMock,  # noqa: ARG002
         mock_session_manager: MagicMock,
@@ -838,12 +887,16 @@ class TestOAuthNoAutoLinkExemptions:
         mock_verify_domain: MagicMock,  # noqa: ARG002
         mock_verify_whitelist: MagicMock,  # noqa: ARG002
         overrides: dict[str, object],
+        relink_enabled: bool,
         mock_async_session: MagicMock,
     ) -> None:
         mock_session_manager.return_value = _AsyncSessionContextManager(
             mock_async_session
         )
         mock_fetch_ee.return_value = AsyncMock(return_value="test_tenant")
+        mock_security_settings.return_value = _build_env_defaults().model_copy(
+            update={"allow_same_provider_subject_relink": relink_enabled}
+        )
 
         user_manager = self._manager_with_existing(
             self._unclaimed(**overrides), mock_user_db_cls
@@ -899,6 +952,79 @@ class TestOAuthNoAutoLinkExemptions:
         cast(AsyncMock, user_manager.user_db.add_oauth_account).assert_not_awaited()
         assert result is deactivated
         assert result.is_active is False
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "other_links",
+        [
+            pytest.param([], id="only-this-provider"),
+            # A link under another provider does not turn a rotation into a
+            # second IdP: this provider already holds a link on the row.
+            pytest.param([MagicMock(oauth_name="okta")], id="also-other-provider"),
+        ],
+    )
+    # The rewrite is not gated on auto-link, so the legacy auto-link callers
+    # get one live link per provider too.
+    @pytest.mark.parametrize(
+        "associate_by_email", [False, True], ids=["no-auto-link", "auto-link"]
+    )
+    @patch("onyx.auth.users.MULTI_TENANT", False)
+    @patch("onyx.auth.users.verify_email_in_whitelist")
+    @patch("onyx.auth.users.verify_email_domain")
+    @patch("onyx.auth.users.fetch_ee_implementation_or_noop")
+    @patch("onyx.auth.users.get_async_session_context_manager")
+    @patch("onyx.auth.users.remove_user_from_invited_users")
+    @patch("onyx.auth.users.SQLAlchemyUserDatabase")
+    @patch("onyx.auth.users.get_security_settings")
+    async def test_same_provider_new_subject_rewrites_stale_link(
+        self,
+        mock_security_settings: MagicMock,
+        mock_user_db_cls: MagicMock,
+        mock_remove_invited: MagicMock,  # noqa: ARG002
+        mock_session_manager: MagicMock,
+        mock_fetch_ee: MagicMock,
+        mock_verify_domain: MagicMock,  # noqa: ARG002
+        mock_verify_whitelist: MagicMock,  # noqa: ARG002
+        other_links: list[MagicMock],
+        associate_by_email: bool,
+        mock_async_session: MagicMock,
+    ) -> None:
+        """The IdP behind one provider re-issued its subjects (a new Entra app
+        registration). That provider already links the row, so the login is a
+        rotation and the stale link is rewritten rather than duplicated."""
+        mock_session_manager.return_value = _AsyncSessionContextManager(
+            mock_async_session
+        )
+        mock_fetch_ee.return_value = AsyncMock(return_value="test_tenant")
+        mock_security_settings.return_value = _build_env_defaults().model_copy(
+            update={"allow_same_provider_subject_relink": True}
+        )
+
+        stale_link: MagicMock = MagicMock(oauth_name="entra", account_id="old-sub")
+        linked: MagicMock = self._unclaimed(oauth_accounts=[*other_links, stale_link])
+        user_manager: UserManager = self._manager_with_existing(
+            linked, mock_user_db_cls
+        )
+
+        result: User = await user_manager.oauth_callback(
+            oauth_name="entra",
+            access_token="token",
+            account_id="new-sub",
+            account_email="provisioned@corp.com",
+            associate_by_email=associate_by_email,
+        )
+
+        update_link: AsyncMock = cast(
+            AsyncMock, user_manager.user_db.update_oauth_account
+        )
+        update_link.assert_awaited_once()
+        assert update_link.await_args is not None
+        rewritten_link: object = update_link.await_args.args[1]
+        update_dict: dict[str, object] = update_link.await_args.args[2]
+        assert rewritten_link is stale_link
+        assert update_dict["account_id"] == "new-sub"
+        cast(AsyncMock, user_manager.user_db.add_oauth_account).assert_not_awaited()
+        assert result is linked
 
 
 class TestPasswordAuthKillSwitch:
@@ -1075,3 +1201,76 @@ class TestPasswordAuthKillSwitch:
             "onyx.db.user_tenant_mapping",
             "get_tenant_id_for_email",
         )
+
+
+class TestPlaceholderUpgradeRace:
+    """The promote decision is made before the row lock, so it is re-checked."""
+
+    @patch("onyx.auth.users.promote_placeholder_to_web_login__no_commit")
+    @patch("onyx.auth.users.enforce_seat_limit_locked")
+    @patch("onyx.auth.users._upgrade_will_add_seat", return_value=True)
+    @patch("onyx.auth.users.fetch_user_by_id")
+    def test_already_promoted_row_is_left_alone(
+        self,
+        mock_fetch_user_by_id: MagicMock,
+        mock_will_add_seat: MagicMock,  # noqa: ARG002
+        mock_enforce_seat_limit: MagicMock,
+        mock_promote: MagicMock,
+    ) -> None:
+        """A concurrent login can promote the row and an admin can then disable
+        it. Re-promoting would reactivate a deliberately disabled account."""
+        db_session = MagicMock()
+        deactivated = MagicMock(
+            account_type=AccountType.STANDARD,
+            is_active=False,
+        )
+        mock_fetch_user_by_id.return_value = deactivated
+
+        seat_added = _upgrade_placeholder_to_web_login__no_commit(
+            uuid4(), True, db_session
+        )
+
+        assert seat_added is False
+        mock_promote.assert_not_called()
+        # The seat was consumed by whoever won the race.
+        mock_enforce_seat_limit.assert_not_called()
+        assert deactivated.is_active is False
+
+    @patch("onyx.auth.users.promote_placeholder_to_web_login__no_commit")
+    @patch("onyx.auth.users.enforce_seat_limit_locked")
+    @patch("onyx.auth.users._upgrade_will_add_seat", return_value=True)
+    @patch("onyx.auth.users.fetch_user_by_id")
+    def test_placeholder_still_promotes(
+        self,
+        mock_fetch_user_by_id: MagicMock,
+        mock_will_add_seat: MagicMock,  # noqa: ARG002
+        mock_enforce_seat_limit: MagicMock,
+        mock_promote: MagicMock,
+    ) -> None:
+        db_session = MagicMock()
+        placeholder = MagicMock(
+            account_type=AccountType.EXT_PERM_USER,
+            is_active=False,
+        )
+        mock_fetch_user_by_id.return_value = placeholder
+
+        seat_added = _upgrade_placeholder_to_web_login__no_commit(
+            uuid4(), True, db_session
+        )
+
+        assert seat_added is True
+        mock_enforce_seat_limit.assert_called_once()
+        mock_promote.assert_called_once_with(db_session, placeholder, is_verified=True)
+
+    @patch("onyx.auth.users.promote_placeholder_to_web_login__no_commit")
+    @patch("onyx.auth.users.fetch_user_by_id", return_value=None)
+    def test_missing_row_is_a_no_op(
+        self,
+        mock_fetch_user_by_id: MagicMock,  # noqa: ARG002
+        mock_promote: MagicMock,
+    ) -> None:
+        assert (
+            _upgrade_placeholder_to_web_login__no_commit(uuid4(), True, MagicMock())
+            is False
+        )
+        mock_promote.assert_not_called()

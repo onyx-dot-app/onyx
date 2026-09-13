@@ -34,7 +34,6 @@ export const SWR_KEYS = {
   // ── Agents ────────────────────────────────────────────────────────────────
   agents: "/api/persona",
   agent: (agentId: number) => `/api/persona/${agentId}`,
-  agentPreferences: "/api/user/assistant/preferences",
   defaultAssistantConfig: "/api/admin/default-assistant/configuration",
   agentLabels: "/api/persona/labels",
   adminAgentLabel: (labelId: number) => `/api/admin/persona/label/${labelId}`,
@@ -55,6 +54,7 @@ export const SWR_KEYS = {
   userUsage: "/api/user/usage",
   costOverrides: "/api/admin/cost-overrides",
   adminUsageExport: "/api/admin/usage/export",
+  adminSystemUsage: "/api/admin/usage/system",
   adminUsageReset: "/api/admin/usage/reset",
 
   // ── Image Generation ──────────────────────────────────────────────────────

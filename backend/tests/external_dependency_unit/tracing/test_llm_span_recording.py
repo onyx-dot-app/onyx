@@ -15,6 +15,7 @@ from onyx.llm.model_response import (
 from onyx.llm.model_response import FunctionCall as ModelResponseFunctionCall
 from onyx.llm.models import FunctionCall, ToolCall
 from onyx.tracing.framework.span_data import GenerationSpanData
+from onyx.tracing.framework.traces import TraceContentMode
 from onyx.tracing.llm_utils import record_llm_response, record_llm_span_output
 
 
@@ -22,6 +23,7 @@ from onyx.tracing.llm_utils import record_llm_response, record_llm_span_output
 def mock_span() -> MagicMock:
     """Create a mock span with GenerationSpanData."""
     span = MagicMock()
+    span.content_mode = TraceContentMode.FULL
     span.span_data = GenerationSpanData()
     return span
 

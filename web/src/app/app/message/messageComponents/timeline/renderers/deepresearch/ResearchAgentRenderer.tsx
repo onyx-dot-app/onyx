@@ -194,7 +194,7 @@ export const ResearchAgentRenderer: MessageRenderer<
           icon: null,
           status: null,
           content: (
-            <div className="flex flex-col pl-(--timeline-common-text-padding)">
+            <div className="flex flex-col ps-(--timeline-common-text-padding)">
               <Text as="p" text04 mainUiMuted className="mb-1">
                 {t("researchAgent.report.title")}
               </Text>
@@ -259,7 +259,7 @@ export const ResearchAgentRenderer: MessageRenderer<
           icon: null,
           status: null,
           content: (
-            <div className="flex flex-col pl-(--timeline-common-text-padding)">
+            <div className="flex flex-col ps-(--timeline-common-text-padding)">
               <Text as="p" text04 mainUiMuted>
                 {t("researchAgent.task.title")}
               </Text>
@@ -302,7 +302,7 @@ export const ResearchAgentRenderer: MessageRenderer<
           }
           isHover={isHover}
         >
-          <div className="pl-(--timeline-common-text-padding)">
+          <div className="ps-(--timeline-common-text-padding)">
             <Text as="p" text02 mainUiMuted>
               {researchTask}
             </Text>
@@ -353,7 +353,7 @@ export const ResearchAgentRenderer: MessageRenderer<
           isHover={isHover}
           noPaddingRight={true}
         >
-          <div className="pl-(--timeline-common-text-padding)">
+          <div className="ps-(--timeline-common-text-padding)">
             <ExpandableTextDisplay
               title={t("researchAgent.report.title")}
               content={fullReportContent}

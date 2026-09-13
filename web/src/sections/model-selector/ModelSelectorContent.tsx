@@ -237,7 +237,11 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
           onClick={onBack}
         />
         <div className="flex min-w-0 flex-1 flex-row items-baseline justify-between gap-2">
-          <Text font="main-ui-body" color="text-02" nowrap>
+          <Text
+            font="main-ui-body"
+            color="text-02"
+            wordWrap="whitespace-nowrap"
+          >
             {option.displayName}
           </Text>
           <div className="min-w-0 truncate">
@@ -331,11 +335,13 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
                   key={stop}
                   className={cn(
                     "absolute top-0",
+                    // rtl: the Radix slider mirrors, so labels position
+                    // from the inline start and negate their shift.
                     index === lastStop
-                      ? "-translate-x-full"
-                      : index > 0 && "-translate-x-1/2"
+                      ? "-translate-x-full rtl:translate-x-full"
+                      : index > 0 && "-translate-x-1/2 rtl:translate-x-1/2"
                   )}
-                  style={{ left: `${(index / lastStop) * 100}%` }}
+                  style={{ insetInlineStart: `${(index / lastStop) * 100}%` }}
                 >
                   <Disabled
                     disabled={reasoningEnabled && index > maxSupportedStop}
@@ -353,7 +359,7 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
                           ? "text-04"
                           : "text-02"
                       }
-                      nowrap
+                      wordWrap="whitespace-nowrap"
                     >
                       {reasoningStopLabels[stop]}
                     </Text>
@@ -407,6 +413,7 @@ export default function ModelSelectorContent({
   onDetailSelect,
 }: ModelSelectorContentProps) {
   const t = useTranslations("chat.modelSelector");
+  const { hide_provider_grouping: hideProviderGrouping } = useSettings();
   const [detailOption, setDetailOption] = useState<LLMOption | null>(null);
   const {
     llmProviders: currentAgentProviderOptions,
@@ -487,6 +494,9 @@ export default function ModelSelectorContent({
   };
 
   const isGroupOpen = (key: string) => isSearching || expandedGroups.has(key);
+
+  // A lone group needs no header, and an admin can drop them workspace-wide.
+  const showFlatList = hideProviderGrouping || groupedOptions.length === 1;
 
   const renderModelItem = (option: LLMOption) => {
     const selected = isSelected(option);
@@ -586,10 +596,12 @@ export default function ModelSelectorContent({
                     {t("list.empty.text")}
                   </Text>,
                 ]
-              : groupedOptions.length === 1
+              : showFlatList
                 ? [
-                    <Section key="single-provider" gap={1} alignItems="stretch">
-                      {groupedOptions[0]!.options.map(renderModelItem)}
+                    <Section key="flat" gap={1} alignItems="stretch">
+                      {groupedOptions
+                        .flatMap((group) => group.options)
+                        .map(renderModelItem)}
                     </Section>,
                   ]
                 : groupedOptions.flatMap((group, groupIndex) => {
@@ -608,7 +620,7 @@ export default function ModelSelectorContent({
                               rounding={2}
                               width="full"
                             >
-                              <div className="pl-2 pr-1 py-1 w-full rounded-08 bg-background-tint-01">
+                              <div className="ps-2 pe-1 py-1 w-full rounded-08 bg-background-tint-01">
                                 <ContentAction
                                   sizePreset="secondary"
                                   variant="body"

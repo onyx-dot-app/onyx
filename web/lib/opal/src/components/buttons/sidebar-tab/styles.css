@@ -60,7 +60,7 @@
 /* `rightChildren` — absolutely positioned above the `Link` overlay. Hidden
    outright when folded: there is no room for them beside the icon. */
 .opal-sidebar-tab__actions {
-  @apply absolute z-100 right-1.5 top-0 bottom-0 flex-col justify-center items-center pointer-events-auto;
+  @apply absolute z-100 end-1.5 top-0 bottom-0 flex-col justify-center items-center pointer-events-auto;
 
   display: var(--sidebar-tab-actions-display);
 }

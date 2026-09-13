@@ -95,6 +95,7 @@ export function useChatSessions() {
       // Matches web; the compound-cursor fix stays out of scope to keep the port backend-free.
       return lastPage.sessions[lastPage.sessions.length - 1]!.time_updated;
     },
+    refetchInterval: 60_000,
   });
 
   const sessions = useMemo(

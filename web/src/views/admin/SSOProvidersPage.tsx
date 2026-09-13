@@ -1,9 +1,10 @@
 "use client";
 
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
-import { Button, Card, MessageCard, Switch } from "@opal/components";
+import { Button, Card, MessageCard, InputSwitch } from "@opal/components";
 import { SvgCopy, SvgPlus, SvgSettings } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
 import {
@@ -36,12 +37,13 @@ interface ShellProps {
 
 function Shell({ children, onAddProvider, addGated }: ShellProps) {
   const t = useTranslations("admin.ssoProviders");
+  const adminRouteTitle = useAdminRouteTitle();
 
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={route.icon}
-        title={route.title}
+        title={adminRouteTitle(route)}
         description={t("page.description")}
         divider
         rightChildren={
@@ -176,10 +178,10 @@ export default function SSOProvidersPage() {
                           tooltip={t("copyRedirectUri.tooltip")}
                           disabled={isPending}
                           onClick={() => {
-                            void copyRedirectUri(provider.redirect_uri);
+                            void copyRedirectUri(provider.redirect_uri, t);
                           }}
                         />
-                        <Switch
+                        <InputSwitch
                           checked={provider.enabled}
                           disabled={isPending}
                           onCheckedChange={(enabled) => {

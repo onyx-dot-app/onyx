@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Checkbox } from "@opal/components";
+import { InputCheckbox } from "@opal/components";
 import {
   updateConnectorFiles,
   type ConnectorFileInfo,
@@ -246,7 +246,7 @@ export default function InlineFileManagement({
                     >
                       {isEditing && (
                         <TableCell>
-                          <Checkbox
+                          <InputCheckbox
                             checked={isMarkedForRemoval}
                             onCheckedChange={() =>
                               toggleFileForRemoval(file.file_id)
@@ -263,7 +263,7 @@ export default function InlineFileManagement({
                           {file.file_name}
                         </span>
                         {isMarkedForRemoval && (
-                          <span className="ml-2 text-xs font-semibold text-red-600 dark:text-red-400">
+                          <span className="ms-2 text-xs font-semibold text-red-600 dark:text-red-400">
                             {t("fileManagement.removingBadge.label")}
                           </span>
                         )}

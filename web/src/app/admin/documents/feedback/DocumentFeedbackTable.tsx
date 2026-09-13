@@ -16,7 +16,7 @@ import { numToDisplay } from "./constants";
 import { FiEye, FiEyeOff } from "react-icons/fi";
 import { getErrorMsg } from "@/lib/fetchUtils";
 import { HoverPopup } from "@/components/HoverPopup";
-import { Checkbox } from "@opal/components";
+import { InputCheckbox } from "@opal/components";
 import { ScoreSection } from "../ScoreEditor";
 import { truncateString } from "@/lib/utils";
 import { clickOnKeyDown } from "@opal/utils";
@@ -47,8 +47,8 @@ const IsVisibleSection = ({
             className="flex text-error cursor-pointer hover:bg-accent-background-hovered py-1 px-2 w-fit rounded-full"
           >
             <div className="select-none">{t("visibility.hidden.label")}</div>
-            <div className="ml-1 my-auto">
-              <Checkbox checked={false} />
+            <div className="ms-1 my-auto">
+              <InputCheckbox checked={false} />
             </div>
           </div>
         ) : (
@@ -63,8 +63,8 @@ const IsVisibleSection = ({
             <div className="my-auto select-none">
               {t("visibility.visible.label")}
             </div>
-            <div className="ml-1 my-auto">
-              <Checkbox checked={true} />
+            <div className="ms-1 my-auto">
+              <InputCheckbox checked={true} />
             </div>
           </div>
         )
@@ -73,11 +73,11 @@ const IsVisibleSection = ({
         <div className="text-xs">
           {document.hidden ? (
             <div className="flex">
-              <FiEye className="my-auto mr-1" /> {t("visibility.unhide.label")}
+              <FiEye className="my-auto me-1" /> {t("visibility.unhide.label")}
             </div>
           ) : (
             <div className="flex">
-              <FiEyeOff className="my-auto mr-1" />
+              <FiEyeOff className="my-auto me-1" />
               {t("visibility.hide.label")}
             </div>
           )}
@@ -144,7 +144,7 @@ export const DocumentFeedbackTable = ({
                     <div className="relative">
                       <div
                         key={document.document_id}
-                        className="h-10 ml-auto mr-8"
+                        className="h-10 ms-auto me-8"
                       >
                         <ScoreSection
                           documentId={document.document_id}

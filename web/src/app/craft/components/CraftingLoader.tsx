@@ -1,25 +1,28 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { useTranslations } from "next-intl";
 
-const messages = [
-  "Punching wood...",
-  "Gathering resources...",
-  "Placing blocks...",
-  "Crafting your workspace...",
-  "Mining for dependencies...",
-  "Smelting the code...",
-  "Enchanting with magic...",
-  "World generation complete...",
-  "/gamemode 1",
-];
-
-const MESSAGE_COUNT = messages.length;
 const TYPE_DELAY = 40;
 const LINE_PAUSE = 800;
 const RESET_DELAY = 2000;
 
 export default function CraftingLoader() {
+  const t = useTranslations("craft.craftingLoader");
+  const messages = useMemo(
+    () => [
+      t("messages.punchingWood"),
+      t("messages.gatheringResources"),
+      t("messages.placingBlocks"),
+      t("messages.craftingWorkspace"),
+      t("messages.miningDependencies"),
+      t("messages.smeltingCode"),
+      t("messages.enchanting"),
+      t("messages.worldGenerated"),
+      t("messages.gamemode"),
+    ],
+    [t]
+  );
   const [display, setDisplay] = useState({
     lines: [] as string[],
     currentText: "",
@@ -40,7 +43,7 @@ export default function CraftingLoader() {
       const lineIdx = lineIndexRef.current;
       const charIdx = charIndexRef.current;
 
-      if (lineIdx >= MESSAGE_COUNT) {
+      if (lineIdx >= messages.length) {
         timeoutRef.current = setTimeout(() => {
           if (!isActive) return;
           lineIndexRef.current = 0;
@@ -87,7 +90,7 @@ export default function CraftingLoader() {
       if (rafRef.current !== undefined) cancelAnimationFrame(rafRef.current);
       if (timeoutRef.current !== undefined) clearTimeout(timeoutRef.current);
     };
-  }, []);
+  }, [messages]);
 
   const { lines, currentText } = display;
   const hasCurrentText = currentText.length > 0;
@@ -99,7 +102,7 @@ export default function CraftingLoader() {
           <div className="w-3 h-3 rounded-none bg-red-500" />
           <div className="w-3 h-3 rounded-none bg-yellow-500" />
           <div className="w-3 h-3 rounded-none bg-green-500" />
-          <span className="ml-4 text-neutral-500 text-sm font-mono">
+          <span className="ms-4 text-neutral-500 text-sm font-mono">
             crafting_table
           </span>
         </div>
@@ -107,19 +110,19 @@ export default function CraftingLoader() {
         <div className="bg-neutral-900 p-6 min-h-[250px] font-mono text-sm">
           {lines.map((line, i) => (
             <div key={i} className="flex items-center text-neutral-300">
-              <span className="text-emerald-500 mr-2">/&gt;</span>
+              <span className="text-emerald-500 me-2">/&gt;</span>
               <span>{line}</span>
             </div>
           ))}
           {hasCurrentText ? (
             <div className="flex items-center text-neutral-300">
-              <span className="text-emerald-500 mr-2">/&gt;</span>
+              <span className="text-emerald-500 me-2">/&gt;</span>
               <span>{currentText}</span>
-              <span className="w-2 h-5 bg-emerald-500 animate-pulse ml-0.5" />
+              <span className="w-2 h-5 bg-emerald-500 animate-pulse ms-0.5" />
             </div>
           ) : (
             <div className="flex items-center text-neutral-300">
-              <span className="text-emerald-500 mr-2">/&gt;</span>
+              <span className="text-emerald-500 me-2">/&gt;</span>
               <span className="w-2 h-5 bg-emerald-500 animate-pulse" />
             </div>
           )}
@@ -127,7 +130,7 @@ export default function CraftingLoader() {
       </div>
 
       <p className="mt-6 text-neutral-500 text-sm font-mono">
-        Crafting your next great idea...
+        {t("tagline.label")}
       </p>
     </div>
   );

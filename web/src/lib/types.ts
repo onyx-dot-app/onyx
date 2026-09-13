@@ -6,15 +6,6 @@ import { Connector } from "./connectors/connectors";
 import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
 import type { PermissionsOf } from "@/lib/permissions/resource-actions";
 
-export interface UserSpecificAgentPreference {
-  disabled_tool_ids?: number[];
-}
-
-export type UserSpecificAgentPreferences = Record<
-  number,
-  UserSpecificAgentPreference
->;
-
 export enum ThemePreference {
   LIGHT = "light",
   DARK = "dark",
@@ -590,6 +581,7 @@ export interface SecuritySettings {
   incognito_availability: IncognitoAvailability;
   incognito_record_mode: IncognitoRecordMode;
   track_external_idp_expiry: boolean;
+  allow_same_provider_subject_relink: boolean;
   ssrf_protection_level: SSRFProtectionLevel;
   mask_credential_prefix: boolean;
   llm_custom_config_env_injection: boolean;

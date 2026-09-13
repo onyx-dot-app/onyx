@@ -24,7 +24,7 @@ import {
   SvgSimpleLoader,
 } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
-import { Switch, Divider } from "@opal/components";
+import { InputSwitch, Divider } from "@opal/components";
 import Card from "@/refresh-components/cards/Card";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -106,7 +106,7 @@ function GroupPermissionsSection({
                     variant="section"
                     padding={1}
                     rightChildren={
-                      <Switch
+                      <InputSwitch
                         checked={isRowEnabled(entry)}
                         onCheckedChange={(checked: boolean) =>
                           handleToggle(entry, checked)

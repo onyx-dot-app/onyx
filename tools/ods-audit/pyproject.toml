@@ -1,0 +1,46 @@
+[build-system]
+requires = ["hatchling==1.29.0", "go-bin~=1.26.4", "manygo==0.2.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "onyx-devtools-audit"
+description = "Vulnerability auditor for onyx-devtools"
+authors = [{ name = "Onyx AI", email = "founders@onyx.app" }]
+readme = "README.md"
+requires-python = ">=3.9"
+keywords = [
+  "onyx", "cli", "devtools", "audit", "vulnerability", "osv",
+]
+classifiers = [
+    "Programming Language :: Go",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+]
+dynamic = ["version"]
+dependencies = []
+
+
+[project.urls]
+Repository = "https://github.com/onyx-dot-app/onyx"
+
+[tool.hatch.build]
+include = ["README.md"]
+
+# The Go sources live in the onyx-devtools project next door. Both wheels are
+# built from a git checkout by .github/workflows/release-devtools.yml, so the
+# relative paths always resolve.
+[tool.hatch.version]
+source = "code"
+path = "../ods/internal/_version.py"
+
+[tool.hatch.build.targets.wheel.hooks.custom]
+path = "../ods/hatch_build.py"
+binary_name = "ods-audit"
+tag_prefix = "ods"
+go_dir = "../ods"
+go_package = "./odsaudit"
+
+[tool.uv]
+managed = false

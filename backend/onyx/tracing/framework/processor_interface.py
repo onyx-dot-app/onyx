@@ -68,7 +68,7 @@ class TracingProcessor(abc.ABC):
         """Called when a trace completes execution.
 
         Args:
-            trace: The completed trace containing all spans and results.
+            trace: The completed workflow correlation root.
 
         Notes:
             - Called synchronously when trace finishes

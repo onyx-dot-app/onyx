@@ -1,11 +1,8 @@
 import React, { memo, JSX, useMemo, useCallback } from "react";
+import type { ExtraProps } from "react-markdown";
 import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
-import {
-  LoadedOnyxDocument,
-  MinimalOnyxDocument,
-  OnyxDocument,
-} from "@/lib/search/interfaces";
+import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
 import { SubQuestionDetail, CitationMap } from "../interfaces";
 import { ValidSources } from "@/lib/types";
 import { ProjectFile } from "@/lib/projects/types";
@@ -22,7 +19,7 @@ import { ensureHrefProtocol } from "@/lib/utils";
 import { useTranslations } from "next-intl";
 
 interface DocumentCardProps {
-  document: LoadedOnyxDocument;
+  document: OnyxDocument;
   updatePresentingDocument: (document: MinimalOnyxDocument) => void;
   url?: string;
 }
@@ -100,7 +97,7 @@ export const MemoizedAnchor = memo(
           const associatedDocInfo = associatedDoc
             ? {
                 ...associatedDoc,
-                icon: icon as any,
+                icon: icon,
                 link: associatedDoc.link,
               }
             : undefined;
@@ -139,17 +136,18 @@ export const MemoizedLink = memo(
     href,
     openQuestion,
     ...rest
-  }: Partial<DocumentCardProps & QuestionCardProps> & {
-    node?: any;
-    [key: string]: any;
-  }) => {
+  }: Partial<DocumentCardProps & QuestionCardProps> &
+    ExtraProps & {
+      href?: string;
+      children?: React.ReactNode;
+    }) => {
     const t = useTranslations("chat.messages");
     const value = rest.children;
 
     // Convert document to SourceInfo for SourceTag
     const documentSourceInfo = useMemo(() => {
       if (!document) return null;
-      return documentToSourceInfo(document as OnyxDocument);
+      return documentToSourceInfo(document);
     }, [document]);
 
     // Convert question to SourceInfo for SourceTag
@@ -161,7 +159,7 @@ export const MemoizedLink = memo(
     // Handle click on SourceTag
     const handleSourceClick = useCallback(() => {
       if (document && updatePresentingDocument) {
-        openDocument(document as OnyxDocument, updatePresentingDocument);
+        openDocument(document, updatePresentingDocument);
       } else if (question && openQuestion) {
         openQuestion(question);
       }
@@ -176,7 +174,7 @@ export const MemoizedLink = memo(
       }
 
       const displayName = document
-        ? getDisplayNameForSource(document as OnyxDocument)
+        ? getDisplayNameForSource(document)
         : question?.question || t("memoizedLink.questionFallback.label");
 
       return (
@@ -186,7 +184,7 @@ export const MemoizedLink = memo(
           sources={[sourceInfo]}
           onSourceClick={handleSourceClick}
           showDetailsCard
-          className="mr-0.5"
+          className="me-0.5"
         />
       );
     }
@@ -231,15 +229,20 @@ export const MemoizedLink = memo(
 
 interface MemoizedParagraphProps {
   className?: string;
+  // Stamped per-paragraph by the rehypeDirection plugin so RTL and LTR
+  // paragraphs align independently. Unstamped paragraphs inherit their
+  // container's direction.
+  dir?: React.HTMLAttributes<HTMLElement>["dir"];
   children?: React.ReactNode;
 }
 
 export const MemoizedParagraph = memo(function MemoizedParagraph({
   className,
+  dir,
   children,
 }: MemoizedParagraphProps) {
   return (
-    <Text as="p" mainContentBody text04 className={className}>
+    <Text as="p" dir={dir} mainContentBody text04 className={className}>
       {children}
     </Text>
   );

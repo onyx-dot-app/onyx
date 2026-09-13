@@ -16,7 +16,8 @@ dependencies, lockfile, and tooling). Scaffolded with `create-expo-app` (Expo Ro
 > First-time machine setup (Xcode, Android Studio, JDK 17, NDK, simulator/emulator) is in
 > [`GETTING_STARTED.md`](./GETTING_STARTED.md). The list below is the short version.
 
-- Node LTS on PATH, **Bun**, Xcode + an iOS simulator, CocoaPods.
+- Node LTS on PATH, **Bun**, **Xcode 26.4+** (older versions fail to build — see
+  [`GETTING_STARTED.md`](./GETTING_STARTED.md#ios)) + an iOS simulator, CocoaPods.
 - Recommended: `brew install watchman` (faster, more reliable Metro file watching).
 - The project path must contain **no spaces** (RN/Xcode build scripts break otherwise).
 - Runs as a **development build** (not Expo Go) — `react-native-mmkv` v4 and FlashList are native

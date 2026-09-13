@@ -38,7 +38,7 @@ type UserGroup struct {
 	ManagerIDs       []string            `json:"manager_ids"`
 	CCPairs          []UserGroupNamedRef `json:"cc_pairs"`
 	DocumentSets     []UserGroupNamedRef `json:"document_sets"`
-	Personas         []UserGroupNamedRef `json:"personas"`
+	Agents           []UserGroupNamedRef `json:"personas"`
 	IsUpToDate       bool                `json:"is_up_to_date"`
 	IsUpForDeletion  bool                `json:"is_up_for_deletion"`
 	IsDefault        bool                `json:"is_default"`

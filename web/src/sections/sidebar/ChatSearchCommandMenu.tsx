@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import type { Route } from "next";
 import { useAppPosition } from "@/lib/position/hooks";
 import CommandMenu, {
@@ -69,6 +69,7 @@ export default function ChatSearchCommandMenu({
   trigger,
 }: ChatSearchCommandMenuProps) {
   const t = useTranslations("sidebar");
+  const locale = useLocale();
   const [open, setOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
   const [activeFilter, setActiveFilter] = useState<
@@ -277,7 +278,7 @@ export default function ChatSearchCommandMenu({
                             text03
                             data-testid="command-menu-timestamp"
                           >
-                            {timeAgo(chat.time)}
+                            {timeAgo(chat.time, locale)}
                           </Text>
                         )
                       }
@@ -338,7 +339,7 @@ export default function ChatSearchCommandMenu({
                           text03
                           data-testid="command-menu-timestamp"
                         >
-                          {timeAgo(project.time)}
+                          {timeAgo(project.time, locale)}
                         </Text>
                       )
                     }

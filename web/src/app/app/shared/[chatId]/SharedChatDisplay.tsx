@@ -22,7 +22,7 @@ import PreviewModal from "@/sections/modals/PreviewModal";
 import Text from "@/refresh-components/texts/Text";
 import useOnMount from "@/hooks/useOnMount";
 import SharedAppInputBar from "@/sections/input/SharedAppInputBar";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 
 export interface SharedChatDisplayProps {
   chatSession: BackendChatSession | null;
@@ -34,6 +34,7 @@ export default function SharedChatDisplay({
   persona,
 }: SharedChatDisplayProps) {
   const t = useTranslations("chat.sharedChat");
+  const locale = useLocale();
   const [presentingDocument, setPresentingDocument] =
     useState<MinimalOnyxDocument | null>(null);
 
@@ -107,7 +108,7 @@ export default function SharedChatDisplay({
             <div className="flex flex-col items-end">
               <Text as="p" text03 secondaryBody>
                 {t("header.sharedOn.text", {
-                  date: humanReadableFormat(chatSession.time_created),
+                  date: humanReadableFormat(chatSession.time_created, locale),
                 })}
               </Text>
               {chatSession.owner_name && (
@@ -210,7 +211,7 @@ export default function SharedChatDisplay({
                 return (
                   <div
                     key={message.messageId}
-                    className="py-5 ml-4 lg:px-5 w-[min(50rem,100%)]"
+                    className="py-5 ms-4 lg:px-5 w-[min(50rem,100%)]"
                   >
                     <div className="mx-auto w-[90%] max-w-message-max">
                       <p className="text-status-text-error-05 text-sm my-auto">

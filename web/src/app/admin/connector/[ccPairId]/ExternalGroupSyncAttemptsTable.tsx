@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import {
   createTableColumns,
   EmptyMessageCard,
@@ -66,7 +66,8 @@ interface ColumnHeaders {
 // "5/3/2026, 12:00:00 PM") stays on a single line.
 function buildColumns(
   onErrorClick: (errorMessage: string) => void,
-  headers: ColumnHeaders
+  headers: ColumnHeaders,
+  locale: string
 ) {
   return [
     tc.column("time_started", {
@@ -75,7 +76,7 @@ function buildColumns(
       enableSorting: false,
       cell: (value) => (
         <Text as="span" font="main-ui-body" color="text-04">
-          {value ? localizeAndPrettify(value) : "-"}
+          {value ? localizeAndPrettify(value, locale) : "-"}
         </Text>
       ),
     }),
@@ -174,7 +175,7 @@ function ErrorMessageCell({
       type="button"
       onClick={() => onErrorClick(modalContent ?? errorMessage)}
       aria-label={t("syncTables.errorCell.ariaLabel")}
-      className="text-left w-full cursor-pointer hover:underline"
+      className="text-start w-full cursor-pointer hover:underline"
     >
       <Text as="span" font="secondary-body" color="text-03" maxLines={2}>
         {errorMessage}
@@ -198,6 +199,7 @@ export function ExternalGroupSyncAttemptsTable({
   onPageChange,
 }: ExternalGroupSyncAttemptsTableProps) {
   const t = useTranslations("admin.connector");
+  const locale = useLocale();
   const [openErrorMessage, setOpenErrorMessage] = useState<string | null>(null);
   const handleErrorClick = useCallback(
     (errorMessage: string) => setOpenErrorMessage(errorMessage),
@@ -205,15 +207,19 @@ export function ExternalGroupSyncAttemptsTable({
   );
   const columns = useMemo(
     () =>
-      buildColumns(handleErrorClick, {
-        timeStarted: t("groupMembershipTable.columns.timeStarted"),
-        status: t("groupMembershipTable.columns.status"),
-        users: t("groupMembershipTable.columns.users"),
-        groups: t("groupMembershipTable.columns.groups"),
-        memberships: t("groupMembershipTable.columns.memberships"),
-        errorMessage: t("groupMembershipTable.columns.errorMessage"),
-      }),
-    [handleErrorClick, t]
+      buildColumns(
+        handleErrorClick,
+        {
+          timeStarted: t("groupMembershipTable.columns.timeStarted"),
+          status: t("groupMembershipTable.columns.status"),
+          users: t("groupMembershipTable.columns.users"),
+          groups: t("groupMembershipTable.columns.groups"),
+          memberships: t("groupMembershipTable.columns.memberships"),
+          errorMessage: t("groupMembershipTable.columns.errorMessage"),
+        },
+        locale
+      ),
+    [handleErrorClick, t, locale]
   );
 
   if (!attempts.length) {

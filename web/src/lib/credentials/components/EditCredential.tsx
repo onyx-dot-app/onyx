@@ -1,4 +1,5 @@
 import { Button, Text } from "@opal/components";
+import { useTranslations } from "next-intl";
 
 import { TextFormField, TypedFileUploadFormField } from "@/components/Field";
 import { Form, Formik, FormikHelpers } from "formik";
@@ -37,6 +38,7 @@ export default function EditCredential({
   onClose,
   onUpdate,
 }: EditCredentialProps) {
+  const t = useTranslations("admin");
   const editableCredentialFields = getEditableCredentialFields(
     credential,
     sourceType
@@ -58,7 +60,7 @@ export default function EditCredential({
       await onUpdate(credential, values, onClose);
     } catch (error) {
       console.error("Error updating credential:", error);
-      toast.error("Error updating credential");
+      toast.error(t("credentials.edit.updateError.toast"));
     } finally {
       formikHelpers.setSubmitting(false);
     }
@@ -66,9 +68,7 @@ export default function EditCredential({
 
   return (
     <div className="flex w-full flex-col gap-y-6">
-      <Text as="p">
-        Ensure that you update to a credential with the proper permissions!
-      </Text>
+      <Text as="p">{t("credentials.edit.permissions.note")}</Text>
 
       <Formik
         initialValues={initialValues}
@@ -81,7 +81,7 @@ export default function EditCredential({
               includeRevert
               name="name"
               placeholder={credential.name || ""}
-              label="Name (optional):"
+              label={t("credentials.edit.name.label")}
             />
 
             {Object.entries(editableCredentialFields).map(([key, value]) =>
@@ -111,14 +111,14 @@ export default function EditCredential({
             )}
             <div className="flex justify-between w-full">
               <Button onClick={() => resetForm()} icon={SvgTrash}>
-                Reset Changes
+                {t("credentials.edit.resetButton.label")}
               </Button>
               <Button
                 disabled={isSubmitting}
                 type="submit"
                 icon={SvgCheckSquare}
               >
-                Update
+                {t("credentials.edit.updateButton.label")}
               </Button>
             </div>
           </Form>

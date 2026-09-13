@@ -12,7 +12,7 @@ import { localizeAndPrettify } from "@opal/time";
 import Text from "@/refresh-components/texts/Text";
 import { PageSelector } from "@/components/PageSelector";
 import { useMemo } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { SvgAlertTriangle } from "@opal/icons";
 
 export interface IndexAttemptErrorsModalProps {
@@ -38,6 +38,7 @@ export default function IndexAttemptErrorsModal({
   supportsTargetedReindex,
 }: IndexAttemptErrorsModalProps) {
   const t = useTranslations("admin.connector");
+  const locale = useLocale();
   const hasUnresolvedErrors = useMemo(
     () => errors.items.some((error) => !error.is_resolved),
     [errors.items]
@@ -85,7 +86,7 @@ export default function IndexAttemptErrorsModal({
                   errors.items.map((error) => (
                     <TableRow key={error.id} className="h-16">
                       <TableCell>
-                        {localizeAndPrettify(error.time_created)}
+                        {localizeAndPrettify(error.time_created, locale)}
                       </TableCell>
                       <TableCell>
                         {error.document_link ? (
@@ -151,7 +152,7 @@ export default function IndexAttemptErrorsModal({
         </Modal.Body>
         <Modal.Footer>
           {hasUnresolvedErrors && (
-            <div className="ml-4">
+            <div className="ms-4">
               <Button onClick={onResolveAll}>
                 {t("errorsModal.resolveAllButton.label")}
               </Button>

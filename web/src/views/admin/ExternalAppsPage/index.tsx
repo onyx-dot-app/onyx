@@ -1,9 +1,9 @@
 "use client";
 
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter, useSearchParams } from "next/navigation";
-import type { Route } from "next";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -58,13 +58,14 @@ interface KindCopy {
 // for granting more.
 export default function ExternalAppsPage() {
   const t = useTranslations("admin.externalApps");
+  const adminRouteTitle = useAdminRouteTitle();
   const [catalogOpen, setCatalogOpen] = useState(false);
 
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={ADMIN_ROUTES.CRAFT_APPS.icon}
-        title={ADMIN_ROUTES.CRAFT_APPS.title}
+        title={adminRouteTitle(ADMIN_ROUTES.CRAFT_APPS)}
         description={t("page.description")}
         rightChildren={
           <div className="flex items-center gap-2">
@@ -172,7 +173,7 @@ function AppsAdminContent({
     setModalState(null);
     if (deepLinkedAppId) {
       setDismissedDeepLink(deepLinkedAppId);
-      router.replace("/admin/craft/apps" as Route);
+      router.replace("/admin/craft/apps");
     }
   }
 
@@ -386,7 +387,7 @@ function AppsAdminContent({
 function LoadingCard() {
   const t = useTranslations("admin.externalApps");
   return (
-    <Card background="none" border="dashed" rounding={4}>
+    <Card color="transparent" border="dashed" rounding={4}>
       <Text font="main-content-body">{t("loading.label")}</Text>
     </Card>
   );

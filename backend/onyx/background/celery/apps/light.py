@@ -160,11 +160,10 @@ celery_app.autodiscover_tasks(
             "onyx.background.celery.tasks.shared",
             "onyx.background.celery.tasks.vespa",
             "onyx.background.celery.tasks.connector_deletion",
+            "onyx.background.celery.tasks.index_reclaim",
             "onyx.background.celery.tasks.doc_permission_syncing",
             "onyx.background.celery.tasks.docprocessing",
             "onyx.background.celery.tasks.opensearch_migration",
-            # Sandbox cleanup tasks (build feature)
-            "onyx.background.celery.tasks.build",
         ]
     )
 )

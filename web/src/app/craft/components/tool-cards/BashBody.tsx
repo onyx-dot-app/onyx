@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Text } from "@opal/components";
 import { useCodeHighlighter } from "@/app/craft/hooks/useCodeHighlighter";
 import ToolCardSurface, {
@@ -15,6 +16,7 @@ import type { ToolCardBodyProps } from "@/app/craft/components/tool-cards/interf
  * monospace size so the result never looks larger than the command.
  */
 export default function BashBody({ toolCall }: ToolCardBodyProps) {
+  const t = useTranslations("craft.toolCards.bash");
   const command = toolCall.command;
   const output = toolCall.rawOutput;
   const highlight = useCodeHighlighter(!!command);
@@ -51,7 +53,7 @@ export default function BashBody({ toolCall }: ToolCardBodyProps) {
       {!command && !output && (
         <ToolCardSection>
           <Text font="secondary-mono" color="text-03">
-            No output
+            {t("noOutput.label")}
           </Text>
         </ToolCardSection>
       )}

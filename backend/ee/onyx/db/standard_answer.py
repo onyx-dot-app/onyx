@@ -3,9 +3,12 @@ import string
 from collections.abc import Sequence
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.db.models import StandardAnswer, StandardAnswerCategory
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -110,6 +113,53 @@ def remove_standard_answer(
 
     standard_answer.active = False
     db_session.commit()
+
+
+def remove_standard_answer_category(
+    standard_answer_category_id: int,
+    db_session: Session,
+) -> None:
+    """Hard delete, unlike a standard answer, which deactivates. A category has
+    no active flag, and anything still in use pointing at it would be left
+    dangling, so a referenced category is refused instead.
+
+    A deactivated standard answer does not block: it is already gone from every
+    caller's point of view, and there is no route that revives one. Its rows in
+    the association table go with the category, which SQLAlchemy removes itself
+    for a `secondary` relationship.
+    """
+    category = fetch_standard_answer_category(
+        standard_answer_category_id=standard_answer_category_id,
+        db_session=db_session,
+    )
+    if category is None:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"No standard answer category with id {standard_answer_category_id}",
+        )
+
+    active_answers = [answer for answer in category.standard_answers if answer.active]
+    if active_answers or category.slack_channel_configs:
+        raise OnyxError(
+            OnyxErrorCode.RESOURCE_IN_USE,
+            f"Cannot delete this category: {len(active_answers)} standard "
+            f"answer(s) and {len(category.slack_channel_configs)} Slack channel "
+            "config(s) still use it.",
+        )
+
+    db_session.delete(category)
+    try:
+        db_session.commit()
+    except IntegrityError:
+        # A concurrent write can attach an answer or a Slack config between the
+        # check above and this commit. Both association tables carry a foreign
+        # key to the category, so the delete is refused rather than leaving the
+        # new row dangling. Report it the same way the check does.
+        db_session.rollback()
+        raise OnyxError(
+            OnyxErrorCode.RESOURCE_IN_USE,
+            "Cannot delete this category: it came into use while being deleted.",
+        )
 
 
 def update_standard_answer_category(

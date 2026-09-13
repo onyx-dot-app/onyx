@@ -1,13 +1,16 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
 import {
   TOOL_IDS,
+  TOOL_NAMES,
+  toolOption,
   openActionManagement,
   openSourceManagement,
   toggleToolDisabled,
   getSourceToggle,
 } from "@tests/e2e/utils/tools";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
+import { sendMessage } from "@tests/e2e/utils/chatActions";
 
 const LOCAL_STORAGE_KEY = "selectedInternalSearchSources";
 
@@ -122,6 +125,9 @@ test.describe("ToolsPopover Tool Toggles", () => {
       (key) => localStorage.removeItem(key),
       LOCAL_STORAGE_KEY
     );
+    // Tool configurations belong to a chat and live in session storage, so a
+    // chat left behind by an earlier test would otherwise be read by this one.
+    await page.evaluate(() => sessionStorage.clear());
   });
 
   test("should show internal search and other tools in popover", async ({
@@ -130,17 +136,15 @@ test.describe("ToolsPopover Tool Toggles", () => {
     await openActionManagement(page);
 
     // Internal search must be visible (connector was created in beforeAll)
-    await expect(page.locator(TOOL_IDS.searchOption)).toBeVisible({
+    await expect(toolOption(page, TOOL_NAMES.internalSearch)).toBeVisible({
       timeout: 10000,
     });
 
     // Soft-check other tools (depend on provider setup success)
-    const webVisible = await page
-      .locator(TOOL_IDS.webSearchOption)
+    const webVisible = await toolOption(page, TOOL_NAMES.webSearch)
       .isVisible()
       .catch(() => false);
-    const imgVisible = await page
-      .locator(TOOL_IDS.imageGenerationOption)
+    const imgVisible = await toolOption(page, TOOL_NAMES.imageGeneration)
       .isVisible()
       .catch(() => false);
     console.log(`[tools] web_search=${webVisible}, image_gen=${imgVisible}`);
@@ -150,7 +154,7 @@ test.describe("ToolsPopover Tool Toggles", () => {
     page,
   }) => {
     await openActionManagement(page);
-    await expect(page.locator(TOOL_IDS.searchOption)).toBeVisible({
+    await expect(toolOption(page, TOOL_NAMES.internalSearch)).toBeVisible({
       timeout: 10000,
     });
     await openSourceManagement(page);
@@ -197,7 +201,7 @@ test.describe("ToolsPopover Tool Toggles", () => {
     page,
   }) => {
     await openActionManagement(page);
-    await expect(page.locator(TOOL_IDS.searchOption)).toBeVisible({
+    await expect(toolOption(page, TOOL_NAMES.internalSearch)).toBeVisible({
       timeout: 10000,
     });
 
@@ -217,10 +221,10 @@ test.describe("ToolsPopover Tool Toggles", () => {
 
     // Go back to primary view
     await page.locator('button[aria-label="Back"]').click();
-    await expect(page.locator(TOOL_IDS.searchOption)).toBeVisible();
+    await expect(toolOption(page, TOOL_NAMES.internalSearch)).toBeVisible();
 
     // Disable the search tool
-    await toggleToolDisabled(page, TOOL_IDS.searchOption);
+    await toggleToolDisabled(toolOption(page, TOOL_NAMES.internalSearch));
 
     // Verify localStorage was written (the fix being tested)
     const stored = await page.evaluate(
@@ -230,7 +234,7 @@ test.describe("ToolsPopover Tool Toggles", () => {
     expect(stored).toBeTruthy();
 
     // Re-enable the search tool
-    await toggleToolDisabled(page, TOOL_IDS.searchOption);
+    await toggleToolDisabled(toolOption(page, TOOL_NAMES.internalSearch));
 
     // Verify sources were restored
     await openSourceManagement(page);
@@ -247,57 +251,48 @@ test.describe("ToolsPopover Tool Toggles", () => {
     expect(enabledAfter).toBe(enabledBefore);
   });
 
-  test("tool enabled and disabled states both persist across reload", async ({
-    page,
-  }) => {
+  // Image generation rather than internal search: the search tool's state is
+  // re-derived on mount from the selected sources, which are still global in
+  // `localStorage`, so it would answer for those rather than for the chat.
+  const CONFIGURED_TOOL = TOOL_NAMES.imageGeneration;
+
+  /** The slash button reads "Disable" while the tool is on, "Enable" once off. */
+  async function expectToolDisabled(
+    page: Page,
+    disabled: boolean
+  ): Promise<void> {
     await openActionManagement(page);
-    const searchOption = page.locator(TOOL_IDS.searchOption);
-    await expect(searchOption).toBeVisible({ timeout: 10000 });
+    const option = toolOption(page, CONFIGURED_TOOL);
+    await expect(option).toBeVisible({ timeout: 10000 });
+    await option.hover();
+    await expect(
+      option
+        .locator('button[aria-label="Disable"], button[aria-label="Enable"]')
+        .first()
+    ).toHaveAttribute("aria-label", disabled ? "Enable" : "Disable");
+  }
 
-    // The slash button says "Disable" when the tool is enabled
-    await searchOption.hover();
-    const slashButton = searchOption.locator(
-      'button[aria-label="Disable"], button[aria-label="Enable"]'
-    );
-    await expect(slashButton.first()).toHaveAttribute("aria-label", "Disable");
+  test("a new session forgets a disabled tool", async ({ page }) => {
+    await expectToolDisabled(page, false);
+    await toggleToolDisabled(toolOption(page, CONFIGURED_TOOL));
+    await expectToolDisabled(page, true);
 
-    // Reload — enabled state should persist
+    // Nothing was chosen for a chat, because there is no chat yet.
     await page.reload();
     await page.waitForLoadState("networkidle");
-    await openActionManagement(page);
-    await page.locator(TOOL_IDS.searchOption).hover();
-    await expect(
-      page
-        .locator(TOOL_IDS.searchOption)
-        .locator('button[aria-label="Disable"], button[aria-label="Enable"]')
-        .first()
-    ).toHaveAttribute("aria-label", "Disable");
+    await expectToolDisabled(page, false);
+  });
 
-    // Disable the search tool
-    await toggleToolDisabled(page, TOOL_IDS.searchOption);
+  test("a chat keeps a disabled tool across a reload", async ({ page }) => {
+    await sendMessage(page, "hello");
+    await page.waitForURL(/chatId=/, { timeout: 30000 });
 
-    // Verify it's now disabled (slash button says "Enable")
-    await page.locator(TOOL_IDS.searchOption).hover();
-    await expect(
-      page
-        .locator(TOOL_IDS.searchOption)
-        .locator('button[aria-label="Disable"], button[aria-label="Enable"]')
-        .first()
-    ).toHaveAttribute("aria-label", "Enable");
+    await expectToolDisabled(page, false);
+    await toggleToolDisabled(toolOption(page, CONFIGURED_TOOL));
+    await expectToolDisabled(page, true);
 
-    // Reload — disabled state should also persist (saved to DB)
     await page.reload();
     await page.waitForLoadState("networkidle");
-    await openActionManagement(page);
-    await page.locator(TOOL_IDS.searchOption).hover();
-    await expect(
-      page
-        .locator(TOOL_IDS.searchOption)
-        .locator('button[aria-label="Disable"], button[aria-label="Enable"]')
-        .first()
-    ).toHaveAttribute("aria-label", "Enable");
-
-    // Re-enable the tool for cleanup (serial tests follow)
-    await toggleToolDisabled(page, TOOL_IDS.searchOption);
+    await expectToolDisabled(page, true);
   });
 });

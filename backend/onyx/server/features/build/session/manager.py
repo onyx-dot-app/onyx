@@ -27,7 +27,11 @@ from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import MessageType
 from onyx.db.enums import BuildSessionStatus, SandboxStatus, SessionOrigin
 from onyx.db.external_app import get_connectable_apps_for_user
-from onyx.db.llm import fetch_all_accessible_llm_providers
+from onyx.db.llm import (
+    fetch_all_accessible_llm_providers,
+    fetch_default_craft_model,
+    fetch_default_llm_model,
+)
 from onyx.db.models import BuildMessage, BuildSession, Sandbox, User
 from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -85,6 +89,7 @@ from onyx.server.features.build.session.errors import (
 from onyx.server.features.build.session.interrupt_signal import request_interrupt
 from onyx.server.features.build.session.llm_config import (
     AgentSelection,
+    GatewaySelection,
     build_onyx_gateway_config,
     parse_agent_selection,
 )
@@ -194,9 +199,21 @@ class SessionManager:
         user: User,
         selection: AgentSelection | None = None,
     ) -> CraftLLMProviderConfig:
+        # Craft outranks chat: an admin can point Craft at a coding model while
+        # chat stays on something else.
+        configured_default_models = [
+            fetch_default_craft_model(self._db_session),
+            fetch_default_llm_model(self._db_session),
+        ]
+        configured_defaults = [
+            GatewaySelection(model.llm_provider_id, model.name)
+            for model in configured_default_models
+            if model is not None
+        ]
         gateway_config = build_onyx_gateway_config(
             fetch_all_accessible_llm_providers(self._db_session, user),
             selection,
+            configured_defaults,
         )
         if gateway_config is None:
             raise OnyxError(

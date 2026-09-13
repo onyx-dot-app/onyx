@@ -48,7 +48,7 @@ const OnboardingFlowInner = ({
         />
         {hasStarted && (
           <div className="relative w-full overflow-hidden">
-            <div className="flex flex-col gap-2 animate-in slide-in-from-right duration-500 ease-out">
+            <div className="flex flex-col gap-2 animate-in slide-in-from-right rtl:slide-in-from-left duration-500 ease-out">
               <NameStep state={onboardingState} actions={onboardingActions} />
               <LLMStep
                 state={onboardingState}
@@ -62,7 +62,7 @@ const OnboardingFlowInner = ({
                   "transition-all duration-500 ease-out " +
                   (onboardingState.currentStep === OnboardingStep.Complete
                     ? "opacity-100 translate-x-0"
-                    : "opacity-0 translate-x-full")
+                    : "opacity-0 translate-x-full rtl:-translate-x-full")
                 }
               >
                 {onboardingState.currentStep === OnboardingStep.Complete && (

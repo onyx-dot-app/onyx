@@ -74,7 +74,7 @@ type Story = StoryObj;
 // CheckboxField (unlabeled)
 // ---------------------------------------------------------------------------
 
-export const Checkbox: Story = {
+export const InputCheckbox: Story = {
   name: "CheckboxField (unlabeled)",
   render: () => (
     <FormikWrapper initialValues={{ agree: false }}>

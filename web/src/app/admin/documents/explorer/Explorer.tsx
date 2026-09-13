@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
-import { Checkbox } from "@opal/components";
+import { InputCheckbox } from "@opal/components";
 import { updateHiddenStatus } from "../lib";
 import { toast } from "@opal/layouts";
 import { getErrorMsg } from "@/lib/fetchUtils";
@@ -63,14 +63,14 @@ const DocumentDisplay = ({
           rel="noopener noreferrer"
         >
           <SourceIcon sourceType={document.source_type} iconSize={22} />
-          <p className="truncate break-all ml-2 my-auto text-base">
+          <p className="truncate break-all ms-2 my-auto text-base">
             {document.semantic_identifier || document.document_id}
           </p>
         </a>
       </div>
       <div className="flex flex-wrap gap-x-2 mt-1 text-xs">
         <div className="px-1 py-0.5 bg-accent-background-hovered rounded-sm flex">
-          <p className="mr-1 my-auto">{t("explorer.boost.label")}</p>
+          <p className="me-1 my-auto">{t("explorer.boost.label")}</p>
           <ScoreSection
             documentId={document.document_id}
             initialScore={document.boost}
@@ -97,8 +97,8 @@ const DocumentDisplay = ({
               t("visibility.visible.label")
             )}
           </div>
-          <div className="ml-1 my-auto">
-            <Checkbox checked={!document.hidden} />
+          <div className="ms-1 my-auto">
+            <InputCheckbox checked={!document.hidden} />
           </div>
         </div>
       </div>
@@ -107,7 +107,7 @@ const DocumentDisplay = ({
           <DocumentUpdatedAtBadge updatedAt={document.updated_at} />
         </div>
       )}
-      <p className="pl-1 pt-2 pb-3 wrap-break-word">
+      <p className="ps-1 pt-2 pb-3 wrap-break-word">
         {buildDocumentSummaryDisplay(document.match_highlights, document.blurb)}
       </p>
     </div>
@@ -190,7 +190,7 @@ export function Explorer({
             if (
               event.key === "Enter" &&
               !event.shiftKey &&
-              !(event.nativeEvent as any).isComposing
+              !event.nativeEvent.isComposing
             ) {
               onSearch(query);
               event.preventDefault();

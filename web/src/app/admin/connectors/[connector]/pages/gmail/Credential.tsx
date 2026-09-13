@@ -1,6 +1,6 @@
 import { Button, Text } from "@opal/components";
 import { Section, toast } from "@opal/layouts";
-import InputFile from "@/refresh-components/inputs/InputFile";
+import { InputFile } from "@opal/components";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import React, { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
@@ -220,7 +220,7 @@ export const GmailAuthSection = ({
                 </Text>
                 <InputTypeInField
                   name="google_primary_admin"
-                  placeholder="admin@yourcompany.com"
+                  placeholder={t("gmail.primaryAdmin.placeholder")}
                 />
                 <Text font="secondary-body" color="text-03">
                   {t("gmail.primaryAdmin.description")}

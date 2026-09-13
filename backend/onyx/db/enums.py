@@ -233,13 +233,15 @@ class IndexReclaimStatus(str, PyEnum):
     PENDING: consented at reindex submit; waiting for the swap + port to drain.
     SOAKING: the old index stopped being read; waiting out the retention window.
     DELETING: deleting the old index's data (loops until count-verified empty).
+    RECLAIMED: terminal success — the old index's data is gone; the PAST row is kept
+        (not deleted) as the durable record that this index was reclaimed.
     BLOCKED: parked after repeated failures; alerted, needs operator/cooldown revival.
-    On success the PAST row is deleted, so there is no persisted terminal state.
     """
 
     PENDING = "PENDING"
     SOAKING = "SOAKING"
     DELETING = "DELETING"
+    RECLAIMED = "RECLAIMED"
     BLOCKED = "BLOCKED"
 
 
@@ -314,6 +316,21 @@ class SupportedLanguage(str, PyEnum):
     JA = "ja"
     ZH = "zh"
     KO = "ko"
+    AR = "ar"
+
+
+# Prompts name the language in English so the model gets a word, not a code.
+SUPPORTED_LANGUAGE_ENGLISH_NAMES: dict[SupportedLanguage, str] = {
+    SupportedLanguage.EN: "English",
+    SupportedLanguage.ES: "Spanish",
+    SupportedLanguage.PT: "Portuguese",
+    SupportedLanguage.FR: "French",
+    SupportedLanguage.DE: "German",
+    SupportedLanguage.JA: "Japanese",
+    SupportedLanguage.ZH: "Simplified Chinese",
+    SupportedLanguage.KO: "Korean",
+    SupportedLanguage.AR: "Arabic",
+}
 
 
 class DefaultAppMode(str, PyEnum):
@@ -606,6 +623,7 @@ class LLMModelFlowType(str, PyEnum):
     CONTEXTUAL_RAG = "contextual_rag"
     REASONING = "reasoning"
     CHAT_NAMING = "chat_naming"
+    CRAFT = "craft"
 
 
 class HookPoint(str, PyEnum):
@@ -759,6 +777,16 @@ class SSOProviderType(str, PyEnum):
     GOOGLE_OAUTH = "GOOGLE_OAUTH"
     OIDC = "OIDC"
     SAML = "SAML"
+
+
+class SystemUsageAttribution(str, PyEnum):
+    ATTRIBUTED = "ATTRIBUTED"
+    UNATTRIBUTED = "UNATTRIBUTED"
+
+
+class UsageActorKind(str, PyEnum):
+    USER = "USER"
+    SYSTEM = "SYSTEM"
 
 
 class IncognitoRecordMode(str, PyEnum):

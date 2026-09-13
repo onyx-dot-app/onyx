@@ -53,7 +53,7 @@ type llmProviderResourceModel struct {
 	IsPublic              types.Bool   `tfsdk:"is_public"`
 	IsAutoMode            types.Bool   `tfsdk:"is_auto_mode"`
 	Groups                types.Set    `tfsdk:"groups"`
-	Personas              types.Set    `tfsdk:"personas"`
+	Agents                types.Set    `tfsdk:"agents"`
 	ForceDelete           types.Bool   `tfsdk:"force_delete"`
 	ModelConfigurations   types.Set    `tfsdk:"model_configurations"`
 }
@@ -188,12 +188,12 @@ func (r *llmProviderResource) Schema(_ context.Context, _ resource.SchemaRequest
 				Default:             setdefault.StaticValue(emptyInt64Set),
 				MarkdownDescription: "User group ids the provider is restricted to (EE).",
 			},
-			"personas": schema.SetAttribute{
+			"agents": schema.SetAttribute{
 				ElementType:         types.Int64Type,
 				Optional:            true,
 				Computed:            true,
 				Default:             setdefault.StaticValue(emptyInt64Set),
-				MarkdownDescription: "Persona ids the provider is restricted to.",
+				MarkdownDescription: "Agent ids the provider is restricted to.",
 			},
 			"force_delete": schema.BoolAttribute{
 				Optional: true,
@@ -285,7 +285,7 @@ func (r *llmProviderResource) buildUpsertRequest(ctx context.Context, plan llmPr
 		upsert.CustomConfig = customConfig
 	}
 	diags.Append(plan.Groups.ElementsAs(ctx, &upsert.Groups, false)...)
-	diags.Append(plan.Personas.ElementsAs(ctx, &upsert.Personas, false)...)
+	diags.Append(plan.Agents.ElementsAs(ctx, &upsert.Agents, false)...)
 
 	var modelConfigs []modelConfigurationModel
 	diags.Append(plan.ModelConfigurations.ElementsAs(ctx, &modelConfigs, false)...)
@@ -366,9 +366,9 @@ func (r *llmProviderResource) Read(ctx context.Context, req resource.ReadRequest
 	groups, diags := types.SetValueFrom(ctx, types.Int64Type, view.Groups)
 	resp.Diagnostics.Append(diags...)
 	state.Groups = groups
-	personas, diags := types.SetValueFrom(ctx, types.Int64Type, view.Personas)
+	agents, diags := types.SetValueFrom(ctx, types.Int64Type, view.Agents)
 	resp.Diagnostics.Append(diags...)
-	state.Personas = personas
+	state.Agents = agents
 
 	// api_key/custom_config are masked in responses; carry the real values
 	// forward from prior state and never let a masked placeholder in.

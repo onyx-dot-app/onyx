@@ -21,7 +21,7 @@ import QualifierContainer from "@opal/components/table/QualifierContainer";
 import ActionsContainer from "@opal/components/table/ActionsContainer";
 import DragOverlayRow from "@opal/components/table/DragOverlayRow";
 import Footer from "@opal/components/table/Footer";
-import { Checkbox } from "@opal/components";
+import { InputCheckbox } from "@opal/components";
 import { TableSizeProvider } from "@opal/components/table/TableSizeContext";
 import { ColumnVisibilityPopover } from "@opal/components/table/ColumnVisibilityPopover";
 import { SortingPopover } from "@opal/components/table/ColumnSortabilityPopover";
@@ -387,7 +387,7 @@ export function Table<TData>(props: DataTableProps<TData>) {
                       return (
                         <QualifierContainer key={header.id} type="head">
                           {isMultiSelect && (
-                            <Checkbox
+                            <InputCheckbox
                               checked={isAllRowsSelected}
                               indeterminate={
                                 !isAllRowsSelected && selectedCount > 0

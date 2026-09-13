@@ -1,6 +1,8 @@
 """Search tools for MCP server - document and web search."""
 
 import time
+from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
@@ -12,6 +14,9 @@ from onyx.configs.app_configs import MCP_SERVER_API_REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
 from onyx.mcp_server.api import mcp_server
 from onyx.mcp_server.utils import (
+    AgentEntry,
+    get_accessible_agents,
+    get_accessible_document_sets,
     get_http_client,
     get_indexed_sources,
     require_access_token,
@@ -98,6 +103,160 @@ def _error_payload(error: str) -> dict[str, Any]:
 
 _TIME_CUTOFF_ADAPTER: TypeAdapter[datetime | None] = TypeAdapter(datetime | None)
 
+# Listing the whole inventory duplicates the matching resource and costs tokens
+# on every failed call, so only name the alternatives while that is cheap.
+_MAX_NAMES_IN_ERROR = 10
+
+
+def _match_agents(agent: str, agents: list[AgentEntry]) -> list[AgentEntry]:
+    """Match an agent by name, preferring an exact hit over a case-fold one."""
+    exact = [entry for entry in agents if entry.name == agent]
+    if exact:
+        return exact
+    folded = agent.casefold()
+    return [entry for entry in agents if entry.name.casefold() == folded]
+
+
+def _unknown_value_error(
+    kind: str, supplied: str, available: Iterable[str], discover: str
+) -> str:
+    """Explain an unusable filter value, naming the alternatives while cheap.
+
+    The call fails rather than dropping the filter, because a silently widened
+    search is indistinguishable from a correctly scoped one.
+    """
+    names = sorted(available)
+    if not names:
+        return f"{kind} '{supplied}' not found. None are accessible to this user."
+
+    if len(names) <= _MAX_NAMES_IN_ERROR:
+        return f"{kind} '{supplied}' not found. Available: {', '.join(names)}."
+
+    return (
+        f"{kind} '{supplied}' not found — it may have been renamed or removed. "
+        f"{discover}"
+    )
+
+
+class _FilterError(Exception):
+    """A filter value the caller supplied that cannot be honoured.
+
+    Carries a caller-facing message that goes back verbatim. Anything else —
+    a failed lookup, an unexpected error — falls through to the tool's generic
+    handler instead, which is what makes this type worth distinguishing.
+    """
+
+
+@dataclass
+class _ResolvedFilters:
+    persona_id: int | None
+    source_types: list[DocumentSource] | None
+
+
+class _NoIndexedSources(Exception):
+    """Nothing is indexed and no agent supplied knowledge of its own."""
+
+
+async def _resolve_agent(agent: str, access_token: AccessToken) -> int:
+    """Resolve an agent name to its persona id."""
+    accessible_agents = await get_accessible_agents(access_token)
+    matches = _match_agents(agent, accessible_agents)
+    if not matches:
+        raise _FilterError(
+            _unknown_value_error(
+                "Agent",
+                agent,
+                (entry.name for entry in accessible_agents),
+                "Read the `agents` resource for the current list.",
+            )
+        )
+    if len(matches) > 1:
+        raise _FilterError(
+            f"Agent name '{agent}' is ambiguous: {len(matches)} accessible "
+            "agents share it. Ask the user which one they mean."
+        )
+    return matches[0].id
+
+
+def _resolve_source_types(
+    source_types: list[str], available: set[str]
+) -> list[DocumentSource]:
+    """Convert supplied source names, rejecting any this tenant cannot filter on."""
+    canonical = [source.lower() for source in source_types]
+    unknown = sorted(set(canonical) - available)
+    if unknown:
+        raise _FilterError(
+            _unknown_value_error(
+                "Source type",
+                unknown[0],
+                available,
+                "Read the `indexed_sources` resource for the current list.",
+            )
+        )
+    # Membership in the inventory guarantees these parse.
+    return [DocumentSource(source) for source in canonical]
+
+
+async def _validate_document_sets(
+    document_set_names: list[str], access_token: AccessToken
+) -> None:
+    """Reject names the user cannot filter on, so the scope is never silently wider."""
+    accessible_sets = await get_accessible_document_sets(access_token)
+    available: set[str] = {entry.name for entry in accessible_sets}
+    unknown = sorted(set(document_set_names) - available)
+    if unknown:
+        raise _FilterError(
+            _unknown_value_error(
+                "Document set",
+                unknown[0],
+                available,
+                "Read the `document_sets` resource for the current list.",
+            )
+        )
+
+
+async def _resolve_filters(
+    access_token: AccessToken,
+    source_types: list[str] | None,
+    document_set_names: list[str] | None,
+    agent: str | None,
+) -> _ResolvedFilters:
+    """Resolve every filter up front so an unusable value fails before searching.
+
+    A value that cannot be honoured raises rather than being dropped: a silently
+    widened search is indistinguishable from a correctly scoped one.
+    """
+    # _build_index_filters lets explicit document sets *replace* the agent's own
+    # sets rather than narrow them, so honouring both would silently search
+    # outside the agent's knowledge scope.
+    if agent is not None and document_set_names is not None:
+        raise _FilterError(
+            "Pass either `agent` or `document_set_names`, not both. Explicit "
+            "document sets replace an agent's knowledge scope instead of "
+            "narrowing it, so the results would not be scoped to the agent."
+        )
+
+    # Resolve the agent before the indexed-sources guard: a bad name deserves
+    # its own actionable error, and an agent can carry attached documents even
+    # when no connector has indexed anything.
+    persona_id = await _resolve_agent(agent, access_token) if agent else None
+
+    indexed_sources: list[str] = []
+    if agent is None or source_types is not None:
+        indexed_sources = await get_indexed_sources(access_token)
+
+    if agent is None and not indexed_sources:
+        raise _NoIndexedSources()
+
+    source_type_enums: list[DocumentSource] | None = None
+    if source_types is not None:
+        source_type_enums = _resolve_source_types(source_types, set(indexed_sources))
+
+    if document_set_names is not None:
+        await _validate_document_sets(document_set_names, access_token)
+
+    return _ResolvedFilters(persona_id=persona_id, source_types=source_type_enums)
+
 
 def _record_requested_sources(source_types: list[str] | None) -> None:
     canonical_sources: set[str] = set()
@@ -117,6 +276,7 @@ async def search_indexed_documents(
     document_set_names: list[str] | None = None,
     time_cutoff: str | None = None,
     skip_query_expansion: bool = False,
+    agent: str | None = None,
 ) -> dict[str, Any]:
     """
     Search the user's knowledge base indexed in Onyx.
@@ -127,17 +287,24 @@ async def search_indexed_documents(
     document selection, context expansion) — the same search quality as the
     Onyx chat interface.
 
-    To find a list of available sources, use the `indexed_sources` resource.
-    `document_set_names` restricts results to documents belonging to the named
-    Document Sets — useful for scoping queries to a curated subset of the
-    knowledge base (e.g. to isolate knowledge between agents). Use the
-    `document_sets` resource to discover accessible set names.
+    `source_types` restricts results to the named connector sources, and
+    `document_set_names` to documents in the named Document Sets — useful for
+    scoping a query to a curated subset of the knowledge base. Pass the values
+    the user gave you; no lookup call is needed first. A value that does not
+    resolve returns an error naming close matches or what is available, so you
+    can retry with a valid one rather than searching unscoped.
     `time_cutoff` accepts an ISO 8601 timestamp; only documents updated on or
     after that moment are returned. Naive (timezone-less) timestamps are
     treated as UTC server-side.
     `skip_query_expansion` bypasses the LLM query-expansion step; useful when
     you already know the exact phrase to search for (faster, no LLM call for
     expansion).
+    `agent` runs the search as a named Onyx agent, applying that agent's
+    knowledge scope (its document sets, attached documents and start date) and
+    its configured model. It resolves the same way as the filters above.
+    `agent` and `document_set_names` are mutually exclusive: explicit document
+    sets replace an agent's knowledge scope rather than narrowing it, so passing
+    both is rejected.
 
     Returns ``{"results": [{title, url, source_type, content, updated_at},
     ...]}``. Results are ordered by LLM-judged relevance. ``content`` is the
@@ -154,23 +321,33 @@ async def search_indexed_documents(
         "time_cutoff": "2025-11-24T00:00:00Z",
     }
     ```
+
+    Scoping the same question to an agent instead:
+    ```
+    {
+        "query": "What is the latest status of PROJ-1234?",
+        "agent": "Engineering Support",
+    }
+    ```
     """
     _start = time.monotonic()
     tool = MCPServerToolName.SEARCH_INDEXED_DOCUMENTS
     logger.info(
-        "Onyx MCP Server: document search: query='%s', sources=%s, document_sets=%s",
+        "Onyx MCP Server: document search: query='%s', sources=%s, document_sets=%s, agent=%s",
         query,
         source_types,
         document_set_names,
+        agent,
     )
 
     _record_requested_sources(source_types)
 
-    # Normalize empty list inputs to None so downstream filter construction is
-    # consistent — BaseFilters treats [] as "match zero" which differs from
-    # "no filter" (None).
+    # Normalize empty inputs to None so "not supplied" is explicit at the
+    # boundary. Retrieval adds no clause for an empty list, so letting one
+    # through as a filter would read as a scoped search that is not scoped.
     source_types = source_types or None
     document_set_names = document_set_names or None
+    agent = (agent or "").strip() or None
 
     # Get authenticated user from FastMCP's access token
     access_token = require_access_token()
@@ -179,16 +356,15 @@ async def search_indexed_documents(
 
     try:
         try:
-            sources = await get_indexed_sources(access_token)
-        except Exception as err:
-            logger.error(
-                "Onyx MCP Server: Error checking indexed sources: %s",
-                err,
-                exc_info=True,
+            filters = await _resolve_filters(
+                access_token=access_token,
+                source_types=source_types,
+                document_set_names=document_set_names,
+                agent=agent,
             )
-            return _error_payload(f"Failed to check indexed sources: {str(err)}")
-
-        if not sources:
+        except _FilterError as err:
+            return _error_payload(str(err))
+        except _NoIndexedSources:
             logger.info("Onyx MCP Server: No indexed sources available for tenant")
             outcome = MCPToolCallStatus.SUCCESS
             result_count = 0
@@ -196,18 +372,6 @@ async def search_indexed_documents(
                 "No document sources are indexed yet. Add connectors or upload data "
                 "through Onyx before calling search_indexed_documents."
             )
-
-        source_type_enums: list[DocumentSource] | None = None
-        if source_types is not None:
-            source_type_enums = []
-            for source_str in source_types:
-                try:
-                    source_type_enums.append(DocumentSource(source_str.lower()))
-                except ValueError:
-                    logger.warning(
-                        "Onyx MCP Server: Invalid source type '%s' - skipping",
-                        source_str,
-                    )
 
         try:
             parsed_cutoff = _TIME_CUTOFF_ADAPTER.validate_python(time_cutoff)
@@ -221,10 +385,11 @@ async def search_indexed_documents(
 
         request = SearchRequest(
             query=query,
-            sources=source_type_enums,
+            sources=filters.source_types,
             document_sets=document_set_names,
             time_cutoff=parsed_cutoff,
             skip_query_expansion=skip_query_expansion,
+            persona_id=filters.persona_id,
         )
         endpoint = f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}/search"
         response = await _post_model(endpoint, request, access_token)

@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@opal/utils";
-import { FieldContext } from "./FieldContext";
+import { FieldContext } from "@opal/form";
 import {
   ControlProps,
   DescriptionProps,
@@ -12,10 +12,11 @@ import {
   APIMessageProps,
 } from "./types";
 import React, { useId, useMemo } from "react";
-import { useFieldContext } from "./FieldContext";
+import { useTranslations } from "next-intl";
+import { useFieldContext } from "@opal/form";
 import { Slot } from "@radix-ui/react-slot";
 import Text from "../texts/Text";
-import { FieldMessage } from "../messages/FieldMessage";
+import { FieldMessage } from "@opal/form";
 
 export const FormFieldRoot: React.FC<FormFieldRootProps> = ({
   id,
@@ -64,13 +65,14 @@ export const FormFieldLabel: React.FC<LabelProps> = ({
   children,
   ...props
 }) => {
+  const t = useTranslations("common.formField");
   const { baseId } = useFieldContext();
   return (
     <label
       id={`${baseId}-label`}
       htmlFor={`${baseId}-control`}
       className={cn(
-        "ml-0.5 text-text-04 font-main-ui-action flex flex-row items-center gap-1",
+        "ms-0.5 text-text-04 font-main-ui-action flex flex-row items-center gap-1",
         className
       )}
       {...props}
@@ -79,16 +81,16 @@ export const FormFieldLabel: React.FC<LabelProps> = ({
       {children}
       {required ? (
         <Text as="p" text03 mainUiMuted className="mx-0.5">
-          {"(Required)"}
+          {t("required.label")}
         </Text>
       ) : optional ? (
         <Text as="p" text03 mainUiMuted className="mx-0.5">
-          {"(Optional)"}
+          {t("optional.label")}
         </Text>
       ) : null}
       {rightIcon && <span className="flex items-center">{rightIcon}</span>}
       {rightAction && (
-        <span className="ml-auto flex items-center">{rightAction}</span>
+        <span className="ms-auto flex items-center">{rightAction}</span>
       )}
     </label>
   );
@@ -135,7 +137,7 @@ export const FormFieldDescription: React.FC<DescriptionProps> = ({
       id={`${baseId}-desc`}
       text03
       secondaryBody
-      className={cn("ml-0.5", className)}
+      className={cn("ms-0.5", className)}
       {...props}
     >
       {content}

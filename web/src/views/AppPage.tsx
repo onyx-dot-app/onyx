@@ -9,6 +9,7 @@ import { useFederatedConnectors, useLlmManager } from "@/lib/hooks";
 import { useSendChatMessageFromURL } from "@/lib/chat/hooks";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
+import { useToolConfiguration } from "@/lib/tools/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 import Dropzone from "react-dropzone";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
@@ -189,6 +190,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       router.replace(`?${params.toString()}`, { scroll: false });
     }
   }, [searchParams, router]);
+
+  const toolConfiguration = useToolConfiguration();
 
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
     chatSessionId: currentChatSessionId,
@@ -416,6 +419,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     availableContextTokens,
   } = useChatController({
     llmManager,
+    toolConfiguration,
     availableAgents: agents,
     activeAgent,
     existingChatSessionId: currentChatSessionId,
@@ -992,6 +996,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         </div>
                       )}
                       <AppInputBar
+                        toolConfiguration={toolConfiguration}
                         ref={chatInputBarRef}
                         deepResearchEnabled={
                           deepResearchEnabledForCurrentWorkflow

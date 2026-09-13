@@ -120,7 +120,7 @@ export function CreateSkillModalContent({
           <Text as="p" font="main-ui-body" color="text-02">
             {t("create.requirements.title")}
           </Text>
-          <ul className="mt-1 list-disc space-y-1 pl-5">
+          <ul className="mt-1 list-disc space-y-1 ps-5">
             <Text as="li" font="secondary-body" color="text-03">
               {t("create.requirements.frontmatter")}
             </Text>

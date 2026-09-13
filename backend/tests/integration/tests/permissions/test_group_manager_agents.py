@@ -75,14 +75,28 @@ def _promote_to_manager(user_id: str, group_id: int) -> None:
         db_session.commit()
 
 
-@pytest.fixture
-def env(reset: None, admin_user: DATestUser) -> _ScopedEnv:  # noqa: ARG001
+@pytest.fixture(scope="module")
+def env(permission_admin_user: DATestUser) -> _ScopedEnv:
+    """Shared by the whole module: running reset_all() per test is a ~12s alembic
+    downgrade/upgrade that cost 10 of this job's 15 minutes.
+
+    Sharing is safe because every test creates its own uuid-named resources and
+    asserts on those ids. A test that promotes, demotes or re-rosters these
+    shared principals would break every test after it.
+    """
+    admin_user = permission_admin_user
     manager = UserManager.create(name="scoped_manager")
     managed_group = UserGroupManager.create(
         name="managed", user_ids=[manager.id], user_performing_action=admin_user
     )
     other_group = UserGroupManager.create(
         name="unmanaged", user_performing_action=admin_user
+    )
+    # A newly created group is not up to date yet, and every group-edit route
+    # rejects it until the sync finishes.
+    UserGroupManager.wait_for_sync(
+        user_performing_action=admin_user,
+        user_groups_to_check=[managed_group, other_group],
     )
     _promote_to_manager(manager.id, managed_group.id)
     return _ScopedEnv(admin_user, manager, managed_group, other_group)

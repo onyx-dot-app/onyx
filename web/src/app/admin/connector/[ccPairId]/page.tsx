@@ -16,7 +16,7 @@ import { credentialTemplates } from "@/lib/connectors/credentials";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import Title from "@/components/ui/title";
 import { useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState, use } from "react";
 import useSWR, { mutate } from "swr";
 import {
@@ -96,6 +96,7 @@ const PAGES_PER_BATCH = 8;
 
 function Main({ ccPairId }: { ccPairId: number }) {
   const t = useTranslations("admin.connector");
+  const locale = useLocale();
   const router = useRouter();
   const { user } = useUser();
 
@@ -471,7 +472,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
           <SourceIcon iconSize={32} sourceType={ccPair.connector.source} />
         </div>
 
-        <div className="ml-2 overflow-hidden text-ellipsis whitespace-nowrap flex-1 mr-4">
+        <div className="ms-2 overflow-hidden text-ellipsis whitespace-nowrap flex-1 me-4">
           <EditableStringFieldDisplay
             value={ccPair.name}
             isEditable={can(ccPair, "edit")}
@@ -480,7 +481,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
           />
         </div>
 
-        <div className="ml-auto flex gap-x-2">
+        <div className="ms-auto flex gap-x-2">
           {can(ccPair, "edit") && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -641,14 +642,17 @@ function Main({ ccPairId }: { ccPairId: number }) {
               {t("statusCard.documentsIndexed.label")}
             </div>
             <div className="text-sm text-text-default flex items-center gap-x-1">
-              {ccPair.num_docs_indexed.toLocaleString()}
+              {ccPair.num_docs_indexed.toLocaleString(locale)}
               {ccPair.status ===
                 ConnectorCredentialPairStatus.INITIAL_INDEXING &&
                 ccPair.overall_indexing_speed !== null &&
                 ccPair.num_docs_indexed > 0 && (
-                  <div className="ml-0.5 text-xs font-medium">
+                  <div className="ms-0.5 text-xs font-medium">
                     {t("statusCard.indexingSpeed", {
-                      speed: ccPair.overall_indexing_speed.toFixed(1),
+                      speed: ccPair.overall_indexing_speed.toLocaleString(
+                        locale,
+                        { minimumFractionDigits: 1, maximumFractionDigits: 1 }
+                      ),
                     })}
                   </div>
                 )}
@@ -660,7 +664,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
               {t("statusCard.lastIndexed.label")}
             </div>
             <div className="text-sm text-text-default">
-              {timeAgo(ccPair?.last_indexed) ?? "-"}
+              {timeAgo(ccPair?.last_indexed, locale) ?? "-"}
             </div>
           </div>
 
@@ -689,8 +693,12 @@ function Main({ ccPairId }: { ccPairId: number }) {
                 </Text>
                 <Text as="p" className="text-sm text-text-default">
                   {ccPair.last_permission_sync_attempt_finished
-                    ? timeAgo(ccPair.last_permission_sync_attempt_finished)
-                    : (timeAgo(ccPair.last_full_permission_sync) ?? "-")}
+                    ? timeAgo(
+                        ccPair.last_permission_sync_attempt_finished,
+                        locale
+                      )
+                    : (timeAgo(ccPair.last_full_permission_sync, locale) ??
+                      "-")}
                 </Text>
               </div>
             </>

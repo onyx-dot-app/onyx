@@ -79,3 +79,17 @@ jobs:
     - name: Run Tests
       shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
       run: py.test -o junit_family=xunit2 -v -n auto backend/tests/unit
+
+  # Keeps the pull request in the merge queue while RunsOn reruns backend-check
+  # after an EC2 Spot interruption. The gate fails when backend-check fails for
+  # any other reason. Require "backend-check-gate / pass" in the main ruleset,
+  # not "backend-check".
+  backend-check-gate:
+    if: ${{ always() && needs.changes.outputs.python == 'true' }}
+    needs: [changes, backend-check]
+    permissions:
+      actions: read
+      checks: read
+    uses: runs-on/spot-retry-gate/.github/workflows/merge-queue.yml@451eea7c3d2c58d14a1f80f0bbb99eaa347b9471 # ratchet:runs-on/spot-retry-gate/.github/workflows/merge-queue.yml@v1.0.0
+    with:
+      job_results: ${{ toJSON(needs) }}

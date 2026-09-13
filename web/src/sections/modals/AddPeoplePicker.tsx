@@ -2,10 +2,15 @@
 
 import { ChangeEvent, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button, LineItemButton, Tag, Text } from "@opal/components";
+import {
+  Button,
+  InputTypeIn,
+  LineItemButton,
+  Tag,
+  Text,
+} from "@opal/components";
 import { SvgBubbleText, SvgEdit, SvgUser, SvgUsers, SvgX } from "@opal/icons";
 import { cn } from "@opal/utils";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import type { MinimalUserSnapshot } from "@/lib/types";
 import type { MinimalUserGroupSnapshot } from "@/hooks/useShareableGroups";
 import {
@@ -198,7 +203,7 @@ export function AddPeoplePicker({
           />
 
           {suggestions.length > 0 ? (
-            <div className="absolute left-0 right-0 top-[calc(100%+0.25rem)] z-20 rounded-12 border border-border-01 bg-background-tint-00 p-1 shadow-md">
+            <div className="absolute start-0 end-0 top-[calc(100%+0.25rem)] z-20 rounded-12 border border-border-01 bg-background-tint-00 p-1 shadow-md">
               <div className="flex flex-col gap-1">
                 {suggestions.map((suggestion) => (
                   <div

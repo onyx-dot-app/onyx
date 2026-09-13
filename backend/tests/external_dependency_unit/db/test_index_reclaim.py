@@ -1,24 +1,39 @@
-"""External dependency unit tests for the old-index-reclamation DB helpers
-(reclaim helpers in db/search_settings.py; the won't-port picker in
-db/connector_credential_pair.py).
+"""External dependency unit tests for the old-index-reclamation DB helpers +
+set_new_search_settings consent/guard logic (reclaim helpers in db/search_settings.py;
+the won't-port picker in db/connector_credential_pair.py; the name-reuse guard + consent
+enforcement in server/manage/search_settings.py).
 
-Covers the pure/isolated helpers introduced in PR1:
+Covers the pure/isolated helpers (the happy-path transitions are exercised end-to-end
+in test_index_reclaim_task.py; here we cover the guards + query logic):
 - compute_wont_port_cc_pair_ids: INVALID always; PAUSED only under ACTIVE_ONLY;
   ACTIVE/DELETING never
-- the transition helpers (advance_to_soaking stamps the anchor; advance_to_deleting;
-  record_failure bumps attempts then BLOCKS at the cap; clear_reclaim_intent resets)
+- mark_cc_pairs_deleting_if_still_wont_port: atomic re-validation — spares a reactivated
+  connector, returns only the ids transitioned
+- transition guard: advance_to_soaking no-ops off its source state (won't re-stamp the
+  soak anchor); clear_reclaim_intent resets the row
 - fetch_reclaimable_past_settings: actionable PAST rows only, excludes BLOCKED, honors limit
-
-set_reclaim_intent_on_current targets the singleton PRESENT row and is covered by the
-endpoint test in a later PR.
+- name-reuse guard: refuses a reindex whose new index_name still belongs to a not-yet-
+  reclaimed PAST; find_unreclaimed_past_by_index_name decides which rows count
+- consent: set_reclaim_intent stamps the PRESENT; drift enforcement rejects deleting a
+  cc_pair the admin never acknowledged
 """
 
+from collections.abc import Generator
+from unittest.mock import MagicMock
 from uuid import uuid4
 
+import pytest
 from sqlalchemy.orm import Session
 
-from onyx.context.search.models import SavedSearchSettings
-from onyx.db.connector_credential_pair import compute_wont_port_cc_pair_ids
+import onyx.server.manage.search_settings as search_settings_api
+from onyx.context.search.models import (
+    SavedSearchSettings,
+    SearchSettingsCreationRequest,
+)
+from onyx.db.connector_credential_pair import (
+    compute_wont_port_cc_pair_ids,
+    mark_cc_pairs_deleting_if_still_wont_port__no_commit,
+)
 from onyx.db.enums import (
     ConnectorCredentialPairStatus,
     EmbeddingPrecision,
@@ -28,20 +43,31 @@ from onyx.db.enums import (
 )
 from onyx.db.models import ConnectorCredentialPair, SearchSettings
 from onyx.db.search_settings import (
-    advance_to_deleting__no_commit,
     advance_to_soaking__no_commit,
     clear_reclaim_intent__no_commit,
     create_search_settings,
     fetch_reclaimable_past_settings,
-    record_failure__no_commit,
+    find_unreclaimed_past_by_index_name,
+    get_current_search_settings,
+    set_reclaim_intent_on_current__no_commit,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.natural_language_processing.search_nlp_models import clean_model_name
+from shared_configs.configs import ALT_INDEX_SUFFIX
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
     make_cc_pair,
 )
 
 
-def _make_past_settings(db_session: Session) -> SearchSettings:
+def _make_settings(
+    db_session: Session,
+    reclaim_status: IndexReclaimStatus | None = None,
+    *,
+    index_name: str | None = None,
+    status: IndexModelStatus = IndexModelStatus.PAST,
+) -> SearchSettings:
     saved = SavedSearchSettings(
         model_name="test-reclaim-model",
         model_dim=128,
@@ -51,10 +77,39 @@ def _make_past_settings(db_session: Session) -> SearchSettings:
         provider_type=None,
         multipass_indexing=False,
         embedding_precision=EmbeddingPrecision.FLOAT,
-        index_name=f"test_reclaim_{uuid4().hex[:8]}",
+        index_name=index_name or f"test_reclaim_{uuid4().hex[:8]}",
         enable_contextual_rag=False,
     )
-    return create_search_settings(saved, db_session, status=IndexModelStatus.PAST)
+    ss = create_search_settings(saved, db_session, status=status)
+    if reclaim_status is not None:
+        ss.reclaim_status = reclaim_status
+        db_session.commit()
+        db_session.refresh(ss)
+    return ss
+
+
+@pytest.fixture
+def present_search_settings(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> Generator[SearchSettings, None, None]:
+    """A PRESENT row for the tests that stamp reclaim intent. The db_session fixture
+    creates none and get_current_search_settings raises without one, so these tests would
+    otherwise depend on whatever the shared database holds. Reuses an existing row rather
+    than adding a second, which would be a state no deployment reaches."""
+    try:
+        existing: SearchSettings | None = get_current_search_settings(db_session)
+    except RuntimeError:
+        existing = None
+    if existing is not None:
+        yield existing
+        return
+
+    created = _make_settings(db_session, None, status=IndexModelStatus.PRESENT)
+    yield created
+    db_session.rollback()
+    db_session.delete(created)
+    db_session.commit()
 
 
 def _make_cc_pair_with_status(
@@ -120,28 +175,38 @@ def test_active_and_deleting_cc_pairs_never_wont_port(
         cleanup_cc_pair(db_session, deleting)
 
 
-# --- transitions ----------------------------------------------------------------
-
-
-def test_advance_to_soaking_stamps_anchor(
+def test_mark_deleting_transitions_only_still_wont_port(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
-    ss = _make_past_settings(db_session)
+    """The atomic fire-time transition moves only still-INVALID/PAUSED consented pairs to
+    DELETING and returns exactly those; a reactivated (ACTIVE) one is spared. Fusing the
+    re-check and the write into one conditional UPDATE closes the reactivation race."""
+    invalid = _make_cc_pair_with_status(
+        db_session, ConnectorCredentialPairStatus.INVALID
+    )
+    paused = _make_cc_pair_with_status(db_session, ConnectorCredentialPairStatus.PAUSED)
+    reactivated = _make_cc_pair_with_status(
+        db_session, ConnectorCredentialPairStatus.ACTIVE
+    )
     try:
-        ss.reclaim_status = IndexReclaimStatus.PENDING
+        transitioned = mark_cc_pairs_deleting_if_still_wont_port__no_commit(
+            db_session, [invalid.id, paused.id, reactivated.id]
+        )
         db_session.commit()
+        for pair in (invalid, paused, reactivated):
+            db_session.refresh(pair)
 
-        assert advance_to_soaking__no_commit(ss) is True
-        db_session.commit()
-        db_session.refresh(ss)
-
-        assert ss.reclaim_status == IndexReclaimStatus.SOAKING
-        assert ss.reclaim_stopped_reading_at is not None
-        assert ss.reclaim_attempts == 0
+        assert set(transitioned) == {invalid.id, paused.id}
+        assert invalid.status == ConnectorCredentialPairStatus.DELETING
+        assert paused.status == ConnectorCredentialPairStatus.DELETING
+        assert reactivated.status == ConnectorCredentialPairStatus.ACTIVE  # spared
     finally:
-        db_session.delete(ss)
-        db_session.commit()
+        for pair in (invalid, paused, reactivated):
+            cleanup_cc_pair(db_session, pair)
+
+
+# --- transitions ----------------------------------------------------------------
 
 
 def test_advance_to_soaking_is_noop_off_source_state(
@@ -150,7 +215,7 @@ def test_advance_to_soaking_is_noop_off_source_state(
 ) -> None:
     """A repeat call on an already-SOAKING row must not re-stamp the anchor (which
     would extend the soak) — it returns False and leaves the row untouched."""
-    ss = _make_past_settings(db_session)
+    ss = _make_settings(db_session)
     try:
         ss.reclaim_status = IndexReclaimStatus.PENDING
         assert advance_to_soaking__no_commit(ss) is True  # PENDING -> SOAKING, stamps
@@ -167,62 +232,11 @@ def test_advance_to_soaking_is_noop_off_source_state(
         db_session.commit()
 
 
-def test_advance_to_deleting(
-    db_session: Session,
-    tenant_context: None,  # noqa: ARG001
-) -> None:
-    ss = _make_past_settings(db_session)
-    try:
-        ss.reclaim_status = IndexReclaimStatus.SOAKING
-        db_session.commit()
-
-        assert advance_to_deleting__no_commit(ss) is True
-        db_session.commit()
-        db_session.refresh(ss)
-
-        assert ss.reclaim_status == IndexReclaimStatus.DELETING
-        # Off-source no-op: cannot skip the soak from PENDING.
-        assert advance_to_deleting__no_commit(ss) is False
-    finally:
-        db_session.delete(ss)
-        db_session.commit()
-
-
-def test_record_failure_bumps_then_blocks_at_cap(
-    db_session: Session,
-    tenant_context: None,  # noqa: ARG001
-) -> None:
-    ss = _make_past_settings(db_session)
-    try:
-        ss.reclaim_status = IndexReclaimStatus.DELETING
-        db_session.commit()
-
-        # under the cap: not blocked
-        blocked = record_failure__no_commit(ss, "boom", max_attempts=2)
-        db_session.commit()
-        db_session.refresh(ss)
-        assert blocked is False
-        assert ss.reclaim_attempts == 1
-        assert ss.reclaim_last_error == "boom"
-        assert ss.reclaim_status == IndexReclaimStatus.DELETING
-
-        # reaches the cap: BLOCKED
-        blocked = record_failure__no_commit(ss, "boom again", max_attempts=2)
-        db_session.commit()
-        db_session.refresh(ss)
-        assert blocked is True
-        assert ss.reclaim_attempts == 2
-        assert ss.reclaim_status == IndexReclaimStatus.BLOCKED
-    finally:
-        db_session.delete(ss)
-        db_session.commit()
-
-
 def test_clear_reclaim_intent_resets_fields(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
-    ss = _make_past_settings(db_session)
+    ss = _make_settings(db_session)
     try:
         ss.reclaim_status = IndexReclaimStatus.PENDING
         ss.pending_cc_pair_deletions = [1, 2, 3]
@@ -251,9 +265,9 @@ def test_fetch_reclaimable_includes_actionable_excludes_blocked(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
-    pending = _make_past_settings(db_session)
-    deleting = _make_past_settings(db_session)
-    blocked = _make_past_settings(db_session)
+    pending = _make_settings(db_session)
+    deleting = _make_settings(db_session)
+    blocked = _make_settings(db_session)
     pending.reclaim_status = IndexReclaimStatus.PENDING
     deleting.reclaim_status = IndexReclaimStatus.DELETING
     blocked.reclaim_status = IndexReclaimStatus.BLOCKED
@@ -273,7 +287,7 @@ def test_fetch_reclaimable_respects_limit(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
-    rows = [_make_past_settings(db_session) for _ in range(3)]
+    rows = [_make_settings(db_session) for _ in range(3)]
     for row in rows:
         row.reclaim_status = IndexReclaimStatus.PENDING
     db_session.commit()
@@ -283,3 +297,252 @@ def test_fetch_reclaimable_respects_limit(
         for row in rows:
             db_session.delete(row)
         db_session.commit()
+
+
+# --- name-reuse guard (server/manage/search_settings.py) ------------------------
+
+
+def test_case_variant_model_gets_the_alt_index_not_the_live_one(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """A model name differing from the live one only by case or separator cleans to the
+    same index name. Keying the ALT suffix on the raw names would skip it and hand the new
+    FUTURE the live index's own name, so the port would write into the index still serving
+    search. Keyed on the cleaned names, the reindex proceeds onto the alternate index."""
+    model = f"acme/test-{uuid4().hex[:8]}"
+    live = _make_settings(
+        db_session,
+        None,
+        index_name=f"danswer_chunk_{clean_model_name(model)}",
+        status=IndexModelStatus.PRESENT,
+    )
+    live.model_name = model
+    # A secondary is refused earlier by the one-reindex-at-a-time check, and the database
+    # ships with a seeded FUTURE row.
+    futures = list(
+        db_session.query(SearchSettings).filter(
+            SearchSettings.status == IndexModelStatus.FUTURE
+        )
+    )
+    for ss in futures:
+        ss.status = IndexModelStatus.PAST
+    db_session.commit()
+
+    variant = model.upper().replace("-", "_")
+    assert variant != model
+    assert clean_model_name(variant) == clean_model_name(model)
+
+    try:
+        computed = search_settings_api._compute_index_name(
+            SearchSettingsCreationRequest.model_validate(
+                {
+                    **SavedSearchSettings.from_db_model(live).model_dump(),
+                    "model_name": variant,
+                    "index_name": None,
+                }
+            ),
+            live,
+        )
+        assert computed != live.index_name
+        assert computed.endswith(ALT_INDEX_SUFFIX)
+    finally:
+        db_session.rollback()
+        for ss in futures:
+            ss.status = IndexModelStatus.FUTURE
+        db_session.commit()
+        db_session.delete(live)
+        db_session.commit()
+
+
+def test_cancel_keeps_reclaim_intent_a_newer_reindex_stamped(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    present_search_settings: SearchSettings,
+) -> None:
+    """Cancel commits the FUTURE to PAST before it clears intent, so a reindex submitted in
+    that window stamps its own intent on the same row and must not have it wiped."""
+    present = present_search_settings
+    newer_future = _make_settings(db_session, None, status=IndexModelStatus.FUTURE)
+    set_reclaim_intent_on_current__no_commit(db_session, [101, 202])
+    db_session.commit()
+    try:
+        search_settings_api.cancel_new_embedding(_=MagicMock(), db_session=db_session)
+
+        db_session.refresh(present)
+        assert present.reclaim_status == IndexReclaimStatus.PENDING
+        assert present.pending_cc_pair_deletions == [101, 202]
+    finally:
+        db_session.rollback()
+        clear_reclaim_intent__no_commit(db_session, present.id)
+        db_session.commit()
+        db_session.delete(newer_future)
+        db_session.commit()
+
+
+def test_guard_no_collision_is_noop(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """A fresh index_name (no PAST row) passes the guard untouched."""
+    search_settings_api._guard_index_name_reuse(
+        db_session, f"test_no_collide_{uuid4().hex[:8]}"
+    )
+
+
+def test_guard_reclaimed_past_same_name_is_noop(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """A same-named PAST already RECLAIMED (its index is gone) is safe to reuse."""
+    name = f"test_reclaimed_reuse_{uuid4().hex[:8]}"
+    ss = _make_settings(db_session, IndexReclaimStatus.RECLAIMED, index_name=name)
+    try:
+        search_settings_api._guard_index_name_reuse(db_session, name)
+    finally:
+        db_session.delete(ss)
+        db_session.commit()
+
+
+@pytest.mark.parametrize(
+    "reclaim_status",
+    [
+        None,  # legacy pre-feature PAST row — its orphaned index still exists
+        IndexReclaimStatus.PENDING,
+        IndexReclaimStatus.SOAKING,
+        IndexReclaimStatus.DELETING,
+        IndexReclaimStatus.BLOCKED,
+    ],
+)
+def test_guard_conflicts_while_index_unreclaimed(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+    reclaim_status: IndexReclaimStatus | None,
+) -> None:
+    """Any collision whose index data is still present is refused — reclaim-tracked rows,
+    legacy NULL rows, and BLOCKED rows alike. The occupant is pulled into the reclaim cycle
+    (marked skip-soak DELETING + reclaim kicked) so it drains without a manual delete."""
+    enqueued: list[int] = []
+    monkeypatch.setattr(
+        search_settings_api,
+        "enqueue_index_reclaim",
+        lambda _app, _tenant, settings_id: enqueued.append(settings_id),
+    )
+    name = f"test_collide_{uuid4().hex[:8]}"
+    ss = _make_settings(db_session, reclaim_status, index_name=name)
+    try:
+        with pytest.raises(OnyxError) as exc:
+            search_settings_api._guard_index_name_reuse(db_session, name)
+        assert exc.value.error_code == OnyxErrorCode.CONFLICT
+        assert "earlier re-index" in exc.value.detail
+        db_session.refresh(ss)
+        assert ss.reclaim_status == IndexReclaimStatus.DELETING  # pulled into reclaim
+        assert ss.reclaim_stopped_reading_at is None  # skip-soak
+        assert enqueued == [ss.id]  # reclaim kicked
+    finally:
+        db_session.delete(ss)
+        db_session.commit()
+
+
+def test_find_unreclaimed_includes_blocked_and_legacy_excludes_reclaimed(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """The collision query treats anything but RECLAIMED as still-present: BLOCKED (its
+    delete never finished) and a legacy NULL row (pre-feature orphan) both count; only
+    RECLAIMED is gone."""
+    name = f"test_find_unreclaimed_{uuid4().hex[:8]}"
+    blocked = _make_settings(db_session, IndexReclaimStatus.BLOCKED, index_name=name)
+    legacy = _make_settings(db_session, None, index_name=name)
+    reclaimed = _make_settings(
+        db_session, IndexReclaimStatus.RECLAIMED, index_name=name
+    )
+    try:
+        found = {s.id for s in find_unreclaimed_past_by_index_name(db_session, name)}
+        assert blocked.id in found
+        assert legacy.id in found
+        assert reclaimed.id not in found
+    finally:
+        for row in (blocked, legacy, reclaimed):
+            db_session.delete(row)
+        db_session.commit()
+
+
+# --- consent resolution + capture -----------------------------------------------
+
+
+def test_resolve_consent_nothing_wont_port_reclaims_only() -> None:
+    """A plain reindex (nothing won't-port) reclaims the old index with no deletions —
+    empty set, never None."""
+    assert search_settings_api._resolve_consented_deletions(None, []) == []
+    assert search_settings_api._resolve_consented_deletions([1], []) == []
+
+
+def test_resolve_consent_no_acknowledgment_is_rejected() -> None:
+    """Proceeding without consent would reclaim the old index anyway, so those connectors
+    would lose their data unannounced."""
+    with pytest.raises(OnyxError) as exc:
+        search_settings_api._resolve_consented_deletions(None, [1, 2])
+    assert exc.value.error_code == OnyxErrorCode.CONFLICT
+
+
+def test_reindex_replaces_consent_set_left_by_a_superseded_reindex(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    present_search_settings: SearchSettings,  # noqa: ARG001
+) -> None:
+    """Both reindexes stamp the same PRESENT row, so the superseding one has to replace the
+    earlier consent set. Inheriting it would let this swap delete connectors the admin only
+    agreed to lose on the reindex that never happened."""
+    invalid = _make_cc_pair_with_status(
+        db_session, ConnectorCredentialPairStatus.INVALID
+    )
+    present = get_current_search_settings(db_session)
+    try:
+        set_reclaim_intent_on_current__no_commit(db_session, [101, 202])
+        assert present.pending_cc_pair_deletions == [101, 202]
+
+        consented = search_settings_api._resolve_reclaim_intent(
+            db_session,
+            SwitchoverType.REINDEX,
+            acknowledged_wont_port_cc_pair_ids=[invalid.id],
+        )
+        assert consented == [invalid.id]
+        set_reclaim_intent_on_current__no_commit(db_session, consented)
+
+        assert present.pending_cc_pair_deletions == [invalid.id]
+    finally:
+        db_session.rollback()
+        cleanup_cc_pair(db_session, invalid)
+
+
+def test_resolve_consent_acknowledged_covers_returns_set() -> None:
+    """Acknowledged covers the server set (incl. the safe drift where a consented connector
+    re-activated) -> stamp the server set."""
+    assert search_settings_api._resolve_consented_deletions([1, 2, 3], [1, 2]) == [1, 2]
+
+
+def test_resolve_consent_rejects_unacknowledged_deletion() -> None:
+    """A connector that became paused/invalid after the page loaded is in the server set
+    but not acknowledged — deleting it would violate consent, so reject."""
+    with pytest.raises(OnyxError) as exc:
+        search_settings_api._resolve_consented_deletions([1], [1, 2])
+    assert exc.value.error_code == OnyxErrorCode.CONFLICT
+
+
+def test_set_reclaim_intent_marks_present_pending(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    present_search_settings: SearchSettings,  # noqa: ARG001
+) -> None:
+    """Consent capture stamps PENDING + the consented cc_pair ids on the current PRESENT
+    (the future PAST). Asserted in-session then rolled back — never committed — so the
+    shared singleton PRESENT row is left untouched."""
+    present = get_current_search_settings(db_session)
+    try:
+        set_reclaim_intent_on_current__no_commit(db_session, [101, 202])
+        assert present.reclaim_status == IndexReclaimStatus.PENDING
+        assert present.pending_cc_pair_deletions == [101, 202]
+    finally:
+        db_session.rollback()

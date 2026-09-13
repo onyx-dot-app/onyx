@@ -2,10 +2,7 @@ import { useCallback, useContext, useMemo } from "react";
 
 import { pickDocuments, pickImages } from "@/api/files/pickers";
 import { type NormalizedAsset } from "@/api/files/upload";
-import {
-  isProcessingStatus,
-  type ProjectFile,
-} from "@/chat/contracts/projects";
+import { isUploadingStatus, type ProjectFile } from "@/chat/contracts/projects";
 import { projectFilesToFileDescriptors } from "@/chat/fileDescriptors";
 import { type FileDescriptor } from "@/chat/interfaces";
 import { ComposerDraftContext } from "@/components/chat/ComposerDraftProvider";
@@ -23,18 +20,20 @@ export interface UseComposerDraft {
   setText: (text: string) => void;
   files: ProjectFile[];
   descriptors: FileDescriptor[];
-  // any file still uploading/indexing OR failed → block send (removal unblocks)
+  // True while any file is still uploading or has failed; send stays blocked until it's removed.
   hasBlockingFiles: boolean;
   addDocuments: () => Promise<void>;
   addImages: () => Promise<void>;
   addRecent: (file: ProjectFile) => void;
   removeFile: (id: string) => void;
-  consume: () => void; // accepted composer send: clear text + attachments
-  consumeAttachments: () => void; // accepted starter send: clear attachments, keep text
+  // Call once a normal composer send is accepted: clears both the text and the attachments.
+  consume: () => void;
+  // Call once a starter/prompt send is accepted: clears the attachments but keeps the text.
+  consumeAttachments: () => void;
 }
 
-// Sole ComposerDraftContext consumer: text/refs from context, file records from the store,
-// uploads via useUpload.
+// This is the only place that reads ComposerDraftContext — everything else goes through this
+// hook, combining the context's text with file records read live from the userFileStore.
 export function useComposerDraft(draftKey: string): UseComposerDraft {
   const ctx = useContext(ComposerDraftContext);
   if (!ctx) {
@@ -57,16 +56,18 @@ export function useComposerDraft(draftKey: string): UseComposerDraft {
     () => projectFilesToFileDescriptors(files),
     [files],
   );
+  // A file that's finished transferring can be sent even while the backend is still processing
+  // or indexing it — only an active transfer or a failure blocks send.
   const hasBlockingFiles = useMemo(
     () =>
       files.some(
-        (file) => isProcessingStatus(file.status) || isFailedFile(file),
+        (file) => isUploadingStatus(file.status) || isFailedFile(file),
       ),
     [files],
   );
 
-  // Depend on the provider's stable methods, not the whole `ctx` (its identity changes every
-  // keystroke), so these callbacks stay stable and the FileCard memo holds while typing.
+  // Destructured so these callbacks depend on the provider's stable methods, not the whole `ctx`
+  // object, which gets a new identity on every keystroke and would otherwise break FileCard's memo.
   const {
     setText: ctxSetText,
     addFiles,
@@ -97,14 +98,15 @@ export function useComposerDraft(draftKey: string): UseComposerDraft {
 
   const removeFile = useCallback(
     (id: string) => {
-      // A chip renders with file.id — a tempId before reconcile, its SERVER id after. The draft is
-      // keyed by clientId (tempId), so resolve back through the store's server→client index (a
-      // no-op for an already-client id), else a completed upload can't be removed.
+      // A chip's `file.id` is a temp id before its upload reconciles and the file's real server id
+      // after, but the draft still stores it under the original temp id. Resolving through the
+      // store's server-to-client index handles both cases (it's a no-op for an already-temp id) —
+      // skipping this would leave a completed upload's chip stuck, unable to be removed.
       const store = useUserFileStore.getState();
       const clientId = store.serverIdToClientId[id] ?? id;
       ctxRemoveFile(draftKey, clientId);
-      // Only hard-delete an upload this draft owns (the store gates on task target); a shared or
-      // recent-attached record is just de-referenced above.
+      // The store only lets the draft that started an upload cancel/delete it, so this is a no-op
+      // for a shared or recent-attached file — it's only de-referenced from the draft above.
       if (store.tasksById[clientId]?.status === "uploading") {
         upload.remove(clientId, target);
       }

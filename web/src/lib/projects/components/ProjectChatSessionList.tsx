@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useMemo, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import { deleteChatSession } from "@/app/app/services/lib";
 import {
   moveChatSession as moveChatSessionService,
@@ -51,6 +52,9 @@ function ProjectChatItem({
   icon,
   afterRefresh,
 }: ProjectChatItemProps) {
+  const t = useTranslations("chat");
+  const tSidebar = useTranslations("sidebar");
+  const locale = useLocale();
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
@@ -62,8 +66,8 @@ function ProjectChatItem({
   const [searchTerm, setSearchTerm] = useState("");
 
   const lastUpdateTime = useMemo(
-    () => timeAgo(chat.time_updated),
-    [chat.time_updated]
+    () => timeAgo(chat.time_updated, locale),
+    [chat.time_updated, locale]
   );
 
   const { refreshChatSessions, removeSession } = useChatSessions();
@@ -134,7 +138,7 @@ function ProjectChatItem({
           sizePreset="main-ui"
           rounding={2}
           icon={SvgFolderIn}
-          title="Move to Project"
+          title={tSidebar("chatButton.moveToProject.label")}
           onClick={noProp(() => setShowMoveOptions(true))}
         />,
         <LineItemButton
@@ -142,7 +146,11 @@ function ProjectChatItem({
           sizePreset="main-ui"
           rounding={2}
           icon={SvgFolder}
-          title={`Remove from ${projects.find((p) => p.id === projectId)?.name ?? "Project"}`}
+          title={tSidebar("chatButton.removeFromProject.label", {
+            projectName:
+              projects.find((p) => p.id === projectId)?.name ??
+              t("projects.chatItem.projectFallback.label"),
+          })}
           onClick={noProp(handleRemoveFromProject)}
         />,
         null,
@@ -152,7 +160,7 @@ function ProjectChatItem({
           rounding={2}
           color="danger"
           icon={SvgTrash}
-          title="Delete"
+          title={tSidebar("chatButton.delete.label")}
           onClick={noProp(() => setIsDeleteModalOpen(true))}
         />,
       ];
@@ -185,23 +193,24 @@ function ProjectChatItem({
     filteredProjects,
     handleMoveChatSession,
     handleRemoveFromProject,
+    t,
+    tSidebar,
   ]);
 
   return (
     <>
       {isDeleteModalOpen && (
         <ConfirmationModalLayout
-          title="Delete Chat"
+          title={tSidebar("chatButton.deleteConfirmation.title")}
           icon={SvgTrash}
           onClose={() => setIsDeleteModalOpen(false)}
           submit={
             <Button variant="danger" onClick={handleConfirmDelete}>
-              Delete
+              {tSidebar("chatButton.deleteConfirmation.confirmButton.label")}
             </Button>
           }
         >
-          Are you sure you want to delete this chat? This action cannot be
-          undone.
+          {tSidebar("chatButton.deleteConfirmation.description")}
         </ConfirmationModalLayout>
       )}
 
@@ -233,7 +242,11 @@ function ProjectChatItem({
           icon={icon}
           title={chat.name || UNNAMED_CHAT}
           description={
-            lastUpdateTime ? `Last message ${lastUpdateTime}` : undefined
+            lastUpdateTime
+              ? t("projects.chatItem.lastMessage.description", {
+                  time: lastUpdateTime,
+                })
+              : undefined
           }
           sizePreset="main-ui"
           interaction={popoverOpen ? "active" : undefined}
@@ -272,6 +285,7 @@ function ProjectChatItem({
 }
 
 export default function ProjectChatSessionList() {
+  const t = useTranslations("chat");
   const {
     currentProjectDetails,
     currentProjectId,
@@ -295,17 +309,17 @@ export default function ProjectChatSessionList() {
       <div>
         <div className="px-3 py-2">
           <Text as="p" font="secondary-body" color="text-02">
-            Recent Chats
+            {t("projects.sessionList.recentChats.title")}
           </Text>
         </div>
 
         {isLoadingProjectDetails && !currentProjectDetails ? (
           <SvgSimpleLoader className="mx-4" />
         ) : projectChats.length === 0 ? (
-          <Card rounding={3} border="dashed" background="none" padding={2}>
+          <Card rounding={3} border="dashed" color="transparent" padding={2}>
             <div className="p-1">
               <Text as="p" font="secondary-body" color="text-02">
-                No chats yet.
+                {t("projects.sessionList.empty.message")}
               </Text>
             </div>
           </Card>

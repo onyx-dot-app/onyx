@@ -2426,6 +2426,11 @@ def upsert_mcp_server(
         raise
     except OnyxError:
         raise
+    except ValueError as e:
+        # Caller input, not a server fault: reject_masked_credentials raises this
+        # when a masked value is replayed, and the catch-all below made it a 500.
+        logger.warning("Rejected MCP server upsert: %s", e)
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
     except Exception as e:
         logger.exception("Failed to create/update MCP tool")
         raise HTTPException(

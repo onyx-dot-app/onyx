@@ -10,6 +10,7 @@ from the raw stored content (here) is equivalent to proving the resulting vector
 differs; the real-embedder path is exercised once the port task is wired.
 """
 
+from contextlib import nullcontext
 from typing import cast
 from unittest.mock import MagicMock
 
@@ -38,6 +39,7 @@ from onyx.indexing.chunker import get_metadata_suffix_for_document_index
 from onyx.indexing.embedder import DefaultIndexingEmbedder, IndexingEmbedder
 from onyx.indexing.models import ChunkEmbedding, DocAwareChunk, IndexChunk
 from onyx.indexing.port_reembed import (
+    CONTEXTUAL_RAG_REEMBED_TRACE_NAME,
     AugmentationReembedContext,
     ReembedStrategy,
     _bare_contents,
@@ -49,6 +51,7 @@ from onyx.indexing.port_reembed import (
     select_reembed_strategy,
 )
 from onyx.natural_language_processing.utils import BaseTokenizer
+from onyx.tracing.framework.traces import TraceContentMode
 from onyx.utils.pydantic_util import shallow_model_dump
 from shared_configs.configs import (
     DOC_EMBEDDING_CONTEXT_SIZE,
@@ -431,6 +434,8 @@ def test_augmentation_enrich_on_generates_and_reembeds(
     monkeypatch.setattr(
         "onyx.indexing.indexing_pipeline.add_contextual_summaries", _fake_enrich
     )
+    ensure_trace = MagicMock(return_value=nullcontext())
+    monkeypatch.setattr("onyx.indexing.port_reembed.ensure_trace", ensure_trace)
 
     bare = "the body text"
     metadata_list = convert_metadata_dict_to_list_of_strings({"author": "Jane"})
@@ -466,6 +471,10 @@ def test_augmentation_enrich_on_generates_and_reembeds(
     assert result.chunk_context == " CONTEXT."
     assert (
         result.content == f"My Title{RETURN_SEPARATOR}SUMMARY. {bare} CONTEXT.{keyword}"
+    )
+    ensure_trace.assert_called_once_with(
+        CONTEXTUAL_RAG_REEMBED_TRACE_NAME,
+        content_mode=TraceContentMode.METADATA_ONLY,
     )
 
     # the embedded text carries the new summaries; vector differs from strip-only

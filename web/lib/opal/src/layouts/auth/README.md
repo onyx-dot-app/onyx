@@ -18,46 +18,51 @@ No props — accepts `children` only.
 The main auth card. Renders an icon above a heading, optional description, card content, and
 an optional bottom prompt rendered outside/below the card border.
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `icon` | `IconFunctionComponent` | **(required)** | Logo/icon rendered above the card heading |
-| `title` | `string \| RichStr` | **(required)** | Card heading |
-| `description` | `string \| RichStr` | — | Subtitle below the heading |
-| `children` | `ReactNode` | — | Card body (form, buttons, separators) |
-| `bottomPrompt` | `string \| RichStr` | — | Text/link below the card (e.g. "Already have an account?") |
+| Prop           | Type                    | Default        | Description                                                |
+| -------------- | ----------------------- | -------------- | ---------------------------------------------------------- |
+| `icon`         | `IconFunctionComponent` | **(required)** | Logo/icon rendered above the card heading                  |
+| `title`        | `string \| RichStr`     | **(required)** | Card heading                                               |
+| `description`  | `string \| RichStr`     | —              | Subtitle below the heading                                 |
+| `children`     | `ReactNode`             | —              | Card body (form, buttons, separators)                      |
+| `bottomPrompt` | `string \| RichStr`     | —              | Text/link below the card (e.g. "Already have an account?") |
 
 ### OrSeparator
 
-A centered "or" label flanked by two divider lines. Use between an SSO button and an
+A centered label flanked by two divider lines. Use between an SSO button and an
 email/password form.
 
-No props.
+| Prop    | Type                | Default        | Description                            |
+| ------- | ------------------- | -------------- | -------------------------------------- |
+| `title` | `string \| RichStr` | **(required)** | Divider label (e.g. a translated "or") |
 
 ### Fields
 
 Flex-column container for form inputs with a consistent `0.75rem` gap between fields.
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `children` | `ReactNode` | — | Input field components |
+| Prop       | Type        | Default | Description            |
+| ---------- | ----------- | ------- | ---------------------- |
+| `children` | `ReactNode` | —       | Input field components |
 
 ### Submit
 
 Full-width submit button. Thin wrapper around `Button` with `type="submit"` and `width="full"`.
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `label` | `SubmitLabel` | **(required)** | Button label key (`"sign-in"`, `"sign-up"`, etc.) |
-| `isSubmitting` | `boolean` | — | Disables + shows spinner while submitting |
-| `isValid` | `boolean` | — | When provided, disables if `false` |
-| `dirty` | `boolean` | — | When provided, disables if `false` |
+| Prop           | Type      | Default        | Description                               |
+| -------------- | --------- | -------------- | ----------------------------------------- |
+| `children`     | `string`  | **(required)** | Translated button text                    |
+| `isSubmitting` | `boolean` | —              | Disables + shows spinner while submitting |
+| `isValid`      | `boolean` | —              | When provided, disables if `false`        |
+| `dirty`        | `boolean` | —              | When provided, disables if `false`        |
 
 ## Usage Example
 
 ```tsx
 import { AuthLayouts } from "@opal/layouts";
 import { markdown } from "@opal/utils";
+import { useTranslations } from "next-intl";
 import { getAppLogo } from "@/lib/app/utils";
+
+const t = useTranslations("auth");
 
 <AuthLayouts.Root>
   <AuthLayouts.Card
@@ -67,7 +72,7 @@ import { getAppLogo } from "@/lib/app/utils";
     bottomPrompt={markdown("Don't have an account? [Create an Account](/auth/signup)")}
   >
     <SignInButton authorizeUrl={authUrl} authType={AuthType.CLOUD} />
-    <AuthLayouts.OrSeparator />
+    <AuthLayouts.OrSeparator title={t("login.orDivider.text")} />
     <Formik ...>
       {({ isSubmitting, isValid, dirty }) => (
         <Form className="flex flex-col gap-6">
@@ -75,7 +80,9 @@ import { getAppLogo } from "@/lib/app/utils";
             <TextFormField name="email" label="Email" type="email" />
             <TextFormField name="password" label="Password" type="password" />
           </AuthLayouts.Fields>
-          <AuthLayouts.Submit label="submit" isSubmitting={isSubmitting} isValid={isValid} dirty={dirty} />
+          <AuthLayouts.Submit isSubmitting={isSubmitting} isValid={isValid} dirty={dirty}>
+            {t("emailPasswordForm.signInButton.label")}
+          </AuthLayouts.Submit>
         </Form>
       )}
     </Formik>

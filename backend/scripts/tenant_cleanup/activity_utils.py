@@ -1,6 +1,9 @@
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 
+# A tenant is eligible for cleanup once it has been inactive this long.
+DEFAULT_INACTIVE_DAYS = 60
+
 CRAFT_ACTIVITY_FIELD = "last_craft_activity_time"
 ACTIVITY_CSV_FIELDNAMES = (
     "last_query_time",

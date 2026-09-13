@@ -18,6 +18,8 @@ permissions:
 
 env:
   GO_VERSION: "1.26.5"
+  # HTML coverage pages for PR comments go next to the playwright reports.
+  REPORTS_S3_BUCKET: onyx-playwright-artifacts
 
 jobs:
   detect-modules:
@@ -36,6 +38,9 @@ jobs:
     needs: detect-modules
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write # OIDC-based AWS credential exchange, to publish the HTML page
     strategy:
       matrix:
         modules: ${{ fromJSON(needs.detect-modules.outputs.modules) }}
@@ -53,5 +58,124 @@ jobs:
       - run: git diff --exit-code go.mod go.sum
         working-directory: ${{ matrix.modules }}
 
-      - run: go test -race ./...
-        working-directory: ${{ matrix.modules }}
+      - name: Build ods
+        run: go build -o "${RUNNER_TEMP}/ods" .
+        working-directory: tools/ods
+
+      # `ods coverage --check` runs `go test -race ./...` with a coverage profile.
+      # A module opts into the gate by committing a .coverage-baseline.yaml; the
+      # check then fails when a package drops below its floor. Without one the
+      # tests still run and nothing is gated. Raise the floors after adding
+      # tests with `ods coverage <suite> --update`.
+      - name: Test
+        env:
+          MODULE: ${{ matrix.modules }}
+        run: |
+          "${RUNNER_TEMP}/ods" coverage "${MODULE}" --check \
+            --html "${RUNNER_TEMP}/coverage/coverage.html" \
+            --markdown "${RUNNER_TEMP}/coverage/report.md"
+
+      # The report goes to the job summary here, and to the PR comment below.
+      # Artifact names cannot contain "/", so "./tools/ods" becomes "tools-ods".
+      - name: Publish the coverage report
+        if: ${{ !cancelled() }}
+        id: report
+        env:
+          MODULE: ${{ matrix.modules }}
+        run: |
+          if [ -f "${RUNNER_TEMP}/coverage/report.md" ]; then
+            cat "${RUNNER_TEMP}/coverage/report.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "name=coverage-$(echo "${MODULE#./}" | tr '/' '-')" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # ratchet:actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: ${{ steps.report.outputs.name }}
+          path: ${{ runner.temp }}/coverage
+          if-no-files-found: ignore
+          retention-days: 14
+
+      # The HTML page is published where a browser can open it, for the PR
+      # comment. Fork PRs cannot assume the role, so they keep the artifact only.
+      - name: Configure AWS credentials
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork }}
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+      - name: Publish the HTML page
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork }}
+        env:
+          NAME: ${{ steps.report.outputs.name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          if [ ! -f "${RUNNER_TEMP}/coverage/coverage.html" ]; then
+            echo "No HTML page (the tests failed) -- skipping the upload."
+            exit 0
+          fi
+          aws s3 cp "${RUNNER_TEMP}/coverage/coverage.html" \
+            "s3://${REPORTS_S3_BUCKET}/reports/pr-${PR_NUMBER}/${RUN_ID}/${NAME}/coverage.html" \
+            --content-type text/html
+
+  # One comment per PR, updated in place, listing the modules with a baseline
+  # where a package moved, each with a link to its HTML page. When nothing
+  # moved, an existing comment is updated to say so and no new one is posted.
+  # Fork PRs get a read-only token, so they only get the job summary.
+  coverage-comment:
+    needs: golang
+    if: >-
+      !cancelled() &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.fork == false
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # ratchet:actions/download-artifact@v4
+        with:
+          pattern: coverage-*
+          path: reports
+      - name: Post the coverage comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          MARKER="<!-- golang-coverage -->"
+
+          HEADER="${MARKER}"$'\n'"### Go coverage"$'\n'
+          BODY="${HEADER}"
+          for dir in reports/coverage-*/; do
+            [ -f "${dir}report.md" ] || continue
+            # ods coverage opens the report with a marker: changed, unchanged, or no-baseline.
+            head -1 "${dir}report.md" | grep -qx '<!-- ods-coverage: changed -->' || continue
+            NAME=$(basename "${dir}")
+            PAGE_URL="https://${REPORTS_S3_BUCKET}.s3.us-east-2.amazonaws.com/reports/pr-${PR_NUMBER}/${RUN_ID}/${NAME}/coverage.html"
+            # The blank line keeps the link out of the table above it.
+            BODY+=$'\n'"$(cat "${dir}report.md")"$'\n\n'
+            BODY+="[Browse the uncovered lines](${PAGE_URL})"$'\n'
+          done
+
+          # Upsert: find the existing comment with the marker, or create one.
+          # --paginate: on a long PR the marker can sit past the first page.
+          EXISTING_COMMENT_ID=$(gh api --paginate "repos/${REPO}/issues/${PR_NUMBER}/comments" \
+            --jq ".[] | select(.body | startswith(\"${MARKER}\")) | .id" | head -1)
+
+          if [ "${BODY}" = "${HEADER}" ]; then
+            if [ -z "${EXISTING_COMMENT_ID}" ]; then
+              echo "No module with a baseline changed coverage -- skipping the PR comment."
+              exit 0
+            fi
+            BODY+=$'\n'"No package moved against its baseline in the latest run."$'\n'
+          fi
+
+          if [ -n "${EXISTING_COMMENT_ID}" ]; then
+            gh api --method PATCH "repos/${REPO}/issues/comments/${EXISTING_COMMENT_ID}" -f body="${BODY}" >/dev/null
+          else
+            gh api --method POST "repos/${REPO}/issues/${PR_NUMBER}/comments" -f body="${BODY}" >/dev/null
+          fi

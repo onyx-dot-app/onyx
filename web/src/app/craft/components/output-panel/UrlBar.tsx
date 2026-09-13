@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { useTranslations } from "next-intl";
 import { cn, copyText } from "@opal/utils";
 import { Text, Button } from "@opal/components";
 import {
@@ -66,7 +67,7 @@ export default function UrlBar({
   onForward,
   previewUrl,
   onDownloadRaw,
-  downloadRawTooltip = "Download file",
+  downloadRawTooltip,
   onDownload,
   isDownloading = false,
   onRefresh,
@@ -75,6 +76,8 @@ export default function UrlBar({
   sharingScope = "private",
   onScopeChange,
 }: UrlBarProps) {
+  const t = useTranslations("craft.urlBar");
+  const rawTooltip = downloadRawTooltip ?? t("downloadFile.tooltip");
   const [copiedUrl, setCopiedUrl] = React.useState<string | null>(null);
   const [copyFeedbackKey, setCopyFeedbackKey] = React.useState(0);
   const isDisplayUrlCopyable = React.useMemo(() => {
@@ -113,7 +116,8 @@ export default function UrlBar({
   };
 
   const urlText = (
-    <Text as="p" font="secondary-body" color="text-03" maxLines={1}>
+    // dir="ltr": URL structure never reorders, even in an RTL locale.
+    <Text as="p" dir="ltr" font="secondary-body" color="text-03" maxLines={1}>
       {displayUrl}
     </Text>
   );
@@ -133,7 +137,7 @@ export default function UrlBar({
                   ? "hover:bg-background-tint-03 text-text-03"
                   : "text-text-02 cursor-not-allowed"
               )}
-              aria-label="Go back"
+              aria-label={t("back.ariaLabel")}
             >
               <SvgArrowLeft size={16} />
             </button>
@@ -146,7 +150,7 @@ export default function UrlBar({
                   ? "hover:bg-background-tint-03 text-text-03"
                   : "text-text-02 cursor-not-allowed"
               )}
-              aria-label="Go forward"
+              aria-label={t("forward.ariaLabel")}
             >
               <SvgArrowRight size={16} />
             </button>
@@ -158,7 +162,7 @@ export default function UrlBar({
                   "p-1.5 rounded-full transition-colors text-text-03",
                   isRefreshing ? "cursor-wait" : "hover:bg-background-tint-03"
                 )}
-                aria-label="Refresh"
+                aria-label={t("refresh.ariaLabel")}
                 aria-busy={isRefreshing}
               >
                 {isRefreshing ? (
@@ -177,11 +181,11 @@ export default function UrlBar({
         >
           {/* Download raw file button */}
           {onDownloadRaw && (
-            <Tooltip tooltip={downloadRawTooltip} delayDuration={200}>
+            <Tooltip tooltip={rawTooltip} delayDuration={200}>
               <button
                 onClick={onDownloadRaw}
                 className="shrink-0 p-0.5 rounded-sm transition-colors hover:bg-background-tint-03 text-text-03"
-                aria-label={downloadRawTooltip}
+                aria-label={rawTooltip}
               >
                 <SvgDownloadCloud size={14} />
               </button>
@@ -189,11 +193,11 @@ export default function UrlBar({
           )}
           {/* Open in new tab button - only shown for Preview tab with valid URL */}
           {previewUrl && (
-            <Tooltip tooltip="open in a new tab" delayDuration={200}>
+            <Tooltip tooltip={t("openInNewTab.tooltip")} delayDuration={200}>
               <button
                 onClick={handleOpenInNewTab}
                 className="shrink-0 p-0.5 rounded-sm transition-colors hover:bg-background-tint-03 text-text-03"
-                aria-label="open in a new tab"
+                aria-label={t("openInNewTab.tooltip")}
                 data-copy-state={isUrlCopied ? "copied" : "idle"}
               >
                 {isUrlCopied ? (
@@ -228,13 +232,13 @@ export default function UrlBar({
                 <button
                   type="button"
                   onClick={handleCopyUrl}
-                  className="block w-full min-w-0 cursor-pointer text-left focus:outline-hidden"
-                  aria-label={`Copy URL: ${displayUrl}`}
+                  className="block w-full min-w-0 cursor-pointer text-start focus:outline-hidden"
+                  aria-label={t("copyUrl.ariaLabel", { url: displayUrl })}
                 >
                   {urlText}
                 </button>
               ) : (
-                <div className="block w-full min-w-0 text-left">{urlText}</div>
+                <div className="block w-full min-w-0 text-start">{urlText}</div>
               )}
             </Tooltip>
           </div>
@@ -248,7 +252,7 @@ export default function UrlBar({
             icon={isDownloading ? SpinningLoader : SvgExternalLink}
             onClick={onDownload}
           >
-            {isDownloading ? "Exporting..." : "Export to .docx"}
+            {isDownloading ? t("export.inProgress") : t("export.button")}
           </Button>
         )}
         {/* Share button — shown when webapp preview is active */}

@@ -5,15 +5,15 @@ import { useLocale, useTranslations } from "next-intl";
 import { Card, MessageCard, Text } from "@opal/components";
 import { SvgX } from "@opal/icons";
 import { PageLoader, Section } from "@opal/layouts";
-import type { DateRange } from "@/refresh-components/DateRangePicker";
+import type { DateRange } from "@opal/components";
 import { formatCalendarDay } from "@/lib/dateUtils";
 import { useUsageExport } from "@/lib/usage/userUsage";
 import { formatCost, formatTokens } from "@/lib/utils";
 import SpendByUserTable from "@/sections/usage/SpendByUserTable";
 import UserUsageDetailModal from "@/sections/usage/UserUsageDetailModal";
 
-function formatDate(value: string): string {
-  return formatCalendarDay(value, { withYear: true });
+function formatDate(value: string, locale: string): string {
+  return formatCalendarDay(value, locale, { withYear: true });
 }
 
 function SummaryMetric({
@@ -97,11 +97,16 @@ export default function PerUserUsagePanel({
       height="fit"
     >
       <Text font="heading-h3">{t("panel.title")}</Text>
-      <Text font="secondary-body" color="text-03">
+      {/* Holds the selected period, so visual tests mask it. */}
+      <Text
+        font="secondary-body"
+        color="text-03"
+        data-testid="usage-overview-period"
+      >
         {usage
           ? t("panel.description", {
-              start: formatDate(usage.start),
-              end: formatDate(usage.end),
+              start: formatDate(usage.start, locale),
+              end: formatDate(usage.end, locale),
             })
           : t("panel.emptyDescription")}
       </Text>
@@ -163,21 +168,21 @@ export default function PerUserUsagePanel({
               detail={t("summary.workspaceSpend.detail")}
             />
           </div>
-          <div className="border-b border-l border-border-02 lg:border-b-0">
+          <div className="border-b border-s border-border-02 lg:border-b-0">
             <SummaryMetric
               label={t("summary.totalTokens.label")}
               value={formatTokens(totalTokens, locale)}
               detail={t("summary.totalTokens.detail")}
             />
           </div>
-          <div className="border-b border-border-02 lg:border-b-0 lg:border-l">
+          <div className="border-b border-border-02 lg:border-b-0 lg:border-s">
             <SummaryMetric
               label={t("summary.activeUsers.label")}
               value={formatTokens(activeUsers, locale)}
               detail={t("summary.activeUsers.detail", { count: users.length })}
             />
           </div>
-          <div className="border-l border-border-02">
+          <div className="border-s border-border-02">
             <SummaryMetric
               label={t("summary.topSpender.label")}
               value={
@@ -229,7 +234,7 @@ export default function PerUserUsagePanel({
           user={selectedUser}
           periodLabel={
             usage
-              ? `${formatDate(usage.start)} – ${formatDate(usage.end)}`
+              ? `${formatDate(usage.start, locale)} – ${formatDate(usage.end, locale)}`
               : undefined
           }
           onOpenChange={(open) => {

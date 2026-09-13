@@ -8,18 +8,18 @@ export async function fetchValidFilterInfo() {
     fetchSS("/manage/document-set"),
   ]);
 
-  let connectors = [] as Connector<any>[];
+  let connectors: Connector<any>[] = [];
   if (connectorsResponse.ok) {
-    connectors = (await connectorsResponse.json()) as Connector<any>[];
+    connectors = await connectorsResponse.json();
   } else {
     console.log(
       `Failed to fetch connectors - ${connectorsResponse.status} - ${connectorsResponse.statusText}`
     );
   }
 
-  let documentSets = [] as DocumentSetSummary[];
+  let documentSets: DocumentSetSummary[] = [];
   if (documentSetResponse.ok) {
-    documentSets = (await documentSetResponse.json()) as DocumentSetSummary[];
+    documentSets = await documentSetResponse.json();
   } else {
     console.log(
       `Failed to fetch document sets - ${documentSetResponse.status} - ${documentSetResponse.statusText}`

@@ -9,7 +9,7 @@ import { Form, Formik } from "formik";
 import { User } from "@/lib/types";
 import { Button, Text } from "@opal/components";
 import { Section, toast } from "@opal/layouts";
-import InputFile from "@/refresh-components/inputs/InputFile";
+import { InputFile } from "@opal/components";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import {
   parseOauthAppCredentialJson,
@@ -209,7 +209,7 @@ export const DriveAuthSection = ({
                 </Text>
                 <InputTypeInField
                   name="google_primary_admin"
-                  placeholder="admin@yourcompany.com"
+                  placeholder={t("gdrive.primaryAdmin.placeholder")}
                 />
                 <Text font="secondary-body" color="text-03">
                   {t("gdrive.primaryAdmin.description")}

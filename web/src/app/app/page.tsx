@@ -1,6 +1,5 @@
 import AppPage from "@/views/AppPage";
 import { SearchFiltersProvider } from "@/lib/searchFilters/providers";
-import { ForcedToolsProvider } from "@/lib/tools/hooks";
 import { defaultAgentRedirectTarget } from "@/lib/app/utils";
 import { redirect } from "next/navigation";
 
@@ -25,9 +24,7 @@ export default async function Page(props: PageProps) {
   // reads from it.
   return (
     <SearchFiltersProvider>
-      <ForcedToolsProvider>
-        <AppPage firstMessage={firstMessage} />
-      </ForcedToolsProvider>
+      <AppPage firstMessage={firstMessage} />
     </SearchFiltersProvider>
   );
 }

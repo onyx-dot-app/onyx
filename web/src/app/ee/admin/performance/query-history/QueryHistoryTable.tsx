@@ -1,5 +1,6 @@
 "use client";
 
+import { useLocale, useTranslations } from "next-intl";
 import {
   Table,
   TableHead,
@@ -16,10 +17,9 @@ import { Section } from "@/layouts/general-layouts";
 import { timestampToReadableDate } from "@/lib/dateUtils";
 import { Dispatch, SetStateAction, useState } from "react";
 import { Feedback, TaskStatus } from "@/lib/types";
-import { DateRange } from "@/refresh-components/DateRangePicker";
+import { DateRange } from "@opal/components";
 import { PageSelector } from "@/components/PageSelector";
 import Link from "next/link";
-import type { Route } from "next";
 import { FeedbackBadge } from "@/app/ee/admin/performance/query-history/FeedbackBadge";
 import KickoffCSVExport from "@/app/ee/admin/performance/query-history/KickoffCSVExport";
 import CardSection from "@/components/admin/CardSection";
@@ -35,9 +35,11 @@ import {
   NUM_IN_PAGE,
   ITEMS_PER_PAGE,
   PAGES_PER_BATCH,
-  PREVIOUS_CSV_TASK_BUTTON_NAME,
 } from "@/app/ee/admin/performance/query-history/constants";
-import { humanReadableFormatWithTime } from "@opal/time";
+import {
+  humanReadableFormatShort,
+  humanReadableFormatWithTime,
+} from "@opal/time";
 import { Modal } from "@opal/components";
 import { Button, Divider } from "@opal/components";
 import { Badge } from "@/components/ui/badge";
@@ -55,6 +57,7 @@ function QueryHistoryTableRow({
 }: {
   chatSessionMinimal: ChatSessionMinimal;
 }) {
+  const t = useTranslations("admin.queryHistory");
   return (
     <TableRow
       key={chatSessionMinimal.id}
@@ -76,17 +79,17 @@ function QueryHistoryTableRow({
         <FeedbackBadge feedback={chatSessionMinimal.feedback_type} />
       </TableCell>
       <TableCell>{chatSessionMinimal.user_email || "-"}</TableCell>
-      <TableCell>{chatSessionMinimal.assistant_name || "Unknown"}</TableCell>
+      <TableCell>
+        {chatSessionMinimal.assistant_name || t("assistant.unknown.label")}
+      </TableCell>
       <TableCell>
         {timestampToReadableDate(chatSessionMinimal.time_created)}
       </TableCell>
       {/* Wrapping in <td> to avoid console warnings */}
       <td className="w-0 p-0">
         <Link
-          href={
-            `/ee/admin/performance/query-history/${chatSessionMinimal.id}` as Route
-          }
-          className="absolute w-full h-full left-0 top-0"
+          href={`/ee/admin/performance/query-history/${chatSessionMinimal.id}`}
+          className="absolute w-full h-full start-0 top-0"
         ></Link>
       </td>
     </TableRow>
@@ -100,10 +103,11 @@ function SelectFeedbackType({
   value: Feedback | "all";
   onValueChange: (value: Feedback | "all") => void;
 }) {
+  const t = useTranslations("admin.queryHistory");
   return (
     <Section alignItems="start" gap={1}>
       <Text as="p" className="font-medium">
-        Feedback Type
+        {t("filters.feedbackType.label")}
       </Text>
       <InputSelect
         value={value}
@@ -113,16 +117,16 @@ function SelectFeedbackType({
 
         <InputSelect.Content>
           <InputSelect.Item value="all" icon={SvgMinusCircle}>
-            Any
+            {t("filters.any.label")}
           </InputSelect.Item>
           <InputSelect.Item value="like" icon={SvgThumbsUp}>
-            Like
+            {t("feedback.like.label")}
           </InputSelect.Item>
           <InputSelect.Item value="dislike" icon={SvgThumbsDown}>
-            Dislike
+            {t("feedback.dislike.label")}
           </InputSelect.Item>
           <InputSelect.Item value="mixed" icon={SvgMinus}>
-            Mixed
+            {t("feedback.mixed.label")}
           </InputSelect.Item>
         </InputSelect.Content>
       </InputSelect>
@@ -131,11 +135,17 @@ function SelectFeedbackType({
 }
 
 function ExportBadge({ status }: { status: TaskStatus }) {
-  if (status === "SUCCESS") return <Badge variant="success">Success</Badge>;
+  const t = useTranslations("admin.queryHistory");
+  if (status === "SUCCESS")
+    return <Badge variant="success">{t("exportStatus.success.label")}</Badge>;
   else if (status === "FAILURE")
-    return <Badge variant="destructive">Failure</Badge>;
+    return (
+      <Badge variant="destructive">{t("exportStatus.failure.label")}</Badge>
+    );
   else if (status === "PENDING" || status === "STARTED")
-    return <Badge variant="in_progress">Pending</Badge>;
+    return (
+      <Badge variant="in_progress">{t("exportStatus.pending.label")}</Badge>
+    );
   else return <></>;
 }
 
@@ -144,6 +154,8 @@ function PreviousQueryHistoryExportsModal({
 }: {
   setShowModal: Dispatch<SetStateAction<boolean>>;
 }) {
+  const t = useTranslations("admin.queryHistory");
+  const locale = useLocale();
   const { data: queryHistoryTasks } = useSWR<TaskQueueState[]>(
     LIST_QUERY_HISTORY_URL,
     errorHandlingFetcher,
@@ -179,28 +191,32 @@ function PreviousQueryHistoryExportsModal({
       <Modal.Content width="full" height="full">
         <Modal.Header
           icon={SvgFileText}
-          title="Previous Query History Exports"
+          title={t("exportsModal.header.title")}
           onClose={() => setShowModal(false)}
         />
         <Modal.Body>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Generated At</TableHead>
-                <TableHead>Start Range</TableHead>
-                <TableHead>End Range</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Download</TableHead>
+                <TableHead>{t("exportsModal.generatedAt.header")}</TableHead>
+                <TableHead>{t("exportsModal.startRange.header")}</TableHead>
+                <TableHead>{t("exportsModal.endRange.header")}</TableHead>
+                <TableHead>{t("exportsModal.status.header")}</TableHead>
+                <TableHead>{t("exportsModal.download.header")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {paginatedTasks.map((task, index) => (
                 <TableRow key={index}>
                   <TableCell>
-                    {humanReadableFormatWithTime(task.startTime)}
+                    {humanReadableFormatWithTime(task.startTime, locale)}
                   </TableCell>
-                  <TableCell>{task.start.toDateString()}</TableCell>
-                  <TableCell>{task.end.toDateString()}</TableCell>
+                  <TableCell>
+                    {humanReadableFormatShort(task.start, locale)}
+                  </TableCell>
+                  <TableCell>
+                    {humanReadableFormatShort(task.end, locale)}
+                  </TableCell>
                   <TableCell>
                     <ExportBadge status={task.status} />
                   </TableCell>
@@ -213,7 +229,7 @@ function PreviousQueryHistoryExportsModal({
                       disabled={task.status !== "SUCCESS"}
                       tooltip={
                         task.status !== "SUCCESS"
-                          ? "Export is not yet ready"
+                          ? t("exportsModal.notReady.tooltip")
                           : undefined
                       }
                       href={
@@ -264,6 +280,7 @@ export function QueryHistoryTable({
   filters,
   setFilters,
 }: QueryHistoryTableProps) {
+  const t = useTranslations("admin.queryHistory");
   const [showModal, setShowModal] = useState(false);
 
   const {
@@ -283,7 +300,7 @@ export function QueryHistoryTable({
   if (error) {
     return (
       <ErrorCallout
-        errorTitle="Error fetching query history"
+        errorTitle={t("table.fetchError.title")}
         errorMsg={error?.message}
       />
     );
@@ -312,7 +329,7 @@ export function QueryHistoryTable({
           <div className="flex flex-row w-full items-center gap-x-2">
             <KickoffCSVExport dateRange={dateRange} />
             <Button prominence="secondary" onClick={() => setShowModal(true)}>
-              {PREVIOUS_CSV_TASK_BUTTON_NAME}
+              {t("previousExports.label")}
             </Button>
           </div>
         </div>
@@ -321,12 +338,12 @@ export function QueryHistoryTable({
           <Table className="mt-5">
             <TableHeader>
               <TableRow>
-                <TableHead>First User Message</TableHead>
-                <TableHead>First AI Response</TableHead>
-                <TableHead>Feedback</TableHead>
-                <TableHead>User</TableHead>
-                <TableHead>Persona</TableHead>
-                <TableHead>Date</TableHead>
+                <TableHead>{t("table.firstUserMessage.header")}</TableHead>
+                <TableHead>{t("table.firstAiResponse.header")}</TableHead>
+                <TableHead>{t("table.feedback.header")}</TableHead>
+                <TableHead>{t("table.user.header")}</TableHead>
+                <TableHead>{t("table.persona.header")}</TableHead>
+                <TableHead>{t("table.date.header")}</TableHead>
               </TableRow>
             </TableHeader>
             {isLoading ? (

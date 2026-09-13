@@ -6,12 +6,14 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type { Tag, ValidSources } from "@/lib/types";
 import type { SourceMetadata } from "@/lib/search/interfaces";
-import type { DateRangePickerValue } from "@/refresh-components/DateRangePicker";
+import type { InputDateRangePickerValue } from "@opal/components";
 import { getConfiguredSources } from "@/lib/sources";
 import type { SearchFilters } from "@/lib/searchFilters/types";
 
 export function useSearchFilters(): SearchFilters {
-  const [timeRange, setTimeRange] = useState<DateRangePickerValue | null>(null);
+  const [timeRange, setTimeRange] = useState<InputDateRangePickerValue | null>(
+    null
+  );
   const [selectedSources, setSelectedSources] = useState<SourceMetadata[]>([]);
   const [selectedDocumentSets, setSelectedDocumentSets] = useState<string[]>(
     []
@@ -54,6 +56,12 @@ interface UseSourcePreferencesProps {
   availableSources: ValidSources[];
   selectedSources: SourceMetadata[];
   setSelectedSources: (sources: SourceMetadata[]) => void;
+  /**
+   * Whether `availableSources` is the complete set yet. Initialising against a
+   * partial list persists that subset as the user's own choice. Defaults to
+   * true, so a caller whose sources have already settled passes nothing.
+   */
+  ready?: boolean;
 }
 
 interface SourcePreferencesSnapshot {
@@ -66,6 +74,7 @@ export function useSourcePreferences({
   availableSources,
   selectedSources,
   setSelectedSources,
+  ready = true,
 }: UseSourcePreferencesProps) {
   const [sourcesInitialized, setSourcesInitialized] = useState(false);
 
@@ -130,7 +139,7 @@ export function useSourcePreferences({
 
   // Initialize sources - load from localStorage or enable all by default
   useEffect(() => {
-    if (!sourcesInitialized && availableSources.length > 0) {
+    if (ready && !sourcesInitialized && availableSources.length > 0) {
       const savedSources = loadSavedSourcePreferences();
 
       if (savedSources !== null) {
@@ -168,6 +177,7 @@ export function useSourcePreferences({
   }, [
     availableSources,
     configuredSources,
+    ready,
     sourcesInitialized,
     setSelectedSources,
   ]);

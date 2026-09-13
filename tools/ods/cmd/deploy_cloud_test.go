@@ -17,8 +17,6 @@ package cmd
 
 import (
 	"io"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -140,10 +138,7 @@ func TestDeployCloud_pushFailureRollsBackLocalTag(t *testing.T) {
 	// Precondition.
 	// Origin rejects every push.
 	repo := gittest.SetupReleaseBranchRepo(t)
-	hook := filepath.Join(repo.Origin, "hooks", "pre-receive")
-	if err := os.WriteFile(hook, []byte("#!/bin/sh\nexit 1\n"), 0755); err != nil {
-		t.Fatal(err)
-	}
+	gittest.RejectPushes(t, repo.Origin)
 
 	// Under test.
 	tag, err := deployCloud(&DeployCloudOptions{Ref: "origin/main", Yes: true})

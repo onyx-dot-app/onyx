@@ -8,6 +8,7 @@ import {
   ZulipConfig,
 } from "@/lib/connectors/connectors";
 import { getSourceMetadata } from "@/lib/sources";
+import { useTranslations } from "next-intl";
 
 import Link from "next/link";
 
@@ -32,17 +33,18 @@ export const ConnectorTitle = ({
   showMetadata = true,
   className = "",
 }: ConnectorTitleProps) => {
+  const t = useTranslations("admin.connectorTitle.metadata");
   const sourceMetadata = getSourceMetadata(connector.source);
 
   let additionalMetadata = new Map<string, string>();
   if (connector.source === "github") {
     const typedConnector = connector as Connector<GithubConfig>;
     additionalMetadata.set(
-      "Repo",
+      t("repo"),
       typedConnector.connector_specific_config.repositories
         ? `${typedConnector.connector_specific_config.repo_owner}/${
             typedConnector.connector_specific_config.repositories.includes(",")
-              ? "multiple repos"
+              ? t("multipleRepos")
               : typedConnector.connector_specific_config.repositories
           }`
         : `${typedConnector.connector_specific_config.repo_owner}/*`
@@ -50,7 +52,7 @@ export const ConnectorTitle = ({
   } else if (connector.source === "gitlab") {
     const typedConnector = connector as Connector<GitlabConfig>;
     additionalMetadata.set(
-      "Repo",
+      t("repo"),
       `${typedConnector.connector_specific_config.project_owner}/${typedConnector.connector_specific_config.project_name}`
     );
   } else if (connector.source === "confluence") {
@@ -58,17 +60,17 @@ export const ConnectorTitle = ({
     const wikiUrl = typedConnector.connector_specific_config.is_cloud
       ? `${typedConnector.connector_specific_config.wiki_base}/wiki/spaces/${typedConnector.connector_specific_config.space}`
       : `${typedConnector.connector_specific_config.wiki_base}/spaces/${typedConnector.connector_specific_config.space}`;
-    additionalMetadata.set("Wiki URL", wikiUrl);
+    additionalMetadata.set(t("wikiUrl"), wikiUrl);
     if (typedConnector.connector_specific_config.page_id) {
       additionalMetadata.set(
-        "Page ID",
+        t("pageId"),
         typedConnector.connector_specific_config.page_id
       );
     }
   } else if (connector.source === "jira") {
     const typedConnector = connector as Connector<JiraConfig>;
     additionalMetadata.set(
-      "Jira Project URL",
+      t("jiraProjectUrl"),
       typedConnector.connector_specific_config.jira_project_url
     );
   } else if (connector.source === "slack") {
@@ -78,34 +80,34 @@ export const ConnectorTitle = ({
       typedConnector.connector_specific_config?.channels.length > 0
     ) {
       additionalMetadata.set(
-        "Channels",
+        t("channels"),
         typedConnector.connector_specific_config.channels.join(", ")
       );
     }
     if (typedConnector.connector_specific_config.channel_regex_enabled) {
-      additionalMetadata.set("Channel Regex Enabled", "True");
+      additionalMetadata.set(t("channelRegexEnabled"), t("enabledTrue"));
     }
     if (
       typedConnector.connector_specific_config?.exclude_channels &&
       typedConnector.connector_specific_config.exclude_channels.length > 0
     ) {
       additionalMetadata.set(
-        "Excluded Channels",
+        t("excludedChannels"),
         typedConnector.connector_specific_config.exclude_channels.join(", ")
       );
     }
     if (
       typedConnector.connector_specific_config.exclude_channel_regex_enabled
     ) {
-      additionalMetadata.set("Exclude Channel Regex Enabled", "True");
+      additionalMetadata.set(t("excludeChannelRegexEnabled"), t("enabledTrue"));
     }
     if (typedConnector.connector_specific_config.include_bot_messages) {
-      additionalMetadata.set("Include Bot Messages", "True");
+      additionalMetadata.set(t("includeBotMessages"), t("enabledTrue"));
     }
   } else if (connector.source === "zulip") {
     const typedConnector = connector as Connector<ZulipConfig>;
     additionalMetadata.set(
-      "Realm",
+      t("realm"),
       typedConnector.connector_specific_config.realm_name
     );
   }
@@ -114,7 +116,7 @@ export const ConnectorTitle = ({
   const mainDisplay = (
     <>
       {sourceMetadata.icon({ size: 16 })}
-      <div className="ml-1 my-auto text-xs font-medium truncate">
+      <div className="ms-1 my-auto text-xs font-medium truncate">
         {ccPairName || sourceMetadata.displayName}
       </div>
     </>

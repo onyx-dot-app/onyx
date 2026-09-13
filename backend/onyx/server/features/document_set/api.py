@@ -187,7 +187,8 @@ def delete_document_set(
     db_session: Session = Depends(get_session),
     tenant_id: str = Depends(get_current_tenant_id),
 ) -> None:
-    document_set = get_document_set_by_id(db_session, document_set_id)
+    # Serialize the delete marker with document-set and group-share updates.
+    document_set = get_document_set_by_id(db_session, document_set_id, for_update=True)
     if document_set is None:
         raise OnyxError(
             OnyxErrorCode.DOCUMENT_SET_NOT_FOUND,
@@ -282,7 +283,10 @@ def get_document_set(
 
 @router.get("/document-set")
 def list_document_sets_for_user(
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    # Search filter vocabulary. READ_DOCUMENT_SETS is deliberately not used: it
+    # means "see every document set", which this route must not grant — the
+    # results stay ACL-filtered below.
+    user: User = Depends(require_permission(Permission.READ_SEARCH)),
     db_session: Session = Depends(get_session),
     get_editable: bool = Query(
         False, description="If true, return editable document sets"

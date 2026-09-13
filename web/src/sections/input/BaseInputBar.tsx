@@ -16,10 +16,10 @@ import { getPastedFilesIfNoText } from "@/lib/clipboard";
 import { deleteTokenBeforeCursor, getTextContent } from "@/lib/contentEditable";
 import PasteTilePopover from "@/sections/input/PasteTilePopover";
 import { cn } from "@opal/utils";
+import { firstStrongTextDir } from "@/lib/rehypeDirection";
 import { Disabled } from "@opal/core";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import { Button, Text } from "@opal/components";
-import { SvgArrowUp, SvgLoader, SvgStop } from "@opal/icons";
+import { SvgArrowUp, SvgLoader, SvgSimpleLoader, SvgStop } from "@opal/icons";
 import Keycap from "@/refresh-components/Keycap";
 import { useContentEditable } from "@/hooks/useContentEditable";
 import QueuedMessageBar from "@/sections/input/QueuedMessageBar";
@@ -295,6 +295,14 @@ const BaseInputBar = memo(
               <div
                 ref={inputRef}
                 contentEditable={!disabled}
+                // Direction follows what the user types. While empty it
+                // follows the placeholder so its punctuation sits on the
+                // correct side in every locale.
+                dir={
+                  message
+                    ? "auto"
+                    : (firstStrongTextDir(resolvedPlaceholder) ?? "auto")
+                }
                 suppressContentEditableWarning
                 onPaste={handlePaste}
                 onInput={handleInput}
@@ -360,12 +368,9 @@ const BaseInputBar = memo(
                       : "w-0 opacity-0 pointer-events-none"
                   )}
                 >
-                  <IconButton
-                    main
-                    tertiary
-                    icon={isInterrupting ? SvgLoader : SvgStop}
-                    iconClassName={isInterrupting ? "animate-spin" : undefined}
-                    className="border-[1.5px] border-border-02"
+                  <Button
+                    prominence="tertiary"
+                    icon={isInterrupting ? SvgSimpleLoader : SvgStop}
                     disabled={!interruptible || isInterrupting}
                     onClick={handleInterrupt}
                     tooltip={t("baseInputBar.stopButton.tooltip")}

@@ -1,5 +1,6 @@
 "use client";
 
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { SettingsLayouts } from "@opal/layouts";
 import {
   QueryHistoryFilters,
@@ -8,14 +9,15 @@ import {
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import {
   DateRange,
-  DateRangePicker,
+  InputDateRangePicker,
   rangeForInclusiveDays,
-} from "@/refresh-components/DateRangePicker";
+} from "@opal/components";
 import { useCallback, useState } from "react";
 
 const route = ADMIN_ROUTES.QUERY_HISTORY;
 
 export default function QueryHistoryPage() {
+  const adminRouteTitle = useAdminRouteTitle();
   const initialRange = rangeForInclusiveDays(30);
   const [dateRange, setDateRange] = useState<DateRange>(initialRange);
   const [filters, setFilters] = useState<QueryHistoryFilters>(() => {
@@ -49,10 +51,10 @@ export default function QueryHistoryPage() {
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={route.icon}
-        title={route.title}
+        title={adminRouteTitle(route)}
         divider
         rightChildren={
-          <DateRangePicker
+          <InputDateRangePicker
             value={dateRange}
             onValueChange={onTimeRangeChange}
           />

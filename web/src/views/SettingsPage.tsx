@@ -3,7 +3,7 @@
 import { useRef, useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Section, AttachmentItemLayout } from "@/layouts/general-layouts";
+import { Section } from "@/layouts/general-layouts";
 import {
   Content,
   ContentAction,
@@ -28,10 +28,10 @@ import {
   Card,
   InputTextArea,
   InputTypeIn,
-  PasswordInputTypeIn,
+  InputPasswordTypeIn,
 } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
-import { Switch } from "@opal/components";
+import { InputSwitch } from "@opal/components";
 import { useUser } from "@/providers/UserProvider";
 import { useTheme } from "next-themes";
 import { MemoryItem, Permission, ThemePreference } from "@/lib/types";
@@ -52,7 +52,13 @@ import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useFilter from "@/hooks/useFilter";
-import { Button, Divider, Checkbox, Text } from "@opal/components";
+import {
+  AttachmentItemButton,
+  Button,
+  Divider,
+  InputCheckbox,
+  Text,
+} from "@opal/components";
 import useFederatedOAuthStatus from "@/hooks/useFederatedOAuthStatus";
 import useCCPairs from "@/hooks/useCCPairs";
 import { ValidSources } from "@/lib/types";
@@ -73,7 +79,6 @@ import {
 } from "@/lib/constants/chatBackgrounds";
 import { SvgCheck } from "@opal/icons";
 import { cn } from "@opal/utils";
-import { Interactive } from "@opal/core";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { useIsSearchModeAvailable, useSettings } from "@/lib/settings/hooks";
@@ -93,6 +98,7 @@ import { findModelConfigId } from "@/lib/languageModels/options";
 import { useLLMProviders } from "@/lib/languageModels/hooks";
 import { DOCS_BASE_URL } from "@/lib/constants";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
+import type { ErrorResponseBody } from "@/lib/fetcher";
 
 interface PAT {
   id: number;
@@ -102,6 +108,11 @@ interface PAT {
   expires_at: string | null;
   last_used_at: string | null;
   scopes: string[] | null;
+}
+
+// Mirrors backend `CreatedTokenResponse`.
+interface CreatedPAT extends PAT {
+  token: string;
 }
 
 interface PatScopeOption {
@@ -192,8 +203,8 @@ function ScopeSelector({
             const lockReason = lockedBy.get(option.scope);
             const locked = lockReason !== undefined;
             return (
-              <div key={option.scope} className="flex items-start gap-2 pl-2">
-                <Checkbox
+              <div key={option.scope} className="flex items-start gap-2 ps-2">
+                <InputCheckbox
                   checked={selectedScopes.includes(option.scope) || locked}
                   disabled={disabled || locked}
                   onCheckedChange={() => toggleScope(option.scope)}
@@ -476,7 +487,7 @@ function usePATCreation({
       });
 
       if (response.ok) {
-        const data = await response.json();
+        const data: CreatedPAT = await response.json();
         setNewlyCreatedToken({
           id: data.id,
           token: data.token,
@@ -485,7 +496,7 @@ function usePATCreation({
         toast.success(t("apiKeys.toasts.created"));
         await onCreateSuccess?.();
       } else {
-        const errorData = await response.json();
+        const errorData: ErrorResponseBody = await response.json();
         toast.error(errorData.detail || t("apiKeys.toasts.createFailed"));
       }
     } catch (error) {
@@ -533,6 +544,15 @@ function GeneralSettings() {
   const { theme, setTheme, systemTheme } = useTheme();
   const currentLanguage = user?.preferences?.language ?? DEFAULT_LOCALE;
 
+  const tBg = useTranslations("common.chatBackgrounds");
+  const bgLabels: Record<string, string> = {
+    none: tBg("none.label"),
+    clouds: tBg("clouds.label"),
+    hills: tBg("hills.label"),
+    plant: tBg("plant.label"),
+    mountains: tBg("mountains.label"),
+    night: tBg("night.label"),
+  };
   const applyBackground = useCallback(
     async (bg: (typeof CHAT_BACKGROUND_OPTIONS)[number]) => {
       try {
@@ -764,11 +784,11 @@ function GeneralSettings() {
                         key={bg.id}
                         onClick={() => applyBackground(bg)}
                         className="relative overflow-hidden rounded-lg transition-all w-[90px] h-[68px] cursor-pointer border-none p-0 bg-transparent group"
-                        title={bg.label}
+                        title={bgLabels[bg.id] ?? bg.label}
                         aria-label={t(
                           "appearance.chatBackground.optionAriaLabel",
                           {
-                            label: bg.label,
+                            label: bgLabels[bg.id] ?? bg.label,
                             selected: isSelected ? "true" : "false",
                           }
                         )}
@@ -794,7 +814,7 @@ function GeneralSettings() {
                           )}
                         />
                         {isSelected && (
-                          <div className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-theme-primary-05 flex items-center justify-center">
+                          <div className="absolute top-1.5 end-1.5 w-4 h-4 rounded-full bg-theme-primary-05 flex items-center justify-center">
                             <SvgCheck className="w-2.5 h-2.5 stroke-text-inverted-05" />
                           </div>
                         )}
@@ -1246,12 +1266,12 @@ function ChatPreferencesSettings() {
     async (value: number): Promise<void> => {
       try {
         await updateUserTemperatureDefault(value);
-        toast.success("Preferences saved");
+        toast.success(t("chats.toasts.saved"));
       } catch {
-        toast.error("Failed to save preferences");
+        toast.error(t("chats.toasts.saveFailed"));
       }
     },
-    [updateUserTemperatureDefault]
+    [updateUserTemperatureDefault, t]
   );
 
   const saveEffortDefault = useCallback(
@@ -1260,12 +1280,12 @@ function ChatPreferencesSettings() {
         await updateUserReasoningEffortDefault(
           ALL_REASONING_STOPS[effortStop] ?? null
         );
-        toast.success("Preferences saved");
+        toast.success(t("chats.toasts.saved"));
       } catch {
-        toast.error("Failed to save preferences");
+        toast.error(t("chats.toasts.saveFailed"));
       }
     },
-    [updateUserReasoningEffortDefault]
+    [updateUserReasoningEffortDefault, t]
   );
 
   const commitVoicePlaybackSpeed = useCallback(() => {
@@ -1367,7 +1387,11 @@ function ChatPreferencesSettings() {
                     />
                   </Section>
                   <Section width={4} height="auto" alignItems="end">
-                    <Text font="secondary-mono" color="text-04" nowrap>
+                    <Text
+                      font="secondary-mono"
+                      color="text-04"
+                      wordWrap="whitespace-nowrap"
+                    >
                       {draftTemperature.toFixed(1)}
                     </Text>
                   </Section>
@@ -1402,7 +1426,11 @@ function ChatPreferencesSettings() {
                       />
                     </Section>
                     <Section width={4} height="auto" alignItems="end">
-                      <Text font="secondary-mono" color="text-04" nowrap>
+                      <Text
+                        font="secondary-mono"
+                        color="text-04"
+                        wordWrap="whitespace-nowrap"
+                      >
                         {tModelSelector(
                           REASONING_STOP_LABEL_KEYS[
                             ALL_REASONING_STOPS[draftEffortStop] ?? "medium"
@@ -1419,7 +1447,7 @@ function ChatPreferencesSettings() {
               description={t("chats.autoScroll.description")}
               withLabel
             >
-              <Switch
+              <InputSwitch
                 checked={user?.preferences.auto_scroll}
                 onCheckedChange={(checked) => {
                   updateUserAutoScroll(checked);
@@ -1432,7 +1460,7 @@ function ChatPreferencesSettings() {
               description={t("chats.smoothStreaming.description")}
               withLabel
             >
-              <Switch
+              <InputSwitch
                 checked={smoothStreamingEnabled}
                 onCheckedChange={setSmoothStreamingEnabled}
               />
@@ -1443,7 +1471,7 @@ function ChatPreferencesSettings() {
               description={t("chats.collapseLargePastes.description")}
               withLabel
             >
-              <Switch
+              <InputSwitch
                 checked={user?.preferences?.paste_as_tile ?? false}
                 onCheckedChange={(checked) => {
                   updateUserPasteAsTile(checked);
@@ -1525,7 +1553,7 @@ function ChatPreferencesSettings() {
               description={t("memory.referenceStoredMemories.description")}
               withLabel
             >
-              <Switch
+              <InputSwitch
                 checked={personalizationValues.use_memories}
                 onCheckedChange={(checked) => {
                   toggleUseMemories(checked);
@@ -1538,7 +1566,7 @@ function ChatPreferencesSettings() {
               description={t("memory.updateMemories.description")}
               withLabel
             >
-              <Switch
+              <InputSwitch
                 checked={personalizationValues.enable_memory_tool}
                 onCheckedChange={(checked) => {
                   toggleEnableMemoryTool(checked);
@@ -1575,7 +1603,7 @@ function ChatPreferencesSettings() {
               description={t("promptShortcuts.toggle.description")}
               withLabel
             >
-              <Switch
+              <InputSwitch
                 checked={user?.preferences?.shortcut_enabled}
                 onCheckedChange={(checked) => {
                   updateUserShortcuts(checked);
@@ -1602,7 +1630,7 @@ function ChatPreferencesSettings() {
               description={t("voice.autoSend.description")}
               withLabel
             >
-              <Switch
+              <InputSwitch
                 checked={user?.preferences.voice_auto_send ?? false}
                 onCheckedChange={(checked) => {
                   void saveVoiceSettings({ auto_send: checked });
@@ -1615,7 +1643,7 @@ function ChatPreferencesSettings() {
               description={t("voice.autoPlayback.description")}
               withLabel
             >
-              <Switch
+              <InputSwitch
                 checked={user?.preferences.voice_auto_playback ?? false}
                 onCheckedChange={(checked) => {
                   void saveVoiceSettings({ auto_playback: checked });
@@ -1919,16 +1947,23 @@ function AccountsAccessSettings() {
   // constraints (max length, uppercase, lowercase, digit, special char) will be
   // wired up when this form is refreshed as part of auth-refresh.
   const passwordValidationSchema = Yup.object().shape({
-    currentPassword: Yup.string().required("Current password is required"),
+    currentPassword: Yup.string().required(
+      t("accounts.passwordModal.validation.currentRequired")
+    ),
     newPassword: Yup.string()
       .min(
         authTypeMetadata?.passwordMinLength ?? 0,
-        `Password must be at least ${authTypeMetadata?.passwordMinLength ?? 0} characters`
+        t("accounts.passwordModal.validation.minLength", {
+          min: authTypeMetadata?.passwordMinLength ?? 0,
+        })
       )
-      .required("New password is required"),
+      .required(t("accounts.passwordModal.validation.newRequired")),
     confirmPassword: Yup.string()
-      .oneOf([Yup.ref("newPassword")], "Passwords do not match")
-      .required("Please confirm your new password"),
+      .oneOf(
+        [Yup.ref("newPassword")],
+        t("accounts.passwordModal.validation.mismatch")
+      )
+      .required(t("accounts.passwordModal.validation.confirmRequired")),
   });
 
   const [tokenToDelete, setTokenToDelete] = useState<PAT | null>(null);
@@ -2061,7 +2096,7 @@ function AccountsAccessSettings() {
           toast.success(t("accounts.passwordModal.toasts.updated"));
           setShowPasswordModal(false);
         } else {
-          const errorData = await response.json();
+          const errorData: ErrorResponseBody = await response.json();
           toast.error(
             errorData.detail || t("accounts.passwordModal.toasts.updateFailed")
           );
@@ -2174,7 +2209,7 @@ function AccountsAccessSettings() {
                       withLabel="currentPassword"
                       title={t("accounts.passwordModal.currentPassword.title")}
                     >
-                      <PasswordInputTypeIn
+                      <InputPasswordTypeIn
                         name="currentPassword"
                         value={values.currentPassword}
                         onChange={handleChange}
@@ -2190,7 +2225,7 @@ function AccountsAccessSettings() {
                       withLabel="newPassword"
                       title={t("accounts.passwordModal.newPassword.title")}
                     >
-                      <PasswordInputTypeIn
+                      <InputPasswordTypeIn
                         name="newPassword"
                         value={values.newPassword}
                         onChange={handleChange}
@@ -2204,7 +2239,7 @@ function AccountsAccessSettings() {
                       withLabel="confirmPassword"
                       title={t("accounts.passwordModal.confirmPassword.title")}
                     >
-                      <PasswordInputTypeIn
+                      <InputPasswordTypeIn
                         name="confirmPassword"
                         value={values.confirmPassword}
                         onChange={handleChange}
@@ -2353,35 +2388,44 @@ function AccountsAccessSettings() {
                                 count: daysSinceCreation,
                               });
 
-                        const middleText = `${createdText} - ${expiryText} - ${scopeText}`;
+                        const middleText = t("apiKeys.list.middleText", {
+                          created: createdText,
+                          expiry: expiryText,
+                          scope: scopeText,
+                        });
 
                         return (
-                          <Interactive.Container
+                          <AttachmentItemButton
                             key={pat.id}
-                            size="fit"
-                            width="full"
-                          >
-                            <div className="w-full bg-background-tint-01">
-                              <AttachmentItemLayout
-                                icon={SvgKey}
-                                title={pat.name}
-                                description={pat.token_display}
-                                middleText={middleText}
-                                rightChildren={
-                                  <Button
-                                    icon={SvgTrash}
-                                    onClick={() => setTokenToDelete(pat)}
-                                    prominence="tertiary"
-                                    size="sm"
-                                    aria-label={t(
-                                      "apiKeys.list.deleteTokenAriaLabel",
-                                      { name: pat.name }
-                                    )}
-                                  />
-                                }
+                            presentational
+                            prominence="secondary"
+                            icon={SvgKey}
+                            title={pat.name}
+                            description={pat.token_display}
+                            centerChildren={
+                              <Section alignItems="end">
+                                <Text
+                                  font="secondary-body"
+                                  color="text-03"
+                                  maxLines={1}
+                                >
+                                  {middleText}
+                                </Text>
+                              </Section>
+                            }
+                            rightChildren={
+                              <Button
+                                icon={SvgTrash}
+                                onClick={() => setTokenToDelete(pat)}
+                                prominence="tertiary"
+                                size="sm"
+                                aria-label={t(
+                                  "apiKeys.list.deleteTokenAriaLabel",
+                                  { name: pat.name }
+                                )}
                               />
-                            </div>
-                          </Interactive.Container>
+                            }
+                          />
                         );
                       })}
                     </Section>
@@ -2567,27 +2611,20 @@ function ConnectorsSettings() {
   ];
 
   // Group indexed connectors by source
-  const groupedConnectors = ccPairs.reduce(
-    (acc, ccPair) => {
-      if (!acc[ccPair.source]) {
-        acc[ccPair.source] = {
-          source: ccPair.source,
-          hasActiveConnector: false,
-        };
-      }
-      if (ACTIVE_STATUSES.includes(ccPair.status)) {
-        acc[ccPair.source]!.hasActiveConnector = true;
-      }
-      return acc;
-    },
-    {} as Record<
-      string,
-      {
-        source: ValidSources;
-        hasActiveConnector: boolean;
-      }
-    >
-  );
+  const groupedConnectors = ccPairs.reduce<
+    Record<string, { source: ValidSources; hasActiveConnector: boolean }>
+  >((acc, ccPair) => {
+    if (!acc[ccPair.source]) {
+      acc[ccPair.source] = {
+        source: ccPair.source,
+        hasActiveConnector: false,
+      };
+    }
+    if (ACTIVE_STATUSES.includes(ccPair.status)) {
+      acc[ccPair.source]!.hasActiveConnector = true;
+    }
+    return acc;
+  }, {});
 
   const hasConnectors =
     Object.keys(groupedConnectors).length > 0 || federatedConnectors.length > 0;

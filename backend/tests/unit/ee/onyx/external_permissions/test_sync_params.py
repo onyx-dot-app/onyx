@@ -3,6 +3,8 @@ from ee.onyx.external_permissions.jira.doc_sync import (
 )
 from ee.onyx.external_permissions.jira.group_sync import jira_group_sync
 from ee.onyx.external_permissions.sync_params import (
+    _load_jira_group_sync,
+    _load_jira_service_management_doc_sync,
     check_if_valid_sync_source,
     get_all_cc_pair_agnostic_group_sync_sources,
     get_source_perm_sync_config,
@@ -29,6 +31,6 @@ def test_jira_service_management_uses_its_own_doc_sync() -> None:
 
     assert sync_config is not None
     assert sync_config.doc_sync_config is not None
-    assert sync_config.doc_sync_config.doc_sync_func is jira_service_management_doc_sync
     assert sync_config.group_sync_config is not None
-    assert sync_config.group_sync_config.group_sync_func is jira_group_sync
+    assert _load_jira_service_management_doc_sync() is jira_service_management_doc_sync
+    assert _load_jira_group_sync() is jira_group_sync

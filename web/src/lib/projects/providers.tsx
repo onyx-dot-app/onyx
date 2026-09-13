@@ -12,6 +12,7 @@ import {
   Dispatch,
   SetStateAction,
 } from "react";
+import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
 import {
@@ -133,6 +134,7 @@ interface ProjectsProviderProps {
 }
 
 export function ProjectsProvider({ children }: ProjectsProviderProps) {
+  const t = useTranslations("chat");
   // Use SWR hook for projects list - no more SSR initial data
   const { projects, refreshProjects } = useProjects();
   // Uploads made in an incognito chat are tied to its session so the server
@@ -375,7 +377,11 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       if (oversizedFiles.length > 0) {
         const skippedNames = oversizedFiles.map((file) => file.name).join(", ");
         toast.warning(
-          `Skipped ${oversizedFiles.length} oversized file(s) (>${rawMax} MB): ${skippedNames}`
+          t("projects.uploads.oversized.toast", {
+            count: oversizedFiles.length,
+            max: rawMax ?? 0,
+            names: skippedNames,
+          })
         );
       }
 
@@ -441,7 +447,9 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
             const detailsParts = Array.from(uniqueReasons);
 
             toast.warning(
-              `Some files were not uploaded. ${detailsParts.join(" | ")}`
+              t("projects.uploads.rejected.toast", {
+                details: detailsParts.join(" | "),
+              })
             );
 
             const failedNameSet = new Set<string>(
@@ -478,7 +486,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
 
           removeOptimisticFilesByTempIds(optimisticTempIds, projectId);
 
-          toast.error("Failed to upload files");
+          toast.error(t("projects.uploads.failed.toast"));
 
           onFailure?.(Array.from(optimisticTempIds));
         })
@@ -498,6 +506,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       userFileMaxUploadSizeMb,
       incognitoUploadsEnabled,
       incognitoUploadsEnabled,
+      t,
     ]
   );
 
@@ -652,7 +661,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
                 latest.name !== f.name ||
                 latest.file_type !== f.file_type
               ) {
-                next.push({ ...f, ...latest } as ProjectFile);
+                next.push({ ...f, ...latest });
                 changed = true;
                 continue;
               }
@@ -669,7 +678,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
         setCurrentProjectDetails((prev) => {
           if (!prev || !prev.files || prev.files.length === 0) return prev;
           let changed = false;
-          const nextFiles = prev.files.map((f) => {
+          const nextFiles = prev.files.map((f): ProjectFile => {
             const latest = statusById.get(f.id);
             if (latest) {
               if (
@@ -678,13 +687,13 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
                 latest.file_type !== f.file_type
               ) {
                 changed = true;
-                return { ...f, ...latest } as ProjectFile;
+                return { ...f, ...latest };
               }
             }
             return f;
           });
           return changed
-            ? ({ ...prev, files: nextFiles } as ProjectDetails)
+            ? ({ ...prev, files: nextFiles } satisfies ProjectDetails)
             : prev;
         });
 

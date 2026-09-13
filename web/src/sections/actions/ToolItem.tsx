@@ -3,7 +3,7 @@
 import React, { useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
-import { Switch } from "@opal/components";
+import { InputSwitch } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
 import type { IconProps } from "@opal/types";
@@ -160,7 +160,7 @@ const ToolItem: React.FC<ToolItemProps> = ({
       )}
     >
       {/* Left Section: Icon and Content */}
-      <div className="flex gap-1 items-start flex-1 min-w-0 pr-2">
+      <div className="flex gap-1 items-start flex-1 min-w-0 pe-2">
         {/* Icon Container */}
         {Icon ? (
           <div
@@ -215,7 +215,7 @@ const ToolItem: React.FC<ToolItemProps> = ({
             <div className="flex items-center min-h-[20px] px-0 py-0.5">
               <div className="flex gap-0.5 items-center">
                 <div className="flex items-center px-0.5">
-                  <Text as="p" text03 secondaryBody className="text-right">
+                  <Text as="p" text03 secondaryBody className="text-end">
                     {t("toolItem.unavailable.label")}
                   </Text>
                 </div>
@@ -226,9 +226,9 @@ const ToolItem: React.FC<ToolItemProps> = ({
             </div>
           )}
 
-          {/* Switch */}
+          {/* InputSwitch */}
           <div className="flex items-center justify-center gap-1 h-5 px-0.5 py-0.5">
-            <Switch
+            <InputSwitch
               checked={isEnabled}
               onCheckedChange={onToggle}
               disabled={!isAvailable || !canToggle}
@@ -253,7 +253,7 @@ const ToolItem: React.FC<ToolItemProps> = ({
           )}
 
           {openApiMetadata?.path && (
-            <Truncated secondaryMono text03 className="text-right truncate">
+            <Truncated secondaryMono text03 className="text-end truncate">
               {highlightedPathContent}
             </Truncated>
           )}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useSWRConfig } from "swr";
 import {
@@ -75,6 +76,7 @@ export default function ScheduleTaskForm({
   description,
   onBack,
 }: ScheduleTaskFormProps) {
+  const t = useTranslations("craft.tasks.form");
   const router = useRouter();
   const { mutate } = useSWRConfig();
   const [name, setName] = useState(initial.name);
@@ -184,8 +186,9 @@ export default function ScheduleTaskForm({
   // Validation states. These gate submission regardless of interaction, but
   // are only surfaced inline once the user has touched (blurred) the field so
   // a pristine form doesn't render red on load.
-  const nameError = trimmedName.length === 0 ? "Name is required." : null;
-  const promptError = trimmedPrompt.length === 0 ? "Prompt is required." : null;
+  const nameError = trimmedName.length === 0 ? t("errors.nameRequired") : null;
+  const promptError =
+    trimmedPrompt.length === 0 ? t("errors.promptRequired") : null;
   const scheduleError = !compiled.ok ? compiled.error : null;
 
   const shownNameError = nameTouched ? nameError : null;
@@ -197,7 +200,7 @@ export default function ScheduleTaskForm({
   // tooltip. A natively-disabled <button> is inert and never fires hover
   // events, so the tooltip must live on the (interactive) wrapper instead.
   const disabledReason = saving
-    ? "Saving..."
+    ? t("savingLabel")
     : (nameError ?? promptError ?? scheduleError ?? undefined);
 
   const submit = useCallback(
@@ -223,7 +226,7 @@ export default function ScheduleTaskForm({
             revalidate: false,
           });
           await mutate(SWR_KEYS.scheduledTasks);
-          toast.success("Scheduled task updated.");
+          toast.success(t("toasts.updated"));
           router.push(taskDetailPath(updated.id));
         } else {
           const body: ScheduledTaskCreateBody = {
@@ -238,15 +241,13 @@ export default function ScheduleTaskForm({
           await createScheduledTask(body);
           await mutate(SWR_KEYS.scheduledTasks);
           toast.success(
-            runImmediately
-              ? "Scheduled task created and queued."
-              : "Scheduled task created."
+            runImmediately ? t("toasts.createdAndQueued") : t("toasts.created")
           );
           router.push(TASKS_PATH);
         }
       } catch (err) {
         toast.error(
-          err instanceof Error ? err.message : "Failed to save scheduled task"
+          err instanceof Error ? err.message : t("toasts.saveFailed")
         );
       } finally {
         setSaving(false);
@@ -264,6 +265,7 @@ export default function ScheduleTaskForm({
       router,
       trimmedName,
       trimmedPrompt,
+      t,
     ]
   );
 
@@ -284,7 +286,7 @@ export default function ScheduleTaskForm({
               onClick={() => router.push(TASKS_PATH)}
               disabled={saving}
             >
-              Cancel
+              {t("cancelButton")}
             </Button>
             {!isEdit && (
               <Disabled
@@ -300,7 +302,7 @@ export default function ScheduleTaskForm({
                   onClick={() => void submit(true)}
                   data-testid="save-and-run-now"
                 >
-                  Save and run now
+                  {t("saveAndRunNowButton")}
                 </Button>
               </Disabled>
             )}
@@ -317,7 +319,7 @@ export default function ScheduleTaskForm({
                 onClick={() => void submit(false)}
                 data-testid="save-task"
               >
-                {isEdit ? "Save changes" : "Save"}
+                {isEdit ? t("saveChangesButton") : t("saveButton")}
               </Button>
             </Disabled>
           </div>
@@ -326,12 +328,12 @@ export default function ScheduleTaskForm({
 
       <SettingsLayouts.Body>
         <GeneralLayouts.Section>
-          <InputVertical withLabel title="Name">
+          <InputVertical withLabel title={t("fields.name.label")}>
             <InputTypeIn
               value={name}
               onChange={(e) => setName(e.target.value)}
               onBlur={() => setNameTouched(true)}
-              placeholder="e.g. Weekly customer escalations digest"
+              placeholder={t("fields.name.placeholder")}
               data-testid="task-name-input"
               variant={shownNameError ? "error" : undefined}
             />
@@ -344,8 +346,8 @@ export default function ScheduleTaskForm({
 
           <InputVertical
             withLabel
-            title="Prompt"
-            description="This message is sent to Craft each time the task fires."
+            title={t("fields.prompt.label")}
+            description={t("fields.prompt.description")}
           >
             <InputTextArea
               ref={promptTextareaRef}
@@ -354,7 +356,7 @@ export default function ScheduleTaskForm({
               onKeyUp={handlePromptCursorChange}
               onClick={handlePromptCursorChange}
               onBlur={() => setPromptTouched(true)}
-              placeholder="Describe what Craft should do on each run..."
+              placeholder={t("fields.prompt.placeholder")}
               rows={6}
               autoResize
               maxRows={12}
@@ -380,7 +382,7 @@ export default function ScheduleTaskForm({
         <Divider paddingParallel={0} paddingPerpendicular={0} />
 
         <GeneralLayouts.Section>
-          <InputVertical title="Schedule">
+          <InputVertical title={t("fields.schedule.label")}>
             <ScheduleEditor
               mode={mode}
               onModeChange={setMode}
@@ -395,8 +397,8 @@ export default function ScheduleTaskForm({
 
         <GeneralLayouts.Section>
           <InputVertical
-            title="Pre-approved apps and MCP servers"
-            description="Craft can use selected apps and MCP servers without pausing when this task runs unattended. Other approval requests pause the run and can cause it to fail."
+            title={t("fields.preApproval.label")}
+            description={t("fields.preApproval.description")}
           >
             <PreApprovalPicker
               selectedAppIds={preApprovedAppIds}

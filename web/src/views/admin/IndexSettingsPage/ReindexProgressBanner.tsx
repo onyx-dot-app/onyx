@@ -18,7 +18,9 @@ import { useReindexProgress } from "@/lib/indexing/hooks";
 
 interface ReindexProgressBannerProps {
   secondaryModelName?: string;
-  onCancel: () => void;
+  // Omitted when the reindex can't be reverted (INSTANT backfill: the new model is
+  // already live) — the banner then shows progress only, no Cancel button.
+  onCancel?: () => void;
 }
 
 const ZERO = {
@@ -67,7 +69,11 @@ export default function ReindexProgressBanner({
           <div className="flex flex-row items-center gap-4 px-2 py-1">
             <div className="flex flex-1 flex-col gap-2 min-w-0">
               <div className="flex flex-row items-center justify-between gap-2">
-                <Text font="main-ui-body" color="text-03" nowrap>
+                <Text
+                  font="main-ui-body"
+                  color="text-03"
+                  wordWrap="whitespace-nowrap"
+                >
                   {t("progressBanner.status.label")}
                 </Text>
                 <div className="flex flex-row items-center gap-1.5">
@@ -114,11 +120,17 @@ export default function ReindexProgressBanner({
                 aria-label={t("progressBanner.progress.ariaLabel")}
               />
             </div>
-            <div className="shrink-0">
-              <Button variant="danger" prominence="primary" onClick={onCancel}>
-                {t("progressBanner.cancelButton.label")}
-              </Button>
-            </div>
+            {onCancel && (
+              <div className="shrink-0">
+                <Button
+                  variant="danger"
+                  prominence="primary"
+                  onClick={onCancel}
+                >
+                  {t("progressBanner.cancelButton.label")}
+                </Button>
+              </div>
+            )}
           </div>
         }
       />

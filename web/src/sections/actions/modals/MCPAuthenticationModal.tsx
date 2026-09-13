@@ -17,7 +17,7 @@ import {
   Divider,
   InputTypeIn,
   MessageCard,
-  PasswordInputTypeIn,
+  InputPasswordTypeIn,
   Tabs,
   Text,
 } from "@opal/components";
@@ -698,7 +698,7 @@ export default function MCPAuthenticationModal({
                           {t("mcpAuthModal.clientSecret.label")}
                         </FormField.Label>
                         <FormField.Control asChild>
-                          <PasswordInputTypeIn
+                          <InputPasswordTypeIn
                             name="oauth_client_secret"
                             value={values.oauth_client_secret}
                             onChange={handleChange}
@@ -726,7 +726,7 @@ export default function MCPAuthenticationModal({
                             as="p"
                             font="secondary-body"
                             color="text-03"
-                            nowrap
+                            wordWrap="whitespace-nowrap"
                           >
                             {markdown(t("mcpAuthModal.redirectUri.label"))}
                           </Text>
@@ -987,7 +987,7 @@ export default function MCPAuthenticationModal({
                                 {t("mcpAuthModal.sharedApiKey.label")}
                               </FormField.Label>
                               <FormField.Control asChild>
-                                <PasswordInputTypeIn
+                                <InputPasswordTypeIn
                                   name="api_token"
                                   value={values.api_token}
                                   onChange={handleChange}

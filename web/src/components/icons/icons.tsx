@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { StaticImageData } from "next/image";
+import { useTranslations } from "next-intl";
 import googleCloudStorageIcon from "@public/GoogleCloudStorage.png";
 import openSourceIcon from "@public/OpenSource.png";
 import r2Icon from "@public/r2.png";
@@ -26,16 +27,19 @@ export const LogoIcon = ({
   size = 16,
   className = defaultTailwindCSS,
   src,
-}: LogoIconProps) => (
-  <Image
-    style={{ width: `${size}px`, height: `${size}px` }}
-    className={`w-[${size}px] h-[${size}px] object-contain ` + className}
-    src={src}
-    alt="Logo"
-    width="96"
-    height="96"
-  />
-);
+}: LogoIconProps) => {
+  const t = useTranslations("common.icons");
+  return (
+    <Image
+      style={{ width: `${size}px`, height: `${size}px` }}
+      className={`w-[${size}px] h-[${size}px] object-contain ` + className}
+      src={src}
+      alt={t("logo.alt")}
+      width="96"
+      height="96"
+    />
+  );
+};
 
 // Helper to create simple icon components from react-icon libraries
 export function createIcon(

@@ -49,6 +49,12 @@ interface ContentBaseProps {
   /** Clamp the title to N lines with ellipsis. Omit to wrap freely. */
   titleMaxLines?: number;
 
+  /**
+   * Strike the title through — a presentational state (e.g. an option that is
+   * switched off), not content, so callers keep passing a plain string.
+   */
+  strikethrough?: boolean;
+
   /** Clamp the description to N lines. Maps to Text's maxLines prop. */
   descriptionMaxLines?: number;
 

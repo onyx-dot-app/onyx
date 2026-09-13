@@ -60,6 +60,7 @@ from onyx.db.engine.async_sql_engine import (
 from onyx.db.engine.connection_warmup import warm_up_connections
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.sso_provider import seed_saml_provider_from_conf_dir
+from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.file_store.file_store import get_default_file_store
 from onyx.hooks.registry import validate_registry
@@ -215,7 +216,14 @@ def validation_exception_handler(request: Request, exc: Exception) -> JSONRespon
 
     exc_str = f"{exc}".replace("\n", " ").replace("   ", " ")
     logger.exception("%s: %s", request, exc_str)
-    content = {"status_code": 422, "message": exc_str, "data": None}
+    # message/status_code/data are kept for existing clients; error_code and
+    # detail make the body match every other error the API returns.
+    content = {
+        "status_code": 422,
+        "message": exc_str,
+        "data": None,
+        **OnyxErrorCode.VALIDATION_ERROR.detail(exc_str),
+    }
     return JSONResponse(content=content, status_code=422)
 
 
@@ -229,9 +237,14 @@ def value_error_handler(_: Request, exc: Exception) -> JSONResponse:
     except Exception:
         # log stacktrace
         logger.exception("ValueError")
+    # "message" is what this handler has always returned; the code and detail
+    # are added so a bare ValueError reads like any other Onyx error.
     return JSONResponse(
         status_code=400,
-        content={"message": str(exc)},
+        content={
+            "message": str(exc),
+            **OnyxErrorCode.BAD_REQUEST.detail(str(exc)),
+        },
     )
 
 
@@ -489,9 +502,14 @@ def log_http_error(request: Request, exc: Exception) -> JSONResponse:
         logger.error(error_msg)
 
     detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
+    # Routes that raise HTTPException name no error code, so derive the
+    # canonical one for the status. Clients reading "detail" are unaffected.
     return JSONResponse(
         status_code=status_code,
-        content={"detail": detail},
+        content={
+            "error_code": OnyxErrorCode.for_status(status_code).code,
+            "detail": detail,
+        },
     )
 
 

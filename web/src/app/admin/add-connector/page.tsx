@@ -1,4 +1,5 @@
 "use client";
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useTranslations } from "next-intl";
 import { SettingsLayouts } from "@opal/layouts";
 import { SourceCategory, SourceMetadata } from "@/lib/search/interfaces";
@@ -139,6 +140,7 @@ function SourceTileTooltipWrapper({
 
 export default function Page() {
   const t = useTranslations("admin.addConnector");
+  const adminRouteTitle = useAdminRouteTitle();
   const sources = useMemo(() => listSourceMetadata(), []);
 
   const [rawSearchTerm, setSearchTerm] = useState("");
@@ -261,7 +263,7 @@ export default function Page() {
     <SettingsLayouts.Root width="full">
       <SettingsLayouts.Header
         icon={route.icon}
-        title={route.title}
+        title={adminRouteTitle(route)}
         rightChildren={
           <Button href="/admin/indexing/status">
             {t("seeConnectorsButton.label")}

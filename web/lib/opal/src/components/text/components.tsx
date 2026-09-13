@@ -10,7 +10,14 @@ import { resolveStr } from "@opal/components/text/InlineMarkdown";
 // Types
 // ---------------------------------------------------------------------------
 
-interface TextProps extends WithoutStyles<
+/**
+ * Tags that establish a block box, so `text-align` has something to align
+ * within. `span` is deliberately absent: it is inline, and aligning an inline
+ * element is the parent's job, not its own.
+ */
+type BlockTag = "p" | "li" | "h1" | "h2" | "h3";
+
+interface TextBaseProps extends WithoutStyles<
   Omit<HTMLAttributes<HTMLElement>, "color" | "children">
 > {
   /** Font preset. Default: `"main-ui-body"`. */
@@ -19,14 +26,39 @@ interface TextProps extends WithoutStyles<
   /** Color variant. Default: `"text-04"`. */
   color?: TextColor;
 
-  /** HTML tag to render. Default: `"span"`. */
-  as?: "p" | "span" | "li" | "h1" | "h2" | "h3";
-
-  /** Prevent text wrapping. */
-  nowrap?: boolean;
+  /**
+   * How this text wraps. Ordinary wrapping only breaks at whitespace, so a
+   * URL, an identifier or any single long token overflows its container
+   * instead of wrapping.
+   *
+   * - `"whitespace-nowrap"` — do not wrap at all; the text stays on one line.
+   * - `"wrap-normal"` — the CSS default: break at whitespace only, and let a
+   *   long run overflow. Spell it out to override an inherited value, since
+   *   `overflow-wrap` inherits and omitting this prop cannot undo an
+   *   ancestor's.
+   * - `"wrap-break-word"` — break only when the run would otherwise overflow.
+   * - `"wrap-anywhere"` — as above, and count the break when min-content is
+   *   measured, so the element can shrink as a flex item.
+   * - `"break-all"` — break between any two characters.
+   * - `"break-keep"` — never break within a word (CJK).
+   */
+  wordWrap?:
+    | "whitespace-nowrap"
+    | "wrap-normal"
+    | "wrap-break-word"
+    | "wrap-anywhere"
+    | "break-all"
+    | "break-keep";
 
   /** Truncate text to N lines with ellipsis. `1` uses simple truncation; `2+` uses `-webkit-line-clamp`. */
   maxLines?: number;
+
+  /**
+   * Strike the text through. This is a presentational state (e.g. an option
+   * that is switched off), so it stays a prop rather than `~~` in the content:
+   * the caller keeps passing the plain string, and no escaping is needed.
+   */
+  strikethrough?: boolean;
 
   /**
    * Plain string, `markdown()` for inline markdown, or `richNodes()` for
@@ -34,6 +66,30 @@ interface TextProps extends WithoutStyles<
    */
   children?: string | RichStr | RichNodes;
 }
+
+/**
+ * `textPosition` is only offered on a tag that makes a block box. On an inline
+ * `span` the property has nothing to align against — `text-align` positions a
+ * block's inline content, not the element itself — so allowing it there would
+ * be a prop that silently does nothing.
+ */
+type TextProps =
+  | (TextBaseProps & {
+      /** HTML tag to render. Default: `"span"`. */
+      as?: "span";
+      textPosition?: never;
+    })
+  | (TextBaseProps & {
+      /** HTML tag to render. */
+      as: BlockTag;
+
+      /**
+       * How the text sits within this element's box. Logical values, so they
+       * follow the reading direction rather than the screen: `"text-start"` is
+       * left in an LTR locale and right in an RTL one.
+       */
+      textPosition?: "text-start" | "text-center" | "text-end" | "text-justify";
+    });
 
 // ---------------------------------------------------------------------------
 // Config
@@ -77,6 +133,7 @@ const COLOR_CONFIG: Record<TextColor, string | null> = {
   "text-light-05": "text-text-light-05",
   "text-dark-03": "text-text-dark-03",
   "text-dark-05": "text-text-dark-05",
+  "action-selection-05": "text-action-selection-05",
   "status-error-01": "text-status-error-01",
   "status-error-02": "text-status-error-02",
   "status-error-05": "text-status-error-05",
@@ -93,8 +150,10 @@ function Text({
   font = "main-ui-body",
   color = "text-04",
   as: Tag = "span",
-  nowrap,
+  wordWrap,
+  textPosition,
   maxLines,
+  strikethrough,
   children,
   ...rest
 }: TextProps) {
@@ -102,9 +161,11 @@ function Text({
     "px-[2px]",
     FONT_CONFIG[font],
     COLOR_CONFIG[color],
-    nowrap && "whitespace-nowrap",
+    wordWrap,
+    textPosition,
     maxLines === 1 && "truncate",
-    maxLines && maxLines > 1 && "overflow-hidden"
+    maxLines && maxLines > 1 && "overflow-hidden",
+    strikethrough && "line-through"
   );
 
   const style =

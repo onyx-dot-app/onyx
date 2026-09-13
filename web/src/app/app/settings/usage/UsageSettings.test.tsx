@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen } from "@tests/setup/test-utils";
 import userEvent from "@testing-library/user-event";
 import UsageSettings from "@/app/app/settings/usage/UsageSettings";
 import { useUserUsage } from "@/app/app/settings/usage/lib";

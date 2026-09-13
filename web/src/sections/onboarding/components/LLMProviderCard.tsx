@@ -5,7 +5,6 @@ import { useTranslations } from "next-intl";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import { Disabled, Hoverable } from "@opal/core";
@@ -16,6 +15,7 @@ import {
   SvgSettings,
 } from "@opal/icons";
 import { ModelIcon } from "@/lib/languageModels/components";
+import { Button } from "@opal/components";
 
 export interface LLMProviderCardProps {
   title: string;
@@ -69,7 +69,7 @@ function LLMProviderCardInner({
             }
           }}
           className={cn(
-            "flex justify-between h-full w-full p-1 rounded-12 border border-border-01 bg-background-neutral-01 transition-colors text-left",
+            "flex justify-between h-full w-full p-1 rounded-12 border border-border-01 bg-background-neutral-01 transition-colors text-start",
             !disabled && "hover:bg-background-neutral-02 cursor-pointer"
           )}
         >
@@ -96,13 +96,14 @@ function LLMProviderCardInner({
                 group="llm-provider-card"
                 variant="appear-on-hover"
               >
-                {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-                <IconButton
-                  internal
+                <Button
+                  prominence="tertiary"
                   icon={SvgSettings}
                   disabled={disabled}
                   onClick={handleSettingsClick}
-                  className="hover:bg-transparent"
+                  aria-label={t(
+                    "llmStep.providerCard.settingsButton.ariaLabel"
+                  )}
                 />
               </Hoverable.Item>
               <div className="p-1">

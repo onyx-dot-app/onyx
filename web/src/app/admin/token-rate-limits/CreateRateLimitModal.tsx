@@ -72,12 +72,15 @@ function handleRadioOptionKeyDown(
     group?.querySelectorAll<HTMLElement>('[role="radio"]') ?? []
   );
   const currentIndex = options.indexOf(event.currentTarget);
+  // Horizontal arrows follow the reading direction, so RTL swaps them.
+  const isRtl = getComputedStyle(event.currentTarget).direction === "rtl";
+  const forwardKey = isRtl ? "ArrowLeft" : "ArrowRight";
   const nextIndex =
     event.key === "Home"
       ? 0
       : event.key === "End"
         ? options.length - 1
-        : event.key === "ArrowRight" || event.key === "ArrowDown"
+        : event.key === forwardKey || event.key === "ArrowDown"
           ? (currentIndex + 1) % options.length
           : (currentIndex - 1 + options.length) % options.length;
   options[nextIndex]?.focus();
@@ -269,8 +272,12 @@ function TokenBudgetField() {
       onBlur={() => void helpers.setTouched(true)}
       variant={meta.touched && meta.error ? "error" : "primary"}
       rightChildren={
-        <div className="pr-1">
-          <Text font="secondary-action" color="text-03" nowrap>
+        <div className="pe-1">
+          <Text
+            font="secondary-action"
+            color="text-03"
+            wordWrap="whitespace-nowrap"
+          >
             {t("modal.tokenBudget.unit")}
           </Text>
         </div>
@@ -602,11 +609,11 @@ export default function CreateRateLimitModal({
                         prefixText="$"
                         placeholder={t("modal.costBudget.placeholder")}
                         rightChildren={
-                          <div className="pr-1">
+                          <div className="pe-1">
                             <Text
                               font="secondary-action"
                               color="text-03"
-                              nowrap
+                              wordWrap="whitespace-nowrap"
                             >
                               {t("modal.costBudget.unit")}
                             </Text>
@@ -633,11 +640,11 @@ export default function CreateRateLimitModal({
                         inputMode="numeric"
                         pattern="[0-9]*"
                         rightChildren={
-                          <div className="pr-1">
+                          <div className="pe-1">
                             <Text
                               font="secondary-action"
                               color="text-03"
-                              nowrap
+                              wordWrap="whitespace-nowrap"
                             >
                               {t("modal.period.unit")}
                             </Text>

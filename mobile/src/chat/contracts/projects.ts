@@ -1,9 +1,9 @@
-// Mobile-native project types (read model, PR 6) — not shared with web.
+// These project types are mobile-only; they are not shared with the web codebase.
 import type { ChatFileType } from "@/chat/interfaces";
 import type { ChatSessionSummary } from "@/api/chat/sessions";
 
-// UPLOADING is client-only (PR 7); the rest come from the backend. Matched
-// case-insensitively — payload casing isn't guaranteed.
+// UPLOADING is set locally before the file has a server record; every other value comes from the
+// backend. Payload casing isn't guaranteed, so status checks below compare against an uppercased value.
 export enum UserFileStatus {
   UPLOADING = "UPLOADING",
   PROCESSING = "PROCESSING",
@@ -23,24 +23,23 @@ export interface ProjectFile {
   chat_file_type: ChatFileType;
   token_count: number | null;
   created_at: string;
-  // Client marker for an optimistic upload; the upload endpoint echoes it back, and reconcile()
-  // uses that echo as the primary key to match the returned server file to its local record.
+  // This is a client-generated marker set before the file has a server id. The upload endpoint
+  // echoes it back, and reconcile() uses that echo to match the returned file to its local record.
   temp_id?: string | null;
 }
 
-// reason is a human string shown to the user
 export interface RejectedFile {
   file_name: string;
   reason: string;
 }
 
-// Partial success is normal: rejected files land in rejected_files, not user_files.
+// An upload can partially succeed: some files land in rejected_files while others land in
+// user_files, in the same response.
 export interface CategorizedFiles {
   user_files: ProjectFile[];
   rejected_files: RejectedFile[];
 }
 
-// Case-insensitive: payload casing isn't guaranteed.
 export function isProcessingStatus(status: UserFileStatus | string): boolean {
   const upper = String(status).toUpperCase();
   return (
@@ -50,7 +49,13 @@ export function isProcessingStatus(status: UserFileStatus | string): boolean {
   );
 }
 
-// Server-side processing (has a real id, so it is pollable) — excludes the client-only UPLOADING.
+// Narrower than isProcessingStatus: true only while the file is still transferring, not once the
+// server has started processing or indexing it.
+export function isUploadingStatus(status: UserFileStatus | string): boolean {
+  return String(status).toUpperCase() === UserFileStatus.UPLOADING;
+}
+
+// Excludes UPLOADING because it's set locally, before the file has a real id to poll for.
 export function isServerProcessingStatus(
   status: UserFileStatus | string,
 ): boolean {
@@ -60,8 +65,8 @@ export function isServerProcessingStatus(
   );
 }
 
-// `chat_sessions` is embedded by the list/detail endpoints — a project's chats
-// need no separate fetch.
+// The list/detail endpoints embed `chat_sessions` inline, so a project's chats never need a
+// separate fetch.
 export interface Project {
   id: number;
   name: string;
@@ -71,8 +76,8 @@ export interface Project {
   chat_sessions: ChatSessionSummary[];
 }
 
-// `GET /user/projects/{id}/details` — project + files inline; featured map drives
-// a chat row's avatar-vs-bubble choice.
+// Returned by `GET /user/projects/{id}/details`. `persona_id_to_is_featured` decides whether a
+// chat row renders that agent's avatar or a plain bubble.
 export interface ProjectDetails {
   project: Project;
   files: ProjectFile[] | null;

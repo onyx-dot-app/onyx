@@ -11,6 +11,7 @@ import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { cn } from "@opal/utils";
 import { useEffect, useRef, useState, useImperativeHandle } from "react";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -88,6 +89,9 @@ interface ContentMdProps {
   /** Clamp the title to N lines with ellipsis. Omit to wrap freely. */
   titleMaxLines?: number;
 
+  /** Strike the title through, for a row whose option is switched off. */
+  strikethrough?: boolean;
+
   /** Size preset. Default: `"main-ui"`. */
   sizePreset?: ContentMdSizePreset;
 
@@ -158,12 +162,14 @@ function ContentMd({
   auxIcon,
   tag,
   titleMaxLines,
+  strikethrough,
   sizePreset = "main-ui",
   ref,
   editHandle,
 }: ContentMdProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(toPlainString(title));
+  const strings = useOpalStrings();
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Move focus to the edit input as soon as editing starts.
@@ -259,6 +265,7 @@ function ContentMd({
               font={config.titleFont}
               color="inherit"
               maxLines={titleMaxLines}
+              strikethrough={strikethrough}
               title={toPlainString(title)}
               onClick={editable ? handleTitleClick : undefined}
             >
@@ -267,9 +274,11 @@ function ContentMd({
           )}
 
           {suffix && (
-            <Text font={config.optionalFont} color="text-03">
-              {suffix === "optional" ? "(Optional)" : suffix}
-            </Text>
+            <span className="opal-content-md-suffix">
+              <Text font={config.optionalFont} color="inherit">
+                {suffix === "optional" ? "(Optional)" : suffix}
+              </Text>
+            </span>
           )}
 
           {auxIcon &&
@@ -304,7 +313,7 @@ function ContentMd({
                 icon={SvgEdit}
                 prominence="internal"
                 size={config.editButtonSize}
-                tooltip="Edit"
+                tooltip={strings.edit}
                 tooltipSide="right"
                 onClick={startEditing}
               />
@@ -328,7 +337,7 @@ function ContentMd({
         >
           <Text
             font="secondary-body"
-            color="text-03"
+            color="inherit"
             as="p"
             maxLines={descriptionMaxLines}
           >

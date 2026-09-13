@@ -33,10 +33,10 @@ function CraftMessageImage({ sessionId, attachment }: CraftMessageImageProps) {
           width={448}
           height={288}
           loading="lazy"
-          className="max-h-72 max-w-112 object-contain object-right"
+          className="max-h-72 max-w-112 object-contain object-right rtl:object-left"
           onError={() => setFailed(true)}
         />
-        <div className="absolute bottom-2 right-2">
+        <div className="absolute bottom-2 end-2">
           <Hoverable.Item group="craftMessageImage" variant="appear-on-hover">
             <Button
               icon={SvgDownload}

@@ -8,11 +8,11 @@ from onyx.connectors.models import Document, HierarchyNode, TextSection
 from onyx.db.enums import HierarchyNodeType
 from tests.daily.connectors.utils import ConnectorOutput, load_all_from_connector
 
-ALL_FILES = list(range(0, 60))
+ALL_FILES = list(range(60))
 SHARED_DRIVE_FILES = list(range(20, 25))
 
 
-ADMIN_FILE_IDS = list(range(0, 5))
+ADMIN_FILE_IDS = list(range(5))
 ADMIN_FOLDER_3_FILE_IDS = list(range(65, 70))  # This folder is shared with test_user_1
 TEST_USER_1_FILE_IDS = list(range(5, 10))
 TEST_USER_2_FILE_IDS = list(range(10, 15))
@@ -476,7 +476,7 @@ ACCESS_MAPPING: dict[str, list[int]] = {
         # This user has been given shared access to folder 3 in Admin's My Drive
         + ADMIN_FOLDER_3_FILE_IDS
         # This user has been given shared access to files 0 and 1 in Admin's My Drive
-        + list(range(0, 2))
+        + list(range(2))
     ),
     TEST_USER_2_EMAIL: (
         TEST_USER_2_FILE_IDS

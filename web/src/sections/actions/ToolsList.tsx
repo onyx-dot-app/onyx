@@ -7,7 +7,7 @@ import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
 import FadingEdgeContainer from "@/refresh-components/FadingEdgeContainer";
 import ToolItemSkeleton from "@/sections/actions/skeleton/ToolItemSkeleton";
-import EnabledCount from "@/refresh-components/EnabledCount";
+import EnabledCount from "@/lib/tools/components/EnabledCount";
 import { SvgEye, SvgXCircle } from "@opal/icons";
 
 export interface ToolsListProps {
@@ -91,12 +91,11 @@ const ToolsList: React.FC<ToolsListProps> = ({
             {leftAction}
 
             {/* Right action area */}
-            <div className="flex items-center gap-1 ml-auto">
+            <div className="flex items-center gap-1 ms-auto">
               {enabledCount > 0 && (
                 <EnabledCount
                   enabledCount={enabledCount}
                   totalCount={totalCount}
-                  name="tool"
                 />
               )}
               {onToggleShowOnlyEnabled && enabledCount > 0 && (

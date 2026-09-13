@@ -13,6 +13,7 @@ import {
   type MessageFormatElement,
 } from "@formatjs/icu-messageformat-parser";
 
+import ar from "@/i18n/messages/ar.json";
 import de from "@/i18n/messages/de.json";
 import en from "@/i18n/messages/en.json";
 import es from "@/i18n/messages/es.json";
@@ -25,6 +26,7 @@ import zh from "@/i18n/messages/zh.json";
 type MessageTree = { [key: string]: string | MessageTree };
 
 const TARGET_LOCALES: Record<string, MessageTree> = {
+  ar,
   de,
   es,
   fr,
@@ -81,6 +83,56 @@ function sortedArguments(message: string): string[] {
   return Array.from(collectArguments(parse(message), new Set<string>())).sort();
 }
 
+// Canonical structure: argument kinds, select branches with exact keys
+// and contents, tag names with contents. Siblings compare unordered
+// (word order is translation freedom), plural branches merge (CLDR).
+function canonicalShape(elements: MessageFormatElement[]): string {
+  const parts: string[] = [];
+  for (const element of elements) {
+    switch (element.type) {
+      case TYPE.argument:
+        parts.push(`arg:${element.value}`);
+        break;
+      case TYPE.number:
+        parts.push(`number:${element.value}`);
+        break;
+      case TYPE.date:
+        parts.push(`date:${element.value}`);
+        break;
+      case TYPE.time:
+        parts.push(`time:${element.value}`);
+        break;
+      case TYPE.plural: {
+        const union = new Set<string>();
+        for (const option of Object.values(element.options)) {
+          for (const part of canonicalShape(option.value).split("|")) {
+            if (part) union.add(part);
+          }
+        }
+        parts.push(
+          `plural:${element.value}{${Array.from(union).sort().join("|")}}`
+        );
+        break;
+      }
+      case TYPE.select: {
+        const branches = Object.entries(element.options)
+          .map(([key, option]) => `${key}{${canonicalShape(option.value)}}`)
+          .sort();
+        parts.push(`select:${element.value}(${branches.join("|")})`);
+        break;
+      }
+      case TYPE.tag:
+        parts.push(`tag:${element.value}{${canonicalShape(element.children)}}`);
+        break;
+      default:
+        break;
+    }
+  }
+  // Multiplicity matters: a repeated argument or tag must repeat in the
+  // translation too, so siblings sort without dedup.
+  return parts.sort().join("|");
+}
+
 const flatEnglish = flatten(en as MessageTree);
 
 describe("i18n message catalogs", () => {
@@ -102,6 +154,10 @@ describe("i18n message catalogs", () => {
         expect({ key, placeholders: sortedArguments(message) }).toEqual({
           key,
           placeholders: sortedArguments(englishMessage),
+        });
+        expect({ key, shape: canonicalShape(parse(message)) }).toEqual({
+          key,
+          shape: canonicalShape(parse(englishMessage)),
         });
       }
     });

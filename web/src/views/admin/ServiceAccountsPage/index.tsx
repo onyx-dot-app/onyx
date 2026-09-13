@@ -1,5 +1,6 @@
 "use client";
 
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR, { mutate } from "swr";
@@ -62,6 +63,7 @@ const tc = createTableColumns<APIKey>();
 
 export default function ServiceAccountsPage() {
   const t = useTranslations("admin.serviceAccounts");
+  const adminRouteTitle = useAdminRouteTitle();
   const {
     data: apiKeys,
     isLoading,
@@ -105,7 +107,7 @@ export default function ServiceAccountsPage() {
         );
         return;
       }
-      const newKey = (await response.json()) as APIKey;
+      const newKey: APIKey = await response.json();
       setFullApiKey(newKey.api_key);
       mutate(API_KEY_SWR_KEY);
     } catch (e) {
@@ -244,7 +246,7 @@ export default function ServiceAccountsPage() {
     return (
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
-          title={route.title}
+          title={adminRouteTitle(route)}
           icon={route.icon}
           description={t("page.description")}
           divider
@@ -264,7 +266,7 @@ export default function ServiceAccountsPage() {
     return (
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
-          title={route.title}
+          title={adminRouteTitle(route)}
           icon={route.icon}
           description={t("page.description")}
           divider
@@ -281,7 +283,7 @@ export default function ServiceAccountsPage() {
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
-        title={route.title}
+        title={adminRouteTitle(route)}
         icon={route.icon}
         description={t("page.description")}
         divider

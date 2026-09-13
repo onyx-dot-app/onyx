@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useRef } from "react";
+import { useTranslations } from "next-intl";
 import AgentCard from "@/sections/agents/AgentCard";
 import { AgentViewer } from "@/lib/agents/components";
 import { useUser } from "@/providers/UserProvider";
@@ -57,7 +58,11 @@ function AgentsSection({
   );
 }
 
+// e2e locator, not user copy.
+const NEW_AGENT_BUTTON_ARIA_LABEL = "AgentsPage/new-agent-button";
+
 export default function AgentsNavigationPage() {
+  const t = useTranslations("agents");
   const { agents } = useAgents();
   const { user, permissions } = useUser();
   const canCreateAgent = hasPermission(permissions, Permission.ADD_AGENTS);
@@ -108,7 +113,7 @@ export default function AgentsNavigationPage() {
   return (
     <SettingsLayouts.Root
       data-testid="AgentsPage/container"
-      aria-label="Agents Page"
+      aria-label={t("navigation.page.ariaLabel")}
     >
       <AgentViewer
         agentId={viewedAgentId}
@@ -116,21 +121,21 @@ export default function AgentsNavigationPage() {
       />
       <SettingsLayouts.Header
         icon={SvgOnyxOctagon}
-        title="Agents"
-        description="Customize AI behavior and knowledge for you and your team's use cases."
+        title={t("navigation.header.title")}
+        description={t("navigation.header.description")}
         rightChildren={
           <Button
             href={canCreateAgent ? "/app/agents/create" : undefined}
             icon={SvgPlus}
-            aria-label="AgentsPage/new-agent-button"
+            aria-label={NEW_AGENT_BUTTON_ARIA_LABEL}
             disabled={!canCreateAgent}
             tooltip={
               !canCreateAgent
-                ? "You don't have permission to create agents. Contact your admin to request access."
+                ? t("navigation.newAgent.noPermission.tooltip")
                 : undefined
             }
           >
-            New Agent
+            {t("navigation.newAgent.label")}
           </Button>
         }
       >
@@ -139,7 +144,7 @@ export default function AgentsNavigationPage() {
             <div className="flex-2">
               <InputTypeIn
                 ref={searchInputRef}
-                placeholder="Search agents..."
+                placeholder={t("navigation.search.placeholder")}
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 searchIcon
@@ -151,8 +156,12 @@ export default function AgentsNavigationPage() {
                 onValueChange={(value) => setActiveTab(value as "all" | "your")}
               >
                 <Tabs.List>
-                  <Tabs.Trigger value="all">All Agents</Tabs.Trigger>
-                  <Tabs.Trigger value="your">Your Agents</Tabs.Trigger>
+                  <Tabs.Trigger value="all">
+                    {t("navigation.tabs.all.label")}
+                  </Tabs.Trigger>
+                  <Tabs.Trigger value="your">
+                    {t("navigation.tabs.your.label")}
+                  </Tabs.Trigger>
                 </Tabs.List>
               </Tabs>
             </div>
@@ -169,24 +178,26 @@ export default function AgentsNavigationPage() {
             className="w-full h-full flex flex-col items-center justify-center py-12"
             text03
           >
-            No Agents found
+            {t("navigation.empty.description")}
           </Text>
         ) : (
           <>
             <AgentsSection
-              title="Featured Agents"
-              description="Curated by your team"
+              title={t("navigation.sections.featured.title")}
+              description={t("navigation.sections.featured.description")}
               agents={featuredAgents}
               onView={setViewedAgentId}
             />
             <AgentsSection
-              title="All Agents"
+              title={t("navigation.sections.all.title")}
               agents={allAgents}
               onView={setViewedAgentId}
             />
             <TextSeparator
               count={agentCount}
-              text={agentCount === 1 ? "Agent" : "Agents"}
+              text={t("navigation.countSeparator.label", {
+                count: agentCount,
+              })}
             />
           </>
         )}

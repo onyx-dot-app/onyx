@@ -1,4 +1,4 @@
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { SvgArrowUpRight, SvgFilterPlus, SvgUserSync } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
 import { Button, Card } from "@opal/components";
@@ -21,7 +21,8 @@ type StatCellProps = {
 
 function StatCell({ value, label, onFilter }: StatCellProps) {
   const t = useTranslations("admin.users");
-  const display = value === null ? "\u2014" : value.toLocaleString();
+  const locale = useLocale();
+  const display = value === null ? "\u2014" : value.toLocaleString(locale);
 
   const cellClassName = `relative flex flex-col items-start gap-0.5 w-full p-2 rounded-08 transition-colors ${
     onFilter ? "cursor-pointer hover:bg-background-tint-02" : ""
@@ -36,7 +37,7 @@ function StatCell({ value, label, onFilter }: StatCellProps) {
         {label}
       </Text>
       {onFilter && (
-        <div className="absolute right-1 top-1">
+        <div className="absolute end-1 top-1">
           <Hoverable.Item group="stat" variant="appear-on-hover">
             <Button
               prominence="tertiary"
