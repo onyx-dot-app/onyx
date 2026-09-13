@@ -147,6 +147,14 @@ def _load_jira_group_sync() -> GroupSyncFuncType:
     return jira_group_sync
 
 
+def _load_jira_service_management_doc_sync() -> DocSyncFuncType:
+    from ee.onyx.external_permissions.jira.doc_sync import (
+        jira_service_management_doc_sync,
+    )
+
+    return jira_service_management_doc_sync
+
+
 def _load_censor_salesforce_chunks() -> CensoringFuncType:
     from ee.onyx.external_permissions.salesforce.postprocessing import (
         censor_salesforce_chunks,
@@ -248,6 +256,20 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
         ),
         group_sync_config=GroupSyncConfig(
             group_sync_frequency=JIRA_PERMISSION_GROUP_SYNC_FREQUENCY,
+            group_sync_func=_lazy_group_sync(_load_jira_group_sync),
+            group_sync_is_cc_pair_agnostic=True,
+        ),
+    ),
+    DocumentSource.JIRA_SERVICE_MANAGEMENT: SyncConfig(
+        doc_sync_config=DocSyncConfig(
+            doc_sync_frequency=JIRA_PERMISSION_DOC_SYNC_FREQUENCY,
+            doc_sync_func=_lazy_doc_sync(_load_jira_service_management_doc_sync),
+            initial_index_should_sync=True,
+        ),
+        group_sync_config=GroupSyncConfig(
+            group_sync_frequency=JIRA_PERMISSION_GROUP_SYNC_FREQUENCY,
+            # Service desk requests live in the same Jira instance, so the groups
+            # come from the same endpoint.
             group_sync_func=_lazy_group_sync(_load_jira_group_sync),
             group_sync_is_cc_pair_agnostic=True,
         ),

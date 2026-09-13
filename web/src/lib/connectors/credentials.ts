@@ -406,6 +406,10 @@ export const credentialTemplates: Record<ValidSources, any> = {
     jira_user_email: null,
     jira_api_token: "",
   },
+  jira_service_management: {
+    jira_user_email: null,
+    jira_api_token: "",
+  },
   productboard: { productboard_access_token: "" },
   slab: { slab_bot_token: "" },
   coda: { coda_bearer_token: "" },
