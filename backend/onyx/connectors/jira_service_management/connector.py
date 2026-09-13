@@ -8,6 +8,7 @@ from onyx.configs.app_configs import (
 )
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.jira.connector import (
     JiraConnector,
     _perform_jql_search,
@@ -75,6 +76,26 @@ class JiraServiceManagementConnector(JiraConnector):
             self._jsm_field_map = discover_jsm_fields(self.jira_client)
         return self._jsm_field_map
 
+    def _get_jql_query(
+        self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
+    ) -> str:
+        """JQL for the configured JSM project plus the poll window.
+
+        Overrides the Jira connector version to always keep the project
+        filter: this connector is scoped to a single service desk project, so
+        a custom ``jql_query`` without its own project clause must not widen
+        indexing to issues from other projects.
+
+        Unquoted epoch-ms so Jira does not reinterpret naive datetimes in the
+        API user's profile timezone.
+        https://support.atlassian.com/jira-software-cloud/docs/jql-fields/#Updated
+        """
+        time_jql = f"updated >= {int(start * 1000)} AND updated <= {int(end * 1000)}"
+        base_jql = f"project = {self.quoted_jira_project}"
+        if self.jql_query:
+            return f"{base_jql} AND ({self.jql_query}) AND {time_jql}"
+        return f"{base_jql} AND {time_jql}"
+
     def _process_issue(
         self,
         issue: Issue,
@@ -109,10 +130,20 @@ class JiraServiceManagementConnector(JiraConnector):
 
     @staticmethod
     def _best_effort_project_type(project: Any) -> str | None:
-        project_type = getattr(project, "projectTypeKey", None)
+        # Direct attribute access (repo convention: no getattr); both
+        # attributes are statically known on Jira project resources and the
+        # caller handles the "not exposed by the instance" case.
+        try:
+            project_type = project.projectTypeKey
+        except AttributeError:
+            project_type = None
         if isinstance(project_type, str) and project_type:
             return project_type
-        raw = getattr(project, "raw", None)
+
+        try:
+            raw = project.raw
+        except AttributeError:
+            return None
         if isinstance(raw, dict):
             raw_type = raw.get("projectTypeKey")
             if isinstance(raw_type, str) and raw_type:

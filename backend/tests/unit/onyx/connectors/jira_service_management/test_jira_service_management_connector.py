@@ -285,6 +285,40 @@ class TestFieldDiscovery:
         assert field_map.organizations is None
 
 
+class TestJqlProjectScoping:
+    """The JSM connector is scoped to a single service desk project, so the
+    project filter must survive even when a custom jql_query is set."""
+
+    def test_custom_jql_keeps_project_filter(self) -> None:
+        connector = JiraServiceManagementConnector(
+            jira_base_url=TEST_BASE_URL,
+            project_key=TEST_PROJECT_KEY,
+            jql_query="priority = High",
+        )
+        jql = connector._get_jql_query(start=0, end=1000)
+        assert f'project = "{TEST_PROJECT_KEY}"' in jql
+        assert "(priority = High)" in jql
+        assert "updated >= 0" in jql
+
+    def test_custom_jql_with_own_project_clause(self) -> None:
+        connector = JiraServiceManagementConnector(
+            jira_base_url=TEST_BASE_URL,
+            project_key=TEST_PROJECT_KEY,
+            jql_query=f'project = "{TEST_PROJECT_KEY}" AND priority = High',
+        )
+        jql = connector._get_jql_query(start=0, end=1000)
+        assert jql.count(f'project = "{TEST_PROJECT_KEY}"') == 2
+
+    def test_no_custom_jql_matches_jira_connector(self) -> None:
+        connector = JiraServiceManagementConnector(
+            jira_base_url=TEST_BASE_URL, project_key=TEST_PROJECT_KEY
+        )
+        jql = connector._get_jql_query(start=0, end=1000)
+        assert jql == (
+            f'project = "{TEST_PROJECT_KEY}" AND updated >= 0 AND updated <= 1000000'
+        )
+
+
 class TestCheckpointing:
     def test_load_from_checkpoint_happy_path(
         self, jsm_connector: JiraServiceManagementConnector
