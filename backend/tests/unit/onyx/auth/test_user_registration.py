@@ -1280,61 +1280,48 @@ class TestStandardUpgradeVerification:
     """Registering over a placeholder row runs the upgrade with the request body.
     On the public register path that body is untrusted, so it cannot self-verify."""
 
-    @staticmethod
-    def _run_upgrade(
-        mock_get_session: MagicMock, is_verified: bool, safe: bool
-    ) -> MagicMock:
-        user_manager: UserManager = UserManager(MagicMock())
-        user_manager.password_helper = MagicMock()
-        sync_user: MagicMock = MagicMock(
+    @pytest.fixture
+    def sync_user(self) -> Iterator[MagicMock]:
+        """The placeholder row the upgrade rewrites. Seat accounting is stubbed
+        off so enforce_seat_limit_locked stays out of these assertions."""
+        user: MagicMock = MagicMock(
             is_active=True,
             is_verified=False,
             account_type=AccountType.EXT_PERM_USER,
         )
         sync_db: MagicMock = MagicMock()
-        sync_db.query.return_value.filter.return_value.first.return_value = sync_user
-        mock_get_session.return_value.__enter__.return_value = sync_db
+        sync_db.query.return_value.filter.return_value.first.return_value = user
+        with (
+            patch("onyx.auth.users.assign_user_to_default_groups__no_commit"),
+            patch("onyx.auth.users._upgrade_will_add_seat", return_value=False),
+            patch("onyx.auth.users.get_session_with_current_tenant") as get_session,
+        ):
+            get_session.return_value.__enter__.return_value = sync_db
+            yield user
+
+    @pytest.mark.parametrize(
+        ("safe", "expected_verified"),
+        [
+            pytest.param(True, False, id="public-register-ignores-client-verified"),
+            pytest.param(False, True, id="trusted-caller-keeps-client-verified"),
+        ],
+    )
+    def test_client_verification_honored_only_when_trusted(
+        self, sync_user: MagicMock, safe: bool, expected_verified: bool
+    ) -> None:
+        user_manager: UserManager = UserManager(MagicMock())
+        user_manager.password_helper = MagicMock()
 
         user_manager._upgrade_user_to_standard__sync(
             uuid4(),
             UserCreate(
                 email="placeholder@corp.com",
                 password="SecurePassword123!",
-                is_verified=is_verified,
+                is_verified=True,
             ),
             is_admin=False,
             safe=safe,
         )
-        return sync_user
 
-    @patch("onyx.auth.users.assign_user_to_default_groups__no_commit")
-    @patch("onyx.auth.users._upgrade_will_add_seat", return_value=False)
-    @patch("onyx.auth.users.get_session_with_current_tenant")
-    def test_safe_upgrade_ignores_client_supplied_verification(
-        self,
-        mock_get_session: MagicMock,
-        mock_will_add_seat: MagicMock,  # noqa: ARG002
-        mock_assign_groups: MagicMock,  # noqa: ARG002
-    ) -> None:
-        sync_user: MagicMock = self._run_upgrade(
-            mock_get_session, is_verified=True, safe=True
-        )
-
-        assert sync_user.is_verified is False
-        assert sync_user.account_type == AccountType.STANDARD
-
-    @patch("onyx.auth.users.assign_user_to_default_groups__no_commit")
-    @patch("onyx.auth.users._upgrade_will_add_seat", return_value=False)
-    @patch("onyx.auth.users.get_session_with_current_tenant")
-    def test_trusted_upgrade_keeps_caller_supplied_verification(
-        self,
-        mock_get_session: MagicMock,
-        mock_will_add_seat: MagicMock,  # noqa: ARG002
-        mock_assign_groups: MagicMock,  # noqa: ARG002
-    ) -> None:
-        sync_user: MagicMock = self._run_upgrade(
-            mock_get_session, is_verified=True, safe=False
-        )
-
-        assert sync_user.is_verified is True
+        assert sync_user.is_verified is expected_verified
         assert sync_user.account_type == AccountType.STANDARD
