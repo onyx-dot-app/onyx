@@ -44,11 +44,11 @@ export interface MultiModelResponseViewProps {
   readOnly?: boolean;
 }
 
-// How many pixels of a non-preferred panel are visible at the viewport edge
 /** Fades the last 6rem of a panel that has more content below the fold. */
 const PANEL_FADE_MASK =
   "linear-gradient(to bottom, black calc(100% - 6rem), transparent 100%)";
 
+// How many pixels of a non-preferred panel are visible at the viewport edge
 const PEEK_W = 64;
 // Uniform panel width used in the selection-mode carousel
 const SELECTION_PANEL_W = 400;

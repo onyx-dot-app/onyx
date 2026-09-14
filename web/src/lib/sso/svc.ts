@@ -9,8 +9,6 @@ import {
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
-// FetchError carries the status the shared SWR guard reads to stop retrying and
-// send an expired session to the login page.
 /** Every JSON body the SSO endpoints below accept. */
 type SSORequestBody =
   | SSOProviderCreateRequest
@@ -20,6 +18,8 @@ type SSORequestBody =
   | { domains: string[] }
   | { domain: string };
 
+// FetchError carries the status the shared SWR guard reads to stop retrying and
+// send an expired session to the login page.
 async function ssoRequest<T>(
   url: string,
   method: string,
