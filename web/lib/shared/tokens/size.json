@@ -1,36 +1,4 @@
 {
-  "height-content-main": {
-    "value": "1rem",
-    "type": "dimension"
-  },
-  "height-content-label": {
-    "value": "1.125rem",
-    "type": "dimension"
-  },
-  "height-content-secondary": {
-    "value": "0.75rem",
-    "type": "dimension"
-  },
-  "height-content-h3-section": {
-    "value": "1.5rem",
-    "type": "dimension"
-  },
-  "height-content-h2-sub-headline": {
-    "value": "1.5rem",
-    "type": "dimension"
-  },
-  "height-content-h1-headline": {
-    "value": "2rem",
-    "type": "dimension"
-  },
-  "height-content-h1-hero": {
-    "value": "2.5rem",
-    "type": "dimension"
-  },
-  "height-content-small": {
-    "value": "0.625rem",
-    "type": "dimension"
-  },
   "height-line-main": {
     "value": "1.25rem",
     "type": "dimension"
@@ -47,16 +15,8 @@
     "value": "1.75rem",
     "type": "dimension"
   },
-  "height-line-h2-sub-headline": {
-    "value": "2rem",
-    "type": "dimension"
-  },
   "height-line-h1-headline": {
     "value": "2.25rem",
-    "type": "dimension"
-  },
-  "height-line-h1-hero": {
-    "value": "3rem",
     "type": "dimension"
   },
   "height-line-small": {
@@ -79,48 +39,12 @@
     "value": "1.125rem",
     "type": "dimension"
   },
-  "height-font-h2-sub-headline": {
-    "value": "1.25rem",
-    "type": "dimension"
-  },
-  "height-font-h1-sub-headline": {
-    "value": "1.375rem",
-    "type": "dimension"
-  },
   "height-font-h1-headline": {
     "value": "1.5rem",
     "type": "dimension"
   },
-  "height-font-h1-hero": {
-    "value": "2rem",
-    "type": "dimension"
-  },
   "height-font-small": {
     "value": "0.625rem",
-    "type": "dimension"
-  },
-  "padding-text-2": {
-    "value": "0.125rem",
-    "type": "dimension"
-  },
-  "padding-text-4": {
-    "value": "0.25rem",
-    "type": "dimension"
-  },
-  "padding-icon-0": {
-    "value": "0",
-    "type": "dimension"
-  },
-  "padding-icon-1": {
-    "value": "0.0625rem",
-    "type": "dimension"
-  },
-  "padding-icon-2": {
-    "value": "0.125rem",
-    "type": "dimension"
-  },
-  "padding-icon-4": {
-    "value": "0.25rem",
     "type": "dimension"
   },
   "spacing-block-4": {
@@ -234,54 +158,6 @@
   "spacing-inline-4": {
     "value": "0.25rem",
     "type": "dimension"
-  },
-  "weight-icon-main": {
-    "value": "1.5",
-    "type": "number"
-  },
-  "weight-icon-secondary": {
-    "value": "1",
-    "type": "number"
-  },
-  "weight-icon-section": {
-    "value": "2",
-    "type": "number"
-  },
-  "weight-icon-headline": {
-    "value": "2.5",
-    "type": "number"
-  },
-  "weight-icon-hero": {
-    "value": "3.5",
-    "type": "number"
-  },
-  "weight-line-border": {
-    "value": "1",
-    "type": "number"
-  },
-  "weight-line-chart-main": {
-    "value": "2",
-    "type": "number"
-  },
-  "weight-line-chart-light": {
-    "value": "1.5",
-    "type": "number"
-  },
-  "weight-bar-extra-small": {
-    "value": "1",
-    "type": "number"
-  },
-  "weight-bar-small": {
-    "value": "2",
-    "type": "number"
-  },
-  "weight-bar-medium-small": {
-    "value": "3",
-    "type": "number"
-  },
-  "weight-bar-medium": {
-    "value": "4",
-    "type": "number"
   },
   "radius-02": {
     "value": "0.125rem",

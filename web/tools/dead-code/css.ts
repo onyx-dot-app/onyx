@@ -10,6 +10,9 @@ export interface CssFinding {
   readonly line: number;
 }
 
+/** An exact name, or a pattern matching a family of generated names. */
+export type CssIgnore = string | RegExp;
+
 export interface CssCheckOptions {
   /** Absolute path to web/. */
   readonly webRoot: string;
@@ -23,7 +26,7 @@ export interface CssCheckOptions {
    * Names that are always live. Each entry needs a comment saying why, because
    * an entry here is a permanent exemption rather than a baseline.
    */
-  readonly ignore: readonly string[];
+  readonly ignore: readonly CssIgnore[];
 }
 
 interface Definition {
@@ -245,12 +248,17 @@ function wordBoundaryCount(haystack: string, needle: string): number {
   return matches === null ? 0 : matches.length;
 }
 
+function isIgnored(ignore: readonly CssIgnore[], name: string): boolean {
+  return ignore.some((entry) =>
+    typeof entry === "string" ? entry === name : entry.test(name)
+  );
+}
+
 export async function findDeadCss(
   options: CssCheckOptions
 ): Promise<CssFinding[]> {
   const { webRoot, extraCorpusRoots, ignore } = options;
   const opalSource = resolve(webRoot, "lib/opal/src");
-  const ignored = new Set(ignore);
 
   // Definition sites: the design system's own stylesheets, plus the app's.
   const cssFiles = (
@@ -329,7 +337,7 @@ export async function findDeadCss(
   const findings: CssFinding[] = [];
 
   for (const [name, definition] of classDefinitions) {
-    if (ignored.has(name)) continue;
+    if (isIgnored(ignore, name)) continue;
     if (wordBoundaryCount(sourceBlob, name) > 0) continue;
     // A reference from another rule counts, so compare against the number of
     // selector positions that declare the class rather than against zero.
@@ -349,7 +357,7 @@ export async function findDeadCss(
   }
 
   for (const [name, definition] of propertyDefinitions) {
-    if (ignored.has(name)) continue;
+    if (isIgnored(ignore, name)) continue;
     if (referencesProperty(cssReferenceBlob, name)) continue;
     if (referencesProperty(sourceBlob, name)) continue;
     findings.push({ kind: "property", ...definition });
@@ -357,7 +365,7 @@ export async function findDeadCss(
 
   const tokens = collectTokens(tokenFiles, webRoot);
   for (const [name, definition] of tokens.definitions) {
-    if (ignored.has(name)) continue;
+    if (isIgnored(ignore, name)) continue;
     // Another token points at this one, so it survives into the compiled CSS.
     if (tokens.aliased.has(name)) continue;
     if (referencesProperty(cssReferenceBlob, `--${name}`)) continue;

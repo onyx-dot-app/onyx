@@ -26,8 +26,18 @@ const config: KnipConfig = {
         // Run by package.json scripts, not imported.
         "tools/type-check/index.ts",
         "tools/dead-code/index.ts",
+        // Reached from src/app/globals.css through Tailwind's `@config`, which
+        // knip does not follow. It requires the theme config, which in turn
+        // requires the typography plugin.
+        "tailwind.config.js",
+        "tailwind-themes/tailwind.config.js",
       ],
-      project: ["src/**/*.{ts,tsx}", "tools/**/*.{ts,tsx}"],
+      project: [
+        "src/**/*.{ts,tsx}",
+        "tools/**/*.{ts,tsx}",
+        "tailwind.config.js",
+        "tailwind-themes/tailwind.config.js",
+      ],
       ignore: [
         // Gitignored; generated at build time.
         "src/lib/generated/**",

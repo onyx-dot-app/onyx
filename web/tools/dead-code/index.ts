@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 
-import { findDeadCss } from "./css.ts";
+import { findDeadCss, type CssIgnore } from "./css.ts";
 
 /**
  * The frontend dead code gate.
@@ -22,10 +22,18 @@ const REPO_ROOT = resolve(WEB_ROOT, "..");
  * Names the CSS checker must never report. Each one needs a reason: an entry
  * here is a permanent exemption, not a baseline.
  */
-const CSS_IGNORE: readonly string[] = [
+const CSS_IGNORE: readonly CssIgnore[] = [
   // Toggled from outside the design system: next-themes writes `.dark` on
   // <html>, and Tailwind's own `dark` variant keys off it.
   "dark",
+  // The @tailwindcss/typography plugin reads these. A stylesheet only ever
+  // assigns them, so a reference search never finds one.
+  /^--tw-/,
+  // Style Dictionary renames these for NativeWind: spacing-block-4 becomes the
+  // mobile utility `p-4`, and radius-12 becomes `rounded-12`, so the mobile
+  // corpus never spells the token name out.
+  /^spacing-(?:block|inline)-/,
+  /^radius-/,
 ];
 
 function runKnip(): boolean {
