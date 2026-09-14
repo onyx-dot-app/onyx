@@ -1,5 +1,8 @@
 [build-system]
-requires = ["hatchling==1.29.0", "go-bin~=1.26.4", "manygo==0.2.0"]
+# go-bin ships the Go toolchain that hatch_build.py compiles with. Bump it together
+# with the `go` directive in tools/ods/go.mod and tools/requirements/build-constraints.in;
+# cli/pyproject.toml pins the same version and shares those constraints.
+requires = ["hatchling==1.29.0", "go-bin==1.27.1", "manygo==0.2.0"]
 build-backend = "hatchling.build"
 
 [project]

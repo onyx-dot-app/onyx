@@ -979,6 +979,26 @@ To build and install the wheel,
 uv pip install .
 ```
 
+## Build constraints
+
+Wheel builds resolve their build environment (hatchling, `go-bin`, manygo and their
+dependencies) against `tools/requirements/build-constraints.txt`, shared by `cli`,
+`tools/ods` and `tools/ods-audit`. The release workflows pass it as
+`UV_BUILD_CONSTRAINT` with `UV_REQUIRE_HASHES`, so every published wheel is built
+from the same verified closure.
+
+`tools/requirements/build-constraints.txt` is compiled from its `.in` by the
+`pip-compile` pre-commit hook, so a plain `pre-commit run pip-compile` refreshes
+it. To upgrade a pinned build dependency, edit `build-constraints.in` and the
+matching `[build-system] requires` in all three `pyproject.toml` files; the
+`build-constraints-drift` hook fails if they disagree.
+
+`go-bin` ships the Go toolchain used to compile the binary. Bumping Go means
+moving it everywhere at once: the `go` directive in `go.mod`, `cli/Dockerfile`,
+the `setup-go` and `GO_VERSION` pins across `.github/workflows/`,
+`.devcontainer/Dockerfile`, the `go-bin` pin in all three `pyproject.toml` files
+and in `tools/requirements/build-constraints.in`, and the compiled `build-constraints.txt`.
+
 ## Deploy
 
 Releases are deployed automatically when git tags prefaced with `ods/` are pushed to [GitHub](https://github.com/onyx-dot-app/onyx/tags).

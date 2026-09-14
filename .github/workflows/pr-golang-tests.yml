@@ -18,7 +18,7 @@ permissions:
   contents: read # needed to checkout the repo on private repos (no-op on public)
 
 env:
-  GO_VERSION: "1.26.5"
+  GO_VERSION: "1.27.1"
   # HTML coverage pages for PR comments, and the coverage snapshots, go next
   # to the playwright reports.
   REPORTS_S3_BUCKET: onyx-playwright-artifacts
