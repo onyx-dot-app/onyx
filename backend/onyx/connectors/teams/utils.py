@@ -8,6 +8,8 @@ from office365.graph_client import GraphClient
 from office365.runtime.client_request_exception import ClientRequestException
 from office365.runtime.queries.client_query import ClientQuery
 from office365.teams.channels.channel import Channel, ConversationMember
+from requests import Response
+from requests.exceptions import RequestException
 
 from onyx.access.models import ExternalAccess
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
@@ -28,6 +30,66 @@ _PUBLIC_MEMBERSHIP_TYPE = "standard"  # public teams channel
 # (`execute_query_with_retry`) so the two can't drift. Mirrors the SharePoint
 # connector's `GRAPH_API_RETRYABLE_STATUSES`.
 GRAPH_API_RETRYABLE_STATUSES: frozenset[int] = frozenset({429, 500, 502, 503, 504})
+
+# Graph error bodies can be long (they sometimes embed an inner exception and a
+# request id); enough to identify the failure, not enough to flood the logs.
+_MAX_GRAPH_ERROR_BODY_CHARS = 500
+
+
+def _graph_error_from_body(body: Any) -> str | None:
+    """``code: message`` from a Microsoft Graph error envelope, if it is one."""
+    if not isinstance(body, dict):
+        return None
+
+    error = body.get("error")
+    if not isinstance(error, dict):
+        return None
+
+    parts = [str(part) for part in (error.get("code"), error.get("message")) if part]
+    return ": ".join(parts) or None
+
+
+def _response_error_detail(response: Response) -> str | None:
+    """The most specific failure detail a Graph response carries.
+
+    Prefers the ``error.code``/``error.message`` envelope and falls back to a
+    truncated raw body, since gateways and proxies in front of Graph return
+    plain text rather than the envelope.
+    """
+    try:
+        body = response.json()
+    except ValueError:
+        body = None
+
+    if detail := _graph_error_from_body(body):
+        return detail
+
+    text = response.text
+    if not isinstance(text, str) or not text.strip():
+        return None
+
+    return text.strip()[:_MAX_GRAPH_ERROR_BODY_CHARS]
+
+
+def describe_graph_error(exc: BaseException) -> str:
+    """A one-line, operator-actionable description of a failed Graph call.
+
+    ``requests``' own ``HTTPError`` message carries only the status line, so a
+    recorded failure cannot distinguish a 401 (credential expired) from a 403
+    (missing application permission) from a 404 (message deleted) -- each of
+    which has a different remedy. Graph puts that in the response body, so
+    anything recording a Graph failure should include this.
+
+    Covers both Graph paths: ``HTTPError`` from the raw ``execute_request_direct``
+    calls and ``ClientRequestException`` from the SDK, which subclasses
+    ``RequestException`` too.
+    """
+    if not isinstance(exc, RequestException) or exc.response is None:
+        return f"{type(exc).__name__}: {exc}"
+
+    detail = _response_error_detail(exc.response)
+    status = exc.response.status_code
+    return f"HTTP {status} ({detail})" if detail else f"HTTP {status}"
 
 
 def _backoff_seconds(attempt: int, retry_after: str | None) -> float:
@@ -146,6 +208,15 @@ def _retry(
 
             continue
 
+        # Record *why* the call failed before raising: callers turn this into a
+        # `ConnectorFailure` and the status code would otherwise appear in no
+        # log at any level.
+        logger.error(
+            "Non-retryable Graph error %s on %s; detail=%s",
+            response.status_code,
+            request_url,
+            _response_error_detail(response) or "<no response body>",
+        )
         response.raise_for_status()
 
     raise RuntimeError(
