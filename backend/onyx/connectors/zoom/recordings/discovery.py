@@ -401,9 +401,7 @@ class _UserRecordingsSource(DiscoverySource):
         """
         if self._listed_host != host.user_id:
             recordings = _list_every_recording(client, host, from_date, to_date)
-            self._listed = sorted(
-                recordings, key=lambda r: (r.start_time or "", r.uuid)
-            )
+            self._listed = sorted(recordings, key=_recording_key)
             self._listed_host = host.user_id
         return self._listed
 
