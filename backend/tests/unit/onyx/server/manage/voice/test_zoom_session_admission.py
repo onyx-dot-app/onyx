@@ -92,9 +92,8 @@ async def test_zoom_transcribe_releases_session_when_upstream_creation_fails(
         _user=cast(User, SimpleNamespace(id="user-7")),
     )
 
-    acquire.assert_awaited_once_with(provider_id=42, user_id="user-7")
+    acquire.assert_awaited_once_with(user_id="user-7")
     release.assert_awaited_once_with(
-        provider_id=42,
         user_id="user-7",
         session_member_id="session-member-1",
     )
@@ -133,7 +132,7 @@ async def test_zoom_transcribe_timeout_uses_hard_cap_and_releases_session(
     monkeypatch.setattr(websocket_api, "acquire_zoom_voice_session", acquire)
     monkeypatch.setattr(websocket_api, "release_zoom_voice_session", release)
     monkeypatch.setattr(websocket_api, "handle_streaming_transcription", hang)
-    monkeypatch.setattr(websocket_api, "ZOOM_VOICE_SESSION_MAX_SECONDS", 0.01)
+    monkeypatch.setattr(websocket_api, "ZOOM_SESSION_HANDLER_SECONDS", 0.01)
 
     await websocket_api.websocket_transcribe(
         cast(WebSocket, websocket),
@@ -146,9 +145,8 @@ async def test_zoom_transcribe_timeout_uses_hard_cap_and_releases_session(
             "message": websocket_api.ZOOM_STREAMING_SESSION_TIMEOUT_MESSAGE,
         }
     ]
-    acquire.assert_awaited_once_with(provider_id=42, user_id="user-7")
+    acquire.assert_awaited_once_with(user_id="user-7")
     release.assert_awaited_once_with(
-        provider_id=42,
         user_id="user-7",
         session_member_id="session-member-1",
     )
@@ -166,8 +164,8 @@ async def test_zoom_transcribe_limit_returns_sanitized_message(monkeypatch) -> N
     )
     release = AsyncMock()
 
-    async def raise_limit(*, provider_id: int, user_id: str) -> str:
-        _ = provider_id, user_id
+    async def raise_limit(*, user_id: str) -> str:
+        _ = user_id
         raise websocket_api.ZoomVoiceSessionLimitExceeded(
             websocket_api.ZOOM_VOICE_SESSION_LIMIT_MESSAGE
         )
@@ -221,7 +219,7 @@ async def test_zoom_chunked_path_uses_hard_cap(monkeypatch) -> None:
     monkeypatch.setattr(websocket_api, "release_zoom_voice_session", release)
     monkeypatch.setattr(websocket_api, "VOICE_DISABLE_STREAMING_STT", True)
     monkeypatch.setattr(websocket_api, "handle_chunked_transcription", hang)
-    monkeypatch.setattr(websocket_api, "ZOOM_VOICE_SESSION_MAX_SECONDS", 0.01)
+    monkeypatch.setattr(websocket_api, "ZOOM_SESSION_HANDLER_SECONDS", 0.01)
 
     await websocket_api.websocket_transcribe(
         cast(WebSocket, websocket),
@@ -234,7 +232,7 @@ async def test_zoom_chunked_path_uses_hard_cap(monkeypatch) -> None:
             "message": websocket_api.ZOOM_STREAMING_SESSION_TIMEOUT_MESSAGE,
         }
     ]
-    acquire.assert_awaited_once_with(provider_id=42, user_id="user-7")
+    acquire.assert_awaited_once_with(user_id="user-7")
     release.assert_awaited_once()
     websocket.close.assert_awaited_once()
 
@@ -245,8 +243,8 @@ async def test_zoom_guards_apply_to_mixed_case_provider_type(monkeypatch) -> Non
     provider_db = SimpleNamespace(id=42, provider_type="Zoom", api_key="api-key")
     release = AsyncMock()
 
-    async def raise_limit(*, provider_id: int, user_id: str) -> str:
-        _ = provider_id, user_id
+    async def raise_limit(*, user_id: str) -> str:
+        _ = user_id
         raise websocket_api.ZoomVoiceSessionLimitExceeded(
             websocket_api.ZOOM_VOICE_SESSION_LIMIT_MESSAGE
         )
@@ -338,7 +336,7 @@ async def test_zoom_hard_cap_includes_transcriber_setup(monkeypatch) -> None:
     )
     monkeypatch.setattr(websocket_api, "acquire_zoom_voice_session", acquire)
     monkeypatch.setattr(websocket_api, "release_zoom_voice_session", release)
-    monkeypatch.setattr(websocket_api, "ZOOM_VOICE_SESSION_MAX_SECONDS", 0.01)
+    monkeypatch.setattr(websocket_api, "ZOOM_SESSION_HANDLER_SECONDS", 0.01)
 
     await websocket_api.websocket_transcribe(
         cast(WebSocket, websocket),
@@ -352,3 +350,13 @@ async def test_zoom_hard_cap_includes_transcriber_setup(monkeypatch) -> None:
         }
     ]
     release.assert_awaited_once()
+
+
+def test_zoom_handler_budget_reserves_provider_teardown() -> None:
+    # Teardown runs after the cap ends the handler, so handler plus teardown
+    # must stay inside the Redis admission window.
+    assert (
+        websocket_api.ZOOM_SESSION_HANDLER_SECONDS
+        + websocket_api.TRANSCRIBER_CLOSE_TIMEOUT_SECONDS
+        == websocket_api.ZOOM_VOICE_SESSION_MAX_SECONDS
+    )
