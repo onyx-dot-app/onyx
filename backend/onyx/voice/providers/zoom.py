@@ -17,7 +17,7 @@ import jwt
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import traced_llm_call
 from onyx.utils.logger import setup_logger
-from onyx.voice.audio_utils import resample_pcm16
+from onyx.voice.audio_utils import Pcm16Resampler
 from onyx.voice.interface import (
     StreamingTranscriberProtocol,
     TranscriptResult,
@@ -118,6 +118,9 @@ class ZoomStreamingTranscriber(StreamingTranscriberProtocol):
         self._handshake_event = asyncio.Event()
         self._handshake_error: Exception | None = None
         self._close_event = asyncio.Event()
+        self._resampler = Pcm16Resampler(
+            ZOOM_INPUT_SAMPLE_RATE, ZOOM_TARGET_SAMPLE_RATE
+        )
         self._buffer = bytearray()
         self._accumulated_transcript = ""
         self._closed = False
@@ -280,10 +283,7 @@ class ZoomStreamingTranscriber(StreamingTranscriberProtocol):
         if not self._ws or self._closed or self._ws.closed:
             raise RuntimeError("Zoom Scribe streaming session is not connected.")
 
-        resampled = resample_pcm16(
-            chunk, ZOOM_INPUT_SAMPLE_RATE, ZOOM_TARGET_SAMPLE_RATE
-        )
-        self._buffer.extend(resampled)
+        self._buffer.extend(self._resampler.resample(chunk))
         while len(self._buffer) >= ZOOM_FRAME_BYTES:
             frame = bytes(self._buffer[:ZOOM_FRAME_BYTES])
             del self._buffer[:ZOOM_FRAME_BYTES]
@@ -303,6 +303,9 @@ class ZoomStreamingTranscriber(StreamingTranscriberProtocol):
             if not self._ws or self._ws.closed:
                 return self._accumulated_transcript
             try:
+                # The resampler holds back the samples that read past the last
+                # input sample, so the tail only exists after a flush.
+                self._buffer.extend(self._resampler.flush())
                 if self._buffer:
                     await self._ws.send_bytes(bytes(self._buffer))
                     self._buffer.clear()
@@ -311,7 +314,10 @@ class ZoomStreamingTranscriber(StreamingTranscriberProtocol):
                     self._close_event.wait(), timeout=ZOOM_CLOSE_DRAIN_SECONDS
                 )
             except asyncio.TimeoutError:
+                # Zoom never confirmed the session, so the audio it still held
+                # may be missing from the transcript.
                 logger.warning("Timed out waiting for Zoom Scribe session close.")
+                await self._signal_error("Zoom Scribe stream failed.")
             except Exception:
                 # Zoom never finalized the in-flight audio, so the caller must
                 # not treat the partial transcript as a successful result.

@@ -14,12 +14,14 @@ from onyx.server.manage.voice.websocket_api import (
     StreamingTranscriptionFailed,
     handle_streaming_transcription,
 )
+from onyx.voice.audio_utils import resample_pcm16
 from onyx.voice.factory import get_voice_provider
 from onyx.voice.interface import TranscriptResult
 from onyx.voice.providers import zoom
 from onyx.voice.providers.zoom import (
     ZOOM_API_BASE,
     ZOOM_FRAME_BYTES,
+    ZOOM_INPUT_SAMPLE_RATE,
     ZOOM_JWT_IAT_SKEW_SECONDS,
     ZOOM_JWT_TTL_SECONDS,
     ZOOM_SCRIBE_LIVE_PATH,
@@ -293,6 +295,24 @@ async def test_send_audio_resamples_and_sends_100ms_16khz_frames() -> None:
 
 
 @pytest.mark.asyncio
+async def test_send_audio_keeps_resampler_phase_across_chunks() -> None:
+    ws = FakeWebSocket()
+    transcriber = ZoomStreamingTranscriber(api_key="key", api_secret="x" * 32)
+    transcriber._ws = cast(Any, ws)
+    transcriber._close_event.set()
+
+    # Chunk sizes that do not divide evenly by the 24-to-16 kHz ratio, so a
+    # per-chunk resampler would restart interpolation at every boundary.
+    audio = bytes(range(256)) * 120
+    for offset in range(0, len(audio), 2500):
+        await transcriber.send_audio(audio[offset : offset + 2500])
+    await transcriber.close()
+
+    expected = resample_pcm16(audio, ZOOM_INPUT_SAMPLE_RATE, ZOOM_TARGET_SAMPLE_RATE)
+    assert b"".join(ws.sent_bytes) == expected
+
+
+@pytest.mark.asyncio
 async def test_close_flushes_remainder_and_is_idempotent() -> None:
     ws = FakeWebSocket()
     session = FakeSession(ws)
@@ -329,6 +349,26 @@ async def test_close_cleans_up_when_remainder_send_fails() -> None:
     assert failure is not None
     assert failure.error is not None
     assert failure.text == "kept"
+
+
+@pytest.mark.asyncio
+async def test_close_signals_failure_when_drain_times_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(zoom, "ZOOM_CLOSE_DRAIN_SECONDS", 0.01)
+    ws = FakeWebSocket()
+    session = FakeSession(ws)
+    transcriber = ZoomStreamingTranscriber(api_key="key", api_secret="x" * 32)
+    transcriber._ws = cast(Any, ws)
+    transcriber._session = cast(Any, session)
+    transcriber._accumulated_transcript = "partial"
+
+    assert await transcriber.close() == "partial"
+
+    failure = transcriber._transcript_queue.get_nowait()
+    assert failure is not None
+    assert failure.error is not None
+    assert failure.text == "partial"
 
 
 @pytest.mark.asyncio
