@@ -41,9 +41,7 @@ async def test_acquire_zoom_voice_session_admits_and_scopes_keys(monkeypatch) ->
     monkeypatch.setattr(redis_pool.uuid, "uuid4", lambda: _Uuid())
     monkeypatch.setattr(redis_pool.time, "time", lambda: 1_000.0)
 
-    session_member_id = await redis_pool.acquire_zoom_voice_session(
-        provider_id=42, user_id="user-7"
-    )
+    session_member_id = await redis_pool.acquire_zoom_voice_session(user_id="user-7")
 
     assert session_member_id == "session-member-1"
     assert len(redis.eval_calls) == 1
@@ -51,8 +49,8 @@ async def test_acquire_zoom_voice_session_admits_and_scopes_keys(monkeypatch) ->
     assert "ZREMRANGEBYSCORE" in str(call[0])
     assert call[1:] == (
         2,
-        "zoom_voice_sessions:tenant:tenant-a:provider:42",
-        "zoom_voice_sessions:tenant:tenant-a:provider:42:user:user-7",
+        "zoom_voice_sessions:tenant:tenant-a",
+        "zoom_voice_sessions:tenant:tenant-a:user:user-7",
         "session-member-1",
         "1660000",
         "1000000",
@@ -75,7 +73,7 @@ async def test_acquire_zoom_voice_session_raises_sanitized_limit(
     monkeypatch.setattr(redis_pool.uuid, "uuid4", lambda: _Uuid())
 
     with pytest.raises(redis_pool.ZoomVoiceSessionLimitExceeded) as exc_info:
-        await redis_pool.acquire_zoom_voice_session(provider_id=42, user_id="user-7")
+        await redis_pool.acquire_zoom_voice_session(user_id="user-7")
 
     assert str(exc_info.value) == redis_pool.ZOOM_VOICE_SESSION_LIMIT_MESSAGE
 
@@ -89,7 +87,6 @@ async def test_release_zoom_voice_session_removes_from_scoped_keys(monkeypatch) 
     monkeypatch.setattr(redis_pool, "get_current_tenant_id", lambda: "tenant-a")
 
     await redis_pool.release_zoom_voice_session(
-        provider_id=42,
         user_id="user-7",
         session_member_id="session-member-1",
     )
@@ -99,7 +96,7 @@ async def test_release_zoom_voice_session_removes_from_scoped_keys(monkeypatch) 
     assert "ZREM" in str(call[0])
     assert call[1:] == (
         2,
-        "zoom_voice_sessions:tenant:tenant-a:provider:42",
-        "zoom_voice_sessions:tenant:tenant-a:provider:42:user:user-7",
+        "zoom_voice_sessions:tenant:tenant-a",
+        "zoom_voice_sessions:tenant:tenant-a:user:user-7",
         "session-member-1",
     )

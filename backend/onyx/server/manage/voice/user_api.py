@@ -1,3 +1,4 @@
+import asyncio
 import json
 import secrets
 from collections.abc import AsyncIterator
@@ -18,11 +19,20 @@ from onyx.db.voice import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.redis.redis_pool import WsTokenRateLimitExceeded, store_ws_token
+from onyx.redis.redis_pool import (
+    ZOOM_VOICE_SESSION_LIMIT_MESSAGE,
+    ZOOM_VOICE_SESSION_MAX_SECONDS,
+    WsTokenRateLimitExceeded,
+    ZoomVoiceSessionLimitExceeded,
+    acquire_zoom_voice_session,
+    release_zoom_voice_session,
+    store_ws_token,
+)
 from onyx.server.manage.models import VoiceSettingsUpdateRequest
 from onyx.server.manage.voice.text_utils import strip_markdown_for_tts
 from onyx.utils.logger import setup_logger
 from onyx.voice.factory import get_voice_provider
+from onyx.voice.interface import VoiceProviderInterface
 
 logger = setup_logger()
 
@@ -53,10 +63,41 @@ def get_voice_status(
     )
 
 
+async def _transcribe_with_provider(
+    provider: VoiceProviderInterface,
+    provider_type: str,
+    user_id: str,
+    audio_data: bytes,
+    audio_format: str,
+) -> str:
+    """Transcribe one upload, under the provider's session limits.
+
+    Zoom opens a live Scribe session for every call, so a REST upload uses the
+    same admission and duration limits as a WebSocket session.
+    """
+    if provider_type != "zoom":
+        return await provider.transcribe(audio_data, audio_format)
+
+    try:
+        session_member_id = await acquire_zoom_voice_session(user_id=user_id)
+    except ZoomVoiceSessionLimitExceeded:
+        raise OnyxError(OnyxErrorCode.RATE_LIMITED, ZOOM_VOICE_SESSION_LIMIT_MESSAGE)
+    try:
+        async with asyncio.timeout(ZOOM_VOICE_SESSION_MAX_SECONDS):
+            return await provider.transcribe(audio_data, audio_format)
+    finally:
+        try:
+            await release_zoom_voice_session(
+                user_id=user_id, session_member_id=session_member_id
+            )
+        except Exception:
+            logger.warning("Transcribe: failed to release Zoom session")
+
+
 @router.post("/transcribe")
 async def transcribe_audio(
     audio: UploadFile = File(...),
-    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
     """Transcribe audio to text using the default STT provider."""
@@ -96,8 +137,19 @@ async def transcribe_audio(
         raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, str(exc)) from exc
 
     try:
-        text = await provider.transcribe(audio_data, audio_format)
+        text = await _transcribe_with_provider(
+            provider=provider,
+            provider_type=provider_db.provider_type.lower(),
+            user_id=str(user.id),
+            audio_data=audio_data,
+            audio_format=audio_format,
+        )
         return {"text": text}
+    except OnyxError:
+        raise
+    except ValueError as exc:
+        # Providers reject audio formats they cannot transcribe.
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(exc)) from exc
     except NotImplementedError as exc:
         raise OnyxError(
             OnyxErrorCode.NOT_IMPLEMENTED,

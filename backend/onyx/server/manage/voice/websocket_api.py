@@ -162,6 +162,11 @@ SESSION_TIMEOUT_ERROR = "Transcription session reached its maximum duration"
 TRANSCRIPT_DRAIN_SECONDS = 0.5
 # Provider SDK teardown must not hold a session past its limit.
 TRANSCRIBER_CLOSE_TIMEOUT_SECONDS = 10
+# Provider teardown runs after the cap ends the handler, so the handler gets the
+# cap minus one close budget and the session stays inside the admission TTL.
+ZOOM_SESSION_HANDLER_SECONDS = (
+    ZOOM_VOICE_SESSION_MAX_SECONDS - TRANSCRIBER_CLOSE_TIMEOUT_SECONDS
+)
 ZOOM_STREAMING_SESSION_TIMEOUT_MESSAGE = (
     "Zoom Scribe session reached its maximum duration. Start a new recording."
 )
@@ -587,7 +592,7 @@ async def _run_with_zoom_session_cap(
     if provider_type != "zoom":
         await handler
         return False
-    deadline = asyncio.timeout(ZOOM_VOICE_SESSION_MAX_SECONDS)
+    deadline = asyncio.timeout(ZOOM_SESSION_HANDLER_SECONDS)
     try:
         async with deadline:
             await handler
@@ -787,9 +792,7 @@ async def websocket_transcribe(
     streaming_transcriber = None
     provider = None
     zoom_session_member_id: str | None = None
-    zoom_session_provider_id: int | None = None
     zoom_session_user_id = str(_user.id)
-    provider_id: int | None = None
     provider_type: str | None = None
 
     try:
@@ -826,7 +829,6 @@ async def websocket_transcribe(
             )
             try:
                 provider_type = provider_db.provider_type.lower()
-                provider_id = provider_db.id
                 provider = get_voice_provider(provider_db)
                 logger.info(
                     "WebSocket transcribe: voice provider created, streaming supported: %s",
@@ -847,13 +849,11 @@ async def websocket_transcribe(
 
         # One budget for the whole connection, shared with the chunked fallback.
         session_deadline = _session_deadline()
-        if provider_type == "zoom" and provider_id is not None:
+        if provider_type == "zoom":
             try:
                 zoom_session_member_id = await acquire_zoom_voice_session(
-                    provider_id=provider_id,
                     user_id=zoom_session_user_id,
                 )
-                zoom_session_provider_id = provider_id
             except ZoomVoiceSessionLimitExceeded:
                 await websocket.send_json(
                     {
@@ -943,10 +943,9 @@ async def websocket_transcribe(
     finally:
         if streaming_transcriber:
             await _close_transcriber(streaming_transcriber)
-        if zoom_session_member_id is not None and zoom_session_provider_id is not None:
+        if zoom_session_member_id is not None:
             try:
                 await release_zoom_voice_session(
-                    provider_id=zoom_session_provider_id,
                     user_id=zoom_session_user_id,
                     session_member_id=zoom_session_member_id,
                 )

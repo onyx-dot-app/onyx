@@ -642,10 +642,10 @@ class ZoomVoiceSessionLimitExceeded(Exception):
     """Raised when Zoom Scribe has no local session capacity."""
 
 
-def _zoom_voice_session_keys(
-    *, tenant_id: str, provider_id: int, user_id: str
-) -> tuple[str, str]:
-    base_key = f"zoom_voice_sessions:tenant:{tenant_id}:provider:{provider_id}"
+def _zoom_voice_session_keys(*, tenant_id: str, user_id: str) -> tuple[str, str]:
+    # Zoom limits concurrency per account, and a tenant can hold several Zoom
+    # provider rows for one account, so the budget is per tenant.
+    base_key = f"zoom_voice_sessions:tenant:{tenant_id}"
     return base_key, f"{base_key}:user:{user_id}"
 
 
@@ -655,12 +655,12 @@ def _decode_redis_lua_result(result: Any) -> str:
     return str(result)
 
 
-async def acquire_zoom_voice_session(provider_id: int, user_id: str) -> str:
-    """Reserve local Zoom Scribe capacity for one accepted WebSocket."""
+async def acquire_zoom_voice_session(user_id: str) -> str:
+    """Reserve local Zoom Scribe capacity for one accepted session."""
     redis = await get_async_redis_connection()
     tenant_id = get_current_tenant_id()
     tenant_key, user_key = _zoom_voice_session_keys(
-        tenant_id=tenant_id, provider_id=provider_id, user_id=user_id
+        tenant_id=tenant_id, user_id=user_id
     )
     session_member_id = uuid.uuid4().hex
     now_ms = int(time.time() * 1000)
@@ -691,14 +691,12 @@ async def acquire_zoom_voice_session(provider_id: int, user_id: str) -> str:
     raise RuntimeError(f"Unexpected Zoom voice session admission result: {result}")
 
 
-async def release_zoom_voice_session(
-    *, provider_id: int, user_id: str, session_member_id: str
-) -> None:
-    """Release local Zoom Scribe capacity for a WebSocket."""
+async def release_zoom_voice_session(*, user_id: str, session_member_id: str) -> None:
+    """Release local Zoom Scribe capacity for a session."""
     redis = await get_async_redis_connection()
     tenant_id = get_current_tenant_id()
     tenant_key, user_key = _zoom_voice_session_keys(
-        tenant_id=tenant_id, provider_id=provider_id, user_id=user_id
+        tenant_id=tenant_id, user_id=user_id
     )
     await cast(Any, redis).eval(
         _ZOOM_VOICE_SESSION_RELEASE_LUA,
