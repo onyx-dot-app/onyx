@@ -31,6 +31,7 @@ from onyx.llm.well_known_providers.constants import (
     OPENAI_PROVIDER_NAME,
     OPENROUTER_PROVIDER_NAME,
     PORTKEY_PROVIDER_NAME,
+    VENICE_PROVIDER_NAME,
     VERTEXAI_PROVIDER_NAME,
 )
 from onyx.llm.well_known_providers.models import WellKnownLLMProviderDescriptor
@@ -65,6 +66,7 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
         OPENAI_COMPATIBLE_PROVIDER_NAME: [],  # Dynamic - fetched from OpenAI-compatible API
         NEBIUS_TOKENFACTORY_PROVIDER_NAME: [],  # Dynamic - fetched from /v1/models
         PORTKEY_PROVIDER_NAME: [],  # Dynamic - fetched from the Portkey gateway
+        VENICE_PROVIDER_NAME: [],  # Dynamic - fetched from Venice's /models
     }
 
 

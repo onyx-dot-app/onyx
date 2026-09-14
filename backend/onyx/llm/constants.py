@@ -29,6 +29,7 @@ class LlmProviderNames(str, Enum):
     OPENAI_COMPATIBLE = "openai_compatible"
     NEBIUS_TOKENFACTORY = "nebius_tokenfactory"
     PORTKEY = "portkey"
+    VENICE = "venice"
 
     def __str__(self) -> str:
         """Needed so things like:
@@ -52,6 +53,7 @@ WELL_KNOWN_PROVIDER_NAMES = [
     LlmProviderNames.OPENAI_COMPATIBLE,
     LlmProviderNames.NEBIUS_TOKENFACTORY,
     LlmProviderNames.PORTKEY,
+    LlmProviderNames.VENICE,
 ]
 
 
@@ -73,6 +75,7 @@ PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     LlmProviderNames.OPENAI_COMPATIBLE: "OpenAI-Compatible",
     LlmProviderNames.NEBIUS_TOKENFACTORY: "Nebius TokenFactory",
     LlmProviderNames.PORTKEY: "Portkey",
+    LlmProviderNames.VENICE: "Venice",
     "groq": "Groq",
     "anyscale": "Anyscale",
     "deepseek": "DeepSeek",
@@ -166,6 +169,9 @@ AGGREGATOR_PROVIDERS: set[str] = {
     LlmProviderNames.OPENAI_COMPATIBLE,
     LlmProviderNames.NEBIUS_TOKENFACTORY,
     LlmProviderNames.PORTKEY,
+    # Venice serves its own models alongside Google, Z.ai, xAI, Qwen and
+    # DeepSeek ones, so model names read as "Gemini (Venice - Google)".
+    LlmProviderNames.VENICE,
 }
 
 # Dynamic providers fetch models directly from source APIs (not LiteLLM).
@@ -178,6 +184,7 @@ DYNAMIC_LLM_PROVIDERS: frozenset[str] = frozenset(
         LlmProviderNames.LM_STUDIO,
         LlmProviderNames.BIFROST,
         LlmProviderNames.OPENAI_COMPATIBLE,
+        LlmProviderNames.VENICE,
     }
 )
 

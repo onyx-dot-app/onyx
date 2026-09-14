@@ -87,6 +87,7 @@ export { default as SvgSnowflake } from "@opal/logos/snowflake";
 export { default as SvgTavily } from "@opal/logos/tavily";
 export { default as SvgTeams } from "@opal/logos/teams";
 export { default as SvgTestrail } from "@opal/logos/testrail";
+export { default as SvgVenice } from "@opal/logos/venice";
 export { default as SvgVoyage } from "@opal/logos/voyage";
 export { default as SvgWikipedia } from "@opal/logos/wikipedia";
 export { default as SvgXai } from "@opal/logos/xai";

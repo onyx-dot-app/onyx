@@ -18,6 +18,7 @@ import {
   SvgGoogle,
   SvgNebius,
   SvgPortkey,
+  SvgVenice,
 } from "@opal/logos";
 import { ZAIIcon } from "@/components/icons/icons";
 import {
@@ -39,6 +40,7 @@ import BifrostModal from "@/sections/modals/languageModels/BifrostModal";
 import OpenAICompatibleModal from "@/sections/modals/languageModels/OpenAICompatibleModal";
 import NebiusTokenfactoryModal from "@/sections/modals/languageModels/NebiusTokenfactoryModal";
 import PortkeyModal from "@/sections/modals/languageModels/PortkeyModal";
+import VeniceModal from "@/sections/modals/languageModels/VeniceModal";
 
 // ─── Text (LLM) providers ────────────────────────────────────────────────────
 
@@ -134,6 +136,12 @@ const PROVIDERS: Record<string, ProviderEntry> = {
     companyName: "Portkey",
     Modal: PortkeyModal,
   },
+  [LLMProviderName.VENICE]: {
+    icon: SvgVenice,
+    productName: "Venice",
+    companyName: "Venice AI",
+    Modal: VeniceModal,
+  },
   [LLMProviderName.CUSTOM]: {
     icon: SvgServer,
     productName: "Custom Models",
@@ -215,6 +223,7 @@ const MODEL_ICON_MAP: Record<string, IconFunctionComponent> = {
   [LLMProviderName.OPENAI_COMPATIBLE]: SvgPlug,
   [LLMProviderName.NEBIUS_TOKENFACTORY]: SvgNebius,
   [LLMProviderName.PORTKEY]: SvgPortkey,
+  [LLMProviderName.VENICE]: SvgVenice,
 
   amazon: SvgAws,
   gpt: SvgOpenai,

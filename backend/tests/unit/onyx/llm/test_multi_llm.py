@@ -3395,3 +3395,54 @@ def test_track_llm_cost_prices_cache_creation_at_write_rate(
     )
 
     assert increment_usage.call_args.args[2] == pytest.approx(1.05)
+
+
+def _venice_llm(api_base: str = "https://api.venice.ai/api/v1") -> LitellmLLM:
+    return LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.VENICE,
+        model_name="zai-org-glm-5-2",
+        api_base=api_base,
+        max_input_tokens=32000,
+    )
+
+
+def test_venice_base_url_is_not_double_suffixed() -> None:
+    """Venice is the first well-known provider whose configured base already
+    ends in /v1, so the OpenAI-compatible coercion must leave it alone."""
+    assert _venice_llm()._api_base == "https://api.venice.ai/api/v1"
+
+
+def test_venice_base_url_without_v1_still_gets_one() -> None:
+    assert _venice_llm("https://api.venice.ai/api")._api_base == (
+        "https://api.venice.ai/api/v1"
+    )
+
+
+def test_venice_suppresses_the_venice_system_prompt() -> None:
+    """Venice prepends its own system prompts unless told not to, which would
+    silently sit in front of every Onyx persona and RAG prompt."""
+    venice_parameters = _venice_llm()._model_kwargs["extra_body"]["venice_parameters"]
+    assert venice_parameters["include_venice_system_prompt"] is False
+
+
+def test_venice_system_prompt_default_yields_to_deployment_config() -> None:
+    """The default fills a gap; an operator who asks for Venice's prompts by
+    name still gets them."""
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.VENICE,
+        model_name="zai-org-glm-5-2",
+        api_base="https://api.venice.ai/api/v1",
+        max_input_tokens=32000,
+        extra_body={"venice_parameters": {"include_venice_system_prompt": True}},
+    )
+    venice_parameters = llm._model_kwargs["extra_body"]["venice_parameters"]
+    assert venice_parameters["include_venice_system_prompt"] is True
+
+
+def test_venice_routes_through_the_openai_chat_completions_surface() -> None:
+    """LiteLLM has no Venice integration, so the call must impersonate OpenAI."""
+    assert _venice_llm()._custom_llm_provider == "openai"
