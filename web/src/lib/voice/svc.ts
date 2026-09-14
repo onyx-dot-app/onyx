@@ -64,8 +64,3 @@ export async function deleteVoiceProvider(
 ): Promise<Response> {
   return fetch(`${VOICE_PROVIDERS_URL}/${providerId}`, { method: "DELETE" });
 }
-
-/** Fetches all configured LLM providers (used to copy API keys into voice providers). */
-async function fetchLLMProviders(): Promise<Response> {
-  return fetch("/api/admin/llm/provider");
-}

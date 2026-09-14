@@ -2,7 +2,6 @@ import { LLMProviderName, LLMProviderView } from "@/lib/languageModels/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { toast } from "@opal/layouts";
 import isEqual from "lodash/isEqual";
-import { parseAzureTargetUri } from "@/lib/azureTargetUri";
 import {
   track,
   AnalyticsEvent,
@@ -42,59 +41,6 @@ const submitLlmTestRequest = async (
   }
 };
 
-const testApiKeyHelper = async (
-  t: LlmModalsTranslator,
-  providerName: string,
-  formValues: Record<string, unknown>,
-  apiKey?: string,
-  modelName?: string,
-  customConfigOverride?: Record<string, unknown>
-): Promise<TestApiKeyResult> => {
-  let finalApiBase = formValues?.api_base;
-  let finalApiVersion = formValues?.api_version;
-  let finalDeploymentName = formValues?.deployment_name;
-
-  if (providerName === "azure" && formValues?.target_uri) {
-    try {
-      const { url, apiVersion, deploymentName } = parseAzureTargetUri(
-        formValues.target_uri as string
-      );
-      finalApiBase = url.origin;
-      finalApiVersion = apiVersion;
-      finalDeploymentName = deploymentName || "";
-    } catch {
-      // leave defaults so validation can surface errors upstream
-    }
-  }
-
-  const payload = {
-    api_key: apiKey ?? formValues?.api_key,
-    api_base: finalApiBase,
-    api_version: finalApiVersion,
-    deployment_name: finalDeploymentName,
-    provider: providerName,
-    api_key_changed: true,
-    custom_config_changed: true,
-    custom_config: {
-      ...(formValues?.custom_config as Record<string, unknown> | undefined),
-      ...customConfigOverride,
-    },
-    model: modelName ?? (formValues?.test_model_name as string) ?? "",
-  };
-
-  return await submitLlmTestRequest(payload, t("toasts.testApiKeyFailed"));
-};
-
-const testCustomProvider = async (
-  t: LlmModalsTranslator,
-  formValues: Record<string, unknown>
-): Promise<TestApiKeyResult> => {
-  return await submitLlmTestRequest(
-    { ...formValues },
-    t("toasts.testCustomProviderFailed")
-  );
-};
-
 // ─── Submit provider ──────────────────────────────────────────────────────
 
 export interface SubmitProviderParams<
@@ -124,7 +70,6 @@ export async function submitProvider<T extends BaseLLMFormValues>({
   initialValues,
   existingLlmProvider,
   shouldMarkAsDefault,
-  isCustomProvider,
   setStatus,
   setSubmitting,
   onClose,

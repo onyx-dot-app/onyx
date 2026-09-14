@@ -84,7 +84,6 @@ export default function useChatSessionController({
   chatSessionIdRef,
   loadedIdSessionRef,
   chatInputBarRef,
-  isInitialLoad,
   submitOnLoadPerformed,
   refreshChatSessions,
   onSubmit,
@@ -397,7 +396,7 @@ export default function useChatSessionController({
         } else {
           setCurrentSessionFileTokenCount(0);
         }
-      } catch (e) {
+      } catch {
         setCurrentSessionFileTokenCount(0);
       }
 
@@ -411,7 +410,7 @@ export default function useChatSessionController({
         } else {
           setProjectFiles([]);
         }
-      } catch (e) {
+      } catch {
         setProjectFiles([]);
       }
 

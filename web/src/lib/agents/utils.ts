@@ -21,25 +21,6 @@ export function checkUserOwnsAgent(
   return agent.owner?.id === user.id;
 }
 
-/**
- * Returns true if the user may edit the agent — owner, EDITOR-level sharee,
- * or admin (admins report EDITOR server-side).
- */
-function checkUserCanEditAgent(
-  user: User | null,
-  agent: MinimalAgent | Agent
-): boolean {
-  if (!user || agent.builtin_persona) return false;
-  if (checkUserIsNoAuthUser(user.id)) return true;
-  if (agent.user_permission != null) {
-    return (
-      agent.user_permission === "OWNER" || agent.user_permission === "EDITOR"
-    );
-  }
-  // Fallback for payloads predating user_permission: only ownership is knowable
-  return agent.owner?.id === user.id;
-}
-
 // TODO(ENG-3766): rename to agent
 /** Returns the URL for an agent's avatar image. */
 export function buildAgentAvatarUrl(agentId: number) {

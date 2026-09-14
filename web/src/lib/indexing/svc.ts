@@ -19,7 +19,7 @@ interface TestEmbeddingArgs {
   deploymentName: string | null;
 }
 
-export async function testEmbedding({
+async function testEmbedding({
   provider_type,
   modelName,
   apiKey,

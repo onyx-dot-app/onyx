@@ -364,7 +364,7 @@ describe("usePacketProcessor", () => {
         createMessageStartPacket({ turn_index: 1 }),
       ];
 
-      const { result, rerender } = renderHook(
+      const { result } = renderHook(
         ({ packets }) => usePacketProcessor(packets, 1),
         { initialProps: { packets } }
       );

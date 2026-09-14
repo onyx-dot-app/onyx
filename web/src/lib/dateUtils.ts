@@ -1,26 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
-import { useState } from "react";
 import { humanReadableFormatShort } from "@opal/time";
-
-const useNightTime = () => {
-  const [isNight, setIsNight] = useState(false);
-
-  useEffect(() => {
-    const checkNightTime = () => {
-      const currentHour = new Date().getHours();
-      setIsNight(currentHour >= 18 || currentHour < 6);
-    };
-
-    checkNightTime();
-    const interval = setInterval(checkNightTime, 60000); // Check every minute
-
-    return () => clearInterval(interval);
-  }, []);
-
-  return { isNight };
-};
 
 export function getXDaysAgo(daysAgo: number) {
   const today = new Date();
@@ -76,10 +56,6 @@ export function isDateInFuture(date: Date): boolean {
   return isAfterDate(date, new Date());
 }
 
-const timestampToDateString = (timestamp: string) => {
-  return formatDateForApiParam(new Date(timestamp));
-};
-
 // Options for formatting the date
 const dateOptions: Intl.DateTimeFormatOptions = {
   year: "numeric",
@@ -101,70 +77,6 @@ export const timestampToReadableDate = (timestamp: string) => {
     ", " +
     date.toLocaleTimeString(undefined, timeOptions)
   );
-};
-
-const buildDateString = (date: Date | null) => {
-  return date
-    ? `${Math.round(
-        (new Date().getTime() - date.getTime()) / (1000 * 60 * 60 * 24)
-      )} days ago`
-    : "Select a time range";
-};
-
-const getFormattedDateRangeString = (
-  from: Date | null,
-  to: Date | null,
-  locale: string
-) => {
-  if (!from || !to) return null;
-
-  const options: Intl.DateTimeFormatOptions = {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  };
-  const fromString = from.toLocaleDateString(locale, options);
-  const toString = to.toLocaleDateString(locale, options);
-
-  return `${fromString} - ${toString}`;
-};
-
-const getDateRangeString = (from: Date | null, to: Date | null) => {
-  if (!from || !to) return null;
-
-  const now = new Date();
-  const fromDiffMs = now.getTime() - from.getTime();
-  const toDiffMs = now.getTime() - to.getTime();
-
-  const fromDiffDays = Math.floor(fromDiffMs / (1000 * 60 * 60 * 24));
-  const toDiffDays = Math.floor(toDiffMs / (1000 * 60 * 60 * 24));
-
-  const fromString = getTimeAgoString(from);
-  const toString = getTimeAgoString(to);
-
-  if (fromString === toString) return fromString;
-
-  if (toDiffDays === 0) {
-    return `${fromString} - Today`;
-  }
-
-  return `${fromString} - ${toString}`;
-};
-
-const getTimeAgoString = (date: Date | null) => {
-  if (!date) return null;
-
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  const diffWeeks = Math.floor(diffDays / 7);
-  const diffMonths = Math.floor(diffDays / 30);
-
-  if (now.toDateString() === date.toDateString()) return "Today";
-  if (diffDays === 1) return "Yesterday";
-  if (diffDays < 7) return `${diffDays}d ago`;
-  if (diffDays < 30) return `${diffWeeks}w ago`;
-  return `${diffMonths}mo ago`;
 };
 
 /** Short date like "Jan 27, 2026", or an em dash when there is no date. */
@@ -195,19 +107,6 @@ export function formatDateTimeLog(iso: string): string {
   return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(
     d.getHours()
   )}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
-
-/**
- * Format an ISO timestamp as "HH:MM:SS" (24-hour, local time).
- * Intended for compact time-only displays.
- */
-function formatTimeOnly(iso: string): string {
-  return new Date(iso).toLocaleTimeString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
 }
 
 export function formatMmDdYyyy(d: string): string {

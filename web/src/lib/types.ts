@@ -83,27 +83,12 @@ export enum Permission {
   FULL_ADMIN_PANEL_ACCESS = "admin",
 }
 
-const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
-  [AccountType.STANDARD]: "Standard",
-  [AccountType.BOT]: "Slack Bot",
-  [AccountType.EXT_PERM_USER]: "External User",
-  [AccountType.SERVICE_ACCOUNT]: "Service Account",
-  [AccountType.ANONYMOUS]: "Anonymous",
-};
-
 export enum UserStatus {
   ACTIVE = "active",
   INACTIVE = "inactive",
   INVITED = "invited",
   REQUESTED = "requested",
 }
-
-const USER_STATUS_LABELS: Record<UserStatus, string> = {
-  [UserStatus.ACTIVE]: "Active",
-  [UserStatus.INACTIVE]: "Inactive",
-  [UserStatus.INVITED]: "Invite Pending",
-  [UserStatus.REQUESTED]: "Request to Join",
-};
 
 export interface User {
   id: string;
@@ -153,12 +138,6 @@ export interface AllUsersResponse {
   slack_users_pages: number;
 }
 
-interface AcceptedUserSnapshot {
-  id: string;
-  email: string;
-  is_active: boolean;
-}
-
 export interface InvitedUserSnapshot {
   email: string;
 }
@@ -194,15 +173,6 @@ export interface DocumentBoostStatus {
   link: string;
   boost: number;
   hidden: boolean;
-}
-
-interface FailedConnectorIndexingStatus {
-  cc_pair_id: number;
-  name: string;
-  error_msg: string | null;
-  is_deletable: boolean;
-  connector_id: number;
-  credential_id: number;
 }
 
 export interface IndexAttemptSnapshot {
@@ -280,20 +250,6 @@ export interface ConnectorStatus<ConnectorConfigType, ConnectorCredentialType> {
   credential: Credential<ConnectorCredentialType>;
   access_type: AccessType;
   groups: number[];
-}
-
-interface ConnectorIndexingStatus<
-  ConnectorConfigType,
-  ConnectorCredentialType,
-> extends ConnectorStatus<ConnectorConfigType, ConnectorCredentialType> {
-  // Inlcude data only necessary for indexing statuses in admin page
-  last_success: string | null;
-  last_status: ValidStatuses | null;
-  last_finished_status: ValidStatuses | null;
-  cc_pair_status: ConnectorCredentialPairStatus;
-  in_repeated_error_state: boolean;
-  latest_index_attempt: IndexAttemptSnapshot | null;
-  docs_indexed: number;
 }
 
 export interface ConnectorIndexingStatusLite {
@@ -392,16 +348,6 @@ export interface CCPairBasicInfo {
   status: ConnectorCredentialPairStatus;
 }
 
-type ConnectorSummary = {
-  count: number;
-  active: number;
-  public: number;
-  totalDocsIndexed: number;
-  errors: number; // New field for error count
-};
-
-type GroupedConnectorSummaries = Record<ValidSources, ConnectorSummary>;
-
 // DELETION
 
 export interface DeletionAttemptSnapshot {
@@ -421,13 +367,6 @@ interface CCPairDescriptor<ConnectorType, CredentialType> {
 
 export interface FederatedConnectorConfig {
   federated_connector_id: number;
-  entities: Record<string, any>;
-}
-
-interface FederatedConnectorDescriptor {
-  id: number;
-  name: string;
-  source: string;
   entities: Record<string, any>;
 }
 
@@ -510,11 +449,6 @@ export interface SlackChannelConfig {
   is_default: boolean;
 }
 
-interface SlackChannelDescriptor {
-  id: string;
-  name: string;
-}
-
 export type SlackBot = {
   id: number;
   name: string;
@@ -531,12 +465,6 @@ export type SlackBot = {
   app_token: string;
   user_token?: string;
 };
-
-interface SlackBotTokens {
-  bot_token: string;
-  app_token: string;
-  user_token?: string;
-}
 
 /* EE Only Types */
 export interface UserGroup {
@@ -704,8 +632,6 @@ export const oauthSupportedSources: ConfigurableSources[] = [
   ValidSources.Confluence,
 ];
 
-type OAuthSupportedSource = (typeof oauthSupportedSources)[number];
-
 // Federated Connector Types
 export interface CredentialFieldSpec {
   type: string;
@@ -730,19 +656,10 @@ export interface CredentialSchemaResponse {
   credentials: Record<string, CredentialFieldSpec>;
 }
 
-interface ConfigurationSchemaResponse {
-  configuration: Record<string, ConfigurationFieldSpec>;
-}
-
 export interface FederatedConnectorCreateRequest {
   source: string;
   credentials: Record<string, any>;
   config?: Record<string, any>;
-}
-
-interface FederatedConnectorCreateResponse {
-  id: number;
-  source: string;
 }
 
 export interface IndexingStatusRequest {

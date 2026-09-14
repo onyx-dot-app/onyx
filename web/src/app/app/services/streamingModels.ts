@@ -203,13 +203,6 @@ export interface FetchToolDocuments extends BaseObj {
   documents: OnyxDocument[];
 }
 
-// Custom Tool Packets
-export interface CustomToolErrorInfo {
-  is_auth_error: boolean;
-  status_code: number;
-  message: string;
-}
-
 export interface CustomToolStart extends BaseObj {
   type: "custom_tool_start";
   tool_name: string;
@@ -220,6 +213,13 @@ export interface CustomToolArgs extends BaseObj {
   type: "custom_tool_args";
   tool_name: string;
   tool_args: Record<string, any>;
+}
+
+// Custom Tool Packets
+interface CustomToolErrorInfo {
+  is_auth_error: boolean;
+  status_code: number;
+  message: string;
 }
 
 export interface CustomToolDelta extends BaseObj {
@@ -488,16 +488,6 @@ export interface ChatPacket {
   obj: ChatObj;
 }
 
-interface StopPacket {
-  placement: Placement;
-  obj: StopObj;
-}
-
-interface CitationPacket {
-  placement: Placement;
-  obj: CitationObj;
-}
-
 // New specific tool packet types
 export interface SearchToolPacket {
   placement: Placement;
@@ -536,16 +526,6 @@ export interface MemoryToolPacket {
 export interface ReasoningPacket {
   placement: Placement;
   obj: ReasoningObj;
-}
-
-interface SectionEndPacket {
-  placement: Placement;
-  obj: SectionEndObj;
-}
-
-interface TopLevelBranchingPacket {
-  placement: Placement;
-  obj: TopLevelBranchingObj;
 }
 
 export interface DeepResearchPlanPacket {

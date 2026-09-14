@@ -94,66 +94,6 @@ export async function deleteAgent(agentId: number): Promise<void> {
   }
 }
 
-/**
- * Uploads an agent avatar image. Returns the server-assigned file ID on
- * success, or null if the upload fails.
- */
-async function uploadFile(file: File): Promise<string | null> {
-  const formData = new FormData();
-  formData.append("file", file);
-  const res = await fetch("/api/admin/persona/upload-image", {
-    method: "POST",
-    body: formData,
-    credentials: "include",
-  });
-  if (!res.ok) {
-    return null;
-  }
-  return ((await res.json()) as { file_id: string }).file_id;
-}
-
-// ── Sharing & visibility ─────────────────────────────────────────────────────
-
-/**
- * Updates the agent's sharing settings (users, groups, public flag, labels).
- * Group sharing is EE-only — groupIds are silently dropped when enterprise
- * features are disabled. Returns an error string on failure, null on success.
- */
-async function updateAgentSharedStatus(
-  agentId: number,
-  userIds: string[],
-  groupIds: number[],
-  isPublic: boolean | undefined,
-  isPaidEnterpriseFeaturesEnabled: boolean,
-  labelIds?: number[]
-): Promise<string | null> {
-  const groupSharesDiscarded =
-    !isPaidEnterpriseFeaturesEnabled && groupIds.length > 0;
-
-  try {
-    const res = await fetch(`/api/persona/${agentId}/share`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        user_ids: userIds,
-        group_ids: isPaidEnterpriseFeaturesEnabled ? groupIds : undefined,
-        is_public: isPublic,
-        label_ids: labelIds,
-      }),
-    });
-    if (res.ok) {
-      return groupSharesDiscarded
-        ? "Group sharing is an enterprise-only feature; groups were not added."
-        : null;
-    }
-    return (
-      ((await res.json()) as { detail?: string }).detail ?? "Unknown error"
-    );
-  } catch {
-    return "Network error. Please check your connection and try again.";
-  }
-}
-
 export interface AgentShareUpdatePayload {
   user_shares?: {
     user_id: string;
@@ -241,31 +181,6 @@ export async function removeSelfFromAgentShares(
     }
 
     return await parseErrorDetail(res, "Failed to remove access");
-  } catch {
-    return "Network error. Please check your connection and try again.";
-  }
-}
-
-// ── Featured / listed / display priority ─────────────────────────────────────
-
-/**
- * Sets the agent's featured status. Admin-only endpoint.
- * Returns an error string on failure, null on success.
- */
-async function updateAgentFeaturedStatus(
-  agentId: number,
-  isFeatured: boolean
-): Promise<string | null> {
-  try {
-    const res = await fetch(`/api/admin/persona/${agentId}/featured`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ is_featured: isFeatured }),
-    });
-    if (res.ok) return null;
-    return (
-      ((await res.json()) as { detail?: string }).detail ?? "Unknown error"
-    );
   } catch {
     return "Network error. Please check your connection and try again.";
   }

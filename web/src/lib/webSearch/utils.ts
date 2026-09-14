@@ -172,21 +172,6 @@ export function isSearchProviderConfigured(
   return true;
 }
 
-function canConnectSearchProvider(
-  providerType: string,
-  apiKey: string,
-  searchEngineIdOrBaseUrl: string
-): boolean {
-  const caps = getSearchCapabilities(providerType);
-  if (caps.requiresApiKey && apiKey.trim().length === 0) return false;
-  if (
-    caps.requiredConfigKeys.length > 0 &&
-    searchEngineIdOrBaseUrl.trim().length === 0
-  )
-    return false;
-  return true;
-}
-
 export function buildSearchProviderConfig(
   providerType: string,
   searchEngineIdOrBaseUrl: string
@@ -334,18 +319,6 @@ export function buildContentProviderConfig(
   if (!requiredKey) return config;
   config[requiredKey] = trimmed;
   return config;
-}
-
-function canConnectContentProvider(
-  providerType: WebContentProviderType,
-  apiKey: string,
-  baseUrl: string
-): boolean {
-  const caps = getContentCapabilities(providerType);
-  if (caps.requiresApiKey && apiKey.trim().length === 0) return false;
-  if (caps.requiredConfigKeys.length > 0 && baseUrl.trim().length === 0)
-    return false;
-  return true;
 }
 
 export function getSingleContentConfigFieldValueForForm(

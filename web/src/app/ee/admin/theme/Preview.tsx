@@ -16,7 +16,7 @@ const previewMarkdownComponents = {
       {children}
     </Text>
   ),
-  a: ({ node, href, className, children, ...rest }) => {
+  a: ({ node: _node, href, className, children, ...rest }) => {
     const fullHref = ensureHrefProtocol(href);
     return (
       <a
@@ -178,7 +178,6 @@ function PreviewStart({
   logoDisplayStyle,
   applicationDisplayName,
   chat_footer_content,
-  chat_header_content,
   greeting_message,
   logoSrc,
   highlightTarget,

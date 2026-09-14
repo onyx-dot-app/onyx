@@ -7,23 +7,12 @@ export type Variants =
 
 type ClassNamesMap = Record<Variants, string | null>;
 
-const MIN_WIDTH_CLASS = "min-w-56";
-
 export const wrapperClasses: ClassNamesMap = {
   primary: "input-normal",
   internal: null,
   error: "input-error",
   disabled: "input-disabled",
   readOnly: "bg-transparent border rounded-08",
-} as const;
-
-const innerClasses: ClassNamesMap = {
-  primary:
-    "text-text-04 placeholder:!font-main-ui-muted placeholder:text-text-02",
-  internal: null,
-  error: null,
-  disabled: "text-text-02",
-  readOnly: null,
 } as const;
 
 export const iconClasses: ClassNamesMap = {

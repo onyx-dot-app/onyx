@@ -56,7 +56,7 @@ interface BadgeProps
 function Badge({
   className,
   variant,
-  color,
+  color: _color,
   icon: Icon,
   size = "sm",
   circle,

@@ -2,7 +2,6 @@
 
 import { useTranslations } from "next-intl";
 import OAuthCallbackPage from "@/components/oauth/OAuthCallbackPage";
-import { getSourceDisplayName } from "@/lib/sources";
 
 export default function FederatedOAuthCallbackPage() {
   const t = useTranslations("admin.federatedCallback");

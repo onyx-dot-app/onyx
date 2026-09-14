@@ -9,10 +9,7 @@ import {
 } from "@opal/icons";
 
 // Tool names as referenced by tool results / tool calls
-const SEARCH_TOOL_NAME = "run_search";
-const INTERNET_SEARCH_TOOL_NAME = "run_internet_search";
-const IMAGE_GENERATION_TOOL_NAME = "run_image_generation";
-const PYTHON_TOOL_NAME = "run_python";
+
 export const OPEN_URL_TOOL_NAME = "open_url";
 
 // In-code tool IDs that also correspond to the tool's name when associated with a persona

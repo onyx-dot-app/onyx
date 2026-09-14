@@ -22,17 +22,12 @@ export const NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED =
 export const SERVER_SIDE_ONLY__AUTH_COOKIE_NAME =
   process.env.AUTH_COOKIE_NAME || "fastapiusersauth";
 
-const SEARCH_TYPE_COOKIE_NAME = "search_type";
-const AGENTIC_SEARCH_TYPE_COOKIE_NAME = "agentic_type";
-
 export const LOGOUT_DISABLED =
   process.env.NEXT_PUBLIC_DISABLE_LOGOUT?.toLowerCase() === "true";
 
 export const TOGGLED_CONNECTORS_COOKIE_NAME = "toggled_connectors";
 
 /* Enterprise-only settings */
-const NEXT_PUBLIC_CUSTOM_REFRESH_URL =
-  process.env.NEXT_PUBLIC_CUSTOM_REFRESH_URL;
 
 // NOTE: this should ONLY be used on the server-side. If used client side,
 // it will not be accurate (will always be false).
@@ -63,9 +58,6 @@ export const NEXT_PUBLIC_CLOUD_ENABLED =
 export const REGISTRATION_URL =
   process.env.INTERNAL_URL || "http://127.0.0.1:3001";
 
-const SERVER_SIDE_ONLY__CLOUD_ENABLED =
-  process.env.NEXT_PUBLIC_CLOUD_ENABLED?.toLowerCase() === "true";
-
 export const NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED =
   process.env.NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED?.toLowerCase() === "true" &&
   !NEXT_PUBLIC_CLOUD_ENABLED;
@@ -85,16 +77,10 @@ export const NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK =
 export const ALLOWED_URL_PROTOCOLS = ["http:", "https:", "mailto:"] as const;
 
 // Agent/Persona related constants
-const MAX_CHARACTERS_PERSONA_DESCRIPTION = 5000000;
+
 export const MAX_CHARACTERS_AGENT_DESCRIPTION = 500;
-const MAX_STARTER_MESSAGES = 4;
+
 export const MAX_CHARACTERS_STARTER_MESSAGE = 200;
-const STARTER_MESSAGES_EXAMPLES = [
-  "Give me an overview of some documents.",
-  "Find the latest sales report.",
-  "Compile a list of our engineering goals for this quarter.",
-  "Summarize my goals for today.",
-];
 
 //Credential form data key constants
 export const CREDENTIAL_NAME = "name";
@@ -109,9 +95,6 @@ export const MODAL_ROOT_ID = "modal-root";
 export const UNNAMED_CHAT = "New Chat";
 
 export const DEFAULT_AGENT_ID = 0;
-const GENERAL_ASSISTANT_ID = -1;
-const IMAGE_ASSISTANT_ID = -2;
-const ART_ASSISTANT_ID = -3;
 
 // Used in the File Picker to show a max number of files.
 // The rest will be hidden behind an "All Recent Files" button.
@@ -124,11 +107,10 @@ export {
   LARGE_BREAKPOINT_PX,
 } from "@opal/constants";
 export const DEFAULT_AVATAR_SIZE_PX = 18;
-const HORIZON_DISTANCE_PX = 800;
+
 export const DEFAULT_LOGO_SIZE_PX = 24;
 
 export const DEFAULT_CONTEXT_TOKENS = 120_000;
-const MAX_CHUNKS_FED_TO_CHAT = 25;
 
 export const APP_SLOGAN = "Open Source AI Platform";
 

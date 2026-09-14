@@ -9,7 +9,6 @@ import {
   test,
   expect,
   gotoDiscordBotPage,
-  gotoGuildDetailPage,
 } from "@tests/e2e/admin/discord-bot/fixtures";
 
 // Disable retries for Discord bot tests - attempt once at most

@@ -15,7 +15,6 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   ConfiguredEmbeddingProvider,
   EmbeddingModelResponse,
-  LLMContextualCost,
   ReindexErrorRow,
   ReindexProgress,
   SavedSearchSettings,
@@ -75,17 +74,6 @@ export function useCurrentEmbeddingModel({
     SWR_KEYS.currentSearchSettings,
     errorHandlingFetcher,
     { refreshInterval: pollIntervalMs }
-  );
-}
-
-/**
- * Fetch LLM models available for contextual RAG, including per-model token
- * cost.
- */
-function useLLMContextualCosts() {
-  return useSWR<LLMContextualCost[]>(
-    SWR_KEYS.llmContextualCost,
-    errorHandlingFetcher
   );
 }
 

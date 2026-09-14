@@ -86,12 +86,6 @@ export interface WellKnownLLMProviderDescriptor {
   recommended_default_model: SimpleKnownModel | null;
 }
 
-interface LLMModelDescriptor {
-  modelName: string;
-  provider: string;
-  maxTokens: number;
-}
-
 export interface LLMProviderView {
   id: number;
   name: string | null;
@@ -106,10 +100,6 @@ export interface LLMProviderView {
   personas: number[];
   deployment_name: string | null;
   model_configurations: ModelConfiguration[];
-}
-
-interface VisionProvider extends LLMProviderView {
-  vision_models: string[];
 }
 
 export interface LLMProviderDescriptor {
@@ -278,10 +268,6 @@ export interface PortkeyModelResponse {
   supports_reasoning: boolean;
 }
 
-interface VertexAIFetchParams {
-  model_configurations?: ModelConfiguration[];
-}
-
 export interface LMStudioFetchParams {
   api_base?: string;
   api_key?: string;
@@ -289,13 +275,3 @@ export interface LMStudioFetchParams {
   provider_id?: number;
   signal?: AbortSignal;
 }
-
-type FetchModelsParams =
-  | BedrockFetchParams
-  | OllamaFetchParams
-  | OpenRouterFetchParams
-  | LiteLLMProxyFetchParams
-  | BifrostFetchParams
-  | OpenAICompatibleFetchParams
-  | VertexAIFetchParams
-  | LMStudioFetchParams;

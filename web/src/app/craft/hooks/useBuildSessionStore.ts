@@ -5,7 +5,6 @@ import { create } from "zustand";
 import {
   ApiSessionResponse,
   Artifact,
-  ArtifactType,
   BuildMessage,
   BuildMessageAttachment,
   FileSystemEntry,
@@ -602,12 +601,6 @@ interface CraftQueuedMessage {
 }
 
 const EMPTY_CRAFT_QUEUED_MESSAGES: readonly CraftQueuedMessage[] = [];
-
-/** File preview tab data */
-interface FilePreviewTab {
-  path: string;
-  fileName: string;
-}
 
 /** Files tab state - persisted across tab switches */
 export interface FilesTabState {

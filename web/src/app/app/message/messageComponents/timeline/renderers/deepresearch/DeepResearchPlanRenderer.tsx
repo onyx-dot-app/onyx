@@ -24,7 +24,7 @@ import {
 export const DeepResearchPlanRenderer: MessageRenderer<
   DeepResearchPlanPacket,
   FullChatState
-> = ({ packets, stopPacketSeen, children }) => {
+> = ({ packets, children }) => {
   const t = useTranslations("chat.messages.timeline");
   const isComplete = packets.some((p) => p.obj.type === PacketType.SECTION_END);
 

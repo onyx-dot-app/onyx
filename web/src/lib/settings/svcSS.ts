@@ -33,18 +33,6 @@ export async function fetchEnterpriseSettingsSS(): Promise<EnterpriseSettings | 
   }
 }
 
-async function fetchCustomAnalyticsScriptSS(): Promise<string | null> {
-  try {
-    const response = await fetchSS(
-      "/enterprise-settings/custom-analytics-script"
-    );
-    if (!response?.ok) return null;
-    return response.json();
-  } catch {
-    return null;
-  }
-}
-
 export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
   const settingsTask = fetchSS("/settings");
   const enterpriseTask = SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED

@@ -10,16 +10,6 @@ import type { ErrorResponseBody } from "@/lib/fetcher";
 
 const BASE_URL = "/api/manage/admin/discord-bot";
 
-// === Bot Config (Self-hosted only) ===
-
-async function fetchBotConfig(): Promise<DiscordBotConfig> {
-  const response = await fetch(`${BASE_URL}/config`);
-  if (!response.ok) {
-    throw new Error("Failed to fetch bot config");
-  }
-  return response.json();
-}
-
 export async function createBotConfig(
   botToken: string
 ): Promise<DiscordBotConfig> {
@@ -42,29 +32,11 @@ export async function deleteBotConfig(): Promise<void> {
   }
 }
 
-// === Guild Config ===
-
-async function fetchGuildConfigs(): Promise<DiscordGuildConfig[]> {
-  const response = await fetch(`${BASE_URL}/guilds`);
-  if (!response.ok) {
-    throw new Error("Failed to fetch guild configs");
-  }
-  return response.json();
-}
-
 export async function createGuildConfig(): Promise<DiscordGuildConfigCreateResponse> {
   const response = await fetch(`${BASE_URL}/guilds`, { method: "POST" });
   if (!response.ok) {
     const error: ErrorResponseBody = await response.json();
     throw new Error(error.detail || "Failed to create guild config");
-  }
-  return response.json();
-}
-
-async function fetchGuildConfig(configId: number): Promise<DiscordGuildConfig> {
-  const response = await fetch(`${BASE_URL}/guilds/${configId}`);
-  if (!response.ok) {
-    throw new Error("Failed to fetch guild config");
   }
   return response.json();
 }
@@ -92,18 +64,6 @@ export async function deleteGuildConfig(configId: number): Promise<void> {
   if (!response.ok) {
     throw new Error("Failed to delete guild config");
   }
-}
-
-// === Channel Config ===
-
-async function fetchChannelConfigs(
-  guildConfigId: number
-): Promise<DiscordChannelConfig[]> {
-  const response = await fetch(`${BASE_URL}/guilds/${guildConfigId}/channels`);
-  if (!response.ok) {
-    throw new Error("Failed to fetch channel configs");
-  }
-  return response.json();
 }
 
 async function updateChannelConfig(

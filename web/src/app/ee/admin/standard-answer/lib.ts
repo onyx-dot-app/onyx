@@ -30,19 +30,6 @@ export const createStandardAnswerCategory = async (
   });
 };
 
-const updateStandardAnswerCategory = async (
-  id: number,
-  request: StandardAnswerCategoryCreationRequest
-) => {
-  return fetch(`/api/manage/admin/standard-answer/category/${id}`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: buildRequestBodyFromStandardAnswerCategoryCreationRequest(request),
-  });
-};
-
 const buildRequestBodyFromStandardAnswerCreationRequest = (
   request: StandardAnswerCreationRequest
 ) => {

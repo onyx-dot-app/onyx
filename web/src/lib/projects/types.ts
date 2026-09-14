@@ -23,6 +23,11 @@ export interface ProjectSearchMatch {
   chatMatched: boolean;
 }
 
+interface RejectedFile {
+  file_name: string;
+  reason: string;
+}
+
 export interface CategorizedFiles {
   user_files: ProjectFile[];
   rejected_files: RejectedFile[];
@@ -42,11 +47,6 @@ export interface ProjectFile {
   token_count: number | null;
   chunk_count: number | null;
   temp_id?: string | null;
-}
-
-export interface RejectedFile {
-  file_name: string;
-  reason: string;
 }
 
 export interface UserFileDeleteResult {

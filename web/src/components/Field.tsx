@@ -11,7 +11,6 @@ import {
 } from "formik";
 import { FileUpload } from "@/components/admin/connectors/FileUpload";
 import * as Yup from "yup";
-import { FormBodyBuilder } from "./admin/connectors/types";
 import { StringOrNumberOption } from "@/components/Dropdown";
 import {
   Select,
@@ -26,14 +25,7 @@ import ReactMarkdown from "react-markdown";
 import { FaMarkdown } from "react-icons/fa";
 import { useState, useEffect, memo, JSX } from "react";
 import remarkGfm from "remark-gfm";
-import {
-  Button,
-  InputCheckbox,
-  InputDatePicker,
-  InputTextArea,
-  type InputTextAreaProps,
-  Tooltip,
-} from "@opal/components";
+import { Button, InputCheckbox, Tooltip } from "@opal/components";
 
 import { Section } from "@/layouts/general-layouts";
 import { transformLinkUri } from "@/lib/utils";
@@ -49,10 +41,6 @@ import {
 import Text from "@/refresh-components/texts/Text";
 
 import { SvgEye, SvgEyeClosed, SvgPlusCircle } from "@opal/icons";
-
-function SectionHeader({ children }: { children: string | JSX.Element }) {
-  return <div className="mb-4 font-bold text-lg">{children}</div>;
-}
 
 export function Label({
   children,
@@ -74,21 +62,6 @@ export function Label({
     >
       {children}
     </label>
-  );
-}
-
-function LabelWithTooltip({
-  children,
-  tooltip,
-}: {
-  children: string | JSX.Element;
-  tooltip: string;
-}) {
-  return (
-    <div className="flex items-center gap-x-2">
-      <Label>{children}</Label>
-      <ToolTipDetails>{tooltip}</ToolTipDetails>
-    </div>
   );
 }
 
@@ -913,23 +886,6 @@ export function TextArrayField<T extends Yup.AnyObject>({
   );
 }
 
-interface TextArrayFieldBuilderProps<T extends Yup.AnyObject> {
-  name: string;
-  label: string;
-  subtext?: string | JSX.Element;
-  type?: string;
-  tooltip?: string;
-}
-
-function TextArrayFieldBuilder<T extends Yup.AnyObject>(
-  props: TextArrayFieldBuilderProps<T>
-): FormBodyBuilder<T> {
-  const _TextArrayField: FormBodyBuilder<T> = (values) => (
-    <TextArrayField {...props} values={values} />
-  );
-  return _TextArrayField;
-}
-
 interface SelectorFormFieldProps {
   name: string;
   label?: string;
@@ -1067,54 +1023,5 @@ export function SelectorFormField({
         className="text-action-danger-05 text-sm mt-1"
       />
     </div>
-  );
-}
-
-interface DatePickerFieldProps {
-  label: string;
-  name: string;
-  subtext?: string;
-  startYear?: number;
-  disabled?: boolean;
-}
-
-function DatePickerField({
-  label,
-  name,
-  subtext,
-  startYear = 1970,
-  disabled = false,
-}: DatePickerFieldProps) {
-  const [field, _, helper] = useField<Date | null>(name);
-
-  return (
-    <div>
-      <FieldLabel label={label} name={name} subtext={subtext} />
-      <InputDatePicker
-        id={name}
-        value={field.value}
-        onChange={helper.setValue}
-        minDate={new Date(startYear, 0, 1)}
-        disabled={disabled}
-      />
-    </div>
-  );
-}
-
-interface TextAreaFieldProps extends InputTextAreaProps {
-  name: string;
-}
-
-function TextAreaField(props: TextAreaFieldProps) {
-  const [field, _, helper] = useField<string>(props.name);
-
-  return (
-    <InputTextArea
-      value={field.value}
-      onChange={(event) => {
-        helper.setValue(event.target.value);
-      }}
-      {...props}
-    />
   );
 }

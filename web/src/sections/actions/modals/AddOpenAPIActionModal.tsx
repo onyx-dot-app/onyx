@@ -2,7 +2,6 @@
 
 import { markdown } from "@opal/utils";
 import { useTranslations } from "next-intl";
-import Link from "next/link";
 import { Modal } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { InputVertical, toast } from "@opal/layouts";

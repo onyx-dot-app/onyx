@@ -97,15 +97,6 @@ export async function updateToolStatus(
 }
 
 /**
- * Disable all tools for a specific MCP server
- */
-async function disableAllServerTools(
-  toolIds: number[]
-): Promise<ToolStatusUpdateResponse> {
-  return updateToolsStatus(toolIds, false);
-}
-
-/**
  * Create a new MCP server with basic information
  */
 export async function createMCPServer(

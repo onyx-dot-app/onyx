@@ -47,7 +47,7 @@ export default function InputFile({
 }: InputFileProps) {
   const strings = useOpalStrings();
   const [displayValue, setDisplayValue] = useState<string>("");
-  const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+  const [, setSelectedFileName] = useState<string | null>(null);
   const [isFileMode, setIsFileMode] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 

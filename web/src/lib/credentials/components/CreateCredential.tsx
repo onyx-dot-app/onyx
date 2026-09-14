@@ -26,7 +26,6 @@ import {
   IsPublicGroupSelectorFormType,
   IsPublicGroupSelector,
 } from "@/components/IsPublicGroupSelector";
-import { useUser } from "@/providers/UserProvider";
 import CardSection from "@/components/admin/CardSection";
 import { CredentialFieldsRenderer } from "@/lib/credentials/components/CredentialFieldsRenderer";
 import { TypedFile } from "@/lib/connectors/fileTypes";
@@ -129,7 +128,7 @@ export default function CreateCredential({
 
     let privateKey: TypedFile | null = null;
     const filteredCredentialValues = Object.fromEntries(
-      Object.entries(credentialValues).filter(([key, value]) => {
+      Object.entries(credentialValues).filter(([_key, value]) => {
         if (value instanceof TypedFile) {
           privateKey = value;
           return false;

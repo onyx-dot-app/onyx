@@ -142,11 +142,7 @@ const FormFieldDescription: React.FC<DescriptionProps> = ({
   );
 };
 
-const FormFieldMessage: React.FC<MessageProps> = ({
-  className,
-  messages,
-  render,
-}) => {
+const FormFieldMessage: React.FC<MessageProps> = ({ className, messages }) => {
   const { baseId, state } = useFieldContext();
   let tempState = state;
   let content = messages?.[tempState];

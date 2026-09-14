@@ -87,10 +87,7 @@ test.describe("Bot Configuration Page", () => {
     }
   });
 
-  test("bot config shows configured state", async ({
-    adminPage,
-    mockBotConfigured,
-  }) => {
+  test("bot config shows configured state", async ({ adminPage }) => {
     await gotoDiscordBotPage(adminPage);
 
     // With mockBotConfigured, should show configured state
@@ -106,10 +103,7 @@ test.describe("Bot Configuration Page", () => {
     await expect(deleteButton).toBeVisible();
   });
 
-  test("bot config delete shows confirmation modal", async ({
-    adminPage,
-    mockBotConfigured,
-  }) => {
+  test("bot config delete shows confirmation modal", async ({ adminPage }) => {
     await gotoDiscordBotPage(adminPage);
 
     // Wait for configured state to be visible

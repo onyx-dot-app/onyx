@@ -32,15 +32,7 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
 }) => {
   const t = useTranslations("chat.messages.timeline");
   const memoryState = constructCurrentMemoryState(packets);
-  const {
-    hasStarted,
-    noAccess,
-    memoryText,
-    operation,
-    isComplete,
-    memoryId,
-    index,
-  } = memoryState;
+  const { hasStarted, noAccess, memoryText, memoryId, index } = memoryState;
   const memoriesModal = useCreateModal();
   const isHighlight = renderType === RenderType.HIGHLIGHT;
 

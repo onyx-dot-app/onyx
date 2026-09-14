@@ -1,7 +1,6 @@
 import { spawn, ChildProcessWithoutNullStreams } from "child_process";
 import path from "path";
 import net from "net";
-import fs from "fs";
 
 interface StartServerOptions {
   bindHost?: string;

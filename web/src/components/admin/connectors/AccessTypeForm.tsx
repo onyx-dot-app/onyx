@@ -30,7 +30,7 @@ export function AccessTypeForm({
   currentCredential?: Credential<any> | null;
 }) {
   const t = useTranslations("admin.connector.accessType");
-  const [access_type, meta, access_type_helpers] =
+  const [access_type, , access_type_helpers] =
     useField<AccessType>("access_type");
   const { isScopedManager } = usePermissionAuthority(
     Permission.MANAGE_CONNECTORS

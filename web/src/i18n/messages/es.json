@@ -5826,7 +5826,9 @@
       "panel": {
         "description": "{start} – {end} · El uso del sistema es actividad del LLM que Onyx ejecuta en segundo plano, no para un usuario específico. Algunos ejemplos son los resúmenes de imágenes, el procesamiento RAG contextual y la extracción del grafo de conocimiento.",
         "emptyDescription": "El uso del sistema es actividad del LLM que Onyx ejecuta en segundo plano, no para un usuario específico. Algunos ejemplos son los resúmenes de imágenes, el procesamiento RAG contextual y la extracción del grafo de conocimiento.",
-        "error": { "title": "No se pudo cargar el uso del sistema de este periodo." },
+        "error": {
+          "title": "No se pudo cargar el uso del sistema de este periodo."
+        },
         "title": "Uso del sistema"
       },
       "summary": {

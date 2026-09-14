@@ -6,8 +6,6 @@ import React from "react";
 
 export { Section, type SectionProps } from "@opal/layouts/general/components";
 
-import { Section } from "@opal/layouts/general/components";
-
 interface CardItemLayoutProps {
   icon: React.FunctionComponent<IconProps>;
   title: string;

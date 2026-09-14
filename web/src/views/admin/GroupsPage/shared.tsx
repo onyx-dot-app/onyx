@@ -5,46 +5,14 @@ import { SvgUser, SvgUserManage, SvgGlobe } from "@opal/icons";
 import { SvgSlack } from "@opal/logos";
 import type { IconFunctionComponent } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
-import { AccountType, UserStatus } from "@/lib/types";
-import type { ApiKeyDescriptor, MemberRow } from "./interfaces";
+import { AccountType } from "@/lib/types";
+import type { MemberRow } from "./interfaces";
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
 export const PAGE_SIZE = 10;
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-// Translated copy threaded in by the calling component, matching
-// MemberColumnLabels below.
-interface ApiKeyMemberRowLabels {
-  serviceAccountEmail: string;
-  unnamedKey: string;
-}
-
-function apiKeyToMemberRow(
-  key: ApiKeyDescriptor,
-  labels: ApiKeyMemberRowLabels
-): MemberRow {
-  return {
-    id: key.user_id,
-    email: labels.serviceAccountEmail,
-    account_type: AccountType.SERVICE_ACCOUNT,
-    is_admin: false,
-    status: UserStatus.ACTIVE,
-    is_active: true,
-    is_scim_synced: false,
-    craft_enabled: null,
-    personal_name: key.api_key_name ?? labels.unnamedKey,
-    created_at: null,
-    updated_at: null,
-    groups: [],
-    api_key_display: key.api_key_display,
-  };
-}
 
 // ---------------------------------------------------------------------------
 // Account type icon mapping

@@ -46,7 +46,6 @@ export const OptionsList: React.FC<OptionsListProps> = ({
   onMouseMove,
   isExactMatch,
   inputValue,
-  allowCreate,
   showCreateOption,
   createPrefix,
 }) => {

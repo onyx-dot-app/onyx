@@ -3,7 +3,6 @@ import {
   SvgFileText,
   SvgEdit,
   SvgSearch,
-  SvgGlobe,
   SvgCpu,
   SvgCheckSquare,
   SvgAlertCircle,

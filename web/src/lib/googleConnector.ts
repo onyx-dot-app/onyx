@@ -1,17 +1,11 @@
 import useSWR, { mutate } from "swr";
 import { toast } from "@opal/layouts";
-import { FetchError, errorHandlingFetcher } from "@/lib/fetcher";
+import { errorHandlingFetcher } from "@/lib/fetcher";
 import { Credential } from "@/lib/connectors/credentials";
-import { ConnectorSnapshot } from "@/lib/connectors/connectors";
 import { ValidSources } from "@/lib/types";
 import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
-import { SWR_KEYS } from "@/lib/swr-keys";
 
 // Constants for service names to avoid typos
-const GOOGLE_SERVICES = {
-  GMAIL: "gmail",
-  GOOGLE_DRIVE: "google-drive",
-} as const;
 
 // Parse an uploaded OAuth app JSON; toasts and returns null when invalid.
 export const parseOauthAppCredentialJson = (
@@ -45,47 +39,6 @@ export const useGoogleCredentials = (
     errorHandlingFetcher,
     { refreshInterval: 5000 }
   );
-};
-
-const useConnectorsByCredentialId = (credential_id: number | null) => {
-  let url: string | null = null;
-  if (credential_id !== null) {
-    url = `/api/manage/admin/connector?credential=${credential_id}`;
-  }
-  const swrResponse = useSWR<ConnectorSnapshot[]>(url, errorHandlingFetcher);
-
-  return {
-    ...swrResponse,
-    refreshConnectorsByCredentialId: () => mutate(url),
-  };
-};
-
-const filterUploadedCredentials = <
-  T extends { authentication_method?: string },
->(
-  credentials: Credential<T>[] | undefined
-): { credential_id: number | null; uploadedCredentials: Credential<T>[] } => {
-  let credential_id = null;
-  let uploadedCredentials: Credential<T>[] = [];
-
-  if (credentials) {
-    uploadedCredentials = credentials.filter(
-      (credential) =>
-        credential.credential_json.authentication_method !== "oauth_interactive"
-    );
-
-    if (uploadedCredentials.length > 0 && uploadedCredentials[0]) {
-      credential_id = uploadedCredentials[0].id;
-    }
-  }
-
-  return { credential_id, uploadedCredentials };
-};
-
-const checkConnectorsExist = (
-  connectors: ConnectorSnapshot[] | undefined
-): boolean => {
-  return !!connectors && connectors.length > 0;
 };
 
 export const refreshAllGoogleData = (

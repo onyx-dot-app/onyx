@@ -3,7 +3,6 @@
 import { useState } from "react";
 import {
   type Table,
-  type ColumnDef,
   type RowData,
   type SortingState,
 } from "@tanstack/react-table";
@@ -147,34 +146,6 @@ function SortingPopover<TData extends RowData>({
       </Popover.Content>
     </Popover>
   );
-}
-
-// ---------------------------------------------------------------------------
-// Column definition factory
-// ---------------------------------------------------------------------------
-
-interface CreateSortingColumnOptions {
-  footerText?: string;
-}
-
-function createSortingColumn<TData>(
-  options?: CreateSortingColumnOptions
-): ColumnDef<TData, unknown> {
-  return {
-    id: "__sorting",
-    size: 44,
-    enableHiding: false,
-    enableSorting: false,
-    enableResizing: false,
-    header: ({ table }) => (
-      <SortingPopover
-        table={table}
-        sorting={table.getState().sorting}
-        footerText={options?.footerText}
-      />
-    ),
-    cell: () => null,
-  };
 }
 
 export { SortingPopover };

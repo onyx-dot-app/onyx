@@ -8,15 +8,12 @@ import { Content, InputErrorText, InputVertical, toast } from "@opal/layouts";
 import Card from "@/refresh-components/cards/Card";
 import { Button, MessageCard } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import InfoBlock from "@/refresh-components/messages/InfoBlock";
 import { InputNumber } from "@opal/components";
 import {
   SvgUsers,
   SvgExternalLink,
   SvgArrowRight,
   SvgPlus,
-  SvgWallet,
-  SvgFileText,
   SvgOrganization,
 } from "@opal/icons";
 import {
@@ -658,85 +655,6 @@ function SeatsCard({
         </Section>
       </Section>
     </Card>
-  );
-}
-
-// ----------------------------------------------------------------------------
-// PaymentSection
-// ----------------------------------------------------------------------------
-
-function PaymentSection({ billing }: { billing: BillingInformation }) {
-  const t = useTranslations("admin.billing");
-  const locale = useLocale();
-  const handleOpenPortal = async () => {
-    try {
-      const response = await createCustomerPortalSession({
-        return_url: `${window.location.origin}/admin/billing?portal_return=true`,
-      });
-      if (response.stripe_customer_portal_url) {
-        window.location.href = response.stripe_customer_portal_url;
-      }
-    } catch (error) {
-      console.error("Failed to open customer portal:", error);
-    }
-  };
-
-  if (!billing.payment_method_enabled) return null;
-
-  const lastPaymentDate = formatDateShort(billing.current_period_start, locale);
-
-  return (
-    <div className="billing-payment-section">
-      <Section alignItems="start" height="auto" width="full">
-        <Text mainContentEmphasis>{t("payment.section.title")}</Text>
-        <Section flexDirection="row" gap={2} alignItems="stretch" height="auto">
-          <Card className="billing-payment-card">
-            <Section
-              flexDirection="row"
-              justifyContent="between"
-              alignItems="start"
-              height="auto"
-            >
-              <InfoBlock
-                icon={SvgWallet}
-                title={t("payment.card.title")}
-                description={t("payment.card.description")}
-              />
-              <Button
-                prominence="tertiary"
-                onClick={handleOpenPortal}
-                rightIcon={SvgExternalLink}
-              >
-                {t("payment.update.label")}
-              </Button>
-            </Section>
-          </Card>
-          {lastPaymentDate && (
-            <Card className="billing-payment-card">
-              <Section
-                flexDirection="row"
-                justifyContent="between"
-                alignItems="start"
-                height="auto"
-              >
-                <InfoBlock
-                  icon={SvgFileText}
-                  title={lastPaymentDate}
-                  description={t("payment.lastPayment.description")}
-                />
-                <Button
-                  prominence="tertiary"
-                  onClick={handleOpenPortal}
-                  rightIcon={SvgExternalLink}
-                >
-                  {t("payment.viewInvoice.label")}
-                </Button>
-              </Section>
-            </Card>
-          )}
-        </Section>
-      </Section>
-    </div>
   );
 }
 

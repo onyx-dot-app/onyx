@@ -296,7 +296,7 @@ export const buildImmediateMessages = (
   parentNodeId: number,
   userInput: string,
   files: FileDescriptor[],
-  messageToResend?: Message
+  _messageToResend?: Message
 ): {
   initialUserNode: Message;
   initialAgentNode: Message;

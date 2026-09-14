@@ -232,9 +232,6 @@ export default function ImageGenerationContent() {
             <Content title={group.name} sizePreset="secondary" variant="body" />
             {group.providers.map((provider) => {
               const status = getStatus(provider);
-              const isDisconnected = status === "disconnected";
-              const isConnected = status === "connected";
-              const isSelected = status === "selected";
 
               return (
                 <ProviderCard

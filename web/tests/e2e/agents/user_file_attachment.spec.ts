@@ -195,47 +195,6 @@ async function uploadTestFile(
   );
 }
 
-// Helper to select a file by clicking its row
-async function selectFileByName(page: Page, fileName: string): Promise<void> {
-  const fileNameWithoutExt = fileName.replace(".txt", "");
-
-  // Try to find and click the row containing the file name
-  // First try by aria-label
-  let fileRow = page.locator(`[aria-label^="user-file-row-"]`, {
-    has: page.locator(`text=${fileNameWithoutExt}`),
-  });
-
-  if ((await fileRow.count()) === 0) {
-    // Fall back to finding by table-row-layout class
-    fileRow = page.locator("[data-selected]", {
-      has: page.locator(`text=${fileNameWithoutExt}`),
-    });
-  }
-
-  if ((await fileRow.count()) === 0) {
-    // Last resort: find any clickable row with the file name
-    fileRow = page
-      .locator("div", {
-        has: page.locator(`text=${fileNameWithoutExt}`),
-      })
-      .filter({
-        has: page.locator('[role="checkbox"], input[type="checkbox"]'),
-      })
-      .first();
-  }
-
-  if ((await fileRow.count()) > 0) {
-    await fileRow.click();
-  } else {
-    // Just click on the file name text itself
-    await page.locator(`text=${fileNameWithoutExt}`).first().click();
-  }
-
-  // Wait for the selection to register
-  await page.waitForTimeout(300);
-  console.log(`[test] Selected file: ${fileName}`);
-}
-
 test.describe("User File Attachment to Assistant", () => {
   const grantGroupIds: number[] = [];
 

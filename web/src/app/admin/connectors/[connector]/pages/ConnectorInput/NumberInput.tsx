@@ -7,7 +7,6 @@ export default function NumberInput({
   optional,
   description,
   name,
-  showNeverIfZero,
 }: {
   label: string;
   name: string;
@@ -16,7 +15,7 @@ export default function NumberInput({
   showNeverIfZero?: boolean;
 }) {
   const t = useTranslations("admin.connectorsList");
-  const [field, meta, helpers] = useField(name);
+  const [field, , helpers] = useField(name);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     // If the input is empty, set the value to undefined or null

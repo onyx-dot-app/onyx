@@ -81,7 +81,6 @@ export default function OpenAPIAuthenticationModal({
   passthroughOAuthEnabled = false,
   onConnect,
   onSkip,
-  entityName = null,
 }: OpenAPIAuthenticationModalProps) {
   const t = useTranslations("actions");
   const isOAuthEnabled = useOAuthPassThroughEnabled();
@@ -93,7 +92,7 @@ export default function OpenAPIAuthenticationModal({
   const isEditingOAuthConfig = Boolean(oauthConfigId);
   const hasInitialHeaders =
     Array.isArray(initialHeaders) && initialHeaders.length > 0;
-  const isEditMode = isEditingOAuthConfig || hasInitialHeaders;
+
   const shouldDisableForm =
     isEditingOAuthConfig &&
     isLoadingOAuthConfig &&

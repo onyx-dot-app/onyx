@@ -2,23 +2,13 @@ import type {
   Project,
   CategorizedFiles,
   ProjectFile,
-  RejectedFile,
   UserFileDeleteResult,
-  UserFileStatus,
   ProjectDetails,
 } from "@/lib/projects/types";
 
 const handleRequestError = (action: string, response: Response): never => {
   throw new Error(`${action} failed (Status: ${response.status})`);
 };
-
-export async function fetchProjects(): Promise<Project[]> {
-  const response = await fetch("/api/user/projects");
-  if (!response.ok) {
-    handleRequestError("Fetch projects", response);
-  }
-  return response.json();
-}
 
 export async function createProject(name: string): Promise<Project> {
   const response = await fetch(
@@ -83,14 +73,6 @@ export async function getFilesInProject(
   return response.json();
 }
 
-export async function getProject(projectId: number): Promise<Project> {
-  const response = await fetch(`/api/user/projects/${projectId}`);
-  if (!response.ok) {
-    handleRequestError("Fetch project", response);
-  }
-  return response.json();
-}
-
 export async function renameProject(
   projectId: number,
   name: string
@@ -113,17 +95,6 @@ export async function deleteProject(projectId: number): Promise<void> {
   if (!response.ok) {
     handleRequestError("Delete project", response);
   }
-}
-
-export async function getProjectInstructions(
-  projectId: number
-): Promise<string | null> {
-  const response = await fetch(`/api/user/projects/${projectId}/instructions`);
-  if (!response.ok) {
-    handleRequestError("Fetch project instructions", response);
-  }
-  const data: { instructions: string | null } = await response.json();
-  return data.instructions ?? null;
 }
 
 export async function upsertProjectInstructions(

@@ -6,7 +6,6 @@ import Title from "@/components/ui/title";
 import { Text } from "@opal/components";
 import { markdown } from "@opal/utils";
 import { Spacer } from "@opal/components";
-import Link from "next/link";
 import { Button } from "@opal/components";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";

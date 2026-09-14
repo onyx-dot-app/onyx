@@ -225,7 +225,12 @@ export const SlackChannelConfigCreationForm = ({
           }
         }}
       >
-        {({ isSubmitting, values, setFieldValue, ...formikProps }) => (
+        {({
+          isSubmitting: _isSubmitting,
+          values,
+          setFieldValue: _setFieldValue,
+          ...formikProps
+        }) => (
           <Form>
             <div className="pb-6 w-full">
               <SlackChannelConfigFormFields

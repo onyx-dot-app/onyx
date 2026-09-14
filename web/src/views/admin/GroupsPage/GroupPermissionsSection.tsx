@@ -5,14 +5,10 @@ import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { ContentAction } from "@opal/layouts";
 import {
-  SvgSettings,
-  SvgPlug,
   SvgActions,
   SvgUsers,
   SvgUserKey,
   SvgSlack,
-  SvgPlusCircle,
-  SvgUserManage,
   SvgBarChart,
   SvgHistory,
   SvgKey,

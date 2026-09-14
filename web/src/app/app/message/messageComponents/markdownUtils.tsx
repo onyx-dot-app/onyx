@@ -7,7 +7,6 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeHighlight from "rehype-highlight";
 import type { LanguageFn } from "highlight.js";
-import { useHighlightLanguages } from "@/hooks/useHighlightLanguages";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import "@/app/app/message/custom-code-styles.css";
@@ -191,35 +190,35 @@ export const useMarkdownComponents = (
     () => ({
       a: anchorCallback,
       p: paragraphCallback,
-      pre: ({ node, className, children }) => {
+      pre: ({ children }) => {
         // Don't render the pre wrapper - CodeBlock handles its own wrapper
         return <>{children}</>;
       },
-      b: ({ node, className, children }) => {
+      b: ({ className, children }) => {
         return <span className={className}>{children}</span>;
       },
-      ul: ({ node, className, children, ...props }) => {
+      ul: ({ node: _node, className, children, ...props }) => {
         return (
           <ul className={className} {...props}>
             {children}
           </ul>
         );
       },
-      ol: ({ node, className, children, ...props }) => {
+      ol: ({ node: _node, className, children, ...props }) => {
         return (
           <ol className={className} {...props}>
             {children}
           </ol>
         );
       },
-      li: ({ node, className, children, ...props }) => {
+      li: ({ node: _node, className, children, ...props }) => {
         return (
           <li className={className} {...props}>
             {children}
           </li>
         );
       },
-      table: ({ node, className, children, ...props }) => {
+      table: ({ node: _node, className, children, ...props }) => {
         return (
           <ScrollableTable className={className} {...props}>
             {children}
@@ -271,38 +270,4 @@ export const renderMarkdown = (
       </ReactMarkdown>
     </div>
   );
-};
-
-/**
- * Complete markdown processing and rendering utility
- */
-const useMarkdownRenderer = (
-  content: string,
-  state: FullChatState | undefined,
-  textSize: string
-) => {
-  const processedContent = useMemo(() => processContent(content), [content]);
-  const markdownComponents = useMarkdownComponents(
-    state,
-    processedContent,
-    textSize
-  );
-  const highlightLanguages = useHighlightLanguages();
-
-  const renderedContent = useMemo(
-    () =>
-      renderMarkdown(
-        processedContent,
-        markdownComponents,
-        textSize,
-        highlightLanguages
-      ),
-    [processedContent, markdownComponents, textSize, highlightLanguages]
-  );
-
-  return {
-    processedContent,
-    markdownComponents,
-    renderedContent,
-  };
 };

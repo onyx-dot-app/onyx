@@ -2,14 +2,12 @@
 
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useTranslations } from "next-intl";
-import * as SliderPrimitive from "@radix-ui/react-slider";
 import {
   Button,
   LineItemButton,
   Text,
   InputTypeIn,
   PopoverMenu,
-  Tooltip,
 } from "@opal/components";
 import {
   SvgBarChart,

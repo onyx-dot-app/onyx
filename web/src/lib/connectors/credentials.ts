@@ -91,10 +91,6 @@ interface JiraCredentialJson {
   jira_api_token: string;
 }
 
-interface JiraServerCredentialJson {
-  jira_api_token: string;
-}
-
 interface ProductboardCredentialJson {
   productboard_access_token: string;
 }
@@ -284,9 +280,6 @@ interface BraintrustCredentialJson {
 interface CanvasCredentialJson {
   canvas_access_token: string;
 }
-
-interface MediaWikiCredentialJson {}
-interface WikipediaCredentialJson extends MediaWikiCredentialJson {}
 
 interface EgnyteCredentialJson {
   domain: string;

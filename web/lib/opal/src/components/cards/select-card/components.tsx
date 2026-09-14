@@ -1,7 +1,6 @@
 import "@opal/components/cards/select-card/styles.css";
 import type { BorderVariants, Rounding, Spacing } from "@opal/types";
 import { roundingToRem, spacingToRem } from "@opal/shared";
-import { cn } from "@opal/utils";
 import { Interactive, type InteractiveStatefulProps } from "@opal/core";
 
 // ---------------------------------------------------------------------------

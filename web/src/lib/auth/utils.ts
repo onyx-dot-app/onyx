@@ -1,18 +1,4 @@
 // ---------------------------------------------------------------------------
-// Auth URL helpers
-// ---------------------------------------------------------------------------
-
-function getAuthUrl(
-  multiTenant: boolean,
-  nextUrl: string | null
-): string | null {
-  const params = new URLSearchParams({ redirect: "true" });
-  if (nextUrl) params.set("next", nextUrl);
-
-  return multiTenant ? `/api/auth/oauth/authorize?${params}` : null;
-}
-
-// ---------------------------------------------------------------------------
 // Password predicate functions
 // ---------------------------------------------------------------------------
 

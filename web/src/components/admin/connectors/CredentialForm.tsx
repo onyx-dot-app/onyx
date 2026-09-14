@@ -1,9 +1,4 @@
-import React, { JSX } from "react";
-import { Formik, Form } from "formik";
-import * as Yup from "yup";
-import { toast } from "@opal/layouts";
-import { useTranslations } from "next-intl";
-import { ValidSources } from "@/lib/types";
+import React from "react";
 
 import {
   createCredential,
@@ -35,7 +30,7 @@ export async function submitCredential<T>(
   const buildSuccess = messages?.success ?? (() => "Success!");
   const buildError =
     messages?.error ?? ((detail: string) => `Error: ${detail}`);
-  let isSuccess = false;
+  let _isSuccess = false;
   try {
     let response: Response;
     if (PRIVATE_KEY_FIELD_KEY in credential && credential.private_key) {
@@ -48,7 +43,7 @@ export async function submitCredential<T>(
     if (response.ok) {
       const parsed_response = await response.json();
       const credential = parsed_response.credential;
-      isSuccess = true;
+      _isSuccess = true;
       return { credential, message: buildSuccess(), isSuccess: true };
     } else {
       const errorData = await response.json();
@@ -60,76 +55,4 @@ export async function submitCredential<T>(
   } catch (error) {
     return { message: buildError(String(error)), isSuccess: false };
   }
-}
-
-interface Props<YupObjectType extends Yup.AnyObject> {
-  formBody: JSX.Element | null;
-  validationSchema: Yup.ObjectSchema<YupObjectType>;
-  initialValues: YupObjectType;
-  onSubmit: (isSuccess: boolean) => void;
-  source: ValidSources;
-}
-
-function CredentialForm<T extends Yup.AnyObject>({
-  formBody,
-  validationSchema,
-  initialValues,
-  source,
-  onSubmit,
-}: Props<T>): JSX.Element {
-  const t = useTranslations("admin.connector.credentialForm");
-  return (
-    <>
-      <Formik
-        initialValues={initialValues}
-        validationSchema={validationSchema}
-        onSubmit={(values, formikHelpers) => {
-          formikHelpers.setSubmitting(true);
-          submitCredential<T>(
-            {
-              credential_json: values,
-              admin_public: true,
-              curator_public: false,
-              groups: [],
-              source: source,
-            },
-            {
-              success: () => t("successToast"),
-              error: (detail) => t("errorToast", { detail }),
-            }
-          ).then(({ message, isSuccess }) => {
-            if (isSuccess) {
-              toast.success(message);
-            } else {
-              toast.error(message);
-            }
-            formikHelpers.setSubmitting(false);
-            onSubmit(isSuccess);
-          });
-        }}
-      >
-        {({ isSubmitting }) => (
-          <Form>
-            {formBody}
-            <div className="flex">
-              <button
-                type="submit"
-                color="green"
-                disabled={isSubmitting}
-                className="mx-auto w-64 inline-flex items-center
-                justify-center whitespace-nowrap rounded-md text-sm
-                font-medium transition-colors  bg-background-200 text-primary-foreground
-                focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring
-                disabled:pointer-events-none disabled:opacity-50
-                shadow hover:bg-primary/90 h-9 px-4 py-2"
-                aria-label={t("updateButton.ariaLabel")}
-              >
-                {t("updateButton.label")}
-              </button>
-            </div>
-          </Form>
-        )}
-      </Formik>
-    </>
-  );
 }

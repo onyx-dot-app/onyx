@@ -16,16 +16,8 @@ import {
   SvgCircle,
   SvgBookOpen,
   SvgSlowTime,
-  SvgXCircle,
   SvgCode,
 } from "@opal/icons";
-
-/**
- * Check if a packet group contains an ERROR packet (tool failed)
- */
-function hasToolError(packets: Packet[]): boolean {
-  return packets.some((p) => p.obj.type === PacketType.ERROR);
-}
 
 /**
  * Check if a tool group is complete.
@@ -64,17 +56,6 @@ export function isToolComplete(packets: Packet[]): boolean {
     (p) =>
       p.obj.type === PacketType.SECTION_END || p.obj.type === PacketType.ERROR
   );
-}
-
-/**
- * Get an error icon for failed tools
- */
-function getToolErrorIcon(): React.ReactNode {
-  return <SvgXCircle className="w-3.5 h-3.5 text-error" />;
-}
-
-function getToolKey(turn_index: number, tab_index: number): string {
-  return `${turn_index}-${tab_index}`;
 }
 
 export function parseToolKey(key: string): {

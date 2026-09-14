@@ -1,8 +1,4 @@
-import {
-  OnyxDocument,
-  SearchOnyxDocument,
-  StreamStopReason,
-} from "@/lib/search/interfaces";
+import { OnyxDocument, StreamStopReason } from "@/lib/search/interfaces";
 import { Packet } from "./services/streamingModels";
 import { ReasoningEffortOverride } from "@/lib/languageModels/types";
 
@@ -75,7 +71,6 @@ export interface ChatSearchResponse {
 }
 
 // The number of messages to buffer on the client side.
-const BUFFER_COUNT = 35;
 
 // Citation number -> Document ID (allows O(1) lookup when rendering citations)
 export type CitationMap = { [citation_num: number]: string };
@@ -88,14 +83,6 @@ export enum ChatFileType {
   USER_KNOWLEDGE = "user_knowledge",
 }
 
-const isTextFile = (fileType: ChatFileType) =>
-  [
-    ChatFileType.PLAIN_TEXT,
-    ChatFileType.TABULAR,
-    ChatFileType.USER_KNOWLEDGE,
-    ChatFileType.DOCUMENT,
-  ].includes(fileType);
-
 export interface FileDescriptor {
   id: string;
   type: ChatFileType;
@@ -104,14 +91,6 @@ export interface FileDescriptor {
   user_file_id?: string | null;
   // FE only
   isUploading?: boolean;
-}
-
-interface FileDescriptorWithHighlights extends FileDescriptor {
-  match_highlights: string[];
-}
-
-interface LLMRelevanceFilterPacket {
-  relevant_chunk_indices: number[];
 }
 
 export interface ToolCallMetadata {
@@ -137,13 +116,6 @@ export interface ChatSession {
   current_alternate_model: string;
   current_temperature_override: number | null;
   current_reasoning_effort_override: ReasoningEffortOverride | null;
-}
-
-interface SearchSession {
-  search_session_id: string;
-  documents: SearchOnyxDocument[];
-  messages: BackendMessage[];
-  description: string;
 }
 
 export interface Message {
@@ -207,22 +179,6 @@ export interface BackendChatSession {
   current_run?: { run_id: number } | null;
   // True for sessions pinned to an incognito record mode.
   incognito?: boolean;
-}
-
-function toChatSession(backend: BackendChatSession): ChatSession {
-  return {
-    id: backend.chat_session_id,
-    name: backend.description,
-    persona_id: backend.persona_id,
-    time_created: backend.time_created,
-    time_updated: backend.time_updated,
-    shared_status: backend.shared_status,
-    project_id: null,
-    current_alternate_model: backend.current_alternate_model ?? "",
-    current_temperature_override: backend.current_temperature_override,
-    current_reasoning_effort_override:
-      backend.current_reasoning_effort_override,
-  };
 }
 
 export interface BackendMessage {
@@ -317,25 +273,6 @@ export interface InputPrompt {
   content: string;
   active: boolean;
   is_public: boolean;
-}
-
-interface EditPromptModalProps {
-  onClose: () => void;
-
-  promptId: number;
-  editInputPrompt: (
-    promptId: number,
-    values: CreateInputPromptRequest
-  ) => Promise<void>;
-}
-interface CreateInputPromptRequest {
-  prompt: string;
-  content: string;
-}
-
-interface AddPromptModalProps {
-  onClose: () => void;
-  onSubmit: (promptData: CreateInputPromptRequest) => void;
 }
 /**
  * // Start of Selection

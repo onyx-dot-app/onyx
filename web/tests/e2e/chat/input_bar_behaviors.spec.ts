@@ -679,7 +679,7 @@ test.describe("Paste Tiles", () => {
 });
 
 test.describe("Paste Tiles — User Setting", () => {
-  test.beforeEach(async ({ chatPage }) => {
+  test.beforeEach(async ({ chatPage: _chatPage }) => {
     resetTurnCounter();
   });
 

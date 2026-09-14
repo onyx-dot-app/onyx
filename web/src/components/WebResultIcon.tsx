@@ -16,7 +16,7 @@ export function WebResultIcon({
   let hostname;
   try {
     hostname = new URL(url).hostname;
-  } catch (e) {
+  } catch {
     hostname = "onyx.app";
   }
   return (

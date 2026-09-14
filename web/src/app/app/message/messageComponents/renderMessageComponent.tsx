@@ -14,7 +14,6 @@ import {
   FullChatState,
   MessageRenderer,
   RenderType,
-  RendererResult,
   RendererOutput,
 } from "./interfaces";
 import { MessageTextRenderer } from "./renderers/MessageTextRenderer";

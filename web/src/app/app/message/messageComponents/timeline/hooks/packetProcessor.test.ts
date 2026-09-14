@@ -14,7 +14,6 @@ import { createInitialState, processPackets } from "./packetProcessor";
 import {
   createPacket,
   createStopPacket,
-  createCitationPacket,
   createBranchingPacket,
   createMessageStartPacket,
   createImageDeltaPacket,

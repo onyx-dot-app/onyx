@@ -42,42 +42,42 @@ const ALLOWED_ELEMENTS = [
 ];
 
 const DEFAULT_COMPONENTS = {
-  h1: ({ node, ...props }) => (
+  h1: ({ node: _node, ...props }) => (
     <p
       dir="auto"
       className="mt-3 first:mt-0 mb-1 text-sm font-semibold text-text-05"
       {...props}
     />
   ),
-  h2: ({ node, ...props }) => (
+  h2: ({ node: _node, ...props }) => (
     <p
       dir="auto"
       className="mt-3 first:mt-0 mb-1 text-sm font-semibold text-text-05"
       {...props}
     />
   ),
-  h3: ({ node, ...props }) => (
+  h3: ({ node: _node, ...props }) => (
     <p
       dir="auto"
       className="mt-2 first:mt-0 mb-1 text-sm font-semibold text-text-05"
       {...props}
     />
   ),
-  h4: ({ node, ...props }) => (
+  h4: ({ node: _node, ...props }) => (
     <p
       dir="auto"
       className="mt-2 first:mt-0 mb-1 text-sm font-medium text-text-05"
       {...props}
     />
   ),
-  h5: ({ node, ...props }) => (
+  h5: ({ node: _node, ...props }) => (
     <p
       dir="auto"
       className="mt-2 first:mt-0 mb-1 text-sm font-medium text-text-05"
       {...props}
     />
   ),
-  h6: ({ node, ...props }) => (
+  h6: ({ node: _node, ...props }) => (
     <p
       dir="auto"
       className="mt-2 first:mt-0 mb-1 text-sm font-medium text-text-05"
@@ -86,28 +86,28 @@ const DEFAULT_COMPONENTS = {
   ),
   // dir="auto" isolates each block's direction so LTR technical copy
   // inside an RTL page keeps its own reading order (props can override).
-  p: ({ node, ...props }) => (
+  p: ({ node: _node, ...props }) => (
     <p dir="auto" className="my-1 text-sm leading-6 text-text-04" {...props} />
   ),
-  ul: ({ node, ...props }) => (
+  ul: ({ node: _node, ...props }) => (
     <ul
       className="my-1 ps-5 list-disc text-sm leading-6 text-text-04"
       {...props}
     />
   ),
-  ol: ({ node, ...props }) => (
+  ol: ({ node: _node, ...props }) => (
     <ol
       className="my-1 ps-5 list-decimal text-sm leading-6 text-text-04"
       {...props}
     />
   ),
-  li: ({ node, ...props }) => (
+  li: ({ node: _node, ...props }) => (
     <li dir="auto" className="my-0.5 ps-1" {...props} />
   ),
-  strong: ({ node, ...props }) => (
+  strong: ({ node: _node, ...props }) => (
     <strong className="font-semibold text-text-05" {...props} />
   ),
-  em: ({ node, ...props }) => <em className="text-text-04" {...props} />,
+  em: ({ node: _node, ...props }) => <em className="text-text-04" {...props} />,
   a: ({ children, href, node: _node, ...props }) => {
     if (!href) return <>{children}</>;
     const isRelative = href.startsWith("/") || href.startsWith("#");
@@ -134,20 +134,20 @@ const DEFAULT_COMPONENTS = {
       </a>
     );
   },
-  blockquote: ({ node, ...props }) => (
+  blockquote: ({ node: _node, ...props }) => (
     <blockquote
       dir="auto"
       className="my-2 border-s border-border-02 ps-3 text-sm text-text-03"
       {...props}
     />
   ),
-  pre: ({ node, ...props }) => (
+  pre: ({ node: _node, ...props }) => (
     <pre
       className="my-2 overflow-x-hidden whitespace-pre-wrap wrap-break-word rounded-08 border border-border-01 bg-background-tint-01 p-2 text-xs leading-5 text-text-04"
       {...props}
     />
   ),
-  code: ({ node, className, ...props }) => (
+  code: ({ node: _node, className, ...props }) => (
     <code
       className={cn(
         className,
@@ -158,7 +158,7 @@ const DEFAULT_COMPONENTS = {
       {...props}
     />
   ),
-  table: ({ node, ...props }) => (
+  table: ({ node: _node, ...props }) => (
     <div className="my-2 overflow-hidden rounded-08 border border-border-01">
       <table
         className="w-full table-fixed border-collapse text-start text-xs"
@@ -166,13 +166,13 @@ const DEFAULT_COMPONENTS = {
       />
     </div>
   ),
-  th: ({ node, ...props }) => (
+  th: ({ node: _node, ...props }) => (
     <th
       className="border-b border-e border-border-01 bg-background-tint-01 px-2 py-1.5 align-top font-semibold text-text-05 wrap-break-word last:border-e-0"
       {...props}
     />
   ),
-  td: ({ node, ...props }) => (
+  td: ({ node: _node, ...props }) => (
     <td
       className="border-b border-e border-border-01 px-2 py-1.5 align-top text-text-04 wrap-break-word last:border-e-0"
       {...props}

@@ -1,5 +1,5 @@
-import { test as base, expect, type Page } from "@playwright/test";
-import { loginAs, apiLogin } from "@tests/e2e/utils/auth";
+import { test as base, expect } from "@playwright/test";
+import { loginAs } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
 const TEST_PASSWORD = "PermGating123!";

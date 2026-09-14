@@ -54,8 +54,6 @@ export function SlackChannelConfigFormFields({
   searchEnabledAgents,
   nonSearchAgents,
   standardAnswerCategoryResponse,
-  slack_bot_id,
-  formikProps,
 }: SlackChannelConfigFormFieldsProps) {
   const t = useTranslations("admin.slackBots");
   const router = useRouter();

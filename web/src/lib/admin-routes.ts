@@ -4,7 +4,6 @@ import { IconFunctionComponent } from "@opal/types";
 import {
   SvgActions,
   SvgActivity,
-  SvgArrowExchange,
   SvgAudio,
   SvgShareWebhook,
   SvgBarChart,
@@ -518,14 +517,6 @@ export const ADMIN_ROUTES = {
     visibleWhen: null,
   },
 } as const satisfies Record<string, AdminRouteEntry>;
-
-/**
- * Helper that converts a route entry into the `{ name, icon, link }`
- * shape expected by the sidebar.
- */
-function sidebarItem(route: AdminRouteEntry) {
-  return { name: route.sidebarLabel, icon: route.icon, link: route.path };
-}
 
 /**
  * Connector/indexing admin route prefixes that need a vector DB. In Lite mode

@@ -1,9 +1,4 @@
-import { ValidSources } from "./types";
-import {
-  Connector,
-  ConnectorBase,
-  ConnectorSnapshot,
-} from "./connectors/connectors";
+import { Connector, ConnectorBase } from "./connectors/connectors";
 async function handleResponse(
   response: Response
 ): Promise<[string | null, any]> {
@@ -12,18 +7,6 @@ async function handleResponse(
     return [null, responseJson];
   }
   return [responseJson.detail, null];
-}
-
-async function fetchConnectors(
-  credential_id: number
-): Promise<ConnectorSnapshot[]> {
-  const url = `/api/manage/admin/connector?credential=${credential_id}`;
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch connectors: ${await response.text()}`);
-  }
-  const connectors: ConnectorSnapshot[] = await response.json();
-  return connectors;
 }
 
 export async function createConnector<T>(
@@ -73,19 +56,6 @@ export async function updateConnectorCredentialPairProperty(
   });
 }
 
-async function updateConnector<T>(
-  connector: Connector<T>
-): Promise<Connector<T>> {
-  const response = await fetch(`/api/manage/admin/connector/${connector.id}`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(connector),
-  });
-  return await response.json();
-}
-
 export async function deleteConnector(
   connectorId: number
 ): Promise<string | null> {
@@ -117,34 +87,6 @@ export async function runConnector(
   });
   if (!response.ok) {
     return (await response.json()).detail;
-  }
-  return null;
-}
-
-async function deleteConnectorIfExistsAndIsUnlinked({
-  source,
-  name,
-}: {
-  source: ValidSources;
-  name?: string;
-}): Promise<string | null> {
-  const connectorsResponse = await fetch("/api/manage/connector");
-  if (connectorsResponse.ok) {
-    const connectors: Connector<any>[] = await connectorsResponse.json();
-    const matchingConnectors = connectors.filter(
-      (connector) =>
-        connector.source === source && (!name || connector.name === name)
-    );
-    if (
-      matchingConnectors.length > 0 &&
-      matchingConnectors[0] &&
-      matchingConnectors[0].credential_ids.length === 0
-    ) {
-      const errorMsg = await deleteConnector(matchingConnectors[0].id);
-      if (errorMsg) {
-        return errorMsg;
-      }
-    }
   }
   return null;
 }

@@ -1,7 +1,3 @@
-import { GmailConfig } from "@/lib/connectors/connectors";
-
-const gmailConnectorNameBuilder = (values: GmailConfig) => "GmailConnector";
-
 import { usePublicCredentials } from "@/lib/hooks";
 import {
   Credential,
@@ -12,12 +8,7 @@ import {
 } from "@/lib/connectors/credentials";
 
 export const useGmailCredentials = (connector: string) => {
-  const {
-    data: credentialsData,
-    isLoading: isCredentialsLoading,
-    error: credentialsError,
-    refreshCredentials,
-  } = usePublicCredentials();
+  const { data: credentialsData } = usePublicCredentials();
 
   const gmailPublicCredential: Credential<GmailCredentialJson> | undefined =
     credentialsData?.find(

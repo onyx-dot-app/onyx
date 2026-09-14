@@ -11,7 +11,6 @@ import {
   SvgFileText,
   SvgImage,
   SvgLoader,
-  SvgSparkle,
   SvgX,
 } from "@opal/icons";
 import { isImageFile } from "@/lib/utils";

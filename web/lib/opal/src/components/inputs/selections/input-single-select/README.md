@@ -22,7 +22,11 @@ For filterable lists, render `Search` as the first child of `Content`. It is a s
 ```
 
 ```tsx
-<InputSingleSelect value={value} onValueChange={setValue} error={touched && !value}>
+<InputSingleSelect
+  value={value}
+  onValueChange={setValue}
+  error={touched && !value}
+>
   <InputSingleSelect.Trigger placeholder="Choose a model" />
   <InputSingleSelect.Content>
     <InputSingleSelect.Group>
@@ -41,7 +45,7 @@ For filterable lists, render `Search` as the first child of `Content`. It is a s
 
 | Part                | Key props                                                     | Notes                                                      |
 | ------------------- | ------------------------------------------------------------- | ---------------------------------------------------------- |
-| `InputSingleSelect`       | Radix Root props + `error`, `disabled`                        | `error`/`disabled` drive the trigger chrome variant        |
+| `InputSingleSelect` | Radix Root props + `error`, `disabled`                        | `error`/`disabled` drive the trigger chrome variant        |
 | `.Trigger`          | `placeholder`, `rightSection`                                 | Custom `children` replace the selected-item display        |
 | `.Content`          | Radix Content props                                           | Popper, trigger-width, 18rem max height with scroll        |
 | `.Item`             | `value`, `children`, `icon`, `description`, `wrapDescription` | The selected item's icon and label mirror into the trigger |

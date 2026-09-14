@@ -69,11 +69,6 @@ export default function UserRowActions({
 
   const closeModal = () => setModal(null);
 
-  const closeAndMutate = () => {
-    setModal(null);
-    onMutate();
-  };
-
   // the only edition-independent way to promote/demote; group editing is EE-only
   const toggleAdminAccess = () => {
     setPopoverOpen(false);

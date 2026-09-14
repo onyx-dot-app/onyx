@@ -89,7 +89,7 @@ export function AppPopup() {
             <ReactMarkdown
               className="prose prose-neutral dark:prose-invert max-w-full"
               components={{
-                a: ({ node, children, ...props }) => (
+                a: ({ node: _node, children, ...props }) => (
                   <a
                     {...props}
                     className="text-link hover:text-link-hover"
@@ -99,22 +99,22 @@ export function AppPopup() {
                     {children}
                   </a>
                 ),
-                p: ({ node, ...props }) => (
+                p: ({ node: _node, ...props }) => (
                   <Text as="p" mainUiBody text03 {...props} />
                 ),
-                strong: ({ node, ...props }) => (
+                strong: ({ node: _node, ...props }) => (
                   <Text mainUiBody text03 {...props} />
                 ),
-                h1: ({ node, ...props }) => (
+                h1: ({ node: _node, ...props }) => (
                   <Text as="p" headingH1 text03 {...props} />
                 ),
-                h2: ({ node, ...props }) => (
+                h2: ({ node: _node, ...props }) => (
                   <Text as="p" headingH2 text03 {...props} />
                 ),
-                h3: ({ node, ...props }) => (
+                h3: ({ node: _node, ...props }) => (
                   <Text as="p" headingH3 text03 {...props} />
                 ),
-                li: ({ node, ...props }) => (
+                li: ({ node: _node, ...props }) => (
                   <Text as="li" mainUiBody text03 {...props} />
                 ),
               }}
@@ -145,7 +145,7 @@ export function AppPopup() {
                     <ReactMarkdown
                       className="prose prose-neutral dark:prose-invert max-w-full"
                       components={{
-                        a: ({ node, children, ...props }) => (
+                        a: ({ node: _node, children, ...props }) => (
                           <a
                             {...props}
                             className="text-link hover:text-link-hover"
@@ -155,7 +155,7 @@ export function AppPopup() {
                             {children}
                           </a>
                         ),
-                        p: ({ node, ...props }) => (
+                        p: ({ node: _node, ...props }) => (
                           <Text
                             as="p"
                             mainUiBody
@@ -164,10 +164,10 @@ export function AppPopup() {
                             {...props}
                           />
                         ),
-                        strong: ({ node, ...props }) => (
+                        strong: ({ node: _node, ...props }) => (
                           <Text mainUiBody text04 {...props} />
                         ),
-                        li: ({ node, ...props }) => (
+                        li: ({ node: _node, ...props }) => (
                           <Text as="li" mainUiBody text04 {...props} />
                         ),
                       }}

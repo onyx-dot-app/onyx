@@ -26,7 +26,6 @@ function ActionCardHeader({
   description,
   icon: Icon,
   status,
-  onEdit,
   onRename,
 }: ActionCardHeaderProps) {
   const t = useTranslations("actions");

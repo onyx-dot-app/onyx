@@ -21,12 +21,6 @@ function uniqueName(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-async function openChat(page: Page): Promise<void> {
-  await page.goto("/app");
-  await page.waitForLoadState("networkidle");
-  await page.waitForSelector("#onyx-chat-input-textbox", { timeout: 15000 });
-}
-
 async function loginWithCleanCookies(
   page: Page,
   user: "admin" | number

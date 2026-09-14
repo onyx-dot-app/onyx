@@ -457,7 +457,7 @@ export default function AppSidebar() {
 
         try {
           await performChatMove(targetProject.id, chatSession);
-        } catch (error) {
+        } catch {
           showErrorNotification(moveChatErrorMessage);
         }
       }
@@ -565,7 +565,7 @@ export default function AppSidebar() {
             if (chat && target != null) {
               try {
                 await performChatMove(target, chat);
-              } catch (error) {
+              } catch {
                 showErrorNotification(moveChatErrorMessage);
               }
             }

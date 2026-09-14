@@ -21,7 +21,6 @@ function Main() {
   const t = useTranslations("admin.documentProcessing");
   const {
     data: isApiKeySet,
-    error,
     mutate,
     isLoading,
   } = useSWR<{

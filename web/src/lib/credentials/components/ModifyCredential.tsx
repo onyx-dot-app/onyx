@@ -96,7 +96,7 @@ function CredentialSelectionTable({
 
         {allCredentials.length > 0 && (
           <tbody className="w-full">
-            {allCredentials.map((credential, ind) => {
+            {allCredentials.map((credential, _ind) => {
               const selected = currentCredentialId
                 ? credential.id == (selectedCredentialId || currentCredentialId)
                 : false;

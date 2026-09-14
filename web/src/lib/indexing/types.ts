@@ -96,15 +96,6 @@ export interface ResolvedEmbeddingModelForApply {
   providerName: EmbeddingProviderName;
 }
 
-interface RerankingModel {
-  rerank_provider_type: RerankerProvider | null;
-  modelName?: string;
-  displayName: string;
-  description: string;
-  link: string;
-  cloud: boolean;
-}
-
 export type EmbeddingModelState =
   | "unconnected"
   | "connected"
@@ -185,12 +176,6 @@ export interface SavedSearchSettings
   switchover_type?: SwitchoverType;
   // Read-only; server-set, always true for new settings.
   use_port_flow: boolean;
-}
-
-export interface LLMContextualCost {
-  provider_name: string;
-  model_name: string;
-  cost: number;
 }
 
 /** Mirrors backend `ReindexProgressCounts`; buckets partition `total`. */

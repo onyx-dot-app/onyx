@@ -62,7 +62,6 @@ export default function ActionCard({
   onRename,
   initialExpanded = false,
   isExpanded: controlledIsExpanded,
-  onExpandedChange,
   enableSearch = false,
   searchQuery = "",
   onSearchQueryChange,

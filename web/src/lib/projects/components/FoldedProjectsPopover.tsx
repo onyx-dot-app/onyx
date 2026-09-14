@@ -24,7 +24,7 @@ import { noProp } from "@/lib/utils";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import { usePinChatAgent } from "@/lib/agents/hooks";
 import { useActiveProject, useProjectSearch } from "@/lib/projects/hooks";
-import type { Project, ProjectSearchMatch } from "@/lib/projects/types";
+import type { ProjectSearchMatch } from "@/lib/projects/types";
 
 /**
  * A project row inside the folded sidebar's Projects popover: the folder tab

@@ -24,11 +24,7 @@ import {
   shouldRedirectToOAuth,
 } from "@/lib/credentials/credentialCreation";
 import ModifyCredential from "@/lib/credentials/components/ModifyCredential";
-import {
-  ConfigurableSources,
-  oauthSupportedSources,
-  ValidSources,
-} from "@/lib/types";
+import { ConfigurableSources, oauthSupportedSources } from "@/lib/types";
 import { Credential, credentialTemplates } from "@/lib/connectors/credentials";
 import {
   ConnectionConfiguration,
@@ -70,12 +66,6 @@ import { SvgKey, SvgAlertCircle } from "@opal/icons";
 import { Tooltip } from "@opal/components";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-
-interface AdvancedConfig {
-  refreshFreq: number;
-  pruneFreq: number;
-  indexingStart: string;
-}
 
 const BASE_CONNECTOR_URL = "/api/manage/admin/connector";
 const CONNECTOR_CREATION_TIMEOUT_MS = 10000; // ~10 seconds is reasonable for longer connector validation
@@ -145,7 +135,7 @@ export default function AddConnector({
 }) {
   const t = useTranslations("admin.connectorsList");
   const [currentPageUrl, setCurrentPageUrl] = useState<string | null>(null);
-  const [oauthUrl, setOauthUrl] = useState<string | null>(null);
+  const [, setOauthUrl] = useState<string | null>(null);
   const [isAuthorizing, setIsAuthorizing] = useState(false);
   const [isAuthorizeVisible, setIsAuthorizeVisible] = useState(false);
   useEffect(() => {
@@ -429,7 +419,7 @@ export default function AddConnector({
             if (response) {
               onSuccess();
             }
-          } catch (error) {
+          } catch {
             toast.error(t("add.fileUploadFailed.toast"));
           } finally {
             setUploading(false);

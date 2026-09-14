@@ -222,7 +222,7 @@ export const DefaultDropdown = forwardRef<HTMLDivElement, DefaultDropdownProps>(
                 isSelected={selected === null}
               />
             )}
-            {options.map((option, ind) => {
+            {options.map((option, _ind) => {
               const isSelected = option.value === selected;
               return (
                 <DefaultDropdownElement

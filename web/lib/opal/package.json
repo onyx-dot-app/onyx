@@ -1,7 +1,7 @@
 {
   "name": "@onyx-ai/opal",
   "version": "0.0.0",
-  "description": "Opal \u2014 Onyx's Typescript component library and design system.",
+  "description": "Opal — Onyx's Typescript component library and design system.",
   "homepage": "https://github.com/onyx-dot-app/onyx/tree/main/web/lib/opal",
   "license": "MIT",
   "repository": {

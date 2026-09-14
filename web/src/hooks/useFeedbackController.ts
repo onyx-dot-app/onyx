@@ -89,7 +89,7 @@ export default function useFeedbackController() {
           }
         }
         return true;
-      } catch (error) {
+      } catch {
         // Rollback on network error
         updateCurrentMessageFeedback(messageId, previousFeedback);
         toast.error("Failed to submit feedback - network error");

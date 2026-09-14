@@ -641,7 +641,7 @@ export default function AgentEditorPage({
   const { allRecentFiles, beginUpload } = useProjectsContext();
   const { data: documentSets } = useDocumentSets();
   const userFilesModal = useCreateModal();
-  const [presentingDocument, setPresentingDocument] = useState<{
+  const [, setPresentingDocument] = useState<{
     document_id: string;
     semantic_identifier: string;
   } | null>(null);
@@ -1106,28 +1106,6 @@ export default function AgentEditorPage({
         })
       );
     }
-  }
-
-  // FilePickerPopover callbacks for Knowledge section
-  function handlePickRecentFile(
-    file: ProjectFile,
-    currentFileIds: string[],
-    setFieldValue: (field: string, value: unknown) => void
-  ) {
-    if (!currentFileIds.includes(file.id)) {
-      setFieldValue("user_file_ids", [...currentFileIds, file.id]);
-    }
-  }
-
-  function handleUnpickRecentFile(
-    file: ProjectFile,
-    currentFileIds: string[],
-    setFieldValue: (field: string, value: unknown) => void
-  ) {
-    setFieldValue(
-      "user_file_ids",
-      currentFileIds.filter((id) => id !== file.id)
-    );
   }
 
   function handleFileClick(file: ProjectFile) {

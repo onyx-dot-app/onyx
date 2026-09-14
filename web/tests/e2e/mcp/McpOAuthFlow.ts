@@ -9,7 +9,7 @@
  * `oauthFlow.completeFlow(...)` instead of inlining ~400 lines of glue.
  */
 
-import { type Page, expect } from "@playwright/test";
+import { type Page } from "@playwright/test";
 import { logPageState } from "@tests/e2e/utils/pageStateLogger";
 import { ToolsPopover } from "@tests/e2e/pages/ToolsPopover";
 

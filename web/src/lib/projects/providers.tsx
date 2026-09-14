@@ -24,13 +24,10 @@ import {
   type UserFileDeleteResult,
 } from "@/lib/projects/types";
 import {
-  fetchProjects as svcFetchProjects,
   createProject as svcCreateProject,
   uploadFiles as svcUploadFiles,
   getRecentFiles as svcGetRecentFiles,
   getFilesInProject as svcGetFilesInProject,
-  getProject as svcGetProject,
-  getProjectInstructions as svcGetProjectInstructions,
   upsertProjectInstructions as svcUpsertProjectInstructions,
   getProjectDetails as svcGetProjectDetails,
   renameProject as svcRenameProject,
@@ -195,7 +192,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     try {
       const result = await refreshProjects();
       return result ?? [];
-    } catch (err) {
+    } catch {
       return [];
     }
   }, [refreshProjects]);
@@ -247,8 +244,6 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
         await fetchProjects();
         return project;
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Failed to create project";
         throw err;
       }
     },
@@ -278,8 +273,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
         if (currentProjectId === projectId) {
           await refreshCurrentProjectDetails();
         }
-        const message =
-          err instanceof Error ? err.message : "Failed to rename project";
+
         throw err;
       }
     },
@@ -304,9 +298,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     try {
       const data: ProjectFile[] = await svcGetRecentFiles();
       return data;
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to fetch recent files";
+    } catch {
       return [];
     }
   }, []);
@@ -476,7 +468,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
           }
           onSuccess?.(uploaded);
         })
-        .catch((err) => {
+        .catch((_err) => {
           // Roll back optimistic inserts on failure
           const optimisticTempIds = new Set(
             optimisticFiles
@@ -552,9 +544,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       try {
         const data: ProjectFile[] = await svcGetFilesInProject(projectId);
         return data;
-      } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Failed to fetch project files";
+      } catch {
         return [];
       }
     },

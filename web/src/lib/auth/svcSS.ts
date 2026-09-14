@@ -1,10 +1,7 @@
-import type { ErrorResponseBody } from "@/lib/fetcher";
 import "server-only";
 
 import { buildUrl, UrlBuilder } from "@/lib/utilsSS";
-import { getDomain } from "@/lib/redirectSS";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
-import { NextRequest, NextResponse } from "next/server";
 import { AuthTypeMetadata, type SSOProviderType } from "@/lib/auth/types";
 import { User } from "@/lib/types";
 import { hasAnyAdminPermission } from "@/lib/permissions";
@@ -83,24 +80,6 @@ async function logoutStandardSS(headers: Headers): Promise<Response> {
 
 export async function logoutSS(headers: Headers): Promise<Response | null> {
   return logoutStandardSS(headers);
-}
-
-async function authErrorRedirect(
-  request: NextRequest,
-  response: Response,
-  redirectStatus?: number
-): Promise<NextResponse> {
-  const errorUrl = new URL("/auth/error", getDomain(request));
-  try {
-    const body: ErrorResponseBody = await response.json();
-    const detail = body?.detail;
-    if (typeof detail === "string" && detail) {
-      errorUrl.searchParams.set("error", detail);
-    }
-  } catch {
-    // response may not be JSON
-  }
-  return NextResponse.redirect(errorUrl, redirectStatus);
 }
 
 // ---------------------------------------------------------------------------

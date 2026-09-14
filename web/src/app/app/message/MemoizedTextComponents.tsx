@@ -33,7 +33,6 @@ export const MemoizedAnchor = memo(
     docs,
     subQuestions,
     openQuestion,
-    userFiles,
     citations,
     href,
     updatePresentingDocument,
@@ -129,7 +128,7 @@ export const MemoizedAnchor = memo(
 
 export const MemoizedLink = memo(
   ({
-    node,
+    node: _node,
     document,
     updatePresentingDocument,
     question,

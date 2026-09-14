@@ -43,7 +43,6 @@ import { BillingStatus, hasActiveSubscription } from "@/lib/billing/interfaces";
 import {
   deleteApiKey,
   regenerateApiKey,
-  updateApiKey,
 } from "@/views/admin/ServiceAccountsPage/svc";
 import type { APIKey } from "@/views/admin/ServiceAccountsPage/interfaces";
 import { DISCORD_SERVICE_API_KEY_NAME } from "@/views/admin/ServiceAccountsPage/interfaces";

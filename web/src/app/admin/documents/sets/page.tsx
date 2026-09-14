@@ -4,7 +4,7 @@ import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useTranslations } from "next-intl";
 import { PageLoader } from "@opal/layouts";
 import { PageSelector } from "@/components/PageSelector";
-import { SvgInfo, SvgPlusCircle } from "@opal/icons";
+import { SvgPlusCircle } from "@opal/icons";
 import {
   Table,
   TableHead,
@@ -20,7 +20,6 @@ import { DocumentSetSummary } from "@/lib/types";
 import { useState } from "react";
 import { useDocumentSets } from "./hooks";
 import { can } from "@/lib/permissions/resource-actions";
-import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
 import { deleteDocumentSet } from "./lib";
 import { SettingsLayouts, toast } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";

@@ -418,17 +418,8 @@ export default function LanguageModelsPage() {
   });
 
   // Pre-filter to providers that have at least one visible model
-  const providersWithVisibleModels = existingLlmProviders
-    .map((provider) => ({
-      provider,
-      visibleModels: provider.model_configurations.filter((m) => m.is_visible),
-    }))
-    .filter(({ visibleModels }) => visibleModels.length > 0);
 
   // Default model logic — use the global default from the API response
-  const currentDefaultValue = defaultText
-    ? `${defaultText.provider_id}:${defaultText.model_name}`
-    : undefined;
 
   async function handleDefaultModelChange(compositeValue: string) {
     const separatorIndex = compositeValue.indexOf(":");

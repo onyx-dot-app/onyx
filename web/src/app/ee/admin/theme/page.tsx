@@ -349,15 +349,7 @@ export default function ThemePage() {
         formikHelpers.setSubmitting(false);
       }}
     >
-      {({
-        isSubmitting,
-        dirty,
-        values,
-        validateForm,
-        setErrors,
-        setTouched,
-        submitForm,
-      }) => {
+      {({ isSubmitting, dirty, validateForm, setErrors, submitForm }) => {
         const hasLogoChange = !!selectedLogo;
 
         return (

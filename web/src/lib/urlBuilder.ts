@@ -6,7 +6,7 @@ export function buildApiPath(base: string, params?: QueryParams): string {
   let queryString = "";
   if (params) {
     const entries = Object.entries(params)
-      .filter(([key, value]) => value !== null && value !== undefined)
+      .filter(([_key, value]) => value !== null && value !== undefined)
       .map(
         ([key, value]) =>
           `${encodeURIComponent(key)}=${encodeURIComponent(value!.toString())}`

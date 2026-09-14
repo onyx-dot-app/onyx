@@ -47,7 +47,7 @@ export const ImageToolRenderer: MessageRenderer<
   {}
 > = ({ packets, onComplete, renderType, children }) => {
   const t = useTranslations("chat.messages");
-  const { prompt, images, isGenerating, isComplete, error } =
+  const { images, isGenerating, isComplete, error } =
     constructCurrentImageState(packets);
 
   useEffect(() => {

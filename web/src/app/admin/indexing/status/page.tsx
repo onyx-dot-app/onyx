@@ -5,7 +5,6 @@ import { useTranslations } from "next-intl";
 import { CCPairIndexingStatusTable } from "./CCPairIndexingStatusTable";
 import { SearchAndFilterControls } from "./SearchAndFilterControls";
 import { SettingsLayouts, useToastFromQuery } from "@opal/layouts";
-import Link from "next/link";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Text } from "@opal/components";
 import { markdown } from "@opal/utils";
@@ -71,7 +70,6 @@ function Main() {
     isLoading: isLoadingCcPairsIndexingStatuses,
     error: ccPairsIndexingStatusesError,
     handlePageChange,
-    sourcePages,
     sourceLoadingStates,
     resetPagination,
   } = useConnectorIndexingStatusWithPagination(request, 30000, vectorDbEnabled);

@@ -2,7 +2,7 @@ import { Button, Text } from "@opal/components";
 import { Section, toast } from "@opal/layouts";
 import { InputFile } from "@opal/components";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useTranslations } from "next-intl";
 import * as Yup from "yup";
 import { useRouter } from "next/navigation";
@@ -13,11 +13,7 @@ import { CRAFT_OAUTH_COOKIE_NAME } from "@/app/craft/v1/constants";
 import Cookies from "js-cookie";
 import { Form, Formik } from "formik";
 import { User } from "@/lib/types";
-import {
-  parseOauthAppCredentialJson,
-  refreshAllGoogleData,
-} from "@/lib/googleConnector";
-import { ValidSources } from "@/lib/types";
+import { parseOauthAppCredentialJson } from "@/lib/googleConnector";
 import { markdown } from "@opal/utils";
 
 interface GmailCredentialSectionProps {

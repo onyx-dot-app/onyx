@@ -65,7 +65,7 @@ export const ExistingSlackBotForm = ({
         throw new Error(await response.text());
       }
       toast.success(t("updateForm.fieldUpdated.toast", { field }));
-    } catch (error) {
+    } catch {
       toast.error(t("updateForm.fieldUpdateFailed.toast", { field }));
     }
     setFormValues((prev) => ({ ...prev, [field]: value }));
@@ -162,7 +162,7 @@ export const ExistingSlackBotForm = ({
                 }
                 toast.success(t("deleteModal.success.toast"));
                 router.push("/admin/bots");
-              } catch (error) {
+              } catch {
                 toast.error(t("deleteModal.error.toast"));
               }
               setShowDeleteModal(false);

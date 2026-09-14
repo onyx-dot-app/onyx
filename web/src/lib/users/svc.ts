@@ -1,21 +1,9 @@
 import { mutate } from "swr";
 import { User, UserPersonalization } from "@/lib/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { CustomRefreshTokenResponse } from "@/lib/users/types";
 
 export function checkUserIsNoAuthUser(userId: string): boolean {
   return userId === "__no_auth_user__";
-}
-
-async function getCurrentUser(): Promise<User | null> {
-  const response = await fetch("/api/me", {
-    credentials: "include",
-  });
-  if (!response.ok) {
-    return null;
-  }
-  const user: User = await response.json();
-  return user;
 }
 
 export async function logout(): Promise<Response> {
@@ -82,30 +70,6 @@ export async function basicSignup(
       captcha_token: captchaToken,
     }),
   });
-}
-
-async function refreshToken(
-  customRefreshUrl: string
-): Promise<CustomRefreshTokenResponse | null> {
-  try {
-    console.debug("Sending request to custom refresh URL");
-    const url = customRefreshUrl.startsWith("http")
-      ? new URL(customRefreshUrl)
-      : new URL(customRefreshUrl, window.location.origin);
-    url.searchParams.append("info", "json");
-    url.searchParams.append("access_token_refresh_interval", "3600");
-
-    const response = await fetch(url.toString());
-    if (!response.ok) {
-      console.error(`Failed to refresh token: ${await response.text()}`);
-      return null;
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error("Error refreshing token:", error);
-    throw error;
-  }
 }
 
 export function getUserDisplayName(user: User | null): string {

@@ -9,8 +9,6 @@
 import "@opal/root.css";
 
 import type {
-  SizeVariants,
-  OverridableExtremaSizeVariants,
   ContainerSizeVariants,
   ExtremaSizeVariants,
   Rounding,

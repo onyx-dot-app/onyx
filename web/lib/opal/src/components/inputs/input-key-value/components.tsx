@@ -242,7 +242,7 @@ export default function KeyValueInput({
     });
 
     // Validate duplicate keys
-    keyCount.forEach((indices, key) => {
+    keyCount.forEach((indices, _key) => {
       if (indices.length > 1) {
         indices.forEach((index) => {
           const error = errorsList[index];

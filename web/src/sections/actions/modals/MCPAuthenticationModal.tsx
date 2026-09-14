@@ -546,7 +546,6 @@ export default function MCPAuthenticationModal({
             errors,
             touched,
             isValid,
-            dirty,
           }) => {
             return (
               <Form className="flex flex-col h-full">

@@ -10,7 +10,6 @@ import type {
   StatusVariants,
 } from "@opal/types";
 import { roundingToRem, spacingToRem } from "@opal/shared";
-import { cn } from "@opal/utils";
 
 // ---------------------------------------------------------------------------
 // Types

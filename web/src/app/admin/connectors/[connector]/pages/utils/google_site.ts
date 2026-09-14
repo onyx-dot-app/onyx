@@ -100,7 +100,7 @@ export const submitGoogleSite = async (
   try {
     const response = await uploadCreateAndTriggerConnector();
     return response;
-  } catch (e) {
+  } catch {
     return false;
   }
 };

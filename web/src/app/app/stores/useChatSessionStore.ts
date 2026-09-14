@@ -742,15 +742,6 @@ export const useSelectedNodeForDocDisplay = () =>
     return currentSession?.selectedNodeIdForDocDisplay || null;
   });
 
-const useHasSentLocalUserMessage = () =>
-  useChatSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    const currentSession = currentSessionId
-      ? sessions.get(currentSessionId)
-      : null;
-    return currentSession?.hasSentLocalUserMessage || false;
-  });
-
 export const useStreamingStartTime = () =>
   useChatSessionStore((state) => {
     const { currentSessionId, sessions } = state;

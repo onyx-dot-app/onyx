@@ -4,12 +4,9 @@ import Image from "next/image";
 import { StaticImageData } from "next/image";
 import { useTranslations } from "next-intl";
 import googleCloudStorageIcon from "@public/GoogleCloudStorage.png";
-import openSourceIcon from "@public/OpenSource.png";
 import r2Icon from "@public/r2.png";
 import s3Icon from "@public/S3.png";
 import boxIcon from "@public/Box.png";
-import trelloIcon from "@public/Trello.png";
-import serviceNowIcon from "@public/Servicenow.png";
 import zAIIcon from "@public/Z_AI.png";
 
 export interface IconProps {
@@ -21,7 +18,6 @@ interface LogoIconProps extends IconProps {
 }
 
 export const defaultTailwindCSS = "my-auto flex shrink-0 text-default";
-const defaultTailwindCSSBlue = "my-auto flex shrink-0 text-link";
 
 const LogoIcon = ({
   size = 16,
@@ -40,23 +36,6 @@ const LogoIcon = ({
     />
   );
 };
-
-// Helper to create simple icon components from react-icon libraries
-function createIcon(
-  IconComponent: React.ComponentType<{ size?: number; className?: string }>
-) {
-  function IconWrapper({
-    size = 16,
-    className = defaultTailwindCSS,
-  }: IconProps) {
-    return <IconComponent size={size} className={className} />;
-  }
-
-  IconWrapper.displayName = `Icon(${
-    IconComponent.displayName || IconComponent.name || "Component"
-  })`;
-  return IconWrapper;
-}
 
 /**
  * Creates a logo icon component that automatically supports dark mode adaptations.
@@ -133,30 +112,6 @@ const createLogoIcon = (
   LogoIconWrapper.displayName = "LogoIconWrapper";
   return LogoIconWrapper;
 };
-
-// ============================================================================
-// GENERIC SVG COMPONENTS (sorted alphabetically)
-// ============================================================================
-const MacIcon = ({
-  size = 16,
-  className = "my-auto flex shrink-0 ",
-}: IconProps) => {
-  return (
-    <svg
-      style={{ width: `${size}px`, height: `${size}px` }}
-      className={`w-[${size}px] h-[${size}px] ` + className}
-      xmlns="http://www.w3.org/2000/svg"
-      width="200"
-      height="200"
-      viewBox="0 0 24 24"
-    >
-      <path
-        fill="currentColor"
-        d="M6.5 4.5a2 2 0 0 1 2 2v2h-2a2 2 0 1 1 0-4Zm4 4v-2a4 4 0 1 0-4 4h2v3h-2a4 4 0 1 0 4 4v-2h3v2a4 4 0 1 0 4-4h-2v-3h2a4 4 0 1 0-4-4v2h-3Zm0 2h3v3h-3v-3Zm5-2v-2a2 2 0 1 1 2 2h-2Zm0 7h2a2 2 0 1 1-2 2v-2Zm-7 0v2a2 2 0 1 1-2-2h2Z"
-      />
-    </svg>
-  );
-};
 export const OnyxLogoTypeIcon = ({
   size = 16,
   className = defaultTailwindCSS,
@@ -212,26 +167,6 @@ export const OnyxLogoTypeIcon = ({
     </svg>
   );
 };
-const WindowsIcon = ({
-  size = 16,
-  className = "my-auto flex shrink-0 ",
-}: IconProps) => {
-  return (
-    <svg
-      style={{ width: `${size}px`, height: `${size}px` }}
-      className={`w-[${size}px] h-[${size}px] ` + className}
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      width="24"
-      height="24"
-    >
-      <path
-        fill="currentColor"
-        d="M3 3h8v8H3V3zm10 0h8v8h-8V3zm-10 10h8v8H3v-8zm10 0h8v8h-8v-8z"
-      />
-    </svg>
-  );
-};
 
 // ============================================================================
 // THIRD-PARTY / COMPANY ICONS (Alphabetically)
@@ -243,9 +178,8 @@ export const GoogleStorageIcon = createLogoIcon(googleCloudStorageIcon, {
   sizeAdjustment: 4,
   classNameAddition: "-m-0.5",
 });
-const OpenSourceIcon = createLogoIcon(openSourceIcon);
+
 export const R2Icon = createLogoIcon(r2Icon);
 export const S3Icon = createLogoIcon(s3Icon);
-const ServiceNowIcon = createLogoIcon(serviceNowIcon);
-const TrelloIcon = createLogoIcon(trelloIcon);
+
 export const ZAIIcon = createLogoIcon(zAIIcon);

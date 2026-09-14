@@ -47,7 +47,7 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
   const [isError, setIsError] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [serviceName, setServiceName] = useState<string>("");
+  const [, setServiceName] = useState<string>("");
   const [redirectPath, setRedirectPath] = useState<string | undefined>(
     undefined
   );

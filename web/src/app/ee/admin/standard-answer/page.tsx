@@ -188,11 +188,11 @@ const StandardAnswersTable = ({
 
   const filteredStandardAnswers = standardAnswers.filter((standardAnswer) => {
     const {
-      answer,
-      id,
+      answer: _answer,
+      id: _id,
       categories,
-      match_regex,
-      match_any_keywords,
+      match_regex: _match_regex,
+      match_any_keywords: _match_any_keywords,
       ...fieldsToSearch
     } = standardAnswer;
     const cleanedQuery = query.toLowerCase();

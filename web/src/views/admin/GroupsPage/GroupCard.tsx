@@ -16,7 +16,6 @@ import {
 } from "@/views/admin/GroupsPage/utils";
 import { refreshGroupLists, renameGroup } from "@/views/admin/GroupsPage/svc";
 import { useSWRConfig } from "swr";
-import { SWR_KEYS } from "@/lib/swr-keys";
 import { can } from "@/lib/permissions/resource-actions";
 
 interface GroupCardProps {

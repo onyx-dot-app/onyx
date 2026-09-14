@@ -21,10 +21,6 @@ const Page = async (props: {
     ? searchParams?.email[0]
     : searchParams?.email || null;
 
-  const teamName = Array.isArray(searchParams?.team)
-    ? searchParams?.team[0]
-    : searchParams?.team || "your team";
-
   // catch cases where the backend is completely unreachable here
   // without try / catch, will just raise an exception and the page
   // will not render
@@ -57,7 +53,6 @@ const Page = async (props: {
   if (cloud && authTypeMetadata) {
     authUrl = await getAuthUrlSS(authTypeMetadata.multiTenant, null);
   }
-  const emailDomain = defaultEmail?.split("@")[1];
 
   return (
     <AuthFlowContainer authState="join">

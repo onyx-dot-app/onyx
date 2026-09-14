@@ -42,20 +42,6 @@ interface TestSearchSettings {
   [key: string]: unknown;
 }
 
-// ---------------------------------------------------------------------------
-// API helpers
-// ---------------------------------------------------------------------------
-
-async function getConfiguredProviders(
-  page: Page
-): Promise<{ provider_type: string }[]> {
-  const response = await page.request.get(
-    "/api/admin/embedding/embedding-provider"
-  );
-  expect(response.ok()).toBeTruthy();
-  return response.json();
-}
-
 async function disconnectProvider(
   page: Page,
   providerType: string

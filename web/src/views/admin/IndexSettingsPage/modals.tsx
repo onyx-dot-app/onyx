@@ -16,7 +16,7 @@ import {
   type EmbeddingModel,
   type EmbeddingProvider,
 } from "@/lib/indexing/types";
-import { connectEmbeddingProvider, testEmbedding } from "@/lib/indexing/svc";
+import { connectEmbeddingProvider } from "@/lib/indexing/svc";
 import {
   ApiKeyField,
   ApiUrlField,

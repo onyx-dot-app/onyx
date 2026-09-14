@@ -92,7 +92,7 @@ import {
   size,
 } from "@floating-ui/react-dom";
 import { useOpalStrings } from "@opal/strings";
-import { cn, noProp } from "@opal/utils";
+import { noProp } from "@opal/utils";
 import { InputTypeIn } from "@opal/components";
 import { FieldContext } from "@opal/form";
 import { Button } from "@opal/components";

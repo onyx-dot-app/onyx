@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.redirect(new URL(redirectTo, req.url));
-  } catch (e) {
+  } catch {
     return NextResponse.json(
       { error: "OAuth callback error" },
       { status: 500 }

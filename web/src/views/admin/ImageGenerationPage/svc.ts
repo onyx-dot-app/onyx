@@ -107,19 +107,6 @@ export async function testImageGenerationApiKey(
 }
 
 /**
- * Fetch all image generation configurations
- */
-async function fetchImageGenerationConfigs(): Promise<
-  ImageGenerationConfigView[]
-> {
-  const response = await fetch(IMAGE_GEN_CONFIG_URL);
-  if (!response.ok) {
-    throw new Error("Failed to fetch image generation configs");
-  }
-  return response.json();
-}
-
-/**
  * Fetch credentials for an image generation config (for edit mode)
  */
 export async function fetchImageGenerationCredentials(

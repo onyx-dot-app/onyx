@@ -43,9 +43,9 @@ export function AccessTypeGroupSelector({
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const isAutoSyncSupported = isValidAutoSyncSource(connector);
 
-  const [access_type, meta, access_type_helpers] =
+  const [access_type, , access_type_helpers] =
     useField<AccessType>("access_type");
-  const [groups, groups_meta, groups_helpers] = useField<number[]>("groups");
+  const [groups, , groups_helpers] = useField<number[]>("groups");
 
   // A scoped manager can only create non-public connectors, so default them to
   // private. Group selection stays theirs to make — auto-assigning their only

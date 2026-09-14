@@ -6,7 +6,6 @@ import {
   CustomToolStart,
   CustomToolArgs,
   CustomToolDelta,
-  CustomToolErrorInfo,
   SectionEnd,
 } from "../../../services/streamingModels";
 import { MessageRenderer, RenderType } from "../interfaces";

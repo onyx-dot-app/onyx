@@ -4,13 +4,7 @@ import React from "react";
 import { cn } from "@opal/utils";
 import { useTableSize } from "@opal/components/table/TableSizeContext";
 import type { WithoutStyles } from "@opal/types";
-import type { ExtremaSizeVariants, SizeVariants } from "@opal/types";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-type TableSize = Extract<SizeVariants, "md" | "lg">;
+import type { ExtremaSizeVariants } from "@opal/types";
 type TableVariant = "rows" | "cards";
 type SelectionBehavior = "no-select" | "single-select" | "multi-select";
 

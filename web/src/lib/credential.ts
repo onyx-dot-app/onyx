@@ -54,29 +54,8 @@ export async function createCredentialWithPrivateKey(
   });
 }
 
-async function adminDeleteCredential<T>(credentialId: number) {
-  return await fetch(`/api/manage/admin/credential/${credentialId}`, {
-    method: "DELETE",
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
-}
-
-export async function deleteCredential<T>(
-  credentialId: number,
-  force?: boolean
-) {
+export async function deleteCredential(credentialId: number, _force?: boolean) {
   return await fetch(`/api/manage/credential/${credentialId}`, {
-    method: "DELETE",
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
-}
-
-async function forceDeleteCredential<T>(credentialId: number) {
-  return await fetch(`/api/manage/credential/force/${credentialId}`, {
     method: "DELETE",
     headers: {
       "Content-Type": "application/json",

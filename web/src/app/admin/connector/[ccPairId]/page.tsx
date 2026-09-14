@@ -67,7 +67,6 @@ import { useStatusChange } from "./useStatusChange";
 import { useReIndexModal } from "./ReIndexModal";
 import { Button } from "@opal/components";
 import { SvgSettings } from "@opal/icons";
-import { useUser } from "@/providers/UserProvider";
 import { resolveAllErrorsForCCPair } from "@/lib/targeted_reindex";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { can } from "@/lib/permissions/resource-actions";
@@ -98,7 +97,6 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const t = useTranslations("admin.connector");
   const locale = useLocale();
   const router = useRouter();
-  const { user } = useUser();
 
   const {
     data: ccPair,
@@ -272,7 +270,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
       }
       mutate(buildCCPairInfoUrl(ccPairId));
       toast.success(t("toasts.nameUpdated"));
-    } catch (error) {
+    } catch {
       toast.error(t("toasts.nameUpdateFailed"));
     }
   };
@@ -310,7 +308,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
       }
       mutate(buildCCPairInfoUrl(ccPairId));
       toast.success(t("toasts.refreshFrequencyUpdated"));
-    } catch (error) {
+    } catch {
       toast.error(t("toasts.refreshFrequencyUpdateFailed"));
     }
   };
@@ -340,7 +338,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
       }
       mutate(buildCCPairInfoUrl(ccPairId));
       toast.success(t("toasts.pruningFrequencyUpdated"));
-    } catch (error) {
+    } catch {
       toast.error(t("toasts.pruningFrequencyUpdateFailed"));
     }
   };

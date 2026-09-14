@@ -92,8 +92,8 @@ const ChatScrollContainer = React.memo(
       const scrolledForSessionRef = useRef<string | null>(null);
       const prevAnchorSelectorRef = useRef<string | null>(null);
 
-      const [hasContentAbove, setHasContentAbove] = useState(false);
-      const [hasContentBelow, setHasContentBelow] = useState(false);
+      const [, setHasContentAbove] = useState(false);
+      const [, setHasContentBelow] = useState(false);
       const [isAtBottom, setIsAtBottom] = useState(true);
       const isAtBottomRef = useRef(true); // Ref for use in callbacks
       const isAutoScrollingRef = useRef(false); // Prevent handleScroll from interfering during auto-scroll

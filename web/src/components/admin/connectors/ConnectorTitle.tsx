@@ -27,8 +27,6 @@ export const ConnectorTitle = ({
   connector,
   ccPairId,
   ccPairName,
-  owner,
-  isPublic = true,
   isLink = true,
   showMetadata = true,
   className = "",

@@ -10,5 +10,3 @@ export const RETRY_COOLDOWN_MILLISECONDS = 200;
 export const ITEMS_PER_PAGE = 20;
 export const PAGES_PER_BATCH = 2;
 export const NUM_IN_PAGE = 10;
-
-const PREVIOUS_CSV_TASK_BUTTON_NAME = "View Exports";

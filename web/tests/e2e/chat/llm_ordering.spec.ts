@@ -1,6 +1,5 @@
 import { test, expect } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
-import { verifyCurrentModel } from "@tests/e2e/utils/chatActions";
 import { ensureImageGenerationEnabled } from "@tests/e2e/utils/agentUtils";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 

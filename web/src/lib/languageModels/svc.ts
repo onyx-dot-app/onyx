@@ -37,21 +37,6 @@ import {
 } from "@/lib/languageModels/types";
 
 /**
- * Test the default LLM provider.
- * Returns true if the default provider is configured and working, false otherwise.
- */
-async function testDefaultProvider(): Promise<boolean> {
-  try {
-    const response = await fetch("/api/admin/llm/test/default", {
-      method: "POST",
-    });
-    return response?.ok || false;
-  } catch {
-    return false;
-  }
-}
-
-/**
  * Set the default LLM model.
  * @param providerId - The provider ID
  * @param modelName - The model name within that provider

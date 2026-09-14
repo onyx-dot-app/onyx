@@ -667,7 +667,7 @@ test.describe("Chat Preferences Admin Page @exclusive", () => {
     await page.goto(ADMIN_ROUTES.CHAT_PREFERENCES.path);
 
     // Restore original states
-    let needsSave = false;
+    let _needsSave = false;
     for (const toolName of [
       "Internal Search",
       "Web Search",
@@ -679,7 +679,7 @@ test.describe("Chat Preferences Admin Page @exclusive", () => {
 
       if (currentState !== originalState) {
         await clickAndWaitForPatch(page, toolSwitch);
-        needsSave = true;
+        _needsSave = true;
       }
     }
   });

@@ -37,7 +37,7 @@ export function documentToSourceInfo(doc: OnyxDocument): SourceInfo {
  */
 export function questionToSourceInfo(
   question: SubQuestionDetail,
-  index: number
+  _index: number
 ): SourceInfo {
   return {
     id: `question-${question.level}-${question.level_question_num}`,

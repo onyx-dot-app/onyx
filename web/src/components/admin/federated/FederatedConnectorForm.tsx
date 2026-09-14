@@ -714,7 +714,7 @@ export function FederatedConnectorForm({
                               configValidationErrors.channels
                             ) {
                               setConfigValidationErrors((prev) => {
-                                const { channels, ...rest } = prev;
+                                const { channels: _channels, ...rest } = prev;
                                 return rest;
                               });
                             }

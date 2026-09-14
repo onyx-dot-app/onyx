@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
-import { SvgUserPlus, SvgUserX, SvgXCircle, SvgKey } from "@opal/icons";
+import { SvgUserPlus, SvgUserX, SvgKey } from "@opal/icons";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import { toast } from "@opal/layouts";

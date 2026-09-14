@@ -1,7 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
 import {
-  TOOL_IDS,
   TOOL_NAMES,
   toolOption,
   openActionManagement,

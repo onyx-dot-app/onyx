@@ -3,7 +3,6 @@
 import { useState } from "react";
 import {
   type Table,
-  type ColumnDef,
   type RowData,
   type VisibilityState,
 } from "@tanstack/react-table";
@@ -88,27 +87,6 @@ function ColumnVisibilityPopover<TData extends RowData>({
       </Popover.Content>
     </Popover>
   );
-}
-
-// ---------------------------------------------------------------------------
-// Column definition factory
-// ---------------------------------------------------------------------------
-
-function createColumnVisibilityColumn<TData>(): ColumnDef<TData, unknown> {
-  return {
-    id: "__columnVisibility",
-    size: 44,
-    enableHiding: false,
-    enableSorting: false,
-    enableResizing: false,
-    header: ({ table }) => (
-      <ColumnVisibilityPopover
-        table={table}
-        columnVisibility={table.getState().columnVisibility}
-      />
-    ),
-    cell: () => null,
-  };
 }
 
 export { ColumnVisibilityPopover };

@@ -81,21 +81,6 @@ export function transformLinkUri(href: string): string | null {
   }
 }
 
-function isSubset(parent: string[], child: string[]): boolean {
-  const parentSet = new Set(parent);
-  return Array.from(new Set(child)).every((item) => parentSet.has(item));
-}
-
-function trinaryLogic<T>(
-  a: boolean | undefined,
-  b: boolean,
-  ifTrue: T,
-  ifFalse: T
-): T {
-  const condition = a !== undefined ? a : b;
-  return condition ? ifTrue : ifFalse;
-}
-
 // A convenience function to prevent propagation of click events to items higher up in the DOM tree.
 //
 // # Note:
@@ -134,8 +119,6 @@ const IMAGE_EXTENSIONS = [
   "svg",
   "bmp",
 ] as const;
-
-type ImageExtension = (typeof IMAGE_EXTENSIONS)[number];
 
 /**
  * Checks whether a provided extension string corresponds to an image extension.
@@ -269,24 +252,6 @@ export function hasNonImageFiles(
   files: Array<{ name?: string | null }>
 ): boolean {
   return files.some((file) => !isImageFile(file.name));
-}
-
-/**
- * Merges multiple refs into a single callback ref.
- * Useful when a component needs both an internal ref and a forwarded ref.
- */
-function mergeRefs<T>(
-  ...refs: (React.Ref<T> | undefined)[]
-): React.RefCallback<T> {
-  return (node: T | null) => {
-    refs.forEach((ref) => {
-      if (typeof ref === "function") {
-        ref(node);
-      } else if (ref) {
-        (ref as React.MutableRefObject<T | null>).current = node;
-      }
-    });
-  };
 }
 
 export function formatCost(

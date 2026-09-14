@@ -51,10 +51,6 @@ export const isPythonToolPackets = (packets: Packet[]): boolean =>
         isCodeInterpreterToolType((p.obj as ToolCallArgumentDelta).tool_type))
   );
 
-// Check if packets belong to reasoning
-const isReasoningPackets = (packets: Packet[]): boolean =>
-  packets.some((p) => p.obj.type === PacketType.REASONING_START);
-
 // Check if step supports collapsed streaming rendering mode
 export const stepSupportsCollapsedStreaming = (packets: Packet[]): boolean =>
   packets.some(
@@ -143,10 +139,6 @@ export const stepHasCollapsedStreamingContent = (
 
   return false;
 };
-
-// Check if packets belong to a deep research plan
-const isDeepResearchPlanPackets = (packets: Packet[]): boolean =>
-  packets.some((p) => p.obj.type === PacketType.DEEP_RESEARCH_PLAN_START);
 
 // Check if packets belong to a memory tool. A step holds the packets of one
 // tool call, so a memory start/no-access packet identifies the whole step.

@@ -1,5 +1,4 @@
 import { toast } from "@opal/layouts";
-import { DeletionAttemptSnapshot } from "./types";
 
 async function scheduleDeletionJobForConnector(
   connectorId: number,
@@ -38,14 +37,4 @@ export async function deleteCCPair(
   }
   toast.success("Scheduled deletion of connector!");
   onCompletion?.();
-}
-
-function isCurrentlyDeleting(deletionAttempt: DeletionAttemptSnapshot | null) {
-  if (!deletionAttempt) {
-    return false;
-  }
-
-  return (
-    deletionAttempt.status === "PENDING" || deletionAttempt.status === "STARTED"
-  );
 }

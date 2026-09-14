@@ -606,7 +606,7 @@ function GeneralSettings() {
       } else {
         throw new Error("Failed to delete all chat sessions");
       }
-    } catch (error) {
+    } catch {
       toast.error(t("dangerZone.deleteAllChats.toasts.deleteFailed"));
     } finally {
       setIsDeleting(false);
@@ -908,7 +908,7 @@ function PromptShortcuts() {
   const t = useTranslations("settings");
   const { promptShortcuts, isLoading, error, refresh } = usePromptShortcuts();
   const [shortcuts, setShortcuts] = useState<LocalShortcut[]>([]);
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [, setIsInitialLoad] = useState(true);
 
   // Initialize shortcuts when input prompts are loaded
   useEffect(() => {
@@ -1018,7 +1018,7 @@ function PromptShortcuts() {
         } else {
           throw new Error("Failed to delete shortcut");
         }
-      } catch (error) {
+      } catch {
         toast.error(t("promptShortcuts.toasts.deleteFailed"));
       }
     },
@@ -1073,7 +1073,7 @@ function PromptShortcuts() {
             throw new Error("Failed to update shortcut");
           }
         }
-      } catch (error) {
+      } catch {
         toast.error(t("promptShortcuts.toasts.saveFailed"));
       }
     },
@@ -2067,7 +2067,7 @@ function AccountsAccessSettings() {
         } else {
           toast.error(t("apiKeys.toasts.deleteFailed"));
         }
-      } catch (error) {
+      } catch {
         toast.error(t("apiKeys.toasts.deleteNetworkError"));
       }
     },
@@ -2101,7 +2101,7 @@ function AccountsAccessSettings() {
             errorData.detail || t("accounts.passwordModal.toasts.updateFailed")
           );
         }
-      } catch (error) {
+      } catch {
         toast.error(t("accounts.passwordModal.toasts.networkError"));
       }
     },
@@ -2511,7 +2511,7 @@ function FederatedConnectorCard({
       } else {
         throw new Error("Failed to disconnect");
       }
-    } catch (error) {
+    } catch {
       toast.error(t("connectors.toasts.disconnectFailed"));
     } finally {
       setIsDisconnecting(false);

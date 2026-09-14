@@ -1,22 +1,6 @@
 import { JSX } from "react";
 
 /**
- * Utility functions to handle thinking tokens in AI messages
- */
-
-/**
- * Check if a message contains complete thinking tokens
- */
-function hasCompletedThinkingTokens(content: string | JSX.Element): boolean {
-  if (typeof content !== "string") return false;
-
-  return (
-    /<think>[\s\S]*?<\/think>/.test(content) ||
-    /<thinking>[\s\S]*?<\/thinking>/.test(content)
-  );
-}
-
-/**
  * Check if a message contains partial thinking tokens (streaming)
  */
 function hasPartialThinkingTokens(content: string | JSX.Element): boolean {
@@ -31,64 +15,6 @@ function hasPartialThinkingTokens(content: string | JSX.Element): boolean {
   // Return true if we have any unmatched tags
   return (
     thinkOpenCount > thinkCloseCount || thinkingOpenCount > thinkingCloseCount
-  );
-}
-
-/**
- * Extract thinking content from a message
- */
-function extractThinkingContent(content: string | JSX.Element): string {
-  if (typeof content !== "string") return "";
-
-  // For complete thinking tags, extract all sections
-  const completeThinkRegex = /<think>[\s\S]*?<\/think>/g;
-  const completeThinkingRegex = /<thinking>[\s\S]*?<\/thinking>/g;
-
-  const thinkMatches = Array.from(content.matchAll(completeThinkRegex));
-  const thinkingMatches = Array.from(content.matchAll(completeThinkingRegex));
-
-  if (thinkMatches.length > 0 || thinkingMatches.length > 0) {
-    // Combine all matches and sort by their position in the original string
-    const allMatches = [...thinkMatches, ...thinkingMatches].sort(
-      (a, b) => (a.index || 0) - (b.index || 0)
-    );
-    return allMatches.map((match) => match[0]).join("\n");
-  }
-
-  // For partial thinking tokens (streaming)
-  if (hasPartialThinkingTokens(content)) {
-    // Find the last opening tag position
-    const lastThinkPos = content.lastIndexOf("<think>");
-    const lastThinkingPos = content.lastIndexOf("<thinking>");
-
-    // Use the position of whichever tag appears last
-    const startPos = Math.max(lastThinkPos, lastThinkingPos);
-
-    if (startPos >= 0) {
-      // Extract everything from the last opening tag to the end
-      return content.substring(startPos);
-    }
-  }
-
-  return "";
-}
-
-/**
- * Check if thinking tokens are complete
- */
-function isThinkingComplete(content: string | JSX.Element): boolean {
-  if (typeof content !== "string") return false;
-
-  // Count opening and closing tags
-  const thinkOpenCount = (content.match(/<think>/g) || []).length;
-  const thinkCloseCount = (content.match(/<\/think>/g) || []).length;
-  const thinkingOpenCount = (content.match(/<thinking>/g) || []).length;
-  const thinkingCloseCount = (content.match(/<\/thinking>/g) || []).length;
-
-  // All tags must be matched
-  return (
-    thinkOpenCount === thinkCloseCount &&
-    thinkingOpenCount === thinkingCloseCount
   );
 }
 
@@ -120,15 +46,4 @@ export function removeThinkingTokens(
   }
 
   return result.trim();
-}
-
-// /**
-//  * Clean the extracted thinking content (remove tags)
-//  */
-function cleanThinkingContent(thinkingContent: string): string {
-  if (!thinkingContent) return "";
-
-  return thinkingContent
-    .replace(/<think>|<\/think>|<thinking>|<\/thinking>/g, "")
-    .trim();
 }

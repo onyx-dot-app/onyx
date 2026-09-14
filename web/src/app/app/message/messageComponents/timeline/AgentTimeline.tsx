@@ -15,7 +15,6 @@ import {
   TimelineUIState,
 } from "@/app/app/message/messageComponents/timeline/hooks/useTimelineUIState";
 import {
-  isResearchAgentPackets,
   isSearchToolPackets,
   stepSupportsCollapsedStreaming,
   stepHasCollapsedStreamingContent,
@@ -124,7 +123,6 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   hasDisplayContent = false,
   collapsible = true,
   buttonTitle,
-  "data-testid": testId,
   processingDurationSeconds,
   isGeneratingImage = false,
   generatedImageCount = 0,

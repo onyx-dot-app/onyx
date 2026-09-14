@@ -3,7 +3,6 @@
 import React, { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
-import type { Route } from "next";
 import { useAppPosition } from "@/lib/position/hooks";
 import CommandMenu, {
   useCommandMenuContext,

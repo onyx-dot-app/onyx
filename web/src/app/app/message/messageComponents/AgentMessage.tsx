@@ -119,7 +119,6 @@ const AgentMessage = React.memo(function AgentMessage({
     citations,
     citationMap,
     documentMap,
-    toolGroups,
     toolTurnGroups,
     displayGroups,
     hasSteps,

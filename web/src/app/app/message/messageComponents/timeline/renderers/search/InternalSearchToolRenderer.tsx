@@ -54,14 +54,7 @@ const resultToSourceInfo = (doc: OnyxDocument): SourceInfo => ({
 export const InternalSearchToolRenderer: MessageRenderer<
   SearchToolPacket,
   {}
-> = ({
-  packets,
-  onComplete,
-  animate,
-  stopPacketSeen,
-  renderType,
-  children,
-}) => {
+> = ({ packets, stopPacketSeen, renderType, children }) => {
   const t = useTranslations("chat.messages.timeline");
   const locale = useLocale();
   const searchState = constructCurrentSearchState(packets);

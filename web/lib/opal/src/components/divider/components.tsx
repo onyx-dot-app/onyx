@@ -6,7 +6,6 @@ import type { OrientationVariants, RichStr } from "@opal/types";
 import { Button, Text } from "@opal/components";
 import { SvgChevronRight } from "@opal/icons";
 import { Interactive } from "@opal/core";
-import { cn } from "@opal/utils";
 import { spacingToRem } from "@opal/shared";
 
 // ---------------------------------------------------------------------------

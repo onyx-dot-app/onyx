@@ -1,6 +1,6 @@
 import React, { useMemo, useCallback } from "react";
 import { useTranslations } from "next-intl";
-import { SvgCircle, SvgCheckCircle, SvgBookOpen } from "@opal/icons";
+import { SvgCircle, SvgBookOpen } from "@opal/icons";
 
 import {
   PacketType,
@@ -57,10 +57,8 @@ export const ResearchAgentRenderer: MessageRenderer<
 > = ({
   packets,
   state,
-  onComplete,
   renderType,
   stopPacketSeen,
-  isLastStep = true,
   isHover = false,
   children,
 }) => {

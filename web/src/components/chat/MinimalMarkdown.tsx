@@ -4,7 +4,7 @@ import {
   MemoizedLink,
   MemoizedParagraph,
 } from "@/app/app/message/MemoizedTextComponents";
-import { useMemo, CSSProperties } from "react";
+import { useMemo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import type { PluggableList } from "unified";
 import remarkGfm from "remark-gfm";
@@ -55,11 +55,11 @@ export default function MinimalMarkdown({
     const defaults: Components = {
       a: MemoizedLink,
       p: MemoizedParagraph,
-      pre: ({ node, className, children }: any) => {
+      pre: ({ children }: any) => {
         // Don't render the pre wrapper - CodeBlock handles its own wrapper
         return <>{children}</>;
       },
-      code: ({ node, inline, className, children, ...props }: any) => {
+      code: ({ node, className, children }: any) => {
         const codeText = extractCodeText(node, content, children);
         return (
           <CodeBlock

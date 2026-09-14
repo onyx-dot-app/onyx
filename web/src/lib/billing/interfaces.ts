@@ -177,13 +177,6 @@ export function hasPaidSubscription(
   return data.status === BillingStatus.ACTIVE;
 }
 
-/**
- * Check if a license is valid and active.
- */
-function isLicenseValid(license: LicenseStatus): boolean {
-  return license.has_license && license.status === "active";
-}
-
 // ----------------------------------------------------------------------------
 // Display Utilities
 // ----------------------------------------------------------------------------

@@ -589,7 +589,7 @@ describe("usePacedTurnGroups", () => {
     test("clears timer on unmount", () => {
       const step1 = createStep(0, 0);
 
-      const { result, rerender, unmount } = renderHook(
+      const { rerender, unmount } = renderHook(
         ({ turnGroups }) => usePacedTurnGroups(turnGroups, [], false, 1, false),
         { initialProps: { turnGroups: [createTurnGroup([step1])] } }
       );

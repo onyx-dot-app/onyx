@@ -4,13 +4,7 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { LoadingAnimation } from "@/components/Loading";
-import { toast } from "@opal/layouts";
 import { ValidSources } from "@/lib/types";
-import {
-  Credential,
-  GmailCredentialJson,
-  GmailServiceAccountCredentialJson,
-} from "@/lib/connectors/credentials";
 import { GmailAuthSection } from "./Credential";
 import { usePublicCredentials } from "@/lib/hooks";
 import { useUser } from "@/providers/UserProvider";

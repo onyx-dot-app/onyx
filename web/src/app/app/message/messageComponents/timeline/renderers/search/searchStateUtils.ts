@@ -12,8 +12,6 @@ import { OnyxDocument } from "@/lib/search/interfaces";
 import { getSourceDisplayName, isValidSource } from "@/lib/sources";
 import { ValidSources } from "@/lib/types";
 
-const MAX_TITLE_LENGTH = 25;
-
 export const getMetadataTags = (metadata?: {
   [key: string]: string;
 }): string[] | undefined => {

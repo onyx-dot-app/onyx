@@ -919,7 +919,7 @@ export default function ChatPreferencesPage() {
         router.refresh();
         await mutate(SWR_KEYS.settings);
         toast.success(t("toasts.settingsUpdated"));
-      } catch (error) {
+      } catch {
         toast.error(t("toasts.settingsUpdateFailed"));
       }
     },

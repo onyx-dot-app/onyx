@@ -96,7 +96,6 @@ export const MessageTextRenderer: MessageRenderer<
   messageNodeId,
   hasTimelineThinking,
   onComplete,
-  renderType,
   animate,
   stopPacketSeen,
   stopReason,

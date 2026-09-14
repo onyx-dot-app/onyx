@@ -1,6 +1,4 @@
-import { InputDateRangePickerValue } from "@opal/components";
-import { Tag, ValidSources } from "../types";
-import { Agent } from "@/lib/agents/types";
+import { ValidSources } from "../types";
 
 const FlowType = {
   SEARCH: "search",
@@ -15,15 +13,6 @@ const SearchType = {
 };
 type SearchType = (typeof SearchType)[keyof typeof SearchType];
 
-interface ToolResponse {
-  id?: string | null;
-  response?: any;
-}
-interface ExtendedToolResponse extends ToolResponse {
-  level: number;
-  level_question_num: number;
-}
-
 export enum StreamStopReason {
   CONTEXT_LENGTH = "CONTEXT_LENGTH",
   CANCELLED = "CANCELLED",
@@ -34,23 +23,6 @@ export interface StreamStopInfo {
   level?: number;
   level_question_num?: number;
   stream_type?: "sub_answer" | "sub_questions" | "main_answer";
-}
-
-interface ErrorMessagePacket {
-  error: string;
-}
-
-interface Quote {
-  quote: string;
-  document_id: string;
-  link: string | null;
-  source_type: ValidSources;
-  blurb: string;
-  semantic_identifier: string;
-}
-
-interface QuotesInfoPacket {
-  quotes: Quote[];
 }
 export interface MinimalOnyxDocument {
   document_id: string;
@@ -72,50 +44,12 @@ export interface OnyxDocument extends MinimalOnyxDocument {
   is_internet: boolean;
   validationState?: null | "good" | "bad";
 }
-
-interface LoadedOnyxDocument extends OnyxDocument {
-  icon: React.FC<{ size?: number; className?: string }>;
-}
-
-export interface SearchOnyxDocument extends OnyxDocument {
-  is_relevant: boolean;
-  relevance_explanation: string;
-}
-
-interface FilteredOnyxDocument extends OnyxDocument {
-  included: boolean;
-}
 export interface DocumentInfoPacket {
   top_documents: OnyxDocument[];
   predicted_flow: FlowType | null;
   predicted_search: SearchType | null;
   time_cutoff: string | null;
   favor_recent: boolean;
-}
-
-interface DocumentRelevance {
-  relevant: boolean;
-  content: string;
-}
-
-interface Relevance {
-  [url: string]: DocumentRelevance;
-}
-
-interface RelevanceChunk {
-  relevance_summaries: Relevance;
-}
-
-interface SearchResponse {
-  suggestedSearchType: SearchType | null;
-  suggestedFlowType: FlowType | null;
-  answer: string | null;
-  quotes: Quote[] | null;
-  documents: SearchOnyxDocument[] | null;
-  selectedDocIndices: number[] | null;
-  error: string | null;
-  messageId: number | null;
-  additional_relevance?: Relevance;
 }
 
 export enum SourceCategory {
@@ -147,48 +81,6 @@ export interface SourceMetadata {
   alwaysConnected?: boolean;
   // Custom description to show instead of status (e.g., "Manage your uploaded files")
   customDescription?: string;
-}
-
-interface SearchDefaultOverrides {
-  forceDisplayQA: boolean;
-  offset: number;
-}
-
-interface SearchRequestArgs {
-  query: string;
-  agentic?: boolean;
-  sources: SourceMetadata[];
-  documentSets: string[];
-  timeRange: InputDateRangePickerValue | null;
-  tags: Tag[];
-  persona: Agent;
-  updateDocumentRelevance: (relevance: any) => void;
-  updateCurrentAnswer: (val: string) => void;
-  updateQuotes: (quotes: Quote[]) => void;
-  updateDocs: (documents: OnyxDocument[]) => void;
-  updateSelectedDocIndices: (docIndices: number[]) => void;
-  updateSuggestedSearchType: (searchType: SearchType) => void;
-  updateSuggestedFlowType: (flowType: FlowType) => void;
-  updateError: (error: string) => void;
-  updateMessageAndThreadId: (
-    messageId: number,
-    chat_session_id: string
-  ) => void;
-  finishedSearching: () => void;
-  updateComments: (comments: any) => void;
-  selectedSearchType: SearchType | null;
-}
-
-interface SearchRequestOverrides {
-  searchType?: SearchType;
-  offset?: number;
-  overrideMessage?: string;
-  agentic?: boolean;
-}
-
-interface ValidQuestionResponse {
-  reasoning: string | null;
-  error: string | null;
 }
 
 // ============================================================================
@@ -275,60 +167,3 @@ export interface SearchFullResponse {
   llm_selected_doc_ids?: string[] | null;
   error?: string | null;
 }
-
-// ============================================================================
-// Search History API
-// ============================================================================
-
-/**
- * Single search query in history
- */
-interface SearchQueryResponse {
-  query: string;
-  query_expansions: string[] | null;
-  created_at: string; // ISO date string
-}
-
-/**
- * Response from search history endpoint
- * GET /api/search/search-history
- */
-export interface SearchHistoryResponse {
-  search_queries: SearchQueryResponse[];
-}
-
-// ============================================================================
-// Streaming Packets (for stream=true)
-// ============================================================================
-
-interface SearchDocsPacket {
-  type: "search_docs";
-  search_docs: SearchDocWithContent[];
-}
-
-interface SearchErrorPacket {
-  type: "search_error";
-  error: string;
-}
-
-interface LLMSelectedDocsPacket {
-  type: "llm_selected_docs";
-  llm_selected_doc_ids: string[] | null;
-}
-
-interface QueryExpansionsPacket {
-  type: "query_expansions";
-  executed_queries: string[];
-}
-
-interface DocSelectionReasoningPacket {
-  type: "doc_selection_reasoning";
-  reasoning: string;
-}
-
-type SearchStreamPacket =
-  | SearchDocsPacket
-  | SearchErrorPacket
-  | LLMSelectedDocsPacket
-  | QueryExpansionsPacket
-  | DocSelectionReasoningPacket;

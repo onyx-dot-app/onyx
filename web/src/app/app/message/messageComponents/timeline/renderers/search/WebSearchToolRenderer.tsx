@@ -36,8 +36,6 @@ const queryToSourceInfo = (query: string, index: number): SourceInfo => ({
  */
 export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
   packets,
-  onComplete,
-  animate,
   stopPacketSeen,
   renderType,
   children,

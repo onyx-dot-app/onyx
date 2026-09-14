@@ -7,7 +7,6 @@ import type {
   SearchFlowClassificationRequest,
   SearchFlowClassificationResponse,
   SearchFullResponse,
-  SearchHistoryResponse,
   SendSearchQueryRequest,
 } from "@/lib/search/interfaces";
 
@@ -63,33 +62,6 @@ export async function searchDocuments(
 
   if (!response.ok) {
     throw new Error(`Search failed: ${response.statusText}`);
-  }
-
-  return response.json();
-}
-
-/**
- * Fetch search history for the current user
- */
-async function fetchSearchHistory(options?: {
-  limit?: number;
-  filterDays?: number;
-  signal?: AbortSignal;
-}): Promise<SearchHistoryResponse> {
-  const params = new URLSearchParams();
-  if (options?.limit) params.set("limit", options.limit.toString());
-  if (options?.filterDays)
-    params.set("filter_days", options.filterDays.toString());
-
-  const response = await fetch(
-    `/api/search/search-history?${params.toString()}`,
-    {
-      signal: options?.signal,
-    }
-  );
-
-  if (!response.ok) {
-    throw new Error(`Failed to fetch search history: ${response.statusText}`);
   }
 
   return response.json();

@@ -32,11 +32,6 @@ export const USER_IDENTITY_PLACEHOLDERS: UserPlaceholder[] = [
   { key: "role", label: "Role" },
 ];
 
-const USER_PLACEHOLDERS: UserPlaceholder[] = [
-  ...USER_DIRECTORY_PLACEHOLDERS,
-  ...USER_IDENTITY_PLACEHOLDERS,
-];
-
 // The token inserted into the prompt for a given placeholder key.
 export function userPlaceholderToken(key: string): string {
   return `{{user.${key}}}`;

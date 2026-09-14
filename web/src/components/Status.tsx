@@ -4,7 +4,6 @@ import { ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { ValidStatuses } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
-import { timeAgo } from "@opal/time";
 import {
   FiAlertTriangle,
   FiCheckCircle,
@@ -171,7 +170,6 @@ export function CCPairStatus({
   ccPairStatus,
   inRepeatedErrorState,
   lastIndexAttemptStatus,
-  size = "md",
 }: {
   ccPairStatus: ConnectorCredentialPairStatus;
   inRepeatedErrorState: boolean;
