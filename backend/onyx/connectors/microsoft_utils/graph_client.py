@@ -26,7 +26,7 @@ logger = setup_logger()
 
 GRAPH_API_MAX_RETRIES = 5
 
-# Rate limits plus the gateway 5xx codes. The default choice.
+# Rate limits plus the gateway 5xx codes. The raw GET's set, Teams uses it too.
 GRAPH_API_RETRYABLE_STATUSES: frozenset[int] = frozenset({429, 500, 502, 503, 504})
 
 # The narrow set, the default for SDK queries through sleep_and_retry.

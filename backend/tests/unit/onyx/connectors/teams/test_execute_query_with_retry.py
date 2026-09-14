@@ -99,9 +99,9 @@ def test_reraises_after_exhausting_retries() -> None:
 
 
 def test_does_not_retry_when_response_is_missing() -> None:
-    # A ClientRequestException with no response (status=None) is not retryable.
-    # (The office365 ctor dereferences response.headers, so build it normally
-    # then null the response to exercise the helper's `response is None` branch.)
+    # A ClientRequestException with no response is not retryable unless a
+    # transport error is chained as its cause. (The office365 ctor dereferences
+    # response.headers, so build it normally then null the response.)
     exc = _client_request_exception(502)
     exc.response = None
     query = _query_returning(exc)

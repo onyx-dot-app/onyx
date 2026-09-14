@@ -44,8 +44,8 @@ class MicrosoftAuthMethod(Enum):
     def parse(cls, value: str | None) -> "MicrosoftAuthMethod":
         """Parse a credential's ``authentication_method`` field.
 
-        A missing field means client secret, which is what every credential
-        created before certificates existed carries.
+        A missing or empty field means client secret, which is what every
+        credential created before certificates existed carries.
         """
         if not value:
             return cls.CLIENT_SECRET
@@ -115,8 +115,8 @@ def build_msal_app(
     """Build the app-only MSAL client for a connector's credential.
 
     ``private_key_b64`` is the base64-encoded PFX bundle as stored on the
-    credential, not a PEM key. Callers parse the credential's method string
-    with :meth:`MicrosoftAuthMethod.parse` before calling.
+    credential, not a PEM key. A connector whose credential carries a method
+    string parses it with :meth:`MicrosoftAuthMethod.parse` first.
 
     Callers own presence checks on the ids. Validating them here would give
     every caller SharePoint's ``ConnectorValidationError``, which cancels the

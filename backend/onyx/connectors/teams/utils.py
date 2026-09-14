@@ -10,6 +10,7 @@ from office365.teams.channels.channel import Channel, ConversationMember
 from onyx.access.models import ExternalAccess
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.microsoft_utils.graph_client import (
+    GRAPH_API_MAX_RETRIES,
     GRAPH_API_RETRYABLE_STATUSES,
     backoff_seconds,
     sleep_and_retry,
@@ -27,10 +28,10 @@ _PUBLIC_MEMBERSHIP_TYPE = "standard"  # public teams channel
 def execute_query_with_retry(
     query: ClientQuery,
     method_name: str,
-    max_retries: int = 5,
+    max_retries: int = GRAPH_API_MAX_RETRIES,
 ) -> Any:
     """Teams' retry policy for ``office365`` SDK queries: the wide Graph status
-    set and more attempts than the SharePoint default. Non-retryable statuses
+    set and more attempts than ``sleep_and_retry`` defaults to. Non-retryable statuses
     (401/403/404, a malformed OData filter 400) and exhausted retries re-raise
     for the caller to handle.
     """
