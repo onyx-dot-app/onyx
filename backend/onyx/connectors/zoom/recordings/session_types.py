@@ -7,8 +7,39 @@ import abc
 from datetime import datetime
 
 from onyx.connectors.zoom.client import ZoomClient
-from onyx.connectors.zoom.models import ZoomMeetingOccurrence, ZoomPastMeetingDetails
+from onyx.connectors.zoom.models import ZoomSessionDetails, ZoomSessionOccurrence
 from onyx.connectors.zoom.recordings.models import ZoomSessionType
+
+# Zoom's `type` code on an entry of the recording listing. The codes and their
+# meeting/webinar split come from `meetings[].type` on Cloud Recording > List all
+# recordings (GET /users/{userId}/recordings):
+# https://developers.zoom.us/docs/api/meetings/#tag/cloud-recording/get/users/%7BuserId%7D/recordings
+_MEETING_RECORDING_TYPES = frozenset({"1", "2", "3", "4", "7", "8"})
+_WEBINAR_RECORDING_TYPES = frozenset({"5", "6", "9"})
+_UPLOADED_RECORDING_TYPE = "99"
+
+
+def session_type_for_recording(recording_type: int | str) -> ZoomSessionType | None:
+    """None means the entry is not a session to index. The code is compared as text
+    because Zoom documents it as a string and sends it as an integer.
+
+    Zoom's enum is closed, so a code that matches neither set is a web-portal upload
+    or something Zoom added later. Neither is guessed at: a document id freezes the
+    session type and ticket 04 picks the access-list endpoint from it, so a wrong
+    guess cannot be corrected once the document exists.
+    """
+    code = str(recording_type)
+    if code in _WEBINAR_RECORDING_TYPES:
+        return ZoomSessionType.WEBINAR
+    if code in _MEETING_RECORDING_TYPES:
+        return ZoomSessionType.MEETING
+    return None
+
+
+def is_portal_upload(recording_type: int | str) -> bool:
+    """A file uploaded through Zoom's web Recordings page. Normal to find and normal
+    to skip, unlike a code we simply don't recognise."""
+    return str(recording_type) == _UPLOADED_RECORDING_TYPE
 
 
 class SessionTypeHandler(abc.ABC):
@@ -21,7 +52,7 @@ class SessionTypeHandler(abc.ABC):
         session_id: str,
         window_start: datetime,
         window_end: datetime,
-    ) -> list[ZoomMeetingOccurrence]:
+    ) -> list[ZoomSessionOccurrence]:
         """The window is a request to Zoom, not a promise: an endpoint that
         can't scope by date ignores it and hands back everything."""
         raise NotImplementedError
@@ -29,7 +60,7 @@ class SessionTypeHandler(abc.ABC):
     @abc.abstractmethod
     def get_occurrence_details(
         self, client: ZoomClient, occurrence_uuid: str
-    ) -> ZoomPastMeetingDetails | None:
+    ) -> ZoomSessionDetails:
         raise NotImplementedError
 
 
@@ -42,19 +73,39 @@ class MeetingSessionType(SessionTypeHandler):
         session_id: str,
         window_start: datetime,
         window_end: datetime,
-    ) -> list[ZoomMeetingOccurrence]:
+    ) -> list[ZoomSessionOccurrence]:
         return client.list_past_meeting_occurrences(
             session_id, window_start, window_end
         )
 
     def get_occurrence_details(
         self, client: ZoomClient, occurrence_uuid: str
-    ) -> ZoomPastMeetingDetails | None:
+    ) -> ZoomSessionDetails:
         return client.get_past_meeting_details(occurrence_uuid)
+
+
+class WebinarSessionType(SessionTypeHandler):
+    session_type = ZoomSessionType.WEBINAR
+
+    def list_occurrences(
+        self,
+        client: ZoomClient,
+        session_id: str,
+        window_start: datetime,  # noqa: ARG002
+        window_end: datetime,  # noqa: ARG002
+    ) -> list[ZoomSessionOccurrence]:
+        # Zoom's past-webinar instances endpoint takes no date scope.
+        return client.list_past_webinar_occurrences(session_id)
+
+    def get_occurrence_details(
+        self, client: ZoomClient, occurrence_uuid: str
+    ) -> ZoomSessionDetails:
+        return client.get_webinar_details(occurrence_uuid)
 
 
 _HANDLERS: dict[ZoomSessionType, SessionTypeHandler] = {
     ZoomSessionType.MEETING: MeetingSessionType(),
+    ZoomSessionType.WEBINAR: WebinarSessionType(),
 }
 
 
