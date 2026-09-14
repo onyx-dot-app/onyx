@@ -2,8 +2,10 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/jmelahman/tag/git"
+
 	"github.com/spf13/cobra"
+
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/release"
 )
 
 // NewLatestStableTagCommand creates the latest-stable-tag command.
@@ -19,7 +21,7 @@ qualifies. Tags with pre-release suffixes (e.g. v1.2.3-beta,
 v1.2.3-cloud.1) are excluded.`,
 		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
-			tag, err := git.GetLatestStableSemverTag("")
+			tag, err := release.LatestStableTag()
 			if err != nil {
 				return fmt.Errorf("get latest stable semver tag: %w", err)
 			}
