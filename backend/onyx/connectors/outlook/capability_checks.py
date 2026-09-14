@@ -53,6 +53,12 @@ _PROBE_WELL_KNOWN_FOLDER = "junkemail"
 # One item proves the permission. More only spends the tenant's budget.
 _PROBE_PAGE_SIZE = 1
 
+# Graph may answer a delta request with an empty page and a next link, so a
+# few pages are followed before the Inbox counts as empty.
+_PROBE_DELTA_PAGES = 3
+
+_TOKEN_ENDPOINT_DENIED = "Microsoft's token endpoint refused the request."
+
 # Mail.ReadBasic.All answers every metadata call but refuses bodies, so the
 # read probe must fetch one body to tell the two grants apart.
 _BODY_DENIED = (
@@ -116,6 +122,8 @@ class _TokenAuthCheck(CapabilityCheck):
             _gateway(context).check_token()
         except OutlookAuthError as e:
             raise_for_auth_error(e)
+        except OutlookGraphError as e:
+            raise_for_graph_error(e, _TOKEN_ENDPOINT_DENIED)
 
 
 class _MailboxListingCheck(CapabilityCheck):
@@ -160,6 +168,7 @@ class _MailReadCheck(CapabilityCheck):
         gateway = _gateway(context)
         mailbox = _first_mailbox(gateway, context)
         denied = f"The app cannot read mail in `{mailbox.address}`."
+        conversation_id: str | None = None
         try:
             inbox = gateway.probe_mailbox(mailbox_id=mailbox.id)
             gateway.get_well_known_folder(
@@ -168,22 +177,35 @@ class _MailReadCheck(CapabilityCheck):
             gateway.list_child_folders(
                 mailbox_id=mailbox.id, page_size=_PROBE_PAGE_SIZE
             )
-            page = gateway.fetch_folder_delta_page(
-                mailbox_id=mailbox.id, folder_id=inbox.id, page_size=_PROBE_PAGE_SIZE
-            )
+            next_link: str | None = None
+            for _ in range(_PROBE_DELTA_PAGES):
+                page = gateway.fetch_folder_delta_page(
+                    mailbox_id=mailbox.id,
+                    folder_id=inbox.id,
+                    page_size=_PROBE_PAGE_SIZE,
+                    next_link=next_link,
+                )
+                conversation_id = next(
+                    (
+                        c.conversation_id
+                        for c in page.changes
+                        if not c.removed and c.conversation_id
+                    ),
+                    None,
+                )
+                next_link = page.next_link
+                if conversation_id is not None or next_link is None:
+                    break
         except OutlookGraphError as e:
             raise_for_graph_error(e, denied)
 
-        conversation_id = next(
-            (c.conversation_id for c in page.changes if c.conversation_id), None
-        )
         if conversation_id is None:
             return
         try:
-            gateway.list_conversation_messages(
+            gateway.fetch_conversation_messages_page(
                 mailbox_id=mailbox.id,
                 conversation_id=conversation_id,
-                limit=_PROBE_PAGE_SIZE,
+                page_size=_PROBE_PAGE_SIZE,
             )
         except OutlookGraphError as e:
             raise_for_graph_error(e, _BODY_DENIED)

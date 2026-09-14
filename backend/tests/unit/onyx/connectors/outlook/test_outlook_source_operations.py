@@ -13,6 +13,7 @@ import requests
 
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.outlook.models import (
+    INVALID_AUTHORITY_CODE,
     MISSING_CREDENTIAL_CODE,
     OutlookAuthError,
     OutlookGraphError,
@@ -154,12 +155,34 @@ def test_transport_failure_after_retries_is_a_graph_error_without_status() -> No
     client.get_json.side_effect = requests.Timeout("read timed out")
 
     with pytest.raises(OutlookGraphError) as exc_info:
-        gateway.list_conversation_messages(
-            mailbox_id=MAILBOX_ID, conversation_id=CONVERSATION_ID, limit=10
+        gateway.fetch_conversation_messages_page(
+            mailbox_id=MAILBOX_ID, conversation_id=CONVERSATION_ID
         )
 
     assert exc_info.value.status is None
     assert exc_info.value.code == "Timeout"
+
+
+def test_unreadable_body_after_retries_is_a_graph_error_without_status() -> None:
+    gateway, client = _gateway()
+    client.get_json.side_effect = ValueError("Expecting value: line 1 column 1")
+
+    with pytest.raises(OutlookGraphError) as exc_info:
+        gateway.probe_mailbox(mailbox_id=MAILBOX_ID)
+
+    assert exc_info.value.status is None
+    assert exc_info.value.code == "ValueError"
+
+
+def test_principal_names_starting_with_a_dollar_use_the_key_literal_form() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = user_json()
+
+    gateway.resolve_mailbox(address="$svc@contoso.com")
+
+    assert (
+        client.get_json.call_args.args[0] == f"{GRAPH_BASE}/users('$svc@contoso.com')"
+    )
 
 
 def test_well_known_folder_lookup_treats_404_as_absent() -> None:
@@ -194,10 +217,22 @@ def test_child_folder_listing_marks_search_folders() -> None:
         mailbox_id=MAILBOX_ID, parent_folder_id=INBOX_ID
     )
 
-    assert client.get_json.call_args.args[0].endswith(
-        f"/mailFolders/{INBOX_ID}/childFolders"
-    )
+    url, params = client.get_json.call_args.args[:2]
+    assert url.endswith(f"/mailFolders/{INBOX_ID}/childFolders")
+    assert params["includeHiddenFolders"] == "true"
     assert [f.is_search_folder for f in result.folders] == [False, True]
+
+
+def test_folder_listing_marks_hidden_folders() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = page_json(
+        [folder_json(), folder_json(id="hidden-1", isHidden=True)]
+    )
+
+    result = gateway.list_child_folders(mailbox_id=MAILBOX_ID)
+
+    assert client.get_json.call_args.args[0].endswith("/mailFolders")
+    assert [f.is_hidden for f in result.folders] == [False, True]
 
 
 def test_delta_page_sends_query_params_once_and_the_page_size_header_always() -> None:
@@ -247,41 +282,60 @@ def test_delta_page_without_a_window_sends_no_filter() -> None:
     assert "$filter" not in client.get_json.call_args.args[1]
 
 
-def test_conversation_messages_come_newest_first_as_text_up_to_the_limit() -> None:
+def test_conversation_page_orders_newest_first_and_reads_text_bodies() -> None:
     gateway, client = _gateway()
     html = message_json(
         id="msg-2",
         body={"contentType": "html", "content": "<p>Hi <b>Bob</b></p>"},
     )
-    client.get_json.side_effect = [
-        page_json([message_json(), html], next_link="https://graph/messages?page=2"),
-        page_json([message_json(id="msg-3"), message_json(id="msg-4")]),
-    ]
-
-    result = gateway.list_conversation_messages(
-        mailbox_id=MAILBOX_ID, conversation_id="conv'1", limit=3
+    client.get_json.return_value = page_json(
+        [message_json(), html], next_link="https://graph/messages?page=2"
     )
 
-    first_url, first_params, first_headers = client.get_json.call_args_list[0].args
-    assert first_url == f"{GRAPH_BASE}/users/{MAILBOX_ID}/messages"
-    assert first_params["$filter"] == (
+    result = gateway.fetch_conversation_messages_page(
+        mailbox_id=MAILBOX_ID, conversation_id="conv'1", page_size=3
+    )
+
+    url, params, headers = client.get_json.call_args.args
+    assert url == f"{GRAPH_BASE}/users/{MAILBOX_ID}/messages"
+    assert params["$filter"] == (
         f"receivedDateTime ge {EPOCH_TIMESTAMP} and conversationId eq 'conv''1'"
     )
-    assert first_params["$orderby"] == "receivedDateTime desc"
-    assert first_params["$top"] == "3"
-    assert first_headers == {"Prefer": TEXT_BODY_PREFERENCE}
-    assert client.get_json.call_args_list[1].args[1] is None
-    assert [m.id for m in result] == ["msg-1", "msg-2", "msg-3"]
-    assert result[1].body_text == "Hi Bob"
-    assert result[0].sender is not None and result[0].sender.address == MAILBOX_ADDRESS
+    assert params["$orderby"] == "receivedDateTime desc"
+    assert params["$top"] == "3"
+    assert headers == {"Prefer": TEXT_BODY_PREFERENCE}
+    assert [m.id for m in result.messages] == ["msg-1", "msg-2"]
+    assert result.messages[1].body_text == "Hi Bob"
+    assert result.messages[0].sender is not None
+    assert result.messages[0].sender.address == MAILBOX_ADDRESS
+    assert result.next_link == "https://graph/messages?page=2"
 
 
-def test_conversation_page_size_never_exceeds_the_graph_maximum() -> None:
+def test_conversation_next_page_keeps_the_body_preference_and_drops_params() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = page_json([message_json(id="msg-3")])
+
+    result = gateway.fetch_conversation_messages_page(
+        mailbox_id=MAILBOX_ID,
+        conversation_id=CONVERSATION_ID,
+        next_link="https://graph/messages?page=2",
+    )
+
+    assert client.get_json.call_args.args == (
+        "https://graph/messages?page=2",
+        None,
+        {"Prefer": TEXT_BODY_PREFERENCE},
+    )
+    assert [m.id for m in result.messages] == ["msg-3"]
+    assert result.next_link is None
+
+
+def test_conversation_page_size_defaults_to_the_message_page_size() -> None:
     gateway, client = _gateway()
     client.get_json.return_value = page_json([])
 
-    gateway.list_conversation_messages(
-        mailbox_id=MAILBOX_ID, conversation_id=CONVERSATION_ID, limit=5000
+    gateway.fetch_conversation_messages_page(
+        mailbox_id=MAILBOX_ID, conversation_id=CONVERSATION_ID
     )
 
     assert client.get_json.call_args.args[1]["$top"] == str(MESSAGES_PAGE_SIZE)
@@ -298,6 +352,38 @@ def test_missing_credential_field_fails_before_msal_is_built() -> None:
 
     assert exc_info.value.code == MISSING_CREDENTIAL_CODE
     build.assert_not_called()
+
+
+def test_unknown_directory_is_an_auth_error_with_a_stable_code() -> None:
+    gateway, _ = _gateway()
+
+    with (
+        patch(
+            f"{MODULE}.build_msal_app",
+            side_effect=ValueError("Unable to get authority configuration"),
+        ),
+        pytest.raises(OutlookAuthError) as exc_info,
+    ):
+        gateway.check_token()
+
+    assert exc_info.value.code == INVALID_AUTHORITY_CODE
+
+
+def test_token_endpoint_transport_failure_is_a_graph_error() -> None:
+    gateway, _ = _gateway()
+
+    with (
+        patch(f"{MODULE}.build_msal_app"),
+        patch(
+            f"{MODULE}.acquire_graph_token",
+            side_effect=requests.ConnectionError("login unreachable"),
+        ),
+        pytest.raises(OutlookGraphError) as exc_info,
+    ):
+        gateway.check_token()
+
+    assert exc_info.value.status is None
+    assert exc_info.value.code == "ConnectionError"
 
 
 def test_check_token_maps_msal_refusal() -> None:

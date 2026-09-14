@@ -30,6 +30,7 @@ from onyx.connectors.microsoft_utils.graph_env import (
     DEFAULT_GRAPH_API_HOST,
 )
 from onyx.connectors.outlook.models import (
+    INVALID_AUTHORITY_CODE,
     MISSING_CREDENTIAL_CODE,
     OutlookAuthError,
     OutlookDeltaPage,
@@ -40,6 +41,7 @@ from onyx.connectors.outlook.models import (
     OutlookMailboxPage,
     OutlookMessage,
     OutlookMessageChange,
+    OutlookMessagePage,
     OutlookRecipient,
     OutlookTokenInfo,
 )
@@ -73,7 +75,7 @@ FOLDERS_PAGE_SIZE = 250
 MESSAGES_PAGE_SIZE = 100
 
 MAILBOX_SELECT = "id,mail,userPrincipalName,displayName"
-FOLDER_SELECT = "id,displayName,parentFolderId,childFolderCount"
+FOLDER_SELECT = "id,displayName,parentFolderId,childFolderCount,isHidden"
 # The delta walk only needs to know which conversations changed.
 CHANGE_SELECT = "id,conversationId,receivedDateTime"
 MESSAGE_SELECT = ",".join(
@@ -107,8 +109,8 @@ def _odata_quote(value: str) -> str:
     return value.replace("'", "''")
 
 
-def _to_graph_error(error: requests.RequestException) -> OutlookGraphError:
-    response = error.response
+def _to_graph_error(error: Exception) -> OutlookGraphError:
+    response = error.response if isinstance(error, requests.RequestException) else None
     if response is None:
         return OutlookGraphError(None, type(error).__name__, str(error))
     try:
@@ -158,6 +160,7 @@ def _parse_folder(raw: dict[str, Any]) -> OutlookFolder:
         parent_folder_id=raw.get("parentFolderId"),
         child_folder_count=raw.get("childFolderCount") or 0,
         is_search_folder=raw.get("@odata.type") == SEARCH_FOLDER_TYPE,
+        is_hidden=bool(raw.get("isHidden")),
     )
 
 
@@ -228,18 +231,29 @@ class OutlookSourceOperations(SourceOperations):
                 raise OutlookAuthError(
                     MISSING_CREDENTIAL_CODE, "missing " + ", ".join(missing)
                 )
-            self._auth_context = build_msal_app(
-                client_id=credentials[CREDENTIAL_CLIENT_ID],
-                directory_id=credentials[CREDENTIAL_DIRECTORY_ID],
-                authority_host=self._config_value(
-                    CONFIG_AUTHORITY_HOST, DEFAULT_AUTHORITY_HOST
-                ),
-                client_secret=credentials[CREDENTIAL_CLIENT_SECRET],
-            )
+            # MSAL validates the authority against Microsoft's discovery
+            # endpoint while building the app, so an unknown directory and a
+            # network failure both surface here.
+            try:
+                self._auth_context = build_msal_app(
+                    client_id=credentials[CREDENTIAL_CLIENT_ID],
+                    directory_id=credentials[CREDENTIAL_DIRECTORY_ID],
+                    authority_host=self._config_value(
+                        CONFIG_AUTHORITY_HOST, DEFAULT_AUTHORITY_HOST
+                    ),
+                    client_secret=credentials[CREDENTIAL_CLIENT_SECRET],
+                )
+            except ValueError as e:
+                raise OutlookAuthError(INVALID_AUTHORITY_CODE, str(e)) from e
+            except requests.RequestException as e:
+                raise _to_graph_error(e) from e
         return self._auth_context
 
     def _token_response(self) -> dict[str, Any]:
-        response = acquire_graph_token(self._auth().app, self._graph_host())
+        try:
+            response = acquire_graph_token(self._auth().app, self._graph_host())
+        except requests.RequestException as e:
+            raise _to_graph_error(e) from e
         if "access_token" not in response:
             raise OutlookAuthError(
                 str(response.get("error") or "unknown_error"),
@@ -261,12 +275,20 @@ class OutlookSourceOperations(SourceOperations):
         params: dict[str, str] | None = None,
         headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
+        # The shared client re-raises a transport error or a non-JSON body once
+        # its retries are spent. Both become gateway errors so callers see one
+        # failure type.
         try:
             return self._client().get_json(url, params, headers)
-        except requests.RequestException as e:
+        except (requests.RequestException, ValueError) as e:
             raise _to_graph_error(e) from e
 
     def _user_url(self, mailbox_id: str) -> str:
+        # Graph rejects the slash form for a principal name that starts with
+        # ``$`` and documents the key-literal form for those.
+        if mailbox_id.startswith("$"):
+            literal = quote(_odata_quote(mailbox_id), safe="@$'")
+            return f"{self._graph_base()}/users('{literal}')"
         return f"{self._graph_base()}/users/{quote(mailbox_id, safe='@')}"
 
     @source_operation(
@@ -382,7 +404,11 @@ class OutlookSourceOperations(SourceOperations):
         page_size: int = FOLDERS_PAGE_SIZE,
         next_link: str | None = None,
     ) -> OutlookFolderPage:
-        """One page of folders directly under a folder, or under the root when None."""
+        """One page of folders directly under a folder, or under the root when None.
+
+        Hidden folders are asked for too, since Graph omits them by default and
+        an excluded subtree's hidden descendants must be known to be excluded.
+        """
         params = None
         url = next_link
         if url is None:
@@ -390,7 +416,11 @@ class OutlookSourceOperations(SourceOperations):
                 url = f"{self._user_url(mailbox_id)}/mailFolders"
             else:
                 url = f"{self._user_url(mailbox_id)}/mailFolders/{parent_folder_id}/childFolders"
-            params = {"$select": FOLDER_SELECT, "$top": str(page_size)}
+            params = {
+                "$select": FOLDER_SELECT,
+                "$top": str(page_size),
+                "includeHiddenFolders": "true",
+            }
         data = self._get(url, params)
         return OutlookFolderPage(
             folders=[_parse_folder(raw) for raw in data.get("value", [])],
@@ -443,30 +473,36 @@ class OutlookSourceOperations(SourceOperations):
             "empty, so the harness never sees the call."
         ),
     )
-    def list_conversation_messages(
-        self, *, mailbox_id: str, conversation_id: str, limit: int
-    ) -> list[OutlookMessage]:
-        """The newest ``limit`` messages of one conversation in one mailbox, newest
-        first, bodies as text.
+    def fetch_conversation_messages_page(
+        self,
+        *,
+        mailbox_id: str,
+        conversation_id: str,
+        page_size: int = MESSAGES_PAGE_SIZE,
+        next_link: str | None = None,
+    ) -> OutlookMessagePage:
+        """One page of a conversation's messages in one mailbox, newest first,
+        bodies as text.
 
         Ordering needs the ordered property to lead the filter, hence the
         always-true ``receivedDateTime`` bound ahead of the conversation id.
+        The body preference is a header, so it goes with every request.
         """
-        params: dict[str, str] | None = {
-            "$filter": (
-                f"receivedDateTime ge {EPOCH_TIMESTAMP} and "
-                f"conversationId eq '{_odata_quote(conversation_id)}'"
-            ),
-            "$orderby": "receivedDateTime desc",
-            "$select": MESSAGE_SELECT,
-            "$top": str(min(limit, MESSAGES_PAGE_SIZE)),
-        }
-        headers = {"Prefer": TEXT_BODY_PREFERENCE}
-        url: str | None = f"{self._user_url(mailbox_id)}/messages"
-        messages: list[OutlookMessage] = []
-        while url is not None and len(messages) < limit:
-            data = self._get(url, params, headers)
-            params = None
-            messages.extend(_parse_message(raw) for raw in data.get("value", []))
-            url = data.get("@odata.nextLink")
-        return messages[:limit]
+        params = None
+        url = next_link
+        if url is None:
+            url = f"{self._user_url(mailbox_id)}/messages"
+            params = {
+                "$filter": (
+                    f"receivedDateTime ge {EPOCH_TIMESTAMP} and "
+                    f"conversationId eq '{_odata_quote(conversation_id)}'"
+                ),
+                "$orderby": "receivedDateTime desc",
+                "$select": MESSAGE_SELECT,
+                "$top": str(page_size),
+            }
+        data = self._get(url, params, {"Prefer": TEXT_BODY_PREFERENCE})
+        return OutlookMessagePage(
+            messages=[_parse_message(raw) for raw in data.get("value", [])],
+            next_link=data.get("@odata.nextLink"),
+        )

@@ -24,10 +24,6 @@ CONFIG_MAILBOXES = "mailboxes"
 # no mailbox behind the user. Anything else is a failure of the call.
 MAILBOX_UNAVAILABLE_STATUSES = frozenset({403, 404})
 
-# Validation probes at most this many named mailboxes, so a long list still
-# validates in time. Indexing walks every one of them.
-MAX_PROBED_MAILBOXES = 25
-
 
 def configured_addresses(config: dict[str, Any] | None) -> list[str]:
     raw = (config or {}).get(CONFIG_MAILBOXES) or []
@@ -53,7 +49,7 @@ def describe_unavailable_mailboxes(
     itself, such as a denied user listing or a throttled call.
     """
     problems: list[str] = []
-    for address in addresses[:MAX_PROBED_MAILBOXES]:
+    for address in addresses:
         mailbox = resolve_mailbox_for_validation(gateway, address)
         if mailbox is None:
             problems.append(f"{address} (no such user)")

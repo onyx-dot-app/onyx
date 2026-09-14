@@ -14,6 +14,7 @@ from onyx.connectors.exceptions import (
     UnexpectedValidationError,
 )
 from onyx.connectors.outlook.models import (
+    INVALID_AUTHORITY_CODE,
     MISSING_CREDENTIAL_CODE,
     OutlookAuthError,
     OutlookGraphError,
@@ -47,6 +48,11 @@ def raise_for_auth_error(error: OutlookAuthError) -> NoReturn:
     if error.code == MISSING_CREDENTIAL_CODE:
         raise CredentialInvalidError(
             f"Outlook credential is incomplete: {error}"
+        ) from error
+    if error.code == INVALID_AUTHORITY_CODE:
+        raise CredentialInvalidError(
+            "Microsoft does not know this directory. Check the directory "
+            f"(tenant) id and the authority host ({error})."
         ) from error
     if error.code == "invalid_client":
         raise CredentialInvalidError(

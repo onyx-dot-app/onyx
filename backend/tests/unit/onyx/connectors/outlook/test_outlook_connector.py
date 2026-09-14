@@ -18,12 +18,14 @@ from onyx.connectors.models import (
     HierarchyNode,
 )
 from onyx.connectors.outlook.connector import (
+    CONVERSATION_FETCH_LIMIT,
     FILTERED_DELTA_CAP,
     MAX_MESSAGES_PER_CONVERSATION,
     OutlookCheckpoint,
     OutlookConnector,
     build_conversation_document,
     conversation_document_id,
+    indexable_messages,
     mailbox_node_id,
 )
 from onyx.connectors.outlook.models import (
@@ -32,6 +34,7 @@ from onyx.connectors.outlook.models import (
     OutlookFolder,
     OutlookFolderPage,
     OutlookMailboxPage,
+    OutlookMessagePage,
     OutlookRecipient,
 )
 from onyx.connectors.outlook.source_operations import OutlookSourceOperations
@@ -51,6 +54,8 @@ from tests.unit.onyx.connectors.outlook.outlook_api_shapes import (
 JUNK_ID = "folder-junk"
 DELETED_ID = "folder-deleted"
 DELETED_CHILD_ID = "folder-deleted-2024"
+HIDDEN_ID = "folder-hidden"
+HIDDEN_CHILD_ID = "folder-hidden-child"
 ARCHIVE_ID = "folder-archive"
 PROJECTS_ID = "folder-projects"
 SEARCH_ID = "folder-search"
@@ -81,37 +86,33 @@ def _child_folders(
     next_link: str | None = None,
 ) -> OutlookFolderPage:
     del mailbox_id, page_size, next_link
-    if parent_folder_id is None:
-        return OutlookFolderPage(
-            folders=[
-                folder(child_folder_count=1),
-                folder(id=JUNK_ID, display_name="Junk Email"),
-                folder(
-                    id=DELETED_ID, display_name="Deleted Items", child_folder_count=1
-                ),
-                folder(id=SEARCH_ID, display_name="Digests", is_search_folder=True),
-                folder(id=ARCHIVE_ID, display_name="Archive"),
-            ]
-        )
-    if parent_folder_id == INBOX_ID:
-        return OutlookFolderPage(
-            folders=[
-                folder(
-                    id=PROJECTS_ID, display_name="Projects", parent_folder_id=INBOX_ID
-                )
-            ]
-        )
-    if parent_folder_id == DELETED_ID:
-        return OutlookFolderPage(
-            folders=[
-                folder(
-                    id=DELETED_CHILD_ID,
-                    display_name="2024",
-                    parent_folder_id=DELETED_ID,
-                )
-            ]
-        )
-    return OutlookFolderPage(folders=[])
+    children = {
+        None: [
+            folder(child_folder_count=1),
+            folder(id=JUNK_ID, display_name="Junk Email"),
+            folder(id=DELETED_ID, display_name="Deleted Items", child_folder_count=1),
+            folder(id=SEARCH_ID, display_name="Digests", is_search_folder=True),
+            folder(
+                id=HIDDEN_ID,
+                display_name="Quick Step Settings",
+                is_hidden=True,
+                child_folder_count=1,
+            ),
+            folder(id=ARCHIVE_ID, display_name="Archive"),
+        ],
+        INBOX_ID: [
+            folder(id=PROJECTS_ID, display_name="Projects", parent_folder_id=INBOX_ID)
+        ],
+        DELETED_ID: [
+            folder(
+                id=DELETED_CHILD_ID, display_name="2024", parent_folder_id=DELETED_ID
+            )
+        ],
+        HIDDEN_ID: [
+            folder(id=HIDDEN_CHILD_ID, display_name="Cache", parent_folder_id=HIDDEN_ID)
+        ],
+    }
+    return OutlookFolderPage(folders=children.get(parent_folder_id, []))
 
 
 def _delta(
@@ -128,7 +129,10 @@ def _delta(
     return OutlookDeltaPage(
         changes=[
             change(),
-            change(id="msg-gone", removed=True, conversation_id=None),
+            # A deletion Graph reports with the conversation it belonged to.
+            change(id="msg-removed", removed=True, conversation_id="conv-removed"),
+            # A row Graph reports without any conversation.
+            change(id="msg-no-conversation", conversation_id=None),
             change(id="msg-2"),
             change(
                 id="msg-late",
@@ -154,13 +158,16 @@ def _happy_gateway() -> MagicMock:
     gateway.get_well_known_folder.side_effect = _well_known
     gateway.list_child_folders.side_effect = _child_folders
     gateway.fetch_folder_delta_page.side_effect = _delta
-    gateway.list_conversation_messages.return_value = [
-        message(id="msg-2", received_at=RECEIVED + timedelta(hours=1)),
-        message(),
-        message(id="msg-junk", parent_folder_id=JUNK_ID),
-        message(id="msg-trashed-deep", parent_folder_id=DELETED_CHILD_ID),
-        message(id="msg-draft", is_draft=True),
-    ]
+    gateway.fetch_conversation_messages_page.return_value = OutlookMessagePage(
+        messages=[
+            message(id="msg-2", received_at=RECEIVED + timedelta(hours=1)),
+            message(),
+            message(id="msg-junk", parent_folder_id=JUNK_ID),
+            message(id="msg-trashed-deep", parent_folder_id=DELETED_CHILD_ID),
+            message(id="msg-hidden-deep", parent_folder_id=HIDDEN_CHILD_ID),
+            message(id="msg-draft", is_draft=True),
+        ]
+    )
     return gateway
 
 
@@ -225,10 +232,8 @@ def test_walk_yields_hierarchy_then_one_document_per_conversation() -> None:
     assert [doc.id for doc in docs] == [
         conversation_document_id(mailbox(), CONVERSATION_ID)
     ]
-    gateway.list_conversation_messages.assert_called_once_with(
-        mailbox_id=mailbox().id,
-        conversation_id=CONVERSATION_ID,
-        limit=MAX_MESSAGES_PER_CONVERSATION,
+    gateway.fetch_conversation_messages_page.assert_called_once_with(
+        mailbox_id=mailbox().id, conversation_id=CONVERSATION_ID, next_link=None
     )
 
 
@@ -239,7 +244,7 @@ def test_walk_skips_removed_old_late_and_repeated_changes() -> None:
 
     conversations = [
         call.kwargs["conversation_id"]
-        for call in gateway.list_conversation_messages.call_args_list
+        for call in gateway.fetch_conversation_messages_page.call_args_list
     ]
     assert conversations == [CONVERSATION_ID]
 
@@ -255,7 +260,7 @@ def test_walk_filters_delta_by_the_poll_window_start() -> None:
     )
 
 
-def test_walk_excludes_junk_deleted_and_search_folders_from_folders_walked() -> None:
+def test_walk_excludes_junk_deleted_hidden_and_search_folders() -> None:
     gateway = _happy_gateway()
 
     _run(_connector(gateway, mailboxes=[MAILBOX_ADDRESS]))
@@ -291,6 +296,8 @@ def test_excluded_subtrees_are_descended_so_their_folder_ids_are_known() -> None
         JUNK_ID,
         DELETED_ID,
         DELETED_CHILD_ID,
+        HIDDEN_ID,
+        HIDDEN_CHILD_ID,
     }
 
 
@@ -315,6 +322,54 @@ def test_document_drops_excluded_and_draft_messages_and_keeps_order() -> None:
     assert doc.metadata == {"mailbox": MAILBOX_ADDRESS, "message_count": "2"}
     assert [o.email for o in doc.primary_owners or []] == [MAILBOX_ADDRESS]
     assert [o.email for o in doc.secondary_owners or []] == ["bob@contoso.com"]
+
+
+def test_conversation_paging_continues_past_excluded_messages() -> None:
+    """Drafts and trashed replies among the newest messages must not displace
+    older indexable ones."""
+    gateway = _happy_gateway()
+    newest = [
+        message(
+            id=f"draft-{i}", is_draft=True, received_at=RECEIVED + timedelta(hours=i)
+        )
+        for i in range(60)
+    ] + [
+        message(id=f"kept-{i}", received_at=RECEIVED + timedelta(minutes=i))
+        for i in range(40)
+    ]
+    older = [
+        message(id=f"old-{i}", received_at=RECEIVED - timedelta(minutes=i))
+        for i in range(70)
+    ]
+    gateway.fetch_conversation_messages_page.side_effect = [
+        OutlookMessagePage(messages=newest, next_link="https://graph/messages?p=2"),
+        OutlookMessagePage(messages=older),
+    ]
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+
+    items, _ = _step(connector, _folder_checkpoint())
+
+    docs = [item for item in items if isinstance(item, Document)]
+    assert len(docs) == 1
+    assert len(docs[0].sections) == MAX_MESSAGES_PER_CONVERSATION
+    assert docs[0].doc_updated_at == RECEIVED + timedelta(minutes=39)
+    assert gateway.fetch_conversation_messages_page.call_count == 2
+
+
+def test_conversation_paging_stops_at_the_fetch_limit() -> None:
+    gateway = _happy_gateway()
+    drafts = [message(id=f"draft-{i}", is_draft=True) for i in range(100)]
+    gateway.fetch_conversation_messages_page.return_value = OutlookMessagePage(
+        messages=drafts, next_link="https://graph/messages?more"
+    )
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+
+    items, _ = _step(connector, _folder_checkpoint())
+
+    assert items == []
+    assert gateway.fetch_conversation_messages_page.call_count == (
+        CONVERSATION_FETCH_LIMIT // 100
+    )
 
 
 def test_unresolved_configured_mailbox_is_a_recorded_failure() -> None:
@@ -437,7 +492,7 @@ def test_folder_that_fills_the_filtered_cap_is_reread_without_the_filter() -> No
 
 def test_conversation_fetch_failure_is_a_document_failure() -> None:
     gateway = _happy_gateway()
-    gateway.list_conversation_messages.side_effect = graph_error(
+    gateway.fetch_conversation_messages_page.side_effect = graph_error(
         503, "ServiceUnavailable"
     )
 
@@ -451,13 +506,22 @@ def test_conversation_fetch_failure_is_a_document_failure() -> None:
     )
 
 
+def test_indexable_messages_drop_drafts_and_excluded_folders() -> None:
+    kept = message()
+
+    assert indexable_messages(
+        [message(is_draft=True), message(id="junk", parent_folder_id=JUNK_ID), kept],
+        {JUNK_ID},
+    ) == [kept]
+
+
 def test_conversation_keeps_only_the_newest_messages() -> None:
     messages = [
         message(id=f"msg-{i}", received_at=RECEIVED + timedelta(minutes=i))
         for i in range(MAX_MESSAGES_PER_CONVERSATION + 5)
     ]
 
-    doc = build_conversation_document(mailbox(), CONVERSATION_ID, messages, set())
+    doc = build_conversation_document(mailbox(), CONVERSATION_ID, messages)
 
     assert doc is not None
     assert len(doc.sections) == MAX_MESSAGES_PER_CONVERSATION
@@ -465,13 +529,8 @@ def test_conversation_keeps_only_the_newest_messages() -> None:
     assert doc.doc_created_at == messages[5].received_at
 
 
-def test_conversation_without_indexable_messages_is_dropped() -> None:
-    assert (
-        build_conversation_document(
-            mailbox(), CONVERSATION_ID, [message(is_draft=True)], set()
-        )
-        is None
-    )
+def test_conversation_without_messages_is_dropped() -> None:
+    assert build_conversation_document(mailbox(), CONVERSATION_ID, []) is None
 
 
 def test_conversation_without_a_subject_gets_a_placeholder_and_root_parent() -> None:
@@ -479,7 +538,6 @@ def test_conversation_without_a_subject_gets_a_placeholder_and_root_parent() -> 
         mailbox(),
         CONVERSATION_ID,
         [message(subject=None, parent_folder_id=None, sender=None, to_recipients=[])],
-        set(),
     )
 
     assert doc is not None
@@ -498,7 +556,6 @@ def test_senders_are_not_repeated_as_secondary_owners() -> None:
             message(sender=alice, to_recipients=[bob]),
             message(id="msg-2", sender=bob, to_recipients=[alice]),
         ],
-        set(),
     )
 
     assert doc is not None

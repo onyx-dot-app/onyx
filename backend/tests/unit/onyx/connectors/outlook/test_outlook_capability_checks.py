@@ -28,10 +28,12 @@ from onyx.connectors.exceptions import (
 )
 from onyx.connectors.outlook.capability_checks import build_outlook_indexing_checks
 from onyx.connectors.outlook.models import (
+    INVALID_AUTHORITY_CODE,
     MISSING_CREDENTIAL_CODE,
     OutlookAuthError,
     OutlookDeltaPage,
     OutlookFolderPage,
+    OutlookGraphError,
     OutlookMailboxPage,
     OutlookTokenInfo,
 )
@@ -99,12 +101,24 @@ def test_token_check_reports_a_blank_credential_field() -> None:
         _run("outlook_token_auth", _context(gateway))
 
 
-@pytest.mark.parametrize("code", ["invalid_client", "unauthorized_client", "weird"])
+@pytest.mark.parametrize(
+    "code", ["invalid_client", "unauthorized_client", INVALID_AUTHORITY_CODE, "weird"]
+)
 def test_token_check_maps_msal_refusals_to_invalid_credential(code: str) -> None:
     gateway = _gateway()
     gateway.check_token.side_effect = OutlookAuthError(code, "nope")
 
     with pytest.raises(CredentialInvalidError):
+        _run("outlook_token_auth", _context(gateway))
+
+
+def test_token_check_is_indeterminate_when_the_token_endpoint_is_unreachable() -> None:
+    gateway = _gateway()
+    gateway.check_token.side_effect = OutlookGraphError(
+        None, "ConnectionError", "login unreachable"
+    )
+
+    with pytest.raises(UnexpectedValidationError):
         _run("outlook_token_auth", _context(gateway))
 
 
@@ -160,7 +174,7 @@ def test_mail_read_check_probes_the_first_configured_mailbox() -> None:
     gateway.list_mailbox_users.assert_not_called()
     gateway.resolve_mailbox.assert_called_once_with(address="bob@contoso.com")
     gateway.fetch_folder_delta_page.assert_called_once_with(
-        mailbox_id=MAILBOX_ID, folder_id=INBOX_ID, page_size=1
+        mailbox_id=MAILBOX_ID, folder_id=INBOX_ID, page_size=1, next_link=None
     )
 
 
@@ -175,15 +189,46 @@ def test_mail_read_check_falls_back_to_the_first_tenant_user() -> None:
 
 def test_mail_read_check_reads_one_body_when_the_inbox_has_mail() -> None:
     gateway = _gateway()
+    gateway.fetch_folder_delta_page.return_value = OutlookDeltaPage(changes=[change()])
+
+    _run("outlook_mail_read", _context(gateway))
+
+    gateway.fetch_conversation_messages_page.assert_called_once_with(
+        mailbox_id=MAILBOX_ID, conversation_id=CONVERSATION_ID, page_size=1
+    )
+
+
+def test_mail_read_check_follows_empty_and_removal_only_delta_pages() -> None:
+    """Graph may answer with an empty page or a page of deletions before the
+    first message, and neither proves body access."""
+    gateway = _gateway()
+    gateway.fetch_folder_delta_page.side_effect = [
+        OutlookDeltaPage(changes=[], next_link="https://graph/delta?page=2"),
+        OutlookDeltaPage(
+            changes=[change(id="msg-gone", removed=True, conversation_id="conv-gone")],
+            next_link="https://graph/delta?page=3",
+        ),
+        OutlookDeltaPage(changes=[change()]),
+    ]
+
+    _run("outlook_mail_read", _context(gateway))
+
+    assert gateway.fetch_folder_delta_page.call_count == 3
+    gateway.fetch_conversation_messages_page.assert_called_once_with(
+        mailbox_id=MAILBOX_ID, conversation_id=CONVERSATION_ID, page_size=1
+    )
+
+
+def test_mail_read_check_gives_up_on_the_delta_after_a_few_empty_pages() -> None:
+    gateway = _gateway()
     gateway.fetch_folder_delta_page.return_value = OutlookDeltaPage(
-        changes=[change(id="msg-gone", removed=True, conversation_id=None), change()]
+        changes=[], next_link="https://graph/delta?again"
     )
 
     _run("outlook_mail_read", _context(gateway))
 
-    gateway.list_conversation_messages.assert_called_once_with(
-        mailbox_id=MAILBOX_ID, conversation_id=CONVERSATION_ID, limit=1
-    )
+    assert gateway.fetch_folder_delta_page.call_count == 3
+    gateway.fetch_conversation_messages_page.assert_not_called()
 
 
 def test_mail_read_check_skips_the_body_probe_on_an_empty_inbox() -> None:
@@ -191,14 +236,14 @@ def test_mail_read_check_skips_the_body_probe_on_an_empty_inbox() -> None:
 
     _run("outlook_mail_read", _context(gateway))
 
-    gateway.list_conversation_messages.assert_not_called()
+    gateway.fetch_conversation_messages_page.assert_not_called()
 
 
 def test_mail_read_check_tells_read_basic_apart_from_read() -> None:
     """Mail.ReadBasic.All answers every metadata probe and refuses only the body."""
     gateway = _gateway()
     gateway.fetch_folder_delta_page.return_value = OutlookDeltaPage(changes=[change()])
-    gateway.list_conversation_messages.side_effect = graph_error(403)
+    gateway.fetch_conversation_messages_page.side_effect = graph_error(403)
 
     with pytest.raises(InsufficientPermissionsError, match="Mail.ReadBasic.All"):
         _run("outlook_mail_read", _context(gateway))
@@ -279,6 +324,19 @@ def test_configured_check_lists_every_problem_address() -> None:
     assert "ghost@contoso.com" in message
     assert "denied@contoso.com (ErrorAccessDenied)" in message
     assert "ok@contoso.com" not in message
+
+
+def test_configured_check_probes_every_address_however_long_the_list() -> None:
+    gateway = _gateway()
+    addresses = [f"user{i}@contoso.com" for i in range(40)]
+    gateway.resolve_mailbox.side_effect = [mailbox()] * 39 + [None]
+
+    with pytest.raises(ConnectorValidationError, match="user39@contoso.com"):
+        _run(
+            "outlook_configured_mailboxes", _context(gateway, {"mailboxes": addresses})
+        )
+
+    assert gateway.resolve_mailbox.call_count == 40
 
 
 def test_configured_check_does_not_blame_the_mailbox_for_a_throttled_probe() -> None:

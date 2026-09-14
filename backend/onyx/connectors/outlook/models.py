@@ -13,14 +13,19 @@ from pydantic import BaseModel, ConfigDict
 # built so a half-filled form reads as a credential problem and not a KeyError.
 MISSING_CREDENTIAL_CODE = "missing_credential"
 
+# The OutlookAuthError code for a directory id Microsoft's discovery endpoint
+# does not know. MSAL reports it as a ValueError while building the app.
+INVALID_AUTHORITY_CODE = "invalid_authority"
+
 
 class OutlookGraphError(Exception):
     """A Graph request the gateway could not complete.
 
     Carries the HTTP status and Graph's machine-readable ``error.code`` so
     callers branch on those and never on the message text, which Microsoft
-    says may change at any time. A transport failure that outlived the
-    client's retries has no status and the exception class name as its code.
+    says may change at any time. A transport failure or an unreadable body
+    that outlived the client's retries has no status and the exception class
+    name as its code.
     """
 
     def __init__(self, status: int | None, code: str, message: str) -> None:
@@ -66,6 +71,9 @@ class OutlookFolder(BaseModel):
     # Search folders show messages that live elsewhere, so walking them would
     # index the same conversation twice.
     is_search_folder: bool = False
+    # Hidden folders hold client and system state, never mail a person filed,
+    # so they are excluded like Junk.
+    is_hidden: bool = False
 
 
 class OutlookFolderPage(BaseModel):
@@ -93,6 +101,11 @@ class OutlookMessage(BaseModel):
     sent_at: datetime | None = None
     web_link: str | None = None
     is_draft: bool = False
+
+
+class OutlookMessagePage(BaseModel):
+    messages: list[OutlookMessage]
+    next_link: str | None = None
 
 
 class OutlookMessageChange(BaseModel):

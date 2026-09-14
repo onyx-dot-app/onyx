@@ -74,8 +74,12 @@ logger = setup_logger()
 # names are localized and an admin's exclusion list is not.
 DEFAULT_EXCLUDED_WELL_KNOWN_FOLDERS = ("junkemail", "deleteditems", "drafts", "outbox")
 
-# A conversation longer than this keeps only its newest messages.
+# A conversation longer than this keeps only its newest indexable messages.
 MAX_MESSAGES_PER_CONVERSATION = 100
+
+# Raw messages read per conversation while looking for indexable ones, so a
+# thread that is mostly drafts or trashed replies stays bounded.
+CONVERSATION_FETCH_LIMIT = 500
 
 # Graph stops a filtered delta round at this many messages without saying so.
 # A folder that fills the cap is read again without the filter, which has no
@@ -188,29 +192,25 @@ def _owners(
     )
 
 
-def build_conversation_document(
-    mailbox: OutlookMailbox,
-    conversation_id: str,
-    messages: list[OutlookMessage],
-    excluded_folder_ids: set[str],
-) -> Document | None:
-    """Assemble one conversation into a document, oldest message first.
+def indexable_messages(
+    messages: list[OutlookMessage], excluded_folder_ids: set[str]
+) -> list[OutlookMessage]:
+    """Drop drafts and messages sitting in excluded folders."""
+    return [
+        message
+        for message in messages
+        if not message.is_draft and message.parent_folder_id not in excluded_folder_ids
+    ]
 
-    Drafts and messages sitting in excluded folders are dropped. None when
-    nothing indexable is left.
-    """
-    kept = sorted(
-        (
-            message
-            for message in messages
-            if not message.is_draft
-            and message.parent_folder_id not in excluded_folder_ids
-        ),
-        key=_message_sort_key,
-    )
+
+def build_conversation_document(
+    mailbox: OutlookMailbox, conversation_id: str, messages: list[OutlookMessage]
+) -> Document | None:
+    """Assemble indexable messages of one conversation into a document, oldest
+    first. None when there is nothing to index."""
+    kept = sorted(messages, key=_message_sort_key)[-MAX_MESSAGES_PER_CONVERSATION:]
     if not kept:
         return None
-    kept = kept[-MAX_MESSAGES_PER_CONVERSATION:]
 
     subject = next((m.subject for m in kept if m.subject), None) or "(no subject)"
     primary_owners, secondary_owners = _owners(kept)
@@ -281,6 +281,8 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
             self.ops.check_token()
         except OutlookAuthError as e:
             raise_for_auth_error(e)
+        except OutlookGraphError as e:
+            raise_for_graph_error(e, "Microsoft's token endpoint refused the request.")
 
         if not self.mailboxes:
             try:
@@ -464,6 +466,7 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
                         continue
                     is_excluded = (
                         parent_excluded
+                        or folder.is_hidden
                         or folder.id in excluded
                         or folder.display_name.casefold() in self.excluded_folder_names
                     )
@@ -570,12 +573,27 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
         excluded_folder_ids: set[str],
     ) -> Document | ConnectorFailure | None:
         document_id = conversation_document_id(mailbox, conversation_id)
+        # Pages arrive newest first, so the walk stops at the newest indexable
+        # messages however many drafts or trashed replies sit among them.
+        kept: list[OutlookMessage] = []
+        fetched = 0
+        next_link: str | None = None
         try:
-            messages = self.ops.list_conversation_messages(
-                mailbox_id=mailbox.id,
-                conversation_id=conversation_id,
-                limit=MAX_MESSAGES_PER_CONVERSATION,
-            )
+            while True:
+                page = self.ops.fetch_conversation_messages_page(
+                    mailbox_id=mailbox.id,
+                    conversation_id=conversation_id,
+                    next_link=next_link,
+                )
+                fetched += len(page.messages)
+                kept.extend(indexable_messages(page.messages, excluded_folder_ids))
+                next_link = page.next_link
+                if (
+                    next_link is None
+                    or len(kept) >= MAX_MESSAGES_PER_CONVERSATION
+                    or fetched >= CONVERSATION_FETCH_LIMIT
+                ):
+                    break
         except OutlookGraphError as e:
             return ConnectorFailure(
                 failed_document=DocumentFailure(document_id=document_id),
@@ -585,6 +603,4 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
                 ),
                 exception=e,
             )
-        return build_conversation_document(
-            mailbox, conversation_id, messages, excluded_folder_ids
-        )
+        return build_conversation_document(mailbox, conversation_id, kept)
