@@ -13,14 +13,14 @@ from typing import Any, Protocol, cast, runtime_checkable
 
 from fastapi.responses import StreamingResponse
 
-from onyx.llm.model_request import RequestFunctionCall, ToolCall
-from onyx.llm.model_response import (
+from onyx.llm.exceptions import LLMRateLimitError, LLMTimeoutError
+from onyx.llm.litellm_models import (
     ChatCompletionDeltaToolCall,
     ModelResponseStream,
-    ResponseFunctionCall,
+    ToolCall,
 )
+from onyx.llm.litellm_models import ToolFunctionCall as ToolFunctionCall
 from onyx.llm.models import Usage
-from onyx.llm.multi_llm import LLMRateLimitError, LLMTimeoutError
 from onyx.tracing.framework.span_data import GenerationSpanData
 from onyx.tracing.framework.spans import Span
 from onyx.tracing.llm_utils import record_llm_span_output
@@ -231,82 +231,41 @@ def merge_tool_call_delta(
     buffer: dict[int, ChatCompletionDeltaToolCall],
     delta: ChatCompletionDeltaToolCall,
 ) -> None:
-    """Merge a single streaming tool-call delta into the per-``index`` buffer.
-
-    Streaming tool calls from LiteLLM arrive as partial fragments:
-    - Early chunks for a given ``index`` usually carry ``id`` and
-      ``function.name`` (and possibly the first slice of ``function.arguments``).
-    - Subsequent chunks for the same ``index`` carry additional
-      ``function.arguments`` fragments with ``id`` / ``name`` set to ``None``.
-
-    This helper merges them in place: it preserves the first seen ``id`` and
-    ``function.name`` and concatenates ``function.arguments`` fragments. The
-    result is a dict of complete ``ChatCompletionDeltaToolCall`` objects
-    keyed by ``index`` that can be converted to fully-formed ``ToolCall``
-    objects via :func:`finalize_tool_calls`.
-    """
+    """Collect provider tool-call fragments for gateway responses."""
     existing = buffer.get(delta.index)
     if existing is None:
-        # Copy into a fresh pydantic model so later mutations don't leak back
-        # into the caller's chunk object.
-        delta_fn = delta.function
-        buffer[delta.index] = ChatCompletionDeltaToolCall(
-            id=delta.id,
-            index=delta.index,
-            type=delta.type,
-            function=(
-                ResponseFunctionCall(
-                    name=delta_fn.name if delta_fn else None,
-                    arguments=delta_fn.arguments if delta_fn else None,
-                )
-                if delta_fn is not None
-                else None
-            ),
-        )
+        buffer[delta.index] = delta.model_copy(deep=True)
         return
-
     if delta.id and not existing.id:
         existing.id = delta.id
-    if delta.function is not None:
-        if existing.function is None:
-            existing.function = ResponseFunctionCall(
-                name=delta.function.name,
-                arguments=delta.function.arguments,
-            )
-        else:
-            if delta.function.name and not existing.function.name:
-                existing.function.name = delta.function.name
-            if delta.function.arguments:
-                existing.function.arguments = (
-                    existing.function.arguments or ""
-                ) + delta.function.arguments
+    if delta.function is None:
+        return
+    if existing.function is None:
+        existing.function = delta.function.model_copy(deep=True)
+        return
+    if delta.function.name and not existing.function.name:
+        existing.function.name = delta.function.name
+    if delta.function.arguments:
+        existing.function.arguments = (
+            existing.function.arguments or ""
+        ) + delta.function.arguments
 
 
 def finalize_tool_calls(
     buffer: dict[int, ChatCompletionDeltaToolCall],
 ) -> list[ToolCall] | None:
-    """Convert a reassembled delta buffer into a list of complete ``ToolCall``.
-
-    Entries missing a required field (``id`` or ``function.name``) are skipped
-    — these would indicate a truncated / malformed stream, and it's safer to
-    log nothing for that index than to fabricate a partial record.
-    """
-    if not buffer:
-        return None
-
-    finalized: list[ToolCall] = []
-    for idx in sorted(buffer.keys()):
-        delta = buffer[idx]
-        if delta.id is None or delta.function is None or delta.function.name is None:
-            continue
-        finalized.append(
-            ToolCall(
-                id=delta.id,
-                type="function",
-                function=RequestFunctionCall(
-                    name=delta.function.name,
-                    arguments=delta.function.arguments or "",
-                ),
-            )
+    """Return complete calls in provider order; omit fragments without an ID or name."""
+    calls = [
+        ToolCall(
+            id=delta.id,
+            function=ToolFunctionCall(
+                name=delta.function.name,
+                arguments=delta.function.arguments or "",
+            ),
         )
-    return finalized or None
+        for _, delta in sorted(buffer.items())
+        if delta.id is not None
+        and delta.function is not None
+        and delta.function.name is not None
+    ]
+    return calls or None

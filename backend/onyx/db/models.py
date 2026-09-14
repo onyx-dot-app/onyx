@@ -1,3 +1,7 @@
+"""
+Auth/Authz (users, permissions, access) Tables
+"""
+
 import datetime
 import json
 from typing import Any, Literal, NotRequired
@@ -9,7 +13,7 @@ from fastapi_users_db_sqlalchemy import (
 )
 from fastapi_users_db_sqlalchemy.access_token import SQLAlchemyBaseAccessTokenTableUUID
 from fastapi_users_db_sqlalchemy.generics import TIMESTAMPAware
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, JsonValue, ValidationError
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -315,11 +319,6 @@ class NullFilteredString(TypeDecorator):
         dialect: Dialect,  # noqa: ARG002
     ) -> str | None:
         return value
-
-
-"""
-Auth/Authz (users, permissions, access) Tables
-"""
 
 
 class OAuthAccount(SQLAlchemyBaseOAuthAccountTableUUID, Base):
@@ -3221,7 +3220,12 @@ class ChatMessage(Base):
     model_display_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Requested reasoning effort plus the kwargs actually sent to the provider.
-    request_params: Mapped[dict[str, Any] | None] = mapped_column(
+    request_params: Mapped[dict[str, JsonValue] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+
+    # Ordered runtime output; display text and artifact relationships remain separate.
+    agent_transcript: Mapped[dict[str, JsonValue] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
 

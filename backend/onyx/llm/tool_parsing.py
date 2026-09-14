@@ -3,11 +3,10 @@
 import json
 import re
 import uuid
-from collections.abc import Sequence
 from html import unescape
 from typing import Any
 
-from onyx.llm.models import ToolCall, ToolDefinition
+from onyx.llm.models import ToolCall
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
 from onyx.utils.text_processing import find_all_json_objects
@@ -24,81 +23,7 @@ _XML_PARAMETER_RE = re.compile(
 )
 
 
-_FUNCTION_CALLS_OPEN_MARKER = "<function_calls"
-_FUNCTION_CALLS_OPEN_RE = re.compile(
-    r"<function_calls(?=[> \t\n\r]|\Z)", re.IGNORECASE | re.ASCII
-)
-_FUNCTION_CALLS_CLOSE_RE = re.compile(r"</function_calls>", re.IGNORECASE | re.ASCII)
-_SPACES = " \t"
-
-
-class XmlToolCallContentFilter:
-    """Streaming filter that strips XML-style tool call payload blocks from text.
-
-    Text that could be the start of a split "<function_calls" marker is held
-    back until the next chunk (or flush) decides it.
-    """
-
-    def __init__(self) -> None:
-        self._pending = ""
-        self._inside_block = False
-        # Empty until text is emitted.
-        self._last_emitted_char = ""
-        # Set after a removed block so spaces after it do not double up with
-        # spaces emitted before it. Line breaks are always kept.
-        self._drop_spaces = False
-
-    def process(self, content: str) -> str:
-        self._pending += content
-        output_parts: list[str] = []
-        while True:
-            if self._inside_block:
-                close = _FUNCTION_CALLS_CLOSE_RE.search(self._pending)
-                if close is None:
-                    break
-                self._pending = self._pending[close.end() :]
-                self._inside_block = False
-                self._drop_spaces = self._last_emitted_char in ("", *_SPACES)
-
-            if self._drop_spaces:
-                self._pending = self._pending.lstrip(_SPACES)
-                if not self._pending:
-                    break
-                self._drop_spaces = False
-
-            open_match = _FUNCTION_CALLS_OPEN_RE.search(self._pending)
-            if open_match is not None:
-                cut = open_match.start()
-            else:
-                # A possible marker prefix can only start at the last "<".
-                cut = self._pending.rfind("<")
-                if cut == -1 or not _FUNCTION_CALLS_OPEN_MARKER.startswith(
-                    self._pending[cut:].lower()
-                ):
-                    cut = len(self._pending)
-
-            if cut > 0:
-                output_parts.append(self._pending[:cut])
-                self._last_emitted_char = self._pending[cut - 1]
-
-            if open_match is None:
-                self._pending = self._pending[cut:]
-                break
-            self._pending = self._pending[open_match.end() :]
-            self._inside_block = True
-
-        return "".join(output_parts)
-
-    def flush(self) -> str:
-        # An incomplete block at stream end is dropped.
-        remaining = "" if self._inside_block else self._pending
-        self._pending = ""
-        self._inside_block = False
-        self._drop_spaces = False
-        return remaining
-
-
-def looks_like_xml_tool_call_payload(text: str | None) -> bool:
+def _looks_like_xml_tool_call_payload(text: str | None) -> bool:
     """Detect XML-style marshaled tool calls emitted as plain text.
 
     Intentionally does NOT require a <parameter> tag: zero-argument invocations
@@ -113,9 +38,88 @@ def looks_like_xml_tool_call_payload(text: str | None) -> bool:
     return "<function_calls" in lowered and "<invoke" in lowered
 
 
+def _try_parse_json_string(value: Any) -> Any:
+    """Attempt to parse a JSON string value into its Python equivalent.
+
+    If value is a string that looks like a JSON array or object, parse it.
+    Otherwise return the value unchanged.
+
+    This handles the case where the LLM returns arguments like:
+    - queries: '["query1", "query2"]' instead of ["query1", "query2"]
+    """
+    if not isinstance(value, str):
+        return value
+
+    stripped = value.strip()
+    # Only attempt to parse if it looks like a JSON array or object
+    if not (
+        (stripped.startswith("[") and stripped.endswith("]"))
+        or (stripped.startswith("{") and stripped.endswith("}"))
+    ):
+        return value
+
+    try:
+        return json.loads(stripped)
+    except json.JSONDecodeError:
+        return value
+
+
+def _parse_tool_args_to_dict(raw_args: Any) -> dict[str, Any]:
+    """Parse tool arguments into a dict.
+
+    Normal case:
+    - raw_args == '{"queries":[...]}' -> dict via json.loads
+
+    Defensive case (JSON string literal of an object):
+    - raw_args == '"{\\"queries\\":[...]}"' -> json.loads -> str -> json.loads -> dict
+
+    Also handles the case where argument values are JSON strings that need parsing:
+    - {"queries": '["q1", "q2"]'} -> {"queries": ["q1", "q2"]}
+
+    Anything else returns {}.
+    """
+
+    if raw_args is None:
+        return {}
+
+    if isinstance(raw_args, dict):
+        # Parse any string values that look like JSON arrays/objects
+        return {
+            k: _try_parse_json_string(sanitize_string(v) if isinstance(v, str) else v)
+            for k, v in raw_args.items()
+        }
+
+    if not isinstance(raw_args, str):
+        return {}
+
+    # Sanitize before parsing to remove NULL bytes and surrogates
+    raw_args = sanitize_string(raw_args)
+
+    try:
+        parsed1: Any = json.loads(raw_args)
+    except json.JSONDecodeError:
+        return {}
+
+    if isinstance(parsed1, dict):
+        # Parse any string values that look like JSON arrays/objects
+        return {k: _try_parse_json_string(v) for k, v in parsed1.items()}
+
+    if isinstance(parsed1, str):
+        try:
+            parsed2: Any = json.loads(parsed1)
+        except json.JSONDecodeError:
+            return {}
+        if isinstance(parsed2, dict):
+            # Parse any string values that look like JSON arrays/objects
+            return {k: _try_parse_json_string(v) for k, v in parsed2.items()}
+        return {}
+
+    return {}
+
+
 def extract_tool_calls_from_response_text(
     response_text: str | None,
-    tool_definitions: Sequence[ToolDefinition],
+    tool_definitions: list[dict],
 ) -> list[ToolCall]:
     """Extract tool calls from LLM response text by matching JSON against tool definitions.
 
@@ -134,7 +138,17 @@ def extract_tool_calls_from_response_text(
     if not response_text or not tool_definitions:
         return []
 
-    tool_name_to_def = {tool.name: tool for tool in tool_definitions}
+    # Build a map of tool names to their definitions
+    tool_name_to_def: dict[str, dict] = {}
+    for tool_def in tool_definitions:
+        if tool_def.get("type") == "function" and "function" in tool_def:
+            func_def = tool_def["function"]
+            tool_name = func_def.get("name")
+            if tool_name:
+                tool_name_to_def[tool_name] = func_def
+
+    if not tool_name_to_def:
+        return []
 
     matched_tool_calls: list[tuple[str, dict[str, Any]]] = []
     # Find all JSON objects in the response text
@@ -182,7 +196,7 @@ def extract_tool_calls_from_response_text(
 
 def _extract_xml_tool_calls_from_response_text(
     response_text: str,
-    tool_name_to_def: dict[str, ToolDefinition],
+    tool_name_to_def: dict[str, dict],
 ) -> list[tuple[str, dict[str, Any]]]:
     """Extract XML-style tool calls from response text.
 
@@ -265,7 +279,7 @@ def _resolve_tool_arguments(obj: dict[str, Any]) -> dict[str, Any] | None:
 
 def _try_match_json_to_tool(
     json_obj: dict[str, Any],
-    tool_name_to_def: dict[str, ToolDefinition],
+    tool_name_to_def: dict[str, dict],
 ) -> tuple[str, dict[str, Any]] | None:
     """Try to match a JSON object to a tool definition.
 
@@ -307,17 +321,15 @@ def _try_match_json_to_tool(
 
     # Format 4: Check if the JSON object matches a tool's parameter schema
     for tool_name, func_def in tool_name_to_def.items():
-        params = func_def.parameters
+        params = func_def.get("parameters", {})
         properties = params.get("properties", {})
         required = params.get("required", [])
 
-        if not isinstance(properties, dict) or not isinstance(required, list):
-            continue
         if not properties:
             continue
 
         # Check if all required parameters are present (empty required = all optional)
-        if all(isinstance(req, str) and req in json_obj for req in required):
+        if all(req in json_obj for req in required):
             # Check if any of the tool's properties are in the JSON object
             matching_props = [prop for prop in properties if prop in json_obj]
             if matching_props:
@@ -331,7 +343,7 @@ def _try_match_json_to_tool(
 def _is_nested_arguments_duplicate(
     previous_json_obj: dict[str, Any],
     current_json_obj: dict[str, Any],
-    tool_name_to_def: dict[str, ToolDefinition],
+    tool_name_to_def: dict[str, dict],
 ) -> bool:
     """Detect when current object is the nested args object from previous tool call."""
     extracted_args = _extract_nested_arguments_obj(previous_json_obj, tool_name_to_def)
@@ -340,7 +352,7 @@ def _is_nested_arguments_duplicate(
 
 def _extract_nested_arguments_obj(
     json_obj: dict[str, Any],
-    tool_name_to_def: dict[str, ToolDefinition],
+    tool_name_to_def: dict[str, dict],
 ) -> dict[str, Any] | None:
     # Format 1: {"name": "...", "arguments": {...}} or {"name": "...", "parameters": {...}}
     if "name" in json_obj and json_obj["name"] in tool_name_to_def:

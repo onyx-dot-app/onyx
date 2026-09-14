@@ -1,7 +1,9 @@
 import contextvars
 import time
+from threading import Barrier
 
 from onyx.utils.threadpool_concurrency import (
+    ContextThreadPoolExecutor,
     FunctionCall,
     run_functions_in_parallel,
     run_functions_tuples_in_parallel,
@@ -204,3 +206,43 @@ def test_start_thread_with_context_passes_args() -> None:
     thread.join(timeout=2.0)
 
     assert seen == [("pos", "kw")]
+
+
+def test_executor_isolates_concurrent_submission_contexts() -> None:
+    barrier = Barrier(2)
+    tenant = contextvars.ContextVar("executor_tenant", default="unset")
+
+    def read_tenant() -> str:
+        barrier.wait(timeout=5)
+        return tenant.get()
+
+    with ContextThreadPoolExecutor(max_workers=2) as executor:
+        token = tenant.set("first")
+        try:
+            first = executor.submit(read_tenant)
+            tenant.set("second")
+            second = executor.submit(read_tenant)
+            assert first.result(timeout=5) == "first"
+            assert second.result(timeout=5) == "second"
+        finally:
+            tenant.reset(token)
+
+
+def test_thread_can_start_without_request_context() -> None:
+    tenant = contextvars.ContextVar("thread_tenant", default="unset")
+    result: str | None = None
+
+    def read_tenant() -> None:
+        nonlocal result
+        result = tenant.get()
+
+    token = tenant.set("request")
+    try:
+        thread = start_thread_with_context(
+            read_tenant, name="context-test", context=contextvars.Context()
+        )
+        thread.join(timeout=5)
+        assert not thread.is_alive()
+        assert result == "unset"
+    finally:
+        tenant.reset(token)

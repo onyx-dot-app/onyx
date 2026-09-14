@@ -128,13 +128,13 @@ def test_happy_path_returns_serialized_result_and_emits_packets() -> None:
     )
 
     # Response shape
-    payload = json.loads(response.llm_facing_response)
+    payload = json.loads(response.text)
     assert payload["stdout"] == "hello\n"
     assert payload["stderr"] == ""
     assert payload["exit_code"] == 0
     assert payload["timed_out"] is False
     assert payload["error"] is None  # exit_code == 0
-    assert response.rich_response is None
+    assert response.details is None
 
     # Two packets emitted: start (with cmd) then delta (with stdout/stderr)
     assert emitter.emit.call_count == 2
@@ -223,7 +223,7 @@ def test_client_exception_returns_error_result_and_emits_error_delta() -> None:
             cmd="ls",
         )
 
-    payload = json.loads(response.llm_facing_response)
+    payload = json.loads(response.text)
     assert payload["stdout"] == ""
     assert "connection refused" in payload["stderr"]
     assert payload["exit_code"] == -1
@@ -257,7 +257,7 @@ def test_client_constructor_failure_still_emits_closing_delta() -> None:
         )
 
     # Error path: error result returned, no exception bubbled out
-    payload = json.loads(response.llm_facing_response)
+    payload = json.loads(response.text)
     assert payload["exit_code"] == -1
     assert "CODE_INTERPRETER_BASE_URL" in payload["error"]
 
@@ -292,7 +292,7 @@ def test_long_stdout_is_truncated() -> None:
             cmd="cat huge.txt",
         )
 
-    payload = json.loads(response.llm_facing_response)
+    payload = json.loads(response.text)
     assert "[output truncated" in payload["stdout"]
     # Truncated to MAX + truncation footer; should be much shorter than original
     assert len(payload["stdout"]) < len(long_output)
@@ -314,7 +314,7 @@ def test_short_stdout_is_not_truncated() -> None:
             cmd="echo short",
         )
 
-    payload = json.loads(response.llm_facing_response)
+    payload = json.loads(response.text)
     assert payload["stdout"] == "short"
     assert "[output truncated" not in payload["stdout"]
 
@@ -340,7 +340,7 @@ def test_nonzero_exit_code_sets_error_field_to_stderr() -> None:
             cmd="cat missing.txt",
         )
 
-    payload = json.loads(response.llm_facing_response)
+    payload = json.loads(response.text)
     assert payload["exit_code"] == 1
     assert payload["error"] == "cat: missing.txt: No such file"
     assert payload["stderr"] == "cat: missing.txt: No such file"
@@ -364,7 +364,7 @@ def test_zero_exit_code_with_stderr_does_not_set_error() -> None:
             cmd="legacy-cmd",
         )
 
-    payload = json.loads(response.llm_facing_response)
+    payload = json.loads(response.text)
     assert payload["exit_code"] == 0
     assert payload["stderr"] == "warning: deprecated"
     assert payload["error"] is None
@@ -510,7 +510,7 @@ def test_timed_out_response_is_propagated() -> None:
             cmd="sleep 99999",
         )
 
-    payload = json.loads(response.llm_facing_response)
+    payload = json.loads(response.text)
     assert payload["timed_out"] is True
     assert payload["exit_code"] is None
     delta_packet = emitter.emit.call_args_list[1].args[0]

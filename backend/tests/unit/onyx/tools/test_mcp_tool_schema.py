@@ -16,9 +16,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from onyx.db.enums import MCPAuthenticationType
+from onyx.llm.models import ToolResult
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.interface import Tool
-from onyx.tools.models import ToolResponse
 from onyx.tools.tool_constructor import _disambiguate_mcp_tool_names
 from onyx.tools.tool_implementations.mcp.mcp_tool import (
     MCPTool,
@@ -114,7 +114,7 @@ class _StaticTool(Tool[None]):
         placement: Placement,
         override_kwargs: None = None,
         **llm_kwargs: Any,
-    ) -> ToolResponse:
+    ) -> ToolResult:
         raise NotImplementedError
 
 

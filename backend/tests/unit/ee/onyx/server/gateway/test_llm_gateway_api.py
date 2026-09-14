@@ -21,26 +21,25 @@ from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.exceptions import LLMRateLimitError, LLMTimeoutError
 from onyx.llm.interfaces import LLMConfig
-from onyx.llm.model_request import (
+from onyx.llm.litellm_models import (
     AssistantMessage,
+    ChatCompletionDeltaToolCall,
     ChatCompletionMessage,
+    ChatCompletionMessageToolCall,
+    Choice,
+    Delta,
+    FunctionCall,
+    Message,
+    ModelResponse,
+    ModelResponseStream,
+    StreamingChoice,
     SystemMessage,
     ToolCall,
     UserMessage,
 )
-from onyx.llm.model_request import RequestFunctionCall as ToolFunctionCall
-from onyx.llm.model_response import (
-    ChatCompletionDeltaToolCall,
-    ChatCompletionMessageToolCall,
-    Choice,
-    Delta,
-    Message,
-    ModelResponse,
-    ModelResponseStream,
-    ResponseFunctionCall,
-    StreamingChoice,
-)
+from onyx.llm.litellm_models import ToolFunctionCall as ToolFunctionCall
 from onyx.llm.models import (
     ImageContentPart,
     ImageUrlDetail,
@@ -51,7 +50,7 @@ from onyx.llm.models import (
     ToolChoiceOptions,
     Usage,
 )
-from onyx.llm.multi_llm import LitellmLLM, LLMRateLimitError, LLMTimeoutError
+from onyx.llm.multi_llm import LitellmLLM, LitellmTransport
 from onyx.server.auth_check import check_router_auth
 from onyx.server.features.build import craft_gateway
 from onyx.server.features.build.craft_gateway import gateway_request_flow
@@ -129,8 +128,9 @@ def _provider(
     )
 
 
-class _ConfigOnlyLLM(LitellmLLM):
+class _ConfigOnlyLLM(LitellmTransport):
     def __init__(self, config: LLMConfig) -> None:
+        self._config = config
         super().__init__(
             model_provider=config.model_provider,
             model_name=config.model_name,
@@ -138,7 +138,6 @@ class _ConfigOnlyLLM(LitellmLLM):
             max_input_tokens=config.max_input_tokens,
             custom_config=config.custom_config,
         )
-        self._config = config
 
     @property
     def config(self) -> LLMConfig:
@@ -159,7 +158,7 @@ class _ChunkStreamLLM(_ConfigOnlyLLM):
         )
         self._chunks = chunks
 
-    def stream_raw(self, *args: object, **kwargs: object):  # type: ignore[no-untyped-def,override]
+    def stream(self, *args: object, **kwargs: object):  # type: ignore[no-untyped-def,override]
         del args, kwargs
         yield from self._chunks
 
@@ -231,7 +230,7 @@ class _StreamingLLM(_ConfigOnlyLLM):
         self._fail = fail
         self._exc = exc or RuntimeError("secret-provider-response")
 
-    def stream_raw(self, *args: object, **kwargs: object):
+    def stream(self, *args: object, **kwargs: object):
         del args, kwargs
         try:
             if self._fail:
@@ -246,7 +245,7 @@ class _StreamingLLM(_ConfigOnlyLLM):
             self._closed.set()
 
 
-class _RaisingCloseStream:
+class _RaisingCloseStream(stream_bridge._ClosableStream):
     def __init__(self) -> None:
         self._remaining = 1
 
@@ -268,12 +267,12 @@ class _RaisingCloseStream:
 
 
 class _RaisingCloseLLM(_ConfigOnlyLLM):
-    def stream_raw(self, *args: object, **kwargs: object) -> _RaisingCloseStream:
+    def stream(self, *args: object, **kwargs: object) -> _RaisingCloseStream:
         del args, kwargs
         return _RaisingCloseStream()
 
 
-def _gateway_stream(llm: LitellmLLM):
+def _gateway_stream(llm: LitellmTransport):
     return stream_bridge._run_bridged_stream(
         gateway_api._stream_worker,
         {
@@ -396,7 +395,7 @@ def test_prepare_messages_marks_stable_prefix_for_prompt_cache() -> None:
 
     assert result is processed
     process_prompt.assert_called_once_with(
-        llm_config=config,
+        llm_info=config,
         cacheable_prefix=messages[:-1],
         suffix=messages[-1:],
         continuation=False,
@@ -505,9 +504,7 @@ def test_completion_payload_serializes_openai_shape() -> None:
                 tool_calls=[
                     ChatCompletionMessageToolCall(
                         id="call_1",
-                        function=ResponseFunctionCall(
-                            name="bash", arguments='{"cmd":"ls"}'
-                        ),
+                        function=FunctionCall(name="bash", arguments='{"cmd":"ls"}'),
                     )
                 ],
             ),
@@ -551,7 +548,7 @@ _TOOL_CALL_STREAM_CHUNKS = [
                     ChatCompletionDeltaToolCall(
                         id="call_1",
                         index=0,
-                        function=ResponseFunctionCall(name="bash", arguments=""),
+                        function=FunctionCall(name="bash", arguments=""),
                     )
                 ]
             )
@@ -565,7 +562,7 @@ _TOOL_CALL_STREAM_CHUNKS = [
                 tool_calls=[
                     ChatCompletionDeltaToolCall(
                         index=0,
-                        function=ResponseFunctionCall(arguments='{"cmd":"ls"}'),
+                        function=FunctionCall(arguments='{"cmd":"ls"}'),
                     )
                 ]
             )
@@ -685,7 +682,7 @@ class _RaisingInvokeLLM(_ConfigOnlyLLM):
         )
         self._exc = exc
 
-    def invoke_raw(self, *args: object, **kwargs: object):
+    def invoke(self, *args: object, **kwargs: object):
         del args, kwargs
         raise self._exc
 
@@ -702,7 +699,7 @@ class _InvokeLLM(_ConfigOnlyLLM):
         )
         self._response = response
 
-    def invoke_raw(self, *args: object, **kwargs: object) -> ModelResponse:
+    def invoke(self, *args: object, **kwargs: object) -> ModelResponse:
         del args, kwargs
         return self._response
 
@@ -712,9 +709,9 @@ class _RecordingInvokeLLM(_InvokeLLM):
         super().__init__(response)
         self.received_tool_choice: ToolChoice | None = None
 
-    def invoke_raw(self, *args: object, **kwargs: object) -> ModelResponse:
+    def invoke(self, *args: object, **kwargs: object) -> ModelResponse:
         self.received_tool_choice = cast("ToolChoice | None", kwargs.get("tool_choice"))
-        return super().invoke_raw(*args, **kwargs)
+        return super().invoke(*args, **kwargs)
 
 
 def _handle_completion_call(request: ChatCompletionRequest) -> Any:
@@ -745,7 +742,7 @@ def test_handle_chat_completion_happy_path_serializes_response() -> None:
     with patch.object(
         gateway_api,
         "llm_from_provider",
-        return_value=_InvokeLLM(response),
+        return_value=LitellmLLM(_InvokeLLM(response)),
     ):
         result = _handle_completion_call(request)
 
@@ -779,7 +776,7 @@ def test_non_streaming_opens_trace_before_generation_span() -> None:
         patch.object(
             gateway_api,
             "llm_from_provider",
-            return_value=_InvokeLLM(response),
+            return_value=LitellmLLM(_InvokeLLM(response)),
         ),
         _capture_trace_at_generation_span(traces),
     ):
@@ -808,7 +805,7 @@ def test_handle_chat_completion_maps_provider_errors_to_onyx_codes(
         patch.object(
             gateway_api,
             "llm_from_provider",
-            return_value=_RaisingInvokeLLM(exc),
+            return_value=LitellmLLM(_RaisingInvokeLLM(exc)),
         ),
         pytest.raises(OnyxError) as exc_info,
     ):
@@ -827,7 +824,9 @@ def test_handle_chat_completion_sanitizes_generic_invoke_failure() -> None:
         patch.object(
             gateway_api,
             "llm_from_provider",
-            return_value=_RaisingInvokeLLM(ValueError("secret-url?key=abc")),
+            return_value=LitellmLLM(
+                _RaisingInvokeLLM(ValueError("secret-url?key=abc"))
+            ),
         ),
         pytest.raises(OnyxError) as exc_info,
     ):
@@ -924,7 +923,7 @@ def test_handle_chat_completion_rejects_named_tool_choice_for_unknown_tool() -> 
     )
 
     with patch.object(
-        gateway_api, "llm_from_provider", return_value=_InvokeLLM(response)
+        gateway_api, "llm_from_provider", return_value=LitellmLLM(_InvokeLLM(response))
     ):
         with pytest.raises(OnyxError) as exc_info:
             _handle_completion_call(request)
@@ -1343,7 +1342,7 @@ def test_handle_responses_request_non_streaming_returns_completed_response() -> 
     )
 
     with patch.object(
-        gateway_api, "llm_from_provider", return_value=_InvokeLLM(response)
+        gateway_api, "llm_from_provider", return_value=LitellmLLM(_InvokeLLM(response))
     ):
         result = _handle_responses_call(request)
 
@@ -1358,7 +1357,7 @@ def test_handle_responses_request_non_streaming_returns_completed_response() -> 
 
 def test_handle_responses_request_forwards_named_tool_choice() -> None:
     """The Responses request must survive the litellm tools transform plus
-    _require_named_tool and reach the LLM as a NamedToolChoice."""
+    _require_named_tool and reach the LitellmTransport as a NamedToolChoice."""
     request = ResponsesRequest(
         model="1/test",
         input="hi",
@@ -1373,7 +1372,9 @@ def test_handle_responses_request_forwards_named_tool_choice() -> None:
     )
     fake_llm = _RecordingInvokeLLM(response)
 
-    with patch.object(gateway_api, "llm_from_provider", return_value=fake_llm):
+    with patch.object(
+        gateway_api, "llm_from_provider", return_value=LitellmLLM(fake_llm)
+    ):
         _handle_responses_call(request)
 
     assert fake_llm.received_tool_choice == NamedToolChoice(name="bash")
@@ -1393,7 +1394,7 @@ def test_handle_responses_request_rejects_named_tool_choice_for_unknown_tool() -
     )
 
     with patch.object(
-        gateway_api, "llm_from_provider", return_value=_InvokeLLM(response)
+        gateway_api, "llm_from_provider", return_value=LitellmLLM(_InvokeLLM(response))
     ):
         with pytest.raises(OnyxError) as exc_info:
             _handle_responses_call(request)
@@ -1428,9 +1429,7 @@ _TOOL_CALL_CHUNKS = [
                     ChatCompletionDeltaToolCall(
                         id="call_1",
                         index=0,
-                        function=ResponseFunctionCall(
-                            name="bash", arguments='{"cmd":"ls"}'
-                        ),
+                        function=FunctionCall(name="bash", arguments='{"cmd":"ls"}'),
                     )
                 ]
             )
@@ -1445,7 +1444,7 @@ _TOOL_CALL_CHUNKS = [
 
 
 def _responses_stream_events(
-    llm: LitellmLLM,
+    llm: LitellmTransport,
     *,
     tools: list[dict[str, Any]] | None = None,
     model: str = "1/test",
@@ -1569,9 +1568,7 @@ _TEXT_AND_TOOL_CALL_CHUNKS = [
                     ChatCompletionDeltaToolCall(
                         id="call_9",
                         index=0,
-                        function=ResponseFunctionCall(
-                            name="bash", arguments='{"cmd":"ls"}'
-                        ),
+                        function=FunctionCall(name="bash", arguments='{"cmd":"ls"}'),
                     )
                 ]
             )
@@ -1650,7 +1647,7 @@ class _FailAfterTextLLM(_ConfigOnlyLLM):
         )
         self._exc = exc
 
-    def stream_raw(self, *args: object, **kwargs: object):  # type: ignore[no-untyped-def,override]
+    def stream(self, *args: object, **kwargs: object):  # type: ignore[no-untyped-def,override]
         del args, kwargs
         yield ModelResponseStream(
             id="p1", created="0", choice=StreamingChoice(delta=Delta(content="partial"))
@@ -1793,7 +1790,9 @@ async def test_handle_responses_request_streaming_returns_event_stream() -> None
 
     with (
         patch.object(
-            gateway_api, "llm_from_provider", return_value=_ChunkStreamLLM(_TEXT_CHUNKS)
+            gateway_api,
+            "llm_from_provider",
+            return_value=LitellmLLM(_ChunkStreamLLM(_TEXT_CHUNKS)),
         ),
         patch.object(gateway_api, "llm_generation_span", return_value=nullcontext()),
     ):

@@ -78,7 +78,7 @@ def test_client_records_reauthentication_required_as_auth_error() -> None:
     ):
         response = tool.run(Placement(turn_index=0))
 
-    assert "Please use the MCP dropdown" in response.llm_facing_response
+    assert "Please use the MCP dropdown" in response.text
     record.assert_called_once()
     assert record.call_args.kwargs["status"] == MCPToolCallStatus.AUTH_ERROR
 
@@ -102,7 +102,7 @@ def test_client_records_post_call_failure_once() -> None:
     ):
         response = tool.run(Placement(turn_index=0))
 
-    assert "emit failed" in response.llm_facing_response
+    assert "emit failed" in response.text
     record.assert_called_once()
     assert record.call_args.kwargs["status"] == MCPToolCallStatus.ERROR
 

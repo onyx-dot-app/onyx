@@ -86,6 +86,7 @@ from onyx.federated_connectors.federated_retrieval import (
 )
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM
+from onyx.llm.models import ToolResult
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.secondary_llm_flows.document_filter import (
@@ -111,7 +112,6 @@ from onyx.tools.models import (
     ChatMinimalTextMessage,
     SearchToolOverrideKwargs,
     ToolCallException,
-    ToolResponse,
 )
 from onyx.tools.tool_implementations.search.constants import (
     KEYWORD_QUERY_HYBRID_ALPHA,
@@ -663,42 +663,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         placement: Placement,
         override_kwargs: SearchToolOverrideKwargs,
         **llm_kwargs: Any,
-    ) -> ToolResponse:
-        # Malformed calls fail loudly whatever the source selection says, so
-        # the argument check comes before any short-circuit.
-        if QUERIES_FIELD not in llm_kwargs:
-            raise ToolCallException(
-                message=f"Missing required '{QUERIES_FIELD}' parameter in internal_search tool call",
-                llm_facing_message=(
-                    f"The internal_search tool requires a '{QUERIES_FIELD}' parameter "
-                    f"containing an array of search queries. Please provide the queries "
-                    f'like: {{"queries": ["your search query here"]}}'
-                ),
-            )
-
-        # An explicitly empty source selection is a statement, not an absent
-        # filter: the tool still runs (it may be forced), and it honestly
-        # finds nothing. `None` keeps its meaning of "no source filter".
-        # Project mode ignores user filters entirely, so the guard must too.
-        if (
-            self.user_selected_filters is not None
-            and self.project_id_filter is None
-            and self.user_selected_filters.source_type is not None
-            and len(self.user_selected_filters.source_type) == 0
-        ):
-            empty_response, _ = convert_inference_sections_to_llm_string(
-                top_sections=[],
-                note=None,
-            )
-            return ToolResponse(
-                rich_response=SearchDocsResponse(
-                    search_docs=[],
-                    citation_mapping={},
-                    displayed_docs=None,
-                ),
-                llm_facing_response=empty_response,
-            )
-
+    ) -> ToolResult:
         # Start overall timing
         overall_start_time = time.time()
 
@@ -1073,13 +1038,13 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 top_sections=[],
                 note=scope_note or None,
             )
-            return ToolResponse(
-                rich_response=SearchDocsResponse(
+            return ToolResult(
+                details=SearchDocsResponse(
                     search_docs=[],
                     citation_mapping={},
                     displayed_docs=None,
                 ),
-                llm_facing_response=empty_response,
+                content=empty_response,
             )
 
         # Enrich chunks with `Document.file_id` (Postgres-only metadata not
@@ -1235,15 +1200,12 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             format(document_expansion_elapsed, ".3f"),
         )
 
-        llm_facing_response = docs_str
-
-        return ToolResponse(
-            # Typically the rich response will give more docs in case it needs to be displayed in the UI
-            rich_response=SearchDocsResponse(
+        return ToolResult(
+            # Displayed documents can exceed the subset sent to the model.
+            details=SearchDocsResponse(
                 search_docs=search_docs,
                 citation_mapping=citation_mapping,
                 displayed_docs=final_ui_docs,
             ),
-            # The LLM facing response typically includes less docs to cut down on noise and token usage
-            llm_facing_response=llm_facing_response,
+            content=docs_str,
         )

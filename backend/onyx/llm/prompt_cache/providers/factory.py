@@ -3,7 +3,7 @@
 import logging
 
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.interfaces import LLMConfig
+from onyx.llm.interfaces import LLMInfo
 from onyx.llm.prompt_cache.providers.anthropic import AnthropicPromptCacheProvider
 from onyx.llm.prompt_cache.providers.base import PromptCacheProvider
 from onyx.llm.prompt_cache.providers.noop import NoOpPromptCacheProvider
@@ -21,7 +21,7 @@ OPENROUTER_GOOGLE_PREFIX = "google/"
 OPENROUTER_OPENAI_PREFIX = "openai/"
 
 
-def get_provider_adapter(llm_config: LLMConfig) -> PromptCacheProvider:
+def get_provider_adapter(llm_info: LLMInfo) -> PromptCacheProvider:
     """Get the appropriate prompt cache provider adapter for a given provider.
 
     Args:
@@ -30,17 +30,17 @@ def get_provider_adapter(llm_config: LLMConfig) -> PromptCacheProvider:
     Returns:
         PromptCacheProvider instance for the given provider
     """
-    if llm_config.model_provider == LlmProviderNames.OPENAI:
+    if llm_info.model_provider == LlmProviderNames.OPENAI:
         return OpenAIPromptCacheProvider()
-    elif llm_config.model_provider == LlmProviderNames.ANTHROPIC or (
-        llm_config.model_provider == LlmProviderNames.BEDROCK
-        and ANTHROPIC_BEDROCK_TAG in llm_config.model_name
+    elif llm_info.model_provider == LlmProviderNames.ANTHROPIC or (
+        llm_info.model_provider == LlmProviderNames.BEDROCK
+        and ANTHROPIC_BEDROCK_TAG in llm_info.model_name
     ):
         return AnthropicPromptCacheProvider()
-    elif llm_config.model_provider == LlmProviderNames.VERTEX_AI:
+    elif llm_info.model_provider == LlmProviderNames.VERTEX_AI:
         return VertexAIPromptCacheProvider()
-    elif llm_config.model_provider == LlmProviderNames.OPENROUTER:
-        model_name = llm_config.model_name or ""
+    elif llm_info.model_provider == LlmProviderNames.OPENROUTER:
+        model_name = llm_info.model_name or ""
         if model_name.startswith(OPENROUTER_ANTHROPIC_PREFIX):
             logger.debug(
                 "Prompt caching enabled for OpenRouter Anthropic model: %s", model_name

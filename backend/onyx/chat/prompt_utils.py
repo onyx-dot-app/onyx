@@ -14,7 +14,9 @@ from onyx.prompts.chat_prompts import (
     CITATION_REMINDER,
     DEFAULT_SYSTEM_PROMPT,
     FILE_REMINDER,
+    IMAGE_GEN_REMINDER,
     LAST_CYCLE_CITATION_REMINDER,
+    OPEN_URL_REMINDER,
     REQUIRE_CITATION_GUIDANCE,
 )
 from onyx.prompts.prompt_utils import apply_prompt_placeholders, get_company_context
@@ -277,7 +279,6 @@ def build_system_prompt(
     system_prompt += user_info_section
 
     # Append citation guidance after company context if placeholder was not present
-    # This maintains backward compatibility and ensures citations are always enforced when needed
     if should_append_citation_guidance:
         system_prompt += REQUIRE_CITATION_GUIDANCE
         system_prompt += ANSWER_COVERAGE_GUIDANCE
@@ -344,3 +345,31 @@ def build_system_prompt(
             system_prompt += TOOL_SECTION_HEADER + "\n".join(tool_guidance_sections)
 
     return system_prompt
+
+
+def select_reminder_text(
+    *,
+    ran_image_gen: bool,
+    just_ran_web_search: bool,
+    has_open_url_tool: bool,
+    out_of_cycles: bool,
+    persona_task_prompt: str | None,
+    include_citation_reminder: bool,
+    include_file_reminder: bool,
+) -> str | None:
+    """Choose the reminder appended after a tool cycle.
+
+    The open_url nudge is gated on the tool actually being available; otherwise
+    the model is told to call a tool it doesn't have and leaks confusing
+    "open_url is not available" replies.
+    """
+    if ran_image_gen:
+        return IMAGE_GEN_REMINDER
+    if just_ran_web_search and has_open_url_tool and not out_of_cycles:
+        return OPEN_URL_REMINDER
+    return build_reminder_message(
+        reminder_text=persona_task_prompt,
+        include_citation_reminder=include_citation_reminder,
+        include_file_reminder=include_file_reminder,
+        is_last_cycle=out_of_cycles,
+    )

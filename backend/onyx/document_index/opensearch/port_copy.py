@@ -65,8 +65,8 @@ def _build_augmentation_ctx(
             "contextual RAG model is configured (and no tenant default exists)"
         )
     tokenizer = get_tokenizer(
-        model_name=llm.config.model_name,
-        provider_type=llm.config.model_provider,
+        model_name=llm.info.model_name,
+        provider_type=llm.info.model_provider,
     )
     return AugmentationReembedContext(
         future_enable_contextual_rag=True,

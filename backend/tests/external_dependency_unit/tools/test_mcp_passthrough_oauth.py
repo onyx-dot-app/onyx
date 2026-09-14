@@ -385,10 +385,10 @@ class TestMCPPassThroughOAuth:
                 override_kwargs=None,
                 input="test",
             )
-            print(response.rich_response)
-            assert isinstance(response.rich_response, CustomToolCallSummary)
-            print(response.rich_response.tool_result)
-            assert response.rich_response.tool_result["tool_result"] == mocked_response
+            print(response.details)
+            assert isinstance(response.details, CustomToolCallSummary)
+            print(response.details.tool_result)
+            assert response.details.tool_result["tool_result"] == mocked_response
 
         # Verify Authorization header was set with the user's OAuth token
         assert "Authorization" in captured_headers

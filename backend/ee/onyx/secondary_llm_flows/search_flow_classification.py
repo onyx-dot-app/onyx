@@ -30,17 +30,10 @@ def classify_is_search_flow(
         GenerationRequest(
             messages=messages,
             options=GenerationOptions(
-                reasoning_effort=ReasoningEffort.OFF,
-                # Well more than necessary but just to ensure completion and in case it succeeds with classifying but
-                # ends up rambling
-                max_tokens=20,
+                reasoning_effort=ReasoningEffort.OFF, max_tokens=20
             ),
         ),
-        context=GenerationContext(
-            # Nothing can happen in the UI until this call finishes so we need to be aggressive with the timeout
-            total_timeout_s=2,
-            flow=LLMFlow.SEARCH_FLOW_CLASSIFICATION,
-        ),
+        context=GenerationContext(timeout=2, flow=LLMFlow.SEARCH_FLOW_CLASSIFICATION),
     )
 
     content = response.text.strip().lower()

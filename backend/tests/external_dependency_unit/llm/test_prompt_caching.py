@@ -15,14 +15,14 @@ import pytest
 from litellm import completion_cost
 from sqlalchemy.orm import Session
 
-from onyx.llm.model_request import (
+from onyx.llm.litellm_models import (
     AssistantMessage,
     ChatCompletionMessage,
     SystemMessage,
     UserMessage,
 )
 from onyx.llm.models import Usage
-from onyx.llm.multi_llm import LitellmLLM
+from onyx.llm.multi_llm import LitellmTransport
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 
 VERTEX_CREDENTIALS_ENV = "VERTEX_CREDENTIALS"
@@ -162,7 +162,7 @@ def test_openai_prompt_caching_reduces_costs(
     successes = 0
     for _ in range(attempts):
         # Create OpenAI LLM
-        llm = LitellmLLM(
+        llm = LitellmTransport(
             api_key=os.environ["OPENAI_API_KEY"],
             model_provider="openai",
             model_name="gpt-4o",
@@ -191,18 +191,18 @@ def test_openai_prompt_caching_reduces_costs(
 
         # Split into cacheable prefix (the long context) and suffix (the question)
         cacheable_prefix: list[ChatCompletionMessage] = [
-            UserMessage(role="user", content=long_context)
+            UserMessage(content=long_context)
         ]
 
         # First call - creates cache
         print("\n=== First call (cache creation) ===")
         question1: list[ChatCompletionMessage] = [
-            UserMessage(role="user", content="What are the main topics discussed?")
+            UserMessage(content="What are the main topics discussed?")
         ]
 
         # Apply prompt caching (for OpenAI, this is mostly a no-op but should still work)
         processed_messages1, _ = process_with_prompt_cache(
-            llm_config=llm.config,
+            llm_info=llm.config,
             cacheable_prefix=cacheable_prefix,
             suffix=question1,
             continuation=False,
@@ -212,7 +212,7 @@ def test_openai_prompt_caching_reduces_costs(
         # print(f"Cache key 1: {metadata1.cache_key if metadata1 else None}")
 
         # Call litellm directly so we can get the raw response
-        response1 = llm.invoke_raw(prompt=processed_messages1)
+        response1 = llm.invoke(prompt=processed_messages1)
         cost1 = completion_cost(
             completion_response=response1.model_dump(),
             model=f"{llm._model_provider}/{llm._model_version}",
@@ -230,18 +230,18 @@ def test_openai_prompt_caching_reduces_costs(
         # Second call with same context - should use cache
         print("\n=== Second call (cache read) ===")
         question2: list[ChatCompletionMessage] = [
-            UserMessage(role="user", content="Can you elaborate on neural networks?")
+            UserMessage(content="Can you elaborate on neural networks?")
         ]
 
         # Apply prompt caching (same cacheable prefix)
         processed_messages2, _ = process_with_prompt_cache(
-            llm_config=llm.config,
+            llm_info=llm.config,
             cacheable_prefix=cacheable_prefix,
             suffix=question2,
             continuation=False,
         )
         # print(f"Processed messages 2: {processed_messages2}")
-        response2 = llm.invoke_raw(prompt=processed_messages2)
+        response2 = llm.invoke(prompt=processed_messages2)
         cost2 = completion_cost(
             completion_response=response2.model_dump(),
             model=f"{llm._model_provider}/{llm._model_version}",
@@ -317,15 +317,13 @@ def test_anthropic_prompt_caching_reduces_costs(
         )
     )
 
-    base_messages: list[ChatCompletionMessage] = [
-        UserMessage(role="user", content=long_context)
-    ]
+    base_messages: list[ChatCompletionMessage] = [UserMessage(content=long_context)]
 
     unavailable_models: list[str] = []
     non_caching_models: list[str] = []
 
     for model_name in candidate_models:
-        llm = LitellmLLM(
+        llm = LitellmTransport(
             api_key=os.environ["ANTHROPIC_API_KEY"],
             model_provider="anthropic",
             model_name=model_name,
@@ -336,20 +334,19 @@ def test_anthropic_prompt_caching_reduces_costs(
         print(f"\n=== First call (cache creation) model={model_name} ===")
         question1: list[ChatCompletionMessage] = [
             UserMessage(
-                role="user",
                 content="Reply with exactly one lowercase word: topics",
             )
         ]
 
         processed_messages1, _ = process_with_prompt_cache(
-            llm_config=llm.config,
+            llm_info=llm.config,
             cacheable_prefix=base_messages,
             suffix=question1,
             continuation=False,
         )
 
         try:
-            response1 = llm.invoke_raw(prompt=processed_messages1, max_tokens=8)
+            response1 = llm.invoke(prompt=processed_messages1, max_tokens=8)
         except Exception as e:
             error_str = str(e).lower()
             if (
@@ -377,19 +374,18 @@ def test_anthropic_prompt_caching_reduces_costs(
         print(f"\n=== Second call (cache read) model={model_name} ===")
         question2: list[ChatCompletionMessage] = [
             UserMessage(
-                role="user",
                 content="Reply with exactly one lowercase word: neural",
             )
         ]
 
         processed_messages2, _ = process_with_prompt_cache(
-            llm_config=llm.config,
+            llm_info=llm.config,
             cacheable_prefix=base_messages,
             suffix=question2,
             continuation=False,
         )
 
-        response2 = llm.invoke_raw(prompt=processed_messages2, max_tokens=8)
+        response2 = llm.invoke(prompt=processed_messages2, max_tokens=8)
         cost2 = completion_cost(
             completion_response=response2.model_dump(),
             model=f"{llm._model_provider}/{llm._model_version}",
@@ -465,7 +461,7 @@ def test_google_genai_prompt_caching_reduces_costs(
         if vertex_location:
             custom_config["vertex_location"] = vertex_location
 
-        llm = LitellmLLM(
+        llm = LitellmTransport(
             api_key=None,
             model_provider="vertex_ai",
             model_name=model_name,
@@ -494,16 +490,16 @@ def test_google_genai_prompt_caching_reduces_costs(
             )
 
             cacheable_prefix: list[ChatCompletionMessage] = [
-                SystemMessage(role="system", content=long_context)
+                SystemMessage(content=long_context)
             ]
 
             print(f"\n=== Vertex attempt {attempt + 1} (cache creation) ===")
             question1: list[ChatCompletionMessage] = [
-                UserMessage(role="user", content="What are the main topics discussed?")
+                UserMessage(content="What are the main topics discussed?")
             ]
 
             processed_messages1, _ = process_with_prompt_cache(
-                llm_config=llm.config,
+                llm_info=llm.config,
                 cacheable_prefix=cacheable_prefix,
                 suffix=question1,
                 continuation=False,
@@ -516,7 +512,7 @@ def test_google_genai_prompt_caching_reduces_costs(
             )
             print(f"Processed messages structure (first msg): {first_msg}")
 
-            response1 = llm.invoke_raw(prompt=processed_messages1)
+            response1 = llm.invoke(prompt=processed_messages1)
             cost1 = completion_cost(
                 completion_response=response1.model_dump(),
                 model=f"{llm._model_provider}/{llm._model_version}",
@@ -535,19 +531,17 @@ def test_google_genai_prompt_caching_reduces_costs(
 
             print(f"\n=== Vertex attempt {attempt + 1} (cache read) ===")
             question2: list[ChatCompletionMessage] = [
-                UserMessage(
-                    role="user", content="Can you elaborate on neural networks?"
-                )
+                UserMessage(content="Can you elaborate on neural networks?")
             ]
 
             processed_messages2, _ = process_with_prompt_cache(
-                llm_config=llm.config,
+                llm_info=llm.config,
                 cacheable_prefix=cacheable_prefix,
                 suffix=question2,
                 continuation=False,
             )
 
-            response2 = llm.invoke_raw(prompt=processed_messages2)
+            response2 = llm.invoke(prompt=processed_messages2)
             cost2 = completion_cost(
                 completion_response=response2.model_dump(),
                 model=f"{llm._model_provider}/{llm._model_version}",
@@ -615,7 +609,7 @@ def test_prompt_caching_with_conversation_history(
     System message and history should be cached, only new user message is uncached.
     """
     # Create OpenAI LLM
-    llm = LitellmLLM(
+    llm = LitellmTransport(
         api_key=os.environ["OPENAI_API_KEY"],
         model_provider="openai",
         model_name="gpt-4o-mini",
@@ -624,7 +618,6 @@ def test_prompt_caching_with_conversation_history(
 
     # Create a long system message and context
     system_message: SystemMessage = SystemMessage(
-        role="system",
         content=(
             "You are an AI assistant specialized in technology. "
             + " ".join(
@@ -644,10 +637,10 @@ def test_prompt_caching_with_conversation_history(
     print("\n=== Turn 1 ===")
     messages_turn1: list[ChatCompletionMessage] = [
         system_message,
-        UserMessage(role="user", content=long_context + "\n\nWhat is this about?"),
+        UserMessage(content=long_context + "\n\nWhat is this about?"),
     ]
 
-    response1 = llm.invoke_raw(prompt=messages_turn1)
+    response1 = llm.invoke(prompt=messages_turn1)
     cost1 = completion_cost(
         completion_response=response1.model_dump(),
         model=f"{llm._model_provider}/{llm._model_version}",
@@ -663,13 +656,11 @@ def test_prompt_caching_with_conversation_history(
     # Turn 2 - add assistant response and new user message
     print("\n=== Turn 2 (with cached history) ===")
     messages_turn2: list[ChatCompletionMessage] = messages_turn1 + [
-        AssistantMessage(
-            role="assistant", content="This document discusses various topics."
-        ),
-        UserMessage(role="user", content="Tell me about the first topic."),
+        AssistantMessage(content="This document discusses various topics."),
+        UserMessage(content="Tell me about the first topic."),
     ]
 
-    response2 = llm.invoke_raw(prompt=messages_turn2)
+    response2 = llm.invoke(prompt=messages_turn2)
     cost2 = completion_cost(
         completion_response=response2.model_dump(),
         model=f"{llm._model_provider}/{llm._model_version}",
@@ -682,11 +673,11 @@ def test_prompt_caching_with_conversation_history(
     # Turn 3 - continue conversation
     print("\n=== Turn 3 (with even more cached history) ===")
     messages_turn3: list[ChatCompletionMessage] = messages_turn2 + [
-        AssistantMessage(role="assistant", content="The first topic covers..."),
-        UserMessage(role="user", content="What about the second topic?"),
+        AssistantMessage(content="The first topic covers..."),
+        UserMessage(content="What about the second topic?"),
     ]
 
-    response3 = llm.invoke_raw(prompt=messages_turn3)
+    response3 = llm.invoke(prompt=messages_turn3)
     cost3 = completion_cost(
         completion_response=response3.model_dump(),
         model=f"{llm._model_provider}/{llm._model_version}",
@@ -730,7 +721,7 @@ def test_no_caching_without_process_with_prompt_cache(
     This establishes a baseline to compare against the caching tests.
     """
     # Create OpenAI LLM
-    llm = LitellmLLM(
+    llm = LitellmTransport(
         api_key=os.environ["OPENAI_API_KEY"],
         model_provider="openai",
         model_name="gpt-4o-mini",
@@ -745,10 +736,10 @@ def test_no_caching_without_process_with_prompt_cache(
     # First call - no explicit caching
     print("\n=== First call (no explicit caching) ===")
     messages1: list[ChatCompletionMessage] = [
-        UserMessage(role="user", content=long_context + "\n\nSummarize this.")
+        UserMessage(content=long_context + "\n\nSummarize this.")
     ]
 
-    response1 = llm.invoke_raw(prompt=messages1)
+    response1 = llm.invoke(prompt=messages1)
     cost1 = completion_cost(
         completion_response=response1.model_dump(),
         model=f"{llm._model_provider}/{llm._model_version}",

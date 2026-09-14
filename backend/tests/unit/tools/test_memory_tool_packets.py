@@ -2,6 +2,7 @@
 
 import queue
 from unittest.mock import MagicMock, patch
+from uuid import uuid4
 
 import pytest
 
@@ -13,11 +14,11 @@ from onyx.server.query_and_chat.streaming_models import (
     MemoryToolStart,
     SectionEnd,
 )
+from onyx.tools.models import MemoryToolResponseSnapshot
 from onyx.tools.tool_implementations.memory.memory_tool import (
     MemoryTool,
     MemoryToolOverrideKwargs,
 )
-from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
 
 
 @pytest.fixture
@@ -36,7 +37,17 @@ def mock_llm() -> MagicMock:
 
 
 @pytest.fixture
-def memory_tool(emitter: Emitter, mock_llm: MagicMock) -> MemoryTool:
+def memory_tool(
+    emitter: Emitter, mock_llm: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> MemoryTool:
+    monkeypatch.setattr(
+        "onyx.tools.tool_implementations.memory.memory_tool.add_memory",
+        MagicMock(return_value=42),
+    )
+    monkeypatch.setattr(
+        "onyx.tools.tool_implementations.memory.memory_tool.update_memory_at_index",
+        MagicMock(return_value=42),
+    )
     return MemoryTool(tool_id=1, emitter=emitter, llm=mock_llm)
 
 
@@ -48,6 +59,7 @@ def placement() -> Placement:
 @pytest.fixture
 def override_kwargs() -> MemoryToolOverrideKwargs:
     return MemoryToolOverrideKwargs(
+        user_id=uuid4(),
         user_name="Test User",
         user_email="test@example.com",
         user_role=None,
@@ -107,7 +119,7 @@ class TestMemoryToolRun:
         assert isinstance(packet.obj, MemoryToolDelta)
         assert packet.obj.memory_text == "User prefers Python"
         assert packet.obj.operation == "add"
-        assert packet.obj.memory_id is None
+        assert packet.obj.memory_id == 42
         assert packet.obj.index is None
 
     @patch("onyx.tools.tool_implementations.memory.memory_tool.process_memory_update")
@@ -131,11 +143,11 @@ class TestMemoryToolRun:
         assert isinstance(packet.obj, MemoryToolDelta)
         assert packet.obj.memory_text == "User prefers light mode"
         assert packet.obj.operation == "update"
-        assert packet.obj.memory_id is None
+        assert packet.obj.memory_id == 42
         assert packet.obj.index == 0
 
     @patch("onyx.tools.tool_implementations.memory.memory_tool.process_memory_update")
-    def test_run_returns_tool_response_with_rich_response(
+    def test_run_returns_saved_memory(
         self,
         mock_process: MagicMock,
         memory_tool: MemoryTool,
@@ -150,10 +162,10 @@ class TestMemoryToolRun:
             memory="User prefers Python",
         )
 
-        assert isinstance(result.rich_response, MemoryToolResponse)
-        assert result.rich_response.memory_text == "User prefers Python"
-        assert result.rich_response.index_to_replace is None
-        assert "User prefers Python" in result.llm_facing_response
+        assert isinstance(result.details, MemoryToolResponseSnapshot)
+        assert result.details.memory_text == "User prefers Python"
+        assert result.details.index is None
+        assert "User prefers Python" in result.text
 
 
 class TestCreateMemoryPackets:

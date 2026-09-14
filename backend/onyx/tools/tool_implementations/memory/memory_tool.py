@@ -6,14 +6,17 @@ The memories are passed in via override_kwargs which contains the current list o
 memories that exist for the user.
 """
 
-from typing import Any, Literal, cast
+from typing import Any, cast
+from uuid import UUID
 
 from pydantic import BaseModel
 from typing_extensions import override
 
 from onyx.chat.emitter import Emitter
-from onyx.chat.incognito import current_turn_persists_content
+from onyx.db.memory import add_memory, update_memory_at_index
+from onyx.llm.cancellation import check_cancelled
 from onyx.llm.interfaces import LLM
+from onyx.llm.models import ToolResult
 from onyx.secondary_llm_flows.memory_update import process_memory_update
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
@@ -22,9 +25,13 @@ from onyx.server.query_and_chat.streaming_models import (
     Packet,
 )
 from onyx.tools.interface import Tool
-from onyx.tools.models import ChatMinimalTextMessage, ToolCallException, ToolResponse
-from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
+from onyx.tools.models import (
+    ChatMinimalTextMessage,
+    MemoryToolResponseSnapshot,
+    ToolCallException,
+)
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_incognito_record_mode
 
 logger = setup_logger()
 
@@ -33,9 +40,8 @@ MEMORY_FIELD = "memory"
 
 
 class MemoryToolOverrideKwargs(BaseModel):
-    # Not including the Team Information or User Preferences because these are less likely to contribute to building the memory
-    # Things like the user's name is important because the LLM may create a memory like "Dave prefers light mode." instead of
-    # User prefers light mode.
+    # User identity helps write standalone memories.
+    user_id: UUID | None
     user_name: str | None
     user_email: str | None
     user_role: str | None
@@ -109,7 +115,7 @@ class MemoryTool(Tool[MemoryToolOverrideKwargs]):
         placement: Placement,
         override_kwargs: MemoryToolOverrideKwargs,
         **llm_kwargs: Any,
-    ) -> ToolResponse:
+    ) -> ToolResult:
         if MEMORY_FIELD not in llm_kwargs:
             raise ToolCallException(
                 message=f"Missing required '{MEMORY_FIELD}' parameter in add_memory tool call",
@@ -121,10 +127,21 @@ class MemoryTool(Tool[MemoryToolOverrideKwargs]):
             )
         memory = cast(str, llm_kwargs[MEMORY_FIELD])
 
+        user_id = override_kwargs.user_id
+        if get_current_incognito_record_mode() is not None:
+            return ToolResult(
+                content="Error: memories cannot be saved from an incognito chat. Tell the user their request was not saved.",
+                is_error=True,
+            )
+        if user_id is None:
+            return ToolResult(
+                content="Error: memory could not be saved without an authenticated user.",
+                is_error=True,
+            )
+
         existing_memories = override_kwargs.existing_memories
         chat_history = override_kwargs.chat_history
 
-        # Determine if this should be an add or update operation
         memory_text, index_to_replace = process_memory_update(
             new_memory=memory,
             existing_memories=existing_memories,
@@ -135,28 +152,43 @@ class MemoryTool(Tool[MemoryToolOverrideKwargs]):
             user_role=override_kwargs.user_role,
         )
 
-        if current_turn_persists_content():
-            logger.info("New memory to be added: %s", memory_text)
-
-        operation: Literal["add", "update"] = (
-            "update" if index_to_replace is not None else "add"
+        check_cancelled()
+        try:
+            memory_id = (
+                update_memory_at_index(
+                    user_id=user_id,
+                    index=index_to_replace,
+                    new_text=memory_text,
+                )
+                if index_to_replace is not None
+                else add_memory(user_id=user_id, memory_text=memory_text)
+            )
+            if memory_id is None:
+                logger.warning("Memory update target was not found")
+                return ToolResult(
+                    content="Error: memory could not be saved.", is_error=True
+                )
+        except Exception:
+            logger.exception("Memory write failed")
+            return ToolResult(
+                content="Error: memory could not be saved. Tell the user their request was not saved.",
+                is_error=True,
+            )
+        snapshot = MemoryToolResponseSnapshot(
+            memory_text=memory_text,
+            operation="update" if index_to_replace is not None else "add",
+            memory_id=memory_id,
+            index=index_to_replace,
         )
         self.emitter.emit(
             Packet(
                 placement=placement,
                 obj=MemoryToolDelta(
-                    memory_text=memory_text,
-                    operation=operation,
-                    memory_id=None,
-                    index=index_to_replace,
+                    memory_text=snapshot.memory_text,
+                    operation=snapshot.operation,
+                    memory_id=snapshot.memory_id,
+                    index=snapshot.index,
                 ),
             )
         )
-
-        return ToolResponse(
-            rich_response=MemoryToolResponse(
-                memory_text=memory_text,
-                index_to_replace=index_to_replace,
-            ),
-            llm_facing_response=f"New memory added: {memory_text}",
-        )
+        return ToolResult(content=snapshot.model_dump_json(), details=snapshot)

@@ -1,159 +1,67 @@
+"""Shared LLM messages, generation requests, options, and stream events."""
+
 from enum import Enum
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
-
-
-class LLMErrorInfo(BaseModel):
-    message: str
-    error_code: str
-    is_retryable: bool
-
-
-class ToolChoiceOptions(str, Enum):
-    REQUIRED = "required"
-    AUTO = "auto"
-    NONE = "none"
-
-
-class NamedToolChoice(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    name: str
-
-
-ToolChoice = ToolChoiceOptions | NamedToolChoice
-
-
-class ReasoningEffort(str, Enum):
-    """Reasoning effort levels for models that support extended thinking.
-
-    Different providers map these values differently:
-    - OpenAI: Uses "low", "medium", "high" directly for reasoning_effort. Recently added "none" for 5 series
-              which is like "minimal"
-    - Claude: Uses budget_tokens with different values for each level
-    - Gemini: Uses "none", "low", "medium", "high" for thinking_budget (via litellm mapping)
-    """
-
-    AUTO = "auto"
-    OFF = "off"
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    # Supported by OpenAI and Anthropic adaptive-thinking models (Claude >= 4.7).
-    # Other provider mappings clamp it to their highest supported effort.
-    XHIGH = "xhigh"
-
-
-# Reasoning-effort values a user may pin per chat session. AUTO is excluded
-# because a cleared override (NULL) already resolves to AUTO.
-USER_SELECTABLE_REASONING_EFFORTS: frozenset[ReasoningEffort] = frozenset(
-    {
-        ReasoningEffort.OFF,
-        ReasoningEffort.LOW,
-        ReasoningEffort.MEDIUM,
-        ReasoningEffort.HIGH,
-        ReasoningEffort.XHIGH,
-    }
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    SerializeAsAny,
 )
 
 
-def parse_user_selectable_reasoning_effort(value: str) -> ReasoningEffort:
-    """Parse a user-supplied override value. Raises ValueError for an unknown
-    value or an explicit "auto", neither of which is user-selectable."""
-    effort = ReasoningEffort(value)
-    if effort not in USER_SELECTABLE_REASONING_EFFORTS:
-        raise ValueError(f"{value!r} is not a selectable reasoning effort")
-    return effort
+class ContentType(str, Enum):
+    TEXT = "text"
+    IMAGE_URL = "image_url"
+    THINKING = "thinking"
+    REDACTED_THINKING = "redacted_thinking"
+    TOOL_CALL = "tool_call"
 
 
-# AUTO has no rank: it defers a choice rather than naming an amount.
-_REASONING_EFFORT_RANK: dict[ReasoningEffort, int] = {
-    ReasoningEffort.OFF: 0,
-    ReasoningEffort.LOW: 1,
-    ReasoningEffort.MEDIUM: 2,
-    ReasoningEffort.HIGH: 3,
-    ReasoningEffort.XHIGH: 4,
-}
+class MessageRole(str, Enum):
+    SYSTEM = "system"
+    USER = "user"
+    ASSISTANT = "assistant"
+    TOOL_RESULT = "tool_result"
+    TOOL = "tool"
 
 
-def reasoning_effort_exceeds(effort: ReasoningEffort, cap: ReasoningEffort) -> bool:
-    """Whether `effort` asks for more thinking than `cap` allows."""
-    return _REASONING_EFFORT_RANK[effort] > _REASONING_EFFORT_RANK[cap]
+class ImageDetail(str, Enum):
+    AUTO = "auto"
+    LOW = "low"
+    HIGH = "high"
 
 
-class UserChatDefaults(BaseModel):
-    """A user's own chat defaults, resolved below any admin per-model
-    setting. See resolve_reasoning_effort for the reasoning chain."""
-
-    temperature_default: float | None = None
-    reasoning_effort_default: ReasoningEffort | None = None
-
-
-def resolve_reasoning_effort(
-    requested: ReasoningEffort,
-    *,
-    default: ReasoningEffort | None,
-    user_default: ReasoningEffort | None,
-    maximum: ReasoningEffort | None,
-) -> ReasoningEffort:
-    """Settle a request against the admin's per-model default, the user's own
-    default, and the cap.
-
-    Ordered chain, first concrete source wins. The cap applies last and
-    unconditionally.
-
-    AUTO is concretized before clamping because it maps to medium downstream,
-    which would quietly exceed a cap of LOW.
-    """
-    if requested != ReasoningEffort.AUTO:
-        effort = requested
-    elif default is not None and default != ReasoningEffort.AUTO:
-        effort = default
-    elif user_default is not None and user_default != ReasoningEffort.AUTO:
-        effort = user_default
-    else:
-        if maximum is None:
-            return ReasoningEffort.AUTO
-        effort = ReasoningEffort.MEDIUM
-
-    if maximum is not None and reasoning_effort_exceeds(effort, maximum):
-        return maximum
-    return effort
-
-
-# Content part structures for multimodal messages
-# The classes in this mirror the OpenAI Chat Completions message types and work well with routers like LiteLLM
 class TextContentPart(BaseModel):
-    type: Literal["text"] = "text"
+    type: Literal[ContentType.TEXT] = ContentType.TEXT
     text: str
     # Some providers (e.g. Anthropic/Gemini) support prompt caching controls on content blocks.
-    cache_control: dict | None = None
+    cache_control: dict[str, JsonValue] | None = None
 
 
 class ImageUrlDetail(BaseModel):
     url: str
-    detail: Literal["auto", "low", "high"] | None = None
+    detail: ImageDetail | None = None
 
 
 class ImageContentPart(BaseModel):
-    type: Literal["image_url"] = "image_url"
+    type: Literal[ContentType.IMAGE_URL] = ContentType.IMAGE_URL
     image_url: ImageUrlDetail
 
 
 ContentPart = TextContentPart | ImageContentPart
 
 
-# The signature is minted by the provider and must be round-tripped unmodified
-# for replay to be accepted.
 class ThinkingBlock(BaseModel):
-    type: Literal["thinking"] = "thinking"
+    type: Literal[ContentType.THINKING] = ContentType.THINKING
     thinking: str = ""
     signature: str | None = None
 
 
 class RedactedThinkingBlock(BaseModel):
-    type: Literal["redacted_thinking"] = "redacted_thinking"
+    type: Literal[ContentType.REDACTED_THINKING] = ContentType.REDACTED_THINKING
     data: str
 
 
@@ -169,24 +77,22 @@ class Usage(BaseModel):
 
 
 class TextContent(BaseModel):
-    type: Literal["text"] = "text"
+    type: Literal[ContentType.TEXT] = ContentType.TEXT
     text: str
 
 
 class ThinkingContent(BaseModel):
-    type: Literal["thinking"] = "thinking"
+    type: Literal[ContentType.THINKING] = ContentType.THINKING
     text: str
     blocks: list[AnyThinkingBlock] | None = None
 
 
 class ToolCall(BaseModel):
-    type: Literal["tool_call"] = "tool_call"
+    type: Literal[ContentType.TOOL_CALL] = ContentType.TOOL_CALL
     id: str
     name: str
     arguments: dict[str, JsonValue]
     argument_error: str | None = None
-    raw_arguments: str | None = None
-    arguments_complete: bool = True
 
 
 AssistantContent = Annotated[
@@ -195,12 +101,13 @@ AssistantContent = Annotated[
 
 
 class BaseMessage(BaseModel):
-    # Marks a stable prompt prefix for provider prompt caching; never sent as content.
+    # Request metadata never becomes provider content or durable transcript data.
+    metadata: SerializeAsAny[BaseModel] | None = Field(default=None, exclude=True)
     cacheable: bool = Field(default=False, exclude=True)
 
 
 class SystemMessage(BaseMessage):
-    role: Literal["system"] = "system"
+    role: Literal[MessageRole.SYSTEM] = MessageRole.SYSTEM
     content: str
 
     @property
@@ -209,8 +116,8 @@ class SystemMessage(BaseMessage):
 
 
 class UserMessage(BaseMessage):
-    role: Literal["user"] = "user"
-    content: str | list[ContentPart]
+    role: Literal[MessageRole.USER] = MessageRole.USER
+    content: str | list[TextContentPart | ImageContentPart]
 
     @property
     def text(self) -> str:
@@ -218,7 +125,7 @@ class UserMessage(BaseMessage):
 
 
 class AssistantMessage(BaseMessage):
-    role: Literal["assistant"] = "assistant"
+    role: Literal[MessageRole.ASSISTANT] = MessageRole.ASSISTANT
     content: list[AssistantContent] = Field(default_factory=list)
     stop_reason: str | None = None
     error_message: str | None = None
@@ -250,16 +157,21 @@ class AssistantMessage(BaseMessage):
         return [block for block in self.content if isinstance(block, ToolCall)]
 
 
-class ToolResultMessage(BaseMessage):
-    role: Literal["tool_result"] = "tool_result"
-    # Provider tool messages carry text only.
-    content: str
-    tool_call_id: str
-    tool_name: str
+class ToolResult(BaseMessage):
+    content: str | list[TextContentPart | ImageContentPart]
+    details: SerializeAsAny[BaseModel] | None = None
+    is_error: bool = False
+    terminate: bool = False
 
     @property
     def text(self) -> str:
-        return self.content
+        return content_text(self.content)
+
+
+class ToolResultMessage(ToolResult):
+    role: Literal[MessageRole.TOOL_RESULT] = MessageRole.TOOL_RESULT
+    tool_call_id: str
+    tool_name: str
 
 
 Message = Annotated[
@@ -268,10 +180,99 @@ Message = Annotated[
 ]
 
 
-def content_text(content: str | list[ContentPart]) -> str:
+def content_text(content: str | list[TextContentPart | ImageContentPart]) -> str:
     if isinstance(content, str):
         return content
     return "".join(part.text for part in content if isinstance(part, TextContentPart))
+
+
+class ReasoningEffort(str, Enum):
+    """Reasoning effort levels mapped by each provider."""
+
+    AUTO = "auto"
+    OFF = "off"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    # Supported by OpenAI and Anthropic adaptive-thinking models (Claude >= 4.7).
+    # Other provider mappings clamp it to their highest supported effort.
+    XHIGH = "xhigh"
+
+
+USER_SELECTABLE_REASONING_EFFORTS: frozenset[ReasoningEffort] = frozenset(
+    {
+        ReasoningEffort.OFF,
+        ReasoningEffort.LOW,
+        ReasoningEffort.MEDIUM,
+        ReasoningEffort.HIGH,
+        ReasoningEffort.XHIGH,
+    }
+)
+
+
+def parse_user_selectable_reasoning_effort(value: str) -> ReasoningEffort:
+    """Parse a user-supplied override value. Raises ValueError for an unknown
+    value or an explicit "auto", neither of which is user-selectable."""
+    effort = ReasoningEffort(value)
+    if effort not in USER_SELECTABLE_REASONING_EFFORTS:
+        raise ValueError(f"{value!r} is not a selectable reasoning effort")
+    return effort
+
+
+_REASONING_EFFORT_RANK: dict[ReasoningEffort, int] = {
+    ReasoningEffort.OFF: 0,
+    ReasoningEffort.LOW: 1,
+    ReasoningEffort.MEDIUM: 2,
+    ReasoningEffort.HIGH: 3,
+    ReasoningEffort.XHIGH: 4,
+}
+
+
+def reasoning_effort_exceeds(effort: ReasoningEffort, cap: ReasoningEffort) -> bool:
+    """Whether `effort` asks for more thinking than `cap` allows."""
+    return _REASONING_EFFORT_RANK[effort] > _REASONING_EFFORT_RANK[cap]
+
+
+def resolve_reasoning_effort(
+    requested: ReasoningEffort,
+    *,
+    default: ReasoningEffort | None,
+    user_default: ReasoningEffort | None,
+    maximum: ReasoningEffort | None,
+) -> ReasoningEffort:
+    """Apply admin and user defaults, then cap the effective reasoning effort.
+
+    AUTO resolves before clamping because providers interpret it as medium.
+    """
+    if requested != ReasoningEffort.AUTO:
+        effort = requested
+    elif default is not None and default != ReasoningEffort.AUTO:
+        effort = default
+    elif user_default is not None and user_default != ReasoningEffort.AUTO:
+        effort = user_default
+    else:
+        if maximum is None:
+            return ReasoningEffort.AUTO
+        effort = ReasoningEffort.MEDIUM
+
+    if maximum is not None and reasoning_effort_exceeds(effort, maximum):
+        return maximum
+    return effort
+
+
+class ToolChoiceOptions(str, Enum):
+    REQUIRED = "required"
+    AUTO = "auto"
+    NONE = "none"
+
+
+class NamedToolChoice(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+
+
+ToolChoice = ToolChoiceOptions | NamedToolChoice
 
 
 class ToolDefinition(BaseModel):
@@ -310,135 +311,111 @@ class GenerationRequestParams(BaseModel):
     sent_kwargs: dict[str, JsonValue]
 
 
+class GenerationEventType(str, Enum):
+    START = "start"
+    DONE = "done"
+    ERROR = "error"
+    TEXT_START = "text_start"
+    TEXT_DELTA = "text_delta"
+    TEXT_END = "text_end"
+    THINKING_START = "thinking_start"
+    THINKING_DELTA = "thinking_delta"
+    THINKING_END = "thinking_end"
+    TOOL_CALL_START = "tool_call_start"
+    TOOL_CALL_DELTA = "tool_call_delta"
+    TOOL_CALL_END = "tool_call_end"
+
+
 class _Event(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     request_params: GenerationRequestParams | None = None
 
 
 class GenerationLifecycleEvent(_Event):
-    """Generation status; content arrives through incremental content events."""
+    message: AssistantMessage
 
 
 class GenerationStartEvent(GenerationLifecycleEvent):
-    type: Literal["start"] = "start"
+    type: Literal[GenerationEventType.START] = GenerationEventType.START
 
 
 class GenerationDoneEvent(GenerationLifecycleEvent):
-    type: Literal["done"] = "done"
-    usage: Usage | None = None
-    stop_reason: str | None = None
+    type: Literal[GenerationEventType.DONE] = GenerationEventType.DONE
 
 
 class GenerationErrorEvent(GenerationLifecycleEvent):
-    type: Literal["error"] = "error"
-    usage: Usage | None = None
-    stop_reason: Literal["error"] = "error"
-    error_message: str
+    type: Literal[GenerationEventType.ERROR] = GenerationEventType.ERROR
 
 
 class GenerationTextEvent(_Event):
+    message: AssistantMessage
     content_index: int = Field(ge=0)
     text: str = ""
 
 
+class TextStartEvent(GenerationTextEvent):
+    type: Literal[GenerationEventType.TEXT_START] = GenerationEventType.TEXT_START
+
+
 class TextDeltaEvent(GenerationTextEvent):
-    type: Literal["text_delta"] = "text_delta"
+    type: Literal[GenerationEventType.TEXT_DELTA] = GenerationEventType.TEXT_DELTA
+
+
+class TextEndEvent(GenerationTextEvent):
+    type: Literal[GenerationEventType.TEXT_END] = GenerationEventType.TEXT_END
+
+
+class ThinkingStartEvent(GenerationTextEvent):
+    type: Literal[GenerationEventType.THINKING_START] = (
+        GenerationEventType.THINKING_START
+    )
 
 
 class ThinkingDeltaEvent(GenerationTextEvent):
-    blocks: list[AnyThinkingBlock] | None = None
-    type: Literal["thinking_delta"] = "thinking_delta"
+    type: Literal[GenerationEventType.THINKING_DELTA] = (
+        GenerationEventType.THINKING_DELTA
+    )
+
+
+class ThinkingEndEvent(GenerationTextEvent):
+    type: Literal[GenerationEventType.THINKING_END] = GenerationEventType.THINKING_END
 
 
 class GenerationToolCallEvent(_Event):
+    message: AssistantMessage
     content_index: int = Field(ge=0)
     tool_call: ToolCall
     argument_deltas: dict[str, str] = Field(default_factory=dict)
 
 
 class ToolCallStartEvent(GenerationToolCallEvent):
-    type: Literal["tool_call_start"] = "tool_call_start"
+    type: Literal[GenerationEventType.TOOL_CALL_START] = (
+        GenerationEventType.TOOL_CALL_START
+    )
 
 
 class ToolCallDeltaEvent(GenerationToolCallEvent):
-    type: Literal["tool_call_delta"] = "tool_call_delta"
+    type: Literal[GenerationEventType.TOOL_CALL_DELTA] = (
+        GenerationEventType.TOOL_CALL_DELTA
+    )
 
 
 class ToolCallEndEvent(GenerationToolCallEvent):
-    type: Literal["tool_call_end"] = "tool_call_end"
+    type: Literal[GenerationEventType.TOOL_CALL_END] = GenerationEventType.TOOL_CALL_END
 
 
 GenerationEvent = Annotated[
     GenerationStartEvent
     | GenerationDoneEvent
     | GenerationErrorEvent
+    | TextStartEvent
     | TextDeltaEvent
+    | TextEndEvent
+    | ThinkingStartEvent
     | ThinkingDeltaEvent
+    | ThinkingEndEvent
     | ToolCallStartEvent
     | ToolCallDeltaEvent
     | ToolCallEndEvent,
     Field(discriminator="type"),
 ]
-
-
-def apply_generation_event(message: AssistantMessage, event: GenerationEvent) -> None:
-    """Mutate caller-owned output while preserving its identity and application metadata.
-
-    The caller must serialize access to the message. Mutable event payloads are
-    copied, so later message updates cannot alter the event. Copy the message
-    before exposing it as a snapshot.
-    """
-    if isinstance(event, GenerationStartEvent):
-        return
-    if isinstance(event, (GenerationDoneEvent, GenerationErrorEvent)):
-        message.stop_reason = event.stop_reason
-        message.error_message = (
-            event.error_message if isinstance(event, GenerationErrorEvent) else None
-        )
-        message.usage = event.usage.model_copy(deep=True) if event.usage else None
-        return
-    index = event.content_index
-    if index > len(message.content):
-        raise ValueError("Generation update skips a content block")
-    if isinstance(event, GenerationToolCallEvent):
-        block = event.tool_call.model_copy(deep=True)
-        if index == len(message.content):
-            if not isinstance(event, ToolCallStartEvent):
-                raise ValueError("Tool update requires a started call")
-            message.content.append(block)
-        else:
-            if not isinstance(message.content[index], ToolCall):
-                raise ValueError("Tool update targets non-tool content")
-            message.content[index] = block
-        return
-    if index == len(message.content):
-        message.content.append(
-            ThinkingContent(text="")
-            if isinstance(event, ThinkingDeltaEvent)
-            else TextContent(text="")
-        )
-    content = message.content[index]
-    if isinstance(event, ThinkingDeltaEvent):
-        if not isinstance(content, ThinkingContent):
-            raise ValueError("Thinking update targets non-thinking content")
-        content.text += event.text
-        if event.blocks:
-            if content.blocks is None:
-                content.blocks = []
-            for block in event.blocks:
-                last = content.blocks[-1] if content.blocks else None
-                # Providers stream one thinking block as text fragments and then
-                # its signature. Merge them so the block can be replayed.
-                if (
-                    isinstance(block, ThinkingBlock)
-                    and isinstance(last, ThinkingBlock)
-                    and not last.signature
-                ):
-                    last.thinking += block.thinking
-                    last.signature = block.signature
-                else:
-                    content.blocks.append(block.model_copy(deep=True))
-    else:
-        if not isinstance(content, TextContent):
-            raise ValueError("Text update targets non-text content")
-        content.text += event.text

@@ -1,55 +1,33 @@
 import re
 
 from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
-from onyx.context.search.models import SearchDocsResponse
+from onyx.configs.constants import DocumentSource
+from onyx.context.search.models import SearchDoc, SearchDocsResponse
+from onyx.file_store.models import ContextFileMetadata
+from onyx.llm.models import ToolResultMessage
 from onyx.tools.built_in_tools import CITEABLE_TOOLS_NAMES
-from onyx.tools.models import ToolResponse
 
 
-def update_citation_processor_from_tool_response(
-    tool_response: ToolResponse,
+def update_citation_processor_from_tool_result(
+    tool_response: ToolResultMessage,
     citation_processor: DynamicCitationProcessor,
 ) -> None:
-    """Update citation processor if this was a citeable tool with a SearchDocsResponse.
-
-    Checks if the tool call is citeable and if the response contains a SearchDocsResponse,
-    then creates a mapping from citation numbers to SearchDoc objects and updates the
-    citation processor.
-
-    Args:
-        tool_response: The response from the tool execution (must have tool_call set)
-        citation_processor: The DynamicCitationProcessor to update
-    """
-    # Early return if tool_call is not set
-    if tool_response.tool_call is None:
+    """Add citeable search artifacts to the citation lookup."""
+    data = tool_response.details
+    if tool_response.tool_name not in CITEABLE_TOOLS_NAMES or not isinstance(
+        data, SearchDocsResponse
+    ):
         return
-
-    # Update citation processor if this was a search tool
-    if tool_response.tool_call.tool_name in CITEABLE_TOOLS_NAMES:
-        # Check if the rich_response is a SearchDocsResponse
-        if isinstance(tool_response.rich_response, SearchDocsResponse):
-            search_response = tool_response.rich_response
-
-            # Create mapping from citation number to SearchDoc
-            citation_to_doc: CitationMapping = {}
-            for (
-                citation_num,
-                doc_id,
-            ) in search_response.citation_mapping.items():
-                # Find the SearchDoc with this doc_id
-                matching_doc = next(
-                    (
-                        doc
-                        for doc in search_response.search_docs
-                        if doc.document_id == doc_id
-                    ),
-                    None,
-                )
-                if matching_doc:
-                    citation_to_doc[citation_num] = matching_doc
-
-            # Update the citation processor
-            citation_processor.update_citation_mapping(citation_to_doc)
+    documents: dict[str, SearchDoc] = {}
+    for document in data.search_docs:
+        documents.setdefault(document.document_id, document)
+    citation_processor.update_citation_mapping(
+        {
+            number: documents[document_id]
+            for number, document_id in data.citation_mapping.items()
+            if document_id in documents
+        }
+    )
 
 
 def extract_citation_order_from_text(text: str) -> list[int]:
@@ -214,3 +192,40 @@ def collapse_citations(
     combined_mapping.update(additional_mappings)
 
     return updated_text, combined_mapping
+
+
+def build_context_file_citation_mapping(
+    file_metadata: list[ContextFileMetadata],
+    starting_citation_num: int = 1,
+) -> dict[int, SearchDoc]:
+    """Build citation mapping for context files.
+
+    Converts context file metadata into SearchDoc objects that can be cited.
+    Citation numbers start from the provided starting number.
+
+    Args:
+        file_metadata: List of context file metadata
+        starting_citation_num: Starting citation number (default: 1)
+
+    Returns:
+        Dictionary mapping citation numbers to SearchDoc objects
+    """
+    citation_mapping: dict[int, SearchDoc] = {}
+
+    for idx, file_meta in enumerate(file_metadata, start=starting_citation_num):
+        search_doc = SearchDoc(
+            document_id=file_meta.file_id,
+            chunk_ind=0,
+            semantic_identifier=file_meta.filename,
+            link=None,
+            blurb=file_meta.file_content,
+            source_type=DocumentSource.FILE,
+            boost=1,
+            hidden=False,
+            metadata={},
+            score=0.0,
+            match_highlights=[file_meta.file_content],
+        )
+        citation_mapping[idx] = search_doc
+
+    return citation_mapping

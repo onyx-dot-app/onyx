@@ -805,35 +805,16 @@ export default function SecurityHardeningPage() {
           </Card>
         </div>
 
-        {/* Network Safety. The env-injection toggle is always shown but locked
-            off in multi-tenant cloud; the SSRF policy is single-tenant only
-            (operator-controlled, env-driven in multi-tenant cloud). */}
-        <div className="flex w-full flex-col gap-3">
-          <Content
-            title={t("networkSafety.section.title")}
-            sizePreset="main-content"
-            variant="section"
-          />
+        {!isMultiTenant && (
+          <div className="flex w-full flex-col gap-3">
+            <Content
+              title={t("networkSafety.section.title")}
+              sizePreset="main-content"
+              variant="section"
+            />
 
-          <Card border="solid" rounding={4}>
-            <Section>
-              <ToggleRow
-                title={t("networkSafety.envInjection.title")}
-                description={
-                  isMultiTenant
-                    ? t("networkSafety.envInjection.multiTenantDescription")
-                    : t("networkSafety.envInjection.description")
-                }
-                checked={draft.llm_custom_config_env_injection}
-                onCheckedChange={(checked) =>
-                  void saveSettings({
-                    llm_custom_config_env_injection: checked,
-                  })
-                }
-                disabled={isMultiTenant}
-              />
-
-              {!isMultiTenant && (
+            <Card border="solid" rounding={4}>
+              <Section>
                 <InputHorizontal
                   title={t("networkSafety.ssrf.title")}
                   description={t("networkSafety.ssrf.description")}
@@ -885,10 +866,10 @@ export default function SecurityHardeningPage() {
                     />
                   </div>
                 </InputHorizontal>
-              )}
-            </Section>
-          </Card>
-        </div>
+              </Section>
+            </Card>
+          </div>
+        )}
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );

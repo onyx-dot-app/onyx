@@ -31,7 +31,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.factory import llm_from_provider
 from onyx.llm.models import Usage
-from onyx.llm.multi_llm import LitellmLLM
+from onyx.llm.multi_llm import LitellmTransport
 from onyx.server.gateway.configs import (
     ANTHROPIC_GATEWAY_PASSTHROUGH_ENABLED,
     ANTHROPIC_PASSTHROUGH_CONNECT_TIMEOUT_SECONDS,
@@ -274,7 +274,9 @@ def handle_anthropic_passthrough(
     url = _messages_url(provider)
     # llm is built only for tracing config (model/provider metadata); the
     # actual call goes straight over httpx, never through llm.invoke/stream.
-    llm = llm_from_provider(model_name=model_config.name, llm_provider=provider)
+    llm = llm_from_provider(
+        model_name=model_config.name, llm_provider=provider
+    ).transport
 
     if request.stream:
         return _sse_response(
@@ -294,7 +296,7 @@ def handle_anthropic_passthrough(
     with (
         _gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
-            llm, flow=flow, input_messages=request.messages, tools=request.tools
+            llm.info, flow=flow, input_messages=request.messages, tools=request.tools
         ) as span,
     ):
         try:
@@ -338,9 +340,9 @@ def handle_anthropic_passthrough(
             if isinstance(block, dict) and block.get("type") == "text"
         )
         converted_usage = _usage_from_anthropic_wire(usage) if usage else None
-        if converted_usage is not None:
+        if converted_usage is not None and isinstance(llm, LitellmTransport):
             # Managed-key cost accounting normally happens inside
-            # LLM.invoke/stream, which this path bypasses.
+            # LitellmTransport.invoke/stream, which this path bypasses.
             llm._track_llm_cost(converted_usage)
         if span is not None:
             record_llm_span_output(
@@ -368,7 +370,7 @@ def _passthrough_stream_worker(
     url: str,
     headers: dict[str, str],
     body: dict[str, Any],
-    llm: LitellmLLM,
+    llm: LitellmTransport,
     flow: LLMFlow,
     input_messages: list[dict[str, Any]],
     tools: list[dict[str, Any]] | None,
@@ -391,7 +393,7 @@ def _passthrough_stream_worker(
     with (
         _gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
-            llm, flow=flow, input_messages=input_messages, tools=tools
+            llm.info, flow=flow, input_messages=input_messages, tools=tools
         ) as span,
     ):
         state = _StreamAccumulator()
@@ -495,8 +497,8 @@ def _passthrough_stream_worker(
             if frame_lines and not cancelled.is_set():
                 _put_stream_item(out, "\n".join(frame_lines) + "\n\n", cancelled)
             # Managed-key cost accounting normally happens inside
-            # LLM.invoke/stream, which this path bypasses.
-            if state.usage is not None:
+            # LitellmTransport.invoke/stream, which this path bypasses.
+            if state.usage is not None and isinstance(llm, LitellmTransport):
                 llm._track_llm_cost(state.usage)
 
 

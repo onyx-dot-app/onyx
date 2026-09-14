@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from onyx.tools.fake_tools import coding_agent
+from onyx.coding_agent import agent as coding_agent
 
 
 def test_coding_agent_downloads_and_extracts_repo_with_existing_policy() -> None:

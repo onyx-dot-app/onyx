@@ -8,6 +8,7 @@ from onyx.configs.app_configs import (
     IMAGE_SUMMARIZATION_USER_PROMPT,
 )
 from onyx.configs.chat_configs import IMAGE_SUMMARIZATION_TIMEOUT
+from onyx.context.messages import prepare_model_messages
 from onyx.llm.interfaces import LLM, GenerationContext
 from onyx.llm.models import (
     ContentPart,
@@ -131,15 +132,18 @@ def _summarize_image(
     )
 
     try:
+        # Call LLM with Braintrust tracing
         response = llm.invoke(
-            GenerationRequest(messages=messages),
+            GenerationRequest(messages=prepare_model_messages(messages, llm.info)),
             context=GenerationContext(
                 flow=LLMFlow.IMAGE_SUMMARIZATION,
                 content_mode=TraceContentMode.METADATA_ONLY,
-                total_timeout_s=IMAGE_SUMMARIZATION_TIMEOUT,
+                total_timeout=IMAGE_SUMMARIZATION_TIMEOUT,
             ),
         )
-        return response.text
+        summary = response.text
+
+        return summary
 
     except Exception as e:
         # Extract structured details from LiteLLM exceptions when available,

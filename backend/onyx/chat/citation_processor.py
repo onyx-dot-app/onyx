@@ -403,8 +403,8 @@ class DynamicCitationProcessor:
         if token is None:
             self.code_fence_tracker.flush()
             if self.curr_segment:
-                yield self.curr_segment
-                self.curr_segment = ""
+                segment, self.curr_segment = self.curr_segment, ""
+                yield segment
             return
 
         # Handle stop stream token

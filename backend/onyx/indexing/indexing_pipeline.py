@@ -87,6 +87,7 @@ from onyx.indexing.models import (
     UpdatableChunkData,
 )
 from onyx.indexing.vector_db_insertion import write_chunks_to_vector_db_with_backoff
+from onyx.llm.exceptions import LLMRateLimitError
 from onyx.llm.factory import (
     get_contextual_rag_llm_for_search_settings,
     get_default_llm_with_vision,
@@ -98,7 +99,6 @@ from onyx.llm.models import (
     ReasoningEffort,
     UserMessage,
 )
-from onyx.llm.multi_llm import LLMRateLimitError
 from onyx.llm.utils import MAX_CONTEXT_TOKENS
 from onyx.natural_language_processing.utils import (
     BaseTokenizer,
@@ -230,11 +230,7 @@ def _upsert_documents_in_db(
         )
         document_metadata_list.append(db_doc_metadata)
 
-    upsert_documents(
-        db_session,
-        document_metadata_list,
-        source=documents[0].source if documents else None,
-    )
+    upsert_documents(db_session, document_metadata_list)
 
     # Insert document content metadata
     for doc in documents:
@@ -372,8 +368,6 @@ def get_docs_to_update(
 
     Two-gate dedup:
 
-    Permission changes bypass both gates so ACL updates persist.
-
     Gate 1 — timestamp skip (fast path):
       If the connector supplies doc_updated_at and it hasn't advanced past what we
       already indexed, skip immediately. No hash computation needed.
@@ -404,18 +398,6 @@ def get_docs_to_update(
     updatable_docs: list[Document] = []
     doc_id_to_content_hash: dict[str, str] = {}
     for doc in documents:
-        db_doc = id_to_db_doc_map.get(doc.id)
-        access_changed = bool(
-            db_doc
-            and doc.external_access is not None
-            and (
-                doc.external_access.external_user_emails
-                != set(db_doc.external_user_emails or [])
-                or doc.external_access.external_user_group_ids
-                != set(db_doc.external_user_group_ids or [])
-                or doc.external_access.is_public != db_doc.is_public
-            )
-        )
         timestamp_advanced = (
             doc.doc_updated_at is not None
             and doc.id in id_update_time_map
@@ -428,7 +410,6 @@ def get_docs_to_update(
             and doc.doc_updated_at
             and doc.id in id_update_time_map
             and not timestamp_advanced
-            and not access_changed
         ):
             continue
 
@@ -437,7 +418,8 @@ def get_docs_to_update(
         # check so we never suppress a legitimate re-index (see docstring).
         content_hash = doc.content_hash()
         if not timestamp_advanced and not ignore_content_hash_gate:
-            if db_doc and db_doc.content_hash == content_hash and not access_changed:
+            db_doc = id_to_db_doc_map.get(doc.id)
+            if db_doc and db_doc.content_hash == content_hash:
                 logger.debug("Skipping document %r — content hash unchanged", doc.id)
                 continue
 
@@ -980,9 +962,6 @@ def add_document_summaries(
     doc_tokens = tokenizer.encode(chunks_by_doc[0].source_document.get_text_content())
     doc_content = tokenizer_trim_middle(doc_tokens, trunc_doc_tokens, tokenizer)
 
-    # Apply prompt caching: cache the static prompt, document content is the suffix
-    # Note: For document summarization, there's no cacheable prefix since the document changes
-    # So we just pass the full prompt without caching
     summary_prompt = DOCUMENT_SUMMARY_PROMPT.format(document=doc_content)
     prompt_msg = UserMessage(content=summary_prompt)
 
@@ -997,7 +976,7 @@ def add_document_summaries(
         context=GenerationContext(
             flow=LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY,
             content_mode=TraceContentMode.METADATA_ONLY,
-            total_timeout_s=CONTEXTUAL_RAG_LLM_TIMEOUT,
+            total_timeout=CONTEXTUAL_RAG_LLM_TIMEOUT,
         ),
     )
     doc_summary = response.text
@@ -1053,7 +1032,7 @@ def add_chunk_summaries(
             context=GenerationContext(
                 flow=LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY,
                 content_mode=TraceContentMode.METADATA_ONLY,
-                total_timeout_s=CONTEXTUAL_RAG_LLM_TIMEOUT,
+                total_timeout=CONTEXTUAL_RAG_LLM_TIMEOUT,
             ),
         )
         doc_info = response.text
@@ -1065,9 +1044,8 @@ def add_chunk_summaries(
     def assign_context(chunk: DocAwareChunk) -> None:
         context_prompt2 = CONTEXTUAL_RAG_PROMPT2.format(chunk=chunk.content)
         try:
-            # Apply prompt caching: cache the document context (prompt1), chunk content is the suffix
             processed_prompt = cached_user_message(
-                llm.config, prefix=context_prompt1, suffix=context_prompt2
+                llm.info, prefix=context_prompt1, suffix=context_prompt2
             )
 
             response = llm.invoke(
@@ -1081,7 +1059,7 @@ def add_chunk_summaries(
                 context=GenerationContext(
                     flow=LLMFlow.CONTEXTUAL_RAG_CHUNK_CONTEXT,
                     content_mode=TraceContentMode.METADATA_ONLY,
-                    total_timeout_s=CONTEXTUAL_RAG_LLM_TIMEOUT,
+                    total_timeout=CONTEXTUAL_RAG_LLM_TIMEOUT,
                 ),
             )
             chunk.chunk_context = response.text
@@ -1116,7 +1094,7 @@ def add_contextual_summaries(
         doc2chunks[chunk.source_document.id].append(chunk)
 
     # The number of tokens allowed for the document when computing a document summary
-    trunc_doc_summary_tokens = llm.config.max_input_tokens - len(
+    trunc_doc_summary_tokens = llm.info.max_input_tokens - len(
         tokenizer.encode(DOCUMENT_SUMMARY_PROMPT)
     )
 
@@ -1126,7 +1104,7 @@ def add_contextual_summaries(
     # The number of tokens allowed for the document when computing a
     # "chunk in context of document" summary
     trunc_doc_chunk_tokens = (
-        llm.config.max_input_tokens - prompt_tokens - chunk_token_limit
+        llm.info.max_input_tokens - prompt_tokens - chunk_token_limit
     )
     for chunks_by_doc in doc2chunks.values():
         doc_tokens = None
@@ -1490,10 +1468,11 @@ def index_doc_batch(
 
     # contextual RAG
     if enable_contextual_rag and llm_enrichment_allowed:
-        assert llm is not None, "must provide an LLM for contextual RAG"
+        if llm is None:
+            raise ValueError("Contextual RAG requires a language model client")
         llm_tokenizer = get_tokenizer(
-            model_name=llm.config.model_name,
-            provider_type=llm.config.model_provider,
+            model_name=llm.info.model_name,
+            provider_type=llm.info.model_provider,
         )
 
         # Because the chunker's tokens are different from the LLM's tokens,

@@ -1,73 +1,143 @@
 import threading
 from collections.abc import Callable
-from dataclasses import dataclass
-from typing import Any
+from contextlib import nullcontext
+from copy import deepcopy
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
+from onyx.agents.runtime import Agent
+from onyx.agents.transcript import AgentTranscript
 from onyx.cache.interface import CacheBackend
 from onyx.chat.citation_processor import CitationMapping
-from onyx.chat.models import (
-    ChatLoadedFile,
-    ChatMessageSimple,
-    ExtractedContextFiles,
-    FileToolMetadata,
-    SearchParams,
-)
+from onyx.chat.models import AnswerStreamPart, SearchParams
 from onyx.context.search.models import SearchDoc
 from onyx.db.enums import IncognitoRecordMode
 from onyx.db.memory import UserMemoryContext
-from onyx.db.models import ChatMessage, Persona
+from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
 from onyx.llm.interfaces import LLM, LLMUserIdentity
-from onyx.llm.models import ReasoningEffort
+from onyx.llm.models import GenerationRequestParams, Message, ReasoningEffort
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.tools.models import ChatFile, ToolCallInfo
 
-# Type alias for search doc deduplication key
-# Simple key: just document_id (str)
-# Full key: (document_id, chunk_ind, match_highlights)
+# A full key preserves distinct highlights for the same document chunk.
 SearchDocKey = str | tuple[str, int, tuple[str, ...]]
 
 
+class ChatArtifactSnapshot(BaseModel):
+    """Application records derived from accepted tool results."""
+
+    model_config = ConfigDict(frozen=True)
+
+    tool_calls: list[ToolCallInfo]
+    all_search_docs: dict[SearchDocKey, SearchDoc]
+    citation_to_doc: CitationMapping
+
+
+class ChatResponseSnapshot(BaseModel):
+    """Detached response data for one persistence attempt."""
+
+    model_config = ConfigDict(frozen=True)
+
+    answer_tokens: str | None
+    reasoning_tokens: str | None
+    request_params: GenerationRequestParams | None
+    citation_to_doc: CitationMapping
+    tool_calls: list[ToolCallInfo]
+    is_clarification: bool
+    all_search_docs: dict[SearchDocKey, SearchDoc]
+    emitted_citations: set[int]
+    pre_answer_processing_time: float | None
+    transcript: AgentTranscript | None
+    cancelled: bool
+
+
 class ChatStateContainer:
-    """Container for accumulating state during LLM loop execution.
+    """Collect display output and artifacts for complete or partial persistence.
 
-    This container holds the partial state that can be saved to the database
-    if the generation is stopped by the user or completes normally.
-
-    Thread-safe: All write operations are protected by a lock to ensure safe
-    concurrent access from multiple threads. For thread-safe reads, use the
-    getter methods. Direct attribute access is not thread-safe.
+    Runtime commits and subscribers share the bound agent lock. Snapshots acquire
+    that lock before the display lock, so both describe the same committed event.
     """
 
     def __init__(self) -> None:
-        self._lock = threading.Lock()
-        # These are collected at the end after the entire tool call is completed
-        self.tool_calls: list[ToolCallInfo] = []
-        # This is accumulated during the streaming
+        self._lock = threading.RLock()
+        self._agent: Agent | None = None
+        self._project_artifacts: (
+            Callable[[list[Message]], ChatArtifactSnapshot] | None
+        ) = None
         self.reasoning_tokens: str | None = None
-        # This is accumulated during the streaming of the answer
         self.answer_tokens: str | None = None
-        # Store citation mapping for building citation_docs_info during partial saves
         self.citation_to_doc: CitationMapping = {}
-        # True if this turn is a clarification question (deep research flow)
         self.is_clarification: bool = False
-        # Pre-answer processing time (time before answer starts) in seconds
         self.pre_answer_processing_time: float | None = None
-        # Per-model: the outcome is persisted from whichever thread claims it.
-        self.request_params: dict[str, Any] | None = None
-        # Note: LLM cost tracking is now handled in multi_llm.py
-        # Search doc collection - maps dedup key to SearchDoc for all docs from tool calls
-        self._all_search_docs: dict[SearchDocKey, SearchDoc] = {}
-        # Track which citation numbers were actually emitted during streaming
+        self.request_params: GenerationRequestParams | None = None
         self._emitted_citations: set[int] = set()
 
-    def add_tool_call(self, tool_call: ToolCallInfo) -> None:
-        """Add a tool call to the accumulated state."""
+    def bind_agent(
+        self,
+        agent: Agent,
+        project_artifacts: Callable[[list[Message]], ChatArtifactSnapshot]
+        | None = None,
+    ) -> None:
+        """Bind runtime history and artifact projection for consistent snapshots."""
         with self._lock:
-            self.tool_calls.append(tool_call)
+            self._agent = agent
+            self._project_artifacts = project_artifacts
+
+    def update_display(
+        self,
+        *,
+        answer: str,
+        reasoning: str,
+        request_params: GenerationRequestParams | None,
+        citations: set[int],
+        pre_answer_seconds: float | None = None,
+    ) -> None:
+        """Commit all display fields for one generation event together."""
+        with self._lock:
+            self.answer_tokens = answer
+            self.reasoning_tokens = reasoning
+            self.request_params = deepcopy(request_params)
+            self._emitted_citations.update(citations)
+            if pre_answer_seconds is not None:
+                self.pre_answer_processing_time = pre_answer_seconds
+
+    def snapshot(self, *, cancelled: bool = False) -> ChatResponseSnapshot:
+        """Capture runtime history and display output at one commit boundary."""
+        while True:
+            with self._lock:
+                agent = self._agent
+            with agent.state_lock if agent is not None else nullcontext():
+                with self._lock:
+                    if agent is not self._agent:
+                        continue
+                    artifacts = (
+                        self._project_artifacts(agent.output_messages)
+                        if agent is not None and self._project_artifacts is not None
+                        else None
+                    )
+                    return ChatResponseSnapshot(
+                        answer_tokens=self.answer_tokens,
+                        reasoning_tokens=self.reasoning_tokens,
+                        request_params=deepcopy(self.request_params),
+                        citation_to_doc=deepcopy(
+                            artifacts.citation_to_doc
+                            if artifacts
+                            else self.citation_to_doc
+                        ),
+                        tool_calls=deepcopy(artifacts.tool_calls if artifacts else []),
+                        is_clarification=self.is_clarification,
+                        all_search_docs=deepcopy(
+                            artifacts.all_search_docs if artifacts else {}
+                        ),
+                        emitted_citations=self._emitted_citations.copy(),
+                        pre_answer_processing_time=self.pre_answer_processing_time,
+                        transcript=agent.snapshot(cancelled=cancelled)
+                        if agent
+                        else None,
+                        cancelled=cancelled,
+                    )
 
     def set_reasoning_tokens(self, reasoning: str | None) -> None:
         """Set the reasoning tokens from the final answer generation."""
@@ -79,20 +149,10 @@ class ChatStateContainer:
         with self._lock:
             self.answer_tokens = answer
 
-    def set_request_params(self, request_params: dict[str, Any] | None) -> None:
-        """Set the request params the answer generation sent to the provider."""
-        with self._lock:
-            self.request_params = request_params
-
-    def get_request_params(self) -> dict[str, Any] | None:
-        """Thread-safe getter for request_params."""
-        with self._lock:
-            return self.request_params
-
     def set_citation_mapping(self, citation_to_doc: CitationMapping) -> None:
         """Set the citation mapping from citation processor."""
         with self._lock:
-            self.citation_to_doc = citation_to_doc
+            self.citation_to_doc = deepcopy(citation_to_doc)
 
     def set_is_clarification(self, is_clarification: bool) -> None:
         """Set whether this turn is a clarification question."""
@@ -111,28 +171,11 @@ class ChatStateContainer:
 
     def get_tool_calls(self) -> list[ToolCallInfo]:
         """Thread-safe getter for tool_calls (returns a copy)."""
-        with self._lock:
-            return self.tool_calls.copy()
+        return self.snapshot().tool_calls
 
     def get_citation_to_doc(self) -> CitationMapping:
         """Thread-safe getter for citation_to_doc (returns a copy)."""
-        with self._lock:
-            return self.citation_to_doc.copy()
-
-    def get_is_clarification(self) -> bool:
-        """Thread-safe getter for is_clarification."""
-        with self._lock:
-            return self.is_clarification
-
-    def set_pre_answer_processing_time(self, duration: float | None) -> None:
-        """Set the pre-answer processing time (time before answer starts)."""
-        with self._lock:
-            self.pre_answer_processing_time = duration
-
-    def get_pre_answer_processing_time(self) -> float | None:
-        """Thread-safe getter for pre_answer_processing_time."""
-        with self._lock:
-            return self.pre_answer_processing_time
+        return self.snapshot().citation_to_doc
 
     @staticmethod
     def create_search_doc_key(
@@ -151,32 +194,6 @@ class ChatStateContainer:
         match_highlights_tuple = tuple(sorted(search_doc.match_highlights or []))
         return (search_doc.document_id, search_doc.chunk_ind, match_highlights_tuple)
 
-    def add_search_docs(
-        self, search_docs: list[SearchDoc], use_simple_key: bool = True
-    ) -> None:
-        """Add search docs to the accumulated collection with deduplication.
-
-        Args:
-            search_docs: List of SearchDoc objects to add
-            use_simple_key: If True (default), deduplicate by document_id only.
-                If False, deduplicate by document_id + chunk_ind + match_highlights.
-        """
-        with self._lock:
-            for doc in search_docs:
-                key = self.create_search_doc_key(doc, use_simple_key)
-                if key not in self._all_search_docs:
-                    self._all_search_docs[key] = doc
-
-    def get_all_search_docs(self) -> dict[SearchDocKey, SearchDoc]:
-        """Thread-safe getter for all accumulated search docs (returns a copy)."""
-        with self._lock:
-            return self._all_search_docs.copy()
-
-    def add_emitted_citation(self, citation_num: int) -> None:
-        """Add a citation number that was actually emitted during streaming."""
-        with self._lock:
-            self._emitted_citations.add(citation_num)
-
     def get_emitted_citations(self) -> set[int]:
         """Thread-safe getter for emitted citations (returns a copy)."""
         with self._lock:
@@ -192,35 +209,41 @@ class AvailableFiles(BaseModel):
     chat_file_ids: list[UUID] = []
 
 
-@dataclass(frozen=True)
-class ChatTurnSetup:
-    """Immutable context produced by ``build_chat_turn`` and consumed by ``_run_models``.
+class PersonaPromptConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
 
-    **Detached-safety contract:** instances of this class travel outside the DB
-    session that built them. The ORM objects still reachable from this dataclass
-    (``persona``, ``reserved_messages``) are detached after ``build_chat_turn``
-    returns. Downstream code must only read column attributes that were
-    eager-loaded during setup. Do NOT access lazy-loaded relationships
-    (e.g. ``setup.persona.tools[i].some_lazy_field``) or SQLAlchemy will raise
-    ``DetachedInstanceError`` at runtime. Closures stored here count: bind the
-    ids they need, never the rows.
+    system_prompt: str | None
+    task_prompt: str | None
+    datetime_aware: bool
+    replace_base_system_prompt: bool
 
-    Session and user-message identity are carried as plain scalars: the turn
-    needs only their ids and the session's project id."""
 
+class PreparedModel(BaseModel):
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    llm: LLM
+    message_id: int
+    display_name: str
+
+
+class ChatTurnSetup(BaseModel):
+    """Request values and service references shared by model executions."""
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    initial_packets: list[AnswerStreamPart]
     new_msg_req: SendMessageRequest
     chat_session_id: UUID
     chat_session_project_id: int | None
     # The session's pinned recording policy. None is an ordinary chat.
     incognito_record_mode: IncognitoRecordMode | None
-    persona: Persona
+    persona_id: int
+    persona: PersonaPromptConfig
     user_message_id: int
     user_identity: LLMUserIdentity
-    llms: list[LLM]  # length 1 for single-model, N for multi-model
-    model_display_names: list[str]  # parallel to llms
-    simple_chat_history: list[ChatMessageSimple]
+    models: list[PreparedModel]
+    messages: list[Message]
     extracted_context_files: ExtractedContextFiles
-    reserved_messages: list[ChatMessage]  # length 1 for single, N for multi
     # Processing-fence value and stream-buffer key — single source for the run id
     processing_run_id: int
     reserved_token_count: int
@@ -228,15 +251,12 @@ class ChatTurnSetup:
     search_params: SearchParams
     all_injected_file_metadata: dict[str, FileToolMetadata]
     available_files: AvailableFiles
-    tool_id_to_name_map: dict[int, str]
     forced_tool_id: int | None
-    files: list[ChatLoadedFile]
     chat_files_for_tools: list[ChatFile]
     custom_agent_prompt: str | None
     user_memory_context: UserMemoryContext
     # For deep research: was the last assistant message a clarification request?
     skip_clarification: bool
-    check_is_connected: Callable[[], bool]
     cache: CacheBackend
     # Execution params forwarded to per-model tool construction
     slack_context: SlackContext | None
