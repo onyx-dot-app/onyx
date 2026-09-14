@@ -353,6 +353,23 @@ repos:
         pass_filenames: false
         types_or: [javascript, ts, tsx]
 
+      # Repo-wide analysis, so it cannot take the changed files prek passes it.
+      # The mobile trigger matters: a mobile import is what keeps a
+      # @onyx-ai/shared export alive.
+      - id: web-dead-code
+        name: web dead code
+        entry: bash -c 'cd web && bun run dead-code'
+        language: system
+        pass_filenames: false
+        files: >-
+          (?x)^(
+            web/(.*\.(ts|tsx|css|js|mjs|cjs)|package\.json|bun\.lock
+                 |tsconfig.*\.json|knip\.config\.ts
+                 |tailwind\.config\.js|tailwind-themes/.*
+                 |lib/shared/tokens/.*\.json)
+            |mobile/.*\.(ts|tsx)
+          )$
+
       # Type checks with the native TypeScript compiler (~10x faster than classic
       # tsc). web/ is checked by the `typescript-check` uv-run hook above. web/lib/shared
       # uses the stable typescript@7 release; the widget hooks below still use

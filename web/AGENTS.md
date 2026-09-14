@@ -100,3 +100,16 @@ the contract keeps Opal host-agnostic while the app supplies real translations.
   not drop below the floors in `web/.type-coverage-baseline.yaml`. The `typescript-check`
   pre-commit hook runs it. After you remove `any` types, casts or non-null assertions, raise the
   floors with `ods type-coverage typescript --update`.
+
+## Dead code
+
+- `cd web && bun run dead-code` fails on any unused export, unreachable file, unused dependency,
+  unused CSS class, unused custom property or unused design token. The `web-dead-code` pre-commit
+  hook runs it. There is no baseline: the count is zero and must stay zero.
+- Delete what it reports. Do not export a symbol before something imports it, and do not keep a
+  props interface exported when only its own file uses it.
+- The corpus includes `mobile/`, because a mobile import is what keeps a `@onyx-ai/shared` export
+  alive.
+- If the tool is wrong, add an exemption with a comment that says why: `ignoreDependencies` or
+  `ignore` in `web/knip.config.ts`, or `CSS_IGNORE` in `web/tools/dead-code/index.ts`. Each entry
+  is a permanent rule, not a place to park work.
