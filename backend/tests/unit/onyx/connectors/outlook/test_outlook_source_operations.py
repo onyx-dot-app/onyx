@@ -12,20 +12,27 @@ import pytest
 import requests
 
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
-from onyx.connectors.outlook.models import OutlookAuthError, OutlookGraphError
+from onyx.connectors.outlook.models import (
+    MISSING_CREDENTIAL_CODE,
+    OutlookAuthError,
+    OutlookGraphError,
+)
 from onyx.connectors.outlook.source_operations import (
     CHANGE_SELECT,
-    MISSING_CREDENTIAL_CODE,
+    EPOCH_TIMESTAMP,
+    MESSAGES_PAGE_SIZE,
     TEXT_BODY_PREFERENCE,
     OutlookSourceOperations,
 )
 from tests.unit.onyx.connectors.outlook.outlook_api_shapes import (
     CONVERSATION_ID,
+    CREDENTIALS,
     INBOX_ID,
     MAILBOX_ADDRESS,
     MAILBOX_ID,
     change_json,
     folder_json,
+    http_error,
     message_json,
     page_json,
     removed_json,
@@ -34,12 +41,6 @@ from tests.unit.onyx.connectors.outlook.outlook_api_shapes import (
 
 MODULE = "onyx.connectors.outlook.source_operations"
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
-
-CREDENTIALS = {
-    "outlook_client_id": "client-id",
-    "outlook_directory_id": "tenant-id",
-    "outlook_client_secret": "secret",
-}
 
 
 def _gateway(
@@ -54,14 +55,6 @@ def _gateway(
     client = MagicMock()
     gateway._graph_client = client
     return gateway, client
-
-
-def _http_error(status: int, code: str = "ErrorAccessDenied") -> requests.HTTPError:
-    response = MagicMock()
-    response.status_code = status
-    response.json.return_value = {"error": {"code": code, "message": "denied"}}
-    response.text = "denied"
-    return requests.HTTPError("boom", response=response)
 
 
 def test_list_mailbox_users_builds_the_users_query() -> None:
@@ -95,7 +88,7 @@ def test_list_mailbox_users_follows_next_link_without_resending_params() -> None
 def test_resolve_mailbox_falls_back_to_the_primary_smtp_address() -> None:
     gateway, client = _gateway()
     client.get_json.side_effect = [
-        _http_error(404, "Request_ResourceNotFound"),
+        http_error(404, "Request_ResourceNotFound"),
         page_json([user_json()]),
     ]
 
@@ -109,7 +102,7 @@ def test_resolve_mailbox_falls_back_to_the_primary_smtp_address() -> None:
 def test_resolve_mailbox_returns_none_when_nothing_matches() -> None:
     gateway, client = _gateway()
     client.get_json.side_effect = [
-        _http_error(404, "Request_ResourceNotFound"),
+        http_error(404, "Request_ResourceNotFound"),
         page_json([]),
     ]
 
@@ -129,7 +122,7 @@ def test_resolve_mailbox_quotes_the_address_in_the_path() -> None:
 
 def test_graph_failures_surface_status_and_code() -> None:
     gateway, client = _gateway()
-    client.get_json.side_effect = _http_error(403, "ErrorAccessDenied")
+    client.get_json.side_effect = http_error(403, "ErrorAccessDenied")
 
     with pytest.raises(OutlookGraphError) as exc_info:
         gateway.probe_mailbox(mailbox_id=MAILBOX_ID)
@@ -138,16 +131,47 @@ def test_graph_failures_surface_status_and_code() -> None:
     assert exc_info.value.code == "ErrorAccessDenied"
 
 
+def test_graph_failure_without_a_json_body_keeps_the_text() -> None:
+    gateway, client = _gateway()
+    response = MagicMock()
+    response.status_code = 502
+    response.json.side_effect = ValueError("not json")
+    response.text = "<html>Bad gateway</html>"
+    client.get_json.side_effect = requests.HTTPError("boom", response=response)
+
+    with pytest.raises(OutlookGraphError) as exc_info:
+        gateway.probe_mailbox(mailbox_id=MAILBOX_ID)
+
+    assert exc_info.value.status == 502
+    assert exc_info.value.code == "<no code>"
+    assert "Bad gateway" in str(exc_info.value)
+
+
+def test_transport_failure_after_retries_is_a_graph_error_without_status() -> None:
+    """The shared client re-raises a transport error once its retries are
+    spent, and the connector must see it as a gateway failure like any other."""
+    gateway, client = _gateway()
+    client.get_json.side_effect = requests.Timeout("read timed out")
+
+    with pytest.raises(OutlookGraphError) as exc_info:
+        gateway.list_conversation_messages(
+            mailbox_id=MAILBOX_ID, conversation_id=CONVERSATION_ID, limit=10
+        )
+
+    assert exc_info.value.status is None
+    assert exc_info.value.code == "Timeout"
+
+
 def test_well_known_folder_lookup_treats_404_as_absent() -> None:
     gateway, client = _gateway()
-    client.get_json.side_effect = _http_error(404, "ErrorItemNotFound")
+    client.get_json.side_effect = http_error(404, "ErrorItemNotFound")
 
     assert gateway.get_well_known_folder(mailbox_id=MAILBOX_ID, name="archive") is None
 
 
 def test_well_known_folder_lookup_reraises_other_statuses() -> None:
     gateway, client = _gateway()
-    client.get_json.side_effect = _http_error(403)
+    client.get_json.side_effect = http_error(403)
 
     with pytest.raises(OutlookGraphError):
         gateway.get_well_known_folder(mailbox_id=MAILBOX_ID, name="junkemail")
@@ -176,7 +200,7 @@ def test_child_folder_listing_marks_search_folders() -> None:
     assert [f.is_search_folder for f in result.folders] == [False, True]
 
 
-def test_delta_page_sends_filter_and_page_size_only_on_the_first_request() -> None:
+def test_delta_page_sends_query_params_once_and_the_page_size_header_always() -> None:
     gateway, client = _gateway()
     client.get_json.return_value = page_json(
         [change_json(), removed_json()], next_link="https://graph/delta?$skiptoken=1"
@@ -202,12 +226,28 @@ def test_delta_page_sends_filter_and_page_size_only_on_the_first_request() -> No
     assert result.next_link == "https://graph/delta?$skiptoken=1"
 
     gateway.fetch_folder_delta_page(
-        mailbox_id=MAILBOX_ID, folder_id=INBOX_ID, next_link=result.next_link
+        mailbox_id=MAILBOX_ID,
+        folder_id=INBOX_ID,
+        page_size=5,
+        next_link=result.next_link,
     )
-    assert client.get_json.call_args.args[:2] == (result.next_link, None)
+    assert client.get_json.call_args.args == (
+        result.next_link,
+        None,
+        {"Prefer": "odata.maxpagesize=5"},
+    )
 
 
-def test_conversation_messages_page_until_the_limit_and_read_text_bodies() -> None:
+def test_delta_page_without_a_window_sends_no_filter() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = page_json([])
+
+    gateway.fetch_folder_delta_page(mailbox_id=MAILBOX_ID, folder_id=INBOX_ID)
+
+    assert "$filter" not in client.get_json.call_args.args[1]
+
+
+def test_conversation_messages_come_newest_first_as_text_up_to_the_limit() -> None:
     gateway, client = _gateway()
     html = message_json(
         id="msg-2",
@@ -224,12 +264,27 @@ def test_conversation_messages_page_until_the_limit_and_read_text_bodies() -> No
 
     first_url, first_params, first_headers = client.get_json.call_args_list[0].args
     assert first_url == f"{GRAPH_BASE}/users/{MAILBOX_ID}/messages"
-    assert first_params["$filter"] == "conversationId eq 'conv''1'"
+    assert first_params["$filter"] == (
+        f"receivedDateTime ge {EPOCH_TIMESTAMP} and conversationId eq 'conv''1'"
+    )
+    assert first_params["$orderby"] == "receivedDateTime desc"
+    assert first_params["$top"] == "3"
     assert first_headers == {"Prefer": TEXT_BODY_PREFERENCE}
     assert client.get_json.call_args_list[1].args[1] is None
     assert [m.id for m in result] == ["msg-1", "msg-2", "msg-3"]
     assert result[1].body_text == "Hi Bob"
     assert result[0].sender is not None and result[0].sender.address == MAILBOX_ADDRESS
+
+
+def test_conversation_page_size_never_exceeds_the_graph_maximum() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = page_json([])
+
+    gateway.list_conversation_messages(
+        mailbox_id=MAILBOX_ID, conversation_id=CONVERSATION_ID, limit=5000
+    )
+
+    assert client.get_json.call_args.args[1]["$top"] == str(MESSAGES_PAGE_SIZE)
 
 
 def test_missing_credential_field_fails_before_msal_is_built() -> None:

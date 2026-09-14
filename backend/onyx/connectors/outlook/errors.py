@@ -13,11 +13,11 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
     UnexpectedValidationError,
 )
-from onyx.connectors.outlook.models import OutlookAuthError, OutlookGraphError
-
-# Mirrors the gateway's code for a blank credential field. Kept here rather
-# than imported so this module stays free of the gateway import.
-MISSING_CREDENTIAL_CODE = "missing_credential"
+from onyx.connectors.outlook.models import (
+    MISSING_CREDENTIAL_CODE,
+    OutlookAuthError,
+    OutlookGraphError,
+)
 
 # Exchange caches app permission changes, so a freshly scoped mailbox can keep
 # answering 403 for a while. Microsoft documents the window as 30 minutes to
@@ -33,6 +33,12 @@ MAILBOX_UNAVAILABLE_REMEDIATION = (
     "Use the user principal name or primary SMTP address of a licensed, "
     "enabled mailbox. Shared mailboxes are sign-in disabled and must be "
     "listed explicitly."
+)
+
+USER_LISTING_DENIED = (
+    "The app cannot look up the tenant's users, which every-mailbox mode and "
+    "address resolution both need. Grant the `User.Read.All` application "
+    "permission and admin-consent it."
 )
 
 
@@ -73,9 +79,9 @@ def raise_for_graph_error(error: OutlookGraphError, denied_message: str) -> NoRe
         raise ConnectorValidationError(
             f"Graph found no mailbox ({error.code}). {MAILBOX_UNAVAILABLE_REMEDIATION}"
         ) from error
-    if error.status == 429 or (error.status is not None and error.status >= 500):
+    if error.status is None or error.status == 429 or error.status >= 500:
         raise UnexpectedValidationError(
-            f"Graph is throttling or unavailable ({error.status} {error.code}). "
+            f"Graph is throttling or unreachable ({error.status} {error.code}). "
             "Re-run the checks in a few minutes."
         ) from error
     raise UnexpectedValidationError(f"Unexpected Graph error: {error}") from error

@@ -1,7 +1,7 @@
 """The Outlook connector walk: mailboxes, folders, delta pages, conversations.
 
 The gateway is autospecced, so these tests drive the real checkpoint state
-machine and document assembly against canned Graph shapes.
+machine and document assembly against the gateway's plain models.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -11,8 +11,14 @@ from unittest.mock import MagicMock, create_autospec
 import pytest
 
 from onyx.connectors.exceptions import ConnectorValidationError, CredentialInvalidError
-from onyx.connectors.models import ConnectorFailure, Document, HierarchyNode
+from onyx.connectors.models import (
+    ConnectorFailure,
+    ConnectorMissingCredentialError,
+    Document,
+    HierarchyNode,
+)
 from onyx.connectors.outlook.connector import (
+    FILTERED_DELTA_CAP,
     MAX_MESSAGES_PER_CONVERSATION,
     OutlookCheckpoint,
     OutlookConnector,
@@ -25,7 +31,6 @@ from onyx.connectors.outlook.models import (
     OutlookDeltaPage,
     OutlookFolder,
     OutlookFolderPage,
-    OutlookGraphError,
     OutlookMailboxPage,
     OutlookRecipient,
 )
@@ -38,12 +43,14 @@ from tests.unit.onyx.connectors.outlook.outlook_api_shapes import (
     RECEIVED,
     change,
     folder,
+    graph_error,
     mailbox,
     message,
 )
 
 JUNK_ID = "folder-junk"
 DELETED_ID = "folder-deleted"
+DELETED_CHILD_ID = "folder-deleted-2024"
 ARCHIVE_ID = "folder-archive"
 PROJECTS_ID = "folder-projects"
 SEARCH_ID = "folder-search"
@@ -79,7 +86,9 @@ def _child_folders(
             folders=[
                 folder(child_folder_count=1),
                 folder(id=JUNK_ID, display_name="Junk Email"),
-                folder(id=DELETED_ID, display_name="Deleted Items"),
+                folder(
+                    id=DELETED_ID, display_name="Deleted Items", child_folder_count=1
+                ),
                 folder(id=SEARCH_ID, display_name="Digests", is_search_folder=True),
                 folder(id=ARCHIVE_ID, display_name="Archive"),
             ]
@@ -89,6 +98,16 @@ def _child_folders(
             folders=[
                 folder(
                     id=PROJECTS_ID, display_name="Projects", parent_folder_id=INBOX_ID
+                )
+            ]
+        )
+    if parent_folder_id == DELETED_ID:
+        return OutlookFolderPage(
+            folders=[
+                folder(
+                    id=DELETED_CHILD_ID,
+                    display_name="2024",
+                    parent_folder_id=DELETED_ID,
                 )
             ]
         )
@@ -116,6 +135,13 @@ def _delta(
                 conversation_id="conv-late",
                 received_at=RECEIVED + timedelta(days=2),
             ),
+            # A read-state row for mail older than the window, which Graph
+            # reports whatever the filter says.
+            change(
+                id="msg-old",
+                conversation_id="conv-old",
+                received_at=RECEIVED - timedelta(days=30),
+            ),
         ]
     )
 
@@ -132,6 +158,7 @@ def _happy_gateway() -> MagicMock:
         message(id="msg-2", received_at=RECEIVED + timedelta(hours=1)),
         message(),
         message(id="msg-junk", parent_folder_id=JUNK_ID),
+        message(id="msg-trashed-deep", parent_folder_id=DELETED_CHILD_ID),
         message(id="msg-draft", is_draft=True),
     ]
     return gateway
@@ -165,6 +192,18 @@ def _run(
     raise AssertionError("walk did not finish in 50 steps")
 
 
+def _folder_checkpoint(**overrides: Any) -> OutlookCheckpoint:
+    """A checkpoint parked on the Inbox of an opened mailbox."""
+    fields: dict[str, Any] = {
+        "has_more": True,
+        "mailboxes": [],
+        "current_mailbox": mailbox(),
+        "folders": [],
+        "current_folder": folder(),
+    }
+    return OutlookCheckpoint(**(fields | overrides))
+
+
 def test_walk_yields_hierarchy_then_one_document_per_conversation() -> None:
     gateway = _happy_gateway()
     connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
@@ -186,10 +225,14 @@ def test_walk_yields_hierarchy_then_one_document_per_conversation() -> None:
     assert [doc.id for doc in docs] == [
         conversation_document_id(mailbox(), CONVERSATION_ID)
     ]
-    gateway.list_conversation_messages.assert_called_once()
+    gateway.list_conversation_messages.assert_called_once_with(
+        mailbox_id=mailbox().id,
+        conversation_id=CONVERSATION_ID,
+        limit=MAX_MESSAGES_PER_CONVERSATION,
+    )
 
 
-def test_walk_skips_removed_late_and_repeated_changes() -> None:
+def test_walk_skips_removed_old_late_and_repeated_changes() -> None:
     gateway = _happy_gateway()
 
     _run(_connector(gateway, mailboxes=[MAILBOX_ADDRESS]))
@@ -236,6 +279,21 @@ def test_configured_folder_names_are_excluded_case_insensitively() -> None:
     assert ARCHIVE_ID not in walked
 
 
+def test_excluded_subtrees_are_descended_so_their_folder_ids_are_known() -> None:
+    gateway = _happy_gateway()
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+    checkpoint = connector.build_dummy_checkpoint()
+
+    _, checkpoint = _step(connector, checkpoint)
+    _, checkpoint = _step(connector, checkpoint)
+
+    assert set(checkpoint.excluded_folder_ids) == {
+        JUNK_ID,
+        DELETED_ID,
+        DELETED_CHILD_ID,
+    }
+
+
 def test_document_drops_excluded_and_draft_messages_and_keeps_order() -> None:
     gateway = _happy_gateway()
 
@@ -271,45 +329,61 @@ def test_unresolved_configured_mailbox_is_a_recorded_failure() -> None:
     assert failures[0].failed_entity.entity_id == "ghost@contoso.com"
 
 
+def test_failed_address_lookup_fails_the_attempt_instead_of_dropping_it() -> None:
+    gateway = _happy_gateway()
+    gateway.resolve_mailbox.side_effect = graph_error(503, "ServiceUnavailable")
+
+    with pytest.raises(Exception, match="ServiceUnavailable"):
+        _run(_connector(gateway, mailboxes=[MAILBOX_ADDRESS]))
+
+
 def test_denied_mailbox_is_a_failure_when_named_and_a_skip_otherwise() -> None:
     gateway = _happy_gateway()
-    gateway.probe_mailbox.side_effect = OutlookGraphError(
-        403, "ErrorAccessDenied", "denied"
-    )
+    gateway.probe_mailbox.side_effect = graph_error(403)
 
     named = _run(_connector(gateway, mailboxes=[MAILBOX_ADDRESS]))
     assert [type(item) for item in named] == [ConnectorFailure]
 
-    gateway.probe_mailbox.side_effect = OutlookGraphError(
-        403, "ErrorAccessDenied", "denied"
-    )
+    gateway.probe_mailbox.side_effect = graph_error(403)
     every = _run(_connector(gateway))
     assert every == []
 
 
+def test_denied_folder_listing_is_treated_like_a_denied_mailbox() -> None:
+    gateway = _happy_gateway()
+    gateway.list_child_folders.side_effect = graph_error(403)
+
+    items = _run(_connector(gateway, mailboxes=[MAILBOX_ADDRESS]))
+
+    assert [type(item) for item in items] == [HierarchyNode, ConnectorFailure]
+    gateway.fetch_folder_delta_page.assert_not_called()
+
+
+def test_denied_delta_stops_the_mailbox_after_one_failure() -> None:
+    gateway = _happy_gateway()
+    gateway.fetch_folder_delta_page.side_effect = graph_error(403)
+
+    items = _run(_connector(gateway, mailboxes=[MAILBOX_ADDRESS]))
+
+    failures = [item for item in items if isinstance(item, ConnectorFailure)]
+    assert len(failures) == 1
+    assert gateway.fetch_folder_delta_page.call_count == 1
+
+
 def test_unexpected_probe_error_fails_the_run() -> None:
     gateway = _happy_gateway()
-    gateway.probe_mailbox.side_effect = OutlookGraphError(
-        500, "InternalServerError", "boom"
-    )
+    gateway.probe_mailbox.side_effect = graph_error(500, "InternalServerError")
 
-    with pytest.raises(OutlookGraphError):
+    with pytest.raises(Exception, match="InternalServerError"):
         _run(_connector(gateway, mailboxes=[MAILBOX_ADDRESS]))
 
 
 def test_expired_delta_state_restarts_the_folder_round() -> None:
     gateway = _happy_gateway()
-    gateway.fetch_folder_delta_page.side_effect = OutlookGraphError(
-        410, "SyncStateNotFound", "gone"
-    )
+    gateway.fetch_folder_delta_page.side_effect = graph_error(410, "SyncStateNotFound")
     connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
-    checkpoint = OutlookCheckpoint(
-        has_more=True,
-        mailboxes=[],
-        current_mailbox=mailbox(),
-        folders=[],
-        current_folder=folder(),
-        delta_next_link="https://graph/delta?$skiptoken=old",
+    checkpoint = _folder_checkpoint(
+        delta_next_link="https://graph/delta?$skiptoken=old", folder_change_count=7
     )
 
     items, checkpoint = _step(connector, checkpoint)
@@ -317,12 +391,54 @@ def test_expired_delta_state_restarts_the_folder_round() -> None:
     assert items == []
     assert checkpoint.current_folder == folder()
     assert checkpoint.delta_next_link is None
+    assert checkpoint.folder_change_count == 0
+
+
+def test_vanished_folder_is_skipped() -> None:
+    gateway = _happy_gateway()
+    gateway.fetch_folder_delta_page.side_effect = graph_error(404, "ErrorItemNotFound")
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+
+    items, checkpoint = _step(connector, _folder_checkpoint())
+
+    assert items == []
+    assert checkpoint.current_folder is None
+    assert checkpoint.current_mailbox == mailbox()
+
+
+def test_folder_that_fills_the_filtered_cap_is_reread_without_the_filter() -> None:
+    gateway = _happy_gateway()
+    windows: list[datetime | None] = []
+
+    def capped_delta(**kwargs: Any) -> OutlookDeltaPage:
+        windows.append(kwargs["received_after"])
+        if kwargs["received_after"] is None:
+            return OutlookDeltaPage(changes=[change()])
+        return OutlookDeltaPage(
+            changes=[
+                change(id=f"msg-{i}", conversation_id=None)
+                for i in range(FILTERED_DELTA_CAP)
+            ]
+        )
+
+    gateway.fetch_folder_delta_page.side_effect = capped_delta
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+
+    items, checkpoint = _step(connector, _folder_checkpoint())
+    assert items == []
+    assert checkpoint.current_folder == folder()
+    assert checkpoint.folder_unfiltered is True
+
+    items, checkpoint = _step(connector, checkpoint)
+    assert [type(item) for item in items] == [Document]
+    assert checkpoint.current_folder is None
+    assert windows == [datetime.fromtimestamp(START, tz=timezone.utc), None]
 
 
 def test_conversation_fetch_failure_is_a_document_failure() -> None:
     gateway = _happy_gateway()
-    gateway.list_conversation_messages.side_effect = OutlookGraphError(
-        503, "ServiceUnavailable", "busy"
+    gateway.list_conversation_messages.side_effect = graph_error(
+        503, "ServiceUnavailable"
     )
 
     items = _run(_connector(gateway, mailboxes=[MAILBOX_ADDRESS]))
@@ -404,9 +520,7 @@ def test_validation_maps_token_refusal_to_invalid_credential() -> None:
 def test_validation_lists_unreachable_configured_mailboxes() -> None:
     gateway = _happy_gateway()
     gateway.resolve_mailbox.side_effect = [None, mailbox(id="user-2")]
-    gateway.probe_mailbox.side_effect = OutlookGraphError(
-        404, "MailboxNotEnabledForRESTAPI", "no"
-    )
+    gateway.probe_mailbox.side_effect = graph_error(404, "MailboxNotEnabledForRESTAPI")
 
     with pytest.raises(ConnectorValidationError) as exc_info:
         _connector(
@@ -435,5 +549,5 @@ def test_mismatched_national_cloud_hosts_are_rejected_at_construction() -> None:
 
 
 def test_credentials_before_provider_is_a_programming_error() -> None:
-    with pytest.raises(RuntimeError):
+    with pytest.raises(ConnectorMissingCredentialError):
         _ = OutlookConnector().ops

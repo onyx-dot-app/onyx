@@ -28,36 +28,31 @@ from onyx.connectors.exceptions import (
 )
 from onyx.connectors.outlook.capability_checks import build_outlook_indexing_checks
 from onyx.connectors.outlook.models import (
+    MISSING_CREDENTIAL_CODE,
     OutlookAuthError,
     OutlookDeltaPage,
     OutlookFolderPage,
-    OutlookGraphError,
     OutlookMailboxPage,
     OutlookTokenInfo,
 )
-from onyx.connectors.outlook.source_operations import (
-    MISSING_CREDENTIAL_CODE,
-    OutlookSourceOperations,
-)
+from onyx.connectors.outlook.source_operations import OutlookSourceOperations
 from tests.unit.onyx.connectors.outlook.outlook_api_shapes import (
+    CONVERSATION_ID,
+    CREDENTIALS,
     INBOX_ID,
     MAILBOX_ADDRESS,
     MAILBOX_ID,
+    change,
     folder,
+    graph_error,
     mailbox,
 )
 
 _CHECKS_BY_ID = {check.check_id: check for check in build_outlook_indexing_checks()}
 
-CREDENTIALS = {
-    "outlook_client_id": "client-id",
-    "outlook_directory_id": "tenant-id",
-    "outlook_client_secret": "secret",
-}
-
 
 def _gateway() -> MagicMock:
-    """A healthy tenant: one user with a readable mailbox."""
+    """A healthy tenant: one user with a readable, empty mailbox."""
     gateway = create_autospec(OutlookSourceOperations, instance=True)
     gateway.check_token.return_value = OutlookTokenInfo(expires_in=3599)
     gateway.list_mailbox_users.return_value = OutlookMailboxPage(mailboxes=[mailbox()])
@@ -83,10 +78,6 @@ def _context(
 
 def _run(check_id: str, context: CapabilityCheckContext) -> None:
     _CHECKS_BY_ID[check_id].run(context)
-
-
-def _graph_error(status: int, code: str = "ErrorAccessDenied") -> OutlookGraphError:
-    return OutlookGraphError(status, code, "denied")
 
 
 # ---------------------------------------------------------------------------
@@ -132,7 +123,7 @@ def test_listing_check_probes_one_user() -> None:
 
 def test_listing_check_names_the_missing_permission_on_403() -> None:
     gateway = _gateway()
-    gateway.list_mailbox_users.side_effect = _graph_error(
+    gateway.list_mailbox_users.side_effect = graph_error(
         403, "Authorization_RequestDenied"
     )
 
@@ -142,13 +133,13 @@ def test_listing_check_names_the_missing_permission_on_403() -> None:
 
 def test_listing_check_maps_401_to_expired_and_429_to_indeterminate() -> None:
     gateway = _gateway()
-    gateway.list_mailbox_users.side_effect = _graph_error(
+    gateway.list_mailbox_users.side_effect = graph_error(
         401, "InvalidAuthenticationToken"
     )
     with pytest.raises(CredentialExpiredError):
         _run("outlook_mailbox_listing", _context(gateway))
 
-    gateway.list_mailbox_users.side_effect = _graph_error(429, "TooManyRequests")
+    gateway.list_mailbox_users.side_effect = graph_error(429, "TooManyRequests")
     with pytest.raises(UnexpectedValidationError):
         _run("outlook_mailbox_listing", _context(gateway))
 
@@ -182,6 +173,37 @@ def test_mail_read_check_falls_back_to_the_first_tenant_user() -> None:
     gateway.resolve_mailbox.assert_called_once_with(address=MAILBOX_ADDRESS)
 
 
+def test_mail_read_check_reads_one_body_when_the_inbox_has_mail() -> None:
+    gateway = _gateway()
+    gateway.fetch_folder_delta_page.return_value = OutlookDeltaPage(
+        changes=[change(id="msg-gone", removed=True, conversation_id=None), change()]
+    )
+
+    _run("outlook_mail_read", _context(gateway))
+
+    gateway.list_conversation_messages.assert_called_once_with(
+        mailbox_id=MAILBOX_ID, conversation_id=CONVERSATION_ID, limit=1
+    )
+
+
+def test_mail_read_check_skips_the_body_probe_on_an_empty_inbox() -> None:
+    gateway = _gateway()
+
+    _run("outlook_mail_read", _context(gateway))
+
+    gateway.list_conversation_messages.assert_not_called()
+
+
+def test_mail_read_check_tells_read_basic_apart_from_read() -> None:
+    """Mail.ReadBasic.All answers every metadata probe and refuses only the body."""
+    gateway = _gateway()
+    gateway.fetch_folder_delta_page.return_value = OutlookDeltaPage(changes=[change()])
+    gateway.list_conversation_messages.side_effect = graph_error(403)
+
+    with pytest.raises(InsufficientPermissionsError, match="Mail.ReadBasic.All"):
+        _run("outlook_mail_read", _context(gateway))
+
+
 def test_mail_read_check_is_indeterminate_without_any_user() -> None:
     gateway = _gateway()
     gateway.list_mailbox_users.return_value = OutlookMailboxPage(mailboxes=[])
@@ -202,7 +224,7 @@ def test_mail_read_check_fails_when_the_address_matches_nobody() -> None:
 
 def test_mail_read_check_points_at_the_exchange_scope_on_403() -> None:
     gateway = _gateway()
-    gateway.probe_mailbox.side_effect = _graph_error(403)
+    gateway.probe_mailbox.side_effect = graph_error(403)
 
     with pytest.raises(InsufficientPermissionsError, match="Exchange"):
         _run("outlook_mail_read", _context(gateway))
@@ -210,7 +232,7 @@ def test_mail_read_check_points_at_the_exchange_scope_on_403() -> None:
 
 def test_mail_read_check_reports_a_mailbox_that_does_not_exist() -> None:
     gateway = _gateway()
-    gateway.probe_mailbox.side_effect = _graph_error(404, "MailboxNotEnabledForRESTAPI")
+    gateway.probe_mailbox.side_effect = graph_error(404, "MailboxNotEnabledForRESTAPI")
 
     with pytest.raises(ConnectorValidationError, match="MailboxNotEnabledForRESTAPI"):
         _run("outlook_mail_read", _context(gateway))
@@ -236,7 +258,7 @@ def test_configured_check_lists_every_problem_address() -> None:
         mailbox(id="user-2"),
         mailbox(id="user-3"),
     ]
-    gateway.probe_mailbox.side_effect = [_graph_error(403), folder()]
+    gateway.probe_mailbox.side_effect = [graph_error(403), folder()]
 
     with pytest.raises(ConnectorValidationError) as exc_info:
         _run(
@@ -257,6 +279,30 @@ def test_configured_check_lists_every_problem_address() -> None:
     assert "ghost@contoso.com" in message
     assert "denied@contoso.com (ErrorAccessDenied)" in message
     assert "ok@contoso.com" not in message
+
+
+def test_configured_check_does_not_blame_the_mailbox_for_a_throttled_probe() -> None:
+    gateway = _gateway()
+    gateway.probe_mailbox.side_effect = graph_error(503, "ServiceUnavailable")
+
+    with pytest.raises(UnexpectedValidationError):
+        _run(
+            "outlook_configured_mailboxes",
+            _context(gateway, {"mailboxes": [MAILBOX_ADDRESS]}),
+        )
+
+
+def test_configured_check_names_user_read_all_when_resolution_is_denied() -> None:
+    gateway = _gateway()
+    gateway.resolve_mailbox.side_effect = graph_error(
+        403, "Authorization_RequestDenied"
+    )
+
+    with pytest.raises(InsufficientPermissionsError, match="User.Read.All"):
+        _run(
+            "outlook_configured_mailboxes",
+            _context(gateway, {"mailboxes": [MAILBOX_ADDRESS]}),
+        )
 
 
 def test_configured_check_is_skipped_without_a_config() -> None:

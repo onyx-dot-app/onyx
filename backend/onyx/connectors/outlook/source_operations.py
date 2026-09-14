@@ -24,15 +24,13 @@ from onyx.connectors.microsoft_utils.graph_auth import (
     acquire_graph_token,
     build_msal_app,
 )
-from onyx.connectors.microsoft_utils.graph_client import (
-    GraphApiClient,
-    graph_error_code,
-)
+from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
 from onyx.connectors.microsoft_utils.graph_env import (
     DEFAULT_AUTHORITY_HOST,
     DEFAULT_GRAPH_API_HOST,
 )
 from onyx.connectors.outlook.models import (
+    MISSING_CREDENTIAL_CODE,
     OutlookAuthError,
     OutlookDeltaPage,
     OutlookFolder,
@@ -64,20 +62,18 @@ CREDENTIAL_FIELDS = (
     CREDENTIAL_DIRECTORY_ID,
     CREDENTIAL_CLIENT_SECRET,
 )
-# Raised as an OutlookAuthError code before MSAL is ever built, so a blank
-# form field reads as a credential problem and not a KeyError.
-MISSING_CREDENTIAL_CODE = "missing_credential"
 
 CONFIG_AUTHORITY_HOST = "authority_host"
 CONFIG_GRAPH_API_HOST = "graph_api_host"
 
-# Graph caps $top at 999 for users and 1000 for messages.
+# Graph caps $top at 999 for users. Message pages stay small because each row
+# carries a full body.
 USERS_PAGE_SIZE = 999
 FOLDERS_PAGE_SIZE = 250
 MESSAGES_PAGE_SIZE = 100
 
 MAILBOX_SELECT = "id,mail,userPrincipalName,displayName"
-FOLDER_SELECT = "id,displayName,parentFolderId,childFolderCount,totalItemCount"
+FOLDER_SELECT = "id,displayName,parentFolderId,childFolderCount"
 # The delta walk only needs to know which conversations changed.
 CHANGE_SELECT = "id,conversationId,receivedDateTime"
 MESSAGE_SELECT = ",".join(
@@ -93,7 +89,6 @@ MESSAGE_SELECT = ",".join(
         "receivedDateTime",
         "sentDateTime",
         "webLink",
-        "hasAttachments",
         "isDraft",
     )
 )
@@ -102,32 +97,35 @@ MESSAGE_SELECT = ",".join(
 TEXT_BODY_PREFERENCE = 'outlook.body-content-type="text"'
 SEARCH_FOLDER_TYPE = "#microsoft.graph.mailSearchFolder"
 
+# Graph only orders by a property that leads the filter, so conversation reads
+# carry this always-true bound to be allowed ``$orderby=receivedDateTime desc``.
+EPOCH_TIMESTAMP = "1970-01-01T00:00:00Z"
+
 
 def _odata_quote(value: str) -> str:
     """Escape a value for an OData string literal. Only the quote is special."""
     return value.replace("'", "''")
 
 
-def _to_graph_error(error: requests.HTTPError) -> OutlookGraphError:
+def _to_graph_error(error: requests.RequestException) -> OutlookGraphError:
     response = error.response
     if response is None:
-        return OutlookGraphError(None, "<no response>", str(error))
+        return OutlookGraphError(None, type(error).__name__, str(error))
     try:
-        message = response.json().get("error", {}).get("message") or response.text
+        body = response.json().get("error", {})
     except ValueError:
-        message = response.text
-    return OutlookGraphError(
-        response.status_code, graph_error_code(response), str(message)[:500]
-    )
+        body = {}
+    code = body.get("code") or "<no code>"
+    message = body.get("message") or response.text
+    return OutlookGraphError(response.status_code, str(code), str(message)[:500])
 
 
 def _recipient(raw: dict[str, Any] | None) -> OutlookRecipient | None:
-    address = ((raw or {}).get("emailAddress") or {}).get("address")
+    email = (raw or {}).get("emailAddress") or {}
+    address = email.get("address")
     if not address:
         return None
-    return OutlookRecipient(
-        address=address, name=(raw or {}).get("emailAddress", {}).get("name")
-    )
+    return OutlookRecipient(address=address, name=email.get("name"))
 
 
 def _recipients(raw: list[dict[str, Any]] | None) -> list[OutlookRecipient]:
@@ -159,7 +157,6 @@ def _parse_folder(raw: dict[str, Any]) -> OutlookFolder:
         display_name=raw.get("displayName") or "",
         parent_folder_id=raw.get("parentFolderId"),
         child_folder_count=raw.get("childFolderCount") or 0,
-        total_item_count=raw.get("totalItemCount") or 0,
         is_search_folder=raw.get("@odata.type") == SEARCH_FOLDER_TYPE,
     )
 
@@ -189,7 +186,6 @@ def _parse_message(raw: dict[str, Any]) -> OutlookMessage:
         received_at=parse_graph_datetime(received) if received else None,
         sent_at=parse_graph_datetime(sent) if sent else None,
         web_link=raw.get("webLink"),
-        has_attachments=bool(raw.get("hasAttachments")),
         is_draft=bool(raw.get("isDraft")),
     )
 
@@ -267,7 +263,7 @@ class OutlookSourceOperations(SourceOperations):
     ) -> dict[str, Any]:
         try:
             return self._client().get_json(url, params, headers)
-        except requests.HTTPError as e:
+        except requests.RequestException as e:
             raise _to_graph_error(e) from e
 
     def _user_url(self, mailbox_id: str) -> str:
@@ -414,12 +410,14 @@ class OutlookSourceOperations(SourceOperations):
         page_size: int = MESSAGES_PAGE_SIZE,
         next_link: str | None = None,
     ) -> OutlookDeltaPage:
-        """One page of messages created in a folder, newest ``received_after``.
+        """One page of messages created in a folder at or after ``received_after``.
 
-        Graph encodes the query into its state tokens, so the filter and page
-        size are sent only on the first request and ``next_link`` carries them
-        afterwards. Delta still reports removals and read-state changes
-        whatever ``changeType`` says, so callers must ignore those entries.
+        Graph encodes query parameters into its state tokens, so ``changeType``,
+        ``$select`` and ``$filter`` go on the first request only and
+        ``next_link`` carries them afterwards. The page-size header is not a
+        query parameter, so it goes with every request. Delta still reports
+        removals and read-state changes whatever ``changeType`` says, so
+        callers must filter those entries.
         """
         params = None
         url = next_link
@@ -434,27 +432,32 @@ class OutlookSourceOperations(SourceOperations):
         return OutlookDeltaPage(
             changes=[_parse_change(raw) for raw in data.get("value", [])],
             next_link=data.get("@odata.nextLink"),
-            delta_link=data.get("@odata.deltaLink"),
         )
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
         untested=(
-            "Needs a conversation id from a live delta page. The mail-read "
-            "check proves the same Mail.Read grant on the same mailbox."
+            "Needs a conversation id, so the mail-read check calls it only when "
+            "the probed Inbox holds a message. The coverage spy's delta page is "
+            "empty, so the harness never sees the call."
         ),
     )
     def list_conversation_messages(
-        self, *, mailbox_id: str, conversation_id: str, limit: int = 500
+        self, *, mailbox_id: str, conversation_id: str, limit: int
     ) -> list[OutlookMessage]:
-        """Up to ``limit`` messages of one conversation in one mailbox, bodies as text.
+        """The newest ``limit`` messages of one conversation in one mailbox, newest
+        first, bodies as text.
 
-        Graph rejects ordering by a property that is not in the filter, so
-        messages come back unordered and callers sort them.
+        Ordering needs the ordered property to lead the filter, hence the
+        always-true ``receivedDateTime`` bound ahead of the conversation id.
         """
         params: dict[str, str] | None = {
-            "$filter": f"conversationId eq '{_odata_quote(conversation_id)}'",
+            "$filter": (
+                f"receivedDateTime ge {EPOCH_TIMESTAMP} and "
+                f"conversationId eq '{_odata_quote(conversation_id)}'"
+            ),
+            "$orderby": "receivedDateTime desc",
             "$select": MESSAGE_SELECT,
             "$top": str(min(limit, MESSAGES_PAGE_SIZE)),
         }

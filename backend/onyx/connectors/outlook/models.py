@@ -9,13 +9,18 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
+# The OutlookAuthError code for a blank credential field, raised before MSAL is
+# built so a half-filled form reads as a credential problem and not a KeyError.
+MISSING_CREDENTIAL_CODE = "missing_credential"
+
 
 class OutlookGraphError(Exception):
     """A Graph request the gateway could not complete.
 
     Carries the HTTP status and Graph's machine-readable ``error.code`` so
     callers branch on those and never on the message text, which Microsoft
-    says may change at any time.
+    says may change at any time. A transport failure that outlived the
+    client's retries has no status and the exception class name as its code.
     """
 
     def __init__(self, status: int | None, code: str, message: str) -> None:
@@ -58,7 +63,6 @@ class OutlookFolder(BaseModel):
     display_name: str
     parent_folder_id: str | None = None
     child_folder_count: int = 0
-    total_item_count: int = 0
     # Search folders show messages that live elsewhere, so walking them would
     # index the same conversation twice.
     is_search_folder: bool = False
@@ -88,12 +92,12 @@ class OutlookMessage(BaseModel):
     received_at: datetime | None = None
     sent_at: datetime | None = None
     web_link: str | None = None
-    has_attachments: bool = False
     is_draft: bool = False
 
 
 class OutlookMessageChange(BaseModel):
-    """One delta entry: a message that appeared in the folder, or left it."""
+    """One delta entry: a message that appeared in the folder, one that left
+    it, or a read-state change that Graph reports whatever the change type."""
 
     id: str
     removed: bool = False
@@ -104,4 +108,3 @@ class OutlookMessageChange(BaseModel):
 class OutlookDeltaPage(BaseModel):
     changes: list[OutlookMessageChange]
     next_link: str | None = None
-    delta_link: str | None = None

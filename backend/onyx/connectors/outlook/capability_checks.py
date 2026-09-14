@@ -28,8 +28,15 @@ from onyx.connectors.exceptions import (
 from onyx.connectors.outlook.errors import (
     EXCHANGE_SCOPE_REMEDIATION,
     MAILBOX_UNAVAILABLE_REMEDIATION,
+    USER_LISTING_DENIED,
     raise_for_auth_error,
     raise_for_graph_error,
+)
+from onyx.connectors.outlook.mailboxes import (
+    configured_addresses,
+    describe_unavailable_mailboxes,
+    raise_if_unavailable,
+    resolve_mailbox_for_validation,
 )
 from onyx.connectors.outlook.models import (
     OutlookAuthError,
@@ -40,23 +47,17 @@ from onyx.connectors.outlook.source_operations import OutlookSourceOperations
 
 _OUTLOOK_DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/outlook"
 
-# Connector config key holding the explicit mailbox list. Mirrors the
-# constructor argument of ``OutlookConnector``.
-CONFIG_MAILBOXES = "mailboxes"
-
 # A well-known folder every mailbox has, used to prove name resolution works.
 _PROBE_WELL_KNOWN_FOLDER = "junkemail"
 
 # One item proves the permission. More only spends the tenant's budget.
 _PROBE_PAGE_SIZE = 1
 
-# Bound the per-address probes so a report on a long list still returns.
-_MAX_CONFIGURED_MAILBOXES_PROBED = 25
-
-_LISTING_DENIED = (
-    "The app cannot look up the tenant's users, which every-mailbox mode and "
-    "address resolution both need. Grant the `User.Read.All` application "
-    "permission and admin-consent it."
+# Mail.ReadBasic.All answers every metadata call but refuses bodies, so the
+# read probe must fetch one body to tell the two grants apart.
+_BODY_DENIED = (
+    "The app can list mail but not read message bodies. `Mail.ReadBasic.All` "
+    "is not enough, grant `Mail.Read`."
 )
 
 
@@ -67,38 +68,25 @@ def _gateway(context: CapabilityCheckContext) -> OutlookSourceOperations:
     return context.source_operations
 
 
-def _configured_addresses(context: CapabilityCheckContext) -> list[str]:
-    config = context.connector_specific_config or {}
-    raw = config.get(CONFIG_MAILBOXES) or []
-    return [str(address).strip() for address in raw if str(address).strip()]
-
-
-def _resolve(gateway: OutlookSourceOperations, address: str) -> OutlookMailbox | None:
-    try:
-        return gateway.resolve_mailbox(address=address)
-    except OutlookGraphError as e:
-        raise_for_graph_error(e, _LISTING_DENIED)
-
-
 def _first_mailbox(
     gateway: OutlookSourceOperations, context: CapabilityCheckContext
 ) -> OutlookMailbox:
     """The mailbox the read probes target: the first configured one, else the
     first enabled user in the tenant."""
-    addresses = _configured_addresses(context)
+    addresses = configured_addresses(context.connector_specific_config)
     if addresses:
         address = addresses[0]
     else:
         try:
             page = gateway.list_mailbox_users(page_size=_PROBE_PAGE_SIZE)
         except OutlookGraphError as e:
-            raise_for_graph_error(e, _LISTING_DENIED)
+            raise_for_graph_error(e, USER_LISTING_DENIED)
         if not page.mailboxes:
             raise UnexpectedValidationError(
                 "The tenant reports no enabled users, so there is no mailbox to probe."
             )
         address = page.mailboxes[0].address
-    mailbox = _resolve(gateway, address)
+    mailbox = resolve_mailbox_for_validation(gateway, address)
     if mailbox is None:
         raise ConnectorValidationError(
             f"No user matches `{address}`. {MAILBOX_UNAVAILABLE_REMEDIATION}"
@@ -150,12 +138,13 @@ class _MailboxListingCheck(CapabilityCheck):
         try:
             _gateway(context).list_mailbox_users(page_size=_PROBE_PAGE_SIZE)
         except OutlookGraphError as e:
-            raise_for_graph_error(e, _LISTING_DENIED)
+            raise_for_graph_error(e, USER_LISTING_DENIED)
 
 
 class _MailReadCheck(CapabilityCheck):
-    """Reads folders and one delta page of one mailbox. Proves ``Mail.Read``
-    and that the mailbox is inside the app's Exchange scope."""
+    """Reads folders, one delta page and one message body of one mailbox.
+    Proves ``Mail.Read`` and that the mailbox is inside the app's Exchange
+    scope."""
 
     def __init__(self) -> None:
         super().__init__(
@@ -179,18 +168,32 @@ class _MailReadCheck(CapabilityCheck):
             gateway.list_child_folders(
                 mailbox_id=mailbox.id, page_size=_PROBE_PAGE_SIZE
             )
-            gateway.fetch_folder_delta_page(
+            page = gateway.fetch_folder_delta_page(
                 mailbox_id=mailbox.id, folder_id=inbox.id, page_size=_PROBE_PAGE_SIZE
             )
         except OutlookGraphError as e:
             raise_for_graph_error(e, denied)
 
+        conversation_id = next(
+            (c.conversation_id for c in page.changes if c.conversation_id), None
+        )
+        if conversation_id is None:
+            return
+        try:
+            gateway.list_conversation_messages(
+                mailbox_id=mailbox.id,
+                conversation_id=conversation_id,
+                limit=_PROBE_PAGE_SIZE,
+            )
+        except OutlookGraphError as e:
+            raise_for_graph_error(e, _BODY_DENIED)
+
 
 class _ConfiguredMailboxesCheck(CapabilityCheck):
     """Resolves and probes every explicitly configured mailbox.
 
-    Skipped in every-mailbox mode, where denied mailboxes are logged and
-    skipped at index time instead of blocking validation.
+    With no configured list the check passes without a call: every-mailbox
+    mode logs and skips denied mailboxes at index time instead.
     """
 
     def __init__(self) -> None:
@@ -205,39 +208,12 @@ class _ConfiguredMailboxesCheck(CapabilityCheck):
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
-        addresses = _configured_addresses(context)
+        addresses = configured_addresses(context.connector_specific_config)
         if not addresses:
             return
-        gateway = _gateway(context)
-        unresolved: list[str] = []
-        unavailable: list[str] = []
-        for address in addresses[:_MAX_CONFIGURED_MAILBOXES_PROBED]:
-            mailbox = _resolve(gateway, address)
-            if mailbox is None:
-                unresolved.append(address)
-                continue
-            try:
-                gateway.probe_mailbox(mailbox_id=mailbox.id)
-            except OutlookGraphError as e:
-                if e.status in (403, 404):
-                    unavailable.append(f"{address} ({e.code})")
-                    continue
-                raise_for_graph_error(e, f"The app cannot read `{address}`.")
-
-        problems: list[str] = []
-        if unresolved:
-            problems.append(f"no user matches {', '.join(unresolved)}")
-        if unavailable:
-            problems.append(
-                "no mailbox, no license, or outside the app's Exchange scope: "
-                + ", ".join(unavailable)
-            )
-        if problems:
-            raise ConnectorValidationError(
-                "Configured mailboxes cannot be indexed. "
-                + ". ".join(problems)
-                + f". {MAILBOX_UNAVAILABLE_REMEDIATION} {EXCHANGE_SCOPE_REMEDIATION}"
-            )
+        raise_if_unavailable(
+            describe_unavailable_mailboxes(_gateway(context), addresses)
+        )
 
 
 def build_outlook_indexing_checks() -> list[CapabilityCheck]:

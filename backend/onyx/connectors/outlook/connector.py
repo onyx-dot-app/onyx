@@ -10,6 +10,7 @@ opens with ``receivedDateTime ge start`` and any conversation that gained a
 message in the window is rebuilt whole.
 """
 
+from collections import deque
 from collections.abc import Generator
 from datetime import datetime, timezone
 from typing import Any
@@ -17,7 +18,6 @@ from typing import Any
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
-from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import (
     CheckpointedConnector,
     CheckpointOutput,
@@ -34,6 +34,7 @@ from onyx.connectors.models import (
     BasicExpertInfo,
     ConnectorCheckpoint,
     ConnectorFailure,
+    ConnectorMissingCredentialError,
     Document,
     DocumentFailure,
     EntityFailure,
@@ -45,6 +46,11 @@ from onyx.connectors.outlook.errors import (
     MAILBOX_UNAVAILABLE_REMEDIATION,
     raise_for_auth_error,
     raise_for_graph_error,
+)
+from onyx.connectors.outlook.mailboxes import (
+    MAILBOX_UNAVAILABLE_STATUSES,
+    describe_unavailable_mailboxes,
+    raise_if_unavailable,
 )
 from onyx.connectors.outlook.models import (
     OutlookAuthError,
@@ -70,20 +76,14 @@ DEFAULT_EXCLUDED_WELL_KNOWN_FOLDERS = ("junkemail", "deleteditems", "drafts", "o
 
 # A conversation longer than this keeps only its newest messages.
 MAX_MESSAGES_PER_CONVERSATION = 100
-# Upper bound on what is fetched before the cap applies, so a runaway thread
-# cannot page forever.
-CONVERSATION_FETCH_LIMIT = 500
 
-# Validation probes at most this many configured mailboxes, so a long list
-# still validates in time. Indexing walks every one of them.
-MAX_VALIDATED_MAILBOXES = 25
+# Graph stops a filtered delta round at this many messages without saying so.
+# A folder that fills the cap is read again without the filter, which has no
+# cap, and the poll window is applied to each entry here instead.
+FILTERED_DELTA_CAP = 5000
 
 MAILBOX_NODE_PREFIX = "outlook-mailbox:"
 DOCUMENT_ID_PREFIX = "outlook:"
-
-# Only statuses that describe the mailbox itself. Anything else is a real
-# failure of the run.
-MAILBOX_UNAVAILABLE_STATUSES = frozenset({403, 404})
 
 
 class OutlookCheckpoint(ConnectorCheckpoint):
@@ -92,9 +92,15 @@ class OutlookCheckpoint(ConnectorCheckpoint):
     current_mailbox: OutlookMailbox | None = None
     # None until the current mailbox's tree is listed, then folders left to walk.
     folders: list[OutlookFolder] | None = None
+    # Every folder id under an excluded root, so a conversation message filed
+    # deep inside Deleted Items is dropped like one at its top.
     excluded_folder_ids: list[str] = []
     current_folder: OutlookFolder | None = None
     delta_next_link: str | None = None
+    # Entries seen in the current folder's delta round, to detect the cap.
+    folder_change_count: int = 0
+    # True once the current folder is being re-read without the server filter.
+    folder_unfiltered: bool = False
     # Conversations already rebuilt for the current mailbox in this attempt.
     seen_conversation_ids: set[str] = set()
 
@@ -111,6 +117,16 @@ def conversation_document_id(mailbox: OutlookMailbox, conversation_id: str) -> s
 
 def _mailbox_link(mailbox: OutlookMailbox) -> str:
     return f"https://outlook.office.com/mail/{mailbox.address}/"
+
+
+def _mailbox_failure(
+    address: str, message: str, exception: Exception | None = None
+) -> ConnectorFailure:
+    return ConnectorFailure(
+        failed_entity=EntityFailure(entity_id=address),
+        failure_message=message,
+        exception=exception,
+    )
 
 
 def _format_recipient(recipient: OutlookRecipient) -> str:
@@ -238,9 +254,7 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
     @property
     def ops(self) -> OutlookSourceOperations:
         if self._ops is None:
-            raise RuntimeError(
-                "Credentials missing, call load_credentials or set_credentials_provider first"
-            )
+            raise ConnectorMissingCredentialError("Outlook")
         return self._ops
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
@@ -276,26 +290,7 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
                     e, "The app cannot list the tenant's users for every-mailbox mode."
                 )
             return
-
-        unavailable: list[str] = []
-        for address in self.mailboxes[:MAX_VALIDATED_MAILBOXES]:
-            try:
-                mailbox = self.ops.resolve_mailbox(address=address)
-                if mailbox is None:
-                    unavailable.append(f"{address} (no such user)")
-                    continue
-                self.ops.probe_mailbox(mailbox_id=mailbox.id)
-            except OutlookGraphError as e:
-                if e.status in MAILBOX_UNAVAILABLE_STATUSES:
-                    unavailable.append(f"{address} ({e.code})")
-                    continue
-                raise_for_graph_error(e, f"The app cannot read `{address}`.")
-        if unavailable:
-            raise ConnectorValidationError(
-                "These mailboxes cannot be indexed: "
-                + ", ".join(unavailable)
-                + f". {MAILBOX_UNAVAILABLE_REMEDIATION} {EXCHANGE_SCOPE_REMEDIATION}"
-            )
+        raise_if_unavailable(describe_unavailable_mailboxes(self.ops, self.mailboxes))
 
     def build_dummy_checkpoint(self) -> OutlookCheckpoint:
         return OutlookCheckpoint(has_more=True)
@@ -324,14 +319,45 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
 
         if checkpoint.current_folder is None:
             if not checkpoint.folders:
-                checkpoint.current_mailbox = None
-                checkpoint.folders = None
+                self._finish_mailbox(checkpoint)
                 return checkpoint
             checkpoint.current_folder = checkpoint.folders.pop()
-            checkpoint.delta_next_link = None
+            self._reset_folder_cursor(checkpoint)
 
         yield from self._read_folder_page(checkpoint, start, end)
         return checkpoint
+
+    def _reset_folder_cursor(self, checkpoint: OutlookCheckpoint) -> None:
+        checkpoint.delta_next_link = None
+        checkpoint.folder_change_count = 0
+        checkpoint.folder_unfiltered = False
+
+    def _finish_mailbox(self, checkpoint: OutlookCheckpoint) -> None:
+        checkpoint.current_mailbox = None
+        checkpoint.folders = None
+        checkpoint.current_folder = None
+        checkpoint.excluded_folder_ids = []
+        checkpoint.seen_conversation_ids = set()
+        self._reset_folder_cursor(checkpoint)
+
+    def _mailbox_unavailable(
+        self, mailbox: OutlookMailbox, error: OutlookGraphError
+    ) -> Generator[ConnectorFailure, None, None]:
+        """A mailbox that is unlicensed or out of the app's Exchange scope is a
+        recorded failure when the admin named it and a log line otherwise."""
+        if self.mailboxes:
+            yield _mailbox_failure(
+                mailbox.address,
+                f"Mailbox {mailbox.address} is unavailable ({error.code}). "
+                f"{EXCHANGE_SCOPE_REMEDIATION}",
+                error,
+            )
+            return
+        logger.info(
+            "Outlook: skipping %s, mailbox unavailable (%s)",
+            mailbox.address,
+            error.code,
+        )
 
     def _enumerate_mailboxes(
         self, checkpoint: OutlookCheckpoint
@@ -339,11 +365,10 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
         found: list[OutlookMailbox] = []
         if self.mailboxes:
             for address in self.mailboxes:
-                try:
-                    mailbox = self.ops.resolve_mailbox(address=address)
-                except OutlookGraphError as e:
-                    yield _mailbox_failure(address, f"Failed to look up {address}", e)
-                    continue
+                # Resolution reads the directory, never the mailbox, so a Graph
+                # error here is about the app or the service and fails the
+                # attempt instead of dropping the address.
+                mailbox = self.ops.resolve_mailbox(address=address)
                 if mailbox is None:
                     yield _mailbox_failure(
                         address,
@@ -366,29 +391,14 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
     def _open_mailbox(
         self, checkpoint: OutlookCheckpoint, mailbox: OutlookMailbox
     ) -> Generator[HierarchyNode | ConnectorFailure, None, None]:
-        """Probe the mailbox, then list its whole folder tree.
-
-        A mailbox that is unlicensed or out of the app's Exchange scope is a
-        recorded failure when the admin named it and a log line otherwise.
-        """
+        """Probe the mailbox, then list its whole folder tree."""
         try:
             self.ops.probe_mailbox(mailbox_id=mailbox.id)
+            excluded = self._excluded_well_known_folder_ids(mailbox)
         except OutlookGraphError as e:
             if e.status not in MAILBOX_UNAVAILABLE_STATUSES:
                 raise
-            if self.mailboxes:
-                yield _mailbox_failure(
-                    mailbox.address,
-                    f"Mailbox {mailbox.address} is unavailable ({e.code}). "
-                    f"{EXCHANGE_SCOPE_REMEDIATION}",
-                    e,
-                )
-            else:
-                logger.info(
-                    "Outlook: skipping %s, mailbox unavailable (%s)",
-                    mailbox.address,
-                    e.code,
-                )
+            yield from self._mailbox_unavailable(mailbox, e)
             return
 
         root_id = mailbox_node_id(mailbox)
@@ -400,17 +410,48 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
             node_type=HierarchyNodeType.MAILBOX,
         )
 
+        folders: list[OutlookFolder] = []
+        try:
+            for folder, parent_node_id in self._walk_folder_tree(mailbox, excluded):
+                yield HierarchyNode(
+                    raw_node_id=folder.id,
+                    raw_parent_id=parent_node_id,
+                    display_name=folder.display_name,
+                    node_type=HierarchyNodeType.FOLDER,
+                )
+                folders.append(folder)
+        except OutlookGraphError as e:
+            if e.status not in MAILBOX_UNAVAILABLE_STATUSES:
+                raise
+            yield from self._mailbox_unavailable(mailbox, e)
+            return
+
+        checkpoint.current_mailbox = mailbox
+        checkpoint.folders = list(reversed(folders))
+        checkpoint.excluded_folder_ids = sorted(excluded)
+        checkpoint.current_folder = None
+        checkpoint.seen_conversation_ids = set()
+        self._reset_folder_cursor(checkpoint)
+
+    def _excluded_well_known_folder_ids(self, mailbox: OutlookMailbox) -> set[str]:
         excluded: set[str] = set()
         for name in DEFAULT_EXCLUDED_WELL_KNOWN_FOLDERS:
             folder = self.ops.get_well_known_folder(mailbox_id=mailbox.id, name=name)
             if folder is not None:
                 excluded.add(folder.id)
+        return excluded
 
-        folders: list[OutlookFolder] = []
-        # (parent folder id or None for the root, hierarchy parent raw id)
-        queue: list[tuple[str | None, str]] = [(None, root_id)]
+    def _walk_folder_tree(
+        self, mailbox: OutlookMailbox, excluded: set[str]
+    ) -> Generator[tuple[OutlookFolder, str], None, None]:
+        """Yield every indexable folder with its hierarchy parent id, breadth
+        first. Excluded subtrees are still descended so ``excluded`` ends up
+        holding every folder id a conversation message could sit in."""
+        root_id = mailbox_node_id(mailbox)
+        # (parent folder id or None for the root, hierarchy parent raw id, excluded)
+        queue: deque[tuple[str | None, str, bool]] = deque([(None, root_id, False)])
         while queue:
-            parent_folder_id, parent_node_id = queue.pop(0)
+            parent_folder_id, parent_node_id, parent_excluded = queue.popleft()
             next_link: str | None = None
             while True:
                 page = self.ops.list_child_folders(
@@ -421,31 +462,20 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
                 for folder in page.folders:
                     if folder.is_search_folder:
                         continue
-                    if (
-                        folder.id in excluded
+                    is_excluded = (
+                        parent_excluded
+                        or folder.id in excluded
                         or folder.display_name.casefold() in self.excluded_folder_names
-                    ):
-                        excluded.add(folder.id)
-                        continue
-                    yield HierarchyNode(
-                        raw_node_id=folder.id,
-                        raw_parent_id=parent_node_id,
-                        display_name=folder.display_name,
-                        node_type=HierarchyNodeType.FOLDER,
                     )
-                    folders.append(folder)
+                    if is_excluded:
+                        excluded.add(folder.id)
+                    else:
+                        yield folder, parent_node_id
                     if folder.child_folder_count > 0:
-                        queue.append((folder.id, folder.id))
+                        queue.append((folder.id, folder.id, is_excluded))
                 next_link = page.next_link
                 if next_link is None:
                     break
-
-        checkpoint.current_mailbox = mailbox
-        checkpoint.folders = list(reversed(folders))
-        checkpoint.excluded_folder_ids = sorted(excluded)
-        checkpoint.current_folder = None
-        checkpoint.delta_next_link = None
-        checkpoint.seen_conversation_ids = set()
 
     def _read_folder_page(
         self,
@@ -457,38 +487,50 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
         folder = checkpoint.current_folder
         assert mailbox is not None and folder is not None
 
-        received_after = (
-            datetime.fromtimestamp(start, tz=timezone.utc) if start else None
-        )
+        window_start = datetime.fromtimestamp(start, tz=timezone.utc) if start else None
         try:
             page = self.ops.fetch_folder_delta_page(
                 mailbox_id=mailbox.id,
                 folder_id=folder.id,
-                received_after=received_after,
+                received_after=None if checkpoint.folder_unfiltered else window_start,
                 next_link=checkpoint.delta_next_link,
             )
         except OutlookGraphError as e:
             # Graph drops delta state with 410. Start the folder's round over.
             if e.status == 410 and checkpoint.delta_next_link is not None:
                 checkpoint.delta_next_link = None
+                checkpoint.folder_change_count = 0
                 return
-            if e.status not in MAILBOX_UNAVAILABLE_STATUSES:
-                raise
-            yield ConnectorFailure(
-                failed_entity=EntityFailure(entity_id=folder.id),
-                failure_message=(
-                    f"Folder {folder.display_name} in {mailbox.address} became "
-                    f"unreadable ({e.code})"
-                ),
-                exception=e,
-            )
-            checkpoint.current_folder = None
-            return
+            # The folder disappeared mid-run. Nothing left to index in it.
+            if e.status == 404:
+                logger.info(
+                    "Outlook: folder %s in %s vanished, skipping",
+                    folder.display_name,
+                    mailbox.address,
+                )
+                checkpoint.current_folder = None
+                return
+            # Access to the whole mailbox is gone, so stop walking it rather
+            # than record one failure per remaining folder.
+            if e.status == 403:
+                yield from self._mailbox_unavailable(mailbox, e)
+                self._finish_mailbox(checkpoint)
+                return
+            raise
 
         end_at = datetime.fromtimestamp(end, tz=timezone.utc) if end else None
         excluded = set(checkpoint.excluded_folder_ids)
+        checkpoint.folder_change_count += len(page.changes)
         for change in page.changes:
             if change.removed or not change.conversation_id:
+                continue
+            # Read-state entries arrive for old messages whatever the filter
+            # says, so the window is applied again here.
+            if (
+                window_start
+                and change.received_at
+                and change.received_at < window_start
+            ):
                 continue
             if end_at and change.received_at and change.received_at > end_at:
                 continue
@@ -502,8 +544,24 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
                 yield result
 
         checkpoint.delta_next_link = page.next_link
-        if page.next_link is None:
-            checkpoint.current_folder = None
+        if page.next_link is not None:
+            return
+        filled_cap = (
+            window_start is not None
+            and not checkpoint.folder_unfiltered
+            and checkpoint.folder_change_count >= FILTERED_DELTA_CAP
+        )
+        if filled_cap:
+            logger.info(
+                "Outlook: folder %s in %s filled the filtered delta cap, "
+                "re-reading it without the filter",
+                folder.display_name,
+                mailbox.address,
+            )
+            self._reset_folder_cursor(checkpoint)
+            checkpoint.folder_unfiltered = True
+            return
+        checkpoint.current_folder = None
 
     def _rebuild_conversation(
         self,
@@ -516,7 +574,7 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
             messages = self.ops.list_conversation_messages(
                 mailbox_id=mailbox.id,
                 conversation_id=conversation_id,
-                limit=CONVERSATION_FETCH_LIMIT,
+                limit=MAX_MESSAGES_PER_CONVERSATION,
             )
         except OutlookGraphError as e:
             return ConnectorFailure(
@@ -530,13 +588,3 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
         return build_conversation_document(
             mailbox, conversation_id, messages, excluded_folder_ids
         )
-
-
-def _mailbox_failure(
-    address: str, message: str, exception: Exception | None = None
-) -> ConnectorFailure:
-    return ConnectorFailure(
-        failed_entity=EntityFailure(entity_id=address),
-        failure_message=message,
-        exception=exception,
-    )

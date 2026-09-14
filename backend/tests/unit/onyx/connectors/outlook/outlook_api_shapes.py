@@ -1,4 +1,4 @@
-"""Builders for the Graph JSON and gateway models the Outlook tests need.
+"""Builders for the Graph JSON, gateway models and errors the Outlook tests need.
 
 Every builder returns a complete shape, so a test names only the field under
 test and passes it as an override.
@@ -6,9 +6,13 @@ test and passes it as an override.
 
 from datetime import datetime, timezone
 from typing import Any
+from unittest.mock import MagicMock
+
+import requests
 
 from onyx.connectors.outlook.models import (
     OutlookFolder,
+    OutlookGraphError,
     OutlookMailbox,
     OutlookMessage,
     OutlookMessageChange,
@@ -20,6 +24,25 @@ MAILBOX_ADDRESS = "alice@contoso.com"
 INBOX_ID = "folder-inbox"
 CONVERSATION_ID = "conv-1"
 RECEIVED = datetime(2026, 9, 1, 10, 0, tzinfo=timezone.utc)
+
+CREDENTIALS = {
+    "outlook_client_id": "client-id",
+    "outlook_directory_id": "tenant-id",
+    "outlook_client_secret": "secret",
+}
+
+
+def graph_error(status: int, code: str = "ErrorAccessDenied") -> OutlookGraphError:
+    return OutlookGraphError(status, code, "denied")
+
+
+def http_error(status: int, code: str = "ErrorAccessDenied") -> requests.HTTPError:
+    """The failure the shared Graph client raises for a non-2xx response."""
+    response = MagicMock()
+    response.status_code = status
+    response.json.return_value = {"error": {"code": code, "message": "denied"}}
+    response.text = "denied"
+    return requests.HTTPError("boom", response=response)
 
 
 def user_json(**overrides: Any) -> dict[str, Any]:
@@ -38,7 +61,6 @@ def folder_json(**overrides: Any) -> dict[str, Any]:
         "displayName": "Inbox",
         "parentFolderId": "root",
         "childFolderCount": 0,
-        "totalItemCount": 3,
     }
     return fields | overrides
 
@@ -60,7 +82,6 @@ def message_json(**overrides: Any) -> dict[str, Any]:
         "receivedDateTime": "2026-09-01T10:00:00Z",
         "sentDateTime": "2026-09-01T09:59:00Z",
         "webLink": "https://outlook.office.com/mail/id/msg-1",
-        "hasAttachments": False,
         "isDraft": False,
     }
     return fields | overrides
@@ -80,15 +101,11 @@ def removed_json(message_id: str = "msg-gone") -> dict[str, Any]:
 
 
 def page_json(
-    values: list[dict[str, Any]],
-    next_link: str | None = None,
-    delta_link: str | None = None,
+    values: list[dict[str, Any]], next_link: str | None = None
 ) -> dict[str, Any]:
     page: dict[str, Any] = {"value": values}
     if next_link:
         page["@odata.nextLink"] = next_link
-    if delta_link:
-        page["@odata.deltaLink"] = delta_link
     return page
 
 
