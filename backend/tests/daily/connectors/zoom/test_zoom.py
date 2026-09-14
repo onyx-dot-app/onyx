@@ -16,14 +16,22 @@ pytestmark = pytest.mark.secrets(
 )
 
 
+def _secret(test_secrets: dict[TestSecret, str], name: TestSecret) -> str:
+    # get_secrets drops whatever it cannot resolve, so an unavailable secret
+    # shows up as a missing key rather than an error.
+    if name not in test_secrets:
+        pytest.skip(f"{name.value} is not available")
+    return test_secrets[name]
+
+
 def _authenticated(
     connector: ZoomConnector, test_secrets: dict[TestSecret, str]
 ) -> ZoomConnector:
     connector.load_credentials(
         {
-            "zoom_account_id": test_secrets[TestSecret.ZOOM_ACCOUNT_ID],
-            "zoom_client_id": test_secrets[TestSecret.ZOOM_CLIENT_ID],
-            "zoom_client_secret": test_secrets[TestSecret.ZOOM_CLIENT_SECRET],
+            "zoom_account_id": _secret(test_secrets, TestSecret.ZOOM_ACCOUNT_ID),
+            "zoom_client_id": _secret(test_secrets, TestSecret.ZOOM_CLIENT_ID),
+            "zoom_client_secret": _secret(test_secrets, TestSecret.ZOOM_CLIENT_SECRET),
         }
     )
     return connector
@@ -34,7 +42,9 @@ def zoom_connector(
     test_secrets: dict[TestSecret, str],
 ) -> ZoomConnector:
     return _authenticated(
-        ZoomConnector(meeting_ids=[test_secrets[TestSecret.ZOOM_TEST_MEETING_ID]]),
+        ZoomConnector(
+            meeting_ids=[_secret(test_secrets, TestSecret.ZOOM_TEST_MEETING_ID)]
+        ),
         test_secrets,
     )
 
@@ -46,7 +56,9 @@ def zoom_webinar_connector(
     # The account behind these secrets needs the Webinar add-on, or every
     # webinar call fails whatever the scopes are.
     return _authenticated(
-        ZoomConnector(webinar_ids=[test_secrets[TestSecret.ZOOM_TEST_WEBINAR_ID]]),
+        ZoomConnector(
+            webinar_ids=[_secret(test_secrets, TestSecret.ZOOM_TEST_WEBINAR_ID)]
+        ),
         test_secrets,
     )
 
