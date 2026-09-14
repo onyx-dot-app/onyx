@@ -115,15 +115,16 @@ def process_occurrence(
         )
         return None
 
-    topic = work.topic
+    # Zoom caps the details endpoint below at one year, so a title taken from
+    # here is the only one an older meeting gets.
+    topic = work.topic or transcript.meeting_topic
     started_at = work.start_time
     if not topic or not started_at:
         try:
             handler = get_session_type_handler(work.session_type)
             details = handler.get_occurrence_details(client, occurrence_uuid)
-            if details:
-                topic = topic or details.topic
-                started_at = started_at or details.start_time
+            topic = topic or details.topic
+            started_at = started_at or details.start_time
         except Exception:
             # The transcript is already downloaded, so a missing title or
             # timestamp isn't worth throwing away an indexable document.
@@ -133,7 +134,7 @@ def process_occurrence(
                 work.session_id,
                 occurrence_uuid,
             )
-    topic = topic or f"Zoom Meeting {work.session_id}"
+    topic = topic or f"Zoom {work.session_type.value.capitalize()} {work.session_id}"
     occurrence_time = time_str_to_utc(started_at) if started_at else None
 
     return Document(
