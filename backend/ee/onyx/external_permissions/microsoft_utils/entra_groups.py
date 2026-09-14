@@ -55,9 +55,7 @@ class EntraGroup(BaseModel):
 
 
 def normalize_email(email: str) -> str:
-    if MICROSOFT_DOMAIN in email:
-        return email.replace(MICROSOFT_DOMAIN, "")
-    return email
+    return email.replace(MICROSOFT_DOMAIN, "")
 
 
 def entra_group_name(display_name: str, group_id: str | None) -> str:

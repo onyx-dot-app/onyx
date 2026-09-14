@@ -738,9 +738,12 @@ class SharepointConnector(
         mid-index. The credential check needs only the auth method. The site
         probe also needs the MSAL app, the tenant domain and configured sites.
         """
-        # SharePoint blocks app-only REST tokens that came from a client
-        # secret, so no permission grant can make this credential work.
-        if self.auth_method is MicrosoftAuthMethod.CLIENT_SECRET:
+        # No permission grant can make a credential work that SharePoint REST
+        # will not accept a token from.
+        if (
+            self.auth_method is not None
+            and not self.auth_method.supports_sharepoint_rest
+        ):
             raise ConnectorValidationError(
                 "Permission sync needs the SharePoint REST API, which only accepts "
                 "app-only tokens from certificate authentication. This credential "
@@ -1615,8 +1618,8 @@ class SharepointConnector(
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self._credential_json = credentials
-        auth_method = credentials.get(
-            "authentication_method", MicrosoftAuthMethod.CLIENT_SECRET.value
+        auth_method = MicrosoftAuthMethod.parse(
+            credentials.get("authentication_method")
         )
         sp_client_id = credentials.get("sp_client_id")
         sp_directory_id = credentials.get("sp_directory_id")

@@ -1,10 +1,10 @@
 """Microsoft Graph transport: retry policies, the authenticated GET, paging.
 
 Two status sets live here because callers disagree about 5xx.
-:data:`RETRYABLE_HTTP_STATUSES` is the narrow set, used only by
+:data:`RETRYABLE_HTTP_STATUSES` is the narrow set and the default of
 :func:`sleep_and_retry`. :data:`GRAPH_API_RETRYABLE_STATUSES` adds the gateway
-5xx codes and is what every other caller uses. Reach for the narrow one only when
-matching ``sleep_and_retry``.
+5xx codes and is what the raw GET and Teams use. A caller that wants the wide
+set on an SDK query passes it to ``sleep_and_retry``.
 
 This layer carries no source identity, so a connector composes it.
 """
@@ -29,7 +29,7 @@ GRAPH_API_MAX_RETRIES = 5
 # Rate limits plus the gateway 5xx codes. The default choice.
 GRAPH_API_RETRYABLE_STATUSES: frozenset[int] = frozenset({429, 500, 502, 503, 504})
 
-# The narrow set, for sleep_and_retry only.
+# The narrow set, the default for SDK queries through sleep_and_retry.
 RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({429, 503})
 
 # Transient transport failures, seen both bare and as the cause of a
@@ -85,12 +85,17 @@ def log_and_raise_for_status(response: requests.Response) -> None:
 
 
 def sleep_and_retry(
-    query_obj: ClientQuery, method_name: str, max_retries: int = 3
+    query_obj: ClientQuery,
+    method_name: str,
+    max_retries: int = 3,
+    retryable_statuses: frozenset[int] = RETRYABLE_HTTP_STATUSES,
 ) -> Any:
     """
     Execute an office365 SDK query with retry logic for rate limiting and
     transient transport-level failures (e.g. ChunkedEncodingError when
     the server or an upstream gateway closes the connection mid-response).
+
+    ``retryable_statuses`` is the HTTP status set worth another attempt.
     """
     for attempt in range(max_retries + 1):
         try:
@@ -127,7 +132,7 @@ def sleep_and_retry(
                 e.__cause__ or e.__context__, TRANSIENT_TRANSPORT_EXCEPTIONS
             )
 
-            is_retryable = status in RETRYABLE_HTTP_STATUSES or wrapped_transport_error
+            is_retryable = status in retryable_statuses or wrapped_transport_error
             if is_retryable and attempt < max_retries:
                 retry_after = (
                     e.response.headers.get("Retry-After")

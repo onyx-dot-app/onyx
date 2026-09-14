@@ -4,7 +4,6 @@ from datetime import datetime, timezone
 from typing import Any
 
 from office365.graph_client import GraphClient
-from office365.runtime.client_request_exception import ClientRequestException
 from office365.runtime.queries.client_query import ClientQuery
 from office365.teams.channels.channel import Channel, ConversationMember
 
@@ -13,6 +12,7 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.microsoft_utils.graph_client import (
     GRAPH_API_RETRYABLE_STATUSES,
     backoff_seconds,
+    sleep_and_retry,
 )
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.teams.models import Message
@@ -29,42 +29,17 @@ def execute_query_with_retry(
     method_name: str,
     max_retries: int = 5,
 ) -> Any:
-    """Execute an ``office365`` SDK query, retrying transient Graph errors
-    (rate limits + 5xx gateway/server hiccups) with capped backoff.
-
-    Kept separate from the shared ``sleep_and_retry`` because it retries the
-    wider 5xx set and allows more attempts. Non-retryable statuses (e.g. 401/403/
-    404, or a malformed OData filter 400) and exhausted retries are re-raised
+    """Teams' retry policy for ``office365`` SDK queries: the wide Graph status
+    set and more attempts than the SharePoint default. Non-retryable statuses
+    (401/403/404, a malformed OData filter 400) and exhausted retries re-raise
     for the caller to handle.
     """
-    for attempt in range(max_retries + 1):
-        try:
-            return query.execute_query()
-        except ClientRequestException as e:
-            status = e.response.status_code if e.response is not None else None
-            if status not in GRAPH_API_RETRYABLE_STATUSES or attempt >= max_retries:
-                raise
-
-            retry_after = (
-                e.response.headers.get("Retry-After")
-                if e.response is not None
-                else None
-            )
-            cooldown = backoff_seconds(attempt=attempt, retry_after=retry_after)
-            logger.warning(
-                "Retryable Graph error on %s (status=%s, attempt %s/%s); "
-                "sleeping %.1fs before retry.",
-                method_name,
-                status,
-                attempt + 1,
-                max_retries + 1,
-                cooldown,
-            )
-            time.sleep(cooldown)
-
-    # The loop returns on success and raises on non-retryable / exhausted
-    # errors, so this is unreachable; it satisfies the type checker.
-    raise RuntimeError(f"execute_query_with_retry exhausted retries for {method_name}")
+    return sleep_and_retry(
+        query,
+        method_name,
+        max_retries=max_retries,
+        retryable_statuses=GRAPH_API_RETRYABLE_STATUSES,
+    )
 
 
 def _sanitize_message_user_display_name(value: dict) -> dict:

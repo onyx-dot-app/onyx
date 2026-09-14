@@ -50,18 +50,18 @@ def test_certificate_path_still_rejects_a_missing_key() -> None:
             client_id="client-id",
             directory_id="tenant-id",
             authority_host=AUTHORITY_HOST,
-            auth_method=MicrosoftAuthMethod.CERTIFICATE.value,
+            auth_method=MicrosoftAuthMethod.CERTIFICATE,
         )
 
 
-def test_unknown_auth_method_is_rejected() -> None:
-    with pytest.raises(ConnectorValidationError):
-        build_msal_app(
-            client_id="client-id",
-            directory_id="tenant-id",
-            authority_host=AUTHORITY_HOST,
-            auth_method="kerberos",
-        )
+def test_unknown_auth_method_fails_at_parse_with_the_method_named() -> None:
+    with pytest.raises(ConnectorValidationError, match="kerberos"):
+        MicrosoftAuthMethod.parse("kerberos")
+
+
+@pytest.mark.parametrize("value", [None, ""])
+def test_missing_auth_method_parses_as_client_secret(value: str | None) -> None:
+    assert MicrosoftAuthMethod.parse(value) is MicrosoftAuthMethod.CLIENT_SECRET
 
 
 def test_client_secret_context_reports_its_method() -> None:
@@ -76,7 +76,7 @@ def test_client_secret_context_reports_its_method() -> None:
         )
 
     assert auth.method is MicrosoftAuthMethod.CLIENT_SECRET
-    assert auth.supports_sharepoint_rest is False
+    assert auth.method.supports_sharepoint_rest is False
 
 
 def test_certificate_context_reports_its_method() -> None:
@@ -93,10 +93,10 @@ def test_certificate_context_reports_its_method() -> None:
             client_id="client-id",
             directory_id="tenant-id",
             authority_host=AUTHORITY_HOST,
-            auth_method=MicrosoftAuthMethod.CERTIFICATE.value,
+            auth_method=MicrosoftAuthMethod.CERTIFICATE,
             private_key_b64=base64.b64encode(b"pfx").decode(),
             certificate_password="pw",
         )
 
     assert auth.method is MicrosoftAuthMethod.CERTIFICATE
-    assert auth.supports_sharepoint_rest is True
+    assert auth.method.supports_sharepoint_rest is True

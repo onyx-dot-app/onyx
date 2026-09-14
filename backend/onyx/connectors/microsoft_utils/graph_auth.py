@@ -14,7 +14,7 @@ threshold that marks a credential invalid, so it is not interchangeable with
 import base64
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+from typing import Any, assert_never
 
 import msal
 from cryptography.hazmat.primitives import hashes, serialization
@@ -31,23 +31,40 @@ class MicrosoftAuthMethod(Enum):
     CLIENT_SECRET = "client_secret"
     CERTIFICATE = "certificate"
 
+    @property
+    def supports_sharepoint_rest(self) -> bool:
+        """SharePoint's REST and CSOM surface accepts an app-only token only
+        when it came from a certificate. A client-secret token gets Access
+        Denied whatever permissions are granted.
+        https://learn.microsoft.com/en-us/sharepoint/dev/solution-guidance/security-apponly-azuread
+        """
+        return self is MicrosoftAuthMethod.CERTIFICATE
+
+    @classmethod
+    def parse(cls, value: str | None) -> "MicrosoftAuthMethod":
+        """Parse a credential's ``authentication_method`` field.
+
+        A missing field means client secret, which is what every credential
+        created before certificates existed carries.
+        """
+        if not value:
+            return cls.CLIENT_SECRET
+        try:
+            return cls(value)
+        except ValueError:
+            expected = ", ".join(method.value for method in cls)
+            raise ConnectorValidationError(
+                f"Unknown authentication method {value!r}. Expected one of: {expected}."
+            ) from None
+
 
 @dataclass(frozen=True)
 class MicrosoftAuthContext:
-    """An MSAL client together with the credential type behind it.
-
-    Callers need the method, not just the client: SharePoint's REST and CSOM
-    surface accepts an app-only token only when it came from a certificate, and
-    rejects a client-secret one with Access Denied.
-    https://learn.microsoft.com/en-us/sharepoint/dev/solution-guidance/security-apponly-azuread
-    """
+    """An MSAL client together with the credential type behind it, since the
+    method decides which Microsoft surfaces the token may be sent to."""
 
     app: msal.ConfidentialClientApplication
     method: MicrosoftAuthMethod
-
-    @property
-    def supports_sharepoint_rest(self) -> bool:
-        return self.method is MicrosoftAuthMethod.CERTIFICATE
 
 
 class CertificateData(BaseModel):
@@ -90,7 +107,7 @@ def build_msal_app(
     client_id: str,
     directory_id: str,
     authority_host: str,
-    auth_method: str = MicrosoftAuthMethod.CLIENT_SECRET.value,
+    auth_method: MicrosoftAuthMethod = MicrosoftAuthMethod.CLIENT_SECRET,
     client_secret: str | None = None,
     private_key_b64: str | None = None,
     certificate_password: str | None = None,
@@ -98,7 +115,8 @@ def build_msal_app(
     """Build the app-only MSAL client for a connector's credential.
 
     ``private_key_b64`` is the base64-encoded PFX bundle as stored on the
-    credential, not a PEM key.
+    credential, not a PEM key. Callers parse the credential's method string
+    with :meth:`MicrosoftAuthMethod.parse` before calling.
 
     Callers own presence checks on the ids. Validating them here would give
     every caller SharePoint's ``ConnectorValidationError``, which cancels the
@@ -106,7 +124,7 @@ def build_msal_app(
     """
     authority_url = f"{authority_host}/{directory_id}"
 
-    if auth_method == MicrosoftAuthMethod.CERTIFICATE.value:
+    if auth_method is MicrosoftAuthMethod.CERTIFICATE:
         logger.info("Using certificate authentication")
         if not private_key_b64 or not certificate_password:
             raise ConnectorValidationError(
@@ -129,7 +147,7 @@ def build_msal_app(
             method=MicrosoftAuthMethod.CERTIFICATE,
         )
 
-    if auth_method == MicrosoftAuthMethod.CLIENT_SECRET.value:
+    if auth_method is MicrosoftAuthMethod.CLIENT_SECRET:
         logger.info("Using client secret authentication")
         return MicrosoftAuthContext(
             app=msal.ConfidentialClientApplication(
@@ -140,9 +158,7 @@ def build_msal_app(
             method=MicrosoftAuthMethod.CLIENT_SECRET,
         )
 
-    raise ConnectorValidationError(
-        "Invalid authentication method or missing required credentials"
-    )
+    assert_never(auth_method)
 
 
 def acquire_graph_token(
