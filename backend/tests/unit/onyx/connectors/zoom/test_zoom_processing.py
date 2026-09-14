@@ -47,7 +47,7 @@ def _work(
 def _client_with_transcript() -> MagicMock:
     client = MagicMock(spec=ZoomClient)
     client.get_meeting_transcript.return_value = transcript(
-        download_url="https://zoom.example/transcript.vtt"
+        download_url="https://zoom.example/transcript.vtt", meeting_topic=""
     )
     client.download_transcript_vtt.return_value = _SAMPLE_VTT
     client.get_past_meeting_details.return_value = past_meeting_details(
@@ -61,6 +61,12 @@ def _run(client: MagicMock, work: OccurrenceWork) -> list[Document | ConnectorFa
     list so an unexpected extra one would show up as a length mismatch."""
     processed = process_occurrence(client, work)
     return [] if processed is None else [processed]
+
+
+def _http_error(status: int) -> requests.HTTPError:
+    response = requests.Response()
+    response.status_code = status
+    return requests.HTTPError(f"{status}", response=response)
 
 
 class TestZoomDocumentId:
@@ -172,9 +178,11 @@ class TestProcessOccurrence:
 
         assert _run(client, _work()) == []
 
-    def test_missing_details_falls_back_to_generic_title(self) -> None:
+    def test_a_session_zoom_no_longer_has_falls_back_to_a_generic_title(self) -> None:
+        # Zoom answers 404 once a meeting ages past the details endpoint's
+        # one-year window.
         client = _client_with_transcript()
-        client.get_past_meeting_details.return_value = None
+        client.get_past_meeting_details.side_effect = _http_error(404)
 
         items = _run(client, _work(start_time=None))
 
@@ -228,12 +236,6 @@ class TestProcessOccurrence:
         assert isinstance(doc, Document)
         assert doc.semantic_identifier == "Town Hall"
         client.get_past_meeting_details.assert_not_called()
-
-
-def _http_error(status: int) -> requests.HTTPError:
-    response = requests.Response()
-    response.status_code = status
-    return requests.HTTPError(f"{status}", response=response)
 
 
 class TestSystemicFailuresStopTheRun:
@@ -291,6 +293,26 @@ class TestSystemicFailuresStopTheRun:
         assert len(items) == 1
         assert isinstance(items[0], ConnectorFailure)
 
+    @pytest.mark.parametrize(
+        "error",
+        [_http_error(429), CredentialExpiredError("expired")],
+    )
+    def test_a_systemic_details_failure_still_yields_the_document(
+        self, error: Exception
+    ) -> None:
+        # The details call runs last, once the transcript is downloaded, so even
+        # a systemic error here costs a title rather than the document. The next
+        # occurrence fetches its transcript first and stops the run there.
+        client = _client_with_transcript()
+        client.get_past_meeting_details.side_effect = error
+
+        items = _run(client, _work(topic="", start_time=None))
+
+        assert len(items) == 1
+        doc = items[0]
+        assert isinstance(doc, Document)
+        assert doc.semantic_identifier == "Zoom Meeting 111"
+
     def test_an_http_error_carrying_no_response_is_not_treated_as_systemic(
         self,
     ) -> None:
@@ -301,3 +323,53 @@ class TestSystemicFailuresStopTheRun:
 
         assert len(items) == 1
         assert isinstance(items[0], ConnectorFailure)
+
+
+class TestTopicComesFromTheTranscript:
+    """The transcript already names the session, so the details endpoint is a
+    second call for a field we hold, and Zoom caps it at one year."""
+
+    def test_transcript_topic_is_used_without_a_details_call(self) -> None:
+        client = _client_with_transcript()
+        client.get_meeting_transcript.return_value = transcript(
+            download_url="https://zoom.example/transcript.vtt",
+            meeting_topic="Quarterly Review",
+        )
+
+        docs = _run(client, _work())
+
+        assert isinstance(docs[0], Document)
+        assert docs[0].semantic_identifier == "Quarterly Review"
+        client.get_past_meeting_details.assert_not_called()
+
+    def test_details_still_fill_in_when_the_transcript_has_no_topic(self) -> None:
+        client = _client_with_transcript()
+
+        docs = _run(client, _work())
+
+        assert isinstance(docs[0], Document)
+        assert docs[0].semantic_identifier == "Weekly Sync"
+        client.get_past_meeting_details.assert_called_once_with("uuid-abc")
+
+    def test_discovery_topic_still_wins_over_the_transcript(self) -> None:
+        client = _client_with_transcript()
+        client.get_meeting_transcript.return_value = transcript(
+            download_url="https://zoom.example/transcript.vtt",
+            meeting_topic="Quarterly Review",
+        )
+
+        docs = _run(client, _work(topic="From Discovery"))
+
+        assert isinstance(docs[0], Document)
+        assert docs[0].semantic_identifier == "From Discovery"
+
+    def test_a_missing_start_time_still_costs_a_details_call(self) -> None:
+        client = _client_with_transcript()
+        client.get_meeting_transcript.return_value = transcript(
+            download_url="https://zoom.example/transcript.vtt",
+            meeting_topic="Quarterly Review",
+        )
+
+        _run(client, _work(start_time=None))
+
+        client.get_past_meeting_details.assert_called_once_with("uuid-abc")

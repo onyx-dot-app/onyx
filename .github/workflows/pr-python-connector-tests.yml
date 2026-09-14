@@ -30,7 +30,6 @@ on:
   # is not evaluated for tag pushes, so the `v*.*.*` release trigger below still
   # fires regardless of changed files.
   pull_request:
-    branches: [main]
     paths:
       - "backend/**"
       - "pyproject.toml"

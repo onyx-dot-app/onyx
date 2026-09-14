@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock, patch
 from urllib.parse import urlparse
@@ -15,6 +15,7 @@ from onyx.connectors.exceptions import (
 )
 from onyx.connectors.zoom.client import (
     _API_BASE_URL,
+    _MAX_PAGE_SIZE,
     _OAUTH_TOKEN_URL,
     ZoomClient,
     _encode_meeting_identifier,
@@ -56,6 +57,52 @@ _DOCUMENTED_PAST_MEETING = {
     "user_email": "jchill@example.com",
     "user_name": "Jill Chill",
     "has_meeting_summary": False,
+}
+
+
+# The five configuration objects ZoomWebinarDetails deliberately leaves off.
+# Naming them keeps the round-trip assertion honest about what it skips.
+_WEBINAR_CONFIG_FIELDS = frozenset(
+    {
+        "occurrences",
+        "recurrence",
+        "settings",
+        "simulive_delay_start",
+        "tracking_fields",
+    }
+)
+
+# Every field of Zoom's documented `GET /webinars/{webinarId}` example. The five
+# configuration objects are trimmed to one entry each, since nothing reads inside
+# them and `settings` alone holds 77 more fields.
+_DOCUMENTED_WEBINAR = {
+    "id": 97871060099,
+    "uuid": "m3WqMkvuRXyYqH+eKWhk9w==",
+    "host_id": "30R7kT7bTIKSNUFEuH_Qlg",
+    "host_email": "jchill@example.com",
+    "topic": "My Webinar",
+    "type": 5,
+    "agenda": "My webinar",
+    "duration": 60,
+    "start_time": "2022-03-26T06:44:14Z",
+    "timezone": "America/Los_Angeles",
+    "created_at": "2022-03-26T07:18:32Z",
+    "creation_source": "open_api",
+    "join_url": "https://example.com/j/11111",
+    "start_url": "https://example.com/s/11111",
+    "registration_url": "https://example.com/webinar/register/7ksAkRCoEpt1",
+    "password": "123456",
+    "encrypted_passcode": "8pEkRweVXPV3Ob2KJYgFTRlDtl1gSn.1",
+    "h323_passcode": "123456",
+    "template_id": "ull6574eur",
+    "record_file_id": "f09340e1-cdc3-4eae-9a74-98f9777ed908",
+    "is_simulive": True,
+    "transition_to_live": False,
+    "simulive_delay_start": {"enable": True, "time": 10, "timeunit": "second"},
+    "occurrences": [{"occurrence_id": "1648194360000", "status": "available"}],
+    "recurrence": {"type": 1, "repeat_interval": 1},
+    "settings": {"approval_type": 0, "auto_recording": "cloud"},
+    "tracking_fields": [{"field": "field1", "value": "value1"}],
 }
 
 
@@ -453,6 +500,364 @@ class TestListPastMeetingOccurrences:
         client.list_past_meeting_occurrences("111")
 
         assert client._session.request.call_args.kwargs["params"] == {}
+
+
+class TestListGroupMembers:
+    def test_reads_the_members_key(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            200,
+            {
+                "members": [
+                    {
+                        "id": "u1",
+                        "email": "jill@example.com",
+                        "first_name": "Jill",
+                        "last_name": "Chill",
+                        "type": 2,
+                    },
+                    {
+                        "id": "u2",
+                        "email": "jack@example.com",
+                        "first_name": "Jack",
+                        "last_name": "Chill",
+                        "type": 2,
+                    },
+                ],
+                "next_page_token": "tok",
+            },
+        )
+
+        page = client.list_group_members("group-1")
+
+        assert [(u.id, u.email) for u in page.users] == [
+            ("u1", "jill@example.com"),
+            ("u2", "jack@example.com"),
+        ]
+        assert page.next_page_token == "tok"
+        params = client._session.request.call_args.kwargs["params"]
+        assert params == {"page_size": _MAX_PAGE_SIZE}
+
+    def test_page_token_is_sent_on_the_next_page(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200, {"members": []})
+
+        client.list_group_members("group-1", page_token="tok")
+
+        params = client._session.request.call_args.kwargs["params"]
+        assert params["next_page_token"] == "tok"
+
+    def test_an_empty_token_ends_the_listing(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            200, {"members": [], "next_page_token": ""}
+        )
+
+        assert client.list_group_members("group-1").next_page_token is None
+
+    def test_a_missing_group_raises(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            404, {"code": 4130, "message": "Group does not exist"}
+        )
+
+        with pytest.raises(requests.HTTPError, match="Group does not exist"):
+            client.list_group_members("nope")
+
+    def test_group_id_is_encoded_into_the_path(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200, {"members": []})
+
+        client.list_group_members("a/b")
+
+        url = client._session.request.call_args.args[1]
+        assert url == f"{_API_BASE_URL}/groups/a%2Fb/members"
+
+
+class TestListUsers:
+    def test_reads_the_users_key(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            200,
+            {
+                "users": [
+                    {
+                        "id": "u1",
+                        "email": "host@example.com",
+                        "first_name": "Jill",
+                        "last_name": "Chill",
+                        "type": 2,
+                    }
+                ],
+                "next_page_token": "",
+            },
+        )
+
+        page = client.list_users()
+
+        assert [(u.id, u.email) for u in page.users] == [("u1", "host@example.com")]
+        assert page.next_page_token is None
+        url = client._session.request.call_args.args[1]
+        assert url == f"{_API_BASE_URL}/users"
+
+
+class TestListUserRecordings:
+    def _page(self) -> dict[str, Any]:
+        return {
+            "meetings": [
+                {
+                    "uuid": "BOKXuumlTAGXuqwr3bLyuQ==",
+                    "id": 6840331990,
+                    "topic": "My Personal Meeting",
+                    "start_time": "2021-03-18T05:41:36Z",
+                    "type": "1",
+                    "account_id": "Cx3wERazSgup7ZWRHQM8-w",
+                    "host_id": "_0ctZtY0REqWalTmwvrdIw",
+                    "duration": 20,
+                    "total_size": 22,
+                    "recording_count": 22,
+                }
+            ],
+            "next_page_token": "tok",
+        }
+
+    def test_reads_the_meetings_key(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200, self._page())
+
+        page = client.list_user_recordings("u1", date(2026, 1, 1), date(2026, 2, 1))
+
+        recording = page.recordings[0]
+        assert recording.uuid == "BOKXuumlTAGXuqwr3bLyuQ=="
+        assert recording.topic == "My Personal Meeting"
+        assert recording.start_time == "2021-03-18T05:41:36Z"
+        assert page.next_page_token == "tok"
+
+    def test_the_integer_meeting_number_becomes_the_session_id(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200, self._page())
+
+        page = client.list_user_recordings("u1", date(2026, 1, 1), date(2026, 2, 1))
+
+        assert page.recordings[0].session_id == "6840331990"
+
+    def test_the_window_and_page_size_go_to_zoom(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200, {"meetings": []})
+
+        client.list_user_recordings(
+            "u1", date(2026, 1, 1), date(2026, 2, 1), page_token="tok"
+        )
+
+        params = client._session.request.call_args.kwargs["params"]
+        assert params == {
+            "from": "2026-01-01",
+            "to": "2026-02-01",
+            "page_size": _MAX_PAGE_SIZE,
+            "next_page_token": "tok",
+        }
+        url = client._session.request.call_args.args[1]
+        assert url == f"{_API_BASE_URL}/users/u1/recordings"
+
+    def test_a_missing_user_raises_rather_than_reading_as_empty(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            404, {"code": 1001, "message": "User does not exist"}
+        )
+
+        with pytest.raises(requests.HTTPError, match="User does not exist"):
+            client.list_user_recordings("nope", date(2026, 1, 1), date(2026, 2, 1))
+
+    def test_missing_meetings_key_yields_an_empty_page(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200, {})
+
+        page = client.list_user_recordings("u1", date(2026, 1, 1), date(2026, 2, 1))
+
+        assert page.recordings == []
+        assert page.next_page_token is None
+
+
+class TestGetWebinarDetails:
+    def test_parses_the_response(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200, _DOCUMENTED_WEBINAR)
+
+        details = client.get_webinar_details("222")
+
+        assert details.topic == "My Webinar"
+        assert details.start_time == "2022-03-26T06:44:14Z"
+
+    def test_keeps_every_documented_scalar_field(self) -> None:
+        # Sharing one model with /past_meetings parses no webinar at all, because
+        # that model requires seven fields a webinar never carries.
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200, _DOCUMENTED_WEBINAR)
+
+        details = client.get_webinar_details("222")
+
+        # Guards the fixture too: trimming the five out of it would quietly
+        # turn the comparison below into a weaker test.
+        assert _WEBINAR_CONFIG_FIELDS <= set(_DOCUMENTED_WEBINAR)
+        expected = {
+            k: v
+            for k, v in _DOCUMENTED_WEBINAR.items()
+            if k not in _WEBINAR_CONFIG_FIELDS
+        }
+        assert details.model_dump() == expected
+
+    def test_a_webinar_configured_with_nothing_optional_still_parses(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            200,
+            {
+                "id": 97871060099,
+                "uuid": "m3WqMkvuRXyYqH+eKWhk9w==",
+                "host_id": "30R7kT7bTIKSNUFEuH_Qlg",
+                "topic": "Bare Webinar",
+                "type": 5,
+            },
+        )
+
+        details = client.get_webinar_details("222")
+
+        assert details.topic == "Bare Webinar"
+        assert details.start_time is None
+
+    def test_404_is_reported_not_swallowed(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(404)
+
+        with pytest.raises(requests.HTTPError):
+            client.get_webinar_details("222")
+
+
+class TestListPastWebinarOccurrences:
+    def test_reads_the_webinars_key(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            200,
+            {
+                "webinars": [
+                    {"uuid": "w1", "start_time": "2026-01-01T10:00:00Z"},
+                    {"uuid": "w2", "start_time": "2026-01-08T10:00:00Z"},
+                ]
+            },
+        )
+
+        occurrences = client.list_past_webinar_occurrences("222")
+
+        assert [o.uuid for o in occurrences] == ["w1", "w2"]
+        assert occurrences[0].start_time == "2026-01-01T10:00:00Z"
+
+    def test_calls_the_webinar_endpoint_not_the_meeting_one(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200, {"webinars": []})
+
+        client.list_past_webinar_occurrences("222")
+
+        url = client._session.request.call_args.args[1]
+        assert url == f"{_API_BASE_URL}/past_webinars/222/instances"
+
+    def test_404_is_reported_not_read_as_no_occurrences(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(404)
+
+        with pytest.raises(requests.HTTPError):
+            client.list_past_webinar_occurrences("222")
+
+    def test_missing_webinars_key_yields_an_empty_list(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200, {})
+
+        assert client.list_past_webinar_occurrences("222") == []
+
+
+class TestWebinarAddOnErrors:
+    """A Pro account without the Webinar add-on fails every webinar call, and
+    the generic scope message sends the admin to re-check scopes that are
+    already correct."""
+
+    def test_403_names_the_add_on(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(403)
+
+        with pytest.raises(InsufficientPermissionsError) as caught:
+            client.list_past_webinar_occurrences("222")
+
+        assert "Webinar add-on" in str(caught.value)
+
+    def test_400_with_zooms_no_permission_code_names_the_add_on(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            400, {"code": 200, "message": "No permission."}
+        )
+
+        with pytest.raises(InsufficientPermissionsError) as caught:
+            client.list_past_webinar_occurrences("222")
+
+        assert "Webinar add-on" in str(caught.value)
+
+    def test_a_missing_plan_keeps_the_user_zoom_named(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            400,
+            {
+                "code": 200,
+                "message": (
+                    "Webinar plan is missing. You must subscribe to the webinar "
+                    "plan and enable webinars for user abc123 to perform this action."
+                ),
+            },
+        )
+
+        with pytest.raises(InsufficientPermissionsError) as caught:
+            client.get_webinar_details("222")
+
+        assert "Webinar add-on" in str(caught.value)
+        assert "abc123" in str(caught.value)
+
+    def test_a_string_error_code_is_still_recognised(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            400, {"code": "200", "message": "No permission."}
+        )
+
+        with pytest.raises(InsufficientPermissionsError):
+            client.list_past_webinar_occurrences("222")
+
+    def test_an_unrelated_400_is_still_an_http_error(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            400, {"code": 300, "message": "Invalid webinar ID."}
+        )
+
+        with pytest.raises(requests.HTTPError):
+            client.list_past_webinar_occurrences("222")
 
 
 class TestDownloadTranscriptVtt:
