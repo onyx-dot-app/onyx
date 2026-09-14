@@ -259,11 +259,12 @@ class DOCXSchemaValidator(BaseSchemaValidator):
         for xml_file in self.xml_files:
             try:
                 for elem in lxml.etree.parse(str(xml_file)).iter():
-                    if val := elem.get(para_id_attr):
-                        if self._parse_id_value(val, base=16) >= 0x80000000:
-                            errors.append(
-                                f"  {xml_file.name}:{elem.sourceline}: paraId={val} >= 0x80000000"
-                            )
+                    if (val := elem.get(para_id_attr)) and (
+                        self._parse_id_value(val, base=16) >= 0x80000000
+                    ):
+                        errors.append(
+                            f"  {xml_file.name}:{elem.sourceline}: paraId={val} >= 0x80000000"
+                        )
 
                     if val := elem.get(durable_id_attr):
                         if xml_file.name == "numbering.xml":

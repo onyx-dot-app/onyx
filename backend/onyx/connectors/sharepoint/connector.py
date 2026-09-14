@@ -2105,20 +2105,21 @@ class SharepointConnector(
                     params=params,
                     timeout=REQUEST_TIMEOUT_SECONDS,
                 )
-                if response.status_code in GRAPH_API_RETRYABLE_STATUSES:
-                    if attempt < GRAPH_API_MAX_RETRIES:
-                        wait = _backoff_seconds(
-                            attempt, response.headers.get("Retry-After")
-                        )
-                        logger.warning(
-                            "Graph API %s on attempt %s, retrying in %.1fs: %s",
-                            response.status_code,
-                            attempt + 1,
-                            wait,
-                            url,
-                        )
-                        time.sleep(wait)
-                        continue
+                if response.status_code in GRAPH_API_RETRYABLE_STATUSES and (
+                    attempt < GRAPH_API_MAX_RETRIES
+                ):
+                    wait = _backoff_seconds(
+                        attempt, response.headers.get("Retry-After")
+                    )
+                    logger.warning(
+                        "Graph API %s on attempt %s, retrying in %.1fs: %s",
+                        response.status_code,
+                        attempt + 1,
+                        wait,
+                        url,
+                    )
+                    time.sleep(wait)
+                    continue
                 _log_and_raise_for_status(response)
                 # ValueError covers the empty/non-JSON 2xx bodies Graph
                 # intermittently returns under load.

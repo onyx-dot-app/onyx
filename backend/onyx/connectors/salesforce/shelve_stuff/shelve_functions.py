@@ -143,9 +143,8 @@ def get_record(
     Retrieve the record and return it as a SalesforceObject.
     The object type will be looked up from the ID-to-type mapping shelf.
     """
-    if object_type is None:
-        if not (object_type := get_type_from_id(object_id)):
-            return None
+    if object_type is None and not (object_type := get_type_from_id(object_id)):
+        return None
 
     shelf_path = get_object_shelf_path(object_type)
     with shelve.open(shelf_path) as db:  # noqa: S301 — connector-local persistence

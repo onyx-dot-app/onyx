@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import queue
 import threading
 from collections import defaultdict
@@ -336,10 +337,8 @@ class UserUsageTracingProcessor(TracingProcessor):
             if self._shutdown.is_set():
                 return
             self._shutdown.set()
-        try:
-            # Wake the drain thread now if there's room; if the queue is full,
-            # the flag-check on its next get() timeout exits it. Never block here.
+        # Wake the drain thread now if there's room; if the queue is full,
+        # the flag-check on its next get() timeout exits it. Never block here.
+        with contextlib.suppress(queue.Full):
             self._queue.put_nowait(_SHUTDOWN)
-        except queue.Full:
-            pass
         self._thread.join(timeout=10.0)

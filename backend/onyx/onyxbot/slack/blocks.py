@@ -142,7 +142,7 @@ def _build_ephemeral_publication_block(
         message_info is not None
         and message_info.msg_to_respond is not None
         and message_info.thread_to_respond is not None
-        and (message_info.msg_to_respond == message_info.thread_to_respond)
+        and message_info.msg_to_respond == message_info.thread_to_respond
     ):
         respond_ts = None
     else:
@@ -262,10 +262,9 @@ def _build_sources_blocks(
         seen_docs_identifiers.add(d.document_id)
 
         doc_sem_id = d.semantic_identifier
-        if d.source_type == DocumentSource.SLACK.value:
-            # for legacy reasons, before the switch to how Slack semantic identifiers are constructed
-            if "#" not in doc_sem_id:
-                doc_sem_id = "#" + doc_sem_id
+        # for legacy reasons, before the switch to how Slack semantic identifiers are constructed
+        if d.source_type == DocumentSource.SLACK.value and "#" not in doc_sem_id:
+            doc_sem_id = "#" + doc_sem_id
 
         # this is needed to try and prevent the line from overflowing
         # if it does overflow, the image gets placed above the title and it

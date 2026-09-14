@@ -92,12 +92,14 @@ class TestVerifyLicenseSignature:
 
         license_data = create_signed_license(private_key, payload)
 
-        with patch(
-            "ee.onyx.utils.license._get_public_keys",
-            return_value=[different_public_key],
+        with (
+            patch(
+                "ee.onyx.utils.license._get_public_keys",
+                return_value=[different_public_key],
+            ),
+            pytest.raises(ValueError, match="Invalid license signature"),
         ):
-            with pytest.raises(ValueError, match="Invalid license signature"):
-                verify_license_signature(license_data)
+            verify_license_signature(license_data)
 
     def test_tampered_payload(self) -> None:
         """Test that a tampered payload fails verification."""
@@ -134,9 +136,11 @@ class TestVerifyLicenseSignature:
 
         encoded_license = base64.b64encode(json.dumps(license_data).encode()).decode()
 
-        with patch("ee.onyx.utils.license._get_public_keys", return_value=[public_key]):
-            with pytest.raises(ValueError, match="Invalid license signature"):
-                verify_license_signature(encoded_license)
+        with (
+            patch("ee.onyx.utils.license._get_public_keys", return_value=[public_key]),
+            pytest.raises(ValueError, match="Invalid license signature"),
+        ):
+            verify_license_signature(encoded_license)
 
     def test_invalid_base64(self) -> None:
         """Test that invalid base64 fails."""
@@ -278,11 +282,13 @@ class TestKeyRotationTrustSet:
         _, trusted_public = generate_test_key_pair()
         untrusted_private, _ = generate_test_key_pair()
 
-        with patch(
-            "ee.onyx.utils.license._get_public_keys", return_value=[trusted_public]
+        with (
+            patch(
+                "ee.onyx.utils.license._get_public_keys", return_value=[trusted_public]
+            ),
+            pytest.raises(ValueError, match="Invalid license signature"),
         ):
-            with pytest.raises(ValueError, match="Invalid license signature"):
-                verify_license_signature(self._license(untrusted_private))
+            verify_license_signature(self._license(untrusted_private))
 
     def test_concatenated_pem_blocks_parse_in_order(self) -> None:
         """Rotation is deployed by appending the new key to the existing PEM."""

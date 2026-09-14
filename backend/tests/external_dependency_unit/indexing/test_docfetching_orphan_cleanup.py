@@ -23,6 +23,7 @@ depends on JSONB metadata filtering and the file_store client is what
 actually deletes blob + FileRecord together.
 """
 
+import contextlib
 from collections.abc import Generator, Iterator
 from io import BytesIO
 from typing import Any
@@ -170,10 +171,8 @@ def file_cleanup(
     finally:
         store = get_default_file_store()
         for fid in created:
-            try:
+            with contextlib.suppress(Exception):
                 store.delete_file(fid, error_on_missing=False)
-            except Exception:
-                pass
 
 
 # ---------------------------------------------------------------------------

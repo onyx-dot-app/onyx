@@ -491,9 +491,8 @@ class GoogleDriveConnector(
                 domain=self.google_domain,
                 query=query,
             ):
-                if email := user.get("primaryEmail"):
-                    if email not in user_emails:
-                        user_emails.append(email)
+                if (email := user.get("primaryEmail")) and email not in user_emails:
+                    user_emails.append(email)
         return user_emails
 
     def _get_my_drive_root_id(self, user_email: str) -> str | None:
@@ -543,10 +542,7 @@ class GoogleDriveConnector(
 
         # Also check with admin in case the retriever doesn't have access
         admin_root_id = self._get_my_drive_root_id(self.primary_admin_email)
-        if admin_root_id and folder_id == admin_root_id:
-            return True
-
-        return False
+        return bool(admin_root_id and folder_id == admin_root_id)
 
     def _get_new_ancestors_for_files(
         self,

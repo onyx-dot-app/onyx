@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -246,9 +247,7 @@ def test_403_applies_5s_wait(
 
     # All retries return 403 so no docs are found — that's expected here.
     # We only care that the 5s wait fired.
-    try:
+    with contextlib.suppress(RuntimeError):
         list(connector.retrieve_all_slim_docs())
-    except RuntimeError:
-        pass
 
     page.wait_for_timeout.assert_called_with(5000)

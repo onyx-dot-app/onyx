@@ -6,6 +6,7 @@ they can be unit-tested against synthetic gateways and directories.
 """
 
 import ast
+import contextlib
 import importlib
 import sys
 from collections.abc import Collection, Sequence
@@ -83,10 +84,8 @@ def compute_uncovered_units(
             connector_specific_config={},
             source_operations=spy,
         )
-        try:
+        with contextlib.suppress(Exception):
             check.run(context)
-        except Exception:
-            pass
         for name, _args, kwargs in spy.mock_calls:
             # Chained calls (``spy.op().foo()``) yield junk segments like
             # ``op()``; they never match a registered operation name, so they

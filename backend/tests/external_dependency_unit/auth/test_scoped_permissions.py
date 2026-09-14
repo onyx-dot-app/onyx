@@ -71,16 +71,19 @@ def _doc_set(db_session: Session, *, is_public: bool, groups: list[UserGroup]) -
 
 
 def test_bundle_is_the_seven_token_set() -> None:
-    assert SCOPED_MANAGER_PERMISSIONS == frozenset(
-        {
-            Permission.MANAGE_CONNECTORS,
-            Permission.MANAGE_DOCUMENT_SETS,
-            Permission.MANAGE_AGENTS,
-            Permission.ADD_AGENTS,
-            Permission.MANAGE_USER_GROUPS,
-            Permission.MANAGE_ACTIONS,
-            Permission.MANAGE_SKILLS,
-        }
+    assert (
+        frozenset(
+            {
+                Permission.MANAGE_CONNECTORS,
+                Permission.MANAGE_DOCUMENT_SETS,
+                Permission.MANAGE_AGENTS,
+                Permission.ADD_AGENTS,
+                Permission.MANAGE_USER_GROUPS,
+                Permission.MANAGE_ACTIONS,
+                Permission.MANAGE_SKILLS,
+            }
+        )
+        == SCOPED_MANAGER_PERMISSIONS
     )
     # admin-only tokens must never be scopable
     assert Permission.MANAGE_LLMS not in SCOPED_MANAGER_PERMISSIONS
@@ -544,7 +547,7 @@ def test_admin_capabilities_reveal_the_bundle_for_a_manager(
     info = UserInfo.from_model(manager, effective_permissions=granted)
 
     assert info.is_group_manager
-    assert SCOPED_MANAGER_PERMISSIONS_EXPANDED <= set(info.admin_capabilities)
+    assert set(info.admin_capabilities) >= SCOPED_MANAGER_PERMISSIONS_EXPANDED
     assert info.effective_permissions == granted
 
 

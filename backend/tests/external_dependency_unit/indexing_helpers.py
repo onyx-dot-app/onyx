@@ -9,6 +9,7 @@ Tests keep their own `cc_pair` fixture (dependencies differ per file), but
 the body is just `make_cc_pair` + `cleanup_cc_pair`.
 """
 
+import contextlib
 from io import BytesIO
 from uuid import uuid4
 
@@ -184,10 +185,8 @@ def cleanup_cc_pair(db_session: Session, pair: ConnectorCredentialPair) -> None:
 
         file_store = get_default_file_store()
         for fid in orphan_file_ids:
-            try:
+            with contextlib.suppress(Exception):
                 file_store.delete_file(fid, error_on_missing=False)
-            except Exception:
-                pass
 
         if orphan_doc_ids:
             db_session.query(DBDocument).filter(

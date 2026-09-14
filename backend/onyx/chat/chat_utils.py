@@ -182,19 +182,20 @@ def create_chat_session_from_request(
         Exception: If the persona is invalid
     """
     project_id = chat_session_request.project_id
-    if project_id:
-        if not check_project_ownership(project_id, user.id, db_session):
-            raise ValueError("User does not have access to project")
+    if project_id and not check_project_ownership(project_id, user.id, db_session):
+        raise ValueError("User does not have access to project")
 
     persona_id = chat_session_request.persona_id
-    if persona_id != DEFAULT_PERSONA_ID:
-        if not user.is_anonymous and not user_can_access_persona(
+    if persona_id != DEFAULT_PERSONA_ID and (
+        not user.is_anonymous
+        and not user_can_access_persona(
             db_session=db_session,
             persona_id=persona_id,
             user=user,
             get_editable=False,
-        ):
-            raise ValueError("User does not have access to persona")
+        )
+    ):
+        raise ValueError("User does not have access to persona")
 
     # Pinned at creation so a later setting change cannot alter a live session.
     # Availability decides server-side, never the client flag. A refusal

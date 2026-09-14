@@ -32,12 +32,11 @@ class ZulipHTTPError(ZulipAPIError):
 
 def __call_with_retry(fun: Callable, *args: Any, **kwargs: Any) -> Dict[str, Any]:
     result = fun(*args, **kwargs)
-    if result.get("result") == "error":
-        if result.get("code") == "RATE_LIMIT_HIT":
-            retry_after = float(result["retry-after"]) + 1
-            logger.warning("Rate limit hit, retrying after %s seconds", retry_after)
-            time.sleep(retry_after)
-            return __call_with_retry(fun, *args)
+    if result.get("result") == "error" and result.get("code") == "RATE_LIMIT_HIT":
+        retry_after = float(result["retry-after"]) + 1
+        logger.warning("Rate limit hit, retrying after %s seconds", retry_after)
+        time.sleep(retry_after)
+        return __call_with_retry(fun, *args)
     return result
 
 

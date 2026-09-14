@@ -225,9 +225,8 @@ def _index_vespa_chunk(
         AGGREGATED_CHUNK_BOOST_FACTOR: chunk.aggregated_chunk_boost_factor,
     }
 
-    if multitenant:
-        if chunk.tenant_id:
-            vespa_document_fields[TENANT_ID] = chunk.tenant_id
+    if multitenant and chunk.tenant_id:
+        vespa_document_fields[TENANT_ID] = chunk.tenant_id
     vespa_url = f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{vespa_chunk_id}"
     logger.debug('Indexing to URL "%s"', vespa_url)
 

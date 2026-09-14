@@ -175,15 +175,19 @@ class TestRetrieveAllSlimDocs:
             doc_created_at=None,
         )
 
-        with patch.object(
-            connector, "build_dummy_checkpoint", return_value=_make_done_checkpoint()
-        ):
-            with patch.object(
+        with (
+            patch.object(
+                connector,
+                "build_dummy_checkpoint",
+                return_value=_make_done_checkpoint(),
+            ),
+            patch.object(
                 connector,
                 "_extract_slim_docs_from_google_drive",
                 return_value=iter([[slim_doc]]),
-            ) as mock_extract:
-                list(connector.retrieve_all_slim_docs())
+            ) as mock_extract,
+        ):
+            list(connector.retrieve_all_slim_docs())
 
         mock_extract.assert_not_called()  # loop exits immediately since checkpoint is DONE
 

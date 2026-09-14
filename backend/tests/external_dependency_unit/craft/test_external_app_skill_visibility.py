@@ -223,15 +223,14 @@ def test_one_skill_cannot_be_associated_with_two_external_apps(
         auth_template={},
     )
 
-    with pytest.raises(IntegrityError):
-        with db_session.begin_nested():
-            db_session.add(
-                ExternalApp__Skill(
-                    external_app_id=second_app.id,
-                    skill_id=shared_skill.id,
-                )
+    with pytest.raises(IntegrityError), db_session.begin_nested():
+        db_session.add(
+            ExternalApp__Skill(
+                external_app_id=second_app.id,
+                skill_id=shared_skill.id,
             )
-            db_session.flush()
+        )
+        db_session.flush()
 
     assert get_external_app_by_skill_id(db_session, shared_skill.id) == first_app
 

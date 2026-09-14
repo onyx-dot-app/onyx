@@ -123,21 +123,24 @@ class BaseSchemaValidator:
                 for elem in dom.getElementsByTagName("*"):
                     if elem.tagName.endswith(":t") and elem.firstChild:
                         text = elem.firstChild.nodeValue
-                        if text and (
-                            text.startswith((" ", "\t")) or text.endswith((" ", "\t"))
-                        ):
-                            if elem.getAttribute("xml:space") != "preserve":
-                                elem.setAttribute("xml:space", "preserve")
-                                text_preview = (
-                                    repr(text[:30]) + "..."
-                                    if len(text) > 30
-                                    else repr(text)
-                                )
-                                print(
-                                    f"  Repaired: {xml_file.name}: Added xml:space='preserve' to {elem.tagName}: {text_preview}"
-                                )
-                                repairs += 1
-                                modified = True
+                        if (
+                            text
+                            and (
+                                text.startswith((" ", "\t"))
+                                or text.endswith((" ", "\t"))
+                            )
+                        ) and elem.getAttribute("xml:space") != "preserve":
+                            elem.setAttribute("xml:space", "preserve")
+                            text_preview = (
+                                repr(text[:30]) + "..."
+                                if len(text) > 30
+                                else repr(text)
+                            )
+                            print(
+                                f"  Repaired: {xml_file.name}: Added xml:space='preserve' to {elem.tagName}: {text_preview}"
+                            )
+                            repairs += 1
+                            modified = True
 
                 if modified:
                     xml_file.write_bytes(dom.toxml(encoding="UTF-8"))
@@ -476,9 +479,7 @@ class BaseSchemaValidator:
 
         if elem_lower.endswith("id") and len(elem_lower) > 2:
             prefix = elem_lower[:-2]
-            if prefix.endswith("master"):
-                return prefix.lower()
-            elif prefix.endswith("layout"):
+            if prefix.endswith(("master", "layout")):
                 return prefix.lower()
             else:
                 if prefix == "sld":
@@ -575,16 +576,19 @@ class BaseSchemaValidator:
                     continue
 
                 extension = file_path.suffix.lstrip(".").lower()
-                if extension and extension not in declared_extensions:
-                    if extension in media_extensions:
-                        relative_path = file_path.relative_to(self.unpacked_dir)
-                        msg = (
-                            f"  {relative_path}: File with extension '{extension}' "
-                            f"not declared in [Content_Types].xml - should add: "
-                            f'<Default Extension="{extension}" '
-                            f'ContentType="{media_extensions[extension]}"/>'
-                        )
-                        errors.append(msg)
+                if (
+                    extension
+                    and extension not in declared_extensions
+                    and (extension in media_extensions)
+                ):
+                    relative_path = file_path.relative_to(self.unpacked_dir)
+                    msg = (
+                        f"  {relative_path}: File with extension '{extension}' "
+                        f"not declared in [Content_Types].xml - should add: "
+                        f'<Default Extension="{extension}" '
+                        f'ContentType="{media_extensions[extension]}"/>'
+                    )
+                    errors.append(msg)
 
         except Exception as e:
             errors.append(f"  Error parsing [Content_Types].xml: {e}")

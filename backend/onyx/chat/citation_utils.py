@@ -24,32 +24,32 @@ def update_citation_processor_from_tool_response(
     if tool_response.tool_call is None:
         return
 
-    # Update citation processor if this was a search tool
-    if tool_response.tool_call.tool_name in CITEABLE_TOOLS_NAMES:
-        # Check if the rich_response is a SearchDocsResponse
-        if isinstance(tool_response.rich_response, SearchDocsResponse):
-            search_response = tool_response.rich_response
+    # Update citation processor if this was a search tool with a SearchDocsResponse
+    if tool_response.tool_call.tool_name in CITEABLE_TOOLS_NAMES and isinstance(
+        tool_response.rich_response, SearchDocsResponse
+    ):
+        search_response = tool_response.rich_response
 
-            # Create mapping from citation number to SearchDoc
-            citation_to_doc: CitationMapping = {}
-            for (
-                citation_num,
-                doc_id,
-            ) in search_response.citation_mapping.items():
-                # Find the SearchDoc with this doc_id
-                matching_doc = next(
-                    (
-                        doc
-                        for doc in search_response.search_docs
-                        if doc.document_id == doc_id
-                    ),
-                    None,
-                )
-                if matching_doc:
-                    citation_to_doc[citation_num] = matching_doc
+        # Create mapping from citation number to SearchDoc
+        citation_to_doc: CitationMapping = {}
+        for (
+            citation_num,
+            doc_id,
+        ) in search_response.citation_mapping.items():
+            # Find the SearchDoc with this doc_id
+            matching_doc = next(
+                (
+                    doc
+                    for doc in search_response.search_docs
+                    if doc.document_id == doc_id
+                ),
+                None,
+            )
+            if matching_doc:
+                citation_to_doc[citation_num] = matching_doc
 
-            # Update the citation processor
-            citation_processor.update_citation_mapping(citation_to_doc)
+        # Update the citation processor
+        citation_processor.update_citation_mapping(citation_to_doc)
 
 
 def extract_citation_order_from_text(text: str) -> list[int]:

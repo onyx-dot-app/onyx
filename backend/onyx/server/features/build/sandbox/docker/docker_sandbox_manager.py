@@ -59,6 +59,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import contextlib
 import io
 import json
 import mimetypes
@@ -1371,15 +1372,13 @@ echo "Session cleanup complete"
             ) from e
         finally:
             # Drop the in-container temp archive regardless of outcome.
-            try:
+            with contextlib.suppress(ExecError):
                 run_in_container(
                     container,
                     ["rm", "-f", archive_path],
                     user=SANDBOX_EXEC_USER,
                     check=False,
                 )
-            except ExecError:
-                pass
 
         logger.info(
             "Created opencode history snapshot for sandbox %s (path=%s size=%s bytes).",

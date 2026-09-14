@@ -11,6 +11,7 @@ socket only.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import time
 from collections.abc import Generator
@@ -59,10 +60,8 @@ def test_network(docker_client: DockerClient) -> Generator[str, None, None]:
     except NotFound:
         docker_client.networks.create(_TEST_NETWORK, driver="bridge")
     yield _TEST_NETWORK
-    try:
+    with contextlib.suppress(NotFound, APIError):
         docker_client.networks.get(_TEST_NETWORK).remove()
-    except (NotFound, APIError):
-        pass
 
 
 def _run_sandbox_labeled(
@@ -105,10 +104,8 @@ def _run_sandbox_labeled(
             f"Container {container.name} did not attach to {network} within 10s."
         )
     except Exception:
-        try:
+        with contextlib.suppress(NotFound, APIError):
             container.remove(force=True, v=False)
-        except (NotFound, APIError):
-            pass
         raise
 
 
@@ -147,10 +144,8 @@ def cleanup_test_containers() -> Generator[list[Container], None, None]:
     created: list[Container] = []
     yield created
     for c in created:
-        try:
+        with contextlib.suppress(NotFound, APIError):
             c.remove(force=True, v=False)
-        except (NotFound, APIError):
-            pass
 
 
 def test_lookup_finds_running_container_via_initial_sync(

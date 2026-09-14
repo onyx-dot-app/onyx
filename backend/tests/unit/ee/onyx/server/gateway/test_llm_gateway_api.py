@@ -912,11 +912,13 @@ def test_handle_chat_completion_rejects_named_tool_choice_for_unknown_tool() -> 
         choice=Choice(finish_reason="stop", message=Message(content="ok")),
     )
 
-    with patch.object(
-        gateway_api, "llm_from_provider", return_value=_InvokeLLM(response)
+    with (
+        patch.object(
+            gateway_api, "llm_from_provider", return_value=_InvokeLLM(response)
+        ),
+        pytest.raises(OnyxError) as exc_info,
     ):
-        with pytest.raises(OnyxError) as exc_info:
-            _handle_completion_call(request)
+        _handle_completion_call(request)
 
     assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
 
@@ -1381,11 +1383,13 @@ def test_handle_responses_request_rejects_named_tool_choice_for_unknown_tool() -
         choice=Choice(finish_reason="stop", message=Message(content="ok")),
     )
 
-    with patch.object(
-        gateway_api, "llm_from_provider", return_value=_InvokeLLM(response)
+    with (
+        patch.object(
+            gateway_api, "llm_from_provider", return_value=_InvokeLLM(response)
+        ),
+        pytest.raises(OnyxError) as exc_info,
     ):
-        with pytest.raises(OnyxError) as exc_info:
-            _handle_responses_call(request)
+        _handle_responses_call(request)
 
     assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
 

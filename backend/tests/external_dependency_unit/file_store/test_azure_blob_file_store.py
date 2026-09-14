@@ -360,18 +360,20 @@ class TestAzureBlobBackedFileStore:
         file_id = str(uuid.uuid4())
         object_key = file_store._get_object_key(file_id)
 
-        with patch(
-            "onyx.file_store.azure_blob_file_store.upsert_filerecord",
-            side_effect=RuntimeError("simulated DB failure"),
+        with (
+            patch(
+                "onyx.file_store.azure_blob_file_store.upsert_filerecord",
+                side_effect=RuntimeError("simulated DB failure"),
+            ),
+            pytest.raises(RuntimeError, match="simulated DB failure"),
         ):
-            with pytest.raises(RuntimeError, match="simulated DB failure"):
-                file_store.save_file(
-                    content=BytesIO(b"never persisted"),
-                    display_name="fresh.txt",
-                    file_origin=FileOrigin.OTHER,
-                    file_type="text/plain",
-                    file_id=file_id,
-                )
+            file_store.save_file(
+                content=BytesIO(b"never persisted"),
+                display_name="fresh.txt",
+                file_origin=FileOrigin.OTHER,
+                file_type="text/plain",
+                file_id=file_id,
+            )
 
         client = file_store._get_blob_service_client()
         blob_client = client.get_blob_client(
@@ -392,18 +394,20 @@ class TestAzureBlobBackedFileStore:
             file_id=file_id,
         )
 
-        with patch(
-            "onyx.file_store.azure_blob_file_store.upsert_filerecord",
-            side_effect=RuntimeError("simulated DB failure"),
+        with (
+            patch(
+                "onyx.file_store.azure_blob_file_store.upsert_filerecord",
+                side_effect=RuntimeError("simulated DB failure"),
+            ),
+            pytest.raises(RuntimeError, match="simulated DB failure"),
         ):
-            with pytest.raises(RuntimeError, match="simulated DB failure"):
-                file_store.save_file(
-                    content=BytesIO(b"replacement"),
-                    display_name="overwrite-fail.txt",
-                    file_origin=FileOrigin.OTHER,
-                    file_type="text/plain",
-                    file_id=file_id,
-                )
+            file_store.save_file(
+                content=BytesIO(b"replacement"),
+                display_name="overwrite-fail.txt",
+                file_origin=FileOrigin.OTHER,
+                file_type="text/plain",
+                file_id=file_id,
+            )
 
         # The record survives and its blob is still readable (the upload itself
         # succeeded before the DB failure, so content is the new version)

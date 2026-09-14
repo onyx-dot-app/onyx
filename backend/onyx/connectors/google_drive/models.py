@@ -191,7 +191,7 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
 
     @field_validator("completion_map", mode="before")
     def validate_completion_map(cls, v: Any) -> ThreadSafeDict[str, StageCompletion]:
-        assert isinstance(v, dict) or isinstance(v, ThreadSafeDict)
+        assert isinstance(v, (dict, ThreadSafeDict))
         return ThreadSafeDict(
             {k: StageCompletion.model_validate(val) for k, val in v.items()}
         )

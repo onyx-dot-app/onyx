@@ -351,11 +351,13 @@ def test_cloud_seat_decline_propagates_from_add_users(*_mocks: MagicMock) -> Non
     def _declining_add_users(*_args: object) -> None:
         raise OnyxError(OnyxErrorCode.SEAT_LIMIT_EXCEEDED, "card declined")
 
-    with patch(
-        "onyx.server.manage.users.fetch_ee_implementation_or_noop",
-        return_value=_declining_add_users,
+    with (
+        patch(
+            "onyx.server.manage.users.fetch_ee_implementation_or_noop",
+            return_value=_declining_add_users,
+        ),
+        pytest.raises(OnyxError) as exc_info,
     ):
-        with pytest.raises(OnyxError) as exc_info:
-            bulk_invite_users(emails=["new@example.com"], current_user=MagicMock())
+        bulk_invite_users(emails=["new@example.com"], current_user=MagicMock())
 
     assert exc_info.value.error_code == OnyxErrorCode.SEAT_LIMIT_EXCEEDED

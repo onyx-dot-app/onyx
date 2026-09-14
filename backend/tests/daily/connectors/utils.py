@@ -117,19 +117,17 @@ def load_all_from_connector(
             if document is not None and isinstance(document, Document):
                 documents.append(document)
                 # Validate: document's parent must have been yielded before this document
-                if document.parent_hierarchy_raw_node_id is not None:
-                    if (
-                        document.parent_hierarchy_raw_node_id
-                        not in seen_hierarchy_raw_ids
-                    ):
-                        raise AssertionError(
-                            f"Document '{document.id}' "
-                            f"(semantic_identifier='{document.semantic_identifier}') "
-                            f"has parent_hierarchy_raw_node_id="
-                            f"'{document.parent_hierarchy_raw_node_id}' "
-                            f"which was not yielded before this document. "
-                            f"Seen hierarchy IDs: {seen_hierarchy_raw_ids}"
-                        )
+                if document.parent_hierarchy_raw_node_id is not None and (
+                    document.parent_hierarchy_raw_node_id not in seen_hierarchy_raw_ids
+                ):
+                    raise AssertionError(
+                        f"Document '{document.id}' "
+                        f"(semantic_identifier='{document.semantic_identifier}') "
+                        f"has parent_hierarchy_raw_node_id="
+                        f"'{document.parent_hierarchy_raw_node_id}' "
+                        f"which was not yielded before this document. "
+                        f"Seen hierarchy IDs: {seen_hierarchy_raw_ids}"
+                    )
 
             if next_checkpoint is not None:
                 checkpoint = next_checkpoint

@@ -124,12 +124,14 @@ class TestLazyResolution:
         connector, client, _ = _connector()
         client.auth_test.return_value = _slack_response(_AUTH_GRID)
 
-        with patch(
-            "onyx.connectors.slack.connector.list_grid_team_ids",
-            side_effect=SlackApiError("missing_scope", MagicMock()),
+        with (
+            patch(
+                "onyx.connectors.slack.connector.list_grid_team_ids",
+                side_effect=SlackApiError("missing_scope", MagicMock()),
+            ),
+            pytest.raises(SlackApiError),
         ):
-            with pytest.raises(SlackApiError):
-                connector._ensure_workspace_metadata()
+            connector._ensure_workspace_metadata()
 
         assert connector._workspace_metadata is None
 
@@ -150,9 +152,9 @@ class TestLazyResolution:
                 "onyx.connectors.slack.connector.fetch_team_user_emails",
                 side_effect=SlackApiError("missing_scope", MagicMock()),
             ),
+            pytest.raises(SlackApiError),
         ):
-            with pytest.raises(SlackApiError):
-                connector._ensure_workspace_metadata()
+            connector._ensure_workspace_metadata()
 
         assert connector._workspace_metadata is None
 

@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import os
 import time
 import uuid
@@ -416,15 +417,13 @@ async def check_and_refresh_oauth_tokens(
             # rotate) and skips the redundant POST.
             user_lock = await _get_user_refresh_lock(user.id)
             async with user_lock:
-                try:
+                # `db_session.refresh` can fail when oauth_account is
+                # detached from this session (e.g. pre-loaded by the
+                # caller). Fall through and attempt the refresh anyway —
+                # at worst the second coroutine sees the same stale
+                # state we'd see without the lock.
+                with contextlib.suppress(Exception):
                     await db_session.refresh(oauth_account)
-                except Exception:
-                    # `db_session.refresh` can fail when oauth_account is
-                    # detached from this session (e.g. pre-loaded by the
-                    # caller). Fall through and attempt the refresh anyway —
-                    # at worst the second coroutine sees the same stale
-                    # state we'd see without the lock.
-                    pass
 
                 try:
                     # This User was loaded before any concurrent refresh. Its

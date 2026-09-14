@@ -44,9 +44,9 @@ async def test_ambiguous_membership_reaches_the_caller() -> None:
             return_value=MagicMock(side_effect=conflict),
         ),
         patch(f"{_AUTH_MODULE}.emit_audit_event"),
+        pytest.raises(OnyxError) as exc_info,
     ):
-        with pytest.raises(OnyxError) as exc_info:
-            await _manager().authenticate(_credentials("user@example.com"))
+        await _manager().authenticate(_credentials("user@example.com"))
 
     assert exc_info.value is conflict
 
@@ -104,8 +104,8 @@ async def test_asyncmock_is_not_required_for_the_lookup() -> None:
             side_effect=RuntimeError("stop after resolution"),
         ),
         patch(f"{_AUTH_MODULE}.SQLAlchemyUserDatabase", AsyncMock()),
+        pytest.raises(RuntimeError, match="stop after resolution"),
     ):
-        with pytest.raises(RuntimeError, match="stop after resolution"):
-            await _manager().authenticate(_credentials("user@example.com"))
+        await _manager().authenticate(_credentials("user@example.com"))
 
     lookup.assert_called_once_with(email="user@example.com")

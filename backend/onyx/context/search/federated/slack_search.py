@@ -1,3 +1,4 @@
+import contextlib
 import json
 import re
 import time
@@ -312,10 +313,8 @@ def get_cached_user_profile(
             logger.warning("Could not fetch profile for user %s: %s", user_id, e)
 
         # Cache negative result to avoid repeated lookups for missing users
-        try:
+        with contextlib.suppress(Exception):
             redis_client.set(cache_key, "", ex=USER_PROFILE_CACHE_TTL)
-        except Exception:
-            pass
 
         return None
 
@@ -397,9 +396,7 @@ def _should_skip_channel(
                     ChannelType.IM.value,
                     ChannelType.MPIM.value,
                 ]
-                if is_private_or_dm and channel_id != allowed_private_channel:
-                    return True
-                return False
+                return bool(is_private_or_dm and channel_id != allowed_private_channel)
 
             # Fallback: API call only if not in cache (should be rare)
             token_to_use = bot_token or access_token

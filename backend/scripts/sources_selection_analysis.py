@@ -273,7 +273,7 @@ class CompareAnalysis:
             color_output("No change detected", model="valid")
         color_output("Documents Score check completed.", model="info")
 
-        return False if diff else True
+        return not diff
 
     def check_documents_order(self) -> bool:
         """Check if the selected documents are the same and in the same order.
@@ -303,7 +303,7 @@ class CompareAnalysis:
             color_output("No change detected", model="valid")
         color_output("Documents order check completed.", model="info")
 
-        return False if diff else True
+        return not diff
 
     def __call__(self) -> None:
         """Manage the analysis process"""

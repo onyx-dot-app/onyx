@@ -359,18 +359,20 @@ def test_pruning_expand_skips_restrictions_but_keeps_hierarchy(
     fake_client = mock.Mock(spec=OnyxConfluence)
     fake_client.cql_paginate_all_expansions.side_effect = fake_paginate
 
-    with mock.patch.object(
-        ConfluenceConnector,
-        "confluence_client",
-        new_callable=mock.PropertyMock,
-        return_value=fake_client,
-    ):
-        with mock.patch.object(
+    with (
+        mock.patch.object(
+            ConfluenceConnector,
+            "confluence_client",
+            new_callable=mock.PropertyMock,
+            return_value=fake_client,
+        ),
+        mock.patch.object(
             confluence_connector,
             "_yield_space_hierarchy_nodes",
             return_value=iter([]),
-        ):
-            list(confluence_connector.retrieve_all_slim_docs())
+        ),
+    ):
+        list(confluence_connector.retrieve_all_slim_docs())
 
     assert captured_expands, "expected at least one CQL paginated call"
     for expand in captured_expands:

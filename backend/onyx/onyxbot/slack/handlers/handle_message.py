@@ -225,15 +225,16 @@ def handle_message(
     respond_tag_only = False
 
     if channel_conf:
-        if not bypass_filters and "answer_filters" in channel_conf:
-            if (
+        if (
+            not bypass_filters
+            and "answer_filters" in channel_conf
+            and (
                 "questionmark_prefilter" in channel_conf["answer_filters"]
                 and "?" not in messages[-1].message
-            ):
-                logger.info(
-                    "Skipping message since it does not contain a question mark"
-                )
-                return False
+            )
+        ):
+            logger.info("Skipping message since it does not contain a question mark")
+            return False
 
         logger.info(
             "Found slack bot config for channel. Restricting bot to use document sets: %s, validity checks enabled: %s",
@@ -259,15 +260,14 @@ def handle_message(
 
     # If configured to respond to team members only, then cannot be used with a /OnyxBot command
     # which would just respond to the sender
-    if send_to and is_slash_command:
-        if sender_id:
-            respond_in_thread_or_channel(
-                client=client,
-                channel=channel,
-                receiver_ids=[sender_id],
-                text="The OnyxBot slash command is not enabled for this channel",
-                thread_ts=None,
-            )
+    if send_to and is_slash_command and sender_id:
+        respond_in_thread_or_channel(
+            client=client,
+            channel=channel,
+            receiver_ids=[sender_id],
+            text="The OnyxBot slash command is not enabled for this channel",
+            thread_ts=None,
+        )
 
     try:
         send_msg_ack_to_user(message_info, client)

@@ -79,20 +79,19 @@ def run_alembic_migrations(schema_name: str) -> None:
 
 
 def create_schema_if_not_exists(tenant_id: str) -> bool:
-    with Session(get_engine_for_tenant(tenant_id)) as db_session:
-        with db_session.begin():
-            result = db_session.execute(
-                text(
-                    "SELECT schema_name FROM information_schema.schemata WHERE schema_name = :schema_name"
-                ),
-                {"schema_name": tenant_id},
-            )
-            schema_exists = result.scalar() is not None
-            if not schema_exists:
-                stmt = CreateSchema(tenant_id)
-                db_session.execute(stmt)
-                return True
-            return False
+    with Session(get_engine_for_tenant(tenant_id)) as db_session, db_session.begin():
+        result = db_session.execute(
+            text(
+                "SELECT schema_name FROM information_schema.schemata WHERE schema_name = :schema_name"
+            ),
+            {"schema_name": tenant_id},
+        )
+        schema_exists = result.scalar() is not None
+        if not schema_exists:
+            stmt = CreateSchema(tenant_id)
+            db_session.execute(stmt)
+            return True
+        return False
 
 
 def drop_schema(tenant_id: str) -> None:
@@ -104,10 +103,9 @@ def drop_schema(tenant_id: str) -> None:
     if not validate_tenant_id(tenant_id):
         raise ValueError(f"Invalid tenant_id format: {tenant_id}")
 
-    with get_engine_for_tenant(tenant_id).connect() as connection:
-        with connection.begin():
-            # Use string formatting with validated tenant_id (safe after validation)
-            connection.execute(text(f'DROP SCHEMA IF EXISTS "{tenant_id}" CASCADE'))
+    with get_engine_for_tenant(tenant_id).connect() as connection, connection.begin():
+        # Use string formatting with validated tenant_id (safe after validation)
+        connection.execute(text(f'DROP SCHEMA IF EXISTS "{tenant_id}" CASCADE'))
 
 
 def get_current_alembic_version(tenant_id: str) -> str:

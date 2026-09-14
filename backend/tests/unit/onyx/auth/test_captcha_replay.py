@@ -38,13 +38,15 @@ async def test_reserve_token_rejects_replay() -> None:
     """Second use of the same token within TTL → CaptchaVerificationError."""
     fake_redis = MagicMock()
     fake_redis.set = AsyncMock(return_value=False)
-    with patch.object(
-        captcha_module,
-        "get_async_redis_connection",
-        AsyncMock(return_value=fake_redis),
+    with (
+        patch.object(
+            captcha_module,
+            "get_async_redis_connection",
+            AsyncMock(return_value=fake_redis),
+        ),
+        pytest.raises(CaptchaVerificationError, match="token already used"),
     ):
-        with pytest.raises(CaptchaVerificationError, match="token already used"):
-            await _reserve_token_or_raise("replayed-token")
+        await _reserve_token_or_raise("replayed-token")
 
 
 @pytest.mark.asyncio
@@ -90,9 +92,9 @@ async def test_reservation_released_when_google_unreachable() -> None:
             AsyncMock(return_value=fake_redis),
         ),
         patch.object(captcha_module.httpx, "AsyncClient", return_value=fake_client),
+        pytest.raises(CaptchaVerificationError, match="service unavailable"),
     ):
-        with pytest.raises(CaptchaVerificationError, match="service unavailable"):
-            await verify_captcha_token("valid-token", CaptchaAction.SIGNUP)
+        await verify_captcha_token("valid-token", CaptchaAction.SIGNUP)
 
     # The reservation was claimed and then released.
     fake_redis.set.assert_awaited_once()
@@ -124,9 +126,9 @@ async def test_reservation_released_on_unexpected_response_shape() -> None:
             AsyncMock(return_value=fake_redis),
         ),
         patch.object(captcha_module.httpx, "AsyncClient", return_value=fake_client),
+        pytest.raises(CaptchaVerificationError, match="service unavailable"),
     ):
-        with pytest.raises(CaptchaVerificationError, match="service unavailable"):
-            await verify_captcha_token("valid-token", CaptchaAction.SIGNUP)
+        await verify_captcha_token("valid-token", CaptchaAction.SIGNUP)
 
     fake_redis.set.assert_awaited_once()
     fake_redis.delete.assert_awaited_once()
@@ -166,9 +168,9 @@ async def test_reservation_kept_when_google_rejects_token() -> None:
             AsyncMock(return_value=fake_redis),
         ),
         patch.object(captcha_module.httpx, "AsyncClient", return_value=fake_client),
+        pytest.raises(CaptchaVerificationError, match="MALFORMED"),
     ):
-        with pytest.raises(CaptchaVerificationError, match="MALFORMED"):
-            await verify_captcha_token("bad-token", CaptchaAction.SIGNUP)
+        await verify_captcha_token("bad-token", CaptchaAction.SIGNUP)
 
     fake_redis.set.assert_awaited_once()
     fake_redis.delete.assert_not_awaited()

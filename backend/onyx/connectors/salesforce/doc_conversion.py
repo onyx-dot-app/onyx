@@ -38,13 +38,14 @@ def _clean_salesforce_dict(data: dict | list) -> dict | list:
     Returns:
         Cleaned dictionary or list with transformed keys and filtered values
     """
-    if isinstance(data, dict):
-        if "records" in data.keys():
-            data = data["records"]
-    if isinstance(data, dict):
-        if "attributes" in data.keys():
-            if isinstance(data["attributes"], dict):
-                data.update(data.pop("attributes"))
+    if isinstance(data, dict) and "records" in data:
+        data = data["records"]
+    if (
+        isinstance(data, dict)
+        and "attributes" in data
+        and (isinstance(data["attributes"], dict))
+    ):
+        data.update(data.pop("attributes"))
 
     if isinstance(data, dict):
         filtered_dict = {}

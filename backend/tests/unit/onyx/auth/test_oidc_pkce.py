@@ -126,10 +126,8 @@ def test_oidc_authorize_omits_pkce_when_flag_disabled() -> None:
     assert response.status_code == 200
     assert oauth_client.authorization_calls[0]["code_challenge"] is None
     assert oauth_client.authorization_calls[0]["code_challenge_method"] is None
-    assert "fastapiusersoauthcsrf" in response.cookies.keys()
-    assert not any(
-        key.startswith(PKCE_COOKIE_NAME_PREFIX) for key in response.cookies.keys()
-    )
+    assert "fastapiusersoauthcsrf" in response.cookies
+    assert not any(key.startswith(PKCE_COOKIE_NAME_PREFIX) for key in response.cookies)
 
 
 def test_oidc_authorize_adds_pkce_when_flag_enabled() -> None:
@@ -140,9 +138,7 @@ def test_oidc_authorize_adds_pkce_when_flag_enabled() -> None:
     assert response.status_code == 200
     assert oauth_client.authorization_calls[0]["code_challenge"] is not None
     assert oauth_client.authorization_calls[0]["code_challenge_method"] == "S256"
-    assert any(
-        key.startswith(PKCE_COOKIE_NAME_PREFIX) for key in response.cookies.keys()
-    )
+    assert any(key.startswith(PKCE_COOKIE_NAME_PREFIX) for key in response.cookies)
 
 
 def test_oidc_callback_fails_when_pkce_cookie_missing() -> None:

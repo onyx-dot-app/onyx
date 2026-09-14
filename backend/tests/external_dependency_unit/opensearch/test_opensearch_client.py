@@ -1587,7 +1587,7 @@ class TestOpenSearchClient:
                 assert len(results) == len(docs)
                 # Assert that all the chunks above are present.
                 assert all(
-                    chunk.document_chunk.document_id in docs.keys() for chunk in results
+                    chunk.document_chunk.document_id in docs for chunk in results
                 )
                 # Make sure the chunk contents are preserved.
                 for i, chunk in enumerate(results):

@@ -133,9 +133,10 @@ def is_obsolete_model(model_name: str, provider: str) -> bool:
             return True
 
     # Anthropic obsolete models
-    if provider == LlmProviderNames.ANTHROPIC:
-        if "claude-2" in model_lower or "claude-instant" in model_lower:
-            return True
+    if provider == LlmProviderNames.ANTHROPIC and (
+        "claude-2" in model_lower or "claude-instant" in model_lower
+    ):
+        return True
 
     # Vertex AI obsolete models
     if provider == LlmProviderNames.VERTEX_AI:
@@ -233,7 +234,7 @@ def get_vertexai_model_names() -> list[str]:
             vertex_models.update(getattr(litellm, attr))  # ods: ignore[getattr]
 
     # Also extract from model_cost for any models not in the sets
-    for key in litellm.model_cost.keys():
+    for key in litellm.model_cost:
         if key.startswith("vertex_ai/"):
             model_name = key.replace("vertex_ai/", "")
             vertex_models.add(model_name)

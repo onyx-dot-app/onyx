@@ -978,11 +978,8 @@ class EmbeddingModel:
             tenant_id: str | None = None,
             request_id: str | None = None,
         ) -> tuple[int, list[Embedding]]:
-            if self.callback:
-                if self.callback.should_stop():
-                    raise ConnectorStopSignal(
-                        "_batch_encode_texts detected stop signal"
-                    )
+            if self.callback and self.callback.should_stop():
+                raise ConnectorStopSignal("_batch_encode_texts detected stop signal")
 
             embed_request = EmbedRequest(
                 model_name=self.model_name,

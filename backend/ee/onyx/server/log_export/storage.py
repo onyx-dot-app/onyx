@@ -177,7 +177,8 @@ def build_export_bundle(snapshot: LogExportSnapshot) -> BuiltLogZip:
     bundle_manifest = LogExportBundleManifest(
         **snapshot.manifest.model_dump(), receipts=snapshot.receipts
     )
-    zip_buffer: tempfile.SpooledTemporaryFile[bytes] = tempfile.SpooledTemporaryFile(
+    # The caller owns and closes this buffer, so a `with` block cannot be used.
+    zip_buffer: tempfile.SpooledTemporaryFile[bytes] = tempfile.SpooledTemporaryFile(  # noqa: SIM115
         max_size=MAX_IN_MEMORY_SIZE
     )
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_STORED) as zip_file:

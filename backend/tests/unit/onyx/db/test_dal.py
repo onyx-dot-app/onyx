@@ -73,9 +73,8 @@ class TestDALFromTenant:
         mock_get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
         mock_get_session.return_value.__exit__ = MagicMock(return_value=False)
 
-        with pytest.raises(ValueError):
-            with DAL.from_tenant("tenant_abc"):
-                raise ValueError("something broke")
+        with pytest.raises(ValueError), DAL.from_tenant("tenant_abc"):
+            raise ValueError("something broke")
 
         mock_get_session.return_value.__exit__.assert_called_once()
 

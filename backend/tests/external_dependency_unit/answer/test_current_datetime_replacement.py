@@ -55,9 +55,12 @@ def test_stream_chat_current_date_response(
 
     for pkt in gen:
         raw.append(pkt)
-        if hasattr(pkt, "obj") and isinstance(pkt.obj, AgentResponseDelta):
-            if pkt.obj.content:
-                content += pkt.obj.content
+        if (
+            hasattr(pkt, "obj")
+            and isinstance(pkt.obj, AgentResponseDelta)
+            and (pkt.obj.content)
+        ):
+            content += pkt.obj.content
         if hasattr(pkt, "obj") and isinstance(pkt.obj, StreamingError):
             had_error = True
             break

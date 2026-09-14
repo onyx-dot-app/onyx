@@ -10,6 +10,7 @@ patched at module level with a counting wrapper so we can assert exactly when
 S3 reads happen.
 """
 
+import contextlib
 from collections.abc import Generator
 from io import BytesIO
 from unittest.mock import patch
@@ -108,10 +109,8 @@ def file_cleanup(
     finally:
         store = get_default_file_store()
         for fid in created:
-            try:
+            with contextlib.suppress(Exception):
                 store.delete_file(fid, error_on_missing=False)
-            except Exception:
-                pass
 
 
 # ---------------------------------------------------------------------------

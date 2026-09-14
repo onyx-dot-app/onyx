@@ -592,14 +592,16 @@ class AzureVoiceProvider(VoiceProviderInterface):
             model=self.stt_model or "azure-speech-stt",
             provider="azure",
         ):
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
+            async with (
+                aiohttp.ClientSession() as session,
+                session.post(
                     url, params=params, headers=headers, data=payload
-                ) as response:
-                    if response.status != 200:
-                        error_text = await response.text()
-                        raise RuntimeError(f"Azure STT failed: {error_text}")
-                    result = await response.json()
+                ) as response,
+            ):
+                if response.status != 200:
+                    error_text = await response.text()
+                    raise RuntimeError(f"Azure STT failed: {error_text}")
+                result = await response.json()
 
         if result.get("RecognitionStatus") != "Success":
             return ""
@@ -660,16 +662,17 @@ class AzureVoiceProvider(VoiceProviderInterface):
             provider="azure",
             input_messages=[{"role": "user", "content": text}],
         ):
-            async with aiohttp.ClientSession() as session:
-                async with session.post(url, headers=headers, data=ssml) as response:
-                    if response.status != 200:
-                        error_text = await response.text()
-                        raise RuntimeError(f"Azure TTS failed: {error_text}")
-
-                    # Use 8192 byte chunks for smoother streaming
-                    async for chunk in response.content.iter_chunked(8192):
-                        if chunk:
-                            yield chunk
+            async with (
+                aiohttp.ClientSession() as session,
+                session.post(url, headers=headers, data=ssml) as response,
+            ):
+                if response.status != 200:
+                    error_text = await response.text()
+                    raise RuntimeError(f"Azure TTS failed: {error_text}")
+                # Use 8192 byte chunks for smoother streaming
+                async for chunk in response.content.iter_chunked(8192):
+                    if chunk:
+                        yield chunk
 
     async def validate_credentials(self) -> None:
         """Validate Azure credentials by listing available voices."""
@@ -683,12 +686,14 @@ class AzureVoiceProvider(VoiceProviderInterface):
             url = f"{(self.api_base or '').rstrip('/')}/cognitiveservices/voices/list"
 
         headers = {"Ocp-Apim-Subscription-Key": self.api_key}
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers) as response:
-                if response.status in (401, 403):
-                    raise RuntimeError("Invalid Azure API key.")
-                if response.status != 200:
-                    raise RuntimeError("Azure credential validation failed.")
+        async with (
+            aiohttp.ClientSession() as session,
+            session.get(url, headers=headers) as response,
+        ):
+            if response.status in (401, 403):
+                raise RuntimeError("Invalid Azure API key.")
+            if response.status != 200:
+                raise RuntimeError("Azure credential validation failed.")
 
     def get_available_voices(self) -> list[dict[str, str]]:
         """Return common Azure Neural voices."""

@@ -176,13 +176,15 @@ def test_group_enumeration_enforces_sync_deadline() -> None:
             i += 1
             yield {"email": f"group-{i}@example.com"}
 
-    with patch(
-        "ee.onyx.external_permissions.google_drive.group_sync.execute_paginated_retrieval",
-        side_effect=endless_groups,
+    with (
+        patch(
+            "ee.onyx.external_permissions.google_drive.group_sync.execute_paginated_retrieval",
+            side_effect=endless_groups,
+        ),
+        pytest.raises(TimeoutError, match="group sync exceeded"),
     ):
-        with pytest.raises(TimeoutError, match="group sync exceeded"):
-            _get_all_google_groups(
-                admin_service=MagicMock(),
-                google_domain="example.com",
-                deadline=time.monotonic() - 1,
-            )
+        _get_all_google_groups(
+            admin_service=MagicMock(),
+            google_domain="example.com",
+            deadline=time.monotonic() - 1,
+        )

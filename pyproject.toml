@@ -309,6 +309,7 @@ select = [
   "PERF",
   "PIE",
   "S",
+  "SIM",
   "W",
 ]
 

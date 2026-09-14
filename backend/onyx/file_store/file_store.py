@@ -441,7 +441,8 @@ class S3BackedFileStore(FileStore):
         # This prevents OOM issues with large files (500MB+ PDFs, etc.)
         if use_tempfile:
             # Stream directly to temp file to avoid holding entire file in memory
-            temp_file = tempfile.NamedTemporaryFile(mode="w+b", delete=True)
+            # The caller owns and closes this file, so a `with` block cannot be used.
+            temp_file = tempfile.NamedTemporaryFile(mode="w+b", delete=True)  # noqa: SIM115
             # Stream in 8MB chunks to reduce memory footprint
             for chunk in response["Body"].iter_chunks(chunk_size=8 * 1024 * 1024):
                 temp_file.write(chunk)

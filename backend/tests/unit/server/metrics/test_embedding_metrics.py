@@ -242,16 +242,17 @@ class TestTrackEmbeddingInProgress:
         }
         before = _embeddings_in_progress.labels(**labels)._value.get()
 
-        # Under test.
-        with patch.object(
-            _embeddings_in_progress.labels(**labels),
-            "inc",
-            side_effect=RuntimeError("boom"),
+        # Under test. The context manager should still yield without decrementing.
+        with (
+            patch.object(
+                _embeddings_in_progress.labels(**labels),
+                "inc",
+                side_effect=RuntimeError("boom"),
+            ),
+            track_embedding_in_progress(provider, text_type),
         ):
-            # Context manager should still yield without decrementing.
-            with track_embedding_in_progress(provider, text_type):
-                during = _embeddings_in_progress.labels(**labels)._value.get()
-                assert during == before
+            during = _embeddings_in_progress.labels(**labels)._value.get()
+            assert during == before
 
         # Postcondition.
         after = _embeddings_in_progress.labels(**labels)._value.get()

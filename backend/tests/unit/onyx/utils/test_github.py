@@ -202,24 +202,28 @@ class TestDownloadGithubArchive:
 
     def test_raises_when_exceeds_max_size(self) -> None:
         response = _mock_response([b"x" * 10, b"x" * 10])
-        with patch("onyx.utils.github.ssrf_safe_get", return_value=response):
-            with pytest.raises(OnyxError) as exc_info:
-                download_github_archive(
-                    _SOURCE,
-                    "HEAD",
-                    max_size_bytes=15,
-                )
+        with (
+            patch("onyx.utils.github.ssrf_safe_get", return_value=response),
+            pytest.raises(OnyxError) as exc_info,
+        ):
+            download_github_archive(
+                _SOURCE,
+                "HEAD",
+                max_size_bytes=15,
+            )
 
         assert exc_info.value.error_code == OnyxErrorCode.PAYLOAD_TOO_LARGE
 
     def test_propagates_http_errors(self) -> None:
         response = _mock_response([], status_code=404)
-        with patch("onyx.utils.github.ssrf_safe_get", return_value=response):
-            with pytest.raises(OnyxError) as exc_info:
-                download_github_archive(
-                    _SOURCE,
-                    "HEAD",
-                    max_size_bytes=500 * 1024 * 1024,
-                )
+        with (
+            patch("onyx.utils.github.ssrf_safe_get", return_value=response),
+            pytest.raises(OnyxError) as exc_info,
+        ):
+            download_github_archive(
+                _SOURCE,
+                "HEAD",
+                max_size_bytes=500 * 1024 * 1024,
+            )
 
         assert exc_info.value.error_code == OnyxErrorCode.NOT_FOUND

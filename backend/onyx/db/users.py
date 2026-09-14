@@ -67,12 +67,10 @@ def is_limited_user(user: User) -> bool:
     """
     if user.account_type == AccountType.ANONYMOUS:
         return True
-    if (
+    return bool(
         user.account_type == AccountType.SERVICE_ACCOUNT
         and not user.effective_permissions
-    ):
-        return True
-    return False
+    )
 
 
 def user_is_admin(user: User) -> bool:

@@ -285,12 +285,11 @@ def update_chat_session_temperature(
             chat_session.current_alternate_model
             and LlmProviderNames.ANTHROPIC
             in chat_session.current_alternate_model.lower()
-        ):
-            if update_thread_req.temperature_override > 1:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Temperature for Anthropic models must be between 0 and 1",
-                )
+        ) and update_thread_req.temperature_override > 1:
+            raise HTTPException(
+                status_code=400,
+                detail="Temperature for Anthropic models must be between 0 and 1",
+            )
 
     chat_session.temperature_override = update_thread_req.temperature_override
 

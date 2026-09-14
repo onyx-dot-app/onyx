@@ -102,13 +102,13 @@ def test_lite_deployment_skips_fanout(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_failed_start_releases_lock() -> None:
     # Precondition.
+    # Under test.
     with (
         patch(f"{_API_MODULE}.client_app"),
         patch(f"{_API_MODULE}.save_manifest", side_effect=OSError("store down")),
+        pytest.raises(OSError),
     ):
-        # Under test.
-        with pytest.raises(OSError):
-            start_log_export(user=_admin_user())
+        start_log_export(user=_admin_user())
 
     # Postcondition.
     # A retry is not rate-limited by the failed attempt.

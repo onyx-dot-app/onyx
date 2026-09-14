@@ -275,9 +275,12 @@ class EnvVisitor(ast.NodeVisitor):
         while isinstance(parent, ast.BoolOp) and hops < 3:
             parent = self._parents.get(id(parent))
             hops += 1
-        if isinstance(parent, ast.Call) and isinstance(parent.func, ast.Name):
-            if parent.func.id in ("int", "float", "bool"):
-                return parent.func.id
+        if (
+            isinstance(parent, ast.Call)
+            and isinstance(parent.func, ast.Name)
+            and (parent.func.id in ("int", "float", "bool"))
+        ):
+            return parent.func.id
         # `.lower() == "true"` / `== "false"` style -> bool
         if isinstance(parent, ast.Attribute) and parent.attr in ("lower", "upper"):
             return "bool"

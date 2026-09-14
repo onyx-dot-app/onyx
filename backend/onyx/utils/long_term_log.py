@@ -1,3 +1,4 @@
+import contextlib
 import json
 import os
 import threading
@@ -29,12 +30,9 @@ class LongTermLogger:
         self.metadata = metadata
         self.log_file_path = Path(log_file_path)
         self.max_files_per_category = max_files_per_category
-        try:
-            # Create directory if it doesn't exist
+        # Create directory if it doesn't exist
+        with contextlib.suppress(Exception):
             os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
-        except Exception:
-            # logger.error(f"Error creating directory for long-term logs: {e}")
-            pass
 
     def _cleanup_old_files(self, category_path: Path) -> None:
         try:
@@ -49,10 +47,8 @@ class LongTermLogger:
                 if not file.is_file():
                     logger.debug("File already deleted: %s", file)
                     continue
-                try:
+                with contextlib.suppress(Exception):
                     file.unlink()
-                except Exception:
-                    pass
                     # logger.error(f"Error deleting old log file {file
                     # }: {e}")
         except Exception:

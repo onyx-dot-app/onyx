@@ -19,6 +19,7 @@ from alembic import op
 import sqlalchemy as sa
 
 from shared_configs.configs import MULTI_TENANT
+import contextlib
 
 # revision identifiers, used by Alembic.
 revision = "f7ca3e2f45d9"
@@ -255,7 +256,7 @@ def downgrade() -> None:
 
     # Set records back to NULL
     for table in tables_to_update:
-        try:
+        with contextlib.suppress(Exception):
             connection.execute(
                 sa.text(f"""
                     UPDATE "{table}"
@@ -264,8 +265,6 @@ def downgrade() -> None:
                     """),
                 {"user_id": NO_AUTH_PLACEHOLDER_USER_UUID},
             )
-        except Exception:
-            pass
 
     # Delete the placeholder user
     connection.execute(

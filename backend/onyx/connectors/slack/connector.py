@@ -1306,14 +1306,13 @@ class SlackConnector(
             if (
                 channel_message_ts is None
                 and len(message_batch) > SlackConnector.BOT_CHANNEL_MIN_BATCH_SIZE
+            ) and num_filtered > SlackConnector.BOT_CHANNEL_PERCENTAGE_THRESHOLD * len(
+                message_batch
             ):
-                if num_filtered > SlackConnector.BOT_CHANNEL_PERCENTAGE_THRESHOLD * len(
-                    message_batch
-                ):
-                    logger.warning(
-                        "Bypassing this channel since it appears to be mostly bot messages"
-                    )
-                    has_more_in_channel = False
+                logger.warning(
+                    "Bypassing this channel since it appears to be mostly bot messages"
+                )
+                has_more_in_channel = False
 
             if not has_more_in_channel:
                 num_channels_remaining -= 1
@@ -1587,9 +1586,7 @@ if __name__ == "__main__":
     )
     try:
         for document_or_failure in gen:
-            if isinstance(document_or_failure, Document):
-                print(document_or_failure)
-            elif isinstance(document_or_failure, ConnectorFailure):
+            if isinstance(document_or_failure, (Document, ConnectorFailure)):
                 print(document_or_failure)
     except StopIteration as e:
         checkpoint = e.value

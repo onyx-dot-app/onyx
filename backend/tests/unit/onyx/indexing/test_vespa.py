@@ -28,11 +28,11 @@ def test_vespa_update() -> None:
 
             # always delete to set up the test, should always be OK
             res = http_client.delete(endpoint)
-            assert HTTPStatus.OK == res.status_code
+            assert res.status_code == HTTPStatus.OK
 
             # Verify the document is not found
             res = http_client.get(endpoint)
-            assert HTTPStatus.NOT_FOUND == res.status_code
+            assert res.status_code == HTTPStatus.NOT_FOUND
 
             # Attempt to update a nonexistent test document. Should return OK
             payload["fields"] = {}
@@ -43,11 +43,11 @@ def test_vespa_update() -> None:
                 headers={"Content-Type": "application/json"},
                 json=payload,
             )
-            assert HTTPStatus.OK == res.status_code
+            assert res.status_code == HTTPStatus.OK
 
             # when we look for it, should be NOT_FOUND
             res = http_client.get(endpoint)
-            assert HTTPStatus.NOT_FOUND == res.status_code
+            assert res.status_code == HTTPStatus.NOT_FOUND
 
             # POST/Put new document
             payload = {}
@@ -60,11 +60,11 @@ def test_vespa_update() -> None:
                 headers={"Content-Type": "application/json"},
                 json=payload,
             )
-            assert HTTPStatus.OK == res.status_code
+            assert res.status_code == HTTPStatus.OK
 
             # when we look for it, now we should find it
             res = http_client.get(endpoint)
-            assert HTTPStatus.OK == res.status_code
+            assert res.status_code == HTTPStatus.OK
             d = res.json()
 
             assert payload["fields"]["title"] == d["fields"]["title"]
@@ -78,18 +78,18 @@ def test_vespa_update() -> None:
                 headers={"Content-Type": "application/json"},
                 json=payload,
             )
-            assert HTTPStatus.OK == res.status_code
+            assert res.status_code == HTTPStatus.OK
 
             # verify the change
             res = http_client.get(endpoint)
-            assert HTTPStatus.OK == res.status_code
+            assert res.status_code == HTTPStatus.OK
             d = res.json()
             assert payload["fields"]["title"]["assign"] == d["fields"]["title"]
 
             # always delete to clean up the test, should always be OK
             res = http_client.delete(endpoint)
-            assert HTTPStatus.OK == res.status_code
+            assert res.status_code == HTTPStatus.OK
 
             # Verify the document is not found
             res = http_client.get(endpoint)
-            assert HTTPStatus.NOT_FOUND == res.status_code
+            assert res.status_code == HTTPStatus.NOT_FOUND

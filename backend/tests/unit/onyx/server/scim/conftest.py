@@ -126,12 +126,12 @@ def make_user_mapping(**kwargs: Any) -> MagicMock:
     mapping.id = kwargs.get("id", 1)
     mapping.external_id = kwargs.get("external_id", "ext-default")
     mapping.user_id = kwargs.get("user_id", uuid4())
-    mapping.scim_username = kwargs.get("scim_username", None)
-    mapping.department = kwargs.get("department", None)
-    mapping.manager = kwargs.get("manager", None)
-    mapping.given_name = kwargs.get("given_name", None)
-    mapping.family_name = kwargs.get("family_name", None)
-    mapping.scim_emails_json = kwargs.get("scim_emails_json", None)
+    mapping.scim_username = kwargs.get("scim_username")
+    mapping.department = kwargs.get("department")
+    mapping.manager = kwargs.get("manager")
+    mapping.given_name = kwargs.get("given_name")
+    mapping.family_name = kwargs.get("family_name")
+    mapping.scim_emails_json = kwargs.get("scim_emails_json")
     return mapping
 
 

@@ -92,10 +92,27 @@ DEFAULT_LEN_TOKENS = int(os.environ.get("MOCK_LEN_TOKENS", "150"))
 
 _KNOB_RE = re.compile(r"-(ttft|itl|len|tools|agents|maxctx)(\d+)")
 
-_FILLER_WORDS = (
-    "This is deterministic mock answer content used only for load testing "
-    "the Onyx application and infrastructure under controlled conditions. "
-).split()
+_FILLER_WORDS = [
+    "This",
+    "is",
+    "deterministic",
+    "mock",
+    "answer",
+    "content",
+    "used",
+    "only",
+    "for",
+    "load",
+    "testing",
+    "the",
+    "Onyx",
+    "application",
+    "and",
+    "infrastructure",
+    "under",
+    "controlled",
+    "conditions.",
+]
 
 # Tool names from Onyx's chat / deep-research loops (see module docstring).
 _RETRIEVAL_TOOLS = ("internal_search", "web_search", "open_url")

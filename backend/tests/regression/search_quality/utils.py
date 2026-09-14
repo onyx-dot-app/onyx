@@ -51,15 +51,14 @@ def find_document_id(
 ) -> str | None:
     """Find a document by its link and return its id if found."""
     # handle federated sources TODO: maybe make handler dictionary by source if this gets complex
-    if ground_truth.doc_source in federated_sources:
-        if ground_truth.doc_source == DocumentSource.SLACK:
-            groups = re.search(
-                r"archives\/([A-Z0-9]+)\/p([0-9]+)", ground_truth.doc_link
-            )
-            if groups:
-                channel_id = groups.group(1)
-                message_id = groups.group(2)
-                return f"{channel_id}__{message_id[:-6]}.{message_id[-6:]}"
+    if ground_truth.doc_source in federated_sources and (
+        ground_truth.doc_source == DocumentSource.SLACK
+    ):
+        groups = re.search(r"archives\/([A-Z0-9]+)\/p([0-9]+)", ground_truth.doc_link)
+        if groups:
+            channel_id = groups.group(1)
+            message_id = groups.group(2)
+            return f"{channel_id}__{message_id[:-6]}.{message_id[-6:]}"
 
     # preprocess links
     doc_link = ground_truth.doc_link
@@ -198,7 +197,8 @@ class LazyJsonWriter:
 
     def append(self, serializable_item: dict[str, Any]) -> None:
         if not self.file:
-            self.file = open(self.filepath, "a")
+            # Held open across calls; `close()` closes it.
+            self.file = open(self.filepath, "a")  # noqa: SIM115
             self.file.write("[\n")
         else:
             self.file.write(",\n")

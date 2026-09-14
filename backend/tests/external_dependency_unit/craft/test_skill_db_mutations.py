@@ -448,32 +448,30 @@ def test_database_rejects_two_same_name_preferences(
     )
     db_session.flush()
 
-    with pytest.raises(IntegrityError):
-        with db_session.begin_nested():
-            db_session.add(
-                UserSkillPreference(
-                    user_id=user.id,
-                    skill_id=second_skill.id,
-                    name=name,
-                )
+    with pytest.raises(IntegrityError), db_session.begin_nested():
+        db_session.add(
+            UserSkillPreference(
+                user_id=user.id,
+                skill_id=second_skill.id,
+                name=name,
             )
-            db_session.flush()
+        )
+        db_session.flush()
 
 
 def test_preference_name_must_match_skill_name(db_session: Session) -> None:
     user = make_user(db_session)
     skill = make_skill(db_session, is_public=True)
 
-    with pytest.raises(IntegrityError):
-        with db_session.begin_nested():
-            db_session.add(
-                UserSkillPreference(
-                    user_id=user.id,
-                    skill_id=skill.id,
-                    name="different-name",
-                )
+    with pytest.raises(IntegrityError), db_session.begin_nested():
+        db_session.add(
+            UserSkillPreference(
+                user_id=user.id,
+                skill_id=skill.id,
+                name="different-name",
             )
-            db_session.flush()
+        )
+        db_session.flush()
 
 
 def test_transfer_skill_ownership_self_transfer_preserves_direct_share(

@@ -7,6 +7,7 @@ Fail-open: `RequestEvaluator` exceptions and non-matching action types.
 import asyncio
 import base64
 import binascii
+import contextlib
 import ipaddress
 import operator
 import socket
@@ -1121,10 +1122,8 @@ class GateAddon:
                     decision = self._claim_expired_or_read_winner(
                         approval_id, tenant_id
                     )
-                    try:
+                    with contextlib.suppress(*CACHE_TRANSIENT_ERRORS):
                         approval_cache.send_wake(approval_id, decision, cache)
-                    except CACHE_TRANSIENT_ERRORS:
-                        pass
                     if decision == ApprovalDecision.EXPIRED:
                         logger.info(
                             "drain_expired tenant=%s approval=%s approval_id=%s",

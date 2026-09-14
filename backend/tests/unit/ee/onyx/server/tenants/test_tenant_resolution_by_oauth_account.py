@@ -105,9 +105,9 @@ def test_an_ambiguous_address_still_conflicts_without_a_linked_subject() -> None
             return_value=None,
         ),
         patch(f"{_MAPPING_MODULE}.get_tenant_id_for_email", side_effect=conflict),
+        pytest.raises(OnyxError) as exc_info,
     ):
-        with pytest.raises(OnyxError) as exc_info:
-            resolve_tenant_id("user@example.com", "google", "sub-123")
+        resolve_tenant_id("user@example.com", "google", "sub-123")
 
     assert exc_info.value is conflict
 
@@ -204,9 +204,9 @@ async def test_ambiguous_mapping_never_enters_provisioning() -> None:
             side_effect=conflict,
         ),
         patch(f"{_PROVISIONING_MODULE}.get_available_tenant", available),
+        pytest.raises(OnyxError) as exc_info,
     ):
-        with pytest.raises(OnyxError) as exc_info:
-            await get_or_provision_tenant(email="user@example.com")
+        await get_or_provision_tenant(email="user@example.com")
 
     assert exc_info.value is conflict
     assert exc_info.value.error_code is OnyxErrorCode.CONFLICT
@@ -225,9 +225,9 @@ def test_several_pending_email_invitations_are_ambiguous() -> None:
     with (
         patch(f"{_MAPPING_MODULE}.MULTI_TENANT", True),
         patch(f"{_MAPPING_MODULE}.get_catalog_session", session_ctx),
+        pytest.raises(OnyxError) as exc_info,
     ):
-        with pytest.raises(OnyxError) as exc_info:
-            get_tenant_id_for_email("user@example.com")
+        get_tenant_id_for_email("user@example.com")
 
     assert exc_info.value.error_code is OnyxErrorCode.CONFLICT
     db_session.query.assert_not_called()

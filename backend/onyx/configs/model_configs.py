@@ -1,3 +1,4 @@
+import contextlib
 import json
 import os
 
@@ -125,10 +126,8 @@ if _LITELLM_PASS_THROUGH_HEADERS_RAW:
 LITELLM_EXTRA_BODY: dict | None = None
 _LITELLM_EXTRA_BODY_RAW = os.environ.get("LITELLM_EXTRA_BODY")
 if _LITELLM_EXTRA_BODY_RAW:
-    try:
+    with contextlib.suppress(Exception):
         LITELLM_EXTRA_BODY = json.loads(_LITELLM_EXTRA_BODY_RAW)
-    except Exception:
-        pass
 
 #####
 # Prompt Caching Configs

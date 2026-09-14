@@ -214,13 +214,10 @@ class BuildStreamingState:
             return True
 
         # If we were receiving thought chunks and now get something else
-        if (
+        return bool(
             self._last_chunk_type == "thought"
             and new_packet_type != "agent_thought_chunk"
-        ):
-            return True
-
-        return False
+        )
 
     def clear_last_chunk_type(self) -> None:
         """Clear the last chunk type tracking after finalization."""

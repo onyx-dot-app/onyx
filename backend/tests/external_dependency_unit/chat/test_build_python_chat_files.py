@@ -7,6 +7,7 @@ mocking those would obscure the origin-allowlist + metadata plumbing that
 are the whole point.
 """
 
+import contextlib
 from collections.abc import Generator
 from io import BytesIO
 from uuid import uuid4
@@ -78,10 +79,8 @@ def file_cleanup(
     finally:
         store = get_default_file_store()
         for fid in created:
-            try:
+            with contextlib.suppress(Exception):
                 store.delete_file(fid, error_on_missing=False)
-            except Exception:
-                pass
 
 
 # ---------------------------------------------------------------------------

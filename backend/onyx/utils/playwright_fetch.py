@@ -12,7 +12,7 @@ Two consumers:
 """
 
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 
 from playwright.sync_api import BrowserContext, Playwright, sync_playwright
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
@@ -292,12 +292,10 @@ def fetch_rendered_html(
                     page.wait_for_timeout(bot_challenge_grace_ms)
 
                 # Best-effort wait for network to settle (SPA / CF challenge JS).
-                try:
+                with suppress(PlaywrightTimeoutError):
                     page.wait_for_load_state(
                         "networkidle", timeout=bot_challenge_grace_ms
                     )
-                except PlaywrightTimeoutError:
-                    pass
 
                 html = page.content()
                 final_url = page.url

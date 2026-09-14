@@ -29,40 +29,37 @@ def test_collects_log_files_recursively(tmp_path: Path) -> None:
     built = build_log_zip([tmp_path], SCOPE_NOTE)
     assert built.log_file_count == 3
     assert built.size_bytes > 0
-    with built.zip_buffer as zip_buffer:
-        with zipfile.ZipFile(zip_buffer) as zip_file:
-            names = _zip_names(zip_file)
-            assert README_FILE_NAME in names
-            # README plus the three log files; ``notes.txt`` is excluded.
-            assert len(names) == 4
-            assert not any(name.endswith("notes.txt") for name in names)
+    with built.zip_buffer as zip_buffer, zipfile.ZipFile(zip_buffer) as zip_file:
+        names = _zip_names(zip_file)
+        assert README_FILE_NAME in names
+        # README plus the three log files; ``notes.txt`` is excluded.
+        assert len(names) == 4
+        assert not any(name.endswith("notes.txt") for name in names)
 
-            debug_entry = _entry_ending_with(zip_file, "onyx_debug.log")
-            assert zip_file.read(debug_entry) == b"debug line\n"
-            _entry_ending_with(zip_file, "onyx_debug.log.1")
-            memory_entry = _entry_ending_with(zip_file, "memory_usage.log")
-            assert "memory" in memory_entry
+        debug_entry = _entry_ending_with(zip_file, "onyx_debug.log")
+        assert zip_file.read(debug_entry) == b"debug line\n"
+        _entry_ending_with(zip_file, "onyx_debug.log.1")
+        memory_entry = _entry_ending_with(zip_file, "memory_usage.log")
+        assert "memory" in memory_entry
 
-            readme = zip_file.read(README_FILE_NAME).decode("utf-8")
-            assert SCOPE_NOTE in readme
-            assert "onyx_debug.log" in readme
-            assert "WARNING" in readme
+        readme = zip_file.read(README_FILE_NAME).decode("utf-8")
+        assert SCOPE_NOTE in readme
+        assert "onyx_debug.log" in readme
+        assert "WARNING" in readme
 
 
 def test_empty_directory_yields_readme_only(tmp_path: Path) -> None:
     built = build_log_zip([tmp_path], SCOPE_NOTE)
-    with built.zip_buffer as zip_buffer:
-        with zipfile.ZipFile(zip_buffer) as zip_file:
-            assert _zip_names(zip_file) == [README_FILE_NAME]
-            readme = zip_file.read(README_FILE_NAME).decode("utf-8")
-            assert "No log files were found" in readme
+    with built.zip_buffer as zip_buffer, zipfile.ZipFile(zip_buffer) as zip_file:
+        assert _zip_names(zip_file) == [README_FILE_NAME]
+        readme = zip_file.read(README_FILE_NAME).decode("utf-8")
+        assert "No log files were found" in readme
 
 
 def test_missing_directory_yields_readme_only(tmp_path: Path) -> None:
     built = build_log_zip([tmp_path / "does_not_exist"], SCOPE_NOTE)
-    with built.zip_buffer as zip_buffer:
-        with zipfile.ZipFile(zip_buffer) as zip_file:
-            assert _zip_names(zip_file) == [README_FILE_NAME]
+    with built.zip_buffer as zip_buffer, zipfile.ZipFile(zip_buffer) as zip_file:
+        assert _zip_names(zip_file) == [README_FILE_NAME]
 
 
 def test_overlapping_directories_deduplicate(tmp_path: Path) -> None:
@@ -71,11 +68,10 @@ def test_overlapping_directories_deduplicate(tmp_path: Path) -> None:
     (nested / "worker.log").write_text("worker line\n")
 
     built = build_log_zip([tmp_path, nested], SCOPE_NOTE)
-    with built.zip_buffer as zip_buffer:
-        with zipfile.ZipFile(zip_buffer) as zip_file:
-            names = _zip_names(zip_file)
-            assert len(names) == 2
-            _entry_ending_with(zip_file, "worker.log")
+    with built.zip_buffer as zip_buffer, zipfile.ZipFile(zip_buffer) as zip_file:
+        names = _zip_names(zip_file)
+        assert len(names) == 2
+        _entry_ending_with(zip_file, "worker.log")
 
 
 def test_symlink_escaping_log_directory_is_skipped(tmp_path: Path) -> None:
@@ -87,13 +83,12 @@ def test_symlink_escaping_log_directory_is_skipped(tmp_path: Path) -> None:
     (log_dir / "evil.log").symlink_to(secret)
 
     built = build_log_zip([log_dir], SCOPE_NOTE)
-    with built.zip_buffer as zip_buffer:
-        with zipfile.ZipFile(zip_buffer) as zip_file:
-            names = _zip_names(zip_file)
-            # README plus ``real.log``; the escaping symlink is dropped.
-            assert len(names) == 2
-            _entry_ending_with(zip_file, "real.log")
-            assert not any("evil" in name or "secret" in name for name in names)
+    with built.zip_buffer as zip_buffer, zipfile.ZipFile(zip_buffer) as zip_file:
+        names = _zip_names(zip_file)
+        # README plus ``real.log``; the escaping symlink is dropped.
+        assert len(names) == 2
+        _entry_ending_with(zip_file, "real.log")
+        assert not any("evil" in name or "secret" in name for name in names)
 
 
 def test_symlink_within_log_directory_is_included(tmp_path: Path) -> None:
@@ -102,11 +97,10 @@ def test_symlink_within_log_directory_is_included(tmp_path: Path) -> None:
     (tmp_path / "alias.log").symlink_to(target)
 
     built = build_log_zip([tmp_path], SCOPE_NOTE)
-    with built.zip_buffer as zip_buffer:
-        with zipfile.ZipFile(zip_buffer) as zip_file:
-            # The entry is stored under its resolved path, hence ``target.txt``.
-            entry = _entry_ending_with(zip_file, "target.txt")
-            assert zip_file.read(entry) == b"aliased content\n"
+    with built.zip_buffer as zip_buffer, zipfile.ZipFile(zip_buffer) as zip_file:
+        # The entry is stored under its resolved path, hence ``target.txt``.
+        entry = _entry_ending_with(zip_file, "target.txt")
+        assert zip_file.read(entry) == b"aliased content\n"
 
 
 def test_known_system_logs_are_excluded(tmp_path: Path) -> None:
@@ -117,16 +111,15 @@ def test_known_system_logs_are_excluded(tmp_path: Path) -> None:
 
     # Under test.
     built = build_log_zip([tmp_path], SCOPE_NOTE)
-    with built.zip_buffer as zip_buffer:
-        # Postcondition.
-        with zipfile.ZipFile(zip_buffer) as zip_file:
-            names = _zip_names(zip_file)
-            # README plus ``onyx_debug.log``; the system logs are dropped.
-            assert len(names) == 2
-            _entry_ending_with(zip_file, "onyx_debug.log")
-            assert not any(
-                name.endswith(("dpkg.log", "alternatives.log")) for name in names
-            )
+    # Postcondition.
+    with built.zip_buffer as zip_buffer, zipfile.ZipFile(zip_buffer) as zip_file:
+        names = _zip_names(zip_file)
+        # README plus ``onyx_debug.log``; the system logs are dropped.
+        assert len(names) == 2
+        _entry_ending_with(zip_file, "onyx_debug.log")
+        assert not any(
+            name.endswith(("dpkg.log", "alternatives.log")) for name in names
+        )
 
 
 def test_shallow_directory_is_not_recursed(tmp_path: Path) -> None:
@@ -138,14 +131,13 @@ def test_shallow_directory_is_not_recursed(tmp_path: Path) -> None:
 
     # Under test.
     built = build_log_zip([], SCOPE_NOTE, shallow_log_directories=[tmp_path])
-    with built.zip_buffer as zip_buffer:
-        # Postcondition.
-        with zipfile.ZipFile(zip_buffer) as zip_file:
-            names = _zip_names(zip_file)
-            # README plus ``top.log``; ``nested/deep.log`` is not searched.
-            assert len(names) == 2
-            _entry_ending_with(zip_file, "top.log")
-            assert not any(name.endswith("deep.log") for name in names)
+    # Postcondition.
+    with built.zip_buffer as zip_buffer, zipfile.ZipFile(zip_buffer) as zip_file:
+        names = _zip_names(zip_file)
+        # README plus ``top.log``; ``nested/deep.log`` is not searched.
+        assert len(names) == 2
+        _entry_ending_with(zip_file, "top.log")
+        assert not any(name.endswith("deep.log") for name in names)
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="Root can read mode-000 files")
@@ -158,14 +150,12 @@ def test_unreadable_file_is_skipped_and_noted(tmp_path: Path) -> None:
 
     try:
         built = build_log_zip([tmp_path], SCOPE_NOTE)
-        with built.zip_buffer as zip_buffer:
-            with zipfile.ZipFile(zip_buffer) as zip_file:
-                names = _zip_names(zip_file)
-                assert not any(name.endswith("unreadable.log") for name in names)
-                _entry_ending_with(zip_file, "readable.log")
-
-                readme = zip_file.read(README_FILE_NAME).decode("utf-8")
-                assert "Skipped files" in readme
-                assert "unreadable.log" in readme
+        with built.zip_buffer as zip_buffer, zipfile.ZipFile(zip_buffer) as zip_file:
+            names = _zip_names(zip_file)
+            assert not any(name.endswith("unreadable.log") for name in names)
+            _entry_ending_with(zip_file, "readable.log")
+            readme = zip_file.read(README_FILE_NAME).decode("utf-8")
+            assert "Skipped files" in readme
+            assert "unreadable.log" in readme
     finally:
         unreadable.chmod(0o644)

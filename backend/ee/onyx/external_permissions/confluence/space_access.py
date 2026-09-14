@@ -123,12 +123,14 @@ def _get_server_space_permissions_rest(
 
         subject = permission.get("subject") or {}
         subject_type = subject.get("type")
-        if subject_type == SPACE_PERMISSION_SUBJECT_TYPE_USER:
-            if user_key := subject.get("userKey"):
-                user_keys.add(user_key)
-        elif subject_type == SPACE_PERMISSION_SUBJECT_TYPE_GROUP:
-            if name := subject.get("name"):
-                group_names.add(name)
+        if subject_type == SPACE_PERMISSION_SUBJECT_TYPE_USER and (
+            user_key := subject.get("userKey")
+        ):
+            user_keys.add(user_key)
+        elif subject_type == SPACE_PERMISSION_SUBJECT_TYPE_GROUP and (
+            name := subject.get("name")
+        ):
+            group_names.add(name)
 
     is_public, extra_groups = _resolve_anonymous_access(confluence_client, space_key)
     group_names.update(extra_groups)

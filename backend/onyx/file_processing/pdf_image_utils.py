@@ -5,6 +5,7 @@ enumerator and filter chain, so they can never disagree. Enumeration reads
 only metadata; pixel data is decoded solely for extracted images.
 """
 
+import contextlib
 from abc import ABC, abstractmethod
 from collections import Counter
 from collections.abc import Iterator
@@ -296,10 +297,8 @@ def count_pdf_embedded_images(file: IO[Any], cap: int) -> int:
         return 0
     finally:
         if start_pos is not None:
-            try:
+            with contextlib.suppress(Exception):
                 file.seek(start_pos)
-            except Exception:
-                pass
 
 
 def iter_pdf_extracted_images(reader: Any, cap: int) -> Iterator[tuple[bytes, str]]:

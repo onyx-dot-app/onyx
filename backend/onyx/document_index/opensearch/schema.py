@@ -314,7 +314,7 @@ class DocumentChunkWithoutVectors(BaseModel):
                 tenant_id=get_current_tenant_id(), multitenant=MULTI_TENANT
             )
         elif isinstance(value, TenantState):
-            if MULTI_TENANT != value.multitenant:
+            if value.multitenant != MULTI_TENANT:
                 raise ValueError(
                     f"Bug: An existing TenantState object was supplied to the DocumentChunk model "
                     f"but its multi-tenant mode ({value.multitenant}) does not match the program's "

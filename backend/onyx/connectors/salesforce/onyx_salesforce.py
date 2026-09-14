@@ -357,10 +357,11 @@ class OnyxSalesforce(Salesforce):
         valid_fields: set[str] = set()
         field_names_to_remove: set[str] = set()
         for field in fields:
-            if compound_field_name := field.get("compoundFieldName"):
-                # We do want to get name fields even if they are compound
-                if not field.get("nameField"):
-                    field_names_to_remove.add(compound_field_name)
+            # We do want to get name fields even if they are compound
+            if (
+                compound_field_name := field.get("compoundFieldName")
+            ) and not field.get("nameField"):
+                field_names_to_remove.add(compound_field_name)
 
             field_name = field.get("name")
             field_type = field.get("type")

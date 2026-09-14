@@ -34,10 +34,7 @@ class RedisUserGroup(RedisObjectHelper):
 
     @property
     def fenced(self) -> bool:
-        if self.redis.exists(self.fence_key):
-            return True
-
-        return False
+        return bool(self.redis.exists(self.fence_key))
 
     def set_fence(self, payload: int | None) -> None:
         if payload is None:

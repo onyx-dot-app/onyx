@@ -157,12 +157,14 @@ def test_ingested_skill_bundle_deletes_new_blob_on_failure(
         delete_bundle_blob,
     )
 
-    with pytest.raises(RuntimeError):
-        with ingested_skill_bundle(
+    with (
+        pytest.raises(RuntimeError),
+        ingested_skill_bundle(
             b"bundle",
             "helper-skill.zip",
             file_store,
-        ):
-            raise RuntimeError("db write failed")
+        ),
+    ):
+        raise RuntimeError("db write failed")
 
     delete_bundle_blob.assert_called_once_with(file_store, "new-bundle")

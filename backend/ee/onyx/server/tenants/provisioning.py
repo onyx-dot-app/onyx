@@ -247,18 +247,18 @@ async def notify_control_plane(
         tenant_id=tenant_id, email=email, referral_source=referral_source
     )
 
-    async with aiohttp.ClientSession() as session:
-        async with session.post(
+    async with (
+        aiohttp.ClientSession() as session,
+        session.post(
             f"{CONTROL_PLANE_API_BASE_URL}/tenants/create",
             headers=headers,
             json=payload.model_dump(),
-        ) as response:
-            if response.status != 200:
-                error_text = await response.text()
-                logger.error("Control plane tenant creation failed: %s", error_text)
-                raise Exception(
-                    f"Failed to create tenant on control plane: {error_text}"
-                )
+        ) as response,
+    ):
+        if response.status != 200:
+            error_text = await response.text()
+            logger.error("Control plane tenant creation failed: %s", error_text)
+            raise Exception(f"Failed to create tenant on control plane: {error_text}")
 
 
 async def rollback_tenant_provisioning(tenant_id: str) -> None:
@@ -631,18 +631,18 @@ async def delete_user_from_control_plane(tenant_id: str, email: str) -> None:
     }
     payload = TenantDeletionPayload(tenant_id=tenant_id, email=email)
 
-    async with aiohttp.ClientSession() as session:
-        async with session.delete(
+    async with (
+        aiohttp.ClientSession() as session,
+        session.delete(
             f"{CONTROL_PLANE_API_BASE_URL}/tenants/delete",
             headers=headers,
             json=payload.model_dump(),
-        ) as response:
-            if response.status != 200:
-                error_text = await response.text()
-                logger.error("Control plane tenant creation failed: %s", error_text)
-                raise Exception(
-                    f"Failed to delete tenant on control plane: {error_text}"
-                )
+        ) as response,
+    ):
+        if response.status != 200:
+            error_text = await response.text()
+            logger.error("Control plane tenant creation failed: %s", error_text)
+            raise Exception(f"Failed to delete tenant on control plane: {error_text}")
 
 
 def get_tenant_by_domain_from_control_plane(

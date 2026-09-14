@@ -587,8 +587,10 @@ def get_db_readonly_user_session_with_current_tenant() -> Generator[
         return
 
     schema_translate_map = {None: tenant_id}
-    with readonly_engine.connect().execution_options(
-        schema_translate_map=schema_translate_map
-    ) as connection:
-        with Session(bind=connection, expire_on_commit=False) as session:
-            yield session
+    with (
+        readonly_engine.connect().execution_options(
+            schema_translate_map=schema_translate_map
+        ) as connection,
+        Session(bind=connection, expire_on_commit=False) as session,
+    ):
+        yield session

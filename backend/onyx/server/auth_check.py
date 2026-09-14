@@ -168,14 +168,17 @@ def check_router_auth(
             for dependency in route_dependant_obj.dependencies:
                 depends_fn = dependency.call
                 if (
-                    depends_fn == current_limited_user
-                    or depends_fn == current_user
-                    or depends_fn == current_user_with_expired_token
-                    or depends_fn == current_chat_accessible_user
-                    or depends_fn == current_user_from_websocket
-                    or depends_fn == control_plane_dep
-                    or depends_fn == current_cloud_superuser
-                    or depends_fn == verify_scim_token
+                    depends_fn
+                    in (
+                        current_limited_user,
+                        current_user,
+                        current_user_with_expired_token,
+                        current_chat_accessible_user,
+                        current_user_from_websocket,
+                        control_plane_dep,
+                        current_cloud_superuser,
+                        verify_scim_token,
+                    )
                     or _is_require_permission_dependency(depends_fn)
                     or _is_websocket_auth_dependency(depends_fn)
                 ):

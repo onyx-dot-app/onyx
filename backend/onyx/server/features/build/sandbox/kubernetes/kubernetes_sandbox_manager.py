@@ -36,6 +36,7 @@ Use get_sandbox_manager() from base.py to get the appropriate implementation.
 
 import base64
 import binascii
+import contextlib
 import copy
 import gzip
 import hashlib
@@ -246,17 +247,19 @@ def _build_targz(files: FileSet) -> tuple[bytes, str]:
             f"Bundle size {total} exceeds {_MAX_BUNDLE_BYTES} byte limit"
         )
     buf = io.BytesIO()
-    with gzip.GzipFile(fileobj=buf, mode="wb", compresslevel=6, mtime=0) as gzip_file:
-        with tarfile.open(fileobj=gzip_file, mode="w") as tar:
-            for name in sorted(files):
-                data = files[name]
-                info = tarfile.TarInfo(name=name)
-                info.size = len(data)
-                info.mtime = 0
-                info.uid = 0
-                info.gid = 0
-                info.mode = 0o644
-                tar.addfile(info, io.BytesIO(data))
+    with (
+        gzip.GzipFile(fileobj=buf, mode="wb", compresslevel=6, mtime=0) as gzip_file,
+        tarfile.open(fileobj=gzip_file, mode="w") as tar,
+    ):
+        for name in sorted(files):
+            data = files[name]
+            info = tarfile.TarInfo(name=name)
+            info.size = len(data)
+            info.mtime = 0
+            info.uid = 0
+            info.gid = 0
+            info.mode = 0o644
+            tar.addfile(info, io.BytesIO(data))
     raw = buf.getvalue()
     return raw, hashlib.sha256(raw).hexdigest()
 
@@ -741,10 +744,8 @@ class KubernetesSandboxManager(SandboxManager):
             # GeneratorExit (raises RuntimeError). Losing the last
             # unterminated chunk on client disconnect is acceptable; it
             # would be incomplete anyway.
-            try:
+            with contextlib.suppress(Exception):
                 stream.close()
-            except Exception:  # noqa: BLE001
-                pass
 
     def _get_init_container_logs(self, pod_name: str, container_name: str) -> str:
         """Get logs from an init container.

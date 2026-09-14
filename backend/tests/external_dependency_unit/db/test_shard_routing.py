@@ -210,19 +210,19 @@ def test_tenant_data_is_isolated_across_shards(two_shards: dict[str, Any]) -> No
 
 def test_catalog_session_ignores_the_current_tenant(two_shards: dict[str, Any]) -> None:
     """The catalog must be reachable from a tenant on any shard, at the same place."""
-    with get_session_with_tenant(tenant_id=two_shards["tenant_b"]):
-        with get_catalog_session() as catalog:
-            assert _current_database(catalog) == POSTGRES_DB
-            rows = (
-                catalog.execute(
-                    text(
-                        "SELECT shard_name FROM public.tenant_shard WHERE tenant_id = :t"
-                    ),
-                    {"t": two_shards["tenant_b"]},
-                )
-                .scalars()
-                .all()
+    with (
+        get_session_with_tenant(tenant_id=two_shards["tenant_b"]),
+        get_catalog_session() as catalog,
+    ):
+        assert _current_database(catalog) == POSTGRES_DB
+        rows = (
+            catalog.execute(
+                text("SELECT shard_name FROM public.tenant_shard WHERE tenant_id = :t"),
+                {"t": two_shards["tenant_b"]},
             )
+            .scalars()
+            .all()
+        )
     assert rows == [SECOND_SHARD]
 
 
@@ -325,9 +325,11 @@ def test_shard_pool_settings_are_rejected_at_config_parse(
         ("-1", "ONYX_DB_SHARD_POOL_SIZE"),
         ("-1", "ONYX_DB_SHARD_POOL_OVERFLOW"),
     ):
-        with mock.patch.dict(os.environ, {setting: value}):
-            with pytest.raises(ValueError, match=setting):
-                importlib.reload(app_configs)
+        with (
+            mock.patch.dict(os.environ, {setting: value}),
+            pytest.raises(ValueError, match=setting),
+        ):
+            importlib.reload(app_configs)
 
     # Restore the module other tests imported from.
     importlib.reload(app_configs)

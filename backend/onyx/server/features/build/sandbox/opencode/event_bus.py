@@ -8,6 +8,7 @@ gaps via the cumulative ``part.text`` field on ``message.part.updated``.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import threading
 from collections.abc import Callable
@@ -114,10 +115,8 @@ class PodEventBus:
             subs = self._subscribers.get(sub.session_id)
             if not subs:
                 return
-            try:
+            with contextlib.suppress(ValueError):
                 subs.remove(sub)
-            except ValueError:
-                pass
             if not subs:
                 self._subscribers.pop(sub.session_id, None)
 

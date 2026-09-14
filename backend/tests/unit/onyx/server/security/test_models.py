@@ -64,7 +64,7 @@ def test_operator_locked_fields_matches_marker_declarations() -> None:
         if isinstance(info.json_schema_extra, dict)
         and info.json_schema_extra.get("operator_locked") is True
     }
-    assert OPERATOR_LOCKED_FIELDS == frozenset(expected)
+    assert frozenset(expected) == OPERATOR_LOCKED_FIELDS
 
 
 def test_derivation_works_on_a_fresh_call() -> None:

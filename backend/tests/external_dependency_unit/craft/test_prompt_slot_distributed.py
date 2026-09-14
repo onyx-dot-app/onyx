@@ -79,10 +79,12 @@ def test_slot_released_on_exception(slot_env: None) -> None:  # noqa: ARG001
     build_session_id = uuid4()
     mgr = _make_replica()
 
-    with pytest.raises(RuntimeError, match="boom"):
-        with mgr.prompt_slot(sandbox_id, build_session_id) as acquired:
-            assert acquired.acquired is True
-            raise RuntimeError("boom")
+    with (
+        pytest.raises(RuntimeError, match="boom"),
+        mgr.prompt_slot(sandbox_id, build_session_id) as acquired,
+    ):
+        assert acquired.acquired is True
+        raise RuntimeError("boom")
 
     with mgr.prompt_slot(sandbox_id, build_session_id) as after:
         assert after.acquired is True

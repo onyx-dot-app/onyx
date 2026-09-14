@@ -111,12 +111,14 @@ def test_retrieve_all_slim_docs_perm_sync_populates_external_access(
     connector = _make_connector()
     mock_access = MagicMock(spec=ExternalAccess)
 
-    with patch.object(connector, "fetch_configured_repos", return_value=[mock_repo]):
-        with patch(
+    with (
+        patch.object(connector, "fetch_configured_repos", return_value=[mock_repo]),
+        patch(
             "onyx.connectors.github.connector.get_external_access_permission",
             return_value=mock_access,
-        ) as mock_perm:
-            batches = list(connector.retrieve_all_slim_docs_perm_sync())
+        ) as mock_perm,
+    ):
+        batches = list(connector.retrieve_all_slim_docs_perm_sync())
 
     # permission fetched at least once per repo (once per page in checkpoint-based flow)
     mock_perm.assert_called_with(mock_repo, connector.github_client)
@@ -157,13 +159,15 @@ def test_pruning_routes_to_slim_connector_path(mock_repo: MagicMock) -> None:
     """extract_ids_from_runnable_connector must use SlimConnector, not CheckpointedConnector."""
     connector = _make_connector()
 
-    with patch.object(connector, "fetch_configured_repos", return_value=[mock_repo]):
-        # If the CheckpointedConnector fallback were used instead, it would call
-        # load_from_checkpoint which hits _convert_pr_to_document and lazy loads.
-        # We verify the slim path is taken by checking load_from_checkpoint is NOT called.
-        with patch.object(connector, "load_from_checkpoint") as mock_load:
-            result = extract_ids_from_runnable_connector(connector)
-            mock_load.assert_not_called()
+    # If the CheckpointedConnector fallback were used instead, it would call
+    # load_from_checkpoint which hits _convert_pr_to_document and lazy loads.
+    # We verify the slim path is taken by checking load_from_checkpoint is NOT called.
+    with (
+        patch.object(connector, "fetch_configured_repos", return_value=[mock_repo]),
+        patch.object(connector, "load_from_checkpoint") as mock_load,
+    ):
+        result = extract_ids_from_runnable_connector(connector)
+        mock_load.assert_not_called()
 
     assert len(result.raw_id_to_parent) == 3
     assert "https://github.com/test-org/test-repo/pull/1" in result.raw_id_to_parent

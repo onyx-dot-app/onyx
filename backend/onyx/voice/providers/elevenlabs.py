@@ -13,6 +13,7 @@ See https://elevenlabs.io/docs for API reference.
 
 import asyncio
 import base64
+import contextlib
 import json
 from collections.abc import AsyncIterator
 from enum import StrEnum
@@ -423,10 +424,8 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
                 self._logger.debug("Error closing WebSocket: %s", e)
         if self._receive_task and not self._receive_task.done():
             self._receive_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._receive_task
-            except asyncio.CancelledError:
-                pass
         if self._session and not self._session.closed:
             await self._session.close()
         return self._final_transcript
@@ -644,10 +643,8 @@ class ElevenLabsStreamingSynthesizer(StreamingSynthesizerProtocol):
             await self._ws.close()
         if self._receive_task:
             self._receive_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._receive_task
-            except asyncio.CancelledError:
-                pass
         if self._session:
             await self._session.close()
 
@@ -862,27 +859,27 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
             raise ValueError("ElevenLabs API key required")
 
         headers = {"xi-api-key": self.api_key}
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                f"{self.api_base}/v1/models", headers=headers
-            ) as response:
-                if response.status == 200:
+        async with (
+            aiohttp.ClientSession() as session,
+            session.get(f"{self.api_base}/v1/models", headers=headers) as response,
+        ):
+            if response.status == 200:
+                return
+            if response.status in (401, 403):
+                try:
+                    body = await response.json()
+                    detail = body.get("detail", {})
+                    status = (
+                        detail.get("status", "") if isinstance(detail, dict) else ""
+                    )
+                except Exception:
+                    status = ""
+                # "missing_permissions" means the key is valid but
+                # lacks this specific scope — that's fine.
+                if status == "missing_permissions":
                     return
-                if response.status in (401, 403):
-                    try:
-                        body = await response.json()
-                        detail = body.get("detail", {})
-                        status = (
-                            detail.get("status", "") if isinstance(detail, dict) else ""
-                        )
-                    except Exception:
-                        status = ""
-                    # "missing_permissions" means the key is valid but
-                    # lacks this specific scope — that's fine.
-                    if status == "missing_permissions":
-                        return
-                    raise RuntimeError("Invalid ElevenLabs API key.")
-                raise RuntimeError("ElevenLabs credential validation failed.")
+                raise RuntimeError("Invalid ElevenLabs API key.")
+            raise RuntimeError("ElevenLabs credential validation failed.")
 
     def get_available_voices(self) -> list[dict[str, str]]:
         """Return common ElevenLabs voices."""

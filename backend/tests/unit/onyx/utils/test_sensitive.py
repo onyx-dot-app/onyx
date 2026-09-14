@@ -158,7 +158,7 @@ class TestSensitiveValueString:
             decrypt_fn=_decrypt_string,
             is_json=False,
         )
-        assert not (sensitive == "secret")
+        assert sensitive != "secret"
 
 
 class TestSensitiveValueJson:

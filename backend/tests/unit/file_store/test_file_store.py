@@ -212,29 +212,29 @@ class TestExternalStorageFileStore:
             patch("onyx.file_store.file_store.S3_FILE_STORE_PREFIX", "onyx-files"),
             patch("onyx.file_store.file_store.S3_AWS_ACCESS_KEY_ID", "test-key"),
             patch("onyx.file_store.file_store.S3_AWS_SECRET_ACCESS_KEY", "test-secret"),
-        ):
             # Mock the database operation to avoid SQLAlchemy issues
-            with patch("onyx.db.file_record.upsert_filerecord") as mock_upsert:
-                mock_upsert.return_value = Mock()
+            patch("onyx.db.file_record.upsert_filerecord") as mock_upsert,
+        ):
+            mock_upsert.return_value = Mock()
 
-                file_store = S3BackedFileStore(bucket_name="test-bucket")
+            file_store = S3BackedFileStore(bucket_name="test-bucket")
 
-                # This should not raise an exception
-                file_store.save_file(
-                    file_id="test-file.txt",
-                    content=sample_file_io,
-                    display_name="Test File",
-                    file_origin=FileOrigin.OTHER,
-                    file_type="text/plain",
-                    db_session=mock_db_session,
-                )
+            # This should not raise an exception
+            file_store.save_file(
+                file_id="test-file.txt",
+                content=sample_file_io,
+                display_name="Test File",
+                file_origin=FileOrigin.OTHER,
+                file_type="text/plain",
+                db_session=mock_db_session,
+            )
 
-                # Verify S3 client was called correctly
-                mock_s3_client.put_object.assert_called_once()
-                call_args = mock_s3_client.put_object.call_args
-                assert call_args[1]["Bucket"] == "test-bucket"
-                assert call_args[1]["Key"] == "onyx-files/public/test-file.txt"
-                assert call_args[1]["ContentType"] == "text/plain"
+            # Verify S3 client was called correctly
+            mock_s3_client.put_object.assert_called_once()
+            call_args = mock_s3_client.put_object.call_args
+            assert call_args[1]["Bucket"] == "test-bucket"
+            assert call_args[1]["Key"] == "onyx-files/public/test-file.txt"
+            assert call_args[1]["ContentType"] == "text/plain"
 
     def test_minio_client_initialization(self) -> None:
         """Test S3 client initialization with MinIO endpoint"""
@@ -479,9 +479,11 @@ class TestGCSFileStore:
         """Test that get_gcs_file_store raises when no bucket name is configured"""
         from onyx.file_store.file_store import get_gcs_file_store
 
-        with patch("onyx.configs.app_configs.GCS_FILE_STORE_BUCKET_NAME", ""):
-            with pytest.raises(RuntimeError, match="GCS_FILE_STORE_BUCKET_NAME"):
-                get_gcs_file_store()
+        with (
+            patch("onyx.configs.app_configs.GCS_FILE_STORE_BUCKET_NAME", ""),
+            pytest.raises(RuntimeError, match="GCS_FILE_STORE_BUCKET_NAME"),
+        ):
+            get_gcs_file_store()
 
     def test_gcs_read_file_mock(self, sample_content: bytes) -> None:
         """Test GCS read_file returns BytesIO with blob content"""

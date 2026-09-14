@@ -135,9 +135,12 @@ def merge_with_env(overrides: SecuritySettingsOverrides) -> SecuritySettings:
         env_value = env_values[name]
         # The DB row is truth only under an unset env (the why lives on
         # _env_pinned).
-        if name in ENV_PINNED_FIELDS and env_value is not None:
-            merged[name] = env_value
-        elif name in locked or override_value is None:
+        if (
+            name in ENV_PINNED_FIELDS
+            and env_value is not None
+            or name in locked
+            or override_value is None
+        ):
             merged[name] = env_value
         else:
             merged[name] = override_value

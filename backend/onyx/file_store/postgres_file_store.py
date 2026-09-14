@@ -73,7 +73,8 @@ def _read_large_object(raw_conn: Psycopg2Connection, oid: int) -> bytes:
 def _read_large_object_to_tempfile(raw_conn: Psycopg2Connection, oid: int) -> IO[bytes]:
     """Stream a Large Object into a temporary file to avoid OOM on large files."""
     lobj = raw_conn.lobject(oid, "rb")
-    temp = tempfile.NamedTemporaryFile(mode="w+b", delete=True)
+    # The caller owns and closes this file, so a `with` block cannot be used.
+    temp = tempfile.NamedTemporaryFile(mode="w+b", delete=True)  # noqa: SIM115
     while True:
         chunk = lobj.read(STREAM_CHUNK_SIZE)
         if not chunk:
@@ -338,10 +339,7 @@ class PostgresBackedFileStore(FileStore):
     @staticmethod
     def _read_content_bytes(content: IO) -> bytes:
         """Normalize an IO object into raw bytes."""
-        if hasattr(content, "read"):
-            raw = content.read()
-        else:
-            raw = content
+        raw = content.read() if hasattr(content, "read") else content
 
         if isinstance(raw, str):
             return raw.encode("utf-8")

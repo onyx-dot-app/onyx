@@ -15,7 +15,4 @@ def is_fence(key_bytes: bytes) -> bool:
         return True
     if key_str.startswith(RedisConnectorPrune.FENCE_PREFIX):
         return True
-    if key_str.startswith(RedisConnectorPermissionSync.FENCE_PREFIX):
-        return True
-
-    return False
+    return bool(key_str.startswith(RedisConnectorPermissionSync.FENCE_PREFIX))

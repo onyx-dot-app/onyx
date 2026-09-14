@@ -70,8 +70,7 @@ class AsanaAPI:
         )
         start_seconds = int(time.mktime(datetime.now().timetuple()))
         projects_list = []
-        project_count = 0
-        for project_info in projects:
+        for project_count, project_info in enumerate(projects, start=1):
             project_gid = project_info["gid"]
             if project_gids is None or project_gid in project_gids:
                 projects_list.append(project_gid)
@@ -79,7 +78,6 @@ class AsanaAPI:
                 logger.debug(
                     "Skipping project: %s - not in accepted project_gids", project_gid
                 )
-            project_count += 1
             if project_count % 100 == 0:
                 logger.info("Processed %s projects", project_count)
 

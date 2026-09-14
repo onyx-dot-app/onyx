@@ -1,3 +1,4 @@
+import contextlib
 import os
 import time
 import uuid
@@ -393,10 +394,8 @@ class TestS3BackedFileStore:
         # Clean up the temp file
         temp_file.close()
         if hasattr(temp_file, "name"):
-            try:
+            with contextlib.suppress(OSError, AttributeError):
                 os.unlink(temp_file.name)
-            except (OSError, AttributeError):
-                pass
 
     def test_delete_file(self, file_store: S3BackedFileStore) -> None:
         """Test deleting a file"""

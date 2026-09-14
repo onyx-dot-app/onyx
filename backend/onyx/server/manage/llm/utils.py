@@ -48,9 +48,7 @@ def is_valid_bedrock_model(
         return False
     if any(pattern in model_id.lower() for pattern in NON_LLM_PATTERNS):
         return False
-    if not supports_streaming:
-        return False
-    return True
+    return supports_streaming
 
 
 def generate_bedrock_display_name(model_id: str) -> str:
@@ -283,9 +281,7 @@ def should_filter_as_dated_duplicate(
 ) -> bool:
     """Check if this model is a dated variant and a non-dated version exists."""
     base = extract_base_model_name(model_name)
-    if base and base in all_model_names:
-        return True
-    return False
+    return bool(base and base in all_model_names)
 
 
 def filter_model_configurations(

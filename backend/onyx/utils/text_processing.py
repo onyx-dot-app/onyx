@@ -279,10 +279,7 @@ def is_valid_email(text: str) -> bool:
     """Can use a library instead if more detailed checks are needed"""
     regex = r"^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
 
-    if re.match(regex, text):
-        return True
-    else:
-        return False
+    return bool(re.match(regex, text))
 
 
 def count_punctuation(text: str) -> int:
@@ -309,9 +306,7 @@ def normalize_char(c: str) -> str:
     """Normalize a single character (curly quotes, whitespace, punctuation)."""
     if c in CURLY_TO_STRAIGHT_QUOTES:
         c = CURLY_TO_STRAIGHT_QUOTES[c]
-    if c.isspace():
-        return " "
-    elif re.match(r"[^\w\s\']", c):
+    if c.isspace() or re.match(r"[^\w\s\']", c):
         return " "
     else:
         return c.lower()

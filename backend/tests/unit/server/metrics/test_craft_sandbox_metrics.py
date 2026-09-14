@@ -103,9 +103,11 @@ class TestTimeProvisionPhase:
         """A phase that failed still consumed the caller's time."""
         before = _phase_count(SandboxProvisionPhase.HISTORY_RESTORE)
 
-        with pytest.raises(RuntimeError):
-            with time_provision_phase(SandboxProvisionPhase.HISTORY_RESTORE):
-                raise RuntimeError("restore failed")
+        with (
+            pytest.raises(RuntimeError),
+            time_provision_phase(SandboxProvisionPhase.HISTORY_RESTORE),
+        ):
+            raise RuntimeError("restore failed")
 
         assert _phase_count(SandboxProvisionPhase.HISTORY_RESTORE) == before + 1
 
@@ -118,13 +120,15 @@ class TestTimeProvisionPhase:
             assert _phase_count(phase) == before + 1
 
     def test_collector_failure_does_not_propagate(self) -> None:
-        with patch.object(
-            _provision_phase_duration,
-            "labels",
-            side_effect=RuntimeError("registry exploded"),
+        with (
+            patch.object(
+                _provision_phase_duration,
+                "labels",
+                side_effect=RuntimeError("registry exploded"),
+            ),
+            time_provision_phase(SandboxProvisionPhase.POD_CREATE),
         ):
-            with time_provision_phase(SandboxProvisionPhase.POD_CREATE):
-                pass
+            pass
 
 
 class TestTimeProvisionPhaseAsDecorator:
@@ -168,19 +172,20 @@ class TestTrackSandboxProvisionInProgress:
     def test_returns_to_baseline_when_block_raises(self) -> None:
         before = _sample(_IN_PROGRESS)
 
-        with pytest.raises(RuntimeError):
-            with track_sandbox_provision_in_progress():
-                raise RuntimeError("provision failed")
+        with pytest.raises(RuntimeError), track_sandbox_provision_in_progress():
+            raise RuntimeError("provision failed")
 
         assert _sample(_IN_PROGRESS) == before
 
     def test_does_not_decrement_when_increment_failed(self) -> None:
         """A failed inc must not be followed by a dec, or the gauge drifts
         negative and stays wrong for the life of the process."""
-        with patch.object(
-            _provisions_in_progress, "inc", side_effect=RuntimeError("boom")
+        with (
+            patch.object(
+                _provisions_in_progress, "inc", side_effect=RuntimeError("boom")
+            ),
+            patch.object(_provisions_in_progress, "dec") as mock_dec,
         ):
-            with patch.object(_provisions_in_progress, "dec") as mock_dec:
-                with track_sandbox_provision_in_progress():
-                    pass
-                mock_dec.assert_not_called()
+            with track_sandbox_provision_in_progress():
+                pass
+            mock_dec.assert_not_called()

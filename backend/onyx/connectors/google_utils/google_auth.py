@@ -123,24 +123,24 @@ def get_google_creds(
         )
 
         # tell caller to update token stored in DB if the refresh token changed
-        if oauth_creds:
-            if oauth_creds.refresh_token != authorized_user_info["refresh_token"]:
-                # if oauth_interactive, sanitize the credentials so they don't get stored in the db
-                if (
-                    authentication_method
-                    == GoogleOAuthAuthenticationMethod.OAUTH_INTERACTIVE.value
-                ):
-                    oauth_creds_json_str = sanitize_oauth_credentials(oauth_creds)
-                else:
-                    oauth_creds_json_str = oauth_creds.to_json()
-
-                new_creds_dict = {
-                    DB_CREDENTIALS_DICT_TOKEN_KEY: oauth_creds_json_str,
-                    DB_CREDENTIALS_PRIMARY_ADMIN_KEY: credentials[
-                        DB_CREDENTIALS_PRIMARY_ADMIN_KEY
-                    ],
-                    DB_CREDENTIALS_AUTHENTICATION_METHOD: authentication_method,
-                }
+        if oauth_creds and (
+            oauth_creds.refresh_token != authorized_user_info["refresh_token"]
+        ):
+            # if oauth_interactive, sanitize the credentials so they don't get stored in the db
+            if (
+                authentication_method
+                == GoogleOAuthAuthenticationMethod.OAUTH_INTERACTIVE.value
+            ):
+                oauth_creds_json_str = sanitize_oauth_credentials(oauth_creds)
+            else:
+                oauth_creds_json_str = oauth_creds.to_json()
+            new_creds_dict = {
+                DB_CREDENTIALS_DICT_TOKEN_KEY: oauth_creds_json_str,
+                DB_CREDENTIALS_PRIMARY_ADMIN_KEY: credentials[
+                    DB_CREDENTIALS_PRIMARY_ADMIN_KEY
+                ],
+                DB_CREDENTIALS_AUTHENTICATION_METHOD: authentication_method,
+            }
     elif DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY in credentials:
         # SERVICE ACCOUNT
         service_account_key_json_str = credentials[

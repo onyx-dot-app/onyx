@@ -93,14 +93,16 @@ def test_second_acquirer_times_out_while_first_holds() -> None:
 
         # Under test.
         start = time.monotonic()
-        with pytest.raises(RedisSharedLockAcquisitionError):
-            with redis_shared_lock(
+        with (
+            pytest.raises(RedisSharedLockAcquisitionError),
+            redis_shared_lock(
                 lock_name=TEST_LOCK_NAME,
                 max_time_lock_held_s=30.0,
                 wait_for_lock_s=blocking_timeout,
                 logger=logger,
-            ):
-                pytest.fail("Second thread acquire should not have succeeded.")
+            ),
+        ):
+            pytest.fail("Second thread acquire should not have succeeded.")
 
         # Postcondition.
         elapsed = time.monotonic() - start
@@ -260,35 +262,39 @@ def test_lock_auto_releases_after_max_time() -> None:
 
 def test_different_lock_names_do_not_block_each_other() -> None:
     """Tests that locks with different names do not block each other."""
-    with redis_shared_lock(
-        lock_name=TEST_LOCK_NAME,
-        max_time_lock_held_s=30.0,
-        wait_for_lock_s=1.0,
-        logger=logger,
-    ):
-        # A different lock name should be freely acquirable while the first lock
-        # is still held.
-        with redis_shared_lock(
+    # A different lock name should be freely acquirable while the first lock
+    # is still held.
+    with (
+        redis_shared_lock(
+            lock_name=TEST_LOCK_NAME,
+            max_time_lock_held_s=30.0,
+            wait_for_lock_s=1.0,
+            logger=logger,
+        ),
+        redis_shared_lock(
             lock_name=TEST_LOCK_NAME_OTHER,
             max_time_lock_held_s=30.0,
             wait_for_lock_s=1.0,
             logger=logger,
-        ):
-            pass
+        ),
+    ):
+        pass
 
 
 def test_lock_released_when_body_raises() -> None:
     """
     Tests that exceptions raised inside the context must still release the lock.
     """
-    with pytest.raises(RuntimeError):
-        with redis_shared_lock(
+    with (
+        pytest.raises(RuntimeError),
+        redis_shared_lock(
             lock_name=TEST_LOCK_NAME,
             max_time_lock_held_s=30.0,
             wait_for_lock_s=1.0,
             logger=logger,
-        ):
-            raise RuntimeError("Boom")
+        ),
+    ):
+        raise RuntimeError("Boom")
 
     redis_client = get_shared_redis_client()
     assert not redis_client.exists(TEST_LOCK_NAME), (

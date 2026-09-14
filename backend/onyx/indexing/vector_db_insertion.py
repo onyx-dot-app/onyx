@@ -19,13 +19,14 @@ logger = setup_logger()
 
 
 def _log_insufficient_storage_error(e: Exception) -> None:
-    if isinstance(e, httpx.HTTPStatusError):
-        if e.response.status_code == HTTPStatus.INSUFFICIENT_STORAGE:
-            logger.error(
-                "NOTE: HTTP Status 507 Insufficient Storage indicates "
-                "you need to allocate more memory or disk space to the "
-                "Vespa/index container."
-            )
+    if isinstance(e, httpx.HTTPStatusError) and (
+        e.response.status_code == HTTPStatus.INSUFFICIENT_STORAGE
+    ):
+        logger.error(
+            "NOTE: HTTP Status 507 Insufficient Storage indicates "
+            "you need to allocate more memory or disk space to the "
+            "Vespa/index container."
+        )
 
 
 def write_chunks_to_vector_db_with_backoff(

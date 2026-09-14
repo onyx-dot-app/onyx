@@ -32,21 +32,23 @@ def test_image_flows_match_serialized_span_values() -> None:
 
 
 def test_traced_llm_call_records_flow_and_provider_on_span() -> None:
-    with trace("test_traced_llm_call"):
-        with traced_llm_call(
+    with (
+        trace("test_traced_llm_call"),
+        traced_llm_call(
             flow=LLMFlow.IMAGE_GENERATION,
             model="gpt-image-1",
             provider="openai",
             extra_config={"size": "1024x1024"},
             image_count=2,
-        ) as span:
-            assert span.span_data.model == "gpt-image-1"
-            assert span.span_data.image_count == 2
-            assert span.span_data.model_config is not None
-            assert span.span_data.model_config["flow"] == "image_generation"
-            assert span.span_data.model_config["model_provider"] == "openai"
-            assert span.span_data.model_config["size"] == "1024x1024"
-            assert "image_count" not in span.span_data.model_config
+        ) as span,
+    ):
+        assert span.span_data.model == "gpt-image-1"
+        assert span.span_data.image_count == 2
+        assert span.span_data.model_config is not None
+        assert span.span_data.model_config["flow"] == "image_generation"
+        assert span.span_data.model_config["model_provider"] == "openai"
+        assert span.span_data.model_config["size"] == "1024x1024"
+        assert "image_count" not in span.span_data.model_config
 
 
 def test_generation_span_rejects_nonpositive_image_count() -> None:
@@ -55,13 +57,13 @@ def test_generation_span_rejects_nonpositive_image_count() -> None:
 
 
 def test_traced_llm_call_records_input_messages() -> None:
-    with trace("test_traced_llm_input_messages"):
-        with traced_llm_call(
+    with (
+        trace("test_traced_llm_input_messages"),
+        traced_llm_call(
             flow=LLMFlow.STT,
             model="whisper-1",
             provider="openai",
             input_messages=[{"audio_format": "webm", "audio_bytes": 1234}],
-        ) as span:
-            assert span.span_data.input == [
-                {"audio_format": "webm", "audio_bytes": 1234}
-            ]
+        ) as span,
+    ):
+        assert span.span_data.input == [{"audio_format": "webm", "audio_bytes": 1234}]

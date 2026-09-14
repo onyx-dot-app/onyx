@@ -48,22 +48,24 @@ def test_validation_failure_leaves_a_connector_this_flow_did_not_create(
     db_session.add_all([connector, credential])
     db_session.commit()
 
-    with patch(
-        "onyx.server.documents.cc_pair.validate_ccpair_for_user",
-        side_effect=ConnectorValidationError("bad settings"),
+    with (
+        patch(
+            "onyx.server.documents.cc_pair.validate_ccpair_for_user",
+            side_effect=ConnectorValidationError("bad settings"),
+        ),
+        pytest.raises(OnyxError),
     ):
-        with pytest.raises(OnyxError):
-            associate_credential_to_connector(
-                connector_id=connector.id,
-                credential_id=credential.id,
-                metadata=ConnectorCredentialPairMetadata(
-                    name=f"pair-{suffix}",
-                    access_type=AccessType.PUBLIC,
-                ),
-                user=caller,
-                db_session=db_session,
-                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
-            )
+        associate_credential_to_connector(
+            connector_id=connector.id,
+            credential_id=credential.id,
+            metadata=ConnectorCredentialPairMetadata(
+                name=f"pair-{suffix}",
+                access_type=AccessType.PUBLIC,
+            ),
+            user=caller,
+            db_session=db_session,
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        )
 
     assert (
         db_session.scalar(select(Connector).where(Connector.id == connector.id))
@@ -96,22 +98,24 @@ def test_integrity_error_leaves_the_caller_s_connector_alone(
     db_session.add_all([connector, credential])
     db_session.commit()
 
-    with patch(
-        "onyx.server.documents.cc_pair.add_credential_to_connector",
-        side_effect=IntegrityError("stmt", {}, Exception("duplicate key")),
+    with (
+        patch(
+            "onyx.server.documents.cc_pair.add_credential_to_connector",
+            side_effect=IntegrityError("stmt", {}, Exception("duplicate key")),
+        ),
+        pytest.raises(OnyxError),
     ):
-        with pytest.raises(OnyxError):
-            associate_credential_to_connector(
-                connector_id=connector.id,
-                credential_id=credential.id,
-                metadata=ConnectorCredentialPairMetadata(
-                    name=f"pair-{suffix}",
-                    access_type=AccessType.PUBLIC,
-                ),
-                user=caller,
-                db_session=db_session,
-                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
-            )
+        associate_credential_to_connector(
+            connector_id=connector.id,
+            credential_id=credential.id,
+            metadata=ConnectorCredentialPairMetadata(
+                name=f"pair-{suffix}",
+                access_type=AccessType.PUBLIC,
+            ),
+            user=caller,
+            db_session=db_session,
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        )
 
     assert (
         db_session.scalar(select(Connector).where(Connector.id == connector.id))

@@ -167,15 +167,17 @@ def test_llm_helper_inherits_metadata_only_trace() -> None:
     llm.config.api_base = None
 
     try:
-        with provider.create_trace(
-            "background_llm_call", content_mode=TraceContentMode.METADATA_ONLY
-        ):
-            with llm_generation_span(
+        with (
+            provider.create_trace(
+                "background_llm_call", content_mode=TraceContentMode.METADATA_ONLY
+            ),
+            llm_generation_span(
                 llm=llm,
                 flow=LLMFlow.IMAGE_SUMMARIZATION,
                 input_messages=[{"role": "user", "content": "private document"}],
-            ) as span:
-                pass
+            ) as span,
+        ):
+            pass
     finally:
         set_trace_provider(original_provider)
 
@@ -191,11 +193,13 @@ def test_ensure_trace_reuses_active_trace() -> None:
     set_trace_provider(provider)
 
     try:
-        with provider.create_trace("existing_trace") as existing_trace:
-            with ensure_trace(
+        with (
+            provider.create_trace("existing_trace") as existing_trace,
+            ensure_trace(
                 "unused_trace", content_mode=TraceContentMode.METADATA_ONLY
-            ) as reused_trace:
-                assert reused_trace is existing_trace
+            ) as reused_trace,
+        ):
+            assert reused_trace is existing_trace
     finally:
         set_trace_provider(original_provider)
 

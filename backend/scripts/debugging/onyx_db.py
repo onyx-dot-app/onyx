@@ -49,10 +49,7 @@ class SQLAlchemyDebugging:
 
         logger.info("Found %s tenant id's.", num_tenant_ids)
 
-        num_processed = 0
-        for tenant_id in tenant_ids:
-            num_processed += 1
-
+        for num_processed, tenant_id in enumerate(tenant_ids, start=1):
             token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
             try:

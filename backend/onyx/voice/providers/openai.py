@@ -8,6 +8,7 @@
 
 import asyncio
 import base64
+import contextlib
 import io
 import json
 from collections.abc import AsyncIterator
@@ -316,10 +317,8 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
             await self._ws.close()
         if self._receive_task:
             self._receive_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._receive_task
-            except asyncio.CancelledError:
-                pass
         if self._session:
             await self._session.close()
         self._cleanup_done = True
@@ -501,10 +500,8 @@ class OpenAIStreamingSynthesizer(StreamingSynthesizerProtocol):
             except asyncio.TimeoutError:
                 self._logger.warning("OpenAIStreamingSynthesizer: flush timeout")
                 self._synthesis_task.cancel()
-                try:
+                with contextlib.suppress(asyncio.CancelledError):
                     await self._synthesis_task
-                except asyncio.CancelledError:
-                    pass
             except asyncio.CancelledError:
                 pass
 
@@ -524,10 +521,8 @@ class OpenAIStreamingSynthesizer(StreamingSynthesizerProtocol):
 
         if self._synthesis_task and not self._synthesis_task.done():
             self._synthesis_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._synthesis_task
-            except asyncio.CancelledError:
-                pass
 
         if self._session:
             await self._session.close()

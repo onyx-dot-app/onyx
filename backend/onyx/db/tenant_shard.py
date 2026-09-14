@@ -24,19 +24,18 @@ def record_tenant_placement(tenant_id: str, shard_name: str) -> None:
     if is_default_shard(shard_name):
         return
 
-    with get_catalog_engine().connect() as connection:
-        with connection.begin():
-            connection.execute(
-                text(
-                    """
+    with get_catalog_engine().connect() as connection, connection.begin():
+        connection.execute(
+            text(
+                """
                     INSERT INTO public.tenant_shard (tenant_id, shard_name)
                     VALUES (:tenant_id, :shard_name)
                     ON CONFLICT (tenant_id)
                     DO UPDATE SET shard_name = EXCLUDED.shard_name, updated_at = now()
                     """
-                ),
-                {"tenant_id": tenant_id, "shard_name": shard_name},
-            )
+            ),
+            {"tenant_id": tenant_id, "shard_name": shard_name},
+        )
 
     # A lookup before this write caches "default" for a full TTL, which would send the
     # schema to the wrong database. Local-only: nothing else has seen this tenant.
@@ -54,14 +53,11 @@ def clear_tenant_placement(tenant_id: str) -> None:
     shards are configured, so the table has to exist.
     """
     try:
-        with get_catalog_engine().connect() as connection:
-            with connection.begin():
-                connection.execute(
-                    text(
-                        "DELETE FROM public.tenant_shard WHERE tenant_id = :tenant_id"
-                    ),
-                    {"tenant_id": tenant_id},
-                )
+        with get_catalog_engine().connect() as connection, connection.begin():
+            connection.execute(
+                text("DELETE FROM public.tenant_shard WHERE tenant_id = :tenant_id"),
+                {"tenant_id": tenant_id},
+            )
     except Exception as e:
         if not is_undefined_table(e):
             raise

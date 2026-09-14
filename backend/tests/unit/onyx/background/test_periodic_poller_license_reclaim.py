@@ -22,9 +22,11 @@ def test_license_reclaim_lock_id_is_unique() -> None:
     claim is a try-lock that gives up rather than waiting."""
     with patch("onyx.utils.variable_functionality.global_version") as mock_version:
         mock_version.is_ee_version.return_value = True
-        with patch("onyx.configs.app_configs.AUTO_LLM_CONFIG_URL", "http://llm"):
-            with patch("onyx.configs.app_configs.SCHEDULED_EVAL_DATASET_NAMES", ["ds"]):
-                lock_ids = [t.lock_id for t in _build_periodic_tasks()]
+        with (
+            patch("onyx.configs.app_configs.AUTO_LLM_CONFIG_URL", "http://llm"),
+            patch("onyx.configs.app_configs.SCHEDULED_EVAL_DATASET_NAMES", ["ds"]),
+        ):
+            lock_ids = [t.lock_id for t in _build_periodic_tasks()]
 
     assert len(lock_ids) == len(set(lock_ids))
 

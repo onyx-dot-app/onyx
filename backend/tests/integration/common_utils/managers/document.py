@@ -27,11 +27,10 @@ def _verify_document_permissions(
     acl_keys = set(retrieved_doc.get("access_control_list", {}).keys())
     print(f"ACL keys: {acl_keys}")
 
-    if cc_pair.access_type == AccessType.PUBLIC:
-        if "PUBLIC" not in acl_keys:
-            raise ValueError(
-                f"Document {retrieved_doc['document_id']} is public but does not have the PUBLIC ACL key"
-            )
+    if cc_pair.access_type == AccessType.PUBLIC and "PUBLIC" not in acl_keys:
+        raise ValueError(
+            f"Document {retrieved_doc['document_id']} is public but does not have the PUBLIC ACL key"
+        )
 
     if f"user_email:{doc_creating_user.email}" not in acl_keys:
         raise ValueError(

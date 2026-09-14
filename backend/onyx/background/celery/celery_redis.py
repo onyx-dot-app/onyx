@@ -1,4 +1,5 @@
 # These are helper objects for tracking the keys we need to write in redis
+import contextlib
 import json
 import threading
 from typing import Any, cast
@@ -39,16 +40,12 @@ def celery_get_broker_client(app: Celery) -> Redis:
                 _broker_client.ping()
                 return _broker_client
             except Exception:
-                try:
+                with contextlib.suppress(Exception):
                     _broker_client.close()
-                except Exception:
-                    pass
                 _broker_client = None
         elif _broker_client is not None:
-            try:
+            with contextlib.suppress(Exception):
                 _broker_client.close()
-            except Exception:
-                pass
             _broker_client = None
 
         _broker_url = url

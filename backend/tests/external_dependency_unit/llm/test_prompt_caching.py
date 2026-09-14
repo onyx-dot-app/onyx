@@ -4,6 +4,7 @@ These tests call LLM providers directly and use litellm's completion_cost() to v
 that prompt caching reduces costs.
 """
 
+import contextlib
 import json
 import os
 import tempfile
@@ -63,10 +64,11 @@ def _extract_cache_read_tokens(usage: Usage | None) -> int:
 
 def _get_usage_value(usage: Any, key: str) -> int:
     """Retrieve a numeric field from usage objects or dictionaries."""
-    if isinstance(usage, dict):
-        value = usage.get(key)
-    else:
-        value = getattr(usage, key, None)  # ods: ignore[getattr]
+    value = (
+        usage.get(key)
+        if isinstance(usage, dict)
+        else getattr(usage, key, None)  # ods: ignore[getattr]
+    )
     return int(value or 0)
 
 
@@ -88,14 +90,10 @@ def _resolve_vertex_credentials() -> tuple[Path, bool]:
             "Vertex credentials must be a valid JSON string or file path."
         ) from exc
 
-    temp_file = tempfile.NamedTemporaryFile(
+    with tempfile.NamedTemporaryFile(
         mode="w", suffix=".json", delete=False, encoding="utf-8"
-    )
-    try:
+    ) as temp_file:
         temp_file.write(raw_value)
-        temp_file.flush()
-    finally:
-        temp_file.close()
     return Path(temp_file.name), True
 
 
@@ -595,10 +593,8 @@ def test_google_genai_prompt_caching_reduces_costs(
         )
     finally:
         if should_cleanup:
-            try:
+            with contextlib.suppress(OSError):
                 credentials_path.unlink(missing_ok=True)
-            except OSError:
-                pass
 
     assert success, (
         f"Expected Gemini prompt caching evidence across attempts. Last observed metrics: {last_metrics}"

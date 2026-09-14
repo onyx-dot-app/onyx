@@ -133,9 +133,11 @@ class TestBindAddressSelection:
         """A non-OSError here would bypass the fallback and reach the worker."""
         import onyx.server.metrics.metrics_server as mod
 
-        with patch.object(socket, "getaddrinfo", return_value=[]):
-            with pytest.raises(OSError):
-                mod._start_wsgi_server("::", 9099)
+        with (
+            patch.object(socket, "getaddrinfo", return_value=[]),
+            pytest.raises(OSError),
+        ):
+            mod._start_wsgi_server("::", 9099)
 
     @patch("onyx.server.metrics.metrics_server._start_wsgi_server")
     @patch.dict("os.environ", {"PROMETHEUS_METRICS_BIND_ADDR": "127.0.0.1"})
@@ -191,9 +193,11 @@ class TestDualStackListener:
         server.socket.setsockopt.side_effect = OSError("Protocol not available")
 
         bound = MagicMock()
-        with patch.object(WSGIServer, "server_bind", bound):
-            with patch.object(mod.logger, "warning") as warn:
-                server.server_bind()  # must not raise
+        with (
+            patch.object(WSGIServer, "server_bind", bound),
+            patch.object(mod.logger, "warning") as warn,
+        ):
+            server.server_bind()  # must not raise
 
         bound.assert_called_once()
         assert warn.call_count == 1
@@ -255,9 +259,11 @@ class TestDualStackListener:
             "PROMETHEUS_METRICS_PORT": str(port),
             "PROMETHEUS_METRICS_BIND_ADDR": "::1",
         }
-        with patch.object(mod._DualStackWSGIServer, "__init__", spy):
-            with patch.dict("os.environ", env):
-                assert start_metrics_server("monitoring") == port
+        with (
+            patch.object(mod._DualStackWSGIServer, "__init__", spy),
+            patch.dict("os.environ", env),
+        ):
+            assert start_metrics_server("monitoring") == port
 
         # getaddrinfo yields the 4-tuple (host, port, flowinfo, scope_id) for
         # IPv6; all four must survive to the socket rather than just the host.

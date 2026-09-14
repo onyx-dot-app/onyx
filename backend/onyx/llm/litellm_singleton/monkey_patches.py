@@ -518,30 +518,29 @@ def _patch_responses_api_usage_format() -> None:
         # Transform usage if present and not already the correct type
         if "usage" in values and values["usage"] is not None:
             usage = values["usage"]
-            if not isinstance(usage, ResponseAPIUsage):
-                if isinstance(usage, dict):
-                    values = dict(values)  # Don't mutate original
-                    # Check if it's in chat completion format
-                    if "prompt_tokens" in usage or "completion_tokens" in usage:
-                        # Transform from chat completion format
-                        values["usage"] = ResponseAPIUsage(
-                            input_tokens=usage.get("prompt_tokens", 0),
-                            output_tokens=usage.get("completion_tokens", 0),
-                            total_tokens=usage.get("total_tokens", 0),
-                        )
-                    elif "input_tokens" in usage or "output_tokens" in usage:
-                        # Already in Responses API format, just convert to proper type.
-                        # List every field explicitly so a new field added upstream
-                        # surfaces here (and in the audit header) instead of being
-                        # silently dropped or silently absorbed.
-                        values["usage"] = ResponseAPIUsage(
-                            input_tokens=usage.get("input_tokens", 0),
-                            input_tokens_details=usage.get("input_tokens_details"),
-                            output_tokens=usage.get("output_tokens", 0),
-                            output_tokens_details=usage.get("output_tokens_details"),
-                            total_tokens=usage.get("total_tokens", 0),
-                            cost=usage.get("cost"),
-                        )
+            if not isinstance(usage, ResponseAPIUsage) and isinstance(usage, dict):
+                values = dict(values)  # Don't mutate original
+                # Check if it's in chat completion format
+                if "prompt_tokens" in usage or "completion_tokens" in usage:
+                    # Transform from chat completion format
+                    values["usage"] = ResponseAPIUsage(
+                        input_tokens=usage.get("prompt_tokens", 0),
+                        output_tokens=usage.get("completion_tokens", 0),
+                        total_tokens=usage.get("total_tokens", 0),
+                    )
+                elif "input_tokens" in usage or "output_tokens" in usage:
+                    # Already in Responses API format, just convert to proper type.
+                    # List every field explicitly so a new field added upstream
+                    # surfaces here (and in the audit header) instead of being
+                    # silently dropped or silently absorbed.
+                    values["usage"] = ResponseAPIUsage(
+                        input_tokens=usage.get("input_tokens", 0),
+                        input_tokens_details=usage.get("input_tokens_details"),
+                        output_tokens=usage.get("output_tokens", 0),
+                        output_tokens_details=usage.get("output_tokens_details"),
+                        total_tokens=usage.get("total_tokens", 0),
+                        cost=usage.get("cost"),
+                    )
 
         # Call original model_construct (need to call it as unbound method)
         return original_model_construct.__func__(cls, _fields_set, **values)
@@ -599,9 +598,7 @@ def _patch_logging_assembled_streaming_response() -> None:
         """
         if self.stream is not True:
             return None
-        if isinstance(result, ModelResponse):
-            return result
-        elif isinstance(result, TextCompletionResponse):
+        if isinstance(result, (ModelResponse, TextCompletionResponse)):
             return result
         elif isinstance(
             result,

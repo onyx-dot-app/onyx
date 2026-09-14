@@ -676,9 +676,12 @@ def test_approval_requested_notification_is_created(
             .order_by(Notification.first_shown.desc())
             .first()
         )
-        if notif is not None and notif.additional_data is not None:
-            if notif.additional_data.get("approval_id") == str(pending.approval_id):
-                break
+        if (
+            notif is not None
+            and notif.additional_data is not None
+            and (notif.additional_data.get("approval_id") == str(pending.approval_id))
+        ):
+            break
         time.sleep(0.5)
 
     assert notif is not None, (

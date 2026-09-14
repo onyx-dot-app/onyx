@@ -72,9 +72,7 @@ class CustomTool(Tool[None]):
         )
 
         # Check for both Authorization header and OAuth token
-        has_auth_header = any(
-            key.lower() == "authorization" for key in self.headers.keys()
-        )
+        has_auth_header = any(key.lower() == "authorization" for key in self.headers)
         if has_auth_header and self._user_oauth_token:
             logger.warning(
                 "Tool '%s' has both an Authorization header and OAuth token set. This is likely a configuration error as the OAuth token will override the custom header.",

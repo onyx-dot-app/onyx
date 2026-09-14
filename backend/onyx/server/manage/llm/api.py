@@ -413,7 +413,7 @@ def fetch_custom_provider_names(
                 value=name,
                 label=PROVIDER_DISPLAY_NAMES.get(name, name.replace("_", " ").title()),
             )
-            for name in litellm.models_by_provider.keys()
+            for name in litellm.models_by_provider
             if name not in well_known
         ),
         key=lambda o: o.label.lower(),

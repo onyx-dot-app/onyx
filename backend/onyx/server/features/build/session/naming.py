@@ -97,21 +97,21 @@ def generate_session_name(db_session: DBSession, session_id: UUID) -> str:
             ),
         ]
         generated = ""
-        with ensure_trace(
-            "build_session_naming",
-            group_id=str(session_id),
-            metadata={"session_id": str(session_id)},
-        ):
-            with llm_generation_span(
+        with (
+            ensure_trace(
+                "build_session_naming",
+                group_id=str(session_id),
+                metadata={"session_id": str(session_id)},
+            ),
+            llm_generation_span(
                 llm=llm,
                 flow=LLMFlow.BUILD_SESSION_NAMING,
                 input_messages=prompt_messages,
-            ) as span_generation:
-                response = llm.invoke(
-                    prompt_messages, reasoning_effort=ReasoningEffort.OFF
-                )
-                record_llm_response(span_generation, response)
-                generated = llm_response_to_string(response).strip().strip('"')
+            ) as span_generation,
+        ):
+            response = llm.invoke(prompt_messages, reasoning_effort=ReasoningEffort.OFF)
+            record_llm_response(span_generation, response)
+            generated = llm_response_to_string(response).strip().strip('"')
 
         if not generated:
             return _fallback_name(session_id)

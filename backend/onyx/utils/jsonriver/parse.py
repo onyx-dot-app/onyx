@@ -378,21 +378,19 @@ class _Parser:
                 new_state.value = obj
                 self._state_stack.append(new_state)
 
-        elif parent_state.type == _StateEnum.InObjectExpectingKey:
-            if self._state_stack and self._state_stack[-1] == parent_state:
-                self._state_stack.pop()
-                obj = cast(JsonObject, parent_state.value)
-                self._state_stack.append(_InObjectExpectingValueState(updated, obj))
+        elif parent_state.type == _StateEnum.InObjectExpectingKey and (
+            self._state_stack and self._state_stack[-1] == parent_state
+        ):
+            self._state_stack.pop()
+            obj = cast(JsonObject, parent_state.value)
+            self._state_stack.append(_InObjectExpectingValueState(updated, obj))
 
     def _progress_value(self, token_type: JsonTokenType, value: JsonValue) -> JsonValue:
         """Create initial value for a token and push appropriate state"""
         if token_type == JsonTokenType.Null:
             return None
 
-        elif token_type == JsonTokenType.Boolean:
-            return value
-
-        elif token_type == JsonTokenType.Number:
+        elif token_type == JsonTokenType.Boolean or token_type == JsonTokenType.Number:
             return value
 
         elif token_type == JsonTokenType.StringStart:

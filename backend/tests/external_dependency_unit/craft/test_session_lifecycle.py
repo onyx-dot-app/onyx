@@ -1213,9 +1213,11 @@ class TestConcurrentCreateLock:
             0.05,
         )
         try:
-            with pytest.raises(SessionCreationLockAcquisitionError):
-                with session_creation_lock(test_user.id):
-                    pytest.fail("contending session creation acquired the lock")
+            with (
+                pytest.raises(SessionCreationLockAcquisitionError),
+                session_creation_lock(test_user.id),
+            ):
+                pytest.fail("contending session creation acquired the lock")
         finally:
             held_lock.release()
 

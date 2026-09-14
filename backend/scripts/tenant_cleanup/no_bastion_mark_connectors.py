@@ -559,9 +559,7 @@ def main() -> None:
             }
 
             # Process results as they complete
-            completed: int = 0
-            for future in as_completed(future_to_tenant):
-                completed += 1
+            for completed, future in enumerate(as_completed(future_to_tenant), start=1):
                 tenant_id, success, error = future.result()
 
                 if success:

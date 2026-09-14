@@ -1,3 +1,4 @@
+import contextlib
 import multiprocessing
 import os
 import time
@@ -590,11 +591,9 @@ def docfetching_proxy_task(
                 # since RSS can grow by GBs within the 60s emit cadence.
                 if INDEXING_WORKER_MEMORY_LIMIT_MB > 0:
                     rss_mb: int | None = None
-                    try:
+                    # process likely exited; job.done() handles it next loop
+                    with contextlib.suppress(psutil.Error):
                         rss_mb = psutil.Process(pid).memory_info().rss // (1024 * 1024)
-                    except psutil.Error:
-                        # process likely exited; job.done() handles it next loop
-                        pass
 
                     if rss_mb is not None and rss_mb > INDEXING_WORKER_MEMORY_LIMIT_MB:
                         task_logger.warning(

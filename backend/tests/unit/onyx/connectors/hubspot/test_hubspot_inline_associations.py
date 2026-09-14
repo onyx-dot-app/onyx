@@ -314,13 +314,15 @@ class TestSearchWithTimeSplit:
                 return original(fn, props, s, e, prop)
             return iter(continuation)
 
-        with patch.object(
-            connector, "_search_paginated_results", return_value=iter(first_batch)
+        with (
+            patch.object(
+                connector, "_search_paginated_results", return_value=iter(first_batch)
+            ),
+            patch.object(connector, "_search_time_range", side_effect=fake_split),
         ):
-            with patch.object(connector, "_search_time_range", side_effect=fake_split):
-                results = list(
-                    fake_split(MagicMock(), ["prop"], start, end, "hs_lastmodifieddate")
-                )
+            results = list(
+                fake_split(MagicMock(), ["prop"], start, end, "hs_lastmodifieddate")
+            )
 
         # All 10k fetched results are yielded, then the continuation
         assert len(results) == HUBSPOT_SEARCH_LIMIT + len(continuation)

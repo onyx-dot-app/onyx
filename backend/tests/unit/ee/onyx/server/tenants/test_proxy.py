@@ -32,10 +32,7 @@ def make_license_payload(
 ) -> LicensePayload:
     """Helper to create a test LicensePayload."""
     now = datetime.now(timezone.utc)
-    if expired:
-        expires_at = now - timedelta(days=1)
-    else:
-        expires_at = now + timedelta(days=30)
+    expires_at = now - timedelta(days=1) if expired else now + timedelta(days=30)
 
     return LicensePayload(
         version="1.0",

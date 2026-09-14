@@ -126,9 +126,12 @@ def upload_files_to_user_files_with_indexing(
     background_tasks: BackgroundTasks | None = None,
     incognito_session_id: UUID | None = None,
 ) -> CategorizedFilesResult:
-    if project_id is not None and user is not None:
-        if not check_project_ownership(project_id, user.id, db_session):
-            raise HTTPException(status_code=404, detail="Project not found")
+    if (
+        project_id is not None
+        and user is not None
+        and (not check_project_ownership(project_id, user.id, db_session))
+    ):
+        raise HTTPException(status_code=404, detail="Project not found")
 
     categorized_files_result = create_user_files(
         files,

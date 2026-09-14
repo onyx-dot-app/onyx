@@ -91,13 +91,15 @@ class TestMakeBillingRequest:
         )
         mock_client = make_mock_http_client("post", side_effect=error)
 
-        with patch("httpx.AsyncClient", mock_client):
-            with pytest.raises(OnyxError) as exc_info:
-                await _make_billing_request(
-                    method="POST",
-                    path="/test",
-                    error_message="Test failed",
-                )
+        with (
+            patch("httpx.AsyncClient", mock_client),
+            pytest.raises(OnyxError) as exc_info,
+        ):
+            await _make_billing_request(
+                method="POST",
+                path="/test",
+                error_message="Test failed",
+            )
 
         assert exc_info.value.status_code == 400
         assert exc_info.value.error_code is OnyxErrorCode.BAD_GATEWAY
@@ -146,9 +148,11 @@ class TestMakeBillingRequest:
         error = httpx.RequestError("Connection failed")
         mock_client = make_mock_http_client("post", side_effect=error)
 
-        with patch("httpx.AsyncClient", mock_client):
-            with pytest.raises(OnyxError) as exc_info:
-                await _make_billing_request(method="POST", path="/test")
+        with (
+            patch("httpx.AsyncClient", mock_client),
+            pytest.raises(OnyxError) as exc_info,
+        ):
+            await _make_billing_request(method="POST", path="/test")
 
         assert exc_info.value.status_code == 502
         assert exc_info.value.error_code is OnyxErrorCode.BAD_GATEWAY

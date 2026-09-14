@@ -1,3 +1,4 @@
+import contextlib
 import contextvars
 import logging
 import os
@@ -382,10 +383,9 @@ def _add_file_handlers(logger: logging.Logger, formatter: logging.Formatter) -> 
 
             # Truncate log file if DEV_LOGGING_ENABLED (for clean dev experience)
             if DEV_LOGGING_ENABLED and os.path.exists(file_name):
-                try:
+                # Ignore errors, just proceed with normal logging
+                with contextlib.suppress(Exception):
                     open(file_name, "w").close()  # Truncate the file
-                except Exception:
-                    pass  # Ignore errors, just proceed with normal logging
 
             file_handler = RotatingFileHandler(
                 file_name,
