@@ -1,7 +1,8 @@
 """Graph driveItem handling shared by the file-bearing Microsoft connectors.
 
 Covers the item model, the delta and folder walks, the time-window filter, the
-size-capped download and the extraction of an item's bytes into Onyx sections.
+size-capped download with its log redaction, and the extraction of an item's
+bytes into Onyx sections.
 Assembling the final ``Document`` stays with each connector, because the source,
 the permission lookup and the metadata are the connector's identity.
 """
