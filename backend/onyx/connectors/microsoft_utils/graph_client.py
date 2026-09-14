@@ -1,4 +1,4 @@
-"""Microsoft Graph transport: the retry policies and the authenticated GET.
+"""Microsoft Graph transport: retry policies, the authenticated GET, paging.
 
 Two status sets live here because callers disagree about 5xx.
 :data:`RETRYABLE_HTTP_STATUSES` is the narrow set, used only by
@@ -11,7 +11,7 @@ This layer carries no source identity, so a connector composes it.
 
 import random
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from typing import Any
 
 import requests
@@ -228,3 +228,17 @@ class GraphApiClient:
         self, url: str, params: dict[str, str] | None = None
     ) -> dict[str, Any]:
         return graph_api_get_json(self.get_access_token, url, params)
+
+
+def iter_graph_collection(
+    client: GraphApiClient,
+    url: str,
+    params: dict[str, str] | None = None,
+) -> Generator[dict[str, Any], None, None]:
+    """Yield every item of a Graph collection, following nextLink page by page."""
+    page_url: str | None = url
+    while page_url:
+        data = client.get_json(page_url, params)
+        params = None  # nextLink already embeds the query
+        yield from data.get("value", [])
+        page_url = data.get("@odata.nextLink")

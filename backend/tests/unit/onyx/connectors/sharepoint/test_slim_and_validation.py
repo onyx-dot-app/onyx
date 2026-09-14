@@ -467,3 +467,18 @@ def test_probe_role_assignments_rejects_client_secret_auth(
     assert "certificate" in message.lower()
     assert "Sites.FullControl.All" not in message
     mock_acquire.assert_not_called()
+
+
+@patch("onyx.connectors.sharepoint.connector.acquire_token_for_rest")
+def test_probe_role_assignments_rejects_client_secret_in_all_sites_mode(
+    mock_acquire: MagicMock,
+) -> None:
+    """With no configured sites there is nothing to probe, but the credential
+    type is still wrong and permission sync would still fail later."""
+    connector = SharepointConnector(sites=[])
+    connector.auth_method = MicrosoftAuthMethod.CLIENT_SECRET
+
+    with pytest.raises(ConnectorValidationError):
+        connector.probe_role_assignments_permission()
+
+    mock_acquire.assert_not_called()

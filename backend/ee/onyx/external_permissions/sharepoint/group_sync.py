@@ -54,8 +54,7 @@ def sharepoint_group_sync(
         external_groups = get_sharepoint_external_groups(
             ctx,
             connector.graph_client,
-            graph_api_base=connector.graph_api_base,
-            get_access_token=connector._get_graph_access_token,
+            graph_api=connector.graph_api,
             enumerate_all_ad_groups=enumerate_all,
         )
 

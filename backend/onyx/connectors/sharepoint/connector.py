@@ -735,11 +735,9 @@ class SharepointConnector(
         Probes up to the first ROLE_ASSIGNMENTS_PROBE_MAX_SITES configured
         sites in parallel and fails if any of them rejects the request, so
         per-site permission gaps surface at validation time rather than
-        mid-index. Only runs when credentials have been loaded.
+        mid-index. The credential check needs only the auth method. The site
+        probe also needs the MSAL app, the tenant domain and configured sites.
         """
-        if not (self.msal_app and self.sp_tenant_domain and self.sites):
-            return
-
         # SharePoint blocks app-only REST tokens that came from a client
         # secret, so no permission grant can make this credential work.
         if self.auth_method is MicrosoftAuthMethod.CLIENT_SECRET:
@@ -750,6 +748,9 @@ class SharepointConnector(
                 "which permissions are granted. Recreate the credential with "
                 "Certificate Authentication, or turn permission sync off."
             )
+
+        if not (self.msal_app and self.sp_tenant_domain and self.sites):
+            return
 
         try:
             token_response = acquire_token_for_rest(
