@@ -76,7 +76,7 @@ export interface ReIndexModalProps {
   onRunIndex: (fromBeginning: boolean) => Promise<void>;
 }
 
-export default function ReIndexModal({ hide, onRunIndex }: ReIndexModalProps) {
+function ReIndexModal({ hide, onRunIndex }: ReIndexModalProps) {
   const t = useTranslations("admin.connector");
   const [isProcessing, setIsProcessing] = useState(false);
 

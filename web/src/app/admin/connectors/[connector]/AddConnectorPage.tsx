@@ -71,7 +71,7 @@ import { Tooltip } from "@opal/components";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 
-export interface AdvancedConfig {
+interface AdvancedConfig {
   refreshFreq: number;
   pruneFreq: number;
   indexingStart: string;
@@ -80,7 +80,7 @@ export interface AdvancedConfig {
 const BASE_CONNECTOR_URL = "/api/manage/admin/connector";
 const CONNECTOR_CREATION_TIMEOUT_MS = 10000; // ~10 seconds is reasonable for longer connector validation
 
-export async function submitConnector<T>(
+async function submitConnector<T>(
   connector: ConnectorBase<T>,
   connectorId?: number,
   fakeCredential?: boolean

@@ -576,14 +576,14 @@ function mapApiSessionStatus(
 }
 
 // Re-export types for consumers
-export type { Artifact, ArtifactType, SessionHistoryItem };
+export type { Artifact, SessionHistoryItem };
 
 // =============================================================================
 // Store Types (mirrors chat's useChatSessionStore pattern)
 // =============================================================================
 
 /** Pre-provisioning state machine - exactly one of these states at a time */
-export type PreProvisioningState =
+type PreProvisioningState =
   | { status: "idle" }
   | { status: "provisioning" }
   | { status: "ready"; sessionId: string }
@@ -604,7 +604,7 @@ interface CraftQueuedMessage {
 const EMPTY_CRAFT_QUEUED_MESSAGES: readonly CraftQueuedMessage[] = [];
 
 /** File preview tab data */
-export interface FilePreviewTab {
+interface FilePreviewTab {
   path: string;
   fileName: string;
 }
@@ -620,12 +620,12 @@ export interface FilesTabState {
 }
 
 /** Tab history entry - can be a pinned tab or a transient panel tab */
-export type TabHistoryEntry =
+type TabHistoryEntry =
   | { type: "pinned"; tab: OutputTabType }
   | { type: "panel-tab"; tabId: string };
 
 /** Browser-style tab navigation history */
-export interface TabNavigationHistory {
+interface TabNavigationHistory {
   entries: TabHistoryEntry[];
   currentIndex: number;
 }

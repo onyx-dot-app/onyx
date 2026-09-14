@@ -76,7 +76,7 @@ export interface CCPairFullInfo {
   supports_targeted_reindex: boolean;
 }
 
-export interface PaginatedIndexAttempts {
+interface PaginatedIndexAttempts {
   index_attempts: IndexAttemptSnapshot[];
   page: number;
   total_pages: number;
@@ -170,7 +170,7 @@ export interface PaginatedIndexAttemptErrors {
 }
 
 /** Request body for `POST /manage/admin/indexing/targeted-reindex`. */
-export interface TargetedReindexRequest {
+interface TargetedReindexRequest {
   error_ids?: number[];
   targets?: { cc_pair_id: number; document_id: string }[];
 }
@@ -183,7 +183,7 @@ export interface TargetedReindexResponse {
 }
 
 /** Job status payload from `GET /manage/admin/indexing/targeted-reindex/{job_id}`. */
-export interface TargetedReindexJobStatus {
+interface TargetedReindexJobStatus {
   id: number;
   status:
     | "not_started"

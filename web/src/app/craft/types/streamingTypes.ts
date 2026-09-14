@@ -53,14 +53,14 @@ export interface BuildMessageAttachment {
 // Tool Call Types (for tracking agent tool usage)
 // =============================================================================
 
-export type ToolCallStatus =
+type ToolCallStatus =
   | "pending"
   | "in_progress"
   | "completed"
   | "failed"
   | "cancelled";
 
-export interface ToolCall {
+interface ToolCall {
   /** Unique ID for this tool call */
   id: string;
   /** Tool kind/category (e.g., "edit", "execute", "other") */
@@ -96,7 +96,7 @@ export type SessionStatus =
   | "active"
   | "failed";
 
-export interface Session {
+interface Session {
   id: string | null;
   status: SessionStatus;
   artifacts: Artifact[];
@@ -115,14 +115,14 @@ export interface SessionHistoryItem {
 // API Response Types
 // =============================================================================
 
-export type ApiSandboxStatus =
+type ApiSandboxStatus =
   | "provisioning"
   | "running"
   | "sleeping"
   | "terminated"
   | "failed";
 
-export interface ApiSandboxResponse {
+interface ApiSandboxResponse {
   id: string;
   status: ApiSandboxStatus;
   container_id: string | null;
@@ -169,7 +169,7 @@ export interface ApiMessageResponse {
   created_at: string;
 }
 
-export type InteractiveTurnStatus =
+type InteractiveTurnStatus =
   | "QUEUED"
   | "RUNNING"
   | "SUCCEEDED"
@@ -233,7 +233,7 @@ export interface SandboxRuntimeState extends Omit<
 // =============================================================================
 
 // Artifact Packets
-export type BackendArtifactType =
+type BackendArtifactType =
   | "web_app"
   | "markdown"
   | "image"
@@ -245,7 +245,7 @@ export type BackendArtifactType =
   | "code"
   | "other";
 
-export interface ArtifactCreatedPacket {
+interface ArtifactCreatedPacket {
   type: "artifact_created";
   artifact: {
     id: string;

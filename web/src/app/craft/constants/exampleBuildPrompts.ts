@@ -6,7 +6,7 @@ import {
   SvgLightbulbSimple,
 } from "@opal/icons";
 
-export interface BuildPrompt {
+interface BuildPrompt {
   id: string;
   /** Sentence-length description shown in the expanded prompt list */
   summary: string;

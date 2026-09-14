@@ -83,7 +83,7 @@ export type ToolName =
   | "invalid"
   | "unknown";
 
-export interface ParsedTextChunk {
+interface ParsedTextChunk {
   type: "text_chunk";
   text: string;
   /** Opencode session this event was emitted on — child's id for subagent child events, else null. */
@@ -92,7 +92,7 @@ export interface ParsedTextChunk {
   parentSessionId: string | null;
 }
 
-export interface ParsedThinkingChunk {
+interface ParsedThinkingChunk {
   type: "thinking_chunk";
   text: string;
   /** Opencode session this event was emitted on — child's id for subagent child events, else null. */
@@ -155,7 +155,7 @@ export interface ParsedToolCallProgress {
   subagentSessionId: string | null;
 }
 
-export interface ParsedPromptResponse {
+interface ParsedPromptResponse {
   type: "prompt_response";
 }
 
@@ -170,41 +170,41 @@ export interface ParsedArtifact {
   };
 }
 
-export interface ParsedError {
+interface ParsedError {
   type: "error";
   message: string;
 }
 
-export interface ParsedApprovalRequested {
+interface ParsedApprovalRequested {
   type: "approval_requested";
   approvalId: string;
   sessionId: string;
 }
 
-export interface ParsedSubagentStarted {
+interface ParsedSubagentStarted {
   type: "subagent_started";
   subagentSessionId: string;
   parentSessionId: string | null;
 }
 
-export interface ParsedConnectAppRequest {
+interface ParsedConnectAppRequest {
   type: "connect_app_request";
   requestId: string;
   externalAppId: number;
   reason: string | null;
 }
 
-export interface ParsedContextUsage {
+interface ParsedContextUsage {
   type: "context_usage";
   usedTokens: number;
 }
 
-export interface ParsedCompaction {
+interface ParsedCompaction {
   type: "compaction";
   summary: string | null;
 }
 
-export interface ParsedUnknown {
+interface ParsedUnknown {
   type: "unknown";
 }
 

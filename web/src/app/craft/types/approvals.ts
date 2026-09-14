@@ -1,4 +1,4 @@
-export type ApprovalDecision = "APPROVED" | "REJECTED" | "EXPIRED";
+type ApprovalDecision = "APPROVED" | "REJECTED" | "EXPIRED";
 
 // Server-only EXPIRED is excluded; clients can only submit a yes/no.
 export type ApprovalSubmitDecision = "APPROVED" | "REJECTED";
@@ -6,7 +6,7 @@ export type ApprovalSubmitDecision = "APPROVED" | "REJECTED";
 // Mirrors backend `EndpointPolicy`. DENY blocks before persistence, so
 // persisted entries are always ASK or ALWAYS — included only to match
 // the backend enum exactly.
-export type ApprovalActionPolicy = "ASK" | "ALWAYS" | "DENY";
+type ApprovalActionPolicy = "ASK" | "ALWAYS" | "DENY";
 
 // Mirrors backend `ActionMatch`.
 export interface ApprovalAction {

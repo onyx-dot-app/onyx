@@ -27,7 +27,7 @@ export function formatAbsolute(isoOrDate: string | Date | null): string {
   return formatRelative(date, new Date());
 }
 
-export function formatDurationMs(ms: number): string {
+function formatDurationMs(ms: number): string {
   if (!Number.isFinite(ms) || ms < 0) return "—";
   if (ms < 1000) return "<1s";
   const s = Math.floor(ms / 1000);
@@ -84,9 +84,7 @@ export function getNonClickableReason(
   return null;
 }
 
-export function isScheduledRunInFlight(
-  status: ScheduledTaskRunStatus
-): boolean {
+function isScheduledRunInFlight(status: ScheduledTaskRunStatus): boolean {
   return status === "RUNNING" || status === "AWAITING_APPROVAL";
 }
 

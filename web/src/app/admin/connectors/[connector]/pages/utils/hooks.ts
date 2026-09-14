@@ -1,7 +1,6 @@
 import { GmailConfig } from "@/lib/connectors/connectors";
 
-export const gmailConnectorNameBuilder = (values: GmailConfig) =>
-  "GmailConnector";
+const gmailConnectorNameBuilder = (values: GmailConfig) => "GmailConnector";
 
 import { usePublicCredentials } from "@/lib/hooks";
 import {

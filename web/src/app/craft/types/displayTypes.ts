@@ -45,7 +45,7 @@ export type ToolCallStatus =
   | "failed"
   | "cancelled";
 
-export type ToolCallName =
+type ToolCallName =
   | "glob"
   | "grep"
   | "read"

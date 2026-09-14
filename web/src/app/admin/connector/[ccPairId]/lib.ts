@@ -41,7 +41,7 @@ export async function triggerIndexing(
   }
 }
 
-export function getTooltipMessage(
+function getTooltipMessage(
   isInvalid: boolean,
   isDeleting: boolean,
   isIndexing: boolean,

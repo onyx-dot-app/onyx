@@ -12,7 +12,7 @@ const BASE_URL = "/api/manage/admin/discord-bot";
 
 // === Bot Config (Self-hosted only) ===
 
-export async function fetchBotConfig(): Promise<DiscordBotConfig> {
+async function fetchBotConfig(): Promise<DiscordBotConfig> {
   const response = await fetch(`${BASE_URL}/config`);
   if (!response.ok) {
     throw new Error("Failed to fetch bot config");
@@ -44,7 +44,7 @@ export async function deleteBotConfig(): Promise<void> {
 
 // === Guild Config ===
 
-export async function fetchGuildConfigs(): Promise<DiscordGuildConfig[]> {
+async function fetchGuildConfigs(): Promise<DiscordGuildConfig[]> {
   const response = await fetch(`${BASE_URL}/guilds`);
   if (!response.ok) {
     throw new Error("Failed to fetch guild configs");
@@ -61,9 +61,7 @@ export async function createGuildConfig(): Promise<DiscordGuildConfigCreateRespo
   return response.json();
 }
 
-export async function fetchGuildConfig(
-  configId: number
-): Promise<DiscordGuildConfig> {
+async function fetchGuildConfig(configId: number): Promise<DiscordGuildConfig> {
   const response = await fetch(`${BASE_URL}/guilds/${configId}`);
   if (!response.ok) {
     throw new Error("Failed to fetch guild config");
@@ -98,7 +96,7 @@ export async function deleteGuildConfig(configId: number): Promise<void> {
 
 // === Channel Config ===
 
-export async function fetchChannelConfigs(
+async function fetchChannelConfigs(
   guildConfigId: number
 ): Promise<DiscordChannelConfig[]> {
   const response = await fetch(`${BASE_URL}/guilds/${guildConfigId}/channels`);
@@ -108,7 +106,7 @@ export async function fetchChannelConfigs(
   return response.json();
 }
 
-export async function updateChannelConfig(
+async function updateChannelConfig(
   guildConfigId: number,
   channelConfigId: number,
   update: DiscordChannelConfigUpdate

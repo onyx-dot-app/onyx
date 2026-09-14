@@ -22,4 +22,4 @@ export function isWebappPreviewEnabled(
   return canQueryWebapp && state !== "none";
 }
 
-export const NO_WEBAPP_LABEL = "No web app in this session yet";
+const NO_WEBAPP_LABEL = "No web app in this session yet";

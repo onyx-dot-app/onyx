@@ -47,7 +47,7 @@ export function getAppTypeLogo(
 // Keep in sync with backend Pydantic models in
 // `server/features/build/external_apps/models.py`.
 
-export interface OrgCredentialFieldDescriptor {
+interface OrgCredentialFieldDescriptor {
   key: string;
   label: string;
   description: string;
@@ -57,7 +57,7 @@ export interface OrgCredentialFieldDescriptor {
 // Mirrors `onyx.db.enums.EndpointPolicy` on the backend.
 export type EndpointPolicy = "ALWAYS" | "ASK" | "DENY";
 
-export interface EndpointDescriptor {
+interface EndpointDescriptor {
   action_id: string;
   normalised_name: string;
   description: string;
@@ -66,7 +66,7 @@ export interface EndpointDescriptor {
   default_policy: EndpointPolicy;
 }
 
-export interface ActionPolicyView {
+interface ActionPolicyView {
   action_id: string;
   normalised_name: string;
   description: string;

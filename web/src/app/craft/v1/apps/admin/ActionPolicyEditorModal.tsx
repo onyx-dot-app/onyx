@@ -20,7 +20,7 @@ import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
 
 // One agent-callable capability whose approval policy an admin can set —
 // an external-app action or an MCP tool.
-export interface PolicyEditorItem {
+interface PolicyEditorItem {
   id: string;
   name: string;
   description: string;

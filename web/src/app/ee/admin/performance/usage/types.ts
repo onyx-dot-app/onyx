@@ -1,6 +1,6 @@
 import { Feedback, SessionType } from "@/lib/types";
 
-export interface AbridgedSearchDoc {
+interface AbridgedSearchDoc {
   document_id: string;
   semantic_identifier: string;
   link: string | null;

@@ -30,7 +30,7 @@ export const createStandardAnswerCategory = async (
   });
 };
 
-export const updateStandardAnswerCategory = async (
+const updateStandardAnswerCategory = async (
   id: number,
   request: StandardAnswerCategoryCreationRequest
 ) => {

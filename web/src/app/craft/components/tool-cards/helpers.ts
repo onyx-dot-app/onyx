@@ -82,7 +82,7 @@ export function getStatusDisplay(status: ToolCallStatus): StatusDisplay {
   }
 }
 
-export { SvgLoader, SvgGlobe };
+export { SvgLoader };
 
 /** The "Using <skill> skill" invocation card (drives the sparkle + border). */
 export function isSkillInvocation(toolCall: ToolCallState): boolean {

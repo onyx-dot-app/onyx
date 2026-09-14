@@ -15,7 +15,7 @@ export type ScheduledTaskRunStatus =
   | "SKIPPED"
   | "AWAITING_APPROVAL";
 
-export type ScheduledTaskTriggerSource = "SCHEDULED" | "MANUAL_RUN_NOW";
+type ScheduledTaskTriggerSource = "SCHEDULED" | "MANUAL_RUN_NOW";
 
 export type EditorMode = "interval" | "daily_weekly" | "advanced";
 
