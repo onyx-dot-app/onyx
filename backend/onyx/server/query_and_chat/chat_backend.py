@@ -93,6 +93,10 @@ from onyx.db.user_file import get_file_id_by_user_file_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.serving import (
+    RESPONSE_POLICY_VERSION,
+    resolve_inline_disposition,
+)
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.factory import get_llm_for_persona, get_llm_token_counter
 from onyx.llm.models import (
@@ -153,26 +157,6 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 router = APIRouter(prefix="/chat")
-
-# Uploads keep the MIME type the client declared, so anything outside this set is
-# served as an attachment: a text/html or image/svg+xml file rendered inline would
-# run script on the app origin with the viewer's session. Keep to inert types.
-_INLINE_SAFE_MIME_TYPES: frozenset[str] = frozenset(
-    {
-        "image/png",
-        "image/jpg",
-        "image/jpeg",
-        "image/gif",
-        "image/webp",
-        "application/pdf",
-        "text/plain",
-    }
-)
-
-# Mixed into the `fetch_chat_file` ETag. Responses are cached `immutable` for a
-# year, so bump this whenever the response security policy changes: it is the only
-# way to make clients drop entries cached under the old policy.
-_RESPONSE_POLICY_VERSION: str = "v2"
 
 
 def _get_available_tokens_for_persona(
@@ -1182,21 +1166,25 @@ def fetch_chat_file(
     if not file_record:
         raise HTTPException(status_code=404, detail="File not found")
 
-    media_type = file_record.file_type
     # `parsed` only changes behavior for spreadsheet files (xlsx is a binary zip
     # the frontend cannot render); everything else is served raw as usual.
-    parse_spreadsheet = parsed and is_spreadsheet_mime_type(media_type)
+    parse_spreadsheet = parsed and is_spreadsheet_mime_type(file_record.file_type)
+
+    media_type, security_headers = resolve_inline_disposition(
+        file_record.file_type,
+        # A parsed spreadsheet is served as a JSON preview, not as the stored bytes.
+        fallback_disposition=None if parse_spreadsheet else "attachment",
+    )
 
     # Files served here are immutable (content-addressed by file_id), so allow long-lived caching.
     # Use `private` because this is behind auth / tenant scoping.
     etag_variant: str = "-parsed" if parse_spreadsheet else ""
-    etag: str = f'"{file_id}{etag_variant}-{_RESPONSE_POLICY_VERSION}"'
-    cache_headers = {
+    etag: str = f'"{file_id}{etag_variant}-{RESPONSE_POLICY_VERSION}"'
+    cache_headers: dict[str, str] = {
         "Cache-Control": "private, max-age=31536000, immutable",
         "ETag": etag,
         "Vary": "Cookie",
-        "X-Content-Type-Options": "nosniff",
-        "Content-Security-Policy": "sandbox",
+        **security_headers,
     }
 
     if request.headers.get("if-none-match") == etag:
@@ -1211,13 +1199,8 @@ def fetch_chat_file(
             )
         return JSONResponse(content=preview.model_dump(), headers=cache_headers)
 
-    file_headers = dict(cache_headers)
-    if media_type.split(";")[0].strip().lower() not in _INLINE_SAFE_MIME_TYPES:
-        media_type = "application/octet-stream"
-        file_headers["Content-Disposition"] = "attachment"
-
     file_io = file_store.read_file(file_id, mode="b")
-    return StreamingResponse(file_io, media_type=media_type, headers=file_headers)
+    return StreamingResponse(file_io, media_type=media_type, headers=cache_headers)
 
 
 @router.get("/search", tags=PUBLIC_API_TAGS)

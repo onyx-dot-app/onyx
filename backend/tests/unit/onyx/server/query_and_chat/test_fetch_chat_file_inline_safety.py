@@ -15,13 +15,11 @@ import pytest
 from fastapi import Request, Response
 
 from onyx.db.models import User
-from onyx.server.query_and_chat.chat_backend import (
-    _RESPONSE_POLICY_VERSION,
-    fetch_chat_file,
-)
+from onyx.file_store.serving import RESPONSE_POLICY_VERSION
+from onyx.server.query_and_chat.chat_backend import fetch_chat_file
 
 FILE_ID = "chat-file-1"
-CURRENT_ETAG = f'"{FILE_ID}-{_RESPONSE_POLICY_VERSION}"'
+CURRENT_ETAG = f'"{FILE_ID}-{RESPONSE_POLICY_VERSION}"'
 # What the endpoint returned before it gained the security headers.
 PRE_POLICY_ETAG = f'"{FILE_ID}"'
 
@@ -139,6 +137,8 @@ def test_security_headers_on_the_not_modified_response(
     assert response.status_code == 304
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["content-security-policy"] == "sandbox"
+    # A 304 updates the stored response, so it repeats the 200's disposition.
+    assert response.headers["content-disposition"] == "attachment"
     file_store.read_file.assert_not_called()
 
 
@@ -166,4 +166,4 @@ def test_parsed_spreadsheet_etag_is_versioned(monkeypatch: pytest.MonkeyPatch) -
     response = _call(if_none_match=f'"{FILE_ID}-parsed"', parsed=True)
 
     assert response.status_code == 200
-    assert response.headers["etag"] == f'"{FILE_ID}-parsed-{_RESPONSE_POLICY_VERSION}"'
+    assert response.headers["etag"] == f'"{FILE_ID}-parsed-{RESPONSE_POLICY_VERSION}"'
