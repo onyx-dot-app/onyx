@@ -73,7 +73,7 @@ def _read_large_object(raw_conn: Psycopg2Connection, oid: int) -> bytes:
 def _read_large_object_to_tempfile(raw_conn: Psycopg2Connection, oid: int) -> IO[bytes]:
     """Stream a Large Object into a temporary file to avoid OOM on large files."""
     lobj = raw_conn.lobject(oid, "rb")
-    # The caller owns and closes this file, so a `with` block cannot be used.
+    # The caller owns this file, so a `with` block cannot be used.
     temp = tempfile.NamedTemporaryFile(mode="w+b", delete=True)  # noqa: SIM115
     while True:
         chunk = lobj.read(STREAM_CHUNK_SIZE)

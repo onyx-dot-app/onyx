@@ -214,7 +214,7 @@ def main() -> None:
     if args.dry_run:
         print("DRY RUN — no changes will be made\n")
 
-    tenant_ids = [args.tenant_id] if args.tenant_id else get_all_tenant_ids()
+    tenant_ids: list[str] = [args.tenant_id] if args.tenant_id else get_all_tenant_ids()
 
     print(f"Targeting {len(tenant_ids)} tenant(s)")
     print(f"Provider filter: {provider_names}")

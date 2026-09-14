@@ -251,7 +251,7 @@ class GCSBackedFileStore(FileStore):
         blob = bucket.blob(file_record.object_key)
 
         if use_tempfile:
-            # The caller owns and closes this file, so a `with` block cannot be used.
+            # The caller owns this file, so a `with` block cannot be used.
             temp_file = tempfile.NamedTemporaryFile(mode="w+b", delete=True)  # noqa: SIM115
             blob.download_to_file(temp_file)
             temp_file.seek(0)
