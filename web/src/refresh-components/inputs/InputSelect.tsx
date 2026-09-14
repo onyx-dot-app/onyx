@@ -503,8 +503,4 @@ export default Object.assign(InputSelectRoot, {
   Separator: InputSelectSeparator,
 });
 
-export {
-  type InputSelectRootProps,
-  type InputSelectTriggerProps,
-  type InputSelectItemProps,
-};
+export { type InputSelectRootProps };

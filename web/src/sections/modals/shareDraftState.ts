@@ -2,14 +2,14 @@ import type { MinimalUserGroupSnapshot } from "@/hooks/useShareableGroups";
 import type { MinimalUserSnapshot } from "@/lib/types";
 import type { ShareAccessPermission } from "@/sections/modals/shareAccessConstants";
 
-export interface ShareDraftUserShare<
+interface ShareDraftUserShare<
   Permission extends ShareAccessPermission = ShareAccessPermission,
 > {
   user: MinimalUserSnapshot;
   permission: Permission;
 }
 
-export interface ShareDraftGroupShare<
+interface ShareDraftGroupShare<
   Permission extends ShareAccessPermission = ShareAccessPermission,
 > {
   group_id: number;

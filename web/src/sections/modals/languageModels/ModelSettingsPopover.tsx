@@ -34,7 +34,7 @@ export type ModelSettingsPatch = Partial<
 >;
 
 /** The subset of a model configuration the popover reads. */
-export type ModelSettingsModel = Pick<
+type ModelSettingsModel = Pick<
   ModelConfiguration,
   | "name"
   | "display_name"

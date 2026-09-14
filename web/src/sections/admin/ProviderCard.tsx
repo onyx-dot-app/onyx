@@ -219,4 +219,4 @@ export default function ProviderCard({
   );
 }
 
-export type { ProviderCardProps, ProviderStatus };
+export type { ProviderCardProps };

@@ -21,7 +21,7 @@ const DEFAULT_BUTTON_THRESHOLD_PX = 32; // 2rem
 const TOP_FADE_HEIGHT = "1rem";
 const BOTTOM_FADE_HEIGHT = "1rem";
 
-export interface ScrollState {
+interface ScrollState {
   isAtBottom: boolean;
   hasContentAbove: boolean;
   hasContentBelow: boolean;

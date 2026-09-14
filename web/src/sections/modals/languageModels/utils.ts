@@ -178,7 +178,7 @@ export function clampModelSettings<
  *   edits (visibility, rename, admin settings), and newly-discovered models are
  *   added unselected so the user can opt-in explicitly.
  */
-export function mergeFetchedModelConfigurations(
+function mergeFetchedModelConfigurations(
   fetched: ModelConfiguration[],
   existing: ModelConfiguration[]
 ): ModelConfiguration[] {

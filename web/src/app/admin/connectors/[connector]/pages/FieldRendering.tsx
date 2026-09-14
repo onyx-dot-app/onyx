@@ -14,7 +14,7 @@ import { Tabs } from "@opal/components";
 import { useFormikContext } from "formik";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { Content, InputVertical } from "@opal/layouts";
-import CheckboxField from "@/refresh-components/form/LabeledCheckboxField";
+import { CheckboxField } from "@/refresh-components/form/LabeledCheckboxField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import Text from "@/refresh-components/texts/Text";
 

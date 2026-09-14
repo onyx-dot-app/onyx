@@ -257,5 +257,3 @@ export function InputChipStrip({
     </AnimatePresence>
   );
 }
-
-export default InputChipStrip;

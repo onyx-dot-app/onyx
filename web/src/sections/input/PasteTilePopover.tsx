@@ -123,6 +123,4 @@ function PasteTilePopover({
     document.body
   );
 }
-
-export type { PasteTilePopoverProps };
 export default PasteTilePopover;

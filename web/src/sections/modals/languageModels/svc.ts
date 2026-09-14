@@ -42,7 +42,7 @@ const submitLlmTestRequest = async (
   }
 };
 
-export const testApiKeyHelper = async (
+const testApiKeyHelper = async (
   t: LlmModalsTranslator,
   providerName: string,
   formValues: Record<string, unknown>,
@@ -85,7 +85,7 @@ export const testApiKeyHelper = async (
   return await submitLlmTestRequest(payload, t("toasts.testApiKeyFailed"));
 };
 
-export const testCustomProvider = async (
+const testCustomProvider = async (
   t: LlmModalsTranslator,
   formValues: Record<string, unknown>
 ): Promise<TestApiKeyResult> => {

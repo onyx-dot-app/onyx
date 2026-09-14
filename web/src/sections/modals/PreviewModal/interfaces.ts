@@ -3,7 +3,7 @@ import type { useTranslations } from "next-intl";
 import type { ModalContentProps } from "@opal/components";
 
 /** Variants are plain objects, so the modal threads its translator to them. */
-export type PreviewTranslate = ReturnType<
+type PreviewTranslate = ReturnType<
   typeof useTranslations<"chat.modals.preview">
 >;
 

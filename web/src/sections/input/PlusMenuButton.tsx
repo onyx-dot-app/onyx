@@ -215,5 +215,3 @@ export function PlusMenuButton({
     </Popover>
   );
 }
-
-export default PlusMenuButton;

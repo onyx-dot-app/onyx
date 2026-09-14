@@ -15,7 +15,7 @@ import type {
 } from "@/lib/skills/types";
 import { cn } from "@opal/utils";
 
-export type SkillCardSource = "builtin" | "custom";
+type SkillCardSource = "builtin" | "custom";
 
 interface SkillCardItemBase {
   id: string;

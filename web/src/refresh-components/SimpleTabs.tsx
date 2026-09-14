@@ -9,7 +9,7 @@ import { IconProps } from "@opal/types";
  *
  * Defines a single tab with its trigger label and content.
  */
-export interface TabDefinition {
+interface TabDefinition {
   /** Display name for the tab trigger */
   name: string;
   /** Content to render when this tab is active */

@@ -7,7 +7,7 @@ import type { IconProps } from "@opal/types";
 /**
  * Filter object for CommandMenu header
  */
-export interface CommandMenuFilter {
+interface CommandMenuFilter {
   id: string;
   label: string;
   icon?: React.FunctionComponent<IconProps>;

@@ -13,7 +13,7 @@ import Truncated from "../texts/Truncated";
 // Types
 // ---------------------------------------------------------------------------
 
-export type FileTileState = "default" | "processing" | "disabled";
+type FileTileState = "default" | "processing" | "disabled";
 
 interface FileTileProps {
   title?: string;

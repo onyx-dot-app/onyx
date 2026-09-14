@@ -18,7 +18,7 @@ import { Slot } from "@radix-ui/react-slot";
 import Text from "../texts/Text";
 import { FieldMessage } from "@opal/form";
 
-export const FormFieldRoot: React.FC<FormFieldRootProps> = ({
+const FormFieldRoot: React.FC<FormFieldRootProps> = ({
   id,
   name,
   state = "idle",
@@ -55,7 +55,7 @@ export const FormFieldRoot: React.FC<FormFieldRootProps> = ({
   );
 };
 
-export const FormFieldLabel: React.FC<LabelProps> = ({
+const FormFieldLabel: React.FC<LabelProps> = ({
   leftIcon,
   rightIcon,
   optional,
@@ -96,10 +96,7 @@ export const FormFieldLabel: React.FC<LabelProps> = ({
   );
 };
 
-export const FormFieldControl: React.FC<ControlProps> = ({
-  asChild,
-  children,
-}) => {
+const FormFieldControl: React.FC<ControlProps> = ({ asChild, children }) => {
   const { baseId, state, describedByIds, required } = useFieldContext();
 
   const ariaAttributes = {
@@ -123,7 +120,7 @@ export const FormFieldControl: React.FC<ControlProps> = ({
   return <>{children}</>;
 };
 
-export const FormFieldDescription: React.FC<DescriptionProps> = ({
+const FormFieldDescription: React.FC<DescriptionProps> = ({
   className,
   children,
   ...props
@@ -145,7 +142,7 @@ export const FormFieldDescription: React.FC<DescriptionProps> = ({
   );
 };
 
-export const FormFieldMessage: React.FC<MessageProps> = ({
+const FormFieldMessage: React.FC<MessageProps> = ({
   className,
   messages,
   render,
@@ -167,7 +164,7 @@ export const FormFieldMessage: React.FC<MessageProps> = ({
   ) : null;
 };
 
-export const FormAPIFieldMessage: React.FC<APIMessageProps> = ({
+const FormAPIFieldMessage: React.FC<APIMessageProps> = ({
   className,
   messages,
   state = "loading",

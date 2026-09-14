@@ -82,5 +82,3 @@ export const CheckboxField: React.FC<CheckboxFieldProps> = ({
     </Tooltip>
   );
 };
-
-export default CheckboxField;

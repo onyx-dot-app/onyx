@@ -139,6 +139,4 @@ function EntryInfoPopover({
     document.body
   );
 }
-
-export type { EntryInfoPopoverProps };
 export default EntryInfoPopover;
