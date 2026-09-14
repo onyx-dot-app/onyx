@@ -71,7 +71,10 @@ import {
   createConnectorWithMockCredential,
   deleteConnector,
 } from "@/lib/connector";
-import { scheduleDeletionJobForConnector } from "@/lib/documentDeletion";
+import {
+  CONNECTOR_NOT_FOUND_CODE,
+  scheduleDeletionJobForConnector,
+} from "@/lib/documentDeletion";
 import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
 import Text from "@/refresh-components/texts/Text";
 import { SvgKey, SvgAlertCircle } from "@opal/icons";
@@ -109,8 +112,9 @@ async function fetchRollbackTarget(ccPairId: number): Promise<RollbackTarget> {
 
 /**
  * A link that answered non-2xx can still have committed the pair, and the client
- * cannot tell, so ask for the pair teardown first and fall back to the bare row.
- * Deleting the connector alone would orphan the credential and its documents.
+ * cannot tell, so ask for the pair teardown first. Only `CONNECTOR_NOT_FOUND`
+ * proves there is no pair; on any other error the pair stays, and deleting the
+ * connector row would strand its credential and its documents.
  */
 async function tearDownConnector(
   connectorId: number,
@@ -123,8 +127,10 @@ async function tearDownConnector(
   if (pairError === null) {
     return null;
   }
-  const connectorError = await deleteConnector(connectorId);
-  return connectorError === null ? null : pairError;
+  if (pairError.errorCode !== CONNECTOR_NOT_FOUND_CODE) {
+    return pairError.detail;
+  }
+  return deleteConnector(connectorId);
 }
 
 export default function AddConnector({
