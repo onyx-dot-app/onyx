@@ -1,7 +1,7 @@
 import { toast } from "@opal/layouts";
 import { DeletionAttemptSnapshot } from "./types";
 
-export async function scheduleDeletionJobForConnector(
+async function scheduleDeletionJobForConnector(
   connectorId: number,
   credentialId: number
 ): Promise<string | null> {
@@ -40,9 +40,7 @@ export async function deleteCCPair(
   onCompletion?.();
 }
 
-export function isCurrentlyDeleting(
-  deletionAttempt: DeletionAttemptSnapshot | null
-) {
+function isCurrentlyDeleting(deletionAttempt: DeletionAttemptSnapshot | null) {
   if (!deletionAttempt) {
     return false;
   }

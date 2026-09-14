@@ -82,7 +82,7 @@ export function useCurrentEmbeddingModel({
  * Fetch LLM models available for contextual RAG, including per-model token
  * cost.
  */
-export function useLLMContextualCosts() {
+function useLLMContextualCosts() {
   return useSWR<LLMContextualCost[]>(
     SWR_KEYS.llmContextualCost,
     errorHandlingFetcher

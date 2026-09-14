@@ -13,14 +13,14 @@ import {
 
 /** Server-enforced cap. Keep in sync with `MAX_TARGETS_PER_REQUEST`
  * in `backend/onyx/db/targeted_reindex.py`. */
-export const TARGETED_REINDEX_MAX_PER_REQUEST = 100;
+const TARGETED_REINDEX_MAX_PER_REQUEST = 100;
 
 export interface ResolveAllSubmitted {
   job_ids: number[];
   total_error_ids: number;
 }
 
-export async function fetchAllUnresolvedErrors(
+async function fetchAllUnresolvedErrors(
   ccPairId: number
 ): Promise<IndexAttemptError[]> {
   const pageSize = 100;

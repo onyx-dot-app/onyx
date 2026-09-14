@@ -75,7 +75,7 @@ export type PortkeyApiMode = "chat_completions" | "responses" | "messages";
 
 export type BifrostApiMode = "chat_completions" | "responses";
 
-export interface SimpleKnownModel {
+interface SimpleKnownModel {
   name: string;
   display_name: string | null;
 }
@@ -86,7 +86,7 @@ export interface WellKnownLLMProviderDescriptor {
   recommended_default_model: SimpleKnownModel | null;
 }
 
-export interface LLMModelDescriptor {
+interface LLMModelDescriptor {
   modelName: string;
   provider: string;
   maxTokens: number;
@@ -108,7 +108,7 @@ export interface LLMProviderView {
   model_configurations: ModelConfiguration[];
 }
 
-export interface VisionProvider extends LLMProviderView {
+interface VisionProvider extends LLMProviderView {
   vision_models: string[];
 }
 
@@ -162,7 +162,7 @@ export interface LLMProviderResponse<T> {
   default_craft: DefaultModel | null;
 }
 
-export type LLMModalVariant = "onboarding" | "llm-configuration";
+type LLMModalVariant = "onboarding" | "llm-configuration";
 
 export interface LLMProviderFormProps {
   variant?: LLMModalVariant;
@@ -278,7 +278,7 @@ export interface PortkeyModelResponse {
   supports_reasoning: boolean;
 }
 
-export interface VertexAIFetchParams {
+interface VertexAIFetchParams {
   model_configurations?: ModelConfiguration[];
 }
 
@@ -290,7 +290,7 @@ export interface LMStudioFetchParams {
   signal?: AbortSignal;
 }
 
-export type FetchModelsParams =
+type FetchModelsParams =
   | BedrockFetchParams
   | OllamaFetchParams
   | OpenRouterFetchParams

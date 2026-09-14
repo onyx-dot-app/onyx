@@ -299,7 +299,7 @@ export function useCustomProviderNames() {
   };
 }
 
-export interface DefaultLlmReference {
+interface DefaultLlmReference {
   providerName: string;
   modelName: string;
 }

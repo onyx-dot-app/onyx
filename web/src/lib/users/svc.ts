@@ -7,7 +7,7 @@ export function checkUserIsNoAuthUser(userId: string): boolean {
   return userId === "__no_auth_user__";
 }
 
-export async function getCurrentUser(): Promise<User | null> {
+async function getCurrentUser(): Promise<User | null> {
   const response = await fetch("/api/me", {
     credentials: "include",
   });
@@ -84,7 +84,7 @@ export async function basicSignup(
   });
 }
 
-export async function refreshToken(
+async function refreshToken(
   customRefreshUrl: string
 ): Promise<CustomRefreshTokenResponse | null> {
   try {

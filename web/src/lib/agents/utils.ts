@@ -25,7 +25,7 @@ export function checkUserOwnsAgent(
  * Returns true if the user may edit the agent — owner, EDITOR-level sharee,
  * or admin (admins report EDITOR server-side).
  */
-export function checkUserCanEditAgent(
+function checkUserCanEditAgent(
   user: User | null,
   agent: MinimalAgent | Agent
 ): boolean {

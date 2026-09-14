@@ -18,7 +18,7 @@ interface EEStandardAnswerCategoryResponse {
   categories?: StandardAnswerCategory[];
 }
 
-export async function getStandardAnswerCategoriesIfEE(): Promise<StandardAnswerCategoryResponse> {
+async function getStandardAnswerCategoriesIfEE(): Promise<StandardAnswerCategoryResponse> {
   if (!SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED) {
     return {
       paidEnterpriseFeaturesEnabled: false,

@@ -50,11 +50,7 @@ import Text from "@/refresh-components/texts/Text";
 
 import { SvgEye, SvgEyeClosed, SvgPlusCircle } from "@opal/icons";
 
-export function SectionHeader({
-  children,
-}: {
-  children: string | JSX.Element;
-}) {
+function SectionHeader({ children }: { children: string | JSX.Element }) {
   return <div className="mb-4 font-bold text-lg">{children}</div>;
 }
 
@@ -81,7 +77,7 @@ export function Label({
   );
 }
 
-export function LabelWithTooltip({
+function LabelWithTooltip({
   children,
   tooltip,
 }: {
@@ -123,17 +119,11 @@ export function SubLabel({ children }: { children: string | JSX.Element }) {
   );
 }
 
-export function ManualErrorMessage({ children }: { children: string }) {
+function ManualErrorMessage({ children }: { children: string }) {
   return <div className="text-action-danger-05 text-sm">{children}</div>;
 }
 
-export function ExplanationText({
-  text,
-  link,
-}: {
-  text: string;
-  link?: string;
-}) {
+function ExplanationText({ text, link }: { text: string; link?: string }) {
   return link ? (
     <a
       className="underline text-text-500 cursor-pointer text-xs font-medium"
@@ -149,7 +139,7 @@ export function ExplanationText({
   );
 }
 
-export function ToolTipDetails({ children }: { children: string }) {
+function ToolTipDetails({ children }: { children: string }) {
   return (
     <Tooltip tooltip={children} side="top" align="center">
       <FiInfo size={12} />
@@ -157,7 +147,7 @@ export function ToolTipDetails({ children }: { children: string }) {
   );
 }
 
-export const FieldLabel = ({
+const FieldLabel = ({
   subtext,
   error,
   name,
@@ -931,7 +921,7 @@ interface TextArrayFieldBuilderProps<T extends Yup.AnyObject> {
   tooltip?: string;
 }
 
-export function TextArrayFieldBuilder<T extends Yup.AnyObject>(
+function TextArrayFieldBuilder<T extends Yup.AnyObject>(
   props: TextArrayFieldBuilderProps<T>
 ): FormBodyBuilder<T> {
   const _TextArrayField: FormBodyBuilder<T> = (values) => (
@@ -1088,7 +1078,7 @@ export interface DatePickerFieldProps {
   disabled?: boolean;
 }
 
-export function DatePickerField({
+function DatePickerField({
   label,
   name,
   subtext,
@@ -1115,7 +1105,7 @@ export interface TextAreaFieldProps extends InputTextAreaProps {
   name: string;
 }
 
-export function TextAreaField(props: TextAreaFieldProps) {
+function TextAreaField(props: TextAreaFieldProps) {
   const [field, _, helper] = useField<string>(props.name);
 
   return (

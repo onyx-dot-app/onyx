@@ -28,7 +28,7 @@ export interface SourceSelectorProps {
   tagsOnLeft: boolean;
 }
 
-export function SelectedBubble({
+function SelectedBubble({
   children,
   onClick,
 }: {

@@ -25,7 +25,7 @@ interface ChatSessionsResponse {
   has_more: boolean;
 }
 
-export interface PendingChatSessionParams {
+interface PendingChatSessionParams {
   chatSessionId: string;
   personaId: number;
   projectId?: number | null;

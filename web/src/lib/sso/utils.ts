@@ -8,7 +8,7 @@ import { SSOProviderType } from "@/lib/sso/interfaces";
 export type SSOTranslate = ReturnType<
   typeof useTranslations<"admin.ssoProviders">
 >;
-export type SSOMessageKey = Parameters<SSOTranslate>[0];
+type SSOMessageKey = Parameters<SSOTranslate>[0];
 
 interface SSOProviderDetail {
   label: string;
@@ -42,12 +42,7 @@ export const CREATABLE_SSO_PROVIDER_TYPES: SSOProviderType[] = [
   "SAML",
 ];
 
-export type SSOConfigFieldKind =
-  | "text"
-  | "textarea"
-  | "password"
-  | "switch"
-  | "chips";
+type SSOConfigFieldKind = "text" | "textarea" | "password" | "switch" | "chips";
 
 // One entry per admin-editable key in a provider type's backend config model.
 // `name` must match the backend config field exactly, since values are sent

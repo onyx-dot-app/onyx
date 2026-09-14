@@ -112,7 +112,7 @@ export interface ToolTooltipMessages {
   askAdmin: string;
 }
 
-export function buildTooltipMessage(
+function buildTooltipMessage(
   actionDescription: string,
   isConfigured: boolean,
   canManageAction: boolean,

@@ -85,7 +85,7 @@ export async function logoutSS(headers: Headers): Promise<Response | null> {
   return logoutStandardSS(headers);
 }
 
-export async function authErrorRedirect(
+async function authErrorRedirect(
   request: NextRequest,
   response: Response,
   redirectStatus?: number

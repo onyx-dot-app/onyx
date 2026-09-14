@@ -24,7 +24,7 @@ export interface AgentAttachedDocument {
   source: ValidSources | null;
 }
 
-export interface AgentStarterMessage {
+interface AgentStarterMessage {
   name: string;
   message: string;
 }
@@ -36,16 +36,16 @@ export interface AgentLabel {
 
 export type PersonaSharePermission = "EDITOR" | "VIEWER";
 
-export type PersonaAccessLevel = "OWNER" | "EDITOR" | "VIEWER";
+type PersonaAccessLevel = "OWNER" | "EDITOR" | "VIEWER";
 
 export type PersonaSharingStatus = "PRIVATE" | "SHARED" | "PUBLIC";
 
-export interface PersonaUserShare {
+interface PersonaUserShare {
   user: MinimalUserSnapshot;
   permission: PersonaSharePermission;
 }
 
-export interface PersonaGroupShare {
+interface PersonaGroupShare {
   group_id: number;
   group_name: string;
   permission: PersonaSharePermission;

@@ -36,8 +36,6 @@ import {
 } from "@/lib/notifications/interfaces";
 import { buildBannerQueue, type BannerQueueItem } from "@/lib/banner/queue";
 
-export type { BannerQueueItem } from "@/lib/banner/queue";
-
 // A single max-size page always holds every active banner-worthy notification
 // (only a handful are ever live per user at once).
 const BANNER_NOTIFICATIONS_PAGE_SIZE = 50;

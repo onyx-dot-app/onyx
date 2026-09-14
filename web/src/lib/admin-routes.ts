@@ -523,7 +523,7 @@ export const ADMIN_ROUTES = {
  * Helper that converts a route entry into the `{ name, icon, link }`
  * shape expected by the sidebar.
  */
-export function sidebarItem(route: AdminRouteEntry) {
+function sidebarItem(route: AdminRouteEntry) {
   return { name: route.sidebarLabel, icon: route.icon, link: route.path };
 }
 
@@ -531,7 +531,7 @@ export function sidebarItem(route: AdminRouteEntry) {
  * Connector/indexing admin route prefixes that need a vector DB. In Lite mode
  * these render an informational notice instead of their normal content.
  */
-export const VECTOR_DB_REQUIRED_ROUTE_PREFIXES: readonly string[] = [
+const VECTOR_DB_REQUIRED_ROUTE_PREFIXES: readonly string[] = [
   ADMIN_ROUTES.INDEXING_STATUS.path,
   ADMIN_ROUTES.ADD_CONNECTOR.path,
   // Covers /sets, /explorer, and /feedback — all require a vector DB.

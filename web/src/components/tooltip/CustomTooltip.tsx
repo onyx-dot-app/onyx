@@ -37,7 +37,7 @@ export const TooltipGroup: React.FC<{
   );
 };
 
-export const CustomTooltip = ({
+const CustomTooltip = ({
   content,
   children,
   large,

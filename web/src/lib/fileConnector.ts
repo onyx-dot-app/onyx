@@ -7,7 +7,7 @@ export interface ConnectorFileInfo {
   upload_date?: string;
 }
 
-export interface ConnectorFilesResponse {
+interface ConnectorFilesResponse {
   files: ConnectorFileInfo[];
 }
 

@@ -118,14 +118,14 @@ export const parseLlmDescriptor = (value: string): LlmDescriptor => {
   };
 };
 
-export const findModelInModelConfigurations = (
+const findModelInModelConfigurations = (
   modelConfigurations: ModelConfiguration[],
   modelName: string
 ): ModelConfiguration | null => {
   return modelConfigurations.find((m) => m.name === modelName) || null;
 };
 
-export const findModelConfiguration = (
+const findModelConfiguration = (
   llmProviders: LLMProviderDescriptor[],
   modelName: string,
   providerName: string | null = null

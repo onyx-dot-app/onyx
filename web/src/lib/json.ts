@@ -1,7 +1,7 @@
 // Types for data decoded from JSON, such as a `JSON.parse` result or a stream
 // packet. Narrow with the predicates and readers below instead of casting.
 
-export type JsonPrimitive = string | number | boolean | null;
+type JsonPrimitive = string | number | boolean | null;
 
 export type JsonValue = JsonPrimitive | JsonValue[] | JsonObject;
 

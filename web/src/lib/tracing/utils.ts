@@ -3,10 +3,8 @@ import { SvgBraintrust, SvgLangfuse } from "@opal/logos";
 import type { IconFunctionComponent } from "@opal/types";
 import type { TracingProviderType } from "@/lib/tracing/types";
 
-export type TracingTranslate = ReturnType<
-  typeof useTranslations<"admin.tracing">
->;
-export type TracingMessageKey = Parameters<TracingTranslate>[0];
+type TracingTranslate = ReturnType<typeof useTranslations<"admin.tracing">>;
+type TracingMessageKey = Parameters<TracingTranslate>[0];
 
 export interface TracingFieldSpec {
   // Form field name. The secret field is always sent as the provider `api_key`;

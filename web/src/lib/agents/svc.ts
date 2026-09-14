@@ -98,7 +98,7 @@ export async function deleteAgent(agentId: number): Promise<void> {
  * Uploads an agent avatar image. Returns the server-assigned file ID on
  * success, or null if the upload fails.
  */
-export async function uploadFile(file: File): Promise<string | null> {
+async function uploadFile(file: File): Promise<string | null> {
   const formData = new FormData();
   formData.append("file", file);
   const res = await fetch("/api/admin/persona/upload-image", {
@@ -119,7 +119,7 @@ export async function uploadFile(file: File): Promise<string | null> {
  * Group sharing is EE-only — groupIds are silently dropped when enterprise
  * features are disabled. Returns an error string on failure, null on success.
  */
-export async function updateAgentSharedStatus(
+async function updateAgentSharedStatus(
   agentId: number,
   userIds: string[],
   groupIds: number[],
@@ -252,7 +252,7 @@ export async function removeSelfFromAgentShares(
  * Sets the agent's featured status. Admin-only endpoint.
  * Returns an error string on failure, null on success.
  */
-export async function updateAgentFeaturedStatus(
+async function updateAgentFeaturedStatus(
   agentId: number,
   isFeatured: boolean
 ): Promise<string | null> {

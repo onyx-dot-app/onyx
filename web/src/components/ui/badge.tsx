@@ -107,4 +107,4 @@ function Badge({
   return <Tooltip tooltip={tooltip}>{BadgeContent}</Tooltip>;
 }
 
-export { Badge, badgeVariants };
+export { Badge };

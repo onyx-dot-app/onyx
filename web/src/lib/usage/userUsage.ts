@@ -20,7 +20,7 @@ export interface UsageExportUser {
   records: UsageExportRecord[];
 }
 
-export interface UsageExportRecord {
+interface UsageExportRecord {
   model: string;
   flow?: string;
   provider?: string;

@@ -191,7 +191,7 @@ interface PasswordRequirementsProps {
   password: string;
 }
 
-export function PasswordRequirements({ password }: PasswordRequirementsProps) {
+function PasswordRequirements({ password }: PasswordRequirementsProps) {
   const t = useTranslations("auth");
   const { authTypeMetadata } = useUser();
 
@@ -269,7 +269,7 @@ const SUBMIT_LABEL_KEYS = {
   join: "emailPasswordForm.joinButton.label",
 } as const;
 
-export type EmailPasswordFormLabel = keyof typeof SUBMIT_LABEL_KEYS;
+type EmailPasswordFormLabel = keyof typeof SUBMIT_LABEL_KEYS;
 
 export interface EmailPasswordFormProps {
   shouldVerify?: boolean;

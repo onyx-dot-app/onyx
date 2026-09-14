@@ -40,7 +40,7 @@ import {
  * Test the default LLM provider.
  * Returns true if the default provider is configured and working, false otherwise.
  */
-export async function testDefaultProvider(): Promise<boolean> {
+async function testDefaultProvider(): Promise<boolean> {
   try {
     const response = await fetch("/api/admin/llm/test/default", {
       method: "POST",
@@ -338,7 +338,7 @@ export const fetchOpenRouterModels = async (
  * Fetches LM Studio models directly without any form state dependencies.
  * Uses snake_case params to match API structure.
  */
-export const fetchLMStudioModels = async (
+const fetchLMStudioModels = async (
   params: LMStudioFetchParams
 ): Promise<{ models: ModelConfiguration[]; error?: string }> => {
   const apiBase = params.api_base;

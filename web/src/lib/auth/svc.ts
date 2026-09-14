@@ -55,7 +55,7 @@ export async function fetchAuthTypeMetadata(
   };
 }
 
-export async function forgotPassword(email: string): Promise<void> {
+async function forgotPassword(email: string): Promise<void> {
   const response = await fetch(`/api/auth/forgot-password`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -73,10 +73,7 @@ export async function forgotPassword(email: string): Promise<void> {
   }
 }
 
-export async function resetPassword(
-  token: string,
-  password: string
-): Promise<void> {
+async function resetPassword(token: string, password: string): Promise<void> {
   const response = await fetch(`/api/auth/reset-password`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -116,7 +113,7 @@ export async function requestEmailVerification(email: string): Promise<void> {
   }
 }
 
-export async function verifyEmail(token: string): Promise<void> {
+async function verifyEmail(token: string): Promise<void> {
   const response = await fetch("/api/auth/verify", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -153,10 +150,7 @@ export async function verifyCaptchaForOAuth(token: string): Promise<void> {
   }
 }
 
-export async function impersonateUser(
-  email: string,
-  apiKey: string
-): Promise<void> {
+async function impersonateUser(email: string, apiKey: string): Promise<void> {
   const response = await fetch("/api/tenants/impersonate", {
     method: "POST",
     headers: {

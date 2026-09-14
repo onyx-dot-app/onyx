@@ -47,7 +47,7 @@ export const STT_LOCALE_PATTERN = /^[A-Za-z]{2,3}(-[A-Za-z]{2,8}){1,2}$/;
 
 /** Azure's candidate caps for STT language auto-detect: continuous LID (cloud) vs at-start (self-hosted). */
 export const MAX_STT_LANGUAGES = 10;
-export const MAX_AT_START_STT_LANGUAGES = 4;
+const MAX_AT_START_STT_LANGUAGES = 4;
 
 const AZURE_CLOUD_HOST_SUFFIXES = [
   ".speech.microsoft.com",
@@ -95,7 +95,7 @@ const DEFAULT_VOICE_PROVIDER_DETAIL: VoiceProviderDetail = {
 };
 
 /** Per-provider static details, keyed by provider_type. */
-export const VOICE_PROVIDER_DETAILS: Record<string, VoiceProviderDetail> = {
+const VOICE_PROVIDER_DETAILS: Record<string, VoiceProviderDetail> = {
   openai: {
     label: "OpenAI",
     icon: SvgOpenai,
@@ -151,7 +151,7 @@ export function getVoiceProviderDetail(
 }
 
 /** Maps card-level model IDs to actual API model IDs. IDs absent from this map are used as-is. */
-export const MODEL_ID_MAP: Record<string, string> = {
+const MODEL_ID_MAP: Record<string, string> = {
   whisper: "whisper-1",
 };
 

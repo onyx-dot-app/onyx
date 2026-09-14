@@ -119,7 +119,7 @@ export interface Settings {
   posthog_host?: string | null;
 }
 
-export interface NavigationItem {
+interface NavigationItem {
   link: string;
   icon?: string;
   svg_logo?: string;

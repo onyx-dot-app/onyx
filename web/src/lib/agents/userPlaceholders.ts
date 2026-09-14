@@ -32,7 +32,7 @@ export const USER_IDENTITY_PLACEHOLDERS: UserPlaceholder[] = [
   { key: "role", label: "Role" },
 ];
 
-export const USER_PLACEHOLDERS: UserPlaceholder[] = [
+const USER_PLACEHOLDERS: UserPlaceholder[] = [
   ...USER_DIRECTORY_PLACEHOLDERS,
   ...USER_IDENTITY_PLACEHOLDERS,
 ];

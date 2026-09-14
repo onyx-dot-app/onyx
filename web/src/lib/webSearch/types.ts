@@ -5,7 +5,7 @@ import type { IconFunctionComponent, RichStr } from "@opal/types";
 export type WebSearchTranslate = ReturnType<
   typeof useTranslations<"admin.webSearch">
 >;
-export type WebSearchMessageKey = Parameters<WebSearchTranslate>[0];
+type WebSearchMessageKey = Parameters<WebSearchTranslate>[0];
 
 // ── Provider type literals ────────────────────────────────────────────────────
 

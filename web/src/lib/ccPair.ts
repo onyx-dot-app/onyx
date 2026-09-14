@@ -38,7 +38,7 @@ export async function setCCPairStatus(
   }
 }
 
-export const getCCPairStatusMessage = (
+const getCCPairStatusMessage = (
   isDisabled: boolean,
   isIndexing: boolean,
   ccPairStatus: ConnectorCredentialPairStatus

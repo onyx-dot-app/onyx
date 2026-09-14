@@ -1,6 +1,6 @@
 export type TracingProviderType = "braintrust" | "langfuse";
 
-export type TracingProviderSource = "db" | "env" | "none";
+type TracingProviderSource = "db" | "env" | "none";
 
 export interface TracingProviderView {
   provider_type: TracingProviderType;

@@ -12,7 +12,7 @@ export interface WithPermissions<
 // One entry per projection in the backend's permission_projection.py. The key names the
 // resource, not the DTO carrying it: CCPair covers both the list row and the detail DTO,
 // and Action covers OpenAPI + MCP tools — each group shares a single backend projection.
-export const RESOURCE_ACTIONS = {
+const RESOURCE_ACTIONS = {
   CCPair: ["edit", "delete", "publish"],
   Agent: [
     "edit",
@@ -37,8 +37,8 @@ export const RESOURCE_ACTIONS = {
   ],
 } as const;
 
-export type ResourceName = keyof typeof RESOURCE_ACTIONS;
-export type ResourceAction<R extends ResourceName> =
+type ResourceName = keyof typeof RESOURCE_ACTIONS;
+type ResourceAction<R extends ResourceName> =
   (typeof RESOURCE_ACTIONS)[R][number];
 
 // Union of all actions — makes a typo a compile error, not a silent false.

@@ -54,7 +54,7 @@ export async function createCredentialWithPrivateKey(
   });
 }
 
-export async function adminDeleteCredential<T>(credentialId: number) {
+async function adminDeleteCredential<T>(credentialId: number) {
   return await fetch(`/api/manage/admin/credential/${credentialId}`, {
     method: "DELETE",
     headers: {
@@ -75,7 +75,7 @@ export async function deleteCredential<T>(
   });
 }
 
-export async function forceDeleteCredential<T>(credentialId: number) {
+async function forceDeleteCredential<T>(credentialId: number) {
   return await fetch(`/api/manage/credential/force/${credentialId}`, {
     method: "DELETE",
     headers: {

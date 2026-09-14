@@ -81,12 +81,12 @@ export function transformLinkUri(href: string): string | null {
   }
 }
 
-export function isSubset(parent: string[], child: string[]): boolean {
+function isSubset(parent: string[], child: string[]): boolean {
   const parentSet = new Set(parent);
   return Array.from(new Set(child)).every((item) => parentSet.has(item));
 }
 
-export function trinaryLogic<T>(
+function trinaryLogic<T>(
   a: boolean | undefined,
   b: boolean,
   ifTrue: T,
@@ -125,7 +125,7 @@ export function getFileExtension(fileName: string): string {
 /**
  * Centralized list of image file extensions (lowercase, no leading dots)
  */
-export const IMAGE_EXTENSIONS = [
+const IMAGE_EXTENSIONS = [
   "png",
   "jpg",
   "jpeg",
@@ -135,7 +135,7 @@ export const IMAGE_EXTENSIONS = [
   "bmp",
 ] as const;
 
-export type ImageExtension = (typeof IMAGE_EXTENSIONS)[number];
+type ImageExtension = (typeof IMAGE_EXTENSIONS)[number];
 
 /**
  * Checks whether a provided extension string corresponds to an image extension.
@@ -187,7 +187,7 @@ export function isImageFile(fileName: string | null | undefined): boolean {
 /**
  * Typical code/config file extensions (lowercase, no leading dots)
  */
-export const CODE_EXTENSIONS = [
+const CODE_EXTENSIONS = [
   "ts",
   "tsx",
   "js",
@@ -240,7 +240,7 @@ export const CODE_EXTENSIONS = [
 /**
  * Checks if a filename represents a code/config file based on its extension.
  */
-export function isCodeFile(fileName: string | null | undefined): boolean {
+function isCodeFile(fileName: string | null | undefined): boolean {
   if (!fileName) return false;
   const lowerFileName = String(fileName).toLowerCase();
   return CODE_EXTENSIONS.some((ext) => lowerFileName.endsWith(`.${ext}`));
@@ -275,7 +275,7 @@ export function hasNonImageFiles(
  * Merges multiple refs into a single callback ref.
  * Useful when a component needs both an internal ref and a forwarded ref.
  */
-export function mergeRefs<T>(
+function mergeRefs<T>(
   ...refs: (React.Ref<T> | undefined)[]
 ): React.RefCallback<T> {
   return (node: T | null) => {

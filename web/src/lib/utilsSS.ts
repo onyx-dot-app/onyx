@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { HOST_URL, INTERNAL_URL } from "./constants";
 import { processCookies } from "@/lib/users/svcSS";
 
-export function buildClientUrl(path: string) {
+function buildClientUrl(path: string) {
   if (path.startsWith("/")) {
     return `${HOST_URL}${path}`;
   }

@@ -109,7 +109,7 @@ export async function testImageGenerationApiKey(
 /**
  * Fetch all image generation configurations
  */
-export async function fetchImageGenerationConfigs(): Promise<
+async function fetchImageGenerationConfigs(): Promise<
   ImageGenerationConfigView[]
 > {
   const response = await fetch(IMAGE_GEN_CONFIG_URL);

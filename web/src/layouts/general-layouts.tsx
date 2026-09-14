@@ -4,16 +4,7 @@ import Truncated from "@/refresh-components/texts/Truncated";
 import { IconProps } from "@opal/types";
 import React from "react";
 
-export {
-  Section,
-  widthClassmap,
-  heightClassmap,
-  type FlexDirection,
-  type JustifyContent,
-  type AlignItems,
-  type Length,
-  type SectionProps,
-} from "@opal/layouts/general/components";
+export { Section, type SectionProps } from "@opal/layouts/general/components";
 
 import { Section } from "@opal/layouts/general/components";
 

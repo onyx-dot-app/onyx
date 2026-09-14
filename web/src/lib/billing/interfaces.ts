@@ -12,16 +12,16 @@
 
 export type PlanType = "monthly" | "annual";
 
-export type LicenseSource = "auto_fetch" | "manual_upload";
+type LicenseSource = "auto_fetch" | "manual_upload";
 
-export type ApplicationStatus =
+type ApplicationStatus =
   | "active"
   | "payment_reminder"
   | "gated_access"
   | "expired"
   | "seat_limit_exceeded";
 
-export type ExpiryWarningStage = "none" | "t_30d" | "t_14d" | "t_1d" | "grace";
+type ExpiryWarningStage = "none" | "t_30d" | "t_14d" | "t_1d" | "grace";
 
 /**
  * Billing status from Stripe subscription.
@@ -180,7 +180,7 @@ export function hasPaidSubscription(
 /**
  * Check if a license is valid and active.
  */
-export function isLicenseValid(license: LicenseStatus): boolean {
+function isLicenseValid(license: LicenseStatus): boolean {
   return license.has_license && license.status === "active";
 }
 

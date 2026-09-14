@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { useState } from "react";
 import { humanReadableFormatShort } from "@opal/time";
 
-export const useNightTime = () => {
+const useNightTime = () => {
   const [isNight, setIsNight] = useState(false);
 
   useEffect(() => {
@@ -62,13 +62,13 @@ export function formatDateForApiParam(date: Date): string {
   return `${date.getFullYear()}-${month}-${day}`;
 }
 
-export function normalizeDate(date: Date): Date {
+function normalizeDate(date: Date): Date {
   const normalizedDate = new Date(date);
   normalizedDate.setHours(0, 0, 0, 0);
   return normalizedDate;
 }
 
-export function isAfterDate(date: Date, maxDate: Date): boolean {
+function isAfterDate(date: Date, maxDate: Date): boolean {
   return normalizeDate(date).getTime() > normalizeDate(maxDate).getTime();
 }
 
@@ -76,7 +76,7 @@ export function isDateInFuture(date: Date): boolean {
   return isAfterDate(date, new Date());
 }
 
-export const timestampToDateString = (timestamp: string) => {
+const timestampToDateString = (timestamp: string) => {
   return formatDateForApiParam(new Date(timestamp));
 };
 
@@ -103,7 +103,7 @@ export const timestampToReadableDate = (timestamp: string) => {
   );
 };
 
-export const buildDateString = (date: Date | null) => {
+const buildDateString = (date: Date | null) => {
   return date
     ? `${Math.round(
         (new Date().getTime() - date.getTime()) / (1000 * 60 * 60 * 24)
@@ -111,7 +111,7 @@ export const buildDateString = (date: Date | null) => {
     : "Select a time range";
 };
 
-export const getFormattedDateRangeString = (
+const getFormattedDateRangeString = (
   from: Date | null,
   to: Date | null,
   locale: string
@@ -129,7 +129,7 @@ export const getFormattedDateRangeString = (
   return `${fromString} - ${toString}`;
 };
 
-export const getDateRangeString = (from: Date | null, to: Date | null) => {
+const getDateRangeString = (from: Date | null, to: Date | null) => {
   if (!from || !to) return null;
 
   const now = new Date();
@@ -151,7 +151,7 @@ export const getDateRangeString = (from: Date | null, to: Date | null) => {
   return `${fromString} - ${toString}`;
 };
 
-export const getTimeAgoString = (date: Date | null) => {
+const getTimeAgoString = (date: Date | null) => {
   if (!date) return null;
 
   const now = new Date();
@@ -201,7 +201,7 @@ export function formatDateTimeLog(iso: string): string {
  * Format an ISO timestamp as "HH:MM:SS" (24-hour, local time).
  * Intended for compact time-only displays.
  */
-export function formatTimeOnly(iso: string): string {
+function formatTimeOnly(iso: string): string {
   return new Date(iso).toLocaleTimeString(undefined, {
     hour: "2-digit",
     minute: "2-digit",

@@ -12,7 +12,7 @@ export interface OAuthDetails {
   supports_manual_credentials: boolean;
   additional_kwargs: OAuthAdditionalKwargDescription[];
 }
-export interface AuthMethodOption<TFields> {
+interface AuthMethodOption<TFields> {
   value: string;
   label: string;
   fields: TFields;
@@ -45,38 +45,38 @@ export interface Credential<T> extends CredentialBase<T> {
   time_created: string;
   time_updated: string;
 }
-export interface GithubCredentialJson {
+interface GithubCredentialJson {
   github_access_token: string;
   github_base_url: string | null;
 }
 
-export interface GitbookCredentialJson {
+interface GitbookCredentialJson {
   gitbook_api_key: string;
 }
 
-export interface GitlabCredentialJson {
+interface GitlabCredentialJson {
   gitlab_url: string;
   gitlab_access_token: string;
 }
 
-export interface LumAppsCredentialJson {
+interface LumAppsCredentialJson {
   lumapps_application_id: string;
   lumapps_api_key: string;
   lumapps_service_user: string;
 }
 
-export interface BitbucketCredentialJson {
+interface BitbucketCredentialJson {
   bitbucket_email: string;
   bitbucket_api_token: string;
 }
 
-export interface BookstackCredentialJson {
+interface BookstackCredentialJson {
   bookstack_base_url: string;
   bookstack_api_token_id: string;
   bookstack_api_token_secret: string;
 }
 
-export interface OutlineCredentialJson {
+interface OutlineCredentialJson {
   outline_base_url: string;
   outline_api_token: string;
 }
@@ -86,20 +86,20 @@ export interface ConfluenceCredentialJson {
   confluence_access_token: string;
 }
 
-export interface JiraCredentialJson {
+interface JiraCredentialJson {
   jira_user_email: string | null;
   jira_api_token: string;
 }
 
-export interface JiraServerCredentialJson {
+interface JiraServerCredentialJson {
   jira_api_token: string;
 }
 
-export interface ProductboardCredentialJson {
+interface ProductboardCredentialJson {
   productboard_access_token: string;
 }
 
-export interface SlackCredentialJson {
+interface SlackCredentialJson {
   slack_bot_token: string;
 }
 
@@ -125,98 +125,98 @@ export interface GoogleDriveServiceAccountCredentialJson {
   authentication_method?: string;
 }
 
-export interface SlabCredentialJson {
+interface SlabCredentialJson {
   slab_bot_token: string;
 }
 
-export interface CodaCredentialJson {
+interface CodaCredentialJson {
   coda_bearer_token: string;
 }
 
-export interface NotionCredentialJson {
+interface NotionCredentialJson {
   notion_integration_token: string;
 }
 
-export interface ZulipCredentialJson {
+interface ZulipCredentialJson {
   zuliprc_content: string;
 }
 
-export interface GuruCredentialJson {
+interface GuruCredentialJson {
   guru_user: string;
   guru_user_token: string;
 }
 
-export interface GongCredentialJson {
+interface GongCredentialJson {
   gong_access_key: string;
   gong_access_key_secret: string;
   gong_base_url: string | null;
 }
 
-export interface LoopioCredentialJson {
+interface LoopioCredentialJson {
   loopio_subdomain: string;
   loopio_client_id: string;
   loopio_client_token: string;
 }
 
-export interface LinearCredentialJson {
+interface LinearCredentialJson {
   linear_api_key: string;
 }
 
-export interface HubSpotCredentialJson {
+interface HubSpotCredentialJson {
   hubspot_access_token: string;
 }
 
-export interface Document360CredentialJson {
+interface Document360CredentialJson {
   portal_id: string;
   document360_api_token: string;
 }
 
-export interface ClickupCredentialJson {
+interface ClickupCredentialJson {
   clickup_api_token: string;
   clickup_team_id: string;
 }
 
-export interface ZendeskCredentialJson {
+interface ZendeskCredentialJson {
   zendesk_subdomain: string;
   zendesk_email: string;
   zendesk_token: string;
 }
 
-export interface BoxCredentialJson {
+interface BoxCredentialJson {
   box_client_id: string;
   box_client_secret: string;
   box_enterprise_id: string;
   box_user_email: string | null;
 }
 
-export interface DropboxCredentialJson {
+interface DropboxCredentialJson {
   dropbox_access_token: string;
 }
 
-export interface R2CredentialJson {
+interface R2CredentialJson {
   account_id: string;
   r2_access_key_id: string;
   r2_secret_access_key: string;
 }
 
-export interface S3CredentialJson {
+interface S3CredentialJson {
   aws_access_key_id?: string;
   aws_secret_access_key?: string;
   aws_role_arn?: string;
 }
 
-export interface GCSCredentialJson {
+interface GCSCredentialJson {
   access_key_id: string;
   secret_access_key: string;
 }
 
-export interface OCICredentialJson {
+interface OCICredentialJson {
   namespace: string;
   region: string;
   access_key_id: string;
   secret_access_key: string;
 }
-export interface SalesforceLegacyCredentialJson {
+interface SalesforceLegacyCredentialJson {
   authentication_method?: "password";
   sf_username: string;
   sf_password: string;
@@ -224,7 +224,7 @@ export interface SalesforceLegacyCredentialJson {
   is_sandbox: boolean;
 }
 
-export interface SalesforceOAuthCredentialJson {
+interface SalesforceOAuthCredentialJson {
   authentication_method: "oauth";
   sf_access_token: string;
   sf_refresh_token: string;
@@ -232,11 +232,11 @@ export interface SalesforceOAuthCredentialJson {
   sf_login_url: string;
 }
 
-export type SalesforceCredentialJson =
+type SalesforceCredentialJson =
   | SalesforceLegacyCredentialJson
   | SalesforceOAuthCredentialJson;
 
-export interface SharepointCredentialJson {
+interface SharepointCredentialJson {
   sp_client_id: string;
   sp_client_secret?: string;
   sp_directory_id: string;
@@ -244,75 +244,75 @@ export interface SharepointCredentialJson {
   sp_private_key?: TypedFile;
 }
 
-export interface AsanaCredentialJson {
+interface AsanaCredentialJson {
   asana_api_token_secret: string;
 }
 
-export interface TeamsCredentialJson {
+interface TeamsCredentialJson {
   teams_client_id: string;
   teams_client_secret: string;
   teams_directory_id: string;
 }
 
-export interface DiscourseCredentialJson {
+interface DiscourseCredentialJson {
   discourse_api_key: string;
   discourse_api_username: string;
 }
 
-export interface AxeroCredentialJson {
+interface AxeroCredentialJson {
   base_url: string;
   axero_api_token: string;
 }
 
-export interface DiscordCredentialJson {
+interface DiscordCredentialJson {
   discord_bot_token: string;
 }
 
-export interface FreshdeskCredentialJson {
+interface FreshdeskCredentialJson {
   freshdesk_domain: string;
   freshdesk_api_key: string;
 }
 
-export interface FirefliesCredentialJson {
+interface FirefliesCredentialJson {
   fireflies_api_key: string;
 }
 
-export interface BraintrustCredentialJson {
+interface BraintrustCredentialJson {
   braintrust_api_key: string;
 }
 
-export interface CanvasCredentialJson {
+interface CanvasCredentialJson {
   canvas_access_token: string;
 }
 
-export interface MediaWikiCredentialJson {}
-export interface WikipediaCredentialJson extends MediaWikiCredentialJson {}
+interface MediaWikiCredentialJson {}
+interface WikipediaCredentialJson extends MediaWikiCredentialJson {}
 
-export interface EgnyteCredentialJson {
+interface EgnyteCredentialJson {
   domain: string;
   access_token: string;
 }
 
-export interface AirtableCredentialJson {
+interface AirtableCredentialJson {
   airtable_access_token: string;
 }
 
-export interface HighspotCredentialJson {
+interface HighspotCredentialJson {
   highspot_url: string;
   highspot_key: string;
   highspot_secret: string;
 }
 
-export interface DrupalWikiCredentialJson {
+interface DrupalWikiCredentialJson {
   drupal_wiki_api_token: string;
 }
 
-export interface ImapCredentialJson {
+interface ImapCredentialJson {
   imap_username: string;
   imap_password: string;
 }
 
-export interface TestRailCredentialJson {
+interface TestRailCredentialJson {
   testrail_base_url: string;
   testrail_username: string;
   testrail_api_key: string;
@@ -601,7 +601,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
   },
 } satisfies CredentialTemplateMap;
 
-export const credentialDisplayNames: Record<string, string> = {
+const credentialDisplayNames: Record<string, string> = {
   // Github
   github_access_token: "GitHub Access Token",
   github_base_url:

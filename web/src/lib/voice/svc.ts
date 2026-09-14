@@ -66,6 +66,6 @@ export async function deleteVoiceProvider(
 }
 
 /** Fetches all configured LLM providers (used to copy API keys into voice providers). */
-export async function fetchLLMProviders(): Promise<Response> {
+async function fetchLLMProviders(): Promise<Response> {
   return fetch("/api/admin/llm/provider");
 }

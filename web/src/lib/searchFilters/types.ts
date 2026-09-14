@@ -3,7 +3,7 @@ import type { SourceMetadata } from "@/lib/search/interfaces";
 import type { InputDateRangePickerValue } from "@opal/components";
 
 /** What is selected, without the means to change it. */
-export interface SearchFiltersSelection {
+interface SearchFiltersSelection {
   timeRange: InputDateRangePickerValue | null;
   selectedSources: SourceMetadata[];
   selectedDocumentSets: string[];
@@ -21,7 +21,7 @@ export interface SearchFilters extends SearchFiltersSelection {
   clearFilters: () => void;
 }
 
-export interface TimeRange {
+interface TimeRange {
   start: Date | string | null;
   end: Date | string | null;
 }

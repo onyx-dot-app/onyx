@@ -6,7 +6,7 @@ import type { IconFunctionComponent } from "@opal/types";
 export type IndexSettingsTranslator = ReturnType<
   typeof useTranslations<"admin.indexSettings">
 >;
-export type IndexSettingsMessageKey = Parameters<IndexSettingsTranslator>[0];
+type IndexSettingsMessageKey = Parameters<IndexSettingsTranslator>[0];
 
 // ---------------------------------------------------------------------------
 // Enums
@@ -29,7 +29,7 @@ export enum EmbeddingProviderName {
   CUSTOM = "custom",
 }
 
-export enum RerankerProvider {
+enum RerankerProvider {
   COHERE = "cohere",
   LITELLM = "litellm",
   BEDROCK = "bedrock",
@@ -41,7 +41,7 @@ export enum SwitchoverType {
   INSTANT = "instant",
 }
 
-export enum EmbeddingPrecision {
+enum EmbeddingPrecision {
   FLOAT = "float",
   BFLOAT16 = "bfloat16",
 }
@@ -96,7 +96,7 @@ export interface ResolvedEmbeddingModelForApply {
   providerName: EmbeddingProviderName;
 }
 
-export interface RerankingModel {
+interface RerankingModel {
   rerank_provider_type: RerankerProvider | null;
   modelName?: string;
   displayName: string;
@@ -154,14 +154,14 @@ export interface ConfiguredEmbeddingProvider {
   deployment_name: string | null;
 }
 
-export interface RerankingDetails {
+interface RerankingDetails {
   rerank_model_name: string | null;
   rerank_provider_type: RerankerProvider | null;
   rerank_api_key: string | null;
   rerank_api_url: string | null;
 }
 
-export interface AdvancedSearchConfiguration {
+interface AdvancedSearchConfiguration {
   index_name: string | null;
   multipass_indexing: boolean;
   enable_contextual_rag: boolean;

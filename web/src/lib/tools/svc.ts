@@ -18,7 +18,7 @@ import {
 } from "@/lib/tools/types";
 import { parseErrorDetail } from "@/lib/fetcher";
 
-export interface ToolStatusUpdateRequest {
+interface ToolStatusUpdateRequest {
   tool_ids: number[];
   enabled: boolean;
 }
@@ -99,7 +99,7 @@ export async function updateToolStatus(
 /**
  * Disable all tools for a specific MCP server
  */
-export async function disableAllServerTools(
+async function disableAllServerTools(
   toolIds: number[]
 ): Promise<ToolStatusUpdateResponse> {
   return updateToolsStatus(toolIds, false);

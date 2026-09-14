@@ -3,7 +3,7 @@
  * namespace. Held as a key (not copy) so the catalog stays the single source
  * of the English text while the registry stays a plain module.
  */
-export type ImageProviderDescriptionKey =
+type ImageProviderDescriptionKey =
   | "providers.openaiGptImage2.description"
   | "providers.openaiGptImage15.description"
   | "providers.openaiGptImage1.description"

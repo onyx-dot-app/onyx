@@ -1,5 +1,5 @@
 /** Prefix for unauthenticated routes (login, signup, password reset, etc.). */
-export const AUTH_PATH_PREFIX = "/auth";
+const AUTH_PATH_PREFIX = "/auth";
 
 /**
  * True when `pathname` is an unauthenticated `/auth/*` route.

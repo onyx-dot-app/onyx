@@ -14,7 +14,7 @@ async function handleResponse(
   return [responseJson.detail, null];
 }
 
-export async function fetchConnectors(
+async function fetchConnectors(
   credential_id: number
 ): Promise<ConnectorSnapshot[]> {
   const url = `/api/manage/admin/connector?credential=${credential_id}`;
@@ -73,7 +73,7 @@ export async function updateConnectorCredentialPairProperty(
   });
 }
 
-export async function updateConnector<T>(
+async function updateConnector<T>(
   connector: Connector<T>
 ): Promise<Connector<T>> {
   const response = await fetch(`/api/manage/admin/connector/${connector.id}`, {
@@ -121,7 +121,7 @@ export async function runConnector(
   return null;
 }
 
-export async function deleteConnectorIfExistsAndIsUnlinked({
+async function deleteConnectorIfExistsAndIsUnlinked({
   source,
   name,
 }: {

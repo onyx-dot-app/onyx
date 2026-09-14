@@ -21,9 +21,9 @@ export interface LogoIconProps extends IconProps {
 }
 
 export const defaultTailwindCSS = "my-auto flex shrink-0 text-default";
-export const defaultTailwindCSSBlue = "my-auto flex shrink-0 text-link";
+const defaultTailwindCSSBlue = "my-auto flex shrink-0 text-link";
 
-export const LogoIcon = ({
+const LogoIcon = ({
   size = 16,
   className = defaultTailwindCSS,
   src,
@@ -42,7 +42,7 @@ export const LogoIcon = ({
 };
 
 // Helper to create simple icon components from react-icon libraries
-export function createIcon(
+function createIcon(
   IconComponent: React.ComponentType<{ size?: number; className?: string }>
 ) {
   function IconWrapper({
@@ -137,7 +137,7 @@ const createLogoIcon = (
 // ============================================================================
 // GENERIC SVG COMPONENTS (sorted alphabetically)
 // ============================================================================
-export const MacIcon = ({
+const MacIcon = ({
   size = 16,
   className = "my-auto flex shrink-0 ",
 }: IconProps) => {
@@ -212,7 +212,7 @@ export const OnyxLogoTypeIcon = ({
     </svg>
   );
 };
-export const WindowsIcon = ({
+const WindowsIcon = ({
   size = 16,
   className = "my-auto flex shrink-0 ",
 }: IconProps) => {
@@ -243,9 +243,9 @@ export const GoogleStorageIcon = createLogoIcon(googleCloudStorageIcon, {
   sizeAdjustment: 4,
   classNameAddition: "-m-0.5",
 });
-export const OpenSourceIcon = createLogoIcon(openSourceIcon);
+const OpenSourceIcon = createLogoIcon(openSourceIcon);
 export const R2Icon = createLogoIcon(r2Icon);
 export const S3Icon = createLogoIcon(s3Icon);
-export const ServiceNowIcon = createLogoIcon(serviceNowIcon);
-export const TrelloIcon = createLogoIcon(trelloIcon);
+const ServiceNowIcon = createLogoIcon(serviceNowIcon);
+const TrelloIcon = createLogoIcon(trelloIcon);
 export const ZAIIcon = createLogoIcon(zAIIcon);

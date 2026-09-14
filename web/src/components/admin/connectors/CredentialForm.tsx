@@ -70,7 +70,7 @@ interface Props<YupObjectType extends Yup.AnyObject> {
   source: ValidSources;
 }
 
-export function CredentialForm<T extends Yup.AnyObject>({
+function CredentialForm<T extends Yup.AnyObject>({
   formBody,
   validationSchema,
   initialValues,

@@ -2,24 +2,24 @@ import { InputDateRangePickerValue } from "@opal/components";
 import { Tag, ValidSources } from "../types";
 import { Agent } from "@/lib/agents/types";
 
-export const FlowType = {
+const FlowType = {
   SEARCH: "search",
   QUESTION_ANSWER: "question-answer",
 };
-export type FlowType = (typeof FlowType)[keyof typeof FlowType];
-export const SearchType = {
+type FlowType = (typeof FlowType)[keyof typeof FlowType];
+const SearchType = {
   SEMANTIC: "semantic",
   KEYWORD: "keyword",
   AUTOMATIC: "automatic",
   INTERNET: "internet",
 };
-export type SearchType = (typeof SearchType)[keyof typeof SearchType];
+type SearchType = (typeof SearchType)[keyof typeof SearchType];
 
-export interface ToolResponse {
+interface ToolResponse {
   id?: string | null;
   response?: any;
 }
-export interface ExtendedToolResponse extends ToolResponse {
+interface ExtendedToolResponse extends ToolResponse {
   level: number;
   level_question_num: number;
 }
@@ -36,11 +36,11 @@ export interface StreamStopInfo {
   stream_type?: "sub_answer" | "sub_questions" | "main_answer";
 }
 
-export interface ErrorMessagePacket {
+interface ErrorMessagePacket {
   error: string;
 }
 
-export interface Quote {
+interface Quote {
   quote: string;
   document_id: string;
   link: string | null;
@@ -49,7 +49,7 @@ export interface Quote {
   semantic_identifier: string;
 }
 
-export interface QuotesInfoPacket {
+interface QuotesInfoPacket {
   quotes: Quote[];
 }
 export interface MinimalOnyxDocument {
@@ -73,7 +73,7 @@ export interface OnyxDocument extends MinimalOnyxDocument {
   validationState?: null | "good" | "bad";
 }
 
-export interface LoadedOnyxDocument extends OnyxDocument {
+interface LoadedOnyxDocument extends OnyxDocument {
   icon: React.FC<{ size?: number; className?: string }>;
 }
 
@@ -82,7 +82,7 @@ export interface SearchOnyxDocument extends OnyxDocument {
   relevance_explanation: string;
 }
 
-export interface FilteredOnyxDocument extends OnyxDocument {
+interface FilteredOnyxDocument extends OnyxDocument {
   included: boolean;
 }
 export interface DocumentInfoPacket {
@@ -93,20 +93,20 @@ export interface DocumentInfoPacket {
   favor_recent: boolean;
 }
 
-export interface DocumentRelevance {
+interface DocumentRelevance {
   relevant: boolean;
   content: string;
 }
 
-export interface Relevance {
+interface Relevance {
   [url: string]: DocumentRelevance;
 }
 
-export interface RelevanceChunk {
+interface RelevanceChunk {
   relevance_summaries: Relevance;
 }
 
-export interface SearchResponse {
+interface SearchResponse {
   suggestedSearchType: SearchType | null;
   suggestedFlowType: FlowType | null;
   answer: string | null;
@@ -149,12 +149,12 @@ export interface SourceMetadata {
   customDescription?: string;
 }
 
-export interface SearchDefaultOverrides {
+interface SearchDefaultOverrides {
   forceDisplayQA: boolean;
   offset: number;
 }
 
-export interface SearchRequestArgs {
+interface SearchRequestArgs {
   query: string;
   agentic?: boolean;
   sources: SourceMetadata[];
@@ -179,14 +179,14 @@ export interface SearchRequestArgs {
   selectedSearchType: SearchType | null;
 }
 
-export interface SearchRequestOverrides {
+interface SearchRequestOverrides {
   searchType?: SearchType;
   offset?: number;
   overrideMessage?: string;
   agentic?: boolean;
 }
 
-export interface ValidQuestionResponse {
+interface ValidQuestionResponse {
   reasoning: string | null;
   error: string | null;
 }
@@ -283,7 +283,7 @@ export interface SearchFullResponse {
 /**
  * Single search query in history
  */
-export interface SearchQueryResponse {
+interface SearchQueryResponse {
   query: string;
   query_expansions: string[] | null;
   created_at: string; // ISO date string
@@ -301,32 +301,32 @@ export interface SearchHistoryResponse {
 // Streaming Packets (for stream=true)
 // ============================================================================
 
-export interface SearchDocsPacket {
+interface SearchDocsPacket {
   type: "search_docs";
   search_docs: SearchDocWithContent[];
 }
 
-export interface SearchErrorPacket {
+interface SearchErrorPacket {
   type: "search_error";
   error: string;
 }
 
-export interface LLMSelectedDocsPacket {
+interface LLMSelectedDocsPacket {
   type: "llm_selected_docs";
   llm_selected_doc_ids: string[] | null;
 }
 
-export interface QueryExpansionsPacket {
+interface QueryExpansionsPacket {
   type: "query_expansions";
   executed_queries: string[];
 }
 
-export interface DocSelectionReasoningPacket {
+interface DocSelectionReasoningPacket {
   type: "doc_selection_reasoning";
   reasoning: string;
 }
 
-export type SearchStreamPacket =
+type SearchStreamPacket =
   | SearchDocsPacket
   | SearchErrorPacket
   | LLMSelectedDocsPacket

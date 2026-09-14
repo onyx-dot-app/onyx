@@ -943,7 +943,7 @@ export const useUserGroups = (): {
   };
 };
 
-export const fetchConnectorIndexingStatus = async (
+const fetchConnectorIndexingStatus = async (
   request: IndexingStatusRequest = {},
   sourcePages: Record<ValidSources, number> | null = null
 ): Promise<ConnectorIndexingStatusLiteResponse[]> => {

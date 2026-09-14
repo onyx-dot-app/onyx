@@ -1,8 +1,8 @@
 import type { UsageExportTotals } from "@/lib/usage/userUsage";
 
-export type SystemUsageAttribution = "ATTRIBUTED" | "UNATTRIBUTED";
+type SystemUsageAttribution = "ATTRIBUTED" | "UNATTRIBUTED";
 
-export interface SystemUsageRecord {
+interface SystemUsageRecord {
   attribution: SystemUsageAttribution;
   model: string;
   flow: string;

@@ -167,8 +167,6 @@ const CsvContent: React.FC<ContentComponentProps> = ({
   );
 };
 
-export default CsvContent;
-
 const csvCache = new Map<
   string,
   { headers: string[]; data: Record<string, string>[] }

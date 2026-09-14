@@ -3,11 +3,11 @@
  * `backend/onyx/server/features/skill/models.py`.
  */
 
-export type SkillSource = "builtin" | "custom";
-export type SkillAccessLevel = "OWNER" | "EDITOR" | "VIEWER";
+type SkillSource = "builtin" | "custom";
+type SkillAccessLevel = "OWNER" | "EDITOR" | "VIEWER";
 export type SkillSharePermission = "EDITOR" | "VIEWER";
 
-export interface SkillUserShare {
+interface SkillUserShare {
   user: {
     id: string;
     email: string;
@@ -15,7 +15,7 @@ export interface SkillUserShare {
   permission: SkillSharePermission;
 }
 
-export interface SkillGroupShare {
+interface SkillGroupShare {
   group_id: number;
   group_name: string;
   permission: SkillSharePermission;
@@ -99,7 +99,7 @@ export interface SkillBundleContents {
   files: SkillBundleFile[];
 }
 
-export interface GitHubSkillPreview {
+interface GitHubSkillPreview {
   path: string;
   name: string;
   description: string | null;
@@ -113,7 +113,7 @@ export interface GitHubSkillsPreview {
   skills: GitHubSkillPreview[];
 }
 
-export interface GitHubImportedSkill {
+interface GitHubImportedSkill {
   skill: CustomSkill;
   disabled_reason: string | null;
 }

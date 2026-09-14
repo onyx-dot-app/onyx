@@ -6,7 +6,7 @@ import { FiCheck, FiChevronDown, FiInfo } from "react-icons/fi";
 import { Popover } from "@opal/components";
 import { Tooltip } from "@opal/components";
 import { clickOnKeyDown } from "@opal/utils";
-export interface Option<T> {
+interface Option<T> {
   name: string;
   value: T;
   description?: string;

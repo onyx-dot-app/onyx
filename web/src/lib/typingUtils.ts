@@ -2,7 +2,7 @@ import { useEffect } from "react";
 
 type Handler = (event: React.KeyboardEvent) => void;
 
-export function handleKeyPress(
+function handleKeyPress(
   requestedKey: string,
   callback?: Handler,
   passthrough?: Handler

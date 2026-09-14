@@ -22,8 +22,8 @@ export const NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED =
 export const SERVER_SIDE_ONLY__AUTH_COOKIE_NAME =
   process.env.AUTH_COOKIE_NAME || "fastapiusersauth";
 
-export const SEARCH_TYPE_COOKIE_NAME = "search_type";
-export const AGENTIC_SEARCH_TYPE_COOKIE_NAME = "agentic_type";
+const SEARCH_TYPE_COOKIE_NAME = "search_type";
+const AGENTIC_SEARCH_TYPE_COOKIE_NAME = "agentic_type";
 
 export const LOGOUT_DISABLED =
   process.env.NEXT_PUBLIC_DISABLE_LOGOUT?.toLowerCase() === "true";
@@ -31,7 +31,7 @@ export const LOGOUT_DISABLED =
 export const TOGGLED_CONNECTORS_COOKIE_NAME = "toggled_connectors";
 
 /* Enterprise-only settings */
-export const NEXT_PUBLIC_CUSTOM_REFRESH_URL =
+const NEXT_PUBLIC_CUSTOM_REFRESH_URL =
   process.env.NEXT_PUBLIC_CUSTOM_REFRESH_URL;
 
 // NOTE: this should ONLY be used on the server-side. If used client side,
@@ -63,7 +63,7 @@ export const NEXT_PUBLIC_CLOUD_ENABLED =
 export const REGISTRATION_URL =
   process.env.INTERNAL_URL || "http://127.0.0.1:3001";
 
-export const SERVER_SIDE_ONLY__CLOUD_ENABLED =
+const SERVER_SIDE_ONLY__CLOUD_ENABLED =
   process.env.NEXT_PUBLIC_CLOUD_ENABLED?.toLowerCase() === "true";
 
 export const NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED =
@@ -85,11 +85,11 @@ export const NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK =
 export const ALLOWED_URL_PROTOCOLS = ["http:", "https:", "mailto:"] as const;
 
 // Agent/Persona related constants
-export const MAX_CHARACTERS_PERSONA_DESCRIPTION = 5000000;
+const MAX_CHARACTERS_PERSONA_DESCRIPTION = 5000000;
 export const MAX_CHARACTERS_AGENT_DESCRIPTION = 500;
-export const MAX_STARTER_MESSAGES = 4;
+const MAX_STARTER_MESSAGES = 4;
 export const MAX_CHARACTERS_STARTER_MESSAGE = 200;
-export const STARTER_MESSAGES_EXAMPLES = [
+const STARTER_MESSAGES_EXAMPLES = [
   "Give me an overview of some documents.",
   "Find the latest sales report.",
   "Compile a list of our engineering goals for this quarter.",
@@ -109,9 +109,9 @@ export const MODAL_ROOT_ID = "modal-root";
 export const UNNAMED_CHAT = "New Chat";
 
 export const DEFAULT_AGENT_ID = 0;
-export const GENERAL_ASSISTANT_ID = -1;
-export const IMAGE_ASSISTANT_ID = -2;
-export const ART_ASSISTANT_ID = -3;
+const GENERAL_ASSISTANT_ID = -1;
+const IMAGE_ASSISTANT_ID = -2;
+const ART_ASSISTANT_ID = -3;
 
 // Used in the File Picker to show a max number of files.
 // The rest will be hidden behind an "All Recent Files" button.
@@ -124,11 +124,11 @@ export {
   LARGE_BREAKPOINT_PX,
 } from "@opal/constants";
 export const DEFAULT_AVATAR_SIZE_PX = 18;
-export const HORIZON_DISTANCE_PX = 800;
+const HORIZON_DISTANCE_PX = 800;
 export const DEFAULT_LOGO_SIZE_PX = 24;
 
 export const DEFAULT_CONTEXT_TOKENS = 120_000;
-export const MAX_CHUNKS_FED_TO_CHAT = 25;
+const MAX_CHUNKS_FED_TO_CHAT = 25;
 
 export const APP_SLOGAN = "Open Source AI Platform";
 

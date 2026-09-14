@@ -4,7 +4,7 @@ import type { IconFunctionComponent } from "@opal/types";
 
 export type Plan = "business" | "enterprise";
 
-export const PLAN_CONFIG: Record<
+const PLAN_CONFIG: Record<
   Plan,
   { color: "blue" | "amber"; icon: IconFunctionComponent; title: string }
 > = {

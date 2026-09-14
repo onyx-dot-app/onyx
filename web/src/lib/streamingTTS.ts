@@ -11,7 +11,7 @@ import { INTERNAL_URL, IS_DEV } from "@/lib/constants";
  * for smooth, gapless audio playback. This is the recommended approach for
  * real-time TTS as it properly handles MP3 frame boundaries.
  */
-export class HTTPStreamingTTSPlayer {
+class HTTPStreamingTTSPlayer {
   private mediaSource: MediaSource | null = null;
   private mediaSourceUrl: string | null = null;
   private sourceBuffer: SourceBuffer | null = null;
@@ -365,7 +365,7 @@ export class HTTPStreamingTTSPlayer {
  * Useful for scenarios where you want to stream text in and get audio out
  * incrementally (e.g., as LLM generates text).
  */
-export class WebSocketStreamingTTSPlayer {
+class WebSocketStreamingTTSPlayer {
   private websocket: WebSocket | null = null;
   private mediaSource: MediaSource | null = null;
   private mediaSourceUrl: string | null = null;

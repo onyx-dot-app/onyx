@@ -71,7 +71,7 @@ export async function searchDocuments(
 /**
  * Fetch search history for the current user
  */
-export async function fetchSearchHistory(options?: {
+async function fetchSearchHistory(options?: {
   limit?: number;
   filterDays?: number;
   signal?: AbortSignal;

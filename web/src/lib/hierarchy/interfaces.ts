@@ -13,7 +13,7 @@ export interface HierarchyNodeSummary {
   parent_id: number | null;
 }
 
-export interface HierarchyNodesRequest {
+interface HierarchyNodesRequest {
   source: ValidSources;
 }
 

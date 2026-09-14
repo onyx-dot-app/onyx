@@ -172,7 +172,7 @@ export function isSearchProviderConfigured(
   return true;
 }
 
-export function canConnectSearchProvider(
+function canConnectSearchProvider(
   providerType: string,
   apiKey: string,
   searchEngineIdOrBaseUrl: string
@@ -336,7 +336,7 @@ export function buildContentProviderConfig(
   return config;
 }
 
-export function canConnectContentProvider(
+function canConnectContentProvider(
   providerType: WebContentProviderType,
   apiKey: string,
   baseUrl: string

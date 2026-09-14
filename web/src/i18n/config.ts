@@ -50,7 +50,7 @@ export function isSupportedLocale(
 // Locales whose UI renders right-to-left. Drives <html dir> and the
 // Radix DirectionProvider in the root layout. A new RTL locale is
 // registered here after joining SUPPORTED_LOCALES.
-export const RTL_LOCALES: readonly Locale[] = ["ar"];
+const RTL_LOCALES: readonly Locale[] = ["ar"];
 
 export type HtmlDir = "ltr" | "rtl";
 

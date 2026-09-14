@@ -2,7 +2,7 @@
 // Auth URL helpers
 // ---------------------------------------------------------------------------
 
-export function getAuthUrl(
+function getAuthUrl(
   multiTenant: boolean,
   nextUrl: string | null
 ): string | null {

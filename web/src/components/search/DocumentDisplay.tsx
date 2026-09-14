@@ -128,7 +128,7 @@ interface CompactDocumentCardProps {
   updatePresentingDocument: (document: MinimalOnyxDocument) => void;
 }
 
-export function CompactDocumentCard({
+function CompactDocumentCard({
   document,
   updatePresentingDocument,
 }: CompactDocumentCardProps) {
@@ -193,7 +193,7 @@ interface CompactQuestionCardProps {
   openQuestion: (question: SubQuestionDetail) => void;
 }
 
-export function CompactQuestionCard({
+function CompactQuestionCard({
   question,
   openQuestion,
 }: CompactQuestionCardProps) {

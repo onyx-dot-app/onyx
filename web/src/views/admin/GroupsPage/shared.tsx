@@ -20,12 +20,12 @@ export const PAGE_SIZE = 10;
 
 // Translated copy threaded in by the calling component, matching
 // MemberColumnLabels below.
-export interface ApiKeyMemberRowLabels {
+interface ApiKeyMemberRowLabels {
   serviceAccountEmail: string;
   unnamedKey: string;
 }
 
-export function apiKeyToMemberRow(
+function apiKeyToMemberRow(
   key: ApiKeyDescriptor,
   labels: ApiKeyMemberRowLabels
 ): MemberRow {

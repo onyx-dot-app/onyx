@@ -83,7 +83,7 @@ export enum Permission {
   FULL_ADMIN_PANEL_ACCESS = "admin",
 }
 
-export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
+const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   [AccountType.STANDARD]: "Standard",
   [AccountType.BOT]: "Slack Bot",
   [AccountType.EXT_PERM_USER]: "External User",
@@ -98,7 +98,7 @@ export enum UserStatus {
   REQUESTED = "requested",
 }
 
-export const USER_STATUS_LABELS: Record<UserStatus, string> = {
+const USER_STATUS_LABELS: Record<UserStatus, string> = {
   [UserStatus.ACTIVE]: "Active",
   [UserStatus.INACTIVE]: "Inactive",
   [UserStatus.INVITED]: "Invite Pending",
@@ -134,7 +134,7 @@ export interface User {
   admin_capabilities?: string[];
 }
 
-export interface TenantInfo {
+interface TenantInfo {
   new_tenant?: NewTenantInfo | null;
   invitation?: NewTenantInfo | null;
 }
@@ -153,7 +153,7 @@ export interface AllUsersResponse {
   slack_users_pages: number;
 }
 
-export interface AcceptedUserSnapshot {
+interface AcceptedUserSnapshot {
   id: string;
   email: string;
   is_active: boolean;
@@ -196,7 +196,7 @@ export interface DocumentBoostStatus {
   hidden: boolean;
 }
 
-export interface FailedConnectorIndexingStatus {
+interface FailedConnectorIndexingStatus {
   cc_pair_id: number;
   name: string;
   error_msg: string | null;
@@ -253,7 +253,7 @@ export const INDEX_ATTEMPT_STAGES = [
 
 export type IndexAttemptStage = (typeof INDEX_ATTEMPT_STAGES)[number];
 
-export type StageScope = "ATTEMPT_LEVEL" | "BATCH_LEVEL";
+type StageScope = "ATTEMPT_LEVEL" | "BATCH_LEVEL";
 
 export interface IndexAttemptStageMetric {
   stage: IndexAttemptStage;
@@ -282,7 +282,7 @@ export interface ConnectorStatus<ConnectorConfigType, ConnectorCredentialType> {
   groups: number[];
 }
 
-export interface ConnectorIndexingStatus<
+interface ConnectorIndexingStatus<
   ConnectorConfigType,
   ConnectorCredentialType,
 > extends ConnectorStatus<ConnectorConfigType, ConnectorCredentialType> {
@@ -392,7 +392,7 @@ export interface CCPairBasicInfo {
   status: ConnectorCredentialPairStatus;
 }
 
-export type ConnectorSummary = {
+type ConnectorSummary = {
   count: number;
   active: number;
   public: number;
@@ -400,7 +400,7 @@ export type ConnectorSummary = {
   errors: number; // New field for error count
 };
 
-export type GroupedConnectorSummaries = Record<ValidSources, ConnectorSummary>;
+type GroupedConnectorSummaries = Record<ValidSources, ConnectorSummary>;
 
 // DELETION
 
@@ -411,7 +411,7 @@ export interface DeletionAttemptSnapshot {
 }
 
 // DOCUMENT SETS
-export interface CCPairDescriptor<ConnectorType, CredentialType> {
+interface CCPairDescriptor<ConnectorType, CredentialType> {
   id: number;
   name: string;
   connector: Connector<ConnectorType>;
@@ -424,7 +424,7 @@ export interface FederatedConnectorConfig {
   entities: Record<string, any>;
 }
 
-export interface FederatedConnectorDescriptor {
+interface FederatedConnectorDescriptor {
   id: number;
   name: string;
   source: string;
@@ -439,7 +439,7 @@ export interface CCPairSummary {
   access_type: AccessType;
 }
 
-export interface FederatedConnectorSummary {
+interface FederatedConnectorSummary {
   id: number;
   name: string;
   source: string;
@@ -483,11 +483,9 @@ export interface StandardAnswer {
 
 // SLACK BOT CONFIGS
 
-export type AnswerFilterOption =
-  | "well_answered_postfilter"
-  | "questionmark_prefilter";
+type AnswerFilterOption = "well_answered_postfilter" | "questionmark_prefilter";
 
-export interface ChannelConfig {
+interface ChannelConfig {
   channel_name: string;
   respond_tag_only?: boolean;
   respond_to_bots?: boolean;
@@ -512,7 +510,7 @@ export interface SlackChannelConfig {
   is_default: boolean;
 }
 
-export interface SlackChannelDescriptor {
+interface SlackChannelDescriptor {
   id: string;
   name: string;
 }
@@ -534,7 +532,7 @@ export type SlackBot = {
   user_token?: string;
 };
 
-export interface SlackBotTokens {
+interface SlackBotTokens {
   bot_token: string;
   app_token: string;
   user_token?: string;
@@ -706,7 +704,7 @@ export const oauthSupportedSources: ConfigurableSources[] = [
   ValidSources.Confluence,
 ];
 
-export type OAuthSupportedSource = (typeof oauthSupportedSources)[number];
+type OAuthSupportedSource = (typeof oauthSupportedSources)[number];
 
 // Federated Connector Types
 export interface CredentialFieldSpec {
@@ -732,7 +730,7 @@ export interface CredentialSchemaResponse {
   credentials: Record<string, CredentialFieldSpec>;
 }
 
-export interface ConfigurationSchemaResponse {
+interface ConfigurationSchemaResponse {
   configuration: Record<string, ConfigurationFieldSpec>;
 }
 
@@ -742,7 +740,7 @@ export interface FederatedConnectorCreateRequest {
   config?: Record<string, any>;
 }
 
-export interface FederatedConnectorCreateResponse {
+interface FederatedConnectorCreateResponse {
   id: number;
   source: string;
 }

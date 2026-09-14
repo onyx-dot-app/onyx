@@ -20,7 +20,7 @@ import { Button, Text } from "@opal/components";
 import { cn } from "@opal/utils";
 import { fetchChatFile } from "@/lib/chat/svc";
 
-export interface SpreadsheetSheet {
+interface SpreadsheetSheet {
   name: string;
   csv: string;
   truncated: boolean;

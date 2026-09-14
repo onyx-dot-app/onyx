@@ -1,4 +1,4 @@
-export type HookPoint = string;
+type HookPoint = string;
 export type HookFailStrategy = "hard" | "soft";
 
 export interface HookPointMeta {
@@ -61,7 +61,7 @@ export interface HookExecutionRecord {
   created_at: string;
 }
 
-export type HookValidateStatus =
+type HookValidateStatus =
   | "passed"
   | "auth_failed"
   | "timeout"

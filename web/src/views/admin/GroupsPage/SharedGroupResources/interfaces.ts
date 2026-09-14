@@ -1,4 +1,4 @@
-export interface PopoverItem {
+interface PopoverItem {
   key: string;
   /** Human-readable name, used as the row's accessible label. */
   label: string;

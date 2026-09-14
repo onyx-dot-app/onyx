@@ -40,7 +40,7 @@ const ME_RETRY_DELAYS_MS = [2_000, 5_000, 15_000];
 const ME_LOADING_DEADLINE_MS = 30_000;
 
 /** Only "resolved" lets a null user mean signed out. "unavailable" means /api/me keeps failing for a possibly valid session. */
-export type UserResolution = "loading" | "unavailable" | "resolved";
+type UserResolution = "loading" | "unavailable" | "resolved";
 
 export interface UserContextType {
   user: User | null;

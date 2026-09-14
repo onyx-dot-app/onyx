@@ -10,7 +10,7 @@ export function isSkillTile(el: Element | null): boolean {
 }
 
 export const PASTE_TILE_THRESHOLD_CHARS = 200;
-export const PASTE_TILE_THRESHOLD_LINES = 3;
+const PASTE_TILE_THRESHOLD_LINES = 3;
 
 export function shouldCreatePasteTile(text: string): boolean {
   return (

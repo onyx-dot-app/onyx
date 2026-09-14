@@ -7,14 +7,14 @@ import type { MCPServer } from "@/lib/tools/types";
 import { CRAFT_APPS_TAB_PARAM } from "@/app/craft/v1/apps/connectableApps";
 import { CRAFT_APPS_PATH } from "@/app/craft/v1/constants";
 
-export interface PickerSkill {
+interface PickerSkill {
   kind: "skill";
   slug: string;
   name: string;
   description: string;
 }
 
-export interface PickerApp {
+interface PickerApp {
   kind: "app";
   externalAppId: number;
   name: string;
@@ -25,7 +25,7 @@ export interface PickerApp {
 /** A craft-enabled MCP server. Kept a distinct kind from `PickerApp` rather
  * than folded in: the two are connected differently, reach the agent by
  * different channels, and the user is told which is which. */
-export interface PickerMcpServer {
+interface PickerMcpServer {
   kind: "mcp";
   mcpServerId: number;
   name: string;

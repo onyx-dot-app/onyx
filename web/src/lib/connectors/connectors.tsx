@@ -14,7 +14,7 @@ export function isLoadState(connector_name: string): boolean {
   return false;
 }
 
-export type InputType =
+type InputType =
   | "list"
   | "text"
   | "select"
@@ -29,7 +29,7 @@ export type StringWithDescription = {
   description?: string;
 };
 
-export interface Option {
+interface Option {
   label: string | ((currentCredential: Credential<any> | null) => string);
   name: string;
   description?:
@@ -46,25 +46,25 @@ export interface Option {
   disabled?: boolean | ((currentCredential: Credential<any> | null) => boolean);
 }
 
-export interface SelectOption extends Option {
+interface SelectOption extends Option {
   type: "select";
   options?: StringWithDescription[];
   default?: string;
 }
 
-export interface MultiSelectOption extends Option {
+interface MultiSelectOption extends Option {
   type: "multiselect";
   options?: StringWithDescription[];
   default?: string[];
 }
 
-export interface ListOption extends Option {
+interface ListOption extends Option {
   type: "list";
   default?: string[];
   transform?: (values: string[]) => string[];
 }
 
-export interface StringPairListOption extends Option {
+interface StringPairListOption extends Option {
   type: "string_pair_list";
   // Object keys each row serializes to, e.g. { leftKey: "source", rightKey: "target" }.
   leftKey: string;
@@ -76,29 +76,29 @@ export interface StringPairListOption extends Option {
   rightPlaceholder?: string;
 }
 
-export interface TextOption extends Option {
+interface TextOption extends Option {
   type: "text";
   default?: string;
   initial?: string | ((currentCredential: Credential<any> | null) => string);
   isTextArea?: boolean;
 }
 
-export interface NumberOption extends Option {
+interface NumberOption extends Option {
   type: "number";
   default?: number;
 }
 
-export interface BooleanOption extends Option {
+interface BooleanOption extends Option {
   type: "checkbox";
   default?: boolean;
 }
 
-export interface FileOption extends Option {
+interface FileOption extends Option {
   type: "file";
   default?: string;
 }
 
-export interface StringTabOption extends Option {
+interface StringTabOption extends Option {
   type: "string_tab";
   default?: string;
 }
@@ -160,9 +160,7 @@ export interface ConnectionConfiguration {
 // Shared "Include Attachments" checkbox. Pair with an `include_attachments`
 // kwarg on the backend connector; see backend/onyx/connectors/README.md for
 // the convention, including how to pick the default.
-export function buildIncludeAttachmentsOption(
-  defaultValue: boolean
-): BooleanOption {
+function buildIncludeAttachmentsOption(defaultValue: boolean): BooleanOption {
   return {
     type: "checkbox",
     query: "Include attachments?",
@@ -2122,12 +2120,12 @@ export interface ConnectorSnapshot {
   from_beginning?: boolean;
 }
 
-export interface UrlRewriteRule {
+interface UrlRewriteRule {
   source: string;
   target: string;
 }
 
-export interface WebConfig {
+interface WebConfig {
   base_url: string;
   web_connector_type?: "recursive" | "single" | "sitemap";
   url_rewrites?: UrlRewriteRule[];
@@ -2149,7 +2147,7 @@ export interface GitlabConfig {
   include_issues: boolean;
 }
 
-export interface LumAppsConfig {
+interface LumAppsConfig {
   base_url: string;
   organization_id: string;
   instance_ids?: string[];
@@ -2157,13 +2155,13 @@ export interface LumAppsConfig {
   lang?: string;
 }
 
-export interface BitbucketConfig {
+interface BitbucketConfig {
   workspace: string;
   repositories?: string;
   projects?: string;
 }
 
-export interface GoogleDriveConfig {
+interface GoogleDriveConfig {
   include_shared_drives?: boolean;
   shared_drive_urls?: string;
   include_my_drives?: boolean;
@@ -2173,9 +2171,9 @@ export interface GoogleDriveConfig {
 
 export interface GmailConfig {}
 
-export interface BookstackConfig {}
+interface BookstackConfig {}
 
-export interface OutlineConfig {}
+interface OutlineConfig {}
 
 export interface ConfluenceConfig {
   wiki_base: string;
@@ -2194,11 +2192,11 @@ export interface JiraConfig {
   jql_query?: string;
 }
 
-export interface SalesforceConfig {
+interface SalesforceConfig {
   requested_objects?: string[];
 }
 
-export interface SharepointConfig {
+interface SharepointConfig {
   sites?: string[];
   include_site_pages?: boolean;
   treat_sharing_link_as_public?: boolean;
@@ -2208,33 +2206,33 @@ export interface SharepointConfig {
   sharepoint_domain_suffix?: string;
 }
 
-export interface TeamsConfig {
+interface TeamsConfig {
   teams?: string[];
   authority_host?: string;
   graph_api_host?: string;
 }
 
-export interface DiscourseConfig {
+interface DiscourseConfig {
   base_url: string;
   categories?: string[];
 }
 
-export interface AxeroConfig {
+interface AxeroConfig {
   spaces?: string[];
 }
 
-export interface CanvasConfig {
+interface CanvasConfig {
   canvas_base_url: string;
 }
 
-export interface DrupalWikiConfig {
+interface DrupalWikiConfig {
   base_url: string;
   spaces?: string[];
   pages?: string[];
   include_attachments?: boolean;
 }
 
-export interface ProductboardConfig {}
+interface ProductboardConfig {}
 
 export interface SlackConfig {
   workspace: string;
@@ -2245,17 +2243,17 @@ export interface SlackConfig {
   include_bot_messages?: boolean;
 }
 
-export interface SlabConfig {
+interface SlabConfig {
   base_url: string;
 }
 
-export interface GuruConfig {}
+interface GuruConfig {}
 
-export interface GongConfig {
+interface GongConfig {
   workspaces?: string[];
 }
 
-export interface LoopioConfig {
+interface LoopioConfig {
   loopio_stack_name?: string;
 }
 
@@ -2270,24 +2268,24 @@ export interface ZulipConfig {
   realm_url: string;
 }
 
-export interface CodaConfig {
+interface CodaConfig {
   workspace_id?: string;
 }
 
-export interface NotionConfig {
+interface NotionConfig {
   root_page_id?: string;
 }
 
-export interface HubSpotConfig {
+interface HubSpotConfig {
   object_types?: string[];
 }
 
-export interface Document360Config {
+interface Document360Config {
   workspace: string;
   categories?: string[];
 }
 
-export interface ClickupConfig {
+interface ClickupConfig {
   connector_type: "list" | "folder" | "space" | "workspace";
   connector_ids?: string[];
   retrieve_task_comments: boolean;
@@ -2298,43 +2296,43 @@ export interface GoogleSitesConfig {
   base_url: string;
 }
 
-export interface XenforoConfig {
+interface XenforoConfig {
   base_url: string;
 }
 
-export interface ZendeskConfig {
+interface ZendeskConfig {
   content_type?: "articles" | "tickets";
   calls_per_minute?: number;
 }
 
-export interface DropboxConfig {}
+interface DropboxConfig {}
 
-export interface S3Config {
+interface S3Config {
   bucket_type: "s3";
   bucket_name: string;
   prefix: string;
 }
 
-export interface R2Config {
+interface R2Config {
   bucket_type: "r2";
   bucket_name: string;
   prefix: string;
   european_residency?: boolean;
 }
 
-export interface GCSConfig {
+interface GCSConfig {
   bucket_type: "google_cloud_storage";
   bucket_name: string;
   prefix: string;
 }
 
-export interface OCIConfig {
+interface OCIConfig {
   bucket_type: "oci_storage";
   bucket_name: string;
   prefix: string;
 }
 
-export interface MediaWikiBaseConfig {
+interface MediaWikiBaseConfig {
   connector_name: string;
   language_code: string;
   categories?: string[];
@@ -2342,23 +2340,23 @@ export interface MediaWikiBaseConfig {
   recurse_depth?: number;
 }
 
-export interface AsanaConfig {
+interface AsanaConfig {
   asana_workspace_id: string;
   asana_project_ids?: string;
   asana_team_id?: string;
 }
 
-export interface FreshdeskConfig {}
+interface FreshdeskConfig {}
 
-export interface FirefliesConfig {}
+interface FirefliesConfig {}
 
-export interface MediaWikiConfig extends MediaWikiBaseConfig {
+interface MediaWikiConfig extends MediaWikiBaseConfig {
   hostname: string;
 }
 
-export interface WikipediaConfig extends MediaWikiBaseConfig {}
+interface WikipediaConfig extends MediaWikiBaseConfig {}
 
-export interface ImapConfig {
+interface ImapConfig {
   host: string;
   port?: number;
   mailboxes?: string[];

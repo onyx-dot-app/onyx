@@ -63,7 +63,7 @@ export async function handleOAuthAuthorizationResponse(
 }
 
 // Handler for federated connector OAuth callbacks
-export async function handleFederatedOAuthCallback(
+async function handleFederatedOAuthCallback(
   federatedConnectorId: string,
   code: string,
   state: string
@@ -114,7 +114,7 @@ export async function handleFederatedOAuthCallback(
 
 // server side handler to process the oauth redirect callback
 // https://api.slack.com/authentication/oauth-v2#exchanging
-export async function handleOAuthSlackAuthorizationResponse(
+async function handleOAuthSlackAuthorizationResponse(
   code: string,
   state: string
 ): Promise<OAuthSlackCallbackResponse> {
@@ -152,7 +152,7 @@ export async function handleOAuthSlackAuthorizationResponse(
   return data;
 }
 
-export async function handleOAuthGoogleDriveAuthorizationResponse(
+async function handleOAuthGoogleDriveAuthorizationResponse(
   code: string,
   state: string
 ): Promise<OAuthBaseCallbackResponse> {
@@ -192,7 +192,7 @@ export async function handleOAuthGoogleDriveAuthorizationResponse(
 
 // call server side helper
 // https://developer.atlassian.com/cloud/confluence/oauth-2-3lo-apps
-export async function handleOAuthConfluenceAuthorizationResponse(
+async function handleOAuthConfluenceAuthorizationResponse(
   code: string,
   state: string
 ): Promise<OAuthBaseCallbackResponse> {
@@ -243,7 +243,7 @@ export async function handleOAuthPrepareFinalization(
 
 // call server side helper
 // https://developer.atlassian.com/cloud/confluence/oauth-2-3lo-apps
-export async function handleOAuthConfluencePrepareFinalization(
+async function handleOAuthConfluencePrepareFinalization(
   credential: number
 ): Promise<OAuthConfluencePrepareFinalizationResponse> {
   const url = `/api/oauth/connector/confluence/accessible-resources?credential_id=${encodeURIComponent(

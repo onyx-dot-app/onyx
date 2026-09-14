@@ -8,7 +8,7 @@ import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 // Constants for service names to avoid typos
-export const GOOGLE_SERVICES = {
+const GOOGLE_SERVICES = {
   GMAIL: "gmail",
   GOOGLE_DRIVE: "google-drive",
 } as const;
@@ -47,7 +47,7 @@ export const useGoogleCredentials = (
   );
 };
 
-export const useConnectorsByCredentialId = (credential_id: number | null) => {
+const useConnectorsByCredentialId = (credential_id: number | null) => {
   let url: string | null = null;
   if (credential_id !== null) {
     url = `/api/manage/admin/connector?credential=${credential_id}`;
@@ -60,7 +60,7 @@ export const useConnectorsByCredentialId = (credential_id: number | null) => {
   };
 };
 
-export const filterUploadedCredentials = <
+const filterUploadedCredentials = <
   T extends { authentication_method?: string },
 >(
   credentials: Credential<T>[] | undefined
@@ -82,7 +82,7 @@ export const filterUploadedCredentials = <
   return { credential_id, uploadedCredentials };
 };
 
-export const checkConnectorsExist = (
+const checkConnectorsExist = (
   connectors: ConnectorSnapshot[] | undefined
 ): boolean => {
   return !!connectors && connectors.length > 0;
