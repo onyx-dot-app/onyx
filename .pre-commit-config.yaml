@@ -243,10 +243,10 @@ repos:
           )$
 
   - repo: https://github.com/golangci/golangci-lint
-    rev: 5d1e709b7be35cb2025444e19de266b056b7b7ee # frozen: v2.10.1
+    rev: 27774aaf853a4fd21f1dd5e69439459dc1b26e68 # frozen: v2.13.2
     hooks:
       - id: golangci-lint
-        language_version: "1.26.5"
+        language_version: "1.27.1"
         entry: bash -c "find . -name go.mod -not -path './.venv/*' -print0 | xargs -0 -I{} bash -c 'cd \"$(dirname {})\" && golangci-lint run ./...'"
 
   - repo: https://github.com/sirwart/ripsecrets

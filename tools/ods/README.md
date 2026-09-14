@@ -981,11 +981,20 @@ uv pip install .
 
 ## Build constraints
 
-Wheel builds resolve their build environment (hatchling, `go-bin`, manygo and their
-dependencies) against `tools/requirements/build-constraints.txt`, shared by `cli`,
-`tools/ods` and `tools/ods-audit`. The release workflows pass it as
-`UV_BUILD_CONSTRAINT` with `UV_REQUIRE_HASHES`, so every published wheel is built
-from the same verified closure.
+The release workflows build every wheel against
+`tools/requirements/build-constraints.txt`, shared by `cli`, `tools/ods` and
+`tools/ods-audit`. They pass it as `UV_BUILD_CONSTRAINT` with
+`UV_REQUIRE_HASHES`, so the build environment (hatchling, `go-bin`, manygo and
+their dependencies) is pinned and verified.
+
+A plain local `uv build` resolves those dependencies freely. Set the same
+variables to build against the pinned closure:
+
+```shell
+UV_BUILD_CONSTRAINT="$(git rev-parse --show-toplevel)/tools/requirements/build-constraints.txt" \
+  UV_REQUIRE_HASHES=true GOTOOLCHAIN=local \
+  uv build --wheel
+```
 
 `tools/requirements/build-constraints.txt` is compiled from its `.in` by the
 `pip-compile` pre-commit hook, so a plain `pre-commit run pip-compile` refreshes

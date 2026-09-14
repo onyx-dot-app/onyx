@@ -17,16 +17,17 @@ PROJECTS = ("cli", "tools/ods", "tools/ods-audit")
 
 
 def main() -> int:
-    expected = {
-        line.strip()
-        for line in (HERE / "build-constraints.in").read_text().splitlines()
-        if line.strip() and not line.startswith("#")
+    lines: list[str] = (HERE / "build-constraints.in").read_text().splitlines()
+    expected: set[str] = {
+        stripped
+        for stripped in (line.strip() for line in lines)
+        if stripped and not stripped.startswith("#")
     }
-    failed = False
+    failed: bool = False
     for project in PROJECTS:
         pyproject = REPO_ROOT / project / "pyproject.toml"
         with pyproject.open("rb") as handle:
-            requires = set(tomllib.load(handle)["build-system"]["requires"])
+            requires: set[str] = set(tomllib.load(handle)["build-system"]["requires"])
         if requires != expected:
             failed = True
             print(f"{pyproject}: build requirements differ from build-constraints.in")
