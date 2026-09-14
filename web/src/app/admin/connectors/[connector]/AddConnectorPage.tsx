@@ -42,6 +42,7 @@ import {
   defaultRefreshFreqMinutes,
   isLoadState,
   ConnectorBase,
+  ConnectorSnapshot,
 } from "@/lib/connectors/connectors";
 import { useSettings } from "@/lib/settings/hooks";
 import { Modal } from "@opal/components";
@@ -104,6 +105,26 @@ async function fetchRollbackTarget(ccPairId: number): Promise<RollbackTarget> {
   return {
     connectorId: ccPair.connector.id,
     credentialId: ccPair.credential.id,
+  };
+}
+
+/** The link endpoint commits the pair before it can fail, so a non-2xx answer does not prove it is absent. */
+async function fetchLinkedRollbackTarget(
+  connectorId: number,
+  credentialId: number
+): Promise<RollbackTarget> {
+  const response = await fetch(`/api/manage/connector/${connectorId}`);
+  if (!response.ok) {
+    throw new Error(
+      await parseErrorDetail(response, `HTTP ${response.status}`)
+    );
+  }
+  const connector: ConnectorSnapshot = await response.json();
+  return {
+    connectorId,
+    credentialId: connector.credential_ids.includes(credentialId)
+      ? credentialId
+      : null,
   };
 }
 
@@ -470,13 +491,9 @@ export default function AddConnector({
                 );
 
                 if (timedOut) {
-                  // A failed link leaves a bare connector row and no cc-pair.
-                  await rollbackTimedOutCreation({
-                    connectorId: created.id,
-                    credentialId: linkCredentialResponse.ok
-                      ? credential!.id
-                      : null,
-                  });
+                  await rollbackTimedOutCreation(
+                    fetchLinkedRollbackTarget(created.id, credential!.id)
+                  );
                   return;
                 }
 

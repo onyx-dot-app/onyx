@@ -15,8 +15,8 @@ import { IndexingStatusPage } from "@tests/e2e/admin/connector/IndexingStatusPag
  */
 const DOCS_URL = "https://docs.onyx.app";
 
-// Comfortably past the wizard's 10s CONNECTOR_CREATION_TIMEOUT_MS.
-const CREATION_DELAY_MS = 12_000;
+// Past the wizard's 10s CONNECTOR_CREATION_TIMEOUT_MS, with room for CI jitter.
+const CREATION_DELAY_MS = 15_000;
 
 test.describe("Web connector setup", () => {
   let connectorName: string;
