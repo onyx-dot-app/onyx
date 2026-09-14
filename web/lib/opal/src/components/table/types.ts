@@ -14,13 +14,13 @@ import type { SortDirection } from "@opal/components/table/TableHead";
 // ---------------------------------------------------------------------------
 
 /** Width config for a data column (participates in proportional distribution). */
-export interface DataColumnWidth {
+interface DataColumnWidth {
   weight: number;
   minWidth?: number;
 }
 
 /** Width config for a fixed column (exact pixels, no proportional distribution). */
-export interface FixedColumnWidth {
+interface FixedColumnWidth {
   fixed: number;
 }
 
@@ -32,7 +32,7 @@ export type ColumnWidth = DataColumnWidth | FixedColumnWidth;
 
 export type QualifierContentType = "simple" | "icon" | "image";
 
-export type OnyxColumnKind = "qualifier" | "data" | "display" | "actions";
+type OnyxColumnKind = "qualifier" | "data" | "display" | "actions";
 
 // ---------------------------------------------------------------------------
 // Column definitions (discriminated union on `kind`)
@@ -104,7 +104,7 @@ export type OnyxColumnDef<TData> =
 // ---------------------------------------------------------------------------
 
 /** Server-side configuration for DataTable. */
-export interface ServerSideConfig {
+interface ServerSideConfig {
   /** Total row count from the server. Used to compute page count. */
   totalItems: number;
   /** Whether data is currently being fetched. Shows loading state. */
@@ -121,7 +121,7 @@ export interface ServerSideConfig {
 // DataTable props
 // ---------------------------------------------------------------------------
 
-export interface DataTableDraggableConfig {
+interface DataTableDraggableConfig {
   /** Called after a successful reorder with the new ID order and changed positions. */
   onReorder: (
     ids: string[],

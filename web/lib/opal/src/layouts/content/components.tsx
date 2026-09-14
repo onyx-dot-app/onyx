@@ -230,13 +230,4 @@ function Content(props: ContentProps) {
 // Exports
 // ---------------------------------------------------------------------------
 
-export {
-  Content,
-  type ContentProps,
-  type SizePreset,
-  type ContentVariant,
-  type XlContentProps,
-  type LgContentProps,
-  type MdContentProps,
-  type SmContentProps,
-};
+export { Content, type ContentProps, type SizePreset, type ContentVariant };

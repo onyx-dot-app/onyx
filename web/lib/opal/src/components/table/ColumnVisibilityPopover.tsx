@@ -111,4 +111,4 @@ function createColumnVisibilityColumn<TData>(): ColumnDef<TData, unknown> {
   };
 }
 
-export { ColumnVisibilityPopover, createColumnVisibilityColumn };
+export { ColumnVisibilityPopover };

@@ -25,7 +25,7 @@ import {
 // ---------------------------------------------------------------------------
 
 export type OnyxSortDirection = "none" | "ascending" | "descending";
-export type OnyxSelectionState = "none" | "partial" | "all";
+type OnyxSelectionState = "none" | "partial" | "all";
 
 // ---------------------------------------------------------------------------
 // Exported utility

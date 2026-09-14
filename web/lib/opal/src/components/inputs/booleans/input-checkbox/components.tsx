@@ -159,4 +159,4 @@ function InputCheckbox({
   );
 }
 
-export { InputCheckbox, type InputCheckboxProps, type CheckboxState };
+export { InputCheckbox, type InputCheckboxProps };

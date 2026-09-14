@@ -154,5 +154,5 @@ function Tag({
   );
 }
 
-export { Tag, TAG_REMOVE_CLASS, type TagProps, type TagSize };
+export { Tag, TAG_REMOVE_CLASS, type TagProps };
 export { TAG_COLORS, type TagColor } from "@opal/components/tag/colors";

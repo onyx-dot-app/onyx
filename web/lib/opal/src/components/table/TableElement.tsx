@@ -59,4 +59,4 @@ function Table({
 }
 
 export default Table;
-export type { TableProps, TableSize, TableVariant, SelectionBehavior };
+export type { TableVariant };

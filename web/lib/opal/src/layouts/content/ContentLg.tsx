@@ -221,4 +221,4 @@ function ContentLg({
   );
 }
 
-export { ContentLg, type ContentLgProps, type ContentLgSizePreset };
+export { ContentLg, type ContentLgProps };

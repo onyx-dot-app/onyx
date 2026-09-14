@@ -311,8 +311,6 @@ export {
   Vertical,
   type HorizontalProps,
   Horizontal,
-  FormikInputError,
-  type FormikInputErrorProps,
   type InputErrorType,
   type InputErrorTextProps,
   InputErrorText,

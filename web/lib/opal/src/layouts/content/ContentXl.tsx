@@ -263,4 +263,4 @@ function ContentXl({
   );
 }
 
-export { ContentXl, type ContentXlProps, type ContentXlSizePreset };
+export { ContentXl, type ContentXlProps };

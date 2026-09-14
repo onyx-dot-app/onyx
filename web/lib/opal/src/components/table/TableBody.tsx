@@ -83,4 +83,3 @@ function TableBody({
 }
 
 export default TableBody;
-export type { TableBodyProps, DraggableProps };

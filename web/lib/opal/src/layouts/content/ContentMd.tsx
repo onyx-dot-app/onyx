@@ -349,10 +349,4 @@ function ContentMd({
   );
 }
 
-export {
-  ContentMd,
-  type ContentMdProps,
-  type ContentMdSizePreset,
-  type ContentMdSuffix,
-  type ContentMdAuxIcon,
-};
+export { ContentMd, type ContentMdProps };

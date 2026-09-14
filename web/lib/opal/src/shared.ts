@@ -144,10 +144,6 @@ function roundingToRem(rounding: Rounding): string {
 export {
   type ExtremaSizeVariants,
   type ContainerSizeVariants,
-  type OverridableExtremaSizeVariants,
-  type Rounding,
-  type SizeVariants,
-  type Spacing,
   containerSizeVariants,
   spacingToRem,
   roundingToRem,

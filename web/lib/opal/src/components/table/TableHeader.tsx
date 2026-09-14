@@ -11,4 +11,3 @@ function TableHeader({ ref, ...props }: TableHeaderProps) {
 }
 
 export default TableHeader;
-export type { TableHeaderProps };

@@ -102,7 +102,6 @@ const sharedConfig = {
     // Path aliases (must come after specific mocks)
     "^@/(.*)$": "<rootDir>/src/$1",
     "^@tests/(.*)$": "<rootDir>/tests/$1",
-    "^@opal$": "<rootDir>/lib/opal/src/index.ts",
     "^@opal/(.*)$": "<rootDir>/lib/opal/src/$1",
   },
 

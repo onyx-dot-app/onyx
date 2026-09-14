@@ -86,7 +86,7 @@ interface InlineMarkdownProps {
   content: string;
 }
 
-export default function InlineMarkdown({ content }: InlineMarkdownProps) {
+function InlineMarkdown({ content }: InlineMarkdownProps) {
   // Convert \n to CommonMark hard line breaks (two trailing spaces + newline).
   // react-markdown renders these as <br />, which inherits the parent's
   // line-height for font-appropriate spacing.

@@ -119,9 +119,4 @@ function ContentSm({
   );
 }
 
-export {
-  ContentSm,
-  type ContentSmProps,
-  type ContentSmSizePreset,
-  type ContentSmOrientation,
-};
+export { ContentSm, type ContentSmOrientation };

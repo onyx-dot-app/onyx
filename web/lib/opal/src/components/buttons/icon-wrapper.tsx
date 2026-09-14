@@ -33,4 +33,4 @@ function iconWrapper(
   ) : null;
 }
 
-export { iconWrapper, iconVariants };
+export { iconWrapper };

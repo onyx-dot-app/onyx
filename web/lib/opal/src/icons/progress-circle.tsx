@@ -2,7 +2,7 @@ import { cn } from "@opal/utils";
 import SvgCheckCircle from "@opal/icons/check-circle";
 import type { IconProps } from "@opal/types";
 
-export interface SvgProgressCircleProps extends IconProps {
+interface SvgProgressCircleProps extends IconProps {
   value?: number;
 }
 

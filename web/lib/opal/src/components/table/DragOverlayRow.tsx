@@ -92,4 +92,3 @@ function DragOverlayRowInner<TData>({
 const DragOverlayRow = memo(DragOverlayRowInner) as typeof DragOverlayRowInner;
 
 export default DragOverlayRow;
-export type { DragOverlayRowProps };

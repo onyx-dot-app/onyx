@@ -221,5 +221,4 @@ export {
   type HoverableRootProps,
   type HoverableItemProps,
   type HoverableItemVariant,
-  type HoverableInteraction,
 };

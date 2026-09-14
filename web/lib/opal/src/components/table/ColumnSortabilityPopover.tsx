@@ -177,4 +177,4 @@ function createSortingColumn<TData>(
   };
 }
 
-export { SortingPopover, createSortingColumn };
+export { SortingPopover };
