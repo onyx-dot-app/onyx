@@ -10,7 +10,10 @@ from onyx.connectors.zoom.client import ZoomClient
 from onyx.connectors.zoom.models import ZoomSessionDetails, ZoomSessionOccurrence
 from onyx.connectors.zoom.recordings.models import ZoomSessionType
 
-# Zoom's `type` code on an entry of the recording listing.
+# Zoom's `type` code on an entry of the recording listing. The codes and their
+# meeting/webinar split come from `meetings[].type` on Cloud Recording > List all
+# recordings (GET /users/{userId}/recordings):
+# https://developers.zoom.us/docs/api/meetings/#tag/cloud-recording/get/users/%7BuserId%7D/recordings
 _MEETING_RECORDING_TYPES = frozenset({"1", "2", "3", "4", "7", "8"})
 _WEBINAR_RECORDING_TYPES = frozenset({"5", "6", "9"})
 _UPLOADED_RECORDING_TYPE = "99"
