@@ -42,7 +42,6 @@ import {
   defaultRefreshFreqMinutes,
   isLoadState,
   ConnectorBase,
-  ConnectorSnapshot,
 } from "@/lib/connectors/connectors";
 import { useSettings } from "@/lib/settings/hooks";
 import { Modal } from "@opal/components";
@@ -90,7 +89,7 @@ const CONNECTOR_CREATION_TIMEOUT_MS = 10000; // ~10 seconds is reasonable for lo
 
 interface RollbackTarget {
   connectorId: number;
-  credentialId: number | null;
+  credentialId: number;
 }
 
 /** The mock-credential endpoint returns only the cc-pair id, so a rollback has to look the rest up. */
@@ -109,30 +108,23 @@ async function fetchRollbackTarget(ccPairId: number): Promise<RollbackTarget> {
 }
 
 /**
- * The link endpoint commits the pair before it can fail, so a non-2xx answer does
- * not prove the pair is absent. This read is global-only, so keep the answer the
- * status code gives when a scoped manager cannot make it.
+ * A link that answered non-2xx can still have committed the pair, and the client
+ * cannot tell, so ask for the pair teardown first and fall back to the bare row.
+ * Deleting the connector alone would orphan the credential and its documents.
  */
-async function fetchLinkedRollbackTarget(
+async function tearDownConnector(
   connectorId: number,
-  credentialId: number,
-  linkSucceeded: boolean
-): Promise<RollbackTarget> {
-  const assumed: RollbackTarget = {
+  credentialId: number
+): Promise<string | null> {
+  const pairError = await scheduleDeletionJobForConnector(
     connectorId,
-    credentialId: linkSucceeded ? credentialId : null,
-  };
-  const response = await fetch(`/api/manage/connector/${connectorId}`);
-  if (!response.ok) {
-    return assumed;
+    credentialId
+  );
+  if (pairError === null) {
+    return null;
   }
-  const connector: ConnectorSnapshot = await response.json();
-  return {
-    connectorId,
-    credentialId: connector.credential_ids.includes(credentialId)
-      ? credentialId
-      : null,
-  };
+  const connectorError = await deleteConnector(connectorId);
+  return connectorError === null ? null : pairError;
 }
 
 export default function AddConnector({
@@ -262,19 +254,12 @@ export default function AddConnector({
     router.push("/admin/indexing/status?message=connector-created");
   };
 
-  /**
-   * Deleting the connector row alone would orphan the credential and leave
-   * indexed documents behind, so schedule a deletion job once a cc-pair exists.
-   */
   const rollbackTimedOutCreation = async (
     target: RollbackTarget | Promise<RollbackTarget>
   ) => {
     try {
       const { connectorId, credentialId } = await target;
-      const errorDetail =
-        credentialId === null
-          ? await deleteConnector(connectorId)
-          : await scheduleDeletionJobForConnector(connectorId, credentialId);
+      const errorDetail = await tearDownConnector(connectorId, credentialId);
       if (errorDetail !== null) {
         toast.error(t("add.rollbackFailed.toast", { detail: errorDetail }));
       }
@@ -498,13 +483,10 @@ export default function AddConnector({
                 );
 
                 if (timedOut) {
-                  await rollbackTimedOutCreation(
-                    fetchLinkedRollbackTarget(
-                      created.id,
-                      credential!.id,
-                      linkCredentialResponse.ok
-                    )
-                  );
+                  await rollbackTimedOutCreation({
+                    connectorId: created.id,
+                    credentialId: credential!.id,
+                  });
                   return;
                 }
 
