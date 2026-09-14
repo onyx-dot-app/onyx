@@ -6,9 +6,6 @@ concurrency:
 on:
   merge_group:
   pull_request:
-    branches:
-      - main
-      - "release/**"
     # NOTE: Intentionally no `paths:` filter. We always trigger and let the
     # `changes` job below decide whether the real test matrix runs. This
     # avoids the dual-workflow skip pattern where a `paths-ignore`'d skip
@@ -1019,8 +1016,18 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
         run: |
           if [ "${EVENT_NAME}" = "pull_request" ]; then
-            # PRs compare against the base branch (e.g. main, release/2.5)
-            echo "rev=${BASE_REF}" >> "$GITHUB_OUTPUT"
+            # PRs compare against the base branch (e.g. main, release/2.5).
+            # Baselines are only written from main/release/*, so a PR into any
+            # other branch (a stacked PR) falls back to main.
+            case "${BASE_REF}" in
+              main|release/*)
+                echo "rev=${BASE_REF}" >> "$GITHUB_OUTPUT"
+                ;;
+              *)
+                echo "No baseline for base branch '${BASE_REF}'; comparing against main"
+                echo "rev=main" >> "$GITHUB_OUTPUT"
+                ;;
+            esac
           elif [ "${EVENT_NAME}" = "merge_group" ]; then
             # Merge queue compares against the target branch (e.g. refs/heads/main -> main)
             echo "rev=${MERGE_GROUP_BASE_REF#refs/heads/}" >> "$GITHUB_OUTPUT"
@@ -1228,6 +1235,9 @@ jobs:
         playwright-tests-oauth-okta,
       ]
     if: ${{ always() }}
+    # Writes the tested-base commit status in the last step.
+    permissions:
+      statuses: write
     steps:
       - name: Check job status
         env:
@@ -1270,3 +1280,26 @@ jobs:
             exit 1
           fi
           echo "All tests passed."
+      # Record which base tip this verdict used. merge-group.yml refuses to
+      # merge a PR whose verdict used a base that never landed in the target
+      # (see .github/actions/check-tested-base).
+      # Fork and Dependabot runs have a read-only token and cannot record.
+      - name: Record tested base
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          github.actor != 'dependabot[bot]'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          DESCRIPTION="${BASE_SHA} ${BASE_REF}"
+          gh api --method POST "repos/${REPO}/statuses/${HEAD_SHA}" \
+            -f state=success \
+            -f context=ci/tested-base/playwright \
+            -f description="${DESCRIPTION:0:140}" \
+            -f target_url="${RUN_URL}"
