@@ -24,6 +24,75 @@ entries:
       org.opencontainers.image.source: https://github.com/onyx-dot-app/onyx
     apiVersion: v2
     appVersion: latest
+    created: "2026-09-14T17:52:17.485708711Z"
+    dependencies:
+    - alias: postgresql
+      condition: postgresqlOperator.enabled,postgresql.enabled
+      name: cloudnative-pg
+      repository: https://cloudnative-pg.github.io/charts
+      version: 0.26.0
+    - condition: postgresql.installCRDs,postgresqlOperator.enabled,postgresql.enabled
+      name: onyx-cnpg-crds
+      repository: file://../onyx-cnpg-crds
+      version: 0.1.0
+    - condition: opensearch.enabled
+      name: opensearch
+      repository: https://opensearch-project.github.io/helm-charts
+      version: 3.6.0
+    - alias: nginx
+      condition: nginx.enabled
+      name: ingress-nginx
+      repository: https://kubernetes.github.io/ingress-nginx
+      version: 4.13.3
+    - condition: redisOperator.enabled,redis.enabled
+      name: redis-operator
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.24.0
+    - condition: redis.enabled
+      name: redis
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.16.6
+    - condition: minio.enabled
+      name: minio
+      repository: https://charts.min.io/
+      version: 5.4.0
+    - condition: codeInterpreter.enabled
+      name: code-interpreter
+      repository: https://onyx-dot-app.github.io/python-sandbox/
+      version: 0.4.7
+    description: Onyx application and Craft sandbox deployment chart
+    digest: 01e2e34dda2298d3c7835a237d20a4d0c5198a1f977f0c3da1ff98144affd7ba
+    home: https://www.onyx.app/
+    name: onyx
+    sources:
+    - https://github.com/onyx-dot-app/onyx
+    type: application
+    urls:
+    - https://github.com/onyx-dot-app/onyx/releases/download/helm/onyx-0.8.24/onyx-0.8.24.tgz
+    version: 0.8.24
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: added
+          description: Optional verified TLS for an external Redis. Set
+            `redisTls.enabled=true` and supply the Redis server CA in a Secret
+            (`redisTls.caSecretName`) or a ConfigMap (`redisTls.caConfigMapName`).
+            The chart then mounts the CA read-only into every Redis client workload
+            and sets `REDIS_SSL`, `REDIS_SSL_CERT_REQS=required`,
+            `REDIS_SSL_CA_CERTS`, and `REDIS_SSL_CHECK_HOSTNAME`. Hostname
+            verification defaults to true; set `redisTls.checkHostname=false` only
+            for an endpoint whose certificate cannot match its host. Rendering fails
+            if `redis.enabled=true`, or if both CA sources are set, or if neither
+            is. Default deployments keep their current Redis configuration.
+      category: Productivity
+      images: |
+        - name: webserver
+          image: docker.io/onyxdotapp/onyx-web-server:latest
+        - name: background
+          image: docker.io/onyxdotapp/onyx-backend:latest
+      licenses: MIT
+      org.opencontainers.image.source: https://github.com/onyx-dot-app/onyx
+    apiVersion: v2
+    appVersion: latest
     created: "2026-09-10T19:31:36.017651815Z"
     dependencies:
     - alias: postgresql
@@ -7872,4 +7941,4 @@ entries:
     urls:
     - https://github.com/onyx-dot-app/onyx/releases/download/onyx-stack-0.2.4/onyx-stack-0.2.4.tgz
     version: 0.2.4
-generated: "2026-09-10T19:31:36.018246641Z"
+generated: "2026-09-14T17:52:17.485977176Z"
