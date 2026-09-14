@@ -55,16 +55,12 @@ _ZOOM_NOT_ENTITLED_ERROR_CODE = 200
 _MAX_PAGE_SIZE = 300
 
 
-def _encode_path_segment(value: str) -> str:
-    return quote(value, safe="")
-
-
 def _encode_meeting_identifier(identifier: str) -> str:
     """Zoom requires a UUID to be encoded twice when it starts with "/" or
     contains "//"."""
-    encoded = _encode_path_segment(identifier)
+    encoded = quote(identifier, safe="")
     if identifier.startswith("/") or "//" in identifier:
-        encoded = _encode_path_segment(encoded)
+        encoded = quote(encoded, safe="")
     return encoded
 
 
@@ -333,7 +329,7 @@ class ZoomClient:
             params["next_page_token"] = page_token
 
         response = self._request(
-            "GET", f"/groups/{_encode_path_segment(group_id)}/members", params=params
+            "GET", f"/groups/{quote(group_id, safe='')}/members", params=params
         )
         _raise_for_zoom_error(response, f"the members of group {group_id}")
         body = response.json()
@@ -376,7 +372,7 @@ class ZoomClient:
             params["next_page_token"] = page_token
 
         response = self._request(
-            "GET", f"/users/{_encode_path_segment(user_id)}/recordings", params=params
+            "GET", f"/users/{quote(user_id, safe='')}/recordings", params=params
         )
         _raise_for_zoom_error(response, f"the recordings for user {user_id}")
         body = response.json()
