@@ -39,31 +39,31 @@ def drop_data_plane_schema(tenant_id: str) -> dict[str, str]:
         # Equivalent to a single lookup when one shard is configured.
         dropped_from: list[str] = []
         for shard_name in sorted(get_shard_specs()):
-            with get_engine_for_shard(shard_name).connect() as connection:
-                with connection.begin():
-                    check_schema_query = text("""
-                        SELECT nspname
-                        FROM pg_namespace
-                        WHERE nspname = :schema_name
-                    """)
+            with (
+                get_engine_for_shard(shard_name).connect() as connection,
+                connection.begin(),
+            ):
+                check_schema_query = text("""
+                    SELECT nspname
+                    FROM pg_namespace
+                    WHERE nspname = :schema_name
+                """)
 
-                    if (
-                        connection.execute(
-                            check_schema_query, {"schema_name": tenant_id}
-                        ).fetchone()
-                        is None
-                    ):
-                        continue
-
-                    # CASCADE to remove all objects within it
+                if (
                     connection.execute(
-                        text(f'DROP SCHEMA IF EXISTS "{tenant_id}" CASCADE')
-                    )
-                    dropped_from.append(shard_name)
-                    print(
-                        f"Dropped schema {tenant_id} from shard {shard_name}",
-                        file=sys.stderr,
-                    )
+                        check_schema_query, {"schema_name": tenant_id}
+                    ).fetchone()
+                    is None
+                ):
+                    continue
+
+                # CASCADE to remove all objects within it
+                connection.execute(text(f'DROP SCHEMA IF EXISTS "{tenant_id}" CASCADE'))
+                dropped_from.append(shard_name)
+                print(
+                    f"Dropped schema {tenant_id} from shard {shard_name}",
+                    file=sys.stderr,
+                )
 
         # Runs even when no schema was found, so a retry after a partially completed
         # cleanup converges instead of repeating `not_found` forever.

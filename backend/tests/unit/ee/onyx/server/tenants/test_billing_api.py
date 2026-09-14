@@ -222,12 +222,14 @@ class TestCreateSubscriptionSession:
 
         token = CURRENT_TENANT_ID_CONTEXTVAR.set("tenant_123")
         try:
-            with patch(
-                "ee.onyx.server.tenants.billing_api.fetch_stripe_checkout_session",
-                side_effect=Exception("control plane 409"),
+            with (
+                patch(
+                    "ee.onyx.server.tenants.billing_api.fetch_stripe_checkout_session",
+                    side_effect=Exception("control plane 409"),
+                ),
+                pytest.raises(OnyxError) as exc_info,
             ):
-                with pytest.raises(OnyxError) as exc_info:
-                    await create_subscription_session(request=None, _=MagicMock())
+                await create_subscription_session(request=None, _=MagicMock())
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
@@ -254,9 +256,9 @@ class TestFetchStripeCheckoutSession:
                 "ee.onyx.server.tenants.billing.requests.post",
                 return_value=mock_response,
             ),
+            pytest.raises(Exception, match="no checkout URL"),
         ):
-            with pytest.raises(Exception, match="no checkout URL"):
-                fetch_stripe_checkout_session("tenant_123")
+            fetch_stripe_checkout_session("tenant_123")
 
     def test_returns_full_result(self) -> None:
         """Parses sessionId, url, and the payment-method-update flag."""

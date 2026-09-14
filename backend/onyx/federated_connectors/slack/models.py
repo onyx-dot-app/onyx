@@ -100,11 +100,12 @@ class SlackEntities(BaseModel):
     def validate_channel_config(self) -> "SlackEntities":
         """Validate search_all_channels configuration"""
         # If search_all_channels is False, channels list must be provided
-        if not self.search_all_channels:
-            if self.channels is None or len(self.channels) == 0:
-                raise ValueError(
-                    "Must specify at least one channel when search_all_channels is False"
-                )
+        if not self.search_all_channels and (
+            self.channels is None or len(self.channels) == 0
+        ):
+            raise ValueError(
+                "Must specify at least one channel when search_all_channels is False"
+            )
 
         return self
 

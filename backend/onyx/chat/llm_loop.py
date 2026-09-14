@@ -389,11 +389,10 @@ def construct_message_history(
     all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
     image_files_replayed_as_markers: bool = False,
 ) -> list[ChatMessageSimple]:
-    if last_n_user_messages is not None:
-        if last_n_user_messages <= 0:
-            raise ValueError(
-                "filtering chat history by last N user messages must be a value greater than 0"
-            )
+    if last_n_user_messages is not None and last_n_user_messages <= 0:
+        raise ValueError(
+            "filtering chat history by last N user messages must be a value greater than 0"
+        )
 
     # Budget each message at its replay cost: when the model takes no image
     # input, translate_history_to_llm_format sends short text markers instead

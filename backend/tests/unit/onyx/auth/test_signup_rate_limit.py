@@ -142,9 +142,9 @@ async def test_rejects_when_over_limit() -> None:
         patch.object(
             rl, "get_async_redis_connection", AsyncMock(return_value=fake_redis)
         ),
+        pytest.raises(OnyxError) as exc_info,
     ):
-        with pytest.raises(OnyxError) as exc_info:
-            await enforce_signup_rate_limit(req)
+        await enforce_signup_rate_limit(req)
     assert exc_info.value.error_code.status_code == 429
 
 

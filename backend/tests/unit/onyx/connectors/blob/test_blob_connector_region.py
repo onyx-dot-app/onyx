@@ -44,9 +44,11 @@ def test_instance_role_auth_passes_region(region_name: str | None) -> None:
     credentials: dict[str, Any] = {"authentication_method": "assume_role"}
 
     connector = _make_connector(region_name)
-    with patch("onyx.connectors.blob.connector.boto3.client") as mock_client:
-        with patch.object(BlobStorageConnector, "_detect_bucket_region"):
-            connector.load_credentials(credentials)
+    with (
+        patch("onyx.connectors.blob.connector.boto3.client") as mock_client,
+        patch.object(BlobStorageConnector, "_detect_bucket_region"),
+    ):
+        connector.load_credentials(credentials)
 
     mock_client.assert_called_once_with("s3", region_name=region_name)
 

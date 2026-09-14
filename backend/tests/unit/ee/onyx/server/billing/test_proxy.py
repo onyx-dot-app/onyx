@@ -144,9 +144,11 @@ class TestForwardToControlPlane:
         )
         mock_client = make_mock_http_client("post", side_effect=error)
 
-        with patch("httpx.AsyncClient", mock_client):
-            with pytest.raises(HTTPException) as exc_info:
-                await forward_to_control_plane("POST", "/test")
+        with (
+            patch("httpx.AsyncClient", mock_client),
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            await forward_to_control_plane("POST", "/test")
 
         assert exc_info.value.status_code == 400
 
@@ -166,9 +168,11 @@ class TestForwardToControlPlane:
         error = httpx.RequestError("Connection failed")
         mock_client = make_mock_http_client("post", side_effect=error)
 
-        with patch("httpx.AsyncClient", mock_client):
-            with pytest.raises(HTTPException) as exc_info:
-                await forward_to_control_plane("POST", "/test")
+        with (
+            patch("httpx.AsyncClient", mock_client),
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            await forward_to_control_plane("POST", "/test")
 
         assert exc_info.value.status_code == 502
         assert "Failed to connect" in exc_info.value.detail

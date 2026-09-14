@@ -81,10 +81,10 @@ def test_stream_does_not_retry_after_first_chunk() -> None:
             return_value=translated_chunk,
         ),
         patch("onyx.llm.multi_llm.logger") as mock_logger,
+        pytest.raises(LiteLLMTimeout),
     ):
         # Bind the unbound method to a fake self to isolate retry behavior.
-        with pytest.raises(LiteLLMTimeout):
-            list(LitellmLLM.stream(fake_llm, prompt=_make_prompt()))
+        list(LitellmLLM.stream(fake_llm, prompt=_make_prompt()))
 
     assert fake_llm._completion.call_count == 1
     mock_logger.warning.assert_not_called()

@@ -193,9 +193,7 @@ def _in_time_window(
     timestamp = modified_at.timestamp()
     if start is not None and timestamp < start:
         return False
-    if end is not None and timestamp > end:
-        return False
-    return True
+    return not (end is not None and timestamp > end)
 
 
 def iter_box_enterprise_users(

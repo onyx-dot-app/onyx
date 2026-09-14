@@ -24,8 +24,8 @@ def test_normalize_citation_link_wraps_url_with_parentheses() -> None:
     normalized = _normalize_link_destinations(message)
 
     assert (
-        "See [[1]](<https://example.com/Access%20ID%20Card(s)%20Guide.pdf>) for details."
-        == normalized
+        normalized
+        == "See [[1]](<https://example.com/Access%20ID%20Card(s)%20Guide.pdf>) for details."
     )
 
 
@@ -102,7 +102,7 @@ def test_format_slack_message_block_spacing() -> None:
 
     formatted = format_slack_message(message)
 
-    assert "Paragraph one.\n\nParagraph two." == formatted
+    assert formatted == "Paragraph one.\n\nParagraph two."
 
 
 def test_format_slack_message_code_block_no_trailing_blank_line() -> None:
@@ -203,29 +203,30 @@ def _render(message: str) -> str:
 def test_bold_url_delimiters_stay_outside_the_link() -> None:
     rendered = _render("See **https://onyx.app/docs** for details.")
 
-    assert "See *<https://onyx.app/docs>* for details." == rendered
+    assert rendered == "See *<https://onyx.app/docs>* for details."
 
 
 def test_unlinked_email_is_still_not_split_by_zero_width_space() -> None:
     # Rejected as a truncated local part, so it stays plain text and the
     # mention defanging is the only thing left that could corrupt it
-    assert "a *support@onyx.app" == _render("a *support@onyx.app")
+    assert _render("a *support@onyx.app") == "a *support@onyx.app"
 
 
 def test_italic_and_strikethrough_urls_stay_intact() -> None:
-    assert "_<https://onyx.app>_" == _render("_https://onyx.app_")
-    assert "~<https://onyx.app>~" == _render("~~https://onyx.app~~")
+    assert _render("_https://onyx.app_") == "_<https://onyx.app>_"
+    assert _render("~~https://onyx.app~~") == "~<https://onyx.app>~"
 
 
 def test_bold_email_renders_as_mailto_link() -> None:
     rendered = _render("Contact **support@onyx.app** for help.")
 
-    assert "Contact *<mailto:support@onyx.app|support@onyx.app>* for help." == rendered
-    assert "_<mailto:support@onyx.app|support@onyx.app>_" == _render(
-        "_support@onyx.app_"
+    assert rendered == "Contact *<mailto:support@onyx.app|support@onyx.app>* for help."
+    assert (
+        _render("_support@onyx.app_") == "_<mailto:support@onyx.app|support@onyx.app>_"
     )
-    assert "~<mailto:support@onyx.app|support@onyx.app>~" == _render(
-        "~~support@onyx.app~~"
+    assert (
+        _render("~~support@onyx.app~~")
+        == "~<mailto:support@onyx.app|support@onyx.app>~"
     )
 
 
@@ -285,10 +286,11 @@ def test_slack_style_mailto_link_survives_formatting() -> None:
 
 
 def test_urls_and_emails_in_code_are_left_alone() -> None:
-    assert "```\nhttps://onyx.app and a@b.com\n```" == _render(
-        "```\nhttps://onyx.app and a@b.com\n```"
+    assert (
+        _render("```\nhttps://onyx.app and a@b.com\n```")
+        == "```\nhttps://onyx.app and a@b.com\n```"
     )
-    assert "code `a@b.com` span" == _render("code `a@b.com` span")
+    assert _render("code `a@b.com` span") == "code `a@b.com` span"
 
 
 def test_ordered_list_resumes_numbering_after_a_fenced_block() -> None:
@@ -302,13 +304,14 @@ def test_ordered_list_resumes_numbering_after_a_fenced_block() -> None:
 def test_blockquoted_list_is_not_treated_as_nested() -> None:
     # mistune counts every block container in attrs["depth"], so only list
     # ancestry may indent
-    assert ">1. alpha\n>2. beta" == format_slack_message("> 1. alpha\n> 2. beta")
-    assert ">• a\n>• b" == format_slack_message("> - a\n> - b")
+    assert format_slack_message("> 1. alpha\n> 2. beta") == ">1. alpha\n>2. beta"
+    assert format_slack_message("> - a\n> - b") == ">• a\n>• b"
 
 
 def test_nested_list_opens_an_indented_line_of_its_own() -> None:
-    assert "1. one\n2. two:\n  • a\n  • b\n3. three" == format_slack_message(
-        "1. one\n2. two:\n   - a\n   - b\n3. three"
+    assert (
+        format_slack_message("1. one\n2. two:\n   - a\n   - b\n3. three")
+        == "1. one\n2. two:\n  • a\n  • b\n3. three"
     )
 
 
@@ -328,54 +331,60 @@ def test_code_is_left_literal_by_every_pre_parse_transform() -> None:
 
 
 def test_url_link_drops_redundant_label() -> None:
-    assert "<https://onyx.app>" == _render("[https://onyx.app](https://onyx.app)")
+    assert _render("[https://onyx.app](https://onyx.app)") == "<https://onyx.app>"
 
 
 def test_link_label_text_is_not_autolinked() -> None:
     # A nested <...> would terminate the citation link that wraps this title
     title = _clean_markdown_link_text("Runbook for https://onyx.app/docs")
 
-    assert "Runbook for https://onyx.app/docs" == title
-    assert "Contact support@onyx.app" == _clean_markdown_link_text(
-        "Contact support@onyx.app"
+    assert title == "Runbook for https://onyx.app/docs"
+    assert (
+        _clean_markdown_link_text("Contact support@onyx.app")
+        == "Contact support@onyx.app"
     )
-    assert "Read the portal" == _clean_markdown_link_text(
-        "Read the [portal](https://onyx.app)"
+    assert (
+        _clean_markdown_link_text("Read the [portal](https://onyx.app)")
+        == "Read the portal"
     )
-    assert "Visit https://onyx.app" == _clean_markdown_link_text(
-        "Visit <https://onyx.app>"
+    assert (
+        _clean_markdown_link_text("Visit <https://onyx.app>")
+        == "Visit https://onyx.app"
     )
 
 
 def test_markdown_link_keeps_nested_url_label_flat() -> None:
     rendered = _render("[outer https://nested.example](https://outer.example/a|b>c)")
 
-    assert "<https://outer.example/a%7Cb%3Ec|outer https://nested.example>" == rendered
+    assert rendered == "<https://outer.example/a%7Cb%3Ec|outer https://nested.example>"
 
 
 def test_image_labels_cannot_nest_slack_links() -> None:
-    assert "<https://images.example/a.png|https://alt.example>" == _render(
-        "![https://alt.example](https://images.example/a.png)"
+    assert (
+        _render("![https://alt.example](https://images.example/a.png)")
+        == "<https://images.example/a.png|https://alt.example>"
     )
-    assert "<https://images.example/a.png|https://alt.example>" == _render(
-        "![<https://alt.example>](https://images.example/a.png)"
+    assert (
+        _render("![<https://alt.example>](https://images.example/a.png)")
+        == "<https://images.example/a.png|https://alt.example>"
     )
 
 
 def test_trailing_punctuation_excluded_from_url() -> None:
-    assert "trailing <https://onyx.app/docs>. Done" == _render(
-        "trailing https://onyx.app/docs. Done"
+    assert (
+        _render("trailing https://onyx.app/docs. Done")
+        == "trailing <https://onyx.app/docs>. Done"
     )
 
 
 def test_balanced_url_parentheses_stay_inside_the_link() -> None:
-    assert "<https://onyx.app/docs_(v2)>" == _render("https://onyx.app/docs_(v2)")
-    assert "<https://onyx.app/docs>)))" == _render("https://onyx.app/docs)))")
+    assert _render("https://onyx.app/docs_(v2)") == "<https://onyx.app/docs_(v2)>"
+    assert _render("https://onyx.app/docs)))") == "<https://onyx.app/docs>)))"
 
 
 def test_url_delimiters_and_short_hosts_do_not_break_slack_links() -> None:
-    assert "<https://x>" == _render("https://x")
-    assert "<https://onyx.app>|label" == _render("https://onyx.app|label")
+    assert _render("https://x") == "<https://x>"
+    assert _render("https://onyx.app|label") == "<https://onyx.app>|label"
 
 
 def test_email_autolinking_does_not_match_an_overlong_local_part() -> None:

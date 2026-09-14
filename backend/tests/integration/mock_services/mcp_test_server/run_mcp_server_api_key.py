@@ -20,15 +20,9 @@ def make_many_tools(mcp: FastMCP) -> None:
 
 if __name__ == "__main__":
     # Accept only these tokens (treat them like API keys) and require a scope
-    if len(sys.argv) > 1:
-        api_key = sys.argv[1]
-    else:
-        api_key = "dev-api-key-123"
+    api_key = sys.argv[1] if len(sys.argv) > 1 else "dev-api-key-123"
 
-    if len(sys.argv) > 2:
-        port = int(sys.argv[2])
-    else:
-        port = 8001
+    port = int(sys.argv[2]) if len(sys.argv) > 2 else 8001
 
     auth = StaticTokenVerifier(
         tokens={

@@ -254,9 +254,7 @@ def passes_global_filters(model: CatalogModel, rules: CurationRules, now: date) 
         return False
     if model.is_expired(now):
         return False
-    if rules.require_text_output and "text" not in model.output_modalities:
-        return False
-    return True
+    return not (rules.require_text_output and "text" not in model.output_modalities)
 
 
 def select_for_rule(

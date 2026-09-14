@@ -550,14 +550,17 @@ def _openai_passthrough_stream_worker(
                         error = response_obj.get("error")
                         if error and span is not None:
                             span.set_error({"message": str(error), "data": None})
-            if frame_lines and not cancelled.is_set():
-                if _put_stream_item(out, "\n".join(frame_lines) + "\n\n", cancelled):
-                    if frame_response_id is not None:
-                        response_id = frame_response_id
-                    if frame_created_at is not None:
-                        response_created_at = frame_created_at
-                    if frame_next_sequence is not None:
-                        next_sequence_number = frame_next_sequence
+            if (
+                frame_lines
+                and not cancelled.is_set()
+                and (_put_stream_item(out, "\n".join(frame_lines) + "\n\n", cancelled))
+            ):
+                if frame_response_id is not None:
+                    response_id = frame_response_id
+                if frame_created_at is not None:
+                    response_created_at = frame_created_at
+                if frame_next_sequence is not None:
+                    next_sequence_number = frame_next_sequence
             # Managed-key cost accounting normally happens inside
             # LLM.invoke/stream, which this path bypasses.
             if state.usage is not None and isinstance(llm, LitellmLLM):

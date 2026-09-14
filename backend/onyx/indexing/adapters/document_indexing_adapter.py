@@ -103,14 +103,16 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
         prepare_to_modify_documents begin() block), then closes the session.
         The single commit both flushes post_index's writes and releases the lock.
         """
-        with get_session_with_current_tenant() as db_session:
-            with prepare_to_modify_documents(
+        with (
+            get_session_with_current_tenant() as db_session,
+            prepare_to_modify_documents(
                 db_session=db_session,
                 document_ids=[doc.id for doc in documents],
                 index_attempt_id=self.index_attempt_metadata.attempt_id,
-            ):
-                yield db_session
-                db_session.commit()
+            ),
+        ):
+            yield db_session
+            db_session.commit()
 
     def prepare_enrichment(
         self,
@@ -302,11 +304,7 @@ class DocumentChunkEnricher:
             ),
             user_project=[],
             personas=[],
-            boost=(
-                self._id_to_boost_map[chunk.source_document.id]
-                if chunk.source_document.id in self._id_to_boost_map
-                else DEFAULT_BOOST
-            ),
+            boost=(self._id_to_boost_map.get(chunk.source_document.id, DEFAULT_BOOST)),
             tenant_id=self._tenant_id,
             aggregated_chunk_boost_factor=score,
             ancestor_hierarchy_node_ids=self._doc_id_to_ancestor_ids[

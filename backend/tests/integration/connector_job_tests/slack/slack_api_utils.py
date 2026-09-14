@@ -9,6 +9,7 @@ Assumptions:
     - chat:write.public
 """
 
+import contextlib
 from collections.abc import Callable, Generator
 from typing import Any, cast
 from uuid import uuid4
@@ -184,18 +185,14 @@ def _build_slack_channel_from_name(
             is_private=is_private,
         )
 
-    try:
+    # Ignore the error raised when the channel is already unarchived.
+    with contextlib.suppress(Exception):
         slack_client.conversations_unarchive(channel=channel_response["channel"]["id"])
-    except Exception:
-        # Channel is already unarchived
-        pass
-    try:
+    with contextlib.suppress(Exception):
         slack_client.conversations_invite(
             channel=channel_response["channel"]["id"],
             users=[admin_user_id],
         )
-    except Exception:
-        pass
 
     final_channel = channel_response["channel"] if channel_response else {}
     return cast(ChannelType, final_channel)

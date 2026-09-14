@@ -277,7 +277,7 @@ def upgrade() -> None:
 
         # Apply updates if any
         if updates:
-            set_clause = ", ".join([f"{k} = :{k}" for k in updates.keys()])
+            set_clause = ", ".join([f"{k} = :{k}" for k in updates])
             updates["user_id"] = str(user_id)  # Convert UUID to string for SQL
             conn.execute(
                 sa.text(f'UPDATE "user" SET {set_clause} WHERE id = :user_id'),

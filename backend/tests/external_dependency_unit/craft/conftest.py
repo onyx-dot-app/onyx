@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import io
 import zipfile
@@ -282,10 +283,8 @@ def seeded_skill(
 
     def _cleanup() -> None:
         for file_id in bundle_file_ids:
-            try:
+            with contextlib.suppress(Exception):
                 file_store.delete_file(file_id, error_on_missing=False)
-            except Exception:
-                pass
 
     request.addfinalizer(_cleanup)
 

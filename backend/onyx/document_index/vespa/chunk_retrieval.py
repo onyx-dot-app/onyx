@@ -193,10 +193,7 @@ def get_chunks_via_visit_api(
         if field_set_list and tenant_id_fieldset_entry not in field_set_list:
             field_set_list.append(tenant_id_fieldset_entry)
 
-    if field_set_list:
-        field_set = f"{index_name}:" + ",".join(field_set_list)
-    else:
-        field_set = None
+    field_set = f"{index_name}:" + ",".join(field_set_list) if field_set_list else None
 
     # build filters
     selection = f"{index_name}.document_id=='{chunk_request.document_id}'"

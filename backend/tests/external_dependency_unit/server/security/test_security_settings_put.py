@@ -6,6 +6,7 @@ framing.
 """
 
 import asyncio
+import contextlib
 import json
 import threading
 from collections.abc import Generator
@@ -88,10 +89,8 @@ def _load_kv(kv_key: str) -> Any:
 
 
 def _delete_kv(kv_key: str) -> None:
-    try:
+    with contextlib.suppress(KvKeyNotFoundError):
         get_kv_store().delete(kv_key)
-    except KvKeyNotFoundError:
-        pass
 
 
 def _delete_kv_backed_overrides() -> None:

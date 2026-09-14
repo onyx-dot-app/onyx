@@ -430,9 +430,9 @@ def test_task_marks_job_failed_on_mid_task_exception(
             "targeted_reindex_task.resolve_failure_derived_targets",
             side_effect=RuntimeError("simulated mid-task crash"),
         ),
+        pytest.raises(RuntimeError, match="simulated mid-task crash"),
     ):
-        with pytest.raises(RuntimeError, match="simulated mid-task crash"):
-            _run_task(result.targeted_reindex_job_id)
+        _run_task(result.targeted_reindex_job_id)
 
     db_session.expire_all()
     job = db_session.get(TargetedReindexJob, result.targeted_reindex_job_id)

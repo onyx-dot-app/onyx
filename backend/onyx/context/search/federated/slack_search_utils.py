@@ -465,27 +465,25 @@ def validate_channel_references(
                     )
 
             # Check if channel is in exclusion list
-            if parsed_entities.exclude_channels:
-                if matches_exclude_pattern(
-                    channel_name, parsed_entities.exclude_channels
-                ):
-                    raise ValueError(
-                        f"Channel '{channel_name}' is excluded from search by your configuration. "
-                        f"Please update your connector settings to search this channel."
-                    )
+            if parsed_entities.exclude_channels and (
+                matches_exclude_pattern(channel_name, parsed_entities.exclude_channels)
+            ):
+                raise ValueError(
+                    f"Channel '{channel_name}' is excluded from search by your configuration. "
+                    f"Please update your connector settings to search this channel."
+                )
 
             # Check if channel is in inclusion list (when search_all_channels is False)
-            if not parsed_entities.search_all_channels:
-                if parsed_entities.channels:
-                    # Normalize channel lists for comparison
-                    normalized_channels = [
-                        ch.lstrip("#").lower() for ch in parsed_entities.channels
-                    ]
-                    if channel_name.lower() not in normalized_channels:
-                        raise ValueError(
-                            f"Channel '{channel_name}' is not in your configured channel list. "
-                            f"Please update your connector settings to include this channel."
-                        )
+            if not parsed_entities.search_all_channels and parsed_entities.channels:
+                # Normalize channel lists for comparison
+                normalized_channels = [
+                    ch.lstrip("#").lower() for ch in parsed_entities.channels
+                ]
+                if channel_name.lower() not in normalized_channels:
+                    raise ValueError(
+                        f"Channel '{channel_name}' is not in your configured channel list. "
+                        f"Please update your connector settings to include this channel."
+                    )
 
     except ValidationError:
         # If entities are malformed, skip validation
@@ -586,10 +584,7 @@ def _is_valid_keyword_query(line: str) -> bool:
 
     # Reject lines that are too long (likely sentences, not keywords)
     # Keywords should be short - reject if > 50 chars or > 6 words
-    if len(line) > 50 or len(line.split()) > 6:
-        return False
-
-    return True
+    return not (len(line) > 50 or len(line.split()) > 6)
 
 
 def expand_query_with_llm(query_text: str, llm: LLM) -> list[str]:

@@ -70,9 +70,7 @@ def _is_targeted_blocked_ip(
         return True
     if block_loopback and ip_obj.is_loopback:
         return True
-    if block_link_local and ip_obj.is_link_local:
-        return True
-    return False
+    return bool(block_link_local and ip_obj.is_link_local)
 
 
 def _hostname_resolves_to_targeted_blocked_ip(

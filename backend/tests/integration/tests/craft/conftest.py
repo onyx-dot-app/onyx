@@ -119,7 +119,5 @@ def shared_session(
         yield SharedSession(owner=owner, session_id=UUID(body.id))
     finally:
         if sandbox:
-            try:
+            with contextlib.suppress(Exception):
                 get_sandbox_manager().terminate(UUID(sandbox.id))
-            except Exception:
-                pass

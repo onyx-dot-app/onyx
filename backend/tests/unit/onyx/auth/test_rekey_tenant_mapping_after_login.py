@@ -52,9 +52,11 @@ def test_the_replaced_address_is_passed_through() -> None:
 
 
 def test_a_keyboard_interrupt_is_not_swallowed() -> None:
-    with patch(
-        f"{_AUTH_MODULE}.fetch_ee_implementation_or_noop",
-        return_value=MagicMock(side_effect=KeyboardInterrupt),
+    with (
+        patch(
+            f"{_AUTH_MODULE}.fetch_ee_implementation_or_noop",
+            return_value=MagicMock(side_effect=KeyboardInterrupt),
+        ),
+        pytest.raises(KeyboardInterrupt),
     ):
-        with pytest.raises(KeyboardInterrupt):
-            rekey_tenant_mapping_after_login("new@example.com", "tenant_a", _IDENTITIES)
+        rekey_tenant_mapping_after_login("new@example.com", "tenant_a", _IDENTITIES)

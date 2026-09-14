@@ -6,6 +6,7 @@ replace it at the module boundary and drive the state machine against real Postg
 One end-to-end test still runs the real primitive.
 """
 
+import contextlib
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 from uuid import uuid4
@@ -363,10 +364,8 @@ def test_deleting_single_tenant_end_to_end_drops_real_index(
         assert row.reclaim_status == IndexReclaimStatus.RECLAIMED
         assert client.index_exists() is False
     finally:
-        try:
+        with contextlib.suppress(Exception):
             client.delete_index()
-        except Exception:
-            pass
         client.close()
         _delete_settings(db_session, ss)
 
@@ -411,10 +410,8 @@ def test_reverted_future_reclaim_gates_on_port_then_drops_index_and_unblocks_ret
         assert client.index_exists() is False
         assert not find_unreclaimed_past_by_index_name(db_session, index_name)
     finally:
-        try:
+        with contextlib.suppress(Exception):
             client.delete_index()
-        except Exception:
-            pass
         client.close()
         db_session.query(PortAttempt).filter(
             PortAttempt.cc_pair_id == cc_pair.id

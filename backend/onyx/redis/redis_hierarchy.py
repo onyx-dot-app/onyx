@@ -265,10 +265,7 @@ def get_node_id_from_raw_id(
 
     # Decode bytes if needed
     value_str: str
-    if isinstance(value, bytes):
-        value_str = value.decode("utf-8")
-    else:
-        value_str = str(value)
+    value_str = value.decode("utf-8") if isinstance(value, bytes) else str(value)
 
     return int(value_str), True
 
@@ -294,10 +291,7 @@ def get_parent_id_from_cache(
 
     # Decode bytes if needed
     value_str: str
-    if isinstance(value, bytes):
-        value_str = value.decode("utf-8")
-    else:
-        value_str = str(value)
+    value_str = value.decode("utf-8") if isinstance(value, bytes) else str(value)
 
     parent_id, _ = _unpack_parent_value(value_str)
     return parent_id, True

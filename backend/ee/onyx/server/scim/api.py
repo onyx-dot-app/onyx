@@ -517,11 +517,14 @@ def _patch_sets_attr(operations: list[ScimPatchOperation], attr: str) -> bool:
         path = (op.path or "").lower()
         if path == attr or path.startswith(f"{attr}["):
             return True
-        if not path and isinstance(op.value, ScimPatchResourceValue):
-            if any(
+        if (
+            not path
+            and isinstance(op.value, ScimPatchResourceValue)
+            and any(
                 key.lower() == attr for key in op.value.model_dump(exclude_unset=True)
-            ):
-                return True
+            )
+        ):
+            return True
     return False
 
 

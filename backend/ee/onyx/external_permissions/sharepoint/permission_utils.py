@@ -229,9 +229,10 @@ def _get_sharepoint_list_item_id(drive_item: DriveItem) -> str | None:
     try:
         properties = getattr(drive_item, "properties", None)  # ods: ignore[getattr]
         sharepoint_ids = properties.get(SHAREPOINT_IDS_PROPERTY) if properties else None
-        if isinstance(sharepoint_ids, dict):
-            if list_item_id := sharepoint_ids.get(LIST_ITEM_ID_PROPERTY):
-                return str(list_item_id)
+        if isinstance(sharepoint_ids, dict) and (
+            list_item_id := sharepoint_ids.get(LIST_ITEM_ID_PROPERTY)
+        ):
+            return str(list_item_id)
 
         if hasattr(drive_item, "listItem"):
             list_item = drive_item.listItem
@@ -396,17 +397,21 @@ def _get_azuread_groups(
             # Users typically have userPrincipalName or mail
             if user_principal_name or (mail and "@" in str(mail)):
                 is_user = True
-            # Groups typically have displayName but no userPrincipalName
-            elif display_name and not user_principal_name:
-                # Additional check: try to access group-specific properties
-                if (
-                    hasattr(member, "groupTypes")
-                    or member_data.get("groupTypes") is not None
-                ):
-                    is_group = True
-                # Or check if it has an 'id' field typical for groups
-                elif member_data.get("id") and not user_principal_name:
-                    is_group = True
+            # Groups typically have displayName but no userPrincipalName, plus
+            # group-specific properties or an 'id' field.
+            elif (
+                display_name
+                and not user_principal_name
+                and (
+                    (
+                        hasattr(member, "groupTypes")
+                        or member_data.get("groupTypes") is not None
+                    )
+                    or member_data.get("id")
+                    and not user_principal_name
+                )
+            ):
+                is_group = True
 
             # Check the object type name (fallback)
             if not is_user and not is_group:

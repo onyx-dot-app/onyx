@@ -103,16 +103,17 @@ def setup_chat_sessions_with_different_feedback() -> tuple[
     # Use ThreadPoolExecutor to create chat sessions in parallel
     with ThreadPoolExecutor(max_workers=5) as executor:
         # Submit all tasks and store futures
-        j = 0
         # Will result in 40 sessions
         number_of_sessions = 10
         futures = []
-        for feedback_type in [
-            QAFeedbackType.MIXED,
-            QAFeedbackType.LIKE,
-            QAFeedbackType.DISLIKE,
-            None,
-        ]:
+        for j, feedback_type in enumerate(
+            [
+                QAFeedbackType.MIXED,
+                QAFeedbackType.LIKE,
+                QAFeedbackType.DISLIKE,
+                None,
+            ]
+        ):
             futures.extend(
                 [
                     executor.submit(
@@ -124,7 +125,6 @@ def setup_chat_sessions_with_different_feedback() -> tuple[
                     for i in range(number_of_sessions)
                 ]
             )
-            j += 1
 
         # Collect results in order
         for future in as_completed(futures):

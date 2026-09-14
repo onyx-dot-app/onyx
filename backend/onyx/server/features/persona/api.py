@@ -96,15 +96,17 @@ def _validate_user_knowledge_enabled(
 ) -> None:
     """Check if user knowledge is enabled when user files/projects are provided."""
     settings = load_settings()
-    if not settings.user_knowledge_enabled:
-        # Only user files are supported going forward; keep getattr for backward compat
-        if persona_upsert_request.user_file_ids or getattr(  # ods: ignore[getattr]
+    # Only user files are supported going forward; keep getattr for backward compat
+    if not settings.user_knowledge_enabled and (
+        persona_upsert_request.user_file_ids
+        or getattr(  # ods: ignore[getattr]
             persona_upsert_request, "user_project_ids", None
-        ):
-            raise HTTPException(
-                status_code=400,
-                detail=f"User Knowledge is disabled. Cannot {action} assistant with user files or projects.",
-            )
+        )
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=f"User Knowledge is disabled. Cannot {action} assistant with user files or projects.",
+        )
 
 
 def _validate_vector_db_knowledge(

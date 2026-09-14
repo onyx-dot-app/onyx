@@ -37,6 +37,8 @@ def load_env_vars(env_file: str = ".env") -> None:
 # in module-level constants that read os.environ once.
 load_env_vars()
 
+import contextlib  # noqa: E402
+
 from fastapi.testclient import TestClient  # noqa: E402
 
 # Import `onyx.main` BEFORE calling fetch_versioned_implementation ourselves.
@@ -219,7 +221,8 @@ def _start_celery_workers(
     log_handles: list[Any] = []
     for app_name, queues in _CELERY_WORKER_PROGRAMS:
         log_path = os.path.join(log_dir, f"celery_worker_{app_name}_debug.log")
-        log_file = open(log_path, "ab")
+        # Held open for the worker lifetime; closed through `log_handles`.
+        log_file = open(log_path, "ab")  # noqa: SIM115
         log_handles.append(log_file)
         cmd = [
             "celery",
@@ -248,7 +251,8 @@ def _start_celery_workers(
     # group sync / pruning / deletion tests poll on. Without beat the
     # tests time out after 300s.
     beat_log_path = os.path.join(log_dir, "celery_beat_debug.log")
-    beat_log_file = open(beat_log_path, "ab")
+    # Held open for the beat lifetime; closed through `log_handles`.
+    beat_log_file = open(beat_log_path, "ab")  # noqa: SIM115
     log_handles.append(beat_log_file)
     beat_proc = subprocess.Popen(
         [
@@ -275,18 +279,14 @@ def _start_celery_workers(
 
         for _, proc in processes:
             if proc.poll() is None:
-                try:
+                with contextlib.suppress(ProcessLookupError):
                     os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-                except ProcessLookupError:
-                    pass
         for _, proc in processes:
             try:
                 proc.wait(timeout=10)
             except subprocess.TimeoutExpired:
-                try:
+                with contextlib.suppress(ProcessLookupError):
                     os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
         for log_file in log_handles:
             log_file.close()
 

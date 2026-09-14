@@ -3,6 +3,7 @@ IMPORTANT: familiarize yourself with the design concepts prior to contributing t
 An overview can be found in the README.md file in this directory.
 """
 
+import contextlib
 import contextvars
 import io
 import os
@@ -181,10 +182,8 @@ def _collect_available_file_ids(
         if not msg.files:
             continue
         for fd in msg.files:
-            try:
+            with contextlib.suppress(ValueError, KeyError):
                 chat_file_ids.add(UUID(fd["id"]))
-            except (ValueError, KeyError):
-                pass
 
     if project_id:
         user_files = get_user_files_from_project(

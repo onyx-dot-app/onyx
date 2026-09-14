@@ -1,3 +1,4 @@
+import contextlib
 import ipaddress
 import random
 import socket
@@ -539,10 +540,8 @@ class WebConnector(LoadConnector, SlimConnector):
                 page.wait_for_timeout(PAGE_RENDER_TIMEOUT_MS)
 
             # Wait for network activity to settle (handles SPAs, CF challenges, etc.)
-            try:
+            with contextlib.suppress(TimeoutError):
                 page.wait_for_load_state("networkidle", timeout=PAGE_RENDER_TIMEOUT_MS)
-            except TimeoutError:
-                pass
 
             final_url = page.url
             if final_url != initial_url:

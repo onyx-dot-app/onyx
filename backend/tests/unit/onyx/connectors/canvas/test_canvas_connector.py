@@ -1384,13 +1384,15 @@ class TestLoadFromCheckpoint:
             stage=CanvasStage.PAGES,
         )
 
-        with patch.object(
-            connector,
-            "_fetch_stage_page",
-            side_effect=OnyxError(OnyxErrorCode.BAD_GATEWAY, "bad next link"),
+        with (
+            patch.object(
+                connector,
+                "_fetch_stage_page",
+                side_effect=OnyxError(OnyxErrorCode.BAD_GATEWAY, "bad next link"),
+            ),
+            pytest.raises(OnyxError, match="bad next link"),
         ):
-            with pytest.raises(OnyxError, match="bad next link"):
-                _run_checkpoint(connector, cp)
+            _run_checkpoint(connector, cp)
 
     @patch("onyx.connectors.canvas.client.rl_requests")
     def test_per_document_conversion_failure_yields_connector_failure(
@@ -1862,13 +1864,15 @@ class TestRetrieveAllSlimDocsPermSync:
         connector = CanvasConnector(canvas_base_url=FAKE_BASE_URL)
         connector.load_credentials({"canvas_access_token": FAKE_TOKEN})
 
-        with patch.object(
-            connector,
-            "_get_item_permissions",
-            side_effect=RuntimeError("permission lookup failed"),
+        with (
+            patch.object(
+                connector,
+                "_get_item_permissions",
+                side_effect=RuntimeError("permission lookup failed"),
+            ),
+            pytest.raises(RuntimeError, match="permission lookup failed"),
         ):
-            with pytest.raises(RuntimeError, match="permission lookup failed"):
-                list(connector.retrieve_all_slim_docs_perm_sync())
+            list(connector.retrieve_all_slim_docs_perm_sync())
 
 
 class TestCanvasGroupSyncHelpers:

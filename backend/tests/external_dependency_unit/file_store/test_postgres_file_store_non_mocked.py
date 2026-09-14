@@ -6,6 +6,7 @@ and verify consistency between the file_record / file_content tables
 and the underlying pg_largeobject storage.
 """
 
+import contextlib
 import uuid
 from collections.abc import Generator
 from io import BytesIO, StringIO
@@ -59,10 +60,8 @@ def pg_file_store(
 
     # Cleanup: delete every file we created (including Large Objects)
     for fid in created_ids:
-        try:
+        with contextlib.suppress(Exception):
             store.delete_file(fid)
-        except Exception:
-            pass
 
 
 # -------------------------------------------------------------------- tests --

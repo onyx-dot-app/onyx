@@ -70,9 +70,11 @@ def test_retries_transient_status_then_succeeds(status: int) -> None:
 def test_does_not_retry_non_retryable_status(status: int) -> None:
     query = _query_returning(_client_request_exception(status))
 
-    with patch("onyx.connectors.teams.utils.time.sleep") as mock_sleep:
-        with pytest.raises(ClientRequestException):
-            execute_query_with_retry(query, method_name="test")
+    with (
+        patch("onyx.connectors.teams.utils.time.sleep") as mock_sleep,
+        pytest.raises(ClientRequestException),
+    ):
+        execute_query_with_retry(query, method_name="test")
 
     assert query.execute_query.call_count == 1
     mock_sleep.assert_not_called()
@@ -85,9 +87,11 @@ def test_reraises_after_exhausting_retries() -> None:
         side_effect=_client_request_exception(502),
     )
 
-    with patch("onyx.connectors.teams.utils.time.sleep") as mock_sleep:
-        with pytest.raises(ClientRequestException):
-            execute_query_with_retry(query, method_name="test", max_retries=2)
+    with (
+        patch("onyx.connectors.teams.utils.time.sleep") as mock_sleep,
+        pytest.raises(ClientRequestException),
+    ):
+        execute_query_with_retry(query, method_name="test", max_retries=2)
 
     # max_retries=2 => 3 total attempts, sleeping between each of the first two.
     assert query.execute_query.call_count == 3
@@ -102,9 +106,11 @@ def test_does_not_retry_when_response_is_missing() -> None:
     exc.response = None
     query = _query_returning(exc)
 
-    with patch("onyx.connectors.teams.utils.time.sleep") as mock_sleep:
-        with pytest.raises(ClientRequestException):
-            execute_query_with_retry(query, method_name="test")
+    with (
+        patch("onyx.connectors.teams.utils.time.sleep") as mock_sleep,
+        pytest.raises(ClientRequestException),
+    ):
+        execute_query_with_retry(query, method_name="test")
 
     assert query.execute_query.call_count == 1
     mock_sleep.assert_not_called()

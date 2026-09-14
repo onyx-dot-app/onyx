@@ -441,14 +441,10 @@ def _provisioned_sandbox(
                 pod_name=pod_name,
             )
         finally:
-            try:
+            with suppress(Exception):
                 manager.terminate(sandbox_id)
-            except Exception:
-                pass
-            try:
+            with suppress(Exception):
                 wait_for_pod_deletion(k8s_client, pod_name, SANDBOX_NAMESPACE)
-            except Exception:
-                pass
     finally:
         cleanup_api_user_sandbox_rows(user_id)
 
@@ -572,18 +568,14 @@ def running_sandbox(
 
         def _cleanup() -> None:
             def _terminate(extra_id: UUID) -> None:
-                try:
+                with suppress(Exception):
                     pool.manager.terminate(extra_id)
-                except Exception:
-                    pass
-                try:
+                with suppress(Exception):
                     wait_for_pod_deletion(
                         pool.k8s_client,
                         pool.manager._get_pod_name(extra_id),
                         SANDBOX_NAMESPACE,
                     )
-                except Exception:
-                    pass
 
             for extra_id, user_id in extra_sandbox_user_ids.items():
                 _terminate(extra_id)

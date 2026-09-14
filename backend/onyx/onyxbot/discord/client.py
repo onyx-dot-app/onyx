@@ -1,6 +1,7 @@
 """Discord bot client with integrated message handling."""
 
 import asyncio
+import contextlib
 import time
 
 import discord
@@ -95,10 +96,8 @@ class OnyxDiscordClient(commands.Bot):
         # Cancel cache refresh task
         if self._cache_refresh_task:
             self._cache_refresh_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._cache_refresh_task
-            except asyncio.CancelledError:
-                pass
 
         # Close Discord connection first - stops new commands from triggering cache ops
         if not self.is_closed():

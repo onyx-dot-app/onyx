@@ -924,18 +924,18 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
             current_search_settings = get_current_search_settings(db_session)
             # So that the first time users aren't surprised by really slow speed of first
             # batch of documents indexed
-            if current_search_settings.provider_type is None and not MULTI_TENANT:
-                if old_search_settings:
-                    embedding_model = EmbeddingModel.from_db_model(
-                        search_settings=current_search_settings,
-                        server_host=INDEXING_MODEL_SERVER_HOST,
-                        server_port=INDEXING_MODEL_SERVER_PORT,
-                    )
-
-                    # only warm up if search settings were changed
-                    warm_up_bi_encoder(
-                        embedding_model=embedding_model,
-                    )
+            if (
+                current_search_settings.provider_type is None and not MULTI_TENANT
+            ) and old_search_settings:
+                embedding_model = EmbeddingModel.from_db_model(
+                    search_settings=current_search_settings,
+                    server_host=INDEXING_MODEL_SERVER_HOST,
+                    server_port=INDEXING_MODEL_SERVER_PORT,
+                )
+                # only warm up if search settings were changed
+                warm_up_bi_encoder(
+                    embedding_model=embedding_model,
+                )
 
         # gather search settings and indexable cc_pair_ids
         # indexable CC pairs include everything for future model and only active cc pairs for current model

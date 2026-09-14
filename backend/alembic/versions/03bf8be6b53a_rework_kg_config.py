@@ -46,7 +46,7 @@ def upgrade() -> None:
         {
             "KG_EXPOSED": current_config_dict.get("KG_EXPOSED", False),
             "KG_ENABLED": current_config_dict.get("KG_ENABLED", False),
-            "KG_VENDOR": current_config_dict.get("KG_VENDOR", None),
+            "KG_VENDOR": current_config_dict.get("KG_VENDOR"),
             "KG_VENDOR_DOMAINS": current_config_dict.get("KG_VENDOR_DOMAINS", []),
             "KG_IGNORE_EMAIL_DOMAINS": current_config_dict.get(
                 "KG_IGNORE_EMAIL_DOMAINS", []
@@ -59,7 +59,7 @@ def upgrade() -> None:
             "KG_MAX_PARENT_RECURSION_DEPTH": current_config_dict.get(
                 "KG_MAX_PARENT_RECURSION_DEPTH", 2
             ),
-            "KG_BETA_PERSONA_ID": current_config_dict.get("KG_BETA_PERSONA_ID", None),
+            "KG_BETA_PERSONA_ID": current_config_dict.get("KG_BETA_PERSONA_ID"),
         }
     )
     op.execute(

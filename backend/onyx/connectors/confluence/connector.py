@@ -338,13 +338,9 @@ class ConfluenceConnector(
 
             self.seen_hierarchy_node_raw_ids.add(ancestor_url)
 
-            # Determine parent of this ancestor
-            if i == 0:
-                # First ancestor - parent is the space
-                parent_raw_id = space_key
-            else:
-                # Parent is the previous ancestor (use URL)
-                parent_raw_id = ancestor_urls[i - 1]
+            # Parent is the space for the first ancestor, else the previous
+            # ancestor (use URL).
+            parent_raw_id = space_key if i == 0 else ancestor_urls[i - 1]
 
             yield HierarchyNode(
                 raw_node_id=ancestor_url,  # Use URL to match document.id
@@ -650,13 +646,12 @@ class ConfluenceConnector(
                 # TODO(rkuo): this check is partially redundant with validate_attachment_filetype
                 # and checks in convert_attachment_to_content/process_attachment
                 # but doing the check here avoids an unnecessary download. Due for refactoring.
-                if not self.allow_images:
-                    if media_type.startswith("image/"):
-                        logger.info(
-                            "Skipping attachment because allow images is False: %s",
-                            attachment["title"],
-                        )
-                        continue
+                if not self.allow_images and media_type.startswith("image/"):
+                    logger.info(
+                        "Skipping attachment because allow images is False: %s",
+                        attachment["title"],
+                    )
+                    continue
 
                 if not validate_attachment_filetype(
                     attachment,

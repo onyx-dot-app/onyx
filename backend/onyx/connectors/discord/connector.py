@@ -349,17 +349,17 @@ if __name__ == "__main__":
     # 1 day
     start = end - 24 * 60 * 60 * 1
     # "1,2,3"
-    server_ids: str | None = os.environ.get("server_ids", None)
+    server_ids: str | None = os.environ.get("SERVER_IDS", None)
     # "channel1,channel2"
-    channel_names: str | None = os.environ.get("channel_names", None)
+    channel_names: str | None = os.environ.get("CHANNEL_NAMES", None)
 
     connector = DiscordConnector(
         server_ids=server_ids.split(",") if server_ids else [],
         channel_names=channel_names.split(",") if channel_names else [],
-        start_date=os.environ.get("start_date", None),
+        start_date=os.environ.get("START_DATE", None),
     )
     connector.load_credentials(
-        {"discord_bot_token": os.environ.get("discord_bot_token")}
+        {"discord_bot_token": os.environ.get("DISCORD_BOT_TOKEN")}
     )
 
     for doc_batch in connector.poll_source(start, end):

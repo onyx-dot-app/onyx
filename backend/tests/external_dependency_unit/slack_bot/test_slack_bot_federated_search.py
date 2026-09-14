@@ -402,9 +402,9 @@ class TestSlackBotFederatedSearch:
             web_client: Mock,  # noqa: ARG001
             channel_id: str,
         ) -> ChannelType:
-            if channel_id == "C1234567890":  # general - public
-                return ChannelType.PUBLIC_CHANNEL
-            elif channel_id == "C1111111111":  # support - public
+            if (
+                channel_id == "C1234567890" or channel_id == "C1111111111"
+            ):  # general - public
                 return ChannelType.PUBLIC_CHANNEL
             elif channel_id == "C9999999999":  # dev-team - private
                 return ChannelType.PRIVATE_CHANNEL

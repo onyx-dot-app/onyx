@@ -1,3 +1,4 @@
+import contextlib
 import logging
 import multiprocessing
 import os
@@ -114,7 +115,7 @@ class TenantAwareTask(Task):
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         # Grab tenant_id from the kwargs, or fallback to default if missing.
-        tenant_id = kwargs.get("tenant_id", None) or POSTGRES_DEFAULT_SCHEMA
+        tenant_id = kwargs.get("tenant_id") or POSTGRES_DEFAULT_SCHEMA
 
         # Set the context var
         CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
@@ -561,10 +562,9 @@ def on_setup_logging(
     if logfile:
         # Truncate log file if DEV_LOGGING_ENABLED (for clean dev experience)
         if DEV_LOGGING_ENABLED and os.path.exists(logfile):
-            try:
+            # Ignore errors, just proceed with normal logging
+            with contextlib.suppress(Exception):
                 open(logfile, "w").close()  # Truncate the file
-            except Exception:
-                pass  # Ignore errors, just proceed with normal logging
 
         root_file_handler = logging.FileHandler(logfile)
         root_file_formatter: logging.Formatter = (
@@ -679,13 +679,10 @@ def wait_for_document_index_or_shutdown() -> None:
         )
         return
 
-    if not ONYX_DISABLE_VESPA:
-        if not wait_for_vespa_with_timeout():
-            msg = (
-                "[Vespa] Readiness probe did not succeed within the timeout. Exiting..."
-            )
-            logger.error(msg)
-            raise WorkerShutdown(msg)
+    if not ONYX_DISABLE_VESPA and not wait_for_vespa_with_timeout():
+        msg = "[Vespa] Readiness probe did not succeed within the timeout. Exiting..."
+        logger.error(msg)
+        raise WorkerShutdown(msg)
 
     if ENABLE_OPENSEARCH_INDEXING_FOR_ONYX:
         # Imported here: opensearchpy costs ~18 MB and not every worker needs it.

@@ -621,8 +621,7 @@ def _responses_stream_worker(
         llm_generation_span(
             llm, flow=flow, input_messages=messages, tools=tools
         ) as span,
-    ):
-        with _stream_worker_guard(
+        _stream_worker_guard(
             span,
             model,
             state,
@@ -630,99 +629,99 @@ def _responses_stream_worker(
             emit_error=emit_error,
             out=out,
             cancelled=cancelled,
-        ):
-            state.upstream = llm.stream(
-                prompt=messages,
-                tools=tools,
-                tool_choice=tool_choice,
-                max_tokens=max_tokens,
-                reasoning_effort=reasoning_effort,
-            )
-            for chunk in state.upstream:
-                if cancelled.is_set():
-                    break
-                state.observe(chunk)
-                if not chunk.choice.delta.content:
-                    continue
-                if not text_item_open:
-                    # Open the item before the first delta; Codex drops
-                    # deltas for items it has not seen added.
-                    if not emit(
-                        ResponsesOutputItemAddedEvent.create(
-                            output_index=0,
-                            item=ResponsesMessageItem.create(
-                                id=message_item_id, status="in_progress", content=[]
-                            ),
-                        )
-                    ):
-                        break
-                    if not emit(
-                        ResponsesContentPartAddedEvent.create(
-                            item_id=message_item_id,
-                            output_index=0,
-                            part=ResponsesOutputTextPart.create(text=""),
-                        )
-                    ):
-                        break
-                    text_item_open = True
+        ),
+    ):
+        state.upstream = llm.stream(
+            prompt=messages,
+            tools=tools,
+            tool_choice=tool_choice,
+            max_tokens=max_tokens,
+            reasoning_effort=reasoning_effort,
+        )
+        for chunk in state.upstream:
+            if cancelled.is_set():
+                break
+            state.observe(chunk)
+            if not chunk.choice.delta.content:
+                continue
+            if not text_item_open:
+                # Open the item before the first delta; Codex drops
+                # deltas for items it has not seen added.
                 if not emit(
-                    ResponsesOutputTextDeltaEvent.create(
-                        item_id=message_item_id,
-                        delta=chunk.choice.delta.content,
+                    ResponsesOutputItemAddedEvent.create(
+                        output_index=0,
+                        item=ResponsesMessageItem.create(
+                            id=message_item_id, status="in_progress", content=[]
+                        ),
                     )
                 ):
                     break
-            else:
-                # Build each item once and reuse it below: re-deriving items
-                # for the terminal payload remints ids the client never saw.
-                completed_items: list[ResponsesOutputItem] = []
-                if text_item_open:
-                    completed_items.append(close_text_item("completed"))
-                # Filter before enumerating, or a dropped nameless call leaves
-                # a hole in the output_index sequence.
-                call_items = [
-                    item
-                    for item in (
-                        _function_call_item(tool_call)
-                        for tool_call in _finalize_tool_calls(state.tool_call_buffer)
-                        or []
+                if not emit(
+                    ResponsesContentPartAddedEvent.create(
+                        item_id=message_item_id,
+                        output_index=0,
+                        part=ResponsesOutputTextPart.create(text=""),
                     )
-                    if item is not None
-                ]
-                for tool_index, call_item in enumerate(
-                    call_items, start=len(completed_items)
                 ):
-                    completed_items.append(call_item)
-                    emit(
-                        ResponsesOutputItemAddedEvent.create(
-                            output_index=tool_index, item=call_item
-                        )
-                    )
-                    emit(
-                        ResponsesFunctionCallArgumentsDoneEvent.create(
-                            item_id=call_item.id,
-                            output_index=tool_index,
-                            arguments=call_item.arguments,
-                            name=call_item.name,
-                        )
-                    )
-                    emit(
-                        ResponsesOutputItemDoneEvent.create(
-                            output_index=tool_index, item=call_item
-                        )
-                    )
+                    break
+                text_item_open = True
+            if not emit(
+                ResponsesOutputTextDeltaEvent.create(
+                    item_id=message_item_id,
+                    delta=chunk.choice.delta.content,
+                )
+            ):
+                break
+        else:
+            # Build each item once and reuse it below: re-deriving items
+            # for the terminal payload remints ids the client never saw.
+            completed_items: list[ResponsesOutputItem] = []
+            if text_item_open:
+                completed_items.append(close_text_item("completed"))
+            # Filter before enumerating, or a dropped nameless call leaves
+            # a hole in the output_index sequence.
+            call_items = [
+                item
+                for item in (
+                    _function_call_item(tool_call)
+                    for tool_call in _finalize_tool_calls(state.tool_call_buffer) or []
+                )
+                if item is not None
+            ]
+            for tool_index, call_item in enumerate(
+                call_items, start=len(completed_items)
+            ):
+                completed_items.append(call_item)
                 emit(
-                    ResponsesCompletedEvent.create(
-                        ResponsesObjectPayload.from_parts(
-                            response_id=response_id,
-                            created_at=created_at,
-                            model=model,
-                            status="completed",
-                            output=completed_items,
-                            usage=state.usage,
-                        )
+                    ResponsesOutputItemAddedEvent.create(
+                        output_index=tool_index, item=call_item
                     )
                 )
+                emit(
+                    ResponsesFunctionCallArgumentsDoneEvent.create(
+                        item_id=call_item.id,
+                        output_index=tool_index,
+                        arguments=call_item.arguments,
+                        name=call_item.name,
+                    )
+                )
+                emit(
+                    ResponsesOutputItemDoneEvent.create(
+                        output_index=tool_index, item=call_item
+                    )
+                )
+            emit(
+                ResponsesCompletedEvent.create(
+                    ResponsesObjectPayload.from_parts(
+                        response_id=response_id,
+                        created_at=created_at,
+                        model=model,
+                        status="completed",
+                        output=completed_items,
+                        usage=state.usage,
+                    )
+                )
+            )
 
 
 def handle_responses_request(
@@ -1219,14 +1218,16 @@ def _anthropic_stream_worker(
                 delta = chunk.choice.delta
                 # Anthropic-family chunks carry reasoning_content mirroring
                 # thinking_blocks, so only one of the two may be emitted.
-                if delta.thinking_blocks:
-                    if not emit_thinking_deltas(delta.thinking_blocks):
-                        break
-                elif delta.reasoning_content:
-                    if not emit_thinking_deltas(
+                thinking_blocks: list[AnyThinkingBlock] | None = (
+                    delta.thinking_blocks
+                    or (
                         [ThinkingBlock(thinking=delta.reasoning_content)]
-                    ):
-                        break
+                        if delta.reasoning_content
+                        else None
+                    )
+                )
+                if thinking_blocks and not emit_thinking_deltas(thinking_blocks):
+                    break
                 if delta.content:
                     if not ensure_block_open("text"):
                         break

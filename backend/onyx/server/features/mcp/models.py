@@ -327,22 +327,21 @@ class MCPToolCreateRequest(BaseModel):
                 "api_token is required when auth_type is 'api_token' and auth_performer is 'admin'"
             )
 
+        # An omitted template is resolved against the existing server
+        # configuration during an update, or defaults to Bearer when a
+        # server is created. Do not materialize that default here, since
+        # doing so makes an omitted template look like an explicit edit.
         if (
             self.auth_type == MCPAuthenticationType.API_TOKEN
             and self.auth_performer == MCPAuthenticationPerformer.ADMIN
+            and self.auth_template is not None
+            and not any(
+                "{api_key}" in value for value in self.auth_template.headers.values()
+            )
         ):
-            # An omitted template is resolved against the existing server
-            # configuration during an update, or defaults to Bearer when a
-            # server is created. Do not materialize that default here, since
-            # doing so makes an omitted template look like an explicit edit.
-            if self.auth_template is not None:
-                if not any(
-                    "{api_key}" in value
-                    for value in self.auth_template.headers.values()
-                ):
-                    raise ValueError(
-                        "Shared API-token header templates must include the {api_key} placeholder"
-                    )
+            raise ValueError(
+                "Shared API-token header templates must include the {api_key} placeholder"
+            )
         # Validate that API token is not provided for per-user auth
         if (
             self.auth_type == MCPAuthenticationType.API_TOKEN

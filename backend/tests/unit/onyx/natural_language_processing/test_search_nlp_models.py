@@ -560,17 +560,19 @@ def test_batch_encode_error_propagates() -> None:
         return _fake_direct_api_call(embed_request)
 
     # Under test and postcondition.
-    with patch.object(
-        EmbeddingModel,
-        "_make_direct_api_call",
-        new=AsyncMock(side_effect=_fail_on_second_call),
+    with (
+        patch.object(
+            EmbeddingModel,
+            "_make_direct_api_call",
+            new=AsyncMock(side_effect=_fail_on_second_call),
+        ),
+        pytest.raises(RuntimeError, match="simulated provider failure"),
     ):
-        with pytest.raises(RuntimeError, match="simulated provider failure"):
-            model.encode(
-                texts=texts,
-                text_type=EmbedTextType.PASSAGE,  # Arbitrary.
-                api_embedding_batch_size=2,
-            )
+        model.encode(
+            texts=texts,
+            text_type=EmbedTextType.PASSAGE,  # Arbitrary.
+            api_embedding_batch_size=2,
+        )
 
 
 def test_batch_encode_sync_caller_uses_thread_local_loop() -> None:

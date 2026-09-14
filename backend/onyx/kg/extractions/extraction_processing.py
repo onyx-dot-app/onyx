@@ -160,7 +160,7 @@ def _get_batch_documents_enhanced_metadata(
 
             for (
                 potential_entity_type
-            ) in source_type_classification_extraction_instructions.keys():
+            ) in source_type_classification_extraction_instructions:
                 potential_entity_type_attribute_filters = (
                     source_type_classification_extraction_instructions[
                         potential_entity_type

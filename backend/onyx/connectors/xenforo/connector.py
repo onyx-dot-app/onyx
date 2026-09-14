@@ -11,6 +11,7 @@ The `load_from_state` method is used to load documents from the forum. It takes 
 can be used to specify a state from which to start loading documents.
 """
 
+import contextlib
 import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -144,15 +145,13 @@ class XenforoConnector(LoadConnector):
         matches = ("threads/", "boards/", "forums/")
         for each in matches:
             if each in self.base_url:
-                try:
+                with contextlib.suppress(ValueError):
                     self.base_url = self.base_url[
                         0 : self.base_url.index(
                             "/", self.base_url.index(each) + len(each)
                         )
                         + 1
                     ]
-                except ValueError:
-                    pass
 
         doc_batch: list[Document | HierarchyNode] = []
         all_threads = []

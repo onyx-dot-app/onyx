@@ -1,3 +1,4 @@
+import contextlib
 from datetime import datetime, timezone
 
 from pydantic import BaseModel
@@ -50,8 +51,6 @@ def set_admin_banner(
 
 
 def clear_admin_banner() -> None:
-    try:
+    # Clearing an absent banner is a no-op.
+    with contextlib.suppress(KvKeyNotFoundError):
         get_kv_store().delete(ADMIN_BANNER_KV_KEY)
-    except KvKeyNotFoundError:
-        # Clearing an absent banner is a no-op.
-        pass

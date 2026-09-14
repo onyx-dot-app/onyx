@@ -197,10 +197,7 @@ def _is_external_doc_permissions_sync_due(cc_pair: ConnectorCredentialPair) -> b
 
     # If the last sync is greater than the full fetch period, we run the sync
     next_sync = last_perm_sync + timedelta(seconds=source_sync_period)
-    if datetime.now(timezone.utc) >= next_sync:
-        return True
-
-    return False
+    return datetime.now(timezone.utc) >= next_sync
 
 
 @shared_task(  # ty: ignore[invalid-argument-type]

@@ -49,9 +49,10 @@ class _FakeStreamingSandboxManager:
             "agent_provider": agent_provider,
             "agent_model": agent_model,
         }
-        if on_opencode_session_resolved is not None:
-            if self.resolved_opencode_session_id is not None:
-                on_opencode_session_resolved(self.resolved_opencode_session_id)
+        if on_opencode_session_resolved is not None and (
+            self.resolved_opencode_session_id is not None
+        ):
+            on_opencode_session_resolved(self.resolved_opencode_session_id)
         yield object()
 
 

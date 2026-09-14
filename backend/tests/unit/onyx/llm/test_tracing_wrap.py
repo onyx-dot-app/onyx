@@ -177,9 +177,11 @@ def test_outer_guard_false_when_no_span_active() -> None:
 def test_outer_guard_true_inside_generation_span() -> None:
     # An active trace is required for `generation_span` to return a real
     # SpanImpl rather than a NoOpSpan (see provider.py).
-    with trace("test_outer_guard_true"):
-        with generation_span(model="test", model_config={"model_provider": "test"}):
-            assert _outer_generation_span_active() is True
+    with (
+        trace("test_outer_guard_true"),
+        generation_span(model="test", model_config={"model_provider": "test"}),
+    ):
+        assert _outer_generation_span_active() is True
     # Span exited cleanly — contextvar reset, guard flips back to False.
     assert _outer_generation_span_active() is False
 
@@ -295,10 +297,12 @@ def test_invoke_does_not_nest_inside_outer_generation_span() -> None:
     executes and returns the response."""
     llm = _FakeLLM()
     prompt = UserMessage(content="hello")
-    with trace("test_no_nesting"):
-        with generation_span(model="test", model_config={"model_provider": "test"}):
-            assert _outer_generation_span_active() is True
-            result = llm.invoke(prompt)
+    with (
+        trace("test_no_nesting"),
+        generation_span(model="test", model_config={"model_provider": "test"}),
+    ):
+        assert _outer_generation_span_active() is True
+        result = llm.invoke(prompt)
     assert result is _TEST_MODEL_RESPONSE
     assert llm._invoke_calls == 1
 
@@ -654,9 +658,11 @@ def test_stream_records_usage_when_inner_stream_raises_mid_flight() -> None:
     record the usage seen before the failure so cost is attributed
     correctly even though the consumer never saw a clean completion."""
     llm = _UsageThenExplodeLLM()
-    with patch("onyx.tracing.llm_utils.record_llm_span_output") as recorder:
-        with pytest.raises(RuntimeError, match="stream-mid-boom"):
-            list(llm.stream(UserMessage(content="hi")))
+    with (
+        patch("onyx.tracing.llm_utils.record_llm_span_output") as recorder,
+        pytest.raises(RuntimeError, match="stream-mid-boom"),
+    ):
+        list(llm.stream(UserMessage(content="hi")))
     recorder.assert_called_once()
     kwargs = recorder.call_args.kwargs
     assert kwargs["usage"] == _TEST_USAGE

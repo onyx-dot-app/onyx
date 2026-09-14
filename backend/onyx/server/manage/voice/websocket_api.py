@@ -1,6 +1,7 @@
 """WebSocket API for streaming speech-to-text and text-to-speech."""
 
 import asyncio
+import contextlib
 import io
 import json
 import os
@@ -476,11 +477,10 @@ async def _receive_client_audio(
                 websocket, transcriber, state, message["bytes"]
             ):
                 return
-        elif "text" in message:
-            if await _handle_control_message(
-                websocket, transcriber, state, transcript_task, message["text"]
-            ):
-                return
+        elif "text" in message and await _handle_control_message(
+            websocket, transcriber, state, transcript_task, message["text"]
+        ):
+            return
 
 
 async def handle_streaming_transcription(
@@ -859,20 +859,16 @@ async def websocket_transcribe(
         logger.debug("WebSocket transcribe: client disconnected")
     except Exception as e:
         logger.error("WebSocket transcribe: unhandled error: %s", e, exc_info=True)
-        try:
-            # Send generic error to avoid leaking sensitive details
+        # Send generic error to avoid leaking sensitive details
+        with contextlib.suppress(Exception):
             await websocket.send_json(
                 {"type": "error", "message": "An unexpected error occurred"}
             )
-        except Exception:
-            pass
     finally:
         if streaming_transcriber:
             await _close_transcriber(streaming_transcriber)
-        try:
+        with contextlib.suppress(Exception):
             await websocket.close()
-        except Exception:
-            pass
         logger.info("WebSocket transcribe: connection closed")
 
 
@@ -1019,10 +1015,8 @@ async def handle_streaming_synthesis(
             except asyncio.TimeoutError:
                 logger.warning("Streaming synthesis: timeout waiting for send_task")
                 send_task.cancel()
-                try:
+                with contextlib.suppress(asyncio.CancelledError):
                     await send_task
-                except asyncio.CancelledError:
-                    pass
             except asyncio.CancelledError:
                 pass
         logger.info("Streaming synthesis: handler finished")
@@ -1279,21 +1273,15 @@ async def websocket_synthesize(
         logger.debug("WebSocket synthesize: client disconnected")
     except Exception as e:
         logger.error("WebSocket synthesize: unhandled error: %s", e, exc_info=True)
-        try:
-            # Send generic error to avoid leaking sensitive details
+        # Send generic error to avoid leaking sensitive details
+        with contextlib.suppress(Exception):
             await websocket.send_json(
                 {"type": "error", "message": "An unexpected error occurred"}
             )
-        except Exception:
-            pass
     finally:
         if streaming_synthesizer:
-            try:
+            with contextlib.suppress(Exception):
                 await streaming_synthesizer.close()
-            except Exception:
-                pass
-        try:
+        with contextlib.suppress(Exception):
             await websocket.close()
-        except Exception:
-            pass
         logger.info("WebSocket synthesize: connection closed")

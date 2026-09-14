@@ -8,6 +8,7 @@ Tests cover:
 4. Case-insensitive email matching for existing user checks
 """
 
+import contextlib
 from collections.abc import Iterator
 from functools import partial
 from types import SimpleNamespace, TracebackType
@@ -160,10 +161,9 @@ class TestDisposableEmailValidation:
         mock_user_db.create = AsyncMock(return_value=MagicMock(id="test-id"))
         user_manager.user_db = mock_user_db
 
-        try:
+        # We just want to verify domain check passed
+        with contextlib.suppress(Exception):
             await user_manager.create(mock_user_create)
-        except Exception:
-            pass  # We just want to verify domain check passed
 
         # Verify domain validation was called
         mock_verify_domain.assert_called_once_with(
@@ -216,10 +216,8 @@ class TestMultiTenantInviteLogic:
         user_manager = UserManager(MagicMock())
         _mock_user_manager_methods(user_manager)
 
-        try:
+        with contextlib.suppress(Exception):
             await user_manager.create(mock_user_create)
-        except Exception:
-            pass
 
         # Verify invite check was NOT called (user_count = 0)
         mock_verify_invited.assert_not_called()
@@ -264,10 +262,8 @@ class TestMultiTenantInviteLogic:
         user_manager = UserManager(MagicMock())
         _mock_user_manager_methods(user_manager)
 
-        try:
+        with contextlib.suppress(Exception):
             await user_manager.create(mock_user_create)
-        except Exception:
-            pass
 
         # Verify invite check WAS called (user_count > 0)
         mock_verify_invited.assert_called_once_with(mock_user_create.email)
@@ -314,10 +310,8 @@ class TestSingleTenantInviteLogic:
         mock_user_db.create = AsyncMock(return_value=MagicMock(id="test-id"))
         user_manager.user_db = mock_user_db
 
-        try:
+        with contextlib.suppress(Exception):
             await user_manager.create(mock_user_create)
-        except Exception:
-            pass
 
         # Verify invite check was called
         mock_verify_invited.assert_called_once_with(mock_user_create.email)
@@ -513,10 +507,8 @@ class TestCaseInsensitiveEmailMatching:
         mock_user_db.create = AsyncMock(return_value=MagicMock(id="test-id"))
         mock_sql_alchemy_db.return_value = mock_user_db
 
-        try:
+        with contextlib.suppress(Exception):
             await user_manager.create(user_create)
-        except Exception:
-            pass
 
         # Verify flow
         mock_verify_domain.assert_called_once_with(
@@ -567,10 +559,8 @@ class TestCaseInsensitiveEmailMatching:
         mock_user_db.create = AsyncMock(return_value=MagicMock(id="test-id"))
         mock_sql_alchemy_db.return_value = mock_user_db
 
-        try:
+        with contextlib.suppress(Exception):
             await user_manager.create(mock_user_create)
-        except Exception:
-            pass
 
         # Verify flow
         mock_verify_domain.assert_called_once_with(
@@ -1103,10 +1093,8 @@ class TestPasswordAuthKillSwitch:
         user_manager = UserManager(MagicMock())
         _mock_user_manager_methods(user_manager)
 
-        try:
+        with contextlib.suppress(Exception):
             await user_manager.create(mock_user_create, safe=True)
-        except Exception:
-            pass
 
         mock_verify_domain.assert_called_once_with(
             mock_user_create.email,

@@ -302,9 +302,9 @@ def test_single_tenant_fetch_raises_without_touching_redis() -> None:
         patch.object(bc, "MULTI_TENANT", False),
         patch.object(bc, "get_shared_redis_client", return_value=redis) as client,
         patch.object(bc, "fetch_billing_information") as cp_fetch,
+        pytest.raises(RuntimeError),
     ):
-        with pytest.raises(RuntimeError):
-            cached_fetch_billing_information("tenant_abc")
+        cached_fetch_billing_information("tenant_abc")
 
     client.assert_not_called()
     cp_fetch.assert_not_called()

@@ -106,9 +106,12 @@ class ChatLoadTester:
             response.raise_for_status()
 
             async for chunk in self.process_stream(response):
-                if "tool_name" in chunk and "run_search" in chunk:
-                    if first_doc_time is None:
-                        first_doc_time = time.time() - start_time
+                if (
+                    "tool_name" in chunk
+                    and "run_search" in chunk
+                    and (first_doc_time is None)
+                ):
+                    first_doc_time = time.time() - start_time
 
                 if "answer_piece" in chunk:
                     if first_answer_time is None:

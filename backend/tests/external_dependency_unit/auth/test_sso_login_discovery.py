@@ -357,9 +357,11 @@ def test_workspace_pin_round_trips_and_rejects_another_signer() -> None:
 
     # Same token, a different signing secret. Flipping a character instead would
     # be flaky: base64url characters can differ while the decoded bytes match.
-    with patch("onyx.auth.sso_tenant_token.USER_AUTH_SECRET", _TEST_SECRET + "x"):
-        with pytest.raises(OnyxError):
-            decode_sso_tenant_token(token)
+    with (
+        patch("onyx.auth.sso_tenant_token.USER_AUTH_SECRET", _TEST_SECRET + "x"),
+        pytest.raises(OnyxError),
+    ):
+        decode_sso_tenant_token(token)
 
 
 @patch("onyx.auth.sso_tenant_token.USER_AUTH_SECRET", _TEST_SECRET)

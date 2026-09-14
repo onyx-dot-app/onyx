@@ -151,13 +151,10 @@ def create_credential(env_name: str) -> int:
 
 @retry_builder(tries=10, delay=2, backoff=2)
 def upload_file(env_name: str, zip_file_path: str) -> list[str]:
-    files = [
-        ("files", open(zip_file_path, "rb")),
-    ]
-
     api_path = _api_url_builder(env_name, "/manage/admin/connector/file/upload")
     try:
-        response = requests.post(api_path, files=files)
+        with open(zip_file_path, "rb") as zip_file:
+            response = requests.post(api_path, files=[("files", zip_file)])
         response.raise_for_status()  # Raises an HTTPError for bad responses
         print("file uploaded successfully:", response.json())
         return response.json()["file_paths"]

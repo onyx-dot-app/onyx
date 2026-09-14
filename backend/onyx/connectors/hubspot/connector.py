@@ -47,6 +47,14 @@ from onyx.connectors.models import (
 from onyx.utils.logger import setup_logger
 
 HUBSPOT_BASE_URL = "https://app.hubspot.com"
+# HubSpot record URLs use a numeric object-type id per object type.
+_OBJECT_TYPE_TO_RECORD_PATH = {
+    "tickets": "record/0-5",
+    "companies": "record/0-2",
+    "deals": "record/0-3",
+    "contacts": "record/0-1",
+    "notes": "objects/0-4",
+}
 HUBSPOT_API_URL = "https://api.hubapi.com/integrations/v1/me"
 
 AVAILABLE_OBJECT_TYPES = {"tickets", "companies", "deals", "contacts"}
@@ -371,28 +379,10 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
     def _get_object_url(self, object_type: str, object_id: str) -> str:
         """Generate HubSpot URL for different object types"""
-        if object_type == "tickets":
-            return (
-                f"{HUBSPOT_BASE_URL}/contacts/{self.portal_id}/record/0-5/{object_id}"
-            )
-        elif object_type == "companies":
-            return (
-                f"{HUBSPOT_BASE_URL}/contacts/{self.portal_id}/record/0-2/{object_id}"
-            )
-        elif object_type == "deals":
-            return (
-                f"{HUBSPOT_BASE_URL}/contacts/{self.portal_id}/record/0-3/{object_id}"
-            )
-        elif object_type == "contacts":
-            return (
-                f"{HUBSPOT_BASE_URL}/contacts/{self.portal_id}/record/0-1/{object_id}"
-            )
-        elif object_type == "notes":
-            return (
-                f"{HUBSPOT_BASE_URL}/contacts/{self.portal_id}/objects/0-4/{object_id}"
-            )
-        else:
+        record_path = _OBJECT_TYPE_TO_RECORD_PATH.get(object_type)
+        if record_path is None:
             return f"{HUBSPOT_BASE_URL}/contacts/{self.portal_id}/{object_type}/{object_id}"
+        return f"{HUBSPOT_BASE_URL}/contacts/{self.portal_id}/{record_path}/{object_id}"
 
     def _extract_inline_association_ids(
         self,

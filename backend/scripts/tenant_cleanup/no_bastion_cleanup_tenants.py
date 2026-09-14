@@ -974,9 +974,9 @@ def main() -> None:
                 }
 
                 # Process results as they complete
-                completed = 0
-                for future in as_completed(future_to_tenant):
-                    completed += 1
+                for completed, future in enumerate(
+                    as_completed(future_to_tenant), start=1
+                ):
                     tenant_id, was_cleaned, error = future.result()
 
                     if error:

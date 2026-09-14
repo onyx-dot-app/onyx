@@ -184,7 +184,7 @@ def test_web_links(
 
     documents_by_name = {d.semantic_identifier: d for d in result.documents}
     # the files are still indexed, plus the bookmark
-    assert EXPECTED_DOC_NAMES <= set(documents_by_name)
+    assert set(documents_by_name) >= EXPECTED_DOC_NAMES
     assert WEB_LINK_NAME in documents_by_name
 
     web_link = documents_by_name[WEB_LINK_NAME]

@@ -631,11 +631,12 @@ def create_update_persona(
         )
 
         # Featured persona validation
-        if create_persona_request.is_featured:
-            if not has_global_permission(user, Permission.MANAGE_AGENTS):
-                raise ValueError(
-                    "Only users with agent management permissions can make a featured persona"
-                )
+        if create_persona_request.is_featured and (
+            not has_global_permission(user, Permission.MANAGE_AGENTS)
+        ):
+            raise ValueError(
+                "Only users with agent management permissions can make a featured persona"
+            )
 
         # Convert incoming string UUIDs to UUID objects for DB operations
         converted_user_file_ids = None
@@ -815,12 +816,14 @@ def user_can_transfer_persona(
     persona: Persona, user: User, db_session: Session
 ) -> bool:
     """Only the owner may transfer; admins may transfer vacant personas."""
-    if persona.user_id is not None:
-        if persona.user_id == user.id:
-            return True
-    elif persona.owner_group_id is not None:
-        if persona.owner_group_id in get_user_group_ids_for_user(db_session, user.id):
-            return True
+    if persona.user_id is not None and persona.user_id == user.id:
+        return True
+    if (
+        persona.user_id is None
+        and persona.owner_group_id is not None
+        and persona.owner_group_id in get_user_group_ids_for_user(db_session, user.id)
+    ):
+        return True
     return has_global_permission(
         user, Permission.MANAGE_AGENTS
     ) and persona_ownership_is_vacant(persona)

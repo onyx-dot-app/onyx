@@ -212,15 +212,14 @@ def should_index(
 
     # User can still manually create single indexing attempts via the UI for the
     # currently in use index
-    if DISABLE_INDEX_UPDATE_ON_SWAP:
-        if (
-            search_settings_instance.status == IndexModelStatus.PRESENT
-            and secondary_index_building
-        ):
-            # print(
-            #     f"Not indexing cc_pair={cc_pair.id}: DISABLE_INDEX_UPDATE_ON_SWAP is True and secondary index building"
-            # )
-            return False
+    if DISABLE_INDEX_UPDATE_ON_SWAP and (
+        search_settings_instance.status == IndexModelStatus.PRESENT
+        and secondary_index_building
+    ):
+        # print(
+        #     f"Not indexing cc_pair={cc_pair.id}: DISABLE_INDEX_UPDATE_ON_SWAP is True and secondary index building"
+        # )
+        return False
 
     # Legacy FUTURE reindex indexes once, then stops so the swap can fire. A
     # port-flow FUTURE polls continuously like PRESENT (its synthetic seed primes
@@ -275,10 +274,11 @@ def should_index(
         # )
         return False
 
-    if search_settings_instance.status.is_current():
-        if cc_pair.indexing_trigger is not None:
-            # if a manual indexing trigger is on the cc pair, honor it for live search settings
-            return True
+    # if a manual indexing trigger is on the cc pair, honor it for live search settings
+    if search_settings_instance.status.is_current() and (
+        cc_pair.indexing_trigger is not None
+    ):
+        return True
 
     # if no attempt has ever occurred, we should index regardless of refresh_freq
     if not last_index_attempt:
@@ -299,11 +299,8 @@ def should_index(
 
     current_db_time = get_db_current_time(db_session)
     time_since_index = current_db_time - last_index_attempt.time_updated
-    if time_since_index.total_seconds() < connector.refresh_freq:
-        # print(
-        #     f"Not indexing cc_pair={cc_pair.id}: Last index attempt={last_index_attempt.id} "
-        #     f"too recent ({time_since_index.total_seconds()}s < {connector.refresh_freq}s)"
-        # )
-        return False
-
-    return True
+    # print(
+    #     f"Not indexing cc_pair={cc_pair.id}: Last index attempt={last_index_attempt.id} "
+    #     f"too recent ({time_since_index.total_seconds()}s < {connector.refresh_freq}s)"
+    # )
+    return time_since_index.total_seconds() >= connector.refresh_freq

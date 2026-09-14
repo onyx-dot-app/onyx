@@ -5,6 +5,7 @@ handler's local-cache invalidation takes effect on the very next request
 without any TTL wait.
 """
 
+import contextlib
 from collections.abc import Generator
 
 import pytest
@@ -52,11 +53,9 @@ def reset_security_settings(
 ) -> Generator[None, None, None]:
     """Restore env defaults after the test — overrides are tenant-persistent."""
     yield
-    try:
+    # Best-effort cleanup; don't mask the underlying test failure.
+    with contextlib.suppress(Exception):
         _put_security(dict(_ALL_OVERRIDE_KEYS_NULL), admin_user)
-    except Exception:
-        # Best-effort cleanup; don't mask the underlying test failure.
-        pass
 
 
 def test_user_directory_admin_only_toggle_flips_basic_access(

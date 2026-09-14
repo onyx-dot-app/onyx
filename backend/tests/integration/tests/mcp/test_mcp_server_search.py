@@ -42,13 +42,15 @@ def _run_with_mcp_session(
     """Run an async action with an MCP client session."""
 
     async def _runner() -> Any:
-        async with streamablehttp_client(STREAMABLE_HTTP_URL, headers=headers) as (
-            read,
-            write,
-            _,
+        async with (
+            streamablehttp_client(STREAMABLE_HTTP_URL, headers=headers) as (
+                read,
+                write,
+                _,
+            ),
+            ClientSession(read, write) as session,
         ):
-            async with ClientSession(read, write) as session:
-                return await action(session)
+            return await action(session)
 
     return asyncio.run(_runner())
 

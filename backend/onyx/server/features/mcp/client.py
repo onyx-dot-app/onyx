@@ -227,12 +227,13 @@ def process_mcp_result(call_tool_result: CallToolResult) -> str:
     for content_block in call_tool_result.content:
         if content_block.type == ContentBlockTypes.TEXT.value:
             parts.append(content_block.text or "")
-        if content_block.type == ContentBlockTypes.RESOURCE.value:
-            if isinstance(
+        if content_block.type == ContentBlockTypes.RESOURCE.value and (
+            isinstance(
                 content_block.resource,
                 TextResourceContents,
-            ):
-                parts.append(content_block.resource.text or "")
+            )
+        ):
+            parts.append(content_block.resource.text or "")
             # TODO: handle blob resource content
         if content_block.type == ContentBlockTypes.RESOURCE_LINK.value:
             parts.append(

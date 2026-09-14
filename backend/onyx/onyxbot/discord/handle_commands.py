@@ -124,11 +124,12 @@ async def handle_registration_command(
             )
 
         # Check permissions - require admin or manage_guild
-        if not message.author.guild_permissions.administrator:
-            if not message.author.guild_permissions.manage_guild:
-                raise RegistrationError(
-                    "You need **Administrator** or **Manage Server** permissions to register this bot."
-                )
+        if not message.author.guild_permissions.administrator and (
+            not message.author.guild_permissions.manage_guild
+        ):
+            raise RegistrationError(
+                "You need **Administrator** or **Manage Server** permissions to register this bot."
+            )
 
         await _register_guild(message, registration_key, cache)
         logger.info("Registration successful: %s", guild_name)
@@ -309,11 +310,12 @@ async def handle_sync_channels_command(
                 "You need to be a server administrator to sync channels."
             )
 
-        if not message.author.guild_permissions.administrator:
-            if not message.author.guild_permissions.manage_guild:
-                raise SyncChannelsError(
-                    "You need **Administrator** or **Manage Server** permissions to sync channels."
-                )
+        if not message.author.guild_permissions.administrator and (
+            not message.author.guild_permissions.manage_guild
+        ):
+            raise SyncChannelsError(
+                "You need **Administrator** or **Manage Server** permissions to sync channels."
+            )
 
         # Get guild config ID
         def _get_guild_config_id() -> int | None:

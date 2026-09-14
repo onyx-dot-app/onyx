@@ -52,9 +52,11 @@ def _fake_provider(supports_ref: bool = True, data: list | None = None) -> Magic
 
 
 def test_no_default_config_raises() -> None:
-    with patch(f"{_HELPER}.get_default_image_generation_config", return_value=None):
-        with pytest.raises(ImageGenerationNotConfiguredError):
-            generate_images_with_default_config(prompt="cat")
+    with (
+        patch(f"{_HELPER}.get_default_image_generation_config", return_value=None),
+        pytest.raises(ImageGenerationNotConfiguredError),
+    ):
+        generate_images_with_default_config(prompt="cat")
 
 
 def test_invalid_credentials_raises() -> None:
@@ -64,9 +66,9 @@ def test_invalid_credentials_raises() -> None:
             return_value=_fake_config("gpt-image-1"),
         ),
         patch(f"{_HELPER}.validate_credentials", return_value=False),
+        pytest.raises(ImageGenerationNotConfiguredError),
     ):
-        with pytest.raises(ImageGenerationNotConfiguredError):
-            generate_images_with_default_config(prompt="cat")
+        generate_images_with_default_config(prompt="cat")
 
 
 @pytest.mark.parametrize(
@@ -109,9 +111,9 @@ def test_reference_images_unsupported_raises() -> None:
         ),
         patch(f"{_HELPER}.validate_credentials", return_value=True),
         patch(f"{_HELPER}.get_image_generation_provider", return_value=provider),
+        pytest.raises(ValueError),
     ):
-        with pytest.raises(ValueError):
-            generate_images_with_default_config(prompt="cat", reference_images=refs)
+        generate_images_with_default_config(prompt="cat", reference_images=refs)
 
 
 def test_returns_b64_and_revised_prompt() -> None:
@@ -143,9 +145,9 @@ def test_no_image_data_raises() -> None:
         ),
         patch(f"{_HELPER}.validate_credentials", return_value=True),
         patch(f"{_HELPER}.get_image_generation_provider", return_value=provider),
+        pytest.raises(RuntimeError),
     ):
-        with pytest.raises(RuntimeError):
-            generate_images_with_default_config(prompt="cat")
+        generate_images_with_default_config(prompt="cat")
 
 
 def test_is_image_generation_configured_true() -> None:

@@ -3,7 +3,7 @@ import logging
 import time
 from collections import Counter
 from collections.abc import Iterator
-from contextlib import AbstractContextManager, nullcontext
+from contextlib import AbstractContextManager, nullcontext, suppress
 from http import HTTPStatus
 from typing import Any, Generic, TypeVar
 
@@ -326,10 +326,8 @@ class OpenSearchClient(AbstractContextManager):
         self.close()
 
     def __del__(self) -> None:
-        try:
+        with suppress(Exception):
             self.close()
-        except Exception:
-            pass
 
     @log_function_time(print_only=True, debug_only=True, include_args=True)
     def create_search_pipeline(
@@ -1790,10 +1788,8 @@ class OpenSearchIndexClient(OpenSearchClient):
         Args:
             pit_id: The point-in-time id to delete.
         """
-        try:
+        with suppress(NotFoundError):
             self._client.delete_pit(body={"pit_id": [pit_id]})
-        except NotFoundError:
-            pass
 
     def fetch_chunks_for_doc_ids(
         self,

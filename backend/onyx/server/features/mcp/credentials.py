@@ -107,9 +107,7 @@ def requires_user_authentication(
     everyone. Consumed at server create/update to report initial auth state."""
     if auth_type == MCPAuthenticationType.NONE:
         return False
-    if auth_performer == MCPAuthenticationPerformer.ADMIN:
-        return False
-    return True
+    return auth_performer != MCPAuthenticationPerformer.ADMIN
 
 
 def get_mcp_auth_template(mcp_server: MCPServer) -> MCPAuthTemplate | None:

@@ -1,3 +1,4 @@
+import contextlib
 import io
 
 from PIL import Image
@@ -110,10 +111,8 @@ class OnyxRuntime:
 
         beat_multiplier_bytes = r.get(f"{ONYX_CLOUD_REDIS_RUNTIME}:beat_multiplier")
         if beat_multiplier_bytes is not None:
-            try:
+            with contextlib.suppress(ValueError):
                 beat_multiplier = float(beat_multiplier_bytes.decode())
-            except ValueError:
-                pass
 
         if beat_multiplier <= 0.0:
             return 1.0
@@ -132,10 +131,8 @@ class OnyxRuntime:
             f"{ONYX_CLOUD_REDIS_RUNTIME}:doc_permission_sync_multiplier"
         )
         if value_bytes is not None:
-            try:
+            with contextlib.suppress(ValueError):
                 value = float(value_bytes.decode())
-            except ValueError:
-                pass
 
         if value <= 0.0:
             return 1.0
@@ -237,10 +234,8 @@ class OnyxRuntime:
             f"{ONYX_CLOUD_REDIS_RUNTIME}:build_fence_lookup_table_interval"
         )
         if interval_bytes is not None:
-            try:
+            with contextlib.suppress(ValueError):
                 interval = int(interval_bytes.decode())
-            except ValueError:
-                pass
 
         if interval <= 0.0:
             return CLOUD_BUILD_FENCE_LOOKUP_TABLE_INTERVAL_DEFAULT

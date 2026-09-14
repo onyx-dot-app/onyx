@@ -396,15 +396,16 @@ def process_jira_issue(
     labels_to_skip: set[str] | None = None,
     parent_hierarchy_raw_node_id: str | None = None,
 ) -> Document | None:
-    if labels_to_skip:
-        if any(label in issue.fields.labels for label in labels_to_skip):
-            logger.info(
-                "Skipping %s because it has a label to skip. Found labels: %s. Labels to skip: %s.",
-                issue.key,
-                issue.fields.labels,
-                labels_to_skip,
-            )
-            return None
+    if labels_to_skip and (
+        any(label in issue.fields.labels for label in labels_to_skip)
+    ):
+        logger.info(
+            "Skipping %s because it has a label to skip. Found labels: %s. Labels to skip: %s.",
+            issue.key,
+            issue.fields.labels,
+            labels_to_skip,
+        )
+        return None
 
     if isinstance(issue.fields.description, str):
         description = issue.fields.description

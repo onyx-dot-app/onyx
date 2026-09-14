@@ -134,10 +134,7 @@ def _is_indexable_path(path: str, size: int | None) -> bool:
         return True
 
     # Extensionless docs like README / LICENSE (basename has no extension).
-    if not extension and basename.lower() in GITHUB_INDEXABLE_FILENAMES:
-        return True
-
-    return False
+    return bool(not extension and basename.lower() in GITHUB_INDEXABLE_FILENAMES)
 
 
 # Cases

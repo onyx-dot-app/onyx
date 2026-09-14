@@ -132,8 +132,10 @@ def format_document_soup(
                 )
 
                 # Don't join separate elements without any spacing
-                if (text and not text[-1].isspace()) and (
-                    content_to_add and not content_to_add[0].isspace()
+                if (
+                    text
+                    and not text[-1].isspace()
+                    and (content_to_add and not content_to_add[0].isspace())
                 ):
                     text += " "
 
@@ -154,20 +156,15 @@ def format_document_soup(
             elif e.name in ["p", "div"]:
                 if not list_element_start:
                     text += "\n"
-            elif e.name in ["h1", "h2", "h3", "h4"]:
-                text += "\n"
-                list_element_start = False
-                last_added_newline = True
-            elif e.name == "br":
+            elif e.name in ["h1", "h2", "h3", "h4"] or e.name == "br":
                 text += "\n"
                 list_element_start = False
                 last_added_newline = True
             elif e.name == "li":
                 text += "\n- "
                 list_element_start = True
-            elif e.name == "pre":
-                if verbatim_output <= 0:
-                    verbatim_output = len(list(e.childGenerator()))
+            elif e.name == "pre" and verbatim_output <= 0:
+                verbatim_output = len(list(e.childGenerator()))
     return strip_excessive_newlines_and_spaces(text)
 
 

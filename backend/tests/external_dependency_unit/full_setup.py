@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import os
 from pathlib import Path
 from typing import Optional
@@ -57,10 +58,8 @@ def ensure_full_deployment_setup(
             setup_postgres(db_session)
 
             # Initialize file store; ignore if not configured
-            try:
+            with contextlib.suppress(Exception):
                 get_default_file_store().initialize()
-            except Exception:
-                pass
 
         # Also ensure indices exist explicitly (no-op if already created)
         with get_session_with_current_tenant() as db_session:

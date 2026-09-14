@@ -47,61 +47,54 @@ async def upsert_saml_user(email: str) -> User:
     get_user_db_context = contextlib.asynccontextmanager(get_user_db)
     get_user_manager_context = contextlib.asynccontextmanager(get_user_manager)
 
-    async with get_async_session_context_manager() as session:
-        async with get_user_db_context(session) as user_db:
-            async with get_user_manager_context(user_db) as user_manager:
-                try:
-                    user = await user_manager.get_by_email(email)
-                    # If user has a non-authenticated account type, treat as non-existent
-                    if not user.account_type.is_web_login():
-                        raise exceptions.UserNotExists()
-                    return user
-                except exceptions.UserNotExists:
-                    logger.info("Creating user from SAML login")
-
-                # Generate a secure random password meeting validation requirements
-                # We use a secure random password since we never need to know what it is
-                # (SAML users authenticate via their IdP)
-                secure_random_password = "".join(
-                    [
-                        # Ensure minimum requirements are met
-                        secrets.choice(
-                            string.ascii_uppercase
-                        ),  # at least one uppercase
-                        secrets.choice(
-                            string.ascii_lowercase
-                        ),  # at least one lowercase
-                        secrets.choice(string.digits),  # at least one digit
-                        secrets.choice(
-                            "!@#$%^&*()-_=+[]{}|;:,.<>?"
-                        ),  # at least one special
-                        # Fill remaining length with random chars (mix of all types)
-                        "".join(
-                            secrets.choice(
-                                string.ascii_letters
-                                + string.digits
-                                + "!@#$%^&*()-_=+[]{}|;:,.<>?"
-                            )
-                            for _ in range(12)
-                        ),
-                    ]
-                )
-
-                # Create the user with SAML-appropriate settings.
-                # UserManager.create triggers fastapi-users' on_after_register,
-                # which places the user in the Admin default group if they are
-                # the first user in the tenant (or their email is in
-                # get_default_admin_user_emails()) and the Basic default group
-                # otherwise — this replaces the old explicit role assignment.
-                user = await user_manager.create(
-                    UserCreate(
-                        email=email,
-                        password=secure_random_password,  # Pass raw password, not hash
-                        is_verified=True,  # SAML users are pre-verified by their IdP
-                    ),
-                )
-
-                return user
+    async with (
+        get_async_session_context_manager() as session,
+        get_user_db_context(session) as user_db,
+        get_user_manager_context(user_db) as user_manager,
+    ):
+        try:
+            user = await user_manager.get_by_email(email)
+            # If user has a non-authenticated account type, treat as non-existent
+            if not user.account_type.is_web_login():
+                raise exceptions.UserNotExists()
+            return user
+        except exceptions.UserNotExists:
+            logger.info("Creating user from SAML login")
+        # Generate a secure random password meeting validation requirements
+        # We use a secure random password since we never need to know what it is
+        # (SAML users authenticate via their IdP)
+        secure_random_password = "".join(
+            [
+                # Ensure minimum requirements are met
+                secrets.choice(string.ascii_uppercase),  # at least one uppercase
+                secrets.choice(string.ascii_lowercase),  # at least one lowercase
+                secrets.choice(string.digits),  # at least one digit
+                secrets.choice("!@#$%^&*()-_=+[]{}|;:,.<>?"),  # at least one special
+                # Fill remaining length with random chars (mix of all types)
+                "".join(
+                    secrets.choice(
+                        string.ascii_letters
+                        + string.digits
+                        + "!@#$%^&*()-_=+[]{}|;:,.<>?"
+                    )
+                    for _ in range(12)
+                ),
+            ]
+        )
+        # Create the user with SAML-appropriate settings.
+        # UserManager.create triggers fastapi-users' on_after_register,
+        # which places the user in the Admin default group if they are
+        # the first user in the tenant (or their email is in
+        # get_default_admin_user_emails()) and the Basic default group
+        # otherwise — this replaces the old explicit role assignment.
+        user = await user_manager.create(
+            UserCreate(
+                email=email,
+                password=secure_random_password,  # Pass raw password, not hash
+                is_verified=True,  # SAML users are pre-verified by their IdP
+            ),
+        )
+        return user
 
 
 async def prepare_from_fastapi_request(request: Request) -> dict[str, Any]:

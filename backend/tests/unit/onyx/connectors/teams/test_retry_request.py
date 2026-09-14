@@ -72,9 +72,11 @@ def test_retries_transient_status_then_succeeds(status: int) -> None:
 def test_does_not_retry_non_retryable_status(status: int) -> None:
     graph_client = _graph_client(_response(ok=False, status_code=status))
 
-    with patch("onyx.connectors.teams.utils.time.sleep") as mock_sleep:
-        with pytest.raises(HTTPError):
-            _retry(graph_client=graph_client, request_url="teams")
+    with (
+        patch("onyx.connectors.teams.utils.time.sleep") as mock_sleep,
+        pytest.raises(HTTPError),
+    ):
+        _retry(graph_client=graph_client, request_url="teams")
 
     assert graph_client.execute_request_direct.call_count == 1
     mock_sleep.assert_not_called()
@@ -84,9 +86,8 @@ def test_raises_when_json_is_not_an_object() -> None:
     # A 200 whose body is a JSON array (not an object) is a contract violation.
     graph_client = _graph_client(_response(ok=True, json_value=[1, 2, 3]))
 
-    with patch("onyx.connectors.teams.utils.time.sleep"):
-        with pytest.raises(RuntimeError):
-            _retry(graph_client=graph_client, request_url="teams")
+    with patch("onyx.connectors.teams.utils.time.sleep"), pytest.raises(RuntimeError):
+        _retry(graph_client=graph_client, request_url="teams")
 
 
 def test_raises_runtime_error_after_exhausting_retries() -> None:
@@ -97,9 +98,11 @@ def test_raises_runtime_error_after_exhausting_retries() -> None:
         return_value=_response(ok=False, status_code=503),
     )
 
-    with patch("onyx.connectors.teams.utils.time.sleep") as mock_sleep:
-        with pytest.raises(RuntimeError, match="Max number of retries"):
-            _retry(graph_client=graph_client, request_url="teams")
+    with (
+        patch("onyx.connectors.teams.utils.time.sleep") as mock_sleep,
+        pytest.raises(RuntimeError, match="Max number of retries"),
+    ):
+        _retry(graph_client=graph_client, request_url="teams")
 
     # 10 attempts are made, but the final (exhausted) attempt raises immediately
     # instead of sleeping, so there are only 9 backoff sleeps.

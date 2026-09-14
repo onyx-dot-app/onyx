@@ -9,6 +9,7 @@ under it. This test creates that exact race scenario and verifies the
 fix.
 """
 
+import contextlib
 from collections.abc import Generator
 from io import BytesIO
 from uuid import uuid4
@@ -147,10 +148,8 @@ def test_sweep_skips_files_owned_by_non_terminal_attempt(
 
     fs = get_default_file_store()
     for fid in (file_for_in_progress, file_for_current):
-        try:
+        with contextlib.suppress(Exception):
             fs.delete_file(fid)
-        except Exception:
-            pass
 
 
 def test_sweep_skips_files_owned_by_not_started_attempt(
@@ -201,10 +200,8 @@ def test_sweep_skips_files_owned_by_not_started_attempt(
     from onyx.file_store.file_store import get_default_file_store
 
     fs = get_default_file_store()
-    try:
+    with contextlib.suppress(Exception):
         fs.delete_file(file_for_not_started)
-    except Exception:
-        pass
 
 
 def test_sweep_reaps_orphan_with_no_owning_attempt(

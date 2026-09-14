@@ -445,9 +445,8 @@ def verify_email_domain(
         )
 
     # Check domain whitelist if configured
-    if valid_email_domains:
-        if domain not in valid_email_domains:
-            raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Email domain is not valid")
+    if valid_email_domains and domain not in valid_email_domains:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Email domain is not valid")
 
 
 def enforce_seat_limit(
@@ -2648,7 +2647,7 @@ async def complete_login_flow(
         )
 
     next_url = sanitize_next_url(state_data.get("next_url"))
-    referral_source = state_data.get("referral_source", None)
+    referral_source = state_data.get("referral_source")
     # Drives the new_team redirect below. Resolving differently from the login
     # itself would greet a returning user as a brand new signup.
     tenant_id = (

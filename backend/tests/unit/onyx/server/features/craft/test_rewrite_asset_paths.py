@@ -340,7 +340,7 @@ class TestProxyRequestWiring:
         # If a new entry is added to EXCLUDED_REQUEST_HEADERS without also
         # being added here, this assertion fails and forces the test to grow.
         covered = {key.lower() for key in sensitive_headers}
-        assert api.EXCLUDED_REQUEST_HEADERS <= covered, (
+        assert covered >= api.EXCLUDED_REQUEST_HEADERS, (
             f"Deny-list entries missing from test input: "
             f"{api.EXCLUDED_REQUEST_HEADERS - covered}"
         )

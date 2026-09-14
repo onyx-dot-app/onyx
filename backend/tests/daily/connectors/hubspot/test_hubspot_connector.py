@@ -98,12 +98,10 @@ class TestHubSpotConnector:
         all_docs: list[Document] = []
 
         # Collect a few batches to test different object types
-        batch_count = 0
-        for batch in document_batches:
+        for batch_count, batch in enumerate(document_batches, start=1):
             all_docs.extend(
                 [doc for doc in batch if not isinstance(doc, HierarchyNode)]
             )
-            batch_count += 1
             if (
                 batch_count >= 3 or len(all_docs) >= 20
             ):  # Limit to avoid too many API calls
@@ -380,12 +378,10 @@ class TestHubSpotConnector:
         all_docs: list[Document] = []
 
         # Collect a few batches
-        batch_count = 0
-        for batch in document_batches:
+        for batch_count, batch in enumerate(document_batches, start=1):
             all_docs.extend(
                 [doc for doc in batch if not isinstance(doc, HierarchyNode)]
             )
-            batch_count += 1
             if batch_count >= 3 or len(all_docs) >= 10:
                 break
 
@@ -459,12 +455,10 @@ class TestHubSpotConnector:
         all_docs: list[Document] = []
 
         # Try to collect batches
-        batch_count = 0
-        for batch in document_batches:
+        for batch_count, batch in enumerate(document_batches, start=1):
             all_docs.extend(
                 [doc for doc in batch if not isinstance(doc, HierarchyNode)]
             )
-            batch_count += 1
             if batch_count >= 2:  # Don't wait too long
                 break
 
@@ -491,12 +485,10 @@ class TestHubSpotConnector:
         all_docs: list[Document] = []
 
         # Collect a few batches
-        batch_count = 0
-        for batch in document_batches:
+        for batch_count, batch in enumerate(document_batches, start=1):
             all_docs.extend(
                 [doc for doc in batch if not isinstance(doc, HierarchyNode)]
             )
-            batch_count += 1
             if batch_count >= 2 or len(all_docs) >= 5:
                 break
 

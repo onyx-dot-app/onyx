@@ -1,3 +1,4 @@
+import contextlib
 import json
 from datetime import datetime, timedelta, timezone
 from typing import Any, cast
@@ -112,10 +113,8 @@ def _load_handshake_state(credential_id: int) -> dict[str, Any]:
         else None
     )
     if issued_at is None or datetime.now(timezone.utc) - issued_at > _HANDSHAKE_TTL:
-        try:
+        with contextlib.suppress(KvKeyNotFoundError):
             delete_encrypted_kv(key)
-        except KvKeyNotFoundError:
-            pass
         raise OnyxError(
             OnyxErrorCode.CSRF_FAILURE,
             "The Google authorization flow expired. Restart the authorization.",
@@ -178,10 +177,8 @@ def update_credential_access_tokens(
     if not update_credential_json(credential_id, new_creds_dict, user, db_session):
         return None
     # The handshake state is one-time use; drop it so captured values expire here.
-    try:
+    with contextlib.suppress(KvKeyNotFoundError):
         delete_encrypted_kv(KV_CRED_KEY.format(str(credential_id)))
-    except KvKeyNotFoundError:
-        pass
     return creds
 
 

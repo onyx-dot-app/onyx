@@ -224,8 +224,9 @@ class SidecarClient:
         )
 
         try:
-            with httpx.Client(timeout=timeout) as http_client:
-                with http_client.stream(
+            with (
+                httpx.Client(timeout=timeout) as http_client,
+                http_client.stream(
                     "POST",
                     self._url(self._host(sandbox_id), endpoint_path),
                     content=body,
@@ -234,21 +235,19 @@ class SidecarClient:
                         sha256_hex=sha256_hex,
                         content_type=content_type,
                     ),
-                ) as resp:
-                    if resp.status_code == 204:
-                        yield None
-                        return
-                    if resp.status_code != 200:
-                        detail = resp.read().decode(errors="replace")
-                        raise SidecarStatusError(
-                            operation_label, resp.status_code, detail
-                        )
-
-                    adapter = _IteratorReader(
-                        resp.iter_bytes(chunk_size=_SIDECAR_CHUNK_SIZE)
-                    )
-                    yield cast(IO[bytes], adapter)
+                ) as resp,
+            ):
+                if resp.status_code == 204:
+                    yield None
                     return
+                if resp.status_code != 200:
+                    detail = resp.read().decode(errors="replace")
+                    raise SidecarStatusError(operation_label, resp.status_code, detail)
+                adapter = _IteratorReader(
+                    resp.iter_bytes(chunk_size=_SIDECAR_CHUNK_SIZE)
+                )
+                yield cast(IO[bytes], adapter)
+                return
         except httpx.TransportError as e:
             raise SidecarRequestError(f"{operation_label} request failed: {e}") from e
 

@@ -306,21 +306,22 @@ class TestTrackOpenSearchSearch:
             search_type=search_type.value
         )._value.get()
 
-        # Under test.
-        with patch.object(
-            _searches_in_progress.labels(search_type=search_type.value),
-            "inc",
-            side_effect=RuntimeError("boom"),
+        # Under test. The context manager should still yield without decrementing.
+        with (
+            patch.object(
+                _searches_in_progress.labels(search_type=search_type.value),
+                "inc",
+                side_effect=RuntimeError("boom"),
+            ),
+            track_opensearch_search(search_type),
         ):
-            # Context manager should still yield without decrementing.
-            with track_opensearch_search(search_type):
-                # Search logic would execute here.
-                during = _searches_in_progress.labels(
-                    search_type=search_type.value
-                )._value.get()
+            # Search logic would execute here.
+            during = _searches_in_progress.labels(
+                search_type=search_type.value
+            )._value.get()
 
-                # Postcondition.
-                assert during == before
+            # Postcondition.
+            assert during == before
 
         after = _searches_in_progress.labels(search_type=search_type.value)._value.get()
         assert after == before
@@ -329,12 +330,13 @@ class TestTrackOpenSearchSearch:
         # Precondition.
         search_type = OpenSearchSearchType.UNKNOWN
 
-        # Under test and postcondition.
-        with patch.object(
-            _search_total.labels(search_type=search_type.value),
-            "inc",
-            side_effect=RuntimeError("boom"),
+        # Under test and postcondition. The context manager should still yield.
+        with (
+            patch.object(
+                _search_total.labels(search_type=search_type.value),
+                "inc",
+                side_effect=RuntimeError("boom"),
+            ),
+            track_opensearch_search(search_type),
         ):
-            # Context manager should still yield.
-            with track_opensearch_search(search_type):
-                pass
+            pass

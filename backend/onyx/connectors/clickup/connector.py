@@ -220,8 +220,8 @@ if __name__ == "__main__":
 
     clickup_connector.load_credentials(
         {
-            "clickup_api_token": os.environ["clickup_api_token"],
-            "clickup_team_id": os.environ["clickup_team_id"],
+            "clickup_api_token": os.environ["CLICKUP_API_TOKEN"],
+            "clickup_team_id": os.environ["CLICKUP_TEAM_ID"],
         }
     )
 

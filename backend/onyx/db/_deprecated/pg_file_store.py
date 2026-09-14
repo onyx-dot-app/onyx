@@ -94,7 +94,8 @@ def read_lobj(
         )
 
         if use_tempfile:
-            temp_file = tempfile.SpooledTemporaryFile(max_size=MAX_IN_MEMORY_SIZE)
+            # The caller owns and closes this file, so a `with` block cannot be used.
+            temp_file = tempfile.SpooledTemporaryFile(max_size=MAX_IN_MEMORY_SIZE)  # noqa: SIM115
             while True:
                 chunk = large_object.read(STANDARD_CHUNK_SIZE)
                 if not chunk:
@@ -116,7 +117,8 @@ def read_lobj(
             raise RuntimeError("Failed to read large object")
 
         if use_tempfile:
-            temp_file = tempfile.SpooledTemporaryFile(max_size=MAX_IN_MEMORY_SIZE)
+            # The caller owns and closes this file, so a `with` block cannot be used.
+            temp_file = tempfile.SpooledTemporaryFile(max_size=MAX_IN_MEMORY_SIZE)  # noqa: SIM115
             temp_file.write(byte_data)
             temp_file.seek(0)
             return temp_file

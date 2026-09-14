@@ -225,49 +225,57 @@ def _assert_signature(
 def test_daemon_5xx_raises_retriable() -> None:
     mgr = _make_manager()
     factory = _mock_httpx_client(response_status=503, response_text="overloaded")
-    with patch(_HTTPX_CLIENT_PATH, factory):
-        with pytest.raises(RetriableWriteError, match="503"):
-            mgr.write_files_to_sandbox(
-                sandbox_id=_sandbox_id(),
-                mount_path="/workspace/managed/skills",
-                files=_files(),
-            )
+    with (
+        patch(_HTTPX_CLIENT_PATH, factory),
+        pytest.raises(RetriableWriteError, match="503"),
+    ):
+        mgr.write_files_to_sandbox(
+            sandbox_id=_sandbox_id(),
+            mount_path="/workspace/managed/skills",
+            files=_files(),
+        )
 
 
 def test_daemon_401_raises_fatal() -> None:
     mgr = _make_manager()
     factory = _mock_httpx_client(response_status=401, response_text="bad signature")
-    with patch(_HTTPX_CLIENT_PATH, factory):
-        with pytest.raises(FatalWriteError, match="401"):
-            mgr.write_files_to_sandbox(
-                sandbox_id=_sandbox_id(),
-                mount_path="/workspace/managed/skills",
-                files=_files(),
-            )
+    with (
+        patch(_HTTPX_CLIENT_PATH, factory),
+        pytest.raises(FatalWriteError, match="401"),
+    ):
+        mgr.write_files_to_sandbox(
+            sandbox_id=_sandbox_id(),
+            mount_path="/workspace/managed/skills",
+            files=_files(),
+        )
 
 
 def test_daemon_400_raises_fatal() -> None:
     mgr = _make_manager()
     factory = _mock_httpx_client(response_status=400, response_text="sha mismatch")
-    with patch(_HTTPX_CLIENT_PATH, factory):
-        with pytest.raises(FatalWriteError, match="400"):
-            mgr.write_files_to_sandbox(
-                sandbox_id=_sandbox_id(),
-                mount_path="/workspace/managed/skills",
-                files=_files(),
-            )
+    with (
+        patch(_HTTPX_CLIENT_PATH, factory),
+        pytest.raises(FatalWriteError, match="400"),
+    ):
+        mgr.write_files_to_sandbox(
+            sandbox_id=_sandbox_id(),
+            mount_path="/workspace/managed/skills",
+            files=_files(),
+        )
 
 
 def test_daemon_413_raises_fatal() -> None:
     mgr = _make_manager()
     factory = _mock_httpx_client(response_status=413, response_text="too big")
-    with patch(_HTTPX_CLIENT_PATH, factory):
-        with pytest.raises(FatalWriteError, match="413"):
-            mgr.write_files_to_sandbox(
-                sandbox_id=_sandbox_id(),
-                mount_path="/workspace/managed/skills",
-                files=_files(),
-            )
+    with (
+        patch(_HTTPX_CLIENT_PATH, factory),
+        pytest.raises(FatalWriteError, match="413"),
+    ):
+        mgr.write_files_to_sandbox(
+            sandbox_id=_sandbox_id(),
+            mount_path="/workspace/managed/skills",
+            files=_files(),
+        )
 
 
 @pytest.mark.parametrize(
@@ -288,13 +296,15 @@ def test_daemon_413_raises_fatal() -> None:
 def test_transport_error_raises_retriable(exc: httpx.HTTPError) -> None:
     mgr = _make_manager()
     factory = _mock_httpx_client(raise_exc=exc)
-    with patch(_HTTPX_CLIENT_PATH, factory):
-        with pytest.raises(RetriableWriteError, match="failed"):
-            mgr.write_files_to_sandbox(
-                sandbox_id=_sandbox_id(),
-                mount_path="/workspace/managed/skills",
-                files=_files(),
-            )
+    with (
+        patch(_HTTPX_CLIENT_PATH, factory),
+        pytest.raises(RetriableWriteError, match="failed"),
+    ):
+        mgr.write_files_to_sandbox(
+            sandbox_id=_sandbox_id(),
+            mount_path="/workspace/managed/skills",
+            files=_files(),
+        )
 
 
 def test_2xx_returns_success() -> None:
@@ -369,8 +379,7 @@ def test_stream_new_snapshot_streams_signed_response() -> None:
     with (
         patch(_HTTPX_CLIENT_PATH, MagicMock(return_value=ctx)),
         patch.object(sidecar_client.time, "time", return_value=1234567890),
-    ):
-        with SidecarClient(
+        SidecarClient(
             host=lambda _sandbox_id: "sidecar.local"
         ).request_and_stream_new_snapshot(
             sandbox_id=sandbox_id,
@@ -379,9 +388,10 @@ def test_stream_new_snapshot_streams_signed_response() -> None:
             content_type="application/json",
             operation_label="Snapshot create",
             timeout_seconds=30.0,
-        ) as stream:
-            assert stream is not None
-            assert stream.read() == b"tarbytes"
+        ) as stream,
+    ):
+        assert stream is not None
+        assert stream.read() == b"tarbytes"
 
     assert [url for url, _kwargs in calls] == [
         f"http://sidecar.local:8731{SIDECAR_SNAPSHOT_CREATE_PATH}",
@@ -566,13 +576,15 @@ def test_bundle_over_100mib_rejected_before_send(
             "httpx.Client should not be constructed for oversized bundles"
         )
 
-    with patch(_HTTPX_CLIENT_PATH, _fail_factory):
-        with pytest.raises(FatalWriteError, match="exceeds"):
-            mgr.write_files_to_sandbox(
-                sandbox_id=_sandbox_id(),
-                mount_path="/workspace/managed/skills",
-                files={"big.bin": b"x" * 2048},
-            )
+    with (
+        patch(_HTTPX_CLIENT_PATH, _fail_factory),
+        pytest.raises(FatalWriteError, match="exceeds"),
+    ):
+        mgr.write_files_to_sandbox(
+            sandbox_id=_sandbox_id(),
+            mount_path="/workspace/managed/skills",
+            files={"big.bin": b"x" * 2048},
+        )
 
     assert httpx_called is False
 
@@ -604,16 +616,18 @@ def test_snapshot_restore_raises_when_all_hosts_fail() -> None:
         raise httpx.ConnectError("unreachable")
 
     archive_body = b"snapshot archive"
-    with patch(_HTTPX_CLIENT_PATH, _mock_httpx_per_url(handler)):
-        with pytest.raises(RuntimeError, match="Snapshot restore request failed"):
-            SidecarClient(host=_service_host(mgr)).post_archive(
-                sandbox_id=sandbox_id,
-                endpoint_path=sidecar_snapshot_restore_path(_sandbox_id()),
-                archive_file=io.BytesIO(archive_body),
-                sha256_hex=hashlib.sha256(archive_body).hexdigest(),
-                operation_label="Snapshot restore",
-                timeout_seconds=0.01,
-            )
+    with (
+        patch(_HTTPX_CLIENT_PATH, _mock_httpx_per_url(handler)),
+        pytest.raises(RuntimeError, match="Snapshot restore request failed"),
+    ):
+        SidecarClient(host=_service_host(mgr)).post_archive(
+            sandbox_id=sandbox_id,
+            endpoint_path=sidecar_snapshot_restore_path(_sandbox_id()),
+            archive_file=io.BytesIO(archive_body),
+            sha256_hex=hashlib.sha256(archive_body).hexdigest(),
+            operation_label="Snapshot restore",
+            timeout_seconds=0.01,
+        )
 
 
 def test_mark_restored_raises_on_non_204() -> None:
@@ -621,16 +635,16 @@ def test_mark_restored_raises_on_non_204() -> None:
     sandbox_id = _sandbox_id()
     factory = _mock_httpx_per_url(lambda _url: _resp(500, "failed"))
 
-    with patch(_HTTPX_CLIENT_PATH, factory):
-        with pytest.raises(
-            RuntimeError, match="opencode history restore marker failed"
-        ):
-            SidecarClient(host=_service_host(mgr)).post_empty(
-                sandbox_id=sandbox_id,
-                endpoint_path=SIDECAR_OPENCODE_HISTORY_MARK_RESTORED_PATH,
-                operation_label="opencode history restore marker",
-                timeout_seconds=1.0,
-            )
+    with (
+        patch(_HTTPX_CLIENT_PATH, factory),
+        pytest.raises(RuntimeError, match="opencode history restore marker failed"),
+    ):
+        SidecarClient(host=_service_host(mgr)).post_empty(
+            sandbox_id=sandbox_id,
+            endpoint_path=SIDECAR_OPENCODE_HISTORY_MARK_RESTORED_PATH,
+            operation_label="opencode history restore marker",
+            timeout_seconds=1.0,
+        )
 
 
 def test_sandbox_service_publishes_not_ready_addresses() -> None:
@@ -644,13 +658,12 @@ def test_sandbox_service_publishes_not_ready_addresses() -> None:
 def test_push_connect_error_is_retriable() -> None:
     mgr = _make_manager()
     factory = _mock_httpx_client(raise_exc=httpx.ConnectError("no endpoints"))
-    with patch(_HTTPX_CLIENT_PATH, factory):
-        with pytest.raises(RetriableWriteError):
-            mgr.write_files_to_sandbox(
-                sandbox_id=_sandbox_id(),
-                mount_path="/workspace/managed/skills",
-                files=_files(),
-            )
+    with patch(_HTTPX_CLIENT_PATH, factory), pytest.raises(RetriableWriteError):
+        mgr.write_files_to_sandbox(
+            sandbox_id=_sandbox_id(),
+            mount_path="/workspace/managed/skills",
+            files=_files(),
+        )
 
 
 def test_create_opencode_history_snapshot_204_preserves_stable_snapshot() -> None:

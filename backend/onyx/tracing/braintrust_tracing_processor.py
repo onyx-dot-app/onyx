@@ -31,9 +31,7 @@ def _span_type(span: Span[Any]) -> braintrust.SpanTypeAttribute:
 
 
 def _span_name(span: Span[Any]) -> str:
-    if isinstance(span.span_data, AgentSpanData) or isinstance(
-        span.span_data, FunctionSpanData
-    ):
+    if isinstance(span.span_data, (AgentSpanData, FunctionSpanData)):
         return span.span_data.name
     elif isinstance(span.span_data, GenerationSpanData):
         return "Generation"

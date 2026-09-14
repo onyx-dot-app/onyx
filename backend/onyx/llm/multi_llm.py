@@ -1102,9 +1102,9 @@ class LitellmLLM(LLM):
                         _log_chat_completions_tools_disable_reasoning(
                             model, self._api_base
                         )
-                    elif i == len(attempts) - 1:
-                        raise
-                    elif not _rejection_names_strippable_kwargs(
+                    elif i == len(
+                        attempts
+                    ) - 1 or not _rejection_names_strippable_kwargs(
                         e, set(opts) - set(attempts[-1])
                     ):
                         raise

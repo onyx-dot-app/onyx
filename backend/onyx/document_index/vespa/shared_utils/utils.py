@@ -67,7 +67,7 @@ def get_vespa_http_client(
             if MANAGED_VESPA
             else None
         ),
-        verify=False if not MANAGED_VESPA else True,
+        verify=bool(MANAGED_VESPA),
         timeout=None if no_timeout else (timeout or VESPA_REQUEST_TIMEOUT),
         http2=http2,
     )

@@ -11,9 +11,11 @@ from onyx.hooks.api_dependencies import require_hook_enabled
 
 class TestRequireHookEnabled:
     def test_raises_when_multi_tenant(self) -> None:
-        with patch("onyx.hooks.api_dependencies.MULTI_TENANT", True):
-            with pytest.raises(OnyxError) as exc_info:
-                require_hook_enabled()
+        with (
+            patch("onyx.hooks.api_dependencies.MULTI_TENANT", True),
+            pytest.raises(OnyxError) as exc_info,
+        ):
+            require_hook_enabled()
         assert exc_info.value.error_code is OnyxErrorCode.SINGLE_TENANT_ONLY
         assert exc_info.value.status_code == 403
         assert "multi-tenant" in exc_info.value.detail

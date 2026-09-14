@@ -278,10 +278,7 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
         file_modified = _parse_last_modified(file["last_modified"])
         if start_time and file_modified < start_time:
             return False
-        if end_time and file_modified > end_time:
-            return False
-
-        return True
+        return not (end_time and file_modified > end_time)
 
     def _process_files(
         self,

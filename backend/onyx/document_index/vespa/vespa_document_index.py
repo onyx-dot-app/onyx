@@ -717,7 +717,7 @@ class VespaDocumentIndex(DocumentIndex):
                     previous_chunk_count=doc_id_to_previous_chunk_cnt[doc_id],
                     new_chunk_count=doc_id_to_new_chunk_cnt[doc_id],
                 )
-                for doc_id in doc_id_to_chunk_cnt_diff.keys()
+                for doc_id in doc_id_to_chunk_cnt_diff
                 # TODO(andrei), WARNING: Don't we need to sanitize these doc IDs?
             ]
 

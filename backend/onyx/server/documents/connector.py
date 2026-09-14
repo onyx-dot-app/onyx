@@ -1396,20 +1396,21 @@ def _apply_connector_status_filters(
             continue
 
         # Filter by document count
-        if docs_count_operator and docs_count_value is not None:
-            if docs_count_operator == DocsCountOperator.GREATER_THAN and not (
-                status.docs_indexed > docs_count_value
-            ):
-                continue
-            elif docs_count_operator == DocsCountOperator.LESS_THAN and not (
-                status.docs_indexed < docs_count_value
-            ):
-                continue
-            elif (
-                docs_count_operator == DocsCountOperator.EQUAL_TO
-                and status.docs_indexed != docs_count_value
-            ):
-                continue
+        if (
+            docs_count_operator
+            and docs_count_value is not None
+            and (
+                docs_count_operator == DocsCountOperator.GREATER_THAN
+                and not (status.docs_indexed > docs_count_value)
+                or docs_count_operator == DocsCountOperator.LESS_THAN
+                and not (status.docs_indexed < docs_count_value)
+                or (
+                    docs_count_operator == DocsCountOperator.EQUAL_TO
+                    and status.docs_indexed != docs_count_value
+                )
+            )
+        ):
+            continue
 
         # Filter by name
         if status.name:

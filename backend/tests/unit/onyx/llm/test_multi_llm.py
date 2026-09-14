@@ -2247,15 +2247,16 @@ def test_env_lock_released_and_env_restored_on_exception(
     restores the pre-existing env value."""
     monkeypatch.setenv(_ENV_LOCK_TEST_KEY, "original")
 
-    with pytest.raises(RuntimeError, match="writer boom"):
-        with temporary_env_and_lock({_ENV_LOCK_TEST_KEY: "writer_value"}):
-            assert os.environ.get(_ENV_LOCK_TEST_KEY) == "writer_value"
-            raise RuntimeError("writer boom")
+    with (
+        pytest.raises(RuntimeError, match="writer boom"),
+        temporary_env_and_lock({_ENV_LOCK_TEST_KEY: "writer_value"}),
+    ):
+        assert os.environ.get(_ENV_LOCK_TEST_KEY) == "writer_value"
+        raise RuntimeError("writer boom")
     assert os.environ.get(_ENV_LOCK_TEST_KEY) == "original"
 
-    with pytest.raises(RuntimeError, match="reader boom"):
-        with temporary_env_and_lock({}):
-            raise RuntimeError("reader boom")
+    with pytest.raises(RuntimeError, match="reader boom"), temporary_env_and_lock({}):
+        raise RuntimeError("reader boom")
 
     # Lock is still usable in both modes afterwards.
     with temporary_env_and_lock({_ENV_LOCK_TEST_KEY: "writer_value_2"}):

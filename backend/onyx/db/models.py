@@ -2046,18 +2046,12 @@ class Connector(Base):
     # TODO(rkuo): experiment with SQLAlchemy validators rather than manual checks
     # https://docs.sqlalchemy.org/en/20/orm/mapped_attributes.html
     def validate_refresh_freq(self) -> None:
-        if self.refresh_freq is not None:
-            if self.refresh_freq < 60:
-                raise ValueError(
-                    "refresh_freq must be greater than or equal to 1 minute."
-                )
+        if self.refresh_freq is not None and self.refresh_freq < 60:
+            raise ValueError("refresh_freq must be greater than or equal to 1 minute.")
 
     def validate_prune_freq(self) -> None:
-        if self.prune_freq is not None:
-            if self.prune_freq < 300:
-                raise ValueError(
-                    "prune_freq must be greater than or equal to 5 minutes."
-                )
+        if self.prune_freq is not None and self.prune_freq < 300:
+            raise ValueError("prune_freq must be greater than or equal to 5 minutes.")
 
 
 class Credential(Base):

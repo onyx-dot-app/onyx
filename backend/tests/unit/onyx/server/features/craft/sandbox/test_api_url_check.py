@@ -33,9 +33,11 @@ def test_missing_api_prefix_raises_with_corrected_url() -> None:
         assert url == "https://onyx.example/api/health"
         return _health_response()
 
-    with patch.object(api_url_check.httpx, "get", side_effect=fake_get):
-        with pytest.raises(OnyxError) as exc_info:
-            api_url_check.validate_sandbox_api_url("https://onyx.example")
+    with (
+        patch.object(api_url_check.httpx, "get", side_effect=fake_get),
+        pytest.raises(OnyxError) as exc_info,
+    ):
+        api_url_check.validate_sandbox_api_url("https://onyx.example")
 
     assert "'https://onyx.example/api'" in str(exc_info.value)
 
@@ -49,9 +51,11 @@ def test_redirected_web_page_does_not_mask_missing_prefix() -> None:
         assert url == "https://onyx.example/api/health"
         return _health_response()
 
-    with patch.object(api_url_check.httpx, "get", side_effect=fake_get):
-        with pytest.raises(OnyxError) as exc_info:
-            api_url_check.validate_sandbox_api_url("https://onyx.example")
+    with (
+        patch.object(api_url_check.httpx, "get", side_effect=fake_get),
+        pytest.raises(OnyxError) as exc_info,
+    ):
+        api_url_check.validate_sandbox_api_url("https://onyx.example")
 
     assert "'https://onyx.example/api'" in str(exc_info.value)
 

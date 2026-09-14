@@ -1,3 +1,4 @@
+import contextlib
 import json
 import math
 import os
@@ -261,12 +262,10 @@ OIDC_SCOPE_OVERRIDE: list[str] | None = None
 _OIDC_SCOPE_OVERRIDE = os.environ.get("OIDC_SCOPE_OVERRIDE")
 
 if _OIDC_SCOPE_OVERRIDE:
-    try:
+    with contextlib.suppress(Exception):
         OIDC_SCOPE_OVERRIDE = [
             scope.strip() for scope in _OIDC_SCOPE_OVERRIDE.split(",")
         ]
-    except Exception:
-        pass
 
 # Enables PKCE for OIDC login flow. Disabled by default to preserve
 # backwards compatibility for existing OIDC deployments.
@@ -938,18 +937,14 @@ REDIS_AUTH_KEY_PREFIX = "fastapi_users_token:"
 RATE_LIMIT_WINDOW_SECONDS: int | None = None
 _rate_limit_window_seconds_str = os.environ.get("RATE_LIMIT_WINDOW_SECONDS")
 if _rate_limit_window_seconds_str is not None:
-    try:
+    with contextlib.suppress(ValueError):
         RATE_LIMIT_WINDOW_SECONDS = int(_rate_limit_window_seconds_str)
-    except ValueError:
-        pass
 
 RATE_LIMIT_MAX_REQUESTS: int | None = None
 _rate_limit_max_requests_str = os.environ.get("RATE_LIMIT_MAX_REQUESTS")
 if _rate_limit_max_requests_str is not None:
-    try:
+    with contextlib.suppress(ValueError):
         RATE_LIMIT_MAX_REQUESTS = int(_rate_limit_max_requests_str)
-    except ValueError:
-        pass
 
 AUTH_RATE_LIMITING_ENABLED = RATE_LIMIT_MAX_REQUESTS and RATE_LIMIT_WINDOW_SECONDS
 
@@ -1819,12 +1814,10 @@ _LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS = os.environ.get(
     "LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS", ""
 )
 LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS: dict[str, str] | None = None
-try:
+with contextlib.suppress(json.JSONDecodeError):
     LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS = cast(
         dict[str, str], json.loads(_LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS)
     )
-except json.JSONDecodeError:
-    pass
 
 # Auto LLM Configuration - fetches model configs from GitHub for providers in Auto mode
 AUTO_LLM_CONFIG_URL = os.environ.get(

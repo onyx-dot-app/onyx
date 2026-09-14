@@ -1,5 +1,6 @@
 """CA bootstrap for the sandbox egress proxy."""
 
+import contextlib
 import datetime as dt
 import os
 from dataclasses import dataclass
@@ -188,10 +189,8 @@ class CABootstrap:
         os.chmod(self._pem_path.parent, 0o700)
         tmp_path = self._pem_path.with_suffix(self._pem_path.suffix + ".tmp")
         # Clear a stale .tmp from a prior crash so O_EXCL can succeed.
-        try:
+        with contextlib.suppress(FileNotFoundError, PermissionError):
             os.unlink(tmp_path)
-        except (FileNotFoundError, PermissionError):
-            pass
         payload = key_pem + b"\n" + cert_pem
         tmp_fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         try:

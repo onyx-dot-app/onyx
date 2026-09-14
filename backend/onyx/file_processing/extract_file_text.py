@@ -1,3 +1,4 @@
+import contextlib
 import csv
 import gc
 import io
@@ -388,10 +389,8 @@ def count_docx_embedded_images(file: IO[Any], cap: int) -> int:
         return 0
     finally:
         if start_pos is not None:
-            try:
+            with contextlib.suppress(Exception):
                 file.seek(start_pos)
-            except Exception:
-                pass
 
 
 def read_docx_file(
@@ -716,10 +715,8 @@ def eml_to_text(file: IO[Any]) -> str:
                 detach_error,
             )
             raw_file = file
-        try:
+        with contextlib.suppress(Exception):
             raw_file.seek(0)
-        except Exception:
-            pass
 
     text_content = []
     for part in message.walk():

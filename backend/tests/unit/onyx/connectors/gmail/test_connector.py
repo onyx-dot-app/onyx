@@ -201,21 +201,23 @@ def test_gmail_checkpoint_progression() -> None:
     checkpoint = connector.build_dummy_checkpoint()
     assert isinstance(checkpoint, GmailCheckpoint)
 
-    with patch.object(GmailConnector, "_get_all_user_emails", return_value=user_emails):
-        with patch(
+    with (
+        patch.object(GmailConnector, "_get_all_user_emails", return_value=user_emails),
+        patch(
             "onyx.connectors.gmail.connector.get_gmail_service",
             side_effect=fake_get_gmail_service,
-        ):
-            with patch(
-                "onyx.connectors.gmail.connector.thread_to_document",
-                side_effect=fake_thread_to_document,
-            ) as mock_thread_to_document:
-                outputs = load_everything_from_checkpoint_connector_from_checkpoint(
-                    connector=connector,
-                    start=0,
-                    end=1_000,
-                    checkpoint=checkpoint,
-                )
+        ),
+        patch(
+            "onyx.connectors.gmail.connector.thread_to_document",
+            side_effect=fake_thread_to_document,
+        ) as mock_thread_to_document,
+    ):
+        outputs = load_everything_from_checkpoint_connector_from_checkpoint(
+            connector=connector,
+            start=0,
+            end=1_000,
+            checkpoint=checkpoint,
+        )
 
     document_ids = [
         item.id

@@ -122,33 +122,39 @@ def test_invalid_base64_reference_rejected() -> None:
 
 
 def test_oversized_reference_rejected() -> None:
-    with patch(
-        "onyx.server.features.image_generation.api._MAX_REFERENCE_IMAGE_BYTES", 4
+    with (
+        patch(
+            "onyx.server.features.image_generation.api._MAX_REFERENCE_IMAGE_BYTES", 4
+        ),
+        pytest.raises(OnyxError) as exc,
     ):
-        with pytest.raises(OnyxError) as exc:
-            generate_image(
-                ImageGenerationRequest(
-                    prompt="a cat",
-                    reference_images=[ReferenceImagePayload(data_base64=_PNG_B64)],
-                ),
-            )
+        generate_image(
+            ImageGenerationRequest(
+                prompt="a cat",
+                reference_images=[ReferenceImagePayload(data_base64=_PNG_B64)],
+            ),
+        )
     assert exc.value.error_code == OnyxErrorCode.INVALID_INPUT
 
 
 def test_admission_limit_rejects_with_rate_limited() -> None:
-    with patch(
-        "onyx.server.features.image_generation.api._admission_semaphore",
-        threading.BoundedSemaphore(0),
+    with (
+        patch(
+            "onyx.server.features.image_generation.api._admission_semaphore",
+            threading.BoundedSemaphore(0),
+        ),
+        pytest.raises(OnyxError) as exc,
     ):
-        with pytest.raises(OnyxError) as exc:
-            generate_image(ImageGenerationRequest(prompt="a cat"))
+        generate_image(ImageGenerationRequest(prompt="a cat"))
     assert exc.value.error_code == OnyxErrorCode.RATE_LIMITED
 
 
 def test_not_configured_raises_before_stream() -> None:
-    with patch(_ENSURE, side_effect=ImageGenerationNotConfiguredError("none")):
-        with pytest.raises(OnyxError) as exc:
-            generate_image(ImageGenerationRequest(prompt="a cat"))
+    with (
+        patch(_ENSURE, side_effect=ImageGenerationNotConfiguredError("none")),
+        pytest.raises(OnyxError) as exc,
+    ):
+        generate_image(ImageGenerationRequest(prompt="a cat"))
     assert exc.value.error_code == OnyxErrorCode.NOT_FOUND
 
 

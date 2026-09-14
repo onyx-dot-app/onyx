@@ -253,9 +253,12 @@ class SlackTextCleaner:
             result.append(_defang_mentions(message[cursor : match.start()]))
             url = match.group("url")
             label = match.group("label")
-            if url is None or label is None:
-                result.append(match.group(0))
-            elif url.startswith("mailto:") and label == url.removeprefix("mailto:"):
+            if (
+                url is None
+                or label is None
+                or url.startswith("mailto:")
+                and label == url.removeprefix("mailto:")
+            ):
                 result.append(match.group(0))
             else:
                 result.append(f"<{url}|{_defang_mentions(label)}>")

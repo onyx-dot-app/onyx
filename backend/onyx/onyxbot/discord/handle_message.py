@@ -1,6 +1,7 @@
 """Discord bot message handling and response logic."""
 
 import asyncio
+import contextlib
 
 import discord
 from pydantic import BaseModel
@@ -87,11 +88,14 @@ async def should_respond(
     persona_id = channel_config.persona_override_id or guild_config.default_persona_id
 
     # Check mention requirement (with exceptions for implicit invocation)
-    if channel_config.require_bot_invocation and not bot_mentioned:
-        if not await check_implicit_invocation(message, bot_user):
-            return ShouldRespondContext(
-                should_respond=False, persona_id=None, thread_only_mode=False
-            )
+    if (
+        channel_config.require_bot_invocation
+        and not bot_mentioned
+        and (not await check_implicit_invocation(message, bot_user))
+    ):
+        return ShouldRespondContext(
+            should_respond=False, persona_id=None, thread_only_mode=False
+        )
 
     return ShouldRespondContext(
         should_respond=True,
@@ -184,9 +188,10 @@ async def process_chat_message(
         parts = []
         if context:
             parts.append(context)
-        if isinstance(message.channel, discord.Thread):
-            if isinstance(message.channel.parent, discord.ForumChannel):
-                parts.append(f"Forum post title: {message.channel.name}")
+        if isinstance(message.channel, discord.Thread) and (
+            isinstance(message.channel.parent, discord.ForumChannel)
+        ):
+            parts.append(f"Forum post title: {message.channel.name}")
         parts.append(
             f"Current message from @{message.author.display_name}: {format_message_content(message)}"
         )
@@ -204,10 +209,8 @@ async def process_chat_message(
 
         await send_response(message, answer, thread_only_mode)
 
-        try:
+        with contextlib.suppress(discord.DiscordException):
             await message.remove_reaction(THINKING_EMOJI, bot_user)
-        except discord.DiscordException:
-            pass
 
     except APIError as e:
         logger.error("API error processing message: %s", e)
@@ -484,10 +487,8 @@ async def send_error_response(
     bot_user: discord.ClientUser,
 ) -> None:
     """Send error response and clean up reaction."""
-    try:
+    with contextlib.suppress(discord.DiscordException):
         await message.remove_reaction(THINKING_EMOJI, bot_user)
-    except discord.DiscordException:
-        pass
 
     error_msg = "Sorry, I encountered an error processing your message. You may want to contact Onyx for support :sweat_smile:"
 

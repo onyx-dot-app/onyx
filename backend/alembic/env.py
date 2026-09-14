@@ -180,11 +180,14 @@ def get_schema_options() -> tuple[
             )
 
     # Validate range
-    if tenant_range_start is not None and tenant_range_end is not None:
-        if tenant_range_start > tenant_range_end:
-            raise ValueError(
-                f"tenant_range_start ({tenant_range_start}) cannot be greater than tenant_range_end ({tenant_range_end})"
-            )
+    if (
+        tenant_range_start is not None
+        and tenant_range_end is not None
+        and (tenant_range_start > tenant_range_end)
+    ):
+        raise ValueError(
+            f"tenant_range_start ({tenant_range_start}) cannot be greater than tenant_range_end ({tenant_range_end})"
+        )
 
     # Specific schema names filtering (replaces both schema_name and the old tenant_ids approach)
     schemas = None

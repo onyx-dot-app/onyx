@@ -17,7 +17,7 @@ from __future__ import annotations
 import socket
 import struct
 from collections.abc import Generator, Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 
 from docker.errors import APIError, NotFound
@@ -168,10 +168,8 @@ def _open_exec_socket(
     try:
         yield exec_id, raw_sock
     finally:
-        try:
+        with suppress(OSError):
             raw_sock.close()
-        except OSError:
-            pass
 
 
 def _check_exit(
@@ -218,10 +216,8 @@ def stream_stdin_to_container(
     ) as (exec_id, sock):
         sock.sendall(payload)
         # Half-close so the remote process sees EOF.
-        try:
+        with suppress(OSError):
             sock.shutdown(socket.SHUT_WR)
-        except OSError:
-            pass
 
         stdout_buf = bytearray()
         stderr_buf = bytearray()

@@ -1,3 +1,4 @@
+import contextlib
 from math import ceil
 
 from fastapi import UploadFile
@@ -151,10 +152,8 @@ def estimate_image_tokens_for_upload(
             capped_w, capped_h, patch_size=patch_size, overhead=overhead_tokens
         )
     finally:
-        try:
+        with contextlib.suppress(Exception):
             upload.file.seek(0)
-        except Exception:
-            pass
 
 
 def categorize_uploaded_files(

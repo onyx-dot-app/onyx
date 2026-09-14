@@ -161,9 +161,7 @@ class OutlineConnector(LoadConnector, PollConnector):
             doc_timestamp = doc.doc_updated_at.timestamp()
             if doc_timestamp < start:
                 return False
-            if doc_timestamp > end:
-                return False
-            return True
+            return not doc_timestamp > end
 
         return self._fetch_documents(time_filter)
 

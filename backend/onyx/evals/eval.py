@@ -167,102 +167,93 @@ def _get_answer_with_tools(
         EvalToolResult containing the answer and tool call information
     """
     engine = get_sqlalchemy_engine()
-    with isolated_ephemeral_session_factory(engine) as SessionLocal:
-        with SessionLocal() as db_session:
-            full_configuration = configuration.get_configuration(db_session)
+    with (
+        isolated_ephemeral_session_factory(engine) as SessionLocal,
+        SessionLocal() as db_session,
+    ):
+        full_configuration = configuration.get_configuration(db_session)
+        # Handle per-input tool forcing (from data file)
+        forced_tool_ids: list[int] = []
+        input_force_tools = eval_input.get("force_tools", [])
+        if input_force_tools:
+            from onyx.db.tools import get_builtin_tool
+            from onyx.tools.built_in_tools import BUILT_IN_TOOL_MAP
 
-            # Handle per-input tool forcing (from data file)
-            forced_tool_ids: list[int] = []
-            input_force_tools = eval_input.get("force_tools", [])
-            if input_force_tools:
-                from onyx.db.tools import get_builtin_tool
-                from onyx.tools.built_in_tools import BUILT_IN_TOOL_MAP
-
-                for tool_type in input_force_tools:
-                    if tool_type in BUILT_IN_TOOL_MAP:
-                        tool_id = get_builtin_tool(
-                            db_session, BUILT_IN_TOOL_MAP[tool_type]
-                        ).id
-                        if tool_id not in forced_tool_ids:
-                            forced_tool_ids.append(tool_id)
-
-            # Build tool assertions from per-input config
-            tool_assertions: ToolAssertion | None = None
-            input_expected_tools = eval_input.get("expected_tools", [])
-            if input_expected_tools:
-                tool_assertions = ToolAssertion(
-                    expected_tools=input_expected_tools,
-                    require_all=eval_input.get("require_all_tools", False),
-                )
-
-            # Handle per-input model configuration
-            llm_override = full_configuration.llm
-            input_model = eval_input.get("model")
-            input_model_provider = eval_input.get("model_provider")
-            input_temperature = eval_input.get("temperature")
-
-            if input_model or input_model_provider or input_temperature is not None:
-                # Create a new LLMOverride with per-input values, falling back to config
-                llm_override = LLMOverride(
-                    model_provider=input_model_provider or llm_override.model_provider,
-                    model_version=input_model or llm_override.model_version,
-                    temperature=(
-                        input_temperature
-                        if input_temperature is not None
-                        else llm_override.temperature
-                    ),
-                )
-
-            user = get_user_by_email(configuration.search_permissions_email, db_session)
-            if not user:
-                raise ValueError(
-                    f"User not found for email: {configuration.search_permissions_email}"
-                )
-
-            forced_tool_id = forced_tool_ids[0] if forced_tool_ids else None
-            request = SendMessageRequest(
-                message=eval_input["message"],
-                llm_override=llm_override,
-                allowed_tool_ids=full_configuration.allowed_tool_ids,
-                forced_tool_id=forced_tool_id,
-                chat_session_info=ChatSessionCreationRequest(
-                    persona_id=DEFAULT_PERSONA_ID,
-                    description="Eval session",
+            for tool_type in input_force_tools:
+                if tool_type in BUILT_IN_TOOL_MAP:
+                    tool_id = get_builtin_tool(
+                        db_session, BUILT_IN_TOOL_MAP[tool_type]
+                    ).id
+                    if tool_id not in forced_tool_ids:
+                        forced_tool_ids.append(tool_id)
+        # Build tool assertions from per-input config
+        tool_assertions: ToolAssertion | None = None
+        input_expected_tools = eval_input.get("expected_tools", [])
+        if input_expected_tools:
+            tool_assertions = ToolAssertion(
+                expected_tools=input_expected_tools,
+                require_all=eval_input.get("require_all_tools", False),
+            )
+        # Handle per-input model configuration
+        llm_override = full_configuration.llm
+        input_model = eval_input.get("model")
+        input_model_provider = eval_input.get("model_provider")
+        input_temperature = eval_input.get("temperature")
+        if input_model or input_model_provider or input_temperature is not None:
+            # Create a new LLMOverride with per-input values, falling back to config
+            llm_override = LLMOverride(
+                model_provider=input_model_provider or llm_override.model_provider,
+                model_version=input_model or llm_override.model_version,
+                temperature=(
+                    input_temperature
+                    if input_temperature is not None
+                    else llm_override.temperature
                 ),
             )
-
-            stream_start_time = time.time()
-            state_container = ChatStateContainer()
-            packets = handle_stream_message_objects(
-                new_msg_req=request,
-                user=user,
-                external_state_container=state_container,
+        user = get_user_by_email(configuration.search_permissions_email, db_session)
+        if not user:
+            raise ValueError(
+                f"User not found for email: {configuration.search_permissions_email}"
             )
-            full = gather_stream_full(packets, state_container)
-
-            result = _chat_full_response_to_eval_result(full, stream_start_time)
-
-            # Evaluate tool assertions
-            assertion_passed, assertion_details = evaluate_tool_assertions(
-                result.tools_called, tool_assertions
-            )
-
-            logger.info(
-                "Eval completed. Tools called: %s.\nAssertion passed: %s. Details: %s",
-                result.tools_called,
-                assertion_passed,
-                assertion_details,
-            )
-
-            return EvalToolResult(
-                answer=result.answer,
-                tools_called=result.tools_called,
-                tool_call_details=result.tool_call_details,
-                citations=result.citations,
-                assertion_passed=assertion_passed,
-                assertion_details=assertion_details,
-                timings=result.timings,
-            )
+        forced_tool_id = forced_tool_ids[0] if forced_tool_ids else None
+        request = SendMessageRequest(
+            message=eval_input["message"],
+            llm_override=llm_override,
+            allowed_tool_ids=full_configuration.allowed_tool_ids,
+            forced_tool_id=forced_tool_id,
+            chat_session_info=ChatSessionCreationRequest(
+                persona_id=DEFAULT_PERSONA_ID,
+                description="Eval session",
+            ),
+        )
+        stream_start_time = time.time()
+        state_container = ChatStateContainer()
+        packets = handle_stream_message_objects(
+            new_msg_req=request,
+            user=user,
+            external_state_container=state_container,
+        )
+        full = gather_stream_full(packets, state_container)
+        result = _chat_full_response_to_eval_result(full, stream_start_time)
+        # Evaluate tool assertions
+        assertion_passed, assertion_details = evaluate_tool_assertions(
+            result.tools_called, tool_assertions
+        )
+        logger.info(
+            "Eval completed. Tools called: %s.\nAssertion passed: %s. Details: %s",
+            result.tools_called,
+            assertion_passed,
+            assertion_details,
+        )
+        return EvalToolResult(
+            answer=result.answer,
+            tools_called=result.tools_called,
+            tool_call_details=result.tool_call_details,
+            citations=result.citations,
+            assertion_passed=assertion_passed,
+            assertion_details=assertion_details,
+            timings=result.timings,
+        )
 
 
 def _get_multi_turn_answer_with_tools(
@@ -308,122 +299,111 @@ def _get_multi_turn_answer_with_tools(
     turn_results: list[EvalToolResult] = []
 
     engine = get_sqlalchemy_engine()
-    with isolated_ephemeral_session_factory(engine) as SessionLocal:
-        with SessionLocal() as db_session:
-            full_configuration = configuration.get_configuration(db_session)
-
-            user = get_user_by_email(configuration.search_permissions_email, db_session)
-            if not user:
-                raise ValueError(
-                    f"User not found for email: {configuration.search_permissions_email}"
-                )
-            # Cache user_id to avoid SQLAlchemy expiration issues
-            user_id = user.id
-
-            # Create a single chat session for all turns
-            chat_session = create_chat_session(
-                db_session=db_session,
-                description="Multi-turn eval session",
-                user_id=user_id,
-                persona_id=DEFAULT_PERSONA_ID,
-                onyxbot_flow=True,
+    with (
+        isolated_ephemeral_session_factory(engine) as SessionLocal,
+        SessionLocal() as db_session,
+    ):
+        full_configuration = configuration.get_configuration(db_session)
+        user = get_user_by_email(configuration.search_permissions_email, db_session)
+        if not user:
+            raise ValueError(
+                f"User not found for email: {configuration.search_permissions_email}"
             )
-            chat_session_id = chat_session.id
+        # Cache user_id to avoid SQLAlchemy expiration issues
+        user_id = user.id
+        # Create a single chat session for all turns
+        chat_session = create_chat_session(
+            db_session=db_session,
+            description="Multi-turn eval session",
+            user_id=user_id,
+            persona_id=DEFAULT_PERSONA_ID,
+            onyxbot_flow=True,
+        )
+        chat_session_id = chat_session.id
+        # Process each turn sequentially
+        for turn_idx, msg in enumerate(messages):
+            logger.info(
+                "Processing turn %s/%s: %s...",
+                turn_idx + 1,
+                len(messages),
+                msg.message[:50],
+            )
+            # Handle per-turn tool forcing
+            forced_tool_ids: list[int] = []
+            if msg.force_tools:
+                from onyx.db.tools import get_builtin_tool
+                from onyx.tools.built_in_tools import BUILT_IN_TOOL_MAP
 
-            # Process each turn sequentially
-            for turn_idx, msg in enumerate(messages):
-                logger.info(
-                    "Processing turn %s/%s: %s...",
-                    turn_idx + 1,
-                    len(messages),
-                    msg.message[:50],
+                for tool_type in msg.force_tools:
+                    if tool_type in BUILT_IN_TOOL_MAP:
+                        tool_id = get_builtin_tool(
+                            db_session, BUILT_IN_TOOL_MAP[tool_type]
+                        ).id
+                        if tool_id not in forced_tool_ids:
+                            forced_tool_ids.append(tool_id)
+            # Build tool assertions for this turn
+            tool_assertions: ToolAssertion | None = None
+            if msg.expected_tools:
+                tool_assertions = ToolAssertion(
+                    expected_tools=msg.expected_tools,
+                    require_all=msg.require_all_tools,
                 )
-
-                # Handle per-turn tool forcing
-                forced_tool_ids: list[int] = []
-                if msg.force_tools:
-                    from onyx.db.tools import get_builtin_tool
-                    from onyx.tools.built_in_tools import BUILT_IN_TOOL_MAP
-
-                    for tool_type in msg.force_tools:
-                        if tool_type in BUILT_IN_TOOL_MAP:
-                            tool_id = get_builtin_tool(
-                                db_session, BUILT_IN_TOOL_MAP[tool_type]
-                            ).id
-                            if tool_id not in forced_tool_ids:
-                                forced_tool_ids.append(tool_id)
-
-                # Build tool assertions for this turn
-                tool_assertions: ToolAssertion | None = None
-                if msg.expected_tools:
-                    tool_assertions = ToolAssertion(
-                        expected_tools=msg.expected_tools,
-                        require_all=msg.require_all_tools,
-                    )
-
-                # Handle per-turn model configuration
-                llm_override = full_configuration.llm
-                if msg.model or msg.model_provider or msg.temperature is not None:
-                    llm_override = LLMOverride(
-                        model_provider=msg.model_provider
-                        or llm_override.model_provider,
-                        model_version=msg.model or llm_override.model_version,
-                        temperature=(
-                            msg.temperature
-                            if msg.temperature is not None
-                            else llm_override.temperature
-                        ),
-                    )
-
-                # Create request for this turn using SendMessageRequest (same API as handle_stream_message_objects)
-                # Use AUTO_PLACE_AFTER_LATEST_MESSAGE to chain messages
-                forced_tool_id = forced_tool_ids[0] if forced_tool_ids else None
-                request = SendMessageRequest(
-                    chat_session_id=chat_session_id,
-                    parent_message_id=AUTO_PLACE_AFTER_LATEST_MESSAGE,
-                    message=msg.message,
-                    llm_override=llm_override,
-                    allowed_tool_ids=full_configuration.allowed_tool_ids,
-                    forced_tool_id=forced_tool_id,
+            # Handle per-turn model configuration
+            llm_override = full_configuration.llm
+            if msg.model or msg.model_provider or msg.temperature is not None:
+                llm_override = LLMOverride(
+                    model_provider=msg.model_provider or llm_override.model_provider,
+                    model_version=msg.model or llm_override.model_version,
+                    temperature=(
+                        msg.temperature
+                        if msg.temperature is not None
+                        else llm_override.temperature
+                    ),
                 )
-
-                # Stream and gather results for this turn via handle_stream_message_objects + gather_stream_full
-                stream_start_time = time.time()
-                state_container = ChatStateContainer()
-                packets = handle_stream_message_objects(
-                    new_msg_req=request,
-                    user=user,
-                    external_state_container=state_container,
+            # Create request for this turn using SendMessageRequest (same API as handle_stream_message_objects)
+            # Use AUTO_PLACE_AFTER_LATEST_MESSAGE to chain messages
+            forced_tool_id = forced_tool_ids[0] if forced_tool_ids else None
+            request = SendMessageRequest(
+                chat_session_id=chat_session_id,
+                parent_message_id=AUTO_PLACE_AFTER_LATEST_MESSAGE,
+                message=msg.message,
+                llm_override=llm_override,
+                allowed_tool_ids=full_configuration.allowed_tool_ids,
+                forced_tool_id=forced_tool_id,
+            )
+            # Stream and gather results for this turn via handle_stream_message_objects + gather_stream_full
+            stream_start_time = time.time()
+            state_container = ChatStateContainer()
+            packets = handle_stream_message_objects(
+                new_msg_req=request,
+                user=user,
+                external_state_container=state_container,
+            )
+            full = gather_stream_full(packets, state_container)
+            result = _chat_full_response_to_eval_result(full, stream_start_time)
+            # Evaluate tool assertions for this turn
+            assertion_passed, assertion_details = evaluate_tool_assertions(
+                result.tools_called, tool_assertions
+            )
+            logger.info(
+                "Turn %s completed. Tools called: %s.\n"
+                "Assertion passed: %s. Details: %s",
+                turn_idx + 1,
+                result.tools_called,
+                assertion_passed,
+                assertion_details,
+            )
+            turn_results.append(
+                EvalToolResult(
+                    answer=result.answer,
+                    tools_called=result.tools_called,
+                    tool_call_details=result.tool_call_details,
+                    citations=result.citations,
+                    assertion_passed=assertion_passed,
+                    assertion_details=assertion_details,
+                    timings=result.timings,
                 )
-                full = gather_stream_full(packets, state_container)
-
-                result = _chat_full_response_to_eval_result(full, stream_start_time)
-
-                # Evaluate tool assertions for this turn
-                assertion_passed, assertion_details = evaluate_tool_assertions(
-                    result.tools_called, tool_assertions
-                )
-
-                logger.info(
-                    "Turn %s completed. Tools called: %s.\n"
-                    "Assertion passed: %s. Details: %s",
-                    turn_idx + 1,
-                    result.tools_called,
-                    assertion_passed,
-                    assertion_details,
-                )
-
-                turn_results.append(
-                    EvalToolResult(
-                        answer=result.answer,
-                        tools_called=result.tools_called,
-                        tool_call_details=result.tool_call_details,
-                        citations=result.citations,
-                        assertion_passed=assertion_passed,
-                        assertion_details=assertion_details,
-                        timings=result.timings,
-                    )
-                )
+            )
 
     # Calculate aggregate metrics
     pass_count = sum(1 for r in turn_results if r.assertion_passed is True)

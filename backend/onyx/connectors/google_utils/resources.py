@@ -1,3 +1,4 @@
+import contextlib
 from collections.abc import Callable
 
 from google.auth.exceptions import RefreshError
@@ -57,10 +58,8 @@ def make_user_removal_checker(
         if not checked:
             checked = True
             if get_fresh_emails is not None:
-                try:
+                with contextlib.suppress(Exception):
                     user_removed = user_email not in get_fresh_emails()
-                except Exception:
-                    pass
         return user_removed
 
     return is_user_removed

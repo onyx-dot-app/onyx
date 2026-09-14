@@ -195,7 +195,7 @@ class CustomFieldExtractor:
         issue_custom_fields = {
             custom_fields[key]: value
             for key, value in jira.fields.__dict__.items()
-            if value and key in custom_fields.keys()
+            if value and key in custom_fields
         }
 
         processed_fields = {}

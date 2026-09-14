@@ -138,9 +138,8 @@ def _next_element_sibling(node):
 def _next_sibling_run(node):
     sibling = node.nextSibling
     while sibling:
-        if sibling.nodeType == sibling.ELEMENT_NODE:
-            if _is_run(sibling):
-                return sibling
+        if sibling.nodeType == sibling.ELEMENT_NODE and _is_run(sibling):
+            return sibling
         sibling = sibling.nextSibling
     return None
 

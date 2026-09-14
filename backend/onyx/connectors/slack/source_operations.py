@@ -160,7 +160,7 @@ class OnyxRedisSlackRetryHandler(BaseRetryHandler):
         state.next_attempt_requested = True  # this signals the caller to retry
 
         # Calculate wait duration based on retry-after + some jitter.
-        for k in response.headers.keys():
+        for k in response.headers:
             if k.lower() == "retry-after":
                 retry_after_header_name = k
                 break

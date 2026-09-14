@@ -711,7 +711,7 @@ class TestGetWebinarDetails:
 
         # Guards the fixture too: trimming the five out of it would quietly
         # turn the comparison below into a weaker test.
-        assert _WEBINAR_CONFIG_FIELDS <= set(_DOCUMENTED_WEBINAR)
+        assert set(_DOCUMENTED_WEBINAR) >= _WEBINAR_CONFIG_FIELDS
         expected = {
             k: v
             for k, v in _DOCUMENTED_WEBINAR.items()

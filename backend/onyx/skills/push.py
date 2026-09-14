@@ -82,9 +82,7 @@ def _is_excluded(path: Path, source_dir: Path) -> bool:
         if part in _EXCLUDED_DIR_NAMES or part.startswith("."):
             return True
     # Template sources are rendered separately; never ship them raw.
-    if path.suffix == ".template":
-        return True
-    return False
+    return path.suffix == ".template"
 
 
 def _add_static_builtin(

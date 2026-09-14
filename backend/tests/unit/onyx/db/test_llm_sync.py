@@ -136,13 +136,15 @@ class TestSyncModelConfigurations:
         """Test that ValueError is raised when provider not found."""
         mock_session = MagicMock()
 
-        with patch("onyx.db.llm.fetch_existing_llm_provider_by_id", return_value=None):
-            with pytest.raises(ValueError, match="not found"):
-                sync_model_configurations(
-                    db_session=mock_session,
-                    provider_id=999,
-                    models=[SyncModelEntry(name="model", display_name="Model")],
-                )
+        with (
+            patch("onyx.db.llm.fetch_existing_llm_provider_by_id", return_value=None),
+            pytest.raises(ValueError, match="not found"),
+        ):
+            sync_model_configurations(
+                db_session=mock_session,
+                provider_id=999,
+                models=[SyncModelEntry(name="model", display_name="Model")],
+            )
 
     def test_inserts_reasoning_flow_when_supports_reasoning(self) -> None:
         """Test that a REASONING flow row is created when supports_reasoning=True."""

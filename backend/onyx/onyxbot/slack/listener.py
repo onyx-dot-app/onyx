@@ -617,9 +617,9 @@ class SlackbotHandler:
         socket_client_list = list(socket_clients.items())
         length = len(socket_client_list)
 
-        x = 0
-        for (tenant_id, slack_bot_id), client in socket_client_list:
-            x += 1
+        for x, ((tenant_id, slack_bot_id), client) in enumerate(
+            socket_client_list, start=1
+        ):
             client.close()
             logger.info(
                 "Stopped SocketModeClient %s/%s: pod_id=%r tenant_id=%r slack_bot_id=%r",
@@ -955,10 +955,12 @@ def build_request_details(
         if event_type == "app_mention":
             tagged = True
 
-        if event_type == "message":
-            if bot_token_user_id:
-                if f"<@{bot_token_user_id}>" in msg:
-                    tagged = True
+        if (
+            event_type == "message"
+            and bot_token_user_id
+            and (f"<@{bot_token_user_id}>" in msg)
+        ):
+            tagged = True
 
         if tagged:
             logger.debug("User tagged OnyxBot")
@@ -1191,9 +1193,10 @@ def action_routing(req: SocketModeRequest, client: TenantSocketModeClient) -> No
 
 
 def view_routing(req: SocketModeRequest, client: TenantSocketModeClient) -> None:
-    if view := req.payload.get("view"):
-        if view["callback_id"] == VIEW_DOC_FEEDBACK_ID:
-            return process_feedback(req, client)
+    if (view := req.payload.get("view")) and (
+        view["callback_id"] == VIEW_DOC_FEEDBACK_ID
+    ):
+        return process_feedback(req, client)
 
 
 def _extract_channel_from_request(req: SocketModeRequest) -> str | None:
@@ -1233,9 +1236,8 @@ def _check_tenant_gated(client: TenantSocketModeClient, req: SocketModeRequest) 
             None,
         )
         metadata = get_cached_metadata()
-        if metadata is not None:
-            if metadata.status == ApplicationStatus.GATED_ACCESS:
-                is_gated = True
+        if metadata is not None and (metadata.status == ApplicationStatus.GATED_ACCESS):
+            is_gated = True
 
     if not is_gated:
         return False

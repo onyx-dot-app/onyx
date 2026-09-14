@@ -90,9 +90,9 @@ async def test_invalid_token_rejects_with_reason() -> None:
     with (
         patch.object(captcha_module, "is_captcha_enabled", return_value=True),
         patch.object(captcha_module.httpx, "AsyncClient", return_value=client),
+        pytest.raises(CaptchaVerificationError, match="MALFORMED"),
     ):
-        with pytest.raises(CaptchaVerificationError, match="MALFORMED"):
-            await verify_captcha_token("tok", CaptchaAction.SIGNUP)
+        await verify_captcha_token("tok", CaptchaAction.SIGNUP)
 
 
 @pytest.mark.asyncio
@@ -101,9 +101,9 @@ async def test_hostname_mismatch_rejects() -> None:
     with (
         patch.object(captcha_module, "is_captcha_enabled", return_value=True),
         patch.object(captcha_module.httpx, "AsyncClient", return_value=client),
+        pytest.raises(CaptchaVerificationError, match="hostname"),
     ):
-        with pytest.raises(CaptchaVerificationError, match="hostname"):
-            await verify_captcha_token("tok", CaptchaAction.SIGNUP)
+        await verify_captcha_token("tok", CaptchaAction.SIGNUP)
 
 
 @pytest.mark.asyncio
@@ -113,9 +113,9 @@ async def test_stale_create_time_rejects() -> None:
     with (
         patch.object(captcha_module, "is_captcha_enabled", return_value=True),
         patch.object(captcha_module.httpx, "AsyncClient", return_value=client),
+        pytest.raises(CaptchaVerificationError, match="token expired"),
     ):
-        with pytest.raises(CaptchaVerificationError, match="token expired"):
-            await verify_captcha_token("tok", CaptchaAction.SIGNUP)
+        await verify_captcha_token("tok", CaptchaAction.SIGNUP)
 
 
 @pytest.mark.asyncio
@@ -125,9 +125,9 @@ async def test_action_mismatch_rejects_strictly() -> None:
     with (
         patch.object(captcha_module, "is_captcha_enabled", return_value=True),
         patch.object(captcha_module.httpx, "AsyncClient", return_value=client),
+        pytest.raises(CaptchaVerificationError, match="action mismatch"),
     ):
-        with pytest.raises(CaptchaVerificationError, match="action mismatch"):
-            await verify_captcha_token("tok", CaptchaAction.SIGNUP)
+        await verify_captcha_token("tok", CaptchaAction.SIGNUP)
 
 
 @pytest.mark.asyncio
@@ -138,9 +138,9 @@ async def test_empty_action_rejects() -> None:
     with (
         patch.object(captcha_module, "is_captcha_enabled", return_value=True),
         patch.object(captcha_module.httpx, "AsyncClient", return_value=client),
+        pytest.raises(CaptchaVerificationError, match="action mismatch"),
     ):
-        with pytest.raises(CaptchaVerificationError, match="action mismatch"):
-            await verify_captcha_token("tok", CaptchaAction.SIGNUP)
+        await verify_captcha_token("tok", CaptchaAction.SIGNUP)
 
 
 @pytest.mark.asyncio
@@ -152,9 +152,9 @@ async def test_automation_reason_rejects_even_with_high_score() -> None:
     with (
         patch.object(captcha_module, "is_captcha_enabled", return_value=True),
         patch.object(captcha_module.httpx, "AsyncClient", return_value=client),
+        pytest.raises(CaptchaVerificationError, match="AUTOMATION"),
     ):
-        with pytest.raises(CaptchaVerificationError, match="AUTOMATION"):
-            await verify_captcha_token("tok", CaptchaAction.SIGNUP)
+        await verify_captcha_token("tok", CaptchaAction.SIGNUP)
 
 
 @pytest.mark.asyncio
@@ -163,9 +163,9 @@ async def test_too_much_traffic_reason_rejects() -> None:
     with (
         patch.object(captcha_module, "is_captcha_enabled", return_value=True),
         patch.object(captcha_module.httpx, "AsyncClient", return_value=client),
+        pytest.raises(CaptchaVerificationError, match="TOO_MUCH_TRAFFIC"),
     ):
-        with pytest.raises(CaptchaVerificationError, match="TOO_MUCH_TRAFFIC"):
-            await verify_captcha_token("tok", CaptchaAction.SIGNUP)
+        await verify_captcha_token("tok", CaptchaAction.SIGNUP)
 
 
 @pytest.mark.asyncio
@@ -174,9 +174,9 @@ async def test_unexpected_environment_reason_rejects() -> None:
     with (
         patch.object(captcha_module, "is_captcha_enabled", return_value=True),
         patch.object(captcha_module.httpx, "AsyncClient", return_value=client),
+        pytest.raises(CaptchaVerificationError, match="UNEXPECTED_ENVIRONMENT"),
     ):
-        with pytest.raises(CaptchaVerificationError, match="UNEXPECTED_ENVIRONMENT"):
-            await verify_captcha_token("tok", CaptchaAction.SIGNUP)
+        await verify_captcha_token("tok", CaptchaAction.SIGNUP)
 
 
 @pytest.mark.asyncio
@@ -185,9 +185,9 @@ async def test_low_confidence_score_reason_rejects() -> None:
     with (
         patch.object(captcha_module, "is_captcha_enabled", return_value=True),
         patch.object(captcha_module.httpx, "AsyncClient", return_value=client),
+        pytest.raises(CaptchaVerificationError, match="LOW_CONFIDENCE_SCORE"),
     ):
-        with pytest.raises(CaptchaVerificationError, match="LOW_CONFIDENCE_SCORE"):
-            await verify_captcha_token("tok", CaptchaAction.SIGNUP)
+        await verify_captcha_token("tok", CaptchaAction.SIGNUP)
 
 
 @pytest.mark.asyncio
@@ -196,9 +196,9 @@ async def test_suspected_carding_reason_rejects() -> None:
     with (
         patch.object(captcha_module, "is_captcha_enabled", return_value=True),
         patch.object(captcha_module.httpx, "AsyncClient", return_value=client),
+        pytest.raises(CaptchaVerificationError, match="SUSPECTED_CARDING"),
     ):
-        with pytest.raises(CaptchaVerificationError, match="SUSPECTED_CARDING"):
-            await verify_captcha_token("tok", CaptchaAction.SIGNUP)
+        await verify_captcha_token("tok", CaptchaAction.SIGNUP)
 
 
 @pytest.mark.asyncio
@@ -207,9 +207,9 @@ async def test_score_below_floor_rejects() -> None:
     with (
         patch.object(captcha_module, "is_captcha_enabled", return_value=True),
         patch.object(captcha_module.httpx, "AsyncClient", return_value=client),
+        pytest.raises(CaptchaVerificationError, match="suspicious"),
     ):
-        with pytest.raises(CaptchaVerificationError, match="suspicious"):
-            await verify_captcha_token("tok", CaptchaAction.SIGNUP)
+        await verify_captcha_token("tok", CaptchaAction.SIGNUP)
 
 
 @pytest.mark.asyncio
@@ -248,9 +248,9 @@ async def test_empty_token_rejected_before_http() -> None:
     with (
         patch.object(captcha_module, "is_captcha_enabled", return_value=True),
         patch.object(captcha_module.httpx, "AsyncClient", return_value=client),
+        pytest.raises(CaptchaVerificationError, match="required"),
     ):
-        with pytest.raises(CaptchaVerificationError, match="required"):
-            await verify_captcha_token("", CaptchaAction.SIGNUP)
+        await verify_captcha_token("", CaptchaAction.SIGNUP)
     client.post.assert_not_awaited()
 
 
