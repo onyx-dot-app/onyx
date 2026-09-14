@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Any, Callable, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from onyx.chat.emitter import Emitter
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT, NUM_RETURNED_HITS
@@ -16,6 +16,7 @@ from onyx.file_store.models import (
     install_lazy_content_loader,
     maybe_materialize_lazy_content,
 )
+from onyx.llm.models import ReasoningEffort
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     CustomToolErrorInfo,
@@ -170,10 +171,41 @@ class OpenURLToolOverrideKwargs(BaseModel):
     max_urls: int = 10
 
 
+class AdaptiveSearchConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    max_rounds: int = Field(default=2, ge=1, le=4)
+    max_refinement_queries_per_round: int = Field(default=2, ge=1, le=4)
+    max_total_queries: int = Field(default=6, ge=1, le=12)
+    refinement_hybrid_alpha: float | None = Field(default=None, ge=0, le=1)
+    balanced_evidence_preview: bool = False
+    center_first_evidence: bool = False
+
+
+class AnswerVerificationConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    max_rounds: int = Field(default=2, ge=1, le=4)
+    max_refinement_queries_per_round: int = Field(default=2, ge=1, le=4)
+    max_total_queries: int = Field(default=6, ge=1, le=12)
+    refinement_hybrid_alpha: float | None = Field(default=None, ge=0, le=1)
+    max_answer_tokens: int = Field(default=700, ge=64, le=4000)
+    max_classifier_tokens: int = Field(default=1500, ge=128, le=4000)
+    synthesis_reasoning_effort: ReasoningEffort = ReasoningEffort.OFF
+
+
 # None indicates that the default value should be used
 class SearchToolOverrideKwargs(BaseModel):
     # To know what citation number to start at for constructing the string to the LLM
     starting_citation_num: int
+    selection_strategy: Literal["llm", "cohere_rerank"] = "llm"
+    rerank_top_n: int = Field(default=10, ge=1, le=20, strict=True)
+    balanced_selection: bool = False
+    center_first_evidence: bool = False
+    selection_query_highlights: bool = False
+    include_retrieval_candidates: bool = False
+    fusion_granularity: Literal["chunk", "document"] = "chunk"
+    context_expansion_strategy: Literal["llm", "adjacent_2"] = "llm"
     # This is needed because the LLM won't be able to do a really detailed semantic query well
     # without help and a specific custom prompt for this
     original_query: str | None = None
@@ -190,8 +222,24 @@ class SearchToolOverrideKwargs(BaseModel):
     # Number of chunks (token approx) to include in the string to the LLM
     max_llm_chunks: int | None = MAX_CHUNKS_FED_TO_CHAT
     include_link: bool = False
+    adaptive_search: AdaptiveSearchConfig | None = None
+    answer_verification: AnswerVerificationConfig | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    @model_validator(mode="after")
+    def validate_selection_strategy(self) -> "SearchToolOverrideKwargs":
+        if self.selection_strategy == "cohere_rerank" and (
+            self.adaptive_search is not None or self.answer_verification is not None
+        ):
+            raise ValueError(
+                "cohere_rerank selection_strategy is only supported for fixed search"
+            )
+        if self.selection_strategy != "cohere_rerank" and self.rerank_top_n != 10:
+            raise ValueError(
+                "rerank_top_n can only be changed when selection_strategy is cohere_rerank"
+            )
+        return self
 
 
 class ChatFile(BaseModel):

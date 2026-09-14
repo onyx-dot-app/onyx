@@ -14,6 +14,8 @@ from enum import StrEnum
 
 
 class LLMFlow(StrEnum):
+    AGENT_HARNESS_V2_DECISION = "agent_harness_v2_decision"
+    AGENT_HARNESS_V2_SEARCH_ANSWER = "agent_harness_v2_search_answer"
     # Chat / agent
     CHAT_RESPONSE = "chat_response"
     CHAT_HISTORY_SUMMARIZATION = "chat_history_summarization"
@@ -25,12 +27,16 @@ class LLMFlow(StrEnum):
     TIME_FILTER_EXTRACTION = "time_filter_extraction"
     CLASSIFY_SECTION_RELEVANCE = "classify_section_relevance"
     SELECT_SECTIONS_FOR_EXPANSION = "select_sections_for_expansion"
+    ADAPTIVE_SEARCH_REFINEMENT = "adaptive_search_refinement"
+    SEARCH_TOOL_ANSWER_SYNTHESIS = "search_tool_answer_synthesis"
+    SEARCH_TOOL_ANSWER_VERIFICATION = "search_tool_answer_verification"
     CHAT_SESSION_NAMING = "chat_session_naming"
     MEMORY_UPDATE = "memory_update"
 
     # Build session (assistants)
     BUILD_SESSION_NAMING = "build_session_naming"
     CRAFT_LLM_GENERATION = "craft_llm_generation"
+    ONYX_SEARCH_HARNESS_SYNTHESIS = "onyx_search_harness_synthesis"
 
     # LLM gateway (external clients via use:llm_gateway PATs)
     LLM_GATEWAY = "llm_gateway"

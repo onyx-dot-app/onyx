@@ -1,5 +1,6 @@
 import json
 import re
+from typing import Any, cast
 
 from onyx.configs.chat_configs import SECONDARY_LLM_FLOW_TIMEOUT_S
 from onyx.context.search.models import (
@@ -22,10 +23,66 @@ from onyx.utils.timing import log_function_time
 
 logger = setup_logger()
 
+_HI_TAG_PATTERN = re.compile(r"</?hi>", flags=re.IGNORECASE)
+_HI_TERM_PATTERN = re.compile(r"<hi>(.*?)</hi>", flags=re.IGNORECASE | re.DOTALL)
+_OPAQUE_TITLE_PREFIX = re.compile(r"^dsid_[0-9a-f]{24,}__", flags=re.IGNORECASE)
+
+
+def _strip_hi_tags(text: str) -> str:
+    return _HI_TAG_PATTERN.sub("", text)
+
+
+def _highlight_term_count(fragment: str) -> int:
+    return len(
+        {
+            match.group(1).strip().casefold()
+            for match in _HI_TERM_PATTERN.finditer(fragment)
+            if match.group(1).strip()
+        }
+    )
+
+
+def _select_query_highlight_excerpt(
+    chunks: list[InferenceChunk],
+    max_content_chars: int | None,
+) -> str | None:
+    ranked_fragments: list[tuple[int, int, str]] = []
+    fragment_order = 0
+    for chunk in chunks:
+        for fragment in chunk.match_highlights:
+            term_count = _highlight_term_count(fragment)
+            if term_count == 0:
+                continue
+            ranked_fragments.append(
+                (
+                    -term_count,
+                    fragment_order,
+                    _strip_hi_tags(fragment),
+                )
+            )
+            fragment_order += 1
+
+    if not ranked_fragments:
+        return None
+
+    seen_fragments: set[str] = set()
+    selected_fragments: list[str] = []
+    for _, _, fragment in sorted(ranked_fragments, key=lambda item: (item[0], item[1])):
+        if fragment in seen_fragments:
+            continue
+        seen_fragments.add(fragment)
+        selected_fragments.append(fragment)
+
+    content = " ".join(selected_fragments)
+    if max_content_chars is None:
+        return content
+    return content[:max_content_chars]
+
 
 def select_chunks_for_relevance(
     section: InferenceSection,
     max_chunks: int = MAX_CHUNKS_FOR_RELEVANCE,
+    center_first: bool = False,
 ) -> list[InferenceChunk]:
     """Select a subset of chunks from a section based on center chunk position.
 
@@ -41,7 +98,8 @@ def select_chunks_for_relevance(
         max_chunks: Maximum number of chunks to select (default: MAX_CHUNKS_FOR_RELEVANCE)
 
     Returns:
-        List of selected InferenceChunks ordered by position
+        List of selected InferenceChunks ordered by position, or with the center
+        chunk first when center_first is enabled.
     """
     if max_chunks <= 0:
         return []
@@ -91,7 +149,18 @@ def select_chunks_for_relevance(
     start_index = center_index - chunks_before
     end_index = center_index + chunks_after + 1  # +1 to include center and chunks after
 
-    return all_chunks[start_index:end_index]
+    selected_chunks = all_chunks[start_index:end_index]
+    if not center_first:
+        return selected_chunks
+
+    return [
+        center_chunk,
+        *[
+            chunk
+            for chunk in selected_chunks
+            if chunk.chunk_id != center_chunk.chunk_id
+        ],
+    ]
 
 
 @log_function_time(print_only=True)
@@ -193,6 +262,14 @@ def select_sections_for_expansion(
     max_sections: int = 10,
     max_chunks_per_section: int | None = MAX_CHUNKS_FOR_RELEVANCE,
     try_to_fill_to_max: bool = False,
+    max_content_chars: int | None = None,
+    center_first_evidence: bool = False,
+    use_query_highlights: bool = False,
+    input_token_budget: int | None = None,
+    preparation_diagnostics: dict[str, Any] | None = None,
+    mark_full_documents: bool = False,
+    compact_cards: bool = False,
+    fit_only_if_needed: bool = False,
 ) -> tuple[list[InferenceSection], list[str] | None]:
     """Use LLM to select the most relevant document sections for expansion.
 
@@ -246,33 +323,62 @@ def select_sections_for_expansion(
         # the LLM with too much content from documents with many matching sections
         if max_chunks_per_section is not None:
             selected_chunks = select_chunks_for_relevance(
-                section, max_chunks_per_section
+                section,
+                max_chunks_per_section,
+                center_first=center_first_evidence and max_content_chars is not None,
             )
-            selected_content = " ".join(chunk.content for chunk in selected_chunks)
         else:
-            selected_content = section.combined_content
+            selected_chunks = section.chunks
+
+        selected_content = None
+        if use_query_highlights:
+            selected_content = _select_query_highlight_excerpt(
+                selected_chunks,
+                max_content_chars=max_content_chars,
+            )
+
+        if selected_content is None:
+            selected_content = (
+                " ".join(chunk.content for chunk in selected_chunks)
+                if max_chunks_per_section is not None
+                else section.combined_content
+            )
+        if max_content_chars is not None:
+            selected_content = selected_content[:max_content_chars]
 
         section_dict: dict[str, str | int | list[str]] = {
             "section_id": idx,
-            "title": chunk.semantic_identifier,
+            "title": (
+                _OPAQUE_TITLE_PREFIX.sub("", chunk.semantic_identifier)
+                if compact_cards
+                else chunk.semantic_identifier
+            ),
         }
 
         # Only include updated_at if not None
-        if updated_at_str is not None:
+        if updated_at_str is not None and not compact_cards:
             section_dict["updated_at"] = updated_at_str
 
         # Only include authors if not None
-        if authors is not None:
+        if authors is not None and not compact_cards:
             section_dict["authors"] = authors
 
-        section_dict["source_type"] = str(chunk.source_type)
-        section_dict["metadata"] = metadata_str
+        if not compact_cards:
+            section_dict["source_type"] = str(chunk.source_type)
+            section_dict["metadata"] = metadata_str
         section_dict["content"] = selected_content
 
         sections_dict.append(section_dict)
 
     # Build the prompt
     extra_instructions = TRY_TO_FILL_TO_MAX_INSTRUCTIONS if try_to_fill_to_max else ""
+    if mark_full_documents:
+        extra_instructions += """
+For up to three sections that are especially likely to be from the exact
+answer-bearing document, append ! to the section_id (for example, 4!). This
+requests wider surrounding context. Use the marker when the excerpt identifies
+the right document but may omit a later table, decision, or conclusion.
+"""
     prompt_text = UserMessage(
         content=DOCUMENT_SELECTION_PROMPT.format(
             max_sections=max_sections,
@@ -281,6 +387,45 @@ def select_sections_for_expansion(
             user_query=user_query,
         )
     )
+
+    if input_token_budget is not None:
+        from onyx.llm.factory import get_llm_token_counter
+        from onyx.tools.tool_implementations.search.candidate_preparation import (
+            bounded_selection_prompt,
+        )
+
+        count_tokens = get_llm_token_counter(llm)
+        prompt_content = cast(str, prompt_text.content or "")
+        if fit_only_if_needed and count_tokens(prompt_content) <= input_token_budget:
+            fitted = prompt_content
+            diagnostics = {
+                "input_tokens": count_tokens(fitted),
+                "input_token_budget": input_token_budget,
+                "included_section_ids": [c["section_id"] for c in sections_dict],
+                "omitted_section_ids": [],
+                "full_prompt_preserved": True,
+            }
+        else:
+            fitted, diagnostics = bounded_selection_prompt(
+                cards=sections_dict,
+                query=user_query,
+                render=lambda payload: DOCUMENT_SELECTION_PROMPT.format(
+                    max_sections=max_sections,
+                    extra_instructions=extra_instructions,
+                    formatted_doc_sections=payload,
+                    user_query=user_query,
+                ),
+                count_tokens=get_llm_token_counter(llm),
+                budget=input_token_budget,
+            )
+        prompt_text = UserMessage(content=fitted)
+        # The fitter drops only a suffix; parsing and fallback must obey that window.
+        included_section_ids = cast(list[str], diagnostics["included_section_ids"])
+        sections = sections[: len(included_section_ids)]
+        if preparation_diagnostics is not None:
+            preparation_diagnostics.update(diagnostics)
+        if not sections:
+            return [], None
 
     # Call LLM for selection with Braintrust tracing
     try:
@@ -292,6 +437,7 @@ def select_sections_for_expansion(
             response = llm.invoke(
                 prompt=[prompt_text],
                 reasoning_effort=ReasoningEffort.OFF,
+                max_tokens=256,
                 timeout_override=SECONDARY_LLM_FLOW_TIMEOUT_S,
             )
             record_llm_response(span_generation, response)
@@ -333,7 +479,12 @@ def select_sections_for_expansion(
             # Try to find an unbracketed comma-separated list
             # Look for patterns like "1, 2, 3" or "1, 2!, 3"
             # This regex finds sequences of digits optionally followed by "!" and separated by commas
-            comma_list_pattern = r"\b\d+!?\b(?:\s*,\s*\b\d+!?\b)*"
+            # Do not put a word boundary after the optional "!" marker. "!"
+            # and the following comma are both non-word characters, so a
+            # trailing \b makes the regex backtrack past "!" and stop after
+            # the first section ID (for example, "0!, 2!, 1!, 4" became
+            # just "0").
+            comma_list_pattern = r"\b\d+!?(?:\s*,\s*\d+!?)*"
             comma_match = re.search(comma_list_pattern, llm_response)
 
             if comma_match:
@@ -435,4 +586,8 @@ def select_sections_for_expansion(
 
     except Exception as e:
         logger.error("Error calling LLM for document selection: %s", e)
+        if preparation_diagnostics is not None:
+            preparation_diagnostics.update(
+                {"fallback": "first_candidates", "error_type": type(e).__name__}
+            )
         return sections[:max_sections], None

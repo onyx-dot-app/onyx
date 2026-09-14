@@ -353,6 +353,8 @@ def llm_from_provider(
     additional_headers: dict[str, str] | None = None,
     policy_fn: Callable[[str], LlmRequestPolicy] | None = None,
     user_defaults: UserChatDefaults | None = None,
+    *,
+    temperature_for_reasoning_none: float | None = None,
 ) -> LLM:
     model_configuration = _get_model_configuration(
         llm_provider=llm_provider, model_name=model_name
@@ -390,6 +392,7 @@ def llm_from_provider(
         custom_config=llm_provider.custom_config,
         timeout=timeout,
         temperature=temperature,
+        temperature_for_reasoning_none=temperature_for_reasoning_none,
         additional_headers=additional_headers,
         max_input_tokens=max_input_tokens,
         model_kwargs=model_kwargs,
@@ -479,6 +482,8 @@ def get_llm(
     reasoning_effort_default: ReasoningEffort | None = None,
     reasoning_effort_user_default: ReasoningEffort | None = None,
     reasoning_effort_max: ReasoningEffort | None = None,
+    *,
+    temperature_for_reasoning_none: float | None = None,
 ) -> LLM:
     if temperature is None:
         temperature = GEN_AI_TEMPERATURE
@@ -510,6 +515,7 @@ def get_llm(
         api_version=api_version,
         timeout=timeout,
         temperature=temperature,
+        temperature_for_reasoning_none=temperature_for_reasoning_none,
         custom_config=custom_config,
         extra_headers=extra_headers,
         model_kwargs=merged_model_kwargs,

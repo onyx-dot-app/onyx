@@ -34,16 +34,19 @@ so that the rest of the code can persist it, render it in the UI, etc. The respo
 refer to by using matching keywords to other parts of the prompt and reminders.
 """
 
+import json
+import re
 import time
 from collections.abc import Callable
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.chat.emitter import Emitter
+from onyx.configs.app_configs import OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
-from onyx.configs.constants import DocumentSource, FederatedConnectorSource
+from onyx.configs.constants import DocumentSource, FederatedConnectorSource, MessageType
 from onyx.context.search.federated.slack_search import slack_retrieval
 from onyx.context.search.models import (
     BaseFilters,
@@ -113,6 +116,11 @@ from onyx.tools.models import (
     ToolCallException,
     ToolResponse,
 )
+from onyx.tools.tool_implementations.search.adaptive_search import (
+    decide_adaptive_search_next_queries,
+    decide_answer_verification_next_queries,
+    generate_search_answer_candidate,
+)
 from onyx.tools.tool_implementations.search.constants import (
     KEYWORD_QUERY_HYBRID_ALPHA,
     LLM_KEYWORD_QUERY_WEIGHT,
@@ -120,9 +128,12 @@ from onyx.tools.tool_implementations.search.constants import (
     LLM_SEMANTIC_QUERY_WEIGHT,
     MAX_CHUNKS_FOR_RELEVANCE,
     ORIGINAL_QUERY_WEIGHT,
-    SELECTION_TOKEN_BUDGET_MULTIPLIER,
+)
+from onyx.tools.tool_implementations.search.rerank_selection import (
+    select_sections_with_cohere_rerank,
 )
 from onyx.tools.tool_implementations.search.search_utils import (
+    document_level_reciprocal_rank_fusion,
     expand_section_with_context,
     merge_overlapping_sections,
     weighted_reciprocal_rank_fusion,
@@ -142,6 +153,7 @@ from shared_configs.configs import (
 logger = setup_logger()
 
 QUERIES_FIELD = "queries"
+_HI_TAG_PATTERN = re.compile(r"</?hi>", flags=re.IGNORECASE)
 
 
 class QueryExpansionAndScope(BaseModel):
@@ -151,6 +163,49 @@ class QueryExpansionAndScope(BaseModel):
     keyword_queries: list[str]
     plan_scope: list[DocumentSource] | None
     time_filter: TimeFilter | None = None
+
+
+def _expansion_history_with_objective(
+    message_history: list[ChatMinimalTextMessage],
+    queries: list[str],
+) -> list[ChatMinimalTextMessage]:
+    """Make the current search objective the query rewriter's final user message."""
+    objective = next((query.strip() for query in queries if query.strip()), None)
+    if objective is None:
+        return message_history
+    return [
+        *message_history,
+        ChatMinimalTextMessage(message=objective, message_type=MessageType.USER),
+    ]
+
+
+def _late_lexical_bridge_query(objective: str) -> str | None:
+    objective_lower = objective.lower()
+    concepts: list[tuple[tuple[str, ...], str]] = [
+        (("partner integration", "integration call"), "marketplace integration sync"),
+        (("cloud catalog", "pre-publication"), "marketplace listing"),
+        (("image security", "security smoke"), "AMI security QA"),
+        (("stop-and-go", "chat sessions"), "fractured context session anchoring"),
+        (("per-session", "recent sessions"), "session anchors Redis hot LRU"),
+        (("longer retention", "retention"), "S3 long-term TTL"),
+        (("shared service", "hosted"), "Hosted API"),
+        (("private network", "isolated deployment"), "Dedicated VPC"),
+        (("assistant responses", "in app assistant"), "in-app help"),
+        (("follow up actions", "action items"), "account plan action items POC"),
+        (("product analytics",), "product analytics"),
+        (
+            ("cheaper", "consistent", "predictable latency"),
+            "lower inference unit costs predictable latency",
+        ),
+    ]
+    matches = [
+        phrase
+        for needles, phrase in concepts
+        if any(needle in objective_lower for needle in needles)
+    ]
+    if len(matches) < 2:
+        return None
+    return " ".join(matches)
 
 
 def _build_scope_note(
@@ -166,6 +221,163 @@ def _build_scope_note(
         f"(This internal search covered only: {searched}. Queries run: {queries_str}. "
         "Call internal_search again with different query terms to keep searching.)"
     )
+
+
+def _build_retrieval_candidate_diagnostics(
+    *,
+    query_specs: list[tuple[str, float, float | None]],
+    round_search_weights: list[float],
+    round_results: list[list[InferenceChunk]],
+) -> list[dict[str, Any]]:
+    diagnostics: list[dict[str, Any]] = []
+    for (query, _weight, hybrid_alpha), fusion_weight, chunks in zip(
+        query_specs,
+        round_search_weights,
+        round_results,
+        strict=True,
+    ):
+        diagnostics.append(
+            {
+                "query": query,
+                "hybrid_alpha": hybrid_alpha,
+                "fusion_weight": fusion_weight,
+                "returned_chunks": [
+                    _build_retrieval_candidate_chunk_diagnostics(
+                        chunk=chunk,
+                        rank=rank,
+                    )
+                    for rank, chunk in enumerate(chunks, start=1)
+                ],
+            }
+        )
+    return diagnostics
+
+
+def _build_retrieval_candidate_chunk_diagnostics(
+    *,
+    chunk: InferenceChunk,
+    rank: int,
+) -> dict[str, Any]:
+    diagnostics: dict[str, Any] = {
+        "document_id": chunk.document_id,
+        "chunk_id": chunk.chunk_id,
+        "rank": rank,
+    }
+    # Bounded passages for inspecting already-authorized alternative candidates.
+    # IDs/ranks cover the full returned window; text covers only its first eight hits.
+    if rank <= 8:
+        diagnostics.update(
+            {
+                "title": chunk.semantic_identifier,
+                "content": chunk.content[:6000],
+                "content_total_chars": len(chunk.content),
+                "source_type": chunk.source_type.value,
+                "indexed_updated_at": chunk.updated_at.isoformat()
+                if chunk.updated_at
+                else None,
+            }
+        )
+    if chunk.score is not None:
+        diagnostics["score"] = chunk.score
+    return diagnostics
+
+
+def _merged_candidate_document_ids_after_cap(
+    sections: list[InferenceSection],
+) -> list[str]:
+    seen: set[str] = set()
+    document_ids: list[str] = []
+    for section in sections:
+        document_id = section.center_chunk.document_id
+        if document_id in seen:
+            continue
+        seen.add(document_id)
+        document_ids.append(document_id)
+    return document_ids
+
+
+def _build_match_highlight_diagnostics(
+    sections: list[InferenceSection],
+) -> dict[str, int]:
+    seen_chunk_ids: set[str] = set()
+    chunks_with_match_highlights = 0
+    tagged_fragments = 0
+
+    for section in sections:
+        for chunk in section.chunks:
+            if chunk.unique_id in seen_chunk_ids:
+                continue
+            seen_chunk_ids.add(chunk.unique_id)
+
+            if not chunk.match_highlights:
+                continue
+            chunks_with_match_highlights += 1
+            tagged_fragments += sum(
+                1
+                for fragment in chunk.match_highlights
+                if _HI_TAG_PATTERN.search(fragment)
+            )
+
+    return {
+        "final_top_section_candidate_chunks_with_match_highlights": (
+            chunks_with_match_highlights
+        ),
+        "final_top_section_tagged_match_highlight_fragments": tagged_fragments,
+    }
+
+
+def _convert_sections_to_llm_string_with_stable_citations(
+    *,
+    sections: list[InferenceSection],
+    document_id_to_citation_id: dict[str, int],
+    citation_start: int,
+    limit: int | None,
+    include_link: bool,
+    note: str | None,
+) -> tuple[str, dict[int, str]]:
+    if limit is not None:
+        sections = sections[:limit]
+
+    next_citation_id = (
+        max(document_id_to_citation_id.values()) + 1
+        if document_id_to_citation_id
+        else citation_start
+    )
+    for section in sections:
+        document_id = section.center_chunk.document_id
+        if document_id in document_id_to_citation_id:
+            continue
+        document_id_to_citation_id[document_id] = next_citation_id
+        next_citation_id += 1
+
+    results: list[dict[str, object]] = []
+    citation_mapping: dict[int, str] = {}
+    for section in sections:
+        chunk = section.center_chunk
+        document_id = chunk.document_id
+        citation_id = document_id_to_citation_id[document_id]
+        citation_mapping[citation_id] = document_id
+
+        result: dict[str, object] = {
+            "document": citation_id,
+            "title": chunk.semantic_identifier,
+            "source_type": chunk.source_type.value,
+            "content": section.combined_content,
+        }
+        if chunk.updated_at is not None:
+            result["updated_at"] = chunk.updated_at.isoformat()
+        if include_link and chunk.source_links:
+            link = next(iter(chunk.source_links.values()), None)
+            if link:
+                result["url"] = link
+        if chunk.metadata:
+            result["metadata"] = json.dumps(chunk.metadata, ensure_ascii=False)
+        results.append(result)
+
+    payload: dict[str, object] = {"results": results}
+    if note:
+        payload["note"] = note
+    return json.dumps(payload, indent=2, ensure_ascii=False), citation_mapping
 
 
 def deduplicate_queries(
@@ -297,6 +509,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # Whether to infer source and time filters from the
         # query. When False, only user/persona-selected filters are applied.
         auto_detect_filters: bool = True,
+        classifier_llm: LLM | None = None,
+        candidate_preparation: bool = False,
+        hierarchical_selection: bool = False,
+        final_selection_limit: int = 10,
+        record_query: str | None = None,
     ) -> None:
         super().__init__(emitter=emitter)
 
@@ -311,6 +528,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self.slack_context = slack_context
         self.enable_slack_search = enable_slack_search
         self.auto_detect_filters = auto_detect_filters
+        self.classifier_llm = classifier_llm
+        self.candidate_preparation = candidate_preparation
+        self.hierarchical_selection = hierarchical_selection
+        self.final_selection_limit = final_selection_limit
+        self.record_query = record_query
 
         self._search_cycles: list[SearchCycle] = []
         self._cached_expansion: tuple[str | None, list[str]] | None = None
@@ -607,6 +829,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         user_info: str | None,
         memories: list[str],
         decide_args: tuple[Any, ...],
+        queries: list[str] | None = None,
     ) -> QueryExpansionAndScope:
         """Expand the query and decide the source/time scope, in parallel when each
         applies.
@@ -625,7 +848,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         scope_job_index: int | None = None
         time_job_index: int | None = None
         if expand_queries:
-            expansion_args = (message_history, self.llm, user_info, memories)
+            expansion_history = _expansion_history_with_objective(
+                message_history, queries or []
+            )
+            expansion_args = (expansion_history, self.llm, user_info, memories)
             jobs.append((semantic_query_rephrase, expansion_args))
             jobs.append((keyword_query_expansion, expansion_args))
         if decide_scope:
@@ -805,8 +1031,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             llm_queries,
         )
         expansion = self._expand_queries_and_decide_scope(
-            skip_query_expansion=override_kwargs.skip_query_expansion,
+            skip_query_expansion=override_kwargs.skip_query_expansion
+            or bool(self.record_query),
             message_history=message_history,
+            queries=llm_queries,
             user_info=user_info,
             memories=memories,
             decide_args=decide_args,
@@ -882,6 +1110,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 + keyword_queries
             )
         )
+        if self.record_query:
+            queries_run = [self.record_query]
         scope_note = _build_scope_note(resolved_scope, queries_run)
 
         effective_filters = self.user_selected_filters
@@ -937,6 +1167,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         deduplicated_semantic_queries = deduplicate_queries(
             semantic_queries_with_weights
         )
+        if self.record_query:
+            # Preserve the caller's primary-record terms in one existing keyword
+            # hybrid lane. Selection still uses the original task below.
+            deduplicated_semantic_queries = []
+            deduplicated_keyword_queries = [(self.record_query, 1.0)]
 
         # Build the all_queries list for UI display, sorted by weight (highest first)
         # Combine all deduplicated queries and sort by weight
@@ -945,14 +1180,45 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         )
         all_queries_with_weights.sort(key=lambda x: x[1], reverse=True)
 
+        answer_verification_config = override_kwargs.answer_verification
+        adaptive_config = (
+            None
+            if answer_verification_config is not None
+            else override_kwargs.adaptive_search
+        )
+        center_first_evidence = override_kwargs.center_first_evidence or (
+            adaptive_config.center_first_evidence
+            if adaptive_config is not None
+            else False
+        )
+        loop_config = answer_verification_config or adaptive_config
+        keyword_query_keys = {
+            query.casefold() for query, _ in deduplicated_keyword_queries
+        }
+
         # Extract queries in weight order, handling cross-duplicates
-        all_queries = []
+        all_query_specs: list[tuple[str, float, float | None]] = []
         seen_lower = set()
-        for query, _ in all_queries_with_weights:
+        for query, weight in all_queries_with_weights:
             query_lower = query.lower()
             if query_lower not in seen_lower:
-                all_queries.append(query)
+                all_query_specs.append(
+                    (
+                        query,
+                        weight,
+                        (
+                            KEYWORD_QUERY_HYBRID_ALPHA
+                            if query.casefold() in keyword_query_keys
+                            else None
+                        ),
+                    )
+                )
                 seen_lower.add(query_lower)
+
+        display_query_specs = all_query_specs
+        if loop_config is not None:
+            display_query_specs = display_query_specs[: loop_config.max_total_queries]
+        all_queries = [query for query, _, _ in display_query_specs]
 
         logger.debug(
             "All Queries (sorted by weight): %s, Keyword queries: %s",
@@ -960,7 +1226,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             [q for q, _ in deduplicated_keyword_queries],
         )
 
-        # Emit the queries early so the UI can display them immediately
         self.emitter.emit(
             Packet(
                 placement=placement,
@@ -970,98 +1235,509 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             )
         )
 
-        # Run all searches in parallel with appropriate hybrid_alpha values
-        # Keyword queries use hybrid_alpha=0.2 (favor keyword search)
-        # Other queries use default hybrid_alpha (balanced semantic/keyword)
-        search_functions: list[tuple[Callable, tuple]] = []
-        search_weights: list[float] = []
-
-        # Add deduplicated semantic queries (use hybrid_alpha=None)
-        for query, weight in deduplicated_semantic_queries:
-            search_functions.append(
-                (
-                    self._run_search_for_query,
-                    (
-                        query,
-                        None,
-                        override_kwargs.num_hits,
-                        acl_filters,
-                        embedding_model,
-                        federated_retrieval_infos,
-                        effective_filters,
-                    ),
-                )
-            )
-            search_weights.append(weight)
-
-        # Add deduplicated keyword queries (use hybrid_alpha=0.2)
-        for query, weight in deduplicated_keyword_queries:
-            search_functions.append(
-                (
-                    self._run_search_for_query,
-                    (
-                        query,
-                        KEYWORD_QUERY_HYBRID_ALPHA,
-                        override_kwargs.num_hits,
-                        acl_filters,
-                        embedding_model,
-                        federated_retrieval_infos,
-                        effective_filters,
-                    ),
-                )
-            )
-            search_weights.append(weight)
-
-        # Add Slack federated search (runs once in parallel with all Vespa queries)
-        # This avoids the query multiplication problem where each Vespa query
-        # would trigger a separate Slack search.
-        # Only run if pre-fetch found a valid Slack access token.
-        if slack_access_token and override_kwargs.original_query:
-            search_functions.append(
-                (
-                    self._run_slack_search,
-                    (
-                        override_kwargs.original_query,
-                        slack_access_token,
-                        slack_bot_token,
-                        slack_entities,
-                        search_settings,
-                    ),
-                )
-            )
-            # Use same weight as original query for Slack results
-            search_weights.append(ORIGINAL_QUERY_WEIGHT)
-
-        # Run all searches in parallel (Vespa queries + Slack)
-        all_search_results = run_functions_tuples_in_parallel(search_functions)
-        if not all_search_results:
-            all_search_results = []
-
-        # Merge results using weighted Reciprocal Rank Fusion
-        # This intelligently combines rankings from different queries
-        top_chunks = weighted_reciprocal_rank_fusion(
-            ranked_results=all_search_results,
-            weights=search_weights,
-            id_extractor=lambda chunk: f"{chunk.document_id}_{chunk.chunk_id}",
+        secondary_flows_user_query = (
+            override_kwargs.original_query
+            or semantic_query
+            or (llm_queries[0] if llm_queries else "")
         )
 
-        # We can disregard all of the chunks that exceed the num_hits parameter since it's not valid to have
-        # documents/contents from things that aren't returned to the user on the frontend
-        top_sections = merge_individual_chunks(top_chunks)[: override_kwargs.num_hits]
+        if loop_config is None:
+            query_specs = [
+                (query, weight, None) for query, weight in deduplicated_semantic_queries
+            ]
+            query_specs.extend(
+                (query, weight, KEYWORD_QUERY_HYBRID_ALPHA)
+                for query, weight in deduplicated_keyword_queries
+            )
+        else:
+            query_specs = list(display_query_specs)
+
+        searched_query_keys = {query.casefold() for query in all_queries}
+        max_rounds = loop_config.max_rounds if loop_config else 1
+        search_weights: list[float] = []
+        all_search_results: list[list[InferenceChunk]] = []
+        top_sections: list[InferenceSection] = []
+        adaptive_stop_reason = "disabled"
+        adaptive_rounds: list[dict[str, Any]] = []
+        answer_verification_stop_reason = "disabled"
+        answer_verification_rounds: list[dict[str, Any]] = []
+        answer_verification_answer: str | None = None
+        answer_verification_context: str | None = None
+        answer_verification_citation_mapping: dict[int, str] = {}
+        document_id_to_citation_id: dict[str, int] = {}
+        selection_prompt_diagnostics: dict[str, Any] = {}
+        hierarchical_selection_diagnostics: dict[str, Any] | None = None
+        selection_stage_ids: dict[str, list[str]] = {}
+        rerank_diagnostics: dict[str, Any] | None = None
+        total_search_elapsed_ms = 0.0
+        total_answer_synthesis_ms = 0.0
+        total_answer_classifier_ms = 0.0
+        include_retrieval_candidates = override_kwargs.include_retrieval_candidates
+
+        for round_index in range(max_rounds):
+            search_functions: list[tuple[Callable, tuple]] = []
+            round_search_weights: list[float] = []
+            round_query_specs: list[tuple[str, float, float | None]] = []
+            for query, weight, hybrid_alpha in query_specs:
+                search_functions.append(
+                    (
+                        self._run_search_for_query,
+                        (
+                            query,
+                            hybrid_alpha,
+                            override_kwargs.num_hits,
+                            acl_filters,
+                            embedding_model,
+                            federated_retrieval_infos,
+                            effective_filters,
+                        ),
+                    )
+                )
+                round_search_weights.append(weight)
+                round_query_specs.append((query, weight, hybrid_alpha))
+
+            if (
+                round_index == 0
+                and slack_access_token
+                and override_kwargs.original_query
+            ):
+                search_functions.append(
+                    (
+                        self._run_slack_search,
+                        (
+                            override_kwargs.original_query,
+                            slack_access_token,
+                            slack_bot_token,
+                            slack_entities,
+                            search_settings,
+                        ),
+                    )
+                )
+                round_search_weights.append(ORIGINAL_QUERY_WEIGHT)
+                round_query_specs.append(
+                    (
+                        override_kwargs.original_query,
+                        ORIGINAL_QUERY_WEIGHT,
+                        None,
+                    )
+                )
+
+            search_start = time.time()
+            round_results = run_functions_tuples_in_parallel(search_functions)
+            search_elapsed_ms = round((time.time() - search_start) * 1000, 3)
+            total_search_elapsed_ms += search_elapsed_ms
+            if round_results:
+                all_search_results.extend(round_results)
+                search_weights.extend(round_search_weights)
+
+            if all_search_results:
+                if override_kwargs.fusion_granularity == "document":
+                    top_chunks = document_level_reciprocal_rank_fusion(
+                        ranked_results=all_search_results,
+                        weights=search_weights,
+                    )
+                else:
+                    top_chunks = weighted_reciprocal_rank_fusion(
+                        ranked_results=all_search_results,
+                        weights=search_weights,
+                        id_extractor=lambda chunk: chunk.unique_id,
+                    )
+                merged_candidates = merge_individual_chunks(top_chunks)
+                if self.candidate_preparation:
+                    from onyx.tools.tool_implementations.search.candidate_preparation import (
+                        distinct_document_sections,
+                    )
+
+                    top_sections = distinct_document_sections(merged_candidates)
+                else:
+                    top_sections = merged_candidates[: override_kwargs.num_hits]
+
+            round_diagnostics: dict[str, Any] = {
+                "round": round_index + 1,
+                "queries": [query for query, _, _ in query_specs],
+                "search_elapsed_ms": search_elapsed_ms,
+                "candidate_section_count": len(top_sections),
+            }
+            if include_retrieval_candidates:
+                round_diagnostics["retrieval_candidates"] = (
+                    _build_retrieval_candidate_diagnostics(
+                        query_specs=round_query_specs,
+                        round_search_weights=round_search_weights,
+                        round_results=round_results,
+                    )
+                )
+                round_diagnostics["merged_candidate_document_ids_after_cap"] = (
+                    _merged_candidate_document_ids_after_cap(top_sections)
+                )
+
+            adaptive_rounds.append(round_diagnostics)
+            if answer_verification_config is not None:
+                answer_verification_context, answer_verification_citation_mapping = (
+                    _convert_sections_to_llm_string_with_stable_citations(
+                        sections=top_sections,
+                        document_id_to_citation_id=document_id_to_citation_id,
+                        citation_start=override_kwargs.starting_citation_num,
+                        limit=override_kwargs.max_llm_chunks,
+                        include_link=override_kwargs.include_link,
+                        note=scope_note or None,
+                    )
+                )
+                synthesis_start = time.time()
+                answer_verification_answer = generate_search_answer_candidate(
+                    question=secondary_flows_user_query,
+                    search_context=answer_verification_context,
+                    llm=self.llm,
+                    max_tokens=answer_verification_config.max_answer_tokens,
+                    reasoning_effort=(
+                        answer_verification_config.synthesis_reasoning_effort
+                    ),
+                )
+                synthesis_elapsed_ms = round((time.time() - synthesis_start) * 1000, 3)
+                total_answer_synthesis_ms += synthesis_elapsed_ms
+
+                round_diagnostics: dict[str, Any] = {
+                    "round": round_index + 1,
+                    "queries": [query for query, _, _ in query_specs],
+                    "search_elapsed_ms": search_elapsed_ms,
+                    "synthesis_elapsed_ms": synthesis_elapsed_ms,
+                    "classifier_elapsed_ms": 0.0,
+                    "candidate_section_count": len(top_sections),
+                    "accepted": False,
+                }
+                if include_retrieval_candidates:
+                    round_diagnostics["retrieval_candidates"] = (
+                        _build_retrieval_candidate_diagnostics(
+                            query_specs=round_query_specs,
+                            round_search_weights=round_search_weights,
+                            round_results=round_results,
+                        )
+                    )
+                    round_diagnostics["merged_candidate_document_ids_after_cap"] = (
+                        _merged_candidate_document_ids_after_cap(top_sections)
+                    )
+                query_specs = []
+
+                remaining_total_queries = (
+                    answer_verification_config.max_total_queries - len(all_queries)
+                )
+                can_search_again = (
+                    round_index + 1 < answer_verification_config.max_rounds
+                    and remaining_total_queries > 0
+                )
+
+                classifier_start = time.time()
+                verification_decision = decide_answer_verification_next_queries(
+                    question=secondary_flows_user_query,
+                    search_context=answer_verification_context,
+                    candidate_answer=answer_verification_answer,
+                    max_tokens=answer_verification_config.max_classifier_tokens,
+                    prior_queries=all_queries,
+                    llm=self.classifier_llm or self.llm,
+                    max_queries=min(
+                        answer_verification_config.max_refinement_queries_per_round,
+                        remaining_total_queries if can_search_again else 0,
+                    ),
+                )
+                classifier_elapsed_ms = round(
+                    (time.time() - classifier_start) * 1000, 3
+                )
+                total_answer_classifier_ms += classifier_elapsed_ms
+                round_diagnostics["classifier_elapsed_ms"] = classifier_elapsed_ms
+
+                if verification_decision.accept is True:
+                    answer_verification_stop_reason = (
+                        verification_decision.reason or "answer_verified"
+                    )
+                    round_diagnostics["accepted"] = True
+                    round_diagnostics["decision"] = {
+                        "accept": True,
+                        "reason": answer_verification_stop_reason,
+                        "refined_queries": [],
+                    }
+                    answer_verification_rounds.append(round_diagnostics)
+                    break
+                if verification_decision.accept is None:
+                    answer_verification_stop_reason = (
+                        verification_decision.reason or "verification_unknown"
+                    )
+                    round_diagnostics["decision"] = {
+                        "accept": None,
+                        "reason": answer_verification_stop_reason,
+                        "refined_queries": [],
+                    }
+                    answer_verification_rounds.append(round_diagnostics)
+                    break
+
+                if not can_search_again:
+                    answer_verification_stop_reason = (
+                        "max_rounds"
+                        if round_index + 1 >= answer_verification_config.max_rounds
+                        else "query_budget_exhausted"
+                    )
+                    round_diagnostics["decision"] = {
+                        "accept": False,
+                        "reason": answer_verification_stop_reason,
+                        "refined_queries": [],
+                    }
+                    answer_verification_rounds.append(round_diagnostics)
+                    break
+
+                refined_queries = [
+                    query
+                    for query in verification_decision.refined_queries
+                    if query.casefold() not in searched_query_keys
+                ][:remaining_total_queries]
+                round_diagnostics["decision"] = {
+                    "accept": False,
+                    "reason": verification_decision.reason,
+                    "refined_queries": refined_queries,
+                }
+                answer_verification_rounds.append(round_diagnostics)
+                if not refined_queries:
+                    answer_verification_stop_reason = "no_new_queries"
+                    break
+
+                for query in refined_queries:
+                    searched_query_keys.add(query.casefold())
+                    all_queries.append(query)
+                query_specs = [
+                    (
+                        query,
+                        LLM_NON_CUSTOM_QUERY_WEIGHT,
+                        answer_verification_config.refinement_hybrid_alpha,
+                    )
+                    for query in refined_queries
+                ]
+                answer_verification_stop_reason = (
+                    verification_decision.reason or "refined"
+                )
+                self.emitter.emit(
+                    Packet(
+                        placement=placement,
+                        obj=SearchToolQueriesDelta(
+                            queries=all_queries,
+                        ),
+                    )
+                )
+                continue
+            query_specs = []
+            if adaptive_config is None:
+                break
+            if round_index + 1 >= adaptive_config.max_rounds:
+                adaptive_stop_reason = "max_rounds"
+                break
+
+            remaining_total_queries = adaptive_config.max_total_queries - len(
+                all_queries
+            )
+            if remaining_total_queries <= 0:
+                adaptive_stop_reason = "query_budget_exhausted"
+                break
+
+            decision = decide_adaptive_search_next_queries(
+                question=secondary_flows_user_query,
+                sections=top_sections,
+                prior_queries=all_queries,
+                balanced_evidence_preview=adaptive_config.balanced_evidence_preview,
+                center_first_evidence=center_first_evidence,
+                llm=self.llm,
+                max_queries=min(
+                    adaptive_config.max_refinement_queries_per_round,
+                    remaining_total_queries,
+                ),
+            )
+            if decision.sufficient is True:
+                adaptive_stop_reason = decision.reason or "evidence_sufficient"
+                adaptive_rounds[-1]["decision"] = {
+                    "sufficient": decision.sufficient,
+                    "reason": adaptive_stop_reason,
+                    "refined_queries": [],
+                }
+                break
+            if decision.sufficient is None:
+                adaptive_stop_reason = decision.reason or "decision_unknown"
+                adaptive_rounds[-1]["decision"] = {
+                    "sufficient": None,
+                    "reason": adaptive_stop_reason,
+                    "refined_queries": [],
+                }
+                break
+
+            refined_queries = [
+                query
+                for query in decision.refined_queries
+                if query.casefold() not in searched_query_keys
+            ][:remaining_total_queries]
+            adaptive_rounds[-1]["decision"] = {
+                "sufficient": decision.sufficient,
+                "reason": decision.reason,
+                "refined_queries": refined_queries,
+            }
+            if not refined_queries:
+                adaptive_stop_reason = "no_new_queries"
+                break
+
+            for query in refined_queries:
+                searched_query_keys.add(query.casefold())
+                all_queries.append(query)
+            query_specs = [
+                (
+                    query,
+                    LLM_NON_CUSTOM_QUERY_WEIGHT,
+                    adaptive_config.refinement_hybrid_alpha,
+                )
+                for query in refined_queries
+            ]
+            adaptive_stop_reason = decision.reason or "refined"
+            self.emitter.emit(
+                Packet(
+                    placement=placement,
+                    obj=SearchToolQueriesDelta(
+                        queries=all_queries,
+                    ),
+                )
+            )
+
+        expansion_fallbacks: list[bool] = []
+        expansion_not_relevant: list[str] = []
+
+        def build_search_tool_diagnostics() -> dict[str, Any]:
+            retrieval_diagnostics: dict[str, Any] = {
+                "mode": (
+                    "answer_verification"
+                    if answer_verification_config is not None
+                    else "adaptive"
+                    if adaptive_config is not None
+                    else "fixed"
+                ),
+                "query_count": len(all_queries),
+                "elapsed_ms": round(total_search_elapsed_ms, 3),
+                "candidate_section_count": len(top_sections),
+                "requested_num_hits": override_kwargs.num_hits,
+                "selection_stage_document_ids": selection_stage_ids,
+                "candidate_preparation": selection_prompt_diagnostics,
+                "hierarchical_selection": hierarchical_selection_diagnostics,
+                "selection_strategy": override_kwargs.selection_strategy,
+                "fusion_granularity": override_kwargs.fusion_granularity,
+                "opensearch_match_highlights_disabled": (
+                    OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED
+                ),
+                **_build_match_highlight_diagnostics(top_sections),
+            }
+            if rerank_diagnostics is not None:
+                retrieval_diagnostics["rerank"] = rerank_diagnostics
+            if (
+                include_retrieval_candidates
+                and answer_verification_config is None
+                and adaptive_config is None
+                and adaptive_rounds
+            ):
+                first_round = adaptive_rounds[0]
+                retrieval_diagnostics["retrieval_candidates"] = first_round.get(
+                    "retrieval_candidates", []
+                )
+                retrieval_diagnostics["merged_candidate_document_ids_after_cap"] = (
+                    first_round.get("merged_candidate_document_ids_after_cap", [])
+                )
+
+            diagnostics = {
+                "context_expansion": {
+                    "fallback_count": len(expansion_fallbacks),
+                    "not_relevant_retained_document_ids": sorted(
+                        set(expansion_not_relevant)
+                    ),
+                },
+                "retrieval": retrieval_diagnostics,
+                "adaptive_search": {
+                    "enabled": adaptive_config is not None,
+                    "stop_reason": adaptive_stop_reason,
+                    "rounds": adaptive_rounds,
+                    "queries": all_queries,
+                },
+                "answer_verification": {
+                    "enabled": False,
+                },
+            }
+            if answer_verification_config is None:
+                return diagnostics
+
+            diagnostics["answer_verification"] = {
+                "enabled": True,
+                "stop_reason": answer_verification_stop_reason,
+                "rounds": answer_verification_rounds,
+                "queries": all_queries,
+                "total_synthesis_ms": round(total_answer_synthesis_ms, 3),
+                "total_classifier_ms": round(total_answer_classifier_ms, 3),
+                "synthesis_reasoning_effort": (
+                    answer_verification_config.synthesis_reasoning_effort.value
+                ),
+                "classifier_reasoning_effort": "off",
+                "classifier_model": (
+                    self.classifier_llm.config.model_name
+                    if self.classifier_llm is not None
+                    else self.llm.config.model_name
+                ),
+            }
+            return diagnostics
+
+        if answer_verification_config is not None:
+            answer_docs = convert_inference_sections_to_search_docs(
+                top_sections, is_internet=False
+            )
+            evidence_doc_ids = set(answer_verification_citation_mapping.values())
+            displayed_answer_docs = [
+                document
+                for document in answer_docs
+                if document.document_id in evidence_doc_ids
+            ]
+            self.emitter.emit(
+                Packet(
+                    placement=placement,
+                    obj=SearchToolDocumentsDelta(documents=displayed_answer_docs),
+                )
+            )
+            return ToolResponse(
+                rich_response=SearchDocsResponse(
+                    search_docs=answer_docs,
+                    displayed_docs=displayed_answer_docs,
+                    citation_mapping=answer_verification_citation_mapping,
+                    answer=answer_verification_answer,
+                    search_tool_diagnostics=build_search_tool_diagnostics(),
+                ),
+                llm_facing_response=answer_verification_answer or "",
+            )
 
         if not top_sections:
+            if override_kwargs.selection_strategy == "cohere_rerank":
+                _empty_sections, rerank_diagnostics = (
+                    select_sections_with_cohere_rerank(
+                        query=secondary_flows_user_query,
+                        sections=[],
+                        embedding_model=embedding_model,
+                        include_candidate_scores=include_retrieval_candidates,
+                        top_n=override_kwargs.rerank_top_n,
+                    )
+                )
             logger.info("Search tool - no results found, returning empty response")
             empty_response, _ = convert_inference_sections_to_llm_string(
                 top_sections=[],
                 note=scope_note or None,
             )
+            llm_facing_response = (
+                answer_verification_answer
+                if answer_verification_config is not None
+                and answer_verification_answer is not None
+                else empty_response
+            )
             return ToolResponse(
                 rich_response=SearchDocsResponse(
                     search_docs=[],
                     citation_mapping={},
+                    answer=answer_verification_answer,
+                    search_tool_diagnostics=build_search_tool_diagnostics(),
                     displayed_docs=None,
                 ),
-                llm_facing_response=empty_response,
+                llm_facing_response=llm_facing_response,
             )
 
         # Enrich chunks with `Document.file_id` (Postgres-only metadata not
@@ -1074,12 +1750,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             top_sections, is_internet=False
         )
 
-        secondary_flows_user_query = (
-            override_kwargs.original_query
-            or semantic_query
-            or (llm_queries[0] if llm_queries else "")
-        )
-
         token_counter = get_llm_token_counter(self.llm)
 
         # Trim sections to fit within token budget before LLM selection
@@ -1087,30 +1757,97 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # Only consider MAX_CHUNKS_FOR_RELEVANCE chunks per section to avoid flooding from
         # documents with many matching sections
         max_tokens_for_selection = (
-            (override_kwargs.max_llm_chunks or MAX_CHUNKS_FED_TO_CHAT)
-            * DOC_EMBEDDING_CONTEXT_SIZE
-            * SELECTION_TOKEN_BUDGET_MULTIPLIER
-        )
+            override_kwargs.max_llm_chunks or MAX_CHUNKS_FED_TO_CHAT
+        ) * DOC_EMBEDDING_CONTEXT_SIZE
 
         # This is approximate since it doesn't build the exact string of the call below
         # Some things are estimated and may be under (like the metadata tokens)
-        sections_for_selection = _trim_sections_by_tokens(
-            sections=top_sections,
-            max_tokens=max_tokens_for_selection,
-            token_counter=token_counter,
-            max_chunks_per_section=MAX_CHUNKS_FOR_RELEVANCE,
+        sections_for_selection = (
+            top_sections
+            if self.candidate_preparation or override_kwargs.balanced_selection
+            else _trim_sections_by_tokens(
+                sections=top_sections,
+                max_tokens=max_tokens_for_selection,
+                token_counter=token_counter,
+                max_chunks_per_section=MAX_CHUNKS_FOR_RELEVANCE,
+            )
         )
+
+        if include_retrieval_candidates:
+            selection_stage_ids["selection_input"] = (
+                _merged_candidate_document_ids_after_cap(sections_for_selection)
+            )
 
         # Start timing for LLM document selection
         document_selection_start_time = time.time()
 
-        # Use LLM to select the most relevant sections for expansion
-        selected_sections, best_doc_ids = select_sections_for_expansion(
-            sections=sections_for_selection,
-            user_query=secondary_flows_user_query,
-            llm=self.llm,
-            max_chunks_per_section=MAX_CHUNKS_FOR_RELEVANCE,
-        )
+        if self.hierarchical_selection:
+            from onyx.tools.tool_implementations.search.hierarchical_selection import (
+                select_hierarchically,
+            )
+
+            selected_sections, best_doc_ids, hierarchical_selection_diagnostics = (
+                select_hierarchically(
+                    ranked_results=all_search_results,
+                    user_query=secondary_flows_user_query,
+                    llm=self.llm,
+                    document_index=self.document_index,
+                    final_limit=self.final_selection_limit,
+                )
+            )
+            if include_retrieval_candidates:
+                selection_stage_ids["selection_input"] = (
+                    hierarchical_selection_diagnostics["nominee_document_ids"]
+                )
+        elif override_kwargs.selection_strategy == "cohere_rerank":
+            selected_sections, rerank_diagnostics = select_sections_with_cohere_rerank(
+                query=secondary_flows_user_query,
+                sections=sections_for_selection,
+                embedding_model=embedding_model,
+                include_candidate_scores=include_retrieval_candidates,
+                top_n=override_kwargs.rerank_top_n,
+            )
+            best_doc_ids = None
+        else:
+            # Use LLM to select the most relevant sections for expansion
+            selected_sections, best_doc_ids = select_sections_for_expansion(
+                sections=sections_for_selection,
+                user_query=secondary_flows_user_query,
+                llm=self.llm,
+                max_chunks_per_section=MAX_CHUNKS_FOR_RELEVANCE,
+                max_content_chars=(
+                    max(1, max_tokens_for_selection * 4 // len(top_sections))
+                    if override_kwargs.balanced_selection
+                    and not self.candidate_preparation
+                    else None
+                ),
+                center_first_evidence=center_first_evidence,
+                use_query_highlights=override_kwargs.selection_query_highlights,
+                input_token_budget=min(16384, max_tokens_for_selection)
+                if self.candidate_preparation
+                else None,
+                preparation_diagnostics=selection_prompt_diagnostics
+                if self.candidate_preparation
+                else None,
+            )
+
+        if include_retrieval_candidates:
+            selection_stage_ids["selected"] = _merged_candidate_document_ids_after_cap(
+                selected_sections
+            )
+
+        if (
+            self.candidate_preparation
+            and "included_section_ids" in selection_prompt_diagnostics
+        ):
+            selection_stage_ids["selection_input"] = (
+                _merged_candidate_document_ids_after_cap(
+                    [
+                        sections_for_selection[i]
+                        for i in selection_prompt_diagnostics["included_section_ids"]
+                    ]
+                )
+            )
 
         # End timing for LLM document selection
         document_selection_elapsed = time.time() - document_selection_start_time
@@ -1144,6 +1881,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             llm: LLM,
             document_index: DocumentIndex,
             expand_override: bool,
+            context_expansion_strategy: Literal["llm", "adjacent_2"],
         ) -> InferenceSection:
             """Wrapper that handles exceptions and returns original section on error."""
             try:
@@ -1153,10 +1891,14 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                     llm=llm,
                     document_index=document_index,
                     expand_override=expand_override,
+                    context_expansion_strategy=context_expansion_strategy,
                 )
                 # Return expanded section if not None, otherwise original
+                if expanded_section is None:
+                    expansion_not_relevant.append(section.center_chunk.document_id)
                 return expanded_section if expanded_section is not None else section
             except Exception as e:
+                expansion_fallbacks.append(True)
                 logger.warning(
                     "Error processing section context expansion: %s. Using original section.",
                     e,
@@ -1173,6 +1915,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                     self.llm,
                     self.document_index,
                     section.center_chunk.document_id in best_doc_ids_set,
+                    override_kwargs.context_expansion_strategy,
                 ),
             )
             for section in selected_sections
@@ -1199,13 +1942,23 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # This prevents duplicate content and reduces token usage
         merged_sections = merge_overlapping_sections(expanded_sections)
 
+        adaptive_note = (
+            f"Adaptive internal search stop reason: {adaptive_stop_reason}. "
+            f"Queries run: {'; '.join(all_queries)}."
+            if adaptive_config is not None
+            else None
+        )
+        response_note = "\n".join(
+            note for note in [scope_note or None, adaptive_note] if note
+        )
+
         docs_str, citation_mapping = convert_inference_sections_to_llm_string(
             top_sections=merged_sections,
             citation_start=override_kwargs.starting_citation_num,
             limit=override_kwargs.max_llm_chunks,
             include_document_id=False,
             include_link=override_kwargs.include_link,
-            note=scope_note or None,
+            note=response_note or None,
         )
 
         # End overall timing
@@ -1217,6 +1970,13 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             format(document_expansion_elapsed, ".3f"),
         )
 
+        if include_retrieval_candidates:
+            selection_stage_ids["expanded"] = _merged_candidate_document_ids_after_cap(
+                merged_sections
+            )
+            selection_stage_ids["returned_evidence"] = list(
+                dict.fromkeys(citation_mapping.values())
+            )
         llm_facing_response = docs_str
 
         return ToolResponse(
@@ -1224,6 +1984,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             rich_response=SearchDocsResponse(
                 search_docs=search_docs,
                 citation_mapping=citation_mapping,
+                answer=answer_verification_answer,
+                search_tool_diagnostics=build_search_tool_diagnostics(),
                 displayed_docs=final_ui_docs,
             ),
             # The LLM facing response typically includes less docs to cut down on noise and token usage

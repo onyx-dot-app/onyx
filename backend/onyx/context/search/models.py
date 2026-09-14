@@ -408,6 +408,8 @@ class SearchDocsResponse(BaseModel):
     # Since these are no longer just links on the frontend but instead document cards, mapping it to the
     # document id is  the most staightforward way.
     citation_mapping: dict[int, str]
+    answer: str | None = None
+    search_tool_diagnostics: dict[str, Any] | None = None
 
     # For cases where the frontend only needs to display a subset of the search docs
     # The whole list is typically still needed for later steps but this set should be saved separately

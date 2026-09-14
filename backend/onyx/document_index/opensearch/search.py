@@ -373,9 +373,7 @@ class DocumentQuery:
                 f"result window ({DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW})."
             )
 
-        # TODO(andrei, yuhong): We can tune this more dynamically based on
-        # num_hits.
-        max_results_per_subquery = DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES
+        max_results_per_subquery = max(DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES, num_hits)
 
         hybrid_search_subqueries = DocumentQuery._get_hybrid_search_subqueries(
             query_text, query_vector, vector_candidates=max_results_per_subquery
