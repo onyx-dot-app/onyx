@@ -1,0 +1,19 @@
+/* Referenced directly from a component. */
+.tag-root {
+  color: var(--tag-text);
+}
+
+/* Built dynamically as `cn("tag-tone-" + tone)`. */
+.tag-tone-warning {
+  color: goldenrod;
+}
+
+/* Nothing references this one. */
+.tag-orphan {
+  color: red;
+}
+
+:root {
+  --tag-text: #111111;
+  --tag-unused: #222222;
+}

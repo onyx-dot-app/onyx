@@ -29,7 +29,8 @@
     "test:diff": "jest --changedSince=main",
     "test:debug": "node --inspect-brk node_modules/.bin/jest --runInBand",
     "storybook": "storybook dev -p 6006",
-    "storybook:build": "storybook build -o storybook-static"
+    "storybook:build": "storybook build -o storybook-static",
+    "dead-code": "node tools/dead-code/index.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.1.0",
@@ -139,13 +140,13 @@
     "identity-obj-proxy": "^3.0.0",
     "jest": "^30.4.2",
     "jest-environment-jsdom": "^30.2.0",
+    "knip": "^6.35.1",
     "oxfmt": "0.59.0",
     "oxlint": "^1.66.0",
     "oxlint-plugin-react-doctor": "0.9.11",
     "stats.js": "^0.17.0",
     "storybook": "10.5.0",
     "tailwindcss": "^4.3.3",
-    "ts-unused-exports": "^11.0.1",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
     "typescript-7": "npm:typescript@^7.0.2",

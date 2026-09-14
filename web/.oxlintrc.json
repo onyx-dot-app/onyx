@@ -120,7 +120,8 @@
     "storybook-static",
     "lib/opal/dist",
     "tools/oxlint/anti-slop",
-    "tools/oxlint/i18n"
+    "tools/oxlint/i18n",
+    "tools/dead-code/__tests__/fixtures"
   ],
   "env": {
     "builtin": true

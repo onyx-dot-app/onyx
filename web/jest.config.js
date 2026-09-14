@@ -182,6 +182,7 @@ module.exports = {
         "**/src/components/**/*.test.ts",
         "**/src/views/**/*.test.ts",
         "**/lib/opal/**/*.test.ts",
+        "**/tools/**/*.test.ts",
         // Add more patterns here as you add more unit tests
       ],
     },
