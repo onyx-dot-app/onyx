@@ -543,7 +543,7 @@ def _recording(
     session_id: int | str = 6840331990,
     topic: str | None = "Weekly Sync",
     start_time: str | None = "2026-01-15T10:00:00Z",
-    recording_type: str = "2",
+    recording_type: str | None = "2",
 ) -> ZoomRecordingEntry:
     return recording_entry(
         uuid=uuid,
@@ -1027,9 +1027,10 @@ class TestUserRecordingsSessionTypes:
 
         assert [w.occurrence_uuid for w in result.work] == ["uuid-meeting"]
 
-    def test_a_code_zoom_added_later_is_skipped_rather_than_guessed_at(self) -> None:
+    def test_a_code_zoom_added_later_stops_the_attempt(self) -> None:
         # Indexing it as a meeting would freeze that guess into the document id
-        # and into which access-list endpoint ticket 04 calls for it.
+        # and into which access-list endpoint ticket 04 calls for it. Failing keeps
+        # the checkpoint, so widening the sets is enough to pick it up.
         source = GroupSource("group-1")
         client = _client_for_hosts(
             members=[user(id="u1")],
@@ -1039,13 +1040,12 @@ class TestUserRecordingsSessionTypes:
             ],
         )
 
-        result = source.discover_step(client, _START, _END, None)
+        with pytest.raises(ValueError, match="'42'"):
+            source.discover_step(client, _START, _END, None)
 
-        assert [w.occurrence_uuid for w in result.work] == ["uuid-meeting"]
-
-    def test_a_recording_with_no_type_at_all_is_skipped(self) -> None:
-        # No field in this response is marked required, so a missing type is
-        # possible and is not evidence that the session was a meeting.
+    def test_a_recording_with_no_type_at_all_stops_the_attempt(self) -> None:
+        # Zoom documents no case where it omits this, so an entry without one is
+        # not a session to skip past.
         source = GroupSource("group-1")
         client = _client_for_hosts(
             members=[user(id="u1")],
@@ -1056,9 +1056,8 @@ class TestUserRecordingsSessionTypes:
             ],
         )
 
-        result = source.discover_step(client, _START, _END, None)
-
-        assert result.work == []
+        with pytest.raises(ValueError, match="no session type"):
+            source.discover_step(client, _START, _END, None)
 
 
 class TestUserRecordingsFailures:

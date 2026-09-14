@@ -19,9 +19,7 @@ _WEBINAR_RECORDING_TYPES = frozenset({"5", "6", "9"})
 _UPLOADED_RECORDING_TYPE = "99"
 
 
-def session_type_for_recording(
-    recording_type: int | str | None,
-) -> ZoomSessionType | None:
+def session_type_for_recording(recording_type: int | str) -> ZoomSessionType | None:
     """None means the entry is not a session to index. The code is compared as text
     because Zoom documents it as a string and sends it as an integer.
 
@@ -38,7 +36,7 @@ def session_type_for_recording(
     return None
 
 
-def is_portal_upload(recording_type: int | str | None) -> bool:
+def is_portal_upload(recording_type: int | str) -> bool:
     """A file uploaded through Zoom's web Recordings page. Normal to find and normal
     to skip, unlike a code we simply don't recognise."""
     return str(recording_type) == _UPLOADED_RECORDING_TYPE

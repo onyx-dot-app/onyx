@@ -121,13 +121,11 @@ class TestSessionTypeForRecording:
         assert session_type_for_recording("99") is None
         assert is_portal_upload("99") is True
 
-    def test_an_unknown_or_missing_code_is_no_session_either(self) -> None:
+    def test_an_unknown_code_is_no_session_either(self) -> None:
         # A document id freezes the session type and ticket 04 picks the
         # access-list endpoint from it, so a wrong guess can never be undone.
         assert session_type_for_recording("42") is None
-        assert session_type_for_recording(None) is None
 
     def test_an_unknown_code_is_not_mistaken_for_a_portal_upload(self) -> None:
         # The two skip for different reasons and only one of them is expected.
         assert is_portal_upload("42") is False
-        assert is_portal_upload(None) is False

@@ -267,6 +267,14 @@ def _resume_at(hosts: list[_Host], host_id: str | None) -> int:
 
 
 def _work_from_recording(recording: ZoomRecordingEntry) -> OccurrenceWork | None:
+    """Raises rather than skipping a recording it cannot type. A ConnectorFailure
+    would end the attempt COMPLETED_WITH_ERRORS, so the next run would rebuild the
+    checkpoint over a newer window and never come back for it; raising keeps the
+    checkpoint, so widening the sets below is enough to index it on the next run.
+    """
+    if recording.type is None:
+        raise ValueError(f"Zoom recording {recording.uuid} carries no session type")
+
     session_type = session_type_for_recording(recording.type)
     if session_type is None:
         if is_portal_upload(recording.type):
@@ -275,16 +283,11 @@ def _work_from_recording(recording: ZoomRecordingEntry) -> OccurrenceWork | None
                 "than recorded from a session",
                 recording.uuid,
             )
-        else:
-            # Loud, because it means Zoom has added a type code and every
-            # recording carrying it is going unindexed until someone widens
-            # the sets in session_types.py.
-            logger.warning(
-                "Skipping Zoom recording %s: unrecognised session type %r",
-                recording.uuid,
-                recording.type,
-            )
-        return None
+            return None
+        raise ValueError(
+            f"Zoom recording {recording.uuid} has unrecognised session type "
+            f"{recording.type!r}"
+        )
     return OccurrenceWork(
         session_type=session_type,
         session_id=recording.session_id,
