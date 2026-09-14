@@ -9,6 +9,7 @@ from onyx.context.search.models import SearchDocsResponse
 from onyx.context.search.utils import convert_inference_sections_to_search_docs
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.web_search import fetch_active_web_search_provider
+from onyx.llm.models import ToolResult
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     Packet,
@@ -17,11 +18,7 @@ from onyx.server.query_and_chat.streaming_models import (
     SearchToolStart,
 )
 from onyx.tools.interface import Tool
-from onyx.tools.models import (
-    ToolCallException,
-    ToolResponse,
-    WebSearchToolOverrideKwargs,
-)
+from onyx.tools.models import ToolCallException, WebSearchToolOverrideKwargs
 from onyx.tools.tool_implementations.utils import (
     convert_inference_sections_to_llm_string,
 )
@@ -202,7 +199,7 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
         placement: Placement,
         override_kwargs: WebSearchToolOverrideKwargs,
         **llm_kwargs: Any,
-    ) -> ToolResponse:
+    ) -> ToolResult:
         """Execute the web search tool with multiple queries in parallel"""
         if QUERIES_FIELD not in llm_kwargs:
             raise ToolCallException(
@@ -350,9 +347,9 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
                 include_link=True,
             )
 
-        return ToolResponse(
-            rich_response=SearchDocsResponse(
+        return ToolResult(
+            details=SearchDocsResponse(
                 search_docs=search_docs, citation_mapping=citation_mapping
             ),
-            llm_facing_response=docs_str,
+            content=docs_str,
         )

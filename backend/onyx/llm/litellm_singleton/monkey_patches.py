@@ -85,6 +85,7 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
 
 import time
 import uuid
+from contextvars import ContextVar
 from typing import Any, List, Optional, cast
 
 from litellm.completion_extras.litellm_responses_transformation.transformation import (
@@ -708,6 +709,43 @@ def _patch_responses_api_bridge_check() -> None:
     )
 
 
+def _patch_responses_async_client_forwarding() -> None:
+    """LiteLLM 1.93 drops the caller's HTTP client in the async Responses bridge."""
+    from litellm import CustomStreamWrapper, ModelResponse
+    from litellm.completion_extras.litellm_responses_transformation.handler import (
+        ResponsesToCompletionBridgeHandler,
+    )
+    from litellm.llms.custom_httpx.http_handler import AsyncHTTPHandler
+
+    current_client: ContextVar[AsyncHTTPHandler | None] = ContextVar(
+        "responses_bridge_client", default=None
+    )
+    original_completion = ResponsesToCompletionBridgeHandler.acompletion
+    original_request = LiteLLMResponsesTransformationHandler.transform_request
+
+    async def completion(
+        self: ResponsesToCompletionBridgeHandler, *args: Any, **kwargs: Any
+    ) -> ModelResponse | CustomStreamWrapper:
+        client = kwargs.get("client")
+        token = current_client.set(
+            client if isinstance(client, AsyncHTTPHandler) else None
+        )
+        try:
+            return await original_completion(self, *args, **kwargs)
+        finally:
+            current_client.reset(token)
+
+    def request(
+        self: LiteLLMResponsesTransformationHandler, *args: Any, **kwargs: Any
+    ) -> dict[str, Any]:
+        if kwargs.get("client") is None and current_client.get() is not None:
+            kwargs["client"] = current_client.get()
+        return original_request(self, *args, **kwargs)
+
+    ResponsesToCompletionBridgeHandler.acompletion = completion
+    LiteLLMResponsesTransformationHandler.transform_request = request
+
+
 def apply_monkey_patches() -> None:
     """
     Apply all necessary monkey patches to LiteLLM for compatibility.
@@ -721,6 +759,7 @@ def apply_monkey_patches() -> None:
     - Patching ResponsesAPIResponse.model_construct to fix usage format in all code paths
     - Patching Logging._get_assembled_streaming_response to avoid mutating original response
     - Patching responses_api_bridge_check to always honor an explicit responses/ prefix
+    - Preserving the caller-owned async HTTP client through the Responses bridge
     """
     _patch_ollama_chunk_parser()
     _patch_responses_reasoning_summary_newlines()
@@ -729,3 +768,4 @@ def apply_monkey_patches() -> None:
     _patch_responses_api_usage_format()
     _patch_logging_assembled_streaming_response()
     _patch_responses_api_bridge_check()
+    _patch_responses_async_client_forwarding()

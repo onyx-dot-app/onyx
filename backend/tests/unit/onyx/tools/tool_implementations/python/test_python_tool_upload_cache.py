@@ -8,7 +8,8 @@ on every agent loop iteration.
 import json
 from unittest.mock import MagicMock, patch
 
-from onyx.tools.models import ChatFile, PythonToolOverrideKwargs, ToolResponse
+from onyx.llm.models import ToolResult
+from onyx.tools.models import ChatFile, PythonToolOverrideKwargs
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     StreamResultEvent,
 )
@@ -45,7 +46,7 @@ def _run_tool(
     mock_client: MagicMock,
     files: list[ChatFile],
     code: str = "print('hi')",
-) -> ToolResponse:
+) -> ToolResult:
     """Call tool.run() with a mocked CodeInterpreterClient context manager."""
     from onyx.server.query_and_chat.placement import Placement
 
@@ -261,8 +262,8 @@ def test_upload_failure_not_cached() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _result_of(resp: ToolResponse) -> dict:
-    return json.loads(resp.llm_facing_response)
+def _result_of(resp: ToolResult) -> dict:
+    return json.loads(resp.text)
 
 
 @patch(f"{TOOL_MODULE}.CODE_INTERPRETER_MAX_STAGED_FILES", 2)

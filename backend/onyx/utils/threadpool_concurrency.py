@@ -4,6 +4,7 @@ import concurrent.futures
 import contextvars
 import copy
 import threading
+import time
 import uuid
 from collections.abc import Callable, Coroutine, Iterator, MutableMapping, Sequence
 from concurrent.futures import (
@@ -13,13 +14,16 @@ from concurrent.futures import (
     as_completed,
     wait,
 )
-from typing import Any, Generic, Protocol, TypeVar, cast, overload
+from typing import TYPE_CHECKING, Any, Generic, Protocol, TypeVar, cast, overload
 
 from pydantic import GetCoreSchemaHandler
 from pydantic.types import T
 from pydantic_core import core_schema
 
 from onyx.utils.logger import setup_logger
+
+if TYPE_CHECKING:
+    from onyx.llm.cancellation import CancellationSignal
 
 logger = setup_logger()
 
@@ -28,6 +32,19 @@ KT = TypeVar("KT")  # Key type
 VT = TypeVar("VT")  # Value type
 _T = TypeVar("_T")  # Default type
 _MISSING: object = object()
+
+
+class ContextThreadPoolExecutor(ThreadPoolExecutor):
+    """Give each submitted operation its own copy of the caller's context."""
+
+    def __init__(self, max_workers: int, thread_name_prefix: str = "") -> None:
+        super().__init__(max_workers=max_workers, thread_name_prefix=thread_name_prefix)
+
+    def submit[T, **P](
+        self, fn: Callable[P, T], /, *args: P.args, **kwargs: P.kwargs
+    ) -> Future[T]:
+        context = contextvars.copy_context()
+        return super().submit(lambda: context.run(fn, *args, **kwargs))
 
 
 class ThreadSafeDict(MutableMapping[KT, VT]):
@@ -283,6 +300,7 @@ def run_functions_tuples_in_parallel(
     timeout_callback: (
         Callable[[int, CallableProtocol, tuple[Any, ...]], Any] | None
     ) = None,
+    cancellation: "CancellationSignal | None" = None,
 ) -> list[Any]:
     """
     Executes multiple functions in parallel and returns a list of the results for each function.
@@ -316,6 +334,14 @@ def run_functions_tuples_in_parallel(
     if workers <= 0:
         return []
 
+    if cancellation is not None:
+        cancellation.check()
+
+    def invoke(func: CallableProtocol, args: tuple[Any, ...]) -> Any:
+        if cancellation is not None:
+            cancellation.check()
+        return func(*args)
+
     results: list[tuple[int, Any]] = []
     executor = ThreadPoolExecutor(max_workers=workers)
 
@@ -324,13 +350,27 @@ def run_functions_tuples_in_parallel(
         # that respects tenant id. Context.run is expected to be low-overhead, but if we later
         # find that it is increasing latency we can make using it optional.
         future_to_index = {
-            executor.submit(contextvars.copy_context().run, func, *args): i
+            executor.submit(contextvars.copy_context().run, invoke, func, args): i
             for i, (func, args) in enumerate(functions_with_args)
         }
 
-        if timeout is not None:
-            # Wait for completion or timeout
-            done, not_done = wait(future_to_index.keys(), timeout=timeout)
+        if timeout is not None or cancellation is not None:
+            if cancellation is None:
+                done, not_done = wait(future_to_index.keys(), timeout=timeout)
+            else:
+                deadline = time.monotonic() + timeout if timeout is not None else None
+                done = set()
+                not_done = set(future_to_index)
+                while not_done:
+                    cancellation.check()
+                    remaining = (
+                        deadline - time.monotonic() if deadline is not None else 0.05
+                    )
+                    if remaining <= 0:
+                        break
+                    finished, not_done = wait(not_done, timeout=min(0.05, remaining))
+                    done.update(finished)
+                cancellation.check()
 
             # Process completed futures
             for future in done:
@@ -378,7 +418,10 @@ def run_functions_tuples_in_parallel(
         # When timeout is used, don't wait for timed-out threads to complete
         # (they will continue running in the background)
         # When no timeout, wait for all threads to complete (original behavior)
-        executor.shutdown(wait=(timeout is None))
+        cancelled = cancellation is not None and cancellation.cancelled
+        executor.shutdown(
+            wait=timeout is None and not cancelled, cancel_futures=cancelled
+        )
 
     results.sort(key=lambda x: x[0])
     return [result for index, result in results]
@@ -456,20 +499,12 @@ def run_multiple_in_background(
     funcs: list[Callable[[], None]],
     thread_name_prefix: str = "worker",
 ) -> ThreadPoolExecutor:
-    """Submit multiple callables to a ``ThreadPoolExecutor`` with context propagation.
-
-    Copies the current ``contextvars`` context once and runs every callable
-    inside that copy, which is important for preserving tenant IDs and other
-    context-local state across threads.
-
-    Returns the executor so the caller can ``shutdown()`` when done.
-    """
-    ctx = contextvars.copy_context()
-    executor = ThreadPoolExecutor(
+    """Submit each operation with its own context; the caller owns executor shutdown."""
+    executor = ContextThreadPoolExecutor(
         max_workers=len(funcs), thread_name_prefix=thread_name_prefix
     )
     for func in funcs:
-        executor.submit(ctx.run, func)
+        executor.submit(func)
     return executor
 
 
@@ -480,16 +515,10 @@ def start_thread_with_context(
     daemon: bool = False,
     args: tuple[Any, ...] = (),
     kwargs: dict[str, Any] | None = None,
+    context: contextvars.Context | None = None,
 ) -> threading.Thread:
-    """Spawn a fire-and-forget thread that inherits the caller's contextvars
-    (tenant id, request id, trace context). A raw ``threading.Thread`` starts
-    with an empty context, so tenant-scoped DB access inside the thread would
-    raise "Tenant ID is not set".
-
-    Unlike ``run_in_background`` / ``run_multiple_in_background``, this is for
-    daemon producer threads that are never joined.
-    """
-    ctx = contextvars.copy_context()
+    """Start a thread with an explicit context or a copy of the caller's context."""
+    ctx = context if context is not None else contextvars.copy_context()
     thread = threading.Thread(
         target=lambda: ctx.run(target, *args, **(kwargs or {})),
         name=name,

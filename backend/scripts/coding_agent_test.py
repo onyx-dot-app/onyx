@@ -25,7 +25,8 @@ import queue
 from uuid import uuid4
 
 from onyx.chat.emitter import Emitter
-from onyx.coding_agent.mock_tools import (
+from onyx.coding_agent.agent import run_coding_agent_call
+from onyx.coding_agent.tool_definitions import (
     CODING_AGENT_QUERY_KEY,
     CODING_AGENT_REPO_KEY,
     CODING_AGENT_TOOL_NAME,
@@ -34,7 +35,6 @@ from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.models import User
 from onyx.llm.factory import get_default_llm, get_llm_token_counter
 from onyx.server.query_and_chat.placement import Placement
-from onyx.tools.fake_tools.coding_agent import run_coding_agent_call
 from onyx.tools.models import ToolCallKickoff
 from onyx.utils.logger import setup_logger
 
@@ -107,7 +107,7 @@ def main() -> int:
 
         logger.info("Repo: %s", args.repo)
         logger.info("Query: %s", args.query)
-        logger.info("LLM: %s/%s", llm.config.model_provider, llm.config.model_name)
+        logger.info("LLM: %s/%s", llm.info.model_provider, llm.info.model_name)
 
         result = run_coding_agent_call(
             coding_agent_call=coding_agent_call,

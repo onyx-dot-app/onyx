@@ -23,7 +23,9 @@ from sqlalchemy.orm import Session
 from onyx.background.celery.tasks.docprocessing.targeted_reindex_task import (
     run_targeted_reindex,
 )
-from onyx.background.indexing.run_targeted_reindex import CCPairReindexResult
+from onyx.background.indexing.run_targeted_reindex import (
+    CCPairReindexResult,
+)
 from onyx.db.enums import IndexingStatus
 from onyx.db.models import (
     ConnectorCredentialPair,

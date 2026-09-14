@@ -144,7 +144,7 @@ class ChatSessionManager:
         # )
 
         # for message_obj in chat_history:
-        #     if message_obj.message_type == MessageType.ASSISTANT:
+        #     if message_obj.role == 'assistant':
         #         streamed_response.research_answer_purpose = (
         #             message_obj.research_answer_purpose
         #         )

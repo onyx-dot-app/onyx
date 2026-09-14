@@ -12,15 +12,29 @@ version. A lost save means a concurrent writer won or the session ended, and
 the caller must not retry with the history it loaded.
 """
 
-from collections.abc import Collection
+import json
+from collections.abc import Collection, Sequence
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from onyx.cache.interface import CacheBackendType
-from onyx.chat.models import ChatMessageSimple
 from onyx.chat.stream_buffer import stream_buffer_key_pattern
 from onyx.configs import app_configs
+from onyx.configs.constants import MessageType
+from onyx.context.messages import PromptMetadata, prompt_metadata
+from onyx.llm.models import (
+    AnyThinkingBlock,
+    AssistantMessage,
+    Message,
+    SystemMessage,
+    TextContent,
+    ThinkingContent,
+    ToolCall,
+    ToolResultMessage,
+    UserMessage,
+)
 from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
 
@@ -40,9 +54,82 @@ _MAX_VERSION_DIGITS = 15
 
 _KEY_PREFIX = "incognito_ctx"
 
-_MESSAGES_ADAPTER: TypeAdapter[list[ChatMessageSimple]] = TypeAdapter(
-    list[ChatMessageSimple]
-)
+_MESSAGE_ADAPTER: TypeAdapter[Message] = TypeAdapter(Message)
+
+
+class _LegacyMessage(BaseModel):
+    """Read Redis records written before canonical agent messages."""
+
+    message: str
+    message_type: MessageType
+    token_count: int
+    tool_calls: list[dict[str, Any]] | None = None
+    tool_call_id: str | None = None
+    thinking_blocks: list[AnyThinkingBlock] | None = None
+    file_id: str | None = None
+    should_cache: bool = False
+
+
+def _read_message(item: dict[str, Any]) -> Message:
+    if "role" in item:
+        data = dict(item)
+        metadata = PromptMetadata.model_validate(data.pop("metadata", {}))
+        message = _MESSAGE_ADAPTER.validate_python(data)
+        message.metadata = metadata
+        return message
+    if isinstance(item.get("message"), dict):
+        # Transitional records wrapped a canonical message with prompt metadata.
+        message = _MESSAGE_ADAPTER.validate_python(item["message"])
+        message.metadata = PromptMetadata.model_validate(item)
+        return message
+    legacy = _LegacyMessage.model_validate(item)
+    metadata = PromptMetadata(
+        token_count=legacy.token_count,
+        file_id=legacy.file_id,
+        should_cache=legacy.should_cache,
+        is_reminder=legacy.message_type == MessageType.USER_REMINDER,
+    )
+    if legacy.message_type in (MessageType.USER, MessageType.USER_REMINDER):
+        return UserMessage(content=legacy.message, metadata=metadata)
+    if legacy.message_type == MessageType.SYSTEM:
+        return SystemMessage(content=legacy.message, metadata=metadata)
+    if legacy.message_type == MessageType.TOOL_CALL_RESPONSE:
+        return ToolResultMessage(
+            content=legacy.message,
+            tool_call_id=legacy.tool_call_id or "",
+            tool_name="",
+            metadata=metadata,
+        )
+    if legacy.message_type == MessageType.ASSISTANT:
+        return AssistantMessage(
+            content=[
+                *(
+                    [ThinkingContent(text="", blocks=legacy.thinking_blocks)]
+                    if legacy.thinking_blocks
+                    else []
+                ),
+                TextContent(text=legacy.message),
+                *(
+                    ToolCall(
+                        id=call["tool_call_id"],
+                        name=call["tool_name"],
+                        arguments=call["tool_arguments"],
+                    )
+                    for call in legacy.tool_calls or []
+                ),
+            ],
+            metadata=metadata,
+        )
+    raise ValueError("Unsupported stored message role")
+
+
+def _write_message(message: Message) -> dict[str, Any]:
+    data = message.model_dump(mode="json", exclude={"details"})
+    data["metadata"] = prompt_metadata(message).model_dump(
+        exclude={"image_files", "image_token_count"}
+    )
+    return data
+
 
 # Stored value grammar: ``<version>:<messages json>``. Lua and Python agree
 # only on the digits-before-colon prefix, mirrored by _parse_version_prefix.
@@ -72,7 +159,7 @@ class IncognitoContext(BaseModel):
     """A session's history plus the version that makes save a compare-and-set."""
 
     version: int
-    messages: list[ChatMessageSimple]
+    messages: list[Message]
 
 
 def incognito_context_available() -> bool:
@@ -123,8 +210,13 @@ def load_incognito_context(chat_session_id: UUID) -> IncognitoContext:
         )
         return IncognitoContext(version=0, messages=[])
     try:
-        messages = _MESSAGES_ADAPTER.validate_json(body)
-    except ValidationError:
+        decoded = json.loads(body)
+        if not isinstance(decoded, list):
+            raise ValueError("Context must be a message list")
+        if not all(isinstance(item, dict) for item in decoded):
+            raise ValueError("Context must contain message objects")
+        messages = [_read_message(item) for item in decoded]
+    except (ValidationError, ValueError, TypeError, KeyError):
         # Corrupt context must end the session cleanly, not fail the turn.
         # Keeping the prefix version lets the next save overwrite the value.
         logger.warning(
@@ -146,13 +238,12 @@ def save_incognito_context(chat_session_id: UUID, context: IncognitoContext) -> 
     past the count and byte caps.
     """
     trimmed = [
-        message.model_copy(update={"image_files": None, "image_token_count": 0})
-        for message in context.messages[-_MAX_CONTEXT_MESSAGES:]
+        _write_message(message) for message in context.messages[-_MAX_CONTEXT_MESSAGES:]
     ]
-    body = _MESSAGES_ADAPTER.dump_json(trimmed)
+    body = json.dumps(trimmed).encode()
     while len(body) > _MAX_CONTEXT_BYTES and len(trimmed) > 1:
         trimmed = trimmed[1:]
-        body = _MESSAGES_ADAPTER.dump_json(trimmed)
+        body = json.dumps(trimmed).encode()
     payload = f"{context.version + 1}:".encode() + body
 
     client = get_redis_client()
@@ -168,7 +259,13 @@ def save_incognito_context(chat_session_id: UUID, context: IncognitoContext) -> 
     return bool(result)
 
 
-def append_incognito_message(chat_session_id: UUID, message: ChatMessageSimple) -> None:
+def append_incognito_message(chat_session_id: UUID, message: Message) -> None:
+    append_incognito_messages(chat_session_id, [message])
+
+
+def append_incognito_messages(
+    chat_session_id: UUID, messages: Sequence[Message]
+) -> None:
     """Append one message to the session's live context, tolerating failure.
 
     A lost compare-and-set (a concurrent writer or an ended session) or a Redis
@@ -178,7 +275,7 @@ def append_incognito_message(chat_session_id: UUID, message: ChatMessageSimple) 
     """
     try:
         context = load_incognito_context(chat_session_id)
-        context.messages.append(message)
+        context.messages.extend(messages)
         if not save_incognito_context(chat_session_id, context):
             logger.warning(
                 "Incognito context save lost the CAS for session %s", chat_session_id

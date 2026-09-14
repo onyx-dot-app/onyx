@@ -1,8 +1,9 @@
 import copy
 import re
 from collections.abc import Callable, Iterable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
+from pydantic import JsonValue
 from sqlalchemy import select
 
 from onyx.configs.app_configs import (
@@ -15,19 +16,19 @@ from onyx.configs.app_configs import (
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.models import LLMProvider, ModelConfiguration
-from onyx.llm.exceptions import ClassifiedLLMError
-from onyx.llm.interfaces import LLM, LLMUserIdentity
+from onyx.llm.exceptions import ClassifiedLLMError, LLMErrorInfo
+from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
 from onyx.llm.model_capabilities import (
     get_max_input_tokens,
     litellm_thinks_model_supports_image_input,
     model_identity_names,
 )
-from onyx.llm.model_response import ModelResponse
-from onyx.llm.models import LLMErrorInfo, UserMessage
+from onyx.llm.models import GenerationOptions, GenerationRequest, UserMessage
 from onyx.prompts.contextual_retrieval import (
     CONTEXTUAL_RAG_TOKEN_ESTIMATE,
     DOCUMENT_SUMMARY_TOKEN_ESTIMATE,
 )
+from onyx.tracing.flows import LLMFlow
 from onyx.utils.logger import setup_logger
 from onyx.utils.redaction import scrub_sensitive_values
 from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
@@ -57,9 +58,9 @@ def truncate_litellm_user_id(user_id: str) -> str:
 
 
 def build_litellm_passthrough_kwargs(
-    model_kwargs: dict[str, Any],
+    model_kwargs: dict[str, JsonValue],
     user_identity: LLMUserIdentity | None,
-) -> dict[str, Any]:
+) -> dict[str, JsonValue]:
     """Build kwargs passed through directly to LiteLLM.
 
     Returns `model_kwargs` unchanged unless we need to add user/session metadata,
@@ -76,7 +77,7 @@ def build_litellm_passthrough_kwargs(
 
     if user_identity.session_id:
         existing_metadata = passthrough_kwargs.get("metadata")
-        metadata: dict[str, Any] | None
+        metadata: dict[str, JsonValue] | None
         if existing_metadata is None:
             metadata = {}
         elif isinstance(existing_metadata, dict):
@@ -175,10 +176,10 @@ def litellm_exception_to_error_msg(
         if llm is not None:
             try:
                 max_context = get_max_input_tokens(
-                    model_name=llm.config.model_name,
-                    model_provider=llm.config.model_provider,
+                    model_name=llm.info.model_name,
+                    model_provider=llm.info.model_provider,
                 )
-                error_msg += f" Your invoked model ({llm.config.model_name}) has a maximum context size of {max_context}."
+                error_msg += f" Your invoked model ({llm.info.model_name}) has a maximum context size of {max_context}."
             except Exception:
                 logger.warning(
                     "Unable to get maximum input token for LiteLLM exception handling"
@@ -214,8 +215,8 @@ def litellm_exception_to_error_msg(
         is_retryable = True
     elif isinstance(core_exception, RateLimitError):
         provider_name = (
-            llm.config.model_provider
-            if llm is not None and llm.config.model_provider
+            llm.info.model_provider
+            if llm is not None and llm.info.model_provider
             else "The LLM provider"
         )
         upstream_detail: str | None = None
@@ -261,8 +262,8 @@ def litellm_exception_to_error_msg(
             is_retryable = True
     elif isinstance(core_exception, ServiceUnavailableError):
         provider_name = (
-            llm.config.model_provider
-            if llm is not None and llm.config.model_provider
+            llm.info.model_provider
+            if llm is not None and llm.info.model_provider
             else "The LLM provider"
         )
         # Check if this is specifically the Bedrock "Too many connections" error
@@ -317,13 +318,6 @@ def litellm_exception_to_error_msg(
         is_retryable = True
 
     return error_msg, error_code, is_retryable
-
-
-def llm_response_to_string(message: ModelResponse) -> str:
-    if not isinstance(message.choice.message.content, str):
-        raise RuntimeError("LLM message not in expected format.")
-
-    return message.choice.message.content
 
 
 def check_number_of_tokens(
@@ -397,12 +391,9 @@ def litellm_exception_to_safe_error(
         fallback_to_error_msg=fallback_to_error_msg,
         custom_error_msg_mappings=custom_error_msg_mappings,
     )
-    llm_secrets = (
-        collect_credential_values(llm.config.api_key, llm.config.custom_config)
-        if llm is not None
-        else []
-    )
-    safe_message = scrub_sensitive_values(message, [*llm_secrets, *secrets])
+    safe_message = scrub_sensitive_values(message, secrets)
+    if llm is not None:
+        safe_message = llm.redact_error(safe_message)
     return LLMErrorInfo(
         message=safe_message,
         error_code=error_code,
@@ -411,14 +402,13 @@ def litellm_exception_to_safe_error(
 
 
 def test_llm(llm: LLM) -> str | None:
-    """Probe an LLM and return either `None` (success) or a sanitized error.
+    """Probe a model and return either `None` (success) or a sanitized error.
 
     The returned message is intended to be safe to surface to admin callers:
     raw upstream exception text is *not* echoed verbatim. Known LiteLLM
     exception types are mapped to friendly messages via
     `litellm_exception_to_error_msg`, and the result is then scrubbed of any
-    credential values pulled from `llm.config` plus common header/JSON
-    credential patterns.
+    provider credentials and common header/JSON credential patterns.
 
     The full raw error is still logged at WARNING for ops debugging.
     """
@@ -426,7 +416,13 @@ def test_llm(llm: LLM) -> str | None:
     # try for up to 2 timeouts (e.g. 10 seconds in total)
     for _ in range(2):
         try:
-            llm.invoke(UserMessage(content="Do not respond"), max_tokens=50)
+            llm.invoke(
+                GenerationRequest(
+                    messages=[UserMessage(content="Do not respond")],
+                    options=GenerationOptions(max_tokens=50),
+                ),
+                context=GenerationContext(flow=LLMFlow.MODEL_VALIDATION),
+            )
             return None
         except Exception as e:
             logger.warning("Failed to call LLM with the following error: %s", e)
@@ -496,15 +492,15 @@ def get_llm_contextual_cost(
         from onyx.llm.cost import compute_cost_cents
 
         input_cents, output_cents = compute_cost_cents(
-            llm.config.model_name,
-            llm.config.model_provider,
+            llm.info.model_name,
+            llm.info.model_provider,
             num_input_tokens,
             num_output_tokens,
         )
     except Exception:
         logger.exception(
             "An unexpected error occurred while calculating cost for model %s (potentially due to malformed name). Assuming cost is 0.",
-            llm.config.model_name,
+            llm.info.model_name,
         )
         return 0
 

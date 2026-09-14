@@ -427,7 +427,7 @@ def test_get_llm_for_persona_falls_back_when_access_denied(
             user=admin_model,
         )
         assert (
-            allowed_llm.config.model_name
+            allowed_llm.info.model_name
             == restricted_provider.model_configurations[0].name
         )
 
@@ -436,7 +436,7 @@ def test_get_llm_for_persona_falls_back_when_access_denied(
             user=basic_model,
         )
         assert (
-            fallback_llm.config.model_name
+            fallback_llm.info.model_name
             == default_provider.model_configurations[0].name
         )
 

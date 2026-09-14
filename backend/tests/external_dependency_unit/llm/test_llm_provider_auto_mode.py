@@ -27,7 +27,7 @@ from onyx.db.llm import (
     update_default_provider,
 )
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.interfaces import LLM
+from onyx.llm.multi_llm import LitellmTransport
 from onyx.llm.well_known_providers.auto_update_models import (
     LLMProviderRecommendation,
     LLMRecommendations,
@@ -515,9 +515,9 @@ class TestAutoModeSyncFeature:
             },
         )
 
-        captured_llms: list[LLM] = []
+        captured_llms: list[LitellmTransport] = []
 
-        def mock_test_llm_capture(llm: LLM) -> str | None:
+        def mock_test_llm_capture(llm: LitellmTransport) -> str | None:
             """Mock test_llm that captures the LLM for inspection."""
             captured_llms.append(llm)
             return None  # Success

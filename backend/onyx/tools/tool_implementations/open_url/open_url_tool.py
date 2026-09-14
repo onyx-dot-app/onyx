@@ -24,6 +24,7 @@ from onyx.db.document import fetch_document_ids_by_links, filter_existing_docume
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
 from onyx.document_index.interfaces_new import DocumentIndex, DocumentSectionRequest
+from onyx.llm.models import ToolResult
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     OpenUrlDocuments,
@@ -32,7 +33,7 @@ from onyx.server.query_and_chat.streaming_models import (
     Packet,
 )
 from onyx.tools.interface import Tool
-from onyx.tools.models import OpenURLToolOverrideKwargs, ToolCallException, ToolResponse
+from onyx.tools.models import OpenURLToolOverrideKwargs, ToolCallException
 from onyx.tools.tool_implementations.open_url.models import (
     FailedFetch,
     WebContentProvider,
@@ -530,7 +531,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         placement: Placement,
         override_kwargs: OpenURLToolOverrideKwargs,
         **llm_kwargs: Any,
-    ) -> ToolResponse:
+    ) -> ToolResult:
         """Execute the open URL tool to fetch content from the specified URLs.
 
         Args:
@@ -540,7 +541,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             **llm_kwargs: Arguments provided by the LLM, including the 'urls' field.
 
         Returns:
-                ToolResponse containing the fetched content and citation mapping.
+                ToolResult containing the fetched content and citation mapping.
         """
         urls = _normalize_string_list(llm_kwargs.get(URLS_FIELD))
 
@@ -586,9 +587,8 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
                     # No index to serve from and crawling is off — nothing to do.
                     # (construct_tools normally drops the tool in this config;
                     # this is a defensive fallback.)
-                    return ToolResponse(
-                        rich_response=None,
-                        llm_facing_response=WEB_FETCH_DISABLED_REASON,
+                    return ToolResult(
+                        content=WEB_FETCH_DISABLED_REASON,
                     )
                 # Crawl-only: no indexed retrieval / link-based fallback without a vector DB.
                 crawled_result = run_functions_tuples_in_parallel(
@@ -612,9 +612,8 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
                     and not indexed_result.sections
                     and not crawled_sections
                 ):
-                    return ToolResponse(
-                        rich_response=None,
-                        llm_facing_response="The call to open_url timed out",
+                    return ToolResult(
+                        content="The call to open_url timed out",
                     )
             else:
                 url_requests, unresolved_urls = _resolve_urls_to_document_ids(
@@ -684,9 +683,8 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
                     and not indexed_result.sections
                     and not crawled_sections
                 ):
-                    return ToolResponse(
-                        rich_response=None,
-                        llm_facing_response="The call to open_url timed out",
+                    return ToolResult(
+                        content="The call to open_url timed out",
                     )
 
                 # Last-resort: link-based lookup when doc-ID resolve + crawl both fail.
@@ -714,7 +712,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
                 failed_web_fetches=failed_web_fetches,
             )
             logger.warning("OpenURL tool failed: %s", failure_msg)
-            return ToolResponse(rich_response=None, llm_facing_response=failure_msg)
+            return ToolResult(content=failure_msg)
 
         for section in inference_sections:
             chunk = section.center_chunk
@@ -742,12 +740,12 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             citation_start=override_kwargs.starting_citation_num,
         )
 
-        return ToolResponse(
-            rich_response=SearchDocsResponse(
+        return ToolResult(
+            details=SearchDocsResponse(
                 search_docs=search_docs,
                 citation_mapping=citation_mapping,
             ),
-            llm_facing_response=docs_str,
+            content=docs_str,
         )
 
     def _fallback_link_lookup(

@@ -3,12 +3,17 @@ import json
 from pydantic import BaseModel
 
 from onyx.configs.constants import DocumentSource, MessageType
-from onyx.llm.interfaces import LLM
-from onyx.llm.models import ChatCompletionMessage, ReasoningEffort, UserMessage
+from onyx.llm.interfaces import LLM, GenerationContext
+from onyx.llm.models import (
+    GenerationOptions,
+    GenerationRequest,
+    Message,
+    ReasoningEffort,
+    UserMessage,
+)
 from onyx.prompts.filter_extration import SOURCE_SCOPE_DECISION_PROMPT
 from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import parse_bracketed_list
 
@@ -106,17 +111,17 @@ def decide_search_scope(
         valid_sources=valid_sources,
         last_user_query=last_user_query,
     )
-    messages: list[ChatCompletionMessage] = [UserMessage(content=prompt)]
+    messages: list[Message] = [UserMessage(content=prompt)]
 
     try:
-        with llm_generation_span(
-            llm=llm,
-            flow=LLMFlow.SOURCE_FILTER_EXTRACTION,
-            input_messages=messages,
-        ) as span_generation:
-            response = llm.invoke(prompt=messages, reasoning_effort=ReasoningEffort.OFF)
-            record_llm_response(span_generation, response)
-            content = response.choice.message.content
+        response = llm.invoke(
+            GenerationRequest(
+                messages=messages,
+                options=GenerationOptions(reasoning_effort=ReasoningEffort.OFF),
+            ),
+            context=GenerationContext(flow=LLMFlow.SOURCE_FILTER_EXTRACTION),
+        )
+        content = response.text
     except Exception:
         logger.exception("Source scope decision failed; searching all sources")
         return None

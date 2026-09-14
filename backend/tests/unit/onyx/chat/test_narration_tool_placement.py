@@ -1,34 +1,29 @@
-"""Regression test for the "disappearing search step" bug.
+"""Narration and tools occupy distinct groups in the packet projection."""
 
-When the model narrates AND calls a tool in the same LLM cycle (e.g.
-"Let me search Zendesk first." followed by an internal_search call), the
-narration streams as the assistant message and the tool call is extracted as a
-kickoff. Both must NOT share the same (turn_index, tab_index): the frontend
-buckets packets by that pair and routes a bucket whose first packet is a
-message to the chat area, which swallows the tool's timeline step.
-
-The fix (onyx/chat/llm_step.py) shifts the tool call to the next tab_index when
-pre-tool answer content was emitted, so it forms its own render group.
-"""
-
+import queue
 from collections.abc import Iterator
 from typing import Any
-from unittest.mock import MagicMock, patch
 
-from onyx.chat.llm_step import run_llm_step_pkt_generator
-from onyx.llm.interfaces import ToolChoiceOptions
-from onyx.llm.model_response import (
+from onyx.chat.emitter import Emitter
+from onyx.chat.presentation import TurnPresentation
+from onyx.chat.renderer import RenderConfig
+from onyx.llm.interfaces import GenerationContext
+from onyx.llm.litellm_models import (
     ChatCompletionDeltaToolCall,
     Delta,
     FunctionCall,
     ModelResponseStream,
     StreamingChoice,
 )
+from onyx.llm.models import GenerationRequest
+from onyx.llm.multi_llm import LitellmLLM
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     AgentResponseDelta,
     AgentResponseStart,
 )
+from onyx.tracing.flows import LLMFlow
+from tests.unit.onyx.agents.fakes import ScriptedTransport
 
 
 def _chunk(delta: Delta) -> ModelResponseStream:
@@ -63,38 +58,31 @@ def _narration_then_tool_stream() -> Iterator[ModelResponseStream]:
     )
 
 
-def _make_llm() -> MagicMock:
-    llm = MagicMock()
-    llm.config.model_name = "test-model"
-    llm.config.model_provider = "openai"
-    llm.config.api_base = None
-    llm.stream.return_value = _narration_then_tool_stream()
-    return llm
+class NarrationTransport(ScriptedTransport):
+    def stream(self, *args: Any, **kwargs: Any) -> Iterator[ModelResponseStream]:
+        del args, kwargs
+        return _narration_then_tool_stream()
 
 
 def _drive() -> tuple[list[Any], Any]:
-    """Run the streaming step and return (emitted_packets, LlmStepResult)."""
-    gen = run_llm_step_pkt_generator(
-        history=[],
-        tool_definitions=[],
-        tool_choice=ToolChoiceOptions.AUTO,
-        llm=_make_llm(),
-        placement=Placement(turn_index=1, tab_index=0),
-        state_container=None,
-        citation_processor=None,
-    )
-    packets: list[Any] = []
-    result: Any = None
-    try:
-        while True:
-            packets.append(next(gen))
-    except StopIteration as stop:
-        result, _has_reasoned = stop.value
-    return packets, result
+    """Render model output and look up tool-call display coordinates."""
+    output = queue.Queue()
+    presentation = TurnPresentation(Emitter(output))
+    presentation.configure(RenderConfig(placement=Placement(turn_index=1, tab_index=0)))
+    llm = LitellmLLM(NarrationTransport([]))
+    message = None
+    for event in llm.stream(
+        GenerationRequest(), GenerationContext(flow=LLMFlow.CHAT_RESPONSE)
+    ):
+        presentation.consume_model(event)
+        if event.type == "done":
+            message = event.message
+    assert message is not None
+    calls = [presentation.placement_for(call.id) for call in message.tool_calls]
+    return [item[1] for item in list(output.queue)], calls
 
 
-@patch("onyx.chat.llm_step.translate_history_to_llm_format", return_value=[])
-def test_narration_and_tool_call_get_distinct_tabs(_translate: MagicMock) -> None:
+def test_narration_and_tool_call_get_distinct_tabs() -> None:
     packets, result = _drive()
 
     # The narration streamed as the assistant message at the cycle's base tab.
@@ -108,8 +96,8 @@ def test_narration_and_tool_call_get_distinct_tabs(_translate: MagicMock) -> Non
     assert all(p.placement.tab_index == 0 for p in narration)
 
     # The tool call must land in its own render group: same turn, distinct tab.
-    assert result.tool_calls is not None and len(result.tool_calls) == 1
-    tool_placement = result.tool_calls[0].placement
+    assert result is not None and len(result) == 1
+    tool_placement = result[0]
     assert tool_placement.turn_index == narration_turn
     assert tool_placement.tab_index == 1, (
         "tool call collided with the narration's placement (same turn_index AND "

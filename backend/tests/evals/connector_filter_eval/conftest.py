@@ -96,5 +96,5 @@ def eval_llm(
         return llm_from_provider(model_name=model, llm_provider=view)
     _ensure_llm_provider(db_session)
     if not fetch_existing_llm_providers(db_session, [LLMModelFlowType.CHAT]):
-        pytest.skip("no LLM provider configured; set one up to run the eval")
+        pytest.skip("no model provider configured; set one up to run the eval")
     return get_default_llm()

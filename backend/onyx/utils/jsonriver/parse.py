@@ -12,7 +12,13 @@ import copy
 from enum import IntEnum
 from typing import Union, cast
 
-from .tokenize import JsonTokenType, Tokenizer, _Input, json_token_type_to_string
+from .tokenize import (
+    JsonTokenType,
+    TokenHandler,
+    Tokenizer,
+    _Input,
+    json_token_type_to_string,
+)
 
 # Type definitions for JSON values
 JsonValue = Union[None, bool, float, str, list["JsonValue"], dict[str, "JsonValue"]]
@@ -84,7 +90,7 @@ class _Unset:
 _UNSET = _Unset()
 
 
-class _Parser:
+class _Parser(TokenHandler):
     """
     Incremental JSON parser
 
@@ -100,6 +106,14 @@ class _Parser:
         self._finished = False
         self._progressed = False
         self._prev_snapshot: JsonValue | _Unset = _UNSET
+
+    def snapshot(self) -> JsonValue:
+        """Return the current partial value without sharing mutable parser state."""
+        return (
+            None
+            if isinstance(self._toplevel_value, _Unset)
+            else copy.deepcopy(self._toplevel_value)
+        )
 
     def feed(self, chunk: str) -> list[JsonValue]:
         """
@@ -264,7 +278,8 @@ class _Parser:
                 f"Unexpected {json_token_type_to_string(JsonTokenType.StringMiddle)} token when not in string"
             )
 
-        assert isinstance(state.value, str)
+        if not isinstance(state.value, str):
+            raise RuntimeError("String parser state must contain a string")
         state.value += value
 
         parent_state = self._state_stack[-2] if len(self._state_stack) >= 2 else None
@@ -281,7 +296,8 @@ class _Parser:
 
         self._state_stack.pop()
         parent_state = self._state_stack[-1] if self._state_stack else None
-        assert isinstance(state.value, str)
+        if not isinstance(state.value, str):
+            raise RuntimeError("String parser state must contain a string")
         self._update_string_parent(state.value, parent_state)
 
     def handle_array_start(self) -> None:

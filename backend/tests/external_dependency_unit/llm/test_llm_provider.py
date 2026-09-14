@@ -22,7 +22,7 @@ from onyx.db.llm import (
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.interfaces import LLM
+from onyx.llm.multi_llm import LitellmTransport
 from onyx.server.manage.llm.api import (
     test_default_provider as run_test_default_provider,
 )
@@ -85,14 +85,14 @@ class TestLLMConfigurationEndpoint:
         provider_name: str,  # noqa: ARG002
     ) -> None:
         """
-        Test that a successful LLM test returns normally (no exception).
+        Test that a successful model probe returns normally (no exception).
 
         When test_llm returns None (success), the endpoint should complete
         without raising an exception.
         """
-        captured_llms: list[LLM] = []
+        captured_llms: list[LitellmTransport] = []
 
-        def mock_test_llm_success(llm: LLM) -> str | None:
+        def mock_test_llm_success(llm: LitellmTransport) -> str | None:
             """Mock test_llm that always succeeds."""
             captured_llms.append(llm)
             return None  # Success
@@ -130,14 +130,14 @@ class TestLLMConfigurationEndpoint:
         provider_name: str,  # noqa: ARG002
     ) -> None:
         """
-        Test that a failed LLM test raises an OnyxError with VALIDATION_ERROR.
+        Test that a failed model probe raises an OnyxError with VALIDATION_ERROR.
 
         When test_llm returns an error message, the endpoint should raise
         an OnyxError with the error details.
         """
         error_message = "Invalid API key: Authentication failed"
 
-        def mock_test_llm_failure(llm: LLM) -> str | None:  # noqa: ARG001
+        def mock_test_llm_failure(llm: LitellmTransport) -> str | None:  # noqa: ARG001
             """Mock test_llm that always fails."""
             return error_message
 
@@ -174,9 +174,9 @@ class TestLLMConfigurationEndpoint:
         the stored API key from the database is used.
         """
         original_api_key = "sk-original-stored-key-00000000000000000000"
-        captured_llms: list[LLM] = []
+        captured_llms: list[LitellmTransport] = []
 
-        def mock_test_llm_capture(llm: LLM) -> str | None:
+        def mock_test_llm_capture(llm: LitellmTransport) -> str | None:
             """Mock test_llm that captures the LLM for inspection."""
             captured_llms.append(llm)
             return None
@@ -223,9 +223,9 @@ class TestLLMConfigurationEndpoint:
         """
         original_api_key = "sk-original-stored-key-00000000000000000000"
         new_api_key = "sk-new-updated-key-000000000000000000000000"
-        captured_llms: list[LLM] = []
+        captured_llms: list[LitellmTransport] = []
 
-        def mock_test_llm_capture(llm: LLM) -> str | None:
+        def mock_test_llm_capture(llm: LitellmTransport) -> str | None:
             """Mock test_llm that captures the LLM for inspection."""
             captured_llms.append(llm)
             return None
@@ -271,9 +271,9 @@ class TestLLMConfigurationEndpoint:
         the stored custom_config from the database is used.
         """
         original_custom_config = {"custom_key": "original_value"}
-        captured_llms: list[LLM] = []
+        captured_llms: list[LitellmTransport] = []
 
-        def mock_test_llm_capture(llm: LLM) -> str | None:
+        def mock_test_llm_capture(llm: LitellmTransport) -> str | None:
             """Mock test_llm that captures the LLM for inspection."""
             captured_llms.append(llm)
             return None
@@ -330,9 +330,9 @@ class TestLLMConfigurationEndpoint:
         """
         Test that the endpoint correctly passes different model names to the LLM.
         """
-        captured_llms: list[LLM] = []
+        captured_llms: list[LitellmTransport] = []
 
-        def mock_test_llm_capture(llm: LLM) -> str | None:
+        def mock_test_llm_capture(llm: LitellmTransport) -> str | None:
             captured_llms.append(llm)
             return None
 
@@ -398,9 +398,9 @@ class TestDefaultProviderEndpoint:
         provider_1_updated_model = "gpt-4o"
         provider_2_default_model = "gpt-4o-mini"
 
-        captured_llms: list[LLM] = []
+        captured_llms: list[LitellmTransport] = []
 
-        def mock_test_llm_capture(llm: LLM) -> str | None:
+        def mock_test_llm_capture(llm: LitellmTransport) -> str | None:
             """Mock test_llm that captures the LLM for inspection."""
             captured_llms.append(llm)
             return None
@@ -548,12 +548,12 @@ class TestDefaultProviderEndpoint:
         db_session: Session,
     ) -> None:
         """
-        Test that when the default provider's LLM test fails, an exception is raised.
+        Test that when the default provider's model probe fails, an exception is raised.
         """
         provider_name = f"test-provider-{uuid4().hex[:8]}"
-        error_message = "Connection to LLM provider failed"
+        error_message = "Connection to model provider failed"
 
-        def mock_test_llm_failure(llm: LLM) -> str | None:  # noqa: ARG001
+        def mock_test_llm_failure(llm: LitellmTransport) -> str | None:  # noqa: ARG001
             """Mock test_llm that always fails."""
             return error_message
 

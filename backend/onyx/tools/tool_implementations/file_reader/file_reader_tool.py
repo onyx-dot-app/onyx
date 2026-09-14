@@ -1,8 +1,8 @@
 import io
-import json
 from typing import Any, cast
 from uuid import UUID
 
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
@@ -12,6 +12,7 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.models import ChatFileType, InMemoryChatFile
 from onyx.file_store.utils import load_chat_file_by_id, load_user_file
+from onyx.llm.models import ToolResult
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     FileReaderResult,
@@ -19,7 +20,7 @@ from onyx.server.query_and_chat.streaming_models import (
     Packet,
 )
 from onyx.tools.interface import Tool
-from onyx.tools.models import ToolCallException, ToolResponse
+from onyx.tools.models import ToolCallException
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -31,6 +32,16 @@ NUM_CHARS_FIELD = "num_chars"
 MAX_NUM_CHARS = 16000
 DEFAULT_NUM_CHARS = MAX_NUM_CHARS
 PREVIEW_CHARS = 500
+
+
+class FileReadResult(BaseModel):
+    file_name: str
+    file_id: str
+    start_char: int
+    end_char: int
+    total_chars: int
+    preview_start: str
+    preview_end: str
 
 
 class FileReaderToolOverrideKwargs:
@@ -149,7 +160,7 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
         placement: Placement,
         override_kwargs: FileReaderToolOverrideKwargs,  # noqa: ARG002
         **llm_kwargs: Any,
-    ) -> ToolResponse:
+    ) -> ToolResult:
         if FILE_ID_FIELD not in llm_kwargs:
             raise ToolCallException(
                 message=f"Missing required '{FILE_ID_FIELD}' parameter",
@@ -237,22 +248,17 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
 
         llm_response = f"{header}\n\n{section}"
 
-        # Build a lightweight summary for DB storage (avoids saving full text).
-        # The LLM-facing response carries the real content; the rich_response
-        # is what gets persisted and re-hydrated on page reload.
-        saved_summary = json.dumps(
-            {
-                "file_name": file_name,
-                "file_id": str(file_id),
-                "start_char": start_char,
-                "end_char": end_char,
-                "total_chars": total_chars,
-                "preview_start": preview_start,
-                "preview_end": preview_end,
-            }
+        summary = FileReadResult(
+            file_name=file_name,
+            file_id=str(file_id),
+            start_char=start_char,
+            end_char=end_char,
+            total_chars=total_chars,
+            preview_start=preview_start,
+            preview_end=preview_end,
         )
 
-        return ToolResponse(
-            rich_response=saved_summary,
-            llm_facing_response=llm_response,
+        return ToolResult(
+            details=summary,
+            content=llm_response,
         )

@@ -11,6 +11,7 @@ from onyx.configs.app_configs import (
     CODE_INTERPRETER_MAX_OUTPUT_LENGTH,
 )
 from onyx.db.code_interpreter import fetch_code_interpreter_server
+from onyx.llm.models import ToolResult
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     BashToolDelta,
@@ -18,7 +19,7 @@ from onyx.server.query_and_chat.streaming_models import (
     Packet,
 )
 from onyx.tools.interface import Tool
-from onyx.tools.models import ToolCallException, ToolResponse
+from onyx.tools.models import ToolCallException
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterClient,
 )
@@ -131,7 +132,7 @@ class BashTool(Tool[BashToolOverrideKwargs]):
         placement: Placement,
         override_kwargs: BashToolOverrideKwargs,  # noqa: ARG002
         **llm_kwargs: Any,
-    ) -> ToolResponse:
+    ) -> ToolResult:
         if CMD_FIELD not in llm_kwargs:
             raise ToolCallException(
                 message=f"Missing required '{CMD_FIELD}' parameter in bash tool call",
@@ -190,9 +191,8 @@ class BashTool(Tool[BashToolOverrideKwargs]):
                     ),
                 ),
             )
-            return ToolResponse(
-                rich_response=None,
-                llm_facing_response=adapter.dump_json(error_result).decode(),
+            return ToolResult(
+                content=adapter.dump_json(error_result).decode(),
             )
 
         truncated_stdout = _truncate_output(
@@ -222,9 +222,8 @@ class BashTool(Tool[BashToolOverrideKwargs]):
             ),
         )
 
-        return ToolResponse(
-            rich_response=None,
-            llm_facing_response=adapter.dump_json(result).decode(),
+        return ToolResult(
+            content=adapter.dump_json(result).decode(),
         )
 
     @classmethod

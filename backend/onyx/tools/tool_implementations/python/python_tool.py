@@ -21,6 +21,7 @@ from onyx.configs.app_configs import (
 from onyx.configs.constants import FileOrigin
 from onyx.db.code_interpreter import fetch_code_interpreter_server
 from onyx.file_store.utils import build_full_frontend_file_url, get_default_file_store
+from onyx.llm.models import ToolResult
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     Packet,
@@ -35,7 +36,6 @@ from onyx.tools.models import (
     PythonToolOverrideKwargs,
     PythonToolRichResponse,
     ToolCallException,
-    ToolResponse,
 )
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterClient,
@@ -351,7 +351,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
         placement: Placement,
         override_kwargs: PythonToolOverrideKwargs,
         **llm_kwargs: Any,
-    ) -> ToolResponse:
+    ) -> ToolResult:
         """
         Execute Python code in the Code Interpreter service.
 
@@ -361,7 +361,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
             **llm_kwargs: Contains 'code' parameter from LLM
 
         Returns:
-            ToolResponse with execution results
+            ToolResult with execution results
         """
         if CODE_FIELD not in llm_kwargs:
             raise ToolCallException(
@@ -546,11 +546,11 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                 adapter = TypeAdapter(LlmPythonExecutionResult)
                 llm_response = adapter.dump_json(result).decode()
 
-                return ToolResponse(
-                    rich_response=PythonToolRichResponse(
+                return ToolResult(
+                    details=PythonToolRichResponse(
                         generated_files=generated_files,
                     ),
-                    llm_facing_response=llm_response,
+                    content=llm_response,
                 )
 
             except Exception as e:
@@ -583,9 +583,8 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                 adapter = TypeAdapter(LlmPythonExecutionResult)
                 llm_response = adapter.dump_json(result).decode()
 
-                return ToolResponse(
-                    rich_response=None,
-                    llm_facing_response=llm_response,
+                return ToolResult(
+                    content=llm_response,
                 )
 
     @classmethod

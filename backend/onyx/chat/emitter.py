@@ -1,27 +1,46 @@
 import threading
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
+from enum import Enum
 from queue import Queue
 
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import Packet
 
+_packet_sink: ContextVar[Callable[[Packet], None] | None] = ContextVar(
+    "tool_packet_sink", default=None
+)
+
+
+@contextmanager
+def capture_tool_packets(sink: Callable[[Packet], None]) -> Iterator[None]:
+    parent = _packet_sink.get()
+
+    def publish(packet: Packet) -> None:
+        token = _packet_sink.set(parent)
+        try:
+            sink(packet)
+        finally:
+            _packet_sink.reset(token)
+
+    token = _packet_sink.set(publish)
+    try:
+        yield
+    finally:
+        _packet_sink.reset(token)
+
+
+class ModelStreamStatus(str, Enum):
+    DONE = "done"
+
 
 class Emitter:
-    """Routes packets from LLM/tool execution to the ``_run_models`` drain loop.
-
-    Tags every packet with ``model_index`` and places it on ``merged_queue``
-    as a ``(model_idx, packet)`` tuple for ordered consumption downstream.
-
-    Args:
-        merged_queue: Shared queue owned by ``_run_models``.
-        model_idx: Index embedded in packet placements (``0`` for N=1 runs).
-        drain_done: Optional event set by ``_run_models`` when the drain loop
-            exits early (e.g. HTTP disconnect). When set, ``emit`` returns
-            immediately so worker threads can exit fast.
-    """
+    """Tag packets with their model index and send them to the chat coordinator."""
 
     def __init__(
         self,
-        merged_queue: Queue[tuple[int, Packet | Exception | object]],
+        merged_queue: Queue[tuple[int, Packet | ModelStreamStatus]],
         model_idx: int = 0,
         drain_done: threading.Event | None = None,
     ) -> None:
@@ -30,6 +49,10 @@ class Emitter:
         self._drain_done = drain_done
 
     def emit(self, packet: Packet) -> None:
+        sink = _packet_sink.get()
+        if sink is not None:
+            sink(packet)
+            return
         if self._drain_done is not None and self._drain_done.is_set():
             return
         base = packet.placement or Placement(turn_index=0)

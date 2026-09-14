@@ -4,9 +4,9 @@ from sqlalchemy.orm import Session
 
 from onyx.chat.emitter import Emitter
 from onyx.db.kg_config import get_kg_config_settings
+from onyx.llm.models import ToolResult
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.interface import Tool
-from onyx.tools.models import ToolResponse
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -77,5 +77,5 @@ class KnowledgeGraphTool(Tool[None]):
         placement: Placement,
         override_kwargs: None = None,
         **llm_kwargs: Any,
-    ) -> ToolResponse:
+    ) -> ToolResult:
         raise NotImplementedError("KnowledgeGraphTool.run is not implemented.")

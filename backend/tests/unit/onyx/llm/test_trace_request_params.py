@@ -5,15 +5,16 @@ from unittest.mock import patch
 
 from litellm.exceptions import BadRequestError
 
-from onyx.llm.models import ReasoningEffort, UserMessage
-from onyx.llm.multi_llm import LitellmLLM
+from onyx.llm.litellm_models import UserMessage
+from onyx.llm.models import ReasoningEffort
+from onyx.llm.multi_llm import LitellmTransport
 from onyx.tracing.framework.create import generation_span, trace
 
 _SENTINEL = object()
 
 
-def _make_llm() -> LitellmLLM:
-    return LitellmLLM(
+def _make_llm() -> LitellmTransport:
+    return LitellmTransport(
         api_key="test-key",
         model_provider="anthropic",
         model_name="claude-sonnet-5",

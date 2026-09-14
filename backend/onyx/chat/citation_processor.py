@@ -278,7 +278,8 @@ class DynamicCitationProcessor:
         # None -> end of stream, flush remaining segment
         if token is None:
             if self.curr_segment:
-                yield self.curr_segment
+                segment, self.curr_segment = self.curr_segment, ""
+                yield segment
             return
 
         # Handle stop stream token

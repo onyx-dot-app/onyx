@@ -86,6 +86,7 @@ from onyx.federated_connectors.federated_retrieval import (
 )
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM
+from onyx.llm.models import ToolResult
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.secondary_llm_flows.document_filter import (
@@ -111,7 +112,6 @@ from onyx.tools.models import (
     ChatMinimalTextMessage,
     SearchToolOverrideKwargs,
     ToolCallException,
-    ToolResponse,
 )
 from onyx.tools.tool_implementations.search.constants import (
     KEYWORD_QUERY_HYBRID_ALPHA,
@@ -666,7 +666,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         placement: Placement,
         override_kwargs: SearchToolOverrideKwargs,
         **llm_kwargs: Any,
-    ) -> ToolResponse:
+    ) -> ToolResult:
         # Start overall timing
         overall_start_time = time.time()
 
@@ -1055,13 +1055,13 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 top_sections=[],
                 note=scope_note or None,
             )
-            return ToolResponse(
-                rich_response=SearchDocsResponse(
+            return ToolResult(
+                details=SearchDocsResponse(
                     search_docs=[],
                     citation_mapping={},
                     displayed_docs=None,
                 ),
-                llm_facing_response=empty_response,
+                content=empty_response,
             )
 
         # Enrich chunks with `Document.file_id` (Postgres-only metadata not
@@ -1217,15 +1217,12 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             format(document_expansion_elapsed, ".3f"),
         )
 
-        llm_facing_response = docs_str
-
-        return ToolResponse(
-            # Typically the rich response will give more docs in case it needs to be displayed in the UI
-            rich_response=SearchDocsResponse(
+        return ToolResult(
+            # Displayed documents can exceed the subset sent to the model.
+            details=SearchDocsResponse(
                 search_docs=search_docs,
                 citation_mapping=citation_mapping,
                 displayed_docs=final_ui_docs,
             ),
-            # The LLM facing response typically includes less docs to cut down on noise and token usage
-            llm_facing_response=llm_facing_response,
+            content=docs_str,
         )
