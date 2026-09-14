@@ -9,6 +9,24 @@ repos:
     rev: d30b4298e4fb63ce8609e29acdbcf4c9018a483c
     hooks:
       - id: uv-sync
+      # The Go CLIs build as wheels in an isolated PEP 517 environment whose
+      # transitive closure is otherwise unpinned and unverified.
+      - id: pip-compile
+        name: pip-compile build-constraints
+        args:
+          [
+            "tools/requirements/build-constraints.in",
+            "--universal",
+            "--generate-hashes",
+            # The floor the three projects declare as `requires-python`,
+            # which is also hatchling's own floor. A `.in` file carries no
+            # project metadata, so the value repeats here.
+            "--python-version",
+            "3.10",
+            "-o",
+            "tools/requirements/build-constraints.txt",
+          ]
+        files: ^tools/requirements/build-constraints\.(in|txt)$
       - id: uv-lock
       - id: uv-export
         name: uv-export default.txt
@@ -226,10 +244,10 @@ repos:
           )$
 
   - repo: https://github.com/golangci/golangci-lint
-    rev: 5d1e709b7be35cb2025444e19de266b056b7b7ee # frozen: v2.10.1
+    rev: 27774aaf853a4fd21f1dd5e69439459dc1b26e68 # frozen: v2.13.2
     hooks:
       - id: golangci-lint
-        language_version: "1.26.5"
+        language_version: "1.27.1"
         entry: bash -c "find . -name go.mod -not -path './.venv/*' -print0 | xargs -0 -I{} bash -c 'cd \"$(dirname {})\" && golangci-lint run ./...'"
 
   - repo: https://github.com/sirwart/ripsecrets
@@ -262,6 +280,21 @@ repos:
 
   - repo: local
     hooks:
+      # `uv pip compile` cannot read `[build-system] requires`, so the pins are
+      # duplicated in tools/requirements/build-constraints.in. Catch a mismatch
+      # here rather than as an unsatisfiable resolution when a release builds wheels.
+      - id: build-constraints-drift
+        name: build constraints drift
+        description: "Check build-constraints.in matches every project's build requirements"
+        language: system
+        entry: python3 tools/requirements/check_build_constraints.py
+        pass_filenames: false
+        stages: [pre-commit]
+        files: >-
+          (?x)^(
+            (cli|tools/ods|tools/ods-audit)/pyproject\.toml
+            |tools/requirements/build-constraints\.in
+          )$
       # Regenerate the baseline with `env_inventory.py --write-baseline`.
       - id: env-drift-baseline
         name: env drift baseline
