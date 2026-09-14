@@ -10,7 +10,7 @@ name = "onyx-devtools"
 description = "Developer utilities for working on onyx.app"
 authors = [{ name = "Onyx AI", email = "founders@onyx.app" }]
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 keywords = [
   "onyx", "cli", "devtools", "tools", "tooling",
 ]

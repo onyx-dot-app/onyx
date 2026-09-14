@@ -10,7 +10,7 @@ name = "onyx-cli"
 readme = "README.md"
 description = "Terminal interface for chatting with your Onyx agent"
 authors = [{ name = "Onyx AI", email = "founders@onyx.app" }]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 keywords = [
   "onyx", "cli", "chat", "ai", "enterprise-search",
 ]
