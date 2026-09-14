@@ -1,5 +1,7 @@
 // Package coverage measures Go statement coverage per package and compares it
-// against a committed baseline, so test coverage can only go up.
+// against a reference: the committed floors, which keep coverage from going
+// down, or a recorded snapshot of a base commit, which shows what a change
+// moved.
 package coverage
 
 import (
