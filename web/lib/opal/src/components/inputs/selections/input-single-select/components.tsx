@@ -1,585 +1,434 @@
 "use client";
 
-import "@opal/components/inputs/shared.css";
+/**
+ * InputSingleSelect — the single-arity member of the input-select family.
+ *
+ * An input-shaped trigger over the family's unified dropdown: typing always
+ * filters the option set, keyboard navigation and selection live in the
+ * shared hooks, and sections render with a Divider between them.
+ *
+ * - `mode="closed"` (default): only option values are allowed; the trigger
+ *   shows the selected option's label at rest.
+ * - `mode="open"`: the raw text can be committed as a value via the create
+ *   row (the old InputComboBox non-strict behavior).
+ *
+ * With no options it degrades to a plain input.
+ */
+
 import "@opal/components/inputs/selections/input-single-select/styles.css";
-import React from "react";
-import * as SelectPrimitive from "@radix-ui/react-select";
-import { cn } from "@opal/utils";
-import type {
-  IconFunctionComponent,
-  InputVariants,
-  RichStr,
-  WithoutStyles,
-} from "@opal/types";
-import {
-  Divider,
-  type DividerSpacing,
-  InputTypeIn,
-  Text,
-  Tooltip,
-} from "@opal/components";
-import { toPlainString } from "@opal/components/text/InlineMarkdown";
-import { ContentAction } from "@opal/layouts";
-import { SvgChevronDownSmall } from "@opal/icons";
+import React, {
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+  useId,
+  useEffect,
+} from "react";
 import { useOpalStrings } from "@opal/strings";
+import { cn, noProp } from "@opal/utils";
+import { InputTypeIn } from "@opal/components";
+import { FieldContext } from "@opal/form";
+import { Button } from "@opal/components";
+import { FieldMessage } from "@opal/form";
 
-// ---------------------------------------------------------------------------
-// Context
-// ---------------------------------------------------------------------------
+// Hooks
+import {
+  useSelectKeyboard,
+  useSelectOverlay,
+  filterSections,
+  flattenSections,
+  normalizeSections,
+} from "../shared";
+import { useValidation } from "./validation";
+import { buildAriaAttributes } from "../dropdown/aria";
 
-interface SelectedItemDisplay {
-  childrenRef: React.MutableRefObject<string | RichStr>;
-  iconRef: React.MutableRefObject<IconFunctionComponent | undefined>;
-}
+// Components
+import { SelectDropdown } from "../dropdown/SelectDropdown";
+import { SelectChevron } from "../dropdown/SelectChevron";
 
-interface InputSelectContextValue {
-  variant: InputVariants;
-  currentValue?: string;
-  disabled?: boolean;
-  selectedItemDisplay: SelectedItemDisplay | null;
-  setSelectedItemDisplay: (display: SelectedItemDisplay | null) => void;
-}
+// Types
+import { InputSingleSelectProps, SelectOption } from "../types";
+import { ChevronIcon } from "@opal/components/buttons/chevron";
+import type { WithoutStyles } from "@opal/types";
 
-const InputSelectContext = React.createContext<InputSelectContextValue | null>(
-  null
-);
-
-const useInputSelectContext = () => {
-  const context = React.useContext(InputSelectContext);
-  if (!context) {
-    throw new Error(
-      "InputSingleSelect compound components must be used within InputSingleSelect"
-    );
-  }
-  return context;
-};
-
-// ---------------------------------------------------------------------------
-// TruncatedDisplay
-// ---------------------------------------------------------------------------
-
-/**
- * Single-line trigger display that shows a hover tooltip only when the text
- * is actually truncated, measured against a hidden untruncated twin.
- */
-function TruncatedDisplay({
-  children,
-  dimmed = false,
-}: {
-  children: string | RichStr;
-  dimmed?: boolean;
-}) {
-  const [isTruncated, setIsTruncated] = React.useState(false);
-  const visibleRef = React.useRef<HTMLDivElement>(null);
-  const hiddenRef = React.useRef<HTMLDivElement>(null);
-
-  React.useLayoutEffect(() => {
-    function checkTruncation() {
-      if (visibleRef.current && hiddenRef.current) {
-        setIsTruncated(
-          hiddenRef.current.offsetWidth > visibleRef.current.offsetWidth
-        );
-      }
-    }
-
-    // Defer a tick so initial layout settles before measuring.
-    const timeoutId = setTimeout(checkTruncation, 0);
-    window.addEventListener("resize", checkTruncation);
-    return () => {
-      clearTimeout(timeoutId);
-      window.removeEventListener("resize", checkTruncation);
-    };
-  }, [children]);
-
-  const text = (
-    <Text color={dimmed ? "text-01" : "text-04"} wordWrap="whitespace-nowrap">
-      {children}
-    </Text>
-  );
-
-  return (
-    <Tooltip
-      tooltip={isTruncated ? toPlainString(children) : undefined}
-      side="top"
-    >
-      <div className="relative min-w-0 flex-1">
-        <div ref={visibleRef} className="overflow-hidden truncate">
-          {text}
-        </div>
-        <div
-          ref={hiddenRef}
-          aria-hidden
-          className="pointer-events-none invisible absolute start-0 top-0 whitespace-nowrap"
-        >
-          {text}
-        </div>
-      </div>
-    </Tooltip>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Root
-// ---------------------------------------------------------------------------
-
-interface InputSingleSelectRootProps extends WithoutStyles<
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Root>
-> {
-  /** Error chrome on the trigger. */
-  error?: boolean;
-  disabled?: boolean;
-  children: React.ReactNode;
-  ref?: React.Ref<HTMLDivElement>;
-}
-
-function InputSelectRoot({
-  disabled,
-  error,
-  value,
-  defaultValue,
-  onValueChange,
-  children,
-  ref,
-  ...props
-}: InputSingleSelectRootProps) {
-  const variant: InputVariants = disabled
-    ? "disabled"
-    : error
-      ? "error"
-      : "primary";
-
-  // Mirrors the value in both modes so Item selection state and the trigger
-  // display work without Radix internals.
-  const isControlled = value !== undefined;
-  const [internalValue, setInternalValue] = React.useState<string | undefined>(
-    defaultValue
-  );
-  const currentValue = isControlled ? value : internalValue;
-
-  React.useEffect(() => {
-    if (isControlled) return;
-    setInternalValue(defaultValue);
-  }, [defaultValue, isControlled]);
-
-  const handleValueChange = React.useCallback(
-    (nextValue: string) => {
-      onValueChange?.(nextValue);
-
-      if (isControlled) return;
-      setInternalValue(nextValue);
-    },
-    [isControlled, onValueChange]
-  );
-
-  // Only the selected Item registers its display, read by the Trigger through refs.
-  const [selectedItemDisplay, setSelectedItemDisplay] =
-    React.useState<SelectedItemDisplay | null>(null);
-
-  React.useEffect(() => {
-    if (!currentValue) setSelectedItemDisplay(null);
-  }, [currentValue]);
-
-  const contextValue = React.useMemo<InputSelectContextValue>(
-    () => ({
-      variant,
-      currentValue,
-      disabled,
-      selectedItemDisplay,
-      setSelectedItemDisplay,
-    }),
-    [variant, currentValue, disabled, selectedItemDisplay]
-  );
-
-  return (
-    <div className="opal-input-select-root">
-      <InputSelectContext.Provider value={contextValue}>
-        <SelectPrimitive.Root
-          {...(isControlled ? { value: currentValue } : { defaultValue })}
-          onValueChange={handleValueChange}
-          disabled={disabled}
-          {...props}
-        >
-          <div ref={ref} className="w-full">
-            {children}
-          </div>
-        </SelectPrimitive.Root>
-      </InputSelectContext.Provider>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Trigger
-// ---------------------------------------------------------------------------
-
-interface InputSingleSelectTriggerProps extends WithoutStyles<
-  React.ComponentProps<typeof SelectPrimitive.Trigger>
-> {
-  /** Shown when no value is selected. Falsy values fall back to "Select an option". */
-  placeholder?: React.ReactNode;
-
-  /** Slot before the chevron. */
-  rightSection?: React.ReactNode;
-}
-
-function InputSelectTrigger({
-  placeholder,
-  rightSection,
-  children,
-  ref,
-  ...props
-}: InputSingleSelectTriggerProps) {
-  const { variant, currentValue, selectedItemDisplay } =
-    useInputSelectContext();
-  const strings = useOpalStrings();
-
-  // Read every render, the refs already hold the latest children/icon.
-  let displayContent: React.ReactNode;
-
-  if (selectedItemDisplay) {
-    const Icon = selectedItemDisplay.iconRef.current;
-    displayContent = (
-      <div className="flex w-full flex-1 flex-row items-center gap-2">
-        {Icon && <Icon className="opal-input-select-icon" />}
-        <TruncatedDisplay dimmed={variant === "disabled"}>
-          {selectedItemDisplay.childrenRef.current}
-        </TruncatedDisplay>
-      </div>
-    );
-  } else if (currentValue) {
-    // Radix mirrors the selected ItemText here, so a preselected value never
-    // shows the placeholder even before the Item's registration effect runs.
-    displayContent = (
-      <SelectPrimitive.Value
-        className={cn(
-          "truncate font-main-ui-body",
-          variant === "disabled" ? "text-text-01" : "text-text-04"
-        )}
-      />
-    );
-  } else {
-    const effectivePlaceholder = placeholder || strings.selectAnOption;
-    displayContent =
-      typeof effectivePlaceholder === "string" ? (
-        <Text as="p" color="text-03">
-          {effectivePlaceholder}
-        </Text>
-      ) : (
-        effectivePlaceholder
-      );
-  }
-
-  return (
-    <SelectPrimitive.Trigger
-      ref={ref}
-      className="opal-input opal-input-select-trigger"
-      data-variant={variant}
-      {...props}
-    >
-      {/* text-start counters the button element's centered default. */}
-      <div className="flex w-full flex-row items-center justify-between gap-1 p-0.5 text-start">
-        {children ?? displayContent}
-
-        <div className="flex flex-row items-center gap-1">
-          {rightSection}
-
-          <SelectPrimitive.Icon asChild>
-            <SvgChevronDownSmall className="opal-input-select-icon opal-input-select-chevron" />
-          </SelectPrimitive.Icon>
-        </div>
-      </div>
-    </SelectPrimitive.Trigger>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Content
-// ---------------------------------------------------------------------------
-
-function InputSelectContent({
-  children,
-  ref,
-  /*
-   * Defaulted here rather than written before the spread below: a spread
-   * copies a key even when its value is `undefined`, so a caller writing
-   * `prop={condition ? x : undefined}` would replace the default rather than
-   * fall back to it.
-   */
-  sideOffset = 4,
-  position = "popper",
-  onMouseDown,
-  ...props
-}: WithoutStyles<React.ComponentProps<typeof SelectPrimitive.Content>>) {
-  return (
-    <SelectPrimitive.Portal>
-      <SelectPrimitive.Content
-        ref={ref}
-        className={cn(
-          "opal-input-select-content",
-          "data-[state=open]:animate-in data-[state=closed]:animate-out",
-          "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
-          "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95"
-        )}
-        sideOffset={sideOffset}
-        position={position}
-        /*
-         * Chained rather than overwritable: swallowing the press is what keeps
-         * a click inside the list from reaching whatever is behind it, so a
-         * caller adding a handler must not silently drop it.
-         */
-        onMouseDown={(e) => {
-          e.stopPropagation();
-          e.preventDefault();
-          onMouseDown?.(e);
-        }}
-        {...props}
-      >
-        <SelectPrimitive.Viewport className="flex flex-col gap-1">
-          {children}
-        </SelectPrimitive.Viewport>
-      </SelectPrimitive.Content>
-    </SelectPrimitive.Portal>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Item
-// ---------------------------------------------------------------------------
-
-interface InputSingleSelectItemProps {
-  /** Unique option value. */
-  value: string;
-
-  /** Option label. */
-  children: string | RichStr;
-
-  icon?: IconFunctionComponent;
-  description?: string | RichStr;
-
-  /** Let the description wrap instead of truncating to one line. */
-  wrapDescription?: boolean;
-
-  ref?: React.Ref<React.ComponentRef<typeof SelectPrimitive.Item>>;
-}
-
-function InputSelectItem({
-  value,
-  children,
-  description,
-  wrapDescription,
-  icon,
-  ref,
-}: InputSingleSelectItemProps) {
-  const { currentValue, setSelectedItemDisplay } = useInputSelectContext();
-  const isSelected = value === currentValue;
-
-  // Refs keep the trigger reading the latest children/icon between
-  // registrations.
-  const childrenRef = React.useRef<string | RichStr>(children);
-  const iconRef = React.useRef(icon);
-  React.useLayoutEffect(() => {
-    childrenRef.current = children;
-    iconRef.current = icon;
-  }, [children, icon]);
-
-  // Layout effect so the trigger never paints the placeholder on first
-  // render when a value is already selected. Radix mounts closed Content
-  // into a detached fragment, so this runs even while the menu is closed.
-  // Keyed on the raw rendered content so RichStr formatting changes still
-  // refresh the trigger without reacting to identity churn.
-  const childrenKey = typeof children === "string" ? children : children.raw;
-  React.useLayoutEffect(() => {
-    if (!isSelected) return;
-    setSelectedItemDisplay({ childrenRef, iconRef });
-
-    return () => setSelectedItemDisplay(null);
-  }, [isSelected, childrenKey, icon]);
-
-  return (
-    <SelectPrimitive.Item
-      ref={ref}
-      value={value}
-      className="opal-input-select-item"
-    >
-      {/* Hidden ItemText feeds Radix's typeahead and the native select fallback. */}
-      <span className="hidden">
-        <SelectPrimitive.ItemText>
-          {toPlainString(children)}
-        </SelectPrimitive.ItemText>
-      </span>
-
-      {/* Pure layout row: Radix owns highlight and selection state, styled
-          via the item's data attributes. */}
-      <div className="w-full p-2">
-        <ContentAction
-          sizePreset="main-ui"
-          variant="section"
-          color="interactive"
-          icon={icon}
-          title={children}
-          titleMaxLines={1}
-          description={description}
-          descriptionMaxLines={wrapDescription ? undefined : 1}
-          padding={0}
-          width="full"
-        />
-      </div>
-    </SelectPrimitive.Item>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Group + Label + Separator
-// ---------------------------------------------------------------------------
-
-function InputSelectGroup({
-  ref,
-  ...props
-}: WithoutStyles<React.ComponentProps<typeof SelectPrimitive.Group>>) {
-  return <SelectPrimitive.Group ref={ref} {...props} />;
-}
-
-function InputSelectLabel({
-  children,
-  ref,
-  ...props
-}: WithoutStyles<React.ComponentProps<typeof SelectPrimitive.Label>>) {
-  return (
-    <SelectPrimitive.Label
-      ref={ref}
-      className="opal-input-select-label"
-      {...props}
-    >
-      {children}
-    </SelectPrimitive.Label>
-  );
-}
-
-interface InputSelectSeparatorProps {
-  paddingParallel?: DividerSpacing;
-  paddingPerpendicular?: DividerSpacing;
-}
-
-function InputSelectSeparator({
-  paddingParallel,
-  paddingPerpendicular,
-}: InputSelectSeparatorProps) {
-  return (
-    <Divider
-      paddingParallel={paddingParallel}
-      paddingPerpendicular={paddingPerpendicular}
-    />
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Search
-// ---------------------------------------------------------------------------
-
-interface InputSingleSelectSearchProps {
-  /** Controlled query. The consumer filters its own Items from it. */
-  value: string;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  placeholder?: string;
-}
-
-/**
- * Sticky search row at the top of Content for filterable selects. The
- * consumer owns the query and renders only the Items that match. The row
- * owns focus and keyboard isolation: printable keys stay in the input so
- * Radix's item typeahead never fires, and ArrowDown hands focus to the
- * option list where Radix drives highlight and Enter natively.
- */
-function InputSelectSearch({
+const InputSingleSelect = ({
   value,
   onChange,
+  onValueChange,
+  options: optionsProp,
+  mode = "closed",
+  disabled = false,
   placeholder,
-}: InputSingleSelectSearchProps) {
+  isError: externalIsError,
+  onValidationError,
+  name,
+  searchIcon = false,
+  rightChildren,
+  separatorLabel,
+  createPrefix,
+  showOtherOptions = false,
+  dropdownMaxHeight,
+  ...rest
+}: WithoutStyles<InputSingleSelectProps>) => {
+  const strict = mode !== "open";
+  const sections = useMemo(
+    () => normalizeSections(optionsProp ?? []),
+    [optionsProp]
+  );
+  const options = useMemo(() => flattenSections(sections), [sections]);
   const strings = useOpalStrings();
-  const rowRef = React.useRef<HTMLDivElement>(null);
-  const inputRef = React.useRef<HTMLInputElement>(null);
+  const {
+    isOpen,
+    setIsOpen,
+    highlightedIndex,
+    setHighlightedIndex,
+    isKeyboardNav,
+    setIsKeyboardNav,
+    setRootRef,
+    inputRef,
+    dropdownRef,
+    setFloatingRef,
+    floatingStyles,
+  } = useSelectOverlay();
+  const fieldContext = useContext(FieldContext);
 
-  // Focus a frame after mount, past Radix's own open autofocus in the
-  // normal path, so typing searches immediately instead of jumping the
-  // highlight via typeahead.
-  React.useEffect(() => {
-    const id = requestAnimationFrame(() => inputRef.current?.focus());
-    return () => cancelAnimationFrame(id);
-  }, []);
+  // The prop's PRESENCE drives the select machinery (chevron, dropdown,
+  // combobox aria): an empty or still-loading set is still a select. Only
+  // an absent prop degrades to a plain input.
+  const hasOptionSet = optionsProp !== undefined;
 
-  function focusFirstOption() {
-    const listbox = rowRef.current?.closest('[role="listbox"]');
-    listbox
-      ?.querySelector<HTMLElement>('[role="option"]:not([data-disabled])')
-      ?.focus();
-  }
+  // The selection's visible text — the ONLY value-to-text crossing point.
+  const selectedLabel = useMemo(() => {
+    if (!value) return "";
+    return options.find((opt) => opt.value === value)?.label ?? value;
+  }, [options, value]);
+
+  // Trigger text is ALWAYS display text (a label or the user's filter);
+  // `value` is the only value-typed state. Closed, the text mirrors the
+  // selection's label; open, only a value-prop change may overwrite it.
+  const [inputValue, setInputValue] = useState(selectedLabel);
+  useEffect(() => {
+    if (!isOpen) setInputValue(selectedLabel);
+  }, [selectedLabel, isOpen]);
+  useEffect(() => {
+    if (isOpen && options.some((opt) => opt.value === value)) {
+      setInputValue(selectedLabel);
+    }
+    // Only react to value prop changes while open, not inputValue changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+
+  // Filtering: each section filters independently; empty ones disappear.
+  const hasSearchTerm = inputValue.trim() !== "";
+  const visibleSections = useMemo(() => {
+    const filtered = filterSections(sections, inputValue);
+    if (hasSearchTerm && showOtherOptions) {
+      const visibleIds = new Set(
+        flattenSections(filtered).map((option) => option.value)
+      );
+      const unmatched = options.filter(
+        (option) => !visibleIds.has(option.value)
+      );
+      if (unmatched.length > 0) {
+        return [
+          ...filtered,
+          {
+            label: separatorLabel ?? strings.comboBoxOtherOptions,
+            options: unmatched,
+          },
+        ];
+      }
+    }
+    return filtered;
+  }, [
+    sections,
+    inputValue,
+    hasSearchTerm,
+    showOtherOptions,
+    options,
+    separatorLabel,
+    strings,
+  ]);
+
+  // Whether to show the create option (always show when typing in non-strict mode)
+  const showCreateOption = !strict && hasSearchTerm && inputValue.trim() !== "";
+
+  // Combined list for keyboard navigation (includes create option when shown)
+  // Only show matched options when searching (hide unmatched)
+  const allVisibleOptions = useMemo(() => {
+    const baseOptions = flattenSections(visibleSections);
+    if (showCreateOption) {
+      // Prepend a synthetic option for the "create new" item
+      return [{ value: inputValue, label: inputValue }, ...baseOptions];
+    }
+    return baseOptions;
+  }, [visibleSections, showCreateOption, inputValue]);
+
+  // Check if an option is an exact match
+  const isExactMatch = useCallback(
+    (option: SelectOption) => {
+      const currentValue = (inputValue || value || "").trim().toLowerCase();
+      if (!currentValue) return false;
+
+      return (
+        option.value.toLowerCase() === currentValue ||
+        option.label.toLowerCase() === currentValue
+      );
+    },
+    [inputValue, value]
+  );
+
+  // Validation Logic
+  const { isValid, errorMessage } = useValidation({
+    value,
+    options,
+    strict,
+    externalIsError,
+    onValidationError,
+  });
+
+  // Sync highlightedIndex with exact match when typing (not keyboard nav)
+  useEffect(() => {
+    // Skip if keyboard navigating or dropdown closed
+    if (isKeyboardNav || !isOpen) return;
+    if (!inputValue.trim()) return;
+
+    const exactMatchIndex = allVisibleOptions.findIndex(
+      (opt) =>
+        opt.value.toLowerCase() === inputValue.trim().toLowerCase() ||
+        opt.label.toLowerCase() === inputValue.trim().toLowerCase()
+    );
+
+    if (exactMatchIndex >= 0) {
+      setHighlightedIndex(exactMatchIndex);
+    }
+  }, [
+    inputValue,
+    allVisibleOptions,
+    isKeyboardNav,
+    isOpen,
+    setHighlightedIndex,
+  ]);
+
+  // Event Handlers
+  const handleInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const newValue = e.target.value;
+      setInputValue(newValue);
+
+      // Only call onChange while typing (for controlled input behavior)
+      // onValueChange is only called when selecting from dropdown
+      onChange?.(e);
+
+      // Open dropdown when user starts typing and there are options
+      if (hasOptionSet && !isOpen) {
+        setIsOpen(true);
+      }
+
+      // Auto-highlight first match when typing
+      setHighlightedIndex(0);
+      setIsKeyboardNav(false); // Reset keyboard navigation mode when typing
+    },
+    [
+      onChange,
+      hasOptionSet,
+      isOpen,
+      setInputValue,
+      setIsOpen,
+      setHighlightedIndex,
+      setIsKeyboardNav,
+    ]
+  );
+
+  const handleOptionSelect = useCallback(
+    (option: SelectOption) => {
+      if (option.disabled) return;
+
+      setInputValue(option.label);
+
+      // Support both onChange (event) and onValueChange (value) patterns
+      if (onChange) {
+        const syntheticEvent = {
+          target: { value: option.value },
+          currentTarget: { value: option.value },
+          type: "change",
+          bubbles: true,
+          cancelable: true,
+        } as React.ChangeEvent<HTMLInputElement>;
+        onChange(syntheticEvent);
+      }
+
+      onValueChange?.(option.value);
+
+      setIsOpen(false);
+      inputRef.current?.focus();
+    },
+    [onChange, onValueChange, setInputValue, setIsOpen]
+  );
+
+  // Keyboard Navigation Hook
+  const { handleKeyDown } = useSelectKeyboard({
+    isOpen,
+    setIsOpen,
+    highlightedIndex,
+    setHighlightedIndex,
+    setIsKeyboardNav,
+    allVisibleOptions,
+    onSelect: handleOptionSelect,
+    hasOptions: hasOptionSet,
+  });
+
+  const handleFocus = useCallback(() => {
+    if (hasOptionSet) {
+      setInputValue(selectedLabel);
+      setIsOpen(true);
+      setHighlightedIndex(-1);
+      setIsKeyboardNav(false);
+      // Caret at the end, ready to modify.
+      requestAnimationFrame(() => {
+        const el = inputRef.current;
+        if (el) el.setSelectionRange(el.value.length, el.value.length);
+      });
+    }
+  }, [
+    hasOptionSet,
+    selectedLabel,
+    setInputValue,
+    setIsOpen,
+    setHighlightedIndex,
+    setIsKeyboardNav,
+  ]);
+
+  const toggleDropdown = useCallback(() => {
+    if (!disabled && hasOptionSet) {
+      setIsOpen((prev) => {
+        const newOpen = !prev;
+        if (newOpen) {
+          setInputValue("");
+          setHighlightedIndex(-1);
+        }
+        return newOpen;
+      });
+      inputRef.current?.focus();
+    }
+  }, [disabled, hasOptionSet, setIsOpen, setInputValue, setHighlightedIndex]);
+
+  const autoId = useId();
+  const fieldId = fieldContext?.baseId || name || `combo-box-${autoId}`;
+
+  // ARIA Attributes Builder
+  const ariaProps = buildAriaAttributes({
+    hasOptions: hasOptionSet,
+    isOpen,
+    isValid,
+    highlightedIndex,
+    fieldId,
+    allVisibleOptions,
+    placeholder,
+  });
 
   return (
-    <div
-      ref={rowRef}
-      role="presentation"
-      className="opal-input-select-search"
-      // Mousedown must not reach Content, whose preventDefault would kill
-      // caret placement and text selection in the input.
-      onMouseDown={(e) => {
-        e.stopPropagation();
-        // Keep focus in the input when the clear (×) button is clicked, so
-        // typing resumes immediately. Its action fires on click, which
-        // preventDefault on mousedown does not suppress.
-        if ((e.target as HTMLElement).closest("button")) {
-          e.preventDefault();
-          inputRef.current?.focus();
-        }
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "ArrowDown") {
-          e.preventDefault();
-          e.stopPropagation();
-          focusFirstOption();
-          return;
-        }
-        // Keep keys out of Radix's item typeahead. Escape still closes the
-        // menu: Radix listens at document capture, ahead of this handler.
-        e.stopPropagation();
-      }}
-    >
-      <InputTypeIn
-        ref={inputRef}
-        variant="internal"
-        searchIcon
-        clearButton
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder ?? strings.search}
-      />
+    <div ref={setRootRef} className="opal-input-single-select">
+      <>
+        <InputTypeIn
+          ref={inputRef}
+          name={name}
+          placeholder={placeholder}
+          value={inputValue}
+          onChange={handleInputChange}
+          onFocus={handleFocus}
+          onClick={() => {
+            // Reopen on click while already focused (e.g. after Escape) —
+            // focus alone won't fire again. The text stays for editing.
+            if (hasOptionSet && !isOpen) {
+              setInputValue(selectedLabel);
+              setIsOpen(true);
+              setHighlightedIndex(-1);
+            }
+          }}
+          onKeyDown={handleKeyDown}
+          variant={disabled ? "disabled" : !isValid ? "error" : undefined}
+          searchIcon={searchIcon}
+          rightChildren={
+            <>
+              {rightChildren && (
+                // Propagation guard only — the children keep their own
+                // semantics.
+                <div
+                  role="presentation"
+                  className="flex items-center"
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                  }}
+                >
+                  {rightChildren}
+                </div>
+              )}
+              {hasOptionSet && (
+                <SelectChevron
+                  isOpen={isOpen}
+                  disabled={disabled}
+                  onToggle={toggleDropdown}
+                />
+              )}
+            </>
+          }
+          {...ariaProps}
+          {...rest}
+        />
+
+        {/* Dropdown - Rendered in Portal */}
+        <SelectDropdown
+          ref={dropdownRef}
+          isOpen={isOpen}
+          disabled={disabled}
+          floatingStyles={floatingStyles}
+          setFloatingRef={setFloatingRef}
+          fieldId={fieldId}
+          placeholder={placeholder}
+          sections={visibleSections}
+          emptySet={hasOptionSet && options.length === 0}
+          value={value}
+          highlightedIndex={highlightedIndex}
+          onSelect={handleOptionSelect}
+          onMouseEnter={(index) => {
+            setIsKeyboardNav(false);
+            setHighlightedIndex(index);
+          }}
+          onMouseMove={() => {
+            if (isKeyboardNav) {
+              setIsKeyboardNav(false);
+            }
+          }}
+          onMouseLeave={() => {
+            if (!isKeyboardNav) setHighlightedIndex(-1);
+          }}
+          isExactMatch={isExactMatch}
+          inputValue={inputValue}
+          allowCreate={!strict}
+          showCreateOption={showCreateOption}
+          createPrefix={createPrefix}
+          dropdownMaxHeight={dropdownMaxHeight}
+        />
+      </>
+
+      {/* Error message - only show internal error messages when not using external isError */}
+      {!isValid && errorMessage && externalIsError === undefined && (
+        <FieldMessage variant="error" className="ms-0.5 mt-1">
+          <FieldMessage.Content
+            id={`${fieldId}-error`}
+            role="alert"
+            className="ms-0.5"
+          >
+            {errorMessage}
+          </FieldMessage.Content>
+        </FieldMessage>
+      )}
     </div>
   );
-}
-
-// ---------------------------------------------------------------------------
-// Exports
-// ---------------------------------------------------------------------------
-
-/**
- * InputSingleSelect (Figma Input/Select): styled dropdown on Radix Select.
- * Compound: Trigger opens the popper Content, Items are Radix options
- * rendered as ContentAction rows, Group/Label/Separator organize them, and
- * Search makes the list filterable.
- */
-const InputSingleSelect = Object.assign(InputSelectRoot, {
-  Trigger: InputSelectTrigger,
-  Content: InputSelectContent,
-  Item: InputSelectItem,
-  Group: InputSelectGroup,
-  Label: InputSelectLabel,
-  Separator: InputSelectSeparator,
-  Search: InputSelectSearch,
-});
-
-export {
-  InputSingleSelect,
-  type InputSingleSelectRootProps,
-  type InputSingleSelectTriggerProps,
-  type InputSingleSelectItemProps,
-  type InputSingleSelectSearchProps,
 };
+
+export { InputSingleSelect };

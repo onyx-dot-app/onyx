@@ -75,6 +75,7 @@ export type OpalStrings = {
   comboBoxOtherOptions: string;
   comboBoxCreate: string;
   comboBoxCreateOption: (prefix: string, value: string) => string;
+  selectEmptySet: string;
   keyValueKey: string;
   keyValueValue: string;
   keyValueAddLine: string;
@@ -171,6 +172,7 @@ export const defaultOpalStrings: OpalStrings = {
   comboBoxOtherOptions: "Other options",
   comboBoxCreate: "Create",
   comboBoxCreateOption: (prefix, value) => `${prefix} "${value}"`,
+  selectEmptySet: "No items found",
   keyValueKey: "Key",
   keyValueValue: "Value",
   keyValueAddLine: "Add Line",

@@ -1,7 +1,7 @@
 import { FormikProps, ErrorMessage } from "formik";
 import { useTranslations } from "next-intl";
 import Text from "@/refresh-components/texts/Text";
-import { InputComboBox } from "@opal/components";
+import { InputSingleSelect } from "@opal/components";
 import { Tag } from "@opal/components";
 import { Disabled } from "@opal/core";
 export type GenericMultiSelectFormType<T extends string> = {
@@ -116,7 +116,7 @@ export function GenericMultiSelect<
 
       <Disabled disabled={disabled}>
         <div>
-          <InputComboBox
+          <InputSingleSelect
             placeholder={t("search.placeholder")}
             value=""
             onChange={() => {}}
@@ -132,7 +132,6 @@ export function GenericMultiSelect<
                 label: item.name,
                 value: String(item.id),
               }))}
-            strict
             searchIcon
             data-testid={`${fieldName}-search-input`}
           />

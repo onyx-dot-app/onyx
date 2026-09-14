@@ -12852,6 +12852,9 @@
       "previousPage": "Previous page",
       "rangeOfTotal": "<range></range> of <total></total>"
     },
+    "select": {
+      "emptySet": "No items found"
+    },
     "table": {
       "alwaysShown": "Always Shown",
       "ascending": "Ascending",

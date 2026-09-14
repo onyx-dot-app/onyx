@@ -5811,36 +5811,66 @@
         "contextualRagDocumentSummary": {
           "label": "ملخصات مستندات RAG السياقية"
         },
-        "imageSummarization": { "label": "تلخيص الصور" },
-        "kgDeepExtraction": { "label": "استخراج الرسم البياني المعرفي" },
+        "imageSummarization": {
+          "label": "تلخيص الصور"
+        },
+        "kgDeepExtraction": {
+          "label": "استخراج الرسم البياني المعرفي"
+        },
         "kgDocumentClassification": {
           "label": "تصنيف الرسم البياني المعرفي"
         },
-        "other": { "label": "أخرى" },
-        "unattributed": { "label": "غير منسوب" }
+        "other": {
+          "label": "أخرى"
+        },
+        "unattributed": {
+          "label": "غير منسوب"
+        }
       },
       "filters": {
-        "allModels": { "label": "كل النماذج" },
-        "allProviders": { "label": "كل المزوّدين" }
+        "allModels": {
+          "label": "كل النماذج"
+        },
+        "allProviders": {
+          "label": "كل المزوّدين"
+        }
       },
       "panel": {
         "description": "{start} – {end} · استخدام النظام هو نشاط نماذج اللغة الكبيرة الذي يشغّله Onyx في الخلفية بدلًا من تشغيله لمستخدم محدد. تشمل الأمثلة تلخيص الصور ومعالجة RAG السياقية واستخراج الرسم البياني المعرفي.",
         "emptyDescription": "استخدام النظام هو نشاط نماذج اللغة الكبيرة الذي يشغّله Onyx في الخلفية بدلًا من تشغيله لمستخدم محدد. تشمل الأمثلة تلخيص الصور ومعالجة RAG السياقية واستخراج الرسم البياني المعرفي.",
-        "error": { "title": "تعذر تحميل استخدام النظام لهذه الفترة." },
+        "error": {
+          "title": "تعذر تحميل استخدام النظام لهذه الفترة."
+        },
         "title": "استخدام النظام"
       },
       "summary": {
-        "spend": { "label": "إنفاق النظام" },
-        "tokens": { "label": "إجمالي الرموز" },
-        "unattributed": { "label": "إنفاق غير منسوب" }
+        "spend": {
+          "label": "إنفاق النظام"
+        },
+        "tokens": {
+          "label": "إجمالي الرموز"
+        },
+        "unattributed": {
+          "label": "إنفاق غير منسوب"
+        }
       },
       "table": {
         "columns": {
-          "category": { "header": "الفئة" },
-          "input": { "header": "الإدخال" },
-          "output": { "header": "الإخراج" },
-          "spend": { "header": "الإنفاق" },
-          "tokens": { "header": "الرموز" }
+          "category": {
+            "header": "الفئة"
+          },
+          "input": {
+            "header": "الإدخال"
+          },
+          "output": {
+            "header": "الإخراج"
+          },
+          "spend": {
+            "header": "الإنفاق"
+          },
+          "tokens": {
+            "header": "الرموز"
+          }
         },
         "empty": {
           "description": "لا يوجد استخدام للنظام يطابق عوامل التصفية الحالية."
@@ -12821,6 +12851,9 @@
       "nextPage": "الصفحة التالية",
       "previousPage": "الصفحة السابقة",
       "rangeOfTotal": "<range></range> من <total></total>"
+    },
+    "select": {
+      "emptySet": "لم يتم العثور على عناصر"
     },
     "table": {
       "alwaysShown": "معروض دائمًا",

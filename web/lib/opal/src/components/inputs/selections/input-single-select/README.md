@@ -1,51 +1,64 @@
 # InputSingleSelect
 
-**Import:** `import { InputSingleSelect } from "@opal/components";`
+**Import:** `import { InputSingleSelect, type InputSingleSelectProps, type SelectOption, type SelectSection } from "@opal/components";`
 
-Styled dropdown on Radix Select, the Figma `Input/Select`. Compound component: the root owns value state (controlled or uncontrolled), `Trigger` renders the `.opal-input` chrome with the selected item's icon and label (truncating with a tooltip when clipped), `Content` is the popper matching the trigger width, `Item`s render as `ContentAction` rows with Radix driving highlight and selection.
+The single-arity member of the `input-select` family: an input-shaped trigger
+over the family's unified dropdown. Typing always filters the option set;
+keyboard navigation (arrows, Enter, Escape) and ARIA combobox semantics are
+built in. With no options it degrades to a plain input.
 
-For filterable lists, render `Search` as the first child of `Content`. It is a sticky query row: the consumer owns the query state and renders only the matching `Item`s. The row keeps printable keys in its input (Radix typeahead never fires), focuses itself when the menu opens, hands focus to the option list on ArrowDown (Radix then drives highlight and Enter), and lets Escape close the menu. Clear the query in `onOpenChange` so each open starts unfiltered.
+The set-openness axis:
 
-```tsx
-<InputSingleSelect.Content>
-  <InputSingleSelect.Search
-    value={query}
-    onChange={(e) => setQuery(e.target.value)}
-    placeholder="Search agents..."
-  />
-  {filtered.map((a) => (
-    <InputSingleSelect.Item key={a.id} value={String(a.id)}>
-      {a.name}
-    </InputSingleSelect.Item>
-  ))}
-</InputSingleSelect.Content>
-```
+- **`mode="closed"`** (default) — only option values are allowed. The trigger
+  shows the selected option's label at rest; a value outside the set shows a
+  validation error.
+- **`mode="open"`** — typing filters AND the raw text can be committed as a
+  value via the create row (prefix it with `createPrefix`, e.g. "Use").
+
+Options are flat or sectioned. Sections render in order with a `Divider`
+between each and an optional muted heading; a section whose options all
+filter out disappears.
 
 ```tsx
-<InputSingleSelect value={value} onValueChange={setValue} error={touched && !value}>
-  <InputSingleSelect.Trigger placeholder="Choose a model" />
-  <InputSingleSelect.Content>
-    <InputSingleSelect.Group>
-      <InputSingleSelect.Label>OpenAI</InputSingleSelect.Label>
-      <InputSingleSelect.Item value="gpt" icon={SvgCpu} description="Default">
-        GPT-5
-      </InputSingleSelect.Item>
-    </InputSingleSelect.Group>
-    <InputSingleSelect.Separator />
-    <InputSingleSelect.Item value="opus">Claude Opus</InputSingleSelect.Item>
-  </InputSingleSelect.Content>
-</InputSingleSelect>
+<InputSingleSelect
+  value={model}
+  onValueChange={setModel}
+  placeholder="Choose a model"
+  options={[
+    {
+      label: "OpenAI",
+      options: [{ value: "gpt", label: "GPT-5", description: "Default" }],
+    },
+    { label: "Anthropic", options: [{ value: "opus", label: "Claude Opus" }] },
+  ]}
+/>
+
+// Open set: pick a suggestion or type a custom model name.
+<InputSingleSelect
+  mode="open"
+  value={model}
+  onValueChange={setModel}
+  options={modelOptions}
+  placeholder="Select or enter model"
+  createPrefix="Use"
+/>
 ```
 
-## Parts
+## Props
 
-| Part                | Key props                                                     | Notes                                                      |
-| ------------------- | ------------------------------------------------------------- | ---------------------------------------------------------- |
-| `InputSingleSelect`       | Radix Root props + `error`, `disabled`                        | `error`/`disabled` drive the trigger chrome variant        |
-| `.Trigger`          | `placeholder`, `rightSection`                                 | Custom `children` replace the selected-item display        |
-| `.Content`          | Radix Content props                                           | Popper, trigger-width, 18rem max height with scroll        |
-| `.Item`             | `value`, `children`, `icon`, `description`, `wrapDescription` | The selected item's icon and label mirror into the trigger |
-| `.Group` / `.Label` | Radix props                                                   | Uppercase group label                                      |
-| `.Separator`        | `paddingParallel`, `paddingPerpendicular`                     | Opal `Divider`                                             |
+Key props (`InputSingleSelectProps` also passes DOM input attributes through):
 
-Requires the `@radix-ui/react-select` peer dependency. The selected row uses the `select-heavy` selected tokens (`action-selection-01` background with the interactive foreground vars), and keyboard/hover highlight comes from Radix's `data-highlighted`.
+| Prop            | Type                                   | Default    | Description                                          |
+| --------------- | -------------------------------------- | ---------- | ---------------------------------------------------- |
+| `value`         | `string`                               | —          | Current value (controlled)                           |
+| `onValueChange` | `(value: string) => void`              | —          | Fires on option selection (and create-row commit)    |
+| `onChange`      | `(e) => void`                          | —          | Fires on every keystroke (controlled-input style)    |
+| `options`       | `SelectOption[] \| SelectSection[]`    | `[]`       | The set; sectioned options render with Dividers      |
+| `mode`          | `"closed" \| "open"`                   | `"closed"` | Set openness                                         |
+| `placeholder`   | `string`                               | —          | Trigger placeholder (required)                       |
+| `createPrefix`  | `string`                               | —          | Prefix on the open-mode create row (e.g. "Use")      |
+| `isError`       | `boolean`                              | —          | External error state (overrides internal validation) |
+| `rightChildren` | `React.ReactNode`                      | —          | Extra trigger-side controls                          |
+
+The dropdown itself (`dropdown/`) is a family-internal component — never
+consumed directly by app code.
