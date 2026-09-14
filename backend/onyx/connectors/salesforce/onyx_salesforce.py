@@ -8,7 +8,6 @@ from requests.adapters import HTTPAdapter
 from simple_salesforce import Salesforce, SFType
 from simple_salesforce.api import exception_handler
 from simple_salesforce.exceptions import SalesforceRefusedRequest
-from simple_salesforce.format import format_soql
 from typing_extensions import override
 from urllib3.util.retry import Retry
 
@@ -19,8 +18,12 @@ from onyx.connectors.salesforce.blacklist import (
     SALESFORCE_BLACKLISTED_SUFFIXES,
 )
 from onyx.connectors.salesforce.models import SalesforceSessionCredentials
-from onyx.connectors.salesforce.salesforce_calls import get_object_by_id_query
-from onyx.connectors.salesforce.utils import ID_FIELD, validate_sf_identifier
+from onyx.connectors.salesforce.salesforce_calls import (
+    get_object_by_id_queries,
+    pinned_child_queries,
+    plan_child_queries,
+)
+from onyx.connectors.salesforce.utils import ID_FIELD
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 
@@ -59,8 +62,6 @@ def is_salesforce_rate_limit_error(exception: Exception) -> bool:
 
 
 class OnyxSalesforce(Salesforce):
-    SOQL_MAX_SUBQUERIES = 20
-
     def __init__(
         self,
         *args: Any,
@@ -232,69 +233,29 @@ class OnyxSalesforce(Salesforce):
                 time.sleep(5)
             raise
 
-    @staticmethod
-    def _make_child_objects_by_id_query(
-        object_id: str,
-        sf_type: str,
-        child_relationships: list[str],
-        relationships_to_fields: dict[str, set[str]],
-    ) -> str:
-        """Returns a SOQL query given the object id, type and child relationships.
-
-        object_id: the id of the parent object
-        sf_type: the object name/type of the parent object
-        child_relationships: a list of the child object names/types to retrieve
-        relationships_to_fields: a mapping of objects to their queryable fields
-
-        When the query is executed, it comes back as result.records[0][child_relationship]
-        """
-
-        # supposedly the real limit is 200? But we limit to 10 for practical reasons
-        SUBQUERY_LIMIT = 10
-
-        # SOQL has no parameter binding for table/column identifiers; validate
-        # everything we interpolate. object_id still goes through format_soql.
-        validate_sf_identifier(sf_type)
-        query = "SELECT "
-        for child_relationship in child_relationships:
-            # TODO(rkuo): what happens if there is a very large list of child records?
-            # is that possible problem?
-
-            # NOTE: we actually have to list out the subqueries we want.
-            # We can't use the following shortcuts:
-            #   FIELDS(ALL) can include binary fields, so don't use that
-            #   FIELDS(CUSTOM) can include aggregate queries, so don't use that
-            validate_sf_identifier(child_relationship)
-            fields = relationships_to_fields[child_relationship]
-            fields_fragment = ",".join(validate_sf_identifier(f) for f in fields)
-            query += f"(SELECT {fields_fragment} FROM {child_relationship} LIMIT {SUBQUERY_LIMIT}), "  # noqa: S608
-
-        query = query.rstrip(", ")
-        query += format_soql(
-            f" FROM {sf_type} WHERE Id = {{object_id}}", object_id=object_id
-        )
-        return query
-
     def query_object(
         self,
         object_type: str,
         object_id: str,
         type_to_queryable_fields: dict[str, set[str]],
     ) -> dict[str, Any] | None:
-        record: dict[str, Any] = {}
-
         queryable_fields = type_to_queryable_fields[object_type]
-        query = get_object_by_id_query(object_id, object_type, queryable_fields)
-        result = self.safe_query(query)
-        if not result:
+        if not queryable_fields:
+            logger.warning(
+                "%s has no queryable fields, skipping %s", object_type, object_id
+            )
             return None
 
-        record_0 = result["records"][0]
-        for record_key, record_value in record_0.items():
-            if record_key == "attributes":
-                continue
+        record: dict[str, Any] = {}
+        for query in get_object_by_id_queries(object_id, object_type, queryable_fields):
+            result = self.safe_query(query)
+            if not result["records"]:
+                # no rows means the record was deleted or is not visible to this user
+                return None
 
-            record[record_key] = record_value
+            record.update(
+                {k: v for k, v in result["records"][0].items() if k != "attributes"}
+            )
 
         return record
 
@@ -305,75 +266,67 @@ class OnyxSalesforce(Salesforce):
         child_relationships: list[str],
         relationships_to_fields: dict[str, set[str]],
     ) -> dict[str, dict[str, Any]]:
-        """There's a limit on the number of subqueries we can put in a single query."""
         child_records: dict[str, dict[str, Any]] = {}
-        child_relationships_batch: list[str] = []
-        remaining_child_relationships = list(child_relationships)
+        chunks_seen: dict[str, int] = {}
+        ids_by_relationship: dict[str, list[str]] = {}
 
-        while True:
-            process_batch = False
-
-            if (
-                len(remaining_child_relationships) == 0
-                and len(child_relationships_batch) == 0
+        # Attachments hold binary content, skip them
+        relationships = [r for r in child_relationships if r != "Attachments"]
+        plan = plan_child_queries(
+            object_id, sf_type, relationships, relationships_to_fields
+        )
+        for query in plan.window_queries:
+            for relationship, child_id in self._merge_child_rows(
+                query, child_records, chunks_seen
             ):
-                break
+                ids_by_relationship.setdefault(relationship, []).append(child_id)
 
-            if len(child_relationships_batch) >= OnyxSalesforce.SOQL_MAX_SUBQUERIES:
-                process_batch = True
+        for query in pinned_child_queries(
+            object_id, sf_type, plan.remaining_chunks, ids_by_relationship
+        ):
+            self._merge_child_rows(query, child_records, chunks_seen)
 
-            if len(remaining_child_relationships) == 0:
-                process_batch = True
-
-            if process_batch:
-                if len(child_relationships_batch) == 0:
-                    break
-
-                query = OnyxSalesforce._make_child_objects_by_id_query(
-                    object_id,
-                    sf_type,
-                    child_relationships_batch,
-                    relationships_to_fields,
-                )
-
-                try:
-                    result = self.safe_query(query)
-                except Exception:
-                    logger.exception("Query failed: query=%r", query)
-                else:
-                    for child_record_key, child_result in result["records"][0].items():
-                        if child_record_key == "attributes":
-                            continue
-
-                        if not child_result:
-                            continue
-
-                        for child_record in child_result["records"]:
-                            child_record_id = child_record[ID_FIELD]
-                            if not child_record_id:
-                                logger.warning("Child record has no id")
-                                continue
-
-                            child_records[f"{child_record_key}:{child_record_id}"] = (
-                                child_record
-                            )
-                finally:
-                    child_relationships_batch.clear()
-
-                continue
-
-            if len(remaining_child_relationships) == 0:
-                break
-
-            child_relationship = remaining_child_relationships.pop(0)
-
-            # this is binary content, skip it
-            if child_relationship == "Attachments":
-                continue
-
-            child_relationships_batch.append(child_relationship)
+        # a child deleted between two chunk queries would otherwise index partially
+        expected_chunks = {
+            relationship: 1 + len(chunks)
+            for relationship, chunks in plan.remaining_chunks.items()
+        }
+        for key, seen in chunks_seen.items():
+            if seen < expected_chunks.get(key.split(":", 1)[0], 1):
+                logger.warning("Dropping partial child record %s", key)
+                del child_records[key]
 
         return child_records
+
+    def _merge_child_rows(
+        self,
+        query: str,
+        child_records: dict[str, dict[str, Any]],
+        chunks_seen: dict[str, int],
+    ) -> list[tuple[str, str]]:
+        """Runs one child query, merges its rows, returns (relationship, Id) pairs."""
+        merged: list[tuple[str, str]] = []
+        result = self.safe_query(query)
+        if not result["records"]:
+            return merged
+
+        for child_record_key, child_result in result["records"][0].items():
+            if child_record_key == "attributes" or not child_result:
+                continue
+
+            for child_record in child_result["records"]:
+                child_record_id = child_record[ID_FIELD]
+                if not child_record_id:
+                    logger.warning("Child record has no id")
+                    continue
+
+                key = f"{child_record_key}:{child_record_id}"
+                # field chunks of one relationship merge into one record
+                child_records.setdefault(key, {}).update(child_record)
+                chunks_seen[key] = chunks_seen.get(key, 0) + 1
+                merged.append((child_record_key, child_record_id))
+
+        return merged
 
     @retry_builder(
         tries=3,
