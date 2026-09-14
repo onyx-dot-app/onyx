@@ -486,9 +486,7 @@ class _UserRecordingsSource(DiscoverySource):
 class HostAllowlistSource(_UserRecordingsSource):
     def __init__(self, host_emails: list[str]) -> None:
         super().__init__("host-allowlist")
-        self._emails = sorted(
-            {email.strip().lower() for email in host_emails if email.strip()}
-        )
+        self._emails = {email.strip().lower() for email in host_emails if email.strip()}
 
     def _resolve_hosts(
         self,
