@@ -8099,6 +8099,9 @@
         "elevenlabsTts": {
           "subtitle": "ElevenLabs 텍스트 음성 변환 API."
         },
+        "openaiCompatibleStt": {
+          "subtitle": "OpenAI 호환 API를 통한 음성 전사."
+        },
         "tts1": {
           "subtitle": "속도에 최적화된 OpenAI의 텍스트 음성 변환 모델."
         },
@@ -8110,9 +8113,17 @@
         }
       },
       "setupModal": {
+        "apiBase": {
+          "description": "서버 루트 URL 또는 /v1로 끝나는 API 기본 URL을 입력하세요.",
+          "invalid": "유효한 API 기본 URL을 입력하세요",
+          "label": "API 기본 URL",
+          "placeholder": "http://host.docker.internal:8000/v1",
+          "required": "API 기본 URL이 필요합니다"
+        },
         "apiKey": {
           "description": "모델을 사용하려면 {provider}의 [API 키]({url})를 붙여넣으세요.",
           "label": "API 키",
+          "optionalDescription": "선택 사항입니다. 서버에서 필요한 경우에만 Bearer API 키를 입력하세요.",
           "placeholder": "API 키",
           "required": "API 키가 필요합니다"
         },
@@ -8121,6 +8132,10 @@
         },
         "connectButton": {
           "label": "연결"
+        },
+        "compatibleInfo": {
+          "description": "Onyx는 분할한 오디오를 `/v1/audio/transcriptions`로 전송합니다. OpenAI Realtime은 사용하지 않습니다. Onyx가 Docker에서 실행되고 서버가 호스트에서 실행되는 경우 `127.0.0.1` 대신 `host.docker.internal`을 사용하세요.",
+          "title": "OpenAI 호환 음성 전사"
         },
         "connectionTestFailed": {
           "message": "연결 테스트에 실패했습니다"
@@ -8145,7 +8160,10 @@
           "selfHostedCapExceeded": "자체 호스팅 엔드포인트는 음성 언어를 최대 {cap}개까지 지원합니다(시작 시 감지)"
         },
         "sttModel": {
-          "label": "STT 모델"
+          "description": "전사 서버가 제공하는 모델 이름을 입력하세요.",
+          "label": "STT 모델",
+          "placeholder": "whisper-1",
+          "required": "STT 모델이 필요합니다"
         },
         "targetUri": {
           "description": "[Azure Portal(키 및 엔드포인트)]({portalUrl})에 표시된 엔드포인트를 붙여넣으세요. Onyx는 이 URL에서 음성 지역을 추출합니다. 예: `https://westus.api.cognitive.microsoft.com/` 또는 `https://westus.tts.speech.microsoft.com/`.",
