@@ -57,5 +57,3 @@ export const CollapsedStreamingContent = React.memo(
     );
   }
 );
-
-export default CollapsedStreamingContent;

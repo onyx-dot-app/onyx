@@ -93,7 +93,7 @@ function constructCustomToolState(
   };
 }
 
-export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
+const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
   packets,
   onComplete,
   renderType,

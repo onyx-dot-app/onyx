@@ -72,5 +72,3 @@ export function TimelineStepComposer({
     </>
   );
 }
-
-export default TimelineStepComposer;

@@ -21,7 +21,7 @@ export enum RenderType {
  * - timeline: parent should render StepContainer around the result.
  * - content: renderer already contains its own layout (headers/containers).
  */
-export type TimelineLayout = "timeline" | "content";
+type TimelineLayout = "timeline" | "content";
 
 export interface FullChatState {
   agent: MinimalAgent;

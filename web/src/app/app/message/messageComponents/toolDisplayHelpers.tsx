@@ -23,7 +23,7 @@ import {
 /**
  * Check if a packet group contains an ERROR packet (tool failed)
  */
-export function hasToolError(packets: Packet[]): boolean {
+function hasToolError(packets: Packet[]): boolean {
   return packets.some((p) => p.obj.type === PacketType.ERROR);
 }
 
@@ -69,11 +69,11 @@ export function isToolComplete(packets: Packet[]): boolean {
 /**
  * Get an error icon for failed tools
  */
-export function getToolErrorIcon(): React.ReactNode {
+function getToolErrorIcon(): React.ReactNode {
   return <SvgXCircle className="w-3.5 h-3.5 text-error" />;
 }
 
-export function getToolKey(turn_index: number, tab_index: number): string {
+function getToolKey(turn_index: number, tab_index: number): string {
   return `${turn_index}-${tab_index}`;
 }
 

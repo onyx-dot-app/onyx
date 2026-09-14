@@ -415,5 +415,3 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     </TimelineContainer>
   );
 }, areAgentTimelinePropsEqual);
-
-export default AgentTimeline;

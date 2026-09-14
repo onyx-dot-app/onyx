@@ -57,7 +57,7 @@ export interface MultiModelPanelProps {
   carouselNext?: CarouselNeighbor;
 }
 
-export interface CarouselNeighbor {
+interface CarouselNeighbor {
   provider: string;
   modelName: string;
   displayName: string;

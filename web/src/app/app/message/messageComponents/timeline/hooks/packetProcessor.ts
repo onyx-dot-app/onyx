@@ -23,8 +23,6 @@ import {
 import { parseToolKey } from "@/app/app/message/messageComponents/toolDisplayHelpers";
 
 // Re-export parseToolKey for consumers that import from this module
-export { parseToolKey };
-
 // ============================================================================
 // Types
 // ============================================================================

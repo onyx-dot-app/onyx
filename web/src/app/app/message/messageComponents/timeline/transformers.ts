@@ -27,7 +27,7 @@ export interface TurnGroup {
 /**
  * Transform a single GroupedPacket into step data
  */
-export function transformPacketGroup(group: GroupedPacket): TransformedStep {
+function transformPacketGroup(group: GroupedPacket): TransformedStep {
   return {
     key: `${group.turn_index}-${group.tab_index}`,
     turnIndex: group.turn_index,

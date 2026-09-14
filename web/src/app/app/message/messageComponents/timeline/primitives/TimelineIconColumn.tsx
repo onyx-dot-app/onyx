@@ -81,5 +81,3 @@ export function TimelineIconColumn({
     </div>
   );
 }
-
-export default TimelineIconColumn;

@@ -113,5 +113,3 @@ export function StepContainer({
     </TimelineRow>
   );
 }
-
-export default StepContainer;

@@ -9,7 +9,7 @@ import {
 // Packet types with renderers supporting collapsed streaming mode.
 // TOOL_CALL_ARGUMENT_DELTA is intentionally excluded here because it requires
 // a tool_type check — it's handled separately in stepSupportsCollapsedStreaming.
-export const COLLAPSED_STREAMING_PACKET_TYPES = new Set<PacketType>([
+const COLLAPSED_STREAMING_PACKET_TYPES = new Set<PacketType>([
   PacketType.SEARCH_TOOL_START,
   PacketType.FETCH_TOOL_START,
   PacketType.PYTHON_TOOL_START,
@@ -27,7 +27,7 @@ export const isResearchAgentPackets = (packets: Packet[]): boolean =>
 // Check if packets belong to a coding agent. The agent's group always contains
 // CodingAgentStart, but BashTool packets are emitted into the same group, so
 // any of these types signal a coding-agent group.
-export const CODING_AGENT_PACKET_TYPES = new Set<PacketType>([
+const CODING_AGENT_PACKET_TYPES = new Set<PacketType>([
   PacketType.CODING_AGENT_START,
   PacketType.CODING_AGENT_THINKING_DELTA,
   PacketType.CODING_AGENT_FINAL,
@@ -52,7 +52,7 @@ export const isPythonToolPackets = (packets: Packet[]): boolean =>
   );
 
 // Check if packets belong to reasoning
-export const isReasoningPackets = (packets: Packet[]): boolean =>
+const isReasoningPackets = (packets: Packet[]): boolean =>
   packets.some((p) => p.obj.type === PacketType.REASONING_START);
 
 // Check if step supports collapsed streaming rendering mode
@@ -145,7 +145,7 @@ export const stepHasCollapsedStreamingContent = (
 };
 
 // Check if packets belong to a deep research plan
-export const isDeepResearchPlanPackets = (packets: Packet[]): boolean =>
+const isDeepResearchPlanPackets = (packets: Packet[]): boolean =>
   packets.some((p) => p.obj.type === PacketType.DEEP_RESEARCH_PLAN_START);
 
 // Check if packets belong to a memory tool. A step holds the packets of one

@@ -276,7 +276,7 @@ export const renderMarkdown = (
 /**
  * Complete markdown processing and rendering utility
  */
-export const useMarkdownRenderer = (
+const useMarkdownRenderer = (
   content: string,
   state: FullChatState | undefined,
   textSize: string

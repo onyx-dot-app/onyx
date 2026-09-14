@@ -112,7 +112,7 @@ export function isFinalAnswerComplete(packets: Packet[]) {
   );
 }
 
-export function groupPacketsByTurnIndex(
+function groupPacketsByTurnIndex(
   packets: Packet[]
 ): { turn_index: number; tab_index: number; packets: Packet[] }[] {
   /*

@@ -34,7 +34,7 @@ export type TimelineTopSpacerVariant = "default" | "first" | "none";
 /**
  * Default sizing for the timeline layout. Override in TimelineRoot if needed.
  */
-export const timelineTokenDefaults: TimelineTokens = {
+const timelineTokenDefaults: TimelineTokens = {
   railWidth: "2.25rem",
   headerRowHeight: "2.25rem",
   stepHeaderHeight: "2rem",

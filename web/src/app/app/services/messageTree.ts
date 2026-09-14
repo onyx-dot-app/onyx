@@ -1,6 +1,6 @@
 import { FileDescriptor, Message } from "../interfaces";
 
-export const SYSTEM_MESSAGE_ID = -3;
+const SYSTEM_MESSAGE_ID = -3;
 export const SYSTEM_NODE_ID = -3;
 
 export type MessageTreeState = Map<number, Message>; // key is nodeId

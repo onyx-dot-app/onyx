@@ -7,9 +7,7 @@ import { JSX } from "react";
 /**
  * Check if a message contains complete thinking tokens
  */
-export function hasCompletedThinkingTokens(
-  content: string | JSX.Element
-): boolean {
+function hasCompletedThinkingTokens(content: string | JSX.Element): boolean {
   if (typeof content !== "string") return false;
 
   return (
@@ -21,9 +19,7 @@ export function hasCompletedThinkingTokens(
 /**
  * Check if a message contains partial thinking tokens (streaming)
  */
-export function hasPartialThinkingTokens(
-  content: string | JSX.Element
-): boolean {
+function hasPartialThinkingTokens(content: string | JSX.Element): boolean {
   if (typeof content !== "string") return false;
 
   // Count opening and closing tags
@@ -41,7 +37,7 @@ export function hasPartialThinkingTokens(
 /**
  * Extract thinking content from a message
  */
-export function extractThinkingContent(content: string | JSX.Element): string {
+function extractThinkingContent(content: string | JSX.Element): string {
   if (typeof content !== "string") return "";
 
   // For complete thinking tags, extract all sections
@@ -80,7 +76,7 @@ export function extractThinkingContent(content: string | JSX.Element): string {
 /**
  * Check if thinking tokens are complete
  */
-export function isThinkingComplete(content: string | JSX.Element): boolean {
+function isThinkingComplete(content: string | JSX.Element): boolean {
   if (typeof content !== "string") return false;
 
   // Count opening and closing tags
@@ -129,7 +125,7 @@ export function removeThinkingTokens(
 // /**
 //  * Clean the extracted thinking content (remove tags)
 //  */
-export function cleanThinkingContent(thinkingContent: string): string {
+function cleanThinkingContent(thinkingContent: string): string {
   if (!thinkingContent) return "";
 
   return thinkingContent

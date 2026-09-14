@@ -135,7 +135,7 @@ interface ResubmitProps {
   resubmit: () => void;
 }
 
-export const Resubmit: React.FC<ResubmitProps> = ({ resubmit }) => {
+const Resubmit: React.FC<ResubmitProps> = ({ resubmit }) => {
   const t = useTranslations("chat.messages");
   return (
     <div className="flex flex-col items-center justify-center gap-y-2 mt-4">

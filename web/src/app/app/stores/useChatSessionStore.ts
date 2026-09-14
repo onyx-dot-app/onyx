@@ -742,7 +742,7 @@ export const useSelectedNodeForDocDisplay = () =>
     return currentSession?.selectedNodeIdForDocDisplay || null;
   });
 
-export const useHasSentLocalUserMessage = () =>
+const useHasSentLocalUserMessage = () =>
   useChatSessionStore((state) => {
     const { currentSessionId, sessions } = state;
     const currentSession = currentSessionId

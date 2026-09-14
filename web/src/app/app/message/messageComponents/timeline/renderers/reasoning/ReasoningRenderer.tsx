@@ -199,5 +199,3 @@ export const ReasoningRenderer: MessageRenderer<
     },
   ]);
 };
-
-export default ReasoningRenderer;

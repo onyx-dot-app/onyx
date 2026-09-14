@@ -51,7 +51,7 @@ export enum ChatSessionSharedStatus {
   Public = "public",
 }
 
-export interface ChatSessionSummary {
+interface ChatSessionSummary {
   id: string;
   name: string | null;
   persona_id: number | null;
@@ -63,7 +63,7 @@ export interface ChatSessionSummary {
   highlights?: string[];
 }
 
-export interface ChatSessionGroup {
+interface ChatSessionGroup {
   title: string;
   chats: ChatSessionSummary[];
 }
@@ -75,7 +75,7 @@ export interface ChatSearchResponse {
 }
 
 // The number of messages to buffer on the client side.
-export const BUFFER_COUNT = 35;
+const BUFFER_COUNT = 35;
 
 // Citation number -> Document ID (allows O(1) lookup when rendering citations)
 export type CitationMap = { [citation_num: number]: string };
@@ -88,7 +88,7 @@ export enum ChatFileType {
   USER_KNOWLEDGE = "user_knowledge",
 }
 
-export const isTextFile = (fileType: ChatFileType) =>
+const isTextFile = (fileType: ChatFileType) =>
   [
     ChatFileType.PLAIN_TEXT,
     ChatFileType.TABULAR,
@@ -106,11 +106,11 @@ export interface FileDescriptor {
   isUploading?: boolean;
 }
 
-export interface FileDescriptorWithHighlights extends FileDescriptor {
+interface FileDescriptorWithHighlights extends FileDescriptor {
   match_highlights: string[];
 }
 
-export interface LLMRelevanceFilterPacket {
+interface LLMRelevanceFilterPacket {
   relevant_chunk_indices: number[];
 }
 
@@ -120,7 +120,7 @@ export interface ToolCallMetadata {
   tool_result?: Record<string, any>;
 }
 
-export interface ToolCallFinalResult {
+interface ToolCallFinalResult {
   tool_name: string;
   tool_args: Record<string, any>;
   tool_result: Record<string, any>;
@@ -139,7 +139,7 @@ export interface ChatSession {
   current_reasoning_effort_override: ReasoningEffortOverride | null;
 }
 
-export interface SearchSession {
+interface SearchSession {
   search_session_id: string;
   documents: SearchOnyxDocument[];
   messages: BackendMessage[];
@@ -209,7 +209,7 @@ export interface BackendChatSession {
   incognito?: boolean;
 }
 
-export function toChatSession(backend: BackendChatSession): ChatSession {
+function toChatSession(backend: BackendChatSession): ChatSession {
   return {
     id: backend.chat_session_id,
     name: backend.description,
@@ -265,7 +265,7 @@ export interface MessageResponseIDInfo {
   reserved_assistant_message_id: number; // TODO: rename to agent — https://linear.app/onyx-app/issue/ENG-3766
 }
 
-export interface ModelResponseSlot {
+interface ModelResponseSlot {
   message_id: number;
   model_name: string;
 }
@@ -328,7 +328,7 @@ export interface EditPromptModalProps {
     values: CreateInputPromptRequest
   ) => Promise<void>;
 }
-export interface CreateInputPromptRequest {
+interface CreateInputPromptRequest {
   prompt: string;
   content: string;
 }
@@ -341,7 +341,7 @@ export interface AddPromptModalProps {
  * // Start of Selection
  */
 
-export interface BaseQuestionIdentifier {
+interface BaseQuestionIdentifier {
   level: number;
   level_question_num: number;
 }
@@ -356,7 +356,7 @@ export interface SubQuestionDetail extends BaseQuestionIdentifier {
   answer_streaming?: boolean;
 }
 
-export interface SubQueryDetail {
+interface SubQueryDetail {
   query: string;
   query_id: number;
   doc_ids?: number[] | null;

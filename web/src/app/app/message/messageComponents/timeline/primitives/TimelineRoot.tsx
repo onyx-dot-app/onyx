@@ -21,5 +21,3 @@ export function TimelineRoot({ children, tokens }: TimelineRootProps) {
     </div>
   );
 }
-
-export default TimelineRoot;

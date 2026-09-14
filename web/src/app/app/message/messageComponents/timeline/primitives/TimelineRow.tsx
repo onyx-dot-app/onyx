@@ -7,7 +7,7 @@ import { TimelineIconColumn, TimelineRailVariant } from "./TimelineIconColumn";
  * - spacer: empty column that preserves rail width.
  * - none: no left column at all.
  */
-export type TimelineRowRailVariant = TimelineRailVariant | "none";
+type TimelineRowRailVariant = TimelineRailVariant | "none";
 
 export interface TimelineRowProps {
   railVariant?: TimelineRowRailVariant;
@@ -58,5 +58,3 @@ export function TimelineRow({
     </div>
   );
 }
-
-export default TimelineRow;

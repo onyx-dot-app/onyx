@@ -96,5 +96,3 @@ export function TimelineStepContent({
     </div>
   );
 }
-
-export default TimelineStepContent;

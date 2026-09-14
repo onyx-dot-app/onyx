@@ -54,5 +54,3 @@ export function TimelineSurface({
     </div>
   );
 }
-
-export default TimelineSurface;

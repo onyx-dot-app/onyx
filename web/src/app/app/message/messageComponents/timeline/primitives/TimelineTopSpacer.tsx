@@ -22,5 +22,3 @@ export function TimelineTopSpacer({
 
   return <div className="h-(--timeline-top-connector-height)" />;
 }
-
-export default TimelineTopSpacer;

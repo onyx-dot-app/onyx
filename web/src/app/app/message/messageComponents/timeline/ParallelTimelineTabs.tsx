@@ -175,5 +175,3 @@ export function ParallelTimelineTabs({
     </Tabs>
   );
 }
-
-export default ParallelTimelineTabs;

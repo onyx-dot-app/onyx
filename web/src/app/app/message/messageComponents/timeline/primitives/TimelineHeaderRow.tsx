@@ -19,5 +19,3 @@ export function TimelineHeaderRow({ left, children }: TimelineHeaderRowProps) {
     </div>
   );
 }
-
-export default TimelineHeaderRow;

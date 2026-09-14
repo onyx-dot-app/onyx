@@ -195,5 +195,3 @@ export const ExpandedTimelineContent = React.memo(
     );
   }
 );
-
-export default ExpandedTimelineContent;

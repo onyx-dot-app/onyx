@@ -73,7 +73,7 @@ export enum PacketType {
   BASH_TOOL_DELTA = "bash_tool_delta",
 }
 
-export const CODE_INTERPRETER_TOOL_TYPES = {
+const CODE_INTERPRETER_TOOL_TYPES = {
   // Legacy LLM-facing name; still present in sessions persisted before the
   // rename (OpenAI reserves the function name "python" and rejects it).
   PYTHON: "python",
@@ -98,7 +98,7 @@ export interface MessageDelta extends BaseObj {
   type: "message_delta";
 }
 
-export interface MessageEnd extends BaseObj {
+interface MessageEnd extends BaseObj {
   type: "message_end";
 }
 
@@ -122,7 +122,7 @@ export interface TopLevelBranching extends BaseObj {
   num_parallel_branches: number;
 }
 
-export interface PacketError extends BaseObj {
+interface PacketError extends BaseObj {
   type: "error";
   message?: string;
 }
@@ -189,7 +189,7 @@ export interface ToolCallArgumentDelta extends BaseObj {
   argument_deltas: Record<string, unknown>;
 }
 
-export interface FetchToolStart extends BaseObj {
+interface FetchToolStart extends BaseObj {
   type: "open_url_start";
 }
 
@@ -233,7 +233,7 @@ export interface CustomToolDelta extends BaseObj {
 }
 
 // File Reader Packets
-export interface FileReaderStart extends BaseObj {
+interface FileReaderStart extends BaseObj {
   type: "file_reader_start";
 }
 
@@ -248,7 +248,7 @@ export interface FileReaderResult extends BaseObj {
   preview_end: string;
 }
 // Memory Tool Packets
-export interface MemoryToolStart extends BaseObj {
+interface MemoryToolStart extends BaseObj {
   type: "memory_tool_start";
 }
 
@@ -260,12 +260,12 @@ export interface MemoryToolDelta extends BaseObj {
   index: number | null;
 }
 
-export interface MemoryToolNoAccess extends BaseObj {
+interface MemoryToolNoAccess extends BaseObj {
   type: "memory_tool_no_access";
 }
 
 // Reasoning Packets
-export interface ReasoningStart extends BaseObj {
+interface ReasoningStart extends BaseObj {
   type: "reasoning_start";
 }
 
@@ -274,7 +274,7 @@ export interface ReasoningDelta extends BaseObj {
   reasoning: string;
 }
 
-export interface ReasoningDone extends BaseObj {
+interface ReasoningDone extends BaseObj {
   type: "reasoning_done";
 }
 
@@ -284,7 +284,7 @@ export interface StreamingCitation {
   document_id: string;
 }
 
-export interface CitationStart extends BaseObj {
+interface CitationStart extends BaseObj {
   type: "citation_start";
 }
 
@@ -296,11 +296,11 @@ export interface CitationInfo extends BaseObj {
 }
 
 // Deep Research Plan Packets
-export interface DeepResearchPlanStart extends BaseObj {
+interface DeepResearchPlanStart extends BaseObj {
   type: "deep_research_plan_start";
 }
 
-export interface DeepResearchPlanDelta extends BaseObj {
+interface DeepResearchPlanDelta extends BaseObj {
   type: "deep_research_plan_delta";
   content: string;
 }
@@ -310,7 +310,7 @@ export interface ResearchAgentStart extends BaseObj {
   research_task: string;
 }
 
-export interface IntermediateReportStart extends BaseObj {
+interface IntermediateReportStart extends BaseObj {
   type: "intermediate_report_start";
 }
 
@@ -319,7 +319,7 @@ export interface IntermediateReportDelta extends BaseObj {
   content: string;
 }
 
-export interface IntermediateReportCitedDocs extends BaseObj {
+interface IntermediateReportCitedDocs extends BaseObj {
   type: "intermediate_report_cited_docs";
   cited_docs: OnyxDocument[] | null;
 }
@@ -355,66 +355,66 @@ export interface BashToolDelta extends BaseObj {
   timed_out: boolean;
 }
 
-export type ChatObj = MessageStart | MessageDelta | MessageEnd;
+type ChatObj = MessageStart | MessageDelta | MessageEnd;
 
-export type StopObj = Stop;
+type StopObj = Stop;
 
 // Connection keepalive emitted during silent stretches; carries no run state
-export interface ChatHeartbeat extends BaseObj {
+interface ChatHeartbeat extends BaseObj {
   type: "chat_heartbeat";
 }
 
-export type ChatHeartbeatObj = ChatHeartbeat;
+type ChatHeartbeatObj = ChatHeartbeat;
 
-export type SectionEndObj = SectionEnd;
+type SectionEndObj = SectionEnd;
 
-export type TopLevelBranchingObj = TopLevelBranching;
+type TopLevelBranchingObj = TopLevelBranching;
 
-export type PacketErrorObj = PacketError;
+type PacketErrorObj = PacketError;
 
 // Specific tool objects
-export type SearchToolObj =
+type SearchToolObj =
   | SearchToolStart
   | SearchToolQueriesDelta
   | SearchToolFilterDelta
   | SearchToolDocumentsDelta
   | SectionEnd
   | PacketError;
-export type ImageGenerationToolObj =
+type ImageGenerationToolObj =
   | ImageGenerationToolStart
   | ImageGenerationToolDelta
   | SectionEnd
   | PacketError;
-export type PythonToolObj =
+type PythonToolObj =
   | PythonToolStart
   | PythonToolDelta
   | ToolCallArgumentDelta
   | SectionEnd
   | PacketError;
-export type FetchToolObj =
+type FetchToolObj =
   | FetchToolStart
   | FetchToolUrls
   | FetchToolDocuments
   | SectionEnd
   | PacketError;
-export type CustomToolObj =
+type CustomToolObj =
   | CustomToolStart
   | CustomToolArgs
   | CustomToolDelta
   | SectionEnd
   | PacketError;
-export type FileReaderToolObj =
+type FileReaderToolObj =
   | FileReaderStart
   | FileReaderResult
   | SectionEnd
   | PacketError;
-export type MemoryToolObj =
+type MemoryToolObj =
   | MemoryToolStart
   | MemoryToolDelta
   | MemoryToolNoAccess
   | SectionEnd
   | PacketError;
-export type NewToolObj =
+type NewToolObj =
   | SearchToolObj
   | ImageGenerationToolObj
   | PythonToolObj
@@ -423,32 +423,28 @@ export type NewToolObj =
   | FileReaderToolObj
   | MemoryToolObj;
 
-export type ReasoningObj =
+type ReasoningObj =
   | ReasoningStart
   | ReasoningDelta
   | ReasoningDone
   | SectionEnd
   | PacketError;
 
-export type CitationObj =
-  | CitationStart
-  | CitationInfo
-  | SectionEnd
-  | PacketError;
+type CitationObj = CitationStart | CitationInfo | SectionEnd | PacketError;
 
-export type DeepResearchPlanObj =
+type DeepResearchPlanObj =
   | DeepResearchPlanStart
   | DeepResearchPlanDelta
   | SectionEnd;
 
-export type ResearchAgentObj =
+type ResearchAgentObj =
   | ResearchAgentStart
   | IntermediateReportStart
   | IntermediateReportDelta
   | IntermediateReportCitedDocs
   | SectionEnd;
 
-export type CodingAgentObj =
+type CodingAgentObj =
   | CodingAgentStart
   | CodingAgentThinkingDelta
   | CodingAgentFinal
@@ -458,7 +454,7 @@ export type CodingAgentObj =
   | PacketError;
 
 // Union type for all possible streaming objects
-export type ObjTypes =
+type ObjTypes =
   | ChatObj
   | NewToolObj
   | ReasoningObj
@@ -492,12 +488,12 @@ export interface ChatPacket {
   obj: ChatObj;
 }
 
-export interface StopPacket {
+interface StopPacket {
   placement: Placement;
   obj: StopObj;
 }
 
-export interface CitationPacket {
+interface CitationPacket {
   placement: Placement;
   obj: CitationObj;
 }
@@ -542,12 +538,12 @@ export interface ReasoningPacket {
   obj: ReasoningObj;
 }
 
-export interface SectionEndPacket {
+interface SectionEndPacket {
   placement: Placement;
   obj: SectionEndObj;
 }
 
-export interface TopLevelBranchingPacket {
+interface TopLevelBranchingPacket {
   placement: Placement;
   obj: TopLevelBranchingObj;
 }

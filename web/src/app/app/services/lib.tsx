@@ -146,7 +146,7 @@ export type PacketType =
 
 // Origin of the message for telemetry tracking.
 // Keep in sync with backend: backend/onyx/server/query_and_chat/models.py::MessageOrigin
-export type MessageOrigin =
+type MessageOrigin =
   | "webapp"
   | "chrome_extension"
   | "api"
@@ -579,7 +579,7 @@ export function buildChatUrl(
   return `/${search ? "search" : "app"}`;
 }
 
-export async function uploadFilesForChat(
+async function uploadFilesForChat(
   files: File[]
 ): Promise<[FileDescriptor[], string | null]> {
   const formData = new FormData();
