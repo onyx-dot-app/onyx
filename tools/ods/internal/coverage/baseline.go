@@ -5,17 +5,16 @@ import (
 	"fmt"
 	"math"
 	"os"
-	"path/filepath"
 
 	"gopkg.in/yaml.v3"
 )
 
-// BaselineFile is the name of the committed baseline, kept at the root of the
-// module it describes.
+// BaselineFile is the name of the committed Go coverage baseline, kept at the
+// root of the module it describes.
 const BaselineFile = ".coverage-baseline.yaml"
 
-// baselineHeader is written above the generated content so a reader of the file
-// knows how it is maintained.
+// baselineHeader is written above a generated Go baseline so a reader of the
+// file knows how it is maintained.
 const baselineHeader = `# Minimum statement coverage per package, in percent.
 #
 # ` + "`ods coverage <suite> --check`" + ` fails when a package drops below its floor,
@@ -31,11 +30,6 @@ type Baseline struct {
 	Total float64 `yaml:"total"`
 	// Packages maps a module-relative package path to its floor.
 	Packages map[string]float64 `yaml:"packages"`
-}
-
-// BaselinePath returns the baseline path for a module directory.
-func BaselinePath(moduleDir string) string {
-	return filepath.Join(moduleDir, BaselineFile)
 }
 
 // LoadBaseline reads a baseline from disk.
@@ -94,11 +88,11 @@ func NewBaseline(profile *Profile) *Baseline {
 	return baseline
 }
 
-// Save writes the baseline to disk. yaml.v3 sorts map keys, so the output is
-// stable across runs and diffs stay readable.
-func (b *Baseline) Save(path string) error {
+// Save writes the baseline to disk below the kind's header. yaml.v3 sorts map
+// keys, so the output is stable across runs and diffs stay readable.
+func (b *Baseline) Save(path string, kind Kind) error {
 	var body bytes.Buffer
-	body.WriteString(baselineHeader)
+	body.WriteString(kind.BaselineHeader)
 
 	encoder := yaml.NewEncoder(&body)
 	encoder.SetIndent(2)

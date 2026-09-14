@@ -1,32 +1,13 @@
 @reference "#reference.css";
 
+/* The surface (color, border, rounding, padding) lives on Card. This file
+   keeps only what Card cannot express: the stretch behavior of the old root
+   and the message layout. */
+
 .opal-message-card {
-  @apply flex flex-col gap-1 w-full self-stretch rounded-16 border;
+  @apply w-full self-stretch;
 }
 
-/* Variant background colors. Border *color* lives in `cards/shared.css` and
-   is keyed off the `data-opal-status-border` attribute. */
-
-.opal-message-card[data-variant="default"] {
-  @apply bg-background-tint-01;
-}
-
-.opal-message-card[data-variant="info"] {
-  @apply bg-status-info-00;
-}
-
-.opal-message-card[data-variant="success"] {
-  @apply bg-status-success-00;
-}
-
-.opal-message-card[data-variant="warning"] {
-  @apply bg-status-warning-00;
-}
-
-.opal-message-card[data-variant="pending"] {
-  @apply bg-theme-amber-01;
-}
-
-.opal-message-card[data-variant="error"] {
-  @apply bg-status-error-00;
+.opal-message-card-layout {
+  @apply flex flex-col gap-1 w-full;
 }

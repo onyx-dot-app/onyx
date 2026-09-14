@@ -6,7 +6,7 @@ import { Modal } from "@opal/components";
 import {
   Button,
   MessageCard,
-  PasswordInputTypeIn,
+  InputPasswordTypeIn,
   Text,
 } from "@opal/components";
 import type { IconFunctionComponent } from "@opal/types";
@@ -99,7 +99,7 @@ export default function UserCredentialsModal({
               {credentialKeys.map((key) => (
                 <div key={key} className="flex flex-col gap-1 w-full">
                   <Text font="main-ui-action">{humanizeKey(key)}</Text>
-                  <PasswordInputTypeIn
+                  <InputPasswordTypeIn
                     value={values[key] ?? ""}
                     onChange={(e) =>
                       setValues((prev) => ({ ...prev, [key]: e.target.value }))

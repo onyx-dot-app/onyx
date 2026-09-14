@@ -25,12 +25,14 @@ const dropCssImports = {
 export default defineConfig({
   entry: [
     "src/components/index.ts",
+    "src/form/index.ts",
     "src/layouts/index.ts",
     "src/core/index.ts",
     "src/icons/index.ts",
     "src/illustrations/index.ts",
     "src/logos/index.ts",
     "src/hooks/index.ts",
+    "src/strings.tsx",
     "src/time.ts",
     "src/types.ts",
     "src/utils.ts",

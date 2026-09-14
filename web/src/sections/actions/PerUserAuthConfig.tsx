@@ -3,9 +3,7 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { FormField } from "@/refresh-components/form/FormField";
-import InputKeyValue, {
-  KeyValue,
-} from "@/refresh-components/inputs/InputKeyValue";
+import { InputKeyValue, type KeyValue } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { Divider } from "@opal/components";

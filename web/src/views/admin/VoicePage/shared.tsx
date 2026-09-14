@@ -29,6 +29,7 @@ import {
   fetchVoicesByType,
   deleteVoiceProvider,
 } from "@/lib/voice/svc";
+import type { ErrorResponseBody } from "@/lib/fetcher";
 import {
   getVoiceProviderDetail,
   resolveModelId,
@@ -175,7 +176,9 @@ export function VoiceProviderSetupModal({
         });
 
         if (!testResponse.ok) {
-          const data = await testResponse.json().catch(() => ({}));
+          const data: ErrorResponseBody = await testResponse
+            .json()
+            .catch(() => ({}));
           toast.error(
             typeof data?.detail === "string"
               ? data.detail
@@ -221,7 +224,7 @@ export function VoiceProviderSetupModal({
       if (response.ok) {
         onSuccess();
       } else {
-        const data = await response.json().catch(() => ({}));
+        const data: ErrorResponseBody = await response.json().catch(() => ({}));
         toast.error(
           typeof data?.detail === "string"
             ? data.detail
@@ -434,7 +437,7 @@ export function VoiceDisconnectModal({
     try {
       const res = await deleteVoiceProvider(disconnectTarget.providerId);
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
+        const body: ErrorResponseBody = await res.json().catch(() => ({}));
         throw new Error(
           typeof body?.detail === "string"
             ? body.detail

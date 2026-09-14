@@ -1,14 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { SvgAddLines, SvgPlusCircle } from "@opal/icons";
+import { Button, SelectCard, Text, useCreateModal } from "@opal/components";
+import { Section } from "@opal/layouts";
 import { useTranslations } from "next-intl";
 import FileTile from "@/refresh-components/tiles/FileTile";
 import ButtonTile from "@/refresh-components/tiles/ButtonTile";
-import { SvgAddLines, SvgFilter, SvgMenu, SvgPlusCircle } from "@opal/icons";
 import MemoriesModal from "@/refresh-components/modals/MemoriesModal";
-import LineItem from "@/refresh-components/buttons/LineItem";
-import { Button } from "@opal/components";
-import { useCreateModal } from "@opal/components";
 import { MemoryItem } from "@/lib/types";
 
 interface MemoriesProps {
@@ -24,24 +23,44 @@ export default function Memories({ memories, onSaveMemories }: MemoriesProps) {
   return (
     <>
       {memories.length === 0 ? (
-        <LineItem
-          skeleton
-          description={t("empty.description")}
+        // A call-to-action, not a list row: the legacy LineItem "skeleton"
+        // dressed this as a placeholder, but it is a clickable card that
+        // opens the add-memory modal. The dashed border keeps the
+        // "nothing here yet" reading.
+        <SelectCard
+          border="dashed"
+          padding={2}
+          rounding={3}
+          // Keep the card visually engaged while the modal it opened is up —
+          // the same treatment OpenButton and Divider give their popovers.
+          interaction={memoriesModal.isOpen ? "hover" : "rest"}
           onClick={() => {
             setTargetMemoryId(null);
             memoriesModal.toggle(true);
           }}
-          rightChildren={
+        >
+          <Section flexDirection="row" gap={1} justifyContent="between">
+            <Section padding={1} width="full" alignItems="start">
+              <Text font="secondary-body" color="text-03">
+                {t("empty.description")}
+              </Text>
+            </Section>
             <Button
-              prominence="internal"
+              prominence="tertiary"
               icon={SvgPlusCircle}
-              onClick={() => {
+              size="md"
+              aria-label={t("empty.addButton.ariaLabel")}
+              onClick={(event) => {
+                // The card underneath opens the same modal; without this the
+                // click runs both handlers and relies on them staying
+                // identical.
+                event.stopPropagation();
                 setTargetMemoryId(null);
                 memoriesModal.toggle(true);
               }}
             />
-          }
-        />
+          </Section>
+        </SelectCard>
       ) : (
         <div className="self-stretch flex flex-row items-center justify-between gap-2">
           <div className="flex flex-row items-center gap-2">

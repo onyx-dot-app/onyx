@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
 import Text from "@/refresh-components/texts/Text";
@@ -161,6 +161,7 @@ export function RecentFilesTableContent({
   hasProcessingFiles,
 }: RecentFilesTableContentProps) {
   const t = useTranslations("knowledge");
+  const locale = useLocale();
   const [searchValue, setSearchValue] = useState("");
 
   const filteredFiles = useMemo(() => {
@@ -190,7 +191,7 @@ export function RecentFilesTableContent({
       width: 8,
       render: (file) => (
         <Text text03 secondaryBody>
-          {timeAgo(file.last_accessed_at || file.created_at)}
+          {timeAgo(file.last_accessed_at || file.created_at, locale)}
         </Text>
       ),
     },

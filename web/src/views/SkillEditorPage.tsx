@@ -10,7 +10,6 @@ import {
 import { useTranslations } from "next-intl";
 import useSWR, { useSWRConfig } from "swr";
 import { useRouter } from "next/navigation";
-import type { Route } from "next";
 import {
   Button,
   Card,
@@ -239,9 +238,7 @@ export default function SkillEditorPage({
 
   function leaveEditor() {
     router.push(
-      hasAppContext
-        ? externalAppAdminUrl(externalAppId)
-        : ("/craft/v1/skills" as Route)
+      hasAppContext ? externalAppAdminUrl(externalAppId) : "/craft/v1/skills"
     );
   }
 
@@ -297,7 +294,7 @@ export default function SkillEditorPage({
         router.replace(
           isCreatingForApp
             ? externalAppAdminUrl(externalAppId)
-            : ("/craft/v1/skills" as Route)
+            : "/craft/v1/skills"
         );
         return;
       }

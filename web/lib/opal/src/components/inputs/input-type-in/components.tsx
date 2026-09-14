@@ -95,8 +95,8 @@ export default function InputTypeIn({
       <input
         ref={ref}
         type="text"
-        // dir="auto": typed text and, while empty, the placeholder decide
-        // the direction, so punctuation sits on the correct side.
+        // dir="auto": typed text decides the direction so punctuation sits on the
+        // correct side. While empty it inherits the page direction (see styles.css).
         dir="auto"
         name={name}
         disabled={disabled}

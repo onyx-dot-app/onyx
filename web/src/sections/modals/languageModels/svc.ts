@@ -13,6 +13,7 @@ import {
   LlmModalsTranslator,
   TestApiKeyResult,
 } from "@/sections/modals/languageModels/utils";
+import type { ErrorResponseBody } from "@/lib/fetcher";
 
 // ─── Test helpers ─────────────────────────────────────────────────────────
 
@@ -229,7 +230,7 @@ export async function submitProvider<T extends BaseLLMFormValues>({
   // ── Set as default ──────────────────────────────────────────────────
   if (shouldMarkAsDefault && testModelName) {
     try {
-      const newLlmProvider = await response.json();
+      const newLlmProvider: LLMProviderView = await response.json();
       if (newLlmProvider?.id != null) {
         const setDefaultResponse = await fetch("/api/admin/llm/default", {
           method: "POST",
@@ -240,7 +241,9 @@ export async function submitProvider<T extends BaseLLMFormValues>({
           }),
         });
         if (!setDefaultResponse.ok) {
-          const err = await setDefaultResponse.json().catch(() => ({}));
+          const err: ErrorResponseBody = await setDefaultResponse
+            .json()
+            .catch(() => ({}));
           toast.error(err?.detail ?? t("toasts.setDefaultFailed"));
           setSubmitting(false);
           return;

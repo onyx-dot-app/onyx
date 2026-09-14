@@ -7,12 +7,12 @@ import (
 	"text/tabwriter"
 )
 
-// WriteReport renders a report as an aligned table. Packages with no floor yet
+// WriteReport renders a report as an aligned table. Rows with no floor yet
 // show a blank floor column rather than a misleading zero.
-func WriteReport(w io.Writer, report *Report) error {
+func WriteReport(w io.Writer, report *Report, kind Kind) error {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 
-	if _, err := fmt.Fprintln(tw, "PACKAGE\tCOVERAGE\tFLOOR\t"); err != nil {
+	if _, err := fmt.Fprintf(tw, "%s\tCOVERAGE\tFLOOR\t\n", strings.ToUpper(kind.Unit)); err != nil {
 		return err
 	}
 	for _, pkg := range report.Packages {

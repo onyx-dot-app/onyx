@@ -24,6 +24,11 @@ import {
   HookTimeoutError,
   HookConnectError,
 } from "@/ee/views/admin/HooksPage/svc";
+import {
+  hookPointDescription,
+  hookPointName,
+  type HooksTranslate,
+} from "@/ee/views/admin/HooksPage/hookPoints";
 import type {
   HookFailStrategy,
   HookFormState,
@@ -50,8 +55,6 @@ interface HookFormModalProps {
 // ---------------------------------------------------------------------------
 
 const MAX_TIMEOUT_SECONDS = 600;
-
-type HooksTranslate = ReturnType<typeof useTranslations<"admin.hooks">>;
 
 function buildInitialValues(
   hook: HookResponse | undefined,
@@ -171,9 +174,10 @@ export default function HookFormModal({
     onOpenChange(false);
   }
 
-  const hookPointDisplayName =
-    spec?.display_name ?? spec?.hook_point ?? hook?.hook_point ?? "";
-  const hookPointDescription = spec?.description;
+  const hookPointDisplayName = spec
+    ? hookPointName(spec, t)
+    : (hook?.hook_point ?? "");
+  const pointDescription = spec ? hookPointDescription(spec, t) : undefined;
   const docsUrl = spec?.docs_url;
 
   return (
@@ -285,7 +289,7 @@ export default function HookFormModal({
                     variant="section"
                     padding={0}
                     title={hookPointDisplayName}
-                    description={hookPointDescription}
+                    description={pointDescription}
                     rightChildren={
                       <div className="flex flex-col items-end gap-1">
                         <Content

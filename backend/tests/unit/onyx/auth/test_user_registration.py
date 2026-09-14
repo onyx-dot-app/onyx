@@ -9,16 +9,18 @@ Tests cover:
 """
 
 from collections.abc import Iterator
+from functools import partial
 from types import SimpleNamespace, TracebackType
-from typing import cast
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import uuid4
 
 import pytest
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi_users import exceptions
 
 from onyx.auth.schemas import UserCreate
-from onyx.auth.users import UserManager
+from onyx.auth.users import UserManager, _upgrade_placeholder_to_web_login__no_commit
 from onyx.db.enums import AccountType
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -711,14 +713,15 @@ class TestOAuthNoAutoLinkExemptions:
     @patch("onyx.auth.users.fetch_ee_implementation_or_noop")
     @patch("onyx.auth.users.get_async_session_context_manager")
     @patch("onyx.auth.users.remove_user_from_invited_users")
-    @patch("onyx.auth.users.assign_user_to_default_groups__no_commit")
+    # Patched where promote_placeholder_to_web_login__no_commit resolves it.
+    @patch("onyx.db.users.assign_user_to_default_groups__no_commit")
     @patch("onyx.auth.users._upgrade_will_add_seat", return_value=False)
-    @patch("onyx.auth.users.get_session_with_current_tenant")
+    @patch("onyx.auth.users.fetch_user_by_id")
     @patch("onyx.auth.users.SQLAlchemyUserDatabase")
     async def test_placeholder_promoted_without_auto_link(
         self,
         mock_user_db_cls: MagicMock,
-        mock_sync_session_factory: MagicMock,
+        mock_fetch_user_by_id: MagicMock,
         mock_will_add_seat: MagicMock,  # noqa: ARG002
         mock_assign_groups: MagicMock,
         mock_remove_invited: MagicMock,  # noqa: ARG002
@@ -746,15 +749,27 @@ class TestOAuthNoAutoLinkExemptions:
         user_manager = self._manager_with_existing(placeholder, mock_user_db_cls)
         mock_async_session.get = AsyncMock(return_value=placeholder)
 
-        sync_user = MagicMock(is_active=is_active)
+        # Still a placeholder under the lock: no concurrent login won the race.
+        sync_user = MagicMock(
+            is_active=is_active, account_type=AccountType.EXT_PERM_USER
+        )
         mock_sync_db = MagicMock()
-        mock_sync_db.query.return_value.filter.return_value.first.return_value = (
-            sync_user
-        )
-        mock_sync_session_factory.return_value.__enter__ = MagicMock(
-            return_value=mock_sync_db
-        )
-        mock_sync_session_factory.return_value.__exit__ = MagicMock(return_value=False)
+        # The row is re-locked through the db layer, so stub that lookup rather
+        # than the query chain behind it.
+        mock_fetch_user_by_id.return_value = sync_user
+
+        # The upgrade runs on the callback's own session, so drive the real
+        # helper through run_sync rather than a second session. Email
+        # reconciliation arrives here too and stays stubbed out.
+        def _upgrade_only(fn: Any) -> Any:
+            if (
+                isinstance(fn, partial)
+                and fn.func is _upgrade_placeholder_to_web_login__no_commit
+            ):
+                return fn(mock_sync_db)
+            return None
+
+        mock_async_session.run_sync = AsyncMock(side_effect=_upgrade_only)
 
         result = await user_manager.oauth_callback(
             oauth_name="okta",
@@ -774,7 +789,13 @@ class TestOAuthNoAutoLinkExemptions:
         # short-circuit a placeholder before it reaches the upgrade.
         assert sync_user.is_active is True
         mock_assign_groups.assert_called_once()
-        mock_sync_db.commit.assert_called_once()
+        # An email change commits the reconcile and drops its lock, so the
+        # upgrade has to take the row itself rather than assume it holds it.
+        mock_fetch_user_by_id.assert_called_once_with(
+            mock_sync_db, "placeholder-id", for_update=True
+        )
+        # Committed on the session holding the row lock, not a second one.
+        cast(AsyncMock, mock_async_session.commit).assert_awaited()
         assert result is placeholder
 
     @pytest.mark.asyncio
@@ -1180,3 +1201,76 @@ class TestPasswordAuthKillSwitch:
             "onyx.db.user_tenant_mapping",
             "get_tenant_id_for_email",
         )
+
+
+class TestPlaceholderUpgradeRace:
+    """The promote decision is made before the row lock, so it is re-checked."""
+
+    @patch("onyx.auth.users.promote_placeholder_to_web_login__no_commit")
+    @patch("onyx.auth.users.enforce_seat_limit_locked")
+    @patch("onyx.auth.users._upgrade_will_add_seat", return_value=True)
+    @patch("onyx.auth.users.fetch_user_by_id")
+    def test_already_promoted_row_is_left_alone(
+        self,
+        mock_fetch_user_by_id: MagicMock,
+        mock_will_add_seat: MagicMock,  # noqa: ARG002
+        mock_enforce_seat_limit: MagicMock,
+        mock_promote: MagicMock,
+    ) -> None:
+        """A concurrent login can promote the row and an admin can then disable
+        it. Re-promoting would reactivate a deliberately disabled account."""
+        db_session = MagicMock()
+        deactivated = MagicMock(
+            account_type=AccountType.STANDARD,
+            is_active=False,
+        )
+        mock_fetch_user_by_id.return_value = deactivated
+
+        seat_added = _upgrade_placeholder_to_web_login__no_commit(
+            uuid4(), True, db_session
+        )
+
+        assert seat_added is False
+        mock_promote.assert_not_called()
+        # The seat was consumed by whoever won the race.
+        mock_enforce_seat_limit.assert_not_called()
+        assert deactivated.is_active is False
+
+    @patch("onyx.auth.users.promote_placeholder_to_web_login__no_commit")
+    @patch("onyx.auth.users.enforce_seat_limit_locked")
+    @patch("onyx.auth.users._upgrade_will_add_seat", return_value=True)
+    @patch("onyx.auth.users.fetch_user_by_id")
+    def test_placeholder_still_promotes(
+        self,
+        mock_fetch_user_by_id: MagicMock,
+        mock_will_add_seat: MagicMock,  # noqa: ARG002
+        mock_enforce_seat_limit: MagicMock,
+        mock_promote: MagicMock,
+    ) -> None:
+        db_session = MagicMock()
+        placeholder = MagicMock(
+            account_type=AccountType.EXT_PERM_USER,
+            is_active=False,
+        )
+        mock_fetch_user_by_id.return_value = placeholder
+
+        seat_added = _upgrade_placeholder_to_web_login__no_commit(
+            uuid4(), True, db_session
+        )
+
+        assert seat_added is True
+        mock_enforce_seat_limit.assert_called_once()
+        mock_promote.assert_called_once_with(db_session, placeholder, is_verified=True)
+
+    @patch("onyx.auth.users.promote_placeholder_to_web_login__no_commit")
+    @patch("onyx.auth.users.fetch_user_by_id", return_value=None)
+    def test_missing_row_is_a_no_op(
+        self,
+        mock_fetch_user_by_id: MagicMock,  # noqa: ARG002
+        mock_promote: MagicMock,
+    ) -> None:
+        assert (
+            _upgrade_placeholder_to_web_login__no_commit(uuid4(), True, MagicMock())
+            is False
+        )
+        mock_promote.assert_not_called()

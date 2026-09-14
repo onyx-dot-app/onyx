@@ -38,7 +38,7 @@ export async function prepareOAuthAuthorizationRequest(
   }
 
   // Parse the JSON response
-  const data = (await response.json()) as OAuthPrepareAuthorizationResponse;
+  const data: OAuthPrepareAuthorizationResponse = await response.json();
   return data;
 }
 
@@ -148,7 +148,7 @@ export async function handleOAuthSlackAuthorizationResponse(
   }
 
   // Parse the JSON response
-  const data = (await response.json()) as OAuthSlackCallbackResponse;
+  const data: OAuthSlackCallbackResponse = await response.json();
   return data;
 }
 
@@ -186,7 +186,7 @@ export async function handleOAuthGoogleDriveAuthorizationResponse(
   }
 
   // Parse the JSON response
-  const data = (await response.json()) as OAuthBaseCallbackResponse;
+  const data: OAuthBaseCallbackResponse = await response.json();
   return data;
 }
 
@@ -226,7 +226,7 @@ export async function handleOAuthConfluenceAuthorizationResponse(
   }
 
   // Parse the JSON response
-  const data = (await response.json()) as OAuthBaseCallbackResponse;
+  const data: OAuthBaseCallbackResponse = await response.json();
   return data;
 }
 
@@ -275,8 +275,8 @@ export async function handleOAuthConfluencePrepareFinalization(
   }
 
   // Parse the JSON response
-  const data =
-    (await response.json()) as OAuthConfluencePrepareFinalizationResponse;
+  const data: OAuthConfluencePrepareFinalizationResponse =
+    await response.json();
   return data;
 }
 
@@ -317,6 +317,6 @@ export async function handleOAuthConfluenceFinalize(
   }
 
   // Parse the JSON response
-  const data = (await response.json()) as OAuthConfluenceFinalizeResponse;
+  const data: OAuthConfluenceFinalizeResponse = await response.json();
   return data;
 }

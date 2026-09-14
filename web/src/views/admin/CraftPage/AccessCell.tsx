@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Switch } from "@opal/components";
+import { InputSwitch } from "@opal/components";
 import { toast } from "@opal/layouts";
 import type { UserRow } from "@/views/admin/UsersPage/interfaces";
 import { setUsersCraftAccess } from "./svc";
@@ -49,7 +49,7 @@ export default function AccessCell({
   };
 
   return (
-    <Switch
+    <InputSwitch
       checked={effective}
       disabled={isUpdating}
       onCheckedChange={(checked) => {

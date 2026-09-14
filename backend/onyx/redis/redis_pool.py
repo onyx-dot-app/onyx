@@ -610,9 +610,13 @@ async def store_ws_token(token: str, user_id: str) -> None:
             f"Rate limit exceeded. Maximum {WS_TOKEN_RATE_LIMIT_MAX} tokens per minute."
         )
 
-    # Store the actual token
     redis_key = REDIS_WS_TOKEN_PREFIX + token
-    token_data = json.dumps({"sub": user_id})
+    token_data = json.dumps(
+        {
+            "sub": user_id,
+            "tenant_id": get_current_tenant_id(),
+        }
+    )
     await redis.set(redis_key, token_data, ex=WS_TOKEN_TTL_SECONDS)
 
 

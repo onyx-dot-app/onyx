@@ -2,7 +2,7 @@
 
 **Import:** `import { Card, type CardProps } from "@opal/components";`
 
-A container component with configurable background, border, padding, and rounding. Has two mutually-exclusive modes:
+A container component with configurable surface color, border, padding, and rounding. Has two mutually-exclusive modes:
 
 - **Plain** (default) — renders children inside a single styled `<div>`.
 - **Expandable** (`expandable: true`) — renders children as an always-visible header plus an `expandedContent` prop that animates open/closed.
@@ -21,17 +21,17 @@ import { Card } from "@opal/components";
 
 ### Plain mode props
 
-| Prop          | Type                            | Default     | Description                                                            |
-| ------------- | ------------------------------- | ----------- | ---------------------------------------------------------------------- |
-| `padding`     | `Spacing`                       | `4`         | Padding, as a spacing step (`N / 4` rem)                               |
-| `rounding`    | `Rounding`                      | `3`         | Corner radius step (`N / 4` rem, or `"full"`)                          |
-| `background`  | `"none" \| "light" \| "heavy"`  | `"light"`   | Background fill intensity                                              |
-| `border`      | `"none" \| "dashed" \| "solid"` | `"none"`    | Border style                                                           |
-| `borderColor` | `StatusVariants`                | `"default"` | Status-palette border color (needs `border` ≠ `"none"`)                |
-| `disabled`    | `boolean`                       | `false`     | Dims the card and shows a not-allowed cursor. Visual only — see below. |
-| `ref`         | `React.Ref<HTMLDivElement>`     | —           | Ref forwarded to the root div                                          |
-| `children`    | `React.ReactNode`               | —           | Card content                                                           |
-| `data-*`      | `string \| boolean`             | —           | Forwarded to the root. See below.                                      |
+| Prop          | Type                            | Default                | Description                                                                                                   |
+| ------------- | ------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `padding`     | `Spacing`                       | `4`                    | Padding, as a spacing step (`N / 4` rem)                                                                      |
+| `rounding`    | `Rounding`                      | `3`                    | Corner radius step (`N / 4` rem, or `"full"`)                                                                 |
+| `color`       | `CardColor`                     | `"background-tint-00"` | Surface color, named for the token it paints (`"transparent"`, `"background-tint-01"`, `"status-info-00"`, …) |
+| `border`      | `"none" \| "dashed" \| "solid"` | `"none"`               | Border style                                                                                                  |
+| `borderColor` | `StatusVariants`                | `"default"`            | Status-palette border color (needs `border` ≠ `"none"`)                                                       |
+| `disabled`    | `boolean`                       | `false`                | Dims the card and shows a not-allowed cursor. Visual only — see below.                                        |
+| `ref`         | `React.Ref<HTMLDivElement>`     | —                      | Ref forwarded to the root div                                                                                 |
+| `children`    | `React.ReactNode`               | —                      | Card content                                                                                                  |
+| `data-*`      | `string \| boolean`             | —                      | Forwarded to the root. See below.                                                                             |
 
 ### `disabled`
 
@@ -52,7 +52,7 @@ when you want a tooltip explaining why:
 </Disabled>
 ```
 
-It is a boolean rather than a variant value, so it stacks with `background` and
+It is a boolean rather than a variant value, so it stacks with `color` and
 `border` instead of replacing them — a disabled card can still be transparent
 with a dashed border.
 
@@ -74,7 +74,7 @@ card's appearance is still its own; behavioural props such as `onClick` are a
 deliberate API decision rather than something inherited by a rest spread (use
 `SelectCard` for an interactive card).
 
-The card's own `data-background`, `data-border`, `data-shadow`, and
+The card's own `data-color`, `data-border`, `data-shadow`, and
 `data-opal-status-border` are written after the forwarded attributes, so a caller
 cannot repurpose them to drive the stylesheet.
 
@@ -148,7 +148,7 @@ Everything from plain mode, **plus**:
 - **Always controlled.** `expanded` is a pure one-way visual prop. There is no `defaultExpanded` or `onExpandChange` — the caller owns state entirely (`useState` at the call site).
 - **No React context.** The component renders a flat tree; there are no compound sub-components (`Card.Header` / `Card.Content`) and no exported context hooks.
 - **Rounding adapts automatically.** When `expanded && expandedContent !== undefined`, the header's bottom corners flatten and the content's top corners flatten so they meet seamlessly. When collapsed (or when `expandedContent` is undefined), the header is fully rounded.
-- **Content background is always transparent.** The `background` prop applies to the header only; the content slot never fills its own background so the page shows through and keeps the two regions visually distinct.
+- **Content background is always transparent.** The `color` prop applies to the header only; the content slot never fills its own background so the page shows through and keeps the two regions visually distinct.
 - **Content has no intrinsic padding.** The `padding` prop applies to the header only. Callers own any padding inside whatever they pass to `expandedContent` — wrap it in a `<div className="p-4">` (or whatever) if you want spacing.
 - **Animation.** Content uses a pure CSS grid `0fr ↔ 1fr` animation with an opacity fade (~200ms ease-out). No `@radix-ui/react-collapsible` dependency.
 
@@ -162,7 +162,7 @@ Because Card doesn't own the trigger, it also doesn't generate IDs or ARIA attri
 type CardBaseProps = {
   padding?: Spacing;
   rounding?: Rounding;
-  background?: "none" | "light" | "heavy";
+  color?: CardColor;
   border?: "none" | "dashed" | "solid";
   borderColor?: StatusVariants;
   ref?: React.Ref<HTMLDivElement>;

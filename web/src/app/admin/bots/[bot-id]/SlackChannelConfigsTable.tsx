@@ -14,7 +14,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import Link from "next/link";
-import type { Route } from "next";
 import { useState } from "react";
 import { deleteSlackChannelConfig, isPersonaASlackBotPersona } from "./lib";
 import { Card } from "@/components/ui/card";
@@ -106,9 +105,7 @@ export default function SlackChannelConfigsTable({
                           slackChannelConfig.persona
                         ) ? (
                           <Link
-                            href={
-                              `/app/agents/edit/${slackChannelConfig.persona.id}` as Route
-                            }
+                            href={`/app/agents/edit/${slackChannelConfig.persona.id}`}
                             className="text-primary hover:underline"
                           >
                             {slackChannelConfig.persona.name}

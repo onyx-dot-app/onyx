@@ -3,7 +3,6 @@ from uuid import UUID
 
 from celery import Task, shared_task
 
-from ee.onyx.server.reporting.usage_export_generation import create_new_usage_report
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -29,6 +28,8 @@ def generate_usage_report_task(
     report_id: str | None = None,
 ) -> None:
     """User-initiated usage report generation task"""
+    from ee.onyx.server.reporting.usage_export_generation import create_new_usage_report
+
     # Parse period if provided
     period = None
     if period_from and period_to:

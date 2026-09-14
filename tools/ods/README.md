@@ -357,6 +357,63 @@ The package floors are the gate. The module total is reported with its delta
 but never fails the check: a package added without tests, or a well-covered
 package deleted, moves the total without any package regressing.
 
+### `type-coverage` - Measure Type Coverage Against a Baseline
+
+Measure type coverage per directory and hold it against a committed baseline.
+Type coverage is the share of identifiers whose type is not `any`. Each type
+cast (`x as T` or `<T>x`) and each non-null assertion (`x!`) also counts as one
+uncovered item. `as const` and `as unknown` do not count, because they do not
+override the checker.
+
+```shell
+ods type-coverage <checker> [flags]
+```
+
+The only checker is `typescript` (alias `ts`), which measures `web/`. Python is
+not supported yet, because `ty` does not report types.
+
+`ods web types:check` type-checks `web/` with the TypeScript 7 API. From the
+same program, it counts the identifiers in each file. A type error fails the
+command before the coverage is compared. The count does not include tests:
+`tests/` and `__tests__/` directories, and `*.test.*` and `*.spec.*` files.
+Tests are still type-checked. This command groups the files into directories
+three levels deep, such as `src/app/admin`, and compares each directory with its
+floor in `web/.type-coverage-baseline.yaml`. The flags and the baseline format
+are the same as for `ods coverage`.
+
+The default tolerance is `0`, because the measurement does not change between
+runs. The TypeScript 7 API is marked unstable, so a TypeScript upgrade can move
+the floors. After an upgrade, run `--update`.
+
+**Flags:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--check` | `false` | Fail when a directory drops below its baseline floor |
+| `--update` | `false` | Rewrite the baseline from this run |
+| `--output` | | Keep the per-file counts as JSON at this path |
+| `--markdown` | | Write the changed directories as a markdown table at this path, for a PR comment |
+| `--tolerance` | `0` | Percentage points a directory may drop below its floor without failing |
+
+**Examples:**
+
+```shell
+# Report where each directory stands
+ods type-coverage ts
+
+# Fail on a regression (what CI runs)
+ods type-coverage ts --check
+
+# Record the new floors after you remove `any` types
+ods type-coverage ts --update
+
+# Type-check and print the total only
+ods web types:check
+```
+
+The `typescript-check` pre-commit hook runs `--check` when a `.ts` or `.tsx`
+file in `web/` changes. `pr-quality-checks.yml` runs the same hook on every PR.
+
 ### `dev` - Devcontainer Management
 
 Manage the Onyx devcontainer. Also available as `ods dc`.

@@ -17,7 +17,7 @@ func TestWriteMarkdown_showsEachStatus(t *testing.T) {
 	}
 
 	var out strings.Builder
-	if err := WriteMarkdown(&out, "tools/ods", Compare(profile, baseline, DefaultTolerance)); err != nil {
+	if err := WriteMarkdown(&out, "tools/ods", Compare(profile, baseline, DefaultTolerance), GoTests); err != nil {
 		t.Fatalf("failed to write the markdown: %v", err)
 	}
 	got := out.String()
@@ -43,7 +43,7 @@ func TestWriteMarkdown_omitsUnchangedPackages(t *testing.T) {
 	baseline := &Baseline{Total: 50, Packages: map[string]float64{"cmd": 50, "internal/audit": 50}}
 
 	var out strings.Builder
-	if err := WriteMarkdown(&out, "tools/ods", Compare(profile, baseline, DefaultTolerance)); err != nil {
+	if err := WriteMarkdown(&out, "tools/ods", Compare(profile, baseline, DefaultTolerance), GoTests); err != nil {
 		t.Fatalf("failed to write the markdown: %v", err)
 	}
 
@@ -60,7 +60,7 @@ func TestWriteMarkdown_holdingBaselineSaysSo(t *testing.T) {
 	baseline := &Baseline{Total: 50, Packages: map[string]float64{"cmd": 50}}
 
 	var out strings.Builder
-	if err := WriteMarkdown(&out, "tools/ods", Compare(profile, baseline, DefaultTolerance)); err != nil {
+	if err := WriteMarkdown(&out, "tools/ods", Compare(profile, baseline, DefaultTolerance), GoTests); err != nil {
 		t.Fatalf("failed to write the markdown: %v", err)
 	}
 
@@ -75,7 +75,7 @@ func TestWriteMarkdown_noBaseline(t *testing.T) {
 	profile := profileOf(map[string][2]int{"cmd": {1, 2}})
 
 	var out strings.Builder
-	if err := WriteMarkdown(&out, "cli", Compare(profile, nil, DefaultTolerance)); err != nil {
+	if err := WriteMarkdown(&out, "cli", Compare(profile, nil, DefaultTolerance), GoTests); err != nil {
 		t.Fatalf("failed to write the markdown: %v", err)
 	}
 
@@ -87,5 +87,27 @@ func TestWriteMarkdown_noBaseline(t *testing.T) {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("expected %q in:\n%s", want, out.String())
 		}
+	}
+}
+
+func TestWriteMarkdown_typeScriptWording(t *testing.T) {
+	profile := profileOf(map[string][2]int{
+		"src/app": {1, 4}, // 25%, below its 50 floor
+		"src/lib": {1, 2}, // holds at its 50 floor
+	})
+	baseline := &Baseline{Total: 50, Packages: map[string]float64{"src/app": 50, "src/lib": 50}}
+
+	var out strings.Builder
+	if err := WriteMarkdown(&out, "web", Compare(profile, baseline, TypeScript.DefaultTolerance), TypeScript); err != nil {
+		t.Fatalf("failed to write the markdown: %v", err)
+	}
+
+	want := MarkerChanged + "\n#### `web`\n\n" +
+		"Directories: 1 regressed. Total type coverage is 33.3% (-16.7 against the baseline).\n\n" +
+		"| Directory | Coverage | Floor | Change |\n| --- | ---: | ---: | --- |\n" +
+		"| src/app | 25.0% | 50.0% | **regressed by 25.0** |\n" +
+		"| **total** | **33.3%** | 50.0% | -16.7 |\n"
+	if out.String() != want {
+		t.Errorf("expected:\n%s\ngot:\n%s", want, out.String())
 	}
 }

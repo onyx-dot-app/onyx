@@ -100,7 +100,9 @@ func compareOne(name string, percent, floor float64, hasFloor bool, tolerance fl
 		result.Status = StatusNew
 	case percent < floor-tolerance:
 		result.Status = StatusRegressed
-	case percent > floor+tolerance:
+	// Floors are rounded down, so compare what `--update` would record. Else a
+	// zero tolerance reports the rounding as an improvement.
+	case floorPercent(percent) > floor+tolerance:
 		result.Status = StatusImproved
 	default:
 		result.Status = StatusOK

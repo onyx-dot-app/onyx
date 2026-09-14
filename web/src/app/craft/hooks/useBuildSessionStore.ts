@@ -1005,7 +1005,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   noSessionOutputPanelOpen: false,
 
   // Temporary active tab when no session exists
-  noSessionActiveOutputTab: "preview" as OutputTabType,
+  noSessionActiveOutputTab: "preview",
 
   // ===========================================================================
   // Session Management (mirrors chat's pattern)
@@ -1292,7 +1292,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const session = state.sessions.get(sessionId);
       if (!session) return state;
 
-      const streamItems = session.streamItems.map((item) => {
+      const streamItems = session.streamItems.map((item): StreamItem => {
         if (item.type === "tool_call" && item.toolCall.id === toolCallId) {
           return {
             ...item,
@@ -1300,7 +1300,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           };
         }
         return item;
-      }) as StreamItem[];
+      });
 
       const updatedSession: BuildSessionData = {
         ...session,
@@ -1333,7 +1333,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
       if (latestInFlightIndex === -1) return state;
 
-      const streamItems = session.streamItems.map((item, index) => {
+      const streamItems = session.streamItems.map((item, index): StreamItem => {
         if (index === latestInFlightIndex && item.type === "tool_call") {
           return {
             ...item,
@@ -1341,7 +1341,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           };
         }
         return item;
-      }) as StreamItem[];
+      });
 
       const updatedSession: BuildSessionData = {
         ...session,
@@ -1371,7 +1371,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       let streamItems: StreamItem[];
       if (existingIndex >= 0) {
         // Update existing todo_list
-        streamItems = session.streamItems.map((item, index) => {
+        streamItems = session.streamItems.map((item, index): StreamItem => {
           if (index === existingIndex && item.type === "todo_list") {
             return {
               ...item,
@@ -1379,7 +1379,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
             };
           }
           return item;
-        }) as StreamItem[];
+        });
       } else {
         // Create new todo_list item
         streamItems = [

@@ -56,6 +56,12 @@ def _check_token_rate_limits(_: User) -> None:
     _user_is_rate_limited_by_global()
 
 
+def check_global_token_rate_limits() -> None:
+    """Enforce tenant-wide budgets without requiring a user principal."""
+    if any_rate_limit_exists():
+        _user_is_rate_limited_by_global()
+
+
 """
 Global rate limits
 """

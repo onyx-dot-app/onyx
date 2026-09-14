@@ -65,6 +65,7 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(NewScreenshotDiffCommand())
 	cmd.AddCommand(NewTestCommand())
 	cmd.AddCommand(NewCoverageCommand())
+	cmd.AddCommand(NewTypeCoverageCommand())
 	cmd.AddCommand(NewDesktopCommand())
 	cmd.AddCommand(NewDevCommand())
 	cmd.AddCommand(NewWebCommand())

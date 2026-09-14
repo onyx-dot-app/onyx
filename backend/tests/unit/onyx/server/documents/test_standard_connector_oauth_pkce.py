@@ -499,7 +499,7 @@ def test_existing_oauth_connectors_report_manual_capability(
 def test_oauth_details_defaults_non_oauth_sources_to_manual(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(standard_oauth, "_discover_oauth_connectors", lambda: {})
+    monkeypatch.setattr(standard_oauth, "_discover_oauth_connectors", dict)
 
     details = standard_oauth.oauth_details(
         source=DocumentSource.SALESFORCE, _=cast(User, object())

@@ -5,12 +5,13 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import useSWR, { useSWRConfig } from "swr";
 import useGroupMemberCandidates from "./useGroupMemberCandidates";
+import { displayGroupName } from "@/views/admin/GroupsPage/utils";
 import {
   Button,
   Card,
   Divider,
   MessageCard,
-  Switch,
+  InputSwitch,
   Table,
 } from "@opal/components";
 import { IllustrationContent, InputHorizontal, toast } from "@opal/layouts";
@@ -470,9 +471,9 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     }
 
     // Re-fetch group to check sync status before saving
-    const freshGroups = await fetch(SWR_KEYS.adminUserGroupsWithDefault).then(
-      (r) => r.json()
-    );
+    const freshGroups: UserGroup[] = await fetch(
+      SWR_KEYS.adminUserGroupsWithDefault
+    ).then((r) => r.json());
     const freshGroup = freshGroups.find((g: UserGroup) => g.id === groupId);
     if (freshGroup && !freshGroup.is_up_to_date) {
       toast.error(t("edit.toasts.syncing"));
@@ -649,7 +650,9 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                 </Text>
                 <InputTypeIn
                   placeholder={t("form.name.placeholder")}
-                  value={groupName}
+                  value={
+                    isDefaultGroup ? displayGroupName(group, t) : groupName
+                  }
                   variant={canManage ? "primary" : "readOnly"}
                   onChange={(e) => setGroupName(e.target.value)}
                 />
@@ -777,7 +780,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                       description={t("edit.incognito.description")}
                       withLabel
                     >
-                      <Switch
+                      <InputSwitch
                         checked={incognitoEnabled}
                         onCheckedChange={setIncognitoEnabled}
                       />

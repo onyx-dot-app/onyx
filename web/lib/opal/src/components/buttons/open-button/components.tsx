@@ -50,7 +50,7 @@ type OpenButtonContentProps =
       children?: string | RichStr;
     };
 
-type OpenButtonVariant = "select-light" | "select-heavy" | "select-tinted";
+type OpenButtonVariant = "select-light" | "select-heavy";
 
 type OpenButtonProps = Omit<InteractiveStatefulProps, "variant"> & {
   variant?: OpenButtonVariant;

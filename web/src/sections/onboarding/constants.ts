@@ -1,3 +1,4 @@
+import type { Route } from "next";
 import { OnboardingStep } from "@/interfaces/onboarding";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { SvgGlobe, SvgImage, SvgUsers } from "@opal/icons";
@@ -62,7 +63,7 @@ export type FinalSetupItemConfig = {
   descriptionKey: string;
   icon: IconFunctionComponent;
   buttonTextKey: string;
-  buttonHref: string;
+  buttonHref: Route;
 };
 
 export const FINAL_SETUP_CONFIG = [

@@ -1,9 +1,12 @@
+"use client";
+
 import "@opal/components/tag/styles.css";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { Text, Tooltip } from "@opal/components";
 import { SvgAlertTriangle, SvgX } from "@opal/icons";
 import { cn } from "@opal/utils";
 import { TAG_COLORS, type TagColor } from "@opal/components/tag/colors";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -70,6 +73,7 @@ function Tag({
   tooltip,
   error = false,
 }: TagProps) {
+  const strings = useOpalStrings();
   const config = TAG_COLORS[color];
   const editable = onRemove !== undefined;
   const capped = editable || truncate;
@@ -125,7 +129,9 @@ function Tag({
             type="button"
             className={TAG_REMOVE_CLASS}
             aria-label={
-              typeof title === "string" ? `Remove ${title}` : "Remove"
+              typeof title === "string"
+                ? strings.removeItem(title)
+                : strings.remove
             }
             onClick={(event) => {
               event.stopPropagation();

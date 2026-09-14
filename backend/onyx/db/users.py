@@ -906,6 +906,23 @@ def assign_user_to_default_groups__no_commit(
     )
 
 
+def promote_placeholder_to_web_login__no_commit(
+    db_session: Session, user: User, is_verified: bool
+) -> None:
+    """Turn a placeholder row (EXT_PERM_USER, BOT) into a real web login.
+
+    Does NOT commit. The caller holds the ``"user"`` row lock and commits this
+    with the rest of its transaction, so the seat check it ran stays valid.
+
+    A placeholder is deactivated until its owner shows up, so this reactivates
+    the row rather than turning the owner away.
+    """
+    user.is_verified = is_verified
+    user.account_type = AccountType.STANDARD
+    user.is_active = True
+    assign_user_to_default_groups__no_commit(db_session, user)
+
+
 def get_active_admin_count(db_session: Session) -> int:
     """Count for the share dialog's Admins row — same filter set as
     get_active_admin_users (no API-key dummies or system placeholders).
