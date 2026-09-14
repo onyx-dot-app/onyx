@@ -97,3 +97,52 @@ func nextSequencedTag(prefix, excludeTag string) (string, error) {
 	}
 	return fmt.Sprintf("%s%d", prefix, next), nil
 }
+
+// LatestStableTag returns the highest stable tag (vX.Y.Z, no pre-release
+// suffix) among the local tags, or "" when the repository has none. Tags are
+// ordered numerically on major, then minor, then patch; pre-release tags such
+// as vX.Y.Z-beta.N and vX.Y.Z-cloud.N are ignored.
+func LatestStableTag() (string, error) {
+	out, err := exec.Command("git", "tag", "--list", "v*").Output()
+	if err != nil {
+		return "", fmt.Errorf("git tag --list failed: %w", err)
+	}
+
+	latestTag := ""
+	latest := [3]int{}
+	for _, line := range strings.Split(string(out), "\n") {
+		tag := strings.TrimSpace(line)
+		version, ok := parseStableTag(tag)
+		if !ok {
+			continue
+		}
+		if latestTag == "" || version[0] > latest[0] ||
+			version[0] == latest[0] && (version[1] > latest[1] ||
+				version[1] == latest[1] && version[2] > latest[2]) {
+			latestTag, latest = tag, version
+		}
+	}
+	return latestTag, nil
+}
+
+// parseStableTag splits a stable tag into its numeric major, minor, and patch
+// components. It reports false for any tag that is not a bare vX.Y.Z.
+func parseStableTag(tag string) ([3]int, bool) {
+	version := [3]int{}
+	matches := stableTagRe.FindStringSubmatch(tag)
+	if matches == nil {
+		return version, false
+	}
+	major, minor, found := strings.Cut(matches[1], ".")
+	if !found {
+		return version, false
+	}
+	for i, part := range [3]string{major, minor, matches[2]} {
+		n, err := strconv.Atoi(part)
+		if err != nil {
+			return version, false
+		}
+		version[i] = n
+	}
+	return version, true
+}
