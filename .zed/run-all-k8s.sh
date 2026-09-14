@@ -10,9 +10,6 @@ readonly ONYX_ZED_COMPOSE_FILE="${ONYX_ZED_ROOT}/.zed/process-compose.k8s.yaml"
 readonly ONYX_ZED_CONTROL_PORT=18080
 readonly ONYX_ZED_API_PORT=8080
 readonly ONYX_ZED_WEB_PORT=3000
-# Same private roots that deployment/helm/dev/k8s-up.sh trusts in the cluster.
-readonly ONYX_ZED_CA_DIR="${ONYX_DEV_CA_DIR:-$HOME/.onyx-dev/ca-certificates}"
-readonly ONYX_ZED_CA_BUNDLE="$HOME/.onyx-dev/ca-bundle.crt"
 
 ONYX_ZED_STACK_STARTED=false
 ONYX_ZED_INTERCEPT_CREATED=false
@@ -59,16 +56,6 @@ is_managed_process_compose() {
   [[ "$command" == *"process-compose"* ]] &&
     [[ "$command" == *"--port ${ONYX_ZED_CONTROL_PORT}"* ]] &&
     [[ "$command" == *"--config ${ONYX_ZED_COMPOSE_FILE}"* ]]
-}
-
-is_managed_api() {
-  local pid="$1"
-  local command
-
-  command="$(process_command "$pid")"
-  [[ "$command" == *"-m uvicorn onyx.main:app"* ]] &&
-    [[ "$command" == *"${ONYX_ZED_ROOT}/backend"* ]] &&
-    [[ "$command" == *"--port ${ONYX_ZED_API_PORT}"* ]]
 }
 
 collect_process_tree() {
@@ -139,17 +126,6 @@ request_process_compose_down() {
   run_bounded 5 process-compose --port "$ONYX_ZED_CONTROL_PORT" down || true
 }
 
-managed_api_pids() {
-  local pid
-  local command
-
-  while read -r pid command; do
-    if is_managed_api "$pid"; then
-      echo "$pid"
-    fi
-  done < <(ps -axo pid=,command=)
-}
-
 assert_port_available() {
   local port="$1"
   local purpose="$2"
@@ -173,7 +149,6 @@ assert_port_available() {
 stop_managed_stack() {
   local pid
   local control_listener_pids=()
-  local api_pids=()
 
   while IFS= read -r pid; do
     [[ -n "$pid" ]] && control_listener_pids+=("$pid")
@@ -194,52 +169,8 @@ stop_managed_stack() {
     terminate_process_trees "${control_listener_pids[@]}"
   fi
 
-  while IFS= read -r pid; do
-    [[ -n "$pid" ]] && api_pids+=("$pid")
-  done < <(managed_api_pids)
-
-  if [[ "${#api_pids[@]}" -gt 0 ]]; then
-    echo "==> stopping stale Onyx API reload processes"
-    terminate_process_trees "${api_pids[@]}"
-  fi
-
   assert_port_available "$ONYX_ZED_CONTROL_PORT" "Process Compose control server"
   assert_port_available "$ONYX_ZED_API_PORT" "Onyx API"
-}
-
-# Add private CAs to certifi's roots for clients that do not use the macOS keychain.
-export_ca_bundle() {
-  if ! compgen -G "$ONYX_ZED_CA_DIR/*.crt" >/dev/null; then
-    return 0
-  fi
-
-  local built=1
-  mkdir -p "$(dirname "$ONYX_ZED_CA_BUNDLE")"
-  "${ONYX_ZED_ROOT}/.venv/bin/python" - \
-    "$ONYX_ZED_CA_BUNDLE" "$ONYX_ZED_CA_DIR" <<'PY' || built=0
-import glob
-import os
-import sys
-
-import certifi
-
-bundle_path, ca_dir = sys.argv[1], sys.argv[2]
-chunks = [open(certifi.where(), "rb").read()]
-for path in sorted(glob.glob(os.path.join(ca_dir, "*.crt"))):
-    chunks.append(open(path, "rb").read())
-with open(bundle_path, "wb") as out:
-    out.write(b"\n".join(chunks))
-PY
-
-  if [[ "$built" -eq 0 ]]; then
-    echo "warning: could not build $ONYX_ZED_CA_BUNDLE; LLM calls may fail TLS" >&2
-    return 0
-  fi
-
-  export SSL_CERT_FILE="$ONYX_ZED_CA_BUNDLE"
-  export REQUESTS_CA_BUNDLE="$ONYX_ZED_CA_BUNDLE"
-  export NODE_EXTRA_CA_CERTS="$ONYX_ZED_CA_BUNDLE"
-  echo "==> trusting private root CAs via $ONYX_ZED_CA_BUNDLE"
 }
 
 update_env_value() {
@@ -247,9 +178,17 @@ update_env_value() {
   local value="$2"
   local temporary_file
 
+  # Single quotes preserve backslashes and dollar signs in Process Compose env files.
+  case "$value" in
+    *"'"*|*$'\n'*|*$'\r'*)
+      echo "error: $key contains a quote or newline that cannot be stored safely" >&2
+      return 1
+      ;;
+  esac
+
   temporary_file="$(mktemp "${ONYX_ZED_ENV_FILE}.tmp.XXXXXX")"
-  awk -v key="$key" -v value="$value" '
-    BEGIN { found = 0 }
+  ONYX_ZED_ENV_VALUE="'$value'" awk -v key="$key" '
+    BEGIN { found = 0; value = ENVIRON["ONYX_ZED_ENV_VALUE"] }
     index($0, key "=") == 1 { print key "=" value; found = 1; next }
     { print }
     END { if (!found) print key "=" value }
@@ -296,11 +235,11 @@ fi
 require_command bun "install Bun before starting the web server"
 require_command kubectl "install kubectl before using the local kind cluster"
 require_file "$ONYX_ZED_ENV_FILE" "copy .vscode/.env.k8s.template and fill in its required values"
-require_file "$ONYX_ZED_WEB_ENV_FILE" "create the web environment file used by the Zed web task"
+require_file "$ONYX_ZED_WEB_ENV_FILE" "run make craft-up to create the web environment file"
 require_file "${ONYX_ZED_ROOT}/.venv/bin/python" "run 'uv sync --frozen' from the repository root"
 
 if ! kubectl config get-contexts kind-onyx-dev -o name >/dev/null 2>&1; then
-  echo "error: kubectl context kind-onyx-dev was not found; run deployment/helm/dev/k8s-up.sh first" >&2
+  echo "error: kubectl context kind-onyx-dev was not found; run make craft-up first" >&2
   exit 1
 fi
 
@@ -352,8 +291,6 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-export_ca_bundle
-
 process_compose_args=(
   --port "$ONYX_ZED_CONTROL_PORT"
   --ordered-shutdown
@@ -361,7 +298,6 @@ process_compose_args=(
   --config "$ONYX_ZED_COMPOSE_FILE"
 )
 
-# Without a terminal, disable the TUI and show how to access service logs.
 if [[ -t 1 ]]; then
   echo "==> starting the service stack in Process Compose"
 else

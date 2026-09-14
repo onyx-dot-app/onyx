@@ -382,6 +382,45 @@ before launching the api_server.
 
 ## Troubleshooting
 
+### VPN or proxy certificate errors
+
+For `x509: certificate signed by unknown authority` or `CERTIFICATE_VERIFY_FAILED`,
+obtain your proxy's root CA from IT. Save it as a PEM `.crt` outside the repository.
+Setup scripts do not install certificates. Keep TLS verification enabled.
+
+If `docker pull` fails, follow [Docker's CA setup](https://docs.docker.com/engine/network/ca-certs/).
+If only kind image pulls fail, run this in Bash with your CA path:
+
+```bash
+set -euo pipefail
+onyx_local_ca="/absolute/path/to/company-root.crt"
+deployment/helm/dev/k8s-up.sh --skip-helm
+onyx_local_nodes="$(kind get nodes --name onyx-dev)"
+for onyx_local_node in $onyx_local_nodes; do
+  docker cp "$onyx_local_ca" "$onyx_local_node:/usr/local/share/ca-certificates/onyx-local-proxy.crt"
+  docker exec "$onyx_local_node" update-ca-certificates
+  docker exec "$onyx_local_node" systemctl restart containerd
+done
+make craft-up
+```
+
+For local client errors, build a bundle from the repository root:
+
+```bash
+set -euo pipefail
+onyx_local_ca="/absolute/path/to/company-root.crt"
+mkdir -p "$HOME/.onyx-dev"
+onyx_public_ca="$(.venv/bin/python -m certifi)"
+cat "$onyx_public_ca" "$onyx_local_ca" > "$HOME/.onyx-dev/manual-ca-bundle.crt"
+```
+
+Set `SSL_CERT_FILE` and `REQUESTS_CA_BUNDLE` to the bundle's absolute path in `.vscode/.env.k8s`.
+Set `NODE_EXTRA_CA_CERTS` to the root CA's absolute path in `.vscode/.env.web`. Restart the services.
+
+After CA rotation or removal, replace or remove the node certificate, run `update-ca-certificates --fresh`, and restart containerd.
+Rebuild the local bundle and update client settings. Repeat node setup after cluster recreation.
+Node trust does not configure certificates inside application pods.
+
 ### Sandbox pods stuck in `ImagePullBackOff`
 
 **Symptoms:** Pods in the `onyx-sandboxes` namespace fail to start, with
