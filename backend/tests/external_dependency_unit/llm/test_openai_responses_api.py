@@ -1,6 +1,6 @@
 """Live behavior tests for the OpenAI Responses API path through LiteLLM.
 
-`LitellmLLM` routes true OpenAI models through LiteLLM's Responses API
+`LitellmTransport` routes true OpenAI models through LiteLLM's Responses API
 bridge (model name prefixed with `openai/responses/`). These tests exercise
 behavior of that bridge that cannot be reached with mocks:
 
@@ -21,18 +21,19 @@ import json
 import warnings
 
 import pytest
+from pydantic import JsonValue
 
 from onyx.llm.constants import LlmProviderNames
+from onyx.llm.litellm_models import ChatCompletionMessage, UserMessage
 from onyx.llm.litellm_singleton import litellm
-from onyx.llm.models import ChatCompletionMessage, UserMessage
-from onyx.llm.multi_llm import LitellmLLM
+from onyx.llm.multi_llm import LitellmTransport
 from tests.utils.secret_names import TestSecret
 
 pytestmark = pytest.mark.nightly
 
 
-def _build_openai_llm(model: str, api_key: str) -> LitellmLLM:
-    return LitellmLLM(
+def _build_openai_llm(model: str, api_key: str) -> LitellmTransport:
+    return LitellmTransport(
         api_key=api_key,
         model_provider=LlmProviderNames.OPENAI,
         model_name=model,
@@ -57,7 +58,7 @@ def test_streaming_parallel_tool_calls_land_in_distinct_slots(
     """
     llm = _build_openai_llm("gpt-4o-mini", test_secrets[TestSecret.OPENAI_API_KEY])
 
-    tools = [
+    tools: list[dict[str, JsonValue]] = [
         {
             "type": "function",
             "function": {
@@ -86,7 +87,6 @@ def test_streaming_parallel_tool_calls_land_in_distinct_slots(
 
     prompt: list[ChatCompletionMessage] = [
         UserMessage(
-            role="user",
             content=(
                 "For Paris, France: call get_weather AND get_population. "
                 "Issue both tool calls in a single response."
@@ -204,7 +204,6 @@ def test_streaming_reasoning_summary_sections_are_separated_by_blank_line(
 
     prompt: list[ChatCompletionMessage] = [
         UserMessage(
-            role="user",
             content=(
                 "Plan a 3-day trip to Tokyo for someone with a peanut allergy on a $2000 budget. "
                 "First plan the itinerary, then verify each restaurant choice is safe, then check "
@@ -245,7 +244,6 @@ def test_non_streaming_reasoning_summary_sections_are_separated_by_blank_line(
 
     prompt: list[ChatCompletionMessage] = [
         UserMessage(
-            role="user",
             content=(
                 "Plan a 3-day trip to Tokyo for someone with a peanut allergy on a $2000 budget. "
                 "First plan the itinerary, then verify each restaurant choice is safe, then check "
@@ -283,7 +281,7 @@ def test_streaming_emits_no_pydantic_serializer_warnings(
     llm = _build_openai_llm("gpt-5.4-nano", test_secrets[TestSecret.OPENAI_API_KEY])
 
     prompt: list[ChatCompletionMessage] = [
-        UserMessage(role="user", content="Reply with exactly the word: ok")
+        UserMessage(content="Reply with exactly the word: ok")
     ]
 
     with warnings.catch_warnings(record=True) as captured:

@@ -176,8 +176,8 @@ class UserFileIndexingAdapter:
         try:
             llm = get_default_llm()
             llm_tokenizer = get_tokenizer(
-                model_name=llm.config.model_name,
-                provider_type=llm.config.model_provider,
+                model_name=llm.info.model_name,
+                provider_type=llm.info.model_provider,
             )
         except Exception as e:
             logger.error("Error getting tokenizer: %s", e)
@@ -257,7 +257,8 @@ class UserFileIndexingAdapter:
         db_session: Session,
         index_to_secondary: bool,
     ) -> None:
-        assert isinstance(enrichment, UserFileChunkEnricher)
+        if not isinstance(enrichment, UserFileChunkEnricher):
+            raise TypeError("User file indexing requires a UserFileChunkEnricher")
         if index_to_secondary:
             # Secondary (reindex-port) write: chunks are written; the PRESENT pass owns the
             # terminal side-effects (status/chunk_count/plaintext/notifications) — leave them.

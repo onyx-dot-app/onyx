@@ -1,4 +1,4 @@
-"""Unit tests for Portkey's three API-mode routing in LitellmLLM.
+"""Unit tests for Portkey's three API-mode routing in LitellmTransport.
 
 Portkey is a single provider that can target three API surfaces, selected via a
 `portkey_api_mode` value persisted in custom_config. The routing differences are
@@ -11,8 +11,8 @@ from unittest.mock import patch
 from onyx.llm.api_surfaces import LlmApiSurface
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.custom_config_mapping import UI_ONLY_CONFIG_KEYS
-from onyx.llm.models import LanguageModelInput, UserMessage
-from onyx.llm.multi_llm import LitellmLLM
+from onyx.llm.litellm_models import LanguageModelInput, UserMessage
+from onyx.llm.multi_llm import LitellmTransport
 from onyx.llm.well_known_providers.constants import PORTKEY_API_MODE_CONFIG_KEY
 
 
@@ -20,9 +20,9 @@ def _make_portkey_llm(
     mode: str | None,
     api_base: str,
     model_name: str = "gpt-4o",
-) -> LitellmLLM:
+) -> LitellmTransport:
     custom_config = {PORTKEY_API_MODE_CONFIG_KEY: mode} if mode is not None else None
-    return LitellmLLM(
+    return LitellmTransport(
         api_key="pk-test-key",
         model_provider=LlmProviderNames.PORTKEY,
         model_name=model_name,
@@ -32,7 +32,7 @@ def _make_portkey_llm(
     )
 
 
-def _completion_kwargs(llm: LitellmLLM) -> dict:
+def _completion_kwargs(llm: LitellmTransport) -> dict:
     with patch("litellm.completion") as mock_completion:
         mock_completion.return_value = []
         messages: LanguageModelInput = [UserMessage(content="Hi")]
@@ -100,8 +100,8 @@ def test_messages_mode_strips_trailing_slash_but_keeps_bare_host() -> None:
 
 def test_api_mode_is_never_injected_into_environment() -> None:
     # The mode is UI-only form state: it must be readable for routing but must
-    # never reach os.environ via temporary_env_and_lock at call time.
+    # never become provider arguments.
     llm = _make_portkey_llm("messages", "https://api.portkey.ai")
     assert llm._api_surface is LlmApiSurface.ANTHROPIC_MESSAGES
     assert PORTKEY_API_MODE_CONFIG_KEY in UI_ONLY_CONFIG_KEYS
-    assert PORTKEY_API_MODE_CONFIG_KEY not in llm._env_only_custom_config
+    assert PORTKEY_API_MODE_CONFIG_KEY not in llm._model_kwargs

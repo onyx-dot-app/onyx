@@ -22,6 +22,7 @@ from onyx.tools.tool_implementations.file_reader.file_reader_tool import (
     NUM_CHARS_FIELD,
     START_CHAR_FIELD,
     FileReaderTool,
+    FileReadResult,
 )
 
 TOOL_MODULE = "onyx.tools.tool_implementations.file_reader.file_reader_tool"
@@ -125,7 +126,12 @@ class TestRun:
             override_kwargs=MagicMock(),
             **{FILE_ID_FIELD: str(uid)},
         )
-        assert content in resp.llm_facing_response
+        assert content in resp.text
+        assert isinstance(resp.details, FileReadResult)
+        assert resp.details.file_id == str(uid)
+        assert resp.details.start_char == 0
+        assert resp.details.end_char == len(content)
+        assert resp.details.preview_start == content
 
     @patch(f"{TOOL_MODULE}.get_session_with_current_tenant")
     @patch(f"{TOOL_MODULE}.load_user_file")
@@ -145,7 +151,7 @@ class TestRun:
             override_kwargs=MagicMock(),
             **{FILE_ID_FIELD: str(uid), START_CHAR_FIELD: 4, NUM_CHARS_FIELD: 6},
         )
-        assert "efghij" in resp.llm_facing_response
+        assert "efghij" in resp.text
 
     @patch(f"{TOOL_MODULE}.get_session_with_current_tenant")
     @patch(f"{TOOL_MODULE}.load_user_file")
@@ -165,7 +171,7 @@ class TestRun:
             override_kwargs=MagicMock(),
             **{FILE_ID_FIELD: str(uid), NUM_CHARS_FIELD: MAX_NUM_CHARS + 9999},
         )
-        assert f"Characters 0-{MAX_NUM_CHARS}" in resp.llm_facing_response
+        assert f"Characters 0-{MAX_NUM_CHARS}" in resp.text
 
     @patch(f"{TOOL_MODULE}.get_session_with_current_tenant")
     @patch(f"{TOOL_MODULE}.load_user_file")
@@ -185,7 +191,7 @@ class TestRun:
             override_kwargs=MagicMock(),
             **{FILE_ID_FIELD: str(uid), NUM_CHARS_FIELD: 10},
         )
-        assert "use start_char=10 to continue reading" in resp.llm_facing_response
+        assert "use start_char=10 to continue reading" in resp.text
 
     def test_raises_on_missing_file_id(self) -> None:
         tool = _make_tool()

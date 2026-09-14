@@ -98,7 +98,6 @@ backend = [
     "python-dotenv==1.2.2",
     "python-slugify==8.0.4",
     "pywikibot==11.4.2",
-    "readerwriterlock==1.0.9",
     "redis==5.0.8",
     # PDF generation for the usage report review pack.
     "reportlab==5.0.0",

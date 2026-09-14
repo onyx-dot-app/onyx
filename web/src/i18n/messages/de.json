@@ -6468,11 +6468,6 @@
         }
       },
       "networkSafety": {
-        "envInjection": {
-          "description": "Erlauben Sie benutzerdefinierten LLM-Anbieterkonfigurationen, während der Aufrufe vorübergehend Prozess-Umgebungsvariablen zu setzen. Deaktivieren Sie dies, um für alle Anbietereinstellungen ein LiteLLM-Parameteräquivalent zu verlangen.",
-          "multiTenantDescription": "Benutzerdefinierte LLM-Anbieterkonfigurationen können in mandantenfähigen Bereitstellungen niemals Prozess-Umgebungsvariablen setzen.",
-          "title": "Einschleusen von LLM-Umgebungsvariablen"
-        },
         "section": {
           "title": "Netzwerksicherheit"
         },

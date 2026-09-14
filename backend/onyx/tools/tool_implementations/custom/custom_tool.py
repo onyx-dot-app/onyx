@@ -11,6 +11,7 @@ from requests import JSONDecodeError
 from onyx.chat.emitter import Emitter
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import get_default_file_store
+from onyx.llm.models import ToolResult
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     CustomToolArgs,
@@ -29,7 +30,6 @@ from onyx.tools.models import (
     CustomToolUserFileSnapshot,
     DynamicSchemaInfo,
     ToolCallException,
-    ToolResponse,
 )
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     REQUEST_BODY,
@@ -151,7 +151,7 @@ class CustomTool(Tool[None]):
         placement: Placement,
         override_kwargs: None = None,  # noqa: ARG002
         **llm_kwargs: Any,
-    ) -> ToolResponse:
+    ) -> ToolResult:
         # Build path params
         path_params = {}
         for path_param_schema in self._method_spec.get_path_param_schemas():
@@ -261,16 +261,16 @@ class CustomTool(Tool[None]):
             )
         )
 
-        llm_facing_response = json.dumps(tool_result)
+        content = json.dumps(tool_result)
 
-        return ToolResponse(
-            rich_response=CustomToolCallSummary(
+        return ToolResult(
+            details=CustomToolCallSummary(
                 tool_name=self._name,
                 response_type=response_type,
                 tool_result=tool_result,
                 error=error_info,
             ),
-            llm_facing_response=llm_facing_response,
+            content=content,
         )
 
 

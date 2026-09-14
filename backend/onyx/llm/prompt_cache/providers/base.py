@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 
-from onyx.llm.interfaces import LanguageModelInput
+from onyx.llm.litellm_models import LanguageModelInput
 from onyx.llm.prompt_cache.models import CacheMetadata
 
 

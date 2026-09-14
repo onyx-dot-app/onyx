@@ -21,15 +21,15 @@ from onyx.chat.incognito_context import (
     load_incognito_context,
     teardown_incognito_session,
 )
-from onyx.chat.models import ChatMessageSimple
-from onyx.chat.save_chat import save_chat_turn
-from onyx.configs.constants import DocumentSource, FileOrigin, MessageType
+from onyx.configs.constants import DocumentSource, FileOrigin
+from onyx.context.messages import PromptMetadata
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat import (
     create_chat_session,
     get_or_create_root_message,
-    reserve_message_id,
+    reserve_chat_response_ids,
 )
+from onyx.db.chat_response import save_chat_turn
 from onyx.db.file_record import (
     FileRecordNotFoundError,
     get_incognito_file_ids,
@@ -37,6 +37,7 @@ from onyx.db.file_record import (
 )
 from onyx.db.models import ChatMessage, ChatSession, User
 from onyx.file_store.file_store import get_default_file_store
+from onyx.llm.models import AssistantMessage, TextContent, UserMessage
 from onyx.redis.redis_pool import get_redis_client
 from onyx.tools.models import ToolCallInfo
 from shared_configs.contextvars import CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR
@@ -64,11 +65,15 @@ def _new_session(db_session: Session, user_id: UUID) -> ChatSession:
 
 def _reserve_assistant(db_session: Session, session_id: UUID) -> ChatMessage:
     root = get_or_create_root_message(chat_session_id=session_id, db_session=db_session)
-    return reserve_message_id(
+    [message_id] = reserve_chat_response_ids(
         db_session=db_session,
         chat_session_id=session_id,
-        parent_message=root.id,
+        parent_message_id=root.id,
+        model_display_names=["test"],
     )
+    message = db_session.get(ChatMessage, message_id)
+    assert message is not None
+    return message
 
 
 def _search_doc(document_id: str) -> SearchDoc:
@@ -160,25 +165,22 @@ def test_turn_round_trips_through_the_store() -> None:
     try:
         append_incognito_message(
             session_id,
-            ChatMessageSimple(
-                message="what is our runway",
-                token_count=4,
-                message_type=MessageType.USER,
+            UserMessage(
+                content="what is our runway", metadata=PromptMetadata(token_count=4)
             ),
         )
         append_incognito_message(
             session_id,
-            ChatMessageSimple(
-                message="eighteen months",
-                token_count=2,
-                message_type=MessageType.ASSISTANT,
+            AssistantMessage(
+                content=[TextContent(text="eighteen months")],
+                metadata=PromptMetadata(token_count=2),
             ),
         )
 
         history = load_incognito_context(session_id).messages
-        assert [(m.message_type, m.message) for m in history] == [
-            (MessageType.USER, "what is our runway"),
-            (MessageType.ASSISTANT, "eighteen months"),
+        assert [(m.role, m.text) for m in history] == [
+            ("user", "what is our runway"),
+            ("assistant", "eighteen months"),
         ]
     finally:
         teardown_incognito_session(session_id)
@@ -188,9 +190,7 @@ def test_teardown_ends_the_session_immediately() -> None:
     session_id = uuid4()
     append_incognito_message(
         session_id,
-        ChatMessageSimple(
-            message="secret", token_count=1, message_type=MessageType.USER
-        ),
+        UserMessage(content="secret", metadata=PromptMetadata(token_count=1)),
     )
     assert load_incognito_context(session_id).messages
 

@@ -23,9 +23,17 @@ from onyx.chat.incognito_context import (
     save_incognito_context,
     teardown_incognito_session,
 )
-from onyx.chat.models import ChatLoadedFile, ChatMessageSimple, ToolCallSimple
 from onyx.configs.constants import MessageType
-from onyx.file_store.models import ChatFileType
+from onyx.context.messages import PromptMetadata, prompt_metadata
+from onyx.file_store.models import ChatFileType, ChatLoadedFile
+from onyx.llm.models import (
+    AssistantMessage,
+    Message,
+    TextContent,
+    ToolResultMessage,
+    UserMessage,
+)
+from onyx.llm.models import ToolCall as AgentToolCall
 from onyx.redis.redis_pool import get_raw_redis_client, get_redis_client
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
@@ -42,17 +50,14 @@ def isolated_tenant() -> Generator[str, None, None]:
         raw.delete(*keys)
 
 
-def _message(
-    text: str, message_type: MessageType = MessageType.USER
-) -> ChatMessageSimple:
-    return ChatMessageSimple(
-        message=text, token_count=len(text), message_type=message_type
-    )
+def _message(text: str, message_type: MessageType = MessageType.USER) -> Message:
+    metadata = PromptMetadata(token_count=len(text))
+    if message_type == MessageType.ASSISTANT:
+        return AssistantMessage(content=[TextContent(text=text)], metadata=metadata)
+    return UserMessage(content=text, metadata=metadata)
 
 
-def _save(
-    chat_session_id: UUID, messages: list[ChatMessageSimple], version: int = 0
-) -> bool:
+def _save(chat_session_id: UUID, messages: list[Message], version: int = 0) -> bool:
     return save_incognito_context(
         chat_session_id, IncognitoContext(version=version, messages=messages)
     )
@@ -75,7 +80,7 @@ def test_stale_version_save_is_discarded() -> None:
 
     loaded = load_incognito_context(session_id)
     assert loaded.version == 1
-    assert loaded.messages[0].message == "turn one"
+    assert loaded.messages[0].text == "turn one"
 
 
 def test_sequential_turns_chain_versions() -> None:
@@ -87,7 +92,7 @@ def test_sequential_turns_chain_versions() -> None:
 
     second = load_incognito_context(session_id)
     assert second.version == 2
-    assert [m.message for m in second.messages] == ["one", "two"]
+    assert [m.text for m in second.messages] == ["one", "two"]
 
 
 def test_corrupt_value_degrades_and_is_overwritable() -> None:
@@ -100,7 +105,7 @@ def test_corrupt_value_degrades_and_is_overwritable() -> None:
 
     # The load/save pair recovers: expecting version 0 overwrites the garbage.
     assert _save(session_id, [_message("fresh start")], version=0)
-    assert load_incognito_context(session_id).messages[0].message == "fresh start"
+    assert load_incognito_context(session_id).messages[0].text == "fresh start"
 
 
 def test_ttl_is_set_and_slides_on_save() -> None:
@@ -145,44 +150,46 @@ def test_images_are_stripped_before_storage() -> None:
         content_text=None,
         token_count=0,
     )
-    message = ChatMessageSimple(
-        message="see attached",
-        token_count=100,
-        message_type=MessageType.USER,
-        image_files=[image],
-        image_token_count=85,
+    message = UserMessage(
+        content="see attached",
+        metadata=PromptMetadata(
+            token_count=100, image_files=[image], image_token_count=85
+        ),
     )
 
     assert _save(session_id, [message])
     (loaded,) = load_incognito_context(session_id).messages
 
-    assert loaded.image_files is None
-    assert loaded.image_token_count == 0
-    assert loaded.message == "see attached"
+    assert prompt_metadata(loaded).image_files is None
+    assert prompt_metadata(loaded).image_token_count == 0
+    assert loaded.text == "see attached"
 
 
 def test_tool_calls_round_trip() -> None:
     """Assistant tool calls and tool responses are part of history and must
     survive storage intact."""
     session_id = uuid4()
-    call = ChatMessageSimple(
-        message="",
-        token_count=12,
-        message_type=MessageType.ASSISTANT,
-        tool_calls=[
-            ToolCallSimple(
-                tool_call_id="call_1",
-                tool_name="run_search",
-                tool_arguments={"query": "churn", "limit": 5, "nested": {"a": [1]}},
-                token_count=12,
-            )
+    call = AssistantMessage(
+        content=[
+            TextContent(text=""),
+            *(
+                [
+                    AgentToolCall(
+                        id="call_1",
+                        name="run_search",
+                        arguments={"query": "churn", "limit": 5, "nested": {"a": [1]}},
+                    )
+                ]
+                or []
+            ),
         ],
+        metadata=PromptMetadata(token_count=12),
     )
-    response = ChatMessageSimple(
-        message="3 documents found",
-        token_count=4,
-        message_type=MessageType.TOOL_CALL_RESPONSE,
+    response = ToolResultMessage(
+        content="3 documents found",
         tool_call_id="call_1",
+        tool_name="",
+        metadata=PromptMetadata(token_count=4),
     )
 
     assert _save(session_id, [call, response])
@@ -199,8 +206,8 @@ def test_message_count_cap_keeps_the_newest() -> None:
     loaded = load_incognito_context(session_id).messages
 
     assert len(loaded) == 200
-    assert loaded[0].message == "m5"
-    assert loaded[-1].message == "m204"
+    assert loaded[0].text == "m5"
+    assert loaded[-1].text == "m204"
 
 
 def test_byte_cap_drops_oldest_but_keeps_an_oversized_singleton() -> None:
@@ -211,7 +218,7 @@ def test_byte_cap_drops_oldest_but_keeps_an_oversized_singleton() -> None:
     assert _save(session_id, [_message(big), _message(big + "newer")])
     loaded = load_incognito_context(session_id).messages
     assert len(loaded) == 1
-    assert loaded[0].message.endswith("newer")
+    assert loaded[0].text.endswith("newer")
 
     # One message alone over the cap is stored anyway: an empty save would
     # read as session-ended on the next turn.
@@ -228,3 +235,44 @@ def test_availability_follows_the_cache_backend() -> None:
         assert incognito_context_available()
         mock_configs.CACHE_BACKEND = CacheBackendType.POSTGRES
         assert not incognito_context_available()
+
+
+def test_previous_context_shape_remains_readable() -> None:
+    import json
+
+    session_id = uuid4()
+    legacy = [
+        {"message": "question", "message_type": "user", "token_count": 1},
+        {
+            "message": "checking",
+            "message_type": "assistant",
+            "token_count": 2,
+            "tool_calls": [
+                {
+                    "tool_call_id": "call",
+                    "tool_name": "lookup",
+                    "tool_arguments": {"query": "value"},
+                    "token_count": 1,
+                }
+            ],
+        },
+        {
+            "message": "result",
+            "message_type": "tool_call_response",
+            "tool_call_id": "call",
+            "token_count": 1,
+        },
+    ]
+    get_redis_client().set(_context_key(session_id), "3:" + json.dumps(legacy))
+    context = load_incognito_context(session_id)
+    assert context.version == 3
+    assert [item.text for item in context.messages] == [
+        "question",
+        "checking",
+        "result",
+    ]
+    assert isinstance(context.messages[1], AssistantMessage)
+    assert context.messages[1].tool_calls[0].id == "call"
+    assert context.messages[1].tool_calls[0].arguments == {"query": "value"}
+    assert save_incognito_context(session_id, context)
+    assert load_incognito_context(session_id).messages == context.messages

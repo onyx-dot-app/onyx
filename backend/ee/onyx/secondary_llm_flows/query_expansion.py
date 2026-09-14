@@ -1,9 +1,15 @@
 import re
 
 from ee.onyx.prompts.query_expansion import KEYWORD_EXPANSION_PROMPT
-from onyx.llm.interfaces import LLM
-from onyx.llm.models import LanguageModelInput, ReasoningEffort, UserMessage
-from onyx.llm.utils import llm_response_to_string
+from onyx.llm.interfaces import LLM, GenerationContext
+from onyx.llm.models import (
+    GenerationOptions,
+    GenerationRequest,
+    Message,
+    ReasoningEffort,
+    UserMessage,
+)
+from onyx.tracing.flows import LLMFlow
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -43,19 +49,22 @@ def expand_keywords(
         List of expanded keyword queries (excluding the original query).
         Returns empty list if expansion fails or produces no useful expansions.
     """
-    messages: LanguageModelInput = [
+    messages: list[Message] = [
         UserMessage(content=KEYWORD_EXPANSION_PROMPT.format(user_query=user_query))
     ]
 
     try:
         response = llm.invoke(
-            prompt=messages,
-            reasoning_effort=ReasoningEffort.OFF,
-            # Limit output - we only expect a few short keyword queries
-            max_tokens=150,
+            GenerationRequest(
+                messages=messages,
+                options=GenerationOptions(
+                    reasoning_effort=ReasoningEffort.OFF, max_tokens=150
+                ),
+            ),
+            context=GenerationContext(flow=LLMFlow.KEYWORD_QUERY_EXPANSION),
         )
 
-        content = llm_response_to_string(response).strip()
+        content = response.text.strip()
 
         if not content:
             logger.warning("Keyword expansion returned empty response.")

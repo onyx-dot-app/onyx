@@ -25,17 +25,12 @@ from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_chat_accessible_user
 from onyx.background.task_utils import enqueue_user_file_deletes
 from onyx.cache.factory import get_cache_backend
+from onyx.chat.cancellation import request_stop
 from onyx.chat.chat_processing_checker import (
     get_processing_run_id,
     is_chat_session_processing,
 )
 from onyx.chat.chat_state import ChatStateContainer
-from onyx.chat.chat_utils import (
-    convert_chat_history_basic,
-    create_chat_history_chain,
-    create_chat_session_from_request,
-    extract_headers,
-)
 from onyx.chat.incognito import (
     delete_incognito_generated_files,
     incognito_allowed_for_user,
@@ -48,7 +43,6 @@ from onyx.chat.process_message import (
     handle_stream_message_objects,
 )
 from onyx.chat.prompt_utils import get_default_base_system_prompt
-from onyx.chat.stop_signal_checker import set_fence
 from onyx.chat.stream_buffer import has_stream_buffer, read_stream_chunks
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.chat_configs import (
@@ -64,6 +58,7 @@ from onyx.configs.constants import (
 from onyx.configs.model_configs import LITELLM_PASS_THROUGH_HEADERS
 from onyx.db.chat import (
     add_chats_to_session_from_slack_thread,
+    create_chat_session_from_request,
     delete_all_chat_sessions_for_user,
     delete_chat_session,
     duplicate_chat_session_for_user_from_slack,
@@ -77,6 +72,7 @@ from onyx.db.chat import (
     translate_db_message_to_chat_message_detail,
     update_chat_session,
 )
+from onyx.db.chat_history import convert_chat_history_basic, create_chat_history_chain
 from onyx.db.chat_search import search_chat_sessions
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import Permission, record_mode_persists_content
@@ -151,7 +147,10 @@ from onyx.server.usage_limits import (
 )
 from onyx.server.utils import get_json_line
 from onyx.tracing.framework.create import ChatTraceMetadata, ensure_trace
-from onyx.utils.headers import get_custom_tool_additional_request_headers
+from onyx.utils.headers import (
+    get_custom_tool_additional_request_headers,
+    get_relevant_headers,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from shared_configs.contextvars import get_current_tenant_id
@@ -195,7 +194,7 @@ def _get_available_tokens_for_persona(
         combined_prompt_tokens = token_counter(agent_prompt + system_prompt)
 
     return _get_non_reserved_input_tokens(
-        model_max_input_tokens=llm.config.max_input_tokens,
+        model_max_input_tokens=llm.info.max_input_tokens,
         system_and_agent_prompt_tokens=combined_prompt_tokens,
         num_tools=len(persona.tools),
     )
@@ -513,7 +512,7 @@ def _generate_or_fallback_chat_session_name(
             persona=persona,
             user=user,
             llm_override=llm_override,
-            additional_headers=extract_headers(
+            additional_headers=get_relevant_headers(
                 request.headers, LITELLM_PASS_THROUGH_HEADERS
             ),
         )
@@ -521,7 +520,7 @@ def _generate_or_fallback_chat_session_name(
             check_llm_cost_limit_for_provider(
                 db_session=db_session,
                 tenant_id=get_current_tenant_id(),
-                llm_provider_api_key=llm.config.api_key,
+                llm_provider_api_key=llm.transport.config.api_key,
             )
 
         token_counter = get_llm_token_counter(llm)
@@ -855,7 +854,7 @@ def handle_send_chat_message(
                     new_msg_req=chat_message_req,
                     user=user,
                     llm_overrides=llm_overrides,
-                    litellm_additional_headers=extract_headers(
+                    litellm_additional_headers=get_relevant_headers(
                         request.headers, LITELLM_PASS_THROUGH_HEADERS
                     ),
                     custom_tool_additional_headers=get_custom_tool_additional_request_headers(
@@ -899,7 +898,7 @@ def handle_send_chat_message(
         packets = handle_stream_message_objects(
             new_msg_req=chat_message_req,
             user=user,
-            litellm_additional_headers=extract_headers(
+            litellm_additional_headers=get_relevant_headers(
                 request.headers, LITELLM_PASS_THROUGH_HEADERS
             ),
             custom_tool_additional_headers=get_custom_tool_additional_request_headers(
@@ -928,7 +927,7 @@ def handle_send_chat_message(
             for obj in handle_stream_message_objects(
                 new_msg_req=chat_message_req,
                 user=user,
-                litellm_additional_headers=extract_headers(
+                litellm_additional_headers=get_relevant_headers(
                     request.headers, LITELLM_PASS_THROUGH_HEADERS
                 ),
                 custom_tool_additional_headers=get_custom_tool_additional_request_headers(
@@ -1393,5 +1392,5 @@ def stop_chat_session(
     except ValueError:
         raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Chat session not found")
 
-    set_fence(chat_session_id, get_cache_backend(), True)
+    request_stop(chat_session_id, get_cache_backend())
     return {"message": "Chat session stopped"}

@@ -30,8 +30,8 @@ from onyx.kg.utils.formatting_utils import (
 )
 from onyx.kg.vespa.vespa_interactions import get_document_vespa_contents
 from onyx.llm.factory import get_default_llm
-from onyx.llm.models import UserMessage
-from onyx.llm.utils import llm_response_to_string
+from onyx.llm.interfaces import GenerationContext
+from onyx.llm.models import GenerationRequest, UserMessage
 from onyx.prompts.kg_prompts import (
     CALL_CHUNK_PREPROCESSING_PROMPT,
     CALL_DOCUMENT_CLASSIFICATION_PROMPT,
@@ -41,7 +41,6 @@ from onyx.prompts.kg_prompts import (
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import ensure_trace
 from onyx.tracing.framework.traces import TraceContentMode
-from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -451,15 +450,14 @@ def kg_classify_document(
     llm = get_default_llm()
     try:
         prompt_msg = UserMessage(content=prompt)
-        with llm_generation_span(
-            llm=llm,
-            flow=LLMFlow.KG_DOCUMENT_CLASSIFICATION,
-            input_messages=[prompt_msg],
-            content_mode=TraceContentMode.METADATA_ONLY,
-        ) as span_generation:
-            response = llm.invoke(prompt_msg)
-            record_llm_response(span_generation, response)
-            raw_classification_result = llm_response_to_string(response)
+        response = llm.invoke(
+            GenerationRequest(messages=[prompt_msg]),
+            context=GenerationContext(
+                flow=LLMFlow.KG_DOCUMENT_CLASSIFICATION,
+                content_mode=TraceContentMode.METADATA_ONLY,
+            ),
+        )
+        raw_classification_result = response.text
 
         classification_result = (
             raw_classification_result.replace("```json", "").replace("```", "").strip()
@@ -527,18 +525,14 @@ def kg_deep_extract_chunks(
     llm = get_default_llm()
     try:
         prompt_msg = UserMessage(content=prompt)
-        with llm_generation_span(
-            llm=llm,
-            flow=LLMFlow.KG_DEEP_EXTRACTION,
-            input_messages=[prompt_msg],
-            content_mode=TraceContentMode.METADATA_ONLY,
-        ) as span_generation:
-            response = llm.invoke(
-                prompt_msg,
-                total_timeout_s=_DEEP_EXTRACTION_TIMEOUT_S,
-            )
-            record_llm_response(span_generation, response)
-            raw_extraction_result = llm_response_to_string(response)
+        response = llm.invoke(
+            GenerationRequest(messages=[prompt_msg]),
+            context=GenerationContext(
+                flow=LLMFlow.KG_DEEP_EXTRACTION,
+                content_mode=TraceContentMode.METADATA_ONLY,
+            ),
+        )
+        raw_extraction_result = response.text
 
         cleaned_response = (
             raw_extraction_result.replace("{{", "{")

@@ -1,6 +1,6 @@
 """Live guard for the Azure Responses API surface routing (#11420).
 
-`LitellmLLM` routes true OpenAI models on Azure through LiteLLM's responses
+`LitellmTransport` routes true OpenAI models on Azure through LiteLLM's responses
 bridge. The bridge must target the modern `/openai/v1/responses` surface even
 when the provider is configured with a dated api-version: dated versions make
 LiteLLM build the legacy `/openai/responses?api-version=<dated>` URL, which
@@ -20,8 +20,8 @@ import pytest
 from litellm.llms.custom_httpx.http_handler import HTTPHandler
 
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.models import LanguageModelInput, UserMessage
-from onyx.llm.multi_llm import _AZURE_V1_API_VERSIONS, LitellmLLM
+from onyx.llm.litellm_models import LanguageModelInput, UserMessage
+from onyx.llm.multi_llm import _AZURE_V1_API_VERSIONS, LitellmTransport
 from tests.utils.secret_names import TestSecret
 
 pytestmark = pytest.mark.nightly
@@ -41,8 +41,8 @@ def _resource_base(azure_api_url: str) -> str:
     return f"{parsed.scheme}://{parsed.netloc}"
 
 
-def _build_azure_llm(test_secrets: dict[TestSecret, str]) -> LitellmLLM:
-    return LitellmLLM(
+def _build_azure_llm(test_secrets: dict[TestSecret, str]) -> LitellmTransport:
+    return LitellmTransport(
         api_key=test_secrets[TestSecret.AZURE_API_KEY],
         model_provider=LlmProviderNames.AZURE,
         model_name=_CHAT_DEPLOYMENT,

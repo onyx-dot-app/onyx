@@ -26,6 +26,7 @@ from onyx.image_gen.interfaces import (
     ImageShape,
     ReferenceImage,
 )
+from onyx.llm.models import ToolResult
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     GeneratedImage,
@@ -35,7 +36,7 @@ from onyx.server.query_and_chat.streaming_models import (
     Packet,
 )
 from onyx.tools.interface import Tool
-from onyx.tools.models import ToolCallException, ToolExecutionException, ToolResponse
+from onyx.tools.models import ToolCallException, ToolExecutionException
 from onyx.tools.tool_implementations.images.models import (
     FinalImageGenerationResponse,
     ImageGenerationResponse,
@@ -309,7 +310,7 @@ class ImageGenerationTool(Tool[None]):
         placement: Placement,
         override_kwargs: None = None,  # noqa: ARG002
         **llm_kwargs: Any,
-    ) -> ToolResponse:
+    ) -> ToolResult:
         if PROMPT_FIELD not in llm_kwargs:
             raise ToolCallException(
                 message=f"Missing required '{PROMPT_FIELD}' parameter in generate_image tool call",
@@ -419,8 +420,7 @@ class ImageGenerationTool(Tool[None]):
             generated_images=generated_images_metadata
         )
 
-        # Create llm_facing_response
-        llm_facing_response = json.dumps(
+        content = json.dumps(
             [
                 {
                     "file_id": img.file_id,
@@ -430,7 +430,7 @@ class ImageGenerationTool(Tool[None]):
             ]
         )
 
-        return ToolResponse(
-            rich_response=final_image_generation_response,
-            llm_facing_response=llm_facing_response,
+        return ToolResult(
+            details=final_image_generation_response,
+            content=content,
         )

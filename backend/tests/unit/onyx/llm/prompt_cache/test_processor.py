@@ -3,7 +3,7 @@ from __future__ import annotations
 from unittest.mock import patch
 
 from onyx.llm.interfaces import LLMConfig
-from onyx.llm.models import ChatCompletionMessage, SystemMessage, UserMessage
+from onyx.llm.litellm_models import ChatCompletionMessage, SystemMessage, UserMessage
 from onyx.llm.prompt_cache import processor as processor_module
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 
@@ -29,7 +29,7 @@ def test_with_metadata_false_skips_cache_key_hash() -> None:
         ) as generate_cache_key_hash,
     ):
         processed, metadata = process_with_prompt_cache(
-            llm_config=llm_config,
+            llm_info=llm_config,
             cacheable_prefix=prefix,
             suffix=suffix,
             continuation=False,
@@ -55,13 +55,13 @@ def test_with_metadata_true_default_keeps_current_behavior() -> None:
         ) as generate_cache_key_hash,
     ):
         processed_with_metadata, metadata = process_with_prompt_cache(
-            llm_config=llm_config,
+            llm_info=llm_config,
             cacheable_prefix=prefix,
             suffix=suffix,
             continuation=False,
         )
         processed_without_metadata, no_metadata = process_with_prompt_cache(
-            llm_config=llm_config,
+            llm_info=llm_config,
             cacheable_prefix=prefix,
             suffix=suffix,
             continuation=False,
@@ -75,3 +75,21 @@ def test_with_metadata_true_default_keeps_current_behavior() -> None:
     assert metadata.model_name == "claude-sonnet"
     assert no_metadata is None
     assert processed_with_metadata == processed_without_metadata
+
+
+def test_canonical_cached_prompt_preserves_continuation_and_cache_boundary() -> None:
+    from onyx.llm.models import TextContentPart
+    from onyx.llm.prompt_cache.processor import cached_user_message
+
+    with patch.object(processor_module, "ENABLE_PROMPT_CACHING", True):
+        message = cached_user_message(_anthropic_config(), "document\n", "chunk")
+
+    assert message.text == "document\nchunk"
+    assert isinstance(message.content, list)
+    assert message.content == [
+        TextContentPart(text="document\nchunk", cache_control={"type": "ephemeral"})
+    ]
+
+    with patch.object(processor_module, "ENABLE_PROMPT_CACHING", False):
+        uncached = cached_user_message(_anthropic_config(), "document\n", "chunk")
+    assert uncached.content == "document\nchunk"

@@ -3,8 +3,10 @@
 from datetime import datetime, timezone
 
 from onyx.configs.model_configs import ENABLE_PROMPT_CACHING
-from onyx.llm.interfaces import LLMConfig
-from onyx.llm.models import LanguageModelInput
+from onyx.llm.interfaces import LLMInfo
+from onyx.llm.litellm_models import LanguageModelInput
+from onyx.llm.litellm_models import UserMessage as ProviderUserMessage
+from onyx.llm.models import TextContentPart, UserMessage
 from onyx.llm.prompt_cache.cache_manager import generate_cache_key_hash
 from onyx.llm.prompt_cache.models import CacheMetadata
 from onyx.llm.prompt_cache.providers.factory import get_provider_adapter
@@ -16,7 +18,7 @@ logger = setup_logger()
 
 # TODO: test with a history containing images
 def process_with_prompt_cache(
-    llm_config: LLMConfig,
+    llm_info: LLMInfo,
     cacheable_prefix: LanguageModelInput | None,
     suffix: LanguageModelInput,
     continuation: bool = False,
@@ -66,13 +68,13 @@ def process_with_prompt_cache(
         return suffix, None
 
     # Get provider adapter
-    provider_adapter = get_provider_adapter(llm_config)
+    provider_adapter = get_provider_adapter(llm_info)
 
     # If provider doesn't support caching, combine and return unchanged
     if not provider_adapter.supports_caching():
         logger.debug(
             "Provider %s does not support caching, combining messages without caching",
-            llm_config.model_provider,
+            llm_info.model_provider,
         )
         # Use no-op adapter to combine messages
         from onyx.llm.prompt_cache.providers.noop import NoOpPromptCacheProvider
@@ -106,15 +108,15 @@ def process_with_prompt_cache(
         tenant_id = get_current_tenant_id()
         cache_key_hash = generate_cache_key_hash(
             cacheable_prefix=cacheable_prefix,
-            provider=llm_config.model_provider,
-            model_name=llm_config.model_name,
+            provider=llm_info.model_provider,
+            model_name=llm_info.model_name,
             tenant_id=tenant_id,
         )
 
         logger.debug(
             "Processed prompt with caching: provider=%s, model=%s, cache_key=%s..., continuation=%s",
-            llm_config.model_provider,
-            llm_config.model_name,
+            llm_info.model_provider,
+            llm_info.model_name,
             cache_key_hash[:16],
             continuation,
         )
@@ -123,8 +125,8 @@ def process_with_prompt_cache(
         # This allows us to track cache usage and effectiveness
         cache_metadata = CacheMetadata(
             cache_key=cache_key_hash,
-            provider=llm_config.model_provider,
-            model_name=llm_config.model_name,
+            provider=llm_info.model_provider,
+            model_name=llm_info.model_name,
             tenant_id=tenant_id,
             created_at=datetime.now(timezone.utc),
             last_accessed=datetime.now(timezone.utc),
@@ -136,7 +138,7 @@ def process_with_prompt_cache(
         # Best-effort: log error and fall back to no-op behavior
         logger.warning(
             "Error processing prompt with caching for provider=%s: %s. Falling back to non-cached behavior.",
-            llm_config.model_provider,
+            llm_info.model_provider,
             str(e),
         )
         # Fall back to no-op adapter
@@ -150,3 +152,27 @@ def process_with_prompt_cache(
             cache_metadata=None,
         )
         return combined, None
+
+
+def cached_user_message(llm_info: LLMInfo, prefix: str, suffix: str) -> UserMessage:
+    """Prepare one continued user prompt with provider-specific cache metadata."""
+    prepared, _ = process_with_prompt_cache(
+        llm_info,
+        cacheable_prefix=ProviderUserMessage(content=prefix),
+        suffix=ProviderUserMessage(content=suffix),
+        continuation=True,
+        with_metadata=False,
+    )
+    message = prepared[0] if isinstance(prepared, list) else prepared
+    if not isinstance(message, ProviderUserMessage):
+        raise TypeError("User prompt caching must preserve the message role")
+    if message.cache_control:
+        content = (
+            [TextContentPart(text=message.content)]
+            if isinstance(message.content, str)
+            else [part.model_copy(deep=True) for part in message.content]
+        )
+        if content and isinstance(content[-1], TextContentPart):
+            content[-1].cache_control = message.cache_control
+        return UserMessage(content=content)
+    return UserMessage(content=message.content)

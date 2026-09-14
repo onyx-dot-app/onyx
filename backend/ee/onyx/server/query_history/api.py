@@ -25,7 +25,6 @@ from onyx.auth.permissions import require_permission
 from onyx.auth.users import get_display_email
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.task_utils import construct_query_history_report_name
-from onyx.chat.chat_utils import create_chat_history_chain
 from onyx.configs.constants import (
     PUBLIC_API_TAGS,
     FileOrigin,
@@ -39,6 +38,7 @@ from onyx.configs.constants import (
     SessionType,
 )
 from onyx.db.chat import get_chat_sessions_by_user
+from onyx.db.chat_history import create_chat_history_chain
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission, TaskStatus
 from onyx.db.file_record import get_query_history_export_files

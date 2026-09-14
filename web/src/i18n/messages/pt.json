@@ -6468,11 +6468,6 @@
         }
       },
       "networkSafety": {
-        "envInjection": {
-          "description": "Permite que configurações personalizadas de provedores de LLM definam temporariamente variáveis de ambiente do processo durante as chamadas. Desative para exigir que todas as configurações do provedor tenham um parâmetro equivalente no LiteLLM.",
-          "multiTenantDescription": "Configurações personalizadas de provedores de LLM nunca podem definir variáveis de ambiente do processo em implantações multi-tenant.",
-          "title": "Injeção de variáveis de ambiente do LLM"
-        },
         "section": {
           "title": "Segurança de rede"
         },

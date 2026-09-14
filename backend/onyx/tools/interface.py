@@ -6,8 +6,8 @@ from typing import Any, Generic, TypeVar
 from sqlalchemy.orm import Session
 
 from onyx.chat.emitter import Emitter
+from onyx.llm.models import ToolResult
 from onyx.server.query_and_chat.placement import Placement
-from onyx.tools.models import ToolResponse
 
 TOverride = TypeVar("TOverride")
 
@@ -87,7 +87,7 @@ class Tool(abc.ABC, Generic[TOverride]):
         # For example when calling the internal search tool, the original user query is passed along too (but not by the LLM)
         override_kwargs: TOverride,
         **llm_kwargs: Any,
-    ) -> ToolResponse:
+    ) -> ToolResult:
         raise NotImplementedError
 
     @classmethod

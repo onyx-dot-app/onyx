@@ -1,12 +1,10 @@
-from __future__ import annotations
-
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from typing import Any, cast
 
-from onyx.llm.interfaces import LLM
-from onyx.llm.model_response import ModelResponse
-from onyx.llm.models import ToolCall
+from onyx.llm.interfaces import LLMInfo
+from onyx.llm.litellm_models import ModelResponse, ToolCall
+from onyx.llm.models import GenerationRequestParams
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import generation_span, get_current_span
 from onyx.tracing.framework.span_data import GenerationSpanData
@@ -14,10 +12,12 @@ from onyx.tracing.framework.spans import Span
 from onyx.tracing.framework.traces import TraceContentMode
 
 
-def build_llm_model_config(llm: LLM, flow: LLMFlow | None = None) -> dict[str, str]:
+def build_llm_model_config(
+    llm_info: LLMInfo, flow: LLMFlow | None = None
+) -> dict[str, str]:
     model_config: dict[str, str] = {
-        "base_url": str(llm.config.api_base or ""),
-        "model_provider": llm.config.model_provider,
+        "base_url": str(llm_info.api_base or ""),
+        "model_provider": llm_info.model_provider,
     }
     if flow:
         model_config["flow"] = flow.value
@@ -26,7 +26,7 @@ def build_llm_model_config(llm: LLM, flow: LLMFlow | None = None) -> dict[str, s
 
 @contextmanager
 def llm_generation_span(
-    llm: LLM,
+    llm_info: LLMInfo,
     flow: LLMFlow | None,
     input_messages: Sequence[Any] | Any | None = None,
     tools: Sequence[Mapping[str, Any]] | None = None,
@@ -34,8 +34,8 @@ def llm_generation_span(
     content_mode: TraceContentMode | None = None,
 ) -> Iterator[Span[GenerationSpanData]]:
     with generation_span(
-        model=llm.config.model_name,
-        model_config=build_llm_model_config(llm, flow),
+        model=llm_info.model_name,
+        model_config=build_llm_model_config(llm_info, flow),
         tools=tools,
         parent=parent,
         content_mode=content_mode,
@@ -65,14 +65,7 @@ def traced_llm_call(
     parent: Any | None = None,
     content_mode: TraceContentMode | None = None,
 ) -> Iterator[Span[GenerationSpanData]]:
-    """Open a generation span for call sites that don't go through ``LLM``.
-
-    Use this for image generation, voice (TTS/STT), embeddings/rerank crossing
-    the model_server boundary, and any direct provider-SDK call. For calls
-    that already go through an ``LLM`` subclass, use
-    :func:`llm_generation_span` instead — it pulls model and provider straight
-    off the ``LLM`` config.
-    """
+    """Trace image, voice, embedding, rerank, and direct provider SDK operations."""
     # Build extra_config first, then overlay authoritative keys so callers
     # cannot accidentally override ``flow`` / ``model_provider``.
     model_config: dict[str, str] = dict(extra_config) if extra_config else {}
@@ -99,16 +92,14 @@ def traced_llm_call(
         yield span
 
 
-def record_llm_request_params(params: Mapping[str, Any]) -> None:
-    """Attach request-shaping params (reasoning effort, provider kwargs) to the
-    active generation span. Call once per send attempt with the provider-mapped
-    kwargs: last write wins. No-op when the current span is not a generation span."""
+def record_llm_request_params(params: GenerationRequestParams) -> None:
+    """Record effective settings on the active generation span, respecting content privacy."""
     span = get_current_span()
     if span is None or not isinstance(span.span_data, GenerationSpanData):
         return
     if span.content_mode == TraceContentMode.METADATA_ONLY:
         return
-    span.span_data.request_params = dict(params)
+    span.span_data.request_params = params.model_dump(mode="json")
 
 
 def record_llm_response(

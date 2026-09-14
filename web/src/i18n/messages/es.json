@@ -6468,11 +6468,6 @@
         }
       },
       "networkSafety": {
-        "envInjection": {
-          "description": "Permite que las configuraciones de proveedores de LLM personalizados definan temporalmente variables de entorno del proceso durante las llamadas. Desactívalo para exigir que todas las opciones del proveedor tengan un parámetro equivalente en LiteLLM.",
-          "multiTenantDescription": "Las configuraciones de proveedores de LLM personalizados nunca pueden definir variables de entorno del proceso en instalaciones multiinquilino.",
-          "title": "Inyección de variables de entorno para LLM"
-        },
         "section": {
           "title": "Seguridad de red"
         },

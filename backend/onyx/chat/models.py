@@ -1,12 +1,12 @@
 from collections.abc import Iterator
-from typing import Any, Callable
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel
 
-from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
-from onyx.file_store.models import ChatFileType, InMemoryChatFile
+from onyx.file_store.models import FileToolMetadata
+from onyx.llm.models import Message
 from onyx.server.query_and_chat.models import (
     MessageResponseIDInfo,
     MultiModelMessageResponseIDInfo,
@@ -16,7 +16,7 @@ from onyx.server.query_and_chat.streaming_models import (
     GeneratedImage,
     Packet,
 )
-from onyx.tools.models import SearchToolUsage, ToolCallKickoff
+from onyx.tools.models import SearchToolUsage
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
 
 
@@ -102,110 +102,12 @@ class ChatFullResponse(BaseModel):
     error_msg: str | None = None
 
 
-class ChatLoadedFile(InMemoryChatFile):
-    content_text: str | None
-    token_count: int
-    # True while the user-file worker is still processing the file — its
-    # canonical plaintext (e.g. including image captions) doesn't exist yet.
-    content_pending: bool = False
+class SearchParams(BaseModel):
+    """Resolved search filter IDs and search-tool usage for a chat turn."""
 
-    # Named distinctly from the base ``lazy_from_descriptor`` so the subclass
-    # can require ``content_text`` / ``token_count`` without violating LSP on
-    # the override (ty correctly flag the broader subclass signature).
-    @classmethod
-    def lazy_loaded(
-        cls,
-        *,
-        file_id: str,
-        file_type: ChatFileType,
-        filename: str | None,
-        content_text: str | None,
-        token_count: int,
-        loader: Callable[[], bytes],
-        content_pending: bool = False,
-    ) -> "ChatLoadedFile":
-        """Construct a ``ChatLoadedFile`` whose ``content`` bytes are loaded
-        only on first access. ``content_text`` and ``token_count`` are passed
-        eagerly because they're cheap (DB lookup + cached plaintext store hit).
-        """
-        from onyx.file_store.models import install_lazy_content_loader
-
-        inst = cls(
-            file_id=file_id,
-            content=b"",
-            file_type=file_type,
-            filename=filename,
-            content_text=content_text,
-            token_count=token_count,
-            content_pending=content_pending,
-        )
-        install_lazy_content_loader(inst, loader)
-        return inst
-
-
-class ToolCallSimple(BaseModel):
-    """Tool call for ChatMessageSimple representation (mirrors OpenAI format).
-
-    Used when an ASSISTANT message contains one or more tool calls.
-    Each tool call has an ID, name, arguments, and token count for tracking.
-    """
-
-    tool_call_id: str
-    tool_name: str
-    tool_arguments: dict[str, Any]
-    token_count: int = 0
-
-
-class ChatMessageSimple(BaseModel):
-    message: str
-    token_count: int
-    message_type: MessageType
-    # Only for USER type messages
-    image_files: list[ChatLoadedFile] | None = None
-    # Portion of token_count contributed by image_files. Kept separate so
-    # budgeting can discount it when a non-vision model replays the images
-    # as text markers instead.
-    image_token_count: int = 0
-    # Only for TOOL_CALL_RESPONSE type messages
-    tool_call_id: str | None = None
-    # For ASSISTANT messages with tool calls (OpenAI parallel tool calling format)
-    tool_calls: list[ToolCallSimple] | None = None
-    # The last message for which this is true
-    # AND is true for all previous messages
-    # (counting from the start of the history)
-    # represents the end of the cacheable prefix
-    # used for prompt caching
-    should_cache: bool = False
-    # When this message represents an injected text file, this is the file's ID.
-    # Used to detect which file messages survive context-window truncation.
-    file_id: str | None = None
-
-
-class ContextFileMetadata(BaseModel):
-    """Metadata for a context-injected file to enable citation support."""
-
-    file_id: str
-    filename: str
-    file_content: str
-
-
-class FileToolMetadata(BaseModel):
-    """Lightweight metadata for exposing files to the FileReaderTool.
-
-    Used when files cannot be loaded directly into context (project too large
-    or persona-attached user_files without direct-load path). The LLM receives
-    a listing of these so it knows which files it can read via ``read_file``.
-    """
-
-    file_id: str
-    filename: str
-    approx_char_count: int
-    # Whether this file's bytes reached ``chat_files_for_tools``, and so are
-    # available to tools that receive the files themselves (PythonTool).
-    # Messages dropped by summary truncation are filtered out of
-    # ``chat_history`` before ``load_all_chat_files`` runs, so their files are
-    # listed for the LLM but never staged. Only ``read_file`` can fetch those.
-    staged_for_tools: bool = True
+    project_id_filter: int | None
+    persona_id_filter: int | None
+    search_usage: SearchToolUsage
 
 
 class ChatHistoryResult(BaseModel):
@@ -218,40 +120,5 @@ class ChatHistoryResult(BaseModel):
     FileReaderTool.
     """
 
-    simple_messages: list[ChatMessageSimple]
+    messages: list[Message]
     all_injected_file_metadata: dict[str, FileToolMetadata]
-
-
-class ExtractedContextFiles(BaseModel):
-    """Result of attempting to load user files (from a project or persona) into context."""
-
-    file_texts: list[str]
-    image_files: list[ChatLoadedFile]
-    use_as_search_filter: bool
-    total_token_count: int
-    # Lightweight metadata for files exposed via FileReaderTool
-    # (populated when files don't fit in context and vector DB is disabled).
-    file_metadata: list[ContextFileMetadata]
-    uncapped_token_count: int | None
-    file_metadata_for_tool: list[FileToolMetadata] = []
-
-
-class SearchParams(BaseModel):
-    """Resolved search filter IDs and search-tool usage for a chat turn."""
-
-    project_id_filter: int | None
-    persona_id_filter: int | None
-    search_usage: SearchToolUsage
-
-
-class LlmStepResult(BaseModel):
-    reasoning: str | None
-    answer: str | None
-    tool_calls: list[ToolCallKickoff] | None
-    # Raw LLM text before any display-oriented filtering/sanitization.
-    # Used for fallback tool-call extraction when providers emit calls as text.
-    raw_answer: str | None = None
-    # Terminal finish_reason from the stream, LiteLLM-normalized (e.g. "stop",
-    # "length", "tool_calls", "content_filter"). Lets downstream classification
-    # distinguish a model refusal from a genuinely empty provider response.
-    finish_reason: str | None = None

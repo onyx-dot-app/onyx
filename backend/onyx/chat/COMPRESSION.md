@@ -6,19 +6,22 @@ Compresses long chat histories by summarizing older messages while keeping recen
 
 ### Branch-Aware via Tree Structure
 Summaries are stored as `ChatMessage` records with two key fields:
-- `parent_message_id` → last message when compression triggered (places summary in the tree)
+- `parent_message_id` → latest user message when compression triggered (places summary in the tree)
 - `last_summarized_message_id` → pointer to an older message up the chain (the cutoff). Messages after this are kept verbatim.
 
-**Why store summary as a separate message?** If we embedded the summary in the `last_summarized_message_id` message itself, that message would contain context from messages that came after it—context that doesn't exist in other branches. By creating the summary as a new message attached to the branch tip, it only applies to the specific branch where compression occurred. It's only back-pointed to by the
-branch which it applies to. All of this is necessary because we keep the last few messages verbatim and also to support branching logic.
+**Why store summary as a separate message?** A separate record limits the summary to branches that contain its parent.
+The parent is the latest user message, so sibling answers can share the summary.
+The cutoff identifies the older messages that the summary replaces.
 
 ### Progressive Summarization
-Subsequent compressions incorporate the existing summary text + new messages, preventing information loss in very long conversations.
+Subsequent compressions incorporate the existing summary text and new messages. Summarization can lose detail.
 
 ### Cutoff Marker Prompt Strategy
 The LLM receives older messages, a cutoff marker, then recent messages. It summarizes only content before the marker while using recent context to inform what's important.
 
 ## Token Budget
+
+Token estimates use stored agent transcripts when available and stored token counts for older records.
 
 Context window breakdown:
 - `max_context_tokens` — LLM's total context window
@@ -34,7 +37,7 @@ Configurable ratios:
 
 1. Trigger when `history_tokens > available * 0.75`
 2. Find existing summary for branch (if any)
-3. Split messages: older (summarize) / recent (keep 25%)
+3. Split messages: older (summarize) / recent (target 20%, keeping complete user exchanges)
 4. Generate summary via LLM
 5. Save as `ChatMessage` with `parent_message_id` + `last_summarized_message_id`
 

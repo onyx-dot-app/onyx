@@ -1,6 +1,6 @@
 from collections.abc import Callable
-from typing import Any
 
+from pydantic import BaseModel, JsonValue
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission
@@ -17,11 +17,11 @@ from onyx.db.llm import (
     fetch_user_group_ids,
 )
 from onyx.db.models import LLMProvider as LLMProviderModel
-from onyx.db.models import Persona, SearchSettings, User
+from onyx.db.models import ModelConfiguration, Persona, SearchSettings, User
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM, LlmRequestPolicy
-from onyx.llm.models import ReasoningEffort, UserChatDefaults
-from onyx.llm.multi_llm import LitellmLLM
+from onyx.llm.models import ReasoningEffort
+from onyx.llm.multi_llm import LitellmLLM, LitellmTransport
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.utils import (
     get_max_input_tokens_from_llm_provider,
@@ -36,6 +36,13 @@ from onyx.utils.headers import build_llm_extra_headers
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+class UserChatDefaults(BaseModel):
+    """User generation preferences used when selecting an LLM."""
+
+    temperature_default: float | None = None
+    reasoning_effort_default: ReasoningEffort | None = None
 
 
 def _build_provider_extra_headers(
@@ -77,8 +84,8 @@ def _get_model_configuration(
 def _build_model_kwargs(
     provider: str,
     configured_max_input_tokens: int | None,
-) -> dict[str, Any]:
-    model_kwargs: dict[str, Any] = {}
+) -> dict[str, JsonValue]:
+    model_kwargs: dict[str, JsonValue] = {}
     if (
         provider == LlmProviderNames.OLLAMA_CHAT
         and configured_max_input_tokens
@@ -156,7 +163,7 @@ def get_llm_for_persona(
     llm_override: LLMOverride | None = None,
     additional_headers: dict[str, str] | None = None,
     policy_fn: Callable[[str], LlmRequestPolicy] | None = None,
-) -> LLM:
+) -> LitellmLLM:
     """Get the appropriate LLM for a persona, with the following priority:
     1. LLM override (model configuration id, else provider + model version)
     2. Persona's model configuration override
@@ -291,7 +298,7 @@ def llm_from_provider(
     additional_headers: dict[str, str] | None = None,
     policy_fn: Callable[[str], LlmRequestPolicy] | None = None,
     user_defaults: UserChatDefaults | None = None,
-) -> LLM:
+) -> LitellmLLM:
     model_configuration = _get_model_configuration(
         llm_provider=llm_provider, model_name=model_name
     )
@@ -331,6 +338,9 @@ def llm_from_provider(
         model_kwargs=model_kwargs,
         policy_headers=policy.headers if policy else None,
         policy_model_kwargs=policy.model_kwargs if policy else None,
+        supports_images=(
+            model_configuration.supports_image_input if model_configuration else None
+        ),
         reasoning_effort_default=(
             model_configuration.reasoning_effort_default
             if model_configuration
@@ -346,8 +356,6 @@ def llm_from_provider(
 
 
 def get_llm_for_contextual_rag(model_configuration_id: int) -> LLM:
-    from onyx.db.models import ModelConfiguration
-
     with get_session_with_current_tenant() as db_session:
         mc = db_session.get(ModelConfiguration, model_configuration_id)
         if not mc:
@@ -378,7 +386,7 @@ def get_default_llm(
     additional_headers: dict[str, str] | None = None,
     policy_fn: Callable[[str], LlmRequestPolicy] | None = None,
     user_defaults: UserChatDefaults | None = None,
-) -> LLM:
+) -> LitellmLLM:
     with get_session_with_current_tenant() as db_session:
         model = fetch_default_llm_model(db_session)
 
@@ -406,13 +414,14 @@ def get_llm(
     custom_config: dict[str, str] | None = None,
     temperature: float | None = None,
     additional_headers: dict[str, str] | None = None,
-    model_kwargs: dict[str, Any] | None = None,
+    model_kwargs: dict[str, JsonValue] | None = None,
     policy_headers: dict[str, str] | None = None,
-    policy_model_kwargs: dict[str, Any] | None = None,
+    policy_model_kwargs: dict[str, JsonValue] | None = None,
     reasoning_effort_default: ReasoningEffort | None = None,
     reasoning_effort_user_default: ReasoningEffort | None = None,
     reasoning_effort_max: ReasoningEffort | None = None,
-) -> LLM:
+    supports_images: bool | None = None,
+) -> LitellmLLM:
     if temperature is None:
         temperature = GEN_AI_TEMPERATURE
 
@@ -435,20 +444,24 @@ def get_llm(
         merged_model_kwargs.update(policy_model_kwargs)
 
     return LitellmLLM(
-        model_provider=provider,
-        model_name=model,
-        deployment_name=deployment_name,
-        api_key=api_key,
-        api_base=api_base,
-        api_version=api_version,
-        temperature=temperature,
-        custom_config=custom_config,
-        extra_headers=extra_headers,
-        model_kwargs=merged_model_kwargs,
-        max_input_tokens=max_input_tokens,
-        reasoning_effort_default=reasoning_effort_default,
-        reasoning_effort_user_default=reasoning_effort_user_default,
-        reasoning_effort_max=reasoning_effort_max,
+        LitellmTransport(
+            model_provider=provider,
+            model_name=model,
+            deployment_name=deployment_name,
+            api_key=api_key,
+            api_base=api_base,
+            api_version=api_version,
+            timeout=timeout,
+            temperature=temperature,
+            custom_config=custom_config,
+            extra_headers=extra_headers,
+            model_kwargs=merged_model_kwargs,
+            max_input_tokens=max_input_tokens,
+            reasoning_effort_default=reasoning_effort_default,
+            reasoning_effort_user_default=reasoning_effort_user_default,
+            reasoning_effort_max=reasoning_effort_max,
+            supports_images=supports_images,
+        )
     )
 
 
@@ -461,8 +474,8 @@ def get_llm_tokenizer_encode_func(llm: LLM) -> Callable[[str], list[int]]:
     Returns:
         A callable that encodes a string into a list of token IDs
     """
-    llm_provider = llm.config.model_provider
-    llm_model_name = llm.config.model_name
+    llm_provider = llm.info.model_provider
+    llm_model_name = llm.info.model_name
 
     llm_tokenizer = get_tokenizer(
         model_name=llm_model_name,

@@ -29,6 +29,7 @@ from ee.onyx.server.gateway.anthropic_passthrough import (
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.interfaces import LLMConfig
+from onyx.llm.multi_llm import LitellmLLM
 from onyx.server.gateway.models import (
     AnthropicCountTokensRequest,
     AnthropicMessagesRequest,
@@ -734,7 +735,9 @@ def _run_non_streaming_passthrough(
             ),
         ),
         patch.object(
-            anthropic_passthrough, "llm_from_provider", return_value=_anthropic_llm()
+            anthropic_passthrough,
+            "llm_from_provider",
+            return_value=LitellmLLM(_anthropic_llm()),
         ),
         patch.object(anthropic_passthrough, "llm_generation_span", span_patch),
     ):

@@ -10,6 +10,7 @@ from onyx.context.search.models import BaseFilters, SavedSearchDoc, SearchDoc, T
 from onyx.db.enums import ChatSessionSharedStatus
 from onyx.db.models import ChatSession
 from onyx.file_store.models import FileDescriptor
+from onyx.llm.models import GenerationRequestParams
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.streaming_models import Packet
 
@@ -239,7 +240,7 @@ class ChatMessageDetail(BaseModel):
     preferred_response_id: int | None = None
     model_display_name: str | None = None
     # Absent on messages written before this was captured.
-    request_params: dict[str, Any] | None = None
+    request_params: GenerationRequestParams | None = None
 
     def model_dump(  # ty: ignore[invalid-method-override]
         self, *args: list, **kwargs: dict[str, Any]

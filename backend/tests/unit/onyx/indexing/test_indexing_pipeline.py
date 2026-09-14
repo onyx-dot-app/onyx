@@ -40,7 +40,7 @@ from onyx.indexing.indexing_pipeline import (
 )
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_capabilities import get_max_input_tokens
-from onyx.llm.model_response import Choice, Message, ModelResponse
+from onyx.llm.models import AssistantMessage, TextContent
 from onyx.tracing.framework.traces import TraceContentMode
 
 
@@ -210,20 +210,18 @@ def test_contextual_rag(
     def mock_llm_invoke(
         *args: Any,  # noqa: ARG001
         **kwargs: Any,  # noqa: ARG001
-    ) -> ModelResponse:
+    ) -> AssistantMessage:
         nonlocal mock_llm_invoke_count
         with counter_lock:
             mock_llm_invoke_count += 1
-        return ModelResponse(
-            id=f"test-{mock_llm_invoke_count}",
-            created="2024-01-01T00:00:00Z",
-            choice=Choice(message=Message(content=f"Test{mock_llm_invoke_count}")),
+        return AssistantMessage(
+            content=[TextContent(text=f"Test{mock_llm_invoke_count}")]
         )
 
     llm_tokenizer = embedder.embedding_model.tokenizer
 
     mock_llm = Mock()
-    mock_llm.config.max_input_tokens = get_max_input_tokens(
+    mock_llm.info.max_input_tokens = get_max_input_tokens(
         model_provider=LlmProviderNames.OPENAI, model_name="gpt-4o"
     )
     mock_llm.invoke = mock_llm_invoke

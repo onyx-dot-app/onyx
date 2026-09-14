@@ -1,60 +1,25 @@
-from __future__ import annotations
-
-from typing import TYPE_CHECKING, cast
-
 import pytest
+from litellm.types.utils import ModelResponse as LiteLLMModelResponse
+from litellm.types.utils import ModelResponseStream as LiteLLMModelResponseStream
+from pydantic import JsonValue
 
-from onyx.llm.model_response import (
-    ChatCompletionDeltaToolCall,
-    FunctionCall,
-    ModelResponse,
-    ModelResponseStream,
+from onyx.llm.litellm_conversion import (
+    MessageAccumulator,
     from_litellm_model_response,
     from_litellm_model_response_stream,
 )
-
-if TYPE_CHECKING:
-    from litellm.types.utils import ModelResponse as LiteLLMModelResponse
-    from litellm.types.utils import ModelResponseStream as LiteLLMModelResponseStream
-
-
-class _LiteLLMStreamDouble:
-    """
-    Lightweight double that mimics the LiteLLM ``ModelResponseStream`` interface
-    used by ``from_litellm_model_response_stream``.
-    """
-
-    def __init__(self, payload: dict) -> None:
-        self._payload = payload
-
-    def model_dump(self) -> dict:
-        return self._payload
+from onyx.llm.litellm_models import (
+    ChatCompletionDeltaToolCall,
+    Delta,
+    FunctionCall,
+    ModelResponse,
+    ModelResponseStream,
+    StreamingChoice,
+)
+from onyx.llm.models import ThinkingBlock, ToolCallEndEvent
 
 
-class _LiteLLMResponseDouble:
-    """
-    Lightweight double that mimics the LiteLLM ``ModelResponse`` interface
-    used by ``from_litellm_model_response``.
-    """
-
-    def __init__(self, payload: dict) -> None:
-        self._payload = payload
-
-    def model_dump(self) -> dict:
-        return self._payload
-
-
-def _make_stream_double(payload: dict) -> "LiteLLMModelResponseStream":
-    """Create a test double for LiteLLM ModelResponseStream."""
-    return cast("LiteLLMModelResponseStream", _LiteLLMStreamDouble(payload))
-
-
-def _make_response_double(payload: dict) -> "LiteLLMModelResponse":
-    """Create a test double for LiteLLM ModelResponse."""
-    return cast("LiteLLMModelResponse", _LiteLLMResponseDouble(payload))
-
-
-def _build_tool_call_payload() -> dict:
+def _build_tool_call_payload() -> dict[str, JsonValue]:
     return {
         "id": "chatcmpl-f739f09c-7c9b-4dd6-aea7-cf41d4fd2196",
         "created": 1762544538,
@@ -83,7 +48,7 @@ def _build_tool_call_payload() -> dict:
     }
 
 
-def _build_reasoning_payload() -> dict:
+def _build_reasoning_payload() -> dict[str, JsonValue]:
     return {
         "id": "chatcmpl-c2a25682-5715-4ca2-84a9-061498f79626",
         "created": 1762544538,
@@ -101,39 +66,7 @@ def _build_reasoning_payload() -> dict:
     }
 
 
-def _build_finish_reason_payload() -> tuple[dict, dict]:
-    base_chunk = {
-        "id": "chatcmpl-2b136068-c6fb-4af1-97d5-d2c9d84cd52b",
-        "created": 1762544448,
-        "object": "chat.completion.chunk",
-    }
-
-    content_chunk = base_chunk | {
-        "choices": [
-            {
-                "finish_reason": None,
-                "index": 0,
-                "delta": {
-                    "content": "?",
-                },
-            }
-        ],
-    }
-
-    final_chunk = base_chunk | {
-        "choices": [
-            {
-                "finish_reason": "stop",
-                "index": 0,
-                "delta": {},
-            }
-        ],
-    }
-
-    return content_chunk, final_chunk
-
-
-def _build_multiple_tool_calls_payload() -> dict:
+def _build_multiple_tool_calls_payload() -> dict[str, JsonValue]:
     return {
         "id": "Yn4SaajROLXEnvgP5JTN-AQ",
         "created": 1762819684,
@@ -171,7 +104,7 @@ def _build_multiple_tool_calls_payload() -> dict:
     }
 
 
-def _build_usage_only_chunk_payload() -> dict:
+def _build_usage_only_chunk_payload() -> dict[str, JsonValue]:
     # Final chunk OpenAI emits when stream_options.include_usage is set: empty
     # `choices` array plus usage. litellm forwards it through verbatim.
     return {
@@ -188,7 +121,7 @@ def _build_usage_only_chunk_payload() -> dict:
     }
 
 
-def _build_non_streaming_response_payload() -> dict:
+def _build_non_streaming_response_payload() -> dict[str, JsonValue]:
     return {
         "id": "chatcmpl-abc123",
         "created": 1234567890,
@@ -207,7 +140,7 @@ def _build_non_streaming_response_payload() -> dict:
     }
 
 
-def _build_non_streaming_tool_call_payload() -> dict:
+def _build_non_streaming_tool_call_payload() -> dict[str, JsonValue]:
     return {
         "id": "chatcmpl-xyz789",
         "created": 9876543210,
@@ -238,7 +171,7 @@ def _build_non_streaming_tool_call_payload() -> dict:
 
 def test_from_litellm_model_response_stream_parses_tool_calls() -> None:
     response = from_litellm_model_response_stream(
-        _make_stream_double(_build_tool_call_payload())
+        LiteLLMModelResponseStream.model_validate(_build_tool_call_payload())
     )
 
     assert isinstance(response, ModelResponseStream)
@@ -257,7 +190,7 @@ def test_from_litellm_model_response_stream_parses_tool_calls() -> None:
 
 def test_from_litellm_model_response_stream_preserves_reasoning_content() -> None:
     response = from_litellm_model_response_stream(
-        _make_stream_double(_build_reasoning_payload())
+        LiteLLMModelResponseStream.model_validate(_build_reasoning_payload())
     )
 
     assert response.choice.delta.content is None
@@ -265,26 +198,43 @@ def test_from_litellm_model_response_stream_preserves_reasoning_content() -> Non
     assert response.choice.finish_reason is None
 
 
-@pytest.mark.parametrize("payload", _build_finish_reason_payload())
+@pytest.mark.parametrize(
+    "expected_finish_reason, expected_content",
+    [pytest.param(None, "?", id="content"), pytest.param("stop", None, id="finish")],
+)
 def test_from_litellm_model_response_stream_handles_content_and_finish_reason(
-    payload: dict,
+    expected_finish_reason: str | None,
+    expected_content: str | None,
 ) -> None:
-    response = from_litellm_model_response_stream(_make_stream_double(payload))
+    response = from_litellm_model_response_stream(
+        LiteLLMModelResponseStream.model_validate(
+            {
+                "id": "chatcmpl-2b136068-c6fb-4af1-97d5-d2c9d84cd52b",
+                "created": 1762544448,
+                "object": "chat.completion.chunk",
+                "choices": [
+                    {
+                        "finish_reason": expected_finish_reason,
+                        "index": 0,
+                        "delta": {"content": expected_content}
+                        if expected_content is not None
+                        else {},
+                    }
+                ],
+            }
+        )
+    )
 
     assert response.id == "chatcmpl-2b136068-c6fb-4af1-97d5-d2c9d84cd52b"
     assert response.created == "1762544448"
     assert response.choice.index == 0
-    if payload["choices"][0]["finish_reason"] == "stop":
-        assert response.choice.finish_reason == "stop"
-        assert response.choice.delta.content is None
-    else:
-        assert response.choice.finish_reason is None
-        assert response.choice.delta.content == "?"
+    assert response.choice.finish_reason == expected_finish_reason
+    assert response.choice.delta.content == expected_content
 
 
 def test_from_litellm_model_response_stream_parses_multiple_tool_calls() -> None:
     response = from_litellm_model_response_stream(
-        _make_stream_double(_build_multiple_tool_calls_payload())
+        LiteLLMModelResponseStream.model_validate(_build_multiple_tool_calls_payload())
     )
 
     tool_calls = response.choice.delta.tool_calls
@@ -315,7 +265,7 @@ def test_from_litellm_model_response_stream_parses_multiple_tool_calls() -> None
 
 def test_from_litellm_model_response_stream_handles_empty_choices_usage_chunk() -> None:
     response = from_litellm_model_response_stream(
-        _make_stream_double(_build_usage_only_chunk_payload())
+        LiteLLMModelResponseStream.model_validate(_build_usage_only_chunk_payload())
     )
 
     assert isinstance(response, ModelResponseStream)
@@ -332,7 +282,7 @@ def test_from_litellm_model_response_stream_handles_empty_choices_usage_chunk() 
 
 def test_from_litellm_model_response_parses_basic_message() -> None:
     response = from_litellm_model_response(
-        _make_response_double(_build_non_streaming_response_payload())
+        LiteLLMModelResponse.model_validate(_build_non_streaming_response_payload())
     )
 
     assert isinstance(response, ModelResponse)
@@ -346,7 +296,7 @@ def test_from_litellm_model_response_parses_basic_message() -> None:
 
 def test_from_litellm_model_response_parses_tool_calls() -> None:
     response = from_litellm_model_response(
-        _make_response_double(_build_non_streaming_tool_call_payload())
+        LiteLLMModelResponse.model_validate(_build_non_streaming_tool_call_payload())
     )
 
     assert isinstance(response, ModelResponse)
@@ -363,3 +313,70 @@ def test_from_litellm_model_response_parses_tool_calls() -> None:
     assert tool_call.type == "function"
     assert tool_call.function.name == "search_documents"
     assert tool_call.function.arguments == '{"query": "test"}'
+
+
+def test_accumulator_keeps_interleaved_calls_and_signed_thinking_separate() -> None:
+    accumulator = MessageAccumulator()
+    signed = ThinkingBlock(thinking="plan", signature="signed")
+    accumulator.add(
+        ModelResponseStream(
+            id="response",
+            created="0",
+            choice=StreamingChoice(
+                delta=Delta(reasoning_content="plan", thinking_blocks=[signed])
+            ),
+        )
+    )
+    for call in [
+        ChatCompletionDeltaToolCall(
+            index=0,
+            id="first",
+            function=FunctionCall(name="search", arguments='{"query":"fir'),
+        ),
+        ChatCompletionDeltaToolCall(
+            index=1,
+            id="second",
+            function=FunctionCall(name="search", arguments='{"query":"second"}'),
+        ),
+        ChatCompletionDeltaToolCall(index=0, function=FunctionCall(arguments='st"}')),
+        ChatCompletionDeltaToolCall(
+            index=2,
+            id="invalid",
+            function=FunctionCall(name="search", arguments='{"query":broken'),
+        ),
+    ]:
+        accumulator.add(
+            ModelResponseStream(
+                id="response",
+                created="0",
+                choice=StreamingChoice(delta=Delta(tool_calls=[call])),
+            )
+        )
+    events = accumulator.end()
+    message = events[-1].message
+    assert message.thinking_blocks == [signed]
+    assert [(call.id, call.arguments) for call in message.tool_calls] == [
+        ("first", {"query": "first"}),
+        ("second", {"query": "second"}),
+        ("invalid", {}),
+    ]
+    assert message.tool_calls[-1].argument_error is not None
+    assert [
+        event.content_index for event in events if isinstance(event, ToolCallEndEvent)
+    ] == [1, 2, 3]
+
+
+def test_provider_stream_accepts_null_optional_tool_calls() -> None:
+    response = from_litellm_model_response_stream(
+        LiteLLMModelResponseStream.model_validate(
+            {
+                "id": "response",
+                "created": 0,
+                "choices": [
+                    {"index": 0, "delta": {"content": "hello", "tool_calls": None}}
+                ],
+            }
+        )
+    )
+    assert response.choice.delta.content == "hello"
+    assert response.choice.delta.tool_calls == []

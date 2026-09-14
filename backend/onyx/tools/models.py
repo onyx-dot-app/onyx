@@ -5,12 +5,12 @@ from enum import Enum
 from typing import Any, Callable, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict
 
 from onyx.chat.emitter import Emitter
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT, NUM_RETURNED_HITS
 from onyx.configs.constants import MessageType
-from onyx.context.search.models import SearchDoc, SearchDocsResponse
+from onyx.context.search.models import SearchDoc
 from onyx.db.memory import UserMemoryContext
 from onyx.file_store.models import (
     install_lazy_content_loader,
@@ -21,8 +21,6 @@ from onyx.server.query_and_chat.streaming_models import (
     CustomToolErrorInfo,
     GeneratedImage,
 )
-from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
-from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
 
 TOOL_CALL_MSG_FUNC_NAME = "function_name"
 TOOL_CALL_MSG_ARGUMENTS = "arguments"
@@ -79,70 +77,6 @@ class ToolCallKickoff(BaseModel):
                 TOOL_CALL_MSG_ARGUMENTS: self.tool_args,
             }
         )
-
-
-class ToolResponse(BaseModel):
-    # Rich response is for the objects that are returned but not directly used by the LLM
-    # these typically need to be saved to the database to load things in the UI (usually both)
-    rich_response: (
-        # This comes from image generation, image needs to be saved and the packet about it's location needs to be emitted
-        FinalImageGenerationResponse
-        # This comes from internal search / web search, search docs need to be saved, already emitted by the tool
-        | SearchDocsResponse
-        # This comes from the memory tool, memory needs to be persisted to the database
-        | MemoryToolResponse
-        # This comes from open url, web content needs to be saved, maybe this can be consolidated too
-        # | WebContentResponse
-        # This comes from custom tools, tool result needs to be saved
-        | CustomToolCallSummary
-        # This comes from code interpreter, carries generated files
-        | PythonToolRichResponse
-        # If the rich response is a string, this is what's saved to the tool call in the DB
-        | str
-        | None  # If nothing needs to be persisted outside of the string value passed to the LLM
-    )
-    # This is the final string that needs to be wrapped in a tool call response message and concatenated to the history
-    llm_facing_response: str
-    # The original tool call that triggered this response - set by tool_runner
-    # The response is first created by the tool runner, which does not need to be aware of things like the tool_call_id
-    # So this is set after the response is created by the tool runner
-    tool_call: ToolCallKickoff | None = None
-
-
-class ParallelToolCallResponse(BaseModel):
-    tool_responses: list[ToolResponse]
-    updated_citation_mapping: dict[int, str]
-
-
-class ToolRunnerResponse(BaseModel):
-    tool_run_kickoff: ToolCallKickoff | None = None
-    tool_response: ToolResponse | None = None
-    tool_message_content: str | list[str | dict[str, Any]] | None = None
-
-    @model_validator(mode="after")
-    def validate_tool_runner_response(self) -> "ToolRunnerResponse":
-        fields = ["tool_response", "tool_message_content", "tool_run_kickoff"]
-        provided = sum(
-            1
-            for field in fields
-            if getattr(self, field) is not None  # ods: ignore[getattr]
-        )
-
-        if provided != 1:
-            raise ValueError(
-                "Exactly one of 'tool_response', 'tool_message_content', or 'tool_run_kickoff' must be provided"
-            )
-
-        return self
-
-
-class ToolCallFinalResult(ToolCallKickoff):
-    tool_result: Any = (
-        None  # we would like to use JSON_ro, but can't due to its recursive nature
-    )
-    # agentic additions; only need to set during agentic tool calls
-    level: int | None = None
-    level_question_num: int | None = None
 
 
 class ChatMinimalTextMessage(BaseModel):

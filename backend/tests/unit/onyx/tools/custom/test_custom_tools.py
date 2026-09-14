@@ -5,8 +5,9 @@ from unittest.mock import patch
 
 import pytest
 
+from onyx.llm.models import ToolResult
 from onyx.server.query_and_chat.placement import Placement
-from onyx.tools.models import DynamicSchemaInfo, ToolResponse
+from onyx.tools.models import DynamicSchemaInfo
 from onyx.tools.tool_implementations.custom.custom_tool import (
     CustomToolCallSummary,
     build_custom_tools_from_openapi_schema_and_headers,
@@ -109,12 +110,12 @@ class TestCustomTool(unittest.TestCase):
 
         self.assertIsNotNone(result, "Expected a result from the tool run")
         self.assertIsNotNone(
-            result.rich_response,
-            "Expected rich_response to be set",
+            result.details,
+            "Expected details to be set",
         )
-        assert isinstance(result.rich_response, CustomToolCallSummary)
+        assert isinstance(result.details, CustomToolCallSummary)
         self.assertEqual(
-            result.rich_response.tool_name,
+            result.details.tool_name,
             "getAssistant",
             "Tool name in response does not match expected value",
         )
@@ -149,12 +150,12 @@ class TestCustomTool(unittest.TestCase):
 
         self.assertIsNotNone(result, "Expected a result from the tool run")
         self.assertIsNotNone(
-            result.rich_response,
-            "Expected rich_response to be set",
+            result.details,
+            "Expected details to be set",
         )
-        assert isinstance(result.rich_response, CustomToolCallSummary)
+        assert isinstance(result.details, CustomToolCallSummary)
         self.assertEqual(
-            result.rich_response.tool_name,
+            result.details.tool_name,
             "createAssistant",
             "Tool name in response does not match expected value",
         )
@@ -382,20 +383,20 @@ class TestCustomTool(unittest.TestCase):
     def test_custom_tool_final_result(self) -> None:
         """
         Test extracting the final result from a custom tool response.
-        Verifies that the tool result can be correctly extracted from the ToolResponse.
+        Verifies that the tool result can be correctly extracted from the ToolResult.
         """
-        mock_response = ToolResponse(
-            rich_response=CustomToolCallSummary(
+        mock_response = ToolResult(
+            details=CustomToolCallSummary(
                 response_type="json",
                 tool_name="getAssistant",
                 tool_result={"id": "789", "name": "Final Assistant"},
             ),
-            llm_facing_response='{"id": "789", "name": "Final Assistant"}',
+            content='{"id": "789", "name": "Final Assistant"}',
         )
 
-        # Extract the final result from the rich_response
-        assert isinstance(mock_response.rich_response, CustomToolCallSummary)
-        final_result = mock_response.rich_response.tool_result
+        # Extract the final result from the details
+        assert isinstance(mock_response.details, CustomToolCallSummary)
+        final_result = mock_response.details.tool_result
         self.assertEqual(
             final_result,
             {"id": "789", "name": "Final Assistant"},

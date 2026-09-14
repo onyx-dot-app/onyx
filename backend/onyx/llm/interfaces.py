@@ -1,21 +1,19 @@
+"""LLM interface, public settings, and provider configuration."""
+
 import abc
-from collections.abc import Callable, Iterator
-from typing import Any
+from collections.abc import Generator
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
-from onyx.configs.chat_configs import LLM_INVOKE_TIMEOUT_S, LLM_SOCKET_READ_TIMEOUT
-from onyx.llm.model_response import ModelResponse, ModelResponseStream
+from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import (
-    LanguageModelInput,
+    AssistantMessage,
+    GenerationEvent,
+    GenerationRequest,
     ReasoningEffort,
-    ToolChoice,
-    ToolChoiceOptions,  # noqa: F401  # re-exported: onyx.chat imports it from here
 )
-from onyx.llm.tracing_wrap import wrap_invoke, wrap_stream
-from onyx.utils.logger import setup_logger
-
-logger = setup_logger()
+from onyx.tracing.flows import LLMFlow
+from onyx.tracing.framework.traces import TraceContentMode
 
 
 class LLMUserIdentity(BaseModel):
@@ -23,107 +21,69 @@ class LLMUserIdentity(BaseModel):
     session_id: str | None = None
 
 
+class GenerationContext(BaseModel):
+    """Policy shared by the provider operation and its tracing span."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+
+    cancellation: CancellationSignal | None = None
+    timeout: int | None = Field(default=None, gt=0)
+    total_timeout: float | None = Field(default=None, gt=0)
+    user_identity: LLMUserIdentity | None = None
+    flow: LLMFlow | None = None
+    content_mode: TraceContentMode | None = None
+
+
 class LlmRequestPolicy(BaseModel):
     """Per-request policy an LLM call must carry (e.g. incognito retention
     suppression). Merged after every other source so nothing overrides it."""
 
     headers: dict[str, str] = {}
-    model_kwargs: dict[str, Any] = {}
+    model_kwargs: dict[str, JsonValue] = {}
 
 
-class LLMConfig(BaseModel):
+class LLMInfo(BaseModel):
+    """Public settings and resolved capabilities of a configured LLM."""
+
+    model_config = ConfigDict(frozen=True, protected_namespaces=())
+
     model_provider: str
     model_name: str
-    temperature: float
-    api_key: str | None = None
-    api_base: str | None = None
-    api_version: str | None = None
-    deployment_name: str | None = None
-    custom_config: dict[str, str] | None = None
     max_input_tokens: int
-    # Here rather than in the chat loop, so every invoke path gets it.
+    max_output_tokens: int | None = None
+    supports_images: bool | None = None
+    temperature: float
+    api_base: str | None = None
+    deployment_name: str | None = None
     reasoning_effort_default: ReasoningEffort | None = None
     reasoning_effort_user_default: ReasoningEffort | None = None
     reasoning_effort_max: ReasoningEffort | None = None
-    # This disables the "model_" protected namespace for pydantic
-    model_config = {"protected_namespaces": ()}
+
+
+class LLMConfig(LLMInfo):
+    """Provider connection settings, including credentials."""
+
+    api_key: str | None = None
+    api_version: str | None = None
+    custom_config: dict[str, str] | None = None
 
 
 class LLM(abc.ABC):
-    """Abstract base for every LLM backend used by Onyx.
-
-    Concrete subclasses have their ``invoke`` and ``stream`` methods
-    auto-wrapped (via ``__init_subclass__`` below) with a fallback braintrust
-    ``generation_span``. This guarantees that every LLM call — from any call
-    site, including future subclasses — is captured in braintrust without
-    per-callsite instrumentation. Callers that explicitly wrap their calls
-    with ``llm_generation_span`` are unaffected: the fallback detects the
-    outer span and no-ops.
-    """
-
-    def __init_subclass__(cls, **kwargs: Any) -> None:
-        super().__init_subclass__(**kwargs)
-        cls._wrap_method_if_defined("invoke", wrap_invoke)
-        cls._wrap_method_if_defined("stream", wrap_stream)
-
-    @classmethod
-    def _wrap_method_if_defined(
-        cls,
-        name: str,
-        wrapper_fn: Callable[[Callable[..., Any]], Callable[..., Any]],
-    ) -> None:
-        """Replace ``cls.<name>`` with ``wrapper_fn(cls.<name>)`` iff the method
-        is defined directly on this subclass.
-
-        Inherited methods are skipped — they've already been wrapped on the
-        parent class, so re-wrapping would nest two fallback spans around
-        the same call.
-        """
-        fn = cls.__dict__.get(name)
-        if fn is not None:
-            setattr(cls, name, wrapper_fn(fn))
+    """Generate assistant messages from conversation input and tool definitions."""
 
     @property
     @abc.abstractmethod
-    def config(self) -> LLMConfig:
-        raise NotImplementedError
+    def info(self) -> LLMInfo: ...
 
+    @abc.abstractmethod
+    def redact_error(self, text: str) -> str: ...
+
+    @abc.abstractmethod
     def invoke(
-        self,
-        prompt: LanguageModelInput,
-        tools: list[dict] | None = None,
-        tool_choice: ToolChoice | None = None,
-        structured_response_format: dict | None = None,
-        max_tokens: int | None = None,
-        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
-        user_identity: LLMUserIdentity | None = None,
-        total_timeout_s: float = LLM_INVOKE_TIMEOUT_S,
-    ) -> "ModelResponse":
-        """Return one complete response, or raise ``LLMTimeoutError`` after
-        ``total_timeout_s`` seconds.
+        self, request: GenerationRequest, context: GenerationContext | None = None
+    ) -> AssistantMessage: ...
 
-        Use ``stream`` when you want output as it arrives. The timeout is always
-        finite: our Celery pools disable Celery's own time limits, so a call that
-        never ends would hold its worker thread forever.
-        """
-        raise NotImplementedError
-
+    @abc.abstractmethod
     def stream(
-        self,
-        prompt: LanguageModelInput,
-        tools: list[dict] | None = None,
-        tool_choice: ToolChoice | None = None,
-        structured_response_format: dict | None = None,
-        max_tokens: int | None = None,
-        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
-        user_identity: LLMUserIdentity | None = None,
-        stall_timeout_s: int = LLM_SOCKET_READ_TIMEOUT,
-    ) -> Iterator[ModelResponseStream]:
-        """Yield deltas as they arrive.
-
-        ``stall_timeout_s`` bounds the gap between deltas, not the whole run. A
-        stream takes no total timeout: its consumer sees progress and owns the
-        end-to-end deadline, and some runs (deep research reports) take many
-        minutes.
-        """
-        raise NotImplementedError
+        self, request: GenerationRequest, context: GenerationContext | None = None
+    ) -> Generator[GenerationEvent, None, None]: ...

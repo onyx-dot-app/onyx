@@ -382,3 +382,17 @@ def any_user_file_reconcile_pending_for_users(
             )
         )
     )
+
+
+def get_user_file_processing_info(
+    file_ids: list[UUID], db_session: Session
+) -> dict[str, tuple[int, UserFileStatus]]:
+    """Read token counts and processing status without loading ORM relationships."""
+    if not file_ids:
+        return {}
+    rows = db_session.execute(
+        select(UserFile.id, UserFile.token_count, UserFile.status).where(
+            UserFile.id.in_(file_ids)
+        )
+    )
+    return {str(file_id): (tokens or 0, status) for file_id, tokens, status in rows}

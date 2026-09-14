@@ -19,6 +19,7 @@ from onyx.db.mcp import (
 from onyx.db.models import Persona, User
 from onyx.db.models import Tool as ToolDBModel
 from onyx.db.oauth_config import get_oauth_config
+from onyx.db.persona import get_persona_by_id
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tools import get_builtin_tool
 from onyx.document_index.factory import get_default_document_index
@@ -90,7 +91,7 @@ class CustomToolConfig(BaseModel):
 
 
 def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
-    """Get image generation LLM config from the default image generation configuration."""
+    """Load the default image generation provider and credentials."""
     from onyx.db.image_generation import get_default_image_generation_config
 
     default_config = get_default_image_generation_config(db_session)
@@ -115,7 +116,7 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
         api_base=llm_provider.api_base,
         api_version=llm_provider.api_version,
         deployment_name=llm_provider.deployment_name,
-        max_input_tokens=llm.config.max_input_tokens,
+        max_input_tokens=llm.info.max_input_tokens,
         custom_config=llm_provider.custom_config,
     )
 
@@ -153,7 +154,7 @@ def should_disable_open_url_web_fetch(
 
 
 def construct_tools(
-    persona: Persona,
+    persona: Persona | int,
     emitter: Emitter,
     user: User,
     llm: LLM,
@@ -164,15 +165,19 @@ def construct_tools(
     allowed_tool_ids: list[int] | None = None,
     search_usage_forcing_setting: SearchToolUsage = SearchToolUsage.AUTO,
 ) -> dict[int, list[Tool]]:
-    """Constructs tools based on persona configuration and available APIs.
+    """Build tools for an authorized persona inside a short database session.
 
-    Will simply skip tools that are not allowed/available.
-
-    Callers must supply a persona with ``tools``, ``document_sets``,
-    ``attached_documents``, and ``hierarchy_nodes`` already eager-loaded
-    (e.g. via ``eager_load_persona=True`` or ``eager_load_for_tools=True``)
-    to avoid lazy SQL queries after the session may have been flushed."""
+    Passing an ID loads the persona here. ORM callers must supply loaded tool
+    relationships or keep their session open through construction.
+    """
     with get_session_with_current_tenant_if_none(db_session) as db_session:
+        if isinstance(persona, int):
+            persona = get_persona_by_id(
+                persona_id=persona,
+                user=None,
+                db_session=db_session,
+                include_deleted=True,
+            )
         return _construct_tools_impl(
             persona=persona,
             db_session=db_session,

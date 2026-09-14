@@ -7,8 +7,13 @@ from onyx.context.search.models import (
     InferenceChunk,
     InferenceSection,
 )
-from onyx.llm.interfaces import LLM
-from onyx.llm.models import ReasoningEffort, UserMessage
+from onyx.llm.interfaces import LLM, GenerationContext
+from onyx.llm.models import (
+    GenerationOptions,
+    GenerationRequest,
+    ReasoningEffort,
+    UserMessage,
+)
 from onyx.prompts.search_prompts import (
     DOCUMENT_CONTEXT_SELECTION_PROMPT,
     DOCUMENT_SELECTION_PROMPT,
@@ -16,7 +21,6 @@ from onyx.prompts.search_prompts import (
 )
 from onyx.tools.tool_implementations.search.constants import MAX_CHUNKS_FOR_RELEVANCE
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
 
@@ -127,21 +131,19 @@ def classify_section_relevance(
     # Default to MAIN_SECTION_ONLY
     default_classification = ContextExpansionType.MAIN_SECTION_ONLY
 
-    # Call LLM for classification with Braintrust tracing
     try:
         prompt_msg = UserMessage(content=prompt_text)
-        with llm_generation_span(
-            llm=llm,
-            flow=LLMFlow.CLASSIFY_SECTION_RELEVANCE,
-            input_messages=[prompt_msg],
-        ) as span_generation:
-            response = llm.invoke(
-                prompt=prompt_msg,
-                reasoning_effort=ReasoningEffort.OFF,
-                total_timeout_s=SECONDARY_LLM_FLOW_TIMEOUT_S,
-            )
-            record_llm_response(span_generation, response)
-            llm_response = response.choice.message.content
+        response = llm.invoke(
+            GenerationRequest(
+                messages=[prompt_msg],
+                options=GenerationOptions(reasoning_effort=ReasoningEffort.OFF),
+            ),
+            context=GenerationContext(
+                timeout=SECONDARY_LLM_FLOW_TIMEOUT_S,
+                flow=LLMFlow.CLASSIFY_SECTION_RELEVANCE,
+            ),
+        )
+        llm_response = response.text
 
         if not llm_response:
             logger.warning(
@@ -308,20 +310,18 @@ def select_sections_for_expansion(
         )
     )
 
-    # Call LLM for selection with Braintrust tracing
     try:
-        with llm_generation_span(
-            llm=llm,
-            flow=LLMFlow.SELECT_SECTIONS_FOR_EXPANSION,
-            input_messages=[prompt_text],
-        ) as span_generation:
-            response = llm.invoke(
-                prompt=[prompt_text],
-                reasoning_effort=ReasoningEffort.OFF,
-                total_timeout_s=SECONDARY_LLM_FLOW_TIMEOUT_S,
-            )
-            record_llm_response(span_generation, response)
-            llm_response = response.choice.message.content
+        response = llm.invoke(
+            GenerationRequest(
+                messages=[prompt_text],
+                options=GenerationOptions(reasoning_effort=ReasoningEffort.OFF),
+            ),
+            context=GenerationContext(
+                timeout=SECONDARY_LLM_FLOW_TIMEOUT_S,
+                flow=LLMFlow.SELECT_SECTIONS_FOR_EXPANSION,
+            ),
+        )
+        llm_response = response.text
 
         if not llm_response:
             logger.warning(

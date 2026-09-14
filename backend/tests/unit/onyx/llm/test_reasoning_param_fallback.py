@@ -6,16 +6,18 @@ from unittest.mock import patch
 import pytest
 from litellm.exceptions import BadRequestError, RateLimitError
 
-from onyx.llm.models import ReasoningEffort, UserMessage
-from onyx.llm.multi_llm import LitellmLLM, LLMRateLimitError
+from onyx.llm.exceptions import LLMRateLimitError
+from onyx.llm.litellm_models import UserMessage
+from onyx.llm.models import ReasoningEffort
+from onyx.llm.multi_llm import LitellmTransport
 
 _SENTINEL = object()
 
 
 def _make_llm(
     model_name: str = "claude-sonnet-5", model_provider: str = "anthropic"
-) -> LitellmLLM:
-    return LitellmLLM(
+) -> LitellmTransport:
+    return LitellmTransport(
         api_key="test-key",
         model_provider=model_provider,
         model_name=model_name,
@@ -28,7 +30,10 @@ def _bad_request(message: str = "effort not supported") -> BadRequestError:
 
 
 def _run(
-    llm: LitellmLLM, completion: Any, effort: ReasoningEffort, stream: bool = False
+    llm: LitellmTransport,
+    completion: Any,
+    effort: ReasoningEffort,
+    stream: bool = False,
 ) -> Any:
     with patch("onyx.llm.litellm_singleton.litellm.completion", side_effect=completion):
         return llm._completion(

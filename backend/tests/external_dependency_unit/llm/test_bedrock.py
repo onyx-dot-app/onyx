@@ -15,8 +15,8 @@ The auth-error path lives at the API surface in
 import pytest
 
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.models import ChatCompletionMessage, UserMessage
-from onyx.llm.multi_llm import LitellmLLM
+from onyx.llm.litellm_models import ChatCompletionMessage, UserMessage
+from onyx.llm.multi_llm import LitellmTransport
 from tests.utils.secret_names import TestSecret
 
 pytestmark = pytest.mark.nightly
@@ -48,7 +48,7 @@ def test_nova_streaming_does_not_leak_thinking_tags(
     the leak is reliably reproducible — we don't want this to be flaky on
     prompts where Nova happens to skip the tags.
     """
-    llm = LitellmLLM(
+    llm = LitellmTransport(
         api_key=test_secrets[TestSecret.BEDROCK_API_KEY],
         model_provider=LlmProviderNames.BEDROCK,
         model_name=_NOVA_THINKING_MODEL,
@@ -58,7 +58,6 @@ def test_nova_streaming_does_not_leak_thinking_tags(
 
     prompt: list[ChatCompletionMessage] = [
         UserMessage(
-            role="user",
             content=(
                 "Solve this step by step. Wrap your reasoning in "
                 "<thinking>...</thinking> tags first, then give the final "

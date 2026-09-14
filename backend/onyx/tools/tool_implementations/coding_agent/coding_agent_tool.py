@@ -6,17 +6,18 @@ from sqlalchemy.orm import Session
 from typing_extensions import override
 
 from onyx.chat.emitter import Emitter
-from onyx.coding_agent.mock_tools import (
+from onyx.coding_agent.tool_definitions import (
     CODING_AGENT_QUERY_KEY,
     CODING_AGENT_REPO_KEY,
     CODING_AGENT_TOOL_NAME,
 )
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM
+from onyx.llm.models import ToolResult
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import CodingAgentStart, Packet
 from onyx.tools.interface import Tool
-from onyx.tools.models import ToolCallException, ToolCallKickoff, ToolResponse
+from onyx.tools.models import ToolCallException, ToolCallKickoff
 from onyx.tools.tool_implementations.bash.bash_tool import BashTool
 from onyx.utils.logger import setup_logger
 
@@ -122,7 +123,7 @@ class CodingAgentTool(Tool[CodingAgentToolOverrideKwargs]):
         placement: Placement,
         override_kwargs: CodingAgentToolOverrideKwargs,
         **llm_kwargs: Any,
-    ) -> ToolResponse:
+    ) -> ToolResult:
         if CODING_AGENT_QUERY_KEY not in llm_kwargs:
             raise ToolCallException(
                 message=f"Missing '{CODING_AGENT_QUERY_KEY}' in coding_agent call",
@@ -151,7 +152,7 @@ class CodingAgentTool(Tool[CodingAgentToolOverrideKwargs]):
 
         # Imported lazily to avoid a circular import: coding_agent.py imports
         # the BashTool which lives in tool_implementations alongside us.
-        from onyx.tools.fake_tools.coding_agent import run_coding_agent_call
+        from onyx.coding_agent.agent import run_coding_agent_call
 
         synthetic_call = ToolCallKickoff(
             tool_call_id=str(uuid4()),
@@ -180,12 +181,10 @@ class CodingAgentTool(Tool[CodingAgentToolOverrideKwargs]):
                 "Check the server logs for the underlying error."
             )
             logger.warning("Coding agent run returned None for query: %s", query)
-            return ToolResponse(
-                rich_response=None,
-                llm_facing_response=failure_msg,
+            return ToolResult(
+                content=failure_msg,
             )
 
-        return ToolResponse(
-            rich_response=result.answer,
-            llm_facing_response=result.answer,
+        return ToolResult(
+            content=result.answer,
         )

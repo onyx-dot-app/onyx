@@ -8,8 +8,9 @@ from unittest.mock import patch
 from litellm.exceptions import BadRequestError
 
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.models import ReasoningEffort, UserMessage
-from onyx.llm.multi_llm import LitellmLLM
+from onyx.llm.litellm_models import UserMessage
+from onyx.llm.models import ReasoningEffort
+from onyx.llm.multi_llm import LitellmTransport
 from onyx.llm.well_known_providers.constants import (
     BIFROST_API_MODE_CHAT_COMPLETIONS,
     BIFROST_API_MODE_CONFIG_KEY,
@@ -27,8 +28,8 @@ _TOOLS: list[dict[str, Any]] = [
 ]
 
 
-def _bifrost_llm(model_name: str, api_mode: str) -> LitellmLLM:
-    return LitellmLLM(
+def _bifrost_llm(model_name: str, api_mode: str) -> LitellmTransport:
+    return LitellmTransport(
         api_key="test-key",
         model_provider=LlmProviderNames.BIFROST,
         model_name=model_name,
@@ -38,8 +39,8 @@ def _bifrost_llm(model_name: str, api_mode: str) -> LitellmLLM:
     )
 
 
-def _azure_llm(model_name: str) -> LitellmLLM:
-    return LitellmLLM(
+def _azure_llm(model_name: str) -> LitellmTransport:
+    return LitellmTransport(
         api_key="test-key",
         model_provider=LlmProviderNames.AZURE,
         model_name=model_name,
@@ -50,7 +51,7 @@ def _azure_llm(model_name: str) -> LitellmLLM:
 
 
 def _sent_kwargs(
-    llm: LitellmLLM,
+    llm: LitellmTransport,
     tools: list[dict] | None,
     effort: ReasoningEffort = ReasoningEffort.AUTO,
 ) -> dict[str, Any]:

@@ -370,7 +370,29 @@ class Tokenizer:
                             raise ValueError("Bad Unicode escape in JSON")
                         code = (code << 4) | digit
 
-                    self.input.advance(6)
+                    width = 6
+                    if 0xD800 <= code <= 0xDBFF:
+                        # Keep a surrogate pair together across input fragments.
+                        if self.input.length < 7:
+                            return
+                        if self.input.peek(6) == "\\":
+                            if self.input.length < 8:
+                                return
+                            if self.input.peek(7) == "u":
+                                if self.input.length < 12:
+                                    return
+                                low = int(
+                                    "".join(
+                                        self.input.peek(i) or "" for i in range(8, 12)
+                                    ),
+                                    16,
+                                )
+                                if 0xDC00 <= low <= 0xDFFF:
+                                    code = (
+                                        0x10000 + ((code - 0xD800) << 10) + low - 0xDC00
+                                    )
+                                    width = 12
+                    self.input.advance(width)
                     self._handler.handle_string_middle(chr(code))
                     self._emitted_tokens += 1
                     continue

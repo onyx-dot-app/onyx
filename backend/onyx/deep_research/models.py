@@ -1,17 +1,15 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from onyx.chat.citation_processor import CitationMapping
-from onyx.tools.models import ToolCallKickoff
-
-
-class SpecialToolCalls(BaseModel):
-    think_tool_call: ToolCallKickoff | None = None
-    generate_report_tool_call: ToolCallKickoff | None = None
+from onyx.llm.models import Message
+from onyx.server.query_and_chat.placement import Placement
 
 
 class ResearchAgentCallResult(BaseModel):
     intermediate_report: str
     citation_mapping: CitationMapping
+    output_messages: list[Message] = Field(default_factory=list)
+    call_placements: dict[str, Placement] = Field(default_factory=dict)
 
 
 class CombinedResearchAgentCallResult(BaseModel):

@@ -8,8 +8,13 @@ from sqlalchemy.exc import MultipleResultsFound
 from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy.sql.expression import ColumnElement
 
+from onyx.chat.incognito import (
+    incognito_allowed_for_user,
+    resolve_incognito_record_mode,
+)
+from onyx.chat.incognito_context import incognito_context_available
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
-from onyx.configs.constants import ANONYMOUS_USER_UUID, MessageType
+from onyx.configs.constants import ANONYMOUS_USER_UUID, DEFAULT_PERSONA_ID, MessageType
 from onyx.context.search.models import InferenceSection, SavedSearchDoc
 from onyx.context.search.models import SearchDoc as ServerSearchDoc
 from onyx.db.enums import IncognitoRecordMode, record_mode_persists_content
@@ -23,13 +28,17 @@ from onyx.db.models import (
     User,
 )
 from onyx.db.models import SearchDoc as DBSearchDoc
-from onyx.db.persona import get_best_persona_id_for_user
+from onyx.db.persona import get_best_persona_id_for_user, user_can_access_persona
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import FileDescriptor
+from onyx.llm.models import GenerationRequestParams
 from onyx.llm.override_models import LLMOverride, PromptOverride
-from onyx.server.query_and_chat.models import ChatMessageDetail
+from onyx.server.query_and_chat.models import (
+    ChatMessageDetail,
+    ChatSessionCreationRequest,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
 
@@ -683,54 +692,15 @@ def get_or_create_root_message(
         return new_root_message
 
 
-def reserve_message_id(
-    db_session: Session,
-    chat_session_id: UUID,
-    parent_message: int,
-    message_type: MessageType = MessageType.ASSISTANT,
-    model_display_name: str | None = None,
-) -> ChatMessage:
-    # Create an temporary holding chat message to the updated and saved at the end
-    empty_message = ChatMessage(
-        chat_session_id=chat_session_id,
-        parent_message_id=parent_message,
-        latest_child_message_id=None,
-        message="Response was terminated prior to completion, try regenerating.",
-        token_count=15,
-        message_type=message_type,
-        model_display_name=model_display_name,
-    )
-
-    # Add the empty message to the session
-    db_session.add(empty_message)
-    db_session.flush()
-
-    # Get the parent message and set its child pointer to the current message
-    parent_chat_message = (
-        db_session.query(ChatMessage).filter(ChatMessage.id == parent_message).first()
-    )
-    if parent_chat_message:
-        parent_chat_message.latest_child_message_id = empty_message.id
-
-    # Committing because it's ok to recover this state. More clear to the user than it is now.
-    # Ideally there's a special UI for a case like this with a regenerate button but not needed for now.
-    db_session.commit()
-
-    return empty_message
-
-
-def reserve_multi_model_message_ids(
+def reserve_chat_response_ids(
     db_session: Session,
     chat_session_id: UUID,
     parent_message_id: int,
     model_display_names: list[str],
-) -> list[ChatMessage]:
-    """Reserve N assistant message placeholders for multi-model parallel streaming.
-
-    All messages share the same parent (the user message). The parent's
-    latest_child_message_id points to the LAST reserved message so that the
-    default history-chain walker picks it up.
-    """
+) -> list[int]:
+    """Reserve assistant responses and select the last response as the active branch."""
+    if not model_display_names:
+        raise ValueError("At least one response model is required")
     reserved: list[ChatMessage] = []
     for display_name in model_display_names:
         msg = ChatMessage(
@@ -738,7 +708,7 @@ def reserve_multi_model_message_ids(
             parent_message_id=parent_message_id,
             latest_child_message_id=None,
             message="Response was terminated prior to completion, try regenerating.",
-            token_count=15,  # placeholder; updated on completion by llm_loop_completion_handle
+            token_count=15,
             message_type=MessageType.ASSISTANT,
             model_display_name=display_name,
         )
@@ -758,7 +728,7 @@ def reserve_multi_model_message_ids(
         parent.latest_child_message_id = reserved[-1].id
 
     db_session.commit()
-    return reserved
+    return [message.id for message in reserved]
 
 
 def set_preferred_response(
@@ -1018,7 +988,11 @@ def translate_db_message_to_chat_message_detail(
         latest_child_message=chat_message.latest_child_message_id,
         message=chat_message.message,
         reasoning_tokens=chat_message.reasoning_tokens,
-        request_params=chat_message.request_params,
+        request_params=GenerationRequestParams.model_validate(
+            chat_message.request_params
+        )
+        if chat_message.request_params is not None
+        else None,
         message_type=chat_message.message_type,
         context_docs=top_documents,
         citations=converted_citations,
@@ -1175,3 +1149,68 @@ def update_db_session_with_messages(
         db_session.flush()
 
     return chat_message
+
+
+def create_chat_session_from_request(
+    chat_session_request: ChatSessionCreationRequest,
+    user: User,
+    db_session: Session,
+) -> ChatSession:
+    """Authorize the project and persona, then create a session with its recording policy."""
+    from onyx.db.projects import check_project_ownership
+
+    project_id = chat_session_request.project_id
+    if project_id:
+        if not check_project_ownership(project_id, user.id, db_session):
+            raise ValueError("User does not have access to project")
+
+    persona_id = chat_session_request.persona_id
+    if persona_id != DEFAULT_PERSONA_ID:
+        if not user.is_anonymous and not user_can_access_persona(
+            db_session=db_session,
+            persona_id=persona_id,
+            user=user,
+            get_editable=False,
+        ):
+            raise ValueError("User does not have access to persona")
+
+    # Pinned at creation so a later setting change cannot alter a live session.
+    # Availability decides server-side, never the client flag. A refusal
+    # errors: degrading would silently persist a believed-incognito chat.
+    # The capability is checked first so a deployment that cannot hold the
+    # context says so, rather than reporting it as a permission the admin
+    # could grant.
+    incognito_mode: IncognitoRecordMode | None = None
+    if chat_session_request.incognito:
+        if not incognito_context_available():
+            raise OnyxError(
+                OnyxErrorCode.DEPLOYMENT_UNSUPPORTED,
+                "Incognito chat is not supported on this deployment.",
+            )
+        if not incognito_allowed_for_user(user, db_session, cached=False):
+            raise OnyxError(
+                OnyxErrorCode.UNAUTHORIZED,
+                "Incognito chat is not enabled for this user.",
+            )
+        incognito_mode = resolve_incognito_record_mode()
+
+    # A caller-supplied title is conversation-derived, so a content-free
+    # session stores none of it.
+    description = (
+        chat_session_request.description or ""
+        if record_mode_persists_content(incognito_mode)
+        else ""
+    )
+
+    chat_session = create_chat_session(
+        db_session=db_session,
+        description=description,
+        user_id=user.id,
+        persona_id=chat_session_request.persona_id,
+        project_id=chat_session_request.project_id,
+        incognito_record_mode=incognito_mode,
+        session_id=(
+            chat_session_request.incognito_session_id if incognito_mode else None
+        ),
+    )
+    return chat_session

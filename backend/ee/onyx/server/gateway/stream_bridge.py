@@ -13,13 +13,14 @@ from typing import Any, Protocol, cast, runtime_checkable
 
 from fastapi.responses import StreamingResponse
 
-from onyx.llm.model_response import (
+from onyx.llm.exceptions import LLMRateLimitError, LLMTimeoutError
+from onyx.llm.litellm_models import (
     ChatCompletionDeltaToolCall,
     ModelResponseStream,
-    Usage,
+    ToolCall,
 )
-from onyx.llm.multi_llm import LLMRateLimitError, LLMTimeoutError
-from onyx.llm.tracing_wrap import _finalize_tool_calls, _merge_tool_call_delta
+from onyx.llm.litellm_models import ToolFunctionCall as ToolFunctionCall
+from onyx.llm.models import Usage
 from onyx.tracing.framework.span_data import GenerationSpanData
 from onyx.tracing.framework.spans import Span
 from onyx.tracing.llm_utils import record_llm_span_output
@@ -71,7 +72,7 @@ class _StreamAccumulator:
         if chunk.choice.delta.reasoning_content:
             self.reasoning.append(chunk.choice.delta.reasoning_content)
         for delta_tc in chunk.choice.delta.tool_calls:
-            _merge_tool_call_delta(self.tool_call_buffer, delta_tc)
+            merge_tool_call_delta(self.tool_call_buffer, delta_tc)
 
     @property
     def text(self) -> str:
@@ -167,7 +168,7 @@ def _stream_worker_guard(
                     output=state.text or None,
                     usage=state.usage,
                     reasoning="".join(state.reasoning) or None,
-                    tool_calls=_finalize_tool_calls(state.tool_call_buffer),
+                    tool_calls=finalize_tool_calls(state.tool_call_buffer),
                 )
         except Exception as span_error:
             logger.warning(
@@ -224,3 +225,47 @@ def _sse_response(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+def merge_tool_call_delta(
+    buffer: dict[int, ChatCompletionDeltaToolCall],
+    delta: ChatCompletionDeltaToolCall,
+) -> None:
+    """Collect provider tool-call fragments for gateway responses."""
+    existing = buffer.get(delta.index)
+    if existing is None:
+        buffer[delta.index] = delta.model_copy(deep=True)
+        return
+    if delta.id and not existing.id:
+        existing.id = delta.id
+    if delta.function is None:
+        return
+    if existing.function is None:
+        existing.function = delta.function.model_copy(deep=True)
+        return
+    if delta.function.name and not existing.function.name:
+        existing.function.name = delta.function.name
+    if delta.function.arguments:
+        existing.function.arguments = (
+            existing.function.arguments or ""
+        ) + delta.function.arguments
+
+
+def finalize_tool_calls(
+    buffer: dict[int, ChatCompletionDeltaToolCall],
+) -> list[ToolCall] | None:
+    """Return complete calls in provider order; omit fragments without an ID or name."""
+    calls = [
+        ToolCall(
+            id=delta.id,
+            function=ToolFunctionCall(
+                name=delta.function.name,
+                arguments=delta.function.arguments or "",
+            ),
+        )
+        for _, delta in sorted(buffer.items())
+        if delta.id is not None
+        and delta.function is not None
+        and delta.function.name is not None
+    ]
+    return calls or None

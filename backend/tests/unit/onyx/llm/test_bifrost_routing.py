@@ -1,4 +1,4 @@
-"""Unit tests for Bifrost's two API-mode routing in LitellmLLM.
+"""Unit tests for Bifrost's two API-mode routing in LitellmTransport.
 
 The surface is selected via a `bifrost_api_mode` value persisted in
 custom_config; the routing difference is the model= string, which drives
@@ -10,8 +10,8 @@ from unittest.mock import patch
 from onyx.llm.api_surfaces import LlmApiSurface
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.custom_config_mapping import UI_ONLY_CONFIG_KEYS
-from onyx.llm.models import LanguageModelInput, UserMessage
-from onyx.llm.multi_llm import LitellmLLM
+from onyx.llm.litellm_models import LanguageModelInput, UserMessage
+from onyx.llm.multi_llm import LitellmTransport
 from onyx.llm.well_known_providers.constants import BIFROST_API_MODE_CONFIG_KEY
 
 
@@ -19,9 +19,9 @@ def _make_bifrost_llm(
     mode: str | None,
     api_base: str = "https://bifrost.example.com/v1",
     model_name: str = "openai.gpt-5.6-sol",
-) -> LitellmLLM:
+) -> LitellmTransport:
     custom_config = {BIFROST_API_MODE_CONFIG_KEY: mode} if mode is not None else None
-    return LitellmLLM(
+    return LitellmTransport(
         api_key="bf-test-key",
         model_provider=LlmProviderNames.BIFROST,
         model_name=model_name,
@@ -31,7 +31,7 @@ def _make_bifrost_llm(
     )
 
 
-def _completion_kwargs(llm: LitellmLLM) -> dict:
+def _completion_kwargs(llm: LitellmTransport) -> dict:
     with patch("litellm.completion") as mock_completion:
         mock_completion.return_value = []
         messages: LanguageModelInput = [UserMessage(content="Hi")]
@@ -86,7 +86,7 @@ def test_responses_mode_prefixes_model_and_keeps_v1_base() -> None:
 
 def test_api_mode_is_never_injected_into_environment() -> None:
     # The mode is UI-only form state: it must be readable for routing but must
-    # never reach os.environ via temporary_env_and_lock at call time.
+    # never become provider arguments.
     llm = _make_bifrost_llm("responses")
     assert BIFROST_API_MODE_CONFIG_KEY in UI_ONLY_CONFIG_KEYS
-    assert BIFROST_API_MODE_CONFIG_KEY not in llm._env_only_custom_config
+    assert BIFROST_API_MODE_CONFIG_KEY not in llm._model_kwargs

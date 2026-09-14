@@ -171,7 +171,7 @@ def test_llm_helper_inherits_metadata_only_trace() -> None:
             "background_llm_call", content_mode=TraceContentMode.METADATA_ONLY
         ):
             with llm_generation_span(
-                llm=llm,
+                llm_info=llm.info,
                 flow=LLMFlow.IMAGE_SUMMARIZATION,
                 input_messages=[{"role": "user", "content": "private document"}],
             ) as span:

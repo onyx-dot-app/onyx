@@ -7,6 +7,7 @@ from mcp.client.auth import OAuthClientProvider
 from onyx.chat.emitter import Emitter
 from onyx.db.enums import MCPAuthenticationType, MCPTransport
 from onyx.db.models import MCPConnectionConfig, MCPServer
+from onyx.llm.models import ToolResult
 from onyx.server.features.mcp.client import call_mcp_tool
 from onyx.server.features.mcp.credentials import ResolvedMCPCredentials
 from onyx.server.features.mcp.models import (
@@ -27,7 +28,7 @@ from onyx.server.query_and_chat.streaming_models import (
     Packet,
 )
 from onyx.tools.interface import Tool
-from onyx.tools.models import CustomToolCallSummary, ToolResponse
+from onyx.tools.models import CustomToolCallSummary
 from onyx.tools.tool_name import sanitize_tool_name
 from onyx.utils.logger import setup_logger
 
@@ -146,7 +147,7 @@ class MCPTool(Tool[None]):
         placement: Placement,
         override_kwargs: None = None,  # noqa: ARG002
         **llm_kwargs: Any,
-    ) -> ToolResponse:
+    ) -> ToolResult:
         """Execute the MCP tool by calling the MCP server"""
         _start = time.monotonic()
         _server = self.mcp_server.name
@@ -193,7 +194,7 @@ class MCPTool(Tool[None]):
                 )
 
                 error_result = {"error": auth_error_msg}
-                llm_facing_response = json.dumps(error_result)
+                content = json.dumps(error_result)
 
                 # Emit CustomToolDelta packet
                 self.emitter.emit(
@@ -208,13 +209,13 @@ class MCPTool(Tool[None]):
                 )
 
                 outcome = MCPToolCallStatus.AUTH_ERROR
-                return ToolResponse(
-                    rich_response=CustomToolCallSummary(
+                return ToolResult(
+                    details=CustomToolCallSummary(
                         tool_name=self._name,
                         response_type="json",
                         tool_result=error_result,
                     ),
-                    llm_facing_response=llm_facing_response,
+                    content=content,
                 )
 
             # For OAuth servers, construct OAuthClientProvider so the MCP SDK
@@ -260,7 +261,7 @@ class MCPTool(Tool[None]):
 
             # Format the tool result for response
             tool_result_dict = {"tool_result": tool_result}
-            llm_facing_response = json.dumps(tool_result_dict)
+            content = json.dumps(tool_result_dict)
 
             # Emit CustomToolDelta packet
             self.emitter.emit(
@@ -274,13 +275,13 @@ class MCPTool(Tool[None]):
                 )
             )
 
-            response = ToolResponse(
-                rich_response=CustomToolCallSummary(
+            response = ToolResult(
+                details=CustomToolCallSummary(
                     tool_name=self._name,
                     response_type="json",
                     tool_result=tool_result_dict,
                 ),
-                llm_facing_response=llm_facing_response,
+                content=content,
             )
             outcome = MCPToolCallStatus.SUCCESS
             return response
@@ -304,7 +305,7 @@ class MCPTool(Tool[None]):
             else:
                 error_result = {"error": f"Tool execution failed: {str(e)}"}
 
-            llm_facing_response = json.dumps(error_result)
+            content = json.dumps(error_result)
 
             # Emit CustomToolDelta packet
             self.emitter.emit(
@@ -318,13 +319,13 @@ class MCPTool(Tool[None]):
                 )
             )
 
-            return ToolResponse(
-                rich_response=CustomToolCallSummary(
+            return ToolResult(
+                details=CustomToolCallSummary(
                     tool_name=self._name,
                     response_type="json",
                     tool_result=error_result,
                 ),
-                llm_facing_response=llm_facing_response,
+                content=content,
             )
         finally:
             record_mcp_client_tool_outcome(

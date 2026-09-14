@@ -7,7 +7,8 @@ calls, so we can trigger it with lightweight mocks.
 
 import threading
 import time
-from collections.abc import Generator
+from collections.abc import Callable, Generator
+from contextlib import AbstractContextManager
 from typing import Any, cast
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
@@ -15,12 +16,15 @@ from uuid import uuid4
 import pytest
 from litellm.exceptions import ContextWindowExceededError
 
-from onyx.chat.llm_loop import EmptyLLMResponseError
+from onyx.chat.chat_state import PreparedModel
+from onyx.chat.errors import EmptyLLMResponseError
 from onyx.chat.models import StreamingError
 from onyx.configs.constants import MessageType
 from onyx.db.chat import set_preferred_response
 from onyx.db.models import ChatMessage
-from onyx.llm.interfaces import ToolChoiceOptions
+from onyx.llm.cancellation import current_cancellation
+from onyx.llm.interfaces import LLM, LLMUserIdentity
+from onyx.llm.models import ToolChoiceOptions
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.placement import Placement
@@ -254,13 +258,18 @@ class TestLLMOverrideDisplayName:
 def _make_setup(n_models: int = 1) -> MagicMock:
     """Minimal ChatTurnSetup mock whose fields pass Pydantic validation in _run_model."""
     setup = MagicMock()
-    setup.llms = [MagicMock() for _ in range(n_models)]
-    # Real int so the min() over model windows in _persist_model_outcome works.
-    for mock_llm in setup.llms:
-        mock_llm.config.max_input_tokens = 32_000
-    setup.model_display_names = [f"model-{i}" for i in range(n_models)]
-    setup.check_is_connected = MagicMock(return_value=True)
-    setup.reserved_messages = [MagicMock() for _ in range(n_models)]
+    setup.models = []
+    for index in range(n_models):
+        llm = MagicMock(spec=LLM)
+        llm.info.max_input_tokens = 32_000
+        llm.redact_error.side_effect = lambda text: text
+        setup.models.append(
+            PreparedModel(
+                llm=llm, message_id=1000 + index, display_name=f"model-{index}"
+            )
+        )
+    setup.incognito_record_mode = None
+    setup.cache.exists.return_value = False
     setup.reserved_token_count = 100
     # Fields consumed by SearchToolConfig / CustomToolConfig / FileReaderToolConfig
     # constructors inside _run_model — must be typed correctly for Pydantic.
@@ -273,8 +282,11 @@ def _make_setup(n_models: int = 1) -> MagicMock:
     setup.slack_context = None
     setup.available_files.user_file_ids = []
     setup.available_files.chat_file_ids = []
+    setup.user_identity = LLMUserIdentity(
+        user_id="test-user", session_id="test-session"
+    )
     setup.forced_tool_id = None
-    setup.simple_chat_history = []
+    setup.messages = []
     setup.chat_session_id = uuid4()
     setup.chat_session_project_id = None
     setup.user_message_id = None
@@ -294,11 +306,11 @@ class TestRunModels:
     """Tests for the _run_models worker-thread drain loop.
 
     All external dependencies (LLM, DB, tools) are patched out.  Worker threads
-    still run but return immediately since run_llm_loop is mocked.
+    still run but return immediately since agent is mocked.
     """
 
     def test_n1_overall_stop_from_llm_loop_passes_through(self) -> None:
-        """OverallStop emitted by run_llm_loop is passed through the drain loop unchanged."""
+        """OverallStop emitted by agent is passed through the drain loop unchanged."""
 
         def emit_stop(**kwargs: Any) -> None:
             kwargs["emitter"].emit(
@@ -309,10 +321,10 @@ class TestRunModels:
             )
 
         with (
-            patch("onyx.chat.process_message.run_llm_loop", side_effect=emit_stop),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch_agent("onyx.chat.process_message.ChatAgent", side_effect=emit_stop),
+            patch("onyx.chat.process_message.run_deep_research"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch("onyx.chat.process_message.llm_loop_completion_handle"),
+            patch("onyx.chat.process_message.save_chat_response"),
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -341,13 +353,13 @@ class TestRunModels:
                 "onyx.chat.process_message.CHAT_HEARTBEAT_INTERVAL_S",
                 0.05,
             ),
-            patch(
-                "onyx.chat.process_message.run_llm_loop",
+            patch_agent(
+                "onyx.chat.process_message.ChatAgent",
                 side_effect=sleep_then_return,
             ),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.run_deep_research"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch("onyx.chat.process_message.llm_loop_completion_handle"),
+            patch("onyx.chat.process_message.save_chat_response"),
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -371,10 +383,10 @@ class TestRunModels:
             )
 
         with (
-            patch("onyx.chat.process_message.run_llm_loop", side_effect=emit_one),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch_agent("onyx.chat.process_message.ChatAgent", side_effect=emit_one),
+            patch("onyx.chat.process_message.run_deep_research"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch("onyx.chat.process_message.llm_loop_completion_handle"),
+            patch("onyx.chat.process_message.save_chat_response"),
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -394,17 +406,17 @@ class TestRunModels:
         """Multi-model path: packets from model 0 get index=0, model 1 gets index=1."""
 
         def emit_one(**kwargs: Any) -> None:
-            # _model_idx is set by _run_model based on position in setup.llms
+            # _model_idx is set by _run_model based on position in setup.models
             emitter = kwargs["emitter"]
             emitter.emit(
                 Packet(placement=Placement(turn_index=0), obj=ReasoningStart())
             )
 
         with (
-            patch("onyx.chat.process_message.run_llm_loop", side_effect=emit_one),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch_agent("onyx.chat.process_message.ChatAgent", side_effect=emit_one),
+            patch("onyx.chat.process_message.run_deep_research"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch("onyx.chat.process_message.llm_loop_completion_handle"),
+            patch("onyx.chat.process_message.save_chat_response"),
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -428,10 +440,11 @@ class TestRunModels:
             raise RuntimeError("intentional test failure")
 
         with (
-            patch("onyx.chat.process_message.run_llm_loop", side_effect=always_fail),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.save_failed_chat_response"),
+            patch_agent("onyx.chat.process_message.ChatAgent", side_effect=always_fail),
+            patch("onyx.chat.process_message.run_deep_research"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch("onyx.chat.process_message.llm_loop_completion_handle"),
+            patch("onyx.chat.process_message.save_chat_response"),
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -458,10 +471,11 @@ class TestRunModels:
             )
 
         with (
-            patch("onyx.chat.process_message.run_llm_loop", side_effect=overflow),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.save_failed_chat_response"),
+            patch_agent("onyx.chat.process_message.ChatAgent", side_effect=overflow),
+            patch("onyx.chat.process_message.run_deep_research"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch("onyx.chat.process_message.llm_loop_completion_handle"),
+            patch("onyx.chat.process_message.save_chat_response"),
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -487,10 +501,11 @@ class TestRunModels:
         )
 
         with (
-            patch("onyx.chat.process_message.run_llm_loop", side_effect=refusal),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.save_failed_chat_response"),
+            patch_agent("onyx.chat.process_message.ChatAgent", side_effect=refusal),
+            patch("onyx.chat.process_message.run_deep_research"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch("onyx.chat.process_message.llm_loop_completion_handle"),
+            patch("onyx.chat.process_message.save_chat_response"),
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -511,20 +526,21 @@ class TestRunModels:
         setup = _make_setup(n_models=2)
 
         def fail_model_0_succeed_model_1(**kwargs: Any) -> None:
-            if kwargs["llm"] is setup.llms[0]:
+            if kwargs["llm"] is setup.models[0].llm:
                 raise RuntimeError("model 0 failed")
             kwargs["emitter"].emit(
                 Packet(placement=Placement(turn_index=0), obj=ReasoningStart())
             )
 
         with (
-            patch(
-                "onyx.chat.process_message.run_llm_loop",
+            patch("onyx.chat.process_message.save_failed_chat_response"),
+            patch_agent(
+                "onyx.chat.process_message.ChatAgent",
                 side_effect=fail_model_0_succeed_model_1,
             ),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.run_deep_research"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch("onyx.chat.process_message.llm_loop_completion_handle"),
+            patch("onyx.chat.process_message.save_chat_response"),
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -544,21 +560,21 @@ class TestRunModels:
         assert reasoning[0].placement.model_index == 1
 
     def test_cancellation_yields_user_cancelled_stop(self) -> None:
-        """If check_is_connected returns False, drain loop emits user_cancelled."""
+        """A cached Stop request ends the turn with user_cancelled."""
 
         def slow_llm(**_kwargs: Any) -> None:
             time.sleep(0.2)  # Outlasts the 50 ms queue-poll interval
 
         setup = _make_setup(n_models=1)
-        setup.check_is_connected = MagicMock(return_value=False)
+        setup.cache.exists.return_value = True
         completion_called = threading.Event()
 
         with (
-            patch("onyx.chat.process_message.run_llm_loop", side_effect=slow_llm),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch_agent("onyx.chat.process_message.ChatAgent", side_effect=slow_llm),
+            patch("onyx.chat.process_message.run_deep_research"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
             patch(
-                "onyx.chat.process_message.llm_loop_completion_handle",
+                "onyx.chat.process_message.save_chat_response",
                 side_effect=lambda *_, **__: completion_called.set(),
             ),
             patch(
@@ -567,7 +583,7 @@ class TestRunModels:
             ),
         ):
             packets = _run_models_collect(setup)
-            # The cancelled worker self-persists after the generator returns, so
+            # The cancelled coordinator saves after the reader returns, so
             # wait inside the patch context — otherwise it calls the real handler.
             assert completion_called.wait(timeout=5)
 
@@ -581,6 +597,57 @@ class TestRunModels:
             for s in stops
         )
 
+    def test_stop_interrupts_workers_during_continuous_output(self) -> None:
+        setup = _make_setup(n_models=2)
+        started = [threading.Event(), threading.Event()]
+        stopped = [threading.Event(), threading.Event()]
+        deadline = time.monotonic() + 5
+
+        def stop_requested(_key: str) -> bool:
+            return all(event.is_set() for event in started)
+
+        setup.cache.exists.side_effect = stop_requested
+
+        def emit_until_cancelled(**kwargs: Any) -> None:
+            index = next(
+                i for i, model in enumerate(setup.models) if model.llm is kwargs["llm"]
+            )
+            signal = current_cancellation()
+            assert signal is not None
+            started[index].set()
+            try:
+                while time.monotonic() < deadline:
+                    signal.check()
+                    kwargs["emitter"].emit(
+                        Packet(placement=Placement(turn_index=0), obj=ReasoningStart())
+                    )
+                raise AssertionError("Stop did not reach the model worker")
+            finally:
+                stopped[index].set()
+
+        with (
+            patch_agent(
+                "onyx.chat.process_message.ChatAgent",
+                side_effect=emit_until_cancelled,
+            ),
+            patch("onyx.chat.process_message.construct_tools", return_value={}),
+            patch("onyx.chat.process_message.save_chat_response") as persist,
+            patch(
+                "onyx.chat.process_message.get_llm_token_counter",
+                return_value=lambda _: 0,
+            ),
+        ):
+            packets = _run_models_collect(setup)
+            assert all(event.wait(2) for event in stopped)
+            assert persist.call_count == 2
+        assert not any(isinstance(packet, StreamingError) for packet in packets)
+        assert any(
+            isinstance(packet, Packet)
+            and isinstance(packet.obj, OverallStop)
+            and packet.obj.stop_reason == "user_cancelled"
+            for packet in packets
+        )
+
     def test_stop_button_calls_completion_for_all_models(self) -> None:
         """Stop-button exit yields immediately and persists each model once."""
 
@@ -588,22 +655,22 @@ class TestRunModels:
             time.sleep(0.2)
 
         setup = _make_setup(n_models=2)
-        setup.check_is_connected = MagicMock(return_value=False)
+        setup.cache.exists.return_value = True
         model_0_persisted = threading.Event()
         model_1_persisted = threading.Event()
 
         def mark_persisted(*_: Any, **kwargs: Any) -> None:
-            if kwargs["llm"] is setup.llms[0]:
+            if kwargs["message_id"] is setup.models[0].message_id:
                 model_0_persisted.set()
             else:
                 model_1_persisted.set()
 
         with (
-            patch("onyx.chat.process_message.run_llm_loop", side_effect=slow_llm),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch_agent("onyx.chat.process_message.ChatAgent", side_effect=slow_llm),
+            patch("onyx.chat.process_message.run_deep_research"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
             patch(
-                "onyx.chat.process_message.llm_loop_completion_handle",
+                "onyx.chat.process_message.save_chat_response",
                 side_effect=mark_persisted,
             ) as mock_handle,
             patch(
@@ -626,21 +693,23 @@ class TestRunModels:
             and stop.obj.stop_reason == "user_cancelled"
             for stop in stops
         )
-        persisted_llms = [call.kwargs["llm"] for call in mock_handle.call_args_list]
-        assert persisted_llms.count(setup.llms[0]) == 1
-        assert persisted_llms.count(setup.llms[1]) == 1
+        persisted_messages = [
+            call.kwargs["message_id"] for call in mock_handle.call_args_list
+        ]
+        assert persisted_messages.count(setup.models[0].message_id) == 1
+        assert persisted_messages.count(setup.models[1].message_id) == 1
 
-    def test_completion_handle_called_for_each_successful_model(self) -> None:
+    def test_completion_handle_called_for_each_successful_model(
+        self, mock_compression: MagicMock
+    ) -> None:
         """Normal completion persists each successful model once."""
         setup = _make_setup(n_models=2)
 
         with (
-            patch("onyx.chat.process_message.run_llm_loop"),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch_agent("onyx.chat.process_message.ChatAgent"),
+            patch("onyx.chat.process_message.run_deep_research"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch(
-                "onyx.chat.process_message.llm_loop_completion_handle"
-            ) as mock_handle,
+            patch("onyx.chat.process_message.save_chat_response") as mock_handle,
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -649,28 +718,24 @@ class TestRunModels:
             _run_models_collect(setup)
 
         assert mock_handle.call_count == 2
-        persisted_llms = [call.kwargs["llm"] for call in mock_handle.call_args_list]
-        assert persisted_llms.count(setup.llms[0]) == 1
-        assert persisted_llms.count(setup.llms[1]) == 1
-        # Exactly one completion owns compression; the other must skip it.
-        compression_flags = sorted(
-            call.kwargs["run_compression"] for call in mock_handle.call_args_list
-        )
-        assert compression_flags == [False, True]
+        persisted_messages = [
+            call.kwargs["message_id"] for call in mock_handle.call_args_list
+        ]
+        assert persisted_messages.count(setup.models[0].message_id) == 1
+        assert persisted_messages.count(setup.models[1].message_id) == 1
+        mock_compression.assert_called_once()
 
     def test_completion_handle_not_called_for_failed_model(self) -> None:
-        """llm_loop_completion_handle must be skipped for a model that raised."""
+        """save_chat_response must be skipped for a model that raised."""
 
         def always_fail(**_kwargs: Any) -> None:
             raise RuntimeError("fail")
 
         with (
-            patch("onyx.chat.process_message.run_llm_loop", side_effect=always_fail),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch_agent("onyx.chat.process_message.ChatAgent", side_effect=always_fail),
+            patch("onyx.chat.process_message.run_deep_research"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch(
-                "onyx.chat.process_message.llm_loop_completion_handle"
-            ) as mock_handle,
+            patch("onyx.chat.process_message.save_chat_response") as mock_handle,
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -682,22 +747,23 @@ class TestRunModels:
 
     def test_compression_falls_to_first_successful_model_when_model_0_errors(
         self,
+        mock_compression: MagicMock,
     ) -> None:
         """Compression ownership goes to the first non-errored completion, not
         a fixed model index — a model-0 failure must not skip compression."""
         setup = _make_setup(n_models=2)
 
         def fail_model_0(**kwargs: Any) -> None:
-            if kwargs["llm"] is setup.llms[0]:
+            if kwargs["llm"] is setup.models[0].llm:
                 raise RuntimeError("fail")
 
         with (
-            patch("onyx.chat.process_message.run_llm_loop", side_effect=fail_model_0),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch_agent(
+                "onyx.chat.process_message.ChatAgent", side_effect=fail_model_0
+            ),
+            patch("onyx.chat.process_message.run_deep_research"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch(
-                "onyx.chat.process_message.llm_loop_completion_handle"
-            ) as mock_handle,
+            patch("onyx.chat.process_message.save_chat_response") as mock_handle,
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -707,8 +773,9 @@ class TestRunModels:
 
         assert mock_handle.call_count == 1
         call = mock_handle.call_args_list[0]
-        assert call.kwargs["llm"] is setup.llms[1]
-        assert call.kwargs["run_compression"] is True
+        assert call.kwargs["message_id"] is setup.models[1].message_id
+        mock_compression.assert_called_once()
+        assert mock_compression.call_args.args[1] is setup.models[1].llm
 
     def test_http_disconnect_completion_via_generator_exit(self) -> None:
         """Worker-thread completion survives HTTP disconnect."""
@@ -724,17 +791,17 @@ class TestRunModels:
             client_gone.wait(timeout=5)
 
         setup = _make_setup(n_models=1)
-        setup.check_is_connected = MagicMock(return_value=True)
+        setup.cache.exists.return_value = False
 
         with (
-            patch(
-                "onyx.chat.process_message.run_llm_loop",
+            patch_agent(
+                "onyx.chat.process_message.ChatAgent",
                 side_effect=emit_then_block_until_drain,
             ),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.run_deep_research"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
             patch(
-                "onyx.chat.process_message.llm_loop_completion_handle",
+                "onyx.chat.process_message.save_chat_response",
                 side_effect=lambda *_, **__: completion_called.set(),
             ) as mock_handle,
             patch(
@@ -751,7 +818,7 @@ class TestRunModels:
             client_gone.set()
 
             assert completion_called.wait(timeout=5), (
-                "worker thread must call completion for the successful model"
+                "coordinator must save completion for the successful model"
             )
             assert mock_handle.call_count == 1
 
@@ -769,7 +836,7 @@ class TestRunModels:
             raise RuntimeError("disconnect failure")
 
         setup = _make_setup(n_models=1)
-        setup.check_is_connected = MagicMock(return_value=True)
+        setup.cache.exists.return_value = False
         commit_called = threading.Event()
         db_session = MagicMock()
         db_session.get.return_value = MagicMock()
@@ -779,17 +846,15 @@ class TestRunModels:
         session_ctx.__exit__.return_value = None
 
         with (
-            patch(
-                "onyx.chat.process_message.run_llm_loop",
+            patch_agent(
+                "onyx.chat.process_message.ChatAgent",
                 side_effect=emit_then_raise_after_drain,
             ),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.run_deep_research"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
+            patch("onyx.chat.process_message.save_chat_response") as mock_handle,
             patch(
-                "onyx.chat.process_message.llm_loop_completion_handle"
-            ) as mock_handle,
-            patch(
-                "onyx.chat.process_message.get_session_with_current_tenant",
+                "onyx.db.agent_transcript.get_session_with_current_tenant",
                 return_value=session_ctx,
             ) as mock_get_session,
             patch(
@@ -811,7 +876,7 @@ class TestRunModels:
             assert db_session.commit.call_count == 1
             db_session.get.assert_called_once_with(
                 ChatMessage,
-                setup.reserved_messages[0].id,
+                setup.models[0].message_id,
             )
 
     def test_b1_race_disconnect_handler_completes_already_finished_model(self) -> None:
@@ -827,17 +892,17 @@ class TestRunModels:
             )
 
         setup = _make_setup(n_models=1)
-        setup.check_is_connected = MagicMock(return_value=True)
+        setup.cache.exists.return_value = False
 
         with (
-            patch(
-                "onyx.chat.process_message.run_llm_loop",
+            patch_agent(
+                "onyx.chat.process_message.ChatAgent",
                 side_effect=emit_and_return_immediately,
             ),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.run_deep_research"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
             patch(
-                "onyx.chat.process_message.llm_loop_completion_handle",
+                "onyx.chat.process_message.save_chat_response",
                 side_effect=lambda *_, **__: completion_called.set(),
             ) as mock_handle,
             patch(
@@ -869,29 +934,29 @@ class TestRunModels:
             emitter.emit(
                 Packet(placement=Placement(turn_index=0), obj=ReasoningStart())
             )
-            if llm is setup.llms[1]:
+            if llm is setup.models[1].llm:
                 client_gone.wait(timeout=5)
 
         setup = _make_setup(n_models=2)
-        setup.check_is_connected = MagicMock(return_value=True)
+        setup.cache.exists.return_value = False
         model_0_persisted = threading.Event()
         model_1_persisted = threading.Event()
 
         def mark_persisted(*_: Any, **kwargs: Any) -> None:
-            if kwargs["llm"] is setup.llms[0]:
+            if kwargs["message_id"] is setup.models[0].message_id:
                 model_0_persisted.set()
             else:
                 model_1_persisted.set()
 
         with (
-            patch(
-                "onyx.chat.process_message.run_llm_loop",
+            patch_agent(
+                "onyx.chat.process_message.ChatAgent",
                 side_effect=emit_and_maybe_block,
             ),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.run_deep_research"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
             patch(
-                "onyx.chat.process_message.llm_loop_completion_handle",
+                "onyx.chat.process_message.save_chat_response",
                 side_effect=mark_persisted,
             ) as mock_handle,
             patch(
@@ -910,9 +975,11 @@ class TestRunModels:
             assert model_1_persisted.wait(timeout=5)
 
         assert mock_handle.call_count == 2
-        persisted_llms = [call.kwargs["llm"] for call in mock_handle.call_args_list]
-        assert persisted_llms.count(setup.llms[0]) == 1
-        assert persisted_llms.count(setup.llms[1]) == 1
+        persisted_messages = [
+            call.kwargs["message_id"] for call in mock_handle.call_args_list
+        ]
+        assert persisted_messages.count(setup.models[0].message_id) == 1
+        assert persisted_messages.count(setup.models[1].message_id) == 1
 
     def test_disconnect_buffers_full_stream_and_marks_done(self) -> None:
         """After a disconnect the writer keeps buffering to the end and marks done."""
@@ -929,19 +996,19 @@ class TestRunModels:
             )
 
         setup = _make_setup(n_models=1)
-        setup.check_is_connected = MagicMock(return_value=True)
+        setup.cache.exists.return_value = False
         stream_buffer = MagicMock()
         done_marked = threading.Event()
         stream_buffer.mark_done.side_effect = lambda: done_marked.set()
 
         with (
-            patch(
-                "onyx.chat.process_message.run_llm_loop",
+            patch_agent(
+                "onyx.chat.process_message.ChatAgent",
                 side_effect=emit_then_block,
             ),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.run_deep_research"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch("onyx.chat.process_message.llm_loop_completion_handle"),
+            patch("onyx.chat.process_message.save_chat_response"),
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -973,20 +1040,22 @@ class TestRunModels:
         """Stop-button completion skips errored models."""
 
         def fail_model_0(**kwargs: Any) -> None:
-            if kwargs["llm"] is setup.llms[0]:
+            if kwargs["llm"] is setup.models[0].llm:
                 raise RuntimeError("model 0 errored")
             time.sleep(0.2)
 
         setup = _make_setup(n_models=2)
-        setup.check_is_connected = lambda: False
+        setup.cache.exists.return_value = True
         model_1_persisted = threading.Event()
 
         with (
-            patch("onyx.chat.process_message.run_llm_loop", side_effect=fail_model_0),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch_agent(
+                "onyx.chat.process_message.ChatAgent", side_effect=fail_model_0
+            ),
+            patch("onyx.chat.process_message.run_deep_research"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
             patch(
-                "onyx.chat.process_message.llm_loop_completion_handle",
+                "onyx.chat.process_message.save_chat_response",
                 side_effect=lambda *_, **__: model_1_persisted.set(),
             ) as mock_handle,
             patch(
@@ -999,8 +1068,8 @@ class TestRunModels:
             assert mock_handle.call_count == 1
 
         for call in mock_handle.call_args_list:
-            assert call.kwargs.get("llm") is not setup.llms[0], (
-                "llm_loop_completion_handle must not be called for the errored model"
+            assert call.kwargs.get("llm") is not setup.models[0].llm, (
+                "save_chat_response must not be called for the errored model"
             )
 
     def test_external_state_container_used_for_model_zero(self) -> None:
@@ -1012,10 +1081,10 @@ class TestRunModels:
         setup = _make_setup(n_models=1)
 
         with (
-            patch("onyx.chat.process_message.run_llm_loop") as mock_llm,
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch_agent("onyx.chat.process_message.ChatAgent") as mock_llm,
+            patch("onyx.chat.process_message.run_deep_research"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch("onyx.chat.process_message.llm_loop_completion_handle"),
+            patch("onyx.chat.process_message.save_chat_response"),
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -1023,40 +1092,321 @@ class TestRunModels:
         ):
             list(_run_models(setup, MagicMock(), external_state_container=external))
 
-        # The state_container kwarg passed to run_llm_loop must be the external one
+        # The state_container kwarg passed to agent must be the external one
         call_kwargs = mock_llm.call_args.kwargs
         assert call_kwargs["state_container"] is external
 
 
-def test_worker_traceback_only_reaches_development_clients() -> None:
-    for dev_mode in (False, True):
-        setup = _make_setup()
-        setup.llms[0].config.api_key = None
-        setup.llms[0].config.custom_config = None
-        setup.llms[0].config.model_name = "test-model"
-        setup.llms[0].config.model_provider = "test-provider"
-        with (
-            patch("onyx.chat.process_message.DEV_MODE", dev_mode, create=True),
-            patch("onyx.chat.process_message.load_settings"),
-            patch("onyx.chat.process_message.get_session_with_current_tenant"),
-            patch(
-                "onyx.chat.process_message.run_llm_loop",
-                side_effect=RuntimeError("worker-frame"),
+def patch_agent(
+    target: str, *, side_effect: Callable[..., Any] | BaseException | None = None
+) -> AbstractContextManager[MagicMock]:
+    def construct(*args: Any, **kwargs: Any) -> MagicMock:
+        if isinstance(side_effect, BaseException):
+            raise side_effect
+        if side_effect:
+            side_effect(*args, **kwargs)
+        return MagicMock()
+
+    return patch(target, side_effect=construct)
+
+
+@pytest.fixture(autouse=True)
+def mock_compression() -> Generator[MagicMock, None, None]:
+    with (
+        patch("onyx.chat.process_message.compress_chat_if_needed") as compress,
+        patch("onyx.chat.process_message.load_settings"),
+    ):
+        yield compress
+
+
+def test_persistence_failure_reaches_live_and_resumed_readers() -> None:
+    from onyx.chat.process_message import _run_models
+
+    setup = _make_setup()
+    buffer = MagicMock()
+    with (
+        patch("onyx.chat.process_message._execute_model"),
+        patch(
+            "onyx.chat.process_message.save_chat_response",
+            side_effect=RuntimeError("database unavailable"),
+        ) as save,
+    ):
+        packets = list(_run_models(setup, MagicMock(), stream_buffer=buffer))
+
+    errors = [packet for packet in packets if isinstance(packet, StreamingError)]
+    assert len(errors) == 1
+    assert errors[0].error_code == "RESPONSE_SAVE_ERROR"
+    assert errors[0].details == {"model_index": 0}
+    assert "database unavailable" not in errors[0].error
+    assert any(
+        "RESPONSE_SAVE_ERROR" in call.args[0]
+        for call in buffer.append_line.call_args_list
+    )
+    assert save.call_count == 1
+    buffer.mark_done.assert_called_once()
+
+
+@pytest.mark.parametrize("failure_stage", ["submit", "coordinator"])
+def test_startup_failure_uses_coordinator_to_finalize_every_reserved_response(
+    failure_stage: str,
+) -> None:
+    from concurrent.futures import Future, ThreadPoolExecutor
+
+    from onyx.chat.process_message import _run_models
+
+    setup = _make_setup(2)
+    buffer = MagicMock()
+    started = threading.Event()
+    exited = threading.Event()
+    saved: list[tuple[str, Any]] = []
+    original_submit = ThreadPoolExecutor.submit
+    original_start = threading.Thread.start
+    submissions = 0
+
+    def execute(*args: Any) -> None:
+        state, signal = args[3], args[5]
+        state.set_answer_tokens("Partial answer")
+        started.set()
+        try:
+            while not signal.cancelled:
+                time.sleep(0.001)
+            signal.check()
+        finally:
+            exited.set()
+
+    def submit(executor: ThreadPoolExecutor, *args: Any, **kwargs: Any) -> Future[Any]:
+        nonlocal submissions
+        submissions += 1
+        if failure_stage == "submit" and submissions == 2:
+            assert started.wait(2)
+            raise RuntimeError("submit failed")
+        return original_submit(executor, *args, **kwargs)
+
+    def start(thread: threading.Thread) -> None:
+        if failure_stage == "coordinator" and thread.name == "chat-coordinator":
+            assert started.wait(2)
+            raise RuntimeError("coordinator failed")
+        original_start(thread)
+
+    with (
+        patch.object(ThreadPoolExecutor, "submit", submit),
+        patch.object(threading.Thread, "start", start),
+        patch("onyx.chat.process_message._execute_model", side_effect=execute),
+        patch(
+            "onyx.chat.process_message.save_chat_response",
+            side_effect=lambda **kwargs: saved.append(
+                ("partial", kwargs["message_id"])
             ),
-            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
-            patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch("onyx.chat.process_message.llm_loop_completion_handle"),
-            patch(
-                "onyx.chat.process_message.get_llm_token_counter",
-                return_value=lambda _: 0,
+        ) as save,
+        patch(
+            "onyx.chat.process_message.save_failed_chat_response",
+            side_effect=lambda setup, index, _state, _error: saved.append(
+                ("error", setup.models[index].message_id)
             ),
+        ) as failure,
+        patch(
+            "onyx.chat.process_message.chat_error",
+            return_value=StreamingError(
+                error="Could not start", error_code="START_FAILED"
+            ),
+        ),
+        patch("onyx.chat.process_message.set_processing_status") as fence,
+    ):
+        packets = list(_run_models(setup, MagicMock(), stream_buffer=buffer))
+        assert exited.wait(2)
+
+    assert len(saved) == 2
+    assert {message_id for _, message_id in saved} == {
+        model.message_id for model in setup.models
+    }
+    assert save.call_count + failure.call_count == 2
+    assert all(call.kwargs["response"].cancelled for call in save.call_args_list)
+    assert any(
+        isinstance(packet, StreamingError) and packet.error_code == "CHAT_STARTUP_ERROR"
+        for packet in packets
+    )
+    assert not any(
+        isinstance(packet, Packet)
+        and isinstance(packet.obj, OverallStop)
+        and packet.obj.stop_reason == "user_cancelled"
+        for packet in packets
+    )
+    buffer.mark_done.assert_called_once()
+    assert fence.call_args.kwargs["value"] is False
+
+
+def test_disconnect_during_initial_packets_closes_unstarted_reader() -> None:
+    from onyx.chat.process_message import _ChatStream, _stream_chat_turn
+    from onyx.server.query_and_chat.streaming_models import heartbeat_packet
+
+    setup = _make_setup()
+    first = heartbeat_packet()
+    setup.initial_packets = [first]
+    reader = _ChatStream()
+    reader.publish(heartbeat_packet())
+    with (
+        patch("onyx.chat.process_message.prepare_chat_turn", return_value=setup),
+        patch("onyx.chat.process_message.get_session_with_current_tenant"),
+        patch("onyx.chat.process_message.StreamBufferWriter"),
+        patch("onyx.chat.process_message._run_models", return_value=reader),
+    ):
+        stream = cast(
+            Generator[Any, None, None], _stream_chat_turn(_make_request(), MagicMock())
+        )
+        assert next(stream) is first
+        stream.close()
+
+    reader.publish(heartbeat_packet())
+    with pytest.raises(StopIteration):
+        next(reader)
+
+
+def test_stop_cancels_compression_without_saving_responses_twice() -> None:
+    from onyx.chat.process_message import _run_models
+
+    setup = _make_setup(2)
+    buffer = MagicMock()
+    compression_started = threading.Event()
+    compression_exited = threading.Event()
+    fence_refreshed = threading.Event()
+    stop_requested = threading.Event()
+    setup.cache.exists.side_effect = lambda _key: stop_requested.is_set()
+
+    def compress(*_args: Any) -> None:
+        signal = current_cancellation()
+        assert signal is not None
+        cancelled = threading.Event()
+        try:
+            with signal.on_cancel(cancelled.set):
+                compression_started.set()
+                assert fence_refreshed.wait(2)
+                stop_requested.set()
+                assert cancelled.wait(2), (
+                    "Stop must reach the compression model request"
+                )
+                signal.check()
+        finally:
+            compression_exited.set()
+
+    def update_fence(**kwargs: Any) -> None:
+        if kwargs["value"] and compression_started.is_set():
+            fence_refreshed.set()
+
+    with (
+        patch("onyx.chat.process_message._execute_model"),
+        patch("onyx.chat.process_message.save_chat_response") as save,
+        patch(
+            "onyx.chat.process_message.compress_chat_if_needed", side_effect=compress
+        ) as compression,
+        patch(
+            "onyx.chat.process_message.set_processing_status", side_effect=update_fence
+        ) as fence,
+        patch("onyx.chat.process_message._FENCE_REFRESH_INTERVAL_S", 0.01),
+    ):
+        packets = list(_run_models(setup, MagicMock(), stream_buffer=buffer))
+        assert compression_exited.wait(2)
+
+    compression.assert_called_once()
+    assert save.call_count == 2
+    assert all(not call.kwargs["response"].cancelled for call in save.call_args_list)
+    stops = [
+        packet.obj
+        for packet in packets
+        if isinstance(packet, Packet) and isinstance(packet.obj, OverallStop)
+    ]
+    assert len(stops) == 1
+    assert stops[0].stop_reason == "user_cancelled"
+    assert not any(isinstance(packet, StreamingError) for packet in packets)
+    buffer.mark_done.assert_called_once()
+    assert fence.call_args.kwargs["value"] is False
+    assert fence_refreshed.is_set()
+
+
+@pytest.mark.parametrize(
+    "blocked_storage,save_fails",
+    [("response", False), ("response", True), ("stream", False)],
+)
+def test_stop_reaches_other_model_before_blocked_storage_resumes(
+    blocked_storage: str,
+    save_fails: bool,
+) -> None:
+    from contextvars import ContextVar
+
+    from onyx.chat.process_message import _run_models
+    from onyx.server.query_and_chat.streaming_models import heartbeat_packet
+
+    setup = _make_setup(2)
+    buffer = MagicMock()
+    provider_started = threading.Event()
+    provider_cancelled = threading.Event()
+    storage_started = threading.Event()
+    release_storage = threading.Event()
+    stop_requested = threading.Event()
+    setup.cache.exists.side_effect = lambda _key: stop_requested.is_set()
+    request_context: ContextVar[str] = ContextVar(
+        "storage_test_context", default="unset"
+    )
+    token = request_context.set("request")
+
+    def execute(*args: Any) -> None:
+        index, state, emitter, signal = args[2:6]
+        state.set_answer_tokens("Partial answer")
+        if index == 0:
+            assert provider_started.wait(2)
+            emitter.emit(heartbeat_packet())
+            return
+        with signal.on_cancel(provider_cancelled.set):
+            provider_started.set()
+            assert provider_cancelled.wait(5)
+            signal.check()
+
+    def block() -> None:
+        assert request_context.get() == "request"
+        storage_started.set()
+        assert release_storage.wait(5)
+
+    def save(**kwargs: Any) -> None:
+        assert request_context.get() == "request"
+        if (
+            blocked_storage == "response"
+            and kwargs["message_id"] == setup.models[0].message_id
         ):
-            packets = _run_models_collect(setup)
+            block()
+            if save_fails:
+                raise RuntimeError("database unavailable")
+
+    if blocked_storage == "stream":
+        buffer.append_line.side_effect = lambda _line: block()
+
+    try:
+        with (
+            patch("onyx.chat.process_message._execute_model", side_effect=execute),
+            patch(
+                "onyx.chat.process_message.save_chat_response", side_effect=save
+            ) as persist,
+            patch("onyx.chat.process_message._CANCEL_POLL_INTERVAL_S", 0.01),
+        ):
+            reader = _run_models(setup, MagicMock(), stream_buffer=buffer)
+            try:
+                assert storage_started.wait(2)
+                stop_requested.set()
+                cancelled_before_release = provider_cancelled.wait(2)
+            finally:
+                stop_requested.set()
+                release_storage.set()
+                packets = list(reader)
+        assert cancelled_before_release, (
+            "Storage must not block Stop delivery to the provider"
+        )
+        assert persist.call_count == 2
+        assert {call.kwargs["message_id"] for call in persist.call_args_list} == {
+            1000,
+            1001,
+        }
         errors = [packet for packet in packets if isinstance(packet, StreamingError)]
-        assert len(errors) == 1
-        error = errors[0]
-        assert error.error_code != "STREAM_WRITER_ERROR"
-        if dev_mode:
-            assert error.stack_trace and "worker-frame" in error.stack_trace
-        else:
-            assert error.stack_trace is None
+        assert [error.error_code for error in errors] == (
+            ["RESPONSE_SAVE_ERROR"] if save_fails else []
+        )
+        buffer.mark_done.assert_called_once()
+    finally:
+        request_context.reset(token)

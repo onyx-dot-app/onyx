@@ -5,6 +5,9 @@ tests. Additive to the root `AGENTS.md`.
 
 ## Key Rules
 
+- Use explicit validation in application code. Reserve `assert` for tests.
+- Declare owned protocol implementations through explicit inheritance.
+
 - Put ALL db operations under the `backend/onyx/db` / `backend/ee/onyx/db` directories. Don't run
   queries outside of those directories. Exception: `backend/onyx/cache/postgres_backend.py` is the
   PostgreSQL implementation of `CacheBackend`, so its queries belong there.
@@ -221,17 +224,19 @@ raise OnyxError(
 
 ## AI/LLM Integration
 
-LLM calls go through LiteLLM; models are configurable per feature (chat, search, embeddings).
+Text generation uses `LLM` with `GenerationRequest` and `GenerationContext`.
+The LiteLLM adapter implements the client. Models remain configurable per feature.
 
 ### Tracing — every LLM invocation must be tagged
 
 Every LLM, embedding, rerank, image-generation, voice (STT/TTS), and intent-classification call must open a generation span tagged with a value from the `LLMFlow` registry in `backend/onyx/tracing/flows.py`. Use one of:
 
-- `llm_generation_span(llm=..., flow=LLMFlow.X, input_messages=...)` for calls going through an `LLM` subclass.
+- `GenerationContext(flow=LLMFlow.X)` for shared client calls. The client owns the generation span.
+- `llm_generation_span(llm=..., flow=LLMFlow.X, input_messages=...)` for raw provider operations in protocol gateways.
 - `traced_llm_call(flow=LLMFlow.X, model=..., provider=..., input_messages=...)` for direct provider SDK / `litellm` / model_server HTTP calls that bypass the `LLM` abstraction.
 
 Rules:
 
 1. Add a new `LLMFlow` enum value before instrumenting a new operation. Don't pass raw strings.
 2. Flow tags name the **operation** (e.g. `IMAGE_EDIT`, `RERANK`) — not the provider. Provider lives in `model_config["model_provider"]`.
-3. The auto-wrap fallback in `onyx/llm/tracing_wrap.py` emits `LLMFlow.UNTAGGED_INVOKE` / `UNTAGGED_STREAM` for calls that reach `LLM.invoke` / `LLM.stream` without an explicit span. These sentinels are visible in dashboards and indicate missing instrumentation — fix the call site, don't rely on the fallback.
+3. Shared calls without a flow emit `LLMFlow.UNTAGGED_INVOKE` or `UNTAGGED_STREAM`. These sentinels indicate missing instrumentation. Fix the call site.

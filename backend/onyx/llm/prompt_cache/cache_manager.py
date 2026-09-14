@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 from onyx.configs.model_configs import PROMPT_CACHE_REDIS_TTL_MULTIPLIER
 from onyx.key_value_store.store import PgRedisKVStore
-from onyx.llm.interfaces import LanguageModelInput
+from onyx.llm.litellm_models import LanguageModelInput
 from onyx.llm.prompt_cache.models import CacheMetadata
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id

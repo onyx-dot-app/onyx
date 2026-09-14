@@ -1,5 +1,5 @@
 """
-Tests for the USER_REMINDER message type handling in translate_history_to_llm_format.
+Tests for the USER_REMINDER message type handling in message preparation and provider serialization.
 
 These tests verify that:
 1. USER_REMINDER messages are wrapped with <system-reminder> tags
@@ -10,12 +10,14 @@ These tests verify that:
 
 import pytest
 
-from onyx.chat.llm_step import translate_history_to_llm_format
-from onyx.chat.models import ChatMessageSimple
-from onyx.configs.constants import MessageType
+from onyx.context.messages import PromptMetadata, prepare_model_messages
 from onyx.llm.interfaces import LLMConfig
-from onyx.llm.models import ChatCompletionMessage, SystemMessage, UserMessage
-from onyx.prompts.chat_prompts import CODE_BLOCK_MARKDOWN
+from onyx.llm.litellm_conversion import CODE_BLOCK_MARKDOWN, serialize_request
+from onyx.llm.litellm_models import ChatCompletionMessage, SystemMessage, UserMessage
+from onyx.llm.models import AssistantMessage as CanonicalAssistantMessage
+from onyx.llm.models import GenerationRequest, TextContent
+from onyx.llm.models import SystemMessage as CanonicalSystemMessage
+from onyx.llm.models import UserMessage as CanonicalUserMessage
 from onyx.prompts.constants import SYSTEM_REMINDER_TAG_CLOSE, SYSTEM_REMINDER_TAG_OPEN
 
 
@@ -43,20 +45,24 @@ def mock_llm_config() -> LLMConfig:
 
 
 class TestUserReminderMessageType:
-    """Tests for USER_REMINDER message handling in translate_history_to_llm_format."""
+    """Tests for USER_REMINDER message handling in message preparation and provider serialization."""
 
     def test_user_reminder_wrapped_with_tags(self, mock_llm_config: LLMConfig) -> None:
         """Test that USER_REMINDER messages are wrapped with system-reminder tags."""
         reminder_text = "Remember to cite your sources."
         history = [
-            ChatMessageSimple(
-                message=reminder_text,
-                token_count=10,
-                message_type=MessageType.USER_REMINDER,
+            CanonicalUserMessage(
+                content=reminder_text,
+                metadata=PromptMetadata(token_count=10, is_reminder=True),
             )
         ]
 
-        raw_result = translate_history_to_llm_format(history, mock_llm_config)
+        raw_result = serialize_request(
+            GenerationRequest(
+                messages=prepare_model_messages(history, mock_llm_config)
+            ),
+            mock_llm_config,
+        )
         result = _ensure_list(raw_result)
 
         assert len(result) == 1
@@ -74,14 +80,18 @@ class TestUserReminderMessageType:
         """Test the exact format of the system-reminder tag wrapping."""
         reminder_text = "This is a test reminder."
         history = [
-            ChatMessageSimple(
-                message=reminder_text,
-                token_count=10,
-                message_type=MessageType.USER_REMINDER,
+            CanonicalUserMessage(
+                content=reminder_text,
+                metadata=PromptMetadata(token_count=10, is_reminder=True),
             )
         ]
 
-        raw_result = translate_history_to_llm_format(history, mock_llm_config)
+        raw_result = serialize_request(
+            GenerationRequest(
+                messages=prepare_model_messages(history, mock_llm_config)
+            ),
+            mock_llm_config,
+        )
         result = _ensure_list(raw_result)
 
         assert len(result) == 1
@@ -97,14 +107,18 @@ class TestUserReminderMessageType:
     ) -> None:
         """Test that USER_REMINDER is converted to UserMessage (not a different type)."""
         history = [
-            ChatMessageSimple(
-                message="Test reminder",
-                token_count=5,
-                message_type=MessageType.USER_REMINDER,
+            CanonicalUserMessage(
+                content="Test reminder",
+                metadata=PromptMetadata(token_count=5, is_reminder=True),
             )
         ]
 
-        raw_result = translate_history_to_llm_format(history, mock_llm_config)
+        raw_result = serialize_request(
+            GenerationRequest(
+                messages=prepare_model_messages(history, mock_llm_config)
+            ),
+            mock_llm_config,
+        )
         result = _ensure_list(raw_result)
 
         assert len(result) == 1
@@ -115,29 +129,29 @@ class TestUserReminderMessageType:
     def test_user_reminder_in_mixed_history(self, mock_llm_config: LLMConfig) -> None:
         """Test USER_REMINDER handling when mixed with other message types."""
         history = [
-            ChatMessageSimple(
-                message="You are a helpful assistant.",
-                token_count=10,
-                message_type=MessageType.SYSTEM,
+            CanonicalSystemMessage(
+                content="You are a helpful assistant.",
+                metadata=PromptMetadata(token_count=10),
             ),
-            ChatMessageSimple(
-                message="Hello!",
-                token_count=5,
-                message_type=MessageType.USER,
+            CanonicalUserMessage(
+                content="Hello!", metadata=PromptMetadata(token_count=5)
             ),
-            ChatMessageSimple(
-                message="Hi there! How can I help?",
-                token_count=10,
-                message_type=MessageType.ASSISTANT,
+            CanonicalAssistantMessage(
+                content=[TextContent(text="Hi there! How can I help?")],
+                metadata=PromptMetadata(token_count=10),
             ),
-            ChatMessageSimple(
-                message="Remember to be concise.",
-                token_count=8,
-                message_type=MessageType.USER_REMINDER,
+            CanonicalUserMessage(
+                content="Remember to be concise.",
+                metadata=PromptMetadata(token_count=8, is_reminder=True),
             ),
         ]
 
-        raw_result = translate_history_to_llm_format(history, mock_llm_config)
+        raw_result = serialize_request(
+            GenerationRequest(
+                messages=prepare_model_messages(history, mock_llm_config)
+            ),
+            mock_llm_config,
+        )
         result = _ensure_list(raw_result)
 
         assert len(result) == 4
@@ -157,14 +171,18 @@ class TestUserReminderMessageType:
     def test_regular_user_message_not_wrapped(self, mock_llm_config: LLMConfig) -> None:
         """Test that regular USER messages are NOT wrapped with system-reminder tags."""
         history = [
-            ChatMessageSimple(
-                message="This is a normal user message.",
-                token_count=10,
-                message_type=MessageType.USER,
+            CanonicalUserMessage(
+                content="This is a normal user message.",
+                metadata=PromptMetadata(token_count=10),
             )
         ]
 
-        raw_result = translate_history_to_llm_format(history, mock_llm_config)
+        raw_result = serialize_request(
+            GenerationRequest(
+                messages=prepare_model_messages(history, mock_llm_config)
+            ),
+            mock_llm_config,
+        )
         result = _ensure_list(raw_result)
 
         assert len(result) == 1
@@ -191,7 +209,7 @@ def _create_llm_config(model_name: str) -> LLMConfig:
 
 
 class TestCodeBlockMarkdownFormatting:
-    """Tests for CODE_BLOCK_MARKDOWN prefix handling in translate_history_to_llm_format.
+    """Tests for CODE_BLOCK_MARKDOWN prefix handling in message preparation and provider serialization.
 
     OpenAI reasoning models (o1, o3, gpt-5) need a "Formatting re-enabled. " prefix
     in their system messages for correct markdown generation.
@@ -201,14 +219,16 @@ class TestCodeBlockMarkdownFormatting:
         """Test that o1 model prepends CODE_BLOCK_MARKDOWN to string system message."""
         llm_config = _create_llm_config("o1")
         history = [
-            ChatMessageSimple(
-                message="You are a helpful assistant.",
-                token_count=10,
-                message_type=MessageType.SYSTEM,
+            CanonicalSystemMessage(
+                content="You are a helpful assistant.",
+                metadata=PromptMetadata(token_count=10),
             )
         ]
 
-        raw_result = translate_history_to_llm_format(history, llm_config)
+        raw_result = serialize_request(
+            GenerationRequest(messages=prepare_model_messages(history, llm_config)),
+            llm_config,
+        )
         result = _ensure_list(raw_result)
 
         assert len(result) == 1
@@ -221,14 +241,15 @@ class TestCodeBlockMarkdownFormatting:
         """Test that o3 model prepends CODE_BLOCK_MARKDOWN to system message."""
         llm_config = _create_llm_config("o3-mini")
         history = [
-            ChatMessageSimple(
-                message="System prompt here.",
-                token_count=10,
-                message_type=MessageType.SYSTEM,
+            CanonicalSystemMessage(
+                content="System prompt here.", metadata=PromptMetadata(token_count=10)
             )
         ]
 
-        raw_result = translate_history_to_llm_format(history, llm_config)
+        raw_result = serialize_request(
+            GenerationRequest(messages=prepare_model_messages(history, llm_config)),
+            llm_config,
+        )
         result = _ensure_list(raw_result)
 
         assert len(result) == 1
@@ -241,14 +262,15 @@ class TestCodeBlockMarkdownFormatting:
         """Test that gpt-5 model prepends CODE_BLOCK_MARKDOWN to system message."""
         llm_config = _create_llm_config("gpt-5")
         history = [
-            ChatMessageSimple(
-                message="System prompt here.",
-                token_count=10,
-                message_type=MessageType.SYSTEM,
+            CanonicalSystemMessage(
+                content="System prompt here.", metadata=PromptMetadata(token_count=10)
             )
         ]
 
-        raw_result = translate_history_to_llm_format(history, llm_config)
+        raw_result = serialize_request(
+            GenerationRequest(messages=prepare_model_messages(history, llm_config)),
+            llm_config,
+        )
         result = _ensure_list(raw_result)
 
         assert len(result) == 1
@@ -261,14 +283,16 @@ class TestCodeBlockMarkdownFormatting:
         """Test that gpt-4o model does NOT prepend CODE_BLOCK_MARKDOWN."""
         llm_config = _create_llm_config("gpt-4o")
         history = [
-            ChatMessageSimple(
-                message="You are a helpful assistant.",
-                token_count=10,
-                message_type=MessageType.SYSTEM,
+            CanonicalSystemMessage(
+                content="You are a helpful assistant.",
+                metadata=PromptMetadata(token_count=10),
             )
         ]
 
-        raw_result = translate_history_to_llm_format(history, llm_config)
+        raw_result = serialize_request(
+            GenerationRequest(messages=prepare_model_messages(history, llm_config)),
+            llm_config,
+        )
         result = _ensure_list(raw_result)
 
         assert len(result) == 1
@@ -283,14 +307,15 @@ class TestCodeBlockMarkdownFormatting:
         """Test that history without system message doesn't crash."""
         llm_config = _create_llm_config("o1")
         history = [
-            ChatMessageSimple(
-                message="Hello!",
-                token_count=5,
-                message_type=MessageType.USER,
+            CanonicalUserMessage(
+                content="Hello!", metadata=PromptMetadata(token_count=5)
             )
         ]
 
-        raw_result = translate_history_to_llm_format(history, llm_config)
+        raw_result = serialize_request(
+            GenerationRequest(messages=prepare_model_messages(history, llm_config)),
+            llm_config,
+        )
         result = _ensure_list(raw_result)
 
         assert len(result) == 1
@@ -302,24 +327,21 @@ class TestCodeBlockMarkdownFormatting:
         """Test that only the first system message gets the prefix."""
         llm_config = _create_llm_config("o1")
         history = [
-            ChatMessageSimple(
-                message="First system prompt.",
-                token_count=10,
-                message_type=MessageType.SYSTEM,
+            CanonicalSystemMessage(
+                content="First system prompt.", metadata=PromptMetadata(token_count=10)
             ),
-            ChatMessageSimple(
-                message="Hello!",
-                token_count=5,
-                message_type=MessageType.USER,
+            CanonicalUserMessage(
+                content="Hello!", metadata=PromptMetadata(token_count=5)
             ),
-            ChatMessageSimple(
-                message="Second system prompt.",
-                token_count=10,
-                message_type=MessageType.SYSTEM,
+            CanonicalSystemMessage(
+                content="Second system prompt.", metadata=PromptMetadata(token_count=10)
             ),
         ]
 
-        raw_result = translate_history_to_llm_format(history, llm_config)
+        raw_result = serialize_request(
+            GenerationRequest(messages=prepare_model_messages(history, llm_config)),
+            llm_config,
+        )
         result = _ensure_list(raw_result)
 
         assert len(result) == 3

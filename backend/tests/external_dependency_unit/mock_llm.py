@@ -9,25 +9,20 @@ from enum import Enum
 from typing import Any, Generic, Literal, TypeVar, cast
 from unittest.mock import patch
 
-from pydantic import BaseModel
+from pydantic import BaseModel, JsonValue
 
-from onyx.configs.chat_configs import LLM_INVOKE_TIMEOUT_S, LLM_SOCKET_READ_TIMEOUT
-from onyx.llm.interfaces import (
-    LLM,
-    LanguageModelInput,
-    LLMConfig,
-    LLMUserIdentity,
-    ReasoningEffort,
-    ToolChoice,
-)
-from onyx.llm.model_response import (
+from onyx.llm.interfaces import LLMConfig, LLMUserIdentity
+from onyx.llm.litellm_models import (
     ChatCompletionDeltaToolCall,
     Delta,
     FunctionCall,
+    LanguageModelInput,
     ModelResponse,
     ModelResponseStream,
     StreamingChoice,
 )
+from onyx.llm.models import ReasoningEffort, ToolChoice
+from onyx.llm.multi_llm import LitellmLLM, LitellmTransport, ProviderOperation
 
 T = TypeVar("T")
 
@@ -75,7 +70,7 @@ class LLMToolCallResponse(LLMResponse):
 
 
 class StreamItem(BaseModel):
-    """Represents a single item in the mock LLM stream with its type."""
+    """Represents a single item in the mock provider stream with its type."""
 
     response_type: LLMResponseType
     data: Any
@@ -220,8 +215,14 @@ class MockLLMController(abc.ABC):
         raise NotImplementedError
 
 
-class MockLLM(LLM, MockLLMController):
+class MockLLM(LitellmTransport, MockLLMController):
     def __init__(self) -> None:
+        super().__init__(
+            model_provider="openai",
+            api_key=None,
+            model_name="gpt-5-mini",
+            max_input_tokens=1000000000,
+        )
         self.stream_controller = SyncStreamController[StreamItem]()
 
     def add_response(self, response: LLMResponse) -> None:
@@ -302,26 +303,29 @@ class MockLLM(LLM, MockLLMController):
     def invoke(
         self,
         prompt: LanguageModelInput,
-        tools: list[dict] | None = None,
+        tools: list[dict[str, JsonValue]] | None = None,
         tool_choice: ToolChoice | None = None,
-        structured_response_format: dict | None = None,
+        structured_response_format: dict[str, JsonValue] | None = None,
+        timeout_override: int | None = None,
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
-        total_timeout_s: float = LLM_INVOKE_TIMEOUT_S,
+        total_timeout_override: float | None = None,
+        operation: ProviderOperation | None = None,
     ) -> ModelResponse:
         raise NotImplementedError("We only care about streaming atm")
 
     def stream(
         self,
         prompt: LanguageModelInput,  # noqa: ARG002
-        tools: list[dict] | None = None,  # noqa: ARG002
+        tools: list[dict[str, JsonValue]] | None = None,  # noqa: ARG002
         tool_choice: ToolChoice | None = None,  # noqa: ARG002
-        structured_response_format: dict | None = None,  # noqa: ARG002
+        structured_response_format: dict[str, JsonValue] | None = None,  # noqa: ARG002
+        timeout_override: int | None = None,  # noqa: ARG002
         max_tokens: int | None = None,  # noqa: ARG002
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,  # noqa: ARG002
         user_identity: LLMUserIdentity | None = None,  # noqa: ARG002
-        stall_timeout_s: int = LLM_SOCKET_READ_TIMEOUT,  # noqa: ARG002
+        operation: ProviderOperation | None = None,  # noqa: ARG002
     ) -> Iterator[ModelResponseStream]:
         if not self.stream_controller:
             return
@@ -400,5 +404,7 @@ class SyncStreamController(Generic[T]):
 def use_mock_llm() -> Generator[MockLLMController, None, None]:
     mock_llm = MockLLM()
 
-    with patch("onyx.chat.process_message.get_llm_for_persona", return_value=mock_llm):
+    with patch(
+        "onyx.chat.prepare.get_llm_for_persona", return_value=LitellmLLM(mock_llm)
+    ):
         yield mock_llm

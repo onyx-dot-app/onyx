@@ -1,65 +1,46 @@
 import base64
 import threading
 from enum import Enum
-from typing import Callable, NotRequired
+from typing import Any, Callable, NotRequired, Self
 
 from pydantic import BaseModel
 from typing_extensions import TypedDict  # noreorder
 
-# Sidecar attribute names used by the lazy-content materialization shim. They
-# live on the instance via object.__setattr__ rather than as Pydantic fields,
-# so they don't affect serialization, validation, or model_dump output.
-_LAZY_LOADER_ATTR = "_lazy_content_loader"
-_LAZY_DONE_ATTR = "_lazy_content_materialized"
-_LAZY_LOCK_ATTR = "_lazy_content_lock"
+
+class _LazyContent:
+    """Own one loader and cache shared by copied file descriptors."""
+
+    def __init__(self, loader: Callable[[], bytes]) -> None:
+        self._loader = loader
+        self._lock = threading.Lock()
+        self._content: bytes | None = None
+
+    def __deepcopy__(self, memo: dict[int, Any] | None = None) -> Self:
+        return self
+
+    def read(self) -> bytes:
+        with self._lock:
+            if self._content is None:
+                self._content = self._loader()
+            return self._content
 
 
 def install_lazy_content_loader(
     instance: BaseModel, loader: Callable[[], bytes]
 ) -> None:
-    """Stash a lazy ``content`` loader + per-instance lock on a Pydantic model.
-
-    Used by ``lazy_from_*`` classmethod factories on models whose
-    ``content: bytes`` field should be populated on first read instead of at
-    construction. Pair with ``maybe_materialize_lazy_content``, which the
-    model's ``__getattribute__`` calls when ``content`` is accessed.
-
-    Sidecar attrs are written via ``object.__setattr__`` so they live on the
-    instance ``__dict__`` without becoming Pydantic fields — serialization
-    (``model_dump``) and equality are unaffected.
-    """
-    object.__setattr__(instance, _LAZY_LOADER_ATTR, loader)
-    object.__setattr__(instance, _LAZY_DONE_ATTR, False)
-    object.__setattr__(instance, _LAZY_LOCK_ATTR, threading.Lock())
+    """Attach shared resource ownership outside serialized descriptor fields."""
+    object.__setattr__(instance, "_lazy_content", _LazyContent(loader))
 
 
 def maybe_materialize_lazy_content(instance: BaseModel) -> None:
-    """If a lazy loader is stashed and bytes haven't been read yet, invoke
-    the loader under a per-instance lock and write the bytes back through
-    Pydantic so subsequent reads of ``.content`` are zero-overhead field
-    accesses.
-
-    Two threads racing on first access must not both call the loader (that
-    would double-GET from S3), hence the per-instance ``threading.Lock``
-    with a double-checked guard inside the critical section.
-    """
-    d = object.__getattribute__(instance, "__dict__")
-    if d.get(_LAZY_LOADER_ATTR) is None or d.get(_LAZY_DONE_ATTR, False):
-        return
-    lock = d.get(_LAZY_LOCK_ATTR)
-    if lock is not None:
-        with lock:
-            if not d.get(_LAZY_DONE_ATTR, False):
-                data = d[_LAZY_LOADER_ATTR]()
-                BaseModel.__setattr__(instance, "content", data)
-                object.__setattr__(instance, _LAZY_DONE_ATTR, True)
-    else:
-        # Defensive: install_lazy_content_loader always provides a lock,
-        # but if a future caller wires up a loader without one, still
-        # memoize correctly.
-        data = d[_LAZY_LOADER_ATTR]()
-        BaseModel.__setattr__(instance, "content", data)
-        object.__setattr__(instance, _LAZY_DONE_ATTR, True)
+    """Read shared content without copying loaders, locks, or cached bytes."""
+    fields = object.__getattribute__(instance, "__dict__")
+    resource = fields.get("_lazy_content")
+    if isinstance(resource, _LazyContent) and not fields.get(
+        "_lazy_materialized", False
+    ):
+        BaseModel.__setattr__(instance, "content", resource.read())
+        object.__setattr__(instance, "_lazy_materialized", True)
 
 
 class ChatFileType(str, Enum):
@@ -147,3 +128,71 @@ class InMemoryChatFile(BaseModel):
             "name": self.filename,
             "user_file_id": str(self.file_id) if self.file_id else None,
         }
+
+
+class ChatLoadedFile(InMemoryChatFile):
+    content_text: str | None
+    token_count: int
+    # True while the user-file worker is still processing the file — its
+    # canonical plaintext (e.g. including image captions) doesn't exist yet.
+    content_pending: bool = False
+
+    @classmethod
+    def lazy_loaded(
+        cls,
+        *,
+        file_id: str,
+        file_type: ChatFileType,
+        filename: str | None,
+        content_text: str | None,
+        token_count: int,
+        loader: Callable[[], bytes],
+        content_pending: bool = False,
+    ) -> "ChatLoadedFile":
+        """Keep supplied text and token counts; load bytes on first content access."""
+        inst = cls(
+            file_id=file_id,
+            content=b"",
+            file_type=file_type,
+            filename=filename,
+            content_text=content_text,
+            token_count=token_count,
+            content_pending=content_pending,
+        )
+        install_lazy_content_loader(inst, loader)
+        return inst
+
+
+class ContextFileMetadata(BaseModel):
+    """Metadata for a context-injected file to enable citation support."""
+
+    file_id: str
+    filename: str
+    file_content: str
+
+
+class FileToolMetadata(BaseModel):
+    """Lightweight metadata for exposing files to the FileReaderTool.
+
+    Used when files cannot be loaded directly into context (project too large
+    or persona-attached user_files without direct-load path). The LLM receives
+    a listing of these so it knows which files it can read via ``read_file``.
+    """
+
+    file_id: str
+    filename: str
+    approx_char_count: int
+
+
+class ExtractedContextFiles(BaseModel):
+    """Result of attempting to load user files (from a project or persona) into context."""
+
+    file_texts: list[str]
+    image_files: list[ChatLoadedFile]
+    use_as_search_filter: bool
+    total_token_count: int
+    # Full text and titles used to construct citations for injected files.
+    file_metadata: list[ContextFileMetadata]
+    uncapped_token_count: int | None
+    # File listings supplied to the model for retrieval through FileReaderTool.
+    file_metadata_for_tool: list[FileToolMetadata] = []
