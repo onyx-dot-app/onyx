@@ -1,0 +1,81 @@
+"""Map Outlook gateway failures onto the connector validation exceptions.
+
+Shared by the capability checks and ``validate_connector_settings`` so both
+paths tell an admin the same thing about the same failure.
+"""
+
+from typing import NoReturn
+
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    CredentialInvalidError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
+from onyx.connectors.outlook.models import OutlookAuthError, OutlookGraphError
+
+# Mirrors the gateway's code for a blank credential field. Kept here rather
+# than imported so this module stays free of the gateway import.
+MISSING_CREDENTIAL_CODE = "missing_credential"
+
+# Exchange caches app permission changes, so a freshly scoped mailbox can keep
+# answering 403 for a while. Microsoft documents the window as 30 minutes to
+# two hours.
+EXCHANGE_SCOPE_REMEDIATION = (
+    "Grant the `Mail.Read` application permission and admin-consent it, or, "
+    "when the app is scoped with Exchange RBAC for Applications or an "
+    "application access policy, add the mailbox to that scope. Exchange takes "
+    "30 minutes to two hours to apply the change."
+)
+
+MAILBOX_UNAVAILABLE_REMEDIATION = (
+    "Use the user principal name or primary SMTP address of a licensed, "
+    "enabled mailbox. Shared mailboxes are sign-in disabled and must be "
+    "listed explicitly."
+)
+
+
+def raise_for_auth_error(error: OutlookAuthError) -> NoReturn:
+    """MSAL failures are always about the credential, never the tenant's data."""
+    if error.code == MISSING_CREDENTIAL_CODE:
+        raise CredentialInvalidError(
+            f"Outlook credential is incomplete: {error}"
+        ) from error
+    if error.code == "invalid_client":
+        raise CredentialInvalidError(
+            "Microsoft rejected the client secret. It is wrong, expired, or "
+            "belongs to a different app registration."
+        ) from error
+    if error.code in ("unauthorized_client", "invalid_request"):
+        raise CredentialInvalidError(
+            "Microsoft rejected the app registration. Check the client id and "
+            f"directory id ({error.code})."
+        ) from error
+    raise CredentialInvalidError(f"Microsoft did not issue a token: {error}") from error
+
+
+def raise_for_graph_error(error: OutlookGraphError, denied_message: str) -> NoReturn:
+    """Turn a Graph HTTP failure into the validation family.
+
+    ``denied_message`` explains what a 403 means for the call that failed, since
+    a denied mailbox and a missing permission look identical on the wire.
+    """
+    if error.status == 401:
+        raise CredentialExpiredError(
+            f"Graph rejected the access token ({error.code})."
+        ) from error
+    if error.status == 403:
+        raise InsufficientPermissionsError(
+            f"{denied_message} Graph reported `{error.code}`. {EXCHANGE_SCOPE_REMEDIATION}"
+        ) from error
+    if error.status == 404:
+        raise ConnectorValidationError(
+            f"Graph found no mailbox ({error.code}). {MAILBOX_UNAVAILABLE_REMEDIATION}"
+        ) from error
+    if error.status == 429 or (error.status is not None and error.status >= 500):
+        raise UnexpectedValidationError(
+            f"Graph is throttling or unavailable ({error.status} {error.code}). "
+            "Re-run the checks in a few minutes."
+        ) from error
+    raise UnexpectedValidationError(f"Unexpected Graph error: {error}") from error

@@ -254,6 +254,12 @@ export interface TeamsCredentialJson {
   teams_directory_id: string;
 }
 
+export interface OutlookCredentialJson {
+  outlook_client_id: string;
+  outlook_client_secret: string;
+  outlook_directory_id: string;
+}
+
 export interface DiscourseCredentialJson {
   discourse_api_key: string;
   discourse_api_username: string;
@@ -346,6 +352,7 @@ type CredentialTemplateMap = Record<ValidSources, object | null> & {
   sharepoint: CredentialTemplateWithAuth<SharepointCredentialJson>;
   asana: AsanaCredentialJson;
   teams: TeamsCredentialJson;
+  outlook: OutlookCredentialJson;
   zendesk: ZendeskCredentialJson;
   discourse: DiscourseCredentialJson;
   axero: AxeroCredentialJson;
@@ -479,6 +486,11 @@ export const credentialTemplates: Record<ValidSources, any> = {
     teams_client_id: "",
     teams_client_secret: "",
     teams_directory_id: "",
+  },
+  outlook: {
+    outlook_client_id: "",
+    outlook_client_secret: "",
+    outlook_directory_id: "",
   },
   zendesk: {
     zendesk_subdomain: "",
@@ -750,6 +762,11 @@ export const credentialDisplayNames: Record<string, string> = {
   teams_client_id: "Microsoft Teams Client ID",
   teams_client_secret: "Microsoft Teams Client Secret",
   teams_directory_id: "Microsoft Teams Directory ID",
+
+  // Outlook
+  outlook_client_id: "Microsoft Outlook Client ID",
+  outlook_client_secret: "Microsoft Outlook Client Secret",
+  outlook_directory_id: "Microsoft Outlook Directory ID",
 
   // Discourse
   discourse_api_key: "Discourse API Key",

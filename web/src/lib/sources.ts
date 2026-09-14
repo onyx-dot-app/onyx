@@ -322,6 +322,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.Messaging,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/teams`,
   },
+  outlook: {
+    icon: SvgMail,
+    displayName: "Outlook",
+    category: SourceCategory.Messaging,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/outlook`,
+  },
   gmail: {
     icon: SvgGmail,
     displayName: "Gmail",
