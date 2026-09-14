@@ -179,7 +179,6 @@ def fetch_repository_team_slugs(
 ) -> List[str]:
     """Fetch team slugs with access to the repository."""
     logger.info("Fetching team slugs for repository %s", repo.full_name)
-    teams_data: List[str] = []
 
     team_objs: PaginatedList[Team] | list[Team] = (
         _run_with_retry(
@@ -190,8 +189,7 @@ def fetch_repository_team_slugs(
         or []
     )
 
-    for team in team_objs:
-        teams_data.append(team.slug)
+    teams_data: List[str] = [team.slug for team in team_objs]
 
     logger.info(
         "Fetched %s team slugs for repository %s", len(teams_data), repo.full_name

@@ -930,6 +930,12 @@ def build_chat_turn(
     ):
         forced_tool_id = None
 
+    # construct_tools skips disabled tools, and a forced id it did not build fails
+    # the whole message. Callers name the forced tool from the persona's attached
+    # tools, which stay attached when an admin disables one.
+    if forced_tool_id in {tool.id for tool in all_tools if not tool.enabled}:
+        forced_tool_id = None
+
     # TODO(nmgarza5): Once summarization is done, we don't need to load all files from the beginning.
     # Load all files needed for this chat chain into memory.
     files = load_all_chat_files(chat_history, db_session)
@@ -1385,6 +1391,7 @@ def _run_models(
                     user_identity=setup.user_identity,
                     chat_session_id=str(setup.chat_session_id),
                     all_injected_file_metadata=setup.all_injected_file_metadata,
+                    user_language=setup.user_memory_context.user_info.language,
                 )
             else:
                 run_llm_loop(
@@ -1982,6 +1989,7 @@ def llm_loop_completion_handle(
     # direct attribute access is not thread-safe — use the provided getters.
     answer_tokens = state_container.get_answer_tokens()
     reasoning_tokens = state_container.get_reasoning_tokens()
+    request_params = state_container.get_request_params()
     citation_to_doc = state_container.get_citation_to_doc()
     tool_calls = state_container.get_tool_calls()
     is_clarification = state_container.get_is_clarification()
@@ -2028,6 +2036,7 @@ def llm_loop_completion_handle(
         save_chat_turn(
             message_text=final_answer,
             reasoning_tokens=reasoning_tokens,
+            request_params=request_params,
             citation_to_doc=citation_to_doc,
             tool_calls=tool_calls,
             all_search_docs=all_search_docs,

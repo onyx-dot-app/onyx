@@ -31,6 +31,7 @@ from onyx.db.incognito import mark_incognito_user_files_deleting
 from onyx.db.models import ChatSession, Project__UserFile, User, UserFile, UserProject
 from onyx.db.persona import get_personas_by_ids
 from onyx.db.projects import (
+    check_project_ownership,
     get_project_token_count,
     upload_files_to_user_files_with_indexing,
 )
@@ -257,6 +258,10 @@ def get_files_in_project(
     db_session: Session = Depends(get_session),
 ) -> list[UserFileSnapshot]:
     user_id = user.id
+    # filtering files by owner alone 200s an empty list, leaking that the id exists
+    if not check_project_ownership(project_id, user_id, db_session):
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Project not found")
+
     user_files = (
         db_session.query(UserFile)
         .join(Project__UserFile, UserFile.id == Project__UserFile.user_file_id)

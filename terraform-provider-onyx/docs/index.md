@@ -28,7 +28,7 @@ variable "onyx_api_key" {
 # Credentials can also come from ONYX_SERVER_URL / ONYX_API_KEY env vars.
 provider "onyx" {
   endpoint = "https://onyx.internal.example.com"
-  api_key  = var.onyx_api_key # an admin-role API key ("on_...")
+  api_key  = var.onyx_api_key # an API key in the Admin group ("on_...")
 }
 ```
 
@@ -37,6 +37,6 @@ provider "onyx" {
 
 ### Optional
 
-- `api_key` (String, Sensitive) Admin-role Onyx API key (`on_...`) or unrestricted personal access token (`onyx_pat_...`). May also be set via the `ONYX_API_KEY` environment variable.
+- `api_key` (String, Sensitive) Onyx API key (`on_...`) in the seeded `Admin` group, or unrestricted personal access token (`onyx_pat_...`). May also be set via the `ONYX_API_KEY` environment variable.
 - `api_prefix` (String) Path prefix the API is served under, defaults to `/api` (the web proxy). Set to `""` when talking directly to the backend (e.g. `http://localhost:8080`). May also be set via the `ONYX_API_PREFIX` environment variable.
 - `endpoint` (String) Onyx server origin, e.g. `https://cloud.onyx.app` or `http://localhost:3000`. May also be set via the `ONYX_SERVER_URL` environment variable.

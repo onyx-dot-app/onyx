@@ -264,7 +264,7 @@ export default function LineItem({
             <Section flexDirection="row" gap={2}>
               <Truncated
                 mainUiMuted
-                className={cn("text-left w-full", textClassNames[variant])}
+                className={cn("text-start w-full", textClassNames[variant])}
               >
                 {children}
               </Truncated>
@@ -276,11 +276,11 @@ export default function LineItem({
             </Section>
             {description &&
               (wrapDescription ? (
-                <Text as="p" secondaryBody text03 className="text-left w-full">
+                <Text as="p" secondaryBody text03 className="text-start w-full">
                   {description}
                 </Text>
               ) : (
-                <Truncated secondaryBody text03 className="text-left w-full">
+                <Truncated secondaryBody text03 className="text-start w-full">
                   {description}
                 </Truncated>
               ))}
@@ -288,11 +288,11 @@ export default function LineItem({
         ) : description ? (
           <Section flexDirection="row" gap={2}>
             {wrapDescription ? (
-              <Text as="p" secondaryBody text03 className="text-left w-full">
+              <Text as="p" secondaryBody text03 className="text-start w-full">
                 {description}
               </Text>
             ) : (
-              <Truncated secondaryBody text03 className="text-left w-full">
+              <Truncated secondaryBody text03 className="text-start w-full">
                 {description}
               </Truncated>
             )}

@@ -1,4 +1,8 @@
-"""Admin cost-override CRUD, auth, and cache invalidation."""
+"""Cost-override CRUD, auth, and cache invalidation.
+
+Gated on MANAGE_LLMS: negotiated rates are part of configuring language models,
+not a separate admin surface.
+"""
 
 from collections.abc import Generator
 from typing import cast
@@ -13,7 +17,7 @@ from sqlalchemy.pool import StaticPool
 
 from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import Permission
+from onyx.db.enums import AccountType, Permission
 from onyx.db.models import ModelCostOverride
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.llm import cost_overrides
@@ -22,14 +26,18 @@ from onyx.server.features.usage.api import router as cost_override_router
 
 
 class _StubUser:
-    """Minimal stand-in for User: require_permission only reads these two."""
+    """Minimal stand-in for User, carrying only what require_permission reads."""
 
     def __init__(self, permissions: list[str]) -> None:
         self.id = "00000000-0000-0000-0000-000000000001"
         self.effective_permissions = permissions
+        self.account_type = AccountType.STANDARD
+        self.is_group_manager = False
 
 
 _ADMIN = _StubUser([Permission.FULL_ADMIN_PANEL_ACCESS.value])
+_LLM_MANAGER = _StubUser([Permission.MANAGE_LLMS.value])
+_OTHER_HOLDER = _StubUser([Permission.MANAGE_AGENTS.value])
 _NON_ADMIN = _StubUser([])
 
 
@@ -112,8 +120,13 @@ def test_delete_removes_then_404(db_session: Session) -> None:
     assert missing.json()["error_code"] == "NOT_FOUND"
 
 
-def test_non_admin_rejected(db_session: Session) -> None:
-    client = TestClient(_make_app(db_session, _NON_ADMIN))
+@pytest.mark.parametrize("user", [_NON_ADMIN, _OTHER_HOLDER])
+def test_callers_without_manage_llms_rejected(
+    user: _StubUser, db_session: Session
+) -> None:
+    """_OTHER_HOLDER holds a different permission, so this pins MANAGE_LLMS
+    specifically rather than "holds something"."""
+    client = TestClient(_make_app(db_session, user))
     resp = client.put(
         "/admin/cost-overrides",
         json={
@@ -124,6 +137,22 @@ def test_non_admin_rejected(db_session: Session) -> None:
     )
     assert resp.status_code == 403
     assert resp.json()["error_code"] == "INSUFFICIENT_PERMISSIONS"
+
+
+def test_manage_llms_holder_admitted(db_session: Session) -> None:
+    """The admin tests all act as FULL_ADMIN_PANEL_ACCESS, which short-circuits
+    every gate — only this one would fail if the routes reverted to admin-only."""
+    client = TestClient(_make_app(db_session, _LLM_MANAGER))
+    resp = client.put(
+        "/admin/cost-overrides",
+        json={
+            "model": "gpt-4o",
+            "input_cost_per_mtok": 2.5,
+            "output_cost_per_mtok": 10.0,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert client.get("/admin/cost-overrides").status_code == 200
 
 
 def test_writes_invalidate_cache(

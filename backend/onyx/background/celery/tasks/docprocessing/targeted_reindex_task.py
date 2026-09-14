@@ -13,10 +13,6 @@ import logging
 from celery import Task, shared_task
 
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.background.indexing.run_targeted_reindex import (
-    group_targets_by_cc_pair,
-    process_targets_for_cc_pair,
-)
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import IndexingStatus
@@ -39,6 +35,11 @@ def run_targeted_reindex(
     """Body of the targeted-reindex task. Lifted out of the @shared_task
     decorator so tests can call it directly without going through
     celery's binding machinery."""
+    from onyx.background.indexing.run_targeted_reindex import (
+        group_targets_by_cc_pair,
+        process_targets_for_cc_pair,
+    )
+
     log = logging.LoggerAdapter(
         task_logger,
         extra={

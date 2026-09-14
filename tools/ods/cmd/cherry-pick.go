@@ -15,6 +15,7 @@ import (
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/git"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/prompt"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/release"
 )
 
 const cherryPickPRLabel = "cherry-pick 🍒"
@@ -174,7 +175,7 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 		log.Debugf("Using specified release versions: %v", releases)
 	} else {
 		// Find the newest release branch missing the first commit.
-		version, err := findTargetReleaseVersion(commitSHAs[0])
+		version, err := release.FindTargetVersion(commitSHAs[0])
 		if err != nil {
 			git.RestoreStash(stashResult)
 			log.Fatalf("Failed to auto-detect the target release (pass --release explicitly): %v", err)
@@ -389,7 +390,7 @@ func cherryPickToRelease(commitSHAs, commitMessages []string, branchSuffix, vers
 
 	// Fetch the release branch
 	log.Infof("Fetching release branch: %s", releaseBranch)
-	if err := git.RunCommand("fetch", "--prune", "--quiet", "origin", releaseBranchRefspec(releaseBranch)); err != nil {
+	if err := git.RunCommand("fetch", "--prune", "--quiet", "origin", release.BranchRefspec(releaseBranch)); err != nil {
 		return "", fmt.Errorf("failed to fetch release branch %s: %w", releaseBranch, err)
 	}
 

@@ -46,7 +46,7 @@ def test_run_functions_in_parallel_preserves_contextvar() -> None:
     # Run in parallel and verify all results have the correct value
     results = run_functions_in_parallel(function_calls)
 
-    for _result_id, value in results.items():
+    for value in results.values():
         assert value == "parallel_test"
 
 

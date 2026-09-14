@@ -3,7 +3,10 @@ use crate::debug_log::{log_backend_error, maybe_open_devtools};
 use std::process::Command;
 #[cfg(target_os = "macos")]
 use std::time::Duration;
-use tauri::{AppHandle, Manager, Webview, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::webview::{NewWindowFeatures, NewWindowResponse};
+#[cfg(target_os = "macos")]
+use tauri::Webview;
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Wry};
 #[cfg(target_os = "macos")]
 use tokio::time::sleep;
 use url::Url;
@@ -12,7 +15,6 @@ use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
 
 #[cfg(target_os = "macos")]
 const TITLEBAR_SCRIPT: &str = include_str!("../../src/titlebar.js");
-const CHAT_LINK_INTERCEPT_SCRIPT: &str = include_str!("scripts/chat_link_intercept.js");
 
 /// The window a shortcut or menu action should apply to: whichever one is
 /// focused (the app can have several windows). Focus-query failures are
@@ -96,10 +98,14 @@ pub fn build_and_setup_window(app: &AppHandle) -> Result<WebviewWindow, String> 
         .parse()
         .map_err(|e| format!("Invalid server URL: {e}"))?;
 
+    let handle = app.clone();
     let builder = WebviewWindowBuilder::new(app, &window_label, WebviewUrl::External(url))
         .title(config.window_title)
         .inner_size(1232.0, 800.0)
-        .min_inner_size(800.0, 600.0);
+        .min_inner_size(800.0, 600.0)
+        .on_new_window(move |url, _features: NewWindowFeatures| {
+            open_new_window_externally(&handle, &url)
+        });
 
     // Windows draws its own title bar in the system theme; a transparent
     // window leaves any unpainted region see-through, which produces the
@@ -200,47 +206,93 @@ pub fn should_open_in_external_browser(current_url: &Url, destination_url: &Url)
     }
 }
 
+/// `is_ok` only says the opener ran; a non-zero exit still means the URL never
+/// reached a browser, so callers need `success()` to report that truthfully.
+fn spawned_opener_succeeded(mut command: Command) -> bool {
+    command.status().is_ok_and(|status| status.success())
+}
+
 pub fn open_in_default_browser(url: &str) -> bool {
     #[cfg(target_os = "macos")]
     {
-        return Command::new("open").arg(url).status().is_ok();
+        let mut command = Command::new("open");
+        command.arg(url);
+        return spawned_opener_succeeded(command);
     }
     #[cfg(target_os = "linux")]
     {
-        return Command::new("xdg-open").arg(url).status().is_ok();
+        let mut command = Command::new("xdg-open");
+        command.arg(url);
+        return spawned_opener_succeeded(command);
     }
     #[cfg(target_os = "windows")]
     {
-        return Command::new("rundll32")
-            .arg("url.dll,FileProtocolHandler")
-            .arg(url)
-            .status()
-            .is_ok();
+        let mut command = Command::new("rundll32");
+        command.arg("url.dll,FileProtocolHandler").arg(url);
+        return spawned_opener_succeeded(command);
     }
     #[allow(unreachable_code)]
     false
 }
 
-/// Scopes the chat-link-intercept script to the configured Onyx server's
-/// origin, not just its path shape -- otherwise a page from any other origin
-/// that happens to have an `/app` path with a `chatId` query param would be
-/// treated as a trusted chat session and get the native-link override.
-pub fn inject_chat_link_intercept(webview: &Webview) {
-    let app = webview.app_handle();
-    let trusted_origin = app
-        .state::<ConfigState>()
-        .app_base_url()
-        .map(|url| url.origin().ascii_serialization());
-    let origin_json = serde_json::to_string(&trusted_origin).unwrap_or_else(|_| "null".to_string());
-    let script =
-        format!("window.__ONYX_TRUSTED_ORIGIN__ = {origin_json};\n{CHAT_LINK_INTERCEPT_SCRIPT}");
+/// Schemes we hand to the OS opener. The URL comes from web content, so
+/// anything outside this list (`file:`, custom app schemes) must not reach it.
+pub fn is_externally_openable(url: &Url) -> bool {
+    matches!(url.scheme(), "http" | "https" | "mailto" | "tel")
+}
 
-    if let Err(e) = webview.eval(&script) {
+/// Enough of a URL to identify it in a log, without the path, query or
+/// userinfo -- those are web-controlled and routinely carry signed tokens.
+pub fn redact_url(url: &Url) -> String {
+    url.host_str().map_or_else(
+        || url.scheme().to_string(),
+        |host| format!("{}://{host}", url.scheme()),
+    )
+}
+
+/// Send every popup request -- `window.open` and `target="_blank"` alike -- to
+/// the user's browser and refuse the popup itself.
+///
+/// Without a handler the platform webview drops these requests on the floor,
+/// which is what made `window.open` links dead in the app: `WKWebView` returns
+/// no webview and `WebView2` marks the request handled with nothing to show,
+/// so the click does nothing at all.
+fn open_new_window_externally(app: &AppHandle, url: &Url) -> NewWindowResponse<Wry> {
+    if is_externally_openable(url) && !open_in_default_browser(url.as_str()) {
         log_backend_error(
             app,
-            &format!("Failed to inject chat-link-intercept script: {e}"),
+            &format!(
+                "Failed to open external URL in default browser: {}",
+                redact_url(url)
+            ),
         );
     }
+
+    NewWindowResponse::Deny
+}
+
+/// Build the main window. It is declared in `tauri.conf.json` with
+/// `"create": false` so it can be built here instead: `on_new_window` is only
+/// reachable through the builder, and the main window needs it as much as the
+/// windows `build_and_setup_window` creates.
+pub fn build_main_window(app: &AppHandle) -> Result<WebviewWindow, String> {
+    let window_config = app
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|window| window.label == "main")
+        .cloned()
+        .ok_or_else(|| "No \"main\" window in the Tauri config".to_string())?;
+
+    let handle = app.clone();
+    WebviewWindowBuilder::from_config(app, &window_config)
+        .map_err(|e| e.to_string())?
+        .on_new_window(move |url, _features: NewWindowFeatures| {
+            open_new_window_externally(&handle, &url)
+        })
+        .build()
+        .map_err(|e| e.to_string())
 }
 
 /// One-off titlebar re-injection on every page load, distinct from
@@ -335,6 +387,34 @@ mod tests {
         assert!(!is_chat_session_url(&url(
             "https://cloud.onyx.app/settings?chatId=123"
         )));
+    }
+
+    #[test]
+    fn is_externally_openable_allows_only_web_and_contact_schemes() {
+        assert!(is_externally_openable(&url("https://example.com")));
+        assert!(is_externally_openable(&url("http://example.com")));
+        assert!(is_externally_openable(&url("mailto:a@b.com")));
+        assert!(is_externally_openable(&url("tel:12345")));
+        // Web content picks these URLs, so the OS opener must not see schemes
+        // that would launch an arbitrary local handler.
+        assert!(!is_externally_openable(&url("file:///etc/passwd")));
+        assert!(!is_externally_openable(&url("ftp://example.com")));
+        assert!(!is_externally_openable(&url("javascript:alert(1)")));
+    }
+
+    #[test]
+    fn redact_url_drops_path_query_and_userinfo() {
+        assert_eq!(
+            redact_url(&url("https://example.com/doc?token=secret#frag")),
+            "https://example.com"
+        );
+        assert_eq!(
+            redact_url(&url("https://user:pw@example.com/a")),
+            "https://example.com"
+        );
+        // Hostless schemes keep only the scheme.
+        assert_eq!(redact_url(&url("mailto:someone@example.com")), "mailto");
+        assert_eq!(redact_url(&url("tel:12345")), "tel");
     }
 
     #[test]

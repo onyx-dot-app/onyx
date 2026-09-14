@@ -1,12 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Form, Formik, useField } from "formik";
+import { useTranslations } from "next-intl";
 import * as Yup from "yup";
-import { Button, InputTags, type TagItem, Text } from "@opal/components";
-import { SvgCopy, SvgSimpleLoader } from "@opal/icons";
-import { InputErrorText, InputVertical, toast } from "@opal/layouts";
-import { cn } from "@opal/utils";
+import {
+  Button,
+  Card,
+  CopyButton,
+  InputMultiSelect,
+  type TagItem,
+  Text,
+} from "@opal/components";
+import { SvgSimpleLoader } from "@opal/icons";
+import { InputErrorText, InputVertical, Section, toast } from "@opal/layouts";
 import type {
   SSOProviderCreateRequest,
   SSOProviderResponse,
@@ -16,12 +23,13 @@ import type {
 import { useSupportedSSOProviderTypes } from "@/lib/sso/hooks";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { createSSOProvider, updateSSOProvider } from "@/lib/sso/svc";
+import SSODomainVerification from "@/sections/modals/sso/SSODomainVerification";
 import {
   CONFIG_FIELDS_BY_TYPE,
-  copyRedirectUri,
   CREATABLE_SSO_PROVIDER_TYPES,
   SSO_PROVIDER_DETAILS,
   type SSOConfigField,
+  type SSOTranslate,
 } from "@/lib/sso/utils";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
@@ -57,7 +65,7 @@ const ALL_CONFIG_FIELDS: SSOConfigField[] = Array.from(
   ).values()
 );
 
-function configSchemaForType(fields: SSOConfigField[]) {
+function configSchemaForType(fields: SSOConfigField[], t: SSOTranslate) {
   const shape: Record<string, Yup.AnySchema> = {};
   for (const field of fields) {
     if (field.kind === "switch") {
@@ -70,50 +78,55 @@ function configSchemaForType(fields: SSOConfigField[]) {
     }
     shape[field.name] = field.optional
       ? Yup.string().optional()
-      : Yup.string().required(`${field.label} is required`);
+      : Yup.string().required(
+          t("modals.provider.validation.fieldRequired", {
+            field: t(field.labelKey),
+          })
+        );
   }
   return Yup.object(shape);
 }
 
-const CONFIG_SCHEMA_BY_TYPE = Object.fromEntries(
-  CREATABLE_SSO_PROVIDER_TYPES.map((type) => [
-    type,
-    configSchemaForType(CONFIG_FIELDS_BY_TYPE[type]),
-  ])
-);
+function buildValidationSchema(t: SSOTranslate) {
+  const configSchemaByType = Object.fromEntries(
+    CREATABLE_SSO_PROVIDER_TYPES.map((type) => [
+      type,
+      configSchemaForType(CONFIG_FIELDS_BY_TYPE[type], t),
+    ])
+  );
 
-const SSO_VALIDATION_SCHEMA = Yup.object({
-  provider_type: Yup.string()
-    .oneOf(CREATABLE_SSO_PROVIDER_TYPES)
-    .required("Provider type is required"),
-  name: Yup.string()
-    .required("Name is required")
-    .matches(
-      /^[a-z0-9-]+$/,
-      "Use lowercase letters, numbers, and hyphens only"
+  return Yup.object({
+    provider_type: Yup.string()
+      .oneOf(CREATABLE_SSO_PROVIDER_TYPES)
+      .required(t("modals.provider.validation.providerTypeRequired")),
+    name: Yup.string()
+      .required(t("modals.provider.validation.nameRequired"))
+      .matches(/^[a-z0-9-]+$/, t("modals.provider.validation.namePattern")),
+    display_name: Yup.string().required(
+      t("modals.provider.validation.displayNameRequired")
     ),
-  display_name: Yup.string().required("Display name is required"),
-  // The whole config schema switches on the sibling provider_type (a when()
-  // nested inside the config object cannot see parent keys, so per-field
-  // conditions would silently never require anything). On edit the masked
-  // value prefills, so "required" passes without re-entry.
-  config: Yup.object().when(
-    "provider_type",
-    ([type], schema) => CONFIG_SCHEMA_BY_TYPE[type as string] ?? schema
-  ),
-  // Cloud rejects an empty list (every address the IdP asserts would become a
-  // billed seat), so require at least one domain there. Single-tenant leaves it
-  // optional, where empty means every address may sign in.
-  allowed_email_domains: NEXT_PUBLIC_CLOUD_ENABLED
-    ? Yup.array()
-        .of(Yup.string())
-        .min(1, "List at least one email domain that may sign in")
-    : Yup.array().of(Yup.string()).optional(),
-});
+    // The whole config schema switches on the sibling provider_type (a when()
+    // nested inside the config object cannot see parent keys, so per-field
+    // conditions would silently never require anything). On edit the masked
+    // value prefills, so "required" passes without re-entry.
+    config: Yup.object().when(
+      "provider_type",
+      ([type], schema) => configSchemaByType[type as string] ?? schema
+    ),
+    // Cloud rejects an empty list (every address the IdP asserts would become a
+    // billed seat), so require at least one domain there. Single-tenant leaves it
+    // optional, where empty means every address may sign in.
+    allowed_email_domains: NEXT_PUBLIC_CLOUD_ENABLED
+      ? Yup.array()
+          .of(Yup.string())
+          .min(1, t("modals.provider.validation.emailDomainsMin"))
+      : Yup.array().of(Yup.string()).optional(),
+  });
+}
 
 // The backend masks every config string on read and restores any value sent
 // back unchanged, so the form sends its current values as-is. Blank optional
-// keys are omitted rather than sent as empty strings. Switch values are always
+// keys are omitted rather than sent as empty strings. InputSwitch values are always
 // sent: the update endpoint overlays only the keys present, so turning a flag
 // off must send an explicit false.
 function buildConfig(
@@ -168,7 +181,7 @@ interface TagListFieldProps {
   transform?: (value: string) => string;
 }
 
-// Formik-bound Opal InputTags for string[] values. Always writes an array, so
+// Formik-bound Opal InputMultiSelect for string[] values. Always writes an array, so
 // clearing every tag stores [] rather than leaving the previous value.
 function TagListField({ name, placeholder, transform }: TagListFieldProps) {
   const [field, meta, helpers] = useField<string[]>(name);
@@ -177,7 +190,7 @@ function TagListField({ name, placeholder, transform }: TagListFieldProps) {
   const tags: TagItem[] = values.map((value) => ({ id: value, label: value }));
   return (
     <>
-      <InputTags
+      <InputMultiSelect
         tags={tags}
         onRemoveTag={(id) => {
           void helpers.setValue(values.filter((value) => value !== id));
@@ -210,33 +223,39 @@ function ConfigInput({
   field: SSOConfigField;
   isEditing: boolean;
 }) {
+  const t = useTranslations("admin.ssoProviders");
   const name = `config.${field.name}`;
+  const placeholder = field.placeholderKey
+    ? t(field.placeholderKey)
+    : field.placeholder;
   if (field.kind === "switch") {
     return <SwitchField name={name} />;
   }
   if (field.kind === "chips") {
-    return <TagListField name={name} placeholder={field.placeholder} />;
+    return <TagListField name={name} placeholder={placeholder} />;
   }
   if (field.kind === "textarea") {
-    return <InputTextAreaField name={name} placeholder={field.placeholder} />;
+    return <InputTextAreaField name={name} placeholder={placeholder} />;
   }
   if (field.kind === "password") {
     return (
       <PasswordInputTypeInField
         name={name}
-        placeholder={field.placeholder}
+        placeholder={placeholder}
         isNonRevealable={isEditing}
       />
     );
   }
-  return <InputTypeInField name={name} placeholder={field.placeholder} />;
+  return <InputTypeInField name={name} placeholder={placeholder} />;
 }
 
 export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
+  const t = useTranslations("admin.ssoProviders");
   const onClose = useModalClose();
   const isEditing = provider !== null;
   const { providerTypes, isLoading: providerTypesLoading } =
     useSupportedSSOProviderTypes();
+  const validationSchema = useMemo(() => buildValidationSchema(t), [t]);
 
   const initialValues: SSOProviderFormValues = {
     provider_type: provider?.provider_type ?? "GOOGLE_OAUTH",
@@ -262,7 +281,7 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
           allowed_email_domains: values.allowed_email_domains,
         };
         await createSSOProvider(request);
-        toast.success("SSO provider created");
+        toast.success(t("modals.provider.toasts.created"));
       } else {
         const request: SSOProviderUpdateRequest = {
           display_name: values.display_name.trim(),
@@ -270,13 +289,13 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
           config,
         };
         await updateSSOProvider(provider.id, request);
-        toast.success("SSO provider updated");
+        toast.success(t("modals.provider.toasts.updated"));
       }
       await onSaved();
       onClose?.();
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Unexpected error occurred."
+        error instanceof Error ? error.message : t("toasts.unexpectedError")
       );
     } finally {
       setSubmitting(false);
@@ -284,14 +303,16 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
   }
 
   const redirectLabel =
-    provider?.provider_type === "SAML" ? "ACS (Reply) URL" : "Redirect URI";
+    provider?.provider_type === "SAML"
+      ? t("modals.provider.redirectField.acsLabel")
+      : t("modals.provider.redirectField.redirectUriLabel");
 
   return (
     <Modal open onOpenChange={onClose}>
       <Modal.Content width="md" height="full" preventAccidentalClose>
         <Formik<SSOProviderFormValues>
           initialValues={initialValues}
-          validationSchema={SSO_VALIDATION_SCHEMA}
+          validationSchema={validationSchema}
           onSubmit={handleSubmit}
           enableReinitialize
         >
@@ -315,21 +336,25 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                   icon={providerTypeIcon}
                   title={
                     isEditing
-                      ? `Edit ${provider.display_name}`
-                      : "Add SSO Provider"
+                      ? t("modals.provider.header.editTitle", {
+                          name: provider.display_name,
+                        })
+                      : t("modals.provider.header.createTitle")
                   }
                   description={
                     isEditing
-                      ? "Update how this provider signs users in."
-                      : "Add an SSO provider for sign-in."
+                      ? t("modals.provider.header.editDescription")
+                      : t("modals.provider.header.createDescription")
                   }
                   onClose={onClose}
                 />
 
                 <Modal.Body>
                   <InputVertical
-                    title="Provider Type"
-                    description="The protocol this provider authenticates with."
+                    title={t("modals.provider.providerTypeField.title")}
+                    description={t(
+                      "modals.provider.providerTypeField.description"
+                    )}
                     withLabel="provider_type"
                   >
                     <InputSelect
@@ -342,7 +367,11 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                         touched.provider_type && errors.provider_type
                       )}
                     >
-                      <InputSelect.Trigger placeholder="Select a provider type" />
+                      <InputSelect.Trigger
+                        placeholder={t(
+                          "modals.provider.providerTypeField.placeholder"
+                        )}
+                      />
                       <InputSelect.Content>
                         {providerTypes.map((type) => {
                           const detail = SSO_PROVIDER_DETAILS[type];
@@ -351,7 +380,7 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                               key={type}
                               value={type}
                               icon={detail.icon}
-                              description={detail.description}
+                              description={t(detail.descriptionKey)}
                               wrapDescription
                             >
                               {detail.label}
@@ -363,8 +392,8 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                   </InputVertical>
 
                   <InputVertical
-                    title="Name"
-                    description="Unique lowercase slug used in the login URL. Cannot be changed later."
+                    title={t("modals.provider.nameField.title")}
+                    description={t("modals.provider.nameField.description")}
                     withLabel="name"
                   >
                     <InputTypeInField
@@ -375,13 +404,17 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                   </InputVertical>
 
                   <InputVertical
-                    title="Display Name"
-                    description="Label shown on the sign-in button."
+                    title={t("modals.provider.displayNameField.title")}
+                    description={t(
+                      "modals.provider.displayNameField.description"
+                    )}
                     withLabel="display_name"
                   >
                     <InputTypeInField
                       name="display_name"
-                      placeholder="Company A"
+                      placeholder={t(
+                        "modals.provider.displayNameField.placeholder"
+                      )}
                     />
                   </InputVertical>
 
@@ -390,10 +423,12 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                       key={field.name}
                       title={
                         field.optional
-                          ? `${field.label} (Optional)`
-                          : field.label
+                          ? t("modals.provider.configField.optionalTitle", {
+                              label: t(field.labelKey),
+                            })
+                          : t(field.labelKey)
                       }
-                      description={field.description}
+                      description={t(field.descriptionKey)}
                       withLabel={`config.${field.name}`}
                     >
                       <ConfigInput field={field} isEditing={isEditing} />
@@ -403,47 +438,66 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                   <InputVertical
                     title={
                       NEXT_PUBLIC_CLOUD_ENABLED
-                        ? "Allowed Email Domains"
-                        : "Allowed Email Domains (Optional)"
+                        ? t("modals.provider.emailDomainsField.title")
+                        : t(
+                            "modals.provider.emailDomainsField.recommendedTitle"
+                          )
                     }
                     description={
                       NEXT_PUBLIC_CLOUD_ENABLED
-                        ? "Only emails in these domains may sign in through this provider."
-                        : "Only emails in these domains may sign in through this provider. Empty allows any."
+                        ? t("modals.provider.emailDomainsField.description")
+                        : t(
+                            "modals.provider.emailDomainsField.optionalDescription"
+                          )
                     }
                     withLabel
                   >
                     <TagListField
                       name="allowed_email_domains"
-                      placeholder="Add a domain (e.g. onyx.app)"
+                      placeholder={t(
+                        "modals.provider.emailDomainsField.placeholder"
+                      )}
                       transform={(value) => value.toLowerCase()}
                     />
                   </InputVertical>
 
+                  {NEXT_PUBLIC_CLOUD_ENABLED && (
+                    <SSODomainVerification
+                      domains={values.allowed_email_domains}
+                    />
+                  )}
+
                   {provider?.redirect_uri && (
                     <InputVertical
                       title={redirectLabel}
-                      description="Register this URL in your IdP as the callback."
+                      description={t(
+                        "modals.provider.redirectField.description"
+                      )}
                       withLabel
                     >
-                      <div
-                        className={cn(
-                          "flex items-start justify-between gap-2 rounded-12 border border-border-03 bg-background-neutral-02 p-3"
-                        )}
-                      >
-                        <Text font="secondary-body" color="text-04" as="p">
-                          {provider.redirect_uri}
-                        </Text>
-                        <Button
-                          icon={SvgCopy}
-                          prominence="tertiary"
-                          size="sm"
-                          tooltip={`Copy ${redirectLabel}`}
-                          onClick={() => {
-                            void copyRedirectUri(provider.redirect_uri);
-                          }}
-                        />
-                      </div>
+                      <Card border="solid" rounding={3}>
+                        <Section
+                          flexDirection="row"
+                          alignItems="center"
+                          justifyContent="between"
+                          height="fit"
+                          gap={2}
+                        >
+                          <div className="min-w-0 break-all">
+                            <Text font="main-ui-mono" color="text-04" as="span">
+                              {provider.redirect_uri}
+                            </Text>
+                          </div>
+                          <CopyButton
+                            getCopyText={() => provider.redirect_uri}
+                            size="sm"
+                            tooltip={t(
+                              "modals.provider.redirectField.copyTooltip",
+                              { label: redirectLabel }
+                            )}
+                          />
+                        </Section>
+                      </Card>
                     </InputVertical>
                   )}
                 </Modal.Body>
@@ -454,14 +508,16 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                     type="button"
                     onClick={onClose}
                   >
-                    Cancel
+                    {t("modals.provider.cancelButton.label")}
                   </Button>
                   <Button
                     type="submit"
                     disabled={isSubmitting || !isValid || !dirty}
                     icon={isSubmitting ? SvgSimpleLoader : undefined}
                   >
-                    {isEditing ? "Update" : "Create"}
+                    {isEditing
+                      ? t("modals.provider.submitButton.updateLabel")
+                      : t("modals.provider.submitButton.createLabel")}
                   </Button>
                 </Modal.Footer>
               </Form>

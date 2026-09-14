@@ -32,8 +32,7 @@ def _collect_with_timeout(
 
     def runner() -> None:
         try:
-            for item in gen:
-                items.append(item)
+            items.extend(gen)
         except BaseException as e:  # noqa: BLE001
             error.append(e)
 

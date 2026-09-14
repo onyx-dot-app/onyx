@@ -18,6 +18,7 @@ export function useAgents() {
     // No serverUrl → `getBaseUrl()` throws, so stay idle until connected.
     enabled: serverUrl !== null,
     queryFn: ({ signal }) => apiFetch<MinimalAgent[]>("/persona", { signal }),
+    refetchInterval: 60_000,
   });
   return { ...query, agents: query.data ?? [] };
 }

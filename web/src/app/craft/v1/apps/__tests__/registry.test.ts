@@ -28,6 +28,7 @@ function configuredApp(
     upstream_url_patterns: [],
     auth_template: {},
     organization_credentials: {},
+    credential_placeholder_keys: [],
     enabled: true,
     actions: [],
     associated_skills: [],

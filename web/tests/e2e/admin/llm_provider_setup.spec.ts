@@ -1,9 +1,10 @@
 import { expect, test } from "@playwright/test";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import type { Locator, Page } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
-const LLM_SETUP_URL = "/admin/configuration/language-models";
+const LLM_SETUP_URL = ADMIN_ROUTES.LLM_MODELS.path;
 const BASE_URL = process.env.BASE_URL || "http://localhost:3000";
 const PROVIDER_API_KEY =
   process.env.E2E_LLM_PROVIDER_API_KEY ||
@@ -120,7 +121,7 @@ async function createPublicProviderWithModels(
 
 async function navigateToAdminLlmPageFromChat(page: Page): Promise<void> {
   await page.goto(LLM_SETUP_URL);
-  await page.waitForURL("**/admin/configuration/language-models**");
+  await page.waitForURL(`**${ADMIN_ROUTES.LLM_MODELS.path}**`);
   await expect(page.getByLabel("admin-page-title")).toHaveText(
     /^Language Models/
   );
@@ -210,18 +211,13 @@ async function findProviderCard(
   page: Page,
   providerName: string
 ): Promise<Locator> {
-  return page
-    .locator("div.rounded-16")
-    .filter({ hasText: providerName })
-    .first();
+  // Exact, because the Edit and Delete buttons inside the card are labelled
+  // "Edit <name>" / "Delete <name>" and would match a substring.
+  return page.getByLabel(providerName, { exact: true }).first();
 }
 
 async function openOpenAiSetupModal(page: Page): Promise<Locator> {
-  const openAiCard = page
-    .locator("div.rounded-16")
-    .filter({ hasText: "OpenAI" })
-    .filter({ has: page.getByRole("button", { name: "Connect" }) })
-    .first();
+  const openAiCard = page.getByLabel(/^Add OpenAI/).first();
 
   await expect(openAiCard).toBeVisible({ timeout: 10000 });
   await openAiCard.getByRole("button", { name: "Connect" }).click();

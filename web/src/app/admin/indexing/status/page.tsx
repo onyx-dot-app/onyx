@@ -1,5 +1,7 @@
 "use client";
 
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
+import { useTranslations } from "next-intl";
 import { CCPairIndexingStatusTable } from "./CCPairIndexingStatusTable";
 import { SearchAndFilterControls } from "./SearchAndFilterControls";
 import { SettingsLayouts, useToastFromQuery } from "@opal/layouts";
@@ -22,6 +24,7 @@ import { IndexingStatusRequest } from "@/lib/types";
 const route = ADMIN_ROUTES.INDEXING_STATUS;
 
 function Main() {
+  const t = useTranslations("admin.indexing");
   const { vectorDbEnabled } = useSettings();
 
   // State for filter management
@@ -156,7 +159,7 @@ function Main() {
     return (
       <div className="text-error">
         {ccPairsIndexingStatusesError?.info?.detail ||
-          "Error loading indexing status."}
+          t("status.loadError.message")}
       </div>
     );
   }
@@ -188,11 +191,7 @@ function Main() {
       ) : !ccPairsIndexingStatuses || ccPairsIndexingStatuses.length === 0 ? (
         <div>
           <Spacer rem={3} />
-          <Text as="p">
-            {markdown(
-              "It looks like you don't have any connectors setup yet. Visit the [Add Connector](/admin/add-connector) page to get started!"
-            )}
-          </Text>
+          <Text as="p">{markdown(t("status.empty.message"))}</Text>
         </div>
       ) : (
         <CCPairIndexingStatusTable
@@ -208,9 +207,12 @@ function Main() {
 }
 
 export default function Status() {
+  const t = useTranslations("admin.indexing");
+  const adminRouteTitle = useAdminRouteTitle();
+
   useToastFromQuery({
     "connector-created": {
-      message: "Connector created successfully",
+      message: t("status.connectorCreated.toast"),
       type: "success",
     },
   });
@@ -219,9 +221,11 @@ export default function Status() {
     <SettingsLayouts.Root width="full">
       <SettingsLayouts.Header
         icon={route.icon}
-        title={route.title}
+        title={adminRouteTitle(route)}
         rightChildren={
-          <Button href="/admin/add-connector">Add Connector</Button>
+          <Button href="/admin/add-connector">
+            {t("status.addConnectorButton.label")}
+          </Button>
         }
         divider
       />

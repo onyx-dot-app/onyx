@@ -68,8 +68,7 @@ def _stream_fragments(
         for packet in maybe_emit_argument_delta(tc_map, delta, pl, parsers=parsers):
             obj = packet.obj
             assert isinstance(obj, ToolCallArgumentDelta)
-            for value in obj.argument_deltas.values():
-                emitted.append(value)
+            emitted.extend(obj.argument_deltas.values())
     return emitted
 
 

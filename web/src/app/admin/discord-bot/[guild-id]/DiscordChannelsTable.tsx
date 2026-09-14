@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import {
   Table,
   TableBody,
@@ -8,7 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Switch } from "@opal/components";
+import { InputSwitch } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { EmptyMessageCard } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
@@ -59,12 +60,14 @@ export function DiscordChannelsTable({
   onChannelUpdate,
   disabled = false,
 }: Props) {
+  const t = useTranslations("admin.discordBot");
+
   if (channels.length === 0) {
     return (
       <EmptyMessageCard
         sizePreset="main-ui"
-        title="No channels configured"
-        description="Run !sync-channels in Discord to add channels."
+        title={t("channels.empty.title")}
+        description={t("channels.empty.description")}
       />
     );
   }
@@ -73,11 +76,11 @@ export function DiscordChannelsTable({
     <Table>
       <TableHeader>
         <TableRow className="[&>th]:whitespace-nowrap">
-          <TableHead>Channel</TableHead>
-          <TableHead>Enabled</TableHead>
-          <TableHead>Require @mention</TableHead>
-          <TableHead>Thread Only Mode</TableHead>
-          <TableHead>Agent Override</TableHead>
+          <TableHead>{t("channels.table.channel.header")}</TableHead>
+          <TableHead>{t("channels.table.enabled.header")}</TableHead>
+          <TableHead>{t("channels.table.requireMention.header")}</TableHead>
+          <TableHead>{t("channels.table.threadOnly.header")}</TableHead>
+          <TableHead>{t("channels.table.agentOverride.header")}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -102,7 +105,7 @@ export function DiscordChannelsTable({
                 </Section>
               </TableCell>
               <TableCell>
-                <Switch
+                <InputSwitch
                   checked={channel.enabled}
                   onCheckedChange={(checked) =>
                     onChannelUpdate(channel.id, "enabled", checked)
@@ -111,7 +114,7 @@ export function DiscordChannelsTable({
                 />
               </TableCell>
               <TableCell>
-                <Switch
+                <InputSwitch
                   checked={channel.require_bot_invocation}
                   onCheckedChange={(checked) =>
                     onChannelUpdate(
@@ -125,7 +128,7 @@ export function DiscordChannelsTable({
               </TableCell>
               <TableCell>
                 {channel.channel_type !== "forum" && (
-                  <Switch
+                  <InputSwitch
                     checked={channel.thread_only_mode}
                     onCheckedChange={(checked) =>
                       onChannelUpdate(channel.id, "thread_only_mode", checked)

@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { SlackChannelConfigCreationForm } from "@/app/admin/bots/[bot-id]/channels/SlackChannelConfigCreationForm";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { SvgSimpleLoader } from "@opal/icons";
@@ -15,6 +16,7 @@ import type { StandardAnswerCategoryResponse } from "@/components/standardAnswer
 import { useRouter } from "next/navigation";
 
 function NewChannelConfigContent({ slackBotId }: { slackBotId: number }) {
+  const t = useTranslations("admin.slackBots");
   const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
 
   const {
@@ -46,10 +48,10 @@ function NewChannelConfigContent({ slackBotId }: { slackBotId: number }) {
   if (docSetsError || !documentSets) {
     return (
       <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch document sets - ${
-          docSetsError?.message ?? "unknown error"
-        }`}
+        errorTitle={t("error.generic.title")}
+        errorMsg={t("error.fetchDocumentSets.message", {
+          error: docSetsError?.message ?? t("error.unknown.message"),
+        })}
       />
     );
   }
@@ -57,10 +59,10 @@ function NewChannelConfigContent({ slackBotId }: { slackBotId: number }) {
   if (agentsError) {
     return (
       <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch agents - ${
-          agentsError?.message ?? "unknown error"
-        }`}
+        errorTitle={t("error.generic.title")}
+        errorMsg={t("error.fetchAgents.message", {
+          error: agentsError?.message ?? t("error.unknown.message"),
+        })}
       />
     );
   }
@@ -87,6 +89,7 @@ function NewChannelConfigContent({ slackBotId }: { slackBotId: number }) {
 }
 
 export default function Page(props: { params: Promise<{ "bot-id": string }> }) {
+  const t = useTranslations("admin.slackBots");
   const unwrappedParams = use(props.params);
   const router = useRouter();
 
@@ -109,7 +112,7 @@ export default function Page(props: { params: Promise<{ "bot-id": string }> }) {
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgSlack}
-        title="Configure OnyxBot for Slack Channel"
+        title={t("newChannel.header.title")}
         divider
         backButton
       />

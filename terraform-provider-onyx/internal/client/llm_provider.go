@@ -44,7 +44,7 @@ type LLMProviderUpsertRequest struct {
 	IsPublic            bool                       `json:"is_public"`
 	IsAutoMode          bool                       `json:"is_auto_mode"`
 	Groups              []int64                    `json:"groups"`
-	Personas            []int64                    `json:"personas"`
+	Agents              []int64                    `json:"personas"`
 	DeploymentName      *string                    `json:"deployment_name"`
 	APIKeyChanged       bool                       `json:"api_key_changed"`
 	CustomConfigChanged bool                       `json:"custom_config_changed"`
@@ -64,7 +64,7 @@ type LLMProviderView struct {
 	IsPublic            bool                     `json:"is_public"`
 	IsAutoMode          bool                     `json:"is_auto_mode"`
 	Groups              []int64                  `json:"groups"`
-	Personas            []int64                  `json:"personas"`
+	Agents              []int64                  `json:"personas"`
 	DeploymentName      *string                  `json:"deployment_name"`
 	ModelConfigurations []ModelConfigurationView `json:"model_configurations"`
 }
@@ -89,8 +89,8 @@ func (c *Client) UpsertLLMProvider(ctx context.Context, req LLMProviderUpsertReq
 	if req.Groups == nil {
 		req.Groups = []int64{}
 	}
-	if req.Personas == nil {
-		req.Personas = []int64{}
+	if req.Agents == nil {
+		req.Agents = []int64{}
 	}
 	if req.ModelConfigurations == nil {
 		req.ModelConfigurations = []ModelConfigurationUpsert{}

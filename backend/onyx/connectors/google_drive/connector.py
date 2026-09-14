@@ -411,10 +411,7 @@ class GoogleDriveConnector(
         parsed = urlparse(url)
         netloc = parsed.netloc.lower()
 
-        if not (
-            netloc.startswith("docs.google.com")
-            or netloc.startswith("drive.google.com")
-        ):
+        if not netloc.startswith(("docs.google.com", "drive.google.com")):
             return NormalizationResult(normalized_url=None, use_default=False)
 
         file_id = _extract_drive_file_id(parsed)
@@ -1438,12 +1435,13 @@ class GoogleDriveConnector(
                 start,
             )
             for file_or_token in _yield_from_drive(drive_id, resume_start):
-                if isinstance(file_or_token, str):
-                    checkpoint.completion_map[
-                        self.primary_admin_email
-                    ].next_page_token = file_or_token
-                    return  # done with the max num pages, return checkpoint
+                # Propagate page tokens so the caller records them and pauses at
+                # this stage. Consuming a token here looks like normal completion
+                # to the caller, which then advances the stage and drops the
+                # remaining pages of the drive.
                 yield file_or_token
+                if isinstance(file_or_token, str):
+                    return  # done with the max num pages, return checkpoint
             checkpoint.completion_map[self.primary_admin_email].next_page_token = None
 
         for drive_id in drive_ids_to_retrieve:
@@ -1457,13 +1455,22 @@ class GoogleDriveConnector(
                 drive_id,
                 self.primary_admin_email,
             )
+            # Record the stage and drive being listed before any file is
+            # yielded (as the service account path does), so a page token
+            # emitted before the first yielded file resumes this drive, not the
+            # previous one. Without the stage, the resume branch above is
+            # skipped and the token leaks into the first unretrieved drive's
+            # fresh listing.
+            checkpoint.completion_map[self.primary_admin_email].update(
+                stage=DriveRetrievalStage.SHARED_DRIVE_FILES,
+                completed_until=0,
+                current_folder_or_drive_id=drive_id,
+            )
             for file_or_token in _yield_from_drive(drive_id, start):
-                if isinstance(file_or_token, str):
-                    checkpoint.completion_map[
-                        self.primary_admin_email
-                    ].next_page_token = file_or_token
-                    return  # done with the max num pages, return checkpoint
+                # See the resume loop above: the caller records page tokens.
                 yield file_or_token
+                if isinstance(file_or_token, str):
+                    return  # done with the max num pages, return checkpoint
             checkpoint.completion_map[self.primary_admin_email].next_page_token = None
 
     def _oauth_retrieval_folders(
@@ -2096,14 +2103,18 @@ class GoogleDriveConnector(
             )
 
             # Build slim documents
-            for file in files_batch:
-                if doc := build_slim_document(
-                    self.creds,
-                    file.drive_file,
-                    permission_sync_context,
-                    retriever_email=file.user_email,
-                ):
-                    slim_batch.append(doc)
+            slim_batch.extend(
+                doc
+                for file in files_batch
+                if (
+                    doc := build_slim_document(
+                        self.creds,
+                        file.drive_file,
+                        permission_sync_context,
+                        retriever_email=file.user_email,
+                    )
+                )
+            )
 
             # Combine: hierarchy nodes first, then slim docs
             result: list[SlimDocument | HierarchyNode] = []

@@ -267,7 +267,7 @@ class SourceOperations(ABC):
                 )
             if not callable(member):
                 continue
-            spec = getattr(member, _SPEC_ATTR, None)
+            spec = getattr(member, _SPEC_ATTR, None)  # ods: ignore[getattr]
             if spec is None:
                 unstamped.append(name)
             elif spec.name != name:

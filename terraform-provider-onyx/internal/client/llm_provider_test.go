@@ -18,7 +18,7 @@ const llmProviderListJSON = `{
 		"is_public": true,
 		"is_auto_mode": false,
 		"groups": [],
-		"personas": [],
+		"personas": [8, 9],
 		"deployment_name": null,
 		"model_configurations": [{
 			"id": 11,
@@ -75,6 +75,7 @@ func TestUpsertLLMProviderCreate(t *testing.T) {
 	if _, isArray := body["groups"].([]any); !isArray {
 		t.Errorf("groups should serialize as [], got %v", body["groups"])
 	}
+	// The wire name is still "personas"; only the Terraform attribute is "agents".
 	if _, isArray := body["personas"].([]any); !isArray {
 		t.Errorf("personas should serialize as [], got %v", body["personas"])
 	}

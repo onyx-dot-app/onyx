@@ -29,7 +29,7 @@ from onyx.db.chat_search import search_chat_sessions
 from onyx.db.enums import IncognitoRecordMode
 from onyx.db.models import ChatSession, User, UserProject
 from onyx.server.features.projects.models import UserProjectSnapshot
-from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 
 
 @pytest.fixture
@@ -47,7 +47,7 @@ def owner(db_session: Session) -> Generator[User, None, None]:
     # Sessions before projects: chat_session.project_id references user_project.
     db_session.query(ChatSession).filter(ChatSession.user_id == user.id).delete()
     db_session.query(UserProject).filter(UserProject.user_id == user.id).delete()
-    db_session.delete(user)
+    delete_test_user(db_session, user)
     db_session.commit()
 
 

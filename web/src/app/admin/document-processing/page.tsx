@@ -1,0 +1,174 @@
+"use client";
+
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
+import { useState } from "react";
+import { useTranslations } from "next-intl";
+import CardSection from "@/components/admin/CardSection";
+import { Button } from "@opal/components";
+import { InputTypeIn } from "@opal/components";
+import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import { PageLoader } from "@opal/layouts";
+import { SettingsLayouts } from "@opal/layouts";
+import Text from "@/refresh-components/texts/Text";
+import { cn } from "@opal/utils";
+import { SvgLock } from "@opal/icons";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
+
+const route = ADMIN_ROUTES.DOCUMENT_PROCESSING;
+
+function Main() {
+  const t = useTranslations("admin.documentProcessing");
+  const {
+    data: isApiKeySet,
+    error,
+    mutate,
+    isLoading,
+  } = useSWR<{
+    unstructured_api_key: string | null;
+  }>(SWR_KEYS.unstructuredApiKeySet, (url: string) =>
+    fetch(url).then((res) => res.json())
+  );
+
+  const [apiKey, setApiKey] = useState("");
+
+  const handleSave = async () => {
+    try {
+      await fetch(
+        `/api/search-settings/upsert-unstructured-api-key?unstructured_api_key=${apiKey}`,
+        {
+          method: "PUT",
+        }
+      );
+    } catch (error) {
+      console.error("Failed to save API key:", error);
+    }
+    mutate();
+  };
+
+  const handleDelete = async () => {
+    try {
+      await fetch("/api/search-settings/delete-unstructured-api-key", {
+        method: "DELETE",
+      });
+      setApiKey("");
+    } catch (error) {
+      console.error("Failed to delete API key:", error);
+    }
+    mutate();
+  };
+
+  if (isLoading) {
+    return <PageLoader />;
+  }
+  return (
+    <div className="pb-36">
+      <div className="w-full max-w-2xl">
+        <CardSection className="flex flex-col gap-2">
+          <Text
+            as="p"
+            headingH3
+            text05
+            className="border-b border-border-01 pb-2"
+          >
+            {t("unstructured.title")}
+          </Text>
+
+          <div className="flex flex-col gap-2">
+            <Text as="p" mainContentBody text04 className="leading-relaxed">
+              {t("unstructured.description")}
+            </Text>
+            <Text as="p" mainContentMuted text03>
+              {t.rich("unstructured.note", {
+                label: (chunks) => (
+                  <span className="font-main-ui-action text-text-03">
+                    {chunks}
+                  </span>
+                ),
+              })}
+            </Text>
+            <Text as="p" mainContentBody text04 className="leading-relaxed">
+              {t.rich("unstructured.learnMore", {
+                link: (chunks) => (
+                  <a
+                    href="https://docs.unstructured.io/welcome"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-action-selection-05 underline-offset-4 hover:underline"
+                  >
+                    {chunks}
+                  </a>
+                ),
+              })}
+            </Text>
+            <div className="pt-1.5">
+              {isApiKeySet ? (
+                <div
+                  className={cn(
+                    "flex",
+                    "items-center",
+                    "gap-0.5",
+                    "rounded-08",
+                    "border",
+                    "border-border-01",
+                    "bg-background-neutral-01",
+                    "px-2",
+                    "py-1.5"
+                  )}
+                >
+                  <Text
+                    as="p"
+                    mainUiMuted
+                    text03
+                    className="flex-1 tracking-[0.3em] text-text-03"
+                  >
+                    ••••••••••••••••
+                  </Text>
+                  <SvgLock className="h-4 w-4 stroke-text-03" aria-hidden />
+                </div>
+              ) : (
+                <InputTypeIn
+                  placeholder={t("unstructured.apiKey.placeholder")}
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                />
+              )}
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
+              {isApiKeySet ? (
+                <>
+                  <Button variant="danger" onClick={handleDelete}>
+                    {t("unstructured.deleteButton.label")}
+                  </Button>
+                  <Text as="p" mainContentBody text04 className="sm:mt-0">
+                    {t("unstructured.deleteHint")}
+                  </Text>
+                </>
+              ) : (
+                <Button variant="action" onClick={handleSave}>
+                  {t("unstructured.saveButton.label")}
+                </Button>
+              )}
+            </div>
+          </div>
+        </CardSection>
+      </div>
+    </div>
+  );
+}
+
+export default function Page() {
+  const adminRouteTitle = useAdminRouteTitle();
+  return (
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header
+        icon={route.icon}
+        title={adminRouteTitle(route)}
+        divider
+      />
+      <SettingsLayouts.Body>
+        <Main />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
+  );
+}

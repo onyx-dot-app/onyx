@@ -54,7 +54,7 @@ _INITIAL_FILTER = re.compile(
     "["
     "\U0000fff0-\U0000ffff"  # Specials
     "\U0001f000-\U0001f9ff"  # Emoticons
-    "\U00002000-\U0000206f"  # General Punctuation
+    "\U0000200b-\U0000200f\U0000202a-\U0000202e\U00002060-\U0000206f"  # Format controls
     "\U00002190-\U000021ff"  # Arrows
     "\U00002700-\U000027bf"  # Dingbats
     "]+",

@@ -1,6 +1,10 @@
 // Always require withSentryConfig
 const { withSentryConfig } = require("@sentry/nextjs");
 const { PHASE_DEVELOPMENT_SERVER } = require("next/constants");
+const createNextIntlPlugin = require("next-intl/plugin");
+
+// Points next-intl at the request-scoped locale/message resolution.
+const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -133,6 +137,11 @@ const nextConfig = {
         permanent: true,
       },
       {
+        source: "/admin/craft/instructions",
+        destination: "/admin/craft/preferences",
+        permanent: true,
+      },
+      {
         source: "/admin/assistants/:path*",
         destination: "/admin/agents/:path*",
         permanent: true,
@@ -142,14 +151,97 @@ const nextConfig = {
         destination: "/ee/agents/:path*",
         permanent: true,
       },
+      // Next.js does not chain redirects, so these two point at the flattened
+      // paths directly rather than at their old /admin/configuration/ targets.
       {
         source: "/admin/configuration/search",
-        destination: "/admin/configuration/index-settings",
+        destination: "/admin/index-settings",
         permanent: true,
       },
       {
         source: "/admin/configuration/llm",
-        destination: "/admin/configuration/language-models",
+        destination: "/admin/language-models",
+        permanent: true,
+      },
+      // Legacy /admin/configuration/* → /admin/* redirects. The segment provided no additional value.
+      {
+        source: "/admin/configuration/chat-preferences",
+        destination: "/admin/chat-preferences",
+        permanent: true,
+      },
+      {
+        source: "/admin/configuration/code-interpreter",
+        destination: "/admin/code-interpreter",
+        permanent: true,
+      },
+      {
+        source: "/admin/configuration/document-processing",
+        destination: "/admin/document-processing",
+        permanent: true,
+      },
+      {
+        source: "/admin/configuration/image-generation",
+        destination: "/admin/image-generation",
+        permanent: true,
+      },
+      {
+        source: "/admin/configuration/index-settings",
+        destination: "/admin/index-settings",
+        permanent: true,
+      },
+      {
+        source: "/admin/configuration/language-models",
+        destination: "/admin/language-models",
+        permanent: true,
+      },
+      {
+        source: "/admin/configuration/voice",
+        destination: "/admin/voice",
+        permanent: true,
+      },
+      {
+        source: "/admin/configuration/web-search",
+        destination: "/admin/web-search",
+        permanent: true,
+      },
+      // Replaces the redirect page that used to live at
+      // /admin/configuration/craft, kept for /admin/craft/access bookmarks.
+      {
+        source: "/admin/configuration/craft",
+        destination: "/admin/craft/access",
+        permanent: true,
+      },
+      // Legacy /admin/actions/* → /admin/*. Only `mcp` and `open-api` held a
+      // real page; `actions`, `new`, `edit-mcp` and `edit/:toolId` were all
+      // redirect pages pointing at the MCP list, so they redirect there too.
+      {
+        source: "/admin/actions/mcp",
+        destination: "/admin/mcp-actions",
+        permanent: true,
+      },
+      {
+        source: "/admin/actions/open-api",
+        destination: "/admin/openapi-actions",
+        permanent: true,
+      },
+      {
+        source: "/admin/actions",
+        destination: "/admin/mcp-actions",
+        permanent: true,
+      },
+      {
+        source: "/admin/actions/new",
+        destination: "/admin/mcp-actions",
+        permanent: true,
+      },
+      {
+        source: "/admin/actions/edit-mcp",
+        destination: "/admin/mcp-actions",
+        permanent: true,
+      },
+      {
+        source: "/admin/actions/edit/:toolId",
+        destination: "/admin/mcp-actions",
         permanent: true,
       },
     ];
@@ -198,11 +290,14 @@ const sentryWebpackPluginOptions = {
 // validate React Compiler behavior in dev.
 module.exports = (phase) => {
   const isDevServer = phase === PHASE_DEVELOPMENT_SERVER;
-  return withSentryConfig(
-    {
-      ...nextConfig,
-      reactCompiler: !isDevServer || process.env.ENABLE_REACT_COMPILER === "1",
-    },
-    sentryWebpackPluginOptions
+  return withNextIntl(
+    withSentryConfig(
+      {
+        ...nextConfig,
+        reactCompiler:
+          !isDevServer || process.env.ENABLE_REACT_COMPILER === "1",
+      },
+      sentryWebpackPluginOptions
+    )
   );
 };

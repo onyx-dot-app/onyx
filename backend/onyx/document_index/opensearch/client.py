@@ -7,7 +7,6 @@ from contextlib import AbstractContextManager, nullcontext
 from http import HTTPStatus
 from typing import Any, Generic, TypeVar
 
-import boto3
 from opensearchpy import (
     NotFoundError,
     OpenSearch,
@@ -294,6 +293,8 @@ class OpenSearchClient(AbstractContextManager):
             # SigV4 signing for an AWS managed domain whose FGAC master is an
             # IAM ARN. Credentials come from the default boto3 chain (env, IRSA,
             # instance/task role); the signer refreshes them per request.
+            import boto3
+
             credentials = boto3.Session().get_credentials()
             if credentials is None:
                 raise ValueError(
@@ -398,22 +399,21 @@ class OpenSearchClient(AbstractContextManager):
             A list of IndexInfo objects for each index.
         """
         response = self._client.cat.indices(format="json")
-        indices: list[IndexInfo] = []
-        for raw_index_info in response:
-            indices.append(
-                IndexInfo(
-                    name=raw_index_info.get("index", ""),
-                    health=raw_index_info.get("health", ""),
-                    status=raw_index_info.get("status", ""),
-                    num_primary_shards=raw_index_info.get("pri", ""),
-                    num_replica_shards=raw_index_info.get("rep", ""),
-                    docs_count=raw_index_info.get("docs.count", ""),
-                    docs_deleted=raw_index_info.get("docs.deleted", ""),
-                    created_at=raw_index_info.get("creation.date.string", ""),
-                    total_size=raw_index_info.get("store.size", ""),
-                    primary_shards_size=raw_index_info.get("pri.store.size", ""),
-                )
+        indices: list[IndexInfo] = [
+            IndexInfo(
+                name=raw_index_info.get("index", ""),
+                health=raw_index_info.get("health", ""),
+                status=raw_index_info.get("status", ""),
+                num_primary_shards=raw_index_info.get("pri", ""),
+                num_replica_shards=raw_index_info.get("rep", ""),
+                docs_count=raw_index_info.get("docs.count", ""),
+                docs_deleted=raw_index_info.get("docs.deleted", ""),
+                created_at=raw_index_info.get("creation.date.string", ""),
+                total_size=raw_index_info.get("store.size", ""),
+                primary_shards_size=raw_index_info.get("pri.store.size", ""),
             )
+            for raw_index_info in response
+        ]
         return indices
 
     @log_function_time(print_only=True, debug_only=True, include_args=True)
@@ -1377,16 +1377,15 @@ class OpenSearchIndexClient(OpenSearchClient):
             len(document_chunk_ids),
             self._index_name,
         )
-        data = []
-        for document_chunk_id in document_chunk_ids:
-            data.append(
-                {
-                    "_index": self._index_name,
-                    "_id": document_chunk_id,
-                    "_op_type": "update",
-                    "doc": properties_to_update,
-                }
-            )
+        data = [
+            {
+                "_index": self._index_name,
+                "_id": document_chunk_id,
+                "_op_type": "update",
+                "doc": properties_to_update,
+            }
+            for document_chunk_id in document_chunk_ids
+        ]
         # max_retries is the number of times to retry a request if we get a 429.
         # We do not raise on error (the default behavior of ``bulk`` is to
         # raise) because we want to attempt to retry certain failed chunks in
@@ -1965,7 +1964,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         The type can be nested under root_cause, so match the stringified body.
         """
         return _SEARCH_CONTEXT_MISSING_ERROR_TYPE in str(
-            getattr(error, "info", "")
+            getattr(error, "info", "")  # ods: ignore[getattr]
         ) or _SEARCH_CONTEXT_MISSING_ERROR_TYPE in str(error)
 
     @log_function_time(print_only=True, debug_only=True)

@@ -13,6 +13,8 @@ import copy
 import re
 import threading
 import time
+from collections.abc import Sequence
+from enum import Enum
 from functools import lru_cache
 from typing import Any, cast
 
@@ -21,7 +23,9 @@ from onyx.configs.model_configs import (
     GEN_AI_MODEL_FALLBACK_MAX_TOKENS,
     GEN_AI_NUM_RESERVED_OUTPUT_TOKENS,
 )
+from onyx.llm.api_surfaces import OPENAI_COMPATIBLE_SURFACES, LlmApiSurface
 from onyx.llm.constants import BEDROCK_MODEL_TOKEN_LIMITS, LlmProviderNames
+from onyx.llm.models import ReasoningEffort
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -427,6 +431,13 @@ def openai_model_rejects_reasoning_effort(model_name: str) -> bool:
     return base_model_name.startswith(_OPENAI_MODELS_REJECTING_REASONING_EFFORT)
 
 
+# Providers that reach OpenAI models over OpenAI's own API shapes: a registry
+# model takes the responses bridge there, anything else chat completions.
+OPENAI_API_PROVIDERS = frozenset(
+    {LlmProviderNames.OPENAI, LlmProviderNames.LITELLM_PROXY, LlmProviderNames.AZURE}
+)
+
+
 def is_true_openai_model(model_provider: str, model_name: str) -> bool:
     """
     Determines if a model is a true OpenAI model or just using OpenAI-compatible API.
@@ -438,11 +449,7 @@ def is_true_openai_model(model_provider: str, model_name: str) -> bool:
     OpenAI models from OpenAI and Azure should use responses.
     """
 
-    if model_provider not in {
-        LlmProviderNames.OPENAI,
-        LlmProviderNames.LITELLM_PROXY,
-        LlmProviderNames.AZURE,
-    }:
+    if model_provider not in OPENAI_API_PROVIDERS:
         return False
 
     model_map = get_model_map()
@@ -475,3 +482,246 @@ def is_true_openai_model(model_provider: str, model_name: str) -> bool:
             model_name,
         )
         return False
+
+
+def is_openai_registry_model_name(model_name: str) -> bool:
+    """Name-only OpenAI-registry check, with any gateway vendor prefix removed.
+
+    Aggregators address models as "vendor/model" ("openai/gpt-5.1"), so the raw
+    name never matches the registry. Unlike `is_true_openai_model` this asks
+    only "whose model is this", not "do we reach it over OpenAI's own API" —
+    keep the two apart, since the latter also decides responses-API routing.
+    """
+    base_model_name = model_name.split("/")[-1]
+    if not base_model_name:
+        return False
+
+    try:
+        model_map = get_model_map()
+        if f"{LlmProviderNames.OPENAI}/{base_model_name}" in model_map:
+            return True
+        entry = model_map.get(base_model_name)
+        return bool(entry) and entry.get("litellm_provider") == LlmProviderNames.OPENAI
+    except Exception:
+        logger.exception("Failed to check %s against the OpenAI registry", model_name)
+        return False
+
+
+def openai_chat_variant_rejects_reasoning(model_name: str) -> bool:
+    """True for the GPT-5 "-chat" registry variants, which reject reasoning
+    params on every surface despite being reasoning models (an OpenAI bug).
+    Registry-gated so a name merely containing "-chat" doesn't false-positive."""
+    return "-chat" in model_name and is_openai_registry_model_name(model_name)
+
+
+# GPT-5.4+ refuse function tools over chat completions unless reasoning_effort
+# is explicitly "none", and omitting it fails the same way. gpt-5.2 and earlier
+# accept tools with reasoning. Version-gated so new releases need no code change.
+_OPENAI_CHAT_TOOLS_REQUIRE_REASONING_NONE_MIN_VERSION = (5, 4)
+
+# Tolerates vendor prefixes ("openai.gpt-5.6-sol") and alias suffixes
+# ("gpt-5.6-sol-01-ptu") so gateway and Azure deployment names match, while the
+# boundary keeps "chatgpt-4o-latest" out.
+_OPENAI_GPT_VERSION_PATTERN = re.compile(r"(?:^|[^a-z0-9])gpt-(\d+)(?:\.(\d+))?")
+
+
+def parse_openai_gpt_version(model_name: str) -> tuple[int, int] | None:
+    """(major, minor) from a GPT model name, minor 0 when absent and Azure's
+    dotless "gpt-35" read as (3, 5). None for any other name."""
+    match = _OPENAI_GPT_VERSION_PATTERN.search(model_name.lower())
+    if match is None:
+        return None
+    major, minor = match.group(1), match.group(2)
+    if minor is None and len(major) > 1:
+        return (int(major[0]), int(major[1:]))
+    return (int(major), int(minor or 0))
+
+
+def openai_chat_tools_require_reasoning_none(model_name: str) -> bool:
+    """True for gpt-5.4 and later, by name alone: the names are OpenAI's wherever
+    they're hosted, and a registry-unknown alias must still match or its tool
+    calls fail outright."""
+    version = parse_openai_gpt_version(model_name)
+    return (
+        version is not None
+        and version >= _OPENAI_CHAT_TOOLS_REQUIRE_REASONING_NONE_MIN_VERSION
+    )
+
+
+# ---------------------------------------------------------------------------
+# Reasoning effort
+# ---------------------------------------------------------------------------
+
+# Named tiers spanning Claude's naming schemes, including the Claude 5 line whose
+# version digit can precede or follow the tier ("claude-sonnet-5" vs
+# "claude-5-sonnet").
+_ANTHROPIC_MODEL_TIERS = ("opus", "sonnet", "haiku", "fable", "mythos")
+_ANTHROPIC_VERSION_PATTERN = r"\d+(?:[.-]\d+)?"
+
+# Claude Opus 4.7+ (and later releases by version) requires adaptive thinking
+# and rejects a non-default temperature with a 400. Version-gated, not listed,
+# so new releases need no code change. LiteLLM's drop_params can't help here.
+_ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION = (4, 7)
+
+# Extended thinking landed in Claude 3.7. Parsing the version off the name
+# keeps aliased deployments (gateways, custom model names) reasoning even when
+# the litellm registry doesn't recognize the string.
+_ANTHROPIC_THINKING_MIN_VERSION = (3, 7)
+
+
+def parse_anthropic_model_version(model_name: str) -> tuple[int, int] | None:
+    """Extract the (major, minor) version from a Claude model name.
+
+    Handles the naming variants that reach LiteLLM: tier-first
+    ("claude-opus-4-8"), version-first ("claude-4-8-opus"), dot-separated
+    ("claude-opus-4.8"), the named Claude 5 tiers ("claude-fable-5",
+    "claude-5-sonnet"), legacy names ("claude-3-5-sonnet-20241022"), and
+    provider-prefixed / date-snapshot forms. Returns None when the name is not a
+    Claude model or carries no parseable version.
+    """
+    name = model_name.lower()
+    if "claude" not in name:
+        return None
+    # Drop any provider prefix (e.g. "anthropic/", "bedrock/anthropic.").
+    name = name[name.index("claude") :]
+    # Drop date/snapshot suffixes ("@20260101", "-20241022") so their digits
+    # can't be mistaken for a version.
+    name = name.split("@")[0]
+    name = re.sub(r"\d{6,}", "", name)
+
+    tier = next((t for t in _ANTHROPIC_MODEL_TIERS if t in name), None)
+    if tier is not None:
+        # The version can sit on either side of the tier depending on scheme.
+        match = re.search(
+            rf"{tier}[.-]?({_ANTHROPIC_VERSION_PATTERN})", name
+        ) or re.search(rf"({_ANTHROPIC_VERSION_PATTERN})[.-]?{tier}", name)
+        version_str = match.group(1) if match else None
+    else:
+        match = re.search(_ANTHROPIC_VERSION_PATTERN, name)
+        version_str = match.group(0) if match else None
+
+    if not version_str:
+        return None
+    parts = re.split(r"[.-]", version_str)
+    major = int(parts[0])
+    minor = int(parts[1]) if len(parts) > 1 else 0
+    return (major, minor)
+
+
+def _anthropic_meets_version(model_name: str, min_version: tuple[int, int]) -> bool:
+    version = parse_anthropic_model_version(model_name)
+    return version is not None and version >= min_version
+
+
+def anthropic_uses_adaptive_thinking(model_name: str) -> bool:
+    return _anthropic_meets_version(
+        model_name, _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION
+    )
+
+
+def anthropic_supports_thinking(model_name: str) -> bool:
+    return _anthropic_meets_version(model_name, _ANTHROPIC_THINKING_MIN_VERSION)
+
+
+def anthropic_omits_sampling_params(model_name: str) -> bool:
+    return _anthropic_meets_version(
+        model_name, _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION
+    )
+
+
+def model_identity_names(model_name: str, deployment_name: str | None) -> list[str]:
+    """Every string that could carry a model's identity: model_name, plus a
+    custom provider's deployment alias when set (e.g. Azure AI Foundry, where
+    the alias is the string actually sent to LiteLLM)."""
+    return [name for name in (model_name, deployment_name) if name]
+
+
+class ReasoningParamStyle(str, Enum):
+    """The shape of the reasoning parameters a model accepts."""
+
+    # reasoning={"effort": ..., "summary": "auto"} — OpenAI's own wire format,
+    # and the one OpenAI-shaped gateways translate from.
+    OPENAI = "openai"
+    # thinking={"type": "adaptive"} + output_config={"effort": ...}
+    ANTHROPIC_ADAPTIVE = "anthropic_adaptive"
+    # thinking={"type": "enabled", "budget_tokens": ...}
+    ANTHROPIC_BUDGET = "anthropic_budget"
+    # reasoning_effort=..., mapped per provider by LiteLLM.
+    LITELLM_EFFORT = "litellm_effort"
+
+
+def resolve_reasoning_param_style(
+    model_provider: str,
+    model_names: Sequence[str],
+    api_surface: LlmApiSurface | None,
+) -> ReasoningParamStyle:
+    """Pick the reasoning wire format for a model.
+
+    Custom providers (e.g. Azure AI Foundry) may carry the model identity only
+    in the deployment alias, so callers pass every name that could identify the
+    model.
+    """
+    openai_compatible_surface = api_surface in OPENAI_COMPATIBLE_SURFACES
+    is_claude_model = any("claude" in name.lower() for name in model_names)
+
+    # An OpenAI model reached over OpenAI's own API, and one reached through a
+    # gateway that speaks OpenAI, take the same parameters. So does Claude
+    # behind such a gateway: the format follows the surface, not the vendor.
+    # LiteLLM drops thinking/output_config as unsupported on an openai surface,
+    # so a gateway only ever sees reasoning.effort — it translates from there.
+    if any(is_true_openai_model(model_provider, name) for name in model_names):
+        return ReasoningParamStyle.OPENAI
+    if openai_compatible_surface and (
+        is_claude_model
+        or any(is_openai_registry_model_name(name) for name in model_names)
+    ):
+        return ReasoningParamStyle.OPENAI
+
+    if is_claude_model:
+        if any(anthropic_uses_adaptive_thinking(name) for name in model_names):
+            return ReasoningParamStyle.ANTHROPIC_ADAPTIVE
+        return ReasoningParamStyle.ANTHROPIC_BUDGET
+
+    return ReasoningParamStyle.LITELLM_EFFORT
+
+
+# Styles that carry XHIGH to the provider. Elsewhere it's indistinct from HIGH:
+# LiteLLM's per-provider mappings reject or silently drop it, and Anthropic's
+# legacy budget for XHIGH equals HIGH's.
+_XHIGH_REASONING_STYLES = frozenset(
+    {ReasoningParamStyle.OPENAI, ReasoningParamStyle.ANTHROPIC_ADAPTIVE}
+)
+
+
+def supported_reasoning_efforts(
+    model_provider: str,
+    model_names: Sequence[str],
+    api_surface: LlmApiSurface | None,
+) -> list[ReasoningEffort]:
+    """The effort levels a reasoning model tells apart, in ascending order.
+
+    Callers gate on their own reasoning-support answer first; this only narrows
+    the range. An empty list means the model reasons but takes no effort
+    parameter at all.
+
+    Both this function and the chat request builder (`onyx.llm.multi_llm`)
+    derive their answer from `resolve_reasoning_param_style`, so a greyed-out
+    slider stop and a dropped request parameter should never disagree.
+    """
+    if any(
+        openai_model_rejects_reasoning_effort(name)
+        or openai_chat_variant_rejects_reasoning(name)
+        for name in model_names
+    ):
+        return []
+
+    style = resolve_reasoning_param_style(model_provider, model_names, api_surface)
+    efforts = [
+        ReasoningEffort.OFF,
+        ReasoningEffort.LOW,
+        ReasoningEffort.MEDIUM,
+        ReasoningEffort.HIGH,
+    ]
+    if style in _XHIGH_REASONING_STYLES:
+        efforts.append(ReasoningEffort.XHIGH)
+    return efforts

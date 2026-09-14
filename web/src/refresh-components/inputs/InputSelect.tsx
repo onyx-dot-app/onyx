@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useTranslations } from "next-intl";
 import * as SelectPrimitive from "@radix-ui/react-select";
 import { cn } from "@opal/utils";
 import LineItem, { LineItemProps } from "@/refresh-components/buttons/LineItem";
@@ -200,6 +201,7 @@ function InputSelectTrigger({
   ref,
   ...props
 }: InputSelectTriggerProps) {
+  const t = useTranslations("common.inputSelect");
   const { variant, selectedItemDisplay } = useInputSelectContext();
 
   let displayContent: React.ReactNode;
@@ -215,7 +217,7 @@ function InputSelectTrigger({
       )
     ) : (
       <Text as="p" text03>
-        Select an option
+        {t("placeholder.fallback")}
       </Text>
     );
   } else {
@@ -364,7 +366,7 @@ function InputSelectItem({
     <SelectPrimitive.Item
       ref={ref}
       value={value}
-      className="outline-hidden focus:outline-hidden rounded-08 data-highlighted:bg-background-tint-02"
+      className="cursor-pointer select-none outline-hidden focus:outline-hidden rounded-08 data-highlighted:bg-background-tint-02"
       onSelect={onClick}
     >
       {/* Hidden ItemText for Radix to track selection */}

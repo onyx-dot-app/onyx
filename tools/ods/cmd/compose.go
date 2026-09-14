@@ -40,7 +40,7 @@ Enterprise Edition features are enabled by default for development.
 
 Available profiles:
   dev          Use dev configuration (exposes service ports for development)
-  multitenant  Use multitenant configuration
+  multitenant  Dev configuration plus multi-tenant (Onyx Cloud) mode
 
 Examples:
   # Start containers with default configuration (EE enabled)
@@ -49,10 +49,12 @@ Examples:
   # Start containers with dev configuration (exposes service ports)
   ods compose dev
 
-  # Start containers with multitenant configuration
+  # Start containers in multi-tenant mode (dev configuration plus the
+  # docker-compose.multitenant.yml overlay)
   ods compose multitenant
 
-  # Start containers without Enterprise Edition features
+  # Start containers without Enterprise Edition features (not available with
+  # the multitenant profile, which requires them)
   ods compose --no-ee
 
   # Stop running containers
@@ -98,11 +100,22 @@ func validateProfile(profile string) {
 	}
 }
 
+// checkComposeOptions rejects flag combinations the compose files cannot
+// honor. The multitenant overlay pins Enterprise Edition features on because
+// tenant provisioning is EE code, so --no-ee would be silently ignored.
+func checkComposeOptions(profile string, opts *ComposeOptions) error {
+	if profile == "multitenant" && opts.NoEE {
+		return fmt.Errorf("--no-ee cannot be used with the multitenant profile: multi-tenant mode requires Enterprise Edition features")
+	}
+	return nil
+}
+
 // composeFiles returns the list of docker compose files for the given profile.
+// "multitenant" stacks a small overlay on the dev configuration.
 func composeFiles(profile string) []string {
 	switch profile {
 	case "multitenant":
-		return []string{"docker-compose.multitenant-dev.yml"}
+		return []string{"docker-compose.yml", "docker-compose.dev.yml", "docker-compose.multitenant.yml"}
 	case "dev":
 		return []string{"docker-compose.yml", "docker-compose.dev.yml"}
 	default:
@@ -115,7 +128,7 @@ func composeFiles(profile string) []string {
 // activated explicitly for commands like "down" that don't name services.
 func composeProfiles(profile string) []string {
 	switch profile {
-	case "dev":
+	case "dev", "multitenant":
 		return []string{"s3-filestore"}
 	default:
 		return nil
@@ -259,6 +272,9 @@ func setEnvValue(key, value string) {
 // containers. EE licensing env vars are also written on startup.
 func runCompose(profile string, opts *ComposeOptions) {
 	validateProfile(profile)
+	if err := checkComposeOptions(profile, opts); err != nil {
+		log.Fatal(err)
+	}
 
 	if !opts.Down {
 		eeValue := "true"

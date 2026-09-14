@@ -1,6 +1,14 @@
 # Docker Compose Override for Development/Testing
 # This file exposes service ports for development and testing purposes.
 #
+# It also shortens the time `up --wait` needs to notice a service is healthy.
+# The base healthchecks poll on a 10-30s interval, so the first probe lands long
+# after the service is actually ready. `start_interval` polls every 1-5s until
+# the first success, then docker reverts to the base `interval`. This keeps the
+# base compose files compatible with older docker; `start_interval` needs
+# Compose 2.20.2+ and Docker Engine 25.0+, and older versions fail hard rather
+# than ignore it.
+#
 # Usage:
 #   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait
 #
@@ -26,10 +34,18 @@ services:
         limits:
           cpus: "${API_SERVER_CPU_LIMIT:-0}"
           memory: "${API_SERVER_MEM_LIMIT:-0}"
+    healthcheck:
+      # 2s rather than 1s: the probe starts a python interpreter, and it runs
+      # against a container that may still be applying alembic migrations.
+      start_interval: 2s
 
   background:
     build:
       target: dev
+
+  web_server:
+    healthcheck:
+      start_interval: 1s
 
   # Uncomment the block below to enable the MCP server for Onyx.
   # mcp_server:
@@ -39,6 +55,11 @@ services:
   relational_db:
     ports:
       - "${POSTGRES_HOST_PORT:-5432}:5432"
+    healthcheck:
+      # The base healthcheck has no start_period, so one is needed here for
+      # start_interval to apply at all.
+      start_period: 30s
+      start_interval: 1s
 
   opensearch:
     ports:
@@ -52,6 +73,20 @@ services:
   inference_model_server:
     ports:
       - "${MODEL_SERVER_HOST_PORT:-9000}:9000"
+    healthcheck:
+      # 5s: on a cold cache this polls for as long as the HuggingFace download
+      # takes, so keep the probe rate low.
+      start_interval: 5s
+
+  indexing_model_server:
+    healthcheck:
+      start_interval: 5s
+
+  nginx:
+    healthcheck:
+      # nginx only starts once api_server and web_server report healthy, so a
+      # full 30s interval here lands at the very end of the startup chain.
+      start_interval: 1s
 
   cache:
     ports:
@@ -63,6 +98,11 @@ services:
     ports:
       - "${MINIO_API_HOST_PORT:-9004}:9000"
       - "${MINIO_CONSOLE_HOST_PORT:-9005}:9001"
+    healthcheck:
+      # The base healthcheck has no start_period, so one is needed here for
+      # start_interval to apply at all.
+      start_period: 30s
+      start_interval: 1s
 
   code-interpreter:
     ports:

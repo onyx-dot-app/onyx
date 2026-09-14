@@ -171,14 +171,13 @@ class QuestionAnswerPairSnapshot(BaseModel):
         cls,
         chat_session_snapshot: ChatSessionSnapshot,
     ) -> list["QuestionAnswerPairSnapshot"]:
-        message_pairs: list[tuple[MessageSnapshot, MessageSnapshot]] = []
-        for ind in range(1, len(chat_session_snapshot.messages), 2):
-            message_pairs.append(
-                (
-                    chat_session_snapshot.messages[ind - 1],
-                    chat_session_snapshot.messages[ind],
-                )
+        message_pairs: list[tuple[MessageSnapshot, MessageSnapshot]] = [
+            (
+                chat_session_snapshot.messages[ind - 1],
+                chat_session_snapshot.messages[ind],
             )
+            for ind in range(1, len(chat_session_snapshot.messages), 2)
+        ]
 
         return [
             cls(

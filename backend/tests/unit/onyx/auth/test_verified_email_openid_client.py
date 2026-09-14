@@ -6,12 +6,15 @@ not own the configured endpoint."""
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
 from httpx_oauth.exceptions import GetIdEmailError
+from httpx_oauth.oauth2 import GetAccessTokenError
 
 from onyx.auth.oidc_client import (
     OpenIDConfigurationIssuerMismatch,
     VerifiedEmailOpenID,
+    log_token_exchange_failure,
     validate_issuer_owns_config_url,
 )
 
@@ -261,3 +264,49 @@ def test_encoded_dot_segments_rejected(encoded: str) -> None:
             "https://idp.example.com/oidc",
             f"https://idp.example.com/oidc/{encoded}/evil/.well-known/openid-configuration",
         )
+
+
+def _exchange_log_detail(error: GetAccessTokenError) -> str:
+    with patch("onyx.auth.oidc_client.logger") as mock_logger:
+        log_token_exchange_failure(error)
+    ((_, detail), _kwargs) = mock_logger.warning.call_args
+    return str(detail)
+
+
+def test_exchange_failure_logs_error_body_on_one_line() -> None:
+    error = GetAccessTokenError(
+        "Client error '400 Bad Request' for url 'https://idp/token'\n"
+        "For more information check: https://developer.mozilla.org",
+        httpx.Response(400, text='{"error":"invalid_grant"}'),
+    )
+    detail = _exchange_log_detail(error)
+    assert "invalid_grant" in detail
+    assert "400 Bad Request" in detail
+    assert "\n" not in detail
+
+
+def test_exchange_failure_never_logs_non_error_body() -> None:
+    # A malformed 2xx raises the same error type carrying the token payload.
+    error = GetAccessTokenError(
+        "Invalid JSON content",
+        httpx.Response(200, text='{"access_token":"live-token"}'),
+    )
+    detail = _exchange_log_detail(error)
+    assert "live-token" not in detail
+    assert "Invalid JSON content" in detail
+
+
+def test_exchange_failure_summarizes_non_oauth_error_body() -> None:
+    # A proxy's HTML error page may reflect request material, so never log it raw.
+    error = GetAccessTokenError(
+        "Server error '502 Bad Gateway' for url 'https://idp/token'",
+        httpx.Response(502, text="<html>secret-echo</html>"),
+    )
+    detail = _exchange_log_detail(error)
+    assert "secret-echo" not in detail
+    assert "unparseable body" in detail
+
+
+def test_exchange_failure_without_response_logs_message_only() -> None:
+    detail = _exchange_log_detail(GetAccessTokenError("connection failed"))
+    assert detail == "connection failed"

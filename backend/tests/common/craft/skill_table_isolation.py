@@ -51,7 +51,7 @@ def snapshot_skill_tables(
     for model in _SKILL_ISOLATION_MODELS:
         keys = _column_keys(model)
         snapshot[model] = [
-            {key: getattr(row, key) for key in keys}
+            {key: getattr(row, key) for key in keys}  # ods: ignore[getattr]
             for row in session.execute(select(model)).scalars().all()
         ]
     return snapshot
@@ -65,7 +65,10 @@ def restore_skill_tables(
         pk_keys = _pk_keys(model)
         baseline_pks = {tuple(row[key] for key in pk_keys) for row in snapshot[model]}
         for row in session.execute(select(model)).scalars().all():
-            if tuple(getattr(row, key) for key in pk_keys) not in baseline_pks:
+            if (
+                tuple(getattr(row, key) for key in pk_keys)  # ods: ignore[getattr]
+                not in baseline_pks
+            ):
                 session.delete(row)
         session.flush()
 

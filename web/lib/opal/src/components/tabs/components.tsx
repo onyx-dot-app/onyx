@@ -10,7 +10,10 @@ import {
   type WithoutStyles,
 } from "@opal/types";
 import { spacingToRem } from "@opal/shared";
-import { SvgChevronLeft, SvgChevronRight } from "@opal/icons";
+// The scroll arrows are physical controls, so they use the raw chevrons
+// instead of the barrel's RTL-mirrored wrappers.
+import SvgChevronLeft from "@opal/icons/chevron-left";
+import SvgChevronRight from "@opal/icons/chevron-right";
 import { Tooltip, Text, Button } from "@opal/components";
 import {
   TabsContext,
@@ -18,6 +21,7 @@ import {
   usePillIndicator,
   useHorizontalScroll,
 } from "@opal/components/tabs/hooks";
+import { useOpalStrings } from "@opal/strings";
 
 /* =============================================================================
    TABS ROOT
@@ -70,6 +74,7 @@ function TabsList({
   const scrollArrowsRef = useRef<HTMLDivElement>(null);
   const rightChildrenRef = useRef<HTMLDivElement>(null);
   const [rightOffset, setRightOffset] = useState(0);
+  const strings = useOpalStrings();
   const { variant } = useTabsContext() ?? { variant: "contained" as const };
   const isPill = variant === "pill" || variant === "underline";
 
@@ -147,7 +152,7 @@ function TabsList({
       {showScrollArrows && (
         <div
           ref={scrollArrowsRef}
-          className="flex items-center gap-1 pl-2 shrink-0"
+          className="flex items-center gap-1 ps-2 shrink-0"
         >
           <Button
             disabled={!canScrollLeft}
@@ -155,7 +160,7 @@ function TabsList({
             size="sm"
             icon={SvgChevronLeft}
             onClick={handleScrollLeft}
-            tooltip="Scroll tabs left"
+            tooltip={strings.scrollTabsLeft}
           />
           <Button
             disabled={!canScrollRight}
@@ -163,13 +168,13 @@ function TabsList({
             size="sm"
             icon={SvgChevronRight}
             onClick={handleScrollRight}
-            tooltip="Scroll tabs right"
+            tooltip={strings.scrollTabsRight}
           />
         </div>
       )}
 
       {isPill && rightChildren && (
-        <div ref={rightChildrenRef} className="ml-auto shrink-0">
+        <div ref={rightChildrenRef} className="ms-auto shrink-0">
           {rightChildren}
         </div>
       )}
@@ -179,7 +184,7 @@ function TabsList({
           {variant !== "underline" && (
             <div
               className="opal-tabs-pill-baseline"
-              style={{ right: rightOffset }}
+              style={{ insetInlineEnd: rightOffset }}
             />
           )}
           <div
@@ -225,6 +230,7 @@ function TabsTrigger({
   ...props
 }: TabsTriggerProps) {
   const { variant } = useTabsContext() ?? { variant: "contained" as const };
+  const strings = useOpalStrings();
 
   const inner = (
     <>
@@ -242,8 +248,8 @@ function TabsTrigger({
       )}
       {isLoading && (
         <span
-          className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin ml-1"
-          aria-label="Loading"
+          className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin ms-1"
+          aria-label={strings.loading}
         />
       )}
     </>
@@ -294,7 +300,7 @@ interface TabsContentProps extends WithoutStyles<
 
 function TabsContent({ padding, children, ...props }: TabsContentProps) {
   return (
-    <TabsPrimitive.Content {...props} className="w-full pt-4">
+    <TabsPrimitive.Content {...props} className="w-full">
       {padding ? (
         <div style={{ padding: spacingToRem(padding) }}>{children}</div>
       ) : (

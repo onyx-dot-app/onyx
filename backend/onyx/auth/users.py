@@ -1,4 +1,4 @@
-import base64
+import contextvars
 import hashlib
 import os
 import random
@@ -57,7 +57,6 @@ from httpx_oauth.exceptions import GetIdEmailError
 from httpx_oauth.integrations.fastapi import OAuth2AuthorizeCallback
 from httpx_oauth.oauth2 import BaseOAuth2, GetAccessTokenError, OAuth2Token
 from pydantic import BaseModel
-from sqlalchemy import nulls_last, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
@@ -77,8 +76,11 @@ from onyx.auth.mobile_sso.sso_completion import (
     complete_mobile_sso,
     is_mobile_sso,
 )
+from onyx.auth.oidc_client import log_token_exchange_failure
 from onyx.auth.pat import get_hashed_pat_from_request
-from onyx.auth.schemas import AuthBackend, UserCreate, UserRole
+from onyx.auth.permissions import has_global_permission
+from onyx.auth.pkce import generate_pkce_pair
+from onyx.auth.schemas import AuthBackend, UserCreate
 from onyx.auth.session_tokens import (
     SESSION_TOKEN_GRACE_PERIOD_SECONDS,
     SessionRejection,
@@ -98,7 +100,6 @@ from onyx.configs.app_configs import (
     DEV_MODE,
     EMAIL_CONFIGURED,
     INTEGRATION_TESTS_MODE,
-    JWT_PUBLIC_KEY_URL,
     REDIS_AUTH_KEY_PREFIX,
     REQUIRE_EMAIL_VERIFICATION,
     SESSION_EXPIRE_TIME_SECONDS,
@@ -119,7 +120,6 @@ from onyx.configs.constants import (
 )
 from onyx.db.api_key import fetch_api_key_auth_result
 from onyx.db.auth import (
-    SQLAlchemyUserAdminDB,
     get_access_token_db,
     get_default_admin_user_emails,
     get_user_count,
@@ -134,13 +134,16 @@ from onyx.db.engine.sql_engine import (
     get_session_with_tenant,
 )
 from onyx.db.enums import AccountType, PatType, Permission
-from onyx.db.models import AccessToken, OAuthAccount, Persona, User
+from onyx.db.models import AccessToken, OAuthAccount, User
 from onyx.db.pat import resolve_pat
+from onyx.db.pinned_personas import seed_pinned_personas_from_featured
 from onyx.db.users import (
     assign_user_to_default_groups__no_commit,
+    fetch_user_by_id,
     get_user_by_email,
     get_user_by_oauth_account,
     is_limited_user,
+    promote_placeholder_to_web_login__no_commit,
     reconcile_user_email__no_commit,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -185,7 +188,7 @@ REGISTER_INVITE_ONLY_CODE = "REGISTER_INVITE_ONLY"
 
 
 def is_user_admin(user: User) -> bool:
-    return user.role == UserRole.ADMIN
+    return has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS)
 
 
 def verify_auth_setting() -> None:
@@ -525,6 +528,47 @@ def _invalidate_license_cache_after_seat_change() -> None:
     )()
 
 
+def _upgrade_placeholder_to_web_login__no_commit(
+    user_id: uuid.UUID, is_verified_by_default: bool, db_session: Session
+) -> bool:
+    """Promote a placeholder row (EXT_PERM_USER, BOT) to a real web login.
+
+    Does NOT commit. Must run on the session that already holds the ``"user"``
+    row lock from ``reconcile_user_email__no_commit``; a second connection
+    would wait on that lock until the callback returns, which it never does.
+
+    Locks the row again rather than trusting that one: an email change commits
+    the reconcile before this runs, which drops it. Re-locking on the same
+    connection is a no-op when it is still held, and serializes concurrent
+    first logins when it is not.
+
+    Returns whether the upgrade consumed a seat.
+    """
+    user = fetch_user_by_id(db_session, user_id, for_update=True)
+    if user is None:
+        return False
+
+    # The caller decided to promote from a read taken before this lock. Confirm
+    # the row is still a placeholder now that it is held: a concurrent login may
+    # have promoted it already, and an admin may have since deactivated the
+    # resulting account. Promoting again would reactivate a disabled account and
+    # re-check a seat that is already taken.
+    if user.account_type.is_web_login():
+        return False
+
+    # The row is active once this returns: it already was, or the promotion
+    # below reactivates it.
+    seat_added = False
+    if _upgrade_will_add_seat(user, will_become_active=True):
+        enforce_seat_limit_locked(db_session, seats_needed=1)
+        seat_added = True
+
+    promote_placeholder_to_web_login__no_commit(
+        db_session, user, is_verified=is_verified_by_default
+    )
+    return seat_added
+
+
 async def resolve_tenant_for_user(email: str, request: Request | None = None) -> str:
     """Workspace to bind a user to. An explicit override wins, since an SSO login
     knows its workspace before the user row exists."""
@@ -539,23 +583,28 @@ async def resolve_tenant_for_user(email: str, request: Request | None = None) ->
     )(email=email, request=request)
 
 
-@asynccontextmanager
-async def _tenant_session_with_context(
-    tenant_id: str,
-) -> AsyncGenerator[AsyncSession, None]:
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
-    try:
-        async with get_async_session_context_manager(tenant_id) as db_session:
-            yield db_session
-    finally:
-        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
-
-
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     reset_password_token_secret = USER_AUTH_SECRET
     verification_token_secret = USER_AUTH_SECRET
     verification_token_lifetime_seconds = AUTH_COOKIE_EXPIRE_TIME_SECONDS
     user_db: SQLAlchemyUserDatabase[User, uuid.UUID]
+
+    @asynccontextmanager
+    async def _tenant_session_with_bound_user_db(
+        self, tenant_id: str
+    ) -> AsyncGenerator[AsyncSession, None]:
+        """Run tenant work on one AsyncSession; user_db writes use that connection."""
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+        previous_user_db = self.user_db
+        try:
+            async with get_async_session_context_manager(tenant_id) as db_session:
+                self.user_db = SQLAlchemyUserDatabase[User, uuid.UUID](
+                    db_session, User, OAuthAccount
+                )
+                yield db_session
+        finally:
+            self.user_db = previous_user_db
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
     async def get_by_email(self, user_email: str) -> User:
         tenant_id = fetch_ee_implementation_or_noop(
@@ -563,7 +612,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         )(user_email)
         async with get_async_session_context_manager(tenant_id) as db_session:
             if MULTI_TENANT:
-                tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](
+                tenant_user_db = SQLAlchemyUserDatabase[User, uuid.UUID](
                     db_session, User, OAuthAccount
                 )
                 user = await tenant_user_db.get_by_email(user_email)
@@ -612,7 +661,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         contextvar_token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
         try:
             async with get_async_session_context_manager(tenant_id) as db_session:
-                tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](
+                tenant_user_db = SQLAlchemyUserDatabase[User, uuid.UUID](
                     db_session, User, OAuthAccount
                 )
 
@@ -690,7 +739,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             # Get captcha token from request body or headers
             captcha_token = None
             if hasattr(user_create, "captcha_token"):
-                captcha_token = getattr(user_create, "captcha_token", None)
+                captcha_token = getattr(  # ods: ignore[getattr]
+                    user_create, "captcha_token", None
+                )
 
             # Also check headers as a fallback
             if not captcha_token:
@@ -739,22 +790,16 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     # Single-tenant: the gate self-skips when invite-only is off
                     verify_email_is_invited(user_create.email)
                 if MULTI_TENANT:
-                    tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](
+                    tenant_user_db = SQLAlchemyUserDatabase[User, uuid.UUID](
                         db_session, User, OAuthAccount
                     )
                     self.user_db = tenant_user_db
 
-                if hasattr(user_create, "role"):
-                    user_create.role = UserRole.BASIC  # ty: ignore[invalid-assignment]
-
-                    user_count = await get_user_count()
-                    if (
-                        user_count == 0
-                        or user_create.email in get_default_admin_user_emails()
-                    ):
-                        user_create.role = (  # ty: ignore[invalid-assignment]
-                            UserRole.ADMIN
-                        )
+                user_count = await get_user_count()
+                is_admin = (
+                    user_count == 0
+                    or user_create.email in get_default_admin_user_emails()
+                )
 
                 # Lock + check on the same session that does the insert.
                 existing = await self.user_db.session.run_sync(
@@ -800,7 +845,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     # object triggers a sync lazy-load which raises MissingGreenlet
                     # in this async context.
                     user_id = user.id
-                    self._upgrade_user_to_standard__sync(user_id, user_create)
+                    self._upgrade_user_to_standard__sync(
+                        user_id, user_create, is_admin, safe=safe
+                    )
                     # Expire so the async session re-fetches the row updated by
                     # the sync session above.
                     self.user_db.session.expire(user)
@@ -830,7 +877,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     # object triggers a sync lazy-load which raises MissingGreenlet
                     # in this async context.
                     user_id = user.id
-                    self._upgrade_user_to_standard__sync(user_id, user_create)
+                    self._upgrade_user_to_standard__sync(
+                        user_id, user_create, is_admin, safe=safe
+                    )
                     # Expire so the async session re-fetches the row updated by
                     # the sync session above.
                     self.user_db.session.expire(user)
@@ -838,51 +887,29 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         user_id
                     )
                 if user_created:
-                    await self._assign_default_pinned_assistants(user, db_session)
+                    await seed_pinned_personas_from_featured(
+                        db_session=db_session, user=user
+                    )
                 remove_user_from_invited_users(user_create.email)
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
         return user
 
-    async def _assign_default_pinned_assistants(
-        self, user: User, db_session: AsyncSession
-    ) -> None:
-        if user.pinned_assistants is not None:
-            return
-
-        result = await db_session.execute(
-            select(Persona.id)
-            .where(
-                Persona.is_featured.is_(True),
-                Persona.is_public.is_(True),
-                Persona.is_listed.is_(True),
-                Persona.deleted.is_(False),
-            )
-            .order_by(
-                nulls_last(Persona.display_priority.asc()),
-                Persona.id.asc(),
-            )
-        )
-        default_persona_ids = list(result.scalars().all())
-        if not default_persona_ids:
-            return
-
-        await self.user_db.update(
-            user,
-            {"pinned_assistants": default_persona_ids},
-        )
-        user.pinned_assistants = default_persona_ids
-
     def _upgrade_user_to_standard__sync(
         self,
         user_id: uuid.UUID,
         user_create: UserCreate,
+        is_admin: bool,
+        safe: bool,
     ) -> None:
         """Upgrade a non-web user to STANDARD + assign groups in one tx.
 
         Enforces the seat limit inside the same transaction when the
         upgrade flips an uncounted user (EXT_PERM_USER, SERVICE_ACCOUNT)
         into a counted one.
+
+        ``safe`` marks the public register path, where the request body is
+        untrusted and cannot decide is_verified.
         """
         seat_added = False
         with get_session_with_current_tenant() as sync_db:
@@ -900,13 +927,15 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 sync_user.hashed_password = self.password_helper.hash(
                     user_create.password
                 )
-                sync_user.is_verified = user_create.is_verified or False
-                sync_user.role = user_create.role
+                # A registrant must not self-verify an address they do not own.
+                sync_user.is_verified = (
+                    False if safe else (user_create.is_verified or False)
+                )
                 sync_user.account_type = AccountType.STANDARD
                 assign_user_to_default_groups__no_commit(
                     sync_db,
                     sync_user,
-                    is_admin=(user_create.role == UserRole.ADMIN),
+                    is_admin=is_admin,
                 )
                 sync_db.commit()
             else:
@@ -955,6 +984,17 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             )
         return
 
+    async def _rewrite_oauth_link(
+        self, user: User, link: OAuthAccount, oauth_account_dict: dict[str, Any]
+    ) -> User:
+        return await self.user_db.update_oauth_account(
+            user,
+            # OAuthAccount implements OAuthAccountProtocol, but the type
+            # checker cannot see it through the fastapi-users generics.
+            link,  # ty: ignore[invalid-argument-type]
+            oauth_account_dict,
+        )
+
     @log_function_time(print_only=True)
     async def oauth_callback(  # ty: ignore[invalid-method-override]
         self,
@@ -969,9 +1009,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         associate_by_email: bool = False,
         is_verified_by_default: bool = False,
         allowed_email_domains_override: Sequence[str] | None = None,
+        enforce_verified_domain: bool = False,
     ) -> User:
         referral_source = (
-            getattr(request.state, "referral_source", None) if request else None
+            getattr(request.state, "referral_source", None)  # ods: ignore[getattr]
+            if request
+            else None
         )
 
         # A workspace-configured provider vouches for who someone is, never for
@@ -993,8 +1036,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         if not tenant_id:
             raise HTTPException(status_code=401, detail="User not found")
 
-        # Proceed with the tenant context
-        async with _tenant_session_with_context(tenant_id) as db_session:
+        async with self._tenant_session_with_bound_user_db(tenant_id) as db_session:
             verify_email_in_whitelist(account_email, tenant_id, oauth_name, account_id)
             oauth_security_settings = get_security_settings()
             effective_valid_email_domains = (
@@ -1007,13 +1049,19 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 valid_email_domains=effective_valid_email_domains,
             )
 
-            # NOTE(rkuo): If this UserManager is instantiated per connection
-            # should we even be doing this here?
-            if MULTI_TENANT:
-                tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](
-                    db_session, User, OAuthAccount
-                )
-                self.user_db = tenant_user_db
+            if override is not None and enforce_verified_domain:
+                # Current active members are exempt from the domain gate.
+                already_member = fetch_ee_implementation_or_noop(
+                    "onyx.db.user_tenant_mapping", "is_active_member", False
+                )(tenant_id, account_email, oauth_name, account_id)
+                if not already_member and not fetch_ee_implementation_or_noop(
+                    "onyx.db.tenant_sso_domain", "is_email_domain_verified", False
+                )(tenant_id, account_email):
+                    raise OnyxError(
+                        OnyxErrorCode.UNAUTHORIZED,
+                        "This workspace has not verified your email domain for "
+                        "single sign-on.",
+                    )
 
             oauth_account_dict = {
                 "oauth_name": oauth_name,
@@ -1037,6 +1085,18 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     user = await self.user_db.get_by_email(account_email)
                     if user is None:
                         raise exceptions.UserNotExists()
+                    # No link matched this subject, so any link this provider holds on
+                    # the row is stale: the IdP re-issued its subjects (a new Entra
+                    # app registration).
+                    stale_link: OAuthAccount | None = next(
+                        (
+                            link
+                            for link in user.oauth_accounts
+                            if link.oauth_name == oauth_name
+                        ),
+                        None,
+                    )
+
                     # Placeholders (EXT_PERM_USER, bots) carry no credentials or
                     # sessions, so neither check applies and the upgrade claims them.
                     if user.account_type.is_web_login():
@@ -1047,15 +1107,37 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
                         # An owned row must not take a second provider, and a
                         # rename stops the address identifying the row. All else
-                        # is claimable, password signups included.
+                        # is claimable, password signups included. The same provider
+                        # with a new subject is admin-gated: the subject alone does
+                        # not prove who holds the address now.
+                        relink_allowed: bool = (
+                            stale_link is not None
+                            and oauth_security_settings.allow_same_provider_subject_relink
+                        )
                         if not associate_by_email and (
-                            user.oauth_accounts or user.prior_emails
+                            user.prior_emails
+                            or (user.oauth_accounts and not relink_allowed)
                         ):
                             raise exceptions.UserAlreadyExists()
 
-                    user = await self.user_db.add_oauth_account(
-                        user, oauth_account_dict
-                    )
+                    # Rewrite rather than append: bearer pass-through reads
+                    # oauth_accounts[0], and a second link for this provider could
+                    # hand it the dead token.
+                    if stale_link is None:
+                        user = await self.user_db.add_oauth_account(
+                            user, oauth_account_dict
+                        )
+                    else:
+                        logger.notice(
+                            "Relinked %s login for user %s from subject %s to %s",
+                            oauth_name,
+                            user.id,
+                            stale_link.account_id,
+                            account_id,
+                        )
+                        user = await self._rewrite_oauth_link(
+                            user, stale_link, oauth_account_dict
+                        )
 
                 except exceptions.UserNotExists:
                     # OAuth-created accounts are not subject to the dotted-Gmail
@@ -1081,7 +1163,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
                     user = await self.user_db.create(user_dict)
                     await self.user_db.add_oauth_account(user, oauth_account_dict)
-                    await self._assign_default_pinned_assistants(user, db_session)
+                    await seed_pinned_personas_from_featured(
+                        db_session=db_session, user=user
+                    )
                     await self.on_after_register(user, request)
 
             else:
@@ -1092,15 +1176,18 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                             existing_oauth_account.account_id == account_id
                             and existing_oauth_account.oauth_name == oauth_name
                         ):
-                            user = await self.user_db.update_oauth_account(
-                                user,
-                                # NOTE: OAuthAccount DOES implement the OAuthAccountProtocol
-                                # but the type checker doesn't know that :(
-                                existing_oauth_account,  # ty: ignore[invalid-argument-type]
-                                oauth_account_dict,
+                            user = await self._rewrite_oauth_link(
+                                user, existing_oauth_account, oauth_account_dict
                             )
 
             assert user is not None
+
+            if override is not None:
+                # A pinned login skipped the provisioning that records
+                # membership. Record it here, before the link below needs the row.
+                fetch_ee_implementation_or_noop(
+                    "onyx.db.user_tenant_mapping", "ensure_tenant_membership", None
+                )(user.email, tenant_id, oauth_name, account_id)
 
             # Keyed on the stored email rather than the one the IdP just sent.
             # The membership row moves onto the new address at the rekey below.
@@ -1147,49 +1234,27 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
             # Handle case where user has used product outside of web and is now creating an account through web
             if not user.account_type.is_web_login():
-                # We must use the existing user in the session if it matches
-                # the user we just got by email/oauth. Note that this only applies
-                # to multi-tenant, due to the overwriting of the user_db
-                if MULTI_TENANT:
-                    if user.id:
-                        user_by_session = await db_session.get(User, user.id)
-                        if user_by_session:
-                            user = user_by_session
+                # Cache the id before the commit below expires `user`. Reading
+                # an attribute off an expired object here triggers a sync lazy
+                # load, which raises MissingGreenlet in this async context.
+                refreshed_user_id = user.id
 
-                # Lock + check + upgrade in one transaction.
-                was_inactive = not user.is_active
-                seat_added = False
-                with get_session_with_current_tenant() as sync_db:
-                    sync_user = (
-                        sync_db.query(User)
-                        .filter(User.id == user.id)  # ty: ignore[invalid-argument-type]
-                        .first()
+                # Runs on this session, which already holds the `"user"` row
+                # lock taken by reconcile_user_email__no_commit above. A second
+                # connection would wait on that lock for the whole callback.
+                seat_added = await db_session.run_sync(
+                    partial(
+                        _upgrade_placeholder_to_web_login__no_commit,
+                        refreshed_user_id,
+                        is_verified_by_default,
                     )
-                    if sync_user:
-                        will_become_active = (
-                            True if was_inactive else bool(sync_user.is_active)
-                        )
-                        if _upgrade_will_add_seat(
-                            sync_user, will_become_active=will_become_active
-                        ):
-                            enforce_seat_limit_locked(sync_db, seats_needed=1)
-                            seat_added = True
-                        sync_user.is_verified = is_verified_by_default
-                        sync_user.role = UserRole.BASIC
-                        sync_user.account_type = AccountType.STANDARD
-                        if was_inactive:
-                            sync_user.is_active = True
-                        assign_user_to_default_groups__no_commit(sync_db, sync_user)
-                        sync_db.commit()
+                )
+                await db_session.commit()
                 if seat_added:
                     _invalidate_license_cache_after_seat_change()
 
-                # Refresh the async user object so downstream code
-                # (e.g. oidc_expiry check) sees the updated fields.
-                # Cache id before expire. Accessing attrs on an expired object
-                # triggers a sync lazy-load which raises MissingGreenlet in this
-                # async context.
-                refreshed_user_id = user.id
+                # Reload so downstream code (e.g. the oidc_expiry check) sees
+                # the upgraded fields.
                 self.user_db.session.expire(user)
                 user = await self.user_db.get(refreshed_user_id)
                 assert user is not None
@@ -1241,6 +1306,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         tenant_id = await resolve_tenant_for_user(user.email, request)
 
         user_count = None
+        is_admin = False
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
         try:
             user_count = await get_user_count()
@@ -1313,7 +1379,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 "email": user.email,
                 "onyx_cloud_user_id": str(user.id),
                 "tenant_id": str(tenant_id) if tenant_id else None,
-                "role": user.role.value,
+                "account_type": user.account_type.value,
                 "is_first_user": user_count == 1,
                 "source": "marketing_site_signup",
                 "conversion_timestamp": datetime.now(timezone.utc).isoformat(),
@@ -1344,6 +1410,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             AuditAction.REGISTER,
             AuditOutcome.SUCCESS,
             actor=AuditActor(user_id=str(user.id), email=user.email),
+            # This is the only record of the first-user and
+            # DEFAULT_ADMIN_USER_EMAILS admin grants; neither one goes through
+            # the admin-access route.
+            extra={"is_admin": is_admin},
         )
 
     async def on_after_forgot_password(
@@ -1416,23 +1486,39 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         # marks the account verified, and the log stream is a wider audience
         # than the intended email channel.
         logger.notice("Verification requested for user %s", user.id)
-        user_count = await get_user_count()
+
+        # This endpoint is unauthenticated, so the request resolves to the
+        # default schema. On multi-tenant that schema owns neither the user rows
+        # nor the branding the email is built from, and the audit event reads
+        # the tenant off the contextvar, so bind the address's own workspace.
+        tenant_id: str = fetch_ee_implementation_or_noop(
+            "onyx.db.user_tenant_mapping",
+            "get_tenant_id_for_email",
+            POSTGRES_DEFAULT_SCHEMA,
+        )(user.email)
+        contextvar_token: contextvars.Token[str | None] = (
+            CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+        )
         try:
+            user_count = await get_user_count()
             send_user_verification_email(
                 user.email, token, new_organization=user_count == 1
             )
+            emit_audit_event(
+                AuditAction.EMAIL_VERIFY,
+                AuditOutcome.SUCCESS,
+                actor=AuditActor(user_id=str(user.id), email=user.email),
+            )
         except Exception as e:
-            logger.error("Failed to send verification email to %s: %s", user.email, e)
+            # The count, the branding lookup and the SMTP call all land here,
+            # so on-call needs the traceback to tell which one broke.
+            logger.exception("Failed to send verification email to %s", user.email)
             raise OnyxError(
                 OnyxErrorCode.SERVICE_UNAVAILABLE,
                 "Failed to send the verification email.",
             ) from e
-
-        emit_audit_event(
-            AuditAction.EMAIL_VERIFY,
-            AuditOutcome.SUCCESS,
-            actor=AuditActor(user_id=str(user.id), email=user.email),
-        )
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(contextvar_token)
 
     @log_function_time(print_only=True)
     async def authenticate(
@@ -1862,10 +1948,8 @@ class FastAPIUserWithRefreshRouter(FastAPIUsers[models.UP, models.ID]):
         )
 
         refresh_responses: OpenAPIResponseType = {
-            **{
-                status.HTTP_401_UNAUTHORIZED: {
-                    "description": "Missing token or inactive user."
-                }
+            status.HTTP_401_UNAUTHORIZED: {
+                "description": "Missing token or inactive user."
             },
             **backend.transport.get_openapi_login_responses_success(),
         }
@@ -1894,12 +1978,12 @@ class FastAPIUserWithRefreshRouter(FastAPIUsers[models.UP, models.ID]):
 
                 # Check if strategy supports refreshing
                 supports_refresh = hasattr(strategy, "refresh_token") and callable(
-                    getattr(strategy, "refresh_token")  # noqa: B009
+                    getattr(strategy, "refresh_token")  # noqa: B009  # ods: ignore[getattr]
                 )
 
                 if supports_refresh:
                     try:
-                        refresh_method = getattr(strategy, "refresh_token")  # noqa: B009
+                        refresh_method = getattr(strategy, "refresh_token")  # noqa: B009  # ods: ignore[getattr]
                         new_token = await refresh_method(token, user)
                         logger.info(
                             "Successfully refreshed session token for user %s",
@@ -2002,7 +2086,7 @@ async def _get_or_create_user_from_jwt(
         valid_email_domains=get_security_settings().valid_email_domains,
     )
 
-    user_db: SQLAlchemyUserAdminDB[User, uuid.UUID] = SQLAlchemyUserAdminDB(
+    user_db: SQLAlchemyUserDatabase[User, uuid.UUID] = SQLAlchemyUserDatabase(
         async_db_session, User, OAuthAccount
     )
     user_manager = UserManager(user_db)
@@ -2050,7 +2134,7 @@ async def _check_for_saml_and_jwt(
     async_db_session: AsyncSession,
 ) -> User | None:
     # If user is None, check for JWT in Authorization header
-    if user is None and JWT_PUBLIC_KEY_URL is not None:
+    if user is None and get_security_settings().jwt_public_key_url is not None:
         auth_header = request.headers.get("Authorization")
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header[len("Bearer ") :].strip()
@@ -2120,8 +2204,10 @@ def _scoped_pat_permitted_on_route(
     if not isinstance(route, APIRoute):
         return False
     return any(
-        getattr(dependency.call, "_is_require_permission", False)
-        or getattr(dependency.call, "_is_scope_exempt", False)
+        getattr(  # ods: ignore[getattr]
+            dependency.call, "_is_require_permission", False
+        )
+        or getattr(dependency.call, "_is_scope_exempt", False)  # ods: ignore[getattr]
         for dependency in route.dependant.dependencies
     )
 
@@ -2177,7 +2263,7 @@ async def _resolve_optional_user(
     # Fail-closed: a scoped PAT may only reach routes guarded by a
     # require_permission its scopes can satisfy (see require_permission).
     if not _scoped_pat_permitted_on_route(
-        getattr(request.state, "token_scopes", None),
+        getattr(request.state, "token_scopes", None),  # ods: ignore[getattr]
         request.scope.get("route"),
     ):
         raise OnyxError(
@@ -2204,7 +2290,7 @@ async def optional_user(
     )
     token = CURRENT_USER_ID_CONTEXTVAR.set(str(user.id) if user is not None else None)
     credential_token = CURRENT_USAGE_CREDENTIAL_CONTEXTVAR.set(
-        getattr(request.state, "usage_credential", None)
+        getattr(request.state, "usage_credential", None)  # ods: ignore[getattr]
     )
     try:
         yield user
@@ -2222,7 +2308,6 @@ def get_anonymous_user() -> User:
         is_active=True,
         is_verified=True,
         is_superuser=False,
-        role=UserRole.LIMITED,
         account_type=AccountType.ANONYMOUS,
         effective_permissions=[Permission.BASIC_ACCESS.value],
         use_memories=False,
@@ -2302,26 +2387,6 @@ async def current_user(
         raise BasicAuthenticationError(
             detail="Access denied. User has limited permissions.",
         )
-    return user
-
-
-_CURATOR_OR_ADMIN_ROLES = frozenset(
-    {UserRole.GLOBAL_CURATOR, UserRole.CURATOR, UserRole.ADMIN}
-)
-
-
-def is_user_curator_or_admin(user: User) -> bool:
-    return user.role in _CURATOR_OR_ADMIN_ROLES
-
-
-async def current_curator_or_admin_user(
-    user: User = Depends(current_user),
-) -> User:
-    if not is_user_curator_or_admin(user):
-        raise BasicAuthenticationError(
-            detail="Access denied. User is not a curator or admin.",
-        )
-
     return user
 
 
@@ -2424,30 +2489,42 @@ async def current_user_from_websocket(
             detail="Authentication verification failed."
         ) from e
 
-    # Get user from token data
-    user = await _get_user_from_token_data(token_data)
-    if user is None:
-        logger.warning("WS auth: user not found for id=%s", token_data.get("sub"))
-        raise BasicAuthenticationError(
-            detail="Access denied. User not found or inactive."
-        )
+    if MULTI_TENANT:
+        token_tenant_id = token_data.get("tenant_id")
+        if not isinstance(token_tenant_id, str):
+            logger.warning("WS auth: token missing tenant_id")
+            raise BasicAuthenticationError(
+                detail="Access denied. Invalid authentication token."
+            )
+    else:
+        # Single-tenant deployments always run on the default schema.
+        token_tenant_id = POSTGRES_DEFAULT_SCHEMA
 
-    # Apply same checks as HTTP auth (verification, OIDC expiry, role)
-    user = await double_check_user(user)
-
-    # Block limited users (same as current_user)
-    if is_limited_user(user):
-        logger.warning("WS auth: user %s is limited", user.email)
-        raise BasicAuthenticationError(
-            detail="Access denied. User has limited permissions.",
-        )
-
-    logger.debug("WS auth: authenticated %s", user.email)
-    context_token = CURRENT_USER_ID_CONTEXTVAR.set(str(user.id))
+    tenant_context_token = CURRENT_TENANT_ID_CONTEXTVAR.set(token_tenant_id)
     try:
-        yield user
+        user = await _get_user_from_token_data(token_data)
+        if user is None:
+            logger.warning("WS auth: user not found for id=%s", token_data.get("sub"))
+            raise BasicAuthenticationError(
+                detail="Access denied. User not found or inactive."
+            )
+
+        user = await double_check_user(user)
+
+        if is_limited_user(user):
+            logger.warning("WS auth: user %s is limited", user.email)
+            raise BasicAuthenticationError(
+                detail="Access denied. User has limited permissions.",
+            )
+
+        logger.debug("WS auth: authenticated %s", user.email)
+        user_context_token = CURRENT_USER_ID_CONTEXTVAR.set(str(user.id))
+        try:
+            yield user
+        finally:
+            CURRENT_USER_ID_CONTEXTVAR.reset(user_context_token)
     finally:
-        CURRENT_USER_ID_CONTEXTVAR.reset(context_token)
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(tenant_context_token)
 
 
 def get_default_admin_user_emails_() -> list[str]:
@@ -2478,16 +2555,6 @@ def generate_state_token(
 
 def generate_csrf_token() -> str:
     return secrets.token_urlsafe(32)
-
-
-def _base64url_encode(data: bytes) -> str:
-    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
-
-
-def generate_pkce_pair() -> tuple[str, str]:
-    verifier = secrets.token_urlsafe(64)
-    challenge = _base64url_encode(hashlib.sha256(verifier.encode("ascii")).digest())
-    return verifier, challenge
 
 
 def get_pkce_cookie_name(state: str) -> str:
@@ -2551,6 +2618,7 @@ async def complete_login_flow(
     associate_by_email: bool,
     is_verified_by_default: bool,
     allowed_email_domains_override: Sequence[str] | None = None,
+    enforce_verified_domain: bool = False,
 ) -> RedirectResponse:
     """Shared post-token OAuth/OIDC login: read the verified identity, create or
     authenticate the user, and return a web or mobile redirect.
@@ -2611,6 +2679,7 @@ async def complete_login_flow(
             associate_by_email=associate_by_email,
             is_verified_by_default=is_verified_by_default,
             allowed_email_domains_override=allowed_email_domains_override,  # ty: ignore[unknown-argument]
+            enforce_verified_domain=enforce_verified_domain,  # ty: ignore[unknown-argument]
         )
     except UserAlreadyExists:
         raise OnyxError(
@@ -2948,7 +3017,8 @@ def get_oauth_router(
                 token = await oauth_client.get_access_token(
                     code, callback_redirect_url, code_verifier
                 )
-            except GetAccessTokenError:
+            except GetAccessTokenError as e:
+                log_token_exchange_failure(e)
                 return build_error_response(
                     OnyxError(
                         OnyxErrorCode.VALIDATION_ERROR,

@@ -12,34 +12,34 @@ The component uses a discriminated union with four variants. `title` and `descri
 
 A plain line with no title or description.
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `orientation` | `"horizontal" \| "vertical"` | `"horizontal"` | Direction of the line |
-| `paddingParallel` | `0 \| 0.5 \| 1 \| 2 \| 4 \| 6` | `2` | Inset along the line direction, as a spacing step (`N / 4` rem) |
-| `paddingPerpendicular` | `0 \| 0.5 \| 1 \| 2 \| 4 \| 6` | `1` | Inset perpendicular to the line, as a spacing step (`N / 4` rem) |
+| Prop                   | Type                           | Default        | Description                                                      |
+| ---------------------- | ------------------------------ | -------------- | ---------------------------------------------------------------- |
+| `orientation`          | `"horizontal" \| "vertical"`   | `"horizontal"` | Direction of the line                                            |
+| `paddingParallel`      | `0 \| 0.5 \| 1 \| 2 \| 4 \| 6` | `2`            | Inset along the line direction, as a spacing step (`N / 4` rem)  |
+| `paddingPerpendicular` | `0 \| 0.5 \| 1 \| 2 \| 4 \| 6` | `1`            | Inset perpendicular to the line, as a spacing step (`N / 4` rem) |
 
 ### Titled divider
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
+| Prop    | Type                | Default        | Description                   |
+| ------- | ------------------- | -------------- | ----------------------------- |
 | `title` | `string \| RichStr` | **(required)** | Label to the left of the line |
 
 ### Described divider
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
+| Prop          | Type                | Default        | Description         |
+| ------------- | ------------------- | -------------- | ------------------- |
 | `description` | `string \| RichStr` | **(required)** | Text below the line |
 
 ### Foldable divider
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `title` | `string \| RichStr` | **(required)** | Label to the left of the line |
-| `foldable` | `true` | **(required)** | Enables fold/expand behavior |
-| `open` | `boolean` | — | Controlled open state |
-| `defaultOpen` | `boolean` | `false` | Uncontrolled initial open state |
-| `onOpenChange` | `(open: boolean) => void` | — | Callback when toggled |
-| `children` | `ReactNode` | — | Content revealed when open |
+| Prop           | Type                      | Default        | Description                     |
+| -------------- | ------------------------- | -------------- | ------------------------------- |
+| `title`        | `string \| RichStr`       | **(required)** | Label to the left of the line   |
+| `foldable`     | `true`                    | **(required)** | Enables fold/expand behavior    |
+| `open`         | `boolean`                 | —              | Controlled open state           |
+| `defaultOpen`  | `boolean`                 | `false`        | Uncontrolled initial open state |
+| `onOpenChange` | `(open: boolean) => void` | —              | Callback when toggled           |
+| `children`     | `ReactNode`               | —              | Content revealed when open      |
 
 ## Usage Examples
 

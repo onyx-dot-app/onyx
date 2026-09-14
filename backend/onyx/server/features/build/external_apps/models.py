@@ -79,6 +79,8 @@ class ExternalAppAdminResponse(BaseModel):
     upstream_url_patterns: list[str]
     auth_template: dict[str, Any]
     organization_credentials: dict[str, Any]
+    # Sorted `{placeholder}` names in the auth-template values.
+    credential_placeholder_keys: list[str]
     enabled: bool
     # The merged per-action policy view (built-in apps; empty for custom).
     actions: list[ActionPolicyView]

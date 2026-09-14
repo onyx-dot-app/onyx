@@ -1,6 +1,8 @@
 import { toast } from "@opal/layouts";
 import { createConnector, runConnector } from "@/lib/connector";
 import { linkCredential } from "@/lib/credential";
+import type { ErrorResponseBody } from "@/lib/fetcher";
+import type { FileUploadResponse } from "@/lib/fileConnector";
 import { GoogleSitesConfig } from "@/lib/connectors/connectors";
 import { ValidSources } from "@/lib/types";
 
@@ -28,13 +30,14 @@ export const submitGoogleSite = async (
         body: formData,
       }
     );
-    const responseJson = await response.json();
+    const responseJson: Partial<FileUploadResponse> & ErrorResponseBody =
+      await response.json();
     if (!response.ok) {
       toast.error(`Unable to upload files - ${responseJson.detail}`);
       return false;
     }
 
-    const filePaths = responseJson.file_paths as string[];
+    const filePaths = responseJson.file_paths;
     if (!filePaths || filePaths.length === 0) {
       toast.error(
         "File upload was successful, but no file path was returned. Cannot create connector."
@@ -77,7 +80,8 @@ export const submitGoogleSite = async (
       groups
     );
     if (!credentialResponse.ok) {
-      const credentialResponseJson = await credentialResponse.json();
+      const credentialResponseJson: ErrorResponseBody =
+        await credentialResponse.json();
       toast.error(
         `Unable to link connector to credential - ${credentialResponseJson.detail}`
       );

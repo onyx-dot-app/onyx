@@ -31,8 +31,10 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/charlievieth/fastwalk"
 	cpb "github.com/google/osv-scalibr/binary/proto/config_go_proto"
 	"github.com/google/osv-scalibr/extractor/filesystem"
 	"github.com/google/osv-scalibr/extractor/filesystem/misc/githubactions"
@@ -197,7 +199,9 @@ func extractCompositeActions(ext filesystem.Extractor, root string) ([]actionRef
 	}
 
 	var refs []actionRef
-	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+	// fastwalk runs the callback on several goroutines, so guard the slice.
+	var mu sync.Mutex
+	err := fastwalk.Walk(nil, dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -234,12 +238,22 @@ func extractCompositeActions(ext filesystem.Extractor, root string) ([]actionRef
 			log.Warnf("Skipping composite action %s: %v", manifest, err)
 			return nil
 		}
+		mu.Lock()
 		refs = append(refs, rs...)
+		mu.Unlock()
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
+	// Walk order is non-deterministic; sort so dedupeRefs always keeps the same
+	// manifest for an action used by more than one composite.
+	sort.Slice(refs, func(i, j int) bool {
+		if refs[i].Manifest != refs[j].Manifest {
+			return refs[i].Manifest < refs[j].Manifest
+		}
+		return refs[i].Name+"@"+refs[i].Ref < refs[j].Name+"@"+refs[j].Ref
+	})
 	return refs, nil
 }
 

@@ -1,6 +1,8 @@
 import { toast } from "@opal/layouts";
 import { createConnector, runConnector } from "@/lib/connector";
 import { createCredential, linkCredential } from "@/lib/credential";
+import type { ErrorResponseBody } from "@/lib/fetcher";
+import type { FileUploadResponse } from "@/lib/fileConnector";
 import { FileConfig } from "@/lib/connectors/connectors";
 import { AccessType, ValidSources } from "@/lib/types";
 
@@ -20,7 +22,8 @@ export const submitFiles = async (
     method: "POST",
     body: formData,
   });
-  const responseJson = await response.json();
+  const responseJson: Partial<FileUploadResponse> & ErrorResponseBody =
+    await response.json();
   if (!response.ok) {
     toast.error(`Unable to upload files - ${responseJson.detail}`);
     return;
@@ -77,7 +80,8 @@ export const submitFiles = async (
     groups
   );
   if (!credentialResponse.ok) {
-    const credentialResponseJson = await credentialResponse.json();
+    const credentialResponseJson: ErrorResponseBody =
+      await credentialResponse.json();
     toast.error(
       `Unable to link connector to credential - ${credentialResponseJson.detail}`
     );

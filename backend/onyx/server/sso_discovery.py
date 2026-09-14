@@ -117,13 +117,27 @@ def _login_options(
         ]
 
 
+def _resolve_workspace(email: str) -> str | None:
+    """An existing membership wins: an invited or returning user reaches the
+    workspace they actually belong to, even if their address domain routes
+    elsewhere. Domain routing is the fallback that lets a first-time user with no
+    membership reach a workspace at all."""
+    tenant_id = fetch_ee_implementation_or_noop(
+        "onyx.db.user_tenant_mapping", "lookup_tenant_id_for_login", None
+    )(email)
+    if tenant_id:
+        return tenant_id
+
+    return fetch_ee_implementation_or_noop(
+        "onyx.db.tenant_sso_domain", "lookup_tenant_id_for_email_domain", None
+    )(email)
+
+
 def _discover(email: str) -> list[SSOProviderOption]:
     if not MULTI_TENANT:
         return _login_options(POSTGRES_DEFAULT_SCHEMA, workspace_token=None)
 
-    tenant_id = fetch_ee_implementation_or_noop(
-        "onyx.db.user_tenant_mapping", "lookup_tenant_id_for_login", None
-    )(email)
+    tenant_id = _resolve_workspace(email)
     if not tenant_id or tenant_id == POSTGRES_DEFAULT_SCHEMA:
         return []
 

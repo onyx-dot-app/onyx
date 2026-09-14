@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useCallback, useState, useEffect, useRef } from "react";
+import { useTranslations } from "next-intl";
 import type { Route } from "next";
 import { useRouter, usePathname } from "next/navigation";
 import { useBuildContext } from "@/app/craft/contexts/BuildContext";
@@ -13,6 +14,7 @@ import {
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import {
   Button,
+  LineItemButton,
   Popover,
   PopoverMenu,
   SidebarTab,
@@ -29,11 +31,9 @@ import RefreshText from "@/refresh-components/texts/Text";
 import { renderSidebarLogo } from "@/lib/sidebar/utils";
 import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
-import LineItem from "@/refresh-components/buttons/LineItem";
+import { Hoverable } from "@opal/core";
 import { noProp } from "@/lib/utils";
-import { cn } from "@opal/utils";
 import {
   SvgEditBig,
   SvgArrowLeft,
@@ -72,9 +72,10 @@ export function CraftSessionDeleteModal({
   onClose,
   onConfirm,
 }: CraftSessionDeleteModalProps) {
+  const t = useTranslations("craft.sideBar");
   return (
     <ConfirmationModalLayout
-      title={`Delete "${sessionTitle}"?`}
+      title={t("deleteModal.title", { title: sessionTitle })}
       icon={SvgTrash}
       onClose={isDeleting ? undefined : onClose}
       submit={
@@ -85,12 +86,11 @@ export function CraftSessionDeleteModal({
           onClick={onConfirm}
           icon={isDeleting ? SvgSimpleLoader : undefined}
         >
-          {isDeleting ? "Deleting..." : "Delete"}
+          {isDeleting ? t("deleteModal.deleting") : t("deleteModal.confirm")}
         </Button>
       }
     >
-      This permanently removes the Craft session and all of its data. This
-      action cannot be undone.
+      {t("deleteModal.body")}
     </ConfirmationModalLayout>
   );
 }
@@ -112,6 +112,7 @@ function BuildSessionButton({
   onDelete,
   onDeleteActiveSession,
 }: BuildSessionButtonProps) {
+  const t = useTranslations("craft.sideBar");
   const [renaming, setRenaming] = useState(false);
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -147,7 +148,7 @@ function BuildSessionButton({
       try {
         await onDelete();
         setIsDeleting(false);
-        toast.success(`Deleted "${historyItem.title}".`);
+        toast.success(t("toast.deleted", { title: historyItem.title }));
         closeModal();
         if (isActive && onDeleteActiveSession) {
           onDeleteActiveSession();
@@ -155,48 +156,59 @@ function BuildSessionButton({
       } catch (err) {
         setIsDeleting(false);
         toast.error(
-          err instanceof Error ? err.message : "Failed to delete session"
+          err instanceof Error ? err.message : t("toast.deleteFailed")
         );
       }
     },
-    [onDelete, historyItem.title, closeModal, isActive, onDeleteActiveSession]
+    [
+      onDelete,
+      historyItem.title,
+      closeModal,
+      isActive,
+      onDeleteActiveSession,
+      t,
+    ]
   );
 
   const rightMenu = (
     <>
       <Popover.Trigger asChild onClick={noProp()}>
         <div>
-          {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-          <IconButton
-            icon={SvgMoreHorizontal}
-            className={cn(
-              !popoverOpen && "hidden",
-              !renaming && "group-hover/SidebarTab:flex"
-            )}
-            transient={popoverOpen}
-            internal
-          />
+          {/* While renaming the row is an input, so the menu stays away unless
+              its own popover is already open. */}
+          {(!renaming || popoverOpen) && (
+            <Hoverable.Item group="CraftSessionTab">
+              <Button
+                icon={SvgMoreHorizontal}
+                prominence="internal"
+                size="sm"
+                interaction={popoverOpen ? "hover" : "rest"}
+              />
+            </Hoverable.Item>
+          )}
         </div>
       </Popover.Trigger>
       <Popover.Content side="right" align="start">
         <PopoverMenu>
           {[
-            <LineItem
+            <LineItemButton
+              sizePreset="main-ui"
+              rounding={2}
               key="rename"
               icon={SvgEdit}
               onClick={noProp(() => setRenaming(true))}
-            >
-              Rename
-            </LineItem>,
+              title={t("rename.label")}
+            />,
             null,
-            <LineItem
+            <LineItemButton
+              sizePreset="main-ui"
+              rounding={2}
               key="delete"
               icon={SvgTrash}
               onClick={noProp(() => setIsDeleteModalOpen(true))}
-              danger
-            >
-              Delete
-            </LineItem>,
+              color="danger"
+              title={t("delete.label")}
+            />,
           ]}
         </PopoverMenu>
       </Popover.Content>
@@ -211,37 +223,42 @@ function BuildSessionButton({
         }}
       >
         <Popover.Anchor>
-          <SidebarTab
-            /* While renaming, drop the click target so the input stays usable. */
-            onClick={renaming ? undefined : onLoad}
-            selected={isActive}
-            rightChildren={rightMenu}
+          <Hoverable.Root
+            group="CraftSessionTab"
+            interaction={popoverOpen ? "hover" : "rest"}
           >
-            {renaming ? (
-              <ButtonRenaming
-                initialName={historyItem.title}
-                onRename={onRename}
-                onClose={() => setRenaming(false)}
-              />
-            ) : shouldAnimate ? (
-              // Opal Text takes string children only; this wraps <TypewriterText>.
-              <RefreshText
-                as="p"
-                data-state={isActive ? "active" : "inactive"}
-                className="line-clamp-1 break-all text-left"
-                mainUiBody
-              >
-                <TypewriterText
-                  text={historyItem.title}
-                  charSpeed={25}
-                  animateOnMount={true}
-                  onAnimationComplete={() => setShouldAnimate(false)}
+            <SidebarTab
+              /* While renaming, drop the click target so the input stays usable. */
+              onClick={renaming ? undefined : onLoad}
+              selected={isActive}
+              rightChildren={rightMenu}
+            >
+              {renaming ? (
+                <ButtonRenaming
+                  initialName={historyItem.title}
+                  onRename={onRename}
+                  onClose={() => setRenaming(false)}
                 />
-              </RefreshText>
-            ) : (
-              historyItem.title
-            )}
-          </SidebarTab>
+              ) : shouldAnimate ? (
+                // Opal Text takes string children only; this wraps <TypewriterText>.
+                <RefreshText
+                  as="p"
+                  data-state={isActive ? "active" : "inactive"}
+                  className="line-clamp-1 break-all text-start"
+                  mainUiBody
+                >
+                  <TypewriterText
+                    text={historyItem.title}
+                    charSpeed={25}
+                    animateOnMount={true}
+                    onAnimationComplete={() => setShouldAnimate(false)}
+                  />
+                </RefreshText>
+              ) : (
+                historyItem.title
+              )}
+            </SidebarTab>
+          </Hoverable.Root>
         </Popover.Anchor>
       </Popover>
       {isDeleteModalOpen && (
@@ -261,6 +278,7 @@ function BuildSessionButton({
 // ============================================================================
 
 const MemoizedBuildSidebarInner = memo(() => {
+  const t = useTranslations("craft.sideBar");
   const { folded } = useSidebarState();
   const router = useRouter();
   const { requestNavigation } = useUnsavedChangesNavigation();
@@ -318,40 +336,38 @@ const MemoizedBuildSidebarInner = memo(() => {
       >
         <div className="flex flex-col gap-0.5">
           <SidebarTab icon={SvgEditBig} onClick={handleNewBuild}>
-            Start Crafting
+            {t("newSession.label")}
           </SidebarTab>
           <SidebarTab
             icon={SvgClock}
             onClick={() => navigate(CRAFT_TASKS_PATH)}
             selected={pathname.startsWith(CRAFT_TASKS_PATH)}
           >
-            Scheduled Tasks
+            {t("scheduledTasks.label")}
           </SidebarTab>
           <SidebarTab
             icon={SvgBlocks}
             onClick={() => navigate(CRAFT_SKILLS_PATH)}
             selected={pathname.startsWith(CRAFT_SKILLS_PATH)}
           >
-            Skills
+            {t("skills.label")}
           </SidebarTab>
           <SidebarTab
             icon={SvgPlug}
             onClick={() => navigate(CRAFT_APPS_PATH)}
             selected={pathname.startsWith(CRAFT_APPS_PATH)}
           >
-            Apps
+            {t("apps.label")}
           </SidebarTab>
         </div>
       </SidebarLayouts.Header>
       <SidebarLayouts.Body scrollKey="build-sidebar">
         {!folded && (
           <>
-            <SidebarLayouts.Section title="Sessions" />
+            <SidebarLayouts.Section title={t("sessions.title")} />
             {sessionHistory.length === 0 ? (
-              <div className="pl-2 pr-1.5 py-1">
-                <Text color="text-01">
-                  Start building! Session history will appear here.
-                </Text>
+              <div className="ps-2 pe-1.5 py-1">
+                <Text color="text-01">{t("sessions.empty")}</Text>
               </div>
             ) : (
               sessionHistory.map((historyItem) => (
@@ -383,7 +399,7 @@ const MemoizedBuildSidebarInner = memo(() => {
       <SidebarLayouts.Footer>
         <div>
           <SidebarTab icon={SvgArrowLeft} onClick={() => navigate("/app")}>
-            Back to Chat
+            {t("backToChat.label")}
           </SidebarTab>
           <OpencodeDebugLogsButton folded={folded} />
           <AccountPopover />

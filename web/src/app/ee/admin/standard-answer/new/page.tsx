@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { StandardAnswerCreationForm } from "@/app/ee/admin/standard-answer/StandardAnswerCreationForm";
 import { useStandardAnswerCategories } from "@/app/ee/admin/standard-answer/hooks";
 import { ErrorCallout } from "@/components/ErrorCallout";
@@ -10,6 +11,7 @@ import { ADMIN_ROUTES } from "@/lib/admin-routes";
 const route = ADMIN_ROUTES.STANDARD_ANSWERS;
 
 function Body() {
+  const t = useTranslations("admin.standardAnswers");
   const {
     data: standardAnswerCategories,
     isLoading,
@@ -23,8 +25,8 @@ function Body() {
   if (error || !standardAnswerCategories) {
     return (
       <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg="Failed to fetch standard answer categories"
+        errorTitle={t("errors.genericTitle.title")}
+        errorMsg={t("errors.fetchCategoriesFailed.message")}
       />
     );
   }
@@ -37,11 +39,12 @@ function Body() {
 }
 
 export default function Page() {
+  const t = useTranslations("admin.standardAnswers");
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={route.icon}
-        title="New Standard Answer"
+        title={t("newStandardAnswer.label")}
         backButton
         divider
       />

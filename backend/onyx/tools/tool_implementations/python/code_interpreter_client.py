@@ -81,7 +81,7 @@ def requires(
         func: Callable[Concatenate["CodeInterpreterClient", _P], _R],
     ) -> Callable[Concatenate["CodeInterpreterClient", _P], _R]:
         # ``Callable`` doesn't promise a ``__name__``; ours always do.
-        method_name = getattr(func, "__name__", "<unknown>")
+        method_name = getattr(func, "__name__", "<unknown>")  # ods: ignore[getattr]
 
         @wraps(func)
         def wrapper(
@@ -101,7 +101,9 @@ def requires(
 def _min_version_for(method: Callable[..., object]) -> str:
     """Min server version recorded on a method, or ``"0.0.0"`` (always
     supported) when the method isn't ``@requires``-decorated."""
-    return getattr(method, _MIN_VERSION_ATTR, _DEFAULT_SERVER_VERSION)
+    return getattr(  # ods: ignore[getattr]
+        method, _MIN_VERSION_ATTR, _DEFAULT_SERVER_VERSION
+    )
 
 
 class HealthResponse(BaseModel):

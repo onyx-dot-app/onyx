@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen } from "@tests/setup/test-utils";
 
 import { FilePreviewContent } from "@/app/craft/components/output-panel/FilePreviewContent";
 import { fetchFileContent } from "@/app/craft/services/apiServices";

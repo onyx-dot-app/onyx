@@ -183,9 +183,8 @@ def validate_sso_provider_name(name: str) -> None:
 
 
 def is_valid_email_domain(domain: str) -> bool:
-    """A domain is a routing key and, on cloud, an email recipient (the
-    verification code goes to a role mailbox there), so it must be a
-    syntactically valid mail domain before it is stored."""
+    """A domain is a routing key and the boundary for which addresses may sign
+    in, so it must be a syntactically valid mail domain before it is stored."""
     try:
         validate_email(f"x@{domain}", check_deliverability=False)
     except EmailNotValidError:
@@ -204,6 +203,15 @@ def fetch_sso_providers(
     if enabled_only:
         stmt = stmt.where(SSOProvider.enabled.is_(True))
     return list(db_session.scalars(stmt).all())
+
+
+def enabled_provider_domains(db_session: Session) -> set[str]:
+    """Every email domain across the workspace's enabled SSO providers."""
+    return {
+        domain
+        for provider in fetch_sso_providers(db_session, enabled_only=True)
+        for domain in provider.allowed_email_domains
+    }
 
 
 def fetch_sso_provider_by_name(

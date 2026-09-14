@@ -3,7 +3,7 @@ from pathlib import Path
 from pydantic import BaseModel
 
 
-class CimdHttpsEndpoint(BaseModel):
+class OAuthHttpsEndpoint(BaseModel):
     origin: str
     ca_file: Path
 

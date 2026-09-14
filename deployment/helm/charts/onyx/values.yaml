@@ -2,10 +2,10 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 #
-# Companion overlays in this directory:
-#   - values-lite.yaml      Minimal deploy (no vector DB / Redis / model servers).
-#   - values-localdev.yaml  Laptop-sized overlay for kind/minikube; see
-#                           /docs/craft/dev/local-kubernetes.md for the full workflow.
+# Overlays:
+#   - values-lite.yaml: minimal deployment without vector DB, Redis, or model servers.
+#   - ../../dev/values-localdev.yaml: local Kubernetes development (source repository only).
+#     See /docs/craft/dev/local-kubernetes.md.
 
 global:
   # Global version for all Onyx components (overrides .Chart.AppVersion)
@@ -63,6 +63,25 @@ postgresTls:
   caKey: ca.crt
   # Full path exposed to POSTGRES_SSLROOTCERT.
   caMountPath: /etc/postgres-ca/ca.crt
+
+# -- Verified TLS connections to Redis.
+# When enabled, the chart mounts one Redis server CA certificate into each
+# backend workload that uses Redis and configures REDIS_SSL with certificate
+# verification. Use an external Redis service (`redis.enabled: false`), because
+# the bundled Redis does not support TLS. The certificate source must already
+# exist in the release namespace.
+redisTls:
+  enabled: false
+  # Verify that the Redis certificate matches REDIS_HOST. Disable only when
+  # the endpoint cannot present a certificate for its configured host or IP.
+  checkHostname: true
+  # Exactly one of caSecretName / caConfigMapName must be set when enabled.
+  caSecretName: ""
+  caConfigMapName: ""
+  caKey: ca.crt
+  # Full path exposed to REDIS_SSL_CA_CERTS. The parent directory must exist
+  # in every Redis client image because Kubernetes mounts this as one file.
+  caMountPath: /etc/ssl/certs/redis-ca.crt
 
 # Uncomment to skip the bundled CNPG operator and its CRDs, and let an existing
 # cluster-managed CloudNativePG operator reconcile the Cluster CR below (keep
@@ -574,9 +593,20 @@ api:
       cpu: 3000m
       memory: 3Gi
 
-  # Optional health probes
+  # Optional health probes.
+  #
+  # Match the path to the probe. /health/ready reports not-ready once the request
+  # threadpool is saturated, which is what should pull a pod out of the Service.
+  # /health only reports that the process is up. Do NOT put /health/ready on the
+  # liveness probe: saturation is load-induced and hits every replica at once,
+  # so restarting on it turns a slowdown into an outage.
+  #
   # Example:
   # readinessProbe:
+  #   httpGet:
+  #     path: /health/ready
+  #     port: api-server-port
+  # livenessProbe:
   #   httpGet:
   #     path: /health
   #     port: api-server-port
@@ -1283,7 +1313,8 @@ externalSecret:
 # -- If set, adds `envFrom: - secretRef: name: <value>` to every backend
 # deployment so all keys in the named Secret are injected as env vars. Intended
 # for secrets that today live in plaintext under the `configMap:` block and
-# should move into a Secret (e.g. LINEAR_CLIENT_SECRET, BRAINTRUST_API_KEY).
+# should move into a Secret (e.g. LINEAR_CLIENT_SECRET,
+# SALESFORCE_CLIENT_ID, SALESFORCE_CLIENT_SECRET, BRAINTRUST_API_KEY).
 # Typically set to the same value as externalSecret.secretName.
 extraEnvFromSecret: ""
 
@@ -1495,6 +1526,11 @@ configMap:
   # model Services; set them here to point at external model servers instead
   # (the chart defaults are then not rendered).
   # See deployment/helm/README.md for the external-Redis / ElastiCache path.
+  # Redis socket deadlines in seconds for the app client (not Celery), default
+  # 30 and 10. A peer that stops replying but keeps the TCP session open raises
+  # after this instead of holding a thread until the pod restarts.
+  REDIS_SOCKET_TIMEOUT: ""
+  REDIS_SOCKET_CONNECT_TIMEOUT: ""
 
   # Authentication is always enabled (email/password). SSO (Google/OIDC/SAML)
   # and its per-provider options are configured in the admin panel (Admin
@@ -1601,6 +1637,7 @@ configMap:
   BOX_PERMISSION_DOC_SYNC_FREQUENCY: ""
   BOX_PERMISSION_GROUP_SYNC_FREQUENCY: ""
   GONG_CONNECTOR_START_TIME: ""
+  ZOOM_TRANSCRIPT_LAG_BUFFER_HOURS: ""
   NOTION_CONNECTOR_DISABLE_RECURSIVE_PAGE_LOOKUP: ""
   # Push every successfully indexed public-connector document to an external
   # HTTP endpoint (failures never fail indexing). Intended for non-EE

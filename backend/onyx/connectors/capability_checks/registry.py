@@ -1,4 +1,11 @@
 from onyx.configs.constants import DocumentSource
+
+# Re-exported: existing callers resolve applicability through the registry; the
+# function lives in ``applicability`` so hot-path modules can import it without
+# this module's eager per-connector check imports.
+from onyx.connectors.capability_checks.applicability import (
+    get_applicable_capabilities as get_applicable_capabilities,
+)
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
@@ -66,18 +73,3 @@ def get_capability_checks(source: DocumentSource) -> list[CapabilityCheck]:
     )
     checks.extend(get_perm_sync_checks(source))
     return checks
-
-
-def get_applicable_capabilities(source: DocumentSource) -> set[CredentialCapability]:
-    """Returns the capabilities that exist for this source on this build.
-
-    Capabilities outside this set aggregate to a NOT_APPLICABLE verdict. On OSS
-    builds only INDEXING applies, which is correct since perm sync does not
-    exist there.
-    """
-    get_perm_sync_capabilities = fetch_ee_implementation_or_noop(
-        "onyx.connectors.capability_checks",
-        "get_applicable_perm_sync_capabilities",
-        noop_return_value=set(),
-    )
-    return {CredentialCapability.INDEXING} | get_perm_sync_capabilities(source)

@@ -62,7 +62,12 @@ def test_ollama_chunk_parser_transitions_from_native_thinking_to_content() -> No
     assert thinking_response.choices[0].delta.reasoning_content == "Let me think"
     assert thinking_response.choices[0].delta.content is None
 
-    assert getattr(content_response.choices[0].delta, "reasoning_content", None) is None
+    assert (
+        getattr(  # ods: ignore[getattr]
+            content_response.choices[0].delta, "reasoning_content", None
+        )
+        is None
+    )
     assert content_response.choices[0].delta.content == "Final answer"
     assert iterator.finished_reasoning_content is True
 
@@ -84,7 +89,12 @@ def test_ollama_chunk_parser_keeps_tagged_thinking_until_close_tag() -> None:
     assert middle_response.choices[0].delta.reasoning_content == "step 2"
     assert middle_response.choices[0].delta.content is None
 
-    assert getattr(close_response.choices[0].delta, "reasoning_content", None) is None
+    assert (
+        getattr(  # ods: ignore[getattr]
+            close_response.choices[0].delta, "reasoning_content", None
+        )
+        is None
+    )
     assert close_response.choices[0].delta.content == "final"
     assert iterator.finished_reasoning_content is True
 

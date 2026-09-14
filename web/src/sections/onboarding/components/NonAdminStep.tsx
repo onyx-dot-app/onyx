@@ -1,19 +1,20 @@
 "use client";
 
 import React, { useRef, useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import Text from "@/refresh-components/texts/Text";
 import { InputTypeIn } from "@opal/components";
 import { updateUserPersonalization } from "@/lib/users/svc";
 import { useUser } from "@/providers/UserProvider";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import { Button } from "@opal/components";
-import InputAvatar from "@/refresh-components/inputs/InputAvatar";
+import { InputAvatar } from "@opal/components";
 import { cn, clickOnKeyDown } from "@opal/utils";
 import { SvgCheckCircle, SvgEdit, SvgUser, SvgX } from "@opal/icons";
 import { ContentAction, InputHorizontal, toast } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
 
 export default function NonAdminStep() {
+  const t = useTranslations("onboarding");
   const inputRef = useRef<HTMLInputElement>(null);
   const { user, refreshUser } = useUser();
   const [name, setName] = useState("");
@@ -50,7 +51,7 @@ export default function NonAdminStep() {
         // refreshUser() is called in handleDismissConfirmation instead.
       })
       .catch((error) => {
-        toast.error("Failed to save name. Please try again.");
+        toast.error(t("nonAdminStep.toasts.saveNameFailed"));
         console.error(error);
       });
   };
@@ -64,7 +65,7 @@ export default function NonAdminStep() {
     <>
       {showHeader && (
         <div
-          className="flex items-center justify-between w-full min-h-11 py-1 pl-3 pr-2 bg-background-tint-00 rounded-16 shadow-box-01 mb-2"
+          className="flex items-center justify-between w-full min-h-11 py-1 ps-3 pe-2 bg-background-tint-00 rounded-16 shadow-box-01 mb-2"
           aria-label="non-admin-confirmation"
         >
           <ContentAction
@@ -74,7 +75,7 @@ export default function NonAdminStep() {
                 {...props}
               />
             )}
-            title="You're all set!"
+            title={t("nonAdminStep.confirmation.title")}
             sizePreset="main-ui"
             variant="body"
             color="muted"
@@ -105,13 +106,13 @@ export default function NonAdminStep() {
             <InputHorizontal
               responsive
               icon={SvgUser}
-              title="What should Onyx call you?"
-              description="We will display this name in the app."
+              title={t("nameStep.title")}
+              description={t("nameStep.description")}
             >
               <div className="flex w-full items-center gap-2">
                 <InputTypeIn
                   ref={inputRef}
-                  placeholder="Your name"
+                  placeholder={t("nameStep.input.placeholder")}
                   value={name || ""}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                     setName(e.target.value)
@@ -124,7 +125,7 @@ export default function NonAdminStep() {
                   }}
                 />
                 <Button disabled={name === ""} onClick={handleSave}>
-                  Save
+                  {t("nonAdminStep.save.label")}
                 </Button>
               </div>
             </InputHorizontal>
@@ -134,7 +135,7 @@ export default function NonAdminStep() {
         <Hoverable.Root group="nonAdminName" width="full">
           <div
             className={containerClasses}
-            aria-label="Edit display name"
+            aria-label={t("nameStep.edit.ariaLabel")}
             role="button"
             tabIndex={0}
             onClick={handleEdit}
@@ -158,7 +159,12 @@ export default function NonAdminStep() {
             <div className="p-1 flex items-center gap-1">
               {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
               <Hoverable.Item group="nonAdminName" variant="appear-on-hover">
-                <IconButton internal icon={SvgEdit} tooltip="Edit" />
+                <Button
+                  prominence="internal"
+                  size="sm"
+                  icon={SvgEdit}
+                  tooltip={t("nameStep.edit.tooltip")}
+                />
               </Hoverable.Item>
               <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
             </div>

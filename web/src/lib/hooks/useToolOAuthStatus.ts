@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 import useSWR from "swr";
 import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
 import { initiateOAuthFlow } from "@/lib/oauth/api";
-import { OAuthTokenStatus, ToolSnapshot } from "@/lib/tools/interfaces";
+import { OAuthTokenStatus, ToolSnapshot } from "@/lib/tools/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 export interface ToolAuthStatus {

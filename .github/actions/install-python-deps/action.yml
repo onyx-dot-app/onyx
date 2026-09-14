@@ -1,0 +1,20 @@
+name: "Install Python deps"
+description: "Syncs Python deps inside the devcontainer into the bind-mounted workspace, so later `uv run --no-sync` steps share one venv."
+inputs:
+  devcontainer-image:
+    description: "Fully qualified devcontainer image reference (registry:tag)"
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - name: Sync deps in devcontainer
+      shell: bash
+      env:
+        DEVCONTAINER_IMAGE: ${{ inputs.devcontainer-image }}
+        WORKSPACE: ${{ github.workspace }}
+      run: |
+        docker run --rm \
+          -v "${WORKSPACE}:/workspace" \
+          -w /workspace \
+          "${DEVCONTAINER_IMAGE}" \
+          uv sync --frozen --no-group model_server

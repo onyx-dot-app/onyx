@@ -114,8 +114,7 @@ def _normalize_text_with_mapping(text: str) -> tuple[str, list[int]]:
     nfd_to_orig: list[int] = []
     for orig_idx, orig_char in enumerate(original_text):
         nfd_of_char = unicodedata.normalize("NFD", orig_char)
-        for _ in nfd_of_char:
-            nfd_to_orig.append(orig_idx)
+        nfd_to_orig.extend([orig_idx] * len(nfd_of_char))
 
     # Map NFC positions → NFD positions.
     # Each NFC char, when decomposed, tells us exactly how many NFD

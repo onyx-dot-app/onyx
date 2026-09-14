@@ -203,7 +203,10 @@ def test_fetch_site_pages_runtime_error_does_not_crash_slim_run(
     def _fetch_side_effect(
         site_descriptor: object, *_args: object, **_kwargs: object
     ) -> list[dict[str, str]]:
-        if getattr(site_descriptor, "url", None) == bad_site.url:
+        if (
+            getattr(site_descriptor, "url", None)  # ods: ignore[getattr]
+            == bad_site.url
+        ):
             raise RuntimeError("pages endpoint blew up")
         return [good_page]
 

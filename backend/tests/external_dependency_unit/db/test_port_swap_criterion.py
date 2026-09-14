@@ -38,7 +38,6 @@ from onyx.db.models import (
     DocumentByConnectorCredentialPair,
     PortAttempt,
     SearchSettings,
-    User,
 )
 from onyx.db.models import Document as DbDocument
 from onyx.db.port_attempt import (
@@ -58,7 +57,7 @@ from onyx.db.swap_index import (
     check_and_perform_index_swap,
 )
 from onyx.kg.models import KGStage
-from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
     cleanup_cc_pair_and_future,
@@ -178,11 +177,8 @@ def test_port_swap_paused_user_blocks(
             PortAttempt.port_user_id == user.id
         ).delete(synchronize_session="fetch")
         db_session.commit()
-        # delete the user via the ORM object (a User.id column-equality delete trips ty)
-        fresh_user = db_session.get(User, user.id)
-        if fresh_user is not None:
-            db_session.delete(fresh_user)
-            db_session.commit()
+        delete_test_user(db_session, user)
+        db_session.commit()
 
 
 def test_port_swap_blocks_on_pending_sync_backlog(

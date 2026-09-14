@@ -93,6 +93,10 @@ from onyx.db.user_file import get_file_id_by_user_file_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.serving import (
+    RESPONSE_POLICY_VERSION,
+    resolve_inline_disposition,
+)
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.factory import get_llm_for_persona, get_llm_token_counter
 from onyx.llm.models import (
@@ -432,15 +436,11 @@ def get_chat_session(
 
     # Every assistant message might have a set of tool calls associated with it, these need to be replayed back for the frontend
     # Each list is the set of tool calls for the given assistant message.
-    replay_packet_lists: list[list[Packet]] = []
-    for msg in session_messages:
-        if msg.message_type == MessageType.ASSISTANT:
-            replay_packet_lists.append(
-                translate_assistant_message_to_packets(
-                    chat_message=msg, db_session=db_session
-                )
-            )
-            # msg_packet_list.append(Packet(ind=end_step_nr, obj=OverallStop()))
+    replay_packet_lists: list[list[Packet]] = [
+        translate_assistant_message_to_packets(chat_message=msg, db_session=db_session)
+        for msg in session_messages
+        if msg.message_type == MessageType.ASSISTANT
+    ]
 
     return ChatSessionDetailResponse(
         chat_session_id=session_id,
@@ -1166,18 +1166,25 @@ def fetch_chat_file(
     if not file_record:
         raise HTTPException(status_code=404, detail="File not found")
 
-    media_type = file_record.file_type
     # `parsed` only changes behavior for spreadsheet files (xlsx is a binary zip
     # the frontend cannot render); everything else is served raw as usual.
-    parse_spreadsheet = parsed and is_spreadsheet_mime_type(media_type)
+    parse_spreadsheet = parsed and is_spreadsheet_mime_type(file_record.file_type)
+
+    media_type, security_headers = resolve_inline_disposition(
+        file_record.file_type,
+        # A parsed spreadsheet is served as a JSON preview, not as the stored bytes.
+        fallback_disposition=None if parse_spreadsheet else "attachment",
+    )
 
     # Files served here are immutable (content-addressed by file_id), so allow long-lived caching.
     # Use `private` because this is behind auth / tenant scoping.
-    etag = f'"{file_id}-parsed"' if parse_spreadsheet else f'"{file_id}"'
-    cache_headers = {
+    etag_variant: str = "-parsed" if parse_spreadsheet else ""
+    etag: str = f'"{file_id}{etag_variant}-{RESPONSE_POLICY_VERSION}"'
+    cache_headers: dict[str, str] = {
         "Cache-Control": "private, max-age=31536000, immutable",
         "ETag": etag,
         "Vary": "Cookie",
+        **security_headers,
     }
 
     if request.headers.get("if-none-match") == etag:

@@ -879,7 +879,7 @@ class NotionConnector(LoadConnector, PollConnector, SlimConnector):
         page_title = None
         if hasattr(page, "database_name") and page.database_name:
             return page.database_name
-        for _, prop in page.properties.items():
+        for prop in page.properties.values():
             if prop["type"] == "title" and len(prop["title"]) > 0:
                 page_title = " ".join([t["plain_text"] for t in prop["title"]]).strip()
                 break

@@ -453,7 +453,10 @@ def _drive_interactive_turn(
                     if isinstance(sandbox_event, PromptResponse):
                         final_event_seen = True
                         cancelled_event_seen = (
-                            getattr(sandbox_event, "stop_reason", None) == "cancelled"
+                            getattr(  # ods: ignore[getattr]
+                                sandbox_event, "stop_reason", None
+                            )
+                            == "cancelled"
                         )
 
                 if timed_out:

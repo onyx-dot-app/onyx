@@ -123,58 +123,65 @@ class TestEscapeSequences:
 
     def test_newline_escape(self) -> None:
         deltas = _all_deltas(['{"text": "line1\\nline2"}'])
-        text_parts = []
-        for d in deltas:
-            if isinstance(d, dict) and "text" in d and isinstance(d["text"], str):
-                text_parts.append(d["text"])
+        text_parts = [
+            d["text"]
+            for d in deltas
+            if isinstance(d, dict) and "text" in d and isinstance(d["text"], str)
+        ]
         assert "".join(text_parts) == "line1\nline2"
 
     def test_tab_escape(self) -> None:
         deltas = _all_deltas(['{"t": "a\\tb"}'])
-        parts = []
-        for d in deltas:
-            if isinstance(d, dict) and "t" in d and isinstance(d["t"], str):
-                parts.append(d["t"])
+        parts = [
+            d["t"]
+            for d in deltas
+            if isinstance(d, dict) and "t" in d and isinstance(d["t"], str)
+        ]
         assert "".join(parts) == "a\tb"
 
     def test_escaped_quote(self) -> None:
         deltas = _all_deltas(['{"q": "say \\"hi\\""}'])
-        parts = []
-        for d in deltas:
-            if isinstance(d, dict) and "q" in d and isinstance(d["q"], str):
-                parts.append(d["q"])
+        parts = [
+            d["q"]
+            for d in deltas
+            if isinstance(d, dict) and "q" in d and isinstance(d["q"], str)
+        ]
         assert "".join(parts) == 'say "hi"'
 
     def test_unicode_escape(self) -> None:
         deltas = _all_deltas(['{"u": "\\u0041\\u0042"}'])
-        parts = []
-        for d in deltas:
-            if isinstance(d, dict) and "u" in d and isinstance(d["u"], str):
-                parts.append(d["u"])
+        parts = [
+            d["u"]
+            for d in deltas
+            if isinstance(d, dict) and "u" in d and isinstance(d["u"], str)
+        ]
         assert "".join(parts) == "AB"
 
     def test_escape_split_across_chunks(self) -> None:
         deltas = _all_deltas(['{"x": "a\\', 'nb"}'])
-        parts = []
-        for d in deltas:
-            if isinstance(d, dict) and "x" in d and isinstance(d["x"], str):
-                parts.append(d["x"])
+        parts = [
+            d["x"]
+            for d in deltas
+            if isinstance(d, dict) and "x" in d and isinstance(d["x"], str)
+        ]
         assert "".join(parts) == "a\nb"
 
     def test_unicode_escape_split_across_chunks(self) -> None:
         deltas = _all_deltas(['{"u": "\\u00', '41"}'])
-        parts = []
-        for d in deltas:
-            if isinstance(d, dict) and "u" in d and isinstance(d["u"], str):
-                parts.append(d["u"])
+        parts = [
+            d["u"]
+            for d in deltas
+            if isinstance(d, dict) and "u" in d and isinstance(d["u"], str)
+        ]
         assert "".join(parts) == "A"
 
     def test_backslash_escape(self) -> None:
         deltas = _all_deltas(['{"p": "c:\\\\dir"}'])
-        parts = []
-        for d in deltas:
-            if isinstance(d, dict) and "p" in d and isinstance(d["p"], str):
-                parts.append(d["p"])
+        parts = [
+            d["p"]
+            for d in deltas
+            if isinstance(d, dict) and "p" in d and isinstance(d["p"], str)
+        ]
         assert "".join(parts) == "c:\\dir"
 
 
@@ -196,9 +203,7 @@ class TestNestedStructures:
         all_items: list[str] = []
         for d in deltas:
             if isinstance(d, list):
-                for item in d:
-                    if isinstance(item, str):
-                        all_items.append(item)
+                all_items.extend(item for item in d if isinstance(item, str))
             elif isinstance(d, str):
                 all_items.append(d)
         joined = "".join(all_items)

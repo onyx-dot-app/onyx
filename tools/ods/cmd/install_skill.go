@@ -2,11 +2,13 @@ package cmd
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
+	"github.com/charlievieth/fastwalk"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 	"github.com/spf13/cobra"
 )
@@ -192,7 +194,9 @@ func installManualSkills(cmd *cobra.Command, source string, copyMode bool) error
 }
 
 func copySkill(srcDir, dstDir string) error {
-	return filepath.WalkDir(srcDir, func(path string, d os.DirEntry, err error) error {
+	// fastwalk visits a directory before its children, so each destination
+	// directory exists by the time its entries are copied.
+	return fastwalk.Walk(nil, srcDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}

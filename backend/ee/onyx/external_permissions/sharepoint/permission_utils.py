@@ -227,7 +227,7 @@ def _get_group_guid_from_identifier(
 
 def _get_sharepoint_list_item_id(drive_item: DriveItem) -> str | None:
     try:
-        properties = getattr(drive_item, "properties", None)
+        properties = getattr(drive_item, "properties", None)  # ods: ignore[getattr]
         sharepoint_ids = properties.get(SHAREPOINT_IDS_PROPERTY) if properties else None
         if isinstance(sharepoint_ids, dict):
             if list_item_id := sharepoint_ids.get(LIST_ITEM_ID_PROPERTY):
@@ -893,9 +893,10 @@ def get_sharepoint_external_groups(
         return external_user_groups
 
     already_resolved = set(groups_and_members.groups_to_emails.keys())
-    for group in _enumerate_ad_groups_paginated(
-        get_access_token, already_resolved, graph_api_base
-    ):
-        external_user_groups.append(group)
+    external_user_groups.extend(
+        _enumerate_ad_groups_paginated(
+            get_access_token, already_resolved, graph_api_base
+        )
+    )
 
     return external_user_groups

@@ -8,7 +8,6 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.auth.schemas import UserRole
 from onyx.db.enums import PersonaSharePermission
 from onyx.db.models import DocumentSet, Persona, User
 from onyx.db.persona import upsert_persona
@@ -117,7 +116,7 @@ def test_editor_cannot_readd_removed_inaccessible_set(db_session: Session) -> No
 
 def test_admin_bypasses_knowledge_guard(db_session: Session) -> None:
     owner = create_test_user(db_session, "owner")
-    admin = create_test_user(db_session, "admin", role=UserRole.ADMIN)
+    admin = create_test_user(db_session, "admin", is_admin=True)
     private_set = _create_document_set(db_session, owner, is_public=False)
     persona = create_test_persona(db_session, owner)
 

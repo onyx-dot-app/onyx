@@ -41,10 +41,7 @@ from onyx.db.connector_credential_pair import (
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
-from onyx.db.hierarchy import (
-    upsert_hierarchy_node_cc_pair_entries,
-    upsert_hierarchy_nodes_batch,
-)
+from onyx.db.hierarchy import persist_hierarchy_nodes_for_cc_pair
 from onyx.db.models import ConnectorCredentialPair
 from onyx.redis.redis_hierarchy import (
     HierarchyNodeCacheEntry,
@@ -312,20 +309,13 @@ def _run_hierarchy_extraction(
         if not node_batch:
             return 0
 
-        upserted_nodes = upsert_hierarchy_nodes_batch(
+        upserted_nodes = persist_hierarchy_nodes_for_cc_pair(
             db_session=db_session,
             nodes=node_batch,
             source=source,
-            commit=True,
-            is_connector_public=is_connector_public,
-        )
-
-        upsert_hierarchy_node_cc_pair_entries(
-            db_session=db_session,
-            hierarchy_node_ids=[n.id for n in upserted_nodes],
             connector_id=cc_pair.connector_id,
             credential_id=cc_pair.credential_id,
-            commit=True,
+            is_connector_public=is_connector_public,
         )
 
         # Cache in Redis for fast ancestor resolution

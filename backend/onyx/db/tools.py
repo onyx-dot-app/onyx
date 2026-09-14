@@ -1,12 +1,23 @@
+from collections.abc import Collection
 from typing import TYPE_CHECKING, Any, Type, cast
 from uuid import UUID
 
-from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy import Select, func, or_, select
+from sqlalchemy.orm import InstrumentedAttribute, Session
 
+from onyx.auth.permissions import has_permission
 from onyx.db.constants import UNSET, UnsetType
-from onyx.db.enums import MCPServerStatus
-from onyx.db.models import MCPServer, OAuthConfig, Tool, ToolCall
+from onyx.db.enums import MCPServerStatus, Permission, PermissionAuthority
+from onyx.db.models import (
+    MCPServer,
+    OAuthConfig,
+    Persona,
+    Persona__Tool,
+    Persona__UserGroup,
+    Tool,
+    ToolCall,
+    User,
+)
 from onyx.server.features.tool.models import Header
 from onyx.tools.built_in_tools import BUILT_IN_TOOL_TYPES
 from onyx.utils.headers import HeaderItemDict
@@ -82,6 +93,106 @@ def get_tool_by_id(tool_id: int, db_session: Session) -> Tool:
     if not tool:
         raise ValueError("Tool by specified id does not exist")
     return tool
+
+
+def can_manage_own_tool(user: User, tool: Tool) -> bool:
+    """Owner-or-admin gate for every action on a custom action (edit, delete, toggle, OAuth
+    config), matching the routes' ``allow_scope`` guard: a global actions-admin manages any
+    action, a scoped manager only one they created. No MANAGE_ACTIONS authority — or a built-in
+    tool (no owner) — never passes."""
+    authority = has_permission(user, Permission.MANAGE_ACTIONS)
+    if authority is PermissionAuthority.GLOBAL:
+        return True
+    if authority is PermissionAuthority.SCOPED:
+        return tool.user_id is not None and tool.user_id == user.id
+    return False
+
+
+def can_manage_mcp_server(user: User, server: MCPServer) -> bool:
+    """Owner-or-admin gate for every action on an MCP server (edit, delete, connect, status).
+    Global MANAGE_ACTIONS manages any server — that permission is full-admin-equivalent for
+    actions, so it isn't narrowed to FULL_ADMIN; a scoped manager only one they own."""
+    authority = has_permission(user, Permission.MANAGE_ACTIONS)
+    if authority is PermissionAuthority.GLOBAL:
+        return True
+    if authority is PermissionAuthority.SCOPED:
+        return server.owner == user.email
+    return False
+
+
+def can_manage_tool(user: User, tool: Tool) -> bool:
+    """The gate for every per-tool action (edit, delete, toggle, OAuth config). An MCP tool
+    is created with ``user_id=None``, so its ownership lives on the server — without routing
+    there, a server's owner could delete it but not disable one of its tools."""
+    if tool.mcp_server is not None:
+        return can_manage_mcp_server(user, tool.mcp_server)
+    return can_manage_own_tool(user, tool)
+
+
+def can_link_oauth_config(
+    user: User, oauth_config_id: int, db_session: Session
+) -> bool:
+    """Whether an action may point at this OAuth config. A global actions-admin links any; a
+    scoped manager only one no other creator's action already uses — the config holds shared
+    client credentials, and ``_assert_can_manage_oauth_config`` derives ownership from exactly
+    these referencing actions, so linking in would grant both."""
+    authority = has_permission(user, Permission.MANAGE_ACTIONS)
+    if authority is PermissionAuthority.GLOBAL:
+        return True
+    if authority is not PermissionAuthority.SCOPED:
+        return False
+    # Vacuously true when nothing references it yet — an unreferenced config has no owner,
+    # and this is the create-config-then-link flow.
+    return all(
+        owner_id == user.id
+        for owner_id in db_session.scalars(
+            select(Tool.user_id).where(Tool.oauth_config_id == oauth_config_id)
+        )
+    )
+
+
+def _connected_to_groups_stmt(
+    column: InstrumentedAttribute[Any], group_ids: Collection[int]
+) -> Select[tuple[Any]]:
+    """Tools an agent in ``group_ids`` uses — one shared to or owned by the group. An action
+    has no group of its own, so an agent is the only path from a group to one."""
+    return (
+        select(column)
+        .join(Persona__Tool, Persona__Tool.tool_id == Tool.id)
+        .join(Persona, Persona.id == Persona__Tool.persona_id)
+        .outerjoin(Persona__UserGroup, Persona__UserGroup.persona_id == Persona.id)
+        .where(
+            Persona.deleted.is_(False),
+            or_(
+                Persona__UserGroup.user_group_id.in_(group_ids),
+                Persona.owner_group_id.in_(group_ids),
+            ),
+        )
+    )
+
+
+def get_mcp_server_ids_connected_to_groups(
+    group_ids: Collection[int], db_session: Session
+) -> set[int]:
+    """MCP server ids reachable from ``group_ids``. A scoped manager may view these without
+    managing them."""
+    if not group_ids:
+        return set()
+    rows = db_session.execute(
+        _connected_to_groups_stmt(Tool.mcp_server_id, group_ids).where(
+            Tool.mcp_server_id.is_not(None)
+        )
+    ).all()
+    return {server_id for (server_id,) in rows if server_id is not None}
+
+
+def get_tool_ids_connected_to_groups(
+    group_ids: Collection[int], db_session: Session
+) -> set[int]:
+    if not group_ids:
+        return set()
+    rows = db_session.execute(_connected_to_groups_stmt(Tool.id, group_ids)).all()
+    return {tool_id for (tool_id,) in rows}
 
 
 def get_tool_by_name(tool_name: str, db_session: Session) -> Tool:

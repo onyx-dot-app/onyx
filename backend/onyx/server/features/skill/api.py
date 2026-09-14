@@ -8,8 +8,11 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from onyx.auth.permissions import get_effective_permissions, require_permission
-from onyx.auth.schemas import UserRole
+from onyx.auth.permissions import (
+    has_global_permission,
+    require_permission,
+)
+from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.db.engine.sql_engine import get_session, get_session_with_tenant
 from onyx.db.enums import (
     AccountType,
@@ -113,7 +116,7 @@ def _github_authorization_header(user: User) -> str | None:
 def _ensure_can_edit_org_visibility(skill: Skill, user: User) -> None:
     if skill.author_user_id == user.id:
         return
-    if user.role == UserRole.ADMIN:
+    if has_global_permission(user, Permission.MANAGE_SKILLS):
         return
     raise OnyxError(
         OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
@@ -416,11 +419,7 @@ def create_custom_skill_from_editor(
     db_session: Session = Depends(get_session),
 ) -> SkillEditableDetailResponse:
     if external_app_id is not None:
-        if (
-            user.role != UserRole.ADMIN
-            and Permission.FULL_ADMIN_PANEL_ACCESS
-            not in get_effective_permissions(user)
-        ):
+        if not has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS):
             raise OnyxError(
                 OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
                 "Only administrators can create a skill for an external app.",
@@ -751,6 +750,38 @@ def patch_current_user_skill(
     )
 
 
+def _assert_group_share_within_scope(
+    skill: Skill,
+    share_req: SkillShareRequest,
+    user: User,
+    db_session: Session,
+) -> None:
+    """GATE 2 — *changing* a skill's group shares is a MANAGE_SKILLS action, matching
+    how agents treat group attachment. Reaching this handler only proves EDIT on the
+    skill, which an owner always has; without this an ordinary owner could publish
+    into any group and inject the skill into that group manager's scope.
+
+    Shares are read from the DB, never the request, so a reassignment can't escape
+    scope. Re-sending the current set is a no-op — the editor round-trips shares on
+    every save.
+    """
+    if share_req.group_shares is None:
+        return
+    current = {share.user_group_id: share.permission for share in skill.group_shares}
+    requested = {share.group_id: share.permission for share in share_req.group_shares}
+    if current == requested:
+        return
+    assert_within_scope(
+        user,
+        db_session,
+        permission=Permission.MANAGE_SKILLS,
+        current_group_ids=list(current),
+        requested_group_ids=list(requested),
+        is_non_public=skill.public_permission is None
+        and share_req.public_permission is None,
+    )
+
+
 @user_router.patch("/custom/{skill_id}/share")
 def share_current_user_skill(
     skill_id: UUID,
@@ -782,6 +813,9 @@ def share_current_user_skill(
     touches_org_visibility = "public_permission" in share_req.model_fields_set
     if touches_org_visibility:
         _ensure_can_edit_org_visibility(skill, user)
+    # Anchor on the pre-call visibility so a public->private convert plus a
+    # group-share in one request can't slip a published skill into managed scope.
+    _assert_group_share_within_scope(skill, share_req, user, db_session)
 
     before_affected = affected_user_ids_for_skill(skill, db_session)
     if touches_org_visibility:
@@ -854,7 +888,7 @@ def transfer_current_user_skill_ownership(
         or not skill.author.is_active
     )
     if skill.author_user_id != user.id and not (
-        user.role == UserRole.ADMIN and ownership_vacant
+        has_global_permission(user, Permission.MANAGE_SKILLS) and ownership_vacant
     ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
@@ -868,11 +902,6 @@ def transfer_current_user_skill_ownership(
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "Ownership can only be transferred to an active user.",
-        )
-    if target.role in [UserRole.SLACK_USER, UserRole.EXT_PERM_USER, UserRole.LIMITED]:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "Ownership cannot be transferred to this account type.",
         )
     if target.account_type is not None and target.account_type != AccountType.STANDARD:
         raise OnyxError(

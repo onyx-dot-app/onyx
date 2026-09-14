@@ -17,7 +17,7 @@ export function Callout({
   return (
     <div
       className={cn(
-        "my-6 flex items-start rounded-md border border-l-4 p-4",
+        "my-6 flex items-start rounded-md border border-s-4 p-4",
         className,
         {
           "border-rose-300 bg-rose-50 dark:border-rose-500 dark:bg-rose-950/50":
@@ -30,7 +30,7 @@ export function Callout({
       )}
       {...props}
     >
-      {icon && <span className="mr-4 text-2xl">{icon}</span>}
+      {icon && <span className="me-4 text-2xl">{icon}</span>}
       <div className="flex-1">
         {title && (
           <div className="font-medium mb-1 flex items-center dark:text-white">

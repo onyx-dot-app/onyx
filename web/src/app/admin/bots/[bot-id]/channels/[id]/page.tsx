@@ -1,6 +1,7 @@
 "use client";
 
 import { use } from "react";
+import { useTranslations } from "next-intl";
 import { SlackChannelConfigCreationForm } from "@/app/admin/bots/[bot-id]/channels/SlackChannelConfigCreationForm";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { SvgSimpleLoader } from "@opal/icons";
@@ -15,6 +16,7 @@ import { Tier } from "@/lib/settings/types";
 import type { StandardAnswerCategoryResponse } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 
 function EditSlackChannelConfigContent({ id }: { id: string }) {
+  const t = useTranslations("admin.slackBots");
   const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
 
   const {
@@ -52,8 +54,8 @@ function EditSlackChannelConfigContent({ id }: { id: string }) {
   );
 
   const title = slackChannelConfig?.is_default
-    ? "Edit Default Slack Config"
-    : "Edit Slack Channel Config";
+    ? t("editChannel.default.header.title")
+    : t("editChannel.channel.header.title");
 
   return (
     <SettingsLayouts.Root>
@@ -68,29 +70,29 @@ function EditSlackChannelConfigContent({ id }: { id: string }) {
           <SvgSimpleLoader />
         ) : channelsError || !slackChannelConfigs ? (
           <ErrorCallout
-            errorTitle="Something went wrong :("
-            errorMsg={`Failed to fetch Slack Channels - ${
-              channelsError?.message ?? "unknown error"
-            }`}
+            errorTitle={t("error.generic.title")}
+            errorMsg={t("error.fetchChannels.message", {
+              error: channelsError?.message ?? t("error.unknown.message"),
+            })}
           />
         ) : !slackChannelConfig ? (
           <ErrorCallout
-            errorTitle="Something went wrong :("
-            errorMsg={`Did not find Slack Channel config with ID: ${id}`}
+            errorTitle={t("error.generic.title")}
+            errorMsg={t("error.channelConfigNotFound.message", { id })}
           />
         ) : docSetsError || !documentSets ? (
           <ErrorCallout
-            errorTitle="Something went wrong :("
-            errorMsg={`Failed to fetch document sets - ${
-              docSetsError?.message ?? "unknown error"
-            }`}
+            errorTitle={t("error.generic.title")}
+            errorMsg={t("error.fetchDocumentSets.message", {
+              error: docSetsError?.message ?? t("error.unknown.message"),
+            })}
           />
         ) : agentsError ? (
           <ErrorCallout
-            errorTitle="Something went wrong :("
-            errorMsg={`Failed to fetch agents - ${
-              agentsError?.message ?? "unknown error"
-            }`}
+            errorTitle={t("error.generic.title")}
+            errorMsg={t("error.fetchAgents.message", {
+              error: agentsError?.message ?? t("error.unknown.message"),
+            })}
           />
         ) : (
           <SlackChannelConfigCreationForm

@@ -13,18 +13,25 @@ from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_user
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import Permission
+from onyx.db.enums import Permission, SystemUsageAttribution
 from onyx.db.llm import (
     fetch_all_llm_providers_accessible_in_any_context,
     fetch_default_llm_model,
 )
 from onyx.db.models import TokenRateLimit, User
+from onyx.db.system_usage import (
+    OTHER_SYSTEM_USAGE_CATEGORY,
+    UNATTRIBUTED_SYSTEM_USAGE_CATEGORY,
+    get_system_usage_export,
+)
 from onyx.db.token_limit import (
     fetch_all_global_token_rate_limits,
     fetch_all_user_token_rate_limits,
     fetch_user_group_token_rate_limits,
 )
 from onyx.db.user_usage import (
+    cost_budget_fetch_cutoff,
+    cost_budget_limits,
     get_cost_window_reset,
     get_cost_window_start,
     get_group_cost_cents_buckets_since,
@@ -52,6 +59,9 @@ from onyx.server.features.usage.models import (
     EffectiveCostBudget,
     ResetUsageRequest,
     ResetUsageResponse,
+    SystemUsageCategory,
+    SystemUsageRecord,
+    SystemUsageResponse,
     UsageExportRecord,
     UsageExportResponse,
     UsageExportTotals,
@@ -122,22 +132,18 @@ def _user_cost_budget(db_session: Session, user_id: str) -> EffectiveCostBudget 
             )
 
     user_rls = fetch_all_user_token_rate_limits(db_session, enabled_only=True)
-    user_cost_rls = [rl for rl in user_rls if rl.cost_budget_cents is not None]
+    user_cost_rls = cost_budget_limits(user_rls)
     if user_cost_rls:
-        fetch_cutoff = min(
-            get_cost_window_start(now, rl.period_hours) for rl in user_cost_rls
-        )
+        fetch_cutoff = cost_budget_fetch_cutoff(now, user_cost_rls)
         _add_from_limits(
             user_cost_rls,
             get_user_cost_cents_buckets_since(db_session, user_id, fetch_cutoff),
         )
 
     global_rls = fetch_all_global_token_rate_limits(db_session, enabled_only=True)
-    global_cost_rls = [rl for rl in global_rls if rl.cost_budget_cents is not None]
+    global_cost_rls = cost_budget_limits(global_rls)
     if global_cost_rls:
-        fetch_cutoff = min(
-            get_cost_window_start(now, rl.period_hours) for rl in global_cost_rls
-        )
+        fetch_cutoff = cost_budget_fetch_cutoff(now, global_cost_rls)
         _add_from_limits(
             global_cost_rls,
             get_total_cost_cents_buckets_since(db_session, fetch_cutoff),
@@ -167,23 +173,21 @@ def _group_cost_budget_candidate(
     if not group_limits:
         return None
 
-    cost_rls = [
-        rl
-        for rls in group_limits.values()
-        for rl in rls
-        if rl.cost_budget_cents is not None
-    ]
+    cost_limits_by_group = {
+        group_id: cost_budget_limits(rls) for group_id, rls in group_limits.items()
+    }
+    cost_rls = [rl for rls in cost_limits_by_group.values() for rl in rls]
     if not cost_rls:
         return None
 
     # One batched query for every group's cost buckets, then window in Python.
-    fetch_cutoff = min(get_cost_window_start(now, rl.period_hours) for rl in cost_rls)
+    fetch_cutoff = cost_budget_fetch_cutoff(now, cost_rls)
     buckets = get_group_cost_cents_buckets_since(
         db_session, list(group_limits.keys()), fetch_cutoff
     )
 
     most_permissive: EffectiveCostBudget | None = None
-    for group_id, limits in group_limits.items():
+    for group_id, limits in cost_limits_by_group.items():
         group_buckets = buckets.get(group_id, [])
         group_binding: EffectiveCostBudget | None = None
         for rl in limits:
@@ -345,6 +349,54 @@ def export_usage(
     )
 
 
+@admin_usage_router.get("/system")
+def get_system_usage(
+    start: date | None = None,
+    end: date | None = None,
+    model: str | None = None,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> SystemUsageResponse:
+    end_date = end or datetime.now(timezone.utc).date()
+    start_date = start or _start_for_inclusive_range(
+        end_date, _DEFAULT_USAGE_RANGE_INCLUSIVE_DAYS
+    )
+    start_dt, end_dt = _date_range_to_utc_bounds(start_date, end_date)
+
+    records_by_category: dict[str, list[SystemUsageRecord]] = defaultdict(list)
+    for row in get_system_usage_export(db_session, start_dt, end_dt, model):
+        category = (
+            UNATTRIBUTED_SYSTEM_USAGE_CATEGORY
+            if row.attribution == SystemUsageAttribution.UNATTRIBUTED
+            else row.flow or OTHER_SYSTEM_USAGE_CATEGORY
+        )
+        records_by_category[category].append(
+            SystemUsageRecord.model_validate(row.model_dump())
+        )
+
+    categories = [
+        SystemUsageCategory(
+            category=category,
+            totals=UsageExportTotals(
+                input_tokens=sum(record.input_tokens for record in records),
+                output_tokens=sum(record.output_tokens for record in records),
+                cache_read_tokens=sum(record.cache_read_tokens for record in records),
+                cache_creation_tokens=sum(
+                    record.cache_creation_tokens for record in records
+                ),
+                cost_cents=sum(record.cost_cents for record in records),
+            ),
+            records=records,
+        )
+        for category, records in sorted(records_by_category.items())
+    ]
+    return SystemUsageResponse(
+        start=start_date.isoformat(),
+        end=end_date.isoformat(),
+        categories=categories,
+    )
+
+
 @admin_usage_router.post("/reset")
 def reset_usage(
     payload: ResetUsageRequest,
@@ -371,7 +423,7 @@ def reset_usage(
 
 @router.get("")
 def list_cost_overrides(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> list[CostOverride]:
     return [CostOverride.from_db(row) for row in list_overrides(db_session)]
@@ -380,7 +432,7 @@ def list_cost_overrides(
 @router.put("")
 def upsert_cost_override(
     payload: CostOverrideUpsertRequest,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> CostOverride:
     row = upsert_override(
@@ -402,7 +454,7 @@ def upsert_cost_override(
 def delete_cost_override(
     model: str,
     provider: str = "",
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     if not delete_override(db_session, model, provider):

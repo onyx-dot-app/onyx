@@ -12,7 +12,9 @@ import (
 )
 
 // Docs generate from schema descriptions + examples/ (needs terraform CLI).
-//go:generate go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs@latest generate
+// Pinned: CI fails on any docs/ diff, and an unpinned generator would move that
+// output on its own.
+//go:generate go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs@v0.25.0 generate
 
 // version is set via ldflags on release builds.
 var version = "dev"

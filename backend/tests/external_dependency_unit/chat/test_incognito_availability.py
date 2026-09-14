@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from onyx.chat.incognito import incognito_allowed_for_user
 from onyx.db.models import User, User__UserGroup, UserGroup
 from onyx.server.security.models import IncognitoAvailability
-from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 
 GROUP_NAME_PREFIX = "incognito-avail-"
 
@@ -32,7 +32,7 @@ def owner(db_session: Session) -> Generator[User, None, None]:
     db_session.query(UserGroup).filter(
         UserGroup.name.like(f"{GROUP_NAME_PREFIX}%")
     ).delete(synchronize_session=False)
-    db_session.delete(user)
+    delete_test_user(db_session, user)
     db_session.commit()
 
 

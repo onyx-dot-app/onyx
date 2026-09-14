@@ -38,7 +38,7 @@ export async function prepareOAuthAuthorizationRequest(
   }
 
   // Parse the JSON response
-  const data = (await response.json()) as OAuthPrepareAuthorizationResponse;
+  const data: OAuthPrepareAuthorizationResponse = await response.json();
   return data;
 }
 
@@ -60,56 +60,6 @@ export async function handleOAuthAuthorizationResponse(
   }
 
   return;
-}
-
-// Handler for federated connector OAuth callbacks
-export async function handleFederatedOAuthCallback(
-  federatedConnectorId: string,
-  code: string,
-  state: string
-): Promise<OAuthBaseCallbackResponse> {
-  // Use the generic callback endpoint - the connector ID will be extracted from the state parameter
-  const url = `/api/federated/callback?code=${encodeURIComponent(
-    code
-  )}&state=${encodeURIComponent(state)}`;
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
-
-  if (!response.ok) {
-    let errorDetails = `Failed to handle federated OAuth callback: ${response.status}`;
-
-    try {
-      const responseBody = await response.text();
-      errorDetails += `\nResponse Body: ${responseBody}`;
-    } catch (err) {
-      if (err instanceof Error) {
-        errorDetails += `\nUnable to read response body: ${err.message}`;
-      } else {
-        errorDetails += `\nUnable to read response body: Unknown error type`;
-      }
-    }
-
-    throw new Error(errorDetails);
-  }
-
-  // Parse the JSON response and extract the data field
-  const result = await response.json();
-
-  if (!result.success) {
-    throw new Error(result.message || "OAuth callback failed");
-  }
-
-  return {
-    success: true,
-    message: result.message || "OAuth authorization successful",
-    redirect_on_success: `/admin/federated/${federatedConnectorId}`,
-    finalize_url: null,
-  };
 }
 
 // server side handler to process the oauth redirect callback
@@ -148,7 +98,7 @@ export async function handleOAuthSlackAuthorizationResponse(
   }
 
   // Parse the JSON response
-  const data = (await response.json()) as OAuthSlackCallbackResponse;
+  const data: OAuthSlackCallbackResponse = await response.json();
   return data;
 }
 
@@ -186,7 +136,7 @@ export async function handleOAuthGoogleDriveAuthorizationResponse(
   }
 
   // Parse the JSON response
-  const data = (await response.json()) as OAuthBaseCallbackResponse;
+  const data: OAuthBaseCallbackResponse = await response.json();
   return data;
 }
 
@@ -226,7 +176,7 @@ export async function handleOAuthConfluenceAuthorizationResponse(
   }
 
   // Parse the JSON response
-  const data = (await response.json()) as OAuthBaseCallbackResponse;
+  const data: OAuthBaseCallbackResponse = await response.json();
   return data;
 }
 
@@ -275,8 +225,8 @@ export async function handleOAuthConfluencePrepareFinalization(
   }
 
   // Parse the JSON response
-  const data =
-    (await response.json()) as OAuthConfluencePrepareFinalizationResponse;
+  const data: OAuthConfluencePrepareFinalizationResponse =
+    await response.json();
   return data;
 }
 
@@ -317,6 +267,6 @@ export async function handleOAuthConfluenceFinalize(
   }
 
   // Parse the JSON response
-  const data = (await response.json()) as OAuthConfluenceFinalizeResponse;
+  const data: OAuthConfluenceFinalizeResponse = await response.json();
   return data;
 }

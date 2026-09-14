@@ -13,7 +13,7 @@ from onyx.db.external_app import (
     get_external_app_by_skill_id,
     get_skills_for_external_app,
 )
-from onyx.db.models import ExternalApp__Skill, User, UserRole, UserSkillPreference
+from onyx.db.models import ExternalApp__Skill, User, UserSkillPreference
 from onyx.db.skill import (
     SkillManagementPolicy,
     fetch_skill,
@@ -97,7 +97,7 @@ def test_admin_view_includes_associated_custom_but_hides_associated_builtin(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
-    admin = make_user(db_session, role=UserRole.ADMIN)
+    admin = make_user(db_session, is_admin=True)
     regular = make_skill(db_session, is_public=True, name="plain-admin-skill")
     custom = make_skill(db_session, is_public=True, name="ext-admin-custom")
     built_in = make_built_in_skill_row(

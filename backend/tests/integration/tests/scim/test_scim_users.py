@@ -27,7 +27,6 @@ import pytest
 import redis
 
 from ee.onyx.server.license.models import LicenseMetadata, LicenseSource, PlanType
-from onyx.auth.schemas import UserRole
 from onyx.configs.app_configs import REDIS_DB_NUMBER, REDIS_HOST, REDIS_PORT
 from onyx.db.enums import AccountType
 from onyx.server.settings.models import ApplicationStatus
@@ -84,7 +83,7 @@ def scim_token(idp_style: str) -> str:
                 email=build_email(ADMIN_USER_NAME),
                 password=DEFAULT_PASSWORD,
                 headers=GENERAL_HEADERS,
-                role=UserRole.ADMIN,
+                is_admin=True,
                 is_active=True,
             )
         )
@@ -241,7 +240,7 @@ def test_create_user_default_group_and_account_type(
             email=build_email(ADMIN_USER_NAME),
             password=DEFAULT_PASSWORD,
             headers=GENERAL_HEADERS,
-            role=UserRole.ADMIN,
+            is_admin=True,
             is_active=True,
         )
     )

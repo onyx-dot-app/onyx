@@ -2,21 +2,23 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { EmptyMessageCard } from "@opal/components";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { useLLMProviders } from "@/lib/languageModels/hooks";
 import { hasVisibleLLMModel } from "@/lib/languageModels/utils";
 import { useSettings } from "@/lib/settings/hooks";
-import { Tier } from "@/lib/settings/types";
+import { LLM_GATEWAY_MIN_TIER } from "@/lib/tiers";
 import { LLMGatewaySettings } from "@/views/SettingsPage";
 
 export default function LLMGatewayPage() {
+  const t = useTranslations("settings.gateway");
   const router = useRouter();
-  const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
+  const gatewayTier = useTierAtLeast(LLM_GATEWAY_MIN_TIER);
   const settings = useSettings();
   const { llmProviders, isLoading, error } = useLLMProviders();
   const hasAccessibleGatewayModel = hasVisibleLLMModel(llmProviders);
-  const hasAccess = enterpriseTier && hasAccessibleGatewayModel;
+  const hasAccess = gatewayTier && hasAccessibleGatewayModel;
   const isLoadingAccess = settings.isLoading || isLoading;
 
   useEffect(() => {
@@ -35,8 +37,8 @@ export default function LLMGatewayPage() {
     return (
       <EmptyMessageCard
         sizePreset="main-ui"
-        title="Could not load LLM Gateway"
-        description="Please refresh the page and try again."
+        title={t("loadError.title")}
+        description={t("loadError.description")}
       />
     );
   }

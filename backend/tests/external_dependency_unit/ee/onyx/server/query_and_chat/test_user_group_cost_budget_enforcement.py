@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 import ee.onyx.server.query_and_chat.token_limit as ee_token_limit
 from onyx.configs.constants import TokenRateLimitScope
+from onyx.db.llm_usage import LLMUsageRecord
 from onyx.db.models import (
     TokenRateLimit,
     TokenRateLimit__UserGroup,
@@ -49,14 +50,16 @@ def _record_cost(db_session: Session, user: User, cost_cents: float) -> None:
     record_user_usage(
         db_session=db_session,
         user_id=str(user.id),
-        model=_TEST_MODEL,
-        flow=LLMFlow.CHAT_RESPONSE.value,
-        provider=None,
-        input_tokens=1,
-        output_tokens=1,
-        cache_read_tokens=0,
-        cost_cents=cost_cents,
-        window_start=window_start,
+        usage=LLMUsageRecord(
+            model=_TEST_MODEL,
+            flow=LLMFlow.CHAT_RESPONSE.value,
+            provider=None,
+            input_tokens=1,
+            output_tokens=1,
+            cache_read_tokens=0,
+            cost_cents=cost_cents,
+            window_start=window_start,
+        ),
     )
     db_session.commit()
 

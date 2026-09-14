@@ -94,8 +94,6 @@ def search_chunks(
     embedding_model: EmbeddingModel | None = None,
     prefetched_federated_retrieval_infos: list[FederatedRetrievalInfo] | None = None,
 ) -> list[InferenceChunk]:
-    run_queries: list[tuple[Callable, tuple]] = []
-
     source_filters = (
         set(query_request.filters.source_type)
         if query_request.filters.source_type
@@ -121,10 +119,10 @@ def search_chunks(
         federated_retrieval_info.source.to_non_federated_source()
         for federated_retrieval_info in federated_retrieval_infos
     )
-    for federated_retrieval_info in federated_retrieval_infos:
-        run_queries.append(
-            (federated_retrieval_info.retrieval_function, (query_request,))
-        )
+    run_queries: list[tuple[Callable, tuple]] = [
+        (federated_retrieval_info.retrieval_function, (query_request,))
+        for federated_retrieval_info in federated_retrieval_infos
+    ]
 
     # Don't run normal hybrid search if there are no indexed sources to
     # search over

@@ -1,5 +1,6 @@
 import json
 import mimetypes
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -177,6 +178,7 @@ def save_chat_turn(
     emitted_citations: set[int] | None = None,
     pre_answer_processing_time: float | None = None,
     persist_content: bool = True,
+    request_params: dict[str, Any] | None = None,
 ) -> None:
     """
     Save a chat turn by populating the assistant_message and creating related entities.
@@ -222,6 +224,8 @@ def save_chat_turn(
         all_search_docs = {}
         emitted_citations = set()
     assistant_message.is_clarification = is_clarification
+    # Attribution, not content, so incognito keeps it.
+    assistant_message.request_params = request_params
 
     # Use pre-answer processing time (captured when MESSAGE_START was emitted)
     if pre_answer_processing_time is not None:

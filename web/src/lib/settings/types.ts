@@ -32,6 +32,9 @@ export interface Settings {
   application_status: ApplicationStatus;
   auto_scroll: boolean;
   temperature_override_enabled: boolean;
+  reasoning_override_enabled?: boolean;
+  // Model selector shows one flat list instead of per-provider groups.
+  hide_provider_grouping?: boolean;
   query_history_type: QueryHistoryType;
 
   // Visibility-only: hides the sidebar page; query-history APIs + recording stay on.
@@ -142,6 +145,7 @@ export interface EnterpriseSettings {
   consent_screen_prompt: string | null;
   show_first_visit_notice: boolean | null;
   custom_greeting_message: string | null;
+  custom_login_subtitle: string | null;
 
   // Custom help link surfaced in the profile dropdown alongside "Help & FAQ".
   custom_help_link_url: string | null;

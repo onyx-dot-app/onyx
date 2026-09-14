@@ -321,7 +321,9 @@ async def _capture_oauth_login_claims(
                 logger.warning("OAuth claims capture: id_token decode failed: %s", e)
 
         userinfo: dict[str, Any] | None = None
-        openid_configuration = getattr(oauth_client, "openid_configuration", None)
+        openid_configuration = getattr(  # ods: ignore[getattr]
+            oauth_client, "openid_configuration", None
+        )
         userinfo_endpoint = (
             openid_configuration.get("userinfo_endpoint")
             if isinstance(openid_configuration, dict)
@@ -349,7 +351,9 @@ async def _capture_oauth_login_claims(
 
         snapshot = {
             "captured_at": datetime.now(timezone.utc).isoformat(),
-            "oauth_name": getattr(oauth_client, "name", "unknown"),
+            "oauth_name": getattr(  # ods: ignore[getattr]
+                oauth_client, "name", "unknown"
+            ),
             "email": email,
             "id_token_claims": id_token_claims,
             "userinfo": userinfo or {},

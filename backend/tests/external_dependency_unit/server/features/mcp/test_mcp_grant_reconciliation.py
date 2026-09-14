@@ -5,7 +5,6 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from onyx.auth.schemas import UserRole
 from onyx.db.models import MCPServer, MCPServer__User, MCPServer__UserGroup, UserGroup
 from onyx.server.features.mcp.api import update_mcp_server_simple
 from onyx.server.features.mcp.models import MCPServerSimpleUpdateRequest
@@ -16,7 +15,7 @@ def test_omitted_mcp_grant_dimensions_are_preserved(
     db_session: Session,
     enable_ee: None,  # noqa: ARG001
 ) -> None:
-    user = create_test_user(db_session, "mcp_grant_reconcile", role=UserRole.ADMIN)
+    user = create_test_user(db_session, "mcp_grant_reconcile", is_admin=True)
     group = UserGroup(name=f"mcp_grant_{uuid4().hex[:8]}", is_up_to_date=True)
     server = MCPServer(
         owner=user.email,

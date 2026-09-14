@@ -5,6 +5,7 @@ import {
   FieldArray,
   useFormikContext,
 } from "formik";
+import { useTranslations } from "next-intl";
 import { Button, Spacer, Text } from "@opal/components";
 import { InputErrorText, InputVertical, Section } from "@opal/layouts";
 import { SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
@@ -40,6 +41,7 @@ const StringPairListInput: React.FC<StringPairListInputProps> = ({
   leftPlaceholder,
   rightPlaceholder,
 }) => {
+  const t = useTranslations("admin.connectorsList");
   const { values } = useFormikContext<Record<string, any>>();
   const pairs: Record<string, string>[] = values[name] || [];
 
@@ -134,7 +136,7 @@ const StringPairListInput: React.FC<StringPairListInputProps> = ({
                     prominence="tertiary"
                     size="sm"
                     type="button"
-                    tooltip="Remove"
+                    tooltip={t("stringPairList.removeButton.tooltip")}
                     onClick={() => {
                       setRowKeys((prev) => ({
                         keys: prev.keys.filter((_, i) => i !== index),
@@ -161,7 +163,7 @@ const StringPairListInput: React.FC<StringPairListInputProps> = ({
                 arrayHelpers.push({ [leftKey]: "", [rightKey]: "" });
               }}
             >
-              Add New
+              {t("stringPairList.addButton.label")}
             </Button>
           </Section>
         )}

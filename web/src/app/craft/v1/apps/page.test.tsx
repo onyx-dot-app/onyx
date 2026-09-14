@@ -11,7 +11,7 @@ import {
   MCPAuthenticationPerformer,
   MCPAuthenticationType,
   type MCPServer,
-} from "@/lib/tools/interfaces";
+} from "@/lib/tools/types";
 import type { ExternalAppUserResponse } from "@/app/craft/v1/apps/registry";
 import { appFixture, mcpServerFixture } from "@/lib/skills/__fixtures__/picker";
 

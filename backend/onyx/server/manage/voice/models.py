@@ -18,6 +18,10 @@ class VoiceProviderView(BaseModel):
         default=None,
         description="Masked API key for display (e.g. 'sk-a...b1c2'). Non-null means a key is stored.",
     )
+    api_secret: str | None = Field(
+        default=None,
+        description="Fixed placeholder for display. Non-null means a secret is stored.",
+    )
     target_uri: str | None = Field(
         default=None,
         description="Target URI for Azure Speech Services.",
@@ -55,6 +59,14 @@ class VoiceProviderUpsertRequest(BaseModel):
         default=False,
         description="Set to true when providing a new API key for an existing provider.",
     )
+    api_secret: str | None = Field(
+        default=None,
+        description="API secret for providers that require one.",
+    )
+    api_secret_changed: bool = Field(
+        default=False,
+        description="Set to true when providing a new API secret for an existing provider.",
+    )
     llm_provider_id: int | None = Field(
         default=None,
         description="If set, copies the API key from the specified LLM provider.",
@@ -85,6 +97,10 @@ class VoiceProviderUpsertRequest(BaseModel):
 class VoiceProviderTestRequest(BaseModel):
     """Request model for testing a voice provider connection."""
 
+    id: int | None = Field(
+        default=None,
+        description="Existing provider ID to use when testing stored credentials.",
+    )
     provider_type: str
     api_key: str | None = Field(
         default=None,
@@ -93,6 +109,14 @@ class VoiceProviderTestRequest(BaseModel):
     use_stored_key: bool = Field(
         default=False,
         description="If true, use the stored API key for this provider type.",
+    )
+    api_secret: str | None = Field(
+        default=None,
+        description="API secret for testing providers that require one.",
+    )
+    use_stored_secret: bool = Field(
+        default=False,
+        description="If true, use the stored API secret for this provider type.",
     )
     api_base: str | None = None
     target_uri: str | None = Field(

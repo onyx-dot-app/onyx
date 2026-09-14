@@ -174,7 +174,7 @@ def merge_individual_chunks(
     chunk_to_section: dict[tuple[str, int], InferenceSection] = {}
 
     # Process each document's chunks
-    for _doc_id, doc_chunk_list in doc_chunks.items():
+    for doc_chunk_list in doc_chunks.values():
         if not doc_chunk_list:
             continue
 

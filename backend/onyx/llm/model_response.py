@@ -105,16 +105,15 @@ def _parse_delta_tool_calls(
     if not tool_calls:
         return []
 
-    parsed_tool_calls: list[ChatCompletionDeltaToolCall] = []
-    for tool_call in tool_calls:
-        parsed_tool_calls.append(
-            ChatCompletionDeltaToolCall(
-                id=tool_call.get("id"),
-                index=tool_call.get("index", 0),
-                type=tool_call.get("type", "function"),
-                function=_parse_function_call(tool_call.get("function")),
-            )
+    parsed_tool_calls: list[ChatCompletionDeltaToolCall] = [
+        ChatCompletionDeltaToolCall(
+            id=tool_call.get("id"),
+            index=tool_call.get("index", 0),
+            type=tool_call.get("type", "function"),
+            function=_parse_function_call(tool_call.get("function")),
         )
+        for tool_call in tool_calls
+    ]
     return parsed_tool_calls
 
 

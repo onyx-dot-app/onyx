@@ -7,7 +7,10 @@ from celery import Celery
 from redis import Redis
 
 from onyx.background.celery.configs.base import CELERY_SEPARATOR
-from onyx.configs.app_configs import REDIS_HEALTH_CHECK_INTERVAL
+from onyx.configs.app_configs import (
+    REDIS_HEALTH_CHECK_INTERVAL,
+    REDIS_SOCKET_TIMEOUT_KWARGS,
+)
 from onyx.configs.constants import REDIS_SOCKET_KEEPALIVE_OPTIONS, OnyxCeleryPriority
 
 _broker_client: Redis | None = None
@@ -56,6 +59,7 @@ def celery_get_broker_client(app: Celery) -> Redis:
             socket_keepalive=True,
             socket_keepalive_options=REDIS_SOCKET_KEEPALIVE_OPTIONS,
             retry_on_timeout=True,
+            **REDIS_SOCKET_TIMEOUT_KWARGS,
         )
         return _broker_client
 
@@ -214,7 +218,7 @@ def celery_inspect_get_reserved(worker_names: list[str], app: Celery) -> set[str
     # get the list of reserved tasks
     reserved_tasks: dict[str, list] | None = inspect.reserved()
     if reserved_tasks:
-        for _, task_list in reserved_tasks.items():
+        for task_list in reserved_tasks.values():
             for task in task_list:
                 reserved_task_ids.add(task["id"])
 
@@ -235,7 +239,7 @@ def celery_inspect_get_active(worker_names: list[str], app: Celery) -> set[str]:
     # get the list of reserved tasks
     active_tasks: dict[str, list] | None = inspect.active()
     if active_tasks:
-        for _, task_list in active_tasks.items():
+        for task_list in active_tasks.values():
             for task in task_list:
                 active_task_ids.add(task["id"])
 

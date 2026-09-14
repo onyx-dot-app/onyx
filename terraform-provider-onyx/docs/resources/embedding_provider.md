@@ -30,7 +30,11 @@ resource "onyx_embedding_provider" "cohere" {
 
 ### Optional
 
-- `api_key` (String, Sensitive) Provider API key. Keep this set in configuration: because the API has no keep-stored-key flag, an update applied without it clears the stored key.
+> **NOTE**: [Write-only arguments](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments) are supported in Terraform 1.11 and later.
+
+- `api_key` (String, Sensitive) Provider API key. Keep this set in configuration: because the API has no keep-stored-key flag, an update applied without it clears the stored key. Prefer `api_key_wo`, which keeps the value out of state entirely; the two cannot be set together.
+- `api_key_wo` (String, Sensitive, [Write-only](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments)) Provider API key, held only in configuration. Terraform sends it on every apply and stores nothing, so the key never reaches state. Pair it with `api_key_wo_version` to rotate it. Needs Terraform 1.11 or later.
+- `api_key_wo_version` (Number) Rotation counter for `api_key_wo`. Terraform never stores a write-only value and so cannot tell that the secret changed; raise this number to make the next apply send the current one. Do not derive it from the secret itself — unlike the secret, this number is kept in state.
 - `api_url` (String) Custom API URL (LiteLLM proxy, Azure).
 - `api_version` (String) API version (Azure).
 - `deployment_name` (String) Deployment name (Azure).

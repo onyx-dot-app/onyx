@@ -1,0 +1,1136 @@
+import time
+from datetime import datetime, timezone
+from unittest.mock import MagicMock
+
+import pytest
+import requests
+
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
+    datetime_from_utc_timestamp,
+)
+from onyx.connectors.exceptions import (
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+)
+from onyx.connectors.zoom.client import ZoomClient
+from onyx.connectors.zoom.models import (
+    ZoomRecordingEntry,
+    ZoomRecordingPage,
+    ZoomSessionOccurrence,
+    ZoomUser,
+    ZoomUserPage,
+)
+from onyx.connectors.zoom.recordings.discovery import (
+    _MAX_WORK_PER_STEP,
+    _OCCURRENCE_POLL_OVERLAP_SECONDS,
+    GroupSource,
+    HostAllowlistSource,
+    IdAllowlistSource,
+    build_discovery_sources,
+)
+from onyx.connectors.zoom.recordings.models import ZoomSessionType
+from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
+    occurrence,
+    recording_entry,
+    user,
+)
+
+# Don't use time.time() here. The clock returns more precision than a
+# datetime keeps, so a value that round-trips through one stops comparing equal.
+_START = 0.0
+_END = 2_000_000_000.0
+_ONE_HOUR = 60 * 60
+
+# A window this narrow excludes any occurrence whose date parsed, so a test using
+# it can only pass through the branch that keeps a start_time Zoom left out.
+_NARROW_WINDOW_SECONDS = 60.0
+
+
+def _occurrence_at(uuid: str, epoch_seconds: float) -> ZoomSessionOccurrence:
+    return ZoomSessionOccurrence(
+        uuid=uuid,
+        start_time=datetime.fromtimestamp(epoch_seconds, tz=timezone.utc).isoformat(),
+    )
+
+
+def _client_with_occurrences(
+    occurrences: list[ZoomSessionOccurrence],
+) -> MagicMock:
+    client = MagicMock(spec=ZoomClient)
+    client.list_past_meeting_occurrences.return_value = occurrences
+    return client
+
+
+class TestIdAllowlistSource:
+    def test_one_id_expanded_per_step_with_cursor_progression(self) -> None:
+        source = IdAllowlistSource(["111", "222"])
+        client = MagicMock(spec=ZoomClient)
+        client.list_past_meeting_occurrences.side_effect = lambda session_id, *_window: [
+            occurrence(uuid=f"uuid-{session_id}")
+        ]
+
+        first = source.discover_step(client, _START, _END, None)
+        assert [w.occurrence_uuid for w in first.work] == ["uuid-111"]
+        assert first.done is False
+        assert first.next_cursor == {"index": 1, "offset": 0}
+
+        second = source.discover_step(client, _START, _END, first.next_cursor)
+        assert [w.occurrence_uuid for w in second.work] == ["uuid-222"]
+        assert second.done is True
+        assert second.next_cursor is None
+
+    def test_work_items_carry_session_identity(self) -> None:
+        source = IdAllowlistSource(["111"])
+        client = _client_with_occurrences(
+            [ZoomSessionOccurrence(uuid="uuid-1", start_time="2026-01-15T10:00:00Z")]
+        )
+
+        result = source.discover_step(client, _START, _END, None)
+
+        work = result.work[0]
+        assert work.session_type == ZoomSessionType.MEETING
+        assert work.session_id == "111"
+        assert work.occurrence_uuid == "uuid-1"
+        assert work.start_time == "2026-01-15T10:00:00Z"
+
+    def test_recurring_id_yields_one_work_item_per_occurrence(self) -> None:
+        source = IdAllowlistSource(["111"])
+        client = _client_with_occurrences(
+            [
+                ZoomSessionOccurrence(uuid="uuid-1", start_time="2026-01-01T10:00:00Z"),
+                ZoomSessionOccurrence(uuid="uuid-2", start_time="2026-01-08T10:00:00Z"),
+                ZoomSessionOccurrence(uuid="uuid-3", start_time="2026-01-15T10:00:00Z"),
+            ]
+        )
+
+        result = source.discover_step(client, _START, _END, None)
+
+        assert [w.occurrence_uuid for w in result.work] == [
+            "uuid-1",
+            "uuid-2",
+            "uuid-3",
+        ]
+        assert result.done is True
+
+    def test_listing_failure_reports_entity_failure_and_still_advances(self) -> None:
+        source = IdAllowlistSource(["111", "222"])
+        client = MagicMock(spec=ZoomClient)
+        client.list_past_meeting_occurrences.side_effect = RuntimeError("boom")
+
+        result = source.discover_step(client, _START, _END, None)
+
+        assert result.work == []
+        assert len(result.failures) == 1
+        failure = result.failures[0]
+        assert failure.failed_entity is not None
+        assert failure.failed_entity.entity_id == "meeting:111"
+        missed = failure.failed_entity.missed_time_range
+        assert missed is not None
+        missed_start, missed_end = missed
+        assert missed_end.timestamp() == _END
+        assert missed_start.timestamp() == _START - _OCCURRENCE_POLL_OVERLAP_SECONDS
+        assert failure.exception is not None
+        assert result.next_cursor == {"index": 1, "offset": 0}
+        assert result.done is False
+
+    def test_cursor_past_end_is_done(self) -> None:
+        source = IdAllowlistSource(["111"])
+        client = MagicMock(spec=ZoomClient)
+
+        result = source.discover_step(client, _START, _END, {"index": 5})
+
+        assert result.work == []
+        assert result.done is True
+        client.list_past_meeting_occurrences.assert_not_called()
+
+
+class TestIdAllowlistPollWindow:
+    def test_zoom_is_asked_for_the_window_including_the_overlap_buffer(self) -> None:
+        # Zoom scopes the listing itself, so the buffer has to reach the API or
+        # the recovery window exists only in the local filter.
+        source = IdAllowlistSource(["111"])
+        now = time.time()
+        poll_start = now - _ONE_HOUR
+        client = _client_with_occurrences([])
+
+        source.discover_step(client, poll_start, now, None)
+
+        session_id, window_start, window_end = (
+            client.list_past_meeting_occurrences.call_args.args
+        )
+        assert session_id == "111"
+        assert window_start == datetime_from_utc_timestamp(
+            int(poll_start - _OCCURRENCE_POLL_OVERLAP_SECONDS)
+        )
+        assert window_end == datetime_from_utc_timestamp(int(now))
+
+    def test_steady_state_poll_only_keeps_occurrences_in_window(self) -> None:
+        source = IdAllowlistSource(["111"])
+        now = time.time()
+        client = _client_with_occurrences(
+            [
+                _occurrence_at("uuid-old", now - 30 * 24 * 60 * 60),
+                _occurrence_at("uuid-new", now - 60),
+            ]
+        )
+
+        result = source.discover_step(client, now - _ONE_HOUR, now, None)
+
+        assert [w.occurrence_uuid for w in result.work] == ["uuid-new"]
+
+    def test_overlap_buffer_keeps_occurrence_just_before_window_start(self) -> None:
+        source = IdAllowlistSource(["111"])
+        now = time.time()
+        poll_start = now - _ONE_HOUR
+        inside_buffer = poll_start - (_OCCURRENCE_POLL_OVERLAP_SECONDS - _ONE_HOUR)
+        client = _client_with_occurrences(
+            [_occurrence_at("uuid-recovering", inside_buffer)]
+        )
+
+        result = source.discover_step(client, poll_start, now, None)
+
+        assert [w.occurrence_uuid for w in result.work] == ["uuid-recovering"]
+
+    def test_occurrence_older_than_overlap_buffer_is_excluded(self) -> None:
+        source = IdAllowlistSource(["111"])
+        now = time.time()
+        poll_start = now - _ONE_HOUR
+        outside_buffer = poll_start - (_OCCURRENCE_POLL_OVERLAP_SECONDS + _ONE_HOUR)
+        client = _client_with_occurrences(
+            [_occurrence_at("uuid-too-old", outside_buffer)]
+        )
+
+        result = source.discover_step(client, poll_start, now, None)
+
+        assert result.work == []
+        assert result.done is True
+
+    def test_occurrence_after_the_window_end_is_excluded(self) -> None:
+        source = IdAllowlistSource(["111"])
+        now = time.time()
+        client = _client_with_occurrences(
+            [_occurrence_at("uuid-future", now + 30 * 24 * _ONE_HOUR)]
+        )
+
+        result = source.discover_step(client, now - _ONE_HOUR, now, None)
+
+        assert result.work == []
+
+    def test_unparseable_start_time_fails_the_run(self) -> None:
+        # Zoom documents start_time as a date-time, so a value that won't parse
+        # means the contract moved. Skipping it quietly would keep indexing
+        # against a shape we no longer understand.
+        source = IdAllowlistSource(["111"])
+        now = time.time()
+        client = _client_with_occurrences(
+            [ZoomSessionOccurrence(uuid="uuid-junk", start_time="not-a-date")]
+        )
+
+        with pytest.raises(ValueError):
+            source.discover_step(client, now - _NARROW_WINDOW_SECONDS, now, None)
+
+    def test_occurrence_with_blank_start_time_is_never_filtered_out(self) -> None:
+        source = IdAllowlistSource(["111"])
+        now = time.time()
+        client = _client_with_occurrences(
+            [ZoomSessionOccurrence(uuid="uuid-no-time", start_time="")]
+        )
+
+        result = source.discover_step(client, now - _NARROW_WINDOW_SECONDS, now, None)
+
+        assert [w.occurrence_uuid for w in result.work] == ["uuid-no-time"]
+
+
+class TestIdAllowlistPaging:
+    def test_long_running_meeting_is_paged_across_steps(self) -> None:
+        total = _MAX_WORK_PER_STEP * 2 + 20
+        source = IdAllowlistSource(["111"])
+        client = _client_with_occurrences(
+            [
+                ZoomSessionOccurrence(
+                    uuid=f"uuid-{i:04d}",
+                    start_time=f"2026-01-01T{i // 60:02d}:{i % 60:02d}:00Z",
+                )
+                for i in range(total)
+            ]
+        )
+
+        seen: list[str] = []
+        cursor: dict | None = None
+        steps = 0
+        while True:
+            steps += 1
+            result = source.discover_step(client, _START, _END, cursor)
+            assert len(result.work) <= _MAX_WORK_PER_STEP
+            seen.extend(w.occurrence_uuid for w in result.work)
+            cursor = result.next_cursor
+            if result.done:
+                break
+            assert steps < 10
+
+        assert steps == 3
+        assert seen == [f"uuid-{i:04d}" for i in range(total)]
+
+    def test_exact_multiple_of_the_cap_needs_no_extra_empty_step(self) -> None:
+        source = IdAllowlistSource(["111"])
+        client = _client_with_occurrences(
+            [
+                ZoomSessionOccurrence(
+                    uuid=f"uuid-{i:04d}",
+                    start_time=f"2026-01-01T00:{i // 60:02d}:{i % 60:02d}Z",
+                )
+                for i in range(_MAX_WORK_PER_STEP)
+            ]
+        )
+
+        result = source.discover_step(client, _START, _END, None)
+
+        # This page ends exactly on the boundary, so a wrong check here asks
+        # Zoom for one more empty page.
+        assert len(result.work) == _MAX_WORK_PER_STEP
+        assert result.done is True
+        assert result.next_cursor is None
+
+    def test_unrecognised_cursor_restarts_the_id_instead_of_raising(self) -> None:
+        source = IdAllowlistSource(["111"])
+        client = _client_with_occurrences(
+            [ZoomSessionOccurrence(uuid="uuid-1", start_time="2026-01-15T10:00:00Z")]
+        )
+
+        result = source.discover_step(client, _START, _END, {"bogus": "value"})
+
+        assert [w.occurrence_uuid for w in result.work] == ["uuid-1"]
+
+    def test_paging_cursor_carries_index_and_offset(self) -> None:
+        source = IdAllowlistSource(["111", "222"])
+        client = _client_with_occurrences(
+            [
+                ZoomSessionOccurrence(
+                    uuid=f"uuid-{i:04d}",
+                    start_time=f"2026-01-01T00:{i // 60:02d}:{i % 60:02d}Z",
+                )
+                for i in range(_MAX_WORK_PER_STEP + 1)
+            ]
+        )
+
+        first = source.discover_step(client, _START, _END, None)
+        assert first.next_cursor == {"index": 0, "offset": _MAX_WORK_PER_STEP}
+        assert first.done is False
+
+        second = source.discover_step(client, _START, _END, first.next_cursor)
+        assert second.next_cursor == {"index": 1, "offset": 0}
+
+    def test_new_occurrence_mid_paging_does_not_skip_earlier_ones(self) -> None:
+        source = IdAllowlistSource(["111"])
+        client = MagicMock(spec=ZoomClient)
+        base = [
+            ZoomSessionOccurrence(
+                uuid=f"uuid-{i:04d}",
+                start_time=f"2026-01-01T00:{i // 60:02d}:{i % 60:02d}Z",
+            )
+            for i in range(_MAX_WORK_PER_STEP + 5)
+        ]
+        # The meeting runs again between the two steps, and Zoom lists the newest
+        # occurrence first, so the second page arrives in a different order.
+        later = [
+            ZoomSessionOccurrence(uuid="uuid-9999", start_time="2026-06-01T00:00:00Z")
+        ] + base
+        client.list_past_meeting_occurrences.side_effect = [base, later]
+
+        first = source.discover_step(client, _START, _END, None)
+        second = source.discover_step(client, _START, _END, first.next_cursor)
+
+        seen = [w.occurrence_uuid for w in first.work + second.work]
+        assert set(o.uuid for o in base).issubset(set(seen))
+        assert len(seen) == len(set(seen))
+
+    def test_old_cursor_without_offset_still_loads(self) -> None:
+        source = IdAllowlistSource(["111", "222"])
+        client = _client_with_occurrences(
+            [ZoomSessionOccurrence(uuid="uuid-1", start_time="2026-01-15T10:00:00Z")]
+        )
+
+        # A checkpoint written before paging existed carries only "index".
+        result = source.discover_step(client, _START, _END, {"index": 1})
+
+        assert [w.session_id for w in result.work] == ["222"]
+        assert result.done is True
+
+
+class TestSlowTranscriptIsRetried:
+    """A transcript can be NOT_READY for hours after the meeting. Processing
+    skips it, so the only thing that brings it back is the poll window still
+    reaching far enough back on a later run."""
+
+    def _still_offered_after(self, lag_hours: float) -> bool:
+        source = IdAllowlistSource(["111"])
+        now = time.time()
+        meeting_at = now - lag_hours * _ONE_HOUR
+        client = _client_with_occurrences([_occurrence_at("uuid-slow", meeting_at)])
+
+        # A steady-state run only polls the last hour, so the overlap buffer is
+        # the only thing that can still offer an older meeting.
+        poll_start = now - _ONE_HOUR
+        result = source.discover_step(client, poll_start, now, None)
+        return [w.occurrence_uuid for w in result.work] == ["uuid-slow"]
+
+    def test_transcript_arriving_within_the_buffer_is_still_offered(self) -> None:
+        buffer_hours = _OCCURRENCE_POLL_OVERLAP_SECONDS / _ONE_HOUR
+        # Zoom gives no guaranteed maximum; these are lags customers report.
+        for lag in (2, 12, 24, 30, buffer_hours - 1):
+            assert self._still_offered_after(lag), f"lost a transcript at {lag}h"
+
+    def test_transcript_arriving_past_the_buffer_is_lost(self) -> None:
+        buffer_hours = _OCCURRENCE_POLL_OVERLAP_SECONDS / _ONE_HOUR
+        assert not self._still_offered_after(buffer_hours + 2)
+
+
+class TestBuildDiscoverySources:
+    def test_no_config_yields_no_sources(self) -> None:
+        assert build_discovery_sources(None) == []
+        assert build_discovery_sources([]) == []
+        assert build_discovery_sources([], []) == []
+        assert build_discovery_sources([], [], [], None) == []
+
+    def test_blank_host_emails_and_group_id_are_not_configuration(self) -> None:
+        assert build_discovery_sources(None, None, ["  "], "  ") == []
+
+    def test_host_emails_alone_yield_a_host_source(self) -> None:
+        sources = build_discovery_sources(None, None, ["host@example.com"])
+        assert len(sources) == 1
+        assert isinstance(sources[0], HostAllowlistSource)
+
+    def test_group_id_alone_yields_a_group_source(self) -> None:
+        sources = build_discovery_sources(None, None, None, "group-1")
+        assert len(sources) == 1
+        assert isinstance(sources[0], GroupSource)
+
+    def test_every_configured_mechanism_becomes_its_own_source(self) -> None:
+        sources = build_discovery_sources(
+            ["111"], ["222"], ["host@example.com"], "group-1"
+        )
+        assert [type(source) for source in sources] == [
+            IdAllowlistSource,
+            HostAllowlistSource,
+            GroupSource,
+        ]
+
+    def test_meeting_ids_yield_allowlist_source(self) -> None:
+        sources = build_discovery_sources(["111"])
+        assert len(sources) == 1
+        assert isinstance(sources[0], IdAllowlistSource)
+
+    def test_webinar_ids_alone_still_yield_a_source(self) -> None:
+        sources = build_discovery_sources(None, ["222"])
+        assert len(sources) == 1
+        assert isinstance(sources[0], IdAllowlistSource)
+
+    def test_both_kinds_of_id_share_one_source(self) -> None:
+        sources = build_discovery_sources(["111"], ["222"])
+        assert len(sources) == 1
+
+
+class TestDiscoverySystemicFailures:
+    """Skipping a session it couldn't list is right for a session-specific
+    error and wrong for a rate limit, which would skip every session left."""
+
+    def test_rate_limit_stops_discovery_instead_of_skipping_the_session(self) -> None:
+        source = IdAllowlistSource(["111", "222"])
+        client = MagicMock(spec=ZoomClient)
+        response = requests.Response()
+        response.status_code = 429
+        client.list_past_meeting_occurrences.side_effect = requests.HTTPError(
+            "429", response=response
+        )
+
+        with pytest.raises(requests.HTTPError):
+            source.discover_step(client, _START, _END, None)
+
+    def test_expired_credentials_stop_discovery(self) -> None:
+        source = IdAllowlistSource(["111", "222"])
+        client = MagicMock(spec=ZoomClient)
+        client.list_past_meeting_occurrences.side_effect = CredentialExpiredError(
+            "token expired"
+        )
+
+        with pytest.raises(CredentialExpiredError):
+            source.discover_step(client, _START, _END, None)
+
+    def test_a_truncated_response_body_stops_discovery(self) -> None:
+        # The occurrence listing ends in response.json(), so a truncated body
+        # surfaces as this rather than as an HTTP error.
+        source = IdAllowlistSource(["111", "222"])
+        client = MagicMock(spec=ZoomClient)
+        client.list_past_meeting_occurrences.side_effect = (
+            requests.exceptions.JSONDecodeError("truncated", "{", 1)
+        )
+
+        with pytest.raises(requests.exceptions.JSONDecodeError):
+            source.discover_step(client, _START, _END, None)
+
+
+class TestIdAllowlistWebinars:
+    def _client_with_webinar_occurrences(
+        self, occurrences: list[ZoomSessionOccurrence]
+    ) -> MagicMock:
+        client = MagicMock(spec=ZoomClient)
+        client.list_past_webinar_occurrences.return_value = occurrences
+        return client
+
+    def test_webinar_id_is_listed_through_the_webinar_endpoint(self) -> None:
+        source = IdAllowlistSource([], ["222"])
+        client = self._client_with_webinar_occurrences(
+            [ZoomSessionOccurrence(uuid="w-1", start_time="2026-01-15T10:00:00Z")]
+        )
+
+        result = source.discover_step(client, _START, _END, None)
+
+        client.list_past_webinar_occurrences.assert_called_once_with("222")
+        client.list_past_meeting_occurrences.assert_not_called()
+        work = result.work[0]
+        assert work.session_type == ZoomSessionType.WEBINAR
+        assert work.session_id == "222"
+        assert work.occurrence_uuid == "w-1"
+
+    def test_meetings_run_before_webinars_in_one_cursor_walk(self) -> None:
+        source = IdAllowlistSource(["111"], ["222"])
+        client = MagicMock(spec=ZoomClient)
+        client.list_past_meeting_occurrences.return_value = [
+            ZoomSessionOccurrence(uuid="m-1", start_time="2026-01-15T10:00:00Z")
+        ]
+        client.list_past_webinar_occurrences.return_value = [
+            ZoomSessionOccurrence(uuid="w-1", start_time="2026-01-16T10:00:00Z")
+        ]
+
+        first = source.discover_step(client, _START, _END, None)
+        second = source.discover_step(client, _START, _END, first.next_cursor)
+
+        assert [(w.session_type, w.occurrence_uuid) for w in first.work] == [
+            (ZoomSessionType.MEETING, "m-1")
+        ]
+        assert [(w.session_type, w.occurrence_uuid) for w in second.work] == [
+            (ZoomSessionType.WEBINAR, "w-1")
+        ]
+        assert second.done is True
+
+    def test_failure_names_the_webinar_rather_than_the_bare_id(self) -> None:
+        source = IdAllowlistSource([], ["111"])
+        client = MagicMock(spec=ZoomClient)
+        client.list_past_webinar_occurrences.side_effect = RuntimeError("boom")
+
+        result = source.discover_step(client, _START, _END, None)
+
+        assert result.failures[0].failed_entity is not None
+        assert result.failures[0].failed_entity.entity_id == "webinar:111"
+
+    def test_a_missing_add_on_stops_discovery_instead_of_skipping_webinars(
+        self,
+    ) -> None:
+        # Without the add-on every webinar call fails, so skipping this one
+        # silently skips them all and still reports success.
+        source = IdAllowlistSource([], ["222", "333"])
+        client = MagicMock(spec=ZoomClient)
+        client.list_past_webinar_occurrences.side_effect = InsufficientPermissionsError(
+            "no add-on"
+        )
+
+        with pytest.raises(InsufficientPermissionsError):
+            source.discover_step(client, _START, _END, None)
+
+
+def _recording(
+    uuid: str,
+    session_id: int | str = 6840331990,
+    topic: str | None = "Weekly Sync",
+    start_time: str | None = "2026-01-15T10:00:00Z",
+    recording_type: str | None = "2",
+) -> ZoomRecordingEntry:
+    return recording_entry(
+        uuid=uuid,
+        id=session_id,
+        topic=topic,
+        start_time=start_time,
+        type=recording_type,
+    )
+
+
+def _client_for_hosts(
+    users: list[ZoomUser] | None = None,
+    members: list[ZoomUser] | None = None,
+    recordings: list[ZoomRecordingEntry] | None = None,
+) -> MagicMock:
+    client = MagicMock(spec=ZoomClient)
+    client.list_users.return_value = ZoomUserPage(users=users or [])
+    client.list_group_members.return_value = ZoomUserPage(users=members or [])
+    client.list_user_recordings.return_value = ZoomRecordingPage(
+        recordings=recordings or []
+    )
+    return client
+
+
+class TestHostAllowlistSource:
+    def test_an_email_is_resolved_to_a_user_id_before_recordings_are_listed(
+        self,
+    ) -> None:
+        source = HostAllowlistSource(["host@example.com"])
+        client = _client_for_hosts(
+            users=[
+                user(id="other", email="someone@example.com"),
+                user(id="u1", email="host@example.com"),
+            ],
+            recordings=[_recording("uuid-1")],
+        )
+
+        result = source.discover_step(client, _START, _END, None)
+
+        assert client.list_user_recordings.call_args.kwargs["user_id"] == "u1"
+        assert [w.occurrence_uuid for w in result.work] == ["uuid-1"]
+        assert result.done is True
+
+    def test_work_carries_everything_processing_would_otherwise_refetch(self) -> None:
+        source = HostAllowlistSource(["host@example.com"])
+        client = _client_for_hosts(
+            users=[user(id="u1", email="host@example.com")],
+            recordings=[_recording("uuid-1")],
+        )
+
+        work = source.discover_step(client, _START, _END, None).work[0]
+
+        assert work.session_type == ZoomSessionType.MEETING
+        assert work.session_id == "6840331990"
+        assert work.occurrence_uuid == "uuid-1"
+        assert work.topic == "Weekly Sync"
+        assert work.start_time == "2026-01-15T10:00:00Z"
+
+    def test_email_matching_ignores_case_and_padding(self) -> None:
+        source = HostAllowlistSource(["  Host@Example.com "])
+        client = _client_for_hosts(
+            users=[user(id="u1", email="host@example.com")],
+            recordings=[_recording("uuid-1")],
+        )
+
+        result = source.discover_step(client, _START, _END, None)
+
+        assert [w.occurrence_uuid for w in result.work] == ["uuid-1"]
+
+    def test_an_unknown_email_is_reported_rather_than_silently_skipped(self) -> None:
+        source = HostAllowlistSource(["typo@example.com"])
+        client = _client_for_hosts(users=[user(id="u1", email="host@example.com")])
+
+        result = source.discover_step(client, _START, _END, None)
+
+        assert result.work == []
+        assert len(result.failures) == 1
+        failure = result.failures[0]
+        assert failure.failed_entity is not None
+        assert failure.failed_entity.entity_id == "host:typo@example.com"
+        assert result.done is True
+
+    def test_a_host_who_has_not_accepted_their_invitation_is_reported(self) -> None:
+        source = HostAllowlistSource(["pending@example.com"])
+        client = _client_for_hosts(users=[user(email="pending@example.com", id=None)])
+
+        result = source.discover_step(client, _START, _END, None)
+
+        assert result.failures[0].failed_entity is not None
+        assert result.failures[0].failed_entity.entity_id == "host:pending@example.com"
+        client.list_user_recordings.assert_not_called()
+
+    def test_user_paging_stops_as_soon_as_every_email_is_found(self) -> None:
+        source = HostAllowlistSource(["host@example.com"])
+        client = _client_for_hosts(recordings=[_recording("uuid-1")])
+        client.list_users.side_effect = [
+            ZoomUserPage(
+                users=[user(id="u1", email="host@example.com")],
+                next_page_token="tok",
+            ),
+            ZoomUserPage(users=[user(id="u2", email="another@example.com")]),
+        ]
+
+        source.discover_step(client, _START, _END, None)
+
+        assert client.list_users.call_count == 1
+
+    def test_user_paging_continues_until_an_email_is_found(self) -> None:
+        source = HostAllowlistSource(["host@example.com"])
+        client = _client_for_hosts(recordings=[_recording("uuid-1")])
+        client.list_users.side_effect = [
+            ZoomUserPage(
+                users=[user(id="u2", email="another@example.com")],
+                next_page_token="tok",
+            ),
+            ZoomUserPage(users=[user(id="u1", email="host@example.com")]),
+        ]
+
+        result = source.discover_step(client, _START, _END, None)
+
+        assert client.list_users.call_args.kwargs["page_token"] == "tok"
+        assert [w.occurrence_uuid for w in result.work] == ["uuid-1"]
+
+    def test_hosts_are_resolved_once_for_the_whole_run(self) -> None:
+        source = HostAllowlistSource(["a@example.com", "b@example.com"])
+        client = _client_for_hosts(
+            users=[
+                user(id="u1", email="a@example.com"),
+                user(id="u2", email="b@example.com"),
+            ],
+            recordings=[_recording("uuid-1")],
+        )
+
+        first = source.discover_step(client, _START, _END, None)
+        source.discover_step(client, _START, _END, first.next_cursor)
+
+        assert client.list_users.call_count == 1
+
+    def test_a_resolution_failure_is_reported_once_not_on_every_step(self) -> None:
+        source = HostAllowlistSource(["typo@example.com", "host@example.com"])
+        client = _client_for_hosts(
+            users=[user(id="u1", email="host@example.com")],
+            recordings=[_recording("uuid-1")],
+        )
+
+        first = source.discover_step(client, _START, _END, None)
+        second = source.discover_step(client, _START, _END, first.next_cursor)
+
+        assert len(first.failures) == 1
+        assert second.failures == []
+
+
+class TestGroupSource:
+    def test_each_member_is_crawled_in_turn(self) -> None:
+        source = GroupSource("group-1")
+        client = _client_for_hosts(
+            members=[
+                user(id="u1", email="jill@example.com"),
+                user(id="u2", email="jack@example.com"),
+            ]
+        )
+        client.list_user_recordings.side_effect = lambda user_id, **_: (
+            ZoomRecordingPage(recordings=[_recording(f"uuid-{user_id}")])
+        )
+
+        first = source.discover_step(client, _START, _END, None)
+        second = source.discover_step(client, _START, _END, first.next_cursor)
+
+        assert [w.occurrence_uuid for w in first.work] == ["uuid-u1"]
+        assert first.done is False
+        assert [w.occurrence_uuid for w in second.work] == ["uuid-u2"]
+        assert second.done is True
+        assert second.next_cursor is None
+
+    def test_members_are_walked_in_a_stable_order(self) -> None:
+        source = GroupSource("group-1")
+        client = _client_for_hosts(
+            members=[user(id="u2"), user(id="u1")],
+            recordings=[_recording("uuid-1")],
+        )
+
+        source.discover_step(client, _START, _END, None)
+
+        assert client.list_user_recordings.call_args.kwargs["user_id"] == "u1"
+
+    def test_member_paging_collects_every_page(self) -> None:
+        source = GroupSource("group-1")
+        client = _client_for_hosts(recordings=[_recording("uuid-1")])
+        client.list_group_members.side_effect = [
+            ZoomUserPage(users=[user(id="u1")], next_page_token="tok"),
+            ZoomUserPage(users=[user(id="u2")]),
+        ]
+
+        first = source.discover_step(client, _START, _END, None)
+
+        assert client.list_group_members.call_count == 2
+        assert first.done is False
+        assert first.next_cursor == {"host_id": "u2"}
+
+    def test_an_empty_group_completes_without_crawling(self) -> None:
+        source = GroupSource("group-1")
+        client = _client_for_hosts(members=[])
+
+        result = source.discover_step(client, _START, _END, None)
+
+        assert result.work == []
+        assert result.done is True
+        client.list_user_recordings.assert_not_called()
+
+    def test_a_member_without_a_user_id_is_skipped(self) -> None:
+        source = GroupSource("group-1")
+        client = _client_for_hosts(
+            members=[user(email="pending@example.com", id=None), user(id="u1")],
+            recordings=[_recording("uuid-1")],
+        )
+
+        result = source.discover_step(client, _START, _END, None)
+
+        assert client.list_user_recordings.call_count == 1
+        assert result.done is True
+
+    def test_a_broken_group_lookup_names_the_group(self) -> None:
+        source = GroupSource("group-1")
+        client = _client_for_hosts()
+        client.list_group_members.side_effect = RuntimeError("boom")
+
+        result = source.discover_step(client, _START, _END, None)
+
+        assert result.failures[0].failed_entity is not None
+        assert result.failures[0].failed_entity.entity_id == "group:group-1"
+        assert result.done is True
+
+
+class TestUserRecordingsPaging:
+    def test_no_page_token_ever_outlives_a_step(self) -> None:
+        source = GroupSource("group-1")
+        client = _client_for_hosts(members=[user(id="u1")])
+        client.list_user_recordings.side_effect = [
+            ZoomRecordingPage(recordings=[_recording("uuid-1")], next_page_token="tok"),
+            ZoomRecordingPage(recordings=[_recording("uuid-2")]),
+        ]
+
+        result = source.discover_step(client, _START, _END, None)
+
+        assert client.list_user_recordings.call_count == 2
+        assert [w.occurrence_uuid for w in result.work] == ["uuid-1", "uuid-2"]
+        assert result.next_cursor is None
+        assert result.done is True
+
+    def test_a_host_longer_than_one_step_is_walked_across_steps(self) -> None:
+        source = GroupSource("group-1")
+        total = _MAX_WORK_PER_STEP + 5
+        client = _client_for_hosts(
+            members=[user(id="u1")],
+            recordings=[
+                _recording(
+                    f"uuid-{i:04d}", start_time=f"2026-01-01T00:{i % 60:02d}:00Z"
+                )
+                for i in range(total)
+            ],
+        )
+
+        first = source.discover_step(client, _START, _END, None)
+        assert first.next_cursor is not None
+        assert first.next_cursor["host_id"] == "u1"
+        assert first.done is False
+
+        second = source.discover_step(client, _START, _END, first.next_cursor)
+
+        seen = [w.occurrence_uuid for w in first.work + second.work]
+        assert len(seen) == total
+        assert len(set(seen)) == total
+        assert second.done is True
+
+    def test_a_host_is_listed_once_however_many_steps_it_takes(self) -> None:
+        source = GroupSource("group-1")
+        client = _client_for_hosts(
+            members=[user(id="u1")],
+            recordings=[
+                _recording(
+                    f"uuid-{i:04d}", start_time=f"2026-01-01T00:{i % 60:02d}:00Z"
+                )
+                for i in range(_MAX_WORK_PER_STEP + 5)
+            ],
+        )
+
+        first = source.discover_step(client, _START, _END, None)
+        source.discover_step(client, _START, _END, first.next_cursor)
+
+        assert client.list_user_recordings.call_count == 1
+
+    def test_a_late_transcript_for_an_old_meeting_costs_nothing(self) -> None:
+        batch = [
+            _recording(f"uuid-{i:04d}", start_time=f"2026-01-02T00:{i % 60:02d}:00Z")
+            for i in range(_MAX_WORK_PER_STEP + 5)
+        ]
+        first = GroupSource("group-1").discover_step(
+            _client_for_hosts(members=[user(id="u1")], recordings=batch),
+            _START,
+            _END,
+            None,
+        )
+
+        resumed = GroupSource("group-1").discover_step(
+            _client_for_hosts(
+                members=[user(id="u1")],
+                recordings=[
+                    _recording("uuid-late", start_time="2026-01-01T09:00:00Z"),
+                    *batch,
+                ],
+            ),
+            _START,
+            _END,
+            first.next_cursor,
+        )
+
+        seen = [w.occurrence_uuid for w in first.work + resumed.work]
+        assert {r.uuid for r in batch}.issubset(set(seen))
+        assert len(seen) == len(set(seen))
+
+    def test_a_resumed_attempt_reaches_the_rest_however_the_list_moved(self) -> None:
+        # Two sources, because only a resumed attempt lists again. With one, the
+        # cache would serve the first listing and the sort would go untested.
+        batch = [
+            _recording(f"uuid-{i:04d}", start_time=f"2026-01-01T00:{i % 60:02d}:00Z")
+            for i in range(_MAX_WORK_PER_STEP + 5)
+        ]
+        first_client = _client_for_hosts(members=[user(id="u1")], recordings=batch)
+        first = GroupSource("group-1").discover_step(first_client, _START, _END, None)
+
+        resumed_client = _client_for_hosts(
+            members=[user(id="u1")],
+            recordings=[
+                _recording("uuid-9999", start_time="2026-06-01T00:00:00Z"),
+                *reversed(batch),
+            ],
+        )
+        second = GroupSource("group-1").discover_step(
+            resumed_client, _START, _END, first.next_cursor
+        )
+
+        seen = [w.occurrence_uuid for w in first.work + second.work]
+        assert {r.uuid for r in batch}.issubset(set(seen))
+        assert len(seen) == len(set(seen))
+
+    def test_an_unrecognised_cursor_restarts_rather_than_skipping_a_host(self) -> None:
+        source = GroupSource("group-1")
+        client = _client_for_hosts(
+            members=[user(id="u1")], recordings=[_recording("uuid-1")]
+        )
+
+        result = source.discover_step(client, _START, _END, {"bogus": "value"})
+
+        assert [w.occurrence_uuid for w in result.work] == ["uuid-1"]
+
+    def test_a_cursor_past_the_last_host_is_done(self) -> None:
+        source = GroupSource("group-1")
+        client = _client_for_hosts(members=[user(id="u1")])
+
+        result = source.discover_step(client, _START, _END, {"host_id": "zzz"})
+
+        assert result.work == []
+        assert result.done is True
+        client.list_user_recordings.assert_not_called()
+
+
+class TestHostListChangesBetweenAttempts:
+    """The host list is resolved again on every attempt, so a position in it would
+    slide onto a different host whenever a member joined or left."""
+
+    def _crawl(
+        self, members: list[ZoomUser], cursor: dict | None
+    ) -> tuple[list[str], MagicMock]:
+        client = _client_for_hosts(members=members)
+        client.list_user_recordings.side_effect = lambda user_id, **_: (
+            ZoomRecordingPage(recordings=[_recording(f"rec-{user_id}")])
+        )
+        source = GroupSource("group-1")
+        seen: list[str] = []
+        for _ in range(10):
+            result = source.discover_step(client, _START, _END, cursor)
+            seen.extend(w.occurrence_uuid for w in result.work)
+            cursor = result.next_cursor
+            if result.done:
+                break
+        return seen, client
+
+    def test_a_member_leaving_does_not_skip_the_host_behind_them(self) -> None:
+        everyone = [user(id=i) for i in ("a", "b", "c")]
+        first, _ = self._crawl(everyone, None)
+        assert first[0] == "rec-a"
+
+        resumed, _ = self._crawl([u for u in everyone if u.id != "a"], {"host_id": "b"})
+
+        assert resumed == ["rec-b", "rec-c"]
+
+    def test_a_member_joining_ahead_does_not_recrawl_what_is_done(self) -> None:
+        everyone = [user(id=i) for i in ("b", "c")]
+
+        resumed, _ = self._crawl([user(id="a"), *everyone], {"host_id": "b"})
+
+        # A member who joins mid-crawl gets their back catalogue only from a full
+        # reindex, exactly as one who joins after the crawl finishes does.
+        assert resumed == ["rec-b", "rec-c"]
+
+    def test_the_named_host_vanishing_starts_the_next_one_cleanly(self) -> None:
+        source = GroupSource("group-1")
+        client = _client_for_hosts(
+            members=[user(id="c")], recordings=[_recording("rec-c")]
+        )
+
+        result = source.discover_step(
+            client, _START, _END, {"host_id": "b", "offset": 150}
+        )
+
+        assert [w.occurrence_uuid for w in result.work] == ["rec-c"]
+
+
+class TestUserRecordingsPollWindow:
+    """This endpoint takes the window itself, so nothing is filtered client-side."""
+
+    def _window(self, client: MagicMock) -> tuple[str, str]:
+        kwargs = client.list_user_recordings.call_args.kwargs
+        return kwargs["from_date"].isoformat(), kwargs["to_date"].isoformat()
+
+    def test_the_poll_window_is_pushed_to_zoom_as_dates(self) -> None:
+        # The expected start is three days before the poll start: that is the
+        # default 72-hour lag buffer, not an arbitrary date.
+        source = GroupSource("group-1")
+        client = _client_for_hosts(members=[user(id="u1")])
+        start = datetime(2026, 3, 10, 12, 0, tzinfo=timezone.utc).timestamp()
+        end = datetime(2026, 3, 17, 12, 0, tzinfo=timezone.utc).timestamp()
+
+        source.discover_step(client, start, end, None)
+
+        assert self._window(client) == ("2026-03-07", "2026-03-17")
+
+    def test_a_first_run_never_asks_for_a_date_before_the_epoch(self) -> None:
+        source = GroupSource("group-1")
+        client = _client_for_hosts(members=[user(id="u1")])
+
+        source.discover_step(client, 0, _END, None)
+
+        assert self._window(client)[0] == "1970-01-01"
+
+    def test_an_occurrence_outside_the_window_is_zooms_call_not_ours(self) -> None:
+        source = GroupSource("group-1")
+        client = _client_for_hosts(
+            members=[user(id="u1")],
+            recordings=[_recording("uuid-1", start_time="1999-01-01T10:00:00Z")],
+        )
+
+        result = source.discover_step(client, time.time() - 60, time.time(), None)
+
+        assert [w.occurrence_uuid for w in result.work] == ["uuid-1"]
+
+
+class TestUserRecordingsSessionTypes:
+    def test_a_webinar_recording_is_tagged_as_a_webinar(self) -> None:
+        source = GroupSource("group-1")
+        client = _client_for_hosts(
+            members=[user(id="u1")],
+            recordings=[_recording("uuid-1", recording_type="5")],
+        )
+
+        work = source.discover_step(client, _START, _END, None).work[0]
+
+        assert work.session_type == ZoomSessionType.WEBINAR
+
+    def test_a_portal_upload_is_not_a_session_and_is_skipped(self) -> None:
+        source = GroupSource("group-1")
+        client = _client_for_hosts(
+            members=[user(id="u1")],
+            recordings=[
+                _recording("uuid-upload", recording_type="99"),
+                _recording("uuid-meeting"),
+            ],
+        )
+
+        result = source.discover_step(client, _START, _END, None)
+
+        assert [w.occurrence_uuid for w in result.work] == ["uuid-meeting"]
+
+    def test_a_code_zoom_added_later_stops_the_attempt(self) -> None:
+        # Indexing it as a meeting would freeze that guess into the document id
+        # and into which access-list endpoint ticket 04 calls for it. Failing keeps
+        # the checkpoint, so widening the sets is enough to pick it up.
+        source = GroupSource("group-1")
+        client = _client_for_hosts(
+            members=[user(id="u1")],
+            recordings=[
+                _recording("uuid-new-kind", recording_type="42"),
+                _recording("uuid-meeting"),
+            ],
+        )
+
+        with pytest.raises(ValueError, match="'42'"):
+            source.discover_step(client, _START, _END, None)
+
+    def test_a_recording_with_no_type_at_all_stops_the_attempt(self) -> None:
+        # Zoom documents no case where it omits this, so an entry without one is
+        # not a session to skip past.
+        source = GroupSource("group-1")
+        client = _client_for_hosts(
+            members=[user(id="u1")],
+            recordings=[
+                recording_entry(
+                    uuid="uuid-typeless", id=111, topic="Mystery", type=None
+                )
+            ],
+        )
+
+        with pytest.raises(ValueError, match="no session type"):
+            source.discover_step(client, _START, _END, None)
+
+
+class TestUserRecordingsFailures:
+    def test_one_broken_host_does_not_cost_the_next_one(self) -> None:
+        source = GroupSource("group-1")
+        client = _client_for_hosts(
+            members=[
+                user(id="u1", email="jill@example.com"),
+                user(id="u2", email="jack@example.com"),
+            ]
+        )
+
+        def _recordings(user_id: str, **_: object) -> ZoomRecordingPage:
+            if user_id == "u1":
+                raise RuntimeError("boom")
+            return ZoomRecordingPage(recordings=[_recording("uuid-2")])
+
+        client.list_user_recordings.side_effect = _recordings
+
+        first = source.discover_step(client, _START, _END, None)
+        second = source.discover_step(client, _START, _END, first.next_cursor)
+
+        assert first.work == []
+        assert first.failures[0].failed_entity is not None
+        assert first.failures[0].failed_entity.entity_id == "host:jill@example.com"
+        missed = first.failures[0].failed_entity.missed_time_range
+        assert missed is not None
+        assert missed[0].timestamp() == _START - _OCCURRENCE_POLL_OVERLAP_SECONDS
+        assert missed[1].timestamp() == _END
+        assert [w.occurrence_uuid for w in second.work] == ["uuid-2"]
+
+    def test_a_rate_limit_stops_discovery_instead_of_skipping_the_host(self) -> None:
+        source = GroupSource("group-1")
+        client = _client_for_hosts(members=[user(id="u1"), user(id="u2")])
+        response = requests.Response()
+        response.status_code = 429
+        client.list_user_recordings.side_effect = requests.HTTPError(
+            "429", response=response
+        )
+
+        with pytest.raises(requests.HTTPError):
+            source.discover_step(client, _START, _END, None)
+
+    def test_a_rate_limit_while_resolving_stops_discovery(self) -> None:
+        source = GroupSource("group-1")
+        client = _client_for_hosts()
+        response = requests.Response()
+        response.status_code = 429
+        client.list_group_members.side_effect = requests.HTTPError(
+            "429", response=response
+        )
+
+        with pytest.raises(requests.HTTPError):
+            source.discover_step(client, _START, _END, None)
+
+    def test_a_missing_scope_stops_discovery_rather_than_emptying_the_group(
+        self,
+    ) -> None:
+        # Without group:read:admin every group resolves to nobody, so reporting
+        # this per group would finish the run successfully having indexed nothing.
+        source = GroupSource("group-1")
+        client = _client_for_hosts()
+        client.list_group_members.side_effect = InsufficientPermissionsError(
+            "missing group:read:admin"
+        )
+
+        with pytest.raises(InsufficientPermissionsError):
+            source.discover_step(client, _START, _END, None)
+
+    def test_expired_credentials_while_resolving_stop_discovery(self) -> None:
+        source = HostAllowlistSource(["host@example.com"])
+        client = _client_for_hosts()
+        client.list_users.side_effect = CredentialExpiredError("token expired")
+
+        with pytest.raises(CredentialExpiredError):
+            source.discover_step(client, _START, _END, None)

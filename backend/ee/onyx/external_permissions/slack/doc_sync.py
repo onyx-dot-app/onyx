@@ -209,7 +209,9 @@ def _get_slack_document_access(
                     "Please check to make sure that your Slack bot token has the "
                     "`channels:read` scope"
                 )
-            channel_id = getattr(doc_metadata, "parent_hierarchy_raw_node_id", None)
+            channel_id = getattr(  # ods: ignore[getattr]
+                doc_metadata, "parent_hierarchy_raw_node_id", None
+            )
             if channel_id is not None:
                 override_access = channel_permissions.get(channel_id)
                 if override_access is not None:

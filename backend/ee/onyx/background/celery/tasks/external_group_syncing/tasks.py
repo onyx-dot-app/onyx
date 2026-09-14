@@ -206,9 +206,11 @@ def check_for_external_group_sync(self: Task, *, tenant_id: str) -> bool | None:
                         if cc_pair.id != cc_pair_to_remove.id
                     ]
 
-            for cc_pair in cc_pairs:
-                if _is_external_group_sync_due(cc_pair):
-                    cc_pair_ids_to_sync.append(cc_pair.id)
+            cc_pair_ids_to_sync.extend(
+                cc_pair.id
+                for cc_pair in cc_pairs
+                if _is_external_group_sync_due(cc_pair)
+            )
 
         # Tenant-work-gating hook: refresh this tenant's active-set membership
         # whenever external-group sync has any due cc_pairs to dispatch.

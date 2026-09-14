@@ -823,6 +823,43 @@ def upsert_hierarchy_node_cc_pair_entries(
         db_session.flush()
 
 
+def persist_hierarchy_nodes_for_cc_pair(
+    db_session: Session,
+    nodes: list[PydanticHierarchyNode],
+    source: DocumentSource,
+    connector_id: int,
+    credential_id: int,
+    is_connector_public: bool = False,
+    commit: bool = True,
+) -> list[HierarchyNode]:
+    """Upsert nodes and their cc_pair ownership links in one transaction.
+
+    Orphan cleanup deletes nodes with no join-table row. The node insert and
+    ownership insert must commit together so a concurrent cleanup cannot
+    remove a node before its link exists.
+    """
+    if not nodes:
+        return []
+
+    upserted = upsert_hierarchy_nodes_batch(
+        db_session=db_session,
+        nodes=nodes,
+        source=source,
+        commit=False,
+        is_connector_public=is_connector_public,
+    )
+    upsert_hierarchy_node_cc_pair_entries(
+        db_session=db_session,
+        hierarchy_node_ids=[n.id for n in upserted],
+        connector_id=connector_id,
+        credential_id=credential_id,
+        commit=False,
+    )
+    if commit:
+        db_session.commit()
+    return upserted
+
+
 def remove_stale_hierarchy_node_cc_pair_entries(
     db_session: Session,
     connector_id: int,
@@ -909,8 +946,8 @@ def reparent_orphaned_hierarchy_nodes(
 ) -> list[HierarchyNode]:
     """Re-parent hierarchy nodes whose parent_id is NULL to the SOURCE node.
 
-    After pruning deletes stale nodes, their former children get parent_id=NULL
-    via the SET NULL cascade. This function points them back to the SOURCE root.
+    After parent nodes are deleted, former children get parent_id=NULL via
+    SET NULL. This points them back to the SOURCE root.
 
     Returns the reparented HierarchyNode objects (with updated parent_id)
     so callers can refresh downstream caches.
@@ -937,3 +974,24 @@ def reparent_orphaned_hierarchy_nodes(
         db_session.flush()
 
     return orphans
+
+
+def cleanup_unowned_hierarchy_nodes(
+    db_session: Session,
+    source: DocumentSource,
+    commit: bool = True,
+) -> tuple[list[str], list[HierarchyNode]]:
+    """Delete nodes with no remaining cc_pair links; reparent leftover children.
+
+    SOURCE roots are kept. Call after join-table rows for a cc_pair are gone
+    (cc_pair delete CASCADE, or prune's stale-entry removal).
+
+    Returns (deleted raw_node_ids, reparented nodes) for cache updates.
+    """
+    deleted_raw_ids = delete_orphaned_hierarchy_nodes(db_session, source, commit=False)
+    reparented_nodes = reparent_orphaned_hierarchy_nodes(
+        db_session, source, commit=False
+    )
+    if commit:
+        db_session.commit()
+    return deleted_raw_ids, reparented_nodes

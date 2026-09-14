@@ -5,6 +5,7 @@ import { getBaseUrl } from "@/api/config";
 import { getValidToken } from "@/api/auth/refreshState";
 import { createNdjsonBuffer } from "@/chat/ndjson";
 import { FileDescriptor } from "@/chat/interfaces";
+import { LlmOverride } from "@/chat/models";
 import { InternalSearchFilters } from "@/chat/sources";
 import {
   MessageResponseIDInfo,
@@ -26,6 +27,9 @@ export interface SendMessageBody {
   allowed_tool_ids?: number[] | null;
   forced_tool_id?: number | null;
   internal_search_filters?: InternalSearchFilters | null;
+  // Omitted or null runs the agent's own default model. Note the singular name: `llm_overrides`
+  // is a separate field for multi-model comparison, which mobile does not use.
+  llm_override?: LlmOverride | null;
 }
 
 export interface ChatToolOptions {
@@ -33,6 +37,7 @@ export interface ChatToolOptions {
   allowedToolIds: number[] | null;
   forcedToolId: number | null;
   internalSearchFilters: InternalSearchFilters | null;
+  llmOverride: LlmOverride | null;
 }
 
 // status lets the resume caller stay silent on the expected "nothing to resume" (404).

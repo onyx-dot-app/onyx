@@ -56,10 +56,10 @@ function EmptyMessageCard(props: EmptyMessageCardProps) {
   return (
     <Card
       ref={ref}
-      background="none"
+      color="transparent"
       border="dashed"
       padding={padding}
-      rounding="md"
+      rounding={3}
     >
       {sizePreset === "secondary" ? (
         <Content

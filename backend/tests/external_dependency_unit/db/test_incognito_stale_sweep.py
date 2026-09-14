@@ -20,7 +20,7 @@ from onyx.db.incognito import (
     stale_unadopted_upload_ids,
 )
 from onyx.db.models import ChatSession, User, UserFile
-from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 
 PAST_THE_WINDOW = INCOGNITO_FILE_ORPHAN_AGE + timedelta(hours=1)
 
@@ -35,7 +35,7 @@ def owner(db_session: Session) -> Generator[User, None, None]:
     db_session.rollback()
     db_session.query(UserFile).filter(UserFile.user_id == user.id).delete()
     db_session.query(ChatSession).filter(ChatSession.user_id == user.id).delete()
-    db_session.delete(user)
+    delete_test_user(db_session, user)
     db_session.commit()
 
 

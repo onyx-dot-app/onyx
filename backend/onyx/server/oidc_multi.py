@@ -27,7 +27,7 @@ from httpx_oauth.clients.openid import BASE_SCOPES
 from httpx_oauth.oauth2 import BaseOAuth2, GetAccessTokenError
 from sqlalchemy.orm import Session
 
-from onyx.auth.oidc_client import VerifiedEmailOpenID
+from onyx.auth.oidc_client import VerifiedEmailOpenID, log_token_exchange_failure
 from onyx.auth.sso_tenant_token import (
     SSO_TENANT_TOKEN_PARAM,
     decode_sso_tenant_token,
@@ -195,7 +195,9 @@ def _drop_unadvertised_offline_access(client: BaseOAuth2[Any]) -> None:
     scopes they don't support, so the auto-added offline_access scope only
     survives when the discovery doc advertises it. A discovery doc without
     scopes_supported keeps the scope, since support can't be ruled out."""
-    discovery = getattr(client, "openid_configuration", None) or {}
+    discovery = (
+        getattr(client, "openid_configuration", None) or {}  # ods: ignore[getattr]
+    )
     supported = discovery.get("scopes_supported")
     if supported is None or "offline_access" in supported:
         return
@@ -227,7 +229,9 @@ def _build_client(provider: SSOProvider, config: dict[str, Any]) -> BaseOAuth2[A
         )
         # The document is attacker-chosen once its URL is, and the endpoints it
         # names are fetched next, so they get the same treatment as the URL.
-        validate_discovered_endpoints(getattr(client, "openid_configuration", None))
+        validate_discovered_endpoints(
+            getattr(client, "openid_configuration", None)  # ods: ignore[getattr]
+        )
         # Explicitly configured offline_access is always respected as-is.
         if offline_access_auto_added:
             _drop_unadvertised_offline_access(client)
@@ -460,6 +464,12 @@ async def oidc_login_callback_for_provider(
             client = await _get_oauth_client(provider, config)
             redirect_uri = _callback_uri(provider, config)
             allowed_email_domains = list(provider.allowed_email_domains)
+            # A tenant-controlled OIDC IdP can assert any address, so its login
+            # may only vouch for a domain the workspace has verified. Google
+            # cannot assert a domain it does not own, so it is trusted as-is.
+            enforce_verified_domain = (
+                provider.provider_type is not SSOProviderType.GOOGLE_OAUTH
+            )
 
         # The state pins the flow's PKCE mode. States without the claim fall
         # back to the row's setting so logins in flight across a deploy complete.
@@ -478,6 +488,7 @@ async def oidc_login_callback_for_provider(
         try:
             token = await client.get_access_token(code, redirect_uri, code_verifier)
         except GetAccessTokenError as e:
+            log_token_exchange_failure(e)
             raise OnyxError(
                 OnyxErrorCode.VALIDATION_ERROR,
                 "Authorization code exchange failed",
@@ -494,6 +505,7 @@ async def oidc_login_callback_for_provider(
             associate_by_email=_ALLOW_AUTO_LINK,
             is_verified_by_default=True,
             allowed_email_domains_override=allowed_email_domains,
+            enforce_verified_domain=enforce_verified_domain,
         )
 
     if use_pkce:

@@ -34,7 +34,6 @@ from onyx.db.models import (
     ConnectorCredentialPair,
     Credential,
     User,
-    UserRole,
 )
 from onyx.db.permission_sync_attempt import (
     create_doc_permission_sync_attempt,
@@ -105,7 +104,7 @@ def _create_cc_pair(
 
 
 def _admin_user(db_session: Session) -> User:
-    return create_test_user(db_session, "admin", role=UserRole.ADMIN)
+    return create_test_user(db_session, "admin", is_admin=True)
 
 
 # --------------------------------------------------------------------------- #

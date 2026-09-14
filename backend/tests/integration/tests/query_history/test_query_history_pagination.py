@@ -60,7 +60,7 @@ def test_query_history_pagination(reset: None) -> None:  # noqa: ARG001
     ) = setup_chat_sessions_with_different_feedback()
 
     all_chat_sessions = []
-    for _, chat_sessions in chat_sessions_by_feedback_type.items():
+    for chat_sessions in chat_sessions_by_feedback_type.values():
         all_chat_sessions.extend(chat_sessions)
 
     # Verify basic pagination with different page sizes

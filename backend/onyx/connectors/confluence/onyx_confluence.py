@@ -534,7 +534,9 @@ class OnyxConfluence:
                                 self._confluence = self._initialize_connection_helper(
                                     credentials, **self._kwargs
                                 )
-                            attr = getattr(self._confluence, name, None)
+                            attr = getattr(  # ods: ignore[getattr]
+                                self._confluence, name, None
+                            )
                             if attr is None:
                                 # The underlying Confluence client doesn't have this attribute
                                 raise AttributeError(
@@ -543,7 +545,9 @@ class OnyxConfluence:
 
                             return attr(*args, **kwargs)
                     else:
-                        attr = getattr(self._confluence, name, None)
+                        attr = getattr(  # ods: ignore[getattr]
+                            self._confluence, name, None
+                        )
                         if attr is None:
                             # The underlying Confluence client doesn't have this attribute
                             raise AttributeError(
@@ -576,7 +580,7 @@ class OnyxConfluence:
 
     def __getattr__(self, name: str) -> Any:
         """Dynamically intercept attribute/method access."""
-        attr = getattr(self._confluence, name, None)
+        attr = getattr(self._confluence, name, None)  # ods: ignore[getattr]
         if attr is None:
             # The underlying Confluence client doesn't have this attribute
             raise AttributeError(

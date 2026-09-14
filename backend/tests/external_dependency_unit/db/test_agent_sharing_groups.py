@@ -117,6 +117,7 @@ def test_ee_group_share_diff_updates_levels_in_place(db_session: Session) -> Non
         creator_user_id=owner.id,
         db_session=db_session,
         group_shares={group.id: PersonaSharePermission.EDITOR},
+        acting_user=owner,
     )
     db_session.commit()
 

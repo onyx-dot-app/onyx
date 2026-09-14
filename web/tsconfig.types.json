@@ -3,6 +3,12 @@
   "compilerOptions": {
     "target": "ES2017",
     "moduleResolution": "bundler",
+    // typescript-7's incremental cache keeps reporting fixed errors in JSON
+    // modules (the i18n catalogs are type-checked via messages/keyParity.ts),
+    // so a repaired catalog can fail types:check until the cache is deleted.
+    // A cold run costs ~3s extra; always-correct beats that. Remove when
+    // https://github.com/microsoft/TypeScript/issues/64025 is fixed.
+    "incremental": false,
     "paths": {
       "@/*": ["./src/*"],
       "@tests/*": ["./tests/*"],

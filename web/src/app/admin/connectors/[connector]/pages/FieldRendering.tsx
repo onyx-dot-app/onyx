@@ -1,4 +1,5 @@
 import React, { FC, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { TabOption } from "@/lib/connectors/connectors";
 import SelectInput from "./ConnectorInput/SelectInput";
 import NumberInput from "./ConnectorInput/NumberInput";
@@ -33,6 +34,7 @@ const TabsField: FC<TabsFieldProps> = ({
   connector,
   currentCredential,
 }) => {
+  const t = useTranslations("admin.connectorsList");
   const { setFieldValue } = useFormikContext<FormValues>();
 
   const resolvedLabel =
@@ -58,7 +60,7 @@ const TabsField: FC<TabsFieldProps> = ({
       {/* Ensure there's at least one tab before rendering */}
       {tabField.tabs.length === 0 ? (
         <Text text03 secondaryBody>
-          No tabs to display.
+          {t("tabs.empty.label")}
         </Text>
       ) : (
         <Tabs
@@ -128,6 +130,7 @@ export const RenderField: FC<RenderFieldProps> = ({
   connector,
   currentCredential,
 }) => {
+  const t = useTranslations("admin.connectorsList");
   const { setFieldValue } = useFormikContext<FormValues>(); // Get Formik's context functions
 
   const label =
@@ -240,7 +243,9 @@ export const RenderField: FC<RenderFieldProps> = ({
             withLabel={field.name}
             title={label}
             description={description}
-            suffix={field.optional ? "optional" : undefined}
+            suffix={
+              field.optional ? t("field.optionalSuffix.label") : undefined
+            }
           >
             <InputTextAreaField
               name={field.name}
@@ -268,7 +273,10 @@ export const RenderField: FC<RenderFieldProps> = ({
           </Text>
         </GeneralLayouts.Section>
       ) : (
-        <>INVALID FIELD TYPE</>
+        <>
+          {/* oxlint-disable-next-line i18n/no-raw-jsx-text -- developer diagnostic, not copy */}
+          INVALID FIELD TYPE
+        </>
       )}
     </>
   );

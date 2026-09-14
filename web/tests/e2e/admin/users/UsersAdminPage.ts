@@ -34,7 +34,7 @@ export class UsersAdminPage {
     this.inviteButton = page.getByRole("button", { name: "Invite Users" });
     this.searchInput = page.getByPlaceholder("Search users...");
 
-    this.accountTypesFilter = page.getByLabel("Filter by role");
+    this.accountTypesFilter = page.getByLabel("Filter by account type");
     this.groupsFilter = page.getByLabel("Filter by group");
     this.statusFilter = page.getByLabel("Filter by status");
 
@@ -255,20 +255,6 @@ export class UsersAdminPage {
   // Inline role editing (Popover + OpenButton + LineItem)
   // ---------------------------------------------------------------------------
 
-  async openRoleDropdown(email: string) {
-    const row = this.getRowByEmail(email);
-    const roleButton = row
-      .locator("button")
-      .filter({ hasText: /Basic|Admin|Global Curator|Slack User/ });
-    await roleButton.click();
-    await expect(this.popover).toBeVisible();
-  }
-
-  async selectRole(roleName: string) {
-    await this.popover.getByText(roleName).first().click();
-    await this.waitForTableRefresh();
-  }
-
   // ---------------------------------------------------------------------------
   // Edit groups modal
   // ---------------------------------------------------------------------------
@@ -294,7 +280,7 @@ export class UsersAdminPage {
     await this.openRowActions(email);
     await this.clickRowAction("Groups");
     await expect(
-      this.editGroupsDialog.getByText("Edit User's Groups & Roles")
+      this.editGroupsDialog.getByText("Edit User's Groups")
     ).toBeVisible();
   }
 

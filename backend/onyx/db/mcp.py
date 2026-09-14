@@ -5,12 +5,14 @@ from sqlalchemy import Select, and_, delete, select
 from sqlalchemy.orm import Session, aliased, selectinload
 from sqlalchemy.orm.attributes import flag_modified
 
+from onyx.auth.permissions import has_global_permission
 from onyx.db.constants import UNSET, UnsetType
 from onyx.db.enums import (
     MCPAuthenticationPerformer,
     MCPOAuthProviderMode,
     MCPServerStatus,
     MCPTransport,
+    Permission,
     SandboxStatus,
 )
 from onyx.db.models import (
@@ -24,7 +26,6 @@ from onyx.db.models import (
     Tool,
     User,
     User__UserGroup,
-    UserRole,
 )
 from onyx.server.features.mcp.models import MCPConnectionData
 from onyx.utils.logger import setup_logger
@@ -110,7 +111,7 @@ def _add_mcp_server_access_filter(stmt: Select, user: User) -> Select:
     """Servers the user may add to an agent (public / direct / group). Admins bypass.
     Does not control chat use of agent-attached servers.
     """
-    if user.role == UserRole.ADMIN:
+    if has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS):
         return stmt
 
     stmt = stmt.distinct()
@@ -182,7 +183,7 @@ def affected_user_ids_for_mcp_server(
     # Admins see every craft-enabled server (ACL bypass), so any change to a
     # private server can be baked into an admin's session and must reload it.
     admin_users = select(User.id).where(  # ty: ignore[no-matching-overload]
-        User.role == UserRole.ADMIN
+        User.effective_permissions.contains([Permission.FULL_ADMIN_PANEL_ACCESS.value])
     )
     stmt = stmt.where(
         Sandbox.user_id.in_(group_users)

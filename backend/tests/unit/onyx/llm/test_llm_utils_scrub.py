@@ -12,11 +12,11 @@ from onyx.llm.utils import (
     collect_credential_values,
     is_sensitive_custom_config_key,
     litellm_exception_to_safe_error,
-    scrub_sensitive_values,
 )
 from onyx.llm.utils import (
     test_llm as run_test_llm,
 )  # aliased to avoid pytest collection
+from onyx.utils.redaction import scrub_sensitive_values
 
 _SECRET_KEY = "sk-anthropic-supersecret-DO-NOT-LEAK-1234567890"
 _SECRET_VERTEX_BLOB = (
@@ -125,6 +125,13 @@ def test_scrub_replaces_multiple_occurrences_of_same_secret() -> None:
 
     assert _SECRET_KEY not in scrubbed
     assert scrubbed.count("[REDACTED]") == 2
+
+
+def test_scrub_replaces_overlapping_values_longest_first() -> None:
+    assert (
+        scrub_sensitive_values("token=secret-token", ["secret", "secret-token"])
+        == "token=[REDACTED]"
+    )
 
 
 def test_scrub_handles_empty_message() -> None:

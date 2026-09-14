@@ -176,16 +176,16 @@ def _run_web_search(
             list(search_results)
         )
         trimmed_results = list(filtered_results)[: request.max_results]
-        for search_result in trimmed_results:
-            results.append(
-                LlmWebSearchResult(
-                    document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
-                    url=search_result.link,
-                    title=search_result.title,
-                    snippet=search_result.snippet or "",
-                    unique_identifier_to_strip_away=search_result.link,
-                )
+        results.extend(
+            LlmWebSearchResult(
+                document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
+                url=search_result.link,
+                title=search_result.title,
+                snippet=search_result.snippet or "",
+                unique_identifier_to_strip_away=search_result.link,
             )
+            for search_result in trimmed_results
+        )
     return provider_view.provider_type, results
 
 
@@ -211,15 +211,14 @@ def _open_urls(
             "Web content provider failed to fetch URLs.",
         ) from exc
 
-    results: list[LlmOpenUrlResult] = []
-    for doc in docs:
-        results.append(
-            LlmOpenUrlResult(
-                document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
-                content=truncate_search_result_content(doc.full_content),
-                unique_identifier_to_strip_away=doc.link,
-            )
+    results: list[LlmOpenUrlResult] = [
+        LlmOpenUrlResult(
+            document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
+            content=truncate_search_result_content(doc.full_content),
+            unique_identifier_to_strip_away=doc.link,
         )
+        for doc in docs
+    ]
     provider_type = (
         provider_view.provider_type
         if provider_view

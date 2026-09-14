@@ -114,6 +114,27 @@ def insert_global_token_rate_limit(
     return token_limit
 
 
+def get_token_rate_limit_scope_and_group_ids(
+    db_session: Session, token_rate_limit_id: int
+) -> tuple[TokenRateLimitScope, list[int]]:
+    """Scope + every group id a rate limit is attached to (empty unless USER_GROUP). Raises
+    ValueError if the id is unknown. The API attaches a limit to one group today, but the schema
+    allows many-to-many, so an authorizing caller must check every group returned, not just one."""
+    token_limit = db_session.get(TokenRateLimit, token_rate_limit_id)
+    if token_limit is None:
+        raise ValueError(f"TokenRateLimit with id '{token_rate_limit_id}' not found")
+    if token_limit.scope != TokenRateLimitScope.USER_GROUP:
+        return token_limit.scope, []
+    group_ids = list(
+        db_session.scalars(
+            select(TokenRateLimit__UserGroup.user_group_id).where(
+                TokenRateLimit__UserGroup.rate_limit_id == token_rate_limit_id
+            )
+        ).all()
+    )
+    return token_limit.scope, group_ids
+
+
 def update_token_rate_limit(
     db_session: Session,
     token_rate_limit_id: int,

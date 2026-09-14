@@ -304,11 +304,12 @@ def test_parallel_yield_basic() -> None:
     gen3 = make_gen([3, 6, 9], 0.15)  # Slowest generator
 
     # Collect results with timestamps
-    results: list[tuple[float, int]] = []
     start_time = time.time()
 
-    for value in parallel_yield([gen1, gen2, gen3]):
-        results.append((time.time() - start_time, value))
+    results: list[tuple[float, int]] = [
+        (time.time() - start_time, value)
+        for value in parallel_yield([gen1, gen2, gen3])
+    ]
 
     # Verify all values were yielded
     assert sorted(v for _, v in results) == list(range(1, 10))

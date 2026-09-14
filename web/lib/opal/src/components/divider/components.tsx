@@ -129,7 +129,11 @@ function Divider(props: DividerProps) {
       <div className="opal-divider-row">
         {title && (
           <div className="opal-divider-title">
-            <Text font="secondary-body" color="text-03" nowrap>
+            <Text
+              font="secondary-body"
+              color="text-03"
+              wordWrap="whitespace-nowrap"
+            >
               {title}
             </Text>
           </div>
@@ -176,11 +180,15 @@ function FoldableDivider({
         interaction={isOpen ? "hover" : "rest"}
         onClick={toggle}
       >
-        <Interactive.Container rounding="sm" size="fit" width="full">
+        <Interactive.Container rounding={2} size="fit" width="full">
           <div className="opal-divider">
             <div className="opal-divider-row">
               <div className="opal-divider-title">
-                <Text font="secondary-body" color="inherit" nowrap>
+                <Text
+                  font="secondary-body"
+                  color="inherit"
+                  wordWrap="whitespace-nowrap"
+                >
                   {title}
                 </Text>
               </div>

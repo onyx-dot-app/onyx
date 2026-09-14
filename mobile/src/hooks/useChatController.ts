@@ -330,6 +330,7 @@ export function useChatController(
           allowed_tool_ids: toolOptions?.allowedToolIds ?? null,
           forced_tool_id: toolOptions?.forcedToolId ?? null,
           internal_search_filters: toolOptions?.internalSearchFilters ?? null,
+          llm_override: toolOptions?.llmOverride ?? null,
         };
 
         if (sessionId == null) {

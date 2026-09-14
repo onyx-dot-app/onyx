@@ -212,8 +212,7 @@ def _get_forums(
         pages_fetched += len(contents)
         logger.debug("Fetched %s forums", pages_fetched)
 
-        for page in contents:
-            pages_to_return.append(page)
+        pages_to_return.extend(contents)
 
         if pages_fetched >= total_records:
             break

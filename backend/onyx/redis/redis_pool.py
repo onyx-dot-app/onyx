@@ -33,10 +33,12 @@ from onyx.configs.app_configs import (
     REDIS_SENTINEL_HOSTS,
     REDIS_SENTINEL_MASTER_NAME,
     REDIS_SENTINEL_PASSWORD,
+    REDIS_SOCKET_TIMEOUT_KWARGS,
     REDIS_SSL,
     REDIS_SSL_CA_CERTS,
     REDIS_SSL_CERT_REQS,
     REDIS_SSL_CERTFILE,
+    REDIS_SSL_CHECK_HOSTNAME,
     REDIS_SSL_KEYFILE,
     USE_REDIS_IAM_AUTH,
 )
@@ -82,7 +84,7 @@ def _redis_ssl_connect_kwargs() -> dict[str, Any]:
     kwargs: dict[str, Any] = {
         "ssl": True,
         "ssl_cert_reqs": REDIS_SSL_CERT_REQS,
-        "ssl_check_hostname": False,
+        "ssl_check_hostname": REDIS_SSL_CHECK_HOSTNAME,
     }
     if REDIS_SSL_CA_CERTS:
         kwargs["ssl_ca_certs"] = REDIS_SSL_CA_CERTS
@@ -97,15 +99,18 @@ def _sentinel_connection_kwargs() -> tuple[dict[str, Any], dict[str, Any]]:
 
     connection_kwargs apply to the master/replica data connections;
     sentinel_kwargs apply to the connections to the sentinel nodes themselves.
-    TLS (when enabled) and the relevant auth apply to both.
+    TLS (when enabled), socket deadlines, and the relevant auth apply to both.
     """
     connection_kwargs: dict[str, Any] = {
         "password": REDIS_PASSWORD or None,
         "socket_keepalive": True,
         "socket_keepalive_options": REDIS_SOCKET_KEEPALIVE_OPTIONS,
         "health_check_interval": REDIS_HEALTH_CHECK_INTERVAL,
+        **REDIS_SOCKET_TIMEOUT_KWARGS,
     }
-    sentinel_kwargs: dict[str, Any] = {}
+    # Passing sentinel_kwargs (needed for sentinel auth and TLS) disables redis-py's
+    # copy of socket_* options from connection_kwargs, so seed the deadlines here too.
+    sentinel_kwargs: dict[str, Any] = dict(REDIS_SOCKET_TIMEOUT_KWARGS)
     if REDIS_SENTINEL_PASSWORD:
         sentinel_kwargs["password"] = REDIS_SENTINEL_PASSWORD
     if REDIS_SSL:
@@ -170,6 +175,7 @@ class RedisPool:
         max_connections: int = REDIS_POOL_MAX_CONNECTIONS,
         ssl_ca_certs: str | None = REDIS_SSL_CA_CERTS,
         ssl_cert_reqs: str = REDIS_SSL_CERT_REQS,
+        ssl_check_hostname: bool = REDIS_SSL_CHECK_HOSTNAME,
         ssl_certfile: str | None = REDIS_SSL_CERTFILE,
         ssl_keyfile: str | None = REDIS_SSL_KEYFILE,
         ssl: bool = False,
@@ -217,6 +223,7 @@ class RedisPool:
                 socket_keepalive_options=REDIS_SOCKET_KEEPALIVE_OPTIONS,
                 connection_class=redis.SSLConnection,
                 ssl_context=ssl_context,  # Use IAM auth SSL context
+                **REDIS_SOCKET_TIMEOUT_KWARGS,
             )
 
         if ssl:
@@ -233,8 +240,10 @@ class RedisPool:
                 connection_class=redis.SSLConnection,
                 ssl_ca_certs=ssl_ca_certs,
                 ssl_cert_reqs=ssl_cert_reqs,
+                ssl_check_hostname=ssl_check_hostname,
                 ssl_certfile=ssl_certfile,
                 ssl_keyfile=ssl_keyfile,
+                **REDIS_SOCKET_TIMEOUT_KWARGS,
             )
 
         return redis.BlockingConnectionPool(
@@ -247,6 +256,7 @@ class RedisPool:
             health_check_interval=REDIS_HEALTH_CHECK_INTERVAL,
             socket_keepalive=True,
             socket_keepalive_options=REDIS_SOCKET_KEEPALIVE_OPTIONS,
+            **REDIS_SOCKET_TIMEOUT_KWARGS,
         )
 
     @staticmethod
@@ -419,6 +429,7 @@ def _build_async_redis_connection() -> aioredis.Redis:
         "health_check_interval": REDIS_HEALTH_CHECK_INTERVAL,
         "socket_keepalive": True,
         "socket_keepalive_options": REDIS_SOCKET_KEEPALIVE_OPTIONS,
+        **REDIS_SOCKET_TIMEOUT_KWARGS,
     }
 
     if USE_REDIS_IAM_AUTH:
@@ -430,7 +441,7 @@ def _build_async_redis_connection() -> aioredis.Redis:
         # but the CA / client cert are dropped). Hand it the native ssl_* params.
         connection_kwargs["ssl"] = True
         connection_kwargs["ssl_cert_reqs"] = REDIS_SSL_CERT_REQS
-        connection_kwargs["ssl_check_hostname"] = False
+        connection_kwargs["ssl_check_hostname"] = REDIS_SSL_CHECK_HOSTNAME
         if REDIS_SSL_CA_CERTS:
             connection_kwargs["ssl_ca_certs"] = REDIS_SSL_CA_CERTS
         # Client certificate for mutual TLS, if configured.
@@ -607,9 +618,13 @@ async def store_ws_token(token: str, user_id: str) -> None:
             f"Rate limit exceeded. Maximum {WS_TOKEN_RATE_LIMIT_MAX} tokens per minute."
         )
 
-    # Store the actual token
     redis_key = REDIS_WS_TOKEN_PREFIX + token
-    token_data = json.dumps({"sub": user_id})
+    token_data = json.dumps(
+        {
+            "sub": user_id,
+            "tenant_id": get_current_tenant_id(),
+        }
+    )
     await redis.set(redis_key, token_data, ex=WS_TOKEN_TTL_SECONDS)
 
 

@@ -1021,33 +1021,31 @@ class CanvasConnector(
         start: SecondsSinceUnixEpoch | None,
         end: SecondsSinceUnixEpoch | None,
     ) -> list[SlimDocument]:
-        slim_docs: list[SlimDocument] = []
-
-        for page in self._list_pages(course_id):
-            slim_docs.append(
-                SlimDocument(
-                    id=f"canvas-page-{page.course_id}-{page.page_id}",
-                    external_access=self._get_item_permissions(course_id, page)
-                    or ExternalAccess.empty(),
-                )
+        slim_docs: list[SlimDocument] = [
+            SlimDocument(
+                id=f"canvas-page-{page.course_id}-{page.page_id}",
+                external_access=self._get_item_permissions(course_id, page)
+                or ExternalAccess.empty(),
             )
+            for page in self._list_pages(course_id)
+        ]
 
-        for assignment in self._list_assignments(course_id):
-            slim_docs.append(
-                SlimDocument(
-                    id=f"canvas-assignment-{assignment.course_id}-{assignment.id}",
-                    external_access=self._get_item_permissions(course_id, assignment)
-                    or ExternalAccess.empty(),
-                )
+        slim_docs.extend(
+            SlimDocument(
+                id=f"canvas-assignment-{assignment.course_id}-{assignment.id}",
+                external_access=self._get_item_permissions(course_id, assignment)
+                or ExternalAccess.empty(),
             )
+            for assignment in self._list_assignments(course_id)
+        )
 
-        for announcement in self._list_announcements(course_id, start, end):
-            slim_docs.append(
-                SlimDocument(
-                    id=f"canvas-announcement-{announcement.course_id}-{announcement.id}",
-                    external_access=self._get_item_permissions(course_id, announcement)
-                    or ExternalAccess.empty(),
-                )
+        slim_docs.extend(
+            SlimDocument(
+                id=f"canvas-announcement-{announcement.course_id}-{announcement.id}",
+                external_access=self._get_item_permissions(course_id, announcement)
+                or ExternalAccess.empty(),
             )
+            for announcement in self._list_announcements(course_id, start, end)
+        )
 
         return slim_docs

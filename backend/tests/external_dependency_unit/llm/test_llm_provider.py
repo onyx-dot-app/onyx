@@ -19,7 +19,6 @@ from onyx.db.llm import (
     update_default_provider,
     upsert_llm_provider,
 )
-from onyx.db.models import UserRole
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.constants import LlmProviderNames
@@ -41,7 +40,6 @@ from onyx.server.manage.llm.models import TestLLMRequest as LLMTestRequest
 def _create_mock_admin() -> MagicMock:
     """Create a mock admin user for testing."""
     mock_admin = MagicMock()
-    mock_admin.role = UserRole.ADMIN
     return mock_admin
 
 
@@ -529,13 +527,9 @@ class TestDefaultProviderEndpoint:
             existing_providers = fetch_existing_llm_providers(
                 db_session, flow_type_filter=[LLMModelFlowType.CHAT]
             )
-            provider_names_to_restore: list[str] = []
 
-            for provider in existing_providers:
-                if provider.name is not None:
-                    provider_names_to_restore.append(provider.name)
-
-            # Remove all providers temporarily
+            # Remove all providers temporarily. The `finally` rollback restores
+            # them, since none of these deletes are committed.
             for provider in existing_providers:
                 remove_llm_provider(db_session, provider.id)
 

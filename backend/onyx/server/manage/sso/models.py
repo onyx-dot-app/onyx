@@ -27,6 +27,29 @@ class SSOProviderEnabledRequest(BaseModel):
     enabled: bool
 
 
+class SSOLoginDomainStatus(BaseModel):
+    domain: str
+    verified: bool
+    # Whether the provider holding this domain is saved. Verification needs a
+    # saved claim, so the record shows first and verifying unlocks on save.
+    claimed: bool = False
+    # The TXT record to publish to prove control. Unset once verified.
+    record_host: str | None = None
+    record_value: str | None = None
+
+
+class SSOLoginDomainsResponse(BaseModel):
+    domains: list[SSOLoginDomainStatus]
+
+
+class SSODomainVerifyRequest(BaseModel):
+    domain: str
+
+
+class SSODomainRecordsRequest(BaseModel):
+    domains: list[str]
+
+
 class SSOProviderResponse(BaseModel):
     id: int
     name: str

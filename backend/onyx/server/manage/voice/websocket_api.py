@@ -5,6 +5,7 @@ import io
 import json
 import os
 from collections.abc import MutableMapping
+from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
@@ -19,6 +20,7 @@ from onyx.server.manage.voice.text_utils import strip_markdown_for_tts
 from onyx.utils.logger import setup_logger
 from onyx.voice.factory import get_voice_provider
 from onyx.voice.interface import (
+    STREAM_FAILED_ERROR,
     StreamingSynthesizerProtocol,
     StreamingTranscriberProtocol,
     TranscriptResult,
@@ -142,6 +144,17 @@ WS_MAX_MESSAGE_SIZE = 64 * 1024  # 64KB per message (OWASP recommendation)
 WS_MAX_TOTAL_BYTES = 25 * 1024 * 1024  # 25MB total per connection (matches REST API)
 WS_MAX_TEXT_MESSAGE_SIZE = 16 * 1024  # 16KB for text/JSON messages
 WS_MAX_TTS_TEXT_LENGTH = 4096  # Max text length per synthesize call (matches REST API)
+WS_SERVER_ERROR_CLOSE_CODE = 1011
+# A client that stops sending without disconnecting must not hold the handler
+# and the provider session open forever.
+WS_CLIENT_IDLE_TIMEOUT_SECONDS = 120
+WS_SESSION_TIMEOUT_SECONDS = 30 * 60
+SESSION_TIMEOUT_ERROR = "Transcription session reached its maximum duration"
+# After close(), the transcript pump gets this long to drain results the
+# provider queued while closing, so a failure reported there is not lost.
+TRANSCRIPT_DRAIN_SECONDS = 0.5
+# Provider SDK teardown must not hold a session past its limit.
+TRANSCRIBER_CLOSE_TIMEOUT_SECONDS = 10
 
 
 class ChunkedTranscriber:
@@ -234,154 +247,390 @@ class ChunkedTranscriber:
         return " ".join(self.transcripts)
 
 
+class StreamingTranscriptionFailed(Exception):
+    """Native streaming failed. The caller picks fallback or an error response.
+
+    Carries the audio the client already sent, so a fallback transcriber can
+    transcribe the whole recording instead of only what arrives after the
+    failure. `client_ended` is True when the client already signalled the end of
+    the recording, so no more audio is coming.
+    """
+
+    def __init__(
+        self, message: str, buffered_audio: bytes = b"", client_ended: bool = False
+    ) -> None:
+        super().__init__(message)
+        self.buffered_audio = buffered_audio
+        self.client_ended = client_ended
+
+
+def _session_deadline() -> float:
+    """Loop time at which a transcription connection must end."""
+    return asyncio.get_running_loop().time() + WS_SESSION_TIMEOUT_SECONDS
+
+
+async def _close_transcriber(transcriber: StreamingTranscriberProtocol) -> None:
+    """Close a provider session with a bound, so teardown cannot hang."""
+    try:
+        await asyncio.wait_for(
+            transcriber.close(), timeout=TRANSCRIBER_CLOSE_TIMEOUT_SECONDS
+        )
+    except Exception:
+        logger.error(
+            "Streaming transcription: failed to close transcriber", exc_info=True
+        )
+
+
+async def _receive_client_message(
+    websocket: WebSocket,
+) -> MutableMapping[str, Any] | None:
+    """Receive one client message, or None when the client goes idle."""
+    try:
+        return await asyncio.wait_for(
+            websocket.receive(), timeout=WS_CLIENT_IDLE_TIMEOUT_SECONDS
+        )
+    except asyncio.TimeoutError:
+        return None
+
+
+@dataclass
+class _ClientStreamState:
+    """Progress of the client-facing side of a streaming session."""
+
+    chunk_count: int = 0
+    total_bytes: int = 0
+    transcriber_closed: bool = False
+    client_ended: bool = False
+    # Kept for the fallback path, and bounded by WS_MAX_TOTAL_BYTES.
+    streamed_audio: bytearray = field(default_factory=bytearray)
+    provider_failed: asyncio.Event = field(default_factory=asyncio.Event)
+
+
+async def _forward_transcripts(
+    websocket: WebSocket,
+    transcriber: StreamingTranscriberProtocol,
+) -> bool:
+    """Send provider transcripts to the client. True if the provider failed."""
+    last_transcript = ""
+    while True:
+        result: TranscriptResult | None = await transcriber.receive_transcript()
+        if result is None:
+            logger.info("Streaming transcription: transcript stream ended")
+            return False
+        if result.error:
+            logger.error("Streaming transcription: provider stream failed")
+            return True
+        if result.text and (result.text != last_transcript or result.is_vad_end):
+            last_transcript = result.text
+            logger.debug(
+                "Streaming transcription: got transcript: %s... (is_vad_end=%s)",
+                result.text[:50],
+                result.is_vad_end,
+            )
+            await websocket.send_json(
+                {
+                    "type": "transcript",
+                    "text": result.text,
+                    "is_final": result.is_vad_end,
+                }
+            )
+
+
+async def _receive_transcripts(
+    websocket: WebSocket,
+    transcriber: StreamingTranscriberProtocol,
+    receiver_failed: asyncio.Event,
+) -> None:
+    """Background task to receive and send transcripts."""
+    logger.info("Streaming transcription: starting transcript receiver")
+    try:
+        if await _forward_transcripts(websocket, transcriber):
+            receiver_failed.set()
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        logger.error(
+            "Streaming transcription: transcript receiver failed", exc_info=True
+        )
+        receiver_failed.set()
+
+
+async def _send_audio_chunk(
+    websocket: WebSocket,
+    transcriber: StreamingTranscriberProtocol,
+    state: _ClientStreamState,
+    chunk: bytes,
+) -> bool:
+    """Forward one audio chunk. False when a size limit ends the session."""
+    chunk_size = len(chunk)
+
+    # Enforce per-message size limit
+    if chunk_size > WS_MAX_MESSAGE_SIZE:
+        logger.warning(
+            "Streaming transcription: message too large (%s bytes)", chunk_size
+        )
+        await websocket.send_json({"type": "error", "message": "Message too large"})
+        return False
+
+    # Enforce total connection size limit
+    if state.total_bytes + chunk_size > WS_MAX_TOTAL_BYTES:
+        logger.warning(
+            "Streaming transcription: total size limit exceeded (%s bytes)",
+            state.total_bytes + chunk_size,
+        )
+        await websocket.send_json(
+            {"type": "error", "message": "Total size limit exceeded"}
+        )
+        return False
+
+    state.chunk_count += 1
+    state.total_bytes += chunk_size
+    logger.debug(
+        "Streaming transcription: received chunk %s (%s bytes, total: %s)",
+        state.chunk_count,
+        chunk_size,
+        state.total_bytes,
+    )
+    state.streamed_audio.extend(chunk)
+    await transcriber.send_audio(chunk)
+    return True
+
+
+async def _handle_control_message(
+    websocket: WebSocket,
+    transcriber: StreamingTranscriberProtocol,
+    state: _ClientStreamState,
+    transcript_task: asyncio.Task[None],
+    text: str,
+) -> bool:
+    """Handle one JSON control message. True when the session is finished."""
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        logger.warning("Streaming transcription: failed to parse JSON: %s", text[:100])
+        return False
+
+    logger.debug("Streaming transcription: received text message: %s", data)
+    if data.get("type") == "end":
+        state.client_ended = True
+        logger.info("Streaming transcription: end signal received, closing transcriber")
+        # A stalled close raises here, so the handler takes the fallback path
+        # with the recording instead of holding the session open.
+        final_transcript = await asyncio.wait_for(
+            transcriber.close(), timeout=TRANSCRIBER_CLOSE_TIMEOUT_SECONDS
+        )
+        state.transcriber_closed = True
+        await asyncio.wait({transcript_task}, timeout=TRANSCRIPT_DRAIN_SECONDS)
+        transcript_task.cancel()
+        if state.provider_failed.is_set():
+            # The handler raises for the fallback; a final transcript sent here
+            # would reach the client twice.
+            logger.warning(
+                "Streaming transcription: provider failed while closing, skipping final transcript"
+            )
+            return True
+        logger.info(
+            "Streaming transcription: final transcript: %s...",
+            final_transcript[:100] if final_transcript else "(empty)",
+        )
+        await websocket.send_json(
+            {"type": "transcript", "text": final_transcript, "is_final": True}
+        )
+        return True
+
+    if data.get("type") == "reset":
+        # Reset accumulated transcript after auto-send
+        logger.info(
+            "Streaming transcription: reset signal received, clearing transcript"
+        )
+        transcriber.reset_transcript()
+    return False
+
+
+async def _receive_client_audio(
+    websocket: WebSocket,
+    transcriber: StreamingTranscriberProtocol,
+    state: _ClientStreamState,
+    transcript_task: asyncio.Task[None],
+) -> None:
+    """Read audio and control messages from the client."""
+    while True:
+        message = await _receive_client_message(websocket)
+        if message is None:
+            logger.warning(
+                "Streaming transcription: no client message for %ss, ending session",
+                WS_CLIENT_IDLE_TIMEOUT_SECONDS,
+            )
+            return
+
+        if message.get("type", "unknown") == "websocket.disconnect":
+            logger.info(
+                "Streaming transcription: client disconnected after %s chunks (%s bytes)",
+                state.chunk_count,
+                state.total_bytes,
+            )
+            return
+
+        if "bytes" in message:
+            if not await _send_audio_chunk(
+                websocket, transcriber, state, message["bytes"]
+            ):
+                return
+        elif "text" in message:
+            if await _handle_control_message(
+                websocket, transcriber, state, transcript_task, message["text"]
+            ):
+                return
+
+
 async def handle_streaming_transcription(
     websocket: WebSocket,
     transcriber: StreamingTranscriberProtocol,
+    deadline: float | None = None,
 ) -> None:
-    """Handle transcription using native streaming API."""
+    """Handle transcription using native streaming API.
+
+    `deadline` is the loop time the connection must end at. The caller shares
+    one deadline across the streaming handler and the chunked fallback, so a
+    fallback does not restart the session budget.
+    """
     logger.info("Streaming transcription: starting handler")
-    last_transcript = ""
-    chunk_count = 0
-    total_bytes = 0
+    if deadline is None:
+        deadline = _session_deadline()
+    state = _ClientStreamState()
+    receiver_failed = state.provider_failed
 
-    async def receive_transcripts() -> None:
-        """Background task to receive and send transcripts."""
-        nonlocal last_transcript
-        logger.info("Streaming transcription: starting transcript receiver")
-        while True:
-            result: TranscriptResult | None = await transcriber.receive_transcript()
-            if result is None:  # End of stream
-                logger.info("Streaming transcription: transcript stream ended")
-                break
-            # Send if text changed OR if VAD detected end of speech (for auto-send trigger)
-            if result.text and (result.text != last_transcript or result.is_vad_end):
-                last_transcript = result.text
-                logger.debug(
-                    "Streaming transcription: got transcript: %s... (is_vad_end=%s)",
-                    result.text[:50],
-                    result.is_vad_end,
-                )
-                await websocket.send_json(
-                    {
-                        "type": "transcript",
-                        "text": result.text,
-                        "is_final": result.is_vad_end,
-                    }
-                )
-
-    # Start receiving transcripts in background
-    receive_task = asyncio.create_task(receive_transcripts())
+    # The client loop blocks on websocket.receive(), so a provider failure has to
+    # unblock it. Otherwise a client that never disconnects keeps the handler and
+    # the provider session alive.
+    receive_task = asyncio.create_task(
+        _receive_transcripts(websocket, transcriber, receiver_failed)
+    )
+    client_task = asyncio.create_task(
+        _receive_client_audio(websocket, transcriber, state, receive_task)
+    )
+    failure_task = asyncio.create_task(receiver_failed.wait())
 
     try:
-        while True:
-            message = await websocket.receive()
-            msg_type = message.get("type", "unknown")
-
-            if msg_type == "websocket.disconnect":
-                logger.info(
-                    "Streaming transcription: client disconnected after %s chunks (%s bytes)",
-                    chunk_count,
-                    total_bytes,
-                )
-                break
-
-            if "bytes" in message:
-                chunk_size = len(message["bytes"])
-
-                # Enforce per-message size limit
-                if chunk_size > WS_MAX_MESSAGE_SIZE:
-                    logger.warning(
-                        "Streaming transcription: message too large (%s bytes)",
-                        chunk_size,
-                    )
-                    await websocket.send_json(
-                        {"type": "error", "message": "Message too large"}
-                    )
-                    break
-
-                # Enforce total connection size limit
-                if total_bytes + chunk_size > WS_MAX_TOTAL_BYTES:
-                    logger.warning(
-                        "Streaming transcription: total size limit exceeded (%s bytes)",
-                        total_bytes + chunk_size,
-                    )
-                    await websocket.send_json(
-                        {"type": "error", "message": "Total size limit exceeded"}
-                    )
-                    break
-
-                chunk_count += 1
-                total_bytes += chunk_size
-                logger.debug(
-                    "Streaming transcription: received chunk %s (%s bytes, total: %s)",
-                    chunk_count,
-                    chunk_size,
-                    total_bytes,
-                )
-                await transcriber.send_audio(message["bytes"])
-
-            elif "text" in message:
-                try:
-                    data = json.loads(message["text"])
-                    logger.debug(
-                        "Streaming transcription: received text message: %s", data
-                    )
-                    if data.get("type") == "end":
-                        logger.info(
-                            "Streaming transcription: end signal received, closing transcriber"
-                        )
-                        final_transcript = await transcriber.close()
-                        receive_task.cancel()
-                        logger.info(
-                            "Streaming transcription: final transcript: %s...",
-                            final_transcript[:100] if final_transcript else "(empty)",
-                        )
-                        await websocket.send_json(
-                            {
-                                "type": "transcript",
-                                "text": final_transcript,
-                                "is_final": True,
-                            }
-                        )
-                        break
-                    elif data.get("type") == "reset":
-                        # Reset accumulated transcript after auto-send
-                        logger.info(
-                            "Streaming transcription: reset signal received, clearing transcript"
-                        )
-                        transcriber.reset_transcript()
-                except json.JSONDecodeError:
-                    logger.warning(
-                        "Streaming transcription: failed to parse JSON: %s",
-                        message.get("text", "")[:100],
-                    )
+        done, _ = await asyncio.wait(
+            {client_task, failure_task},
+            timeout=max(deadline - asyncio.get_running_loop().time(), 0.0),
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        if receiver_failed.is_set():
+            # A provider failure wins over a client result that arrives with it,
+            # so the caller always applies its fallback policy. The socket stays
+            # open for that decision.
+            raise StreamingTranscriptionFailed(
+                STREAM_FAILED_ERROR,
+                buffered_audio=bytes(state.streamed_audio),
+                client_ended=state.client_ended,
+            )
+        if not done:
+            logger.warning(
+                "Streaming transcription: session exceeded %ss, ending session",
+                WS_SESSION_TIMEOUT_SECONDS,
+            )
+            await websocket.send_json(
+                {"type": "error", "message": SESSION_TIMEOUT_ERROR}
+            )
+            return
+        # The client loop finished the session, so its outcome wins.
+        # A failure here re-raises for the caller's fallback logic.
+        client_task.result()
+    except WebSocketDisconnect:
+        raise
     except Exception as e:
         logger.error("Streaming transcription: error: %s", e, exc_info=True)
-        raise
+        if isinstance(e, StreamingTranscriptionFailed):
+            raise
+        # Every streaming failure carries the audio and end state, so the
+        # caller's fallback can still transcribe the whole recording.
+        raise StreamingTranscriptionFailed(
+            STREAM_FAILED_ERROR,
+            buffered_audio=bytes(state.streamed_audio),
+            client_ended=state.client_ended,
+        ) from e
     finally:
-        receive_task.cancel()
-        try:
-            await receive_task
-        except asyncio.CancelledError:
-            pass
+        for task in (receive_task, client_task, failure_task):
+            task.cancel()
+        await asyncio.gather(
+            receive_task, client_task, failure_task, return_exceptions=True
+        )
+        if not state.transcriber_closed:
+            await _close_transcriber(transcriber)
         logger.info(
             "Streaming transcription: handler finished. Processed %s chunks, %s total bytes",
-            chunk_count,
-            total_bytes,
+            state.chunk_count,
+            state.total_bytes,
         )
 
 
 async def handle_chunked_transcription(
     websocket: WebSocket,
     transcriber: ChunkedTranscriber,
+    initial_audio: bytes = b"",
+    client_ended: bool = False,
+    deadline: float | None = None,
 ) -> None:
-    """Handle transcription using chunked batch API."""
+    """Handle transcription using chunked batch API.
+
+    `initial_audio` is audio the client already sent on this connection, for
+    example before native streaming failed. Set `client_ended` when the client
+    already ended the recording, so the handler transcribes and returns without
+    waiting for more audio. `deadline` is the loop time the connection must end
+    at; see handle_streaming_transcription.
+    """
+    if deadline is None:
+        deadline = _session_deadline()
+    # The bound covers the replay of recovered audio and every provider call,
+    # not only the wait for client messages.
+    try:
+        async with asyncio.timeout_at(deadline):
+            await _run_chunked_transcription(
+                websocket, transcriber, initial_audio, client_ended
+            )
+    except TimeoutError:
+        logger.warning(
+            "Chunked transcription: session exceeded %ss, ending session",
+            WS_SESSION_TIMEOUT_SECONDS,
+        )
+        await websocket.send_json({"type": "error", "message": SESSION_TIMEOUT_ERROR})
+
+
+async def _run_chunked_transcription(
+    websocket: WebSocket,
+    transcriber: ChunkedTranscriber,
+    initial_audio: bytes,
+    client_ended: bool,
+) -> None:
     logger.info("Chunked transcription: starting handler")
     chunk_count = 0
     total_bytes = 0
 
+    # Replay in the transcriber's window size, so recovered audio keeps the same
+    # request sizes and silence detection as audio that arrives live.
+    for offset in range(0, len(initial_audio), transcriber.window_bytes):
+        window = initial_audio[offset : offset + transcriber.window_bytes]
+        chunk_count += 1
+        total_bytes += len(window)
+        await transcriber.add_chunk(window)
+
+    if client_ended:
+        final_transcript = await transcriber.flush()
+        await websocket.send_json(
+            {"type": "transcript", "text": final_transcript, "is_final": True}
+        )
+        return
+
     while True:
-        message = await websocket.receive()
+        message = await _receive_client_message(websocket)
+        if message is None:
+            logger.warning(
+                "Chunked transcription: no client message for %ss, ending session",
+                WS_CLIENT_IDLE_TIMEOUT_SECONDS,
+            )
+            break
         msg_type = message.get("type", "unknown")
 
         if msg_type == "websocket.disconnect":
@@ -551,20 +800,48 @@ async def websocket_transcribe(
             provider.supports_streaming_stt() and not VOICE_DISABLE_STREAMING_STT
         )
 
+        # One budget for the whole connection, shared with the chunked fallback.
+        session_deadline = _session_deadline()
+
         if use_streaming:
             try:
                 streaming_transcriber = await provider.create_streaming_transcriber()
                 logger.info("WebSocket transcribe: streaming transcriber created")
-                await handle_streaming_transcription(websocket, streaming_transcriber)
+                await handle_streaming_transcription(
+                    websocket, streaming_transcriber, deadline=session_deadline
+                )
                 return
+            except WebSocketDisconnect:
+                raise
             except Exception as e:
                 logger.error("WebSocket transcribe: streaming STT failed: %s", e)
-                if VOICE_DISABLE_STREAMING_FALLBACK:
+                if (
+                    VOICE_DISABLE_STREAMING_FALLBACK
+                    or not provider.allows_streaming_stt_fallback()
+                ):
                     await websocket.send_json(
-                        {"type": "error", "message": f"Streaming STT failed: {e}"}
+                        {"type": "error", "message": STREAM_FAILED_ERROR}
                     )
+                    await websocket.close(code=WS_SERVER_ERROR_CLOSE_CODE)
                     return
+                if isinstance(e, StreamingTranscriptionFailed):
+                    # Replay the audio native streaming already consumed, so the
+                    # fallback transcript covers the whole recording.
+                    recovered_audio = e.buffered_audio
+                    recording_ended = e.client_ended
+                else:
+                    recovered_audio = b""
+                    recording_ended = False
                 logger.info("WebSocket transcribe: falling back to chunked STT")
+                chunked_transcriber = ChunkedTranscriber(provider, audio_format="pcm16")
+                await handle_chunked_transcription(
+                    websocket,
+                    chunked_transcriber,
+                    initial_audio=recovered_audio,
+                    client_ended=recording_ended,
+                    deadline=session_deadline,
+                )
+                return
         elif VOICE_DISABLE_STREAMING_FALLBACK and not VOICE_DISABLE_STREAMING_STT:
             # Provider can't stream and chunked fallback is disabled.
             await websocket.send_json(
@@ -574,7 +851,9 @@ async def websocket_transcribe(
 
         # Chunked/REST path; browser sends raw PCM16 chunks.
         chunked_transcriber = ChunkedTranscriber(provider, audio_format="pcm16")
-        await handle_chunked_transcription(websocket, chunked_transcriber)
+        await handle_chunked_transcription(
+            websocket, chunked_transcriber, deadline=session_deadline
+        )
 
     except WebSocketDisconnect:
         logger.debug("WebSocket transcribe: client disconnected")
@@ -589,10 +868,7 @@ async def websocket_transcribe(
             pass
     finally:
         if streaming_transcriber:
-            try:
-                await streaming_transcriber.close()
-            except Exception:
-                pass
+            await _close_transcriber(streaming_transcriber)
         try:
             await websocket.close()
         except Exception:

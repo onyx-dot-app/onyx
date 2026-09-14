@@ -6,9 +6,6 @@ concurrency:
 on:
   merge_group:
   pull_request:
-    branches:
-      - main
-      - "release/**"
     # NOTE: Intentionally no `paths:` filter. We always trigger and let the
     # `changes` job below decide whether the real test matrix runs. This
     # avoids the dual-workflow skip pattern where a `paths-ignore`'d skip
@@ -64,7 +61,7 @@ jobs:
     steps:
       - name: Checkout code
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
       - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706
@@ -82,7 +79,7 @@ jobs:
               - 'uv.lock'
               - '.github/workflows/pr-integration-tests.yml'
               - '.github/actions/setup-test-license/**'
-              - '.github/actions/install-deps-and-generate-openapi-client/**'
+              - '.github/actions/install-python-deps/**'
               - '.github/actions/login-ecr-pullthrough-cache/**'
             gateway:
               - 'backend/onyx/server/gateway/**'
@@ -99,7 +96,7 @@ jobs:
       editions: ${{ steps.set-editions.outputs.editions }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -153,7 +150,7 @@ jobs:
     steps:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -184,7 +181,7 @@ jobs:
     steps:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -260,7 +257,7 @@ jobs:
     steps:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -319,6 +316,10 @@ jobs:
           EOF
           fi
 
+      # NOTE: only `inference_model_server` runs. `indexing_model_server` is the
+      # same image with the same routes (INDEXING_ONLY only changes the log
+      # request-id prefix), so the tests point both hosts at the one container
+      # and skip a second load of the embedding model.
       - name: Start Docker containers
         run: |
           cd deployment/docker_compose
@@ -328,8 +329,7 @@ jobs:
             opensearch \
             cache \
             minio \
-            inference_model_server \
-            indexing_model_server
+            inference_model_server
         id: start_docker
 
       - name: Start Mock Services
@@ -352,8 +352,8 @@ jobs:
           cd cli
           GOARCH=arm64 GOOS=linux go build -o ${{ github.workspace }}/onyx-cli-test .
 
-      - name: Install Python deps and generate OpenAPI client
-        uses: ./.github/actions/install-deps-and-generate-openapi-client
+      - name: Install Python deps
+        uses: ./.github/actions/install-python-deps
         with:
           devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
 
@@ -401,7 +401,7 @@ jobs:
               -e OPENSEARCH_HOST=opensearch \
               -e REDIS_HOST=cache \
               -e MODEL_SERVER_HOST=inference_model_server \
-              -e INDEXING_MODEL_SERVER_HOST=indexing_model_server \
+              -e INDEXING_MODEL_SERVER_HOST=inference_model_server \
               -e S3_ENDPOINT_URL=http://minio:9000 \
               -e S3_AWS_ACCESS_KEY_ID=minioadmin \
               -e S3_AWS_SECRET_ACCESS_KEY=minioadmin \
@@ -473,7 +473,7 @@ jobs:
     steps:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -510,8 +510,8 @@ jobs:
             relational_db
         id: start_docker_onyx_lite
 
-      - name: Install Python deps and generate OpenAPI client
-        uses: ./.github/actions/install-deps-and-generate-openapi-client
+      - name: Install Python deps
+        uses: ./.github/actions/install-python-deps
         with:
           devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
 
@@ -580,7 +580,7 @@ jobs:
     steps:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -589,33 +589,34 @@ jobs:
         with:
           ecr-registry: ${{ vars.ECR_REGISTRY }}
 
-      - name: Start Docker containers for multi-tenant tests
+      # Only infrastructure containers start here, so the multi-tenant app
+      # settings live on the test-runner container below, not in this .env.
+      - name: Create .env file for Docker Compose
         env:
           ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
           RUN_ID: ${{ github.run_id }}
         run: |
+          cat <<EOF > deployment/docker_compose/.env
+          COMPOSE_PROFILES=s3-filestore
+          ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID}
+          EOF
+
+      # NOTE: `indexing_model_server` is intentionally not started. See the
+      # integration-tests job above.
+      - name: Start Docker containers for multi-tenant tests
+        run: |
           cd deployment/docker_compose
-          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
-          LICENSE_ENFORCEMENT_ENABLED=false \
-          MULTI_TENANT=true \
-          AUTH_TYPE=cloud \
-          REQUIRE_EMAIL_VERIFICATION=false \
-          DISABLE_TELEMETRY=true \
-          OPENAI_DEFAULT_API_KEY=${OPENAI_API_KEY} \
-          ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID} \
-          DEV_MODE=true \
-          docker compose -f docker-compose.multitenant-dev.yml up -d \
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d \
             --wait --wait-timeout 300 \
             relational_db \
             opensearch \
             cache \
             minio \
-            inference_model_server \
-            indexing_model_server
+            inference_model_server
         id: start_docker_multi_tenant
 
-      - name: Install Python deps and generate OpenAPI client
-        uses: ./.github/actions/install-deps-and-generate-openapi-client
+      - name: Install Python deps
+        uses: ./.github/actions/install-python-deps
         with:
           devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
 
@@ -640,7 +641,7 @@ jobs:
             -e OPENSEARCH_HOST=opensearch \
             -e REDIS_HOST=cache \
             -e MODEL_SERVER_HOST=inference_model_server \
-            -e INDEXING_MODEL_SERVER_HOST=indexing_model_server \
+            -e INDEXING_MODEL_SERVER_HOST=inference_model_server \
             -e S3_ENDPOINT_URL=http://minio:9000 \
             -e S3_AWS_ACCESS_KEY_ID=minioadmin \
             -e S3_AWS_SECRET_ACCESS_KEY=minioadmin \
@@ -666,7 +667,7 @@ jobs:
         if: always()
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.multitenant-dev.yml logs --no-color > $GITHUB_WORKSPACE/docker-compose-multitenant.log || true
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --no-color > $GITHUB_WORKSPACE/docker-compose-multitenant.log || true
 
       - name: Upload logs (multi-tenant)
         if: always()
@@ -679,7 +680,7 @@ jobs:
         if: always()
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.multitenant-dev.yml down -v
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml down -v
 
   required:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
@@ -691,6 +692,9 @@ jobs:
     timeout-minutes: 5
     needs: [changes, integration-tests, onyx-lite-tests, multitenant-tests]
     if: ${{ always() }}
+    # Writes the tested-base commit status in the last step.
+    permissions:
+      statuses: write
     steps:
       - name: Check job status
         env:
@@ -719,3 +723,26 @@ jobs:
             exit 1
           fi
           echo "All tests passed."
+      # Record which base tip this verdict used. merge-group.yml refuses to
+      # merge a PR whose verdict used a base that never landed in the target
+      # (see .github/actions/check-tested-base).
+      # Fork and Dependabot runs have a read-only token and cannot record.
+      - name: Record tested base
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          github.actor != 'dependabot[bot]'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          DESCRIPTION="${BASE_SHA} ${BASE_REF}"
+          gh api --method POST "repos/${REPO}/statuses/${HEAD_SHA}" \
+            -f state=success \
+            -f context=ci/tested-base/integration \
+            -f description="${DESCRIPTION:0:140}" \
+            -f target_url="${RUN_URL}"

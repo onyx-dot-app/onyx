@@ -1,85 +1,109 @@
 package cmd
 
 import (
+	"errors"
+	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-
-	"github.com/onyx-dot-app/onyx/tools/ods/internal/audit"
 )
 
-// AuditOptions holds options for the audit command.
-type AuditOptions struct {
-	Web        bool
-	Python     bool
-	Dependabot bool
-	Actions    bool
-	Format     string
-	FailOn     string
-	IgnoreURL  string
-}
+// auditBinary is the standalone auditor installed by the `audit` extra.
+const auditBinary = "ods-audit"
 
-// NewAuditCommand creates the `ods audit` command.
+// installHint tells the user how to get the auditor.
+const installHint = `The auditor ships separately because its scanner is most of the download.
+
+Install it with the "audit" extra:
+
+  uv tool install 'onyx-devtools[audit]'
+
+or run it without installing:
+
+  uv run --with 'onyx-devtools[audit]' ods audit`
+
+// NewAuditCommand creates the `ods audit` command, a pass-through to the
+// `ods-audit` binary. Flag parsing stays off so every argument, including
+// --help, reaches the real command.
 func NewAuditCommand() *cobra.Command {
-	opts := &AuditOptions{}
-
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:   "audit",
-		Short: "Audit dependencies for known vulnerabilities",
+		Short: "Audit dependencies for known vulnerabilities (needs onyx-devtools[audit])",
 		Long: `Audit dependencies for known vulnerabilities.
 
-Scans the JavaScript (bun.lock) and Python (uv.lock) lockfiles via osv-scanner,
-open GitHub Dependabot security alerts, and the GitHub Actions pinned in
-.github/workflows and .github/actions against OSV.dev. With no selector flags,
-all sources are audited. Accepted advisories are suppressed via an allowlist
-fetched from S3 at runtime, so releases can be unblocked without a code change.
-
-Exits non-zero when an unignored finding at or above --fail-on remains, which is
-how it gates deploys.`,
-		Args: cobra.NoArgs,
+Runs the ` + auditBinary + ` binary from the onyx-devtools "audit" extra, which
+scans lockfiles, container images, Dependabot alerts, and pinned GitHub Actions.
+Run "` + auditBinary + ` --help" for the full reference.`,
+		DisableFlagParsing: true,
+		Args:               cobra.ArbitraryArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			runAudit(opts)
+			runAudit(cmd, args)
 		},
 	}
-
-	cmd.Flags().BoolVar(&opts.Web, "web", false, "Audit web/JS dependencies (bun.lock)")
-	cmd.Flags().BoolVar(&opts.Python, "python", false, "Audit Python dependencies (uv.lock)")
-	cmd.Flags().BoolVar(&opts.Dependabot, "dependabot", false, "Audit open Dependabot security alerts")
-	cmd.Flags().BoolVar(&opts.Actions, "actions", false, "Audit GitHub Actions in .github/workflows and .github/actions")
-	cmd.Flags().StringVar(&opts.Format, "format", "text", "Output format(s), comma-separated: text, json, sarif (e.g. sarif,text)")
-	cmd.Flags().StringVar(&opts.FailOn, "fail-on", "critical", "Minimum severity that fails the audit: critical, high, moderate, or low")
-	cmd.Flags().StringVar(&opts.IgnoreURL, "ignore-url", audit.DefaultIgnoreURL, "S3 URL of the advisory allowlist")
-
-	cmd.AddCommand(newAuditImageCommand())
-	cmd.AddCommand(newAuditIgnoreCommand())
-
-	return cmd
 }
 
-func runAudit(opts *AuditOptions) {
-	failOn := audit.ParseSeverity(opts.FailOn)
-	if failOn == audit.SeverityUnknown {
-		log.Fatalf("Invalid --fail-on %q (want critical, high, moderate, or low)", opts.FailOn)
-	}
-
-	result, err := audit.Run(audit.Options{
-		Web:        opts.Web,
-		Python:     opts.Python,
-		Dependabot: opts.Dependabot,
-		Actions:    opts.Actions,
-		Format:     opts.Format,
-		FailOn:     failOn,
-		IgnoreURL:  opts.IgnoreURL,
-		Stdout:     os.Stdout,
-		Stderr:     os.Stderr,
-	})
+func runAudit(cmd *cobra.Command, args []string) {
+	bin, err := resolveAuditBinary()
 	if err != nil {
-		log.Fatalf("Audit failed: %v", err)
-	}
-
-	if len(result.Blocking) > 0 {
-		log.Errorf("%d finding(s) at or above %s severity must be resolved or suppressed", len(result.Blocking), failOn)
+		if wantsHelp(args) {
+			_ = cmd.Help()
+		}
+		log.Errorf("%s is not installed.", auditBinary)
+		fmt.Fprintln(os.Stderr, installHint)
 		os.Exit(1)
 	}
+
+	// Flag parsing is off, so args still holds every root flag, such as --debug.
+	c := exec.Command(bin, args...)
+	c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
+	if err := c.Run(); err != nil {
+		// Pass the exit code through: `ods audit` gates deploys on it.
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			// A signal kill has no exit code, and ExitCode() reports -1 for it.
+			if code := exitErr.ExitCode(); code >= 0 {
+				os.Exit(code)
+			}
+			log.Fatalf("%s was terminated: %v", auditBinary, exitErr)
+		}
+		log.Fatalf("Failed to run %s: %v", bin, err)
+	}
+}
+
+// resolveAuditBinary finds the auditor next to this binary, then on PATH.
+func resolveAuditBinary() (string, error) {
+	exeDir := ""
+	if exe, err := os.Executable(); err == nil {
+		exeDir = filepath.Dir(exe)
+	}
+	return lookupAuditBinary(exeDir)
+}
+
+// lookupAuditBinary prefers the auditor in exeDir so a venv that has both wheels
+// works even when it is not on PATH.
+func lookupAuditBinary(exeDir string) (string, error) {
+	name := auditBinary
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	if exeDir != "" {
+		sibling := filepath.Join(exeDir, name)
+		if info, err := os.Stat(sibling); err == nil && !info.IsDir() {
+			return sibling, nil
+		}
+	}
+	return exec.LookPath(auditBinary)
+}
+
+func wantsHelp(args []string) bool {
+	for _, a := range args {
+		if a == "-h" || a == "--help" {
+			return true
+		}
+	}
+	return len(args) == 0
 }

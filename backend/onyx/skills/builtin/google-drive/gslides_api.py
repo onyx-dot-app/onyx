@@ -93,11 +93,15 @@ def _element_text(element: dict[str, Any]) -> str:
     if shape_text:
         parts.append(_text_runs(shape_text))
     for row in element.get("table", {}).get("tableRows", []):
-        for cell in row.get("tableCells", []):
-            if cell.get("text"):
-                parts.append(_text_runs(cell["text"]))
-    for child in element.get("elementGroup", {}).get("children", []):
-        parts.append(_element_text(child))
+        parts.extend(
+            _text_runs(cell["text"])
+            for cell in row.get("tableCells", [])
+            if cell.get("text")
+        )
+    parts.extend(
+        _element_text(child)
+        for child in element.get("elementGroup", {}).get("children", [])
+    )
     return "".join(parts)
 
 

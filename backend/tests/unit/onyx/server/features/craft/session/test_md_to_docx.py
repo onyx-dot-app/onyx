@@ -263,16 +263,15 @@ def test_table_cell_alignment_follows_column_spec() -> None:
     # The Markdown separator row (:--, :--:, --:) sets per-column alignment, the
     # way pandoc renders it.
     doc = _render("| L | C | R |\n|:--|:--:|--:|\n| a | b | c |\n")
-    row_alignments = []
-    for row in doc.tables[0].rows:
-        row_alignments.append(
-            [
-                None
-                if cell.paragraphs[0].alignment is None
-                else cell.paragraphs[0].alignment
-                for cell in row.cells
-            ]
-        )
+    row_alignments = [
+        [
+            None
+            if cell.paragraphs[0].alignment is None
+            else cell.paragraphs[0].alignment
+            for cell in row.cells
+        ]
+        for row in doc.tables[0].rows
+    ]
     # WD_ALIGN_PARAGRAPH: left default (None), CENTER == 1, RIGHT == 2.
     assert all(
         alignments[1] == WD_ALIGN_PARAGRAPH.CENTER for alignments in row_alignments

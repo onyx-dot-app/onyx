@@ -15,6 +15,8 @@ from onyx.db.models import TokenRateLimit, User
 from onyx.db.token_limit import fetch_all_global_token_rate_limits
 from onyx.db.user_usage import (
     TokenUsageBucket,
+    cost_budget_fetch_cutoff,
+    cost_budget_limits,
     earliest_window_reset,
     get_cost_window_reset,
     get_cost_window_start,
@@ -54,6 +56,12 @@ def _check_token_rate_limits(_: User) -> None:
     _user_is_rate_limited_by_global()
 
 
+def check_global_token_rate_limits() -> None:
+    """Enforce tenant-wide budgets without requiring a user principal."""
+    if any_rate_limit_exists():
+        _user_is_rate_limited_by_global()
+
+
 """
 Global rate limits
 """
@@ -83,13 +91,10 @@ def _user_is_rate_limited_by_global() -> None:
             token_reset = _token_budget_reset(global_rate_limits, global_usage)
 
         cost_reset: datetime | None = None
-        cost_limits = [
-            rl for rl in global_rate_limits if rl.cost_budget_cents is not None
-        ]
+        cost_limits = cost_budget_limits(global_rate_limits)
         if cost_limits:
-            now = datetime.now(timezone.utc)
-            cost_cutoff = min(
-                get_cost_window_start(now, rl.period_hours) for rl in cost_limits
+            cost_cutoff = cost_budget_fetch_cutoff(
+                datetime.now(timezone.utc), cost_limits
             )
             cost_buckets = get_total_cost_cents_buckets_since(db_session, cost_cutoff)
             cost_reset = _cost_budget_reset(global_rate_limits, cost_buckets)
@@ -170,7 +175,7 @@ def _cost_budget_reset(
     """The latest fixed reset among the exceeded cost budgets, or None."""
     now = datetime.now(timezone.utc)
     resets: list[datetime] = []
-    for rate_limit in rate_limits:
+    for rate_limit in cost_budget_limits(rate_limits):
         budget = rate_limit.cost_budget_cents
         if budget is None:
             continue

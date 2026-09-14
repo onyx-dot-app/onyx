@@ -2,7 +2,7 @@ import copy
 import json
 import os
 from collections.abc import Callable, Generator, Iterable, Iterator
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any
 
 import requests
@@ -180,7 +180,7 @@ def _handle_jira_search_error(e: Exception, jql: str) -> None:
     # Try to get status code and error text from JIRAError or requests response
     if hasattr(e, "status_code"):
         status_code = e.status_code
-        raw_text = getattr(e, "text", "")
+        raw_text = getattr(e, "text", "")  # ods: ignore[getattr]
         if isinstance(raw_text, str):
             try:
                 error_text = _format_error_text(json.loads(raw_text))
@@ -600,7 +600,7 @@ class JiraConnector(
         than a full Issue, so we handle it separately.
         """
         parent_issuetype = (
-            getattr(parent.fields, "issuetype", None)
+            getattr(parent.fields, "issuetype", None)  # ods: ignore[getattr]
             if hasattr(parent, "fields")
             else None
         )
@@ -668,7 +668,7 @@ class JiraConnector(
 
         # Get summary if available
         parent_summary = (
-            getattr(parent.fields, "summary", None)
+            getattr(parent.fields, "summary", None)  # ods: ignore[getattr]
             if hasattr(parent, "fields")
             else None
         )
@@ -714,19 +714,13 @@ class JiraConnector(
     def _get_jql_query(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> str:
-        """Get the JQL query based on configuration and time range
+        """JQL for the configured project/query plus the poll window.
 
-        If a custom JQL query is provided, it will be used and combined with time constraints.
-        Otherwise, the query will be constructed based on project key (if provided).
+        Unquoted epoch-ms so Jira does not reinterpret naive datetimes in the
+        API user's profile timezone.
+        https://support.atlassian.com/jira-software-cloud/docs/jql-fields/#Updated
         """
-        start_date_str = datetime.fromtimestamp(start, tz=timezone.utc).strftime(
-            "%Y-%m-%d %H:%M"
-        )
-        end_date_str = datetime.fromtimestamp(end, tz=timezone.utc).strftime(
-            "%Y-%m-%d %H:%M"
-        )
-
-        time_jql = f"updated >= '{start_date_str}' AND updated <= '{end_date_str}'"
+        time_jql = f"updated >= {int(start * 1000)} AND updated <= {int(end * 1000)}"
 
         # If custom JQL query is provided, use it and combine with time constraints
         if self.jql_query:
@@ -955,25 +949,28 @@ class JiraConnector(
 
                 # Yield hierarchy nodes BEFORE the slim document (parent-before-child)
                 # 1. Yield project hierarchy node (if not already yielded)
-                for node in self._yield_project_hierarchy_node(
-                    project_key, project_name, seen_hierarchy_node_ids
-                ):
-                    slim_doc_batch.append(node)
+                slim_doc_batch.extend(
+                    self._yield_project_hierarchy_node(
+                        project_key, project_name, seen_hierarchy_node_ids
+                    )
+                )
 
                 # 2. If parent is an Epic, yield hierarchy node for it
                 parent = best_effort_get_field_from_issue(issue, _FIELD_PARENT)
                 if parent:
-                    for node in self._yield_parent_hierarchy_node_if_epic(
-                        parent, project_key, seen_hierarchy_node_ids
-                    ):
-                        slim_doc_batch.append(node)
+                    slim_doc_batch.extend(
+                        self._yield_parent_hierarchy_node_if_epic(
+                            parent, project_key, seen_hierarchy_node_ids
+                        )
+                    )
 
                 # 3. If this issue IS an Epic, yield it as hierarchy node
                 if self._is_epic(issue):
-                    for node in self._yield_epic_hierarchy_node(
-                        issue, project_key, seen_hierarchy_node_ids
-                    ):
-                        slim_doc_batch.append(node)
+                    slim_doc_batch.extend(
+                        self._yield_epic_hierarchy_node(
+                            issue, project_key, seen_hierarchy_node_ids
+                        )
+                    )
 
                 # Now add the slim document
                 issue_key = best_effort_get_field_from_issue(issue, _FIELD_KEY)
@@ -1064,7 +1061,7 @@ class JiraConnector(
             InsufficientPermissionsError: If the status code is 403
             ConnectorValidationError: For other HTTP errors with extracted error messages
         """
-        status_code = getattr(e, "status_code", None)
+        status_code = getattr(e, "status_code", None)  # ods: ignore[getattr]
         logger.error("Jira API error during validation: %s", e)
 
         # Handle specific status codes with appropriate exceptions
@@ -1082,7 +1079,7 @@ class JiraConnector(
             )
 
         # Try to extract original error message from the response
-        error_message = getattr(e, "text", None)
+        error_message = getattr(e, "text", None)  # ods: ignore[getattr]
         if error_message is None:
             raise UnexpectedValidationError(
                 f"Unexpected Jira error during validation: {e}"

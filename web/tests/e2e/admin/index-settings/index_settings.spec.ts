@@ -1,9 +1,10 @@
 import { expect, test } from "@playwright/test";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import type { Page } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
 import { IndexSettingsPage } from "./IndexSettingsPage";
 
-const INDEX_SETTINGS_URL = "/admin/configuration/index-settings";
+const INDEX_SETTINGS_URL = ADMIN_ROUTES.INDEX_SETTINGS.path;
 const EMBEDDING_PROVIDER_API = "**/api/admin/embedding/embedding-provider**";
 const TEST_EMBEDDING_API = "**/api/admin/embedding/test-embedding";
 const SET_NEW_SETTINGS_API = "**/api/search-settings/set-new-search-settings**";

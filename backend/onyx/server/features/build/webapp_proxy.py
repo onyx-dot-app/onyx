@@ -193,8 +193,7 @@ async def _proxy_request(
         for key, value in request.headers.items()
         if not (
             (lowered := key.lower()) in EXCLUDED_REQUEST_HEADERS
-            or lowered.startswith("x-onyx-")
-            or lowered.startswith("sec-fetch-")
+            or lowered.startswith(("x-onyx-", "sec-fetch-"))
         )
     }
 

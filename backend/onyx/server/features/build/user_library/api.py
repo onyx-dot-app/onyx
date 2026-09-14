@@ -21,7 +21,7 @@ from onyx.db.enums import ConnectorCredentialPairStatus, Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.file_processing.extract_file_text import count_pdf_embedded_images
+from onyx.file_processing.pdf_image_utils import count_pdf_embedded_images
 from onyx.server.features.build.configs import (
     USER_LIBRARY_MAX_FILE_SIZE_BYTES,
     USER_LIBRARY_MAX_FILES_PER_UPLOAD,

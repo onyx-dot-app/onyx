@@ -53,7 +53,7 @@ def _get_role_id(holder: Holder) -> str | None:
 def _get_obj_value(obj: object, field: str) -> object | None:
     if isinstance(obj, dict):
         return obj.get(field)
-    return getattr(obj, field, None)
+    return getattr(obj, field, None)  # ods: ignore[getattr]
 
 
 def _get_raw_value(obj: object, field: str) -> object | None:
@@ -311,7 +311,7 @@ def _get_actor_user_email(
         return None
 
     user = jira_client.user(id=user_lookup_id)
-    account_type = getattr(user, "accountType", None)
+    account_type = getattr(user, "accountType", None)  # ods: ignore[getattr]
     if account_type is not None and account_type != "atlassian":
         logger.info(
             "Skipping Jira project %s project role %s user %s because it is not an "
@@ -322,7 +322,7 @@ def _get_actor_user_email(
         )
         return None
 
-    email = getattr(user, "emailAddress", None)
+    email = getattr(user, "emailAddress", None)  # ods: ignore[getattr]
     if email:
         return email
 

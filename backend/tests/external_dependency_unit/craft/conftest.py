@@ -37,7 +37,6 @@ from onyx.db.models import (
     Skill__UserGroup,
     User,
     UserGroup,
-    UserRole,
 )
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.constants import LlmProviderNames
@@ -160,6 +159,11 @@ def test_user(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> Generator[User, None, None]:
+    """A group-less, permission-less external-permission placeholder.
+
+    That is deliberate: it matches the row production's permission sync creates.
+    Use ``make_user(standard_account=True)`` when a test needs real authority.
+    """
     password_helper = PasswordHelper()
     user = User(
         id=uuid4(),
@@ -168,7 +172,6 @@ def test_user(
         is_active=True,
         is_superuser=False,
         is_verified=True,
-        role=UserRole.EXT_PERM_USER,
         account_type=AccountType.EXT_PERM_USER,
     )
     db_session.add(user)

@@ -1,8 +1,8 @@
-import type { MutableRefObject, Ref, RefCallback } from "react";
+import type { MutableRefObject, ReactNode, Ref, RefCallback } from "react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import copy from "copy-to-clipboard";
-import type { RichStr } from "@opal/types";
+import type { RichNodes, RichStr } from "@opal/types";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -18,6 +18,30 @@ export function cn(...inputs: ClassValue[]) {
  */
 export function markdown(...lines: string[]): RichStr {
   return { __brand: "RichStr", raw: lines.join("\n") };
+}
+
+/**
+ * Brands React nodes as deliberate `Text` children.
+ *
+ * Use for sentences that must embed inline components — the main case is
+ * next-intl rich-text output:
+ * ```tsx
+ * <Text font="main-ui-body" color="text-04">
+ *   {richNodes(t.rich("help.text", { link: (chunks) => <a ...>{chunks}</a> }))}
+ * </Text>
+ * ```
+ * Do not use it to pass layout JSX into `Text`; the content must stay inline.
+ */
+export function richNodes(nodes: ReactNode): RichNodes {
+  return { __brand: "RichNodes", nodes };
+}
+
+export function isRichNodes(value: unknown): value is RichNodes {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as RichNodes).__brand === "RichNodes"
+  );
 }
 
 export function mergeRefs<T>(...refs: (Ref<T> | undefined)[]): RefCallback<T> {
@@ -64,5 +88,19 @@ export function clickOnKeyDown(
     if (event.repeat) return;
     event.preventDefault();
     onClick();
+  };
+}
+
+/**
+ * Wraps a click handler so the event stops at this element — for controls
+ * nested inside a larger click surface (an input's action button, a card's
+ * inner control) that must not also trigger the surface.
+ */
+export function noProp(
+  f?: (event: React.MouseEvent) => void
+): React.MouseEventHandler {
+  return (event) => {
+    event.stopPropagation();
+    f?.(event);
   };
 }

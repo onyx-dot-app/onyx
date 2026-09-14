@@ -5,9 +5,10 @@ from fastapi import HTTPException
 from sqlalchemy import Select, and_, asc, delete, desc, exists, select
 from sqlalchemy.orm import Session, aliased
 
+from onyx.auth.permissions import has_global_permission
 from onyx.configs.constants import MessageType, SearchFeedbackType
 from onyx.db.chat import get_chat_message
-from onyx.db.enums import AccessType
+from onyx.db.enums import AccessType, Permission
 from onyx.db.models import (
     ChatMessageFeedback,
     ConnectorCredentialPair,
@@ -16,7 +17,6 @@ from onyx.db.models import (
     User,
     User__UserGroup,
     UserGroup__ConnectorCredentialPair,
-    UserRole,
 )
 from onyx.db.models import Document as DbDocument
 from onyx.utils.logger import setup_logger
@@ -36,7 +36,12 @@ def _fetch_db_doc_by_id(doc_id: str, db_session: Session) -> DbDocument:
 
 
 def _add_user_filters(stmt: Select, user: User, get_editable: bool = True) -> Select:
-    if user.role == UserRole.ADMIN:
+    # MANAGE_CONNECTORS is org-wide over connectors, so boost/hide sees every
+    # document the same way an admin does; without this the routes would admit
+    # the holder and then silently return only their own groups' documents.
+    if has_global_permission(
+        user, Permission.FULL_ADMIN_PANEL_ACCESS
+    ) or has_global_permission(user, Permission.MANAGE_CONNECTORS):
         return stmt
 
     stmt = stmt.distinct()
@@ -64,14 +69,11 @@ def _add_user_filters(stmt: Select, user: User, get_editable: bool = True) -> Se
     )
 
     """
-    Filter Documents by:
-    - if the user is in the user_group that owns the object
-    - if the user is not a global_curator, they must also have a curator relationship
-    to the user_group
-    - if editing is being done, we also filter out objects that are owned by groups
-    that the user isn't a curator for
-    - if we are not editing, we show all objects in the groups the user is a curator
-    for (as well as public objects as well)
+    Filter Documents by group membership:
+    - if get_editable, the document's CCPair must be owned exclusively by
+      groups the user belongs to (prevents mutating docs that are also
+      visible to groups outside the user's reach)
+    - otherwise, show docs in any group the user belongs to plus public docs
     """
 
     # Anonymous users only see public documents
@@ -80,8 +82,6 @@ def _add_user_filters(stmt: Select, user: User, get_editable: bool = True) -> Se
         return stmt.where(where_clause)
 
     where_clause = User__UG.user_id == user.id
-    if user.role == UserRole.CURATOR and get_editable:
-        where_clause &= User__UG.is_curator == True  # noqa: E712
     if get_editable:
         user_groups = select(User__UG.user_group_id).where(User__UG.user_id == user.id)
         where_clause &= ~exists().where(UG__CCpair.cc_pair_id == CCPair.id).where(

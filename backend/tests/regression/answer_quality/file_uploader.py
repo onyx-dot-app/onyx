@@ -25,8 +25,7 @@ def unzip_and_get_file_paths(zip_file_path: str) -> list[str]:
 
     file_paths = []
     for root, _, files in os.walk(persistent_dir):
-        for file in sorted(files):
-            file_paths.append(os.path.join(root, file))
+        file_paths.extend(os.path.join(root, file) for file in sorted(files))
 
     return file_paths
 

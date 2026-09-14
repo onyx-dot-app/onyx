@@ -81,6 +81,7 @@ from onyx.file_processing.image_utils import (
     store_image_and_create_section,
 )
 from onyx.file_store.staging import RawFileCallback
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_after import parse_retry_after_seconds
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
@@ -152,6 +153,8 @@ def _build_item_relative_path(parent_reference_path: str | None, item_name: str)
 DEFAULT_AUTHORITY_HOST = "https://login.microsoftonline.com"
 DEFAULT_GRAPH_API_HOST = "https://graph.microsoft.com"
 DEFAULT_SHAREPOINT_DOMAIN_SUFFIX = "sharepoint.com"
+# OneDrive sites live on '<tenant>-my.<suffix>' instead of '<tenant>.<suffix>'.
+_ONEDRIVE_HOST_SUFFIX = "-my"
 
 GRAPH_API_BASE = f"{DEFAULT_GRAPH_API_HOST}/v1.0"
 GRAPH_API_MAX_RETRIES = 5
@@ -219,16 +222,6 @@ class DriveItemData(BaseModel):
 
     @classmethod
     def from_graph_json(cls, item: dict[str, Any]) -> "DriveItemData":
-        last_mod_raw = item.get(DRIVE_ITEM_LAST_MODIFIED_DATETIME_PROPERTY)
-        last_mod: datetime | None = None
-        if isinstance(last_mod_raw, str):
-            last_mod = datetime.fromisoformat(last_mod_raw.replace("Z", "+00:00"))
-
-        created_raw = item.get(DRIVE_ITEM_CREATED_DATETIME_PROPERTY)
-        created: datetime | None = None
-        if isinstance(created_raw, str):
-            created = datetime.fromisoformat(created_raw.replace("Z", "+00:00"))
-
         last_modified_by = item.get(DRIVE_ITEM_LAST_MODIFIED_BY_PROPERTY, {}).get(
             "user", {}
         )
@@ -242,8 +235,12 @@ class DriveItemData(BaseModel):
             size=item.get(DRIVE_ITEM_SIZE_PROPERTY),
             mime_type=item.get(DRIVE_ITEM_FILE_PROPERTY, {}).get("mimeType"),
             download_url=item.get(DRIVE_ITEM_DOWNLOAD_URL_PROPERTY),
-            created_datetime=created,
-            last_modified_datetime=last_mod,
+            created_datetime=_parse_sharepoint_datetime(
+                item.get(DRIVE_ITEM_CREATED_DATETIME_PROPERTY)
+            ),
+            last_modified_datetime=_parse_sharepoint_datetime(
+                item.get(DRIVE_ITEM_LAST_MODIFIED_DATETIME_PROPERTY)
+            ),
             last_modified_by_display_name=last_modified_by.get("displayName"),
             last_modified_by_email=(
                 last_modified_by.get("email")
@@ -320,6 +317,28 @@ class CertificateData(BaseModel):
     thumbprint: str
 
 
+def _parse_sharepoint_datetime(value: str | datetime | None) -> datetime | None:
+    """Parse a SharePoint Graph datetime that may be an ISO string or datetime."""
+    if not value:
+        return None
+    if isinstance(value, str):
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    elif isinstance(value, datetime):
+        parsed = value
+    else:
+        raise TypeError(f"Unsupported Graph datetime value: {value!r}")
+    # Graph timestamps are UTC. A naive value would not compare with aware bounds.
+    return datetime_to_utc(parsed)
+
+
+def _timestamp_in_window(
+    timestamp: datetime,
+    start: datetime | None,
+    end: datetime | None,
+) -> bool:
+    return (start is None or timestamp >= start) and (end is None or timestamp <= end)
+
+
 def _site_page_in_time_window(
     page: dict[str, Any],
     start: datetime | None,
@@ -328,15 +347,45 @@ def _site_page_in_time_window(
     """Return True if the page's lastModifiedDateTime falls within [start, end]."""
     if start is None and end is None:
         return True
-    raw = page.get("lastModifiedDateTime")
-    if not raw:
+    last_modified = _parse_sharepoint_datetime(page.get("lastModifiedDateTime"))
+    if last_modified is None:
         return True
-    if not isinstance(raw, str):
-        raise ValueError(f"lastModifiedDateTime is not a string: {raw}")
-    last_modified = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-    return (start is None or last_modified >= start) and (
-        end is None or last_modified <= end
-    )
+    return _timestamp_in_window(last_modified, start, end)
+
+
+def _drive_item_in_time_window(
+    item: dict[str, Any],
+    start: datetime | None,
+    end: datetime | None,
+) -> bool:
+    """Return True if a drive item falls within [start, end].
+
+    Uses the later of `createdDateTime` and `lastModifiedDateTime`, or whichever
+    is present: a file copied or synced into a drive keeps its original
+    modification date, which can predate the window even though the file is new
+    to the drive. Items carrying neither timestamp are kept.
+
+    Checking only the latest change attributes each item to exactly one poll
+    window. A change after `end` lands in the next window, which starts
+    POLL_CONNECTOR_OFFSET before this one ends.
+    """
+    if start is None and end is None:
+        return True
+
+    timestamps = [
+        ts
+        for ts in (
+            _parse_sharepoint_datetime(item.get(DRIVE_ITEM_CREATED_DATETIME_PROPERTY)),
+            _parse_sharepoint_datetime(
+                item.get(DRIVE_ITEM_LAST_MODIFIED_DATETIME_PROPERTY)
+            ),
+        )
+        if ts is not None
+    ]
+    if not timestamps:
+        return True
+
+    return _timestamp_in_window(max(timestamps), start, end)
 
 
 # Transport-level exceptions that indicate a transient network/server-side
@@ -703,6 +752,20 @@ def _redact_url_for_logging(url: str, max_len: int = 120) -> str:
     return safe
 
 
+_URL_QUERY_RE = re.compile(r"(https?://[^\s'\")?]*)\?[^\s'\")]*")
+
+
+def _scrub_url_credentials(text: str) -> str:
+    """Strip query strings out of URLs embedded in arbitrary text.
+
+    Transport errors from requests/urllib3 quote the request target, so a
+    pre-authenticated ``@microsoft.graph.downloadUrl`` reaches the logs with its
+    ``tempauth=`` JWT intact. Only a query that follows an http(s) URL is
+    redacted, so an ordinary question mark in a message survives.
+    """
+    return _URL_QUERY_RE.sub(r"\1?<redacted>", text)
+
+
 def _stream_response_to_buffer_with_cap(
     request_factory: Callable[[], requests.Response],
     cap: int,
@@ -765,7 +828,7 @@ def _stream_response_to_buffer_with_cap(
                     description,
                     max_retries + 1,
                     type(e).__name__,
-                    e,
+                    _scrub_url_credentials(str(e)),
                 )
                 raise
             sleep_time = _backoff_seconds(attempt, retry_after=None)
@@ -776,7 +839,7 @@ def _stream_response_to_buffer_with_cap(
                 attempt + 1,
                 max_retries + 1,
                 type(e).__name__,
-                e,
+                _scrub_url_credentials(str(e)),
                 sleep_time,
             )
             time.sleep(sleep_time)
@@ -917,11 +980,14 @@ def _convert_driveitem_to_document_with_permissions(
             )
             return None
         except Exception as e:
+            scrubbed = _scrub_url_credentials(str(e))
             logger.warning(
-                "Failed to download via Graph API for '%s': %s", driveitem.name, e
+                "Failed to download via Graph API for '%s': %s",
+                driveitem.name,
+                scrubbed,
             )
             return _create_document_failure(
-                driveitem, f"Failed to download via graph api: {e}", e
+                driveitem, f"Failed to download via graph api: {scrubbed}", e
             )
 
     sections: list[TextSection | ImageSection | TabularSection] = []
@@ -1002,16 +1068,8 @@ def _convert_driveitem_to_document_with_permissions(
         source=DocumentSource.SHAREPOINT,
         semantic_identifier=driveitem.name,
         external_access=external_access,
-        doc_created_at=(
-            driveitem.created_datetime.replace(tzinfo=timezone.utc)
-            if driveitem.created_datetime
-            else None
-        ),
-        doc_updated_at=(
-            driveitem.last_modified_datetime.replace(tzinfo=timezone.utc)
-            if driveitem.last_modified_datetime
-            else None
-        ),
+        doc_created_at=driveitem.created_datetime,
+        doc_updated_at=driveitem.last_modified_datetime,
         primary_owners=[
             BasicExpertInfo(
                 display_name=driveitem.last_modified_by_display_name or "",
@@ -1122,24 +1180,10 @@ def _convert_sitepage_to_document(
     if not page_text and title:
         page_text = title
 
-    # Parse creation and modification info
-    created_datetime = site_page.get("createdDateTime")
-    if created_datetime:
-        if isinstance(created_datetime, str):
-            created_datetime = datetime.fromisoformat(
-                created_datetime.replace("Z", "+00:00")
-            )
-        elif not created_datetime.tzinfo:
-            created_datetime = created_datetime.replace(tzinfo=timezone.utc)
-
-    last_modified_datetime = site_page.get("lastModifiedDateTime")
-    if last_modified_datetime:
-        if isinstance(last_modified_datetime, str):
-            last_modified_datetime = datetime.fromisoformat(
-                last_modified_datetime.replace("Z", "+00:00")
-            )
-        elif not last_modified_datetime.tzinfo:
-            last_modified_datetime = last_modified_datetime.replace(tzinfo=timezone.utc)
+    created_datetime = _parse_sharepoint_datetime(site_page.get("createdDateTime"))
+    last_modified_datetime = _parse_sharepoint_datetime(
+        site_page.get("lastModifiedDateTime")
+    )
 
     # Extract owner information
     primary_owners = []
@@ -1190,17 +1234,6 @@ def _convert_sitepage_to_document(
     return doc
 
 
-def _parse_sharepoint_datetime(value: Any) -> datetime | None:
-    """Parse a SharePoint Graph datetime that may be an ISO string or datetime."""
-    if not value:
-        return None
-    if isinstance(value, str):
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
-    if not value.tzinfo:
-        return value.replace(tzinfo=timezone.utc)
-    return value
-
-
 def _convert_driveitem_to_slim_document(
     driveitem: DriveItemData,
     drive_name: str,
@@ -1227,11 +1260,7 @@ def _convert_driveitem_to_slim_document(
         id=driveitem.id,
         external_access=external_access,
         parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
-        doc_created_at=(
-            driveitem.created_datetime.replace(tzinfo=timezone.utc)
-            if driveitem.created_datetime
-            else None
-        ),
+        doc_created_at=driveitem.created_datetime,
     )
 
 
@@ -1346,6 +1375,41 @@ class SharepointConnector(
                 raise ConnectorValidationError(
                     f"Invalid site URL '{site_url}': {e}"
                 ) from e
+            self._validate_site_url_host(site_url)
+
+    def _expected_site_hostnames(self) -> set[str] | None:
+        """Hosts the REST token is valid for, or None before credentials load.
+
+        ``acquire_token_for_rest`` mints the token for
+        ``{sp_tenant_domain}.{suffix}``. OneDrive lives on the ``-my`` sibling of
+        that host, so both forms of the tenant label are accepted.
+        """
+        if not self.sp_tenant_domain:
+            return None
+        tenant = self.sp_tenant_domain.lower().removesuffix(_ONEDRIVE_HOST_SUFFIX)
+        suffix = self.sharepoint_domain_suffix.lower()
+        return {f"{tenant}.{suffix}", f"{tenant}{_ONEDRIVE_HOST_SUFFIX}.{suffix}"}
+
+    def _validate_site_url_host(self, site_url: str) -> None:
+        """Reject a site URL the REST token must not be sent to.
+
+        The token is minted for one tenant, so a host like
+        'tenant.attacker.example/sites/x' would leak it to the attacker, and
+        another tenant under the same cloud suffix would receive a token it has
+        no claim to.
+        """
+        suffix = self.sharepoint_domain_suffix.lower()
+        hostname = (urlsplit(site_url).hostname or "").lower()
+        if hostname != suffix and not hostname.endswith(f".{suffix}"):
+            raise ConnectorValidationError(
+                f"Site URL '{site_url}' must be on the '{suffix}' domain."
+            )
+        expected = self._expected_site_hostnames()
+        if expected is not None and hostname not in expected:
+            raise ConnectorValidationError(
+                f"Site URL '{site_url}' is not on this tenant's SharePoint host "
+                f"(expected one of: {', '.join(sorted(expected))})."
+            )
 
     def probe_role_assignments_permission(self) -> None:
         """Verify the Azure AD app can read SharePoint RoleAssignments.
@@ -1501,6 +1565,9 @@ class SharepointConnector(
         ``_REST_CTX_MAX_AGE_S``.  On recreation we also call
         ``load_credentials`` to build a fresh MSAL app with an empty token
         cache, guaranteeing a brand-new token from Azure AD."""
+        # Re-checked here because callers reach this without validation.
+        self._validate_site_url_host(site_url)
+
         elapsed = time.monotonic() - self._cached_rest_ctx_created_at
         if (
             self._cached_rest_ctx is not None
@@ -2115,23 +2182,11 @@ class SharepointConnector(
                         folder_queue.append(child_url)
                         continue
 
-                    # Skip non-file items (e.g. OneNote notebooks without a "file" facet)
-                    # but still yield them — the downstream conversion handles filtering
-                    # by extension / mime type.
+                    if not _drive_item_in_time_window(item, start, end):
+                        continue
 
-                    # NOTE: We are now including items without a lastModifiedDateTime,
-                    # and respecting when only one of start or end is set.
-                    if start is not None or end is not None:
-                        raw_ts = item.get(DRIVE_ITEM_LAST_MODIFIED_DATETIME_PROPERTY)
-                        if raw_ts:
-                            mod_dt = datetime.fromisoformat(
-                                raw_ts.replace("Z", "+00:00")
-                            )
-                            if start is not None and mod_dt < start:
-                                continue
-                            if end is not None and mod_dt > end:
-                                continue
-
+                    # Non-file items (e.g. OneNote notebooks without a "file" facet) are
+                    # yielded too. The downstream conversion filters by extension and mime.
                     yield DriveItemData.from_graph_json(item)
 
                 page_url = data.get("@odata.nextLink")
@@ -2220,14 +2275,8 @@ class SharepointConnector(
                 ):
                     continue
 
-                if start is not None or end is not None:
-                    raw_ts = item.get(DRIVE_ITEM_LAST_MODIFIED_DATETIME_PROPERTY)
-                    if raw_ts:
-                        mod_dt = datetime.fromisoformat(raw_ts.replace("Z", "+00:00"))
-                        if start is not None and mod_dt < start:
-                            continue
-                        if end is not None and mod_dt > end:
-                            continue
+                if not _drive_item_in_time_window(item, start, end):
+                    continue
 
                 yield DriveItemData.from_graph_json(item)
 
@@ -2295,14 +2344,8 @@ class SharepointConnector(
                 or DRIVE_ITEM_DELETED_PROPERTY in item
             ):
                 continue
-            if start is not None or end is not None:
-                raw_ts = item.get(DRIVE_ITEM_LAST_MODIFIED_DATETIME_PROPERTY)
-                if raw_ts:
-                    mod_dt = datetime.fromisoformat(raw_ts.replace("Z", "+00:00"))
-                    if start is not None and mod_dt < start:
-                        continue
-                    if end is not None and mod_dt > end:
-                        continue
+            if not _drive_item_in_time_window(item, start, end):
+                continue
             items.append(DriveItemData.from_graph_json(item))
 
         next_url = data.get("@odata.nextLink")
@@ -2416,13 +2459,7 @@ class SharepointConnector(
                                     id=driveitem.id,
                                     external_access=ExternalAccess.empty(),
                                     parent_hierarchy_raw_node_id=parent_hierarchy_url,
-                                    doc_created_at=(
-                                        driveitem.created_datetime.replace(
-                                            tzinfo=timezone.utc
-                                        )
-                                        if driveitem.created_datetime
-                                        else None
-                                    ),
+                                    doc_created_at=driveitem.created_datetime,
                                 )
                             )
                     except Exception as e:

@@ -449,7 +449,10 @@ def test_is_available_true_when_all_checks_pass() -> None:
         # mocks at runtime); assert by name rather than by identity.
         mock_client.supports.assert_called_once()
         called_args, _ = mock_client.supports.call_args
-        called_names = {getattr(arg, "_mock_name", "") for arg in called_args}
+        called_names = {
+            getattr(arg, "_mock_name", "")  # ods: ignore[getattr]
+            for arg in called_args
+        }
         assert called_names == {
             "create_session",
             "execute_bash_in_session",

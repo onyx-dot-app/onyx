@@ -59,14 +59,14 @@ export function getFinalLLM(
 }
 
 export function getProviderOverrideForAgent(
-  liveAgent: MinimalAgent,
+  activeAgent: MinimalAgent,
   llmProviders: LLMProviderDescriptor[]
 ): LlmDescriptor | null {
   // Canonical path: resolve from model configuration ID.
-  if (liveAgent.default_model_configuration_id != null) {
+  if (activeAgent.default_model_configuration_id != null) {
     for (const provider of llmProviders) {
       const mc = provider.model_configurations.find(
-        (m) => m.id === liveAgent.default_model_configuration_id
+        (m) => m.id === activeAgent.default_model_configuration_id
       );
       if (mc) {
         return {
@@ -162,6 +162,17 @@ export const modelSupportsImageInput = (
   );
   return modelConfiguration?.supports_image_input || false;
 };
+
+/** Display name for form-state model rows, which do not reliably carry
+ *  effectiveDisplayName. Everything else should read that field instead. */
+export function modelDisplayName(
+  model: Pick<
+    ModelConfiguration,
+    "name" | "display_name" | "custom_display_name"
+  >
+): string {
+  return model.custom_display_name || model.display_name || model.name;
+}
 
 export function getDisplayName(
   agent: MinimalAgent,

@@ -651,7 +651,7 @@ def convert_chat_history_basic(
             continue
 
         message = chat_message.message or ""
-        token_count = getattr(chat_message, "token_count", None)
+        token_count = getattr(chat_message, "token_count", None)  # ods: ignore[getattr]
         if token_count is None:
             token_count = token_counter(message)
 

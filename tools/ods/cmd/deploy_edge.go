@@ -12,12 +12,9 @@ import (
 )
 
 const (
-	onyxRepo               = "onyx-dot-app/onyx"
-	deploymentWorkflowFile = "deployment.yml"
-	edgeTagName            = "edge"
+	edgeTagName = "edge"
 
-	// Build runs typically take 20-30 minutes; deploys are much shorter.
-	buildPollTimeout  = 60 * time.Minute
+	// Deploys are much shorter than the builds they follow.
 	deployPollTimeout = 30 * time.Minute
 )
 

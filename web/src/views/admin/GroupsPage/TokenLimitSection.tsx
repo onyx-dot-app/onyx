@@ -1,15 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { SvgPlusCircle, SvgMinusCircle } from "@opal/icons";
 import { Button, Card } from "@opal/components";
 import { Disabled } from "@opal/core";
 import type { RichStr } from "@opal/types";
 import { planTagProps } from "@/lib/tier-badge";
 import { Section } from "@/layouts/general-layouts";
-import InputNumber from "@/refresh-components/inputs/InputNumber";
+import { InputNumber } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 
 // ---------------------------------------------------------------------------
@@ -43,6 +43,7 @@ function TokenLimitSection({
   disabled,
   disabledTooltip,
 }: TokenLimitSectionProps) {
+  const t = useTranslations("admin.groups");
   const [rowKeys, setRowKeys] = useState<{
     keys: number[];
     nextKey: number;
@@ -117,15 +118,15 @@ function TokenLimitSection({
   return (
     <SimpleCollapsible>
       <SimpleCollapsible.Header
-        title="Token Rate Limit"
-        description="Limit number of tokens this group can use within a given time period."
+        title={t("tokenLimits.section.title")}
+        description={t("tokenLimits.section.description")}
         tag={
           disabled ? { ...planTagProps("enterprise"), size: "sm" } : undefined
         }
       />
       <SimpleCollapsible.Content>
         <Disabled disabled={disabled} tooltip={disabledTooltip}>
-          <Card border="solid" rounding="lg">
+          <Card border="solid" rounding={4}>
             <Section alignItems="start" height="fit">
               <Section
                 gap={2}
@@ -135,29 +136,29 @@ function TokenLimitSection({
                 width="full"
               >
                 {/* Column headers */}
-                <div className="flex flex-wrap items-center gap-1 pr-[40px]">
+                <div className="flex flex-wrap items-center gap-1 pe-[40px]">
                   <div className="flex-1 flex items-center min-w-[160px]">
                     <Text mainUiAction text04>
-                      Token Limit
+                      {t("tokenLimits.tokenLimit.header")}
                     </Text>
-                    <Text mainUiMuted text03 className="ml-0.5">
-                      (thousands)
+                    <Text mainUiMuted text03 className="ms-0.5">
+                      {t("tokenLimits.tokenLimit.unit")}
                     </Text>
                   </div>
                   <div className="flex-1 flex items-center min-w-[160px]">
                     <Text mainUiAction text04>
-                      Cost Limit
+                      {t("tokenLimits.costLimit.header")}
                     </Text>
-                    <Text mainUiMuted text03 className="ml-0.5">
-                      (USD)
+                    <Text mainUiMuted text03 className="ms-0.5">
+                      {t("tokenLimits.costLimit.unit")}
                     </Text>
                   </div>
                   <div className="flex-1 flex items-center min-w-[160px]">
                     <Text mainUiAction text04>
-                      Time Window
+                      {t("tokenLimits.timeWindow.header")}
                     </Text>
-                    <Text mainUiMuted text03 className="ml-0.5">
-                      (UTC days)
+                    <Text mainUiMuted text03 className="ms-0.5">
+                      {t("tokenLimits.timeWindow.unit")}
                     </Text>
                   </div>
                 </div>
@@ -173,7 +174,7 @@ function TokenLimitSection({
                         value={limit.tokenBudget}
                         onChange={(v) => updateLimit(i, "tokenBudget", v)}
                         min={1}
-                        placeholder="Token limit (thousands)"
+                        placeholder={t("tokenLimits.tokenLimit.placeholder")}
                       />
                     </div>
                     <div className="flex-1">
@@ -183,7 +184,7 @@ function TokenLimitSection({
                         min={0.01}
                         step={0.01}
                         decimalPlaces={2}
-                        placeholder="Cost limit"
+                        placeholder={t("tokenLimits.costLimit.placeholder")}
                       />
                     </div>
                     <div className="flex-1">
@@ -194,8 +195,9 @@ function TokenLimitSection({
                         placeholder="1"
                       />
                     </div>
-                    <IconButton
-                      small
+                    <Button
+                      size="xs"
+                      prominence="internal"
                       icon={SvgMinusCircle}
                       onClick={() => removeLimit(i)}
                     />
@@ -209,7 +211,7 @@ function TokenLimitSection({
                   size="md"
                   onClick={addLimit}
                 >
-                  Add Limit
+                  {t("tokenLimits.addLimit.label")}
                 </Button>
               </Section>
             </Section>

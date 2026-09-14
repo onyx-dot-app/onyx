@@ -1,13 +1,14 @@
 /**
  * Page Object Model for the Admin Index Settings page
- * (/admin/configuration/index-settings).
+ * (/admin/index-settings).
  *
  * Encapsulates model selection, apply actions, and provider setup dialogs.
  */
 
 import { type Page, type Locator, expect } from "@playwright/test";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
-const INDEX_SETTINGS_URL = "/admin/configuration/index-settings";
+const INDEX_SETTINGS_URL = ADMIN_ROUTES.INDEX_SETTINGS.path;
 
 export class IndexSettingsPage {
   readonly page: Page;
