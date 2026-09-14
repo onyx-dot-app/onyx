@@ -101,6 +101,24 @@ def test_member_outside_archive_root_rejected(name: str) -> None:
 
 
 @pytest.mark.parametrize(
+    "name",
+    [
+        f"{ARCHIVE_ROOT}/../{ARCHIVE_ROOT}/evil.sh",
+        f"{ARCHIVE_ROOT}/sub/../opencode/agent.json",
+    ],
+)
+def test_traversal_landing_back_inside_root_rejected(name: str) -> None:
+    """These normalise back inside the root, so only the `..` clause can reject them.
+
+    Docker untars as root and resolves each component against the real destination
+    tree, where a component may be a symlink. Refusing `..` outright keeps the
+    decision independent of how the extractor resolves paths.
+    """
+    with pytest.raises(RuntimeError, match="escapes"):
+        _validate_opencode_history_archive(_archive([_file(name)]))
+
+
+@pytest.mark.parametrize(
     ("member_type", "linkname"),
     [
         (tarfile.SYMTYPE, "/etc/passwd"),
