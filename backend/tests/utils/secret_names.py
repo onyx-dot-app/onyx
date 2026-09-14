@@ -88,6 +88,7 @@ class TestSecret(StrEnum):
     ZOOM_CLIENT_ID = "zoom-client-id"
     ZOOM_CLIENT_SECRET = "zoom-client-secret"
     ZOOM_TEST_MEETING_ID = "zoom-test-meeting-id"
+    ZOOM_TEST_WEBINAR_ID = "zoom-test-webinar-id"
     CANVAS_ADMIN_ACCESS_TOKEN = "canvas-admin-access-token"
     CANVAS_TEACHER_ACCESS_TOKEN = "canvas-teacher-access-token"
     CANVAS_STUDENT_ACCESS_TOKEN = "canvas-student-access-token"

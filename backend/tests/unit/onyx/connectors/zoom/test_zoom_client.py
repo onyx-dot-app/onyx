@@ -59,6 +59,52 @@ _DOCUMENTED_PAST_MEETING = {
 }
 
 
+# The five configuration objects ZoomWebinarDetails deliberately leaves off.
+# Naming them keeps the round-trip assertion honest about what it skips.
+_WEBINAR_CONFIG_FIELDS = frozenset(
+    {
+        "occurrences",
+        "recurrence",
+        "settings",
+        "simulive_delay_start",
+        "tracking_fields",
+    }
+)
+
+# Every field of Zoom's documented `GET /webinars/{webinarId}` example. The five
+# configuration objects are trimmed to one entry each, since nothing reads inside
+# them and `settings` alone holds 77 more fields.
+_DOCUMENTED_WEBINAR = {
+    "id": 97871060099,
+    "uuid": "m3WqMkvuRXyYqH+eKWhk9w==",
+    "host_id": "30R7kT7bTIKSNUFEuH_Qlg",
+    "host_email": "jchill@example.com",
+    "topic": "My Webinar",
+    "type": 5,
+    "agenda": "My webinar",
+    "duration": 60,
+    "start_time": "2022-03-26T06:44:14Z",
+    "timezone": "America/Los_Angeles",
+    "created_at": "2022-03-26T07:18:32Z",
+    "creation_source": "open_api",
+    "join_url": "https://example.com/j/11111",
+    "start_url": "https://example.com/s/11111",
+    "registration_url": "https://example.com/webinar/register/7ksAkRCoEpt1",
+    "password": "123456",
+    "encrypted_passcode": "8pEkRweVXPV3Ob2KJYgFTRlDtl1gSn.1",
+    "h323_passcode": "123456",
+    "template_id": "ull6574eur",
+    "record_file_id": "f09340e1-cdc3-4eae-9a74-98f9777ed908",
+    "is_simulive": True,
+    "transition_to_live": False,
+    "simulive_delay_start": {"enable": True, "time": 10, "timeunit": "second"},
+    "occurrences": [{"occurrence_id": "1648194360000", "status": "available"}],
+    "recurrence": {"type": 1, "repeat_interval": 1},
+    "settings": {"approval_type": 0, "auto_recording": "cloud"},
+    "tracking_fields": [{"field": "field1", "value": "value1"}],
+}
+
+
 def _transcript(**overrides: Any) -> ZoomTranscript:
     """Most fields are required, so a readiness case has to start from a whole
     response rather than the two fields it exercises.
@@ -453,6 +499,177 @@ class TestListPastMeetingOccurrences:
         client.list_past_meeting_occurrences("111")
 
         assert client._session.request.call_args.kwargs["params"] == {}
+
+
+class TestGetWebinarDetails:
+    def test_parses_the_response(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200, _DOCUMENTED_WEBINAR)
+
+        details = client.get_webinar_details("222")
+
+        assert details.topic == "My Webinar"
+        assert details.start_time == "2022-03-26T06:44:14Z"
+
+    def test_keeps_every_documented_scalar_field(self) -> None:
+        # Sharing one model with /past_meetings parses no webinar at all, because
+        # that model requires seven fields a webinar never carries.
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200, _DOCUMENTED_WEBINAR)
+
+        details = client.get_webinar_details("222")
+
+        # Guards the fixture too: trimming the five out of it would quietly
+        # turn the comparison below into a weaker test.
+        assert _WEBINAR_CONFIG_FIELDS <= set(_DOCUMENTED_WEBINAR)
+        expected = {
+            k: v
+            for k, v in _DOCUMENTED_WEBINAR.items()
+            if k not in _WEBINAR_CONFIG_FIELDS
+        }
+        assert details.model_dump() == expected
+
+    def test_a_webinar_configured_with_nothing_optional_still_parses(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            200,
+            {
+                "id": 97871060099,
+                "uuid": "m3WqMkvuRXyYqH+eKWhk9w==",
+                "host_id": "30R7kT7bTIKSNUFEuH_Qlg",
+                "topic": "Bare Webinar",
+                "type": 5,
+            },
+        )
+
+        details = client.get_webinar_details("222")
+
+        assert details.topic == "Bare Webinar"
+        assert details.start_time is None
+
+    def test_404_is_reported_not_swallowed(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(404)
+
+        with pytest.raises(requests.HTTPError):
+            client.get_webinar_details("222")
+
+
+class TestListPastWebinarOccurrences:
+    def test_reads_the_webinars_key(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            200,
+            {
+                "webinars": [
+                    {"uuid": "w1", "start_time": "2026-01-01T10:00:00Z"},
+                    {"uuid": "w2", "start_time": "2026-01-08T10:00:00Z"},
+                ]
+            },
+        )
+
+        occurrences = client.list_past_webinar_occurrences("222")
+
+        assert [o.uuid for o in occurrences] == ["w1", "w2"]
+        assert occurrences[0].start_time == "2026-01-01T10:00:00Z"
+
+    def test_calls_the_webinar_endpoint_not_the_meeting_one(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200, {"webinars": []})
+
+        client.list_past_webinar_occurrences("222")
+
+        url = client._session.request.call_args.args[1]
+        assert url == f"{_API_BASE_URL}/past_webinars/222/instances"
+
+    def test_404_is_reported_not_read_as_no_occurrences(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(404)
+
+        with pytest.raises(requests.HTTPError):
+            client.list_past_webinar_occurrences("222")
+
+    def test_missing_webinars_key_yields_an_empty_list(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200, {})
+
+        assert client.list_past_webinar_occurrences("222") == []
+
+
+class TestWebinarAddOnErrors:
+    """A Pro account without the Webinar add-on fails every webinar call, and
+    the generic scope message sends the admin to re-check scopes that are
+    already correct."""
+
+    def test_403_names_the_add_on(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(403)
+
+        with pytest.raises(InsufficientPermissionsError) as caught:
+            client.list_past_webinar_occurrences("222")
+
+        assert "Webinar add-on" in str(caught.value)
+
+    def test_400_with_zooms_no_permission_code_names_the_add_on(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            400, {"code": 200, "message": "No permission."}
+        )
+
+        with pytest.raises(InsufficientPermissionsError) as caught:
+            client.list_past_webinar_occurrences("222")
+
+        assert "Webinar add-on" in str(caught.value)
+
+    def test_a_missing_plan_keeps_the_user_zoom_named(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            400,
+            {
+                "code": 200,
+                "message": (
+                    "Webinar plan is missing. You must subscribe to the webinar "
+                    "plan and enable webinars for user abc123 to perform this action."
+                ),
+            },
+        )
+
+        with pytest.raises(InsufficientPermissionsError) as caught:
+            client.get_webinar_details("222")
+
+        assert "Webinar add-on" in str(caught.value)
+        assert "abc123" in str(caught.value)
+
+    def test_a_string_error_code_is_still_recognised(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            400, {"code": "200", "message": "No permission."}
+        )
+
+        with pytest.raises(InsufficientPermissionsError):
+            client.list_past_webinar_occurrences("222")
+
+    def test_an_unrelated_400_is_still_an_http_error(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            400, {"code": 300, "message": "Invalid webinar ID."}
+        )
+
+        with pytest.raises(requests.HTTPError):
+            client.list_past_webinar_occurrences("222")
 
 
 class TestDownloadTranscriptVtt:

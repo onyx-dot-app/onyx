@@ -34,8 +34,12 @@ class ZoomConnectorCheckpoint(ConnectorCheckpoint):
 
 
 class ZoomConnector(CheckpointedConnector[ZoomConnectorCheckpoint]):
-    def __init__(self, meeting_ids: list[str] | None = None) -> None:
-        self._sources = build_discovery_sources(meeting_ids)
+    def __init__(
+        self,
+        meeting_ids: list[str] | None = None,
+        webinar_ids: list[str] | None = None,
+    ) -> None:
+        self._sources = build_discovery_sources(meeting_ids, webinar_ids)
         self.client: ZoomClient | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:

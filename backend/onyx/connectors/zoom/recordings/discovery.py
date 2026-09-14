@@ -22,7 +22,7 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorFailure, EntityFailure
 from onyx.connectors.zoom.client import ZoomClient
-from onyx.connectors.zoom.models import ZoomMeetingOccurrence
+from onyx.connectors.zoom.models import ZoomSessionOccurrence
 from onyx.connectors.zoom.recordings.models import (
     OccurrenceWork,
     ZoomSessionType,
@@ -44,7 +44,7 @@ _MAX_WORK_PER_STEP = 200
 
 
 def _occurrence_in_poll_window(
-    occurrence: ZoomMeetingOccurrence,
+    occurrence: ZoomSessionOccurrence,
     start: SecondsSinceUnixEpoch,
     end: SecondsSinceUnixEpoch,
 ) -> bool:
@@ -88,9 +88,15 @@ class _AllowlistCursor(BaseModel):
 
 
 class IdAllowlistSource(DiscoverySource):
-    def __init__(self, meeting_ids: list[str]) -> None:
+    def __init__(
+        self, meeting_ids: list[str], webinar_ids: list[str] | None = None
+    ) -> None:
         self._refs: list[tuple[ZoomSessionType, str]] = [
-            (ZoomSessionType.MEETING, meeting_id) for meeting_id in meeting_ids
+            *((ZoomSessionType.MEETING, meeting_id) for meeting_id in meeting_ids),
+            *(
+                (ZoomSessionType.WEBINAR, webinar_id)
+                for webinar_id in webinar_ids or []
+            ),
         ]
 
     def discover_step(
@@ -114,7 +120,7 @@ class IdAllowlistSource(DiscoverySource):
         window_end = datetime_from_utc_timestamp(int(end))
 
         failures: list[ConnectorFailure] = []
-        occurrences: list[ZoomMeetingOccurrence] = []
+        occurrences: list[ZoomSessionOccurrence] = []
         try:
             occurrences = handler.list_occurrences(
                 client, session_id, window_start, window_end
@@ -187,8 +193,10 @@ class IdAllowlistSource(DiscoverySource):
         )
 
 
-def build_discovery_sources(meeting_ids: list[str] | None) -> list[DiscoverySource]:
+def build_discovery_sources(
+    meeting_ids: list[str] | None, webinar_ids: list[str] | None = None
+) -> list[DiscoverySource]:
     sources: list[DiscoverySource] = []
-    if meeting_ids:
-        sources.append(IdAllowlistSource(meeting_ids))
+    if meeting_ids or webinar_ids:
+        sources.append(IdAllowlistSource(meeting_ids or [], webinar_ids or []))
     return sources

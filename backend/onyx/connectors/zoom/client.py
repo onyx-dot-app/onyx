@@ -16,9 +16,10 @@ from onyx.connectors.exceptions import (
 )
 from onyx.connectors.zoom.models import (
     ZoomAccessToken,
-    ZoomMeetingOccurrence,
     ZoomPastMeetingDetails,
+    ZoomSessionOccurrence,
     ZoomTranscript,
+    ZoomWebinarDetails,
 )
 from onyx.utils.url import (
     SSRFException,
@@ -35,6 +36,17 @@ _TOKEN_REFRESH_MARGIN_SECONDS = 60
 
 # Zoom's date-scoped query parameters are whole UTC days.
 _ZOOM_DATE_FORMAT = "%Y-%m-%d"
+
+_WEBINAR_ACCESS_HINT = (
+    "Zoom refused a webinar request. Webinars need the Webinar add-on enabled for "
+    "the host, and the app needs the webinar:read:admin scope. Meetings need "
+    "neither, so credentials that read meetings can still fail here."
+)
+
+# Zoom's own error code from the response body, not an HTTP status. It covers
+# every "this account may not do that" case, and Zoom sends it under HTTP 400
+# rather than 403.
+_ZOOM_NOT_ENTITLED_ERROR_CODE = 200
 
 
 def _encode_meeting_identifier(identifier: str) -> str:
@@ -61,6 +73,20 @@ def _reject_non_zoom_download_url(download_url: str) -> None:
         validate_outbound_http_url(download_url, https_only=True)
     except (SSRFException, ValueError) as e:
         raise ValueError(f"Unsafe Zoom transcript download URL: {e}") from e
+
+
+def _not_entitled_message(response: requests.Response) -> str | None:
+    try:
+        body = response.json()
+    except ValueError:
+        return None
+    if not isinstance(body, dict):
+        return None
+    # Compared as text: if Zoom ever sends the code as a string, an int
+    # comparison falls through and the admin loses the add-on hint.
+    if str(body.get("code")) != str(_ZOOM_NOT_ENTITLED_ERROR_CODE):
+        return None
+    return str(body.get("message") or "no permission")
 
 
 def _raise_for_zoom_error(response: requests.Response, description: str) -> None:
@@ -179,6 +205,26 @@ class ZoomClient:
 
         return self._send_authorized(endpoint, send)
 
+    def _request_webinar(self, endpoint: str) -> requests.Response:
+        """Every webinar endpoint fails the same way without the Webinar add-on,
+        and the generic scope message sends the admin to check scopes that are
+        already correct.
+        """
+        try:
+            response = self._request("GET", endpoint)
+        except InsufficientPermissionsError as e:
+            raise InsufficientPermissionsError(f"{_WEBINAR_ACCESS_HINT} ({e})") from e
+
+        if response.status_code == 400:
+            denial = _not_entitled_message(response)
+            if denial is not None:
+                # Zoom's message names the user whose licence is missing, which
+                # the hint can't know.
+                raise InsufficientPermissionsError(
+                    f"{_WEBINAR_ACCESS_HINT} Zoom said: {denial}"
+                )
+        return response
+
     def get_meeting_transcript(self, meeting_identifier: str) -> ZoomTranscript:
         """Takes a meeting ID, a webinar ID, or one occurrence's UUID. Zoom has
         no webinar transcript endpoint, so webinars come through here too.
@@ -207,7 +253,7 @@ class ZoomClient:
         meeting_id: str,
         window_start: datetime | None = None,
         window_end: datetime | None = None,
-    ) -> list[ZoomMeetingOccurrence]:
+    ) -> list[ZoomSessionOccurrence]:
         """A recurring meeting records each run separately, and the bare
         meeting_id only ever reaches the latest one, so call this first for every
         occurrence's UUID. This endpoint is not paginated. Zoom returns nothing
@@ -232,7 +278,34 @@ class ZoomClient:
         )
         _raise_for_zoom_error(response, f"the occurrences for {meeting_id}")
         occurrences = response.json().get("meetings", [])
-        return [ZoomMeetingOccurrence.model_validate(o) for o in occurrences]
+        return [ZoomSessionOccurrence.model_validate(o) for o in occurrences]
+
+    def get_webinar_details(self, webinar_identifier: str) -> ZoomWebinarDetails:
+        """Takes a webinar ID or one occurrence's UUID. Zoom has no
+        `/past_webinars/{id}` to match the meeting details endpoint, so a past
+        occurrence is read back through this one.
+        """
+        response = self._request_webinar(
+            f"/webinars/{_encode_meeting_identifier(webinar_identifier)}"
+        )
+        _raise_for_zoom_error(response, f"the details for webinar {webinar_identifier}")
+        return ZoomWebinarDetails.model_validate(response.json())
+
+    def list_past_webinar_occurrences(
+        self, webinar_id: str
+    ) -> list[ZoomSessionOccurrence]:
+        """Unlike the meeting equivalent, this endpoint declares no age limit,
+        so webinar history is not cut off at 15 months.
+
+        An unknown webinar answers 404, which raises here rather than reading as
+        a webinar that ran no times.
+        """
+        response = self._request_webinar(
+            f"/past_webinars/{_encode_meeting_identifier(webinar_id)}/instances"
+        )
+        _raise_for_zoom_error(response, f"the occurrences for webinar {webinar_id}")
+        occurrences = response.json().get("webinars", [])
+        return [ZoomSessionOccurrence.model_validate(o) for o in occurrences]
 
     def download_transcript_vtt(self, download_url: str) -> str:
         """The download redirects to a storage host, so every hop is checked
