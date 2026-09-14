@@ -103,6 +103,19 @@ def test_certificate_without_site_pages_sets_tenant_domain(
     assert connector.sp_tenant_domain == EXPECTED_TENANT_DOMAIN
 
 
+@patch("onyx.connectors.microsoft_utils.graph_auth.msal.ConfidentialClientApplication")
+def test_unknown_auth_method_is_rejected_before_msal(mock_msal_cls: MagicMock) -> None:
+    """The credential string is parsed at the connector boundary, so a typo
+    fails with the value named and never reaches MSAL."""
+    creds = dict(CLIENT_SECRET_CREDS, authentication_method="kerberos")
+    connector = SharepointConnector(sites=[SITE_URL])
+
+    with pytest.raises(ConnectorValidationError, match="kerberos"):
+        connector.load_credentials(creds)
+
+    mock_msal_cls.assert_not_called()
+
+
 @pytest.mark.parametrize("missing_field", ["sp_client_id", "sp_directory_id"])
 def test_missing_id_is_a_validation_error(missing_field: str) -> None:
     """SharePoint owns these checks, so an absent or blank id must still cancel
