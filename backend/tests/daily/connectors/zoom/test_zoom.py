@@ -70,7 +70,9 @@ def zoom_host_connector(
     test_secrets: dict[TestSecret, str],
 ) -> ZoomConnector:
     return _authenticated(
-        ZoomConnector(host_emails=[test_secrets[TestSecret.ZOOM_TEST_HOST_EMAIL]]),
+        ZoomConnector(
+            host_emails=[_secret(test_secrets, TestSecret.ZOOM_TEST_HOST_EMAIL)]
+        ),
         test_secrets,
     )
 
@@ -80,7 +82,7 @@ def zoom_group_connector(
     test_secrets: dict[TestSecret, str],
 ) -> ZoomConnector:
     return _authenticated(
-        ZoomConnector(group_id=test_secrets[TestSecret.ZOOM_TEST_GROUP_ID]),
+        ZoomConnector(group_id=_secret(test_secrets, TestSecret.ZOOM_TEST_GROUP_ID)),
         test_secrets,
     )
 

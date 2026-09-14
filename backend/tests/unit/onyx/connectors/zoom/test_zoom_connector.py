@@ -19,6 +19,7 @@ from onyx.connectors.zoom.models import (
     ZoomRecordingPage,
     ZoomSessionOccurrence,
     ZoomTranscript,
+    ZoomUser,
     ZoomUserPage,
 )
 from onyx.connectors.zoom.recordings.models import (
@@ -599,7 +600,9 @@ def _recording(
 
 
 def _configure_user_recordings(
-    mock_client: MagicMock, recordings_by_user: dict[str, list[ZoomRecordingEntry]]
+    mock_client: MagicMock,
+    recordings_by_user: dict[str, list[ZoomRecordingEntry]],
+    members: list[ZoomUser] | None = None,
 ) -> None:
     mock_client.list_users.return_value = ZoomUserPage(
         users=[
@@ -608,7 +611,11 @@ def _configure_user_recordings(
         ]
     )
     mock_client.list_group_members.return_value = ZoomUserPage(
-        users=[user(id="member-user", email="member@example.com")]
+        users=(
+            [user(id="member-user", email="member@example.com")]
+            if members is None
+            else members
+        )
     )
     mock_client.list_user_recordings.side_effect = lambda user_id, **_: (
         ZoomRecordingPage(recordings=recordings_by_user.get(user_id, []))
@@ -732,10 +739,20 @@ class TestDiscoveryMechanismUnion:
         assert [d.id for d in docs] == ["ZOOM_MEETING_uuid-member"]
 
     def test_a_run_resumes_mid_group_from_a_serialized_checkpoint(self) -> None:
+        # Two members, so the first step ends inside the group rather than
+        # finishing it: only then does the checkpoint carry a host cursor.
         connector, mock_client = _make_connector(meeting_ids=[], group_id="group-1")
         _configure_happy_path(mock_client)
         _configure_user_recordings(
-            mock_client, {"member-user": [_recording("uuid-standup")]}
+            mock_client,
+            {
+                "member-one": [_recording("uuid-standup")],
+                "member-two": [_recording("uuid-retro")],
+            },
+            members=[
+                user(id="member-one", email="one@example.com"),
+                user(id="member-two", email="two@example.com"),
+            ],
         )
 
         checkpoint = connector.build_dummy_checkpoint()
@@ -745,8 +762,12 @@ class TestDiscoveryMechanismUnion:
                 next(generator)
         except StopIteration as stop:
             checkpoint = stop.value
-        restored = connector.validate_checkpoint_json(checkpoint.model_dump_json())
 
+        # The guarantee being resumed: the cursor names the host it stopped on,
+        # so a member leaving cannot shift a later one under it.
+        assert checkpoint.recordings.source_cursor == {"host_id": "member-two"}
+
+        restored = connector.validate_checkpoint_json(checkpoint.model_dump_json())
         outputs = load_everything_from_checkpoint_connector_from_checkpoint(
             connector, 0, _FULL_HISTORY_END, restored
         )
@@ -757,5 +778,10 @@ class TestDiscoveryMechanismUnion:
             if isinstance(item, Document)
         ]
 
-        assert [d.id for d in docs] == ["ZOOM_MEETING_uuid-standup"]
+        # The second member is the one the cursor names, so it is the one a
+        # broken resume would skip.
+        assert [d.id for d in docs] == [
+            "ZOOM_MEETING_uuid-standup",
+            "ZOOM_MEETING_uuid-retro",
+        ]
         assert outputs[-1].next_checkpoint.has_more is False
