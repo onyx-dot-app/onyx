@@ -39,6 +39,7 @@ from onyx.connectors.models import (
 )
 from onyx.connectors.teams.models import Message
 from onyx.connectors.teams.utils import (
+    describe_graph_error,
     execute_query_with_retry,
     fetch_expert_infos,
     fetch_external_access,
@@ -798,6 +799,100 @@ def _collect_all_channels_from_team(
     return channels
 
 
+def _iter_channel_messages(
+    graph_client: GraphClient,
+    team: Team,
+    channel: Channel,
+    start: SecondsSinceUnixEpoch,
+) -> Iterator[Message | ConnectorFailure]:
+    """Yield a channel's messages, reporting a failure to *enumerate* them
+    rather than raising it.
+
+    `fetch_messages` paginates lazily, so a Graph error can surface on any
+    `next()`, not just the first. Raising here would propagate out of
+    `load_from_checkpoint` and end the index attempt for every remaining
+    channel in the team, discarding the documents already retrieved.
+    """
+    messages = fetch_messages(
+        graph_client=graph_client,
+        team_id=team.id,
+        channel_id=channel.id,
+        start=start,
+    )
+
+    while True:
+        try:
+            message = next(messages)
+        except StopIteration:
+            return
+        except Exception as e:
+            detail = describe_graph_error(e)
+            logger.exception(
+                "Enumeration of channel messages failed; team_id=%s channel_id=%s detail=%s",
+                team.id,
+                channel.id,
+                detail,
+            )
+            yield ConnectorFailure(
+                failed_entity=EntityFailure(
+                    entity_id=channel.id or "",
+                ),
+                failure_message=f"Enumeration of channel messages failed; {channel.id=} ({detail})",
+                exception=e,
+            )
+            return
+
+        yield message
+
+
+def _collect_documents_for_message(
+    graph_client: GraphClient,
+    team: Team,
+    channel: Channel,
+    message: Message,
+) -> Iterator[Document | ConnectorFailure]:
+    """Convert one root message and its replies into a single `Document`."""
+    try:
+        replies = list(
+            fetch_replies(
+                graph_client=graph_client,
+                team_id=team.id,
+                channel_id=channel.id,
+                root_message_id=message.id,
+            )
+        )
+
+        thread = [message]
+        thread.extend(replies[::-1])
+
+        # Note:
+        # We convert an entire *thread* (including the root message and its replies) into one, singular `Document`.
+        # I.e., we don't convert each individual message and each individual reply into their own individual `Document`s.
+        if doc := _convert_thread_to_document(
+            graph_client=graph_client,
+            channel=channel,
+            thread=thread,
+        ):
+            yield doc
+
+    except Exception as e:
+        detail = describe_graph_error(e)
+        logger.exception(
+            "Retrieval of message and its replies failed; team_id=%s channel_id=%s message_id=%s detail=%s",
+            team.id,
+            channel.id,
+            message.id,
+            detail,
+        )
+        yield ConnectorFailure(
+            failed_entity=EntityFailure(
+                entity_id=message.id,
+            ),
+            failure_message=f"Retrieval of message and its replies failed; {channel.id=} {message.id} ({detail})",
+            exception=e,
+        )
+
+
 def _collect_documents_for_channel(
     graph_client: GraphClient,
     team: Team,
@@ -810,43 +905,22 @@ def _collect_documents_for_channel(
     A "thread" is the conjunction of the "root" message and all of its replies.
     """
 
-    for message in fetch_messages(
+    for message_or_failure in _iter_channel_messages(
         graph_client=graph_client,
-        team_id=team.id,
-        channel_id=channel.id,
+        team=team,
+        channel=channel,
         start=start,
     ):
-        try:
-            replies = list(
-                fetch_replies(
-                    graph_client=graph_client,
-                    team_id=team.id,
-                    channel_id=channel.id,
-                    root_message_id=message.id,
-                )
-            )
+        if isinstance(message_or_failure, ConnectorFailure):
+            yield message_or_failure
+            continue
 
-            thread = [message]
-            thread.extend(replies[::-1])
-
-            # Note:
-            # We convert an entire *thread* (including the root message and its replies) into one, singular `Document`.
-            # I.e., we don't convert each individual message and each individual reply into their own individual `Document`s.
-            if doc := _convert_thread_to_document(
-                graph_client=graph_client,
-                channel=channel,
-                thread=thread,
-            ):
-                yield doc
-
-        except Exception as e:
-            yield ConnectorFailure(
-                failed_entity=EntityFailure(
-                    entity_id=message.id,
-                ),
-                failure_message=f"Retrieval of message and its replies failed; {channel.id=} {message.id}",
-                exception=e,
-            )
+        yield from _collect_documents_for_message(
+            graph_client=graph_client,
+            team=team,
+            channel=channel,
+            message=message_or_failure,
+        )
 
 
 if __name__ == "__main__":
