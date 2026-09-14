@@ -4,7 +4,7 @@ import React from "react";
 import { cn } from "@opal/utils";
 import type { IconProps } from "@opal/types";
 
-export interface SquareButtonProps extends Omit<
+interface SquareButtonProps extends Omit<
   React.ComponentPropsWithoutRef<"button">,
   "children"
 > {

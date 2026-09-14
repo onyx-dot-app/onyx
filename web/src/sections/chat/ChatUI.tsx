@@ -29,7 +29,7 @@ import { cn } from "@opal/utils";
 // toggle is hidden).
 const MSG_MAX_W = "md:max-w-[720px] md:min-w-[400px]";
 
-export interface ChatUIProps {
+interface ChatUIProps {
   activeAgent: MinimalAgent;
   llmManager: LlmManager;
   setPresentingDocument: (doc: MinimalOnyxDocument | null) => void;

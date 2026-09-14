@@ -5,7 +5,7 @@ import { cn } from "@opal/utils";
 import type { IconProps } from "@opal/types";
 import Truncated from "@/refresh-components/texts/Truncated";
 
-export interface InfoBlockProps extends React.HTMLAttributes<HTMLDivElement> {
+interface InfoBlockProps extends React.HTMLAttributes<HTMLDivElement> {
   icon: React.FunctionComponent<IconProps>;
   title: string;
   description?: string;

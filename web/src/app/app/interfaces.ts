@@ -319,7 +319,7 @@ export interface InputPrompt {
   is_public: boolean;
 }
 
-export interface EditPromptModalProps {
+interface EditPromptModalProps {
   onClose: () => void;
 
   promptId: number;
@@ -333,7 +333,7 @@ interface CreateInputPromptRequest {
   content: string;
 }
 
-export interface AddPromptModalProps {
+interface AddPromptModalProps {
   onClose: () => void;
   onSubmit: (promptData: CreateInputPromptRequest) => void;
 }

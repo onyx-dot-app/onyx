@@ -58,7 +58,7 @@ function getMethodStyles(method?: string) {
   };
 }
 
-export interface ToolItemProps {
+interface ToolItemProps {
   // Tool information
   name: string;
   description: string;

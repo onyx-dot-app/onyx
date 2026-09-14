@@ -71,7 +71,7 @@ export function useReIndexModal(
   };
 }
 
-export interface ReIndexModalProps {
+interface ReIndexModalProps {
   hide: () => void;
   onRunIndex: (fromBeginning: boolean) => Promise<void>;
 }

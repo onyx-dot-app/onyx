@@ -16,7 +16,7 @@ export interface IconProps {
   size?: number;
   className?: string;
 }
-export interface LogoIconProps extends IconProps {
+interface LogoIconProps extends IconProps {
   src: string | StaticImageData;
 }
 

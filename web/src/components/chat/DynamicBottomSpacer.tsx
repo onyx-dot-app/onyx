@@ -15,7 +15,7 @@ const SMOOTH_SCROLL_DURATION_MS = 600;
 // How long to wait after content stops changing before deactivating
 const CONTENT_SETTLED_DEBOUNCE_MS = 500;
 
-export interface DynamicBottomSpacerProps {
+interface DynamicBottomSpacerProps {
   /**
    * Node ID of the anchor message (the new user message)
    */

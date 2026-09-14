@@ -15,7 +15,7 @@ import { SvgCheckCircle, SvgEdit, SvgUser } from "@opal/icons";
 import { InputHorizontal } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
 
-export interface NameStepProps {
+interface NameStepProps {
   state: OnboardingState;
   actions: OnboardingActions;
 }

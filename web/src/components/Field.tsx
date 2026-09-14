@@ -1070,7 +1070,7 @@ export function SelectorFormField({
   );
 }
 
-export interface DatePickerFieldProps {
+interface DatePickerFieldProps {
   label: string;
   name: string;
   subtext?: string;
@@ -1101,7 +1101,7 @@ function DatePickerField({
   );
 }
 
-export interface TextAreaFieldProps extends InputTextAreaProps {
+interface TextAreaFieldProps extends InputTextAreaProps {
   name: string;
 }
 

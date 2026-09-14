@@ -49,7 +49,7 @@ export interface CraftInputBarHandle {
   setMessage: (message: string) => void;
 }
 
-export interface CraftInputBarProps {
+interface CraftInputBarProps {
   onSubmit: (message: string, files: BuildFile[]) => void;
   isRunning: boolean;
   disabled?: boolean;

@@ -264,7 +264,7 @@ const QueryText = ({
 /**
  * Props for the SourceTag component.
  */
-export interface SourceTagProps {
+interface SourceTagProps {
   /** Sizing variant: "inlineCitation" for compact in-text use, "button" for interactive contexts, "tag" (default) for standard display */
   variant?: "inlineCitation" | "tag" | "button";
 

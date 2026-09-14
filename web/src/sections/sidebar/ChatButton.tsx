@@ -95,7 +95,7 @@ export function PopoverSearchInput({
   );
 }
 
-export interface ChatButtonProps {
+interface ChatButtonProps {
   chatSession: ChatSession;
   project?: Project;
   draggable?: boolean;

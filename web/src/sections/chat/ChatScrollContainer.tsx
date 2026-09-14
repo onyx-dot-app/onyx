@@ -31,7 +31,7 @@ export interface ChatScrollContainerHandle {
   scrollToBottom: (behavior?: ScrollBehavior) => void;
 }
 
-export interface ChatScrollContainerProps {
+interface ChatScrollContainerProps {
   children: React.ReactNode;
 
   /**

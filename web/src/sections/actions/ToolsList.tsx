@@ -10,7 +10,7 @@ import ToolItemSkeleton from "@/sections/actions/skeleton/ToolItemSkeleton";
 import EnabledCount from "@/lib/tools/components/EnabledCount";
 import { SvgEye, SvgXCircle } from "@opal/icons";
 
-export interface ToolsListProps {
+interface ToolsListProps {
   // Loading state
   isFetching?: boolean;
 

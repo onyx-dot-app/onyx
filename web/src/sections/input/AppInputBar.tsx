@@ -78,7 +78,7 @@ export interface AppInputBarHandle {
   focus: () => void;
 }
 
-export interface AppInputBarProps {
+interface AppInputBarProps {
   initialMessage?: string;
   stopGenerating: () => void;
   onSubmit: (message: string) => void;

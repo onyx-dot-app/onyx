@@ -42,7 +42,7 @@ export interface BaseInputBarHandle {
   deleteBeforeToken: (token: string) => boolean;
 }
 
-export interface BaseInputBarProps {
+interface BaseInputBarProps {
   onSubmit: (message: string) => void;
   isRunning: boolean;
   disabled?: boolean;

@@ -17,7 +17,7 @@ import {
 import { ModelIcon } from "@/lib/languageModels/components";
 import { Button } from "@opal/components";
 
-export interface LLMProviderCardProps {
+interface LLMProviderCardProps {
   title: string;
   subtitle: string;
   providerName?: string;
