@@ -1,15 +1,19 @@
 "use client";
 
-import { errorHandlingFetcher } from "@/lib/fetcher";
+import { errorHandlingFetcher, parseErrorDetail } from "@/lib/fetcher";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import useSWR, { mutate } from "swr";
 import { AdminPageTitle } from "@/components/admin/Title";
-import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
+import {
+  buildCCPairInfoUrl,
+  buildSimilarCredentialInfoURL,
+} from "@/app/admin/connector/[ccPairId]/lib";
+import { CCPairFullInfo } from "@/app/admin/connector/[ccPairId]/types";
 import { useFormContext } from "@/components/context/FormContext";
 import { getSourceDisplayName, getSourceMetadata } from "@/lib/sources";
 import { SourceIcon } from "@/components/SourceIcon";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { deleteCredential, linkCredential } from "@/lib/credential";
 import { submitFiles } from "@/app/admin/connectors/[connector]/pages/utils/files";
 import { submitGoogleSite } from "@/app/admin/connectors/[connector]/pages/utils/google_site";
@@ -37,7 +41,6 @@ import {
   createConnectorValidationSchema,
   defaultRefreshFreqMinutes,
   isLoadState,
-  Connector,
   ConnectorBase,
 } from "@/lib/connectors/connectors";
 import { useSettings } from "@/lib/settings/hooks";
@@ -63,7 +66,12 @@ import {
 import { Spinner } from "@/components/Spinner";
 import { Button, Text as OpalText } from "@opal/components";
 import { Section, toast } from "@opal/layouts";
-import { deleteConnector } from "@/lib/connector";
+import {
+  createConnector,
+  createConnectorWithMockCredential,
+  deleteConnector,
+} from "@/lib/connector";
+import { scheduleDeletionJobForConnector } from "@/lib/documentDeletion";
 import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
 import Text from "@/refresh-components/texts/Text";
 import { SvgKey, SvgAlertCircle } from "@opal/icons";
@@ -77,65 +85,26 @@ export interface AdvancedConfig {
   indexingStart: string;
 }
 
-const BASE_CONNECTOR_URL = "/api/manage/admin/connector";
 const CONNECTOR_CREATION_TIMEOUT_MS = 10000; // ~10 seconds is reasonable for longer connector validation
 
-export async function submitConnector<T>(
-  connector: ConnectorBase<T>,
-  connectorId?: number,
-  fakeCredential?: boolean
-): Promise<{
-  errorDetail?: string;
-  isSuccess: boolean;
-  response?: Connector<T>;
-}> {
-  const isUpdate = connectorId !== undefined;
-  if (!connector.connector_specific_config) {
-    connector.connector_specific_config = {} as T;
-  }
+interface RollbackTarget {
+  connectorId: number;
+  credentialId: number | null;
+}
 
-  try {
-    if (fakeCredential) {
-      const response = await fetch(
-        "/api/manage/admin/connector-with-mock-credential",
-        {
-          method: isUpdate ? "PATCH" : "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ ...connector }),
-        }
-      );
-      if (response.ok) {
-        const responseJson = await response.json();
-        return { isSuccess: true, response: responseJson };
-      } else {
-        const errorData = await response.json();
-        return { errorDetail: String(errorData.detail), isSuccess: false };
-      }
-    } else {
-      const response = await fetch(
-        BASE_CONNECTOR_URL + (isUpdate ? `/${connectorId}` : ""),
-        {
-          method: isUpdate ? "PATCH" : "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(connector),
-        }
-      );
-
-      if (response.ok) {
-        const responseJson = await response.json();
-        return { isSuccess: true, response: responseJson };
-      } else {
-        const errorData = await response.json();
-        return { errorDetail: String(errorData.detail), isSuccess: false };
-      }
-    }
-  } catch (error) {
-    return { errorDetail: String(error), isSuccess: false };
+/** The mock-credential endpoint returns only the cc-pair id, so a rollback has to look the rest up. */
+async function fetchRollbackTarget(ccPairId: number): Promise<RollbackTarget> {
+  const response = await fetch(buildCCPairInfoUrl(ccPairId));
+  if (!response.ok) {
+    throw new Error(
+      await parseErrorDetail(response, `HTTP ${response.status}`)
+    );
   }
+  const ccPair: CCPairFullInfo = await response.json();
+  return {
+    connectorId: ccPair.connector.id,
+    credentialId: ccPair.credential.id,
+  };
 }
 
 export default function AddConnector({
@@ -202,18 +171,6 @@ export default function AddConnector({
   const [uploading, setUploading] = useState(false);
   const [creatingConnector, setCreatingConnector] = useState(false);
 
-  // Connector creation timeout management
-  const timeoutErrorHappenedRef = useRef<boolean>(false);
-  const connectorIdRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    return () => {
-      // Cleanup refs when component unmounts
-      timeoutErrorHappenedRef.current = false;
-      connectorIdRef.current = null;
-    };
-  }, []);
-
   // Hooks for Google Drive and Gmail credentials
   const { liveGDriveCredential } = useGoogleDriveCredentials(connector);
   const { liveGmailCredential } = useGmailCredentials(connector);
@@ -275,6 +232,31 @@ export default function AddConnector({
 
   const onSuccess = () => {
     router.push("/admin/indexing/status?message=connector-created");
+  };
+
+  /**
+   * Deleting the connector row alone would orphan the credential and leave
+   * indexed documents behind, so schedule a deletion job once a cc-pair exists.
+   */
+  const rollbackTimedOutCreation = async (
+    target: RollbackTarget | Promise<RollbackTarget>
+  ) => {
+    try {
+      const { connectorId, credentialId } = await target;
+      const errorDetail =
+        credentialId === null
+          ? await deleteConnector(connectorId)
+          : await scheduleDeletionJobForConnector(connectorId, credentialId);
+      if (errorDetail !== null) {
+        toast.error(t("add.rollbackFailed.toast", { detail: errorDetail }));
+      }
+    } catch (error) {
+      toast.error(
+        t("add.rollbackFailed.toast", {
+          detail: error instanceof Error ? error.message : String(error),
+        })
+      );
+    }
   };
 
   const closeCredentialModal = () => setCredentialCreationMethod(null);
@@ -438,103 +420,118 @@ export default function AddConnector({
           return;
         }
 
+        const connectorBase: ConnectorBase<Record<string, unknown>> = {
+          connector_specific_config: transformedConnectorSpecificConfig,
+          input_type: isLoadState(connector) ? "load_state" : "poll", // single case
+          name: name,
+          source: connector,
+          access_type: access_type,
+          refresh_freq: advancedConfiguration.refreshFreq || null,
+          prune_freq: advancedConfiguration.pruneFreq || null,
+          indexing_start: advancedConfiguration.indexingStart || null,
+          groups: groups,
+        };
+
         setCreatingConnector(true);
         try {
-          const timeoutPromise = new Promise<{ isTimeout: true }>((resolve) =>
-            setTimeout(
-              () => resolve({ isTimeout: true }),
-              CONNECTOR_CREATION_TIMEOUT_MS
-            )
+          // The request is never aborted, so the backend still creates the
+          // connector after the race. Undo that work instead of reporting success.
+          let timedOut = false;
+
+          const timeoutPromise = new Promise<"timeout">((resolve) =>
+            setTimeout(() => resolve("timeout"), CONNECTOR_CREATION_TIMEOUT_MS)
           );
 
-          const connectorCreationPromise = (async () => {
-            const { errorDetail, isSuccess, response } =
-              await submitConnector<any>(
-                {
-                  connector_specific_config: transformedConnectorSpecificConfig,
-                  input_type: isLoadState(connector) ? "load_state" : "poll", // single case
-                  name: name,
-                  source: connector,
-                  access_type: access_type,
-                  refresh_freq: advancedConfiguration.refreshFreq || null,
-                  prune_freq: advancedConfiguration.pruneFreq || null,
-                  indexing_start: advancedConfiguration.indexingStart || null,
-                  groups: groups,
-                },
-                undefined,
-                credentialActivated ? false : true
-              );
-
-            // Store the connector id immediately for potential timeout
-            if (response?.id) {
-              connectorIdRef.current = response.id;
-            }
-
-            if (!credentialActivated) {
-              if (isSuccess) {
-                onSuccess();
-              } else {
-                toast.error(
-                  t("add.error.toast", { detail: errorDetail ?? "" })
-                );
-              }
-              timeoutErrorHappenedRef.current = false;
-              return;
-            }
-
-            // With credential
-            if (credentialActivated && isSuccess && response) {
-              const credential =
-                currentCredential ||
-                liveGDriveCredential ||
-                liveGmailCredential;
-              const linkCredentialResponse = await linkCredential(
-                response.id,
-                credential!.id,
-                name,
-                access_type,
-                groups,
-                auto_sync_options
-              );
-              if (linkCredentialResponse.ok) {
-                onSuccess();
-              } else {
-                const errorData = await linkCredentialResponse.json();
-
-                if (!timeoutErrorHappenedRef.current) {
-                  // Only show error if timeout didn't happen
-                  toast.error(errorData.detail || errorData.message);
+          const connectorCreationPromise = (async (): Promise<void> => {
+            try {
+              if (credentialActivated) {
+                const [errorDetail, created] =
+                  await createConnector(connectorBase);
+                if (!created) {
+                  if (!timedOut) {
+                    toast.error(
+                      t("add.error.toast", { detail: errorDetail ?? "" })
+                    );
+                  }
+                  return;
                 }
-              }
-            } else if (isSuccess) {
-              onSuccess();
-            } else {
-              toast.error(t("add.error.toast", { detail: errorDetail ?? "" }));
-            }
 
-            timeoutErrorHappenedRef.current = false;
-            return;
+                const credential =
+                  currentCredential ||
+                  liveGDriveCredential ||
+                  liveGmailCredential;
+                const linkCredentialResponse = await linkCredential(
+                  created.id,
+                  credential!.id,
+                  name,
+                  access_type,
+                  groups,
+                  auto_sync_options
+                );
+
+                if (timedOut) {
+                  // A failed link leaves a bare connector row and no cc-pair.
+                  await rollbackTimedOutCreation({
+                    connectorId: created.id,
+                    credentialId: linkCredentialResponse.ok
+                      ? credential!.id
+                      : null,
+                  });
+                  return;
+                }
+
+                if (!linkCredentialResponse.ok) {
+                  const errorData = await linkCredentialResponse.json();
+                  toast.error(errorData.detail || errorData.message);
+                  return;
+                }
+
+                onSuccess();
+                return;
+              }
+
+              const [errorDetail, ccPairId] =
+                await createConnectorWithMockCredential(connectorBase);
+              if (ccPairId === null) {
+                if (!timedOut) {
+                  toast.error(
+                    t("add.error.toast", { detail: errorDetail ?? "" })
+                  );
+                }
+                return;
+              }
+
+              if (timedOut) {
+                await rollbackTimedOutCreation(fetchRollbackTarget(ccPairId));
+                return;
+              }
+
+              onSuccess();
+            } catch (error) {
+              if (timedOut) {
+                return;
+              }
+              toast.error(
+                t("add.error.toast", {
+                  detail:
+                    error instanceof Error ? error.message : String(error),
+                })
+              );
+            }
           })();
 
-          const result = (await Promise.race([
+          const result = await Promise.race([
             connectorCreationPromise,
             timeoutPromise,
-          ])) as {
-            isTimeout?: true;
-          };
+          ]);
 
-          if (result.isTimeout) {
-            timeoutErrorHappenedRef.current = true;
+          if (result === "timeout") {
+            timedOut = true;
             toast.error(
               t("add.timeout.toast", {
                 seconds: CONNECTOR_CREATION_TIMEOUT_MS / 1000,
               })
             );
-
-            if (connectorIdRef.current) {
-              await deleteConnector(connectorIdRef.current);
-              connectorIdRef.current = null;
-            }
           }
           return;
         } finally {

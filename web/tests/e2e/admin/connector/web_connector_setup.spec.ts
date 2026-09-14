@@ -15,6 +15,9 @@ import { IndexingStatusPage } from "@tests/e2e/admin/connector/IndexingStatusPag
  */
 const DOCS_URL = "https://docs.onyx.app";
 
+// Comfortably past the wizard's 10s CONNECTOR_CREATION_TIMEOUT_MS.
+const CREATION_DELAY_MS = 12_000;
+
 test.describe("Web connector setup", () => {
   let connectorName: string;
   let ccPairId: number | null = null;
@@ -69,5 +72,43 @@ test.describe("Web connector setup", () => {
     expect(openedCcPairId).toBe(ccPairId);
     await expect(page.getByText(connectorName).first()).toBeVisible();
     await expect(page.getByText(DOCS_URL).first()).toBeVisible();
+  });
+
+  test("rolls the connector back when creation times out", async ({ page }) => {
+    const setupPage = new ConnectorSetupPage(page, "web");
+    await setupPage.goto();
+
+    // Hold the creation POST past the wizard's timeout. `continue` still sends
+    // it, so the connector really is created and the rollback has a target.
+    await page.route(
+      "**/api/manage/admin/connector-with-mock-credential",
+      async (route) => {
+        await new Promise((resolve) => setTimeout(resolve, CREATION_DELAY_MS));
+        await route.continue();
+      }
+    );
+
+    await setupPage.connectorNameInput.fill(connectorName);
+    await setupPage.textField("base_url").fill(DOCS_URL);
+    await setupPage.selectField("web_connector_type").selectOption("recursive");
+
+    // Listen before the click: the rollback fires as soon as the delayed
+    // creation response lands.
+    const rollbackRequest = page.waitForRequest(
+      (candidate) =>
+        candidate.method() === "POST" &&
+        candidate.url().includes("/api/manage/admin/deletion-attempt"),
+      { timeout: 60_000 }
+    );
+    await setupPage.submit();
+
+    await setupPage.expectCreationTimedOut();
+
+    const body = (await rollbackRequest).postDataJSON();
+    expect(typeof body.connector_id).toBe("number");
+    expect(typeof body.credential_id).toBe("number");
+
+    // The timeout is a failure, so the wizard must not report success.
+    await setupPage.expectStillOnWizard();
   });
 });

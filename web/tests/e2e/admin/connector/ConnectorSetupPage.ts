@@ -17,6 +17,7 @@ export class ConnectorSetupPage {
   readonly pageTitle: Locator;
   readonly connectorNameInput: Locator;
   readonly createConnectorButton: Locator;
+  readonly timeoutToast: Locator;
 
   constructor(page: Page, source: string) {
     this.page = page;
@@ -26,6 +27,7 @@ export class ConnectorSetupPage {
     this.createConnectorButton = page.getByRole("button", {
       name: "Create Connector",
     });
+    this.timeoutToast = page.getByText(/Operation timed out after \d+ seconds/);
   }
 
   /** A single-line text field from the connector config, by its config name. */
@@ -57,6 +59,20 @@ export class ConnectorSetupPage {
     await this.page.waitForURL("**/admin/indexing/status**", {
       timeout: 30_000,
     });
+  }
+
+  async submit() {
+    await this.createConnectorButton.click();
+  }
+
+  async expectCreationTimedOut() {
+    await expect(this.timeoutToast).toBeVisible({ timeout: 30_000 });
+  }
+
+  async expectStillOnWizard() {
+    await expect(this.page).toHaveURL(
+      new RegExp(`/admin/connectors/${this.source}`)
+    );
   }
 
   /** Capture a full-page visual snapshot of the wizard. */
