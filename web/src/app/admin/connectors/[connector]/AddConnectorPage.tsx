@@ -108,16 +108,23 @@ async function fetchRollbackTarget(ccPairId: number): Promise<RollbackTarget> {
   };
 }
 
-/** The link endpoint commits the pair before it can fail, so a non-2xx answer does not prove it is absent. */
+/**
+ * The link endpoint commits the pair before it can fail, so a non-2xx answer does
+ * not prove the pair is absent. This read is global-only, so keep the answer the
+ * status code gives when a scoped manager cannot make it.
+ */
 async function fetchLinkedRollbackTarget(
   connectorId: number,
-  credentialId: number
+  credentialId: number,
+  linkSucceeded: boolean
 ): Promise<RollbackTarget> {
+  const assumed: RollbackTarget = {
+    connectorId,
+    credentialId: linkSucceeded ? credentialId : null,
+  };
   const response = await fetch(`/api/manage/connector/${connectorId}`);
   if (!response.ok) {
-    throw new Error(
-      await parseErrorDetail(response, `HTTP ${response.status}`)
-    );
+    return assumed;
   }
   const connector: ConnectorSnapshot = await response.json();
   return {
@@ -492,7 +499,11 @@ export default function AddConnector({
 
                 if (timedOut) {
                   await rollbackTimedOutCreation(
-                    fetchLinkedRollbackTarget(created.id, credential!.id)
+                    fetchLinkedRollbackTarget(
+                      created.id,
+                      credential!.id,
+                      linkCredentialResponse.ok
+                    )
                   );
                   return;
                 }
