@@ -96,6 +96,13 @@ class FakeSession:
         self.closed = True
 
 
+class HangingConnectSession(FakeSession):
+    async def ws_connect(self, url: str, **kwargs: Any) -> FakeWebSocket:
+        self.ws_connect_calls.append({"url": url, **kwargs})
+        await asyncio.sleep(60)
+        return self.ws
+
+
 class CancelledConnectSession(FakeSession):
     async def ws_connect(self, url: str, **kwargs: Any) -> FakeWebSocket:
         self.ws_connect_calls.append({"url": url, **kwargs})
@@ -472,6 +479,21 @@ async def test_receive_loop_fails_on_protocol_violations(raw: str) -> None:
     assert failure.error is not None
     assert await transcriber.receive_transcript() is None
     assert ws.messages  # loop stopped at the bad frame
+
+
+@pytest.mark.asyncio
+async def test_connect_bounds_socket_setup_with_handshake_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = HangingConnectSession(FakeWebSocket())
+    monkeypatch.setattr(zoom.aiohttp, "ClientSession", lambda: session)
+    monkeypatch.setattr(zoom, "ZOOM_HANDSHAKE_TIMEOUT_SECONDS", 0.01)
+    transcriber = ZoomStreamingTranscriber(api_key="key", api_secret="x" * 32)
+
+    with pytest.raises(TimeoutError):
+        await transcriber.connect()
+
+    assert session.closed is True
 
 
 @pytest.mark.asyncio

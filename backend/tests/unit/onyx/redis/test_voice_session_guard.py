@@ -155,7 +155,8 @@ async def test_acquire_rejects_when_tenant_is_full(redis: _FakeRedis) -> None:
         await redis_pool.acquire_voice_session(policy=POLICY, user_id="user-7")
 
     assert str(exc_info.value) == POLICY.limit_message
-    assert "session-member-1" not in redis.sets[TENANT_KEY]
+    assert redis.sets == {TENANT_KEY: {"other-1": 9e12, "other-2": 9e12}}
+    assert redis.executed_batches == []
 
 
 @pytest.mark.asyncio
@@ -166,7 +167,9 @@ async def test_acquire_rejects_when_user_is_full(redis: _FakeRedis) -> None:
     with pytest.raises(redis_pool.VoiceSessionLimitExceeded):
         await redis_pool.acquire_voice_session(policy=POLICY, user_id="user-7")
 
-    assert USER_KEY in redis.sets and "session-member-1" not in redis.sets[USER_KEY]
+    # Rejection reserves nothing in either scope.
+    assert redis.sets == {TENANT_KEY: {"mine-1": 9e12}, USER_KEY: {"mine-1": 9e12}}
+    assert redis.executed_batches == []
 
 
 @pytest.mark.asyncio

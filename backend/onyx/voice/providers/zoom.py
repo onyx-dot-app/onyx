@@ -159,10 +159,15 @@ class ZoomStreamingTranscriber(StreamingTranscriberProtocol):
         ws_base = _http_to_ws_url(self.api_base.rstrip("/"))
         token = build_zoom_scribe_jwt(self.api_key, self.api_secret)
         try:
-            self._ws = await self._session.ws_connect(
-                f"{ws_base}{ZOOM_SCRIBE_LIVE_PATH}",
-                headers={"Authorization": f"Bearer {token}"},
-                protocols=[ZOOM_WS_SUBPROTOCOL],
+            # Bound TCP, TLS and the upgrade too; aiohttp's default network
+            # timeout is far longer than a voice connection should wait.
+            self._ws = await asyncio.wait_for(
+                self._session.ws_connect(
+                    f"{ws_base}{ZOOM_SCRIBE_LIVE_PATH}",
+                    headers={"Authorization": f"Bearer {token}"},
+                    protocols=[ZOOM_WS_SUBPROTOCOL],
+                ),
+                timeout=ZOOM_HANDSHAKE_TIMEOUT_SECONDS,
             )
             await self._ws.send_str(
                 json.dumps(
