@@ -15,7 +15,7 @@ from onyx.server.documents.models import (
     IndexingStatus,
     InputType,
 )
-from onyx.server.query_and_chat.streaming_models import GeneratedImage
+from onyx.tools.progress import GeneratedImage
 
 """
 These data models are used to represent the data on the testing side of things.

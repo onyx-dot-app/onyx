@@ -1,6 +1,14 @@
-"""Map request-scoped provider settings to explicit LiteLLM arguments."""
+"""Maps LLM provider custom_config keys to LiteLLM completion kwargs.
 
-from pydantic import BaseModel, ConfigDict, JsonValue
+Recognized keys become explicit kwargs and never touch os.environ. Unrecognized
+keys are env-only: injected into os.environ for the duration of the call when
+the llm_custom_config_env_injection security setting allows it (self-hosted
+only, default on), dropped otherwise.
+"""
+
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict
 
 from onyx.llm.api_surfaces import SURFACE_SELECTION_CONFIG_KEYS
 from onyx.llm.constants import LlmProviderNames
@@ -53,7 +61,7 @@ _PROVIDER_CUSTOM_CONFIG_KWARGS: dict[str, dict[str, str]] = {
     },
 }
 
-# UI form state does not become a provider argument.
+# UI form state stored in custom_config; exempt from validation, env injection, and drop warnings.
 UI_ONLY_CONFIG_KEYS = frozenset({"BEDROCK_AUTH_METHOD"}) | SURFACE_SELECTION_CONFIG_KEYS
 
 
@@ -67,7 +75,7 @@ class CustomConfigMapping(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    model_kwargs: dict[str, JsonValue]
+    model_kwargs: dict[str, Any]
     consumed_keys: frozenset[str]
 
 
@@ -76,7 +84,7 @@ def _normalize_key(key: str) -> str:
 
 
 def _map_vertex_config(custom_config: dict[str, str]) -> CustomConfigMapping:
-    kwargs: dict[str, JsonValue] = {}
+    kwargs: dict[str, Any] = {}
     consumed: set[str] = set()
 
     workload_identity = (
@@ -124,7 +132,7 @@ def map_custom_config_to_model_kwargs(
     if model_provider == LlmProviderNames.VERTEX_AI:
         return _map_vertex_config(custom_config)
 
-    kwargs: dict[str, JsonValue] = {}
+    kwargs: dict[str, Any] = {}
     consumed: set[str] = set()
 
     provider_kwargs = _PROVIDER_CUSTOM_CONFIG_KWARGS.get(model_provider, {})

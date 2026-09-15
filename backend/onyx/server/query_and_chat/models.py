@@ -190,6 +190,10 @@ class RenameChatSessionResponse(BaseModel):
     new_name: str  # This is only really useful if the name is generated
 
 
+class StopChatResponse(BaseModel):
+    message: str
+
+
 class ChatSessionDetails(BaseModel):
     id: UUID
     name: str | None

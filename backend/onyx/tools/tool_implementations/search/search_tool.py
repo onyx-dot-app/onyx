@@ -1,49 +1,13 @@
-"""
-An explanation of the search tool found below:
-
-Step 1: Queries
-- The LLM will generate some queries based on the chat history for what it thinks are the best things to search for.
-This has a pretty generic prompt so it's not perfectly tuned for search but provides breadth and also the LLM can often break up
-the query into multiple searches which the other flows do not do. Exp: Compare the sales process between company X and Y can be
-broken up into "sales process company X" and "sales process company Y".
-- A specifial prompt and history is used to generate another query which is best tuned for a semantic/hybrid search pipeline.
-- A small set of keyword emphasized queries are also generated to cover additional breadth. This is important for cases where
-the query is short, keyword heavy, or has a lot of model unseen terminology.
-
-Step 2: Recombination
-We use a weighted RRF to combine the search results from the queries above. Each query will have a list of search results with
-some scores however these are downstream of a normalization step so they cannot easily be compared with one another on an
-absolute scale. RRF is a good way to combine these and allows us to give some custom weightings. We also merge document chunks
-that are adjacent to provide more continuous context to the LLM.
-
-Step 3: Selection
-We pass the recombined results (truncated set) to the LLM to select the most promising ones to read. This is to reduce noise and
-reduce downstream chances of hallucination. The LLM at this point also has the entire set of document chunks so it has
-information across documents not just per document. This also reduces the number of tokens required for the next step.
-
-Step 4: Expansion
-For the selected documents, we pass the main retrieved sections from above (this may be a single chunk or a section comprised of
-several consecutive chunks) along with chunks above and below the section to the LLM. The LLM determines how much of the document
-it wants to read. This is done in parallel for all selected documents. Reason being that the LLM would not be able to do a good
-job of this with all of the documents in the prompt at once. Keeping every LLM decision step as simple as possible is key for
-reliable performance.
-
-Step 5: Prompt Building
-We construct a response string back to the LLM as the result of the tool call. We also pass relevant richer objects back
-so that the rest of the code can persist it, render it in the UI, etc. The response is a json that makes it easy for the LLM to
-refer to by using matching keywords to other parts of the prompt and reminders.
-"""
-
 import time
 from collections.abc import Callable
-from typing import Any, cast
+from typing import Any
 
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.chat.emitter import Emitter
-from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
-from onyx.configs.constants import DocumentSource, FederatedConnectorSource
+from onyx.agents.tools import ToolInvocation, ToolProgress, ToolUpdate
+from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT, NUM_RETURNED_HITS
+from onyx.configs.constants import DocumentSource, FederatedConnectorSource, MessageType
 from onyx.context.search.federated.slack_search import slack_retrieval
 from onyx.context.search.models import (
     BaseFilters,
@@ -99,19 +63,23 @@ from onyx.secondary_llm_flows.query_expansion import (
 )
 from onyx.secondary_llm_flows.source_filter import SearchCycle, decide_search_scope
 from onyx.secondary_llm_flows.time_filter import TimeFilter, decide_time_filter
-from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import (
-    Packet,
-    SearchToolDocumentsDelta,
-    SearchToolFilterDelta,
-    SearchToolQueriesDelta,
-    SearchToolStart,
+from onyx.tools.interface import (
+    CITATIONS_PER_TOOL_CALL,
+    FunctionToolDefinition,
+    Tool,
+    ToolContext,
+    parse_tool_arguments,
+    tool_message_history,
 )
-from onyx.tools.interface import Tool
 from onyx.tools.models import (
     ChatMinimalTextMessage,
-    SearchToolOverrideKwargs,
     ToolCallException,
+)
+from onyx.tools.progress import (
+    SearchDocuments,
+    SearchFilters,
+    SearchQueries,
+    SearchStarted,
 )
 from onyx.tools.tool_implementations.search.constants import (
     KEYWORD_QUERY_HYBRID_ALPHA,
@@ -142,6 +110,10 @@ from shared_configs.configs import (
 logger = setup_logger()
 
 QUERIES_FIELD = "queries"
+
+
+class SearchArguments(BaseModel):
+    queries: list[str]
 
 
 class QueryExpansionAndScope(BaseModel):
@@ -267,7 +239,7 @@ def _trim_sections_by_tokens(
     return trimmed_sections
 
 
-class SearchTool(Tool[SearchToolOverrideKwargs]):
+class SearchTool(Tool):
     NAME = "internal_search"
     DISPLAY_NAME = "Internal Search"
     DESCRIPTION = "Search connected applications for information."
@@ -275,7 +247,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
     def __init__(
         self,
         tool_id: int,
-        emitter: Emitter,
         # Used for ACLs and federated search, anonymous users only see public docs
         user: User,
         # Pre-extracted persona search configuration
@@ -296,8 +267,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # Whether to infer source and time filters from the
         # query. When False, only user/persona-selected filters are applied.
         auto_detect_filters: bool = True,
+        include_link: bool = False,
     ) -> None:
-        super().__init__(emitter=emitter)
 
         self.user = user
         self.persona_search_info = persona_search_info
@@ -309,6 +280,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self.slack_context = slack_context
         self.enable_slack_search = enable_slack_search
         self.auto_detect_filters = auto_detect_filters
+        self.include_link = include_link
 
         self._search_cycles: list[SearchCycle] = []
         self._cached_expansion: tuple[str | None, list[str]] | None = None
@@ -559,7 +531,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
     """For explicit tool calling"""
 
-    def tool_definition(self) -> dict:
+    def tool_definition(self) -> FunctionToolDefinition:
         return {
             "type": "function",
             "function": {
@@ -583,14 +555,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 },
             },
         }
-
-    def emit_start(self, placement: Placement) -> None:
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=SearchToolStart(),
-            )
-        )
 
     @log_function_time(
         func_name="Search tool - query expansion + scope decision",
@@ -657,14 +621,58 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             time_filter=self._time_filter,
         )
 
+    def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
+        message_history = tool_message_history(list(invocation.messages))
+        original_query = next(
+            (
+                message.message
+                for message in reversed(message_history)
+                if message.message_type == MessageType.USER
+            ),
+            None,
+        )
+        if original_query is None:
+            raise ValueError("Search requires a user message")
+        if QUERIES_FIELD not in invocation.arguments:
+            raise ToolCallException(
+                message=f"Missing required '{QUERIES_FIELD}' parameter in internal_search tool call",
+                llm_facing_message=(
+                    f"The internal_search tool requires a '{QUERIES_FIELD}' parameter "
+                    f"containing an array of search queries. Please provide the queries "
+                    f'like: {{"queries": ["your search query here"]}}'
+                ),
+            )
+        llm_queries = parse_tool_arguments(
+            SearchArguments, invocation.arguments
+        ).queries
+
+        return self.search(
+            llm_queries,
+            original_query=original_query,
+            message_history=message_history,
+            context=context,
+            citation_start=context.next_citation_num
+            + CITATIONS_PER_TOOL_CALL * invocation.call_index,
+            update=invocation.update,
+        )
+
     @log_function_time(print_only=True)
-    def run(
+    def search(
         self,
-        placement: Placement,
-        override_kwargs: SearchToolOverrideKwargs,
-        **llm_kwargs: Any,
+        llm_queries: list[str],
+        *,
+        original_query: str,
+        message_history: list[ChatMinimalTextMessage],
+        context: ToolContext,
+        citation_start: int = 1,
+        update: ToolUpdate | None = None,
     ) -> ToolResult:
-        # Start overall timing
+        """Retrieve documents using the original question and optional query variants."""
+        memory = context.user_memory_context
+        if memory is not None and not context.inject_memories_in_prompt:
+            memory = memory.without_memories()
+        if update is not None:
+            update(ToolProgress(details=SearchStarted()))
         overall_start_time = time.time()
 
         # Initialize timing variables (in case of early exceptions)
@@ -756,17 +764,9 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 )
         # Session is closed here — all parallel work uses plain Python objects only
 
-        llm_queries = cast(list[str], llm_kwargs[QUERIES_FIELD])
-
         # Run semantic and keyword query expansion in parallel (unless skipped)
-        # Use message history, memories, and user info from override_kwargs
-        message_history = override_kwargs.message_history or []
-        memories = (
-            override_kwargs.user_memory_context.as_formatted_list()
-            if override_kwargs.user_memory_context
-            else []
-        )
-        user_info = override_kwargs.user_info
+        memories = memory.as_formatted_list() if memory else []
+        user_info = context.user_info
 
         # A persona/user source restriction is the outer bound the decision works within.
         user_source_restriction: list[DocumentSource] | None = (
@@ -788,7 +788,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             llm_queries,
         )
         expansion = self._expand_queries_and_decide_scope(
-            skip_query_expansion=override_kwargs.skip_query_expansion,
+            skip_query_expansion=context.skip_search_query_expansion,
             message_history=message_history,
             user_info=user_info,
             memories=memories,
@@ -816,7 +816,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             source.value not in searched_sources for source in resolved_scope
         )
         if (
-            override_kwargs.skip_query_expansion
+            context.skip_search_query_expansion
             and is_new_filter
             and self._cached_expansion is not None
         ):
@@ -834,9 +834,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             )
         )
 
-        # Surface the applied filters (source scope + time window) to the UI. Scope
-        # is reported only when it narrows to a strict subset — scoping to all
-        # connected sources is equivalent to an unscoped search.
+        # Scoping to all connected sources is equivalent to an unscoped search.
         scopes_all_sources = bool(connected_sources) and set(
             connected_sources
         ).issubset(resolved_scope or [])
@@ -847,16 +845,18 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         )
         time_filter = expansion.time_filter
         if emitted_sources or time_filter is not None:
-            self.emitter.emit(
-                Packet(
-                    placement=placement,
-                    obj=SearchToolFilterDelta(
-                        sources=emitted_sources,
-                        time_filter_start=time_filter.start if time_filter else None,
-                        time_filter_end=time_filter.end if time_filter else None,
-                    ),
+            if update is not None:
+                update(
+                    ToolProgress(
+                        details=SearchFilters(
+                            sources=emitted_sources,
+                            time_filter_start=time_filter.start
+                            if time_filter
+                            else None,
+                            time_filter_end=time_filter.end if time_filter else None,
+                        )
+                    )
                 )
-            )
 
         queries_run = list(
             dict.fromkeys(
@@ -913,16 +913,14 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             for llm_query in llm_queries
             if llm_query
         )
-        if override_kwargs.original_query:
+        if original_query:
             semantic_queries_with_weights.append(
-                (override_kwargs.original_query, ORIGINAL_QUERY_WEIGHT)
+                (original_query, ORIGINAL_QUERY_WEIGHT)
             )
         deduplicated_semantic_queries = deduplicate_queries(
             semantic_queries_with_weights
         )
 
-        # Build the all_queries list for UI display, sorted by weight (highest first)
-        # Combine all deduplicated queries and sort by weight
         all_queries_with_weights = (
             deduplicated_semantic_queries + deduplicated_keyword_queries
         )
@@ -943,15 +941,14 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             [q for q, _ in deduplicated_keyword_queries],
         )
 
-        # Emit the queries early so the UI can display them immediately
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=SearchToolQueriesDelta(
-                    queries=all_queries,
-                ),
+        if update is not None:
+            update(
+                ToolProgress(
+                    details=SearchQueries(
+                        queries=all_queries,
+                    )
+                )
             )
-        )
 
         # Run all searches in parallel with appropriate hybrid_alpha values
         # Keyword queries use hybrid_alpha=0.2 (favor keyword search)
@@ -967,7 +964,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                     (
                         query,
                         None,
-                        override_kwargs.num_hits,
+                        NUM_RETURNED_HITS,
                         acl_filters,
                         embedding_model,
                         federated_retrieval_infos,
@@ -985,7 +982,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                     (
                         query,
                         KEYWORD_QUERY_HYBRID_ALPHA,
-                        override_kwargs.num_hits,
+                        NUM_RETURNED_HITS,
                         acl_filters,
                         embedding_model,
                         federated_retrieval_infos,
@@ -999,12 +996,12 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # This avoids the query multiplication problem where each Vespa query
         # would trigger a separate Slack search.
         # Only run if pre-fetch found a valid Slack access token.
-        if slack_access_token and override_kwargs.original_query:
+        if slack_access_token and original_query:
             search_functions.append(
                 (
                     self._run_slack_search,
                     (
-                        override_kwargs.original_query,
+                        original_query,
                         slack_access_token,
                         slack_bot_token,
                         slack_entities,
@@ -1030,7 +1027,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
         # We can disregard all of the chunks that exceed the num_hits parameter since it's not valid to have
         # documents/contents from things that aren't returned to the user on the frontend
-        top_sections = merge_individual_chunks(top_chunks)[: override_kwargs.num_hits]
+        top_sections = merge_individual_chunks(top_chunks)[:NUM_RETURNED_HITS]
 
         if not top_sections:
             logger.info("Search tool - no results found, returning empty response")
@@ -1058,9 +1055,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         )
 
         secondary_flows_user_query = (
-            override_kwargs.original_query
-            or semantic_query
-            or (llm_queries[0] if llm_queries else "")
+            original_query or semantic_query or (llm_queries[0] if llm_queries else "")
         )
 
         token_counter = get_llm_token_counter(self.llm)
@@ -1070,7 +1065,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # Only consider MAX_CHUNKS_FOR_RELEVANCE chunks per section to avoid flooding from
         # documents with many matching sections
         max_tokens_for_selection = (
-            (override_kwargs.max_llm_chunks or MAX_CHUNKS_FED_TO_CHAT)
+            MAX_CHUNKS_FED_TO_CHAT
             * DOC_EMBEDDING_CONTEXT_SIZE
             * SELECTION_TOKEN_BUDGET_MULTIPLIER
         )
@@ -1111,14 +1106,14 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             selected_sections, is_internet=False
         )
 
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=SearchToolDocumentsDelta(
-                    documents=final_ui_docs,
-                ),
+        if update is not None:
+            update(
+                ToolProgress(
+                    details=SearchDocuments(
+                        documents=final_ui_docs,
+                    )
+                )
             )
-        )
 
         # Create wrapper function to handle errors gracefully
         def expand_section_safe(
@@ -1184,10 +1179,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
         docs_str, citation_mapping = convert_inference_sections_to_llm_string(
             top_sections=merged_sections,
-            citation_start=override_kwargs.starting_citation_num,
-            limit=override_kwargs.max_llm_chunks,
+            citation_start=citation_start,
+            limit=MAX_CHUNKS_FED_TO_CHAT,
             include_document_id=False,
-            include_link=override_kwargs.include_link,
+            include_link=self.include_link,
             note=scope_note or None,
         )
 

@@ -320,6 +320,7 @@ function addPacketToGroup(
 // ============================================================================
 
 function processPacket(state: ProcessorState, packet: Packet): void {
+  if (packet.obj.type === PacketType.OPERATION_STATUS) return;
   if (!packet) return;
 
   // Handle TopLevelBranching packets - these tell us how many parallel branches to expect

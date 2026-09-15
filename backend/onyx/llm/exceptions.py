@@ -27,3 +27,7 @@ class LLMTimeoutError(TimeoutError):
 
 class LLMRateLimitError(Exception):
     """The provider rejected a request because its rate limit was reached."""
+
+
+class LLMContextLimitError(Exception):
+    """The generation input exceeds the selected model context limit."""

@@ -1,18 +1,18 @@
 from collections.abc import Callable
 from functools import partial
+from uuid import UUID
 
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
-from onyx.chat.chat_state import ChatTurnSetup, PersonaPromptConfig, PreparedModel
-from onyx.chat.compression import find_summary_for_branch
 from onyx.chat.files import (
     _collect_available_file_ids,
     _convert_loaded_files_to_chat_files,
     _load_context_user_files_for_tools,
     determine_search_params,
     extract_context_files,
-    load_all_chat_files,
+    load_chat_files,
     resolve_context_user_files,
     summarize_file_metadata,
 )
@@ -21,8 +21,20 @@ from onyx.chat.incognito import (
     incognito_llm_request_policy,
 )
 from onyx.chat.incognito_context import append_incognito_message, load_incognito_context
-from onyx.chat.models import AnswerStreamPart, ChatHistoryResult, CreateChatSessionID
-from onyx.chat.prompt_utils import calculate_reserved_tokens
+from onyx.chat.models import (
+    AnswerStreamPart,
+    AvailableFiles,
+    ChatHistoryMessage,
+    ChatHistoryResult,
+    ChatTurnSetup,
+    CreateChatSessionID,
+    PersonaPromptConfig,
+    PreparedResponse,
+)
+from onyx.chat.prompt_utils import (
+    calculate_reserved_tokens,
+    get_default_base_system_prompt,
+)
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType, MilestoneRecordType
 from onyx.context.messages import PromptMetadata
 from onyx.db.chat import (
@@ -32,18 +44,28 @@ from onyx.db.chat import (
     reserve_chat_response_ids,
 )
 from onyx.db.chat_history import (
+    capture_chat_history,
     convert_chat_history,
+    find_summary_for_branch,
     is_last_assistant_message_clarification,
     load_message_branch,
 )
 from onyx.db.document_set import filter_document_set_names_by_user_access
-from onyx.db.enums import HookPoint, record_mode_persists_content
-from onyx.db.memory import get_memories
-from onyx.db.models import ChatMessage, ChatSession, Persona, User, UserFile
-from onyx.db.tools import get_tools
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import HookPoint, IncognitoRecordMode, record_mode_persists_content
+from onyx.db.memory import UserMemoryContext, get_memories
+from onyx.db.models import ChatMessage, ChatSession, Persona, User
+from onyx.db.tools import capture_persona_tool_configuration, get_tools
+from onyx.db.user_file import prepare_chat_file_inputs
+from onyx.deep_research.tool_definitions import RESEARCH_AGENT_IN_CODE_ID
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
+from onyx.file_store.models import (
+    ChatFileInput,
+    ExtractedContextFiles,
+    FileToolMetadata,
+    UserFileMetadata,
+)
 from onyx.file_store.utils import verify_user_files
 from onyx.hooks.executor import HookSkipped, HookSoftFailed, execute_hook
 from onyx.hooks.points.query_processing import (
@@ -65,7 +87,7 @@ from onyx.server.query_and_chat.models import (
 )
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.tools.constants import FILE_READER_TOOL_ID, SEARCH_TOOL_ID
-from onyx.tools.models import ChatFile, SearchToolUsage
+from onyx.tools.models import ChatFile, PersonaToolConfiguration, SearchToolUsage
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from shared_configs.contextvars import get_current_tenant_id
@@ -202,191 +224,96 @@ def _accept_message(
     chat_session: ChatSession,
     user: User,
     db_session: Session,
-) -> tuple[list[ChatMessage], ChatMessage, str | None]:
+) -> tuple[list[ChatMessage], str | None]:
     """Apply the query hook once; regeneration reuses its accepted user message."""
     message_text = new_msg_req.message
     chat_history, parent_message = load_message_branch(
         chat_session.id, new_msg_req.parent_message_id, db_session
     )
 
-    # Regeneration reuses the accepted user message.
     if parent_message.message_type == MessageType.USER:
-        return chat_history, parent_message, None
-    else:
-        # The hook sends query text and email externally; respect content egress policy.
-        mode = chat_session.incognito_record_mode
-        if message_text.strip() and (mode is None or mode.fires_hooks):
-            hook_result = execute_hook(
-                db_session=db_session,
-                hook_point=HookPoint.QUERY_PROCESSING,
-                payload=QueryProcessingPayload(
-                    query=message_text,
-                    # Anonymous and some SSO users have no email.
-                    user_email=None if user.is_anonymous else user.email,
-                    chat_session_id=str(chat_session.id),
-                ).model_dump(),
-                response_type=QueryProcessingResponse,
-            )
-            message_text = _resolve_query_processing_hook_result(
-                hook_result, message_text
-            )
-
-        # Use one tokenizer for stored counts, including after model switches.
-        default_tokenizer = get_tokenizer(None, None)
-        user_token_count = len(default_tokenizer.encode(message_text))
-        # Incognito persists structure and token counts; text stays in the ephemeral store.
-        keeps_content = record_mode_persists_content(mode)
-        user_message = create_new_chat_message(
-            chat_session_id=chat_session.id,
-            parent_message=parent_message,
-            message=message_text if keeps_content else "",
-            token_count=user_token_count,
-            message_type=MessageType.USER,
-            files=(
-                new_msg_req.file_descriptors
-                if keeps_content
-                else content_free_file_descriptors(new_msg_req.file_descriptors)
-            ),
+        return chat_history, None
+    # The hook sends query text and email externally; respect content egress policy.
+    mode = chat_session.incognito_record_mode
+    if message_text.strip() and (mode is None or mode.fires_hooks):
+        hook_result = execute_hook(
             db_session=db_session,
-            commit=True,
+            hook_point=HookPoint.QUERY_PROCESSING,
+            payload=QueryProcessingPayload(
+                query=message_text,
+                # Anonymous and some SSO users have no email.
+                user_email=None if user.is_anonymous else user.email,
+                chat_session_id=str(chat_session.id),
+            ).model_dump(),
+            response_type=QueryProcessingResponse,
         )
-        chat_history.append(user_message)
+        message_text = _resolve_query_processing_hook_result(hook_result, message_text)
 
-    return chat_history, user_message, message_text
-
-
-def _prepare_history(
-    chat_history: list[ChatMessage],
-    chat_session: ChatSession,
-    context_user_files: list[UserFile],
-    extracted_context_files: ExtractedContextFiles,
-    token_counter: Callable[[str], int],
-    tool_id_to_name_map: dict[int, str],
-    db_session: Session,
-    *,
-    accepted_text: str | None,
-    additional_context: str | None,
-) -> tuple[ChatHistoryResult, list[ChatFile], bool]:
-    """Load replayable messages and tool files, retaining references dropped by summaries."""
-    persona = chat_session.persona
-    summary_message = find_summary_for_branch(db_session, chat_history)
-    # Preserve file metadata when summaries replace the messages that attached them.
-    summarized_file_metadata: dict[str, FileToolMetadata] = {}
-    if summary_message and summary_message.last_summarized_message_id:
-        cutoff_id = summary_message.last_summarized_message_id
-        summarized_file_metadata = summarize_file_metadata(
-            [message for message in chat_history if message.id <= cutoff_id]
-        )
-        chat_history = [m for m in chat_history if m.id > cutoff_id]
-
-    skip_clarification = is_last_assistant_message_clarification(chat_history)
-
-    # Keep file bytes lazy until prompt preparation or a tool needs them.
-    files = load_all_chat_files(chat_history, db_session)
-    chat_files_for_tools = _convert_loaded_files_to_chat_files(files)
-    chat_files_for_tools.extend(
-        _load_context_user_files_for_tools(
-            context_user_files,
-            {chat_file.filename for chat_file in chat_files_for_tools},
-        )
-    )
-
-    # Detach history from ORM objects before agent execution.
-    has_file_reader_tool = any(
-        tool.in_code_tool_id == FILE_READER_TOOL_ID for tool in persona.tools
-    )
-
-    chat_history_result = convert_chat_history(
-        chat_history=chat_history,
-        files=files,
-        context_image_files=extracted_context_files.image_files,
-        additional_context=additional_context,
-        token_counter=token_counter,
-        tool_id_to_name_map=tool_id_to_name_map,
-    )
-    messages = chat_history_result.messages
-
-    # Restore incognito text from ephemeral storage; database rows contain no content.
-    incognito_mode = chat_session.incognito_record_mode
-    if not record_mode_persists_content(incognito_mode):
-        stored_messages = load_incognito_context(chat_session.id).messages
-        if (
-            accepted_text is not None
-            and messages
-            and isinstance(messages[-1], UserMessage)
-        ):
-            current_user = messages[-1].model_copy(update={"content": accepted_text})
-            messages = stored_messages + [current_user]
-            append_incognito_message(chat_session.id, current_user)
-        else:
-            messages = stored_messages
-
-    # FileReaderTool needs metadata for files whose text no longer fits the prompt.
-    all_injected_file_metadata: dict[str, FileToolMetadata] = (
-        chat_history_result.all_injected_file_metadata if has_file_reader_tool else {}
-    )
-
-    # Include files whose source messages were replaced by a summary.
-    if summarized_file_metadata:
-        for fid, meta in summarized_file_metadata.items():
-            all_injected_file_metadata.setdefault(fid, meta)
-
-    if all_injected_file_metadata:
-        logger.debug(
-            "FileReader: file metadata for model: %s",
-            [(fid, m.filename) for fid, m in all_injected_file_metadata.items()],
-        )
-
-    if summary_message is not None:
-        summary_simple = AssistantMessage(
-            content=[TextContent(text=summary_message.message)],
-            metadata=PromptMetadata(token_count=summary_message.token_count),
-        )
-        messages.insert(0, summary_simple)
-
-    return (
-        ChatHistoryResult(
-            messages=messages, all_injected_file_metadata=all_injected_file_metadata
+    # Use one tokenizer for stored counts, including after model switches.
+    default_tokenizer = get_tokenizer(None, None)
+    user_token_count = len(default_tokenizer.encode(message_text))
+    # Incognito persists structure and token counts; text stays in the ephemeral store.
+    keeps_content = record_mode_persists_content(mode)
+    user_message = create_new_chat_message(
+        chat_session_id=chat_session.id,
+        parent_message=parent_message,
+        message=message_text if keeps_content else "",
+        token_count=user_token_count,
+        message_type=MessageType.USER,
+        files=(
+            new_msg_req.file_descriptors
+            if keeps_content
+            else content_free_file_descriptors(new_msg_req.file_descriptors)
         ),
-        chat_files_for_tools,
-        skip_clarification,
+        db_session=db_session,
+        commit=True,
     )
+    chat_history.append(user_message)
+
+    return chat_history, message_text
 
 
-def prepare_chat_turn(
-    new_msg_req: SendMessageRequest,
+class _ChatPreparation(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    session_id: UUID
+    project_id: int | None
+    incognito_record_mode: IncognitoRecordMode | None
+    persona_id: int
+    persona: PersonaPromptConfig
+    base_system_prompt: str
+    tool_configuration: PersonaToolConfiguration
+    research_tool_id: int | None
+    selected_models: list[tuple[LLM, str]]
+    history: list[ChatHistoryMessage]
+    file_inputs: list[ChatFileInput]
+    context_user_files: list[UserFileMetadata]
+    available_files: AvailableFiles
+    user_message_id: int
+    accepted_text: str | None
+    user_memory_context: UserMemoryContext
+    custom_agent_prompt: str | None
+    reserved_token_count: int
+    reasoning_effort: ReasoningEffort
+    forced_tool_id: int | None
+    search_tool_id: int | None
+    summary: AssistantMessage | None
+    summarized_file_metadata: dict[str, FileToolMetadata]
+    skip_clarification: bool
+
+
+def _prepare_chat_data(
+    request: SendMessageRequest,
     user: User,
     db_session: Session,
-    # None → single-model (persona default LLM); non-empty list → multi-model (one LLM per override)
     llm_overrides: list[LLMOverride] | None,
-    *,
-    litellm_additional_headers: dict[str, str] | None = None,
-    custom_tool_additional_headers: dict[str, str] | None = None,
-    mcp_headers: dict[str, str] | None = None,
-    bypass_acl: bool = False,
-    slack_context: SlackContext | None = None,
-    # External conversation context enters the prompt without being persisted.
-    additional_context: str | None = None,
-) -> ChatTurnSetup:
-    """Prepare messages, files, scalar persona settings, and response IDs for execution."""
-    chat_session = _load_session(new_msg_req, user, db_session, bypass_acl=bypass_acl)
+    litellm_additional_headers: dict[str, str] | None,
+    bypass_acl: bool,
+) -> _ChatPreparation:
+    chat_session = _load_session(request, user, db_session, bypass_acl=bypass_acl)
     persona = chat_session.persona
-    is_multi = bool(llm_overrides)
-    initial_packets: list[AnswerStreamPart] = []
-    if new_msg_req.chat_session_id is None:
-        initial_packets.append(
-            CreateChatSessionID(
-                chat_session_id=chat_session.id,
-                incognito=chat_session.incognito_record_mode is not None,
-            )
-        )
-    user_identity = LLMUserIdentity(
-        user_id="anonymous_user" if user.is_anonymous else user.email or str(user.id),
-        session_id=str(chat_session.id),
-    )
-
     selected_models = _select_models(
-        new_msg_req,
+        request,
         chat_session,
         user,
         llm_overrides,
@@ -394,109 +321,229 @@ def prepare_chat_turn(
         db_session,
     )
     token_counter = get_llm_token_counter(selected_models[0][0])
-    chat_history, user_message, accepted_text = _accept_message(
-        new_msg_req, chat_session, user, db_session
+    chat_history, accepted_text = _accept_message(
+        request, chat_session, user, db_session
     )
-
-    # Keep summarized attachments accessible to FileReaderTool.
-    context_user_files = resolve_context_user_files(
-        persona=persona,
-        project_id=chat_session.project_id,
-        user_id=user.id,
+    user_message_id = chat_history[-1].id
+    context_user_files = [
+        UserFileMetadata.model_validate(file)
+        for file in resolve_context_user_files(
+            persona, chat_session.project_id, user.id, db_session
+        )
+    ]
+    available_files = _collect_available_file_ids(chat_history, context_user_files)
+    memory = get_memories(user, db_session)
+    custom_prompt = get_custom_agent_prompt(persona, chat_session)
+    base_system_prompt = get_default_base_system_prompt(db_session)
+    reserved_tokens = calculate_reserved_tokens(
         db_session=db_session,
-    )
-    available_files = _collect_available_file_ids(
-        chat_history=chat_history, context_user_files=context_user_files
-    )
-
-    user_memory_context = get_memories(user, db_session)
-
-    # Read stored agent/project instructions before calculating the prompt budget.
-    custom_agent_prompt = get_custom_agent_prompt(persona, chat_session)
-
-    # Hide disabled memories from the prompt while retaining context for memory writes.
-    prompt_memory_context = (
-        user_memory_context
-        if user.use_memories
-        else user_memory_context.without_memories()
-    )
-
-    # Count substituted instructions so long directory values fit the reserved budget.
-    max_reserved_system_prompt_tokens_str = substitute_user_placeholders(
-        (persona.system_prompt or "") + (custom_agent_prompt or ""),
-        user_memory_context.user_info.placeholder_values,
-    )
-    reserved_token_count = calculate_reserved_tokens(
-        db_session=db_session,
-        persona_system_prompt=max_reserved_system_prompt_tokens_str,
+        persona_system_prompt=substitute_user_placeholders(
+            (persona.system_prompt or "") + (custom_prompt or ""),
+            memory.user_info.placeholder_values,
+        ),
         token_counter=token_counter,
-        files=new_msg_req.file_descriptors,
-        user_memory_context=prompt_memory_context,
+        files=request.file_descriptors,
+        user_memory_context=memory if user.use_memories else memory.without_memories(),
+        base_system_prompt=base_system_prompt,
     )
-
-    # Use the smallest context window across models for safety (harmless for N=1).
-    llm_max_context_window = min(
-        llm.info.max_input_tokens for llm, _ in selected_models
+    tools = get_tools(db_session)
+    research_tool_id = next(
+        (
+            tool.id
+            for tool in tools
+            if tool.in_code_tool_id == RESEARCH_AGENT_IN_CODE_ID
+        ),
+        None,
     )
-
-    extracted_context_files = extract_context_files(
-        user_files=context_user_files,
-        llm_max_context_window=llm_max_context_window,
-        reserved_token_count=reserved_token_count,
-        db_session=db_session,
-    )
-
-    search_params = determine_search_params(
-        persona_id=persona.id,
+    if request.deep_research and research_tool_id is None:
+        raise ValueError("Research tool configuration is missing")
+    tool_names = {tool.id: tool.name for tool in tools}
+    forced_tool_id = request.forced_tool_id
+    if forced_tool_id in {tool.id for tool in tools if not tool.enabled}:
+        forced_tool_id = None
+    summary_message = find_summary_for_branch(db_session, chat_history)
+    summarized_file_metadata: dict[str, FileToolMetadata] = {}
+    if summary_message and summary_message.last_summarized_message_id:
+        cutoff = summary_message.last_summarized_message_id
+        summarized_file_metadata = summarize_file_metadata(
+            [message for message in chat_history if message.id <= cutoff]
+        )
+        chat_history = [message for message in chat_history if message.id > cutoff]
+    descriptors = {
+        descriptor["id"]: descriptor
+        for message in chat_history
+        for descriptor in message.files or []
+    }
+    return _ChatPreparation(
+        session_id=chat_session.id,
         project_id=chat_session.project_id,
-        extracted_context_files=extracted_context_files,
+        incognito_record_mode=chat_session.incognito_record_mode,
+        persona_id=persona.id,
+        persona=PersonaPromptConfig(
+            system_prompt=persona.system_prompt,
+            task_prompt=persona.task_prompt,
+            datetime_aware=persona.datetime_aware,
+            replace_base_system_prompt=persona.replace_base_system_prompt,
+        ),
+        base_system_prompt=base_system_prompt,
+        tool_configuration=capture_persona_tool_configuration(persona),
+        research_tool_id=research_tool_id,
+        selected_models=selected_models,
+        history=capture_chat_history(chat_history, tool_names, token_counter),
+        file_inputs=prepare_chat_file_inputs(list(descriptors.values()), db_session),
+        context_user_files=context_user_files,
+        available_files=available_files,
+        user_message_id=user_message_id,
+        accepted_text=accepted_text,
+        user_memory_context=memory,
+        custom_agent_prompt=custom_prompt,
+        reserved_token_count=reserved_tokens,
+        reasoning_effort=chat_session.reasoning_effort_override or ReasoningEffort.AUTO,
+        forced_tool_id=forced_tool_id,
+        search_tool_id=next(
+            (tool.id for tool in tools if tool.in_code_tool_id == SEARCH_TOOL_ID), None
+        ),
+        summary=AssistantMessage(
+            content=[TextContent(text=summary_message.message)],
+            metadata=PromptMetadata(token_count=summary_message.token_count),
+        )
+        if summary_message
+        else None,
+        summarized_file_metadata=summarized_file_metadata,
+        skip_clarification=is_last_assistant_message_clarification(chat_history),
     )
 
-    all_tools = get_tools(db_session)
-    tool_id_to_name_map = {tool.id: tool.name for tool in all_tools}
 
-    search_tool_id = next(
-        (tool.id for tool in all_tools if tool.in_code_tool_id == SEARCH_TOOL_ID), None
+class _PreparedHistory(BaseModel):
+    history: ChatHistoryResult
+    files: list[ChatFile]
+
+
+def _prepare_history(
+    prepared: _ChatPreparation,
+    extracted_context_files: ExtractedContextFiles,
+    token_counter: Callable[[str], int],
+    additional_context: str | None,
+) -> _PreparedHistory:
+    files = load_chat_files(prepared.file_inputs)
+    tool_files = _convert_loaded_files_to_chat_files(files)
+    tool_files.extend(
+        _load_context_user_files_for_tools(
+            prepared.context_user_files, {file.filename for file in tool_files}
+        )
+    )
+    history = convert_chat_history(
+        chat_history=prepared.history,
+        files=files,
+        context_image_files=extracted_context_files.image_files,
+        additional_context=additional_context,
+        token_counter=token_counter,
+    )
+    messages = history.messages
+    if not record_mode_persists_content(prepared.incognito_record_mode):
+        stored_messages = load_incognito_context(prepared.session_id).messages
+        if (
+            prepared.accepted_text is not None
+            and messages
+            and isinstance(messages[-1], UserMessage)
+        ):
+            current_user = messages[-1].model_copy(
+                update={"content": prepared.accepted_text}
+            )
+            messages = stored_messages + [current_user]
+            append_incognito_message(prepared.session_id, current_user)
+        else:
+            messages = stored_messages
+    file_metadata = (
+        history.all_injected_file_metadata
+        if any(
+            tool.in_code_tool_id == FILE_READER_TOOL_ID
+            for tool in prepared.tool_configuration.tools
+        )
+        else {}
+    )
+    for file_id, metadata in prepared.summarized_file_metadata.items():
+        file_metadata.setdefault(file_id, metadata)
+    if prepared.summary:
+        messages.insert(0, prepared.summary)
+    return _PreparedHistory(
+        history=ChatHistoryResult(
+            messages=messages, all_injected_file_metadata=file_metadata
+        ),
+        files=tool_files,
     )
 
-    forced_tool_id = new_msg_req.forced_tool_id
+
+def prepare_chat_turn(
+    new_msg_req: SendMessageRequest,
+    user: User,
+    llm_overrides: list[LLMOverride] | None,
+    *,
+    litellm_additional_headers: dict[str, str] | None = None,
+    custom_tool_additional_headers: dict[str, str] | None = None,
+    mcp_headers: dict[str, str] | None = None,
+    bypass_acl: bool = False,
+    slack_context: SlackContext | None = None,
+    additional_context: str | None = None,
+) -> ChatTurnSetup:
+    """Capture configuration, load files, then reserve responses before execution."""
+    with get_session_with_current_tenant() as session:
+        prepared = _prepare_chat_data(
+            new_msg_req,
+            user,
+            session,
+            llm_overrides,
+            litellm_additional_headers,
+            bypass_acl,
+        )
+    token_counter = get_llm_token_counter(prepared.selected_models[0][0])
+    extracted_files = extract_context_files(
+        user_files=prepared.context_user_files,
+        llm_max_context_window=min(
+            llm.info.max_input_tokens for llm, _ in prepared.selected_models
+        ),
+        reserved_token_count=prepared.reserved_token_count,
+    )
+    search_params = determine_search_params(
+        prepared.persona_id, prepared.project_id, extracted_files
+    )
+    forced_tool_id = prepared.forced_tool_id
     if (
         search_params.search_usage == SearchToolUsage.DISABLED
-        and forced_tool_id is not None
-        and search_tool_id is not None
-        and forced_tool_id == search_tool_id
+        and forced_tool_id == prepared.search_tool_id
     ):
         forced_tool_id = None
-
-    # Resolve forced tools against enabled tools; disabled tools can remain attached to personas.
-    if forced_tool_id in {tool.id for tool in all_tools if not tool.enabled}:
-        forced_tool_id = None
-
-    history, chat_files_for_tools, skip_clarification = _prepare_history(
-        chat_history,
-        chat_session,
-        context_user_files,
-        extracted_context_files,
+    history = _prepare_history(
+        prepared,
+        extracted_files,
         token_counter,
-        tool_id_to_name_map,
-        db_session,
-        accepted_text=accepted_text,
-        additional_context=additional_context or new_msg_req.additional_context,
+        additional_context or new_msg_req.additional_context,
     )
-
-    response_ids = reserve_chat_response_ids(
-        db_session=db_session,
-        chat_session_id=chat_session.id,
-        parent_message_id=user_message.id,
-        model_display_names=[name for _, name in selected_models],
-    )
+    with get_session_with_current_tenant() as session:
+        response_ids = reserve_chat_response_ids(
+            db_session=session,
+            chat_session_id=prepared.session_id,
+            parent_message_id=prepared.user_message_id,
+            model_display_names=[name for _, name in prepared.selected_models],
+        )
     models = [
-        PreparedModel(llm=llm, display_name=name, message_id=message_id)
-        for (llm, name), message_id in zip(selected_models, response_ids, strict=True)
+        PreparedResponse(llm=llm, display_name=name, message_id=message_id)
+        for (llm, name), message_id in zip(
+            prepared.selected_models, response_ids, strict=True
+        )
     ]
+    initial_packets: list[AnswerStreamPart] = []
+    if new_msg_req.chat_session_id is None:
+        initial_packets.append(
+            CreateChatSessionID(
+                chat_session_id=prepared.session_id,
+                incognito=prepared.incognito_record_mode is not None,
+            )
+        )
+    is_multi = bool(llm_overrides)
     initial_packets.append(
         MultiModelMessageResponseIDInfo(
-            user_message_id=user_message.id,
+            user_message_id=prepared.user_message_id,
             responses=[
                 ModelResponseSlot(
                     message_id=model.message_id, model_name=model.display_name
@@ -506,47 +553,52 @@ def prepare_chat_turn(
         )
         if is_multi
         else MessageResponseIDInfo(
-            user_message_id=user_message.id,
+            user_message_id=prepared.user_message_id,
             reserved_assistant_message_id=models[0].message_id,
         )
     )
-    processing_run_id = user_message.id if is_multi else models[0].message_id
-
-    cache = get_cache_backend()
-
-    # Finish database preparation before model execution starts.
-    db_session.commit()
-
     return ChatTurnSetup(
         initial_packets=initial_packets,
         new_msg_req=new_msg_req,
-        chat_session_id=chat_session.id,
-        chat_session_project_id=chat_session.project_id,
-        incognito_record_mode=chat_session.incognito_record_mode,
-        persona_id=persona.id,
-        persona=PersonaPromptConfig(
-            system_prompt=persona.system_prompt,
-            task_prompt=persona.task_prompt,
-            datetime_aware=persona.datetime_aware,
-            replace_base_system_prompt=persona.replace_base_system_prompt,
+        chat_session_id=prepared.session_id,
+        chat_session_project_id=prepared.project_id,
+        incognito_record_mode=prepared.incognito_record_mode,
+        persona_id=prepared.persona_id,
+        persona=prepared.persona,
+        base_system_prompt=prepared.base_system_prompt,
+        tool_configuration=prepared.tool_configuration,
+        research_tool_id=prepared.research_tool_id,
+        checkpoint=next(
+            (
+                message.checkpoint
+                for message in reversed(prepared.history)
+                if message.checkpoint is not None
+            ),
+            None,
         ),
-        user_message_id=user_message.id,
-        user_identity=user_identity,
-        models=models,
-        messages=history.messages,
-        extracted_context_files=extracted_context_files,
-        processing_run_id=processing_run_id,
-        reserved_token_count=reserved_token_count,
-        reasoning_effort=chat_session.reasoning_effort_override or ReasoningEffort.AUTO,
+        user_message_id=prepared.user_message_id,
+        user_identity=LLMUserIdentity(
+            user_id="anonymous_user"
+            if user.is_anonymous
+            else user.email or str(user.id),
+            session_id=str(prepared.session_id),
+        ),
+        responses=models,
+        messages=history.history.messages[:-1],
+        input_messages=history.history.messages[-1:],
+        extracted_context_files=extracted_files,
+        processing_key=prepared.user_message_id if is_multi else models[0].message_id,
+        reserved_token_count=prepared.reserved_token_count,
+        reasoning_effort=prepared.reasoning_effort,
         search_params=search_params,
-        all_injected_file_metadata=history.all_injected_file_metadata,
-        available_files=available_files,
+        all_injected_file_metadata=history.history.all_injected_file_metadata,
+        available_files=prepared.available_files,
         forced_tool_id=forced_tool_id,
-        chat_files_for_tools=chat_files_for_tools,
-        custom_agent_prompt=custom_agent_prompt,
-        user_memory_context=user_memory_context,
-        skip_clarification=skip_clarification,
-        cache=cache,
+        chat_files_for_tools=history.files,
+        custom_agent_prompt=prepared.custom_agent_prompt,
+        user_memory_context=prepared.user_memory_context,
+        skip_clarification=prepared.skip_clarification,
+        cache=get_cache_backend(),
         bypass_acl=bypass_acl,
         slack_context=slack_context,
         custom_tool_additional_headers=custom_tool_additional_headers,

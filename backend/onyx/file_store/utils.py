@@ -12,7 +12,12 @@ from onyx.configs.constants import CHAT_SESSION_ID_FILE_METADATA_KEY, FileOrigin
 from onyx.db.models import UserFile
 from onyx.db.user_file import get_user_file_by_id
 from onyx.file_store.file_store import get_default_file_store
-from onyx.file_store.models import ChatFileType, FileDescriptor, InMemoryChatFile
+from onyx.file_store.models import (
+    ChatFileType,
+    FileDescriptor,
+    InMemoryChatFile,
+    UserFileMetadata,
+)
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.utils.b64 import get_image_type
 from onyx.utils.logger import setup_logger
@@ -88,13 +93,9 @@ def load_chat_file_by_id(file_id: str) -> InMemoryChatFile:
     )
 
 
-def load_user_file(file_id: UUID, db_session: Session) -> InMemoryChatFile:
+def load_user_file_content(user_file: UserFileMetadata) -> InMemoryChatFile:
+    """Read file content from captured metadata without sharing a database session."""
     status = "not_loaded"
-
-    user_file = get_user_file_by_id(file_id, db_session)
-    if not user_file:
-        raise ValueError(f"User file with id {file_id} not found")
-
     # Get the file record to determine the appropriate chat file type
     file_store = get_default_file_store()
     file_record = file_store.read_file_record(user_file.file_id)
@@ -103,7 +104,7 @@ def load_user_file(file_id: UUID, db_session: Session) -> InMemoryChatFile:
     chat_file_type = mime_type_to_chat_file_type(file_record.file_type)
 
     # Try to load plaintext version first
-    plaintext_file_name = user_file_id_to_plaintext_file_name(file_id)
+    plaintext_file_name = user_file_id_to_plaintext_file_name(user_file.id)
 
     # check for plain text normalized version first, then use original file otherwise
     try:
@@ -155,7 +156,7 @@ def load_user_file(file_id: UUID, db_session: Session) -> InMemoryChatFile:
         return chat_file
     finally:
         logger.debug(
-            "load_user_file finished: file_id=%s chat_file_type=%s status=%s",
+            "load_user_file_content finished: file_id=%s chat_file_type=%s status=%s",
             user_file.file_id,
             chat_file_type,
             status,
@@ -163,27 +164,13 @@ def load_user_file(file_id: UUID, db_session: Session) -> InMemoryChatFile:
 
 
 def load_in_memory_chat_files(
-    user_file_ids: list[UUID],
-    db_session: Session,
+    user_files: list[UserFileMetadata],
 ) -> list[InMemoryChatFile]:
-    """
-    Loads the actual content of user files specified by individual IDs and those
-    within specified project IDs into memory.
-
-    Args:
-        user_file_ids: A list of specific UserFile IDs to load.
-        db_session: The SQLAlchemy database session.
-
-    Returns:
-        A list of InMemoryChatFile objects, each containing the file content (as bytes),
-        file ID, file type, and filename. Prioritizes loading plaintext versions if available.
-    """
-    # Use parallel execution to load files concurrently
+    # The shared parallel helper erases each callable's return type.
     return cast(
         list[InMemoryChatFile],
         run_functions_tuples_in_parallel(
-            # 1. Load files specified by individual IDs
-            [(load_user_file, (file_id, db_session)) for file_id in user_file_ids]
+            [(load_user_file_content, (file,)) for file in user_files]
         ),
     )
 

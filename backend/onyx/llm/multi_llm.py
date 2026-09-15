@@ -1,14 +1,16 @@
 import copy
 import math
+import os
 import threading
 import time
 from collections.abc import Generator, Iterable, Iterator, Mapping
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from functools import lru_cache
 from typing import TYPE_CHECKING, cast
 from uuid import uuid4
 
 from pydantic import BaseModel, JsonValue, TypeAdapter
+from readerwriterlock import rwlock
 
 from onyx.configs.app_configs import (
     MOCK_LLM_RESPONSE,
@@ -44,7 +46,7 @@ from onyx.llm.custom_config_mapping import (
     UI_ONLY_CONFIG_KEYS,
     map_custom_config_to_model_kwargs,
 )
-from onyx.llm.exceptions import LLMRateLimitError, LLMTimeoutError
+from onyx.llm.exceptions import LLMContextLimitError, LLMRateLimitError, LLMTimeoutError
 from onyx.llm.interfaces import (
     LLM,
     GenerationContext,
@@ -114,6 +116,7 @@ from onyx.tracing.llm_utils import (
     record_llm_request_params,
     record_llm_span_output,
 )
+from onyx.utils.encryption import mask_env_value_for_logging
 from onyx.utils.logger import setup_logger
 from onyx.utils.redaction import scrub_sensitive_values
 
@@ -154,6 +157,12 @@ class ProviderOperation(BaseModel):
 
 
 logger = setup_logger()
+
+# Write-preferring reader-writer lock guarding os.environ during litellm calls.
+# Calls that inject custom_config env vars hold the write lock; all other calls
+# hold a read lock so they never observe injected secrets but still run
+# concurrently with each other.
+_env_rwlock = rwlock.RWLockWrite()
 
 if TYPE_CHECKING:
     from litellm import CustomStreamWrapper, HTTPHandler
@@ -295,11 +304,13 @@ def _generation_scope(context: GenerationContext) -> Iterator[CancellationSignal
 
 @contextmanager
 def _provider_scope(context: GenerationContext) -> Iterator[CancellationSignal]:
-    from litellm.exceptions import RateLimitError, Timeout
+    from litellm.exceptions import ContextWindowExceededError, RateLimitError, Timeout
 
     try:
         with _generation_scope(context) as signal:
             yield signal
+    except ContextWindowExceededError as error:
+        raise LLMContextLimitError("Model input exceeds its context limit") from error
     except Timeout as error:
         raise LLMTimeoutError(str(error)) from error
     except RateLimitError as error:
@@ -543,6 +554,25 @@ def _is_vertex_model_rejecting_stream_options(model_name: str) -> bool:
     )
 
 
+def _env_injection_enabled() -> bool:
+    # Deferred import: the security store pulls in the DB layer, which this
+    # module must not import at module load.
+    from onyx.server.security.store import llm_custom_config_env_injection_enabled
+
+    return llm_custom_config_env_injection_enabled()
+
+
+def _warn_dropped_env_only_keys(
+    model_provider: str, dropped_keys: tuple[str, ...]
+) -> None:
+    logger.warning(
+        "Dropping custom_config key(s) with no LiteLLM kwarg equivalent for "
+        "provider %s (env injection is disabled on this deployment): %s",
+        model_provider,
+        list(dropped_keys),
+    )
+
+
 class LitellmTransport:
     """Own provider configuration, requests, retries, cost tracking, and cleanup."""
 
@@ -598,17 +628,16 @@ class LitellmTransport:
             api_base=api_base,
         )
         model_kwargs.update(custom_config_mapping.model_kwargs)
-        unsupported = (
-            set(custom_config or {})
-            - custom_config_mapping.consumed_keys
-            - UI_ONLY_CONFIG_KEYS
-        )
-        if unsupported:
-            raise ValueError(
-                "Unsupported request-scoped provider settings: "
-                + ", ".join(sorted(unsupported))
-                + ". Configure environment-only settings in the deployment."
-            )
+        # Keys with no LiteLLM kwarg equivalent. Injected into os.environ during
+        # the call on deployments that allow it; dropped (with a warning at call
+        # time) otherwise. UI-only form-state keys are neither injected nor
+        # warned about.
+        self._env_only_custom_config: dict[str, str] = {
+            k: v
+            for k, v in (custom_config or {}).items()
+            if k not in custom_config_mapping.consumed_keys
+            and k not in UI_ONLY_CONFIG_KEYS
+        }
 
         # LM Studio: LiteLLM defaults to "fake-api-key" when no key is provided,
         # which LM Studio rejects. Ensure we always pass an explicit key (or empty
@@ -1158,6 +1187,12 @@ class LitellmTransport:
                 else:
                     optional_kwargs["tool_choice"] = tool_choice
 
+            if not _env_injection_enabled() and self._env_only_custom_config:
+                _warn_dropped_env_only_keys(
+                    self._model_provider,
+                    tuple(sorted(self._env_only_custom_config)),
+                )
+
             def _call_litellm(
                 opts: dict[str, JsonValue],
             ) -> "LiteLLMModelResponse | CustomStreamWrapper | CancellableStream":
@@ -1175,20 +1210,29 @@ class LitellmTransport:
                     **opts,
                     **passthrough_kwargs,
                 )
-                signal = current_cancellation()
-                if stream and signal is not None:
-                    return CancellableStream(
-                        kwargs,
-                        signal,
-                        timeout=timeout_override or self._timeout,
-                        isolated_client=self._uses_isolated_client()
-                        or self._api_surface is LlmApiSurface.OPENAI_RESPONSES,
-                    )
-                # LiteLLM's overloads do not express the stream flag's return type.
-                return cast(
-                    "LiteLLMModelResponse | CustomStreamWrapper",
-                    litellm.completion(**kwargs, client=client),
+                # Injection disabled means no env writer exists anywhere in
+                # the process, so skip the rwlock entirely. Built per attempt
+                # because the context manager is single-use.
+                env_ctx: AbstractContextManager[None] = (
+                    temporary_env_and_lock(self._env_only_custom_config)
+                    if _env_injection_enabled()
+                    else nullcontext()
                 )
+                with env_ctx:
+                    signal = current_cancellation()
+                    if stream and signal is not None:
+                        return CancellableStream(
+                            kwargs,
+                            signal,
+                            timeout=timeout_override or self._timeout,
+                            isolated_client=self._uses_isolated_client()
+                            or self._api_surface is LlmApiSurface.OPENAI_RESPONSES,
+                        )
+                    # LiteLLM's overloads do not express the stream flag's return type.
+                    return cast(
+                        "LiteLLMModelResponse | CustomStreamWrapper",
+                        litellm.completion(**kwargs, client=client),
+                    )
 
             # Provider 400s degrade to provider defaults with a warning instead
             # of failing the message, or learn the "none" a provider demands.
@@ -1335,7 +1379,12 @@ class LitellmTransport:
             client = HTTPHandler(timeout=read_timeout)
 
         try:
-            # Use one streaming transport for complete and incremental responses.
+            # When env-only custom_config keys are injected (self-hosted
+            # deployments only), they are set under a global lock. Using
+            # stream=True here means the lock is only held during connection
+            # setup (not the full inference). The chunks are then collected
+            # outside the lock and reassembled into a single ModelResponse
+            # via stream_chunk_builder.
             from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
             from litellm import stream_chunk_builder
 
@@ -1630,3 +1679,50 @@ class LitellmLLM(LLM):
                     usage=message.usage,
                     reasoning=message.thinking,
                 )
+
+
+@contextmanager
+def temporary_env_and_lock(env_variables: dict[str, str]) -> Iterator[None]:
+    """
+    Temporarily sets the environment variables to the given values while holding
+    the exclusive write side of _env_rwlock, so no concurrent LLM call can
+    observe them. Then cleans up the environment and releases the lock.
+
+    Calls without env_variables hold the shared read side instead: they run
+    concurrently with each other and only block while a writer has env vars
+    injected.
+    """
+    if not env_variables:
+        with _env_rwlock.gen_rlock():
+            yield
+        return
+
+    masked_env = {
+        key: mask_env_value_for_logging(key, value)
+        for key, value in env_variables.items()
+    }
+    logger.info(
+        "temporary_env_and_lock setting custom_config env var(s): %s",
+        masked_env,
+    )
+    start_time = time.monotonic()
+    with _env_rwlock.gen_wlock():
+        logger.debug("Acquired env write lock in temporary_env_and_lock")
+        # Store original values (None if key didn't exist)
+        original_values: dict[str, str | None] = {
+            key: os.environ.get(key) for key in env_variables
+        }
+        try:
+            os.environ.update(env_variables)
+            yield
+        finally:
+            for key, original_value in original_values.items():
+                if original_value is None:
+                    os.environ.pop(key, None)  # Remove if it didn't exist before
+                else:
+                    os.environ[key] = original_value  # Restore original value
+
+    logger.info(
+        "temporary_env_and_lock write section took %.3f seconds",
+        time.monotonic() - start_time,
+    )

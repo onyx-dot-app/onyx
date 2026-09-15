@@ -7,20 +7,18 @@ from uuid import UUID
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.chat.chat_state import AvailableFiles
-from onyx.chat.models import SearchParams
+from onyx.chat.models import AvailableFiles, SearchParams
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import DEFAULT_PERSONA_ID, FileOrigin
 from onyx.context.messages import PromptMetadata
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.utils import sandbox_filename_for_document
-from onyx.db.enums import UserFileStatus
 from onyx.db.file_record import FileRecordNotFoundError
 from onyx.db.models import ChatMessage, Persona, UserFile
 from onyx.db.projects import get_user_files_from_project
-from onyx.db.user_file import get_user_file_processing_info
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.models import (
+    ChatFileInput,
     ChatFileType,
     ChatLoadedFile,
     ContextFileMetadata,
@@ -28,6 +26,7 @@ from onyx.file_store.models import (
     FileDescriptor,
     FileToolMetadata,
     InMemoryChatFile,
+    UserFileMetadata,
 )
 from onyx.file_store.utils import (
     get_default_file_store,
@@ -48,7 +47,7 @@ APPROX_CHARS_PER_TOKEN = 4
 
 def _collect_available_file_ids(
     chat_history: list[ChatMessage],
-    context_user_files: list[UserFile],
+    context_user_files: list[UserFileMetadata],
 ) -> AvailableFiles:
     """Collect authorized file IDs, separated by storage type."""
     chat_file_ids: set[UUID] = set()
@@ -99,7 +98,7 @@ def _deduped_filename(filename: str, seen_filenames: set[str], file_id: str) -> 
 
 
 def _load_context_user_files_for_tools(
-    user_files: list[UserFile],
+    user_files: list[UserFileMetadata],
     existing_filenames: set[str],
 ) -> list[ChatFile]:
     """Expose tabular context files to tools with lazy content loading."""
@@ -189,10 +188,9 @@ def _extract_text_from_in_memory_file(f: InMemoryChatFile) -> str | None:
 
 
 def extract_context_files(
-    user_files: list[UserFile],
+    user_files: list[UserFileMetadata],
     llm_max_context_window: int,
     reserved_token_count: int,
-    db_session: Session,
     # Because the tokenizer is a generic tokenizer, the token count may be incorrect.
     # to account for this, the maximum context that is allowed for this function is
     # 60% of the LLM's max context window. The other benefit is that for projects with
@@ -239,8 +237,7 @@ def extract_context_files(
     # Files fit — load them into context
     user_file_map = {uf.file_id: uf for uf in user_files}
     in_memory_files = load_in_memory_chat_files(
-        user_file_ids=[uf.id for uf in user_files],
-        db_session=db_session,
+        user_files=user_files,
     )
 
     file_texts: list[str] = []
@@ -305,7 +302,7 @@ def extract_context_files(
     )
 
 
-def _build_tool_metadata(user_file: UserFile) -> FileToolMetadata:
+def _build_tool_metadata(user_file: UserFileMetadata) -> FileToolMetadata:
     """Use the user-file ID that FileReaderTool accepts."""
     return build_file_context(
         tool_file_id=str(user_file.id),
@@ -481,13 +478,6 @@ def _get_or_extract_plaintext(
     return content_text
 
 
-def load_chat_file(
-    file_descriptor: FileDescriptor, db_session: Session
-) -> ChatLoadedFile:
-    """Load prompt text and keep attachment bytes lazy."""
-    return _load_file_descriptors([file_descriptor], db_session)[0]
-
-
 def _load_chat_file(
     file_descriptor: FileDescriptor, token_count: int, content_pending: bool
 ) -> ChatLoadedFile:
@@ -571,46 +561,19 @@ def _load_chat_file(
 _MAX_PARALLEL_CHAT_FILE_LOADS = 16
 
 
-def load_all_chat_files(
-    chat_messages: list[ChatMessage], db_session: Session
-) -> list[ChatLoadedFile]:
-    """Load each attachment once, keeping database access on the caller's thread."""
-    descriptors = {
-        descriptor["id"]: descriptor
-        for message in chat_messages
-        for descriptor in message.files or []
-    }
-    return _load_file_descriptors(list(descriptors.values()), db_session)
-
-
-def _load_file_descriptors(
-    descriptors: list[FileDescriptor], db_session: Session
-) -> list[ChatLoadedFile]:
-    user_file_ids: list[UUID] = []
-    for descriptor in descriptors:
-        raw_id = descriptor.get("user_file_id")
-        if raw_id:
-            try:
-                user_file_ids.append(UUID(raw_id))
-            except ValueError:
-                logger.warning("Invalid user-file ID: %s", raw_id)
-    metadata = get_user_file_processing_info(user_file_ids, db_session)
-    inputs: list[tuple[FileDescriptor, int, bool]] = []
-    for descriptor in descriptors:
-        tokens, status = metadata.get(
-            descriptor.get("user_file_id", ""), (0, UserFileStatus.COMPLETED)
-        )
-        inputs.append(
-            (
-                descriptor,
-                tokens,
-                status in (UserFileStatus.PROCESSING, UserFileStatus.INDEXING),
-            )
-        )
+def load_chat_files(inputs: list[ChatFileInput]) -> list[ChatLoadedFile]:
+    """Load attachments from metadata without retaining a preparation session."""
+    # The shared parallel helper erases each callable's return type.
     return cast(
         list[ChatLoadedFile],
         run_functions_tuples_in_parallel(
-            [(_load_chat_file, values) for values in inputs],
+            [
+                (
+                    _load_chat_file,
+                    (item.descriptor, item.token_count, item.content_pending),
+                )
+                for item in inputs
+            ],
             max_workers=_MAX_PARALLEL_CHAT_FILE_LOADS,
         ),
     )

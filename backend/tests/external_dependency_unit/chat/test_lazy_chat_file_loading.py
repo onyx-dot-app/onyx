@@ -18,13 +18,14 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.chat.files import load_all_chat_files, load_chat_file
+from onyx.chat.files import load_chat_files
 from onyx.configs.constants import FileOrigin, MessageType
 from onyx.db.chat import (
     create_chat_session,
     create_new_chat_message,
     get_or_create_root_message,
 )
+from onyx.db.user_file import prepare_chat_file_inputs
 from onyx.file_store import file_store as file_store_module
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType, ChatLoadedFile, FileDescriptor
@@ -278,10 +279,12 @@ class TestLoadChatFileLazy:
         file_id = _write_file(b"sentinel-bytes", file_type="image/png")
         file_cleanup.append(file_id)
 
-        loaded = load_chat_file(
-            {"id": file_id, "type": ChatFileType.IMAGE, "name": "icon.png"},
-            db_session,
-        )
+        loaded = load_chat_files(
+            prepare_chat_file_inputs(
+                [{"id": file_id, "type": ChatFileType.IMAGE, "name": "icon.png"}],
+                db_session,
+            )
+        )[0]
 
         # Construction must not have read raw bytes.
         assert read_counter.hits_for(file_id) == 0, (
@@ -308,10 +311,12 @@ class TestLoadChatFileLazy:
         kill the send-message flow."""
         file_id = _write_file(b"doomed-bytes", file_type="image/png")
 
-        loaded = load_chat_file(
-            {"id": file_id, "type": ChatFileType.IMAGE, "name": "gone.png"},
-            db_session,
-        )
+        loaded = load_chat_files(
+            prepare_chat_file_inputs(
+                [{"id": file_id, "type": ChatFileType.IMAGE, "name": "gone.png"}],
+                db_session,
+            )
+        )[0]
 
         # Delete the underlying file after construction but before the lazy
         # bytes read — simulates user-file deletion racing chat history use.
@@ -331,10 +336,12 @@ class TestLoadChatFileLazy:
         file_id = _write_file(b"unreachable-bytes", file_type="image/png")
         file_cleanup.append(file_id)
 
-        loaded = load_chat_file(
-            {"id": file_id, "type": ChatFileType.IMAGE, "name": "flaky.png"},
-            db_session,
-        )
+        loaded = load_chat_files(
+            prepare_chat_file_inputs(
+                [{"id": file_id, "type": ChatFileType.IMAGE, "name": "flaky.png"}],
+                db_session,
+            )
+        )[0]
 
         with patch.object(
             file_store_module.S3BackedFileStore,
@@ -387,7 +394,18 @@ class TestLoadAllChatFilesLazy:
         assert len(chat_history) == 10
 
         baseline = read_counter.count
-        loaded = load_all_chat_files(chat_history, db_session)
+        loaded = load_chat_files(
+            prepare_chat_file_inputs(
+                list(
+                    {
+                        descriptor["id"]: descriptor
+                        for message in chat_history
+                        for descriptor in message.files or []
+                    }.values()
+                ),
+                db_session,
+            )
+        )
         assert len(loaded) == 10
         # No raw byte reads should have occurred during the load itself.
         assert read_counter.count == baseline, (
@@ -398,39 +416,6 @@ class TestLoadAllChatFilesLazy:
         # Touch one file → exactly one read.
         _ = loaded[0].content
         assert read_counter.count == baseline + 1
-
-    def test_max_workers_capped_at_16(self) -> None:
-        """Defense-in-depth: even with 200 files passed in, the thread pool
-        is capped at 16 workers."""
-        from typing import Any, cast
-
-        captured: dict[str, int] = {}
-
-        def _spy(funcs, **kwargs):
-            captured["max_workers"] = kwargs.get("max_workers", -1)
-            return [None] * len(funcs)
-
-        with patch(
-            "onyx.chat.files.run_functions_tuples_in_parallel", side_effect=_spy
-        ):
-            # Synthetic 200-file "message" — we patch the parallel runner so
-            # actual DB/file_store access never happens. Casting through Any
-            # bypasses the ORM type contract that is irrelevant for this
-            # particular invariant check.
-            class _FakeMsg:
-                files = [
-                    {
-                        "id": f"id-{i}",
-                        "type": ChatFileType.PLAIN_TEXT,
-                        "name": f"f-{i}.txt",
-                    }
-                    for i in range(200)
-                ]
-
-            from onyx.chat.files import load_all_chat_files as _llc
-
-            _llc(cast(Any, [_FakeMsg()]), cast(Any, None))
-            assert captured["max_workers"] == 16
 
 
 # ---------------------------------------------------------------------------
@@ -454,10 +439,12 @@ class TestConvertLoadedFilesToChatFilesLazy:
         file_id = _write_file(b"some-bytes", file_type="image/png")
         file_cleanup.append(file_id)
         loaded = [
-            load_chat_file(
-                {"id": file_id, "type": ChatFileType.IMAGE, "name": "x.png"},
-                db_session,
-            )
+            load_chat_files(
+                prepare_chat_file_inputs(
+                    [{"id": file_id, "type": ChatFileType.IMAGE, "name": "x.png"}],
+                    db_session,
+                )
+            )[0]
         ]
 
         baseline = read_counter.count

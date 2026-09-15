@@ -4,6 +4,7 @@ and missing-chunk gaps surfacing as non-replayable instead of broken replays."""
 
 import os
 import zlib
+from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import pytest
@@ -20,7 +21,9 @@ _RUN_ID = 42
 
 
 def _make_writer(cache: FakeCache, session_id: UUID) -> StreamBufferWriter:
-    return StreamBufferWriter(cache=cache, chat_session_id=session_id, run_id=_RUN_ID)
+    return StreamBufferWriter(
+        cache=cache, chat_session_id=session_id, processing_key=_RUN_ID
+    )
 
 
 class _FailingChunkCache(FakeCache):
@@ -215,3 +218,25 @@ def test_corrupt_meta_reads_as_missing_buffer() -> None:
     cache.set(f"chatstream_{session_id}_{_RUN_ID}:meta", b"not json{", ex=600)
 
     assert read_stream_chunks(cache, session_id, _RUN_ID, cursor=0) is None
+
+
+def test_truncation_cache_failure_does_not_prevent_content_free_cleanup(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    cache = FakeCache()
+    writer = StreamBufferWriter(
+        cache=cache,
+        chat_session_id=uuid4(),
+        processing_key=_RUN_ID,
+        delete_on_done=True,
+    )
+    writer.append_line('{"text": "private"}\n')
+    writer.flush()
+    assert cache.store
+
+    with patch.object(cache, "set", side_effect=RuntimeError("cache unavailable")):
+        writer.mark_truncated()
+        writer.mark_done()
+
+    assert not cache.store
+    assert "truncation update failed" in caplog.text

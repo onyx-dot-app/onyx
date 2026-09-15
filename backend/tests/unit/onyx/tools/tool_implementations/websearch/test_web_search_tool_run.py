@@ -5,8 +5,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from onyx.agents.tools import ToolInvocation
+from onyx.llm.cancellation import CancellationSignal
 from onyx.server.query_and_chat.placement import Placement
-from onyx.tools.models import ToolCallException, WebSearchToolOverrideKwargs
+from onyx.tools.interface import ToolContext
+from onyx.tools.models import ToolCallException
 from onyx.tools.tool_implementations.web_search.models import WebSearchResult
 from onyx.tools.tool_implementations.web_search.web_search_tool import (
     WebSearchTool,
@@ -43,16 +46,24 @@ def _make_tool(mock_provider: Any) -> WebSearchTool:
     ):
         mock_session_ctx.return_value.__enter__ = MagicMock(return_value=MagicMock())
         mock_session_ctx.return_value.__exit__ = MagicMock(return_value=False)
-        tool = WebSearchTool(tool_id=1, emitter=MagicMock())
+        tool = WebSearchTool(tool_id=1)
 
     return tool
 
 
 def _run(tool: WebSearchTool, queries: Any) -> list[str]:
     """Call tool.run() and return the list of query strings passed to provider.search."""
-    placement = Placement(turn_index=0, tab_index=0)
-    override_kwargs = WebSearchToolOverrideKwargs(starting_citation_num=1)
-    tool.run(placement=placement, override_kwargs=override_kwargs, queries=queries)
+    Placement(turn_index=0, tab_index=0)
+    tool_context = ToolContext(next_citation_num=1)
+    tool.run(
+        invocation=ToolInvocation(
+            call_id="test",
+            arguments={"queries": queries},
+            cancellation=CancellationSignal(),
+            update=lambda _progress: None,
+        ),
+        context=tool_context,
+    )
     search_mock = cast(MagicMock, tool._provider.search)  # noqa: SLF001
     return [call.args[0] for call in search_mock.call_args_list]
 
@@ -147,14 +158,18 @@ class TestWebSearchToolRunQueryCoercion:
         mock_provider = MagicMock()
         mock_provider.supports_site_filter = False
         tool = _make_tool(mock_provider)
-        placement = Placement(turn_index=0, tab_index=0)
-        override_kwargs = WebSearchToolOverrideKwargs(starting_citation_num=1)
+        Placement(turn_index=0, tab_index=0)
+        tool_context = ToolContext(next_citation_num=1)
 
         with pytest.raises(ToolCallException) as exc_info:
             tool.run(
-                placement=placement,
-                override_kwargs=override_kwargs,
-                queries="   ",
+                invocation=ToolInvocation(
+                    call_id="test",
+                    arguments={"queries": "   "},
+                    cancellation=CancellationSignal(),
+                    update=lambda _progress: None,
+                ),
+                context=tool_context,
             )
 
         assert "No valid" in str(exc_info.value)

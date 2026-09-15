@@ -6468,6 +6468,11 @@
         }
       },
       "networkSafety": {
+        "envInjection": {
+          "description": "Allow custom LLM provider configurations to temporarily set process environment variables during calls. Disable to require all provider settings to have a LiteLLM parameter equivalent.",
+          "multiTenantDescription": "Custom LLM provider configurations can never set process environment variables on multi-tenant deployments.",
+          "title": "LLM Environment Variable Injection"
+        },
         "section": {
           "title": "Network Safety"
         },

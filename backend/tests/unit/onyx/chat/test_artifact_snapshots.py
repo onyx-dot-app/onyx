@@ -1,217 +1,124 @@
-"""Accepted tool artifacts remain available when Stop prevents turn completion."""
+"""Accepted artifacts survive cancellation of their parent or sibling operation."""
 
-import queue
-import threading
-from contextlib import nullcontext
+from queue import Queue
+from threading import Event
 
 import pytest
 
 from onyx.agents.events import AgentEvent
-from onyx.chat.agent import ChatAgent
-from onyx.chat.chat_state import ChatStateContainer
+from onyx.agents.runtime import Agent, AgentContext
+from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.chat.emitter import Emitter
-from onyx.file_store.models import ExtractedContextFiles
+from onyx.chat.presentation import ResponseBinding, attach_response
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
-from onyx.llm.litellm_models import ChatCompletionDeltaToolCall, Delta, FunctionCall
-from onyx.llm.models import ToolResult, ToolResultMessage, UserMessage
-from onyx.tools.models import (
-    PythonExecutionFile,
-    PythonToolRichResponse,
-    ToolCallKickoff,
-)
-from tests.unit.onyx.agents.fakes import EchoTool, ScriptedLLM
+from onyx.llm.models import AssistantMessage, ToolCall, ToolResult
+from onyx.tools.models import PythonExecutionFile, PythonToolRichResponse
+from onyx.utils.threadpool_concurrency import ContextThreadPoolExecutor
+from tests.unit.onyx.agents.fakes import FakeModelClient
 
 
+@pytest.mark.parametrize("child_run", [False, True])
 @pytest.mark.parametrize("render", [False, True])
-@pytest.mark.parametrize("blocked_sibling", [False, True])
-def test_stop_preserves_accepted_file_artifact(
-    monkeypatch: pytest.MonkeyPatch, render: bool, blocked_sibling: bool
+def test_stop_preserves_accepted_file_and_unfinished_parent(
+    child_run: bool, render: bool
 ) -> None:
-    monkeypatch.setattr(
-        "onyx.chat.agent.get_session_with_current_tenant", lambda: nullcontext(None)
-    )
-    monkeypatch.setattr("onyx.chat.agent.get_default_base_system_prompt", lambda _: "")
+    accepted = Event()
+    release = Event()
     generated = PythonExecutionFile(
         filename="result.csv", file_link="/files/result.csv"
     )
-    calls = 0
-    sibling_started = threading.Event()
-    release_sibling = threading.Event()
 
-    def execute(**_kwargs: object) -> ToolResult:
-        nonlocal calls
-        call = _kwargs["tool_call"]
-        assert isinstance(call, ToolCallKickoff)
-        if call.tool_call_id == "pending":
-            sibling_started.set()
-            assert release_sibling.wait(5)
-            raise AgentCancelled()
-        if blocked_sibling:
-            assert sibling_started.wait(5)
-        calls += 1
+    def write(_invocation: ToolInvocation) -> ToolResult:
         return ToolResult(
             content="Created result.csv",
             details=PythonToolRichResponse(generated_files=[generated]),
         )
 
-    monkeypatch.setattr("onyx.chat.agent.run_tool_call", execute)
-    llm = ScriptedLLM(
-        [
-            Delta(
-                tool_calls=[
-                    ChatCompletionDeltaToolCall(
-                        id="file",
-                        index=0,
-                        function=FunctionCall(
-                            name="echo", arguments='{"value":"create file"}'
-                        ),
-                    ),
-                    *(
-                        [
-                            ChatCompletionDeltaToolCall(
-                                id="pending",
-                                index=1,
-                                function=FunctionCall(
-                                    name="echo", arguments='{"value":"wait"}'
-                                ),
-                            )
-                        ]
-                        if blocked_sibling
-                        else []
-                    ),
+    def wait(invocation: ToolInvocation) -> ToolResult:
+        assert release.wait(5)
+        invocation.cancellation.check()
+        return ToolResult(content="Finished waiting")
+
+    worker = Agent(
+        FakeModelClient(
+            lambda _request, _signal: AssistantMessage(
+                content=[
+                    ToolCall(id="file", name="write", arguments={}),
+                    ToolCall(id="pending", name="wait", arguments={}),
                 ]
-            ),
-        ]
-    )
-    emitter = Emitter(queue.Queue())
-    state = ChatStateContainer()
-    agent = ChatAgent(
-        emitter if render else None,
-        state,
-        [UserMessage(content="Create a file")],
-        [EchoTool(emitter)],
-        None,
-        ExtractedContextFiles(
-            file_texts=[],
-            image_files=[],
-            use_as_search_filter=False,
-            total_token_count=0,
-            file_metadata=[],
-            uncapped_token_count=None,
+            )
         ),
-        None,
-        None,
-        llm,
-        len,
+        context=AgentContext(
+            tools=[
+                AgentTool(name="write", description="", parameters={}, execute=write),
+                AgentTool(name="wait", description="", parameters={}, execute=wait),
+            ]
+        ),
     )
-    signal = CancellationSignal()
 
-    def stop_after_result(event: AgentEvent) -> None:
-        if event.type == "tool_end":
-            signal.cancel()
+    def on_event(event: AgentEvent) -> None:
+        if event.type == "tool_end" and event.tool_call.id == "file":
+            accepted.set()
 
-    agent.subscribe(stop_after_result)
-    try:
-        with pytest.raises(AgentCancelled):
-            agent.run(max_turns=2, cancellation=signal)
-    finally:
-        release_sibling.set()
+    worker.subscribe(on_event)
+    if child_run:
 
-    for _ in range(2):
-        snapshot = state.snapshot(cancelled=True)
-        assert snapshot.transcript is not None
-        result = next(
-            message
-            for message in snapshot.transcript.messages
-            if isinstance(message, ToolResultMessage) and message.tool_call_id == "file"
-        )
-        assert result.text == "Created result.csv"
-        assert result.details is None
-        assert len(snapshot.tool_calls) == 1 + int(blocked_sibling)
-        assert snapshot.tool_calls[0].generated_files == [generated]
-        assert snapshot.tool_calls[0].tool_call_response == result.text
-        # Mutating a projection cannot affect accepted results or later snapshots.
-        snapshot.tool_calls[0].generated_files = []
-    assert calls == 1
+        async def research(invocation: ToolInvocation) -> ToolResult:
+            result = await invocation.run_child(worker, max_steps=1)
+            return ToolResult(content=result.output.text)
 
-
-def test_stop_preserves_accepted_research_child_artifacts(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    import time
-
-    from onyx.deep_research.agent import DeepResearchAgent
-    from onyx.deep_research.models import ResearchAgentCallResult
-    from onyx.deep_research.tool_definitions import RESEARCH_AGENT_TOOL_NAME
-    from onyx.llm.models import AssistantMessage, ReasoningEffort, ToolCall
-    from onyx.server.query_and_chat.placement import Placement
-
-    generated = PythonExecutionFile(filename="facts.csv", file_link="/files/facts.csv")
-    child = ResearchAgentCallResult(
-        intermediate_report="Child report",
-        citation_mapping={},
-        output_messages=[
-            AssistantMessage(
-                content=[ToolCall(id="child-file", name="echo", arguments={})]
+        agent = Agent(
+            FakeModelClient(
+                lambda _request, _signal: AssistantMessage(
+                    content=[ToolCall(id="parent", name="research", arguments={})]
+                )
             ),
-            ToolResultMessage(
-                tool_call_id="child-file",
-                tool_name="echo",
-                content="Created facts.csv",
-                details=PythonToolRichResponse(generated_files=[generated]),
-            ),
-        ],
-        call_placements={"child-file": Placement(turn_index=0, sub_turn_index=2)},
-    )
-    monkeypatch.setattr(
-        "onyx.deep_research.agent.run_research_agent_call", lambda **_kwargs: child
-    )
-    monkeypatch.setattr(
-        "onyx.deep_research.agent._get_research_agent_tool_id", lambda: 7
-    )
-    llm = ScriptedLLM(
-        [
-            Delta(
-                tool_calls=[
-                    ChatCompletionDeltaToolCall(
-                        id="parent",
-                        index=0,
-                        function=FunctionCall(
-                            name=RESEARCH_AGENT_TOOL_NAME, arguments='{"task":"facts"}'
-                        ),
+            context=AgentContext(
+                tools=[
+                    AgentTool(
+                        name="research",
+                        description="",
+                        parameters={},
+                        execute_async=research,
                     )
                 ]
             ),
-        ],
-        128000,
-    )
-    emitter = Emitter(queue.Queue())
-    state = ChatStateContainer()
-    agent = DeepResearchAgent(
-        emitter,
+        )
+    else:
+        agent = worker
+    state = ResponseBinding()
+    attach_response(
+        agent,
         state,
-        [UserMessage(content="Research")],
-        [EchoTool(emitter)],
-        llm,
-        len,
-        None,
-        "",
-        ReasoningEffort.LOW,
-        None,
-        time.monotonic(),
-        "Plan",
-        1,
-        False,
+        Emitter(Queue(), response_id=42) if render else None,
+        response_id=42,
+        tool_ids={"write": 1, "wait": 2, "research": 7},
     )
     signal = CancellationSignal()
-    agent.subscribe(lambda event: signal.cancel() if event.type == "tool_end" else None)
-    with pytest.raises(AgentCancelled):
-        agent.run(max_turns=3, cancellation=signal)
-    snapshot = state.snapshot(cancelled=True)
-    assert len(snapshot.tool_calls) == 2
-    child_record, parent_record = snapshot.tool_calls
-    assert child_record.parent_tool_call_id == "parent"
-    assert child_record.turn_index == 2
-    assert child_record.tab_index == parent_record.tab_index
-    assert child_record.generated_files == [generated]
-    assert parent_record.tool_call_response == "Child report"
+    with ContextThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(lambda: agent.run(max_steps=2, cancellation=signal))
+        try:
+            assert accepted.wait(5)
+            signal.cancel()
+            with pytest.raises(AgentCancelled):
+                future.result(timeout=5)
+        finally:
+            release.set()
+    for _ in range(2):
+        snapshot = state.snapshot(cancelled=True)
+        assert snapshot.transcript is not None
+        file_record = next(
+            record for record in snapshot.tool_calls if record.tool_call_id == "file"
+        )
+        assert file_record.generated_files == [generated]
+        assert file_record.tool_call_response == "Created result.csv"
+        if child_run:
+            parent = next(
+                record
+                for record in snapshot.tool_calls
+                if record.tool_call_id == "parent"
+            )
+            assert file_record.parent_execution_key == parent.execution_key
+            assert parent.tool_call_response == ""
+            assert snapshot.transcript.children
+        file_record.generated_files = []

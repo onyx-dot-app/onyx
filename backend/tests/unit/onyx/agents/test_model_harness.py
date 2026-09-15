@@ -33,8 +33,8 @@ def tool() -> AgentTool:
         name="echo",
         description="Echo",
         parameters={"type": "object"},
-        execute=lambda _id, args, _signal, _update: ToolResult(
-            content=str(args["value"])
+        execute=lambda invocation: ToolResult(
+            content=str(invocation.arguments["value"])
         ),
     )
 
@@ -60,7 +60,7 @@ def test_model_and_agent_share_transcript_and_stream_events() -> None:
     )
     events: list[AgentEvent] = []
     agent.subscribe(events.append)
-    result = agent.run(messages=[UserMessage(content="Echo 3")], max_turns=2)
+    result = agent.run(messages=[UserMessage(content="Echo 3")], max_steps=2)
     assert result.output.text == "done"
     assert isinstance(llm.requests[-1]["prompt"][-1], ToolMessage)
     assert llm.requests[-1]["prompt"][-1].content == "3"
@@ -83,8 +83,8 @@ def test_tool_recovery_happens_before_events() -> None:
     )
     events: list[AgentEvent] = []
     agent.subscribe(events.append)
-    result = agent.run(max_turns=2)
-    response = result.messages[1]
+    agent.run(max_steps=2)
+    response = agent.context.messages[1]
     assert isinstance(response, ToolResultMessage) and response.content == "recovered"
     first = next(
         event.generation_event for event in events if event.type == "message_update"
@@ -141,7 +141,7 @@ def test_model_honors_cancelled_signal() -> None:
     from onyx.llm.cancellation import AgentCancelled
 
     with pytest.raises(AgentCancelled):
-        Agent(llm).run(max_turns=1, cancellation=signal)
+        Agent(llm).run(max_steps=1, cancellation=signal)
     assert not llm.requests
 
 

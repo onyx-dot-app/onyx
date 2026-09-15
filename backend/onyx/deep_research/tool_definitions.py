@@ -1,3 +1,5 @@
+from onyx.tools.interface import FunctionToolDefinition
+
 GENERATE_PLAN_TOOL_NAME = "generate_plan"
 
 RESEARCH_AGENT_IN_CODE_ID = "ResearchAgent"
@@ -10,7 +12,7 @@ THINK_TOOL_NAME = "think_tool"
 
 
 # ruff: noqa: E501, W605 start
-GENERATE_PLAN_TOOL_DESCRIPTION = {
+GENERATE_PLAN_TOOL_DESCRIPTION: FunctionToolDefinition = {
     "type": "function",
     "function": {
         "name": GENERATE_PLAN_TOOL_NAME,
@@ -24,7 +26,7 @@ GENERATE_PLAN_TOOL_DESCRIPTION = {
 }
 
 
-RESEARCH_AGENT_TOOL_DESCRIPTION = {
+RESEARCH_AGENT_TOOL_DESCRIPTION: FunctionToolDefinition = {
     "type": "function",
     "function": {
         "name": RESEARCH_AGENT_TOOL_NAME,
@@ -43,7 +45,7 @@ RESEARCH_AGENT_TOOL_DESCRIPTION = {
 }
 
 
-GENERATE_REPORT_TOOL_DESCRIPTION = {
+GENERATE_REPORT_TOOL_DESCRIPTION: FunctionToolDefinition = {
     "type": "function",
     "function": {
         "name": GENERATE_REPORT_TOOL_NAME,
@@ -57,7 +59,7 @@ GENERATE_REPORT_TOOL_DESCRIPTION = {
 }
 
 
-THINK_TOOL_DESCRIPTION = {
+THINK_TOOL_DESCRIPTION: FunctionToolDefinition = {
     "type": "function",
     "function": {
         "name": THINK_TOOL_NAME,
@@ -76,7 +78,7 @@ THINK_TOOL_DESCRIPTION = {
 }
 
 
-RESEARCH_AGENT_THINK_TOOL_DESCRIPTION = {
+RESEARCH_AGENT_THINK_TOOL_DESCRIPTION: FunctionToolDefinition = {
     "type": "function",
     "function": {
         "name": "think_tool",
@@ -95,7 +97,7 @@ RESEARCH_AGENT_THINK_TOOL_DESCRIPTION = {
 }
 
 
-RESEARCH_AGENT_GENERATE_REPORT_TOOL_DESCRIPTION = {
+RESEARCH_AGENT_GENERATE_REPORT_TOOL_DESCRIPTION: FunctionToolDefinition = {
     "type": "function",
     "function": {
         "name": "generate_report",
@@ -113,11 +115,11 @@ THINK_TOOL_RESPONSE_MESSAGE = "Acknowledged, please continue."
 THINK_TOOL_RESPONSE_TOKEN_COUNT = 10
 
 
-def get_clarification_tool_definitions() -> list[dict]:
+def get_clarification_tool_definitions() -> list[FunctionToolDefinition]:
     return [GENERATE_PLAN_TOOL_DESCRIPTION]
 
 
-def get_orchestrator_tools(include_think_tool: bool) -> list[dict]:
+def get_orchestrator_tools(include_think_tool: bool) -> list[FunctionToolDefinition]:
     tools = [
         RESEARCH_AGENT_TOOL_DESCRIPTION,
         GENERATE_REPORT_TOOL_DESCRIPTION,
@@ -129,7 +131,7 @@ def get_orchestrator_tools(include_think_tool: bool) -> list[dict]:
 
 def get_research_agent_additional_tool_definitions(
     include_think_tool: bool,
-) -> list[dict]:
+) -> list[FunctionToolDefinition]:
     tools = [GENERATE_REPORT_TOOL_DESCRIPTION]
     if include_think_tool:
         tools.append(RESEARCH_AGENT_THINK_TOOL_DESCRIPTION)

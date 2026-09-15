@@ -1,18 +1,23 @@
 """Project semantic generation events into Onyx packets without model or storage I/O."""
 
-from typing import Literal
-
 from pydantic import BaseModel, ConfigDict, Field
 
 from onyx.chat.citation_processor import DynamicCitationProcessor
+from onyx.chat.models import PresentationMode
 from onyx.context.search.models import SearchDoc
 from onyx.llm.models import (
+    AssistantMessage,
+    GenerationDoneEvent,
+    GenerationErrorEvent,
     GenerationEvent,
     GenerationTextEvent,
     GenerationToolCallEvent,
-    ToolCall,
+    TextContent,
+    TextDeltaEvent,
+    ThinkingContent,
+    ThinkingDeltaEvent,
+    ToolCallDeltaEvent,
 )
-from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     AgentResponseDelta,
     AgentResponseStart,
@@ -23,6 +28,8 @@ from onyx.server.query_and_chat.streaming_models import (
     IntermediateReportDelta,
     IntermediateReportStart,
     Packet,
+    PacketIdentity,
+    PacketObj,
     ReasoningDelta,
     ReasoningDone,
     ReasoningStart,
@@ -33,48 +40,46 @@ from onyx.server.query_and_chat.streaming_models import (
 
 class RenderConfig(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
-    placement: Placement = Field(default_factory=lambda: Placement(turn_index=0))
     citations: DynamicCitationProcessor | None = None
     documents: list[SearchDoc] | None = None
-    mode: Literal["answer", "plan", "report", "coding_thinking", "silent"] = "answer"
+    mode: PresentationMode = PresentationMode.ANSWER
     text_as_thinking: bool = False
     think_tool: str | None = None
     argument_tools: set[str] = Field(default_factory=set)
-    nested: bool = False
     pre_answer_seconds: float | None = None
 
 
 class PacketRenderer:
-    def __init__(self, config: RenderConfig) -> None:
+    def __init__(self, config: RenderConfig, identity: PacketIdentity) -> None:
         self.config = config
-        self.placement = config.placement.model_copy()
+        self.identity = identity
         self.answer = ""
         self.reasoning = ""
         self.has_reasoned = False
         self.reasoning_active = False
         self.answer_started = False
-        self.calls: dict[str, Placement] = {}
         self.citations_emitted: set[int] = set()
 
-    def _packet(self, obj: object, placement: Placement | None = None) -> Packet:
-        return Packet.model_validate(
-            {"placement": placement or self.placement, "obj": obj}
+    def _packet(
+        self,
+        obj: PacketObj,
+        *,
+        part_id: str = "answer",
+        tool_call_id: str | None = None,
+    ) -> Packet:
+        return Packet(
+            identity=self.identity.model_copy(
+                update={"part_id": part_id, "tool_call_id": tool_call_id}
+            ),
+            obj=obj,
         )
 
     def _close_reasoning(self) -> list[Packet]:
         if not self.reasoning_active:
             return []
-        packets = [self._packet(ReasoningDone())]
+        packets = [self._packet(ReasoningDone(), part_id="reasoning")]
         self.reasoning_active = False
         self.has_reasoned = True
-        if self.placement.sub_turn_index is None:
-            self.placement = self.placement.model_copy(
-                update={"turn_index": self.placement.turn_index + 1}
-            )
-        else:
-            self.placement = self.placement.model_copy(
-                update={"sub_turn_index": self.placement.sub_turn_index + 1}
-            )
         return packets
 
     def _thinking(self, text: str) -> list[Packet]:
@@ -82,10 +87,12 @@ class PacketRenderer:
             return []
         packets: list[Packet] = []
         if not self.reasoning_active:
-            packets.append(self._packet(ReasoningStart()))
+            packets.append(self._packet(ReasoningStart(), part_id="reasoning"))
             self.reasoning_active = True
         self.reasoning += text
-        packets.append(self._packet(ReasoningDelta(reasoning=text)))
+        packets.append(
+            self._packet(ReasoningDelta(reasoning=text), part_id="reasoning")
+        )
         return packets
 
     def _answer(self, text: str) -> list[Packet]:
@@ -120,16 +127,6 @@ class PacketRenderer:
                 packets.append(self._packet(item))
         return packets
 
-    def call_placement(self, call: ToolCall) -> Placement:
-        if call.id not in self.calls:
-            tab = (
-                self.config.placement.tab_index
-                if self.config.nested
-                else len(self.calls) + int(self.answer_started)
-            )
-            self.calls[call.id] = self.placement.model_copy(update={"tab_index": tab})
-        return self.calls[call.id]
-
     def consume(self, event: GenerationEvent) -> list[Packet]:
         packets: list[Packet] = []
         if isinstance(event, GenerationTextEvent) and event.type == "thinking_delta":
@@ -144,10 +141,8 @@ class PacketRenderer:
                 )
                 if event.type == "tool_call_end":
                     packets.extend(self._close_reasoning())
-                    self.call_placement(call)
             else:
                 packets.extend(self._close_reasoning())
-                placement = self.call_placement(call)
                 if call.name in self.config.argument_tools and event.argument_deltas:
                     packets.append(
                         self._packet(
@@ -155,7 +150,8 @@ class PacketRenderer:
                                 tool_type=call.name,
                                 argument_deltas=event.argument_deltas,
                             ),
-                            placement,
+                            tool_call_id=call.id,
+                            part_id="tool",
                         )
                     )
         elif event.type in {"done", "error"}:
@@ -204,10 +200,38 @@ class PacketRenderer:
                     obj = IntermediateReportDelta(content=obj.content)
                 elif mode == "coding_thinking":
                     obj = CodingAgentThinkingDelta(content=obj.content)
-            placement = (
-                self.config.placement
-                if mode in {"report", "silent"}
-                else packet.placement
-            )
-            result.append(Packet(placement=placement, obj=obj))
+            result.append(packet.model_copy(update={"obj": obj}))
         return result
+
+
+def render_message(
+    renderer: PacketRenderer, message: AssistantMessage, *, complete: bool
+) -> list[Packet]:
+    """Project a recorded prefix through the same renderer used for live updates."""
+    packets: list[Packet] = []
+    for index, content in enumerate(message.content):
+        if isinstance(content, TextContent):
+            event = TextDeltaEvent(
+                message=message, content_index=index, text=content.text
+            )
+        elif isinstance(content, ThinkingContent):
+            event = ThinkingDeltaEvent(
+                message=message, content_index=index, text=content.text
+            )
+        else:
+            event = ToolCallDeltaEvent(
+                message=message,
+                content_index=index,
+                tool_call=content,
+                argument_deltas={
+                    key: value
+                    for key, value in content.arguments.items()
+                    if isinstance(value, str)
+                },
+            )
+        packets.extend(renderer.consume(event))
+    if complete:
+        packets.extend(renderer.consume(GenerationDoneEvent(message=message)))
+    elif message.stop_reason == "error":
+        packets.extend(renderer.consume(GenerationErrorEvent(message=message)))
+    return packets

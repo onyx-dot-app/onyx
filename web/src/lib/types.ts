@@ -585,6 +585,7 @@ export interface SecuritySettings {
   allow_same_provider_subject_relink: boolean;
   ssrf_protection_level: SSRFProtectionLevel;
   mask_credential_prefix: boolean;
+  llm_custom_config_env_injection: boolean;
   valid_email_domains: string[];
   password_min_length: number;
   password_max_length: number;

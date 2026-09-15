@@ -1,11 +1,12 @@
-from typing import Any, cast
-from uuid import uuid4
+from collections.abc import Awaitable, Callable
 
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
-from onyx.chat.emitter import Emitter
+from onyx.agents.tools import ToolInvocation, ToolProgress
+from onyx.coding_agent.agent import BASH_TOOL_SENTINEL_ID, CodingAgent, _setup_session
+from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.coding_agent.tool_definitions import (
     CODING_AGENT_QUERY_KEY,
     CODING_AGENT_REPO_KEY,
@@ -14,21 +15,26 @@ from onyx.coding_agent.tool_definitions import (
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import ToolResult
-from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import CodingAgentStart, Packet
-from onyx.tools.interface import Tool
-from onyx.tools.models import ToolCallException, ToolCallKickoff
+from onyx.prompts.coding_agent.coding_agent import MAX_CODING_AGENT_CYCLES
+from onyx.tools.interface import (
+    FunctionToolDefinition,
+    Tool,
+    ToolContext,
+    parse_tool_arguments,
+)
+from onyx.tools.progress import CodingCompleted, CodingStarted
 from onyx.tools.tool_implementations.bash.bash_tool import BashTool
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
-class CodingAgentToolOverrideKwargs(BaseModel):
-    pass
+class CodingAgentArguments(BaseModel):
+    query: str
+    github_repo: str
 
 
-class CodingAgentTool(Tool[CodingAgentToolOverrideKwargs]):
+class CodingAgentTool(Tool):
     """Top-level Tool wrapper around the coding-agent loop.
 
     Exposes a single LLM-facing tool that takes a query + GitHub repo,
@@ -48,11 +54,9 @@ class CodingAgentTool(Tool[CodingAgentToolOverrideKwargs]):
     def __init__(
         self,
         tool_id: int,
-        emitter: Emitter,
         llm: LLM,
         github_token: str | None = None,
     ) -> None:
-        super().__init__(emitter=emitter)
         self._id = tool_id
         self._llm = llm
         self._github_token = github_token
@@ -80,7 +84,7 @@ class CodingAgentTool(Tool[CodingAgentToolOverrideKwargs]):
         return BashTool.is_available(db_session)
 
     @override
-    def tool_definition(self) -> dict:
+    def tool_definition(self) -> FunctionToolDefinition:
         return {
             "type": "function",
             "function": {
@@ -111,80 +115,52 @@ class CodingAgentTool(Tool[CodingAgentToolOverrideKwargs]):
             },
         }
 
-    @override
-    def emit_start(self, placement: Placement) -> None:
-        # query and repo aren't bound until run(); CodingAgentStart is emitted
-        # there, mirroring PythonTool's pattern.
-        return
-
-    @override
-    def run(
+    @property
+    def execute_async(
         self,
-        placement: Placement,
-        override_kwargs: CodingAgentToolOverrideKwargs,
-        **llm_kwargs: Any,
+    ) -> Callable[[ToolInvocation, ToolContext], Awaitable[ToolResult]]:
+        return self._execute
+
+    async def _execute(
+        self, invocation: ToolInvocation, _context: ToolContext
     ) -> ToolResult:
-        if CODING_AGENT_QUERY_KEY not in llm_kwargs:
-            raise ToolCallException(
-                message=f"Missing '{CODING_AGENT_QUERY_KEY}' in coding_agent call",
-                llm_facing_message=(
-                    f"The {self.name} tool requires a "
-                    f"'{CODING_AGENT_QUERY_KEY}' parameter."
+        arguments = parse_tool_arguments(CodingAgentArguments, invocation.arguments)
+        invocation.update(
+            ToolProgress(
+                details=CodingStarted(query=arguments.query, repo=arguments.github_repo)
+            )
+        )
+        sandbox = _setup_session(
+            repo=arguments.github_repo, github_token=self._github_token
+        )
+        session_id = await invocation.run_blocking(sandbox.__enter__)
+        try:
+            feature = CodingAgent(
+                query=arguments.query,
+                repo=arguments.github_repo,
+                llm=self._llm,
+                token_counter=get_llm_token_counter(self._llm),
+                user_identity=None,
+                bash_tool=BashTool(
+                    tool_id=BASH_TOOL_SENTINEL_ID, session_id=session_id
                 ),
             )
-        if CODING_AGENT_REPO_KEY not in llm_kwargs:
-            raise ToolCallException(
-                message=f"Missing '{CODING_AGENT_REPO_KEY}' in coding_agent call",
-                llm_facing_message=(
-                    f"The {self.name} tool requires a "
-                    f"'{CODING_AGENT_REPO_KEY}' parameter."
-                ),
+            completed = await invocation.run_child(
+                feature.agent,
+                max_steps=MAX_CODING_AGENT_CYCLES + 1,
+                messages=feature.input_messages,
             )
-        query = cast(str, llm_kwargs[CODING_AGENT_QUERY_KEY])
-        repo = cast(str, llm_kwargs[CODING_AGENT_REPO_KEY])
-
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=CodingAgentStart(query=query, repo=repo),
-            )
-        )
-
-        # Imported lazily to avoid a circular import: coding_agent.py imports
-        # the BashTool which lives in tool_implementations alongside us.
-        from onyx.coding_agent.agent import run_coding_agent_call
-
-        synthetic_call = ToolCallKickoff(
-            tool_call_id=str(uuid4()),
-            tool_name=self.name,
-            tool_args={
-                CODING_AGENT_QUERY_KEY: query,
-                CODING_AGENT_REPO_KEY: repo,
-            },
-            placement=placement,
-        )
-
-        token_counter = get_llm_token_counter(self._llm)
-
-        result = run_coding_agent_call(
-            coding_agent_call=synthetic_call,
-            emitter=self.emitter,
-            llm=self._llm,
-            token_counter=token_counter,
-            user_identity=None,
-            github_token=self._github_token,
-        )
-
-        if result is None:
-            failure_msg = (
-                "Coding agent failed to produce an answer. "
-                "Check the server logs for the underlying error."
-            )
-            logger.warning("Coding agent run returned None for query: %s", query)
+            answer = completed.output.text
+            if not answer:
+                raise ValueError("Coding agent produced no final answer")
+            invocation.update(ToolProgress(details=CodingCompleted(answer=answer)))
             return ToolResult(
-                content=failure_msg,
+                content=answer, details=CodingAgentCallResult(answer=answer)
             )
-
-        return ToolResult(
-            content=result.answer,
-        )
+        finally:
+            try:
+                await invocation.run_blocking(
+                    lambda: sandbox.__exit__(None, None, None), cleanup=True
+                )
+            except Exception:
+                logger.exception("Coding sandbox cleanup failed")

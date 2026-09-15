@@ -4,48 +4,49 @@ import queue
 import re
 import threading
 import time
-from collections.abc import Callable, Iterator
 from concurrent.futures import Future, wait
 from contextvars import Token
-from enum import Enum
 from functools import partial
 from uuid import UUID
 
 from onyx.chat.agent import ChatAgent
 from onyx.chat.cancellation import clear_stop, is_stop_requested
 from onyx.chat.chat_processing_checker import set_processing_status
-from onyx.chat.chat_state import ChatResponseSnapshot, ChatStateContainer, ChatTurnSetup
-from onyx.chat.compression import compress_chat_if_needed
 from onyx.chat.emitter import Emitter, ModelStreamStatus
 from onyx.chat.errors import chat_error
 from onyx.chat.incognito_context import incognito_session_ended
 from onyx.chat.models import (
+    PERSISTENCE_ERROR_MESSAGES,
     AnswerStream,
     ChatBasicResponse,
     ChatFullResponse,
+    ChatResponseOutcome,
+    ChatResponseSnapshot,
+    ChatTurnSetup,
     CreateChatSessionID,
+    PersistenceStatus,
     StreamingError,
     ToolCallResponse,
 )
 from onyx.chat.prepare import prepare_chat_turn
-from onyx.chat.stream_buffer import StreamBufferWriter
+from onyx.chat.presentation import ResponseBinding, attach_response
+from onyx.chat.prompt_utils import build_language_section
+from onyx.chat.stream_buffer import ChatDelivery, ChatStream, StreamBufferWriter
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
-from onyx.configs.chat_configs import CHAT_HEARTBEAT_INTERVAL_S, MAX_LLM_CYCLES
+from onyx.configs.chat_configs import MAX_LLM_CYCLES, SKIP_DEEP_RESEARCH_CLARIFICATION
 from onyx.configs.constants import DEFAULT_PERSONA_ID, DocumentSource
 from onyx.context.search.models import BaseFilters, SearchDoc
-from onyx.db.agent_transcript import save_chat_error
 from onyx.db.chat_response import save_chat_response
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import record_mode_persists_content
 from onyx.db.models import User
-from onyx.deep_research.agent import run_deep_research
+from onyx.deep_research.agent import MIN_RESEARCH_CONTEXT_TOKENS, DeepResearchAgent
+from onyx.deep_research.tool_definitions import RESEARCH_AGENT_TOOL_NAME
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError, log_onyx_error
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal, cancellation_scope
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.request_context import reset_llm_mock_response, set_llm_mock_response
-from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.server.query_and_chat.models import MessageResponseIDInfo, SendMessageRequest
 from onyx.server.query_and_chat.placement import Placement
@@ -55,7 +56,6 @@ from onyx.server.query_and_chat.streaming_models import (
     CitationInfo,
     OverallStop,
     Packet,
-    heartbeat_packet,
 )
 from onyx.server.settings.store import load_settings
 from onyx.server.utils import get_json_line
@@ -82,48 +82,10 @@ ERROR_TYPE_CANCELLED = "cancelled"
 APPROX_CHARS_PER_TOKEN = 4
 
 
-class _ChatStreamStatus(str, Enum):
-    DONE = "done"
-
-
 _CANCEL_POLL_INTERVAL_S = 0.05
 _FENCE_REFRESH_INTERVAL_S = 60.0
-
-
-class _ChatStream(Iterator[Packet | StreamingError]):
-    """A detachable reader; closing it does not cancel agent execution."""
-
-    def __init__(self) -> None:
-        self._queue: queue.Queue[Packet | StreamingError | _ChatStreamStatus] = (
-            queue.Queue()
-        )
-        self._lock = threading.Lock()
-        self._closed = False
-
-    def publish(self, item: Packet | StreamingError | _ChatStreamStatus) -> None:
-        with self._lock:
-            if not self._closed:
-                self._queue.put(item)
-
-    def __next__(self) -> Packet | StreamingError:
-        try:
-            item = self._queue.get(timeout=CHAT_HEARTBEAT_INTERVAL_S)
-        except queue.Empty:
-            return heartbeat_packet()
-        if item is _ChatStreamStatus.DONE:
-            self.close()
-            raise StopIteration
-        return item
-
-    def close(self) -> None:
-        with self._lock:
-            self._closed = True
-            while True:
-                try:
-                    self._queue.get_nowait()
-                except queue.Empty:
-                    break
-            self._queue.put(_ChatStreamStatus.DONE)
+_MODEL_EVENT_QUEUE_CAPACITY = 1024
+_PERSISTENCE_WAIT_SECONDS = 30.0
 
 
 def _should_enable_slack_search(persona_id: int, filters: BaseFilters | None) -> bool:
@@ -137,21 +99,18 @@ def _execute_model(
     setup: ChatTurnSetup,
     user: User,
     model_idx: int,
-    state: ChatStateContainer,
+    state: ResponseBinding,
     emitter: Emitter,
     cancellation: CancellationSignal,
     auto_detect_search_filters: bool,
 ) -> None:
-    model_emitter = emitter
-    sc = state
-    model_llm = setup.models[model_idx].llm
-    n_models = len(setup.models)
+    model_llm = setup.responses[model_idx].llm
+    n_models = len(setup.responses)
     with cancellation_scope(cancellation):
         cancellation.check()
         # Tools open DB sessions on demand, so model I/O cannot retain a connection.
         thread_tool_dict = construct_tools(
-            persona=setup.persona_id,
-            emitter=model_emitter,
+            configuration=setup.tool_configuration,
             user=user,
             llm=model_llm,
             search_tool_config=SearchToolConfig(
@@ -187,40 +146,53 @@ def _execute_model(
         }:
             raise ValueError(f"Forced tool {setup.forced_tool_id} not found in tools")
 
-        if n_models == 1 and setup.new_msg_req.deep_research:
-            if setup.chat_session_project_id:
-                raise RuntimeError("Deep research is not supported for projects")
-            run_deep_research(
-                emitter=model_emitter,
-                state_container=sc,
-                messages=list(setup.messages),
-                tools=model_tools,
-                custom_agent_prompt=setup.custom_agent_prompt,
-                llm=model_llm,
-                token_counter=get_llm_token_counter(model_llm),
-                reasoning_effort=setup.reasoning_effort,
-                skip_clarification=setup.skip_clarification,
-                user_identity=setup.user_identity,
+        research = n_models == 1 and setup.new_msg_req.deep_research
+        with trace(
+            "run_deep_research" if research else "chat",
+            group_id=str(setup.chat_session_id),
+            metadata=ChatTraceMetadata(
                 chat_session_id=str(setup.chat_session_id),
-                all_injected_file_metadata=setup.all_injected_file_metadata,
-                user_language=setup.user_memory_context.user_info.language,
-            )
-        else:
-            with trace(
-                "chat",
-                group_id=str(setup.chat_session_id),
-                metadata=ChatTraceMetadata(
-                    user_id=setup.user_identity.user_id
-                ).model_dump(),
-            ):
-                ChatAgent(
-                    emitter=model_emitter,
-                    state_container=sc,
+                user_id=setup.user_identity.user_id,
+            ).model_dump(),
+        ):
+            feature: ChatAgent | DeepResearchAgent
+            if research:
+                if setup.chat_session_project_id:
+                    raise RuntimeError("Deep research is not supported for projects")
+                if setup.research_tool_id is None:
+                    raise ValueError("Deep research tool configuration is missing")
+                if model_llm.info.max_input_tokens < MIN_RESEARCH_CONTEXT_TOKENS:
+                    raise ValueError(
+                        "Deep research requires a model with at least 50,000 input tokens"
+                    )
+                feature = DeepResearchAgent(
+                    messages=list(setup.messages),
+                    allowed_tools=model_tools,
+                    llm=model_llm,
+                    token_counter=get_llm_token_counter(model_llm),
+                    user_identity=setup.user_identity,
+                    language_section=build_language_section(
+                        setup.user_memory_context.user_info.language
+                    ),
+                    reasoning_effort=setup.reasoning_effort,
+                    all_injected_file_metadata=setup.all_injected_file_metadata,
+                    skip_clarification=SKIP_DEEP_RESEARCH_CLARIFICATION
+                    or setup.skip_clarification,
+                    checkpoint=setup.checkpoint,
+                )
+                max_steps = feature.max_steps
+                tool_ids = {tool.name: tool.id for tool in feature.tools}
+                tool_ids[RESEARCH_AGENT_TOOL_NAME] = setup.research_tool_id
+                initial_citations = {}
+            else:
+                feature = ChatAgent(
                     messages=list(setup.messages),
                     tools=model_tools,
                     custom_agent_prompt=setup.custom_agent_prompt,
                     context_files=setup.extracted_context_files,
                     persona=setup.persona,
+                    base_system_prompt=setup.base_system_prompt,
+                    checkpoint=setup.checkpoint,
                     user_memory_context=setup.user_memory_context,
                     llm=model_llm,
                     token_counter=get_llm_token_counter(model_llm),
@@ -231,184 +203,276 @@ def _execute_model(
                     include_citations=setup.new_msg_req.include_citations,
                     all_injected_file_metadata=setup.all_injected_file_metadata,
                     inject_memories_in_prompt=user.use_memories,
-                ).run(max_turns=MAX_LLM_CYCLES, cancellation=cancellation)
-
-
-def _run_models(
-    setup: ChatTurnSetup,
-    user: User,
-    external_state_container: ChatStateContainer | None = None,
-    stream_buffer: StreamBufferWriter | None = None,
-) -> _ChatStream:
-    """Start agent tasks and return a reader independent of their lifetime."""
-    queue_out: queue.Queue[tuple[int, Packet | ModelStreamStatus]] = queue.Queue()
-    reader = _ChatStream()
-    output_closed = threading.Event()
-    cancellation = CancellationSignal()
-    states = [
-        external_state_container
-        if index == 0 and external_state_container is not None
-        else ChatStateContainer()
-        for index in range(len(setup.models))
-    ]
-    executor: ContextThreadPoolExecutor | None = None
-    futures: dict[int, Future[None]] = {}
-
-    buffer_executor: ContextThreadPoolExecutor | None = None
-    buffer_work: Future[None] | None = None
-    saves: dict[int, Future[bool]] = {}
-
-    def store_stream(callback: Callable[[], None]) -> Future[None]:
-        nonlocal buffer_work
-        if buffer_executor is None:
-            raise RuntimeError("Stream storage executor has not started")
-
-        def store() -> None:
-            try:
-                callback()
-            except Exception:
-                logger.exception("Failed to store chat stream")
-
-        future = buffer_executor.submit(store)
-        buffer_work = future
-        return future
-
-    def publish(item: Packet | StreamingError) -> None:
-        if stream_buffer is not None:
-            store_stream(
-                partial(stream_buffer.append_line, get_json_line(item.model_dump()))
+                )
+                max_steps = MAX_LLM_CYCLES
+                tool_ids = {tool.name: tool.id for tool in model_tools}
+                initial_citations = feature.artifacts.initial_citations
+            attach_response(
+                feature.agent,
+                state,
+                emitter,
+                response_id=setup.responses[model_idx].message_id,
+                tool_ids=tool_ids,
+                initial_citations=initial_citations,
             )
-        reader.publish(item)
+            feature.agent.run(
+                max_steps=max_steps,
+                cancellation=cancellation,
+                messages=setup.input_messages,
+            )
 
-    def start_save(index: int) -> None:
-        """Choose one immutable outcome; storage workers never make completion decisions."""
-        future = futures[index]
-        error = future.exception() if future.done() else AgentCancelled()
+
+def _log_late_save(future: Future[None]) -> None:
+    try:
+        future.result()
+    except Exception:
+        logger.exception("Response save failed after its wait bound")
+    else:
+        logger.debug("Response save completed after its wait bound")
+
+
+class _ResponseTask:
+    def __init__(self, index: int, state: ResponseBinding) -> None:
+        self.index = index
+        self.state = state
+        self.execution: Future[None] | None = None
+        self.persistence: Future[None] | None = None
+        self.response: ChatResponseSnapshot | None = None
+        self.persistence_deadline = 0.0
+        self.is_finalized = False
+
+
+class ChatCoordinator:
+    """Own the executions, Stop control, and terminal saves for one chat turn."""
+
+    def __init__(
+        self,
+        setup: ChatTurnSetup,
+        user: User,
+        response_binding: ResponseBinding | None = None,
+        stream_buffer: StreamBufferWriter | None = None,
+    ) -> None:
+        self.setup = setup
+        self.user = user
+        self.delivery = ChatDelivery(stream_buffer)
+        self._events: queue.Queue[tuple[int, Packet | ModelStreamStatus]] = queue.Queue(
+            _MODEL_EVENT_QUEUE_CAPACITY
+        )
+        self._output_closed = threading.Event()
+        self._cancellation = CancellationSignal()
+        self._tasks = [
+            _ResponseTask(
+                index,
+                response_binding
+                if index == 0 and response_binding is not None
+                else ResponseBinding(),
+            )
+            for index in range(len(setup.responses))
+        ]
+        self._executor: ContextThreadPoolExecutor | None = None
+        self._stopped_by_user = False
+        self._last_refresh = self._last_stop_check = time.monotonic()
+
+    def start(self) -> ChatStream:
+        self.delivery.start()
         try:
-            response = states[index].snapshot(
-                cancelled=isinstance(error, AgentCancelled)
+            self._executor = ContextThreadPoolExecutor(
+                max_workers=len(self._tasks) + 1, thread_name_prefix="chat-agent"
             )
-            success = error is None or isinstance(error, AgentCancelled)
-            if not success:
+            auto_filters = load_settings().auto_detect_search_filters is not False
+            clear_stop(
+                self.setup.chat_session_id,
+                self.setup.cache,
+                processing_key=self.setup.processing_key,
+            )
+            set_processing_status(
+                chat_session_id=self.setup.chat_session_id,
+                cache=self.setup.cache,
+                value=True,
+                processing_key=self.setup.processing_key,
+            )
+            for task in self._tasks:
+                emitter = Emitter(
+                    merged_queue=self._events,
+                    model_idx=task.index,
+                    response_id=self.setup.responses[task.index].message_id,
+                    drain_done=self._output_closed,
+                )
+                task.execution = self._executor.submit(
+                    lambda task=task, emitter=emitter: _execute_model(
+                        self.setup,
+                        self.user,
+                        task.index,
+                        task.state,
+                        emitter,
+                        self._cancellation,
+                        auto_filters,
+                    )
+                )
+                task.execution.add_done_callback(partial(self._notify_done, task.index))
+            start_thread_with_context(self._coordinate, name="chat-coordinator")
+        except Exception as error:
+            self._cancellation.cancel()
+            self._output_closed.set()
+            for task in self._tasks:
+                if task.execution is None:
+                    failed: Future[None] = Future()
+                    failed.set_exception(error)
+                    task.execution = failed
+            self._coordinate(startup_error=error)
+        return self.delivery.reader
+
+    def _notify_done(self, index: int, _future: Future[None]) -> None:
+        try:
+            self._events.put_nowait((index, ModelStreamStatus.DONE))
+        except queue.Full:
+            logger.debug(
+                "Chat coordinator will observe the completed response directly"
+            )
+
+    def _start_save(self, task: _ResponseTask) -> None:
+        if task.is_finalized or task.persistence is not None:
+            return
+        try:
+            execution = task.execution
+            if execution is None:
+                raise RuntimeError("Response execution was not initialized")
+            error = execution.exception() if execution.done() else AgentCancelled()
+            response_error: str | None = None
+            if error is not None and not isinstance(error, AgentCancelled):
                 failure = (
                     error
                     if isinstance(error, Exception)
                     else RuntimeError("Agent task failed")
                 )
-                error_packet = chat_error(failure, setup.models[index].llm, index)
-                publish(error_packet)
-                save = partial(
-                    save_failed_chat_response, setup, index, response, error_packet
+                packet = chat_error(
+                    failure, self.setup.responses[task.index].llm, task.index
                 )
-            else:
-                save = partial(
-                    save_chat_response,
-                    message_id=setup.models[index].message_id,
+                self.delivery.publish(packet)
+                response_error = packet.error
+            response = task.state.snapshot(
+                cancelled=isinstance(error, AgentCancelled)
+            ).model_copy(update={"error": response_error})
+            task.response = response
+            if response.delivery_failed:
+                self.delivery.report_gap()
+            executor = self._executor
+            if executor is None:
+                raise RuntimeError("Chat persistence executor was not initialized")
+            task.persistence_deadline = time.monotonic() + _PERSISTENCE_WAIT_SECONDS
+            task.persistence = executor.submit(
+                lambda: save_chat_response(
+                    message_id=self.setup.responses[task.index].message_id,
                     response=response,
                 )
-
-            def persist() -> bool:
-                save()
-                return success
-
-            if executor is None:
-                raise RuntimeError("Chat executor has not started")
-            saves[index] = executor.submit(persist)
+            )
         except Exception as error:
-            failed: Future[bool] = Future()
+            failed: Future[None] = Future()
             failed.set_exception(error)
-            saves[index] = failed
+            task.persistence = failed
 
-    def finish_save(index: int) -> bool:
-        try:
-            return saves.pop(index).result()
-        except Exception:
-            logger.exception("Failed to save response for model %d", index)
-            publish(
-                StreamingError(
-                    error="The response could not be saved. Please try again.",
-                    error_code="RESPONSE_SAVE_ERROR",
-                    is_retryable=True,
-                    details={"model_index": index},
-                )
-            )
-            return False
-
-    def coordinate(startup_error: Exception | None = None) -> None:
-        nonlocal executor, buffer_executor
-        if executor is None:
-            executor = ContextThreadPoolExecutor(
-                max_workers=len(states) + 1, thread_name_prefix="chat-agent"
-            )
-        if stream_buffer is not None:
-            buffer_executor = ContextThreadPoolExecutor(
-                max_workers=1, thread_name_prefix="chat-stream-storage"
-            )
-        pending = set(futures)
-        compression_model: int | None = None
-        last_refresh = last_stop_check = time.monotonic()
-        stopped_by_user = False
-
-        def poll_control() -> bool:
-            nonlocal last_refresh, last_stop_check, stopped_by_user
-            now = time.monotonic()
-            if (
-                not cancellation.cancelled
-                and now - last_stop_check >= _CANCEL_POLL_INTERVAL_S
-            ):
-                last_stop_check = now
-                if is_stop_requested(setup.chat_session_id, setup.cache):
-                    stopped_by_user = True
-                    cancellation.cancel()
-                    output_closed.set()
-            if now - last_refresh >= _FENCE_REFRESH_INTERVAL_S:
-                last_refresh = now
+    def _finish_saves(self) -> None:
+        for task in self._tasks:
+            persistence = task.persistence
+            if task.is_finalized or persistence is None:
+                continue
+            status = PersistenceStatus.SAVED
+            if persistence.done():
                 try:
-                    set_processing_status(
-                        chat_session_id=setup.chat_session_id,
-                        cache=setup.cache,
-                        value=True,
-                        run_id=setup.processing_run_id,
+                    persistence.result()
+                except Exception as error:
+                    logger.exception("Failed to save response for model %d", task.index)
+                    status = PersistenceStatus.FAILED
+                    if task.response is None:
+                        task.state.fail(error)
+            elif time.monotonic() >= task.persistence_deadline:
+                logger.error(
+                    "Response persistence exceeded its wait bound for model %d",
+                    task.index,
+                )
+                status = PersistenceStatus.UNCONFIRMED
+                persistence.add_done_callback(_log_late_save)
+            else:
+                continue
+            if task.response is not None:
+                task.state.finish(
+                    ChatResponseOutcome(
+                        response=task.response, persistence_status=status
                     )
-                except Exception:
-                    logger.exception("Failed to refresh chat processing status")
-            return cancellation.cancelled
+                )
+            if message := PERSISTENCE_ERROR_MESSAGES.get(status):
+                self.delivery.publish(
+                    StreamingError(
+                        error=message,
+                        error_code="RESPONSE_SAVE_ERROR",
+                        is_retryable=True,
+                        details={"model_index": task.index},
+                    )
+                )
+            task.persistence = None
+            task.is_finalized = True
 
+    def _poll_control(self) -> bool:
+        now = time.monotonic()
+        if self._output_closed.is_set() and not self._cancellation.cancelled:
+            self.delivery.report_gap()
+        if (
+            not self._cancellation.cancelled
+            and now - self._last_stop_check >= _CANCEL_POLL_INTERVAL_S
+        ):
+            self._last_stop_check = now
+            if is_stop_requested(
+                self.setup.chat_session_id,
+                self.setup.cache,
+                processing_key=self.setup.processing_key,
+            ):
+                self._stopped_by_user = True
+                self._cancellation.cancel()
+                self._output_closed.set()
+        if now - self._last_refresh >= _FENCE_REFRESH_INTERVAL_S:
+            self._last_refresh = now
+            try:
+                set_processing_status(
+                    chat_session_id=self.setup.chat_session_id,
+                    cache=self.setup.cache,
+                    value=True,
+                    processing_key=self.setup.processing_key,
+                )
+            except Exception:
+                logger.exception("Failed to refresh chat processing status")
+        return self._cancellation.cancelled
+
+    def _coordinate(self, startup_error: Exception | None = None) -> None:
         try:
             if startup_error is not None:
-                publish(
+                self.delivery.publish(
                     StreamingError(
                         error="The response could not be started. Please try again.",
                         error_code="CHAT_STARTUP_ERROR",
                         is_retryable=True,
                     )
                 )
-            while (pending or saves) and startup_error is None:
-                if poll_control():
+                return
+            while not all(task.is_finalized for task in self._tasks):
+                if self._poll_control():
                     break
-                for index, save in list(saves.items()):
-                    if save.done() and finish_save(index) and compression_model is None:
-                        compression_model = index
-                if not pending and not saves:
-                    break
+                self._finish_saves()
                 try:
-                    index, event = queue_out.get(timeout=_CANCEL_POLL_INTERVAL_S)
+                    index, event = self._events.get(timeout=_CANCEL_POLL_INTERVAL_S)
                 except queue.Empty:
-                    if stream_buffer is not None and (
-                        buffer_work is None or buffer_work.done()
-                    ):
-                        store_stream(stream_buffer.flush)
+                    for task in self._tasks:
+                        if task.execution is not None and task.execution.done():
+                            self._start_save(task)
                     continue
                 if event is ModelStreamStatus.DONE:
-                    pending.remove(index)
-                    start_save(index)
-                elif isinstance(event, Packet):
-                    publish(event)
+                    self._start_save(self._tasks[index])
+                else:
+                    self.delivery.publish(event)
         except Exception:
-            cancellation.cancel()
-            output_closed.set()
+            self._cancellation.cancel()
+            self._output_closed.set()
             logger.exception("Chat coordinator failed")
-            publish(
+            self.delivery.publish(
                 StreamingError(
                     error="The response stream ended unexpectedly. Please try again.",
                     error_code="STREAM_WRITER_ERROR",
@@ -416,146 +480,49 @@ def _run_models(
                 )
             )
         finally:
-            # Only this coordinator saves outcomes, including snapshots of cancelled tasks.
-            for index in sorted(pending):
-                start_save(index)
-            while saves:
-                poll_control()
-                for index, save in list(saves.items()):
-                    if save.done() and finish_save(index) and compression_model is None:
-                        compression_model = index
-                if saves:
-                    wait(list(saves.values()), timeout=_CANCEL_POLL_INTERVAL_S)
-            if (
-                compression_model is not None
-                and not cancellation.cancelled
-                and record_mode_persists_content(setup.incognito_record_mode)
-            ):
+            self._finalize()
 
-                def compress() -> None:
-                    with cancellation_scope(cancellation):
-                        cancellation.check()
-                        compress_chat_if_needed(
-                            setup.chat_session_id,
-                            setup.models[compression_model].llm,
-                            setup.reserved_token_count,
-                            min(
-                                model.llm.info.max_input_tokens
-                                for model in setup.models
-                            ),
-                        )
-
-                try:
-                    compression = executor.submit(compress)
-                    while not compression.done():
-                        if poll_control():
-                            break
-                        if stream_buffer is not None and (
-                            buffer_work is None or buffer_work.done()
-                        ):
-                            store_stream(stream_buffer.flush)
-                        wait([compression], timeout=_CANCEL_POLL_INTERVAL_S)
-                    if not cancellation.cancelled:
-                        compression.result()
-                except AgentCancelled:
-                    cancellation.cancel()
-                except Exception:
-                    cancellation.cancel()
-                    logger.exception("Chat compression failed")
-            if stopped_by_user:
-                publish(
+    def _finalize(self) -> None:
+        try:
+            if self._executor is None:
+                self._executor = ContextThreadPoolExecutor(
+                    max_workers=1, thread_name_prefix="chat-save"
+                )
+            for task in self._tasks:
+                self._start_save(task)
+            while not all(task.is_finalized for task in self._tasks):
+                self._finish_saves()
+                pending = [
+                    task.persistence
+                    for task in self._tasks
+                    if task.persistence is not None
+                ]
+                if not pending:
+                    break
+                self._poll_control()
+                wait(pending, timeout=_CANCEL_POLL_INTERVAL_S)
+            if self._stopped_by_user:
+                self.delivery.publish(
                     Packet(
                         placement=Placement(turn_index=0),
                         obj=OverallStop(stop_reason="user_cancelled"),
                     )
                 )
+        finally:
+            self._output_closed.set()
             try:
-                if stream_buffer is not None:
-                    final_write = store_stream(stream_buffer.mark_done)
-                    while not final_write.done():
-                        poll_control()
-                        wait([final_write], timeout=_CANCEL_POLL_INTERVAL_S)
-                    final_write.result()
+                self.delivery.finish()
             finally:
                 try:
                     set_processing_status(
-                        chat_session_id=setup.chat_session_id,
-                        cache=setup.cache,
+                        chat_session_id=self.setup.chat_session_id,
+                        cache=self.setup.cache,
                         value=False,
                     )
                 except Exception:
                     logger.exception("Failed to clear chat processing status")
-                reader.publish(_ChatStreamStatus.DONE)
-                if buffer_executor is not None:
-                    buffer_executor.shutdown(wait=False)
-                if executor is not None:
-                    executor.shutdown(wait=False)
-
-    def notify_done(index: int, _future: Future[None]) -> None:
-        queue_out.put((index, ModelStreamStatus.DONE))
-
-    try:
-        auto_filters = load_settings().auto_detect_search_filters is not False
-        clear_stop(setup.chat_session_id, setup.cache)
-        set_processing_status(
-            chat_session_id=setup.chat_session_id,
-            cache=setup.cache,
-            value=True,
-            run_id=setup.processing_run_id,
-        )
-        executor = ContextThreadPoolExecutor(
-            max_workers=len(states) + 1, thread_name_prefix="chat-agent"
-        )
-        for index, state in enumerate(states):
-            emitter = Emitter(
-                merged_queue=queue_out, model_idx=index, drain_done=output_closed
-            )
-            execute = partial(
-                _execute_model,
-                setup,
-                user,
-                index,
-                state,
-                emitter,
-                cancellation,
-                auto_filters,
-            )
-            future = executor.submit(execute)
-            futures[index] = future
-            future.add_done_callback(partial(notify_done, index))
-        start_thread_with_context(coordinate, name="chat-coordinator")
-    except Exception as error:
-        cancellation.cancel()
-        output_closed.set()
-        for index in range(len(states)):
-            if index not in futures:
-                failed: Future[None] = Future()
-                failed.set_exception(error)
-                futures[index] = failed
-        coordinate(startup_error=error)
-
-    return reader
-
-
-def save_failed_chat_response(
-    setup: ChatTurnSetup,
-    index: int,
-    response: ChatResponseSnapshot,
-    error: StreamingError,
-) -> None:
-    persist_content = record_mode_persists_content(setup.incognito_record_mode)
-    text = (
-        f"Error from {setup.models[index].display_name}: {error.error}"
-        if persist_content
-        else "The model encountered an error."
-    )
-    save_chat_error(
-        message_id=setup.models[index].message_id,
-        error=text,
-        token_count=len(get_tokenizer(None, None).encode(response.answer_tokens or "")),
-        transcript=response.transcript,
-        persist_content=persist_content,
-    )
+                if self._executor is not None:
+                    self._executor.shutdown(wait=False)
 
 
 def _stream_chat_turn(
@@ -567,7 +534,7 @@ def _stream_chat_turn(
     mcp_headers: dict[str, str] | None = None,
     additional_context: str | None = None,
     slack_context: SlackContext | None = None,
-    external_state_container: ChatStateContainer | None = None,
+    response_binding: ResponseBinding | None = None,
 ) -> AnswerStream:
     """Prepare one request, then read its independently owned agent stream."""
     if new_msg_req.mock_llm_response is not None and not INTEGRATION_TESTS_MODE:
@@ -577,22 +544,19 @@ def _stream_chat_turn(
     setup: ChatTurnSetup | None = None
     mock_token: Token[str | None] | None = None
     scope_started = False
-    stream: _ChatStream | None = None
+    stream: ChatStream | None = None
     try:
-        with get_session_with_current_tenant() as session:
-            setup = prepare_chat_turn(
-                new_msg_req=new_msg_req,
-                user=user,
-                db_session=session,
-                llm_overrides=llm_overrides,
-                litellm_additional_headers=litellm_additional_headers,
-                custom_tool_additional_headers=custom_tool_additional_headers,
-                mcp_headers=mcp_headers,
-                bypass_acl=bypass_acl,
-                slack_context=slack_context,
-                additional_context=additional_context,
-            )
-            session.expunge_all()
+        setup = prepare_chat_turn(
+            new_msg_req=new_msg_req,
+            user=user,
+            llm_overrides=llm_overrides,
+            litellm_additional_headers=litellm_additional_headers,
+            custom_tool_additional_headers=custom_tool_additional_headers,
+            mcp_headers=mcp_headers,
+            bypass_acl=bypass_acl,
+            slack_context=slack_context,
+            additional_context=additional_context,
+        )
         if new_msg_req.mock_llm_response is not None:
             mock_token = set_llm_mock_response(new_msg_req.mock_llm_response)
         mode = setup.incognito_record_mode
@@ -605,7 +569,7 @@ def _stream_chat_turn(
         stream_buffer = StreamBufferWriter(
             cache=setup.cache,
             chat_session_id=setup.chat_session_id,
-            run_id=setup.processing_run_id,
+            processing_key=setup.processing_key,
             delete_on_done=content_free,
             session_ended=(
                 partial(incognito_session_ended, setup.chat_session_id)
@@ -615,7 +579,7 @@ def _stream_chat_turn(
         )
         for packet in setup.initial_packets:
             stream_buffer.append_line(get_json_line(packet.model_dump()))
-        stream = _run_models(setup, user, external_state_container, stream_buffer)
+        stream = ChatCoordinator(setup, user, response_binding, stream_buffer).start()
         yield from setup.initial_packets
         yield from stream
     except Exception as error:
@@ -624,7 +588,7 @@ def _stream_chat_turn(
                 log_onyx_error(error)
         else:
             logger.exception("Chat request failed")
-        yield chat_error(error, setup.models[0].llm if setup else None)
+        yield chat_error(error, setup.responses[0].llm if setup else None)
     finally:
         if stream is not None:
             stream.close()
@@ -644,7 +608,7 @@ def handle_stream_message_objects(
     mcp_headers: dict[str, str] | None = None,
     additional_context: str | None = None,
     slack_context: SlackContext | None = None,
-    external_state_container: ChatStateContainer | None = None,
+    response_binding: ResponseBinding | None = None,
 ) -> AnswerStream:
     """Single-model streaming entrypoint. For multi-model comparison, use ``handle_multi_model_stream``.
 
@@ -661,7 +625,7 @@ def handle_stream_message_objects(
         mcp_headers=mcp_headers,
         additional_context=additional_context,
         slack_context=slack_context,
-        external_state_container=external_state_container,
+        response_binding=response_binding,
     )
 
 
@@ -807,43 +771,16 @@ def gather_stream(
 @log_function_time()
 def gather_stream_full(
     packets: AnswerStream,
-    state_container: ChatStateContainer,
+    response_binding: ResponseBinding,
 ) -> ChatFullResponse:
-    """
-    Aggregate streaming packets and state container into a complete ChatFullResponse.
-
-    This function consumes all packets from the stream and combines them with
-    the accumulated state from the ChatStateContainer to build a complete response
-    including answer, reasoning, citations, and tool calls.
-
-    Args:
-        packets: The stream of packets from handle_stream_message_objects
-        state_container: The state container that accumulates tool calls, reasoning, etc.
-
-    Returns:
-        ChatFullResponse with all available data
-    """
-    answer: str | None = None
-    citations: list[CitationInfo] = []
+    """Read delivery metadata and project accepted execution content."""
     error_msg: str | None = None
     message_id: int | None = None
-    top_documents: list[SearchDoc] = []
     chat_session_id: UUID | None = None
     incognito = False
 
     for packet in packets:
-        if isinstance(packet, Packet):
-            if isinstance(packet.obj, AgentResponseStart):
-                if packet.obj.final_documents:
-                    top_documents = packet.obj.final_documents
-            elif isinstance(packet.obj, AgentResponseDelta):
-                if answer is None:
-                    answer = ""
-                if packet.obj.content:
-                    answer += packet.obj.content
-            elif isinstance(packet.obj, CitationInfo):
-                citations.append(packet.obj)
-        elif isinstance(packet, StreamingError):
+        if isinstance(packet, StreamingError):
             error_msg = packet.error
         elif isinstance(packet, MessageResponseIDInfo):
             message_id = packet.reserved_assistant_message_id
@@ -854,9 +791,11 @@ def gather_stream_full(
     if message_id is None:
         raise ValueError("Message ID is required")
 
-    final_answer = state_container.get_answer_tokens() or answer or ""
+    outcome = response_binding.result()
+    snapshot = outcome.response
+    final_answer = snapshot.answer or ""
 
-    reasoning = state_container.get_reasoning_tokens()
+    reasoning = snapshot.reasoning
 
     tool_call_responses = [
         ToolCallResponse(
@@ -867,7 +806,7 @@ def gather_stream_full(
             generated_images=tc.generated_images,
             pre_reasoning=tc.reasoning_tokens,
         )
-        for tc in state_container.get_tool_calls()
+        for tc in snapshot.tool_calls
     ]
 
     return ChatFullResponse(
@@ -875,10 +814,10 @@ def gather_stream_full(
         answer_citationless=remove_answer_citations(final_answer),
         pre_answer_reasoning=reasoning,
         tool_calls=tool_call_responses,
-        top_documents=top_documents,
-        citation_info=citations,
+        top_documents=snapshot.top_documents,
+        citation_info=snapshot.citation_info,
         message_id=message_id,
         chat_session_id=chat_session_id,
         incognito=incognito,
-        error_msg=error_msg,
+        error_msg=outcome.error or error_msg,
     )

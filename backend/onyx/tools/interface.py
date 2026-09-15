@@ -1,30 +1,88 @@
-from __future__ import annotations
-
 import abc
-from typing import Any, Generic, TypeVar
+from collections.abc import Awaitable, Callable
+from typing import Literal, NotRequired, TypedDict
 
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError
 from sqlalchemy.orm import Session
 
-from onyx.chat.emitter import Emitter
-from onyx.llm.models import ToolResult
-from onyx.server.query_and_chat.placement import Placement
+from onyx.agents.tools import ToolExecutionMode, ToolInvocation
+from onyx.configs.constants import MessageType
+from onyx.context.messages import prompt_metadata
+from onyx.db.memory import UserMemoryContext
+from onyx.llm.models import Message, ToolResult
+from onyx.tools.models import ChatFile, ChatMinimalTextMessage, ToolCallException
 
-TOverride = TypeVar("TOverride")
+CITATIONS_PER_TOOL_CALL = 100
 
 
-class Tool(abc.ABC, Generic[TOverride]):
-    def __init__(self, emitter: Emitter | None = None):
-        """Initialize tool with optional emitter. Emitter can be set later via set_emitter()."""
-        self._emitter = emitter
+class ToolFunctionDefinition(TypedDict):
+    name: str
+    description: str
+    parameters: dict[str, JsonValue]
+    strict: NotRequired[bool]
+
+
+class FunctionToolDefinition(TypedDict):
+    type: Literal["function"]
+    function: ToolFunctionDefinition
+
+
+class ToolContext(BaseModel):
+    """Application data available to each tool in an agent step."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    user_memory_context: UserMemoryContext | None = None
+    user_info: str | None = None
+    citation_mapping: dict[int, str] = Field(default_factory=dict)
+    next_citation_num: int = 1
+    skip_search_query_expansion: bool = False
+    chat_files: list[ChatFile] = Field(default_factory=list)
+    url_snippet_map: dict[str, str] = Field(default_factory=dict)
+    inject_memories_in_prompt: bool = True
+
+
+_MESSAGE_TYPES = {
+    "user": MessageType.USER,
+    "assistant": MessageType.ASSISTANT,
+    "system": MessageType.SYSTEM,
+    "tool_result": MessageType.TOOL_CALL_RESPONSE,
+}
+
+
+def tool_message_history(messages: list[Message]) -> list[ChatMinimalTextMessage]:
+    return [
+        ChatMinimalTextMessage(
+            message=message.text,
+            message_type=MessageType.USER_REMINDER
+            if prompt_metadata(message).is_reminder
+            else _MESSAGE_TYPES[message.role],
+        )
+        for message in messages
+    ]
+
+
+def parse_tool_arguments[T: BaseModel](
+    model: type[T], arguments: dict[str, JsonValue]
+) -> T:
+    try:
+        return model.model_validate(arguments)
+    except ValidationError as error:
+        message = "; ".join(
+            item["msg"] for item in error.errors(include_input=False, include_url=False)
+        )
+        raise ToolCallException(
+            message=f"Invalid tool arguments: {message}",
+            llm_facing_message=f"Invalid tool arguments: {message}",
+        ) from error
+
+
+class Tool(abc.ABC):
+    """An application tool bound to the runtime with a ToolContext."""
 
     @property
-    def emitter(self) -> Emitter:
-        """Get the emitter. Raises if not set."""
-        if self._emitter is None:
-            raise ValueError(
-                f"Emitter not set on tool {self.name}. Call set_emitter() first."
-            )
-        return self._emitter
+    def execution_mode(self) -> ToolExecutionMode:
+        return ToolExecutionMode.PARALLEL
 
     @property
     @abc.abstractmethod
@@ -34,7 +92,6 @@ class Tool(abc.ABC, Generic[TOverride]):
     @property
     @abc.abstractmethod
     def name(self) -> str:
-        """Should be the name of the tool passed to the LLM as the json field"""
         raise NotImplementedError
 
     @property
@@ -45,51 +102,21 @@ class Tool(abc.ABC, Generic[TOverride]):
     @property
     @abc.abstractmethod
     def display_name(self) -> str:
-        """Should be the name of the tool displayed to the user"""
         raise NotImplementedError
 
     @classmethod
-    def is_available(cls, db_session: "Session") -> bool:  # noqa: ARG003
-        """
-        Whether this tool is currently available for use given
-        the state of the system. Default: available.
-        Subclasses may override to perform dynamic checks.
-
-        Args:
-            db_session: Database session for tools that need DB access
-        """
+    def is_available(cls, db_session: Session) -> bool:  # noqa: ARG003
         return True
 
     @abc.abstractmethod
-    def tool_definition(self) -> dict:
-        """
-        This is the full definition of the tool with all of the parameters, settings, etc.
-        """
+    def tool_definition(self) -> FunctionToolDefinition:
         raise NotImplementedError
 
-    @abc.abstractmethod
-    def emit_start(self, placement: Placement) -> None:
-        """
-        Emit the start packet for this tool. Each tool implementation should
-        emit its specific start packet type.
+    def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+        raise RuntimeError(f"Tool {self.name} requires asynchronous execution")
 
-        Args:
-            turn_index: The turn index for this tool execution
-            tab_index: The tab index for parallel tool calls
-        """
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def run(
+    @property
+    def execute_async(
         self,
-        placement: Placement,
-        # Specific tool override arguments that are not provided by the LLM
-        # For example when calling the internal search tool, the original user query is passed along too (but not by the LLM)
-        override_kwargs: TOverride,
-        **llm_kwargs: Any,
-    ) -> ToolResult:
-        raise NotImplementedError
-
-    @classmethod
-    def should_emit_argument_deltas(cls) -> bool:
-        return False
+    ) -> Callable[[ToolInvocation, ToolContext], Awaitable[ToolResult]] | None:
+        return None

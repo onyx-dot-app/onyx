@@ -6468,6 +6468,11 @@
         }
       },
       "networkSafety": {
+        "envInjection": {
+          "description": "Autorisez les configurations de fournisseurs LLM personnalisés à définir temporairement des variables d'environnement du processus pendant les appels. Désactivez cette option pour exiger que chaque paramètre de fournisseur ait un équivalent LiteLLM.",
+          "multiTenantDescription": "Les configurations de fournisseurs LLM personnalisés ne peuvent jamais définir de variables d'environnement du processus sur les déploiements multi-locataires.",
+          "title": "Injection de variables d'environnement LLM"
+        },
         "section": {
           "title": "Sécurité réseau"
         },

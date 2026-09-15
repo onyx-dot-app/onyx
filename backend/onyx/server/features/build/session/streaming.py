@@ -83,7 +83,6 @@ logger = setup_logger()
 class BuildStreamingState:
     """Container for accumulating state during sandbox-event streaming.
 
-    Similar to ChatStateContainer but adapted for sandbox event packet types.
     Accumulates chunks and tracks pending tool calls until completion.
 
     Usage:
@@ -108,7 +107,7 @@ class BuildStreamingState:
         """
         self.turn_index = turn_index
 
-        # Accumulated text chunks (similar to answer_tokens in ChatStateContainer)
+        # Accumulated text chunks
         self.message_chunks: list[str] = []
         self.thought_chunks: list[str] = []
 

@@ -1595,15 +1595,15 @@ def _list_mcp_tools_by_id(
         )
     auth = None
     if mcp_server.auth_type == MCPAuthenticationType.OAUTH:
-        connection_config = credentials.connection_config
-        if connection_config is None:
+        connection_config_id = credentials.connection_config_id
+        if connection_config_id is None:
             raise OnyxError(
                 OnyxErrorCode.INTERNAL_ERROR,
                 "OAuth MCP credentials are missing their connection config.",
             )
         auth = make_oauth_provider(
             mcp_server,
-            connection_config.id,
+            connection_config_id,
             None,
         )
 

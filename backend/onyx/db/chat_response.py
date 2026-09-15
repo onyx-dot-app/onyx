@@ -4,8 +4,12 @@ import mimetypes
 from sqlalchemy.orm import Session
 
 from onyx.agents.transcript import AgentTranscript
-from onyx.chat.chat_state import ChatResponseSnapshot, ChatStateContainer, SearchDocKey
 from onyx.chat.incognito_context import append_incognito_messages
+from onyx.chat.models import (
+    ChatResponseSnapshot,
+    MessagePresentation,
+    ToolRecordReference,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc
 from onyx.db.agent_transcript import set_agent_transcript
@@ -59,99 +63,58 @@ def _create_and_link_tool_calls(
     assistant_message: ChatMessage,
     db_session: Session,
     default_tokenizer: BaseTokenizer,
-    tool_call_to_search_doc_ids: dict[str, list[int]],
-) -> None:
-    """Link tool calls after IDs exist; the caller owns the transaction."""
-    tool_call_objects: list[ToolCall] = []
-    tool_call_info_map: dict[str, ToolCallInfo] = {}
-
-    for tool_call_info in tool_calls:
-        tool_call_info_map[tool_call_info.tool_call_id] = tool_call_info
-
-        # Calculate tool_call_tokens from arguments
-        try:
-            arguments_json_str = json.dumps(tool_call_info.tool_call_arguments)
-            tool_call_tokens = len(default_tokenizer.encode(arguments_json_str))
-        except Exception as e:
-            logger.warning(
-                "Failed to tokenize tool call arguments for %s: %s. Using length as (over) estimate.",
-                tool_call_info.tool_call_id,
-                e,
-                exc_info=True,
-            )
-            arguments_json_str = json.dumps(tool_call_info.tool_call_arguments)
-            tool_call_tokens = len(arguments_json_str)
-
-        parent_message_id = (
-            assistant_message.id if tool_call_info.parent_tool_call_id is None else None
-        )
-
-        # Create ToolCall DB entry (parent_tool_call_id will be set after flush)
-        # This is needed to get the IDs for the parent pointers
-        tool_call = create_tool_call_no_commit(
+    tool_call_to_search_doc_ids: dict[tuple[str, str], list[int]],
+) -> list[ToolRecordReference]:
+    """Link message-scoped tool identities; the caller owns the transaction."""
+    keys = {info.execution_key for info in tool_calls}
+    if len(keys) != len(tool_calls):
+        raise ValueError("Duplicate tool identity within one response")
+    if any(
+        info.parent_execution_key is not None and info.parent_execution_key not in keys
+        for info in tool_calls
+    ):
+        raise ValueError("Child artifact has no parent operation")
+    records: dict[tuple[str, str], ToolCall] = {}
+    for info in tool_calls:
+        record = create_tool_call_no_commit(
             chat_session_id=assistant_message.chat_session_id,
-            parent_chat_message_id=parent_message_id,
-            turn_number=tool_call_info.turn_index,
-            tool_id=tool_call_info.tool_id,
-            tool_call_id=tool_call_info.tool_call_id,
-            tool_call_arguments=tool_call_info.tool_call_arguments,
-            tool_call_response=tool_call_info.tool_call_response,
-            tool_call_tokens=tool_call_tokens,
-            db_session=db_session,
-            parent_tool_call_id=None,  # Will be updated after flush
-            reasoning_tokens=tool_call_info.reasoning_tokens,
-            generated_images=(
-                [img.model_dump() for img in tool_call_info.generated_images]
-                if tool_call_info.generated_images
-                else None
+            parent_chat_message_id=assistant_message.id
+            if info.parent_execution_key is None
+            else None,
+            turn_number=info.turn_index,
+            tool_id=info.tool_id,
+            tool_call_id=info.tool_call_id,
+            tool_call_arguments=info.tool_call_arguments,
+            tool_call_response=info.tool_call_response,
+            tool_call_tokens=len(
+                default_tokenizer.encode(json.dumps(info.tool_call_arguments))
             ),
-            tab_index=tool_call_info.tab_index,
+            db_session=db_session,
+            reasoning_tokens=info.reasoning_tokens,
+            generated_images=[image.model_dump() for image in info.generated_images]
+            if info.generated_images
+            else None,
+            tab_index=info.tab_index,
             add_only=True,
         )
-
-        # Flush to get all of the IDs
-        db_session.flush()
-
-        tool_call_objects.append(tool_call)
-
-    # Build mapping of tool calls (tool_call_id string -> DB id int)
-    tool_call_map: dict[str, int] = {}
-    for tool_call_obj in tool_call_objects:
-        tool_call_map[tool_call_obj.tool_call_id] = tool_call_obj.id
-
-    # Update parent_tool_call_id for all tool calls
-    # Filter out orphaned children (whose parents don't exist) - this can happen
-    # when generation is stopped mid-execution and parent tool calls were cancelled
-    valid_tool_calls: list[ToolCall] = []
-    for tool_call_obj in tool_call_objects:
-        tool_call_info = tool_call_info_map[tool_call_obj.tool_call_id]
-        if tool_call_info.parent_tool_call_id is not None:
-            parent_id = tool_call_map.get(tool_call_info.parent_tool_call_id)
-            if parent_id is not None:
-                tool_call_obj.parent_tool_call_id = parent_id
-                valid_tool_calls.append(tool_call_obj)
-            else:
-                # Parent doesn't exist (likely cancelled) - skip this orphaned child
-                logger.warning(
-                    "Skipping tool call '%s' with missing parent '%s' (likely cancelled during execution)",
-                    tool_call_obj.tool_call_id,
-                    tool_call_info.parent_tool_call_id,
-                )
-                # Remove from DB session to prevent saving
-                db_session.delete(tool_call_obj)
-        else:
-            # Top-level tool call (no parent)
-            valid_tool_calls.append(tool_call_obj)
-
-    # Link SearchDocs only to valid ToolCalls
-    for tool_call_obj in valid_tool_calls:
-        search_doc_ids = tool_call_to_search_doc_ids.get(tool_call_obj.tool_call_id, [])
+        records[info.execution_key] = record
+    db_session.flush()
+    for info in tool_calls:
+        record = records[info.execution_key]
+        if info.parent_execution_key is not None:
+            record.parent_tool_call_id = records[info.parent_execution_key].id
+        search_doc_ids = tool_call_to_search_doc_ids.get(info.execution_key, [])
         if search_doc_ids:
             add_search_docs_to_tool_call(
-                tool_call_id=tool_call_obj.id,
+                tool_call_id=record.id,
                 search_doc_ids=search_doc_ids,
                 db_session=db_session,
             )
+
+    return [
+        ToolRecordReference(message_id=key[0], tool_call_id=key[1], record_id=record.id)
+        for key, record in records.items()
+    ]
 
 
 def save_chat_turn(
@@ -159,7 +122,7 @@ def save_chat_turn(
     reasoning_tokens: str | None,
     tool_calls: list[ToolCallInfo],
     citation_to_doc: dict[int, SearchDoc],
-    all_search_docs: dict[SearchDocKey, SearchDoc],
+    all_search_docs: dict[str, SearchDoc],
     db_session: Session,
     assistant_message: ChatMessage,
     is_clarification: bool = False,
@@ -168,14 +131,12 @@ def save_chat_turn(
     persist_content: bool = True,
     request_params: GenerationRequestParams | None = None,
     agent_transcript: AgentTranscript | None = None,
+    presentation: list[MessagePresentation] | None = None,
 ) -> None:
-    """Persist answer content and its tool/citation records; the caller owns the transaction.
+    """Persist answer content, transcript, and tool records, then commit the session.
 
-    Content retention applies to transcripts and related records. Request attribution remains stored.
+    Content retention applies to related records; request attribution remains stored.
     """
-    set_agent_transcript(
-        assistant_message, agent_transcript, persist_content=persist_content
-    )
     sanitized_message_text = (
         sanitize_string(message_text) if message_text else message_text
     )
@@ -212,7 +173,7 @@ def save_chat_turn(
         assistant_message.token_count = 0
 
     # 2. Create DB SearchDoc entries from pre-deduplicated all_search_docs
-    search_doc_key_to_id: dict[SearchDocKey, int] = {}
+    search_doc_key_to_id: dict[str, int] = {}
     for key, search_doc_py in all_search_docs.items():
         db_search_doc = create_db_search_doc(
             server_search_doc=search_doc_py,
@@ -222,12 +183,12 @@ def save_chat_turn(
         search_doc_key_to_id[key] = db_search_doc.id
 
     # 3. Build tool_call -> search_doc mapping (for displayed docs in each tool call)
-    tool_call_to_search_doc_ids: dict[str, list[int]] = {}
+    tool_call_to_search_doc_ids: dict[tuple[str, str], list[int]] = {}
     for tool_call_info in tool_calls:
         if tool_call_info.search_docs:
             search_doc_ids_for_tool: list[int] = []
             for search_doc_py in tool_call_info.search_docs:
-                key = ChatStateContainer.create_search_doc_key(search_doc_py)
+                key = search_doc_py.document_id
                 if key in search_doc_key_to_id:
                     search_doc_ids_for_tool.append(search_doc_key_to_id[key])
                 else:
@@ -240,7 +201,7 @@ def save_chat_turn(
                     )
                     search_doc_key_to_id[key] = db_search_doc.id
                     search_doc_ids_for_tool.append(db_search_doc.id)
-            tool_call_to_search_doc_ids[tool_call_info.tool_call_id] = list(
+            tool_call_to_search_doc_ids[tool_call_info.execution_key] = list(
                 set(search_doc_ids_for_tool)
             )
 
@@ -257,7 +218,7 @@ def save_chat_turn(
             continue
 
         # Create the unique key for this SearchDoc version
-        search_doc_key = ChatStateContainer.create_search_doc_key(search_doc_py)
+        search_doc_key = search_doc_py.document_id
 
         # Get the search doc ID (should already exist from processing tool_calls)
         if search_doc_key in search_doc_key_to_id:
@@ -308,7 +269,7 @@ def save_chat_turn(
         )
 
     # 6. Create ToolCall entries and link SearchDocs to them
-    _create_and_link_tool_calls(
+    tool_records = _create_and_link_tool_calls(
         tool_calls=tool_calls,
         assistant_message=assistant_message,
         db_session=db_session,
@@ -316,12 +277,19 @@ def save_chat_turn(
         tool_call_to_search_doc_ids=tool_call_to_search_doc_ids,
     )
 
+    set_agent_transcript(
+        assistant_message,
+        agent_transcript,
+        persist_content=persist_content,
+        presentation=presentation,
+        tool_records=tool_records,
+    )
+
     # 7. Build citations mapping - use the mapping we already built in step 4
     assistant_message.citations = citation_number_to_search_doc_id or None
 
-    # 8. Attach code interpreter generated files that the assistant actually
-    # referenced in its response, so they are available via load_all_chat_files
-    # on subsequent turns. Files not mentioned are intermediate artifacts.
+    # Preserve referenced generated files for subsequent turns. Unreferenced
+    # files remain intermediate artifacts.
     if sanitized_message_text:
         referenced = _extract_referenced_file_descriptors(
             tool_calls, sanitized_message_text
@@ -335,15 +303,17 @@ def save_chat_turn(
 
 
 def save_chat_response(*, message_id: int, response: ChatResponseSnapshot) -> None:
-    """Save one complete or cancelled response from a stable snapshot."""
-    if response.cancelled:
+    """Persist one terminal response and its accepted artifacts from a stable snapshot."""
+    if response.error is not None:
+        answer = response.answer or ""
+    elif response.cancelled:
         answer = (
-            (response.answer_tokens + " ... \n\n") if response.answer_tokens else ""
+            (response.answer + " ... \n\n") if response.answer else ""
         ) + "Generation was stopped by the user."
     else:
-        if response.answer_tokens is None:
+        if response.answer is None:
             raise RuntimeError("Agent completed without an answer")
-        answer = response.answer_tokens
+        answer = response.answer
     with get_session_with_current_tenant() as session:
         message = session.get(ChatMessage, message_id)
         if message is None:
@@ -351,9 +321,18 @@ def save_chat_response(*, message_id: int, response: ChatResponseSnapshot) -> No
         keeps_content = record_mode_persists_content(
             message.chat_session.incognito_record_mode
         )
+        message.error = (
+            (
+                sanitize_string(response.error)
+                if keeps_content
+                else "The model encountered an error."
+            )
+            if response.error is not None
+            else None
+        )
         save_chat_turn(
             message_text=answer,
-            reasoning_tokens=response.reasoning_tokens,
+            reasoning_tokens=response.reasoning,
             request_params=response.request_params,
             citation_to_doc=response.citation_to_doc,
             tool_calls=response.tool_calls,
@@ -361,10 +340,13 @@ def save_chat_response(*, message_id: int, response: ChatResponseSnapshot) -> No
             db_session=session,
             assistant_message=message,
             is_clarification=response.is_clarification,
-            emitted_citations=response.emitted_citations,
+            emitted_citations={
+                citation.citation_number for citation in response.citation_info
+            },
             pre_answer_processing_time=response.pre_answer_processing_time,
             persist_content=keeps_content,
             agent_transcript=response.transcript,
+            presentation=response.presentation,
         )
         if not keeps_content:
             messages = (

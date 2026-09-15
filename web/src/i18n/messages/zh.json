@@ -6468,6 +6468,11 @@
         }
       },
       "networkSafety": {
+        "envInjection": {
+          "description": "允许自定义 LLM 提供商配置在调用期间临时设置进程环境变量。禁用后，所有提供商设置都必须有对应的 LiteLLM 参数。",
+          "multiTenantDescription": "在多租户部署中，自定义 LLM 提供商配置永远无法设置进程环境变量。",
+          "title": "LLM 环境变量注入"
+        },
         "section": {
           "title": "网络安全"
         },

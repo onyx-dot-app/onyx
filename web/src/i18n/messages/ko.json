@@ -6468,6 +6468,11 @@
         }
       },
       "networkSafety": {
+        "envInjection": {
+          "description": "사용자 지정 LLM 제공자 구성이 호출 중에 프로세스 환경 변수를 임시로 설정하도록 허용합니다. 비활성화하면 모든 제공자 설정에 대응하는 LiteLLM 파라미터가 있어야 합니다.",
+          "multiTenantDescription": "멀티테넌트 배포에서는 사용자 지정 LLM 제공자 구성이 프로세스 환경 변수를 설정할 수 없습니다.",
+          "title": "LLM 환경 변수 주입"
+        },
         "section": {
           "title": "네트워크 보안"
         },

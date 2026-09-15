@@ -5,16 +5,17 @@ from unittest.mock import patch
 
 import pytest
 
+from onyx.agents.tools import ToolInvocation
+from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import ToolResult
-from onyx.server.query_and_chat.placement import Placement
-from onyx.tools.models import DynamicSchemaInfo
+from onyx.tools.interface import ToolContext
+from onyx.tools.models import CustomToolCallSummary, DynamicSchemaInfo
 from onyx.tools.tool_implementations.custom.custom_tool import (
-    CustomToolCallSummary,
     build_custom_tools_from_openapi_schema_and_headers,
-    validate_openapi_schema,
 )
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     openapi_to_method_specs,
+    validate_openapi_schema,
 )
 from onyx.tools.tool_name import sanitize_tool_name
 from onyx.utils.headers import HeaderItemDict
@@ -101,9 +102,13 @@ class TestCustomTool(unittest.TestCase):
         )
 
         result = tools[0].run(
-            placement=Placement(turn_index=0, tab_index=0),
-            override_kwargs=None,
-            assistant_id="123",
+            invocation=ToolInvocation(
+                call_id="test",
+                arguments={"assistant_id": "123"},
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            context=ToolContext(),
         )
         expected_url = f"http://localhost:8080/{self.dynamic_schema_info.chat_session_id}/test/{self.dynamic_schema_info.message_id}/assistant/123"
         mock_request.assert_called_once_with("GET", expected_url, json=None, headers={})
@@ -139,9 +144,13 @@ class TestCustomTool(unittest.TestCase):
         )
 
         result = tools[1].run(
-            placement=Placement(turn_index=0, tab_index=0),
-            override_kwargs=None,
-            assistant_id="456",
+            invocation=ToolInvocation(
+                call_id="test",
+                arguments={"assistant_id": "456"},
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            context=ToolContext(),
         )
         expected_url = f"http://localhost:8080/{self.dynamic_schema_info.chat_session_id}/test/{self.dynamic_schema_info.message_id}/assistant/456"
         mock_request.assert_called_once_with(
@@ -186,9 +195,13 @@ class TestCustomTool(unittest.TestCase):
         )
 
         tools[0].run(
-            placement=Placement(turn_index=0, tab_index=0),
-            override_kwargs=None,
-            assistant_id="123",
+            invocation=ToolInvocation(
+                call_id="test",
+                arguments={"assistant_id": "123"},
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            context=ToolContext(),
         )
         expected_url = f"http://localhost:8080/{self.dynamic_schema_info.chat_session_id}/test/{self.dynamic_schema_info.message_id}/assistant/123"
         expected_headers = {
@@ -222,9 +235,13 @@ class TestCustomTool(unittest.TestCase):
         )
 
         tools[0].run(
-            placement=Placement(turn_index=0, tab_index=0),
-            override_kwargs=None,
-            assistant_id="123",
+            invocation=ToolInvocation(
+                call_id="test",
+                arguments={"assistant_id": "123"},
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            context=ToolContext(),
         )
         expected_url = f"http://localhost:8080/{self.dynamic_schema_info.chat_session_id}/test/{self.dynamic_schema_info.message_id}/assistant/123"
         mock_request.assert_called_once_with("GET", expected_url, json=None, headers={})
@@ -308,9 +325,13 @@ class TestCustomTool(unittest.TestCase):
         )
 
         tools[0].run(
-            placement=Placement(turn_index=0, tab_index=0),
-            override_kwargs=None,
-            email=user_email,
+            invocation=ToolInvocation(
+                call_id="test",
+                arguments={"email": user_email},
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            context=ToolContext(),
         )
 
         expected_url = (
@@ -369,8 +390,13 @@ class TestCustomTool(unittest.TestCase):
         )
 
         tools[0].run(
-            placement=Placement(turn_index=0, tab_index=0),
-            override_kwargs=None,
+            invocation=ToolInvocation(
+                call_id="test",
+                arguments={},
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            context=ToolContext(),
         )
 
         mock_request.assert_called_once_with(

@@ -1,6 +1,6 @@
-from collections.abc import Callable
+from collections.abc import Mapping
 
-from onyx.chat.chat_state import ChatArtifactSnapshot, ChatStateContainer, SearchDocKey
+from onyx.agents.runtime import RunSnapshot
 from onyx.chat.citation_processor import (
     CitationMapping,
     CitationMode,
@@ -10,21 +10,20 @@ from onyx.chat.citation_utils import (
     build_context_file_citation_mapping,
     update_citation_processor_from_tool_result,
 )
+from onyx.chat.models import ChatArtifactSnapshot
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
+from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.file_store.models import ExtractedContextFiles
-from onyx.llm.models import AssistantMessage, Message, ToolCall, ToolResultMessage
-from onyx.server.query_and_chat.placement import Placement
+from onyx.llm.models import AssistantMessage, ToolCall, ToolResultMessage
 from onyx.tools.built_in_tools import STOPPING_TOOLS_NAMES
-from onyx.tools.interface import Tool
 from onyx.tools.models import (
     ChatFile,
     CustomToolCallSummary,
     CustomToolUserFileSnapshot,
-    MemoryToolResponseSnapshot,
     PythonToolRichResponse,
     ToolCallInfo,
 )
-from onyx.tools.tool_implementations.file_reader.file_reader_tool import FileReadResult
+from onyx.tools.progress import FileReadResult, MemoryUpdated
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 
@@ -36,7 +35,7 @@ class ChatSearchResult(SearchDocsResponse):
 
 
 class ChatArtifacts:
-    """Rich tool results, citation state, and persistence for one chat request."""
+    """Tool-derived context for subsequent chat steps."""
 
     def __init__(
         self,
@@ -67,7 +66,7 @@ class ChatArtifacts:
         message: AssistantMessage,
         responses: list[ToolResultMessage],
     ) -> None:
-        """Apply completed-turn artifacts to the next request's context policy."""
+        """Apply completed-step artifacts to the next request's context policy."""
         for response in responses:
             data = response.details
             if response.tool_name == SearchTool.NAME:
@@ -87,65 +86,68 @@ class ChatArtifacts:
             call.name in STOPPING_TOOLS_NAMES for call in message.tool_calls
         )
 
-    def project(
-        self,
-        messages: list[Message],
-        tools: list[Tool],
-        placement_for: Callable[[str], Placement],
-    ) -> ChatArtifactSnapshot:
-        return project_tool_artifacts(
-            messages, tools, placement_for, self.initial_citations
-        )
-
 
 def _saved_tool_response(result: ToolResultMessage) -> str:
     data = result.details
-    if isinstance(
-        data, (MemoryToolResponseSnapshot, CustomToolCallSummary, FileReadResult)
-    ):
+    if isinstance(data, (MemoryUpdated, CustomToolCallSummary, FileReadResult)):
         return data.model_dump_json()
     return result.text
 
 
 def project_tool_artifacts(
-    messages: list[Message],
-    tools: list[Tool],
-    placement_for: Callable[[str], Placement],
+    snapshot: RunSnapshot,
+    tool_ids: Mapping[str, int],
     initial_citations: CitationMapping | None = None,
 ) -> ChatArtifactSnapshot:
-    """Build persistence records without changing policy state or performing I/O."""
-    tools_by_name = {tool.name: tool for tool in tools}
+    """Project completed and interrupted operations from one execution tree."""
     records: list[ToolCallInfo] = []
-    documents: dict[SearchDocKey, SearchDoc] = {}
+    documents: dict[str, SearchDoc] = {}
     citations = DynamicCitationProcessor(citation_mode=CitationMode.HYPERLINK)
     citations.update_citation_mapping(initial_citations or {})
-    assistant: AssistantMessage | None = None
-    for message in messages:
-        if isinstance(message, AssistantMessage):
-            assistant = message
-        elif isinstance(message, ToolResultMessage) and assistant is not None:
-            tool = tools_by_name.get(message.tool_name)
-            if tool is None:
-                continue
-            call = next(
-                call for call in assistant.tool_calls if call.id == message.tool_call_id
+    for operation in snapshot.operations:
+        if operation.tool_call_id is not None:
+            continue
+        message = snapshot.messages[operation.message_index]
+        if not isinstance(message, AssistantMessage):
+            raise ValueError(
+                "Message operation does not reference an assistant message"
             )
+        results: dict[str, ToolResultMessage] = {}
+        for item in snapshot.messages[operation.message_index + 1 :]:
+            if isinstance(item, AssistantMessage):
+                break
+            if isinstance(item, ToolResultMessage):
+                results[item.tool_call_id] = item
+        for index, call in enumerate(message.tool_calls):
+            tool_id = tool_ids.get(call.name)
+            if tool_id is None:
+                continue
+            result = results.get(call.id)
             records.append(
                 _tool_record(
-                    tool,
-                    assistant,
+                    tool_id,
                     message,
+                    result,
                     call,
-                    placement_for(call.id),
+                    snapshot,
+                    operation.step_index,
+                    index,
                 )
             )
-            data = message.details
-            if isinstance(data, SearchDocsResponse):
-                for document in data.search_docs:
-                    documents.setdefault(
-                        ChatStateContainer.create_search_doc_key(document), document
-                    )
-            update_citation_processor_from_tool_result(message, citations)
+            if result is None:
+                continue
+            if isinstance(result.details, SearchDocsResponse):
+                for document in result.details.search_docs:
+                    documents.setdefault(document.document_id, document)
+            if isinstance(result.details, ResearchAgentCallResult):
+                citations.update_citation_mapping(result.details.citation_mapping)
+                for document in result.details.citation_mapping.values():
+                    documents.setdefault(document.document_id, document)
+            update_citation_processor_from_tool_result(result, citations)
+    for child in snapshot.children:
+        child_artifacts = project_tool_artifacts(child, tool_ids)
+        records.extend(child_artifacts.tool_calls)
+        documents.update(child_artifacts.all_search_docs)
     return ChatArtifactSnapshot(
         tool_calls=records,
         all_search_docs=documents,
@@ -154,13 +156,15 @@ def project_tool_artifacts(
 
 
 def _tool_record(
-    tool: Tool,
+    tool_id: int,
     output: AssistantMessage,
-    tool_response: ToolResultMessage,
+    tool_response: ToolResultMessage | None,
     tool_call: ToolCall,
-    placement: Placement,
+    snapshot: RunSnapshot,
+    turn: int,
+    index: int,
 ) -> ToolCallInfo:
-    data = tool_response.details
+    data = tool_response.details if tool_response else None
     search_docs = data.search_docs if isinstance(data, SearchDocsResponse) else None
     displayed_docs = (
         data.displayed_docs if isinstance(data, SearchDocsResponse) else None
@@ -180,15 +184,17 @@ def _tool_record(
     ):
         generated_file_ids = data.tool_result.file_ids or None
 
-    saved_response = _saved_tool_response(tool_response)
+    saved_response = _saved_tool_response(tool_response) if tool_response else ""
 
     return ToolCallInfo(
-        parent_tool_call_id=None,  # Top-level tool calls are attached to the chat message
-        turn_index=placement.turn_index,
-        tab_index=placement.tab_index,
+        message_id=f"{snapshot.run_id}:{turn}",
+        parent_message_id=snapshot.parent_message_id,
+        parent_tool_call_id=snapshot.parent_tool_call_id,
+        turn_index=turn,
+        tab_index=index,
         tool_name=tool_call.name,
         tool_call_id=tool_call.id,
-        tool_id=tool.id,
+        tool_id=tool_id,
         reasoning_tokens=output.thinking,  # Calls from one assistant message share its thinking.
         tool_call_arguments=tool_call.arguments,
         tool_call_response=saved_response,

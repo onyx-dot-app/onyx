@@ -373,6 +373,11 @@ export default function useChatSessionController({
       }
 
       const currentRun = chatSession.current_run;
+      useChatSessionStore
+        .getState()
+        .updateSessionData(chatSession.chat_session_id, {
+          processingKey: currentRun?.run_id,
+        });
       if (
         currentRun &&
         newMessageMap.get(currentRun.run_id)?.type === "assistant"

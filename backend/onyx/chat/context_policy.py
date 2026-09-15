@@ -1,22 +1,19 @@
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 
 from pydantic import BaseModel, ConfigDict
 
-from onyx.agents.runtime import AgentTurn
+from onyx.agents.runtime import AgentStep
 from onyx.chat.artifacts import ChatArtifacts
-from onyx.chat.chat_state import PersonaPromptConfig
+from onyx.chat.models import PersonaPromptConfig
 from onyx.chat.prompt_utils import (
     build_system_prompt,
     process_prompt_template,
     select_reminder_text,
 )
-from onyx.configs.model_configs import GEN_AI_INPUT_TOKEN_SAFETY_MARGIN
-from onyx.context.messages import PromptMetadata, prompt_metadata
-from onyx.context.prompt import prepare_prompt
+from onyx.context.messages import PromptMetadata
 from onyx.context.search.models import SearchDocsResponse
 from onyx.db.memory import UserMemoryContext
-from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
-from onyx.llm.interfaces import LLMInfo
+from onyx.file_store.models import ExtractedContextFiles
 from onyx.llm.models import (
     Message,
     SystemMessage,
@@ -24,7 +21,6 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
-from onyx.llm.utils import model_supports_image_input
 from onyx.prompts.prompt_utils import substitute_user_placeholders
 from onyx.tools.built_in_tools import CITEABLE_TOOLS_NAMES
 from onyx.tools.interface import Tool
@@ -32,7 +28,6 @@ from onyx.tools.models import PythonToolRichResponse
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
-from onyx.tools.utils import compute_all_tool_tokens
 
 
 class ChatReminderContext(BaseModel):
@@ -87,9 +82,11 @@ class ChatReminderPolicy:
         )
 
 
-class PreparedChatTurn(BaseModel):
+class PreparedChatStep(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
-    history: list[Message]
+    system_prompt: Message | None
+    custom_prompt: Message | None
+    reminder: Message | None
     tools: list[Tool]
     tool_choice: ToolChoiceOptions
 
@@ -104,24 +101,18 @@ class ChatContextPolicy:
         base_prompt: str,
         files: ExtractedContextFiles,
         memory: UserMemoryContext | None,
-        llm_info: LLMInfo,
-        token_counter: Callable[[str], int],
         artifacts: ChatArtifacts,
         reminders: ChatReminderPolicy,
         forced_tool_id: int | None = None,
-        file_metadata: dict[str, FileToolMetadata] | None = None,
         inject_memories: bool = True,
     ) -> None:
         self.tools = tools
         self.persona = persona
         self.files = files
         self.memory = memory
-        self.llm_info = llm_info
-        self.token_counter = token_counter
         self.artifacts = artifacts
         self.reminders = reminders
         self.forced_tool_id = forced_tool_id
-        self.file_metadata = file_metadata
         self.inject_memories = inject_memories
         self.base_prompt = base_prompt
         values = memory.user_info.placeholder_values if memory else {}
@@ -133,7 +124,7 @@ class ChatContextPolicy:
         self.persona_system = substitute(persona.system_prompt if persona else None)
         self.persona_task = substitute(persona.task_prompt if persona else None)
 
-    def prepare(self, history: list[Message], turn: AgentTurn) -> PreparedChatTurn:
+    def prepare(self, step: AgentStep) -> PreparedChatStep:
         tools = self.tools
         choice = ToolChoiceOptions.AUTO
         if self.forced_tool_id is not None:
@@ -142,7 +133,7 @@ class ChatContextPolicy:
                 raise ValueError(f"Tool {self.forced_tool_id} not found")
             self.forced_tool_id = None
             choice = ToolChoiceOptions.REQUIRED
-        elif turn.is_last or self.artifacts.ran_image_gen:
+        elif step.is_last or self.artifacts.ran_image_gen:
             tools = []
             choice = ToolChoiceOptions.NONE
 
@@ -191,37 +182,19 @@ class ChatContextPolicy:
                 has_open_url_tool=any(
                     isinstance(tool, OpenURLTool) for tool in self.tools
                 ),
-                out_of_cycles=turn.is_last,
+                out_of_cycles=step.is_last,
                 persona_task_prompt=render(self.persona_task),
                 has_context_documents=context_documents,
             )
         )
-        image_markers = any(
-            isinstance(message, UserMessage) and prompt_metadata(message).image_files
-            for message in history
-        ) and not model_supports_image_input(
-            self.llm_info.model_name,
-            self.llm_info.model_provider,
-            self.llm_info.deployment_name,
-        )
-        budget = int(
-            self.llm_info.max_input_tokens * (1 - GEN_AI_INPUT_TOKEN_SAFETY_MARGIN)
-        )
-        prepared = prepare_prompt(
+        return PreparedChatStep(
             system_prompt=SystemMessage(content=system) if system else None,
-            custom_agent_prompt=UserMessage(content=custom) if custom else None,
-            messages=history,
-            reminder_message=UserMessage(
+            custom_prompt=UserMessage(content=custom) if custom else None,
+            reminder=UserMessage(
                 content=reminder, metadata=PromptMetadata(is_reminder=True)
             )
             if reminder
             else None,
-            context_files=self.files,
-            available_tokens=max(
-                0, budget - compute_all_tool_tokens(tools, self.token_counter)
-            ),
-            token_counter=self.token_counter,
-            all_injected_file_metadata=self.file_metadata,
-            image_files_replayed_as_markers=image_markers,
+            tools=tools,
+            tool_choice=choice,
         )
-        return PreparedChatTurn(history=prepared, tools=tools, tool_choice=choice)

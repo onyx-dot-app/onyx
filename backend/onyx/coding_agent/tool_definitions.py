@@ -1,4 +1,5 @@
 from onyx.deep_research.tool_definitions import THINK_TOOL_NAME
+from onyx.tools.interface import FunctionToolDefinition
 
 CODING_AGENT_IN_CODE_ID = "CodingAgent"
 CODING_AGENT_TOOL_NAME = "coding_agent"
@@ -12,7 +13,7 @@ BASH_TOOL_CMD_KEY = "cmd"
 GENERATE_ANSWER_TOOL_NAME = "generate_answer"
 
 
-CODING_AGENT_TOOL_DESCRIPTION = {
+CODING_AGENT_TOOL_DESCRIPTION: FunctionToolDefinition = {
     "type": "function",
     "function": {
         "name": CODING_AGENT_TOOL_NAME,
@@ -45,7 +46,7 @@ CODING_AGENT_TOOL_DESCRIPTION = {
 }
 
 
-BASH_TOOL_DESCRIPTION = {
+BASH_TOOL_DESCRIPTION: FunctionToolDefinition = {
     "type": "function",
     "function": {
         "name": BASH_TOOL_NAME,
@@ -70,7 +71,7 @@ BASH_TOOL_DESCRIPTION = {
 }
 
 
-GENERATE_ANSWER_TOOL_DESCRIPTION = {
+GENERATE_ANSWER_TOOL_DESCRIPTION: FunctionToolDefinition = {
     "type": "function",
     "function": {
         "name": GENERATE_ANSWER_TOOL_NAME,
@@ -89,7 +90,7 @@ GENERATE_ANSWER_TOOL_DESCRIPTION = {
 }
 
 
-CODING_AGENT_THINK_TOOL_DESCRIPTION = {
+CODING_AGENT_THINK_TOOL_DESCRIPTION: FunctionToolDefinition = {
     "type": "function",
     "function": {
         "name": THINK_TOOL_NAME,
@@ -110,13 +111,3 @@ CODING_AGENT_THINK_TOOL_DESCRIPTION = {
         },
     },
 }
-
-
-def get_coding_agent_tool_definitions(include_think_tool: bool) -> list[dict]:
-    tools = [
-        BASH_TOOL_DESCRIPTION,
-        GENERATE_ANSWER_TOOL_DESCRIPTION,
-    ]
-    if include_think_tool:
-        tools.append(CODING_AGENT_THINK_TOOL_DESCRIPTION)
-    return tools

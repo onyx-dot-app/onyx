@@ -1,3 +1,4 @@
+import { PacketLayout } from "@/app/app/services/packetLayout";
 import { DocumentInfoPacket, StreamStopInfo } from "@/lib/search/types";
 import type { SearchFiltersRequest } from "@/lib/searchFilters/types";
 import { handleSSEStream } from "@/lib/search/streamingUtils";
@@ -280,11 +281,17 @@ export async function* sendMessage({
 async function* withoutHeartbeats(
   stream: AsyncGenerator<PacketType, void, unknown>
 ): AsyncGenerator<PacketType, void, unknown> {
+  const layout = new PacketLayout();
   for await (const packet of stream) {
+    if ("responses" in packet) {
+      layout.setResponses(
+        packet.responses.map((response) => response.message_id)
+      );
+    }
     if ("obj" in packet && packet.obj.type === "chat_heartbeat") {
       continue;
     }
-    yield packet;
+    yield "obj" in packet ? layout.project(packet) : packet;
   }
 }
 
@@ -307,7 +314,15 @@ export async function* resumeStream(
     throw new Error(data.detail ?? `HTTP error! status: ${response.status}`);
   }
 
-  yield* handleSSEStream<PacketType>(response, signal);
+  const layout = new PacketLayout();
+  for await (const packet of handleSSEStream<PacketType>(response, signal)) {
+    if ("responses" in packet) {
+      layout.setResponses(
+        packet.responses.map((response) => response.message_id)
+      );
+    }
+    yield "obj" in packet ? layout.project(packet) : packet;
+  }
 }
 
 export async function setPreferredResponse(
@@ -450,7 +465,10 @@ export function processRawChatHistory(
   let agentMessageInd = 0;
 
   rawMessages.forEach((messageInfo, _ind) => {
-    const packetsForMessage = packets[agentMessageInd];
+    const layout = new PacketLayout();
+    const packetsForMessage = packets[agentMessageInd]?.map((packet) =>
+      layout.project(packet)
+    );
     if (messageInfo.message_type === "assistant") {
       agentMessageInd++;
     }

@@ -9,7 +9,7 @@ from mcp.shared.auth import (
     ProtectedResourceMetadata,
 )
 from mcp.types import Tool as MCPLibTool
-from pydantic import AnyUrl, BaseModel, Field, model_validator
+from pydantic import AnyUrl, BaseModel, ConfigDict, Field, model_validator
 
 from onyx.db.enums import (
     EndpointPolicy,
@@ -575,6 +575,21 @@ class MCPPendingOAuthAuthorization(BaseModel):
     authorization_url: str
     state: str
     code_verifier: str
+
+
+class MCPServerConnection(BaseModel):
+    """Server settings needed for tool calls and token refresh."""
+
+    model_config = ConfigDict(from_attributes=True, frozen=True)
+
+    id: int
+    name: str
+    server_url: str
+    auth_type: MCPAuthenticationType
+    transport: MCPTransport | None
+    oauth_provider_mode: MCPOAuthProviderMode
+    oauth_authorization_endpoint: str | None
+    oauth_token_endpoint: str | None
 
 
 class MCPOAuthServerSnapshot(BaseModel):

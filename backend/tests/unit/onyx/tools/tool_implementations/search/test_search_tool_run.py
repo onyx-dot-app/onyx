@@ -1,13 +1,13 @@
-from __future__ import annotations
-
-from typing import Any, cast
+from typing import Any
 from unittest.mock import MagicMock, patch
 
-from onyx.configs.constants import DocumentSource, MessageType
+from onyx.agents.tools import ToolInvocation, ToolProgress
+from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import BaseFilters
-from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import SearchToolFilterDelta
-from onyx.tools.models import ChatMinimalTextMessage, SearchToolOverrideKwargs
+from onyx.llm.cancellation import CancellationSignal
+from onyx.llm.models import UserMessage
+from onyx.tools.interface import ToolContext
+from onyx.tools.progress import SearchFilters
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 
 MODULE = "onyx.tools.tool_implementations.search.search_tool"
@@ -23,7 +23,6 @@ def _make_tool(
     """Instantiate SearchTool with non-DB deps mocked; DB/LLM calls are patched in _run."""
     return SearchTool(
         tool_id=1,
-        emitter=MagicMock(),
         user=MagicMock(is_anonymous=False),
         persona_search_info=MagicMock(document_set_names=[]),
         llm=MagicMock(),
@@ -42,6 +41,7 @@ def _run(
     decision: ScopeDecision = None,
     decide_mock: MagicMock | None = None,
     skip_query_expansion: bool = False,
+    progress: list[ToolProgress] | None = None,
 ) -> MagicMock:
     """Run tool.run() with all DB/LLM deps mocked; returns the search_pipeline mock.
 
@@ -73,19 +73,16 @@ def _run(
         mock_session_ctx.return_value.__enter__ = MagicMock(return_value=MagicMock())
         mock_session_ctx.return_value.__exit__ = MagicMock(return_value=False)
         tool.run(
-            placement=Placement(turn_index=0, tab_index=0),
-            override_kwargs=SearchToolOverrideKwargs(
-                starting_citation_num=1,
-                original_query="resolve the ticket",
-                message_history=[
-                    ChatMinimalTextMessage(
-                        message="resolve the ticket",
-                        message_type=MessageType.USER,
-                    )
-                ],
-                skip_query_expansion=skip_query_expansion,
+            invocation=ToolInvocation(
+                call_id="search",
+                arguments={"queries": ["ticket"]},
+                cancellation=CancellationSignal(),
+                update=progress.append
+                if progress is not None
+                else lambda _progress: None,
+                messages=[UserMessage(content="resolve the ticket")],
             ),
-            queries=["ticket"],
+            context=ToolContext(skip_search_query_expansion=skip_query_expansion),
         )
     return mock_search_pipeline
 
@@ -104,11 +101,12 @@ def _queries_sent(mock_search_pipeline: MagicMock) -> list[str]:
     ]
 
 
-def _emitted_filter_sources(tool: SearchTool) -> list[list[str]]:
-    """Sources of each SearchToolFilterDelta the tool emitted to the UI."""
-    emit_mock = cast(MagicMock, tool.emitter.emit)
-    emitted = [call.args[0].obj for call in emit_mock.call_args_list]
-    return [obj.sources for obj in emitted if isinstance(obj, SearchToolFilterDelta)]
+def _emitted_filter_sources(progress: list[ToolProgress]) -> list[list[str]]:
+    return [
+        item.details.sources
+        for item in progress
+        if isinstance(item.details, SearchFilters)
+    ]
 
 
 def test_decided_scope_is_passed_to_search() -> None:
@@ -132,23 +130,26 @@ def test_decided_scope_is_passed_to_search() -> None:
 
 
 def test_filter_delta_emitted_for_a_subset_scope() -> None:
+    updates: list[ToolProgress] = []
     """A scope narrower than the connected sources surfaces a filter to the UI."""
     tool = _make_tool()
     _run(
         tool,
+        progress=updates,
         decision=[DocumentSource.CONFLUENCE],
         connected_sources=[DocumentSource.CONFLUENCE, DocumentSource.GITHUB],
     )
-    assert _emitted_filter_sources(tool) == [["confluence"]]
+    assert _emitted_filter_sources(updates) == [["confluence"]]
 
 
 def test_no_filter_delta_when_scope_covers_all_sources() -> None:
+    updates: list[ToolProgress] = []
     """Scoping to every connected source is equivalent to an unscoped search, so
     no filter is surfaced (the UI keeps its default 'internal documents' label)."""
     tool = _make_tool()
     connected = [DocumentSource.CONFLUENCE, DocumentSource.GITHUB]
-    _run(tool, decision=connected, connected_sources=connected)
-    assert _emitted_filter_sources(tool) == []
+    _run(tool, progress=updates, decision=connected, connected_sources=connected)
+    assert _emitted_filter_sources(updates) == []
 
 
 def test_no_decided_scope_leaves_search_unscoped() -> None:
@@ -305,17 +306,18 @@ def test_prior_cycles_accumulate_across_calls_for_the_walk() -> None:
 
 
 def test_auto_detect_disabled_skips_scope_decision() -> None:
+    updates: list[ToolProgress] = []
     """With auto-detect off, no scope decision runs and the search stays unscoped."""
     tool = _make_tool(auto_detect_filters=False)
     connected = [DocumentSource.ZENDESK, DocumentSource.CONFLUENCE]
     decide_mock = MagicMock(return_value=[DocumentSource.ZENDESK])
 
     mock_search_pipeline = _run(
-        tool, decide_mock=decide_mock, connected_sources=connected
+        tool, progress=updates, decide_mock=decide_mock, connected_sources=connected
     )
 
     decide_mock.assert_not_called()
-    assert _emitted_filter_sources(tool) == []
+    assert _emitted_filter_sources(updates) == []
     filters = _filters_passed_to_search(mock_search_pipeline)
     assert filters, "search_pipeline was never called"
     for applied in filters:

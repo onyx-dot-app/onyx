@@ -1,10 +1,13 @@
 from typing import cast
 from unittest.mock import MagicMock
 
+import pytest
+
 from onyx.configs.constants import MessageType
 from onyx.context.messages import prompt_metadata
 from onyx.db.chat_history import (
     _build_tool_call_response_history_message,
+    capture_chat_history,
     convert_chat_history,
 )
 from onyx.db.models import ChatMessage
@@ -40,6 +43,8 @@ class TestConvertChatHistory:
         token_count: int = 5,
     ) -> MagicMock:
         msg = MagicMock()
+        msg.id = 1
+        msg.is_clarification = False
         msg.agent_transcript = None
         msg.message = message
         msg.message_type = message_type
@@ -67,12 +72,13 @@ class TestConvertChatHistory:
         ]
 
         result = convert_chat_history(
-            chat_history=cast(list[ChatMessage], chat_history),
+            chat_history=capture_chat_history(
+                cast(list[ChatMessage], chat_history), {}, lambda s: len(s)
+            ),
             files=[],
             context_image_files=[project_image],
             additional_context=None,
             token_counter=lambda s: len(s),
-            tool_id_to_name_map={},
         )
 
         user_messages = [m for m in result.messages if m.role == "user"]
@@ -113,12 +119,15 @@ class TestConvertChatHistory:
         ]
 
         result = convert_chat_history(
-            chat_history=cast(list[ChatMessage], chat_history),
+            chat_history=capture_chat_history(
+                cast(list[ChatMessage], chat_history),
+                {1: "internal_search"},
+                lambda s: len(s),
+            ),
             files=[],
             context_image_files=[],
             additional_context=None,
             token_counter=lambda s: len(s),
-            tool_id_to_name_map={1: "internal_search"},
         )
 
         tool_responses = [m for m in result.messages if m.role == "tool_result"]
@@ -127,3 +136,48 @@ class TestConvertChatHistory:
         assert prompt_metadata(tool_responses[0]).token_count == len(
             TOOL_CALL_RESPONSE_CROSS_MESSAGE
         )
+
+
+def test_replay_preserves_completed_tools_and_drops_partial_arguments() -> None:
+    from onyx.agents.transcript import messages_for_model
+    from onyx.llm.models import (
+        AssistantMessage,
+        TextContent,
+        ToolCall,
+        ToolResultMessage,
+    )
+
+    completed_call = AssistantMessage(
+        content=[ToolCall(id="reused", name="lookup", arguments={})]
+    )
+    completed_result = ToolResultMessage(
+        tool_call_id="reused", tool_name="lookup", content="Found"
+    )
+    partial = AssistantMessage(
+        content=[
+            TextContent(text="Checking another source"),
+            ToolCall(id="reused", name="lookup", arguments={}),
+        ],
+        stop_reason="aborted",
+    )
+
+    replay = messages_for_model([completed_call, completed_result, partial])
+
+    assert replay[:2] == [completed_call, completed_result]
+    assert replay[-1].text == "Checking another source"
+    assert isinstance(replay[-1], AssistantMessage)
+    assert replay[-1].tool_calls == []
+    assert len(partial.tool_calls) == 1
+
+
+@pytest.mark.parametrize("parent_id,expected", [(3, True), (5, False)])
+def test_legacy_summary_matches_branch(parent_id: int, expected: bool) -> None:
+    from onyx.db.chat_history import find_summary_for_branch
+
+    history = [ChatMessage(id=identifier) for identifier in (1, 2, 3)]
+    summary = ChatMessage(id=100, parent_message_id=parent_id)
+    session = MagicMock()
+    session.query.return_value.filter.return_value.order_by.return_value.all.return_value = [
+        summary
+    ]
+    assert find_summary_for_branch(session, history) is (summary if expected else None)
