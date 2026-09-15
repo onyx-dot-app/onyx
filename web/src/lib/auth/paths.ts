@@ -9,8 +9,7 @@ export const LOGIN_PATH = "/auth/login";
  * cannot read the URL; requireAuth() hands it back as the login `next`. */
 export const ORIGINAL_PATH_HEADER = "x-onyx-original-path";
 
-/** Login page flag. `false` keeps the SSO button instead of auto-starting,
- * for logout and the auth error page. */
+/** Login page flag. `false` keeps the SSO button instead of auto-starting it. */
 export const SSO_AUTO_REDIRECT_PARAM = "autoRedirectToSso";
 
 /** Narrow enough for Next's typed routes without a cast. */

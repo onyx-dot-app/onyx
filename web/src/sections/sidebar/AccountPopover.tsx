@@ -60,9 +60,8 @@ function SettingsPopover({
   const showLogout = user && !isAnonymousUser && !LOGOUT_DISABLED;
   const showLogin = isAnonymousUser;
 
-  const currentUrl = `${pathname}${
-    searchParams?.toString() ? `?${searchParams.toString()}` : ""
-  }`;
+  const query = searchParams?.toString();
+  const currentUrl = query ? `${pathname}?${query}` : pathname;
 
   const handleLogin = () => {
     router.push(loginPath({ next: currentUrl }));

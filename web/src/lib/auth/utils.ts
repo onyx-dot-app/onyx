@@ -90,9 +90,8 @@ export function validateInternalRedirect(
 // SSO auto-start
 // ---------------------------------------------------------------------------
 
-/** Start the one SSO flow on load when it is the only way in: single-tenant,
- * password login off, exactly one provider. `autoRedirectToSso` is the
- * `?autoRedirectToSso=false` hold used after logout and on the error page. */
+/** True when the login page should start SSO on load: single-tenant, password
+ * login off, exactly one provider, and the `autoRedirectToSso` flag not off. */
 export function shouldAutoStartSso(
   authTypeMetadata: AuthTypeMetadata | null,
   autoRedirectToSso: boolean

@@ -18,7 +18,7 @@ import * as Yup from "yup";
 import { requestEmailVerification } from "@/lib/auth/svc";
 import Link from "next/link";
 import { useUser } from "@/providers/UserProvider";
-import { loginPath } from "@/lib/auth/paths";
+import { LOGIN_PATH, loginPath } from "@/lib/auth/paths";
 import {
   validateInternalRedirect,
   passwordHasUppercase,
@@ -52,7 +52,7 @@ export function AuthenticationShell({ children }: AuthenticationShellProps) {
     const { isExtension } = getExtensionContext();
     if (isExtension) {
       window.open(
-        window.location.origin + "/auth/login",
+        window.location.origin + LOGIN_PATH,
         "_blank",
         "noopener,noreferrer"
       );

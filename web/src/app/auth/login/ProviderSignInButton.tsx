@@ -13,7 +13,7 @@
  *
  * Like SignInButton, this renders on the login page which is hit by headless
  * SSR requests, so browser globals stay out of the render path and live only in
- * the effect and the click handler.
+ * startSignIn, reached from the effect and the click handler.
  */
 
 "use client";

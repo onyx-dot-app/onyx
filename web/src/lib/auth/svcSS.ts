@@ -129,8 +129,6 @@ export async function requireAuth(): Promise<AuthCheckResult> {
   }
 
   if (!user) {
-    // The proxy stamps the request path and query, so the login page can send
-    // the user back to the URL they arrived on once they are signed in.
     const originalPath = (await headers()).get(ORIGINAL_PATH_HEADER);
     return {
       user,
