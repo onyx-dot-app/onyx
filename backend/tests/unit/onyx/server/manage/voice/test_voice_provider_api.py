@@ -161,8 +161,11 @@ def test_activate_tts_allows_provider_with_tts_models(
     db_session.commit.assert_called_once()
 
 
-def test_stored_secret_lookup_ignores_legacy_provider_type_case() -> None:
-    existing_provider = _make_provider(provider_type="OpenAI")
+@pytest.mark.parametrize("provider_type", ["OpenAI", " OpenAI ", "\tOpenAI\n"])
+def test_stored_secret_lookup_normalizes_legacy_provider_type(
+    provider_type: str,
+) -> None:
+    existing_provider = _make_provider(provider_type=provider_type)
     db_session = MagicMock()
     db_session.get.return_value = existing_provider
     db_session.scalar.return_value = existing_provider

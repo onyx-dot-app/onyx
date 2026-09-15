@@ -45,13 +45,21 @@ def fetch_default_tts_provider(db_session: Session) -> VoiceProvider | None:
 def fetch_voice_provider_by_type(
     db_session: Session, provider_type: str
 ) -> VoiceProvider | None:
-    """Fetch a voice provider by type. Rows saved before types were
-    canonicalized may carry mixed case, so the match ignores case."""
-    return db_session.scalar(
-        select(VoiceProvider).where(
-            func.lower(VoiceProvider.provider_type) == provider_type.lower()
+    """Fetch one provider by normalized type, rejecting ambiguous matches."""
+    providers = db_session.scalars(
+        select(VoiceProvider)
+        .where(
+            func.lower(func.trim(VoiceProvider.provider_type))
+            == provider_type.strip().lower()
         )
-    )
+        .limit(2)
+    ).all()
+    if len(providers) > 1:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Multiple voice providers match this type. Provide an API key explicitly.",
+        )
+    return providers[0] if providers else None
 
 
 def upsert_voice_provider(
