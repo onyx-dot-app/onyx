@@ -238,7 +238,7 @@ def _get_answer_with_tools(
                 user=user,
                 external_state_container=state_container,
             )
-            full = gather_stream_full(packets, state_container, user=user)
+            full = gather_stream_full(packets, state_container)
 
             result = _chat_full_response_to_eval_result(full, stream_start_time)
 
@@ -395,7 +395,7 @@ def _get_multi_turn_answer_with_tools(
                     user=user,
                     external_state_container=state_container,
                 )
-                full = gather_stream_full(packets, state_container, user=user)
+                full = gather_stream_full(packets, state_container)
 
                 result = _chat_full_response_to_eval_result(full, stream_start_time)
 

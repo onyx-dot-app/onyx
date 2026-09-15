@@ -907,7 +907,7 @@ def handle_send_chat_message(
             additional_context=chat_message_req.additional_context,
             external_state_container=state_container,
         )
-        result = gather_stream_full(packets, state_container, user=user)
+        result = gather_stream_full(packets, state_container)
         # CreateChatSessionID is only yielded for newly-created sessions, so for
         # follow-up messages on an existing session the aggregated response would
         # otherwise omit chat_session_id. Backfill it from the request so the

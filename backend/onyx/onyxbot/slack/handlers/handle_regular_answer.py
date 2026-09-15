@@ -317,7 +317,7 @@ def handle_regular_answer(
                 additional_context=slack_context_str,
                 slack_context=message_info.slack_context,
             )
-            answer = gather_stream(packets, user=onyx_user)
+            answer = gather_stream(packets)
         finally:
             CURRENT_USER_ID_CONTEXTVAR.reset(token)
 
