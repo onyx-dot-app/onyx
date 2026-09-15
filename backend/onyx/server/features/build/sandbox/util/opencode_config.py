@@ -87,6 +87,10 @@ _PERMISSIONS_TEMPLATE: dict[str, Any] = {
     # Connect-app tool: a no-op tool the agent calls to request connecting an
     # external app it isn't set up for.
     "connect_app": "ask",
+    # Scheduled-task proposal tool: a no-op tool that only records a proposal
+    # for the user to approve. "allow" rather than "ask" because it creates
+    # nothing; the approval happens on the card, not in the turn.
+    "propose_scheduled_task": "allow",
 }
 
 _TMP_EXTERNAL_DIRECTORY_RULES: dict[str, str] = {
