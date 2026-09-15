@@ -151,6 +151,8 @@ def generate_final_report(
             context_files=None,
             available_tokens=llm.config.max_input_tokens,
             all_injected_file_metadata=all_injected_file_metadata,
+            # The final report runs with no tools at all.
+            available_tool_names=set(),
         )
 
         citation_processor = DynamicCitationProcessor()
@@ -290,6 +292,8 @@ def run_deep_research_llm_loop(
                     available_tokens=available_tokens,
                     last_n_user_messages=MAX_USER_MESSAGES_FOR_CONTEXT,
                     all_injected_file_metadata=all_injected_file_metadata,
+                    # These steps expose only mock control tools.
+                    available_tool_names=set(),
                 )
 
                 # Calculate tool processing duration for clarification step
@@ -355,6 +359,8 @@ def run_deep_research_llm_loop(
                 available_tokens=available_tokens,
                 last_n_user_messages=MAX_USER_MESSAGES_FOR_CONTEXT + 1,
                 all_injected_file_metadata=all_injected_file_metadata,
+                # Plan generation runs with no tools.
+                available_tool_names=set(),
             )
 
             research_plan_generator = run_llm_step_pkt_generator(
@@ -521,6 +527,8 @@ def run_deep_research_llm_loop(
                     available_tokens=available_tokens,
                     last_n_user_messages=MAX_USER_MESSAGES_FOR_CONTEXT,
                     all_injected_file_metadata=all_injected_file_metadata,
+                    # These steps expose only mock control tools.
+                    available_tool_names=set(),
                 )
 
                 # Use think tool processor for non-reasoning models to convert

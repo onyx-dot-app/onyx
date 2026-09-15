@@ -64,6 +64,7 @@ from onyx.server.query_and_chat.streaming_models import (
     TopLevelBranching,
 )
 from onyx.tools.built_in_tools import CITEABLE_TOOLS_NAMES, STOPPING_TOOLS_NAMES
+from onyx.tools.constants import FILE_READER_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.models import (
     ChatFile,
@@ -353,13 +354,14 @@ def _build_context_file_citation_mapping(
 def _build_project_message(
     context_files: ExtractedContextFiles | None,
     token_counter: Callable[[str], int] | None,
+    available_tool_names: set[str] | None = None,
 ) -> list[ChatMessageSimple]:
     """Build messages for context-injected / tool-backed files.
 
     Returns up to two messages:
     1. The full-text files message (if file_texts is populated).
-    2. A lightweight metadata message for files the LLM should access via the
-       FileReaderTool (e.g. oversized files that don't fit in context).
+    2. A lightweight metadata message for oversized files, naming whichever
+       retrieval tool this request actually received.
     """
     if not context_files:
         return []
@@ -372,7 +374,9 @@ def _build_project_message(
     if context_files.file_metadata_for_tool and token_counter:
         messages.append(
             _create_file_tool_metadata_message(
-                context_files.file_metadata_for_tool, token_counter
+                context_files.file_metadata_for_tool,
+                token_counter,
+                available_tool_names,
             )
         )
     return messages
@@ -412,6 +416,11 @@ def construct_message_history(
     token_counter: Callable[[str], int] | None = None,
     all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
     image_files_replayed_as_markers: bool = False,
+    # Tool names this step offers the model. Only the retrieval tools
+    # (read_file, internal_search) are consulted, so the out-of-context file
+    # notice never names one the model cannot call. Steps exposing neither pass
+    # an empty set; leaving it unset also names no tool.
+    available_tool_names: set[str] | None = None,
 ) -> list[ChatMessageSimple]:
     if last_n_user_messages is not None:
         if last_n_user_messages <= 0:
@@ -427,7 +436,9 @@ def construct_message_history(
 
     # Build the project / file-metadata messages up front so we can use their
     # actual token counts for the budget.
-    project_messages = _build_project_message(context_files, token_counter)
+    project_messages = _build_project_message(
+        context_files, token_counter, available_tool_names
+    )
     project_messages_tokens = sum(m.token_count for m in project_messages)
 
     history_token_budget = available_tokens
@@ -565,7 +576,7 @@ def construct_message_history(
                 [(m.file_id, m.filename) for m in forgotten_meta],
             )
             forgotten_files_message = _create_file_tool_metadata_message(
-                forgotten_meta, token_counter
+                forgotten_meta, token_counter, available_tool_names
             )
             # Shrink the remaining budget. If the metadata message doesn't
             # fit we may need to drop more history messages.
@@ -583,7 +594,7 @@ def construct_message_history(
                     forgotten_meta.append(all_injected_file_metadata[evicted.file_id])
                     # Rebuild the message with the new entry
                     forgotten_files_message = _create_file_tool_metadata_message(
-                        forgotten_meta, token_counter
+                        forgotten_meta, token_counter, available_tool_names
                     )
 
     # Build the final message list according to README ordering:
@@ -655,22 +666,57 @@ def _drop_orphaned_tool_call_responses(
 def _create_file_tool_metadata_message(
     file_metadata: list[FileToolMetadata],
     token_counter: Callable[[str], int],
+    available_tool_names: set[str] | None = None,
 ) -> ChatMessageSimple:
-    """Build a lightweight metadata-only message listing files available via FileReaderTool.
+    """Build a lightweight metadata-only message listing files not held in context.
 
-    Used when files are too large to fit in context and the vector DB is
-    disabled, so the LLM must use ``read_file`` to inspect them.
+    Name only a tool this step actually received. FileReaderTool is attached
+    only when the vector DB is disabled, and internal search can be absent even
+    when it is enabled (persona, ``allowed_tool_ids``, or a disabled search
+    usage setting). Naming a tool the model was never given makes it invent
+    workarounds — it searches the web for the document or guesses the contents.
+
+    An unreported tool set names no tool. Steps that offer none are common (a
+    deep-research final report runs with no tools), and under-promising is the
+    safe direction to fail in.
     """
-    lines = [
-        "You have access to the following files. Use the read_file tool to "
-        "read sections of any file. You MUST pass the file_id UUID (not the "
-        "filename) to read_file:"
-    ]
+    offered: set[str] = available_tool_names or set()
+    if FILE_READER_TOOL_NAME in offered:
+        lines: list[str] = [
+            "You have access to the following files. Use the read_file tool to "
+            "read sections of any file. You MUST pass the file_id UUID (not the "
+            "filename) to read_file:"
+        ]
+        # The UUID is only meaningful to read_file, so it is listed only here.
+        lines.extend(
+            f'- file_id="{meta.file_id}" filename="{meta.filename}" (~{meta.approx_char_count:,} chars)'
+            for meta in file_metadata
+        )
+        return _finalize_file_metadata_message(lines, token_counter)
+
+    if SearchTool.NAME in offered:
+        lines = [
+            "These files are attached but too large to include in full. Their "
+            "contents are indexed — use internal search to find the relevant "
+            "passages. Do not guess them or search the web for them:"
+        ]
+    else:
+        lines = [
+            "These files are attached but too large to include in full, and no "
+            "tool here can read them. Do not guess their contents or search the "
+            "web for them — say they are too large to read in this conversation:"
+        ]
     lines.extend(
-        f'- file_id="{meta.file_id}" filename="{meta.filename}" (~{meta.approx_char_count:,} chars)'
+        f'- filename="{meta.filename}" (~{meta.approx_char_count:,} chars)'
         for meta in file_metadata
     )
+    return _finalize_file_metadata_message(lines, token_counter)
 
+
+def _finalize_file_metadata_message(
+    lines: list[str],
+    token_counter: Callable[[str], int],
+) -> ChatMessageSimple:
     message_content = "\n".join(lines)
     return ChatMessageSimple(
         message=message_content,
@@ -1031,6 +1077,7 @@ def run_llm_loop(
                 token_counter=token_counter,
                 all_injected_file_metadata=all_injected_file_metadata,
                 image_files_replayed_as_markers=image_files_replayed_as_markers,
+                available_tool_names={tool.name for tool in final_tools},
             )
 
             max_output_tokens = token_budget.output_allowance(
