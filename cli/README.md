@@ -232,10 +232,13 @@ The CLI is distributed as a Python package via [PyPI](https://pypi.org/project/o
 
 ### CI release (recommended)
 
-Tag a release and push — the `release-cli.yml` workflow builds wheels for all platforms and publishes to PyPI automatically:
+Tag a release and push — the `release-cli.yml` workflow builds wheels for all platforms and publishes to PyPI automatically. `ods release cli` calculates and pushes the next tag for you:
 
 ```shell
-tag --prefix cli
+ods release cli              # bumps the patch version
+ods release cli --bump minor
+ods release cli --version 1.5.0
+ods release cli --dry-run    # computes the version, tags nothing
 ```
 
 To do this manually:
@@ -244,6 +247,11 @@ To do this manually:
 git tag cli/v0.1.0
 git push origin cli/v0.1.0
 ```
+
+> [!IMPORTANT]
+> `ods release` tags **`HEAD`**, not `main`, and does not check which branch you
+> are on. Compare `git rev-parse HEAD` with `git rev-parse origin/main` first.
+> Tagging from a stale branch publishes that branch under the new version.
 
 The workflow builds wheels for:
 

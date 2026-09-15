@@ -152,7 +152,6 @@ dev = [
     "pytest-repeat==0.9.4",
     "pytest-xdist==3.8.0",
     "pytest==9.0.3",
-    "release-tag==0.5.2",
     # Keep in sync with the pinned `ruff==` in the ruff / ruff-format hooks in
     # .pre-commit-config.yaml, which install ruff into an isolated overlay.
     "ruff==0.16.1",
