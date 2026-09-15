@@ -79,6 +79,10 @@ export default function ModelSelector({
     defaultText,
     isLoading: providersLoading,
   } = useLLMProviders(agentId);
+  const {
+    llmProviders: globalProviderOptions,
+    defaultText: globalDefaultText,
+  } = useLLMProviders();
   const llmProviders = providerOptions ?? fetchedProviderOptions ?? [];
   const isLoading = providerOptions === undefined && providersLoading;
   const [open, setOpen] = useState(false);
@@ -118,6 +122,17 @@ export default function ModelSelector({
   const effectiveOption = currentOption ?? defaultModelOption;
   const currentDisplayName =
     effectiveOption?.displayName ?? t("trigger.noSelection.label");
+  const globalDefaultDisplayName = useMemo(() => {
+    if (!globalDefaultText || !globalProviderOptions) return null;
+    const provider = globalProviderOptions.find(
+      (option) => option.id === globalDefaultText.provider_id
+    );
+    return (
+      provider?.model_configurations.find(
+        (model) => model.name === globalDefaultText.model_name
+      )?.effectiveDisplayName ?? null
+    );
+  }, [globalDefaultText, globalProviderOptions]);
 
   const isSelected = useCallback(
     (option: LLMOption) => {
@@ -171,6 +186,7 @@ export default function ModelSelector({
           onSelect={handleSelect}
           isSelected={isSelected}
           includeGlobalDefault={includeGlobalDefault}
+          globalDefaultDisplayName={globalDefaultDisplayName}
           scrollContainerRef={scrollContainerRef}
           modelDetail={modelDetail}
           onDetailSelect={onChange}

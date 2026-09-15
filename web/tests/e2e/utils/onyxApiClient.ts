@@ -568,6 +568,9 @@ export class OnyxApiClient {
       response,
       "Failed to create agent-restricted provider"
     );
+    this.log(
+      `Created agent-restricted LLM provider: ${providerName} (ID: ${responseData.id}, Agents: ${agentIds.join(", ")})`
+    );
     return responseData.id;
   }
 
