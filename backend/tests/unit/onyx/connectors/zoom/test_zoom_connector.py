@@ -29,6 +29,7 @@ from onyx.connectors.zoom.recordings.models import (
     ZoomSessionType,
 )
 from tests.unit.onyx.connectors.utils import (
+    _ITERATION_LIMIT,
     load_everything_from_checkpoint_connector,
     load_everything_from_checkpoint_connector_from_checkpoint,
 )
@@ -795,10 +796,16 @@ def _run_with_perm_sync(
     connector: ZoomConnector,
 ) -> list[Document | ConnectorFailure]:
     """The shared helper only drives load_from_checkpoint, so the permission
-    sync entry point needs its own loop."""
+    sync entry point needs its own loop. It carries the shared helper's iteration
+    guard too: a connector that stops clearing has_more would otherwise hang the
+    suite rather than fail it."""
     checkpoint = connector.build_dummy_checkpoint()
     items: list[Document | ConnectorFailure] = []
+    iterations = 0
     while checkpoint.has_more:
+        iterations += 1
+        if iterations > _ITERATION_LIMIT:
+            raise RuntimeError("Too many iterations. Infinite loop?")
         generator = CheckpointOutputWrapper[ZoomConnectorCheckpoint]()(
             connector.load_from_checkpoint_with_perm_sync(
                 0, _FULL_HISTORY_END, checkpoint
