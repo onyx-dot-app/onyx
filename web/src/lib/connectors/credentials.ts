@@ -256,8 +256,10 @@ export interface TeamsCredentialJson {
 
 export interface OutlookCredentialJson {
   outlook_client_id: string;
-  outlook_client_secret: string;
+  outlook_client_secret?: string;
   outlook_directory_id: string;
+  outlook_certificate_password?: string;
+  outlook_private_key?: TypedFile;
 }
 
 export interface DiscourseCredentialJson {
@@ -352,7 +354,7 @@ type CredentialTemplateMap = Record<ValidSources, object | null> & {
   sharepoint: CredentialTemplateWithAuth<SharepointCredentialJson>;
   asana: AsanaCredentialJson;
   teams: TeamsCredentialJson;
-  outlook: OutlookCredentialJson;
+  outlook: CredentialTemplateWithAuth<OutlookCredentialJson>;
   zendesk: ZendeskCredentialJson;
   discourse: DiscourseCredentialJson;
   axero: AxeroCredentialJson;
@@ -487,11 +489,35 @@ export const credentialTemplates: Record<ValidSources, any> = {
     teams_client_secret: "",
     teams_directory_id: "",
   },
+  // SAFETY: the certificate template seeds outlook_private_key with null, which TypedFile does not allow.
   outlook: {
-    outlook_client_id: "",
-    outlook_client_secret: "",
-    outlook_directory_id: "",
-  },
+    authentication_method: "client_secret",
+    authMethods: [
+      {
+        value: "client_secret",
+        label: "Client Secret",
+        fields: {
+          outlook_client_id: "",
+          outlook_client_secret: "",
+          outlook_directory_id: "",
+        },
+        description:
+          "The connector signs in with a client secret of the app registration. Provide the client ID, directory ID and secret.",
+      },
+      {
+        value: "certificate",
+        label: "Certificate Authentication",
+        fields: {
+          outlook_client_id: "",
+          outlook_directory_id: "",
+          outlook_certificate_password: "",
+          outlook_private_key: null,
+        },
+        description:
+          "The connector signs in with a certificate uploaded to the app registration. Provide the client ID, directory ID, the PFX bundle and its password.",
+      },
+    ],
+  } as CredentialTemplateWithAuth<OutlookCredentialJson>,
   zendesk: {
     zendesk_subdomain: "",
     zendesk_email: "",
@@ -767,6 +793,8 @@ export const credentialDisplayNames: Record<string, string> = {
   outlook_client_id: "Microsoft Outlook Client ID",
   outlook_client_secret: "Microsoft Outlook Client Secret",
   outlook_directory_id: "Microsoft Outlook Directory ID",
+  outlook_certificate_password: "Microsoft Outlook Certificate Password",
+  outlook_private_key: "Microsoft Outlook Private Key (PFX)",
 
   // Discourse
   discourse_api_key: "Discourse API Key",
