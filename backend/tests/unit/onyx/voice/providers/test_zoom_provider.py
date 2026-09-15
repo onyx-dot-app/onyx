@@ -484,6 +484,28 @@ async def test_receive_loop_reports_unrequested_session_closed_as_failure() -> N
 
 
 @pytest.mark.asyncio
+async def test_receive_loop_reports_unexpected_termination_as_failure() -> None:
+    ws = FakeWebSocket(
+        [
+            _text_message({"type": "session.updated"}),
+            _text_message({"type": "transcription.completed", "transcript": "cut"}),
+        ]
+    )
+    transcriber = ZoomStreamingTranscriber(api_key="key", api_secret="x" * 32)
+    transcriber._ws = cast(Any, ws)
+
+    await transcriber._receive_loop()
+
+    assert await transcriber.receive_transcript() == zoom.TranscriptResult(
+        text="cut", is_vad_end=True
+    )
+    failure = await transcriber.receive_transcript()
+    assert failure is not None
+    assert failure.error is not None
+    assert await transcriber.receive_transcript() is None
+
+
+@pytest.mark.asyncio
 async def test_receive_loop_surfaces_fatal_error_safely() -> None:
     ws = FakeWebSocket(
         [
@@ -741,7 +763,11 @@ def test_factory_extracts_key_and_secret_and_uses_fixed_api_base() -> None:
     assert provider.api_secret == "secret"
     assert provider.language == "es-ES"
     assert provider.stt_model == ZOOM_STT_MODEL
-    assert ZOOM_API_BASE == "https://api.zoom.us"
+    # The row's api_base is dropped; sessions always target ZOOM_API_BASE.
+    assert "api_base" not in vars(provider)
+    assert ZoomStreamingTranscriber(api_key="key", api_secret="secret").api_base == (
+        ZOOM_API_BASE
+    )
 
 
 @pytest.mark.asyncio
