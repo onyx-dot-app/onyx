@@ -19,8 +19,10 @@ CONSTRAINT_NAME = "uq_user_file_user_id_file_id"
 
 
 def upgrade() -> None:
-    # Keep one row per (user_id, file_id) before the unique constraint.
+    # Keep one live row per (user_id, file_id) before the unique constraint.
     # Prefer a completed row so an already-indexed file stays attached.
+    # Remaining duplicates are marked DELETING with a unique file_id so the
+    # delete task can drop their index docs and plaintext caches.
     op.execute(
         sa.text(
             """
@@ -81,10 +83,26 @@ def upgrade() -> None:
             """
         )
     )
+    # Historical persona__user_file.user_file_id has no ON DELETE CASCADE.
+    # Drop duplicate links after remapping or the later row delete fails.
     op.execute(
         sa.text(
             """
-            DELETE FROM user_file
+            DELETE FROM persona__user_file
+            WHERE user_file_id NOT IN (SELECT id FROM _user_file_keepers)
+            """
+        )
+    )
+    # Keep duplicate rows as DELETING with a unique file_id so the existing
+    # delete task can drop per-id index docs and plaintext caches without
+    # deleting the keeper's shared source blob.
+    op.execute(
+        sa.text(
+            """
+            UPDATE user_file
+            SET
+                status = 'DELETING',
+                file_id = 'duplicate-cleanup:' || id::text
             WHERE id NOT IN (SELECT id FROM _user_file_keepers)
             """
         )

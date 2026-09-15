@@ -120,10 +120,11 @@ def get_or_create_user_file_for_existing_store_file(
     """Return the user's UserFile for this blob, creating one if needed.
 
     Concurrent index requests share one row via INSERT ... ON CONFLICT on
-    (user_id, file_id). A row that is already DELETING is returned as-is so
-    the caller can reject reuse. Indexing promotes the blob: the incognito
-    session stamp is cleared so teardown no longer deletes a file the user
-    asked to keep.
+    (user_id, file_id). A no-op UPDATE on conflict locks that row so a
+    concurrent delete cannot hide it from this transaction. A row that is
+    already DELETING is returned as-is so the caller can reject reuse.
+    Indexing promotes the blob: the incognito session stamp is cleared so
+    teardown no longer deletes a file the user asked to keep.
     """
     now = datetime.datetime.now(datetime.timezone.utc)
     stmt = (
@@ -142,7 +143,13 @@ def get_or_create_user_file_for_existing_store_file(
             needs_persona_sync=False,
             last_accessed_at=now,
         )
-        .on_conflict_do_nothing(constraint=USER_FILE_USER_ID_FILE_ID_CONSTRAINT)
+        # DO NOTHING does not lock the conflicting row. A concurrent delete
+        # can then remove it before the following .one() and /file/index
+        # returns 500.
+        .on_conflict_do_update(
+            constraint=USER_FILE_USER_ID_FILE_ID_CONSTRAINT,
+            set_={"file_id": UserFile.file_id},
+        )
     )
     db_session.execute(stmt)
 

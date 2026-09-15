@@ -117,6 +117,85 @@ def test_get_or_create_is_idempotent_under_concurrency(
     )
 
 
+def test_get_or_create_survives_concurrent_delete(
+    db_session: Session, owner: User
+) -> None:
+    file_id = _save_blob()
+    existing = get_or_create_user_file_for_existing_store_file(
+        user_id=owner.id,
+        file_id=file_id,
+        name="chart.png",
+        content_type="image/png",
+        db_session=db_session,
+    )
+    existing_id = existing.id
+    user_id = owner.id
+
+    def _index() -> UUID:
+        CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+        with get_session_with_current_tenant() as session:
+            return get_or_create_user_file_for_existing_store_file(
+                user_id=user_id,
+                file_id=file_id,
+                name="chart.png",
+                content_type="image/png",
+                db_session=session,
+            ).id
+
+    def _delete() -> None:
+        CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+        with get_session_with_current_tenant() as session:
+            user_file = session.get(UserFile, existing_id)
+            if user_file is not None:
+                session.delete(user_file)
+                session.commit()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(_index), executor.submit(_delete)]
+        for future in as_completed(futures):
+            future.result()
+
+    remaining = (
+        db_session.query(UserFile)
+        .filter(UserFile.user_id == owner.id, UserFile.file_id == file_id)
+        .all()
+    )
+    assert len(remaining) <= 1
+
+
+def test_get_or_create_inserts_again_after_hard_delete(
+    db_session: Session, owner: User
+) -> None:
+    file_id = _save_blob()
+    first = get_or_create_user_file_for_existing_store_file(
+        user_id=owner.id,
+        file_id=file_id,
+        name="chart.png",
+        content_type="image/png",
+        db_session=db_session,
+    )
+    first_id = first.id
+    db_session.delete(first)
+    db_session.commit()
+
+    second = get_or_create_user_file_for_existing_store_file(
+        user_id=owner.id,
+        file_id=file_id,
+        name="chart.png",
+        content_type="image/png",
+        db_session=db_session,
+    )
+
+    assert second.id != first_id
+    assert second.status == UserFileStatus.PROCESSING
+    assert (
+        db_session.query(UserFile)
+        .filter(UserFile.user_id == owner.id, UserFile.file_id == file_id)
+        .count()
+        == 1
+    )
+
+
 def test_get_or_create_does_not_replace_a_deleting_row(
     db_session: Session, owner: User
 ) -> None:
