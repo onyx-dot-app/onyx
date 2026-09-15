@@ -785,12 +785,14 @@ def test_slim_docs_skip_a_vanished_mailbox_and_abort_on_anything_else() -> None:
         list(_connector(gateway, mailboxes=[MAILBOX_ADDRESS]).retrieve_all_slim_docs())
 
 
-def test_slim_docs_restart_a_folder_once_when_delta_state_expires() -> None:
+def test_slim_docs_abort_when_delta_state_expires_mid_folder() -> None:
+    """Ids already yielded from the expired round cannot be retracted, so a
+    restart could keep a since-deleted conversation alive. Aborting deletes
+    nothing and the next prune starts clean."""
     gateway = _happy_gateway()
     inbox_pages: list[OutlookDeltaPage | OutlookGraphError] = [
         OutlookDeltaPage(changes=[change()], next_link="https://graph/delta?p=2"),
         graph_error(410, "SyncStateNotFound"),
-        OutlookDeltaPage(changes=[change(id="msg-2", conversation_id="conv-2")]),
     ]
 
     def delta(**kwargs: Any) -> OutlookDeltaPage:
@@ -804,14 +806,8 @@ def test_slim_docs_restart_a_folder_once_when_delta_state_expires() -> None:
     gateway.fetch_folder_delta_page.side_effect = delta
     connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
 
-    ids = _slim_ids(list(connector.retrieve_all_slim_docs()))
-
-    # The first page's conversation stays in the batch across the restart.
-    assert ids == [
-        conversation_document_id(mailbox(), CONVERSATION_ID),
-        conversation_document_id(mailbox(), "conv-2"),
-    ]
-    assert inbox_pages == []
+    with pytest.raises(OutlookGraphError):
+        list(connector.retrieve_all_slim_docs())
 
 
 def test_slim_docs_batch_and_report_progress() -> None:
@@ -827,7 +823,7 @@ def test_slim_docs_batch_and_report_progress() -> None:
 
     batches = list(connector.retrieve_all_slim_docs(callback=callback))
 
+    # Three walked folders of 501 each, batched across folder boundaries.
     slim_batches = [b for b in batches if isinstance(b[0], SlimDocument)]
-    assert [len(b) for b in slim_batches[:2]] == [SLIM_BATCH_SIZE, 1]
-    assert len(_slim_ids(batches)) == 3 * (SLIM_BATCH_SIZE + 1)
+    assert [len(b) for b in slim_batches] == [SLIM_BATCH_SIZE] * 3 + [3]
     callback.progress.assert_any_call("outlook_slim_docs", SLIM_BATCH_SIZE + 1)

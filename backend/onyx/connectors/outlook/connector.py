@@ -453,49 +453,45 @@ class OutlookConnector(
                     continue
                 raise
             yield list(self._hierarchy_nodes(mailbox, tree))
-            for folder, _ in tree:
-                yield from self._slim_conversations(mailbox, folder, callback)
+            yield from self._slim_conversations(mailbox, tree, callback)
 
     def _slim_conversations(
         self,
         mailbox: OutlookMailbox,
-        folder: OutlookFolder,
+        tree: list[tuple[OutlookFolder, str]],
         callback: IndexingHeartbeatInterface | None,
     ) -> GenerateSlimDocumentOutput:
-        """Conversation ids of one folder, deduplicated per page. The parent is
-        left unset so pruning keeps the folder indexing chose."""
+        """Conversation ids of every folder in the tree, batched across folders
+        and deduplicated per page. The parent is left unset so pruning keeps the
+        folder indexing chose. Any Graph error raises, since pruning must see
+        the whole mailbox or nothing."""
         batch: list[SlimDocument | HierarchyNode] = []
-        next_link: str | None = None
-        restarted = False
-        while True:
-            try:
+        for folder, _ in tree:
+            next_link: str | None = None
+            while True:
+                # A 410 mid-round is not restarted here: ids already yielded
+                # from the expired round cannot be retracted, so the prune
+                # aborts and runs again later.
                 page = self.ops.fetch_folder_delta_page(
                     mailbox_id=mailbox.id, folder_id=folder.id, next_link=next_link
                 )
-            except OutlookGraphError as e:
-                # Graph drops delta state with 410. One restart per folder.
-                if e.status == 410 and next_link is not None and not restarted:
-                    restarted = True
-                    next_link = None
-                    continue
-                raise
-            conversation_ids = dict.fromkeys(
-                change.conversation_id
-                for change in page.changes
-                if not change.removed and change.conversation_id
-            )
-            batch.extend(
-                SlimDocument(id=conversation_document_id(mailbox, conversation_id))
-                for conversation_id in conversation_ids
-            )
-            while len(batch) >= SLIM_BATCH_SIZE:
-                yield batch[:SLIM_BATCH_SIZE]
-                batch = batch[SLIM_BATCH_SIZE:]
-            if callback is not None:
-                callback.progress("outlook_slim_docs", len(conversation_ids))
-            next_link = page.next_link
-            if next_link is None:
-                break
+                conversation_ids = dict.fromkeys(
+                    change.conversation_id
+                    for change in page.changes
+                    if not change.removed and change.conversation_id
+                )
+                batch.extend(
+                    SlimDocument(id=conversation_document_id(mailbox, conversation_id))
+                    for conversation_id in conversation_ids
+                )
+                while len(batch) >= SLIM_BATCH_SIZE:
+                    yield batch[:SLIM_BATCH_SIZE]
+                    batch = batch[SLIM_BATCH_SIZE:]
+                if callback is not None:
+                    callback.progress("outlook_slim_docs", len(conversation_ids))
+                next_link = page.next_link
+                if next_link is None:
+                    break
         if batch:
             yield batch
 
