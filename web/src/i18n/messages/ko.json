@@ -8996,6 +8996,9 @@
       "ssoMissingAuthUrl": {
         "error": "로그인 응답에 인증 URL이 없습니다"
       },
+      "ssoRedirecting": {
+        "text": "로그인을 위해 {provider}(으)로 이동하는 중…"
+      },
       "ssoSignInButton": {
         "label": "SSO로 로그인"
       },

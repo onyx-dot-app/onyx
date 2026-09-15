@@ -8996,6 +8996,9 @@
       "ssoMissingAuthUrl": {
         "error": "登录响应中缺少授权 URL"
       },
+      "ssoRedirecting": {
+        "text": "正在前往 {provider} 登录…"
+      },
       "ssoSignInButton": {
         "label": "使用 SSO 登录"
       },

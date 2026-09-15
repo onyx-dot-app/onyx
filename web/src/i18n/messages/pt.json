@@ -8996,6 +8996,9 @@
       "ssoMissingAuthUrl": {
         "error": "A resposta de login não incluía a URL de autorização"
       },
+      "ssoRedirecting": {
+        "text": "Redirecionando para {provider} para entrar…"
+      },
       "ssoSignInButton": {
         "label": "Entrar com SSO"
       },

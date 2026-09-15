@@ -4,8 +4,10 @@ import "server-only";
 import { buildUrl, UrlBuilder } from "@/lib/utilsSS";
 import { getDomain } from "@/lib/redirectSS";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { AuthTypeMetadata, type SSOProviderType } from "@/lib/auth/types";
+import { loginPath, ORIGINAL_PATH_HEADER } from "@/lib/auth/paths";
 import { User } from "@/lib/types";
 import { hasAnyAdminPermission } from "@/lib/permissions";
 import { getCurrentUserSS } from "@/lib/users/svcSS";
@@ -127,7 +129,14 @@ export async function requireAuth(): Promise<AuthCheckResult> {
   }
 
   if (!user) {
-    return { user, authTypeMetadata, redirect: "/auth/login" };
+    // The proxy stamps the request path and query, so the login page can send
+    // the user back to the URL they arrived on once they are signed in.
+    const originalPath = (await headers()).get(ORIGINAL_PATH_HEADER);
+    return {
+      user,
+      authTypeMetadata,
+      redirect: loginPath({ next: originalPath }),
+    };
   }
 
   if (user && !user.is_verified && authTypeMetadata?.requiresVerification) {
