@@ -33,6 +33,7 @@ from onyx.connectors.outlook.models import (
     OutlookDeltaPage,
     OutlookFolder,
     OutlookFolderPage,
+    OutlookGraphError,
     OutlookMailboxPage,
     OutlookMessagePage,
     OutlookRecipient,
@@ -585,10 +586,10 @@ def test_folder_that_fills_the_filtered_cap_is_reread_without_the_filter() -> No
     assert windows == [datetime.fromtimestamp(START, tz=timezone.utc), None]
 
 
-def test_conversation_fetch_failure_is_a_document_failure() -> None:
+def test_conversation_fetch_refusal_is_a_document_failure() -> None:
     gateway = _happy_gateway()
     gateway.fetch_conversation_messages_page.side_effect = graph_error(
-        503, "ServiceUnavailable"
+        404, "ErrorItemNotFound"
     )
 
     items = _run(_connector(gateway, mailboxes=[MAILBOX_ADDRESS]))
@@ -599,6 +600,26 @@ def test_conversation_fetch_failure_is_a_document_failure() -> None:
     assert failures[0].failed_document.document_id == conversation_document_id(
         mailbox(), CONVERSATION_ID
     )
+
+
+@pytest.mark.parametrize("status", [429, 503, None])
+def test_transient_conversation_fetch_failure_keeps_the_checkpoint(
+    status: int | None,
+) -> None:
+    """A recorded failure would let the poll window move past the mail, so a
+    throttled or dropped call fails the attempt with the conversation unseen."""
+    gateway = _happy_gateway()
+    gateway.fetch_conversation_messages_page.side_effect = OutlookGraphError(
+        status, "ServiceUnavailable", "busy"
+    )
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+    checkpoint = _folder_checkpoint()
+
+    with pytest.raises(OutlookGraphError):
+        _step(connector, checkpoint)
+
+    assert checkpoint.seen_conversation_ids == set()
+    assert checkpoint.delta_next_link is None
 
 
 def test_indexable_messages_drop_drafts_and_excluded_folders() -> None:
