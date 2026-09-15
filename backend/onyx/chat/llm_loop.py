@@ -36,7 +36,7 @@ from onyx.chat.prompt_utils import (
     process_prompt_template,
 )
 from onyx.chat.token_budget import resolve_chat_token_budget
-from onyx.configs.app_configs import DISABLE_VECTOR_DB, INTEGRATION_TESTS_MODE
+from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.chat_configs import MAX_LLM_CYCLES
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
@@ -416,9 +416,10 @@ def construct_message_history(
     token_counter: Callable[[str], int] | None = None,
     all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
     image_files_replayed_as_markers: bool = False,
-    # Names of the tools this request actually gave the model. Lets the
-    # out-of-context file notice name a tool the model really has. Callers that
-    # leave it unset fall back to the deployment-level gate.
+    # Tool names this step offers the model. Only the retrieval tools
+    # (read_file, internal_search) are consulted, so the out-of-context file
+    # notice never names one the model cannot call. Steps exposing neither pass
+    # an empty set; leaving it unset also names no tool.
     available_tool_names: set[str] | None = None,
 ) -> list[ChatMessageSimple]:
     if last_n_user_messages is not None:
@@ -662,18 +663,6 @@ def _drop_orphaned_tool_call_responses(
     return sanitized
 
 
-def _offers_tool(available_tool_names: set[str] | None, tool_name: str) -> bool:
-    """Whether this request actually gave the model ``tool_name``.
-
-    ``None`` means the caller did not report its tool set. Fall back to the
-    deployment gate that decides the file reader, which is what
-    ``FileReaderTool.is_available`` and ``SearchTool.is_available`` both key on.
-    """
-    if available_tool_names is not None:
-        return tool_name in available_tool_names
-    return DISABLE_VECTOR_DB if tool_name == FILE_READER_TOOL_NAME else True
-
-
 def _create_file_tool_metadata_message(
     file_metadata: list[FileToolMetadata],
     token_counter: Callable[[str], int],
@@ -681,13 +670,18 @@ def _create_file_tool_metadata_message(
 ) -> ChatMessageSimple:
     """Build a lightweight metadata-only message listing files not held in context.
 
-    Name only a tool this request actually received. FileReaderTool is attached
+    Name only a tool this step actually received. FileReaderTool is attached
     only when the vector DB is disabled, and internal search can be absent even
-    when it is enabled (persona, ``allowed_tool_ids`` or a disabled search
+    when it is enabled (persona, ``allowed_tool_ids``, or a disabled search
     usage setting). Naming a tool the model was never given makes it invent
     workarounds — it searches the web for the document or guesses the contents.
+
+    An unreported tool set names no tool. Steps that offer none are common (a
+    deep-research final report runs with no tools), and under-promising is the
+    safe direction to fail in.
     """
-    if _offers_tool(available_tool_names, FILE_READER_TOOL_NAME):
+    offered = available_tool_names or set()
+    if FILE_READER_TOOL_NAME in offered:
         lines = [
             "You have access to the following files. Use the read_file tool to "
             "read sections of any file. You MUST pass the file_id UUID (not the "
@@ -700,7 +694,7 @@ def _create_file_tool_metadata_message(
         )
         return _finalize_file_metadata_message(lines, token_counter)
 
-    if _offers_tool(available_tool_names, SearchTool.NAME):
+    if SearchTool.NAME in offered:
         lines = [
             "These files are attached but too large to include in full. Their "
             "contents are indexed — use internal search to find the relevant "

@@ -75,15 +75,20 @@ def test_metadata_only_files_keep_tool_instructions(
         content_text=None,
         token_count=0,
     )
-    assert "file_reader" in result.message.message
+    # The attached tool is named read_file; "file_reader" matches nothing.
+    assert "read_file" in result.message.message
+    assert "file_reader" not in result.message.message
     assert CONTENT_UNAVAILABLE_NOTICE not in result.message.message
 
 
-def test_metadata_only_files_omit_file_reader_when_unavailable(
+def test_metadata_only_files_name_no_tool_when_reader_is_absent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """FileReaderTool is only attached when the vector DB is off. Naming it
-    otherwise sends the model after a tool it was never given.
+    """FileReaderTool is only attached when the vector DB is off.
+
+    Tools are constructed after this runs, so the message cannot know what is
+    available and must not promise anything — not read_file, and not the
+    python or search tools either.
     """
     monkeypatch.setattr("onyx.chat.chat_utils.DISABLE_VECTOR_DB", False)
     result = build_file_context(
@@ -93,10 +98,12 @@ def test_metadata_only_files_omit_file_reader_when_unavailable(
         content_text=None,
         token_count=0,
     )
+    assert "read_file" not in result.message.message
     assert "file_reader" not in result.message.message
-    # Pin the replacement hint: dropping tools_hint entirely would otherwise
-    # satisfy the negative assertion above.
-    assert "internal search" in result.message.message
+    assert "internal search" not in result.message.message
+    # Pin the replacement text: dropping the hint entirely would otherwise
+    # satisfy the negative assertions above.
+    assert "do not guess the contents" in result.message.message
     assert "sheet.xlsx" in result.message.message
     # The UUID only means something to read_file, which is not attached here.
     assert "abc" not in result.message.message

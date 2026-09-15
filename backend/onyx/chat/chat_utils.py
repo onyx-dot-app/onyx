@@ -111,16 +111,18 @@ def build_file_context(
     — the ID that FileReaderTool accepts (``UserFile.id`` for user files).
     """
     if file_type.use_metadata_only():
-        # Only name the file reader where it is actually attached; see
-        # FileReaderTool.is_available. The id is dropped with it: read_file is
-        # the only consumer of that UUID, and the python tool addresses files
-        # by filename.
+        # Name read_file only where it is attached (FileReaderTool.is_available),
+        # and drop the id with it: read_file is that UUID's only consumer, since
+        # the python tool addresses files by filename. Tools are constructed
+        # after this runs, so the other branch cannot know what is available and
+        # names nothing rather than promising a tool the model may not have.
         message_text = (
             f"File: {filename} (id={tool_file_id})\n"
-            "Use the file_reader or python tools to access this file's contents."
+            "Use the read_file or python tools to access this file's contents."
             if DISABLE_VECTOR_DB
             else f"File: {filename}\n"
-            "Use the python tool or internal search to access this file's contents."
+            "This file's contents are not included here. Use your available "
+            "tools to read it, and do not guess the contents."
         )
         message = ChatMessageSimple(
             message=message_text,

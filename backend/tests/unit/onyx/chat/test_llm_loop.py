@@ -30,7 +30,9 @@ from onyx.file_store.models import ChatFileType
 from onyx.llm.interfaces import LLMConfig, ToolChoiceOptions
 from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER, OPEN_URL_REMINDER
 from onyx.server.query_and_chat.placement import Placement
+from onyx.tools.constants import FILE_READER_TOOL_NAME
 from onyx.tools.models import ToolCallKickoff
+from onyx.tools.tool_implementations.search.search_tool import SearchTool
 
 
 def create_message(
@@ -640,12 +642,9 @@ class TestConstructMessageHistory:
         assert "Project file 0 content" in project_message.message
         assert "Project file 1 content" in project_message.message
 
-    def test_file_metadata_for_tool_produces_message(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_file_metadata_for_tool_produces_message(self) -> None:
         """When context_files has file_metadata_for_tool, a metadata listing
         message should be injected into the history."""
-        monkeypatch.setattr("onyx.chat.llm_loop.DISABLE_VECTOR_DB", True)
         system_prompt = create_message("System", MessageType.SYSTEM, 10)
         user_msg = create_message("Analyze the spreadsheet", MessageType.USER, 5)
 
@@ -673,6 +672,7 @@ class TestConstructMessageHistory:
             context_files=context_files,
             available_tokens=1000,
             token_counter=_simple_token_counter,
+            available_tool_names={"read_file"},
         )
 
         # Should have: system, tool_metadata_message, user
@@ -680,6 +680,7 @@ class TestConstructMessageHistory:
         metadata_msg = result[1]
         assert metadata_msg.message_type == MessageType.USER
         assert "report.xlsx" in metadata_msg.message
+        # read_file is offered, so the listing carries the id it consumes.
         assert "xlsx-1" in metadata_msg.message
 
     def test_metadata_only_and_text_files_both_present(self) -> None:
@@ -905,14 +906,9 @@ class TestForgottenFileMetadata:
     lightweight metadata message pointing the LLM at whichever retrieval path
     the deployment actually offers (read_file or internal search).
 
-    This class covers the FileReaderTool deployment, so it pins
-    DISABLE_VECTOR_DB on. TestForgottenFilesWithoutFileReader covers the
-    vector-DB-enabled case, where the tool is never attached.
+    This class covers a request that was given the FileReaderTool.
+    TestForgottenFilesWithoutFileReader covers one that was not.
     """
-
-    @pytest.fixture(autouse=True)
-    def _file_reader_available(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("onyx.chat.llm_loop.DISABLE_VECTOR_DB", True)
 
     def _build(
         self,
@@ -930,6 +926,7 @@ class TestForgottenFileMetadata:
             available_tokens=available_tokens,
             token_counter=_simple_token_counter,
             all_injected_file_metadata=all_injected_file_metadata,
+            available_tool_names={FILE_READER_TOOL_NAME},
         )
 
     @staticmethod
@@ -1221,19 +1218,12 @@ class TestForgottenFilesWithoutFileReader:
     persona had the tool row attached. On a vector-DB deployment that told the
     model to call a tool it had never been given, so it reported read_file as
     unavailable and fell back to guessing or web-searching the document.
-
-    These cases leave ``available_tool_names`` unset, so they cover the
-    deployment-level fallback used by callers that do not report their tools.
     """
-
-    @pytest.fixture(autouse=True)
-    def _file_reader_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("onyx.chat.llm_loop.DISABLE_VECTOR_DB", False)
 
     def _build_with_dropped_file(
         self, available_tool_names: set[str] | None = None
     ) -> ChatMessageSimple:
-        return _notice_for_dropped_file(available_tool_names)
+        return _notice_for_dropped_file(available_tool_names or {SearchTool.NAME})
 
     def test_notice_does_not_name_read_file(self) -> None:
         notice = self._build_with_dropped_file()
@@ -1266,13 +1256,7 @@ class TestForgottenFilesNoticeFollowsConstructedTools:
     excludes it, or the search usage setting disables it.
     """
 
-    @pytest.fixture(autouse=True)
-    def _vector_db_enabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Pinned off so the tool set, not the deployment gate, decides."""
-        monkeypatch.setattr("onyx.chat.llm_loop.DISABLE_VECTOR_DB", False)
-
     def test_names_read_file_when_the_request_has_it(self) -> None:
-        """Ground truth wins over the deployment gate, which is off here."""
         notice = _notice_for_dropped_file({"read_file", "internal_search"})
         assert "read_file" in notice.message
         # read_file is the one consumer of the UUID, so it comes back with it.
