@@ -200,8 +200,10 @@ def _parse_section_ids(llm_response: str) -> tuple[list[str], set[str]]:
     section_ids: list[str] = []
     sections_with_exclamation: set[str] = set()
     for token in text.replace(",", " ").split():
+        token = token.rstrip(".")
         has_exclamation = token.endswith("!")
-        token = token.rstrip("!").rstrip(".")
+        if has_exclamation:
+            token = token[:-1]
         if not token.isdigit():
             continue
         section_ids.append(token)
