@@ -79,6 +79,7 @@ from onyx.db.user_preferences import (
     update_users_craft_enabled,
 )
 from onyx.db.users import (
+    batch_get_last_active,
     batch_get_user_groups,
     delete_user_from_db,
     get_all_accepted_users,
@@ -302,6 +303,7 @@ def list_accepted_users(
 
     user_ids = [user.id for user in filtered_accepted_users]
     groups_by_user = batch_get_user_groups(db_session, user_ids, include_default=True)
+    last_active_by_user = batch_get_last_active(db_session, user_ids)
 
     # Batch-fetch SCIM mappings to mark synced users
     scim_synced_ids: set[UUID] = set()
@@ -328,6 +330,7 @@ def list_accepted_users(
                 ],
                 is_scim_synced=user.id in scim_synced_ids,
                 is_admin=user_is_admin(user),
+                last_active=last_active_by_user.get(user.id),
             )
             for user in filtered_accepted_users
         ],
@@ -349,6 +352,7 @@ def list_all_accepted_users(
 
     user_ids = [user.id for user in users]
     groups_by_user = batch_get_user_groups(db_session, user_ids, include_default=True)
+    last_active_by_user = batch_get_last_active(db_session, user_ids)
 
     # Batch-fetch SCIM mappings to mark synced users
     scim_synced_ids: set[UUID] = set()
@@ -374,6 +378,7 @@ def list_all_accepted_users(
             ],
             is_scim_synced=user.id in scim_synced_ids,
             is_admin=user_is_admin(user),
+            last_active=last_active_by_user.get(user.id),
         )
         for user in users
     ]

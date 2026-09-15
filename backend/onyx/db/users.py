@@ -1,3 +1,4 @@
+import datetime
 import hashlib
 import struct
 from collections.abc import Callable, Sequence
@@ -22,6 +23,8 @@ from onyx.configs.constants import (
 )
 from onyx.db.enums import AccountType, Permission
 from onyx.db.models import (
+    ChatMessage,
+    ChatSession,
     DocumentSet,
     DocumentSet__User,
     MCPConnectionConfig,
@@ -1026,6 +1029,47 @@ def batch_get_user_groups(
     for user_id, group_id, group_name in rows:
         result[user_id].append((group_id, group_name))
     return result
+
+
+def batch_get_last_active(
+    db_session: Session,
+    user_ids: list[UUID],
+) -> dict[UUID, datetime.datetime | None]:
+    """Fetch the most recent chat activity for a batch of users in a single query.
+
+    `User.updated_at` only moves when the user row itself is written — a profile or
+    role change — so it is not a measure of activity.
+
+    `ChatSession.time_updated` alone is not either. It has `onupdate=func.now()`, so
+    it advances when the session row is written — creation, and auto-naming on the
+    first turn — but sending a follow-up message only inserts a `ChatMessage`.
+    (`update_chat_session_updated_at_timestamp` exists for this and has no callers.)
+    Measured against production, that left 65% of users with a stale value, the worst
+    understated by 174 days.
+
+    Taking the greatest of the two per session covers both: message traffic, and a
+    session that has been created or renamed but carries no messages yet.
+
+    Returns user_id -> last activity, or None for a user who has never chatted.
+    """
+    if not user_ids:
+        return {}
+
+    rows = db_session.execute(
+        select(
+            ChatSession.user_id,
+            func.max(func.greatest(ChatSession.time_updated, ChatMessage.time_sent)),
+        )
+        .select_from(ChatSession)
+        .outerjoin(ChatMessage, ChatMessage.chat_session_id == ChatSession.id)
+        .where(ChatSession.user_id.in_(user_ids))
+        .group_by(ChatSession.user_id)
+    ).all()
+
+    # Every requested id gets a key, so a user who has never chatted reads as
+    # None rather than going missing from the mapping.
+    last_active_by_user = {user_id: last_active for user_id, last_active in rows}
+    return {uid: last_active_by_user.get(uid) for uid in user_ids}
 
 
 def get_user_groups(

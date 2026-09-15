@@ -31,7 +31,7 @@ import { toSettings } from "@/lib/settings/types";
 import { updateAdminSettings } from "@/lib/settings/svc";
 import useAdminUsers from "@/hooks/useAdminUsers";
 import type { User } from "@/lib/types";
-import type { UserRow } from "@/views/admin/UsersPage/interfaces";
+import type { UserRow } from "@/views/admin/UsersPage/types";
 import GroupsCell from "@/views/admin/UsersPage/GroupsCell";
 import AccessCell from "./AccessCell";
 

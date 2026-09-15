@@ -14,7 +14,7 @@ import { Tooltip } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import useGroups from "@/hooks/useGroups";
 import { addUserToGroup, removeUserFromGroup } from "./svc";
-import type { UserRow } from "./interfaces";
+import type { UserRow } from "./types";
 import { cn } from "@opal/utils";
 
 // ---------------------------------------------------------------------------

@@ -30,6 +30,7 @@ export function apiKeyToMemberRow(key: ApiKeyDescriptor): MemberRow {
     personal_name: key.api_key_name ?? "Unnamed Key",
     created_at: null,
     updated_at: null,
+    last_active: null,
     groups: [],
     api_key_display: key.api_key_display,
   };
