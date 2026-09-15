@@ -792,17 +792,27 @@ class TestNonVisionImageBudgeting:
             "Follow-up",
         ]
 
-    @pytest.mark.parametrize("stored_image_tokens", [0, 20000])
+    @pytest.mark.parametrize(
+        "supports_vision,stored_image_tokens",
+        [(False, 0), (False, 20000), (True, 0), (True, 500)],
+    )
     @pytest.mark.parametrize("configured_input_limit", [8000, 24000])
+    @pytest.mark.parametrize("has_project_text", [False, True])
     def test_output_allowance_uses_image_replay_cost(
         self,
         stored_image_tokens: int,
         configured_input_limit: int,
+        supports_vision: bool,
+        has_project_text: bool,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         image_msg = self._image_user_msg()
         image_msg.token_count = stored_image_tokens + 5
         image_msg.image_token_count = stored_image_tokens
+        context_files = create_context_files(num_files=int(has_project_text))
+        if stored_image_tokens == 0:
+            context_files.image_files = image_msg.image_files or []
+            context_files.total_token_count += 500
         monkeypatch.setattr(
             "onyx.chat.token_budget.GEN_AI_INPUT_TOKEN_SAFETY_MARGIN", 0.05
         )
@@ -815,6 +825,7 @@ class TestNonVisionImageBudgeting:
         )
         older_user = create_message("Old input", MessageType.USER, 20000)
         older_answer = create_message("Old answer", MessageType.ASSISTANT, 5)
+        state = Mock()
         with (
             patch("onyx.chat.llm_loop.trace", return_value=nullcontext()),
             patch("onyx.llm.litellm_singleton.config.initialize_litellm"),
@@ -824,7 +835,10 @@ class TestNonVisionImageBudgeting:
             ),
             patch("onyx.chat.llm_loop.get_default_base_system_prompt", return_value=""),
             patch("onyx.chat.llm_loop.select_reminder_text", return_value=""),
-            patch("onyx.chat.llm_loop.model_supports_image_input", return_value=False),
+            patch(
+                "onyx.chat.llm_loop.model_supports_image_input",
+                return_value=supports_vision,
+            ),
             patch(
                 "onyx.chat.token_budget.get_model_map",
                 return_value={
@@ -844,27 +858,25 @@ class TestNonVisionImageBudgeting:
         ):
             run_llm_loop(
                 emitter=Mock(),
-                state_container=Mock(),
+                state_container=state,
                 simple_chat_history=[older_user, older_answer, image_msg],
                 tools=[],
                 custom_agent_prompt=None,
-                context_files=create_context_files(),
+                context_files=context_files,
                 persona=None,
                 user_memory_context=None,
                 llm=llm,
                 token_counter=lambda _: 10,
             )
 
-        if configured_input_limit == 8000:
-            assert step.call_args.kwargs["history"] == [older_answer, image_msg]
-            assert step.call_args.kwargs["max_tokens"] == 16000
-        else:
-            assert step.call_args.kwargs["history"] == [
-                older_user,
-                older_answer,
-                image_msg,
-            ]
-            assert step.call_args.kwargs["max_tokens"] == 2780
+        history = step.call_args.kwargs["history"]
+        assert history[0] == older_answer
+        assert history[-1] == image_msg
+        assert len(history) == 2 + int(has_project_text)
+        assert step.call_args.kwargs["max_tokens"] == 16000
+        state.set_reserved_input_tokens.assert_called_once_with(
+            (500 if supports_vision else 10) + (100 if has_project_text else 0)
+        )
         assert (
             count_message_replay_tokens(
                 image_msg,

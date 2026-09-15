@@ -3,6 +3,8 @@
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from onyx.chat.compression import (
     SummaryContent,
     _build_llm_messages_for_summarization,
@@ -55,22 +57,51 @@ def create_mock_message(
 def test_no_compression_when_under_threshold() -> None:
     """Should not compress when history is under threshold."""
     result = get_compression_params(
-        max_input_tokens=10000,
+        input_token_budget=8000,
         current_history_tokens=1000,
-        reserved_tokens=2000,
     )
     assert result.should_compress is False
 
 
-def test_compression_triggered_when_over_threshold() -> None:
+def test_compression_triggered_when_over_threshold(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Should compress when history exceeds threshold."""
+    monkeypatch.setattr("onyx.chat.compression.COMPRESSION_TRIGGER_RATIO", 0.9)
     result = get_compression_params(
-        max_input_tokens=10000,
-        current_history_tokens=7000,
-        reserved_tokens=2000,
+        input_token_budget=8000,
+        current_history_tokens=7201,
     )
     assert result.should_compress is True
-    assert result.tokens_for_recent > 0
+    assert result.tokens_for_recent == 1600
+
+
+def test_compression_threshold_uses_90_percent_input_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("onyx.chat.compression.COMPRESSION_TRIGGER_RATIO", 0.9)
+
+    at_threshold = get_compression_params(
+        input_token_budget=8000,
+        current_history_tokens=7200,
+    )
+    above_threshold = get_compression_params(
+        input_token_budget=8000,
+        current_history_tokens=7201,
+    )
+
+    assert at_threshold.should_compress is False
+    assert above_threshold.should_compress is True
+
+
+def test_compression_handles_zero_input_budget() -> None:
+    result = get_compression_params(
+        input_token_budget=-1,
+        current_history_tokens=1,
+    )
+
+    assert result.should_compress is True
+    assert result.tokens_for_recent == 1
 
 
 def test_get_messages_returns_summary_content() -> None:
