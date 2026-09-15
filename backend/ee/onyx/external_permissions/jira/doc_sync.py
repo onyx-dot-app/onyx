@@ -8,6 +8,9 @@ from ee.onyx.external_permissions.utils import credential_json, generic_doc_sync
 from onyx.access.models import ElementExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.jira.connector import JiraConnector
+from onyx.connectors.jira.service_management_connector import (
+    JiraServiceManagementConnector,
+)
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
@@ -15,6 +18,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 JIRA_DOC_SYNC_TAG = "jira_doc_sync"
+JIRA_SERVICE_MANAGEMENT_DOC_SYNC_TAG = "jira_service_management_doc_sync"
 
 
 def jira_doc_sync(
@@ -35,4 +39,30 @@ def jira_doc_sync(
         doc_source=DocumentSource.JIRA,
         slim_connector=jira_connector,
         label=JIRA_DOC_SYNC_TAG,
+    )
+
+
+def jira_service_management_doc_sync(
+    cc_pair: ConnectorCredentialPair,
+    fetch_all_existing_docs_fn: FetchAllDocumentsFunction,  # noqa: ARG001
+    fetch_all_existing_docs_ids_fn: FetchAllDocumentsIdsFunction,
+    callback: IndexingHeartbeatInterface | None = None,
+) -> Generator[ElementExternalAccess, None, None]:
+    """Doc sync for Service Management requests.
+
+    The requests are Jira issues, but they carry the Service Management source and
+    document ids, so the sync uses the Service Management connector.
+    """
+    jsm_connector = JiraServiceManagementConnector(
+        **cc_pair.connector.connector_specific_config,
+    )
+    jsm_connector.load_credentials(credential_json(cc_pair))
+
+    yield from generic_doc_sync(
+        cc_pair=cc_pair,
+        fetch_all_existing_docs_ids_fn=fetch_all_existing_docs_ids_fn,
+        callback=callback,
+        doc_source=DocumentSource.JIRA_SERVICE_MANAGEMENT,
+        slim_connector=jsm_connector,
+        label=JIRA_SERVICE_MANAGEMENT_DOC_SYNC_TAG,
     )

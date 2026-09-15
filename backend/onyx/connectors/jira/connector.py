@@ -557,6 +557,15 @@ class JiraConnector(
         return self._jira_client
 
     @property
+    def document_source(self) -> DocumentSource:
+        """Source of the documents of this connector.
+
+        It also prefixes the external group ids, so it must match the source of
+        the connector credential pair.
+        """
+        return DocumentSource.JIRA
+
+    @property
     def quoted_jira_project(self) -> str:
         # Quote the project name to handle reserved words
         if not self.jira_project:
@@ -583,6 +592,7 @@ class JiraConnector(
                 jira_client=self.jira_client,
                 jira_project=project_key,
                 add_prefix=add_prefix,
+                source=self.document_source,
             )
         return self._project_permissions_cache[cache_key]
 
@@ -702,6 +712,25 @@ class JiraConnector(
         # For non-epic parents (e.g., story with subtasks),
         # the document belongs directly under the project in the hierarchy
         return project_key
+
+    def _build_document_id(self, issue_key: str) -> str:
+        """Id of the document created for an issue.
+
+        Subclasses that index the same issues under another source override this to
+        keep document ids unique per source.
+        """
+        return build_jira_url(self.jira_base, issue_key)
+
+    def _process_issue(
+        self, issue: Issue, parent_hierarchy_raw_node_id: str | None
+    ) -> Document | None:
+        return process_jira_issue(
+            jira_base_url=self.jira_base,
+            issue=issue,
+            comment_email_blacklist=self.comment_email_blacklist,
+            labels_to_skip=self.labels_to_skip,
+            parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+        )
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self._jira_client = build_jira_client(
@@ -827,11 +856,8 @@ class JiraConnector(
                     else None
                 )
 
-                if document := process_jira_issue(
-                    jira_base_url=self.jira_base,
+                if document := self._process_issue(
                     issue=issue,
-                    comment_email_blacklist=self.comment_email_blacklist,
-                    labels_to_skip=self.labels_to_skip,
                     parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
                 ):
                     # Add permission information to the document if requested
@@ -974,7 +1000,7 @@ class JiraConnector(
 
                 # Now add the slim document
                 issue_key = best_effort_get_field_from_issue(issue, _FIELD_KEY)
-                doc_id = build_jira_url(self.jira_base, issue_key)
+                doc_id = self._build_document_id(issue_key)
 
                 created = best_effort_get_field_from_issue(issue, _FIELD_CREATED)
 
