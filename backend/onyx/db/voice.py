@@ -1,7 +1,7 @@
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from onyx.db.models import User, VoiceProvider
@@ -45,9 +45,12 @@ def fetch_default_tts_provider(db_session: Session) -> VoiceProvider | None:
 def fetch_voice_provider_by_type(
     db_session: Session, provider_type: str
 ) -> VoiceProvider | None:
-    """Fetch a voice provider by type."""
+    """Fetch a voice provider by type. Rows saved before types were
+    canonicalized may carry mixed case, so the match ignores case."""
     return db_session.scalar(
-        select(VoiceProvider).where(VoiceProvider.provider_type == provider_type)
+        select(VoiceProvider).where(
+            func.lower(VoiceProvider.provider_type) == provider_type.lower()
+        )
     )
 
 
