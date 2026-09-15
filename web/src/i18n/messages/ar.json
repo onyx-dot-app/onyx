@@ -8996,6 +8996,9 @@
       "ssoMissingAuthUrl": {
         "error": "استجابة تسجيل الدخول لا تتضمن رابط التفويض"
       },
+      "ssoRedirecting": {
+        "text": "جارٍ تحويلك إلى {provider} لتسجيل الدخول…"
+      },
       "ssoSignInButton": {
         "label": "تسجيل الدخول عبر SSO"
       },

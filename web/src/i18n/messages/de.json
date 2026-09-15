@@ -8996,6 +8996,9 @@
       "ssoMissingAuthUrl": {
         "error": "In der Anmeldeantwort fehlte die Autorisierungs-URL"
       },
+      "ssoRedirecting": {
+        "text": "Sie werden zur Anmeldung zu {provider} weitergeleitet …"
+      },
       "ssoSignInButton": {
         "label": "Mit SSO anmelden"
       },

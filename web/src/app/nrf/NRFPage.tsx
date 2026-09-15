@@ -649,11 +649,13 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
               title={t("nrf.page.loginModal.title")}
             />
             <Modal.Body>
+              {/* Every new tab opens this page, so it never bounces to the IdP on its own. */}
               {authTypeMetadata?.multiTenant === false ? (
                 <LoginPage
                   authUrl={null}
                   authTypeMetadata={authTypeMetadata ?? null}
                   nextUrl="/nrf"
+                  autoRedirectToSso={false}
                 />
               ) : (
                 <div className="flex flex-col items-center">

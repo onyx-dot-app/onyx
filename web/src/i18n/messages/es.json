@@ -8996,6 +8996,9 @@
       "ssoMissingAuthUrl": {
         "error": "La respuesta de inicio de sesión no incluía la URL de autorización"
       },
+      "ssoRedirecting": {
+        "text": "Redirigiendo a {provider} para iniciar sesión…"
+      },
       "ssoSignInButton": {
         "label": "Iniciar sesión con SSO"
       },

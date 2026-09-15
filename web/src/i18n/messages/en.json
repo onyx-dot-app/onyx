@@ -9026,6 +9026,9 @@
       "ssoMissingAuthUrl": {
         "error": "Sign-in response was missing the authorization URL"
       },
+      "ssoRedirecting": {
+        "text": "Taking you to {provider} to sign in…"
+      },
       "ssoSignInButton": {
         "label": "Sign in with SSO"
       },
