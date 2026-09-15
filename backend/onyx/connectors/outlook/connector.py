@@ -435,23 +435,25 @@ class OutlookConnector(
         """Every conversation document id the walk would produce today, so
         pruning drops the conversations that vanished.
 
-        Reads folder and delta metadata only, never a body. A mailbox that is
-        gone (404) contributes nothing, so its documents go too. Any other
-        Graph failure raises: an aborted prune deletes nothing, while a silent
-        skip would delete every document of that mailbox.
+        Reads folder and delta metadata only, never a body. A mailbox whose
+        probe answers 404 is gone and contributes nothing, so its documents go
+        too. Any other Graph failure raises: an aborted prune deletes nothing,
+        while a silent skip would delete every document of that mailbox.
         """
         del start, end
         mailboxes, _ = self._resolve_mailboxes()
         for mailbox in mailboxes:
             try:
                 self.ops.probe_mailbox(mailbox_id=mailbox.id)
-                excluded = self._excluded_well_known_folder_ids(mailbox)
-                tree = list(self._walk_folder_tree(mailbox, excluded))
             except OutlookGraphError as e:
                 if e.status == 404:
                     logger.info("Outlook: %s is gone, pruning it", mailbox.address)
                     continue
                 raise
+            # A 404 past the probe is a folder that vanished mid-walk, not the
+            # mailbox, so it aborts the prune like any other error.
+            excluded = self._excluded_well_known_folder_ids(mailbox)
+            tree = list(self._walk_folder_tree(mailbox, excluded))
             yield list(self._hierarchy_nodes(mailbox, tree))
             yield from self._slim_conversations(mailbox, tree, callback)
 

@@ -178,10 +178,16 @@ def extract_ids_from_runnable_connector(
         | None
     ) = None
 
+    # The heartbeat lets a slim walk report progress per page, since a sparse
+    # source can spend many requests before it fills a batch.
     if isinstance(runnable_connector, SlimConnector):
-        raw_batch_generator = runnable_connector.retrieve_all_slim_docs()
+        raw_batch_generator = runnable_connector.retrieve_all_slim_docs(
+            callback=callback
+        )
     elif isinstance(runnable_connector, SlimConnectorWithPermSync):
-        raw_batch_generator = runnable_connector.retrieve_all_slim_docs_perm_sync()
+        raw_batch_generator = runnable_connector.retrieve_all_slim_docs_perm_sync(
+            callback=callback
+        )
     # If the connector isn't slim, fall back to running it normally to get ids
     elif isinstance(runnable_connector, LoadConnector):
         raw_batch_generator = runnable_connector.load_from_state()

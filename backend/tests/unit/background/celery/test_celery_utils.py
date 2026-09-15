@@ -154,3 +154,19 @@ class TestRateLimitDetection:
 
         after = PRUNING_RATE_LIMIT_ERRORS.labels(connector_type="unknown")._value.get()
         assert after == before + 1
+
+
+def test_heartbeat_callback_reaches_slim_connectors() -> None:
+    """A sparse source spends many requests before it fills a batch, so the
+    connector needs the callback to report progress per page."""
+    mock = MagicMock(spec=SlimConnector)
+    mock.retrieve_all_slim_docs.return_value = iter([[]])
+    connector: SlimConnector = mock
+    callback = MagicMock()
+    callback.should_stop.return_value = False
+
+    extract_ids_from_runnable_connector(
+        connector, connector_type="outlook", callback=callback
+    )
+
+    mock.retrieve_all_slim_docs.assert_called_once_with(callback=callback)

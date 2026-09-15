@@ -771,6 +771,23 @@ def test_slim_docs_list_every_conversation_without_reading_bodies() -> None:
     )
 
 
+def test_slim_docs_abort_when_a_folder_vanishes_mid_walk() -> None:
+    """A folder deleted between the tree listing and its own children request
+    answers 404 too. Skipping the mailbox would prune all of its live mail."""
+    gateway = _happy_gateway()
+
+    def child_folders(**kwargs: Any) -> OutlookFolderPage:
+        if kwargs["parent_folder_id"] == INBOX_ID:
+            raise graph_error(404, "ErrorItemNotFound")
+        return _child_folders(**kwargs)
+
+    gateway.list_child_folders.side_effect = child_folders
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+
+    with pytest.raises(OutlookGraphError):
+        list(connector.retrieve_all_slim_docs())
+
+
 def test_slim_docs_skip_a_vanished_mailbox_and_abort_on_anything_else() -> None:
     gateway = _happy_gateway()
     gateway.probe_mailbox.side_effect = graph_error(404, "MailboxNotEnabledForRESTAPI")
