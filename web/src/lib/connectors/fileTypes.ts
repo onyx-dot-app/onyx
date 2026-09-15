@@ -25,7 +25,7 @@ export const FILE_TYPE_DEFINITIONS: Record<
       allowedExtensions: [".pfx"],
     },
     description:
-      "Please upload a .pfx file containing the private key for SharePoint. The file size must be under 10KB.",
+      "Please upload the .pfx file containing the private key of the app registration. The file size must be under 10KB.",
   },
 };
 

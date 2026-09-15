@@ -24,7 +24,6 @@ from onyx.connectors.outlook.models import (
     OutlookGraphError,
 )
 from onyx.connectors.outlook.source_operations import (
-    ATTACHMENT_SELECT,
     CHANGE_SELECT,
     EMPTY_PAGE_FOLLOW_LIMIT,
     EPOCH_TIMESTAMP,
@@ -339,6 +338,20 @@ def test_conversation_page_orders_newest_first_and_reads_text_bodies() -> None:
     assert result.messages[0].sender is not None
     assert result.messages[0].sender.address == MAILBOX_ADDRESS
     assert result.next_link == "https://graph/messages?page=2"
+
+
+def test_conversation_page_selects_and_parses_has_attachments() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = page_json(
+        [message_json(hasAttachments=True), message_json(id="msg-2")]
+    )
+
+    result = gateway.fetch_conversation_messages_page(
+        mailbox_id=MAILBOX_ID, conversation_id=CONVERSATION_ID
+    )
+
+    assert "hasAttachments" in client.get_json.call_args.args[1]["$select"].split(",")
+    assert [m.has_attachments for m in result.messages] == [True, False]
 
 
 def test_conversation_next_page_keeps_the_body_preference_and_drops_params() -> None:
@@ -687,7 +700,9 @@ def test_attachment_listing_selects_records_without_bytes() -> None:
 
     url, params = client.get_json.call_args.args[:2]
     assert url == f"{GRAPH_BASE}/users/{MAILBOX_ID}/messages/msg-1/attachments"
-    assert params == {"$select": ATTACHMENT_SELECT}
+    # contentBytes must stay out of the selection or every listing carries
+    # every file attachment whole.
+    assert params == {"$select": "id,name,contentType,size,isInline"}
     assert [(a.id, a.is_file, a.is_inline) for a in result] == [
         ("att-1", True, False),
         ("att-2", False, False),

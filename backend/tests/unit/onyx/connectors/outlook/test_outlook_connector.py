@@ -4,6 +4,7 @@ The gateway is autospecced, so these tests drive the real checkpoint state
 machine and document assembly against the gateway's plain models.
 """
 
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import MagicMock, call, create_autospec, patch
@@ -21,8 +22,11 @@ from onyx.connectors.models import (
     SlimDocument,
 )
 from onyx.connectors.outlook.connector import (
+    ATTACHMENT_EXTRACTION_TIMEOUT_SECONDS,
     CONVERSATION_FETCH_LIMIT,
     FILTERED_DELTA_CAP,
+    MAX_ATTACHMENT_TEXT_PER_CONVERSATION,
+    MAX_ATTACHMENTS_PER_MESSAGE,
     MAX_MESSAGES_PER_CONVERSATION,
     SLIM_BATCH_SIZE,
     OutlookCheckpoint,
@@ -45,6 +49,8 @@ from onyx.connectors.outlook.models import (
 )
 from onyx.connectors.outlook.source_operations import OutlookSourceOperations
 from onyx.db.enums import HierarchyNodeType
+from onyx.file_processing.extract_file_text import extract_file_text
+from onyx.utils.process_isolation import IsolatedProcessError
 from tests.unit.onyx.connectors.outlook.outlook_api_shapes import (
     CONVERSATION_ID,
     INBOX_ID,
@@ -768,12 +774,25 @@ def test_credentials_before_provider_is_a_programming_error() -> None:
 # ---------------------------------------------------------------------------
 
 
+def _extraction(text: str) -> Callable[..., str]:
+    """A stand-in for the isolated extraction that records what it was asked to run."""
+
+    def run(fn: Callable[..., str], *_args: Any, timeout: float, **kwargs: Any) -> str:
+        assert fn is extract_file_text
+        assert timeout == ATTACHMENT_EXTRACTION_TIMEOUT_SECONDS
+        assert kwargs == {"break_on_unprocessable": False}
+        return text
+
+    return run
+
+
 def test_attachment_text_follows_its_message_and_skips_the_rest() -> None:
     gateway = _attachment_gateway()
     connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
 
     with patch(
-        f"{CONNECTOR_MODULE}.extract_file_text", return_value="Quarterly numbers"
+        f"{CONNECTOR_MODULE}.run_in_isolated_process",
+        side_effect=_extraction("Quarterly numbers"),
     ):
         items, _ = _step(connector, _folder_checkpoint())
 
@@ -842,6 +861,45 @@ def test_refused_attachment_listing_keeps_the_message_text() -> None:
     docs = [item for item in items if isinstance(item, Document)]
     assert len(docs[0].sections) == 2
     gateway.download_attachment.assert_not_called()
+
+
+def test_attachment_extraction_that_hangs_or_crashes_is_skipped() -> None:
+    gateway = _attachment_gateway()
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+
+    with patch(
+        f"{CONNECTOR_MODULE}.run_in_isolated_process",
+        side_effect=IsolatedProcessError("timed out"),
+    ):
+        items, _ = _step(connector, _folder_checkpoint())
+
+    docs = [item for item in items if isinstance(item, Document)]
+    assert len(docs[0].sections) == 2
+
+
+def test_attachment_text_is_capped_per_conversation() -> None:
+    gateway = _attachment_gateway()
+    gateway.list_message_attachments.return_value = [
+        attachment(id=f"att-{n}", name=f"part-{n}.txt")
+        for n in range(MAX_ATTACHMENTS_PER_MESSAGE + 5)
+    ]
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+    # Each attachment expands to over half the budget, so the second one is
+    # truncated and the third is never downloaded.
+    text = "x" * (MAX_ATTACHMENT_TEXT_PER_CONVERSATION * 3 // 5)
+
+    with patch(
+        f"{CONNECTOR_MODULE}.run_in_isolated_process", side_effect=_extraction(text)
+    ):
+        items, _ = _step(connector, _folder_checkpoint())
+
+    docs = [item for item in items if isinstance(item, Document)]
+    kept = [
+        len(section.text or "") - len("Attachment: part-0.txt\n\n")
+        for section in docs[0].sections[2:]
+    ]
+    assert sum(kept) == MAX_ATTACHMENT_TEXT_PER_CONVERSATION
+    assert gateway.download_attachment.call_count == 2
 
 
 def test_attachment_skip_reasons() -> None:

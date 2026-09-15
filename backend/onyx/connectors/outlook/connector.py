@@ -85,6 +85,7 @@ from onyx.file_processing.extract_file_text import extract_file_text, get_file_e
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
+from onyx.utils.process_isolation import IsolatedProcessError, run_in_isolated_process
 
 logger = setup_logger()
 
@@ -101,6 +102,13 @@ MAX_MESSAGES_PER_CONVERSATION = 100
 # Raw messages read per conversation while looking for indexable ones, so a
 # thread that is mostly drafts or trashed replies stays bounded.
 CONVERSATION_FETCH_LIMIT = 500
+
+# Attachment bytes come from whoever sent the mail, so extraction runs in a
+# child process this long at most, and the text kept per conversation is
+# capped however much a crafted document expands to.
+ATTACHMENT_EXTRACTION_TIMEOUT_SECONDS = 120
+MAX_ATTACHMENTS_PER_MESSAGE = 20
+MAX_ATTACHMENT_TEXT_PER_CONVERSATION = 1_000_000
 
 
 # Graph stops a filtered delta round at this many messages without saying so.
@@ -763,11 +771,14 @@ class OutlookConnector(
             # Pages arrive newest first, so the head of the list is what the
             # document keeps and the only messages worth attachment reads.
             kept = kept[:MAX_MESSAGES_PER_CONVERSATION]
-            attachments = {
-                message.id: self._attachment_sections(mailbox, message)
-                for message in kept
-                if self.include_attachments and message.has_attachments
-            }
+            attachments: dict[str, list[TextSection]] = {}
+            budget = MAX_ATTACHMENT_TEXT_PER_CONVERSATION
+            for message in kept:
+                if not (self.include_attachments and message.has_attachments):
+                    continue
+                attachments[message.id], budget = self._attachment_sections(
+                    mailbox, message, budget
+                )
         except OutlookGraphError as e:
             # A recorded failure lets the poll window move past the mail, so a
             # passing failure raises and keeps the checkpoint for the retry.
@@ -784,13 +795,16 @@ class OutlookConnector(
         return build_conversation_document(mailbox, conversation_id, kept, attachments)
 
     def _attachment_sections(
-        self, mailbox: OutlookMailbox, message: OutlookMessage
-    ) -> list[TextSection]:
-        """The extracted text of a message's file attachments, one section each.
+        self, mailbox: OutlookMailbox, message: OutlookMessage, budget: int
+    ) -> tuple[list[TextSection], int]:
+        """The extracted text of a message's file attachments, one section each,
+        and what is left of the conversation's text budget.
 
         An attachment Graph refuses is skipped with a warning. A throttled or
         failed call raises, like a message read, so the checkpoint is kept.
         """
+        if budget <= 0:
+            return [], budget
         try:
             attachments = self.ops.list_message_attachments(
                 mailbox_id=mailbox.id, message_id=message.id
@@ -803,10 +817,13 @@ class OutlookConnector(
                 message.id,
                 e.code,
             )
-            return []
+            return [], budget
 
         sections: list[TextSection] = []
-        for attachment in attachments:
+        for attachment in attachments[:MAX_ATTACHMENTS_PER_MESSAGE]:
+            if budget <= 0:
+                logger.info("Outlook: attachment text budget spent in %s", message.id)
+                break
             reason = attachment_skip_reason(attachment)
             if reason is not None:
                 logger.debug(
@@ -834,14 +851,29 @@ class OutlookConnector(
                     e.code,
                 )
                 continue
-            text = extract_file_text(
-                BytesIO(data), attachment.name, break_on_unprocessable=False
-            )
-            if text.strip():
-                sections.append(
-                    TextSection(
-                        link=message.web_link,
-                        text=f"Attachment: {attachment.name}\n\n{text}",
-                    )
+            try:
+                text = run_in_isolated_process(
+                    extract_file_text,
+                    BytesIO(data),
+                    attachment.name,
+                    break_on_unprocessable=False,
+                    timeout=ATTACHMENT_EXTRACTION_TIMEOUT_SECONDS,
                 )
-        return sections
+            except IsolatedProcessError as e:
+                logger.warning(
+                    "Outlook: extraction of %s gave up (%s), skipping",
+                    attachment.name,
+                    e,
+                )
+                continue
+            text = text.strip()[:budget]
+            if not text:
+                continue
+            budget -= len(text)
+            sections.append(
+                TextSection(
+                    link=message.web_link,
+                    text=f"Attachment: {attachment.name}\n\n{text}",
+                )
+            )
+        return sections, budget
