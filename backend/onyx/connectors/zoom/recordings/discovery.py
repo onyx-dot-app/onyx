@@ -57,14 +57,36 @@ _MAX_LISTING_WINDOW_DAYS = 30
 _WIDE_BACKFILL_WINDOWS = 24
 
 
+def _poll_window_range(
+    start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
+) -> tuple[datetime, datetime]:
+    """A failure covers the lag buffer too, because the buffer is part of the
+    window the connector actually asked Zoom for."""
+    return (
+        datetime.fromtimestamp(
+            start - _OCCURRENCE_POLL_OVERLAP_SECONDS, tz=timezone.utc
+        ),
+        datetime.fromtimestamp(end, tz=timezone.utc),
+    )
+
+
+def _listing_window_range(from_date: date, to_date: date) -> tuple[datetime, datetime]:
+    """Zoom scopes a listing by whole UTC days, so a window that failed cost
+    exactly those days, not the rest of the poll window."""
+    return (
+        datetime(from_date.year, from_date.month, from_date.day, tzinfo=timezone.utc),
+        datetime(to_date.year, to_date.month, to_date.day, tzinfo=timezone.utc)
+        + timedelta(days=1),
+    )
+
+
 def _entity_failure(
     entity_id: str,
     message: str,
-    start: SecondsSinceUnixEpoch,
-    end: SecondsSinceUnixEpoch,
+    missed_time_range: tuple[datetime, datetime],
     error: Exception | None = None,
 ) -> ConnectorFailure:
-    """Discovery moves on, and this window is the only trace the skipped scope
+    """Discovery moves on, and this range is the only trace the skipped scope
     leaves. Targeted reindex is keyed on document ids, so an entity failure can
     never be replayed: recovery means widening ZOOM_TRANSCRIPT_LAG_BUFFER_HOURS
     or reindexing from scratch.
@@ -72,12 +94,7 @@ def _entity_failure(
     return ConnectorFailure(
         failed_entity=EntityFailure(
             entity_id=entity_id,
-            missed_time_range=(
-                datetime.fromtimestamp(
-                    start - _OCCURRENCE_POLL_OVERLAP_SECONDS, tz=timezone.utc
-                ),
-                datetime.fromtimestamp(end, tz=timezone.utc),
-            ),
+            missed_time_range=missed_time_range,
         ),
         failure_message=message,
         exception=error,
@@ -210,8 +227,7 @@ class IdAllowlistSource(DiscoverySource):
                     # which one failed.
                     entity_id=f"{session_type.value}:{session_id}",
                     message=f"Failed to list occurrences for Zoom {session_type.value} {session_id}: {e}",
-                    start=start,
-                    end=end,
+                    missed_time_range=_poll_window_range(start, end),
                     error=e,
                 )
             )
@@ -424,8 +440,7 @@ class _UserRecordingsSource(DiscoverySource):
                 _entity_failure(
                     entity_id=self._scope_entity_id,
                     message=f"Failed to resolve the Zoom hosts for {self._scope_entity_id}: {e}",
-                    start=start,
-                    end=end,
+                    missed_time_range=_poll_window_range(start, end),
                     error=e,
                 )
             ]
@@ -546,8 +561,7 @@ class _UserRecordingsSource(DiscoverySource):
                         f"Failed to list Zoom recordings for {host.entity_id} "
                         f"over {from_date}..{to_date}: {e}"
                     ),
-                    start=start,
-                    end=end,
+                    missed_time_range=_listing_window_range(from_date, to_date),
                     error=e,
                 )
             )
@@ -628,8 +642,7 @@ class HostAllowlistSource(_UserRecordingsSource):
             _entity_failure(
                 entity_id=f"host:{email}",
                 message=f"No active Zoom user has the email {email}, so none of that host's sessions were indexed",
-                start=start,
-                end=end,
+                missed_time_range=_poll_window_range(start, end),
             )
             for email in sorted(unmatched)
         ]

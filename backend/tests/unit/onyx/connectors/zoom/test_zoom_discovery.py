@@ -1093,10 +1093,13 @@ class TestUserRecordingsFailures:
         assert first.work == []
         assert first.failures[0].failed_entity is not None
         assert first.failures[0].failed_entity.entity_id == "host:jill@example.com"
+        # The window Zoom refused, not the whole poll range, because discovery
+        # carries on into the next window.
         missed = first.failures[0].failed_entity.missed_time_range
         assert missed is not None
-        assert missed[0].timestamp() == _HOST_START - _OCCURRENCE_POLL_OVERLAP_SECONDS
-        assert missed[1].timestamp() == _END
+        asked_for = client.list_user_recordings.call_args_list[0].kwargs
+        assert missed[0].date() == asked_for["from_date"]
+        assert (missed[1] - timedelta(days=1)).date() == asked_for["to_date"]
         assert [w.occurrence_uuid for w in second.work] == ["uuid-2"]
 
     def test_a_rate_limit_stops_discovery_instead_of_skipping_the_host(self) -> None:
