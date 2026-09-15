@@ -880,8 +880,8 @@ class OutlookConnector(
         indexing applies: skips on the row, and a series only when its master
         is readable and not excluded, read once per series per mailbox. Ids
         are deduplicated per page only, since a repeat costs the callers
-        nothing. With permissions, a series carries the readers of its first
-        occurrence on the page.
+        nothing. With permissions, a series carries the readers of its master,
+        the event indexing writes it from.
 
         A calendar that is gone (404 on the first page) lists nothing, so its
         events are pruned like the mail of a vanished mailbox. A refused one
@@ -891,7 +891,7 @@ class OutlookConnector(
         raises, since the ids already listed cannot be retracted.
         """
         window_start, window_end = self._calendar_window()
-        series_included: dict[str, bool] = {}
+        series_readers: dict[str, ExternalAccess | None] = {}
         next_link: str | None = None
         while True:
             try:
@@ -924,33 +924,40 @@ class OutlookConnector(
                 event_id = series_id or event.id
                 if event_id in docs:
                     continue
-                if series_id is not None and not self._series_included(
-                    mailbox, series_id, series_included
-                ):
-                    continue
+                readers = event_access(mailbox, event)
+                if series_id is not None:
+                    master_readers = self._listed_series_readers(
+                        mailbox, series_id, series_readers
+                    )
+                    if master_readers is None:
+                        continue
+                    readers = master_readers
                 docs[event_id] = SlimDocument(
                     id=event_document_id(mailbox, event_id),
-                    external_access=event_access(mailbox, event)
-                    if include_permissions
-                    else None,
+                    external_access=readers if include_permissions else None,
                 )
             yield list(docs.values())
             next_link = page.next_link
             if next_link is None:
                 break
 
-    def _series_included(
-        self, mailbox: OutlookMailbox, series_id: str, decided: dict[str, bool]
-    ) -> bool:
-        """Whether a series is listed, decided once per mailbox from its master
+    def _listed_series_readers(
+        self,
+        mailbox: OutlookMailbox,
+        series_id: str,
+        decided: dict[str, ExternalAccess | None],
+    ) -> ExternalAccess | None:
+        """The readers of a listed series, taken from the master indexing writes
+        it from, or None when the series is excluded. Decided once per mailbox
         and remembered in ``decided``, capped like the checkpoint's set so a
         huge calendar costs repeat master reads rather than memory."""
         if series_id in decided:
             return decided[series_id]
-        included = self._indexable_series_master(mailbox, series_id) is not None
+        master = self._indexable_series_master(mailbox, series_id)
+        readers = event_access(mailbox, master) if master is not None else None
         if len(decided) < MAX_TRACKED_SERIES_PER_MAILBOX:
-            decided[series_id] = included
-        return included
+            decided[series_id] = readers
+        return readers
 
     def _open_mailbox(
         self,

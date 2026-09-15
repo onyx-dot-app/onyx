@@ -1658,6 +1658,31 @@ def test_perm_sync_slim_docs_carry_each_readership() -> None:
     _assert_each_readership(items)
 
 
+def test_series_readers_come_from_the_master_in_both_walks() -> None:
+    """The series document holds the master's text, so an attendee an
+    occurrence row names must not read it unless the master names them too."""
+    gateway = _calendar_gateway()
+    gateway.fetch_calendar_delta_page.return_value = OutlookEventPage(
+        events=[
+            event(
+                id="occ-1",
+                event_type="occurrence",
+                series_master_id=SERIES_ID,
+                attendees=[OutlookRecipient(address="carol@contoso.com", name="C")],
+            )
+        ]
+    )
+    connector = _calendar_connector(gateway)
+    series_doc_id = event_document_id(mailbox(), SERIES_ID)
+
+    slim = [i for batch in connector.retrieve_all_slim_docs_perm_sync() for i in batch]
+    indexed = _run(connector, include_permissions=True)
+
+    for items in (slim, indexed):
+        by_id = {i.id: i for i in items if isinstance(i, (Document, SlimDocument))}
+        assert _readers(by_id[series_doc_id]) == {MAILBOX_ADDRESS, "bob@contoso.com"}
+
+
 def test_perm_sync_indexing_carries_each_readership() -> None:
     """A connector set to Auto Sync Permissions indexes with its readers
     attached, so its documents are searchable before the first sync."""
