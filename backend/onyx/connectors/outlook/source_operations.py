@@ -114,11 +114,20 @@ def _to_graph_error(error: Exception) -> OutlookGraphError:
     if response is None:
         return OutlookGraphError(None, type(error).__name__, str(error))
     try:
-        body = response.json().get("error", {})
+        payload = response.json()
     except ValueError:
-        body = {}
-    code = body.get("code") or "<no code>"
-    message = body.get("message") or response.text
+        payload = None
+    if not isinstance(payload, dict):
+        return OutlookGraphError(response.status_code, "<no code>", response.text[:500])
+    detail = payload.get("error")
+    # Graph nests code and message under "error". The OAuth token endpoint puts
+    # the code there as a bare string and the text in "error_description".
+    if isinstance(detail, dict):
+        code = detail.get("code") or "<no code>"
+        message = detail.get("message") or response.text
+    else:
+        code = detail or "<no code>"
+        message = payload.get("error_description") or response.text
     return OutlookGraphError(response.status_code, str(code), str(message)[:500])
 
 
@@ -250,9 +259,11 @@ class OutlookSourceOperations(SourceOperations):
         return self._auth_context
 
     def _token_response(self) -> dict[str, Any]:
+        # MSAL surfaces a token endpoint it cannot reach or parse as a
+        # requests error or a bare ValueError.
         try:
             response = acquire_graph_token(self._auth().app, self._graph_host())
-        except requests.RequestException as e:
+        except (requests.RequestException, ValueError) as e:
             raise _to_graph_error(e) from e
         if "access_token" not in response:
             raise OutlookAuthError(
@@ -337,6 +348,11 @@ class OutlookSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "Runs only for a configured address. The configured-mailboxes check "
+            "and the mail-read check call it for every listed address, but the "
+            "coverage spy carries no connector config, so neither reaches it."
+        ),
     )
     def resolve_mailbox(self, *, address: str) -> OutlookMailbox | None:
         """Find the user behind an address: by UPN or object id, then by primary SMTP."""
@@ -467,10 +483,29 @@ class OutlookSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
+    )
+    def read_any_message(self, *, mailbox_id: str) -> OutlookMessage | None:
+        """One message from anywhere in the mailbox with the fields indexing
+        reads, or None when the mailbox holds none.
+
+        Mail.ReadBasic.All answers every folder and delta call and refuses only
+        bodies, so this is the call that tells the two grants apart.
+        """
+        data = self._get(
+            f"{self._user_url(mailbox_id)}/messages",
+            {"$select": MESSAGE_SELECT, "$top": "1"},
+            {"Prefer": TEXT_BODY_PREFERENCE},
+        )
+        messages = data.get("value", [])
+        return _parse_message(messages[0]) if messages else None
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
         untested=(
-            "Needs a conversation id, so the mail-read check calls it only when "
-            "the probed Inbox holds a message. The coverage spy's delta page is "
-            "empty, so the harness never sees the call."
+            "Needs a conversation id, which only the delta walk produces. The "
+            "mail-read check proves body access with read_any_message, the same "
+            "fields and body preference on the mailbox-wide route."
         ),
     )
     def fetch_conversation_messages_page(

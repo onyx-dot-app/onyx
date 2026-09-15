@@ -33,6 +33,7 @@ from onyx.connectors.outlook.errors import (
     raise_for_graph_error,
 )
 from onyx.connectors.outlook.mailboxes import (
+    MAILBOX_UNAVAILABLE_STATUSES,
     configured_addresses,
     describe_unavailable_mailboxes,
     raise_if_unavailable,
@@ -40,6 +41,7 @@ from onyx.connectors.outlook.mailboxes import (
 )
 from onyx.connectors.outlook.models import (
     OutlookAuthError,
+    OutlookFolder,
     OutlookGraphError,
     OutlookMailbox,
 )
@@ -53,9 +55,9 @@ _PROBE_WELL_KNOWN_FOLDER = "junkemail"
 # One item proves the permission. More only spends the tenant's budget.
 _PROBE_PAGE_SIZE = 1
 
-# Graph may answer a delta request with an empty page and a next link, so a
-# few pages are followed before the Inbox counts as empty.
-_PROBE_DELTA_PAGES = 3
+# Every-mailbox mode gives up on finding an openable mailbox after this many
+# enabled users.
+_CANDIDATE_MAILBOXES = 10
 
 _TOKEN_ENDPOINT_DENIED = "Microsoft's token endpoint refused the request."
 
@@ -74,30 +76,64 @@ def _gateway(context: CapabilityCheckContext) -> OutlookSourceOperations:
     return context.source_operations
 
 
-def _first_mailbox(
-    gateway: OutlookSourceOperations, context: CapabilityCheckContext
-) -> OutlookMailbox:
-    """The mailbox the read probes target: the first configured one, else the
-    first enabled user in the tenant."""
-    addresses = configured_addresses(context.connector_specific_config)
-    if addresses:
-        address = addresses[0]
-    else:
-        try:
-            page = gateway.list_mailbox_users(page_size=_PROBE_PAGE_SIZE)
-        except OutlookGraphError as e:
-            raise_for_graph_error(e, USER_LISTING_DENIED)
-        if not page.mailboxes:
-            raise UnexpectedValidationError(
-                "The tenant reports no enabled users, so there is no mailbox to probe."
-            )
-        address = page.mailboxes[0].address
+def _denied(mailbox: OutlookMailbox) -> str:
+    return f"The app cannot read mail in `{mailbox.address}`."
+
+
+def _open_configured_mailbox(
+    gateway: OutlookSourceOperations, address: str
+) -> tuple[OutlookMailbox, OutlookFolder]:
+    """A named mailbox must open, so every failure here is final."""
     mailbox = resolve_mailbox_for_validation(gateway, address)
     if mailbox is None:
         raise ConnectorValidationError(
             f"No user matches `{address}`. {MAILBOX_UNAVAILABLE_REMEDIATION}"
         )
-    return mailbox
+    try:
+        return mailbox, gateway.probe_mailbox(mailbox_id=mailbox.id)
+    except OutlookGraphError as e:
+        raise_for_graph_error(e, _denied(mailbox))
+
+
+def _open_first_readable_mailbox(
+    gateway: OutlookSourceOperations,
+) -> tuple[OutlookMailbox, OutlookFolder]:
+    """Walk the user listing one user at a time until a mailbox opens.
+
+    Enabled users without a mailbox, such as directory sync service accounts,
+    are common and indexing skips them too, so they must not fail the check.
+    A 403 is remembered: when no mailbox opens it is the likelier cause.
+    """
+    denied: OutlookGraphError | None = None
+    next_link: str | None = None
+    for _ in range(_CANDIDATE_MAILBOXES):
+        try:
+            page = gateway.list_mailbox_users(
+                page_size=_PROBE_PAGE_SIZE, next_link=next_link
+            )
+        except OutlookGraphError as e:
+            raise_for_graph_error(e, USER_LISTING_DENIED)
+        if not page.mailboxes:
+            break
+        mailbox = page.mailboxes[0]
+        try:
+            return mailbox, gateway.probe_mailbox(mailbox_id=mailbox.id)
+        except OutlookGraphError as e:
+            if e.status not in MAILBOX_UNAVAILABLE_STATUSES:
+                raise_for_graph_error(e, _denied(mailbox))
+            if e.status == 403:
+                denied = e
+        next_link = page.next_link
+        if next_link is None:
+            break
+    if denied is not None:
+        raise_for_graph_error(
+            denied, "The app cannot read mail in the tenant's first mailboxes."
+        )
+    raise UnexpectedValidationError(
+        "None of the tenant's first enabled users has a mailbox to probe. List a "
+        "mailbox to verify it."
+    )
 
 
 class _TokenAuthCheck(CapabilityCheck):
@@ -166,49 +202,34 @@ class _MailReadCheck(CapabilityCheck):
 
     def run(self, context: CapabilityCheckContext) -> None:
         gateway = _gateway(context)
-        mailbox = _first_mailbox(gateway, context)
-        denied = f"The app cannot read mail in `{mailbox.address}`."
-        conversation_id: str | None = None
+        addresses = configured_addresses(context.connector_specific_config)
+        if addresses:
+            mailbox, inbox = _open_configured_mailbox(gateway, addresses[0])
+        else:
+            mailbox, inbox = _open_first_readable_mailbox(gateway)
         try:
-            inbox = gateway.probe_mailbox(mailbox_id=mailbox.id)
             gateway.get_well_known_folder(
                 mailbox_id=mailbox.id, name=_PROBE_WELL_KNOWN_FOLDER
             )
             gateway.list_child_folders(
                 mailbox_id=mailbox.id, page_size=_PROBE_PAGE_SIZE
             )
-            next_link: str | None = None
-            for _ in range(_PROBE_DELTA_PAGES):
-                page = gateway.fetch_folder_delta_page(
-                    mailbox_id=mailbox.id,
-                    folder_id=inbox.id,
-                    page_size=_PROBE_PAGE_SIZE,
-                    next_link=next_link,
-                )
-                conversation_id = next(
-                    (
-                        c.conversation_id
-                        for c in page.changes
-                        if not c.removed and c.conversation_id
-                    ),
-                    None,
-                )
-                next_link = page.next_link
-                if conversation_id is not None or next_link is None:
-                    break
-        except OutlookGraphError as e:
-            raise_for_graph_error(e, denied)
-
-        if conversation_id is None:
-            return
-        try:
-            gateway.fetch_conversation_messages_page(
-                mailbox_id=mailbox.id,
-                conversation_id=conversation_id,
-                page_size=_PROBE_PAGE_SIZE,
+            gateway.fetch_folder_delta_page(
+                mailbox_id=mailbox.id, folder_id=inbox.id, page_size=_PROBE_PAGE_SIZE
             )
         except OutlookGraphError as e:
+            raise_for_graph_error(e, _denied(mailbox))
+
+        try:
+            sample = gateway.read_any_message(mailbox_id=mailbox.id)
+        except OutlookGraphError as e:
             raise_for_graph_error(e, _BODY_DENIED)
+        # Nothing to read means nothing proven, which is not a pass.
+        if sample is None:
+            raise UnexpectedValidationError(
+                f"`{mailbox.address}` holds no messages, so body access could not "
+                "be proven. List a mailbox that has mail to verify it."
+            )
 
 
 class _ConfiguredMailboxesCheck(CapabilityCheck):

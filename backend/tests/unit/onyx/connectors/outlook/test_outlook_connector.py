@@ -372,6 +372,31 @@ def test_conversation_paging_stops_at_the_fetch_limit() -> None:
     )
 
 
+def test_conversation_fetch_limit_cuts_the_last_page_before_filtering() -> None:
+    """The budget counts raw messages, so an indexable message just past it is
+    not kept even when it shares a page with messages inside it."""
+    gateway = _happy_gateway()
+    drafts = [message(id=f"draft-{i}", is_draft=True) for i in range(99)]
+    last_page = [
+        message(id="draft-last", is_draft=True),
+        message(id="just-past-the-budget"),
+    ]
+    pages = [
+        OutlookMessagePage(
+            messages=drafts + [message(id="draft-99", is_draft=True)], next_link="p"
+        )
+        for _ in range(CONVERSATION_FETCH_LIMIT // 100 - 1)
+    ]
+    pages.append(OutlookMessagePage(messages=drafts, next_link="p"))
+    pages.append(OutlookMessagePage(messages=last_page))
+    gateway.fetch_conversation_messages_page.side_effect = pages
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+
+    items, _ = _step(connector, _folder_checkpoint())
+
+    assert items == []
+
+
 def test_unresolved_configured_mailbox_is_a_recorded_failure() -> None:
     gateway = _happy_gateway()
     gateway.resolve_mailbox.return_value = None
@@ -425,12 +450,30 @@ def test_denied_delta_stops_the_mailbox_after_one_failure() -> None:
     assert gateway.fetch_folder_delta_page.call_count == 1
 
 
-def test_unexpected_probe_error_fails_the_run() -> None:
+def test_unexpected_probe_error_fails_the_run_and_keeps_the_mailbox_queued() -> None:
     gateway = _happy_gateway()
     gateway.probe_mailbox.side_effect = graph_error(500, "InternalServerError")
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+    _, checkpoint = _step(connector, connector.build_dummy_checkpoint())
 
     with pytest.raises(Exception, match="InternalServerError"):
-        _run(_connector(gateway, mailboxes=[MAILBOX_ADDRESS]))
+        _step(connector, checkpoint)
+
+    # The retry resumes from this checkpoint, so the mailbox must still be there.
+    assert checkpoint.mailboxes == [mailbox()]
+    assert checkpoint.current_mailbox is None
+
+
+def test_addresses_naming_the_same_mailbox_are_walked_once() -> None:
+    gateway = _happy_gateway()
+
+    items = _run(
+        _connector(gateway, mailboxes=[MAILBOX_ADDRESS, f"alias-of-{MAILBOX_ADDRESS}"])
+    )
+
+    docs = [item for item in items if isinstance(item, Document)]
+    assert len(docs) == 1
+    assert gateway.probe_mailbox.call_count == 1
 
 
 def test_expired_delta_state_restarts_the_folder_round() -> None:

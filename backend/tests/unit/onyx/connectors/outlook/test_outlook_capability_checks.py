@@ -39,22 +39,21 @@ from onyx.connectors.outlook.models import (
 )
 from onyx.connectors.outlook.source_operations import OutlookSourceOperations
 from tests.unit.onyx.connectors.outlook.outlook_api_shapes import (
-    CONVERSATION_ID,
     CREDENTIALS,
     INBOX_ID,
     MAILBOX_ADDRESS,
     MAILBOX_ID,
-    change,
     folder,
     graph_error,
     mailbox,
+    message,
 )
 
 _CHECKS_BY_ID = {check.check_id: check for check in build_outlook_indexing_checks()}
 
 
 def _gateway() -> MagicMock:
-    """A healthy tenant: one user with a readable, empty mailbox."""
+    """A healthy tenant: one user with a readable mailbox holding one message."""
     gateway = create_autospec(OutlookSourceOperations, instance=True)
     gateway.check_token.return_value = OutlookTokenInfo(expires_in=3599)
     gateway.list_mailbox_users.return_value = OutlookMailboxPage(mailboxes=[mailbox()])
@@ -63,6 +62,7 @@ def _gateway() -> MagicMock:
     gateway.get_well_known_folder.return_value = folder(id="junk", display_name="Junk")
     gateway.list_child_folders.return_value = OutlookFolderPage(folders=[folder()])
     gateway.fetch_folder_delta_page.return_value = OutlookDeltaPage(changes=[])
+    gateway.read_any_message.return_value = message()
     return gateway
 
 
@@ -174,8 +174,9 @@ def test_mail_read_check_probes_the_first_configured_mailbox() -> None:
     gateway.list_mailbox_users.assert_not_called()
     gateway.resolve_mailbox.assert_called_once_with(address="bob@contoso.com")
     gateway.fetch_folder_delta_page.assert_called_once_with(
-        mailbox_id=MAILBOX_ID, folder_id=INBOX_ID, page_size=1, next_link=None
+        mailbox_id=MAILBOX_ID, folder_id=INBOX_ID, page_size=1
     )
+    gateway.read_any_message.assert_called_once_with(mailbox_id=MAILBOX_ID)
 
 
 def test_mail_read_check_falls_back_to_the_first_tenant_user() -> None:
@@ -183,67 +184,59 @@ def test_mail_read_check_falls_back_to_the_first_tenant_user() -> None:
 
     _run("outlook_mail_read", _context(gateway))
 
-    gateway.list_mailbox_users.assert_called_once_with(page_size=1)
-    gateway.resolve_mailbox.assert_called_once_with(address=MAILBOX_ADDRESS)
+    gateway.list_mailbox_users.assert_called_once_with(page_size=1, next_link=None)
+    gateway.resolve_mailbox.assert_not_called()
+    gateway.probe_mailbox.assert_called_once_with(mailbox_id=MAILBOX_ID)
 
 
-def test_mail_read_check_reads_one_body_when_the_inbox_has_mail() -> None:
+def test_mail_read_check_skips_enabled_users_without_a_mailbox() -> None:
+    """A directory sync service account is enabled but has no mailbox, and it
+    is often the first user Graph lists."""
     gateway = _gateway()
-    gateway.fetch_folder_delta_page.return_value = OutlookDeltaPage(changes=[change()])
-
-    _run("outlook_mail_read", _context(gateway))
-
-    gateway.fetch_conversation_messages_page.assert_called_once_with(
-        mailbox_id=MAILBOX_ID, conversation_id=CONVERSATION_ID, page_size=1
-    )
-
-
-def test_mail_read_check_follows_empty_and_removal_only_delta_pages() -> None:
-    """Graph may answer with an empty page or a page of deletions before the
-    first message, and neither proves body access."""
-    gateway = _gateway()
-    gateway.fetch_folder_delta_page.side_effect = [
-        OutlookDeltaPage(changes=[], next_link="https://graph/delta?page=2"),
-        OutlookDeltaPage(
-            changes=[change(id="msg-gone", removed=True, conversation_id="conv-gone")],
-            next_link="https://graph/delta?page=3",
+    gateway.list_mailbox_users.side_effect = [
+        OutlookMailboxPage(
+            mailboxes=[mailbox(id="sync-svc", address="sync@contoso.com")],
+            next_link="https://graph/users?page=2",
         ),
-        OutlookDeltaPage(changes=[change()]),
+        OutlookMailboxPage(mailboxes=[mailbox()]),
+    ]
+    gateway.probe_mailbox.side_effect = [
+        graph_error(404, "MailboxNotEnabledForRESTAPI"),
+        folder(),
     ]
 
     _run("outlook_mail_read", _context(gateway))
 
-    assert gateway.fetch_folder_delta_page.call_count == 3
-    gateway.fetch_conversation_messages_page.assert_called_once_with(
-        mailbox_id=MAILBOX_ID, conversation_id=CONVERSATION_ID, page_size=1
+    assert gateway.list_mailbox_users.call_args_list[1].kwargs["next_link"] == (
+        "https://graph/users?page=2"
+    )
+    gateway.fetch_folder_delta_page.assert_called_once_with(
+        mailbox_id=MAILBOX_ID, folder_id=INBOX_ID, page_size=1
     )
 
 
-def test_mail_read_check_gives_up_on_the_delta_after_a_few_empty_pages() -> None:
+def test_mail_read_check_is_indeterminate_when_no_user_has_a_mailbox() -> None:
     gateway = _gateway()
-    gateway.fetch_folder_delta_page.return_value = OutlookDeltaPage(
-        changes=[], next_link="https://graph/delta?again"
-    )
+    gateway.probe_mailbox.side_effect = graph_error(404, "MailboxNotEnabledForRESTAPI")
 
-    _run("outlook_mail_read", _context(gateway))
-
-    assert gateway.fetch_folder_delta_page.call_count == 3
-    gateway.fetch_conversation_messages_page.assert_not_called()
+    with pytest.raises(UnexpectedValidationError, match="List a mailbox"):
+        _run("outlook_mail_read", _context(gateway))
 
 
-def test_mail_read_check_skips_the_body_probe_on_an_empty_inbox() -> None:
+def test_mail_read_check_is_indeterminate_for_a_mailbox_without_messages() -> None:
+    """An empty mailbox proves nothing about body access, so the check must
+    not report a pass."""
     gateway = _gateway()
+    gateway.read_any_message.return_value = None
 
-    _run("outlook_mail_read", _context(gateway))
-
-    gateway.fetch_conversation_messages_page.assert_not_called()
+    with pytest.raises(UnexpectedValidationError, match="holds no messages"):
+        _run("outlook_mail_read", _context(gateway))
 
 
 def test_mail_read_check_tells_read_basic_apart_from_read() -> None:
     """Mail.ReadBasic.All answers every metadata probe and refuses only the body."""
     gateway = _gateway()
-    gateway.fetch_folder_delta_page.return_value = OutlookDeltaPage(changes=[change()])
-    gateway.fetch_conversation_messages_page.side_effect = graph_error(403)
+    gateway.read_any_message.side_effect = graph_error(403)
 
     with pytest.raises(InsufficientPermissionsError, match="Mail.ReadBasic.All"):
         _run("outlook_mail_read", _context(gateway))
@@ -275,12 +268,12 @@ def test_mail_read_check_points_at_the_exchange_scope_on_403() -> None:
         _run("outlook_mail_read", _context(gateway))
 
 
-def test_mail_read_check_reports_a_mailbox_that_does_not_exist() -> None:
+def test_mail_read_check_reports_a_configured_mailbox_that_does_not_exist() -> None:
     gateway = _gateway()
     gateway.probe_mailbox.side_effect = graph_error(404, "MailboxNotEnabledForRESTAPI")
 
     with pytest.raises(ConnectorValidationError, match="MailboxNotEnabledForRESTAPI"):
-        _run("outlook_mail_read", _context(gateway))
+        _run("outlook_mail_read", _context(gateway, {"mailboxes": [MAILBOX_ADDRESS]}))
 
 
 # ---------------------------------------------------------------------------

@@ -21,6 +21,7 @@ from onyx.connectors.outlook.models import (
 from onyx.connectors.outlook.source_operations import (
     CHANGE_SELECT,
     EPOCH_TIMESTAMP,
+    MESSAGE_SELECT,
     MESSAGES_PAGE_SIZE,
     TEXT_BODY_PREFERENCE,
     OutlookSourceOperations,
@@ -146,6 +147,26 @@ def test_graph_failure_without_a_json_body_keeps_the_text() -> None:
     assert exc_info.value.status == 502
     assert exc_info.value.code == "<no code>"
     assert "Bad gateway" in str(exc_info.value)
+
+
+def test_oauth_error_bodies_keep_their_bare_code_and_description() -> None:
+    """The token endpoint puts a string in "error", unlike Graph's nested object."""
+    gateway, client = _gateway()
+    response = MagicMock()
+    response.status_code = 503
+    response.json.return_value = {
+        "error": "temporarily_unavailable",
+        "error_description": "AADSTS90033: retry later",
+    }
+    response.text = "irrelevant"
+    client.get_json.side_effect = requests.HTTPError("boom", response=response)
+
+    with pytest.raises(OutlookGraphError) as exc_info:
+        gateway.probe_mailbox(mailbox_id=MAILBOX_ID)
+
+    assert exc_info.value.status == 503
+    assert exc_info.value.code == "temporarily_unavailable"
+    assert "AADSTS90033" in str(exc_info.value)
 
 
 def test_transport_failure_after_retries_is_a_graph_error_without_status() -> None:
@@ -330,6 +351,26 @@ def test_conversation_next_page_keeps_the_body_preference_and_drops_params() -> 
     assert result.next_link is None
 
 
+def test_read_any_message_selects_the_indexed_fields_as_text() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = page_json([message_json()])
+
+    result = gateway.read_any_message(mailbox_id=MAILBOX_ID)
+
+    url, params, headers = client.get_json.call_args.args
+    assert url == f"{GRAPH_BASE}/users/{MAILBOX_ID}/messages"
+    assert params == {"$select": MESSAGE_SELECT, "$top": "1"}
+    assert headers == {"Prefer": TEXT_BODY_PREFERENCE}
+    assert result is not None and result.body_text == "Hello team"
+
+
+def test_read_any_message_is_none_for_an_empty_mailbox() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = page_json([])
+
+    assert gateway.read_any_message(mailbox_id=MAILBOX_ID) is None
+
+
 def test_conversation_page_size_defaults_to_the_message_page_size() -> None:
     gateway, client = _gateway()
     client.get_json.return_value = page_json([])
@@ -369,21 +410,27 @@ def test_unknown_directory_is_an_auth_error_with_a_stable_code() -> None:
     assert exc_info.value.code == INVALID_AUTHORITY_CODE
 
 
-def test_token_endpoint_transport_failure_is_a_graph_error() -> None:
+@pytest.mark.parametrize(
+    "failure, code",
+    [
+        (requests.ConnectionError("login unreachable"), "ConnectionError"),
+        (ValueError("Expecting value: line 1 column 1"), "ValueError"),
+    ],
+)
+def test_token_endpoint_failures_are_graph_errors_without_status(
+    failure: Exception, code: str
+) -> None:
     gateway, _ = _gateway()
 
     with (
         patch(f"{MODULE}.build_msal_app"),
-        patch(
-            f"{MODULE}.acquire_graph_token",
-            side_effect=requests.ConnectionError("login unreachable"),
-        ),
+        patch(f"{MODULE}.acquire_graph_token", side_effect=failure),
         pytest.raises(OutlookGraphError) as exc_info,
     ):
         gateway.check_token()
 
     assert exc_info.value.status is None
-    assert exc_info.value.code == "ConnectionError"
+    assert exc_info.value.code == code
 
 
 def test_check_token_maps_msal_refusal() -> None:

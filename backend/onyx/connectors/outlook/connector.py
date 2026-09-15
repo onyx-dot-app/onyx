@@ -316,7 +316,10 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
             if not checkpoint.mailboxes:
                 checkpoint.has_more = False
                 return checkpoint
-            yield from self._open_mailbox(checkpoint, checkpoint.mailboxes.pop())
+            yield from self._open_mailbox(checkpoint, checkpoint.mailboxes[-1])
+            # Popped only once opened or skipped, so a raised Graph error
+            # leaves the mailbox queued for the retry.
+            checkpoint.mailboxes.pop()
             return checkpoint
 
         if checkpoint.current_folder is None:
@@ -366,6 +369,8 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
     ) -> Generator[ConnectorFailure, None, None]:
         found: list[OutlookMailbox] = []
         if self.mailboxes:
+            # A UPN and a primary SMTP address can name the same mailbox.
+            found_ids: set[str] = set()
             for address in self.mailboxes:
                 # Resolution reads the directory, never the mailbox, so a Graph
                 # error here is about the app or the service and fails the
@@ -377,6 +382,12 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
                         f"No user matches {address}. {MAILBOX_UNAVAILABLE_REMEDIATION}",
                     )
                     continue
+                if mailbox.id in found_ids:
+                    logger.info(
+                        "Outlook: %s names an already listed mailbox, skipping", address
+                    )
+                    continue
+                found_ids.add(mailbox.id)
                 found.append(mailbox)
         else:
             next_link: str | None = None
@@ -539,10 +550,10 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
                 continue
             if change.conversation_id in checkpoint.seen_conversation_ids:
                 continue
-            checkpoint.seen_conversation_ids.add(change.conversation_id)
             result = self._rebuild_conversation(
                 mailbox, change.conversation_id, excluded
             )
+            checkpoint.seen_conversation_ids.add(change.conversation_id)
             if result is not None:
                 yield result
 
@@ -585,8 +596,11 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
                     conversation_id=conversation_id,
                     next_link=next_link,
                 )
-                fetched += len(page.messages)
-                kept.extend(indexable_messages(page.messages, excluded_folder_ids))
+                # The budget applies to raw messages, so a final page is cut
+                # to what is left of it before filtering.
+                within_budget = page.messages[: CONVERSATION_FETCH_LIMIT - fetched]
+                fetched += len(within_budget)
+                kept.extend(indexable_messages(within_budget, excluded_folder_ids))
                 next_link = page.next_link
                 if (
                     next_link is None
