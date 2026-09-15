@@ -7,7 +7,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import Permission
@@ -38,6 +37,8 @@ from onyx.connectors.zoom.recordings.models import (
 )
 from onyx.db.enums import AccessType
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents import connector as connector_router
 from onyx.server.documents.connector import (
     create_connector_from_model,
@@ -244,10 +245,10 @@ class TestIndexingStartIsRequiredAtConfigTime:
         self, endpoint: Callable[..., Any]
     ) -> None:
         with self._rows_written() as written:
-            with pytest.raises(HTTPException) as raised:
+            with pytest.raises(OnyxError) as raised:
                 self._post(endpoint)
 
-        assert raised.value.status_code == 400
+        assert raised.value.error_code is OnyxErrorCode.INVALID_INPUT
         assert written == []
 
     # Only the plain endpoint: the mock-credential one carries on into credential
