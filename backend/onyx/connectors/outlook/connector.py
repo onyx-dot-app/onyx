@@ -18,7 +18,7 @@ until it gains a message or a full re-index rebuilds it.
 from collections import deque
 from collections.abc import Generator
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from typing import Any
 
@@ -68,8 +68,10 @@ from onyx.connectors.outlook.mailboxes import (
     raise_if_unavailable,
 )
 from onyx.connectors.outlook.models import (
+    EVENT_OCCURRENCE,
     OutlookAttachment,
     OutlookAuthError,
+    OutlookEvent,
     OutlookFolder,
     OutlookGraphError,
     OutlookMailbox,
@@ -126,6 +128,19 @@ FILTERED_DELTA_CAP = 5000
 
 MAILBOX_NODE_PREFIX = "outlook-mailbox:"
 DOCUMENT_ID_PREFIX = "outlook:"
+CALENDAR_NODE_PREFIX = "outlook-calendar:"
+EVENT_DOCUMENT_ID_PREFIX = "outlook-event:"
+
+# Attendee names written into an event's text. A company all-hands lists
+# hundreds and the rest add nothing a search would find.
+MAX_ATTENDEES_LISTED = 50
+# The calendar view needs explicit bounds. Past meetings hold the decisions
+# people search for, so the window reaches further back than ahead.
+DEFAULT_CALENDAR_PAST_DAYS = 365
+DEFAULT_CALENDAR_FUTURE_DAYS = 180
+# Outlook hides the details of these events from everyone but the owner, so
+# indexing them into a shared corpus would undo that choice.
+SKIPPED_EVENT_SENSITIVITIES = frozenset({"private", "confidential"})
 
 
 class OutlookCheckpoint(ConnectorCheckpoint):
@@ -145,6 +160,11 @@ class OutlookCheckpoint(ConnectorCheckpoint):
     folder_unfiltered: bool = False
     # Conversations already rebuilt for the current mailbox in this attempt.
     seen_conversation_ids: set[str] = set()
+    # The calendar view round of the current mailbox, read after its folders.
+    calendar_next_link: str | None = None
+    calendar_done: bool = False
+    # Recurring series already written for the current mailbox in this attempt.
+    seen_series_ids: set[str] = set()
 
 
 def mailbox_node_id(mailbox: OutlookMailbox) -> str:
@@ -157,8 +177,22 @@ def conversation_document_id(mailbox: OutlookMailbox, conversation_id: str) -> s
     return f"{DOCUMENT_ID_PREFIX}{mailbox.id}:{conversation_id}"
 
 
+def calendar_node_id(mailbox: OutlookMailbox) -> str:
+    return f"{CALENDAR_NODE_PREFIX}{mailbox.id}"
+
+
+def event_document_id(mailbox: OutlookMailbox, event_id: str) -> str:
+    """Keyed by mailbox like conversations: every attendee's mailbox holds its
+    own copy of a meeting, each with its own readership."""
+    return f"{EVENT_DOCUMENT_ID_PREFIX}{mailbox.id}:{event_id}"
+
+
 def _mailbox_link(mailbox: OutlookMailbox) -> str:
     return f"https://outlook.office.com/mail/{mailbox.address}/"
+
+
+def _calendar_link(mailbox: OutlookMailbox) -> str:
+    return f"https://outlook.office.com/calendar/{mailbox.address}/"
 
 
 def _mailbox_failure(
@@ -257,6 +291,96 @@ def attachment_skip_reason(attachment: OutlookAttachment) -> str | None:
     return None
 
 
+def _indexed_event_id(event: OutlookEvent) -> str:
+    """The id the event's document is keyed by: its series master for an
+    occurrence, itself otherwise."""
+    if event.event_type == EVENT_OCCURRENCE and event.series_master_id:
+        return event.series_master_id
+    return event.id
+
+
+def event_skip_reason(event: OutlookEvent) -> str | None:
+    """Why an event is not indexed, None when it is."""
+    if event.is_cancelled:
+        return "cancelled"
+    if event.sensitivity in SKIPPED_EVENT_SENSITIVITIES:
+        return f"marked {event.sensitivity}"
+    return None
+
+
+def _format_event_time(event: OutlookEvent) -> str | None:
+    if event.start_at is None:
+        return None
+    if event.is_all_day:
+        # Graph ends an all-day event at midnight of the day after.
+        last = (event.end_at - timedelta(days=1)) if event.end_at else event.start_at
+        first_day = event.start_at.date().isoformat()
+        last_day = last.date().isoformat()
+        if last_day <= first_day:
+            return f"{first_day} (all day)"
+        return f"{first_day} to {last_day} (all day)"
+    text = event.start_at.strftime("%Y-%m-%d %H:%M")
+    if event.end_at is not None:
+        same_day = event.end_at.date() == event.start_at.date()
+        text += " to " + event.end_at.strftime(
+            "%H:%M" if same_day else "%Y-%m-%d %H:%M"
+        )
+    return f"{text} UTC"
+
+
+def build_event_document(mailbox: OutlookMailbox, event: OutlookEvent) -> Document:
+    """One document per event: header lines, then the body, like a message."""
+    lines: list[str] = []
+    when = _format_event_time(event)
+    if when is not None:
+        lines.append(f"When: {when}")
+    if event.recurrence:
+        lines.append(f"Repeats: {event.recurrence}")
+    if event.location:
+        lines.append(f"Where: {event.location}")
+    if event.organizer is not None:
+        lines.append(f"Organizer: {_format_recipient(event.organizer)}")
+    if event.attendees:
+        listed = ", ".join(
+            _format_recipient(a) for a in event.attendees[:MAX_ATTENDEES_LISTED]
+        )
+        extra = len(event.attendees) - MAX_ATTENDEES_LISTED
+        lines.append(
+            f"Attendees: {listed}" + (f" and {extra} more" if extra > 0 else "")
+        )
+    if event.subject:
+        lines.append(f"Subject: {event.subject}")
+    text = "\n".join(lines) + "\n\n" + event.body_text
+
+    attendees = {a.address.lower(): a for a in event.attendees}
+    if event.organizer is not None:
+        attendees.pop(event.organizer.address.lower(), None)
+    subject = event.subject or "(no subject)"
+    metadata: dict[str, str | list[str]] = {
+        "mailbox": mailbox.address,
+        "recurring": "true" if event.recurrence else "false",
+    }
+    if event.start_at is not None:
+        metadata["start"] = event.start_at.isoformat()
+    if event.end_at is not None:
+        metadata["end"] = event.end_at.isoformat()
+    if event.location:
+        metadata["location"] = event.location
+    return Document(
+        id=event_document_id(mailbox, event.id),
+        sections=[TextSection(link=event.web_link, text=text.strip())],
+        source=DocumentSource.OUTLOOK,
+        semantic_identifier=subject,
+        title=subject,
+        doc_created_at=event.created_at,
+        doc_updated_at=event.last_modified_at or event.created_at,
+        primary_owners=[_expert(event.organizer)] if event.organizer else [],
+        secondary_owners=[_expert(a) for a in attendees.values()],
+        metadata=metadata,
+        parent_hierarchy_raw_node_id=calendar_node_id(mailbox),
+    )
+
+
 @dataclass
 class AttachmentBudget:
     """What one conversation may still spend on attachments: characters kept
@@ -324,6 +448,9 @@ class OutlookConnector(
         mailboxes: list[str] | None = None,
         excluded_folders: list[str] | None = None,
         include_attachments: bool = False,
+        include_calendar: bool = False,
+        calendar_past_days: int = DEFAULT_CALENDAR_PAST_DAYS,
+        calendar_future_days: int = DEFAULT_CALENDAR_FUTURE_DAYS,
         authority_host: str = DEFAULT_AUTHORITY_HOST,
         graph_api_host: str = DEFAULT_GRAPH_API_HOST,
         batch_size: int = INDEX_BATCH_SIZE,
@@ -331,6 +458,11 @@ class OutlookConnector(
         # An empty list means every mailbox the app may open.
         self.mailboxes = [a.strip() for a in mailboxes or [] if a.strip()]
         self.include_attachments = include_attachments
+        self.include_calendar = include_calendar
+        if calendar_past_days < 0 or calendar_future_days < 0:
+            raise ConnectorValidationError("Calendar window days cannot be negative.")
+        self.calendar_past_days = calendar_past_days
+        self.calendar_future_days = calendar_future_days
         self.excluded_folder_names = {
             name.strip().casefold() for name in excluded_folders or [] if name.strip()
         }
@@ -413,6 +545,10 @@ class OutlookConnector(
 
         if checkpoint.current_folder is None:
             if not checkpoint.folders:
+                # The calendar follows the folders, one view page per step.
+                if self.include_calendar and not checkpoint.calendar_done:
+                    yield from self._read_calendar_page(checkpoint, start)
+                    return checkpoint
                 self._finish_mailbox(checkpoint)
                 return checkpoint
             checkpoint.current_folder = checkpoint.folders.pop()
@@ -432,6 +568,9 @@ class OutlookConnector(
         checkpoint.current_folder = None
         checkpoint.excluded_folder_ids = []
         checkpoint.seen_conversation_ids = set()
+        checkpoint.calendar_next_link = None
+        checkpoint.calendar_done = False
+        checkpoint.seen_series_ids = set()
         self._reset_folder_cursor(checkpoint)
 
     def _mailbox_unavailable(
@@ -543,6 +682,8 @@ class OutlookConnector(
             tree = list(self._walk_folder_tree(mailbox, excluded))
             yield list(self._hierarchy_nodes(mailbox, tree))
             yield from self._slim_conversations(mailbox, tree, callback)
+            if self.include_calendar:
+                yield from self._slim_events(mailbox, callback)
 
     def _slim_conversations(
         self,
@@ -581,6 +722,48 @@ class OutlookConnector(
                 next_link = page.next_link
                 if next_link is None:
                     break
+        if batch:
+            yield batch
+
+    def _slim_events(
+        self, mailbox: OutlookMailbox, callback: IndexingHeartbeatInterface | None
+    ) -> GenerateSlimDocumentOutput:
+        """Event document ids of the calendar window, series collapsed to their
+        master the way indexing does. A series whose master Graph refuses is
+        listed anyway, which keeps a document that was never written and
+        prunes nothing. Any Graph error raises, like the folder walk."""
+        window_start, window_end = self._calendar_window()
+        batch: list[SlimDocument | HierarchyNode] = []
+        seen: set[str] = set()
+        next_link: str | None = None
+        while True:
+            page = self.ops.fetch_calendar_delta_page(
+                mailbox_id=mailbox.id,
+                window_start=window_start,
+                window_end=window_end,
+                next_link=next_link,
+            )
+            new_ids: list[str] = []
+            for event in page.events:
+                if event_skip_reason(event) is not None:
+                    continue
+                event_id = _indexed_event_id(event)
+                if event_id in seen:
+                    continue
+                seen.add(event_id)
+                new_ids.append(event_id)
+            batch.extend(
+                SlimDocument(id=event_document_id(mailbox, event_id))
+                for event_id in new_ids
+            )
+            while len(batch) >= SLIM_BATCH_SIZE:
+                yield batch[:SLIM_BATCH_SIZE]
+                batch = batch[SLIM_BATCH_SIZE:]
+            if callback is not None:
+                callback.progress("outlook_slim_docs", len(new_ids))
+            next_link = page.next_link
+            if next_link is None:
+                break
         if batch:
             yield batch
 
@@ -626,6 +809,14 @@ class OutlookConnector(
                 raw_node_id=folder.id,
                 raw_parent_id=parent_node_id,
                 display_name=folder.display_name,
+                node_type=HierarchyNodeType.FOLDER,
+            )
+        if self.include_calendar:
+            yield HierarchyNode(
+                raw_node_id=calendar_node_id(mailbox),
+                raw_parent_id=mailbox_node_id(mailbox),
+                display_name="Calendar",
+                link=_calendar_link(mailbox),
                 node_type=HierarchyNodeType.FOLDER,
             )
 
@@ -761,6 +952,121 @@ class OutlookConnector(
             checkpoint.folder_unfiltered = True
             return
         checkpoint.current_folder = None
+
+    def _calendar_window(self) -> tuple[datetime, datetime]:
+        """The event times the calendar view covers, around the moment of the call."""
+        now = datetime.now(timezone.utc)
+        return (
+            now - timedelta(days=self.calendar_past_days),
+            now + timedelta(days=self.calendar_future_days),
+        )
+
+    def _calendar_unavailable(
+        self, mailbox: OutlookMailbox, error: OutlookGraphError
+    ) -> Generator[ConnectorFailure, None, None]:
+        """No calendar grant, or none for this mailbox: its mail stays indexed
+        and the calendar is a recorded failure when the admin named the mailbox."""
+        if self.mailboxes:
+            yield _mailbox_failure(
+                f"{mailbox.address} calendar",
+                f"Calendar of {mailbox.address} is unavailable ({error.code}). "
+                f"Grant `Calendars.Read` to the app registration. "
+                f"{EXCHANGE_SCOPE_REMEDIATION}",
+                error,
+            )
+            return
+        logger.info(
+            "Outlook: skipping calendar of %s, unavailable (%s)",
+            mailbox.address,
+            error.code,
+        )
+
+    def _read_calendar_page(
+        self, checkpoint: OutlookCheckpoint, start: SecondsSinceUnixEpoch
+    ) -> Generator[Document | ConnectorFailure, None, None]:
+        mailbox = checkpoint.current_mailbox
+        assert mailbox is not None
+
+        window_start, window_end = self._calendar_window()
+        try:
+            page = self.ops.fetch_calendar_delta_page(
+                mailbox_id=mailbox.id,
+                window_start=window_start,
+                window_end=window_end,
+                next_link=checkpoint.calendar_next_link,
+            )
+        except OutlookGraphError as e:
+            # Graph drops delta state with 410. Start the round over.
+            if e.status == 410 and checkpoint.calendar_next_link is not None:
+                checkpoint.calendar_next_link = None
+                return
+            if e.status in MAILBOX_UNAVAILABLE_STATUSES:
+                yield from self._calendar_unavailable(mailbox, e)
+                checkpoint.calendar_done = True
+                return
+            raise
+
+        modified_after = (
+            datetime.fromtimestamp(start, tz=timezone.utc) if start else None
+        )
+        for event in page.events:
+            document = self._event_document(
+                mailbox, event, modified_after, checkpoint.seen_series_ids
+            )
+            if document is not None:
+                yield document
+        checkpoint.calendar_next_link = page.next_link
+        checkpoint.calendar_done = page.next_link is None
+
+    def _event_document(
+        self,
+        mailbox: OutlookMailbox,
+        event: OutlookEvent,
+        modified_after: datetime | None,
+        seen_series_ids: set[str],
+    ) -> Document | None:
+        """The document for one calendar view row, or None when the row adds
+        nothing: unchanged since the poll window opened, skipped, or one more
+        occurrence of a series already written this attempt."""
+        # The view takes no filter, so the poll window is applied here. An
+        # occurrence carries its series' modification time.
+        if (
+            modified_after is not None
+            and event.last_modified_at is not None
+            and event.last_modified_at < modified_after
+        ):
+            return None
+        reason = event_skip_reason(event)
+        if reason is not None:
+            logger.debug("Outlook: skipping event %s, %s", event.id, reason)
+            return None
+        if event.event_type == EVENT_OCCURRENCE and event.series_master_id:
+            if event.series_master_id in seen_series_ids:
+                return None
+            master = self._series_master(mailbox, event.series_master_id)
+            seen_series_ids.add(event.series_master_id)
+            if master is None or event_skip_reason(master) is not None:
+                return None
+            event = master
+        return build_event_document(mailbox, event)
+
+    def _series_master(
+        self, mailbox: OutlookMailbox, series_master_id: str
+    ) -> OutlookEvent | None:
+        """The master an occurrence expands from, so a series is one document
+        instead of one per meeting in the window. None when Graph refuses it."""
+        try:
+            return self.ops.get_event(mailbox_id=mailbox.id, event_id=series_master_id)
+        except OutlookGraphError as e:
+            if e.is_transient:
+                raise
+            logger.warning(
+                "Outlook: series master %s in %s unreadable (%s), skipping",
+                series_master_id,
+                mailbox.address,
+                e.code,
+            )
+            return None
 
     def _rebuild_conversation(
         self,

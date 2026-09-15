@@ -150,3 +150,35 @@ class OutlookMessageChange(BaseModel):
 class OutlookDeltaPage(BaseModel):
     changes: list[OutlookMessageChange]
     next_link: str | None = None
+
+
+# Graph's event.type for one meeting expanded from a recurring series.
+EVENT_OCCURRENCE = "occurrence"
+
+
+class OutlookEvent(BaseModel):
+    id: str
+    subject: str | None = None
+    body_text: str = ""
+    start_at: datetime | None = None
+    end_at: datetime | None = None
+    is_all_day: bool = False
+    is_cancelled: bool = False
+    # normal, personal, private or confidential.
+    sensitivity: str = "normal"
+    # singleInstance, occurrence, exception or seriesMaster.
+    event_type: str = "singleInstance"
+    series_master_id: str | None = None
+    organizer: OutlookRecipient | None = None
+    attendees: list[OutlookRecipient] = []
+    location: str | None = None
+    web_link: str | None = None
+    created_at: datetime | None = None
+    last_modified_at: datetime | None = None
+    # A plain-language recurrence pattern, series masters only.
+    recurrence: str | None = None
+
+
+class OutlookEventPage(BaseModel):
+    events: list[OutlookEvent]
+    next_link: str | None = None

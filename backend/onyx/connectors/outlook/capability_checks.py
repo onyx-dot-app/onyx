@@ -10,11 +10,14 @@ Permission-to-capability mapping (application permissions):
 
 - ``Mail.Read``     -> INDEXING (folders, message delta, message bodies, attachments)
 - ``User.Read.All`` -> INDEXING (mailbox enumeration and address resolution)
+- ``Calendars.Read`` -> INDEXING (calendar view, only when the connector indexes calendars)
 
 Exchange RBAC for Applications or an application access policy can narrow the
 mailboxes those grants reach. A mailbox outside that scope answers 403 exactly
 like a missing grant, so the remediation text names both causes.
 """
+
+from datetime import datetime, timedelta, timezone
 
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
@@ -245,6 +248,56 @@ class _MailReadCheck(CapabilityCheck):
             raise_for_graph_error(e, _denied(mailbox))
 
 
+_CONFIG_INCLUDE_CALENDAR = "include_calendar"
+
+
+def _calendar_denied(mailbox: OutlookMailbox) -> str:
+    return (
+        f"The app cannot read the calendar of `{mailbox.address}`. Grant "
+        "`Calendars.Read` (application) to the app registration."
+    )
+
+
+class _CalendarReadCheck(CapabilityCheck):
+    """Reads one page of one mailbox's calendar view, the call indexing makes,
+    which proves ``Calendars.Read``. A connector that does not index calendars
+    needs no such grant, so the check passes without a call for it."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.INDEXING,
+            check_id="outlook_calendar_read",
+            display_name="Calendar of one mailbox is readable",
+            requires_connector_instance=False,
+            requires_connector_config=True,
+            remediation=(
+                "Grant `Calendars.Read` (application) to the app registration. "
+                f"{EXCHANGE_SCOPE_REMEDIATION}"
+            ),
+            docs_link=_OUTLOOK_DOCS_LINK,
+        )
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        if not (context.connector_specific_config or {}).get(_CONFIG_INCLUDE_CALENDAR):
+            return
+        gateway = _gateway(context)
+        addresses = configured_addresses(context.connector_specific_config)
+        if addresses:
+            mailbox, _ = _open_configured_mailbox(gateway, addresses[0])
+        else:
+            mailbox, _ = _open_first_readable_mailbox(gateway)
+        now = datetime.now(timezone.utc)
+        try:
+            gateway.fetch_calendar_delta_page(
+                mailbox_id=mailbox.id,
+                window_start=now - timedelta(days=1),
+                window_end=now + timedelta(days=1),
+                page_size=1,
+            )
+        except OutlookGraphError as e:
+            raise_for_graph_error(e, _calendar_denied(mailbox))
+
+
 class _ConfiguredMailboxesCheck(CapabilityCheck):
     """Resolves and probes every explicitly configured mailbox.
 
@@ -277,5 +330,6 @@ def build_outlook_indexing_checks() -> list[CapabilityCheck]:
         _TokenAuthCheck(),
         _MailboxListingCheck(),
         _MailReadCheck(),
+        _CalendarReadCheck(),
         _ConfiguredMailboxesCheck(),
     ]

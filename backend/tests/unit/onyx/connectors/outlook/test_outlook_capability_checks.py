@@ -5,6 +5,7 @@ operations return the gateway's plain models. Probe reach (which operations a
 check exercises) is enforced by the auto-discovering coverage harness.
 """
 
+from datetime import timedelta
 from typing import Any
 from unittest.mock import MagicMock, create_autospec
 
@@ -32,6 +33,7 @@ from onyx.connectors.outlook.models import (
     MISSING_CREDENTIAL_CODE,
     OutlookAuthError,
     OutlookDeltaPage,
+    OutlookEventPage,
     OutlookFolderPage,
     OutlookGraphError,
     OutlookMailboxPage,
@@ -444,3 +446,49 @@ def test_healthy_tenant_passes_indexing() -> None:
     assert all(result.status is CapabilityCheckStatus.PASSED for result in results)
     verdicts = compute_capability_verdicts({CredentialCapability.INDEXING}, results)
     assert verdicts[CredentialCapability.INDEXING] is CapabilityVerdict.PASSED
+
+
+# ---------------------------------------------------------------------------
+# outlook_calendar_read
+# ---------------------------------------------------------------------------
+
+
+def test_calendar_check_passes_without_a_call_when_calendars_are_off() -> None:
+    gateway = _gateway()
+
+    _run("outlook_calendar_read", _context(gateway, {"include_calendar": False}))
+
+    gateway.fetch_calendar_delta_page.assert_not_called()
+    gateway.probe_mailbox.assert_not_called()
+
+
+def test_calendar_check_reads_one_page_of_a_two_day_window() -> None:
+    gateway = _gateway()
+    gateway.fetch_calendar_delta_page.return_value = OutlookEventPage(events=[])
+
+    _run(
+        "outlook_calendar_read",
+        _context(gateway, {"include_calendar": True, "mailboxes": [MAILBOX_ADDRESS]}),
+    )
+
+    kwargs = gateway.fetch_calendar_delta_page.call_args.kwargs
+    assert kwargs["mailbox_id"] == MAILBOX_ID
+    assert kwargs["page_size"] == 1
+    assert kwargs["window_end"] - kwargs["window_start"] == timedelta(days=2)
+    gateway.resolve_mailbox.assert_called_once_with(address=MAILBOX_ADDRESS)
+
+
+def test_calendar_check_names_the_missing_grant_on_403() -> None:
+    gateway = _gateway()
+    gateway.fetch_calendar_delta_page.side_effect = graph_error(403)
+
+    with pytest.raises(InsufficientPermissionsError, match="Calendars.Read"):
+        _run("outlook_calendar_read", _context(gateway, {"include_calendar": True}))
+
+
+def test_calendar_check_is_skipped_on_a_credential_only_run() -> None:
+    results = run_capability_checks(
+        [_CHECKS_BY_ID["outlook_calendar_read"]], _context(_gateway())
+    )
+
+    assert results[0].status is CapabilityCheckStatus.SKIPPED

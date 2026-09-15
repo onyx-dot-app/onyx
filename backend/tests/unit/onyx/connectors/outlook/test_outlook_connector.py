@@ -24,6 +24,7 @@ from onyx.connectors.models import (
 from onyx.connectors.outlook.connector import (
     ATTACHMENT_EXTRACTION_TIMEOUT_SECONDS,
     CONVERSATION_FETCH_LIMIT,
+    EVENT_DOCUMENT_ID_PREFIX,
     FILTERED_DELTA_CAP,
     MAX_ATTACHMENT_READS_PER_CONVERSATION,
     MAX_ATTACHMENT_TEXT_PER_CONVERSATION,
@@ -34,7 +35,10 @@ from onyx.connectors.outlook.connector import (
     OutlookConnector,
     attachment_skip_reason,
     build_conversation_document,
+    build_event_document,
+    calendar_node_id,
     conversation_document_id,
+    event_document_id,
     extract_attachment_text,
     indexable_messages,
     mailbox_node_id,
@@ -42,6 +46,8 @@ from onyx.connectors.outlook.connector import (
 from onyx.connectors.outlook.models import (
     OutlookAuthError,
     OutlookDeltaPage,
+    OutlookEvent,
+    OutlookEventPage,
     OutlookFolder,
     OutlookFolderPage,
     OutlookGraphError,
@@ -59,6 +65,7 @@ from tests.unit.onyx.connectors.outlook.outlook_api_shapes import (
     RECEIVED,
     attachment,
     change,
+    event,
     folder,
     graph_error,
     mailbox,
@@ -185,6 +192,7 @@ def _happy_gateway() -> MagicMock:
         ]
     )
     gateway.list_message_attachments.return_value = []
+    gateway.fetch_calendar_delta_page.return_value = OutlookEventPage(events=[])
     return gateway
 
 
@@ -1118,3 +1126,264 @@ def test_slim_docs_follow_delta_pages_by_their_link() -> None:
     ]
     assert len(inbox_progress) == 2
     assert call("outlook_slim_docs", 0) in callback.progress.call_args_list
+
+
+# ---------------------------------------------------------------------------
+# calendar
+# ---------------------------------------------------------------------------
+
+SERIES_ID = "series-1"
+
+
+def _calendar_gateway() -> MagicMock:
+    """The happy gateway whose calendar holds a single meeting, a recurring
+    series seen twice, an exception of that series, and two events to skip."""
+    gateway = _happy_gateway()
+    gateway.fetch_calendar_delta_page.return_value = OutlookEventPage(
+        events=[
+            event(),
+            event(id="occ-1", event_type="occurrence", series_master_id=SERIES_ID),
+            event(id="occ-2", event_type="occurrence", series_master_id=SERIES_ID),
+            event(
+                id="exc-1",
+                event_type="exception",
+                series_master_id=SERIES_ID,
+                subject="Standup moved",
+            ),
+            event(id="evt-cancelled", is_cancelled=True),
+            event(id="evt-private", sensitivity="private"),
+        ]
+    )
+    gateway.get_event.return_value = event(
+        id=SERIES_ID,
+        event_type="seriesMaster",
+        subject="Standup",
+        recurrence="every week on monday from 2026-01-05",
+    )
+    return gateway
+
+
+def _calendar_connector(gateway: MagicMock, **kwargs: Any) -> OutlookConnector:
+    return _connector(
+        gateway, mailboxes=[MAILBOX_ADDRESS], include_calendar=True, **kwargs
+    )
+
+
+def _event_doc_ids(
+    items: list[Document | HierarchyNode | ConnectorFailure],
+) -> list[str]:
+    return [
+        item.id
+        for item in items
+        if isinstance(item, Document) and item.id.startswith(EVENT_DOCUMENT_ID_PREFIX)
+    ]
+
+
+def test_calendar_is_off_by_default() -> None:
+    gateway = _calendar_gateway()
+
+    items = _run(_connector(gateway, mailboxes=[MAILBOX_ADDRESS]))
+
+    gateway.fetch_calendar_delta_page.assert_not_called()
+    nodes = [item for item in items if isinstance(item, HierarchyNode)]
+    assert calendar_node_id(mailbox()) not in [n.raw_node_id for n in nodes]
+
+
+def test_calendar_follows_the_folders_with_one_document_per_event_or_series() -> None:
+    gateway = _calendar_gateway()
+
+    items = _run(_calendar_connector(gateway))
+
+    nodes = [item for item in items if isinstance(item, HierarchyNode)]
+    assert (calendar_node_id(mailbox()), mailbox_node_id(mailbox())) in [
+        (n.raw_node_id, n.raw_parent_id) for n in nodes
+    ]
+    docs = [item for item in items if isinstance(item, Document)]
+    assert [doc.id for doc in docs] == [
+        conversation_document_id(mailbox(), CONVERSATION_ID),
+        event_document_id(mailbox(), "evt-1"),
+        event_document_id(mailbox(), SERIES_ID),
+        event_document_id(mailbox(), "exc-1"),
+    ]
+    # Two occurrences, one master read, one document carrying the pattern.
+    gateway.get_event.assert_called_once_with(
+        mailbox_id=mailbox().id, event_id=SERIES_ID
+    )
+    series = docs[2]
+    assert series.semantic_identifier == "Standup"
+    assert "Repeats: every week on monday from 2026-01-05" in (
+        series.sections[0].text or ""
+    )
+    assert series.parent_hierarchy_raw_node_id == calendar_node_id(mailbox())
+    assert not [item for item in items if isinstance(item, ConnectorFailure)]
+
+
+def test_calendar_window_comes_from_the_configured_days() -> None:
+    gateway = _calendar_gateway()
+
+    _run(_calendar_connector(gateway, calendar_past_days=10, calendar_future_days=5))
+
+    kwargs = gateway.fetch_calendar_delta_page.call_args.kwargs
+    assert kwargs["window_end"] - kwargs["window_start"] == timedelta(days=15)
+    assert kwargs["next_link"] is None
+    with pytest.raises(ConnectorValidationError):
+        OutlookConnector(calendar_past_days=-1)
+
+
+def test_calendar_skips_events_untouched_since_the_poll_window_opened() -> None:
+    gateway = _calendar_gateway()
+    gateway.fetch_calendar_delta_page.return_value = OutlookEventPage(
+        events=[
+            event(id="old", last_modified_at=RECEIVED - timedelta(days=30)),
+            event(id="fresh"),
+            event(id="undated", last_modified_at=None),
+        ]
+    )
+
+    items = _run(_calendar_connector(gateway))
+
+    assert _event_doc_ids(items) == [
+        event_document_id(mailbox(), "fresh"),
+        event_document_id(mailbox(), "undated"),
+    ]
+
+
+def test_calendar_pages_follow_their_link_then_the_mailbox_finishes() -> None:
+    gateway = _calendar_gateway()
+    gateway.fetch_calendar_delta_page.side_effect = [
+        OutlookEventPage(events=[event(id="page-1")], next_link="https://graph/next"),
+        OutlookEventPage(events=[event(id="page-2")]),
+    ]
+
+    items = _run(_calendar_connector(gateway))
+
+    assert [
+        c.kwargs["next_link"] for c in gateway.fetch_calendar_delta_page.call_args_list
+    ] == [None, "https://graph/next"]
+    assert _event_doc_ids(items) == [
+        event_document_id(mailbox(), "page-1"),
+        event_document_id(mailbox(), "page-2"),
+    ]
+
+
+def test_calendar_round_restarts_when_graph_drops_its_state() -> None:
+    gateway = _calendar_gateway()
+    gateway.fetch_calendar_delta_page.side_effect = graph_error(
+        410, "SyncStateNotFound"
+    )
+    connector = _calendar_connector(gateway)
+    checkpoint = _folder_checkpoint(
+        current_folder=None, calendar_next_link="https://graph/next"
+    )
+
+    items, checkpoint = _step(connector, checkpoint)
+
+    assert items == []
+    assert checkpoint.calendar_next_link is None
+    assert checkpoint.calendar_done is False
+    assert checkpoint.current_mailbox == mailbox()
+
+
+def test_denied_calendar_is_a_failure_when_named_and_a_skip_otherwise() -> None:
+    gateway = _calendar_gateway()
+    gateway.fetch_calendar_delta_page.side_effect = graph_error(403)
+
+    named = _run(_calendar_connector(gateway))
+    failures = [item for item in named if isinstance(item, ConnectorFailure)]
+    assert len(failures) == 1
+    assert failures[0].failed_entity is not None
+    assert failures[0].failed_entity.entity_id == f"{MAILBOX_ADDRESS} calendar"
+    # The mail was indexed all the same.
+    assert [doc.id for doc in named if isinstance(doc, Document)] == [
+        conversation_document_id(mailbox(), CONVERSATION_ID)
+    ]
+
+    every = _run(_connector(gateway, include_calendar=True))
+    assert not [item for item in every if isinstance(item, ConnectorFailure)]
+
+
+def test_throttled_calendar_read_keeps_the_checkpoint() -> None:
+    gateway = _calendar_gateway()
+    gateway.fetch_calendar_delta_page.side_effect = graph_error(429, "TooManyRequests")
+    connector = _calendar_connector(gateway)
+    checkpoint = _folder_checkpoint(current_folder=None)
+
+    with pytest.raises(OutlookGraphError):
+        _step(connector, checkpoint)
+
+    assert checkpoint.calendar_done is False
+
+
+def test_unreadable_series_master_skips_the_series_once() -> None:
+    gateway = _calendar_gateway()
+    gateway.get_event.side_effect = graph_error(404, "ErrorItemNotFound")
+
+    items = _run(_calendar_connector(gateway))
+
+    assert event_document_id(mailbox(), SERIES_ID) not in _event_doc_ids(items)
+    gateway.get_event.assert_called_once()
+
+
+def test_event_document_carries_the_meeting_facts() -> None:
+    doc = build_event_document(mailbox(), event())
+
+    text = doc.sections[0].text or ""
+    assert text == (
+        "When: 2026-09-02 14:00 to 15:00 UTC\n"
+        "Where: Room 4\n"
+        "Organizer: Alice <alice@contoso.com>\n"
+        "Attendees: Bob <bob@contoso.com>, Alice <alice@contoso.com>\n"
+        "Subject: Quarterly review\n\n"
+        "Agenda: numbers"
+    )
+    assert doc.sections[0].link == "https://outlook.office365.com/calendar/item/evt-1"
+    assert [o.email for o in doc.primary_owners or []] == [MAILBOX_ADDRESS]
+    # The organizer is not listed twice.
+    assert [o.email for o in doc.secondary_owners or []] == ["bob@contoso.com"]
+    assert doc.metadata == {
+        "mailbox": MAILBOX_ADDRESS,
+        "recurring": "false",
+        "start": "2026-09-02T14:00:00+00:00",
+        "end": "2026-09-02T15:00:00+00:00",
+        "location": "Room 4",
+    }
+    assert doc.doc_updated_at == RECEIVED
+
+
+def test_all_day_and_multi_day_events_read_as_dates() -> None:
+    day = datetime(2026, 9, 2, tzinfo=timezone.utc)
+    one_day = event(is_all_day=True, start_at=day, end_at=day + timedelta(days=1))
+    three_days = event(is_all_day=True, start_at=day, end_at=day + timedelta(days=3))
+    overnight = event(
+        start_at=day + timedelta(hours=22), end_at=day + timedelta(hours=25)
+    )
+
+    def when(e: OutlookEvent) -> str:
+        return (build_event_document(mailbox(), e).sections[0].text or "").split("\n")[
+            0
+        ]
+
+    assert when(one_day) == "When: 2026-09-02 (all day)"
+    assert when(three_days) == "When: 2026-09-02 to 2026-09-04 (all day)"
+    assert when(overnight) == "When: 2026-09-02 22:00 to 2026-09-03 01:00 UTC"
+
+
+def test_slim_docs_list_events_collapsed_to_their_series() -> None:
+    gateway = _calendar_gateway()
+    connector = _calendar_connector(gateway)
+
+    batches = list(connector.retrieve_all_slim_docs())
+
+    nodes = [
+        item for batch in batches for item in batch if isinstance(item, HierarchyNode)
+    ]
+    assert calendar_node_id(mailbox()) in [n.raw_node_id for n in nodes]
+    event_ids = [
+        i for i in _slim_ids(batches) if i.startswith(EVENT_DOCUMENT_ID_PREFIX)
+    ]
+    assert event_ids == [
+        event_document_id(mailbox(), "evt-1"),
+        event_document_id(mailbox(), SERIES_ID),
+        event_document_id(mailbox(), "exc-1"),
+    ]
+    gateway.get_event.assert_not_called()
