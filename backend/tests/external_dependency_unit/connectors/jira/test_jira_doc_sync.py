@@ -13,17 +13,13 @@ from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
 from onyx.db.models import Connector, ConnectorCredentialPair, Credential
 from onyx.db.utils import DocumentRow, SortOrder
 from tests.external_dependency_unit.connectors.jira.conftest import JiraTestCredentials
-from tests.utils.secret_names import TestSecret
 
 JIRA_BASE_URL = "https://danswerai.atlassian.net"
 TEAM_MANAGED_PROJECT_KEY = "TP"
 TEAM_MANAGED_USER_EMAIL = "hagen@danswer.ai"
 TEAM_MANAGED_GROUP_ID = "org-admins"
 
-pytestmark = [
-    pytest.mark.usefixtures("enable_ee"),
-    pytest.mark.secrets(TestSecret.JIRA_USER_EMAIL, TestSecret.JIRA_API_TOKEN),
-]
+pytestmark = pytest.mark.usefixtures("enable_ee")
 
 
 class DocExternalAccessSet(BaseModel):
