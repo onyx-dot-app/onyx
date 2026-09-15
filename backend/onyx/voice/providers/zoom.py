@@ -244,6 +244,10 @@ class ZoomStreamingTranscriber(StreamingTranscriberProtocol):
             await self._signal_error("Zoom Scribe stream failed.")
             return True
         if msg_type == ZoomScribeMessageType.SESSION_CLOSED:
+            if not self._closed and not self._error_signaled:
+                # Only the client ends a session normally; a server-initiated
+                # close cuts the recording short.
+                await self._signal_error("Zoom Scribe closed the stream.")
             self._close_event.set()
             return True
         if msg_type in {
