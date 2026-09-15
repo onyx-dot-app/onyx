@@ -398,6 +398,7 @@ async def test_receive_loop_accumulates_transcription_turns() -> None:
     transcriber = ZoomStreamingTranscriber(api_key="key", api_secret="x" * 32)
     transcriber._ws = cast(Any, ws)
 
+    transcriber._closed = True  # client already requested session.close
     await transcriber._receive_loop()
 
     assert await transcriber.receive_transcript() == zoom.TranscriptResult(
@@ -421,6 +422,7 @@ async def test_receive_loop_ignores_non_object_json_and_binary() -> None:
     transcriber = ZoomStreamingTranscriber(api_key="key", api_secret="x" * 32)
     transcriber._ws = cast(Any, ws)
 
+    transcriber._closed = True  # client already requested session.close
     await transcriber._receive_loop()
 
     assert await transcriber.receive_transcript() is None
@@ -448,11 +450,36 @@ async def test_receive_loop_logs_nonfatal_errors_and_continues() -> None:
     transcriber = ZoomStreamingTranscriber(api_key="key", api_secret="x" * 32)
     transcriber._ws = cast(Any, ws)
 
+    transcriber._closed = True  # client already requested session.close
     await transcriber._receive_loop()
 
     assert await transcriber.receive_transcript() == zoom.TranscriptResult(
         text="after", is_vad_end=True
     )
+    assert await transcriber.receive_transcript() is None
+
+
+@pytest.mark.asyncio
+async def test_receive_loop_reports_unrequested_session_closed_as_failure() -> None:
+    ws = FakeWebSocket(
+        [
+            _text_message({"type": "session.updated"}),
+            _text_message({"type": "transcription.completed", "transcript": "partial"}),
+            _text_message({"type": "session.closed"}),
+        ]
+    )
+    transcriber = ZoomStreamingTranscriber(api_key="key", api_secret="x" * 32)
+    transcriber._ws = cast(Any, ws)
+
+    await transcriber._receive_loop()
+
+    assert await transcriber.receive_transcript() == zoom.TranscriptResult(
+        text="partial", is_vad_end=True
+    )
+    failure = await transcriber.receive_transcript()
+    assert failure is not None
+    assert failure.error is not None
+    assert failure.text == "partial"
     assert await transcriber.receive_transcript() is None
 
 
