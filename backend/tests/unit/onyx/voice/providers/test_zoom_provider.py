@@ -740,6 +740,52 @@ async def test_transcribe_closes_after_successful_connect_on_cancellation(
 
 
 @pytest.mark.asyncio
+async def test_validate_credentials_rejects_session_that_failed_after_handshake(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeTranscriber:
+        failed = True
+
+        def __init__(self, **kwargs: Any):
+            self.kwargs = kwargs
+
+        async def connect(self) -> None:
+            return None
+
+        async def close(self) -> str:
+            return ""
+
+    monkeypatch.setattr(zoom, "ZoomStreamingTranscriber", FakeTranscriber)
+    provider = ZoomVoiceProvider(api_key="key", api_secret="secret")
+
+    with pytest.raises(RuntimeError, match="error during validation"):
+        await provider.validate_credentials()
+
+
+@pytest.mark.asyncio
+async def test_validate_credentials_rejects_close_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeTranscriber:
+        failed = False
+
+        def __init__(self, **kwargs: Any):
+            self.kwargs = kwargs
+
+        async def connect(self) -> None:
+            return None
+
+        async def close(self) -> str:
+            raise RuntimeError("socket gone")
+
+    monkeypatch.setattr(zoom, "ZoomStreamingTranscriber", FakeTranscriber)
+    provider = ZoomVoiceProvider(api_key="key", api_secret="secret")
+
+    with pytest.raises(RuntimeError, match="did not close cleanly"):
+        await provider.validate_credentials()
+
+
+@pytest.mark.asyncio
 async def test_validate_credentials_closes_after_successful_connect_on_cancellation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

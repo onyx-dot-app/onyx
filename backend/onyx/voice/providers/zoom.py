@@ -461,10 +461,11 @@ class ZoomVoiceProvider(VoiceProviderInterface):
             await asyncio.wait_for(
                 transcriber.close(), timeout=ZOOM_CLOSE_TIMEOUT_SECONDS
             )
-        except Exception:
-            logger.debug(
-                "Zoom Scribe credential validation close failed", exc_info=True
-            )
+        except Exception as exc:
+            raise RuntimeError("Zoom Scribe session did not close cleanly.") from exc
+        if transcriber.failed:
+            # A fatal event after the handshake means the account cannot stream.
+            raise RuntimeError("Zoom Scribe reported an error during validation.")
 
     def get_available_voices(self) -> list[dict[str, str]]:
         return []
