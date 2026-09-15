@@ -450,19 +450,14 @@ def download_with_cap(url: str, timeout: int, cap: int) -> bytes:
     )
 
 
-def download_via_graph_api(
-    access_token: str,
-    drive_id: str,
-    item_id: str,
-    cap: int,
-    graph_api_base: str,
+def download_graph_url_with_cap(
+    access_token: str, url: str, cap: int, description: str
 ) -> bytes:
-    """Download a drive item via the Graph API /content endpoint with a byte cap.
+    """Stream the bytes a Graph URL serves, with a byte cap.
 
     Retries on transient transport errors. Raises SizeCapExceeded if the cap is
     exceeded.
     """
-    url = f"{graph_api_base}/drives/{drive_id}/items/{item_id}/content"
     headers = {"Authorization": f"Bearer {access_token}"}
 
     def _factory() -> requests.Response:
@@ -470,8 +465,20 @@ def download_via_graph_api(
             url, headers=headers, stream=True, timeout=REQUEST_TIMEOUT_SECONDS
         )
 
-    return stream_response_to_buffer_with_cap(
-        _factory,
+    return stream_response_to_buffer_with_cap(_factory, cap, description=description)
+
+
+def download_via_graph_api(
+    access_token: str,
+    drive_id: str,
+    item_id: str,
+    cap: int,
+    graph_api_base: str,
+) -> bytes:
+    """Download a drive item via the Graph API /content endpoint with a byte cap."""
+    return download_graph_url_with_cap(
+        access_token,
+        f"{graph_api_base}/drives/{drive_id}/items/{item_id}/content",
         cap,
         description=f"graph_api(drive={drive_id},item={item_id})",
     )

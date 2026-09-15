@@ -11,6 +11,7 @@ from unittest.mock import MagicMock
 import requests
 
 from onyx.connectors.outlook.models import (
+    OutlookAttachment,
     OutlookFolder,
     OutlookGraphError,
     OutlookMailbox,
@@ -146,3 +147,24 @@ def change(**overrides: Any) -> OutlookMessageChange:
         "received_at": RECEIVED,
     }
     return OutlookMessageChange(**(fields | overrides))
+
+
+def attachment_json(**overrides: Any) -> dict[str, Any]:
+    fields: dict[str, Any] = {
+        "@odata.type": "#microsoft.graph.fileAttachment",
+        "id": "att-1",
+        "name": "report.pdf",
+        "size": 2048,
+        "isInline": False,
+    }
+    return fields | overrides
+
+
+def attachment(**overrides: Any) -> OutlookAttachment:
+    fields: dict[str, Any] = {
+        "id": "att-1",
+        "name": "report.pdf",
+        "size": 2048,
+        "is_file": True,
+    }
+    return OutlookAttachment(**(fields | overrides))

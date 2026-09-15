@@ -14,8 +14,11 @@ import requests
 from msal.exceptions import MsalServiceError
 
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
+from onyx.connectors.microsoft_utils.graph_auth import MicrosoftAuthMethod
 from onyx.connectors.outlook.models import (
+    INVALID_AUTH_METHOD_CODE,
     INVALID_AUTHORITY_CODE,
+    INVALID_CERTIFICATE_CODE,
     MISSING_CREDENTIAL_CODE,
     OutlookAuthError,
     OutlookGraphError,
@@ -35,6 +38,7 @@ from tests.unit.onyx.connectors.outlook.outlook_api_shapes import (
     INBOX_ID,
     MAILBOX_ADDRESS,
     MAILBOX_ID,
+    attachment_json,
     change_json,
     folder_json,
     http_error,
@@ -336,6 +340,20 @@ def test_conversation_page_orders_newest_first_and_reads_text_bodies() -> None:
     assert result.next_link == "https://graph/messages?page=2"
 
 
+def test_conversation_page_selects_and_parses_has_attachments() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = page_json(
+        [message_json(hasAttachments=True), message_json(id="msg-2")]
+    )
+
+    result = gateway.fetch_conversation_messages_page(
+        mailbox_id=MAILBOX_ID, conversation_id=CONVERSATION_ID
+    )
+
+    assert "hasAttachments" in client.get_json.call_args.args[1]["$select"].split(",")
+    assert [m.has_attachments for m in result.messages] == [True, False]
+
+
 def test_conversation_next_page_keeps_the_body_preference_and_drops_params() -> None:
     gateway, client = _gateway()
     client.get_json.return_value = page_json([message_json(id="msg-3")])
@@ -584,6 +602,183 @@ def test_token_endpoint_failures_are_graph_errors_without_status(
 
     assert exc_info.value.status is None
     assert exc_info.value.code == code
+
+
+def test_certificate_credentials_reach_msal_as_a_pfx() -> None:
+    gateway, _ = _gateway(
+        {
+            "authentication_method": "certificate",
+            "outlook_client_id": "client-id",
+            "outlook_directory_id": "tenant-id",
+            "outlook_private_key": "cGZ4LWJ5dGVz",
+            "outlook_certificate_password": "pfx-pass",
+        }
+    )
+
+    with (
+        patch(f"{MODULE}.build_msal_app") as build,
+        patch(
+            f"{MODULE}.acquire_graph_token",
+            return_value={"access_token": "tok", "expires_in": "3599"},
+        ),
+    ):
+        gateway.check_token()
+
+    kwargs = build.call_args.kwargs
+    assert kwargs["auth_method"] is MicrosoftAuthMethod.CERTIFICATE
+    assert kwargs["private_key_b64"] == "cGZ4LWJ5dGVz"
+    assert kwargs["certificate_password"] == "pfx-pass"
+    assert kwargs["client_secret"] is None
+
+
+def test_certificate_method_without_a_key_is_a_missing_credential() -> None:
+    gateway, _ = _gateway(
+        {
+            "authentication_method": "certificate",
+            "outlook_client_id": "client-id",
+            "outlook_directory_id": "tenant-id",
+            "outlook_certificate_password": "pfx-pass",
+        }
+    )
+
+    with (
+        patch(f"{MODULE}.build_msal_app") as build,
+        pytest.raises(OutlookAuthError, match="outlook_private_key"),
+    ):
+        gateway.check_token()
+
+    build.assert_not_called()
+
+
+def test_unknown_authentication_method_is_an_auth_error() -> None:
+    gateway, _ = _gateway({**CREDENTIALS, "authentication_method": "magic"})
+
+    with pytest.raises(OutlookAuthError) as exc_info:
+        gateway.check_token()
+
+    assert exc_info.value.code == INVALID_AUTH_METHOD_CODE
+
+
+def test_unopenable_pfx_is_an_invalid_certificate() -> None:
+    gateway, _ = _gateway(
+        {
+            "authentication_method": "certificate",
+            "outlook_client_id": "client-id",
+            "outlook_directory_id": "tenant-id",
+            "outlook_private_key": "cGZ4LWJ5dGVz",
+            "outlook_certificate_password": "wrong",
+        }
+    )
+
+    with (
+        patch(
+            f"{MODULE}.build_msal_app",
+            side_effect=RuntimeError("Failed to load certificate"),
+        ),
+        pytest.raises(OutlookAuthError) as exc_info,
+    ):
+        gateway.check_token()
+
+    assert exc_info.value.code == INVALID_CERTIFICATE_CODE
+
+
+def test_pfx_that_is_not_base64_is_an_invalid_certificate() -> None:
+    gateway, _ = _gateway(
+        {
+            "authentication_method": "certificate",
+            "outlook_client_id": "client-id",
+            "outlook_directory_id": "tenant-id",
+            "outlook_private_key": "é",
+            "outlook_certificate_password": "pass",
+        }
+    )
+
+    with (
+        patch(f"{MODULE}.build_msal_app") as build,
+        pytest.raises(OutlookAuthError) as exc_info,
+    ):
+        gateway.check_token()
+
+    assert exc_info.value.code == INVALID_CERTIFICATE_CODE
+    build.assert_not_called()
+
+
+def test_attachment_listing_selects_records_without_bytes() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = page_json(
+        [
+            attachment_json(),
+            attachment_json(
+                id="att-2",
+                name="Reminder",
+                **{"@odata.type": "#microsoft.graph.itemAttachment"},
+            ),
+            attachment_json(id="att-3", name="logo.png", isInline=True),
+            attachment_json(id="att-4", name="extra.pdf"),
+        ],
+        next_link="https://graph.microsoft.com/v1.0/next-attachments",
+    )
+
+    result = gateway.list_message_attachments(
+        mailbox_id=MAILBOX_ID, message_id="msg-1", limit=3
+    )
+
+    url, params = client.get_json.call_args.args[:2]
+    assert url == f"{GRAPH_BASE}/users/{MAILBOX_ID}/messages/msg-1/attachments"
+    # contentBytes must stay out of the selection or every listing carries
+    # every file attachment whole.
+    assert params == {"$select": "id,name,size,isInline", "$top": "3"}
+    # The limit holds even when Graph hands back more than asked, and the
+    # next page is never requested.
+    assert client.get_json.call_count == 1
+    assert [(a.id, a.is_file, a.is_inline) for a in result] == [
+        ("att-1", True, False),
+        ("att-2", False, False),
+        ("att-3", True, True),
+    ]
+
+
+def test_attachment_download_streams_the_value_endpoint_with_a_cap() -> None:
+    gateway, _ = _gateway()
+
+    with (
+        patch(f"{MODULE}.build_msal_app"),
+        patch(
+            f"{MODULE}.acquire_graph_token",
+            return_value={"access_token": "tok"},
+        ),
+        patch(f"{MODULE}.download_graph_url_with_cap", return_value=b"pdf") as download,
+    ):
+        data = gateway.download_attachment(
+            mailbox_id=MAILBOX_ID, message_id="msg-1", attachment_id="att-1", cap=10
+        )
+
+    assert data == b"pdf"
+    download.assert_called_once_with(
+        access_token="tok",
+        url=f"{GRAPH_BASE}/users/{MAILBOX_ID}/messages/msg-1/attachments/att-1/$value",
+        cap=10,
+        description="outlook attachment att-1",
+    )
+
+
+def test_attachment_download_failure_is_a_graph_error() -> None:
+    gateway, _ = _gateway()
+
+    with (
+        patch(f"{MODULE}.build_msal_app"),
+        patch(f"{MODULE}.acquire_graph_token", return_value={"access_token": "tok"}),
+        patch(
+            f"{MODULE}.download_graph_url_with_cap",
+            side_effect=http_error(404, "ErrorItemNotFound"),
+        ),
+        pytest.raises(OutlookGraphError) as exc_info,
+    ):
+        gateway.download_attachment(
+            mailbox_id=MAILBOX_ID, message_id="msg-1", attachment_id="att-1", cap=10
+        )
+
+    assert exc_info.value.status == 404
 
 
 def test_check_token_maps_msal_refusal() -> None:

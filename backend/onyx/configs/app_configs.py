@@ -1362,6 +1362,11 @@ SHAREPOINT_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("SHAREPOINT_CONNECTOR_SIZE_THRESHOLD", 20 * 1024 * 1024)
 )
 
+# Largest mail attachment the Outlook connector downloads and extracts.
+OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD = int(
+    os.environ.get("OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD", 20 * 1024 * 1024)
+)
+
 # When True, group sync enumerates every Azure AD group in the tenant (expensive).
 # When False (default), only groups found in site role assignments are synced.
 # Can be overridden per-connector via the "exhaustive_ad_enumeration" key in

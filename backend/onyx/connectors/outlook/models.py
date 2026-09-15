@@ -17,6 +17,14 @@ MISSING_CREDENTIAL_CODE = "missing_credential"
 # does not know. MSAL reports it as a ValueError while building the app.
 INVALID_AUTHORITY_CODE = "invalid_authority"
 
+# The OutlookAuthError code for an authentication_method value the shared
+# package does not know.
+INVALID_AUTH_METHOD_CODE = "invalid_auth_method"
+
+# The OutlookAuthError code for a PFX bundle the shared package cannot open:
+# not base64, not PKCS12, or the wrong password.
+INVALID_CERTIFICATE_CODE = "invalid_certificate"
+
 
 class OutlookGraphError(Exception):
     """A Graph request the gateway could not complete.
@@ -32,6 +40,12 @@ class OutlookGraphError(Exception):
         self.status = status
         self.code = code
         super().__init__(f"Graph {status} {code}: {message}")
+
+    @property
+    def is_transient(self) -> bool:
+        """Throttling, any 5xx or a dropped connection is the service's trouble,
+        not the mail's, so the attempt raises and runs again later."""
+        return self.status is None or self.status == 429 or self.status >= 500
 
 
 class OutlookAuthError(Exception):
@@ -101,6 +115,21 @@ class OutlookMessage(BaseModel):
     sent_at: datetime | None = None
     web_link: str | None = None
     is_draft: bool = False
+    has_attachments: bool = False
+
+
+class OutlookAttachment(BaseModel):
+    """One attachment record without its bytes, so the caller decides what
+    to download."""
+
+    id: str
+    name: str
+    size: int = 0
+    # Inline attachments are embedded in the body, almost always signature images.
+    is_inline: bool = False
+    # Only file attachments are downloaded. Item attachments are nested
+    # Outlook items and reference attachments are cloud links.
+    is_file: bool = False
 
 
 class OutlookMessagePage(BaseModel):

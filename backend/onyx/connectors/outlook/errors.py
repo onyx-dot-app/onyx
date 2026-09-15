@@ -14,7 +14,9 @@ from onyx.connectors.exceptions import (
     UnexpectedValidationError,
 )
 from onyx.connectors.outlook.models import (
+    INVALID_AUTH_METHOD_CODE,
     INVALID_AUTHORITY_CODE,
+    INVALID_CERTIFICATE_CODE,
     MISSING_CREDENTIAL_CODE,
     OutlookAuthError,
     OutlookGraphError,
@@ -64,10 +66,17 @@ def raise_for_auth_error(error: OutlookAuthError) -> NoReturn:
             "Microsoft does not know this directory. Check the directory "
             f"(tenant) id and the authority host ({error})."
         ) from error
+    if error.code == INVALID_CERTIFICATE_CODE:
+        raise CredentialInvalidError(
+            "The PFX bundle could not be opened. Check the file and its "
+            "certificate password."
+        ) from error
+    if error.code == INVALID_AUTH_METHOD_CODE:
+        raise CredentialInvalidError(str(error)) from error
     if error.code == "invalid_client":
         raise CredentialInvalidError(
-            "Microsoft rejected the client secret. It is wrong, expired, or "
-            "belongs to a different app registration."
+            "Microsoft rejected the client secret or certificate. It is wrong, "
+            "expired, or belongs to a different app registration."
         ) from error
     if error.code in ("unauthorized_client", "invalid_request"):
         raise CredentialInvalidError(
@@ -95,7 +104,7 @@ def raise_for_graph_error(error: OutlookGraphError, denied_message: str) -> NoRe
         raise ConnectorValidationError(
             f"Graph found no mailbox ({error.code}). {MAILBOX_UNAVAILABLE_REMEDIATION}"
         ) from error
-    if error.status is None or error.status == 429 or error.status >= 500:
+    if error.is_transient:
         raise UnexpectedValidationError(
             f"Graph is throttling or unreachable ({error.status} {error.code}). "
             "Re-run the checks in a few minutes."
