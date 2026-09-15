@@ -15,8 +15,12 @@ _TEMPLATE_NEXT_CONFIG = (
     Path(__file__).parent / "image" / "templates" / "outputs" / "web" / "next.config.ts"
 )
 
-# Canonical scaffold marker shared by bootstrap, restore, and API detection.
-WEBAPP_PACKAGE_JSON_PATH = "outputs/web/package.json"
+# Canonical scaffold marker shared by bootstrap, restore, API detection, and
+# artifact classification, built from one set of parts so the variants cannot
+# drift.
+WEBAPP_ROOT_NAME = "web"
+WEBAPP_OUTPUTS_RELATIVE_PACKAGE_JSON = f"{WEBAPP_ROOT_NAME}/package.json"
+WEBAPP_PACKAGE_JSON_PATH = f"outputs/{WEBAPP_OUTPUTS_RELATIVE_PACKAGE_JSON}"
 
 
 def webapp_base_path(session_id: UUID | str) -> str:

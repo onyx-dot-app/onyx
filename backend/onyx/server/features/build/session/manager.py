@@ -40,6 +40,7 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import (
     MAX_TOTAL_UPLOAD_SIZE_BYTES,
     MAX_UPLOAD_FILES_PER_SESSION,
+    is_hidden_workspace_name,
 )
 from onyx.server.features.build.db.build_session import (
     create_build_session__no_commit,
@@ -137,21 +138,6 @@ def mark_opencode_dispose_pending(session_id: UUID) -> None:
 _WEBAPP_PROBE_TIMEOUT_SECONDS = 2.0
 
 
-# Hidden directories/files to filter from listings
-HIDDEN_PATTERNS = {
-    ".venv",
-    ".git",
-    ".next",
-    "__pycache__",
-    "node_modules",
-    ".DS_Store",
-    "opencode.json",
-    ".env",
-    ".gitignore",
-    "nextjs.log",
-    "nextjs.pid",
-}
-
 _WEBAPP_DIRECTORY = str(Path(WEBAPP_PACKAGE_JSON_PATH).parent)
 _WEBAPP_PACKAGE_FILENAME = Path(WEBAPP_PACKAGE_JSON_PATH).name
 
@@ -164,7 +150,7 @@ def _sanitize_zip_basename(name: str, *, allow_dots: bool) -> str:
 
 
 def _is_hidden_workspace_entry(entry: FilesystemEntry) -> bool:
-    return entry.name in HIDDEN_PATTERNS or entry.name.startswith(".")
+    return is_hidden_workspace_name(entry.name)
 
 
 class SessionManager:
