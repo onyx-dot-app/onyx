@@ -1,5 +1,5 @@
 from onyx.db.models import VoiceProvider
-from onyx.voice.interface import VoiceProviderInterface
+from onyx.voice.interface import VoiceProviderInterface, normalize_provider_type
 
 
 def get_voice_provider(provider: VoiceProvider) -> VoiceProviderInterface:
@@ -15,7 +15,7 @@ def get_voice_provider(provider: VoiceProvider) -> VoiceProviderInterface:
     Raises:
         ValueError: If provider_type is not supported
     """
-    provider_type = provider.provider_type.lower()
+    provider_type = normalize_provider_type(provider.provider_type)
 
     # Handle both SensitiveValue (from DB) and plain string (from temp model)
     if provider.api_key is None:

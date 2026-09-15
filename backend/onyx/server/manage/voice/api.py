@@ -32,7 +32,7 @@ from onyx.utils.encryption import mask_string
 from onyx.utils.logger import setup_logger
 from onyx.utils.url import SSRFException, validate_outbound_http_url
 from onyx.voice.factory import get_voice_provider
-from onyx.voice.interface import VoiceProviderInterface
+from onyx.voice.interface import VoiceProviderInterface, normalize_provider_type
 
 logger = setup_logger()
 
@@ -152,7 +152,9 @@ def _fetch_provider_for_stored_secret(
     if provider is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Voice provider not found.")
 
-    if provider.provider_type.strip().lower() != provider_type.strip().lower():
+    if normalize_provider_type(provider.provider_type) != normalize_provider_type(
+        provider_type
+    ):
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
             "Stored API secret provider does not match the requested provider type.",

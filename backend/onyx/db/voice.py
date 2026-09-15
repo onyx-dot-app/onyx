@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from onyx.db.models import User, VoiceProvider
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.voice.interface import normalize_provider_type
 
 MIN_VOICE_PLAYBACK_SPEED = 0.5
 MAX_VOICE_PLAYBACK_SPEED = 2.0
@@ -50,7 +51,7 @@ def fetch_voice_provider_by_type(
         select(VoiceProvider)
         .where(
             func.lower(func.trim(VoiceProvider.provider_type))
-            == provider_type.strip().lower()
+            == normalize_provider_type(provider_type)
         )
         .limit(2)
     ).all()

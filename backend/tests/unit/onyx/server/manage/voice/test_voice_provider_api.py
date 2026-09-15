@@ -13,6 +13,8 @@ from onyx.server.manage.voice.models import (
     VoiceProviderTestRequest,
     VoiceProviderUpsertRequest,
 )
+from onyx.voice.factory import get_voice_provider
+from onyx.voice.providers.openai import OpenAIVoiceProvider
 
 
 def _make_provider(provider_type: str = "openai") -> VoiceProvider:
@@ -173,3 +175,10 @@ def test_stored_secret_lookup_normalizes_legacy_provider_type(
     provider = _fetch_provider_for_stored_secret(db_session, 1, "openai")
 
     assert provider is existing_provider
+
+
+@pytest.mark.parametrize("provider_type", ["OpenAI", " openai ", "\tOpenAI\n"])
+def test_factory_normalizes_legacy_provider_type(provider_type: str) -> None:
+    provider = get_voice_provider(_make_provider(provider_type=provider_type))
+
+    assert isinstance(provider, OpenAIVoiceProvider)

@@ -2,9 +2,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
-
-def _normalize_provider_type(value: str) -> str:
-    return value.strip().lower()
+from onyx.voice.interface import normalize_provider_type
 
 
 class VoiceProviderView(BaseModel):
@@ -100,7 +98,7 @@ class VoiceProviderUpsertRequest(BaseModel):
     @field_validator("provider_type")
     @classmethod
     def _lowercase_provider_type(cls, value: str) -> str:
-        return _normalize_provider_type(value)
+        return normalize_provider_type(value)
 
 
 class VoiceProviderTestRequest(BaseModel):
@@ -137,4 +135,4 @@ class VoiceProviderTestRequest(BaseModel):
     @field_validator("provider_type")
     @classmethod
     def _lowercase_provider_type(cls, value: str) -> str:
-        return _normalize_provider_type(value)
+        return normalize_provider_type(value)
