@@ -12,8 +12,8 @@ message in the window is rebuilt whole.
 
 Pruning walks the same mailboxes, folders and calendar windows but reads only
 conversation and event ids, so a conversation whose every message was deleted
-leaves the index without a full re-index. A conversation that lost one message keeps the stale text
-until it gains a message or a full re-index rebuilds it.
+leaves the index without a full re-index. A conversation that lost one message
+keeps the stale text until it gains a message or a full re-index rebuilds it.
 """
 
 from collections import deque
@@ -343,7 +343,12 @@ def _format_event_time(event: OutlookEvent) -> str | None:
         text += " to " + event.end_at.strftime(
             "%H:%M" if same_day else "%Y-%m-%d %H:%M"
         )
-    return f"{text} UTC"
+    text += " UTC"
+    # The local hour of a series shifts against UTC with daylight saving, so
+    # the zone it was scheduled in is the only fixed description of it.
+    if event.time_zone and event.time_zone != "UTC":
+        text += f" (scheduled in {event.time_zone})"
+    return text
 
 
 def build_event_document(mailbox: OutlookMailbox, event: OutlookEvent) -> Document:
@@ -1073,7 +1078,7 @@ class OutlookConnector(
         try:
             return self.ops.get_event(mailbox_id=mailbox.id, event_id=series_master_id)
         except OutlookGraphError as e:
-            if e.is_transient:
+            if e.fails_the_attempt:
                 raise
             logger.warning(
                 "Outlook: series master %s in %s unreadable (%s), skipping",
@@ -1128,7 +1133,7 @@ class OutlookConnector(
         except OutlookGraphError as e:
             # A recorded failure lets the poll window move past the mail, so a
             # transient failure raises and keeps the checkpoint for the retry.
-            if e.is_transient:
+            if e.fails_the_attempt:
                 raise
             return ConnectorFailure(
                 failed_document=DocumentFailure(document_id=document_id),
@@ -1158,7 +1163,7 @@ class OutlookConnector(
                 limit=MAX_ATTACHMENTS_PER_MESSAGE,
             )
         except OutlookGraphError as e:
-            if e.is_transient:
+            if e.fails_the_attempt:
                 raise
             logger.warning(
                 "Outlook: attachments of %s unreadable (%s), skipping",
@@ -1211,7 +1216,7 @@ class OutlookConnector(
             logger.info("Outlook: skipping attachment %s over the cap", attachment.name)
             return ""
         except OutlookGraphError as e:
-            if e.is_transient:
+            if e.fails_the_attempt:
                 raise
             logger.warning(
                 "Outlook: attachment %s unreadable (%s), skipping",

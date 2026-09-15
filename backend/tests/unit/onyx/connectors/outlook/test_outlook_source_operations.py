@@ -868,6 +868,7 @@ def test_calendar_delta_first_page_carries_the_window_and_preferences() -> None:
     assert [a.address for a in first.attendees] == ["bob@contoso.com", MAILBOX_ADDRESS]
     assert first.location == "Room 4"
     assert first.last_modified_at == datetime(2026, 9, 1, 9, 0, tzinfo=timezone.utc)
+    assert first.time_zone == "UTC"
     assert first.recurrence is None
     assert occurrence.event_type == "occurrence"
     assert occurrence.series_master_id == "series-1"

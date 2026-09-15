@@ -157,6 +157,7 @@ def event_json(**overrides: Any) -> dict[str, Any]:
         "body": {"contentType": "text", "content": "Agenda: numbers"},
         "start": {"dateTime": "2026-09-02T14:00:00.0000000", "timeZone": "UTC"},
         "end": {"dateTime": "2026-09-02T15:00:00.0000000", "timeZone": "UTC"},
+        "originalStartTimeZone": "UTC",
         "isAllDay": False,
         "isCancelled": False,
         "sensitivity": "normal",

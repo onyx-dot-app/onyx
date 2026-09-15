@@ -1356,6 +1356,20 @@ def test_unreadable_series_master_skips_the_series_once() -> None:
     gateway.get_event.assert_called_once()
 
 
+def test_rejected_token_on_a_series_master_keeps_the_checkpoint() -> None:
+    """A 401 is the app's trouble, not the series', so nothing is skipped."""
+    gateway = _calendar_gateway()
+    gateway.get_event.side_effect = graph_error(401, "InvalidAuthenticationToken")
+    connector = _calendar_connector(gateway)
+    checkpoint = _folder_checkpoint(current_folder=None)
+
+    with pytest.raises(OutlookGraphError):
+        _step(connector, checkpoint)
+
+    assert checkpoint.calendar_done is False
+    assert checkpoint.seen_series_ids == set()
+
+
 def test_event_document_carries_the_meeting_facts() -> None:
     doc = build_event_document(mailbox(), event())
 
@@ -1397,6 +1411,16 @@ def test_all_day_and_multi_day_events_read_as_dates() -> None:
     assert when(one_day) == "When: 2026-09-02 (all day)"
     assert when(three_days) == "When: 2026-09-02 to 2026-09-04 (all day)"
     assert when(overnight) == "When: 2026-09-02 22:00 to 2026-09-03 01:00 UTC"
+
+
+def test_event_time_names_the_zone_it_was_scheduled_in() -> None:
+    scheduled = event(time_zone="Eastern Standard Time")
+
+    text = build_event_document(mailbox(), scheduled).sections[0].text or ""
+
+    assert text.splitlines()[0] == (
+        "When: 2026-09-02 14:00 to 15:00 UTC (scheduled in Eastern Standard Time)"
+    )
 
 
 def test_slim_docs_list_events_collapsed_to_their_series() -> None:

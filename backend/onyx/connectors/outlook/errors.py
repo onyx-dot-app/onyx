@@ -115,7 +115,7 @@ def raise_for_graph_error(
         raise ConnectorValidationError(
             f"Graph found no mailbox ({error.code}). {MAILBOX_UNAVAILABLE_REMEDIATION}"
         ) from error
-    if error.is_transient:
+    if error.fails_the_attempt:
         raise UnexpectedValidationError(
             f"Graph is throttling or unreachable ({error.status} {error.code}). "
             "Re-run the checks in a few minutes."

@@ -42,10 +42,11 @@ class OutlookGraphError(Exception):
         super().__init__(f"Graph {status} {code}: {message}")
 
     @property
-    def is_transient(self) -> bool:
-        """Throttling, any 5xx or a dropped connection is the service's trouble,
-        not the mail's, so the attempt raises and runs again later."""
-        return self.status is None or self.status == 429 or self.status >= 500
+    def fails_the_attempt(self) -> bool:
+        """Throttling, any 5xx, a dropped connection or a rejected token is the
+        service's or the app's trouble, not the item's, so the attempt raises
+        and runs again later instead of recording the item as failed."""
+        return self.status is None or self.status in (401, 429) or self.status >= 500
 
 
 class OutlookAuthError(Exception):
@@ -162,6 +163,9 @@ class OutlookEvent(BaseModel):
     body_text: str = ""
     start_at: datetime | None = None
     end_at: datetime | None = None
+    # The zone the event was scheduled in, a Windows name. The times above are
+    # UTC, so a recurring 09:00 meeting keeps its local hour only through this.
+    time_zone: str | None = None
     is_all_day: bool = False
     is_cancelled: bool = False
     # normal, personal, private or confidential.

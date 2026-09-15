@@ -344,6 +344,7 @@ def _parse_event(raw: dict[str, Any]) -> OutlookEvent:
         body_text=_body_text(raw.get("body")),
         start_at=parse_graph_datetime((raw.get("start") or {}).get("dateTime")),
         end_at=parse_graph_datetime((raw.get("end") or {}).get("dateTime")),
+        time_zone=raw.get("originalStartTimeZone") or None,
         is_all_day=bool(raw.get("isAllDay")),
         is_cancelled=bool(raw.get("isCancelled")),
         sensitivity=raw.get("sensitivity") or "normal",
