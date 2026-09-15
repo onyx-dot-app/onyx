@@ -24,7 +24,7 @@ import type {
   GroupOption,
   StatusFilter,
   StatusCountMap,
-} from "./interfaces";
+} from "./types";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
 import type { User } from "@/lib/types";
 
@@ -62,7 +62,7 @@ function renderStatusColumn(
   );
 }
 
-function renderLastUpdatedColumn(value: string | null) {
+function renderLastActiveColumn(value: string | null) {
   return (
     <Text as="span" secondaryBody text03>
       {value ? (timeAgo(value) ?? "\u2014") : "\u2014"}
@@ -80,7 +80,7 @@ interface ColumnLabels {
   name: string;
   groups: string;
   accountType: string;
-  lastUpdated: string;
+  lastActive: string;
   statusHeader: string;
   status: Record<UserStatus, string>;
   scimSynced: string;
@@ -124,10 +124,10 @@ function buildColumns(onMutate: () => void, labels: ColumnLabels) {
       weight: 14,
       cell: (value, row) => renderStatusColumn(value, row, labels),
     }),
-    tc.column("updated_at", {
-      header: labels.lastUpdated,
+    tc.column("last_active", {
+      header: labels.lastActive,
       weight: 14,
-      cell: renderLastUpdatedColumn,
+      cell: renderLastActiveColumn,
     }),
     tc.actions({
       cell: (row) => <UserRowActions user={row} onMutate={onMutate} />,
@@ -181,7 +181,7 @@ export default function UsersTable({
         name: t("table.columns.name.header"),
         groups: t("table.columns.groups.header"),
         accountType: t("table.columns.accountType.header"),
-        lastUpdated: t("table.columns.lastUpdated.header"),
+        lastActive: t("table.columns.lastActive.header"),
         statusHeader: t("table.columns.status.header"),
         status: {
           [UserStatus.ACTIVE]: t("status.active.label"),

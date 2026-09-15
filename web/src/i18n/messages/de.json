@@ -6333,8 +6333,8 @@
           "groups": {
             "header": "Gruppen"
           },
-          "lastUpdated": {
-            "header": "Zuletzt aktualisiert"
+          "lastActive": {
+            "header": "Zuletzt aktiv"
           },
           "name": {
             "header": "Name"

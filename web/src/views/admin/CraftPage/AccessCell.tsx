@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Switch } from "@opal/components";
 import { toast } from "@opal/layouts";
-import type { UserRow } from "@/views/admin/UsersPage/interfaces";
+import type { UserRow } from "@/views/admin/UsersPage/types";
 import { setUsersCraftAccess } from "./svc";
 
 interface AccessCellProps {
