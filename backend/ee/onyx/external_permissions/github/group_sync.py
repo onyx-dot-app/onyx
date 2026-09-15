@@ -3,7 +3,10 @@ from collections.abc import Generator
 from github import Repository
 
 from ee.onyx.db.external_perm import ExternalUserGroup
-from ee.onyx.external_permissions.github.utils import get_external_user_group
+from ee.onyx.external_permissions.github.utils import (
+    GitHubGroupSyncCache,
+    get_external_user_group,
+)
 from ee.onyx.external_permissions.utils import credential_json
 from onyx.connectors.github.connector import GithubConnector
 from onyx.db.models import ConnectorCredentialPair
@@ -36,10 +39,11 @@ def github_group_sync(
         # All repositories
         repos = github_connector.get_all_repos(github_connector.github_client)
 
+    cache = GitHubGroupSyncCache()
     for repo in repos:
         try:
             for external_group in get_external_user_group(
-                repo, github_connector.github_client
+                repo, github_connector.github_client, cache
             ):
                 logger.info("External group: %s", external_group)
                 yield external_group
