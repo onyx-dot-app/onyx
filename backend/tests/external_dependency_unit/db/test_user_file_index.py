@@ -1,6 +1,7 @@
 """Indexing an existing store blob must reuse one UserFile and promote it."""
 
 from collections.abc import Generator
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from io import BytesIO
 from uuid import UUID, uuid4
 
@@ -8,12 +9,17 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import UserFileStatus
 from onyx.db.file_record import get_incognito_file_ids
 from onyx.db.models import User, UserFile
 from onyx.db.user_file import get_or_create_user_file_for_existing_store_file
 from onyx.file_store.file_store import get_default_file_store
-from shared_configs.contextvars import CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+from shared_configs.contextvars import (
+    CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR,
+    CURRENT_TENANT_ID_CONTEXTVAR,
+)
 from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 
 
@@ -73,6 +79,36 @@ def test_get_or_create_is_idempotent(db_session: Session, owner: User) -> None:
     )
 
     assert first.id == second.id
+    assert (
+        db_session.query(UserFile)
+        .filter(UserFile.user_id == owner.id, UserFile.file_id == file_id)
+        .count()
+        == 1
+    )
+
+
+def test_get_or_create_is_idempotent_under_concurrency(
+    db_session: Session, owner: User
+) -> None:
+    file_id = _save_blob()
+    user_id = owner.id
+
+    def _create() -> UUID:
+        CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+        with get_session_with_current_tenant() as session:
+            return get_or_create_user_file_for_existing_store_file(
+                user_id=user_id,
+                file_id=file_id,
+                name="chart.png",
+                content_type="image/png",
+                db_session=session,
+            ).id
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures = [executor.submit(_create) for _ in range(8)]
+        created_ids = [future.result() for future in as_completed(futures)]
+
+    assert len(set(created_ids)) == 1
     assert (
         db_session.query(UserFile)
         .filter(UserFile.user_id == owner.id, UserFile.file_id == file_id)
