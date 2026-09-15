@@ -352,7 +352,9 @@ class CloudEmbedding:
 
         # Use the OpenAI specific timeout for this one
         client = openai.AsyncOpenAI(
-            api_key=self.api_key, timeout=OPENAI_EMBEDDING_TIMEOUT
+            api_key=self.api_key,
+            base_url=self.api_url or None,
+            timeout=OPENAI_EMBEDDING_TIMEOUT,
         )
 
         final_embeddings: list[Embedding] = []
@@ -593,7 +595,7 @@ class CloudEmbedding:
         import openai
 
         try:
-            if self.provider == EmbeddingProvider.OPENAI:
+            if self.provider in (EmbeddingProvider.OPENAI, EmbeddingProvider.OPENAI_COMPATIBLE):
                 return await self._embed_openai(texts, model_name, reduced_dimension)
             elif self.provider == EmbeddingProvider.AZURE:
                 return await self._embed_azure(texts, f"azure/{deployment_name}")

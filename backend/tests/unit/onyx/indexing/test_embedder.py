@@ -29,7 +29,7 @@ def test_default_indexing_embedder_embed_chunks(
         normalize=True,
         query_prefix=None,
         passage_prefix=None,
-        provider_type=EmbeddingProvider.OPENAI,
+        provider_type=EmbeddingProvider.OPENAI_COMPATIBLE,
     )
 
     # Mock the encode method of the embedding model
