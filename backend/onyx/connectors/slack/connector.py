@@ -1087,7 +1087,7 @@ class SlackConnector(
             Step 2.2: Process messages in parallel, yield back docs.
             Step 2.3: Update checkpoint with new_oldest, seen_thread_ts, and current_channel.
                       Slack returns messages from newest to oldest, so we need to keep track of
-                      the latest message we've seen in each channel.
+                      the oldest message we've seen in each channel.
             Step 2.4: If there are no more messages in the channel, switch the current
                       channel to the next channel.
         """
@@ -1175,8 +1175,9 @@ class SlackConnector(
 
             channel_message_ts = checkpoint.channel_completion_map.get(channel_id)
             if channel_message_ts:
-                # Set oldest to the checkpoint timestamp to resume from where we left off
-                oldest = channel_message_ts
+                # Slack pages newest to oldest, so the checkpoint holds the
+                # oldest message seen; resume strictly below it.
+                latest = channel_message_ts
             else:
                 # First time processing this channel - yield its hierarchy node
                 yield _channel_to_hierarchy_node(
@@ -1205,8 +1206,8 @@ class SlackConnector(
                 latest,
             )
 
-            # message_batch[0] is the newest message (Slack returns newest to oldest)
-            new_oldest = message_batch[0]["ts"] if message_batch else latest
+            # message_batch[-1] is the oldest message (Slack returns newest to oldest)
+            new_oldest = message_batch[-1]["ts"] if message_batch else latest
 
             num_threads_start = len(seen_thread_ts)
 
@@ -1268,14 +1269,11 @@ class SlackConnector(
             # how much of the time range we've processed so far
             new_oldest_seconds_epoch = SecondsSinceUnixEpoch(new_oldest)
             range_start = start if start else max(0, channel_created)
-            if new_oldest_seconds_epoch < range_start:
-                range_complete = 0.0
-            else:
-                range_complete = new_oldest_seconds_epoch - range_start
-
             range_total = end - range_start
             if range_total <= 0:
                 range_total = 1
+            # we walk backwards from end, so the processed span is end - new_oldest
+            range_complete = min(max(end - new_oldest_seconds_epoch, 0.0), range_total)
             range_percent_complete = range_complete / range_total * 100.0
 
             num_filtered = num_bot_filtered_messages + num_other_filtered_messages
