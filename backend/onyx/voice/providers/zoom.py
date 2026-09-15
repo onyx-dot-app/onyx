@@ -321,7 +321,13 @@ class ZoomStreamingTranscriber(StreamingTranscriberProtocol):
             return self._accumulated_transcript
         self._closed = True
         try:
-            if not self._ws or self._ws.closed:
+            if not self._ws:
+                return self._accumulated_transcript
+            if self._ws.closed:
+                # Zoom dropped the socket before the client asked to close, so
+                # the recording is cut short even if no close frame arrived.
+                if not self._error_signaled:
+                    await self._signal_error("Zoom Scribe closed the stream.")
                 return self._accumulated_transcript
             try:
                 # The resampler holds back the samples that read past the last

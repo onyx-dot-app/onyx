@@ -332,6 +332,25 @@ async def test_close_flushes_remainder_and_is_idempotent() -> None:
 
 
 @pytest.mark.asyncio
+async def test_close_reports_socket_already_closed_by_server_as_failure() -> None:
+    ws = FakeWebSocket()
+    ws.closed = True
+    session = FakeSession(ws)
+    transcriber = ZoomStreamingTranscriber(api_key="key", api_secret="x" * 32)
+    transcriber._ws = cast(Any, ws)
+    transcriber._session = cast(Any, session)
+    transcriber._accumulated_transcript = "partial"
+
+    assert await transcriber.close() == "partial"
+
+    assert transcriber.failed is True
+    failure = transcriber._transcript_queue.get_nowait()
+    assert failure is not None and failure.error is not None
+    assert ws.sent_str == []
+    assert session.closed is True
+
+
+@pytest.mark.asyncio
 async def test_close_cleans_up_when_remainder_send_fails() -> None:
     ws = FailingSendBytesWebSocket()
     session = FakeSession(ws)
