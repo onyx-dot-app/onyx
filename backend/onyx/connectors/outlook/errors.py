@@ -14,7 +14,9 @@ from onyx.connectors.exceptions import (
     UnexpectedValidationError,
 )
 from onyx.connectors.outlook.models import (
+    INVALID_AUTH_METHOD_CODE,
     INVALID_AUTHORITY_CODE,
+    INVALID_CERTIFICATE_CODE,
     MISSING_CREDENTIAL_CODE,
     OutlookAuthError,
     OutlookGraphError,
@@ -64,6 +66,12 @@ def raise_for_auth_error(error: OutlookAuthError) -> NoReturn:
             "Microsoft does not know this directory. Check the directory "
             f"(tenant) id and the authority host ({error})."
         ) from error
+    if error.code == INVALID_CERTIFICATE_CODE:
+        raise CredentialInvalidError(
+            "The PFX bundle could not be opened with that certificate password."
+        ) from error
+    if error.code == INVALID_AUTH_METHOD_CODE:
+        raise CredentialInvalidError(str(error)) from error
     if error.code == "invalid_client":
         raise CredentialInvalidError(
             "Microsoft rejected the client secret. It is wrong, expired, or "

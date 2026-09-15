@@ -18,9 +18,13 @@ until it gains a message or a full re-index rebuilds it.
 from collections import deque
 from collections.abc import Generator
 from datetime import datetime, timezone
+from io import BytesIO
 from typing import Any
 
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import (
+    INDEX_BATCH_SIZE,
+    OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.exceptions import ConnectorValidationError
@@ -33,6 +37,7 @@ from onyx.connectors.interfaces import (
     SecondsSinceUnixEpoch,
     SlimConnector,
 )
+from onyx.connectors.microsoft_utils.drive_items import SizeCapExceeded
 from onyx.connectors.microsoft_utils.graph_env import (
     DEFAULT_AUTHORITY_HOST,
     DEFAULT_GRAPH_API_HOST,
@@ -62,6 +67,7 @@ from onyx.connectors.outlook.mailboxes import (
     raise_if_unavailable,
 )
 from onyx.connectors.outlook.models import (
+    OutlookAttachment,
     OutlookAuthError,
     OutlookFolder,
     OutlookGraphError,
@@ -75,6 +81,8 @@ from onyx.connectors.outlook.source_operations import (
     OutlookSourceOperations,
 )
 from onyx.db.enums import HierarchyNodeType
+from onyx.file_processing.extract_file_text import extract_file_text, get_file_ext
+from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
@@ -131,6 +139,12 @@ def conversation_document_id(mailbox: OutlookMailbox, conversation_id: str) -> s
     """Keyed by mailbox because the same conversation has a different readership
     in every mailbox it sits in."""
     return f"{DOCUMENT_ID_PREFIX}{mailbox.id}:{conversation_id}"
+
+
+def _is_passing(error: OutlookGraphError) -> bool:
+    """Throttling, any 5xx or a dropped connection: the shared client has
+    already retried, so the attempt fails and retries later."""
+    return error.status is None or error.status == 429 or error.status >= 500
 
 
 def _mailbox_link(mailbox: OutlookMailbox) -> str:
@@ -217,21 +231,45 @@ def indexable_messages(
     ]
 
 
+def attachment_skip_reason(attachment: OutlookAttachment) -> str | None:
+    """Why an attachment is not worth a download, None when it is."""
+    if not attachment.is_file:
+        return "not a file attachment"
+    if attachment.is_inline:
+        return "inline image"
+    if (
+        get_file_ext(attachment.name)
+        not in OnyxFileExtensions.TEXT_AND_DOCUMENT_EXTENSIONS
+    ):
+        return "unsupported file type"
+    if attachment.size > OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD:
+        return "over the size threshold"
+    return None
+
+
 def build_conversation_document(
-    mailbox: OutlookMailbox, conversation_id: str, messages: list[OutlookMessage]
+    mailbox: OutlookMailbox,
+    conversation_id: str,
+    messages: list[OutlookMessage],
+    attachment_sections: dict[str, list[TextSection]] | None = None,
 ) -> Document | None:
     """Assemble indexable messages of one conversation into a document, oldest
-    first. None when there is nothing to index."""
+    first, each message followed by the text of its attachments. None when
+    there is nothing to index."""
     kept = sorted(messages, key=_message_sort_key)[-MAX_MESSAGES_PER_CONVERSATION:]
     if not kept:
         return None
 
+    sections: list[TextSection] = []
+    for message in kept:
+        sections.append(_message_section(message))
+        sections.extend((attachment_sections or {}).get(message.id, []))
     subject = next((m.subject for m in kept if m.subject), None) or "(no subject)"
     primary_owners, secondary_owners = _owners(kept)
     newest = kept[-1]
     return Document(
         id=conversation_document_id(mailbox, conversation_id),
-        sections=[_message_section(message) for message in kept],
+        sections=sections,
         source=DocumentSource.OUTLOOK,
         semantic_identifier=subject,
         title=subject,
@@ -252,12 +290,14 @@ class OutlookConnector(
         self,
         mailboxes: list[str] | None = None,
         excluded_folders: list[str] | None = None,
+        include_attachments: bool = True,
         authority_host: str = DEFAULT_AUTHORITY_HOST,
         graph_api_host: str = DEFAULT_GRAPH_API_HOST,
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
         # An empty list means every mailbox the app may open.
         self.mailboxes = [a.strip() for a in mailboxes or [] if a.strip()]
+        self.include_attachments = include_attachments
         self.excluded_folder_names = {
             name.strip().casefold() for name in excluded_folders or [] if name.strip()
         }
@@ -720,11 +760,18 @@ class OutlookConnector(
                     or fetched >= CONVERSATION_FETCH_LIMIT
                 ):
                     break
+            # Pages arrive newest first, so the head of the list is what the
+            # document keeps and the only messages worth attachment reads.
+            kept = kept[:MAX_MESSAGES_PER_CONVERSATION]
+            attachments = {
+                message.id: self._attachment_sections(mailbox, message)
+                for message in kept
+                if self.include_attachments and message.has_attachments
+            }
         except OutlookGraphError as e:
             # A recorded failure lets the poll window move past the mail, so a
-            # passing failure (throttling, any 5xx, a dropped connection)
-            # raises and keeps the checkpoint for the retry.
-            if e.status is None or e.status == 429 or e.status >= 500:
+            # passing failure raises and keeps the checkpoint for the retry.
+            if _is_passing(e):
                 raise
             return ConnectorFailure(
                 failed_document=DocumentFailure(document_id=document_id),
@@ -734,4 +781,67 @@ class OutlookConnector(
                 ),
                 exception=e,
             )
-        return build_conversation_document(mailbox, conversation_id, kept)
+        return build_conversation_document(mailbox, conversation_id, kept, attachments)
+
+    def _attachment_sections(
+        self, mailbox: OutlookMailbox, message: OutlookMessage
+    ) -> list[TextSection]:
+        """The extracted text of a message's file attachments, one section each.
+
+        An attachment Graph refuses is skipped with a warning. A throttled or
+        failed call raises, like a message read, so the checkpoint is kept.
+        """
+        try:
+            attachments = self.ops.list_message_attachments(
+                mailbox_id=mailbox.id, message_id=message.id
+            )
+        except OutlookGraphError as e:
+            if _is_passing(e):
+                raise
+            logger.warning(
+                "Outlook: attachments of %s unreadable (%s), skipping",
+                message.id,
+                e.code,
+            )
+            return []
+
+        sections: list[TextSection] = []
+        for attachment in attachments:
+            reason = attachment_skip_reason(attachment)
+            if reason is not None:
+                logger.debug(
+                    "Outlook: skipping attachment %s, %s", attachment.name, reason
+                )
+                continue
+            try:
+                data = self.ops.download_attachment(
+                    mailbox_id=mailbox.id,
+                    message_id=message.id,
+                    attachment_id=attachment.id,
+                    cap=OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD,
+                )
+            except SizeCapExceeded:
+                logger.info(
+                    "Outlook: skipping attachment %s over the cap", attachment.name
+                )
+                continue
+            except OutlookGraphError as e:
+                if _is_passing(e):
+                    raise
+                logger.warning(
+                    "Outlook: attachment %s unreadable (%s), skipping",
+                    attachment.name,
+                    e.code,
+                )
+                continue
+            text = extract_file_text(
+                BytesIO(data), attachment.name, break_on_unprocessable=False
+            )
+            if text.strip():
+                sections.append(
+                    TextSection(
+                        link=message.web_link,
+                        text=f"Attachment: {attachment.name}\n\n{text}",
+                    )
+                )
+        return sections

@@ -186,9 +186,9 @@ class _MailboxListingCheck(CapabilityCheck):
 
 
 class _MailReadCheck(CapabilityCheck):
-    """Reads folders, one delta page and one message body of one mailbox.
-    Proves ``Mail.Read`` and that the mailbox is inside the app's Exchange
-    scope."""
+    """Reads folders, one delta page, one message body and, when that message
+    has any, its attachment records. Proves ``Mail.Read`` and that the mailbox
+    is inside the app's Exchange scope."""
 
     def __init__(self) -> None:
         super().__init__(
@@ -230,6 +230,14 @@ class _MailReadCheck(CapabilityCheck):
                 f"`{mailbox.address}` holds no messages, so body access could not "
                 "be proven. List a mailbox that has mail to verify it."
             )
+        if not sample.has_attachments:
+            return
+        try:
+            gateway.list_message_attachments(
+                mailbox_id=mailbox.id, message_id=sample.id
+            )
+        except OutlookGraphError as e:
+            raise_for_graph_error(e, _denied(mailbox))
 
 
 class _ConfiguredMailboxesCheck(CapabilityCheck):

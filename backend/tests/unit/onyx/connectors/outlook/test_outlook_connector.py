@@ -6,11 +6,13 @@ machine and document assembly against the gateway's plain models.
 
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from unittest.mock import MagicMock, call, create_autospec
+from unittest.mock import MagicMock, call, create_autospec, patch
 
 import pytest
 
+from onyx.configs.app_configs import OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD
 from onyx.connectors.exceptions import ConnectorValidationError, CredentialInvalidError
+from onyx.connectors.microsoft_utils.drive_items import SizeCapExceeded
 from onyx.connectors.models import (
     ConnectorFailure,
     ConnectorMissingCredentialError,
@@ -25,6 +27,7 @@ from onyx.connectors.outlook.connector import (
     SLIM_BATCH_SIZE,
     OutlookCheckpoint,
     OutlookConnector,
+    attachment_skip_reason,
     build_conversation_document,
     conversation_document_id,
     indexable_messages,
@@ -47,12 +50,15 @@ from tests.unit.onyx.connectors.outlook.outlook_api_shapes import (
     INBOX_ID,
     MAILBOX_ADDRESS,
     RECEIVED,
+    attachment,
     change,
     folder,
     graph_error,
     mailbox,
     message,
 )
+
+CONNECTOR_MODULE = "onyx.connectors.outlook.connector"
 
 JUNK_ID = "folder-junk"
 DELETED_ID = "folder-deleted"
@@ -171,6 +177,35 @@ def _happy_gateway() -> MagicMock:
             message(id="msg-draft", is_draft=True),
         ]
     )
+    gateway.list_message_attachments.return_value = []
+    return gateway
+
+
+def _attachment_gateway() -> MagicMock:
+    """The happy gateway whose newest message carries a mixed bag of attachments."""
+    gateway = _happy_gateway()
+    gateway.fetch_conversation_messages_page.return_value = OutlookMessagePage(
+        messages=[
+            message(
+                id="msg-2",
+                received_at=RECEIVED + timedelta(hours=1),
+                has_attachments=True,
+            ),
+            message(),
+        ]
+    )
+    gateway.list_message_attachments.return_value = [
+        attachment(),
+        attachment(id="att-inline", name="logo.png", is_inline=True),
+        attachment(id="att-item", name="Fwd: reminder", is_file=False),
+        attachment(id="att-zip", name="build.zip"),
+        attachment(
+            id="att-huge",
+            name="huge.pdf",
+            size=OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD + 1,
+        ),
+    ]
+    gateway.download_attachment.return_value = b"%PDF"
     return gateway
 
 
@@ -726,6 +761,102 @@ def test_mismatched_national_cloud_hosts_are_rejected_at_construction() -> None:
 def test_credentials_before_provider_is_a_programming_error() -> None:
     with pytest.raises(ConnectorMissingCredentialError):
         _ = OutlookConnector().ops
+
+
+# ---------------------------------------------------------------------------
+# attachments
+# ---------------------------------------------------------------------------
+
+
+def test_attachment_text_follows_its_message_and_skips_the_rest() -> None:
+    gateway = _attachment_gateway()
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+
+    with patch(
+        f"{CONNECTOR_MODULE}.extract_file_text", return_value="Quarterly numbers"
+    ):
+        items, _ = _step(connector, _folder_checkpoint())
+
+    docs = [item for item in items if isinstance(item, Document)]
+    texts = [section.text or "" for section in docs[0].sections]
+    assert len(texts) == 3
+    assert texts[1].startswith("From: Alice")
+    assert texts[2] == "Attachment: report.pdf\n\nQuarterly numbers"
+    assert docs[0].sections[2].link == message().web_link
+    # Only the plain file attachment is worth a download: inline images, item
+    # attachments, unsupported types and oversize files are skipped unread.
+    gateway.download_attachment.assert_called_once_with(
+        mailbox_id=mailbox().id,
+        message_id="msg-2",
+        attachment_id="att-1",
+        cap=OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD,
+    )
+
+
+def test_attachments_are_not_read_when_switched_off() -> None:
+    gateway = _attachment_gateway()
+    connector = _connector(
+        gateway, mailboxes=[MAILBOX_ADDRESS], include_attachments=False
+    )
+
+    items, _ = _step(connector, _folder_checkpoint())
+
+    assert len([item for item in items if isinstance(item, Document)]) == 1
+    gateway.list_message_attachments.assert_not_called()
+
+
+def test_attachment_over_the_cap_or_refused_is_skipped() -> None:
+    gateway = _attachment_gateway()
+    gateway.download_attachment.side_effect = SizeCapExceeded("during_download")
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+
+    items, _ = _step(connector, _folder_checkpoint())
+    docs = [item for item in items if isinstance(item, Document)]
+    assert len(docs[0].sections) == 2
+
+    gateway.download_attachment.side_effect = graph_error(404, "ErrorItemNotFound")
+    items, _ = _step(connector, _folder_checkpoint())
+    docs = [item for item in items if isinstance(item, Document)]
+    assert len(docs[0].sections) == 2
+
+
+def test_throttled_attachment_read_keeps_the_checkpoint() -> None:
+    gateway = _attachment_gateway()
+    gateway.download_attachment.side_effect = graph_error(429, "TooManyRequests")
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+    checkpoint = _folder_checkpoint()
+
+    with pytest.raises(OutlookGraphError):
+        _step(connector, checkpoint)
+
+    assert checkpoint.seen_conversation_ids == set()
+
+
+def test_refused_attachment_listing_keeps_the_message_text() -> None:
+    gateway = _attachment_gateway()
+    gateway.list_message_attachments.side_effect = graph_error(403)
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+
+    items, _ = _step(connector, _folder_checkpoint())
+
+    docs = [item for item in items if isinstance(item, Document)]
+    assert len(docs[0].sections) == 2
+    gateway.download_attachment.assert_not_called()
+
+
+def test_attachment_skip_reasons() -> None:
+    assert attachment_skip_reason(attachment()) is None
+    assert attachment_skip_reason(attachment(is_file=False)) == "not a file attachment"
+    assert attachment_skip_reason(attachment(is_inline=True)) == "inline image"
+    assert (
+        attachment_skip_reason(attachment(name="tool.exe")) == "unsupported file type"
+    )
+    assert (
+        attachment_skip_reason(
+            attachment(size=OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD + 1)
+        )
+        == "over the size threshold"
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -17,6 +17,14 @@ MISSING_CREDENTIAL_CODE = "missing_credential"
 # does not know. MSAL reports it as a ValueError while building the app.
 INVALID_AUTHORITY_CODE = "invalid_authority"
 
+# The OutlookAuthError code for an authentication_method value the shared
+# package does not know.
+INVALID_AUTH_METHOD_CODE = "invalid_auth_method"
+
+# The OutlookAuthError code for a PFX bundle that cannot be opened with the
+# given password.
+INVALID_CERTIFICATE_CODE = "invalid_certificate"
+
 
 class OutlookGraphError(Exception):
     """A Graph request the gateway could not complete.
@@ -101,6 +109,22 @@ class OutlookMessage(BaseModel):
     sent_at: datetime | None = None
     web_link: str | None = None
     is_draft: bool = False
+    has_attachments: bool = False
+
+
+class OutlookAttachment(BaseModel):
+    """One attachment record without its bytes, so the caller decides what
+    to download."""
+
+    id: str
+    name: str
+    content_type: str | None = None
+    size: int = 0
+    # Inline attachments are the images embedded in a signature or body.
+    is_inline: bool = False
+    # Only file attachments have bytes to download. Item attachments are
+    # nested Outlook items and reference attachments are cloud links.
+    is_file: bool = False
 
 
 class OutlookMessagePage(BaseModel):

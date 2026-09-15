@@ -20,11 +20,17 @@ import bs4
 import requests
 from msal.exceptions import MsalServiceError
 
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capabilities import CredentialCapability
-from onyx.connectors.microsoft_utils.drive_items import parse_graph_datetime
+from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.microsoft_utils.drive_items import (
+    parse_graph_datetime,
+    stream_response_to_buffer_with_cap,
+)
 from onyx.connectors.microsoft_utils.graph_auth import (
     MicrosoftAuthContext,
+    MicrosoftAuthMethod,
     acquire_graph_token,
     build_msal_app,
 )
@@ -34,8 +40,11 @@ from onyx.connectors.microsoft_utils.graph_env import (
     DEFAULT_GRAPH_API_HOST,
 )
 from onyx.connectors.outlook.models import (
+    INVALID_AUTH_METHOD_CODE,
     INVALID_AUTHORITY_CODE,
+    INVALID_CERTIFICATE_CODE,
     MISSING_CREDENTIAL_CODE,
+    OutlookAttachment,
     OutlookAuthError,
     OutlookDeltaPage,
     OutlookFolder,
@@ -63,11 +72,24 @@ GRAPH_API_VERSION = "v1.0"
 CREDENTIAL_CLIENT_ID = "outlook_client_id"
 CREDENTIAL_DIRECTORY_ID = "outlook_directory_id"
 CREDENTIAL_CLIENT_SECRET = "outlook_client_secret"
-CREDENTIAL_FIELDS = (
-    CREDENTIAL_CLIENT_ID,
-    CREDENTIAL_DIRECTORY_ID,
-    CREDENTIAL_CLIENT_SECRET,
-)
+CREDENTIAL_PRIVATE_KEY = "outlook_private_key"
+CREDENTIAL_CERTIFICATE_PASSWORD = "outlook_certificate_password"
+# Missing means client secret, the shared package's default.
+CREDENTIAL_AUTH_METHOD = "authentication_method"
+# The fields each authentication method needs filled.
+CREDENTIAL_FIELDS_BY_METHOD: dict[MicrosoftAuthMethod, tuple[str, ...]] = {
+    MicrosoftAuthMethod.CLIENT_SECRET: (
+        CREDENTIAL_CLIENT_ID,
+        CREDENTIAL_DIRECTORY_ID,
+        CREDENTIAL_CLIENT_SECRET,
+    ),
+    MicrosoftAuthMethod.CERTIFICATE: (
+        CREDENTIAL_CLIENT_ID,
+        CREDENTIAL_DIRECTORY_ID,
+        CREDENTIAL_PRIVATE_KEY,
+        CREDENTIAL_CERTIFICATE_PASSWORD,
+    ),
+}
 
 CONFIG_AUTHORITY_HOST = "authority_host"
 CONFIG_GRAPH_API_HOST = "graph_api_host"
@@ -96,8 +118,13 @@ MESSAGE_SELECT = ",".join(
         "sentDateTime",
         "webLink",
         "isDraft",
+        "hasAttachments",
     )
 )
+# Attachment records without contentBytes, which the listing would otherwise
+# inline for every file attachment.
+ATTACHMENT_SELECT = "id,name,contentType,size,isInline"
+FILE_ATTACHMENT_TYPE = "#microsoft.graph.fileAttachment"
 
 # Graph renders bodies as HTML unless asked for text, and text spares a parse.
 TEXT_BODY_PREFERENCE = 'outlook.body-content-type="text"'
@@ -239,6 +266,18 @@ def _parse_message(raw: dict[str, Any]) -> OutlookMessage:
         sent_at=parse_graph_datetime(sent) if sent else None,
         web_link=raw.get("webLink"),
         is_draft=bool(raw.get("isDraft")),
+        has_attachments=bool(raw.get("hasAttachments")),
+    )
+
+
+def _parse_attachment(raw: dict[str, Any]) -> OutlookAttachment:
+    return OutlookAttachment(
+        id=raw["id"],
+        name=raw.get("name") or "",
+        content_type=raw.get("contentType"),
+        size=raw.get("size") or 0,
+        is_inline=bool(raw.get("isInline")),
+        is_file=raw.get("@odata.type") == FILE_ATTACHMENT_TYPE,
     )
 
 
@@ -271,9 +310,15 @@ class OutlookSourceOperations(SourceOperations):
     def _auth(self) -> MicrosoftAuthContext:
         if self._auth_context is None:
             credentials = self.credentials_provider.get_credentials()
+            try:
+                method = MicrosoftAuthMethod.parse(
+                    credentials.get(CREDENTIAL_AUTH_METHOD)
+                )
+            except ConnectorValidationError as e:
+                raise OutlookAuthError(INVALID_AUTH_METHOD_CODE, str(e)) from e
             missing = [
                 field
-                for field in CREDENTIAL_FIELDS
+                for field in CREDENTIAL_FIELDS_BY_METHOD[method]
                 if not str(credentials.get(field) or "").strip()
             ]
             if missing:
@@ -283,7 +328,8 @@ class OutlookSourceOperations(SourceOperations):
             # MSAL validates the authority against Microsoft's discovery
             # endpoint while building the app. An unknown directory answers
             # 400 and is the credential's fault. Throttling (429), a 5xx, an
-            # unreadable body or a network failure are the service's.
+            # unreadable body or a network failure are the service's. A PFX
+            # the password does not open surfaces as a RuntimeError.
             try:
                 self._auth_context = build_msal_app(
                     client_id=credentials[CREDENTIAL_CLIENT_ID],
@@ -291,12 +337,19 @@ class OutlookSourceOperations(SourceOperations):
                     authority_host=self._config_value(
                         CONFIG_AUTHORITY_HOST, DEFAULT_AUTHORITY_HOST
                     ),
-                    client_secret=credentials[CREDENTIAL_CLIENT_SECRET],
+                    auth_method=method,
+                    client_secret=credentials.get(CREDENTIAL_CLIENT_SECRET),
+                    private_key_b64=credentials.get(CREDENTIAL_PRIVATE_KEY),
+                    certificate_password=credentials.get(
+                        CREDENTIAL_CERTIFICATE_PASSWORD
+                    ),
                 )
             except ValueError as e:
                 if _is_decode_error(e) or _msal_http_status(e) == 429:
                     raise _msal_error(e) from e
                 raise OutlookAuthError(INVALID_AUTHORITY_CODE, str(e)) from e
+            except RuntimeError as e:
+                raise OutlookAuthError(INVALID_CERTIFICATE_CODE, str(e)) from e
             except MsalServiceError as e:
                 raise _msal_error(e) from e
             except requests.RequestException as e:
@@ -559,6 +612,61 @@ class OutlookSourceOperations(SourceOperations):
             changes=[_parse_change(raw) for raw in data.get("value", [])],
             next_link=data.get("@odata.nextLink"),
         )
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def list_message_attachments(
+        self, *, mailbox_id: str, message_id: str
+    ) -> list[OutlookAttachment]:
+        """Every attachment record of one message, without bytes."""
+        url: str | None = (
+            f"{self._user_url(mailbox_id)}/messages/{message_id}/attachments"
+        )
+        params: dict[str, str] | None = {"$select": ATTACHMENT_SELECT}
+        attachments: list[OutlookAttachment] = []
+        while url is not None:
+            data = self._get(url, params)
+            params = None
+            attachments.extend(_parse_attachment(raw) for raw in data.get("value", []))
+            url = data.get("@odata.nextLink")
+        return attachments
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "Needs an attachment id, which only a message with attachments "
+            "provides. The mail-read check lists its sample message's "
+            "attachments, which proves the same permission."
+        ),
+    )
+    def download_attachment(
+        self, *, mailbox_id: str, message_id: str, attachment_id: str, cap: int
+    ) -> bytes:
+        """The bytes of a file attachment, streamed with a cap.
+
+        Raises ``SizeCapExceeded`` past ``cap`` so a huge attachment never sits
+        in memory whole.
+        """
+        url = (
+            f"{self._user_url(mailbox_id)}/messages/{message_id}"
+            f"/attachments/{attachment_id}/$value"
+        )
+        headers = {"Authorization": f"Bearer {self._access_token()}"}
+
+        def request() -> requests.Response:
+            return requests.get(
+                url, headers=headers, stream=True, timeout=REQUEST_TIMEOUT_SECONDS
+            )
+
+        try:
+            return stream_response_to_buffer_with_cap(
+                request, cap, description=f"outlook attachment {attachment_id}"
+            )
+        except requests.RequestException as e:
+            raise _to_graph_error(e) from e
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},

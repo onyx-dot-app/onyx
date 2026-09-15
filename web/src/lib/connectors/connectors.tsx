@@ -1081,6 +1081,7 @@ export const connectorConfigs: Record<
           "Leave empty to index every mailbox the app registration may open. " +
           "Shared mailboxes are never picked up automatically and must be listed here.",
       },
+      buildIncludeAttachmentsOption(true),
     ],
     advanced_values: [
       {
