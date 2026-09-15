@@ -680,9 +680,9 @@ def _create_file_tool_metadata_message(
     deep-research final report runs with no tools), and under-promising is the
     safe direction to fail in.
     """
-    offered = available_tool_names or set()
+    offered: set[str] = available_tool_names or set()
     if FILE_READER_TOOL_NAME in offered:
-        lines = [
+        lines: list[str] = [
             "You have access to the following files. Use the read_file tool to "
             "read sections of any file. You MUST pass the file_id UUID (not the "
             "filename) to read_file:"

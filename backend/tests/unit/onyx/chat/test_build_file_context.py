@@ -103,7 +103,9 @@ def test_metadata_only_files_name_no_tool_when_reader_is_absent(
     assert "internal search" not in result.message.message
     # Pin the replacement text: dropping the hint entirely would otherwise
     # satisfy the negative assertions above.
-    assert "do not guess the contents" in result.message.message
+    assert "Do not guess the contents" in result.message.message
+    # The failure this replaced was the model web-searching the document.
+    assert "do not search the web" in result.message.message
     assert "sheet.xlsx" in result.message.message
     # The UUID only means something to read_file, which is not attached here.
     assert "abc" not in result.message.message

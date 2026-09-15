@@ -116,13 +116,14 @@ def build_file_context(
         # the python tool addresses files by filename. Tools are constructed
         # after this runs, so the other branch cannot know what is available and
         # names nothing rather than promising a tool the model may not have.
-        message_text = (
+        message_text: str = (
             f"File: {filename} (id={tool_file_id})\n"
             "Use the read_file or python tools to access this file's contents."
             if DISABLE_VECTOR_DB
             else f"File: {filename}\n"
             "This file's contents are not included here. Use your available "
-            "tools to read it, and do not guess the contents."
+            "tools to read it. Do not guess the contents and do not search "
+            "the web for this file."
         )
         message = ChatMessageSimple(
             message=message_text,
