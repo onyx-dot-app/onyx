@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from onyx.db.models import VoiceProvider
+from onyx.db.voice import fetch_voice_provider_by_id
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.voice.api import (
     _fetch_provider_for_stored_secret,
@@ -182,3 +183,29 @@ def test_factory_normalizes_legacy_provider_type(provider_type: str) -> None:
     provider = get_voice_provider(_make_provider(provider_type=provider_type))
 
     assert isinstance(provider, OpenAIVoiceProvider)
+
+
+def test_activate_tts_locks_provider_row(monkeypatch: pytest.MonkeyPatch) -> None:
+    existing_provider = _make_provider(provider_type="openai")
+    db_session = MagicMock()
+    db_session.scalar.return_value = existing_provider
+    monkeypatch.setattr(
+        "onyx.server.manage.voice.api.get_voice_provider",
+        lambda _: MockVoiceProvider(tts_models=[{"id": "tts-1", "name": "TTS 1"}]),
+    )
+
+    activate_tts_provider_endpoint(1, None, MagicMock(), db_session)
+
+    first_select = db_session.scalar.call_args_list[0].args[0]
+    assert first_select._for_update_arg is not None
+
+
+def test_fetch_voice_provider_by_id_locks_only_when_asked() -> None:
+    db_session = MagicMock()
+
+    fetch_voice_provider_by_id(db_session, 1)
+    fetch_voice_provider_by_id(db_session, 1, for_update=True)
+
+    plain, locked = (c.args[0] for c in db_session.scalar.call_args_list)
+    assert plain._for_update_arg is None
+    assert locked._for_update_arg is not None

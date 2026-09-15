@@ -21,12 +21,17 @@ def fetch_voice_providers(db_session: Session) -> list[VoiceProvider]:
 
 
 def fetch_voice_provider_by_id(
-    db_session: Session, provider_id: int
+    db_session: Session, provider_id: int, *, for_update: bool = False
 ) -> VoiceProvider | None:
-    """Fetch a voice provider by ID."""
-    return db_session.scalar(
-        select(VoiceProvider).where(VoiceProvider.id == provider_id)
-    )
+    """Fetch a voice provider by ID.
+
+    `for_update` locks the row until the transaction ends, so a concurrent
+    upsert cannot change the row between a capability check and an update.
+    """
+    stmt = select(VoiceProvider).where(VoiceProvider.id == provider_id)
+    if for_update:
+        stmt = stmt.with_for_update()
+    return db_session.scalar(stmt)
 
 
 def fetch_default_stt_provider(db_session: Session) -> VoiceProvider | None:

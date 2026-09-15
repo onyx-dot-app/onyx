@@ -316,7 +316,9 @@ def activate_tts_provider_endpoint(
     db_session: Session = Depends(get_session),
 ) -> VoiceProviderView:
     """Set a voice provider as the default TTS provider."""
-    provider_db = fetch_voice_provider_by_id(db_session, provider_id)
+    # Lock the row so an upsert cannot switch it to an STT-only type between
+    # this check and set_default_tts_provider.
+    provider_db = fetch_voice_provider_by_id(db_session, provider_id, for_update=True)
     if provider_db is None:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,
