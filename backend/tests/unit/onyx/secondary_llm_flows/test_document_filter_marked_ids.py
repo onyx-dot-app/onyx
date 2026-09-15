@@ -51,7 +51,11 @@ def _make_section(index: int) -> InferenceSection:
         ("[0!, 2!, 1!, 4]", [0, 2, 1, 4], ["doc-0", "doc-2", "doc-1"]),
         ("0, 2, 1, 4", [0, 2, 1, 4], None),
         ("[0, 2, 1, 4]", [0, 2, 1, 4], None),
+        ("Section IDs: [3, 0!, 1]", [3, 0, 1], ["doc-0"]),
+        ("0!, 2!, 1!, 4.", [0, 2, 1, 4], ["doc-0", "doc-2", "doc-1"]),
+        ("1, 2, 3abc", [1, 2], None),
         ("1st, 2nd", [0, 1, 2, 3, 4], None),
+        ("", [0, 1, 2, 3, 4], None),
     ],
 )
 @patch("onyx.secondary_llm_flows.document_filter.record_llm_response")
