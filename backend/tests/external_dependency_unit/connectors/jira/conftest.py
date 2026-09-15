@@ -1,11 +1,9 @@
-import os
 from typing import Any
 
 import pytest
 from pydantic import BaseModel, SecretStr
 
-JIRA_ADMIN_USER_EMAIL_ENV = "JIRA_ADMIN_USER_EMAIL"
-JIRA_ADMIN_API_TOKEN_ENV = "JIRA_ADMIN_API_TOKEN"
+from tests.utils.secret_names import TestSecret
 
 
 class JiraTestCredentials(BaseModel):
@@ -29,8 +27,17 @@ def jira_connector_config() -> dict[str, Any]:
 
 
 @pytest.fixture
-def jira_credentials() -> JiraTestCredentials:
+def jira_credentials(
+    test_secrets: dict[TestSecret, str],
+) -> JiraTestCredentials:
     return JiraTestCredentials(
-        user_email=os.environ[JIRA_ADMIN_USER_EMAIL_ENV],
-        api_token=SecretStr(os.environ[JIRA_ADMIN_API_TOKEN_ENV]),
+        user_email=test_secrets[TestSecret.JIRA_USER_EMAIL],
+        api_token=SecretStr(test_secrets[TestSecret.JIRA_API_TOKEN]),
     )
+
+
+@pytest.fixture
+def jira_credential_json(
+    jira_credentials: JiraTestCredentials,
+) -> dict[str, str]:
+    return jira_credentials.as_credential_json()
