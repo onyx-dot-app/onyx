@@ -23,7 +23,10 @@ from onyx.db.slack_channel_config import (
     remove_slack_channel_config,
     update_slack_channel_config,
 )
-from onyx.onyxbot.slack.config import validate_channel_name
+from onyx.onyxbot.slack.config import (
+    clean_respond_member_group_list,
+    validate_channel_name,
+)
 from onyx.server.manage.models import (
     SlackBot,
     SlackBotCreationRequest,
@@ -55,7 +58,7 @@ def _form_channel_config(
 ) -> ChannelConfig:
     raw_channel_name = slack_channel_config_creation_request.channel_name
     respond_tag_only = slack_channel_config_creation_request.respond_tag_only
-    respond_member_group_list = (
+    respond_member_group_list = clean_respond_member_group_list(
         slack_channel_config_creation_request.respond_member_group_list
     )
     answer_filters = slack_channel_config_creation_request.answer_filters
@@ -74,10 +77,7 @@ def _form_channel_config(
             detail=str(e),
         )
 
-    if (
-        slack_channel_config_creation_request.is_ephemeral
-        and slack_channel_config_creation_request.respond_member_group_list
-    ):
+    if slack_channel_config_creation_request.is_ephemeral and respond_member_group_list:
         raise ValueError(
             "Cannot set OnyxBot to respond to users in a private (ephemeral) message "
             "and also respond to a selected list of users."
