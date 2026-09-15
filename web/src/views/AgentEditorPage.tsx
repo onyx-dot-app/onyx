@@ -1746,6 +1746,7 @@ export default function AgentEditorPage({
                                   description="This model will be used by Onyx by default in your chats."
                                 >
                                   <ModelSelector
+                                    agentId={existingAgent?.id}
                                     value={
                                       (values.default_model_configuration_id as
                                         | number
