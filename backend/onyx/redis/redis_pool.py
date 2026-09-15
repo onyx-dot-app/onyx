@@ -591,7 +591,12 @@ REDIS_WS_TOKEN_RATE_LIMIT_PREFIX = "ws_token_rate:"
 # A session member outlives the policy cap by this grace so a slow teardown
 # cannot free capacity before the provider session is really gone.
 VOICE_SESSION_TTL_GRACE_SECONDS = 60
-VOICE_SESSION_ADMISSION_LOCK_SECONDS = 5
+# How long a caller waits for the admission lock.
+VOICE_SESSION_ADMISSION_WAIT_SECONDS = 5
+# Lease on the admission lock. The critical section is a few Redis commands,
+# so this only matters if Redis itself stalls; it must outlive that stall or
+# two admissions could run at once.
+VOICE_SESSION_ADMISSION_LEASE_SECONDS = 30
 
 
 class WsTokenRateLimitExceeded(Exception):
@@ -636,8 +641,8 @@ async def acquire_voice_session(*, policy: VoiceSessionPolicy, user_id: str) -> 
 
     async with redis.lock(
         f"{tenant_key}:lock",
-        timeout=VOICE_SESSION_ADMISSION_LOCK_SECONDS,
-        blocking_timeout=VOICE_SESSION_ADMISSION_LOCK_SECONDS,
+        timeout=VOICE_SESSION_ADMISSION_LEASE_SECONDS,
+        blocking_timeout=VOICE_SESSION_ADMISSION_WAIT_SECONDS,
     ):
         await redis.zremrangebyscore(tenant_key, "-inf", now_ms)
         await redis.zremrangebyscore(user_key, "-inf", now_ms)
@@ -645,10 +650,15 @@ async def acquire_voice_session(*, policy: VoiceSessionPolicy, user_id: str) -> 
             raise VoiceSessionLimitExceeded(policy.limit_message)
         if await redis.zcard(user_key) >= policy.user_concurrency_limit:
             raise VoiceSessionLimitExceeded(policy.limit_message)
-        await redis.zadd(tenant_key, {session_member_id: expires_at_ms})
-        await redis.zadd(user_key, {session_member_id: expires_at_ms})
-        await redis.expire(tenant_key, key_ttl_seconds)
-        await redis.expire(user_key, key_ttl_seconds)
+        # MULTI/EXEC so a reservation is written to both keys or to neither;
+        # a half-written member would hold quota until its TTL with no id to
+        # release it.
+        async with redis.pipeline(transaction=True) as pipe:
+            pipe.zadd(tenant_key, {session_member_id: expires_at_ms})
+            pipe.zadd(user_key, {session_member_id: expires_at_ms})
+            pipe.expire(tenant_key, key_ttl_seconds)
+            pipe.expire(user_key, key_ttl_seconds)
+            await pipe.execute()
     return session_member_id
 
 

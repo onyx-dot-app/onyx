@@ -940,7 +940,10 @@ async def websocket_transcribe(
                     session_member_id=session_member_id,
                 )
             except Exception:
-                logger.warning("WebSocket transcribe: failed to release session slot")
+                logger.warning(
+                    "WebSocket transcribe: failed to release session slot",
+                    exc_info=True,
+                )
         try:
             await websocket.close()
         except Exception:

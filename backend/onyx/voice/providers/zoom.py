@@ -39,17 +39,19 @@ ZOOM_JWT_IAT_SKEW_SECONDS = 30
 ZOOM_HANDSHAKE_TIMEOUT_SECONDS = 10.0
 ZOOM_CLOSE_DRAIN_SECONDS = 3.0
 # Teardown after a cancelled or failed transcribe must not outlive the session cap.
-ZOOM_CLOSE_TIMEOUT_SECONDS = 10.0
+ZOOM_CLOSE_TIMEOUT_SECONDS: float = 10.0
 # Zoom limits concurrent Scribe sessions per account, so Onyx admits sessions
 # locally and caps their duration. The cap stays under the Redis member TTL.
-ZOOM_VOICE_SESSION_MAX_SECONDS = 10 * 60
-ZOOM_VOICE_SESSION_TENANT_LIMIT = 16
-ZOOM_VOICE_SESSION_USER_LIMIT = 2
-ZOOM_VOICE_SESSION_LIMIT_MESSAGE = "Zoom Scribe session limit reached. Try again later."
-ZOOM_STREAMING_SESSION_TIMEOUT_MESSAGE = (
+ZOOM_VOICE_SESSION_MAX_SECONDS: int = 10 * 60
+ZOOM_VOICE_SESSION_TENANT_LIMIT: int = 16
+ZOOM_VOICE_SESSION_USER_LIMIT: int = 2
+ZOOM_VOICE_SESSION_LIMIT_MESSAGE: str = (
+    "Zoom Scribe session limit reached. Try again later."
+)
+ZOOM_STREAMING_SESSION_TIMEOUT_MESSAGE: str = (
     "Zoom Scribe session reached its maximum duration. Start a new recording."
 )
-ZOOM_SESSION_POLICY = VoiceSessionPolicy(
+ZOOM_SESSION_POLICY: VoiceSessionPolicy = VoiceSessionPolicy(
     scope="zoom",
     max_session_seconds=ZOOM_VOICE_SESSION_MAX_SECONDS,
     teardown_seconds=ZOOM_CLOSE_TIMEOUT_SECONDS,
