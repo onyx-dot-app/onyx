@@ -17,11 +17,9 @@ from onyx.db.engine.sql_engine import get_sqlalchemy_engine
 from onyx.db.models import User
 from onyx.db.voice import fetch_default_stt_provider, fetch_default_tts_provider
 from onyx.redis.redis_pool import (
-    ZOOM_VOICE_SESSION_LIMIT_MESSAGE,
-    ZOOM_VOICE_SESSION_MAX_SECONDS,
-    ZoomVoiceSessionLimitExceeded,
-    acquire_zoom_voice_session,
-    release_zoom_voice_session,
+    VoiceSessionLimitExceeded,
+    acquire_voice_session,
+    release_voice_session,
 )
 from onyx.server.manage.voice.text_utils import strip_markdown_for_tts
 from onyx.utils.logger import setup_logger
@@ -31,7 +29,7 @@ from onyx.voice.interface import (
     StreamingSynthesizerProtocol,
     StreamingTranscriberProtocol,
     TranscriptResult,
-    normalize_provider_type,
+    VoiceSessionPolicy,
 )
 
 logger = setup_logger()
@@ -163,14 +161,6 @@ SESSION_TIMEOUT_ERROR = "Transcription session reached its maximum duration"
 TRANSCRIPT_DRAIN_SECONDS = 0.5
 # Provider SDK teardown must not hold a session past its limit.
 TRANSCRIBER_CLOSE_TIMEOUT_SECONDS = 10
-# Provider teardown runs after the cap ends the handler, so the handler gets the
-# cap minus one close budget and the session stays inside the admission TTL.
-ZOOM_SESSION_HANDLER_SECONDS = (
-    ZOOM_VOICE_SESSION_MAX_SECONDS - TRANSCRIBER_CLOSE_TIMEOUT_SECONDS
-)
-ZOOM_STREAMING_SESSION_TIMEOUT_MESSAGE = (
-    "Zoom Scribe session reached its maximum duration. Start a new recording."
-)
 
 
 class ChunkedTranscriber:
@@ -582,32 +572,33 @@ async def handle_streaming_transcription(
         )
 
 
-async def _run_with_zoom_session_cap(
-    provider_type: str | None, handler: Awaitable[None]
-) -> bool:
-    """Run a transcription handler; Zoom sessions stop at the hard cap.
+async def _run_with_session_cap(
+    policy: VoiceSessionPolicy | None, handler: Awaitable[None]
+) -> VoiceSessionPolicy | None:
+    """Run a transcription handler under the provider's session cap, if any.
 
-    Returns True when the cap ended the session. A TimeoutError raised by the
-    handler itself is re-raised so setup failures use the normal error path.
+    Returns the policy when its cap ended the session, else None. A
+    TimeoutError raised by the handler itself is re-raised so setup failures
+    use the normal error path.
     """
-    if provider_type != "zoom":
+    if policy is None:
         await handler
-        return False
-    deadline = asyncio.timeout(ZOOM_SESSION_HANDLER_SECONDS)
+        return None
+    deadline = asyncio.timeout(policy.handler_seconds)
     try:
         async with deadline:
             await handler
     except TimeoutError:
         if not deadline.expired():
             raise
-    return deadline.expired()
+    return policy if deadline.expired() else None
 
 
-async def _send_zoom_session_timeout(websocket: WebSocket) -> None:
-    logger.info("WebSocket transcribe: Zoom session reached the hard cap")
-    await websocket.send_json(
-        {"type": "error", "message": ZOOM_STREAMING_SESSION_TIMEOUT_MESSAGE}
-    )
+async def _send_session_timeout(
+    websocket: WebSocket, policy: VoiceSessionPolicy
+) -> None:
+    logger.info("WebSocket transcribe: %s session reached the hard cap", policy.scope)
+    await websocket.send_json({"type": "error", "message": policy.timeout_message})
 
 
 async def handle_chunked_transcription(
@@ -792,9 +783,9 @@ async def websocket_transcribe(
 
     streaming_transcriber = None
     provider = None
-    zoom_session_member_id: str | None = None
-    zoom_session_user_id = str(_user.id)
-    provider_type: str | None = None
+    session_policy: VoiceSessionPolicy | None = None
+    session_member_id: str | None = None
+    session_user_id = str(_user.id)
 
     try:
         # Get STT provider
@@ -829,7 +820,6 @@ async def websocket_transcribe(
                 provider_db.provider_type,
             )
             try:
-                provider_type = normalize_provider_type(provider_db.provider_type)
                 provider = get_voice_provider(provider_db)
                 logger.info(
                     "WebSocket transcribe: voice provider created, streaming supported: %s",
@@ -850,24 +840,20 @@ async def websocket_transcribe(
 
         # One budget for the whole connection, shared with the chunked fallback.
         session_deadline = _session_deadline()
-        if provider_type == "zoom":
+        session_policy = provider.session_policy()
+        if session_policy is not None:
             try:
-                zoom_session_member_id = await acquire_zoom_voice_session(
-                    user_id=zoom_session_user_id,
+                session_member_id = await acquire_voice_session(
+                    policy=session_policy, user_id=session_user_id
                 )
-            except ZoomVoiceSessionLimitExceeded:
-                await websocket.send_json(
-                    {
-                        "type": "error",
-                        "message": ZOOM_VOICE_SESSION_LIMIT_MESSAGE,
-                    }
-                )
+            except VoiceSessionLimitExceeded as e:
+                await websocket.send_json({"type": "error", "message": str(e)})
                 return
 
         if use_streaming:
 
             async def stream_with_provider() -> None:
-                # Setup counts toward the Zoom cap, so a slow handshake cannot
+                # Setup counts toward the session cap, so a slow handshake cannot
                 # stretch the session past the Redis admission TTL.
                 nonlocal streaming_transcriber
                 streaming_transcriber = await provider.create_streaming_transcriber()
@@ -877,10 +863,11 @@ async def websocket_transcribe(
                 )
 
             try:
-                if await _run_with_zoom_session_cap(
-                    provider_type, stream_with_provider()
-                ):
-                    await _send_zoom_session_timeout(websocket)
+                capped = await _run_with_session_cap(
+                    session_policy, stream_with_provider()
+                )
+                if capped is not None:
+                    await _send_session_timeout(websocket, capped)
                 return
             except WebSocketDisconnect:
                 raise
@@ -922,13 +909,14 @@ async def websocket_transcribe(
 
         # Chunked/REST path; browser sends raw PCM16 chunks.
         chunked_transcriber = ChunkedTranscriber(provider, audio_format="pcm16")
-        if await _run_with_zoom_session_cap(
-            provider_type,
+        capped = await _run_with_session_cap(
+            session_policy,
             handle_chunked_transcription(
                 websocket, chunked_transcriber, deadline=session_deadline
             ),
-        ):
-            await _send_zoom_session_timeout(websocket)
+        )
+        if capped is not None:
+            await _send_session_timeout(websocket, capped)
 
     except WebSocketDisconnect:
         logger.debug("WebSocket transcribe: client disconnected")
@@ -944,14 +932,15 @@ async def websocket_transcribe(
     finally:
         if streaming_transcriber:
             await _close_transcriber(streaming_transcriber)
-        if zoom_session_member_id is not None:
+        if session_policy is not None and session_member_id is not None:
             try:
-                await release_zoom_voice_session(
-                    user_id=zoom_session_user_id,
-                    session_member_id=zoom_session_member_id,
+                await release_voice_session(
+                    policy=session_policy,
+                    user_id=session_user_id,
+                    session_member_id=session_member_id,
                 )
             except Exception:
-                logger.warning("WebSocket transcribe: failed to release Zoom session")
+                logger.warning("WebSocket transcribe: failed to release session slot")
         try:
             await websocket.close()
         except Exception:

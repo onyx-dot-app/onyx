@@ -22,6 +22,7 @@ from onyx.voice.interface import (
     StreamingTranscriberProtocol,
     TranscriptResult,
     VoiceProviderInterface,
+    VoiceSessionPolicy,
 )
 
 logger = setup_logger()
@@ -39,6 +40,24 @@ ZOOM_HANDSHAKE_TIMEOUT_SECONDS = 10.0
 ZOOM_CLOSE_DRAIN_SECONDS = 3.0
 # Teardown after a cancelled or failed transcribe must not outlive the session cap.
 ZOOM_CLOSE_TIMEOUT_SECONDS = 10.0
+# Zoom limits concurrent Scribe sessions per account, so Onyx admits sessions
+# locally and caps their duration. The cap stays under the Redis member TTL.
+ZOOM_VOICE_SESSION_MAX_SECONDS = 10 * 60
+ZOOM_VOICE_SESSION_TENANT_LIMIT = 16
+ZOOM_VOICE_SESSION_USER_LIMIT = 2
+ZOOM_VOICE_SESSION_LIMIT_MESSAGE = "Zoom Scribe session limit reached. Try again later."
+ZOOM_STREAMING_SESSION_TIMEOUT_MESSAGE = (
+    "Zoom Scribe session reached its maximum duration. Start a new recording."
+)
+ZOOM_SESSION_POLICY = VoiceSessionPolicy(
+    scope="zoom",
+    max_session_seconds=ZOOM_VOICE_SESSION_MAX_SECONDS,
+    teardown_seconds=ZOOM_CLOSE_TIMEOUT_SECONDS,
+    tenant_concurrency_limit=ZOOM_VOICE_SESSION_TENANT_LIMIT,
+    user_concurrency_limit=ZOOM_VOICE_SESSION_USER_LIMIT,
+    limit_message=ZOOM_VOICE_SESSION_LIMIT_MESSAGE,
+    timeout_message=ZOOM_STREAMING_SESSION_TIMEOUT_MESSAGE,
+)
 ZOOM_STT_MODEL = "scribe-live"
 
 ZOOM_SUPPORTED_LANGUAGES = frozenset(
@@ -489,6 +508,12 @@ class ZoomVoiceProvider(VoiceProviderInterface):
         return False
 
     def allows_streaming_stt_fallback(self) -> bool:
+        return False
+
+    def session_policy(self) -> VoiceSessionPolicy:
+        return ZOOM_SESSION_POLICY
+
+    def supports_target_uri(self) -> bool:
         return False
 
     async def create_streaming_transcriber(

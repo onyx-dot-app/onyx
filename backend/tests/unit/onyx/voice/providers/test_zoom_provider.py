@@ -25,6 +25,7 @@ from onyx.voice.providers.zoom import (
     ZOOM_JWT_IAT_SKEW_SECONDS,
     ZOOM_JWT_TTL_SECONDS,
     ZOOM_SCRIBE_LIVE_PATH,
+    ZOOM_SESSION_POLICY,
     ZOOM_STT_MODEL,
     ZOOM_SUPPORTED_LANGUAGES,
     ZOOM_TARGET_SAMPLE_RATE,
@@ -892,3 +893,12 @@ async def test_streaming_transcriber_connect_cleans_up_on_handshake_timeout(
 
     assert ws.closed is True
     assert session.closed is True
+
+
+def test_zoom_exposes_session_policy_and_rejects_target_uri() -> None:
+    provider = ZoomVoiceProvider(api_key=None, api_secret=None)
+
+    assert provider.session_policy() is ZOOM_SESSION_POLICY
+    assert provider.supports_target_uri() is False
+    assert ZOOM_SESSION_POLICY.scope == "zoom"
+    assert ZOOM_SESSION_POLICY.max_session_seconds == 10 * 60

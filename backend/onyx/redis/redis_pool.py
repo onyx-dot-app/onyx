@@ -54,6 +54,7 @@ from onyx.redis.iam_auth import (
 )
 from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
+from onyx.voice.interface import VoiceSessionPolicy
 from shared_configs.configs import DEFAULT_REDIS_PREFIX
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -587,124 +588,81 @@ WS_TOKEN_RATE_LIMIT_MAX = 10
 WS_TOKEN_RATE_LIMIT_WINDOW_SECONDS = 60
 REDIS_WS_TOKEN_RATE_LIMIT_PREFIX = "ws_token_rate:"
 
-ZOOM_VOICE_SESSION_TENANT_LIMIT = 16
-ZOOM_VOICE_SESSION_USER_LIMIT = 2
-ZOOM_VOICE_SESSION_MAX_SECONDS = 10 * 60
-ZOOM_VOICE_SESSION_MEMBER_TTL_SECONDS = ZOOM_VOICE_SESSION_MAX_SECONDS + 60
-ZOOM_VOICE_SESSION_KEY_TTL_SECONDS = ZOOM_VOICE_SESSION_MEMBER_TTL_SECONDS + 60
-ZOOM_VOICE_SESSION_LIMIT_MESSAGE = "Zoom Scribe session limit reached. Try again later."
-
-_ZOOM_VOICE_SESSION_ADMIT_RESULT = "admitted"
-_ZOOM_VOICE_SESSION_TENANT_LIMIT_RESULT = "tenant_limit"
-_ZOOM_VOICE_SESSION_USER_LIMIT_RESULT = "user_limit"
-
-_ZOOM_VOICE_SESSION_ADMIT_LUA = """
-local tenant_key = KEYS[1]
-local user_key = KEYS[2]
-local member_id = ARGV[1]
-local expires_at_ms = tonumber(ARGV[2])
-local now_ms = tonumber(ARGV[3])
-local tenant_limit = tonumber(ARGV[4])
-local user_limit = tonumber(ARGV[5])
-local key_ttl_seconds = tonumber(ARGV[6])
-
-redis.call("ZREMRANGEBYSCORE", tenant_key, "-inf", now_ms)
-redis.call("ZREMRANGEBYSCORE", user_key, "-inf", now_ms)
-
-if redis.call("ZCARD", tenant_key) >= tenant_limit then
-    return "tenant_limit"
-end
-
-if redis.call("ZCARD", user_key) >= user_limit then
-    return "user_limit"
-end
-
-redis.call("ZADD", tenant_key, expires_at_ms, member_id)
-redis.call("ZADD", user_key, expires_at_ms, member_id)
-redis.call("EXPIRE", tenant_key, key_ttl_seconds)
-redis.call("EXPIRE", user_key, key_ttl_seconds)
-
-return "admitted"
-"""
-
-_ZOOM_VOICE_SESSION_RELEASE_LUA = """
-redis.call("ZREM", KEYS[1], ARGV[1])
-redis.call("ZREM", KEYS[2], ARGV[1])
-return 1
-"""
+# A session member outlives the policy cap by this grace so a slow teardown
+# cannot free capacity before the provider session is really gone.
+VOICE_SESSION_TTL_GRACE_SECONDS = 60
+VOICE_SESSION_ADMISSION_LOCK_SECONDS = 5
 
 
 class WsTokenRateLimitExceeded(Exception):
     """Raised when a user exceeds the WS token generation rate limit."""
 
 
-class ZoomVoiceSessionLimitExceeded(Exception):
-    """Raised when Zoom Scribe has no local session capacity."""
+class VoiceSessionLimitExceeded(Exception):
+    """Raised when a voice provider has no local session capacity."""
 
 
-def _zoom_voice_session_keys(*, tenant_id: str, user_id: str) -> tuple[str, str]:
-    # Zoom limits concurrency per account, and a tenant can hold several Zoom
-    # provider rows for one account, so the budget is per tenant.
-    base_key = f"zoom_voice_sessions:tenant:{tenant_id}"
+def _voice_session_keys(*, scope: str, tenant_id: str, user_id: str) -> tuple[str, str]:
+    # Concurrency is an account-level quota and a tenant can hold several rows
+    # for one account, so the budget is per tenant and provider family.
+    base_key = f"voice_sessions:{scope}:tenant:{tenant_id}"
     return base_key, f"{base_key}:user:{user_id}"
 
 
-def _decode_redis_lua_result(result: Any) -> str:
-    if isinstance(result, bytes):
-        return result.decode("utf-8")
-    return str(result)
+def voice_session_member_ttl_seconds(policy: VoiceSessionPolicy) -> float:
+    return policy.max_session_seconds + VOICE_SESSION_TTL_GRACE_SECONDS
 
 
-async def acquire_zoom_voice_session(user_id: str) -> str:
-    """Reserve local Zoom Scribe capacity for one accepted session."""
+def voice_session_key_ttl_seconds(policy: VoiceSessionPolicy) -> float:
+    return voice_session_member_ttl_seconds(policy) + VOICE_SESSION_TTL_GRACE_SECONDS
+
+
+async def acquire_voice_session(*, policy: VoiceSessionPolicy, user_id: str) -> str:
+    """Reserve local capacity for one session under the provider's policy.
+
+    Members are scored by expiry so a session whose release never ran still
+    frees its slot. The lock keeps the prune, count and add atomic across
+    API replicas.
+    """
     redis = await get_async_redis_connection()
     tenant_id = get_current_tenant_id()
-    tenant_key, user_key = _zoom_voice_session_keys(
-        tenant_id=tenant_id, user_id=user_id
+    tenant_key, user_key = _voice_session_keys(
+        scope=policy.scope, tenant_id=tenant_id, user_id=user_id
     )
     session_member_id = uuid.uuid4().hex
     now_ms = int(time.time() * 1000)
-    expires_at_ms = now_ms + (ZOOM_VOICE_SESSION_MEMBER_TTL_SECONDS * 1000)
+    expires_at_ms = now_ms + int(voice_session_member_ttl_seconds(policy) * 1000)
+    key_ttl_seconds = int(voice_session_key_ttl_seconds(policy))
 
-    result = _decode_redis_lua_result(
-        await cast(Any, redis).eval(
-            _ZOOM_VOICE_SESSION_ADMIT_LUA,
-            2,
-            tenant_key,
-            user_key,
-            session_member_id,
-            str(expires_at_ms),
-            str(now_ms),
-            str(ZOOM_VOICE_SESSION_TENANT_LIMIT),
-            str(ZOOM_VOICE_SESSION_USER_LIMIT),
-            str(ZOOM_VOICE_SESSION_KEY_TTL_SECONDS),
-        )
-    )
-
-    if result == _ZOOM_VOICE_SESSION_ADMIT_RESULT:
-        return session_member_id
-    if result in {
-        _ZOOM_VOICE_SESSION_TENANT_LIMIT_RESULT,
-        _ZOOM_VOICE_SESSION_USER_LIMIT_RESULT,
-    }:
-        raise ZoomVoiceSessionLimitExceeded(ZOOM_VOICE_SESSION_LIMIT_MESSAGE)
-    raise RuntimeError(f"Unexpected Zoom voice session admission result: {result}")
+    async with redis.lock(
+        f"{tenant_key}:lock",
+        timeout=VOICE_SESSION_ADMISSION_LOCK_SECONDS,
+        blocking_timeout=VOICE_SESSION_ADMISSION_LOCK_SECONDS,
+    ):
+        await redis.zremrangebyscore(tenant_key, "-inf", now_ms)
+        await redis.zremrangebyscore(user_key, "-inf", now_ms)
+        if await redis.zcard(tenant_key) >= policy.tenant_concurrency_limit:
+            raise VoiceSessionLimitExceeded(policy.limit_message)
+        if await redis.zcard(user_key) >= policy.user_concurrency_limit:
+            raise VoiceSessionLimitExceeded(policy.limit_message)
+        await redis.zadd(tenant_key, {session_member_id: expires_at_ms})
+        await redis.zadd(user_key, {session_member_id: expires_at_ms})
+        await redis.expire(tenant_key, key_ttl_seconds)
+        await redis.expire(user_key, key_ttl_seconds)
+    return session_member_id
 
 
-async def release_zoom_voice_session(*, user_id: str, session_member_id: str) -> None:
-    """Release local Zoom Scribe capacity for a session."""
+async def release_voice_session(
+    *, policy: VoiceSessionPolicy, user_id: str, session_member_id: str
+) -> None:
+    """Release local capacity reserved by acquire_voice_session."""
     redis = await get_async_redis_connection()
     tenant_id = get_current_tenant_id()
-    tenant_key, user_key = _zoom_voice_session_keys(
-        tenant_id=tenant_id, user_id=user_id
+    tenant_key, user_key = _voice_session_keys(
+        scope=policy.scope, tenant_id=tenant_id, user_id=user_id
     )
-    await cast(Any, redis).eval(
-        _ZOOM_VOICE_SESSION_RELEASE_LUA,
-        2,
-        tenant_key,
-        user_key,
-        session_member_id,
-    )
+    await redis.zrem(tenant_key, session_member_id)
+    await redis.zrem(user_key, session_member_id)
 
 
 async def store_ws_token(token: str, user_id: str) -> None:

@@ -36,9 +36,15 @@ def _make_provider(provider_type: str = "openai") -> VoiceProvider:
 
 
 class MockVoiceProvider:
-    def __init__(self, tts_models: list[dict[str, str]]) -> None:
+    def __init__(
+        self, tts_models: list[dict[str, str]], target_uri: bool = True
+    ) -> None:
         self.tts_models = tts_models
+        self.target_uri = target_uri
         self.validate_credentials_called = False
+
+    def supports_target_uri(self) -> bool:
+        return self.target_uri
 
     def get_available_tts_models(self) -> list[dict[str, str]]:
         return self.tts_models
@@ -209,3 +215,39 @@ def test_fetch_voice_provider_by_id_locks_only_when_asked() -> None:
     plain, locked = (c.args[0] for c in db_session.scalar.call_args_list)
     assert plain._for_update_arg is None
     assert locked._for_update_arg is not None
+
+
+@pytest.mark.asyncio
+async def test_upsert_rejects_target_uri_for_provider_without_support(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    existing_provider = _make_provider()
+    existing_provider.api_key = "key"  # ty: ignore[invalid-assignment]
+    db_session = MagicMock()
+    db_session.scalar.return_value = existing_provider
+    mock_voice_provider = MockVoiceProvider(tts_models=[], target_uri=False)
+    monkeypatch.setattr(
+        "onyx.server.manage.voice.api.get_voice_provider",
+        lambda _: mock_voice_provider,
+    )
+    monkeypatch.setattr(
+        "onyx.server.manage.voice.api.validate_outbound_http_url",
+        lambda url, **_kwargs: url,
+    )
+
+    with pytest.raises(OnyxError, match="does not support a target URI"):
+        await upsert_voice_provider_endpoint(
+            VoiceProviderUpsertRequest(
+                id=1,
+                name="Speech",
+                provider_type="openai",
+                api_key="key",
+                api_key_changed=True,
+                api_base="https://api.example.com",
+            ),
+            MagicMock(),
+            db_session,
+        )
+
+    assert mock_voice_provider.validate_credentials_called is False
+    db_session.rollback.assert_called_once()

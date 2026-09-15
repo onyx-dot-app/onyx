@@ -20,20 +20,17 @@ from onyx.db.voice import (
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import (
-    ZOOM_VOICE_SESSION_LIMIT_MESSAGE,
-    ZOOM_VOICE_SESSION_MAX_SECONDS,
+    VoiceSessionLimitExceeded,
     WsTokenRateLimitExceeded,
-    ZoomVoiceSessionLimitExceeded,
-    acquire_zoom_voice_session,
-    release_zoom_voice_session,
+    acquire_voice_session,
+    release_voice_session,
     store_ws_token,
 )
 from onyx.server.manage.models import VoiceSettingsUpdateRequest
 from onyx.server.manage.voice.text_utils import strip_markdown_for_tts
 from onyx.utils.logger import setup_logger
 from onyx.voice.factory import get_voice_provider
-from onyx.voice.interface import VoiceProviderInterface, normalize_provider_type
-from onyx.voice.providers.zoom import ZOOM_CLOSE_TIMEOUT_SECONDS
+from onyx.voice.interface import VoiceProviderInterface
 
 logger = setup_logger()
 
@@ -43,11 +40,6 @@ router = APIRouter(prefix="/voice")
 MAX_AUDIO_SIZE = 25 * 1024 * 1024
 # Chunk size for streaming uploads (8KB)
 UPLOAD_READ_CHUNK_SIZE = 8192
-# A cancelled Zoom transcribe still tears down its session, so the transcribe
-# budget is the cap minus one close budget.
-ZOOM_REST_TRANSCRIBE_SECONDS = (
-    ZOOM_VOICE_SESSION_MAX_SECONDS - ZOOM_CLOSE_TIMEOUT_SECONDS
-)
 
 
 class VoiceStatusResponse(BaseModel):
@@ -71,33 +63,35 @@ def get_voice_status(
 
 async def _transcribe_with_provider(
     provider: VoiceProviderInterface,
-    provider_type: str,
     user_id: str,
     audio_data: bytes,
     audio_format: str,
 ) -> str:
-    """Transcribe one upload, under the provider's session limits.
+    """Transcribe one upload under the provider's session policy, if it has one.
 
-    Zoom opens a live Scribe session for every call, so a REST upload uses the
-    same admission and duration limits as a WebSocket session.
+    A constrained provider opens a live session for every call, so a REST
+    upload uses the same admission and duration limits as a WebSocket session.
     """
-    if provider_type != "zoom":
+    policy = provider.session_policy()
+    if policy is None:
         return await provider.transcribe(audio_data, audio_format)
 
     try:
-        session_member_id = await acquire_zoom_voice_session(user_id=user_id)
-    except ZoomVoiceSessionLimitExceeded:
-        raise OnyxError(OnyxErrorCode.RATE_LIMITED, ZOOM_VOICE_SESSION_LIMIT_MESSAGE)
+        session_member_id = await acquire_voice_session(policy=policy, user_id=user_id)
+    except VoiceSessionLimitExceeded as e:
+        raise OnyxError(OnyxErrorCode.RATE_LIMITED, str(e))
     try:
-        async with asyncio.timeout(ZOOM_REST_TRANSCRIBE_SECONDS):
+        # A cancelled transcribe still tears down its session, so the handler
+        # budget is the cap minus the provider's teardown budget.
+        async with asyncio.timeout(policy.handler_seconds):
             return await provider.transcribe(audio_data, audio_format)
     finally:
         try:
-            await release_zoom_voice_session(
-                user_id=user_id, session_member_id=session_member_id
+            await release_voice_session(
+                policy=policy, user_id=user_id, session_member_id=session_member_id
             )
         except Exception:
-            logger.warning("Transcribe: failed to release Zoom session")
+            logger.warning("Transcribe: failed to release session slot")
 
 
 @router.post("/transcribe")
@@ -145,7 +139,6 @@ async def transcribe_audio(
     try:
         text = await _transcribe_with_provider(
             provider=provider,
-            provider_type=normalize_provider_type(provider_db.provider_type),
             user_id=str(user.id),
             audio_data=audio_data,
             audio_format=audio_format,

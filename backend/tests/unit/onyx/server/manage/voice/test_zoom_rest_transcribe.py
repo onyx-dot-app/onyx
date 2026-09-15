@@ -9,11 +9,14 @@ from fastapi import UploadFile
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.redis.redis_pool import (
-    ZOOM_VOICE_SESSION_LIMIT_MESSAGE,
-    ZoomVoiceSessionLimitExceeded,
-)
+from onyx.redis.redis_pool import VoiceSessionLimitExceeded
 from onyx.server.manage.voice import user_api
+from onyx.voice.interface import VoiceSessionPolicy
+from onyx.voice.providers.zoom import ZOOM_SESSION_POLICY
+
+TEST_POLICY = ZOOM_SESSION_POLICY.model_copy(
+    update={"max_session_seconds": 0.01, "teardown_seconds": 0.0}
+)
 
 
 class _FakeUpload:
@@ -33,6 +36,9 @@ class _ZoomProvider:
     def __init__(self, transcript: str = "hello") -> None:
         self.transcript = transcript
         self.calls: list[str] = []
+
+    def session_policy(self) -> VoiceSessionPolicy | None:
+        return TEST_POLICY
 
     async def transcribe(self, audio_data: bytes, audio_format: str) -> str:
         _ = audio_data
@@ -69,14 +75,14 @@ async def test_rest_transcribe_admits_and_releases_zoom_session(
     _install_zoom_provider(monkeypatch, provider)
     acquire = AsyncMock(return_value="session-member-1")
     release = AsyncMock()
-    monkeypatch.setattr(user_api, "acquire_zoom_voice_session", acquire)
-    monkeypatch.setattr(user_api, "release_zoom_voice_session", release)
+    monkeypatch.setattr(user_api, "acquire_voice_session", acquire)
+    monkeypatch.setattr(user_api, "release_voice_session", release)
 
     assert await _transcribe("audio.pcm16") == {"text": "hello"}
 
-    acquire.assert_awaited_once_with(user_id="user-7")
+    acquire.assert_awaited_once_with(policy=TEST_POLICY, user_id="user-7")
     release.assert_awaited_once_with(
-        user_id="user-7", session_member_id="session-member-1"
+        policy=TEST_POLICY, user_id="user-7", session_member_id="session-member-1"
     )
 
 
@@ -89,10 +95,10 @@ async def test_rest_transcribe_releases_zoom_session_on_failure(
     release = AsyncMock()
     monkeypatch.setattr(
         user_api,
-        "acquire_zoom_voice_session",
+        "acquire_voice_session",
         AsyncMock(return_value="session-member-1"),
     )
-    monkeypatch.setattr(user_api, "release_zoom_voice_session", release)
+    monkeypatch.setattr(user_api, "release_voice_session", release)
 
     with pytest.raises(OnyxError) as exc_info:
         await _transcribe("audio.webm")
@@ -107,27 +113,32 @@ async def test_rest_transcribe_reports_zoom_session_limit(
 ) -> None:
     _install_zoom_provider(monkeypatch, _ZoomProvider())
 
-    async def raise_limit(*, user_id: str) -> str:
+    async def raise_limit(*, policy: VoiceSessionPolicy, user_id: str) -> str:
         _ = user_id
-        raise ZoomVoiceSessionLimitExceeded(ZOOM_VOICE_SESSION_LIMIT_MESSAGE)
+        raise VoiceSessionLimitExceeded(policy.limit_message)
 
     release = AsyncMock()
-    monkeypatch.setattr(user_api, "acquire_zoom_voice_session", raise_limit)
-    monkeypatch.setattr(user_api, "release_zoom_voice_session", release)
+    monkeypatch.setattr(user_api, "acquire_voice_session", raise_limit)
+    monkeypatch.setattr(user_api, "release_voice_session", release)
 
     with pytest.raises(OnyxError) as exc_info:
         await _transcribe("audio.pcm16")
 
     assert exc_info.value.error_code == OnyxErrorCode.RATE_LIMITED
-    assert exc_info.value.detail == ZOOM_VOICE_SESSION_LIMIT_MESSAGE
+    assert exc_info.value.detail == TEST_POLICY.limit_message
     release.assert_not_awaited()
 
 
+class _UnconstrainedProvider(_ZoomProvider):
+    def session_policy(self) -> None:
+        return None
+
+
 @pytest.mark.asyncio
-async def test_rest_transcribe_skips_zoom_guards_for_other_providers(
+async def test_rest_transcribe_skips_admission_for_unconstrained_providers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    provider = _ZoomProvider()
+    provider = _UnconstrainedProvider()
     monkeypatch.setattr(
         user_api,
         "fetch_default_stt_provider",
@@ -135,7 +146,7 @@ async def test_rest_transcribe_skips_zoom_guards_for_other_providers(
     )
     monkeypatch.setattr(user_api, "get_voice_provider", lambda _provider_db: provider)
     acquire = AsyncMock()
-    monkeypatch.setattr(user_api, "acquire_zoom_voice_session", acquire)
+    monkeypatch.setattr(user_api, "acquire_voice_session", acquire)
 
     assert await _transcribe("audio.pcm16") == {"text": "hello"}
 
@@ -157,25 +168,15 @@ async def test_rest_transcribe_timeout_releases_zoom_session(
     release = AsyncMock()
     monkeypatch.setattr(
         user_api,
-        "acquire_zoom_voice_session",
+        "acquire_voice_session",
         AsyncMock(return_value="session-member-1"),
     )
-    monkeypatch.setattr(user_api, "release_zoom_voice_session", release)
-    monkeypatch.setattr(user_api, "ZOOM_REST_TRANSCRIBE_SECONDS", 0.01)
+    monkeypatch.setattr(user_api, "release_voice_session", release)
 
     with pytest.raises(OnyxError) as exc_info:
         await _transcribe("audio.pcm16")
 
     assert exc_info.value.error_code == OnyxErrorCode.INTERNAL_ERROR
     release.assert_awaited_once_with(
-        user_id="user-7", session_member_id="session-member-1"
-    )
-
-
-def test_rest_transcribe_budget_reserves_provider_teardown() -> None:
-    # A cancelled transcribe still closes its Zoom session, so transcribe plus
-    # teardown must stay inside the admission window.
-    assert (
-        user_api.ZOOM_REST_TRANSCRIBE_SECONDS + user_api.ZOOM_CLOSE_TIMEOUT_SECONDS
-        == user_api.ZOOM_VOICE_SESSION_MAX_SECONDS
+        policy=TEST_POLICY, user_id="user-7", session_member_id="session-member-1"
     )
