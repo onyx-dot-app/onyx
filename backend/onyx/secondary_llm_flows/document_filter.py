@@ -333,7 +333,7 @@ def select_sections_for_expansion(
             # Try to find an unbracketed comma-separated list
             # Look for patterns like "1, 2, 3" or "1, 2!, 3"
             # This regex finds sequences of digits optionally followed by "!" and separated by commas
-            comma_list_pattern = r"\b\d+!?\b(?:\s*,\s*\b\d+!?\b)*"
+            comma_list_pattern = r"\b\d+!?(?:\s*,\s*\d+!?)*"
             comma_match = re.search(comma_list_pattern, llm_response)
 
             if comma_match:
