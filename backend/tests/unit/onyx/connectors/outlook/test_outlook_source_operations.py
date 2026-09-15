@@ -4,6 +4,7 @@ The Graph client is replaced below the gateway, so these tests exercise the
 real query construction, pagination and error mapping without a network.
 """
 
+import json
 from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -371,6 +372,37 @@ def test_read_any_message_is_none_for_an_empty_mailbox() -> None:
     assert gateway.read_any_message(mailbox_id=MAILBOX_ID) is None
 
 
+def test_read_any_message_follows_an_empty_page_with_a_next_link() -> None:
+    gateway, client = _gateway()
+    client.get_json.side_effect = [
+        page_json([], next_link="https://graph/messages?page=2"),
+        page_json([message_json()]),
+    ]
+
+    result = gateway.read_any_message(mailbox_id=MAILBOX_ID)
+
+    assert result is not None and result.id == "msg-1"
+    assert client.get_json.call_args_list[1].args == (
+        "https://graph/messages?page=2",
+        None,
+        {"Prefer": TEXT_BODY_PREFERENCE},
+    )
+
+
+def test_resolve_mailbox_fallback_follows_an_empty_page_with_a_next_link() -> None:
+    gateway, client = _gateway()
+    client.get_json.side_effect = [
+        http_error(404, "Request_ResourceNotFound"),
+        page_json([], next_link="https://graph/users?page=2"),
+        page_json([user_json()]),
+    ]
+
+    result = gateway.resolve_mailbox(address="alias@contoso.com")
+
+    assert result is not None and result.id == MAILBOX_ID
+    assert client.get_json.call_count == 3
+
+
 def test_conversation_page_size_defaults_to_the_message_page_size() -> None:
     gateway, client = _gateway()
     client.get_json.return_value = page_json([])
@@ -393,6 +425,28 @@ def test_missing_credential_field_fails_before_msal_is_built() -> None:
 
     assert exc_info.value.code == MISSING_CREDENTIAL_CODE
     build.assert_not_called()
+
+
+def test_unparseable_discovery_body_is_a_graph_error_not_a_bad_directory() -> None:
+    """MSAL wraps the decode error of a discovery body in a ValueError, which
+    is a broken proxy or outage rather than a wrong directory id."""
+    gateway, _ = _gateway()
+
+    def wrapped_decode_error(**kwargs: Any) -> None:
+        del kwargs
+        try:
+            json.loads("<html>")
+        except json.JSONDecodeError as e:
+            raise ValueError("Unable to get authority configuration") from e
+
+    with (
+        patch(f"{MODULE}.build_msal_app", side_effect=wrapped_decode_error),
+        pytest.raises(OutlookGraphError) as exc_info,
+    ):
+        gateway.check_token()
+
+    assert exc_info.value.status is None
+    assert exc_info.value.code == "ValueError"
 
 
 def test_unknown_directory_is_an_auth_error_with_a_stable_code() -> None:

@@ -369,8 +369,6 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
     ) -> Generator[ConnectorFailure, None, None]:
         found: list[OutlookMailbox] = []
         if self.mailboxes:
-            # A UPN and a primary SMTP address can name the same mailbox.
-            found_ids: set[str] = set()
             for address in self.mailboxes:
                 # Resolution reads the directory, never the mailbox, so a Graph
                 # error here is about the app or the service and fails the
@@ -382,12 +380,6 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
                         f"No user matches {address}. {MAILBOX_UNAVAILABLE_REMEDIATION}",
                     )
                     continue
-                if mailbox.id in found_ids:
-                    logger.info(
-                        "Outlook: %s names an already listed mailbox, skipping", address
-                    )
-                    continue
-                found_ids.add(mailbox.id)
                 found.append(mailbox)
         else:
             next_link: str | None = None
@@ -397,50 +389,48 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
                 next_link = page.next_link
                 if next_link is None:
                     break
-        logger.info("Outlook: %s mailboxes to walk", len(found))
+        # A UPN and a primary SMTP address, or two listing pages, can name the
+        # same mailbox. The dict keeps the first occurrence in order.
+        unique = list({mailbox.id: mailbox for mailbox in found}.values())
+        logger.info("Outlook: %s mailboxes to walk", len(unique))
         # Popped from the end, so reverse to keep the configured order.
-        checkpoint.mailboxes = list(reversed(found))
+        checkpoint.mailboxes = list(reversed(unique))
 
     def _open_mailbox(
         self, checkpoint: OutlookCheckpoint, mailbox: OutlookMailbox
     ) -> Generator[HierarchyNode | ConnectorFailure, None, None]:
-        """Probe the mailbox, then list its whole folder tree."""
+        """Probe the mailbox, then list its whole folder tree.
+
+        Nothing is yielded until the tree is known, so a listing that fails
+        part way leaves nothing behind for the retry to repeat.
+        """
         try:
             self.ops.probe_mailbox(mailbox_id=mailbox.id)
             excluded = self._excluded_well_known_folder_ids(mailbox)
+            tree = list(self._walk_folder_tree(mailbox, excluded))
         except OutlookGraphError as e:
             if e.status not in MAILBOX_UNAVAILABLE_STATUSES:
                 raise
             yield from self._mailbox_unavailable(mailbox, e)
             return
 
-        root_id = mailbox_node_id(mailbox)
         yield HierarchyNode(
-            raw_node_id=root_id,
+            raw_node_id=mailbox_node_id(mailbox),
             raw_parent_id=None,
             display_name=mailbox.display_name or mailbox.address,
             link=_mailbox_link(mailbox),
             node_type=HierarchyNodeType.MAILBOX,
         )
-
-        folders: list[OutlookFolder] = []
-        try:
-            for folder, parent_node_id in self._walk_folder_tree(mailbox, excluded):
-                yield HierarchyNode(
-                    raw_node_id=folder.id,
-                    raw_parent_id=parent_node_id,
-                    display_name=folder.display_name,
-                    node_type=HierarchyNodeType.FOLDER,
-                )
-                folders.append(folder)
-        except OutlookGraphError as e:
-            if e.status not in MAILBOX_UNAVAILABLE_STATUSES:
-                raise
-            yield from self._mailbox_unavailable(mailbox, e)
-            return
+        for folder, parent_node_id in tree:
+            yield HierarchyNode(
+                raw_node_id=folder.id,
+                raw_parent_id=parent_node_id,
+                display_name=folder.display_name,
+                node_type=HierarchyNodeType.FOLDER,
+            )
 
         checkpoint.current_mailbox = mailbox
-        checkpoint.folders = list(reversed(folders))
+        checkpoint.folders = list(reversed([folder for folder, _ in tree]))
         checkpoint.excluded_folder_ids = sorted(excluded)
         checkpoint.current_folder = None
         checkpoint.seen_conversation_ids = set()
@@ -534,7 +524,6 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
 
         end_at = datetime.fromtimestamp(end, tz=timezone.utc) if end else None
         excluded = set(checkpoint.excluded_folder_ids)
-        checkpoint.folder_change_count += len(page.changes)
         for change in page.changes:
             if change.removed or not change.conversation_id:
                 continue
@@ -557,6 +546,9 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
             if result is not None:
                 yield result
 
+        # Committed with the cursor, so a page replayed after a failure part
+        # way through is counted once.
+        checkpoint.folder_change_count += len(page.changes)
         checkpoint.delta_next_link = page.next_link
         if page.next_link is not None:
             return

@@ -435,7 +435,8 @@ def test_denied_folder_listing_is_treated_like_a_denied_mailbox() -> None:
 
     items = _run(_connector(gateway, mailboxes=[MAILBOX_ADDRESS]))
 
-    assert [type(item) for item in items] == [HierarchyNode, ConnectorFailure]
+    # No hierarchy node goes out for a mailbox whose tree was never complete.
+    assert [type(item) for item in items] == [ConnectorFailure]
     gateway.fetch_folder_delta_page.assert_not_called()
 
 
@@ -474,6 +475,43 @@ def test_addresses_naming_the_same_mailbox_are_walked_once() -> None:
     docs = [item for item in items if isinstance(item, Document)]
     assert len(docs) == 1
     assert gateway.probe_mailbox.call_count == 1
+
+
+def test_users_repeated_across_listing_pages_are_walked_once() -> None:
+    gateway = _happy_gateway()
+    gateway.list_mailbox_users.side_effect = [
+        OutlookMailboxPage(mailboxes=[mailbox()], next_link="https://graph/users?p=2"),
+        OutlookMailboxPage(mailboxes=[mailbox()]),
+    ]
+
+    items = _run(_connector(gateway))
+
+    docs = [item for item in items if isinstance(item, Document)]
+    assert len(docs) == 1
+    assert gateway.probe_mailbox.call_count == 1
+
+
+def test_failure_part_way_through_a_page_leaves_the_page_uncounted() -> None:
+    """The replayed page must not count twice toward the filtered delta cap."""
+    gateway = _happy_gateway()
+    gateway.fetch_folder_delta_page.side_effect = None
+    gateway.fetch_folder_delta_page.return_value = OutlookDeltaPage(
+        changes=[change(), change(id="msg-b", conversation_id="conv-b")],
+        next_link="https://graph/delta?more",
+    )
+    gateway.fetch_conversation_messages_page.side_effect = [
+        OutlookMessagePage(messages=[message()]),
+        OutlookAuthError("invalid_client", "secret expired"),
+    ]
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+    checkpoint = _folder_checkpoint(folder_change_count=4997)
+
+    with pytest.raises(OutlookAuthError):
+        _step(connector, checkpoint)
+
+    assert checkpoint.folder_change_count == 4997
+    assert checkpoint.delta_next_link is None
+    assert checkpoint.seen_conversation_ids == {CONVERSATION_ID}
 
 
 def test_expired_delta_state_restarts_the_folder_round() -> None:

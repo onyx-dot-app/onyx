@@ -55,9 +55,10 @@ _PROBE_WELL_KNOWN_FOLDER = "junkemail"
 # One item proves the permission. More only spends the tenant's budget.
 _PROBE_PAGE_SIZE = 1
 
-# Every-mailbox mode gives up on finding an openable mailbox after this many
-# enabled users.
-_CANDIDATE_MAILBOXES = 10
+# Every-mailbox mode reads up to this many one-user pages looking for a
+# mailbox that opens. Graph may hand back empty continuation pages, so the
+# bound is on pages rather than users.
+_CANDIDATE_PAGES = 20
 
 _TOKEN_ENDPOINT_DENIED = "Microsoft's token endpoint refused the request."
 
@@ -106,23 +107,22 @@ def _open_first_readable_mailbox(
     """
     denied: OutlookGraphError | None = None
     next_link: str | None = None
-    for _ in range(_CANDIDATE_MAILBOXES):
+    for _ in range(_CANDIDATE_PAGES):
         try:
             page = gateway.list_mailbox_users(
                 page_size=_PROBE_PAGE_SIZE, next_link=next_link
             )
         except OutlookGraphError as e:
             raise_for_graph_error(e, USER_LISTING_DENIED)
-        if not page.mailboxes:
-            break
-        mailbox = page.mailboxes[0]
-        try:
-            return mailbox, gateway.probe_mailbox(mailbox_id=mailbox.id)
-        except OutlookGraphError as e:
-            if e.status not in MAILBOX_UNAVAILABLE_STATUSES:
-                raise_for_graph_error(e, _denied(mailbox))
-            if e.status == 403:
-                denied = e
+        if page.mailboxes:
+            mailbox = page.mailboxes[0]
+            try:
+                return mailbox, gateway.probe_mailbox(mailbox_id=mailbox.id)
+            except OutlookGraphError as e:
+                if e.status not in MAILBOX_UNAVAILABLE_STATUSES:
+                    raise_for_graph_error(e, _denied(mailbox))
+                if e.status == 403:
+                    denied = e
         next_link = page.next_link
         if next_link is None:
             break

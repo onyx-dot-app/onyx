@@ -9,6 +9,7 @@ Application permissions this gateway needs: ``Mail.Read`` for folders and
 messages, ``User.Read.All`` to enumerate and resolve mailboxes.
 """
 
+import json
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import quote
@@ -102,6 +103,21 @@ SEARCH_FOLDER_TYPE = "#microsoft.graph.mailSearchFolder"
 # Graph only orders by a property that leads the filter, so conversation reads
 # carry this always-true bound to be allowed ``$orderby=receivedDateTime desc``.
 EPOCH_TIMESTAMP = "1970-01-01T00:00:00Z"
+
+# Graph may answer a collection request with an empty page and a next link.
+# Lookups that want a single item follow at most this many of them.
+EMPTY_PAGE_FOLLOW_LIMIT = 20
+
+
+def _is_decode_error(error: BaseException) -> bool:
+    """MSAL wraps a discovery body it cannot parse in a bare ValueError, which
+    must not read as a bad directory id."""
+    current: BaseException | None = error
+    while current is not None:
+        if isinstance(current, json.JSONDecodeError):
+            return True
+        current = current.__cause__ or current.__context__
+    return False
 
 
 def _odata_quote(value: str) -> str:
@@ -253,6 +269,8 @@ class OutlookSourceOperations(SourceOperations):
                     client_secret=credentials[CREDENTIAL_CLIENT_SECRET],
                 )
             except ValueError as e:
+                if _is_decode_error(e):
+                    raise _to_graph_error(e) from e
                 raise OutlookAuthError(INVALID_AUTHORITY_CODE, str(e)) from e
             except requests.RequestException as e:
                 raise _to_graph_error(e) from e
@@ -293,6 +311,25 @@ class OutlookSourceOperations(SourceOperations):
             return self._client().get_json(url, params, headers)
         except (requests.RequestException, ValueError) as e:
             raise _to_graph_error(e) from e
+
+    def _first_item(
+        self,
+        url: str,
+        params: dict[str, str] | None,
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, Any] | None:
+        """The first entry of a collection, following empty continuation pages."""
+        next_url: str | None = url
+        for _ in range(EMPTY_PAGE_FOLLOW_LIMIT):
+            if next_url is None:
+                return None
+            data = self._get(next_url, params, headers)
+            params = None
+            items = data.get("value", [])
+            if items:
+                return items[0]
+            next_url = data.get("@odata.nextLink")
+        return None
 
     def _user_url(self, mailbox_id: str) -> str:
         # Graph rejects the slash form for a principal name that starts with
@@ -363,8 +400,8 @@ class OutlookSourceOperations(SourceOperations):
             if e.status != 404:
                 raise
         params["$filter"] = f"mail eq '{_odata_quote(address)}'"
-        users = self._get(f"{self._graph_base()}/users", params).get("value", [])
-        return _parse_mailbox(users[0]) if users else None
+        user = self._first_item(f"{self._graph_base()}/users", params)
+        return _parse_mailbox(user) if user else None
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
@@ -491,13 +528,12 @@ class OutlookSourceOperations(SourceOperations):
         Mail.ReadBasic.All answers every folder and delta call and refuses only
         bodies, so this is the call that tells the two grants apart.
         """
-        data = self._get(
+        raw = self._first_item(
             f"{self._user_url(mailbox_id)}/messages",
             {"$select": MESSAGE_SELECT, "$top": "1"},
             {"Prefer": TEXT_BODY_PREFERENCE},
         )
-        messages = data.get("value", [])
-        return _parse_message(messages[0]) if messages else None
+        return _parse_message(raw) if raw else None
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},

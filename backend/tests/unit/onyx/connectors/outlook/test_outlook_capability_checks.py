@@ -215,6 +215,19 @@ def test_mail_read_check_skips_enabled_users_without_a_mailbox() -> None:
     )
 
 
+def test_mail_read_check_follows_an_empty_user_page() -> None:
+    gateway = _gateway()
+    gateway.list_mailbox_users.side_effect = [
+        OutlookMailboxPage(mailboxes=[], next_link="https://graph/users?page=2"),
+        OutlookMailboxPage(mailboxes=[mailbox()]),
+    ]
+
+    _run("outlook_mail_read", _context(gateway))
+
+    assert gateway.list_mailbox_users.call_count == 2
+    gateway.probe_mailbox.assert_called_once_with(mailbox_id=MAILBOX_ID)
+
+
 def test_mail_read_check_is_indeterminate_when_no_user_has_a_mailbox() -> None:
     gateway = _gateway()
     gateway.probe_mailbox.side_effect = graph_error(404, "MailboxNotEnabledForRESTAPI")
