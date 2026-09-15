@@ -97,10 +97,7 @@ Here are some memories about the user:
 # There are now multiple places for misleading docs to get dropped so each one can be a bit more lax.
 # As models get better, it's likely better to include more context than not, some questionably
 # useful stuff may be helpful downstream.
-# Adding the ! option to allow better models to handle questions where all of the documents are
-# necessary to make a good determination.
-# If a document is by far the best and is a very obvious inclusion, add a ! after the section_id to indicate that it should \
-# be included in full. Example output: [8, 2!, 5].
+# The ! marker lets better models flag documents that should be included in full.
 DOCUMENT_SELECTION_PROMPT = """
 Select the most relevant document sections for the user's query (maximum {max_sections}).{extra_instructions}
 
@@ -123,8 +120,10 @@ Select the most relevant document sections for the user's query (maximum {max_se
 later to expand the section and read more from the document so include the section.
 
 # Output Format
-Return ONLY section_ids as a comma-separated list, ordered by relevance:
-[most_relevant_section_id, second_most_relevant_section_id, ...]
+Return ONLY the section_ids as a bracketed, comma-separated list of integers, ordered by relevance. \
+Do not include any other text.
+If a document is by far the best and an obvious inclusion, add a ! after its section_id to include it in full.
+Example output: [8, 2!, 5]
 
 Section IDs:
 """.strip()
