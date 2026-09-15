@@ -21,22 +21,22 @@ Interactive.Stateless          <- variant, prominence, interaction, disabled, hr
 
 ## Props
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `variant` | `"default" \| "action" \| "danger" \| "none"` | `"default"` | Color variant |
-| `prominence` | `"primary" \| "secondary" \| "tertiary" \| "internal"` | `"primary"` | Color prominence |
-| `interaction` | `"rest" \| "hover" \| "active"` | `"rest"` | JS-controlled interaction override |
-| `icon` | `IconFunctionComponent` | — | Left icon |
-| `children` | `string` | — | Label text. Omit for icon-only buttons |
-| `rightIcon` | `IconFunctionComponent` | — | Right icon |
-| `responsiveHideText` | `boolean` | `false` | Hides label on small screens |
-| `size` | `SizeVariant` | `"lg"` | Size preset |
-| `type` | `"submit" \| "button" \| "reset"` | `"button"` | HTML button type |
-| `width` | `WidthVariant` | — | Width preset |
-| `tooltip` | `string` | — | Tooltip text |
-| `tooltipSide` | `TooltipSide` | `"top"` | Tooltip placement |
-| `disabled` | `boolean` | `false` | Disables the button |
-| `href` | `string` | — | URL; renders as a link |
+| Prop                 | Type                                                   | Default     | Description                            |
+| -------------------- | ------------------------------------------------------ | ----------- | -------------------------------------- |
+| `variant`            | `"default" \| "action" \| "danger" \| "none"`          | `"default"` | Color variant                          |
+| `prominence`         | `"primary" \| "secondary" \| "tertiary" \| "internal"` | `"primary"` | Color prominence                       |
+| `interaction`        | `"rest" \| "hover" \| "active"`                        | `"rest"`    | JS-controlled interaction override     |
+| `icon`               | `IconFunctionComponent`                                | —           | Left icon                              |
+| `children`           | `string`                                               | —           | Label text. Omit for icon-only buttons |
+| `rightIcon`          | `IconFunctionComponent`                                | —           | Right icon                             |
+| `responsiveHideText` | `boolean`                                              | `false`     | Hides label on small screens           |
+| `size`               | `SizeVariant`                                          | `"lg"`      | Size preset                            |
+| `type`               | `"submit" \| "button" \| "reset"`                      | `"button"`  | HTML button type                       |
+| `width`              | `WidthVariant`                                         | —           | Width preset                           |
+| `tooltip`            | `string`                                               | —           | Tooltip text                           |
+| `tooltipSide`        | `TooltipSide`                                          | `"top"`     | Tooltip placement                      |
+| `disabled`           | `boolean`                                              | `false`     | Disables the button                    |
+| `href`               | `string`                                               | —           | URL; renders as a link                 |
 
 ## Usage
 

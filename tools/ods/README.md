@@ -296,6 +296,11 @@ package's floor. `--check` fails when a package drops below its floor, which is
 what `pr-golang-tests.yml` runs on every PR. After adding tests, `--update`
 raises the floors.
 
+The floors are the gate, but they are not always a good comparison: they go
+stale, so the report shows gains the current change never made. Give `--base` a
+commit and the report compares against the coverage snapshot of that commit
+instead. A PR then sees only what it changed.
+
 Coverage is measured per package with `go test -coverprofile`, so a package's
 number counts only its own tests. That is a number the package's owner can act
 on; a cross-package `-coverpkg` total would credit a package for statements its
@@ -312,9 +317,13 @@ suite name, which is what CI passes.
 | `--check` | `false` | Fail when a package drops below its baseline floor |
 | `--update` | `false` | Rewrite the baseline from this run |
 | `--profile` | | Keep the coverage profile at this path (for `go tool cover`) |
+| `--from-profile` | | Report from this coverage profile instead of running the tests |
 | `--html` | | Render the profile as a browsable page at this path |
 | `--markdown` | | Write the changed packages as a markdown table at this path, for a PR comment |
 | `--tolerance` | `0.1` | Percentage points a package may drop below its floor without failing |
+| `--base` | | Report against the coverage snapshot of this commit instead of the floors |
+| `--publish` | `false` | Record this run as the snapshot of `HEAD` (needs AWS credentials) |
+| `--snapshot-bucket` | `onyx-playwright-artifacts` | S3 bucket that holds the snapshots |
 
 **Examples:**
 
@@ -328,10 +337,37 @@ ods coverage ods --check
 # Record today's numbers as the new floors
 ods coverage ods --update
 
+# Compare your branch against main (fetch first, so origin/main is current)
+git fetch origin
+ods coverage ods --base origin/main
+
 # Keep the profile and browse the uncovered lines
 ods coverage ods --profile /tmp/cover.out
 go tool cover -html=/tmp/cover.out
 ```
+
+#### Comparing against the base
+
+A snapshot records the exact per-package statement counts of one commit. Each
+snapshot is a YAML object in S3 at
+`s3://<bucket>/coverage/<module>/<commit sha>.yaml`, where the module directory
+keeps its shape with `/` replaced by `-`: `tools/ods` becomes `tools-ods`. Runs
+on `main` and on `release/**` write them with `--publish`, which needs AWS
+credentials, refuses a dirty tree, and only records a fully successful run.
+
+`--base <commit-ish>` resolves the base commit first: the merge base of that
+revision and `HEAD` when there is one, which is the fork point of your branch,
+else the revision itself. That is what CI passes, where the given SHA is already
+the base. The command then walks the first-parent history from the base, at most
+25 commits, and reports against the first snapshot it finds. It logs the distance
+when the snapshot is not on the base commit itself.
+
+With a snapshot, the report column reads `Base` instead of `Floor`. Without one,
+or when the revision cannot be fetched, the command prints a warning and reports
+against the floors, which is the behavior without `--base`.
+
+`--base` never changes what the check does. The committed floors stay the only
+gate.
 
 #### Raising the baseline
 
@@ -344,10 +380,24 @@ Without a baseline the tests still run and the report prints, but nothing is
 gated. A module opts into the gate by committing a baseline, so `cli` and
 `terraform-provider-onyx` join by running `ods coverage <suite> --update` once.
 
+CI measures and reports in two steps. The first runs the check with `--profile`
+and no AWS credentials: the test code comes from the PR, and a process can read
+the environment it starts with. The second step gets credentials and reports
+from that profile with `--from-profile`. A PR run adds `--base <base sha>`. A
+merge queue run on `main`, and a push to a `release/**` branch, add `--publish`
+instead, so the commit that lands gets its snapshot. A fork PR cannot assume the
+AWS role, so it reads no snapshot and falls back to the floors. After this change
+lands, run the workflow once by hand (`workflow_dispatch` on `main`) to publish
+the first snapshots.
+
+Against a base, a module without a baseline still reports what moved, so `cli`
+and `terraform-provider-onyx` can now appear in the PR comment. The check still
+gates nothing for them.
+
 In CI, each module's `--markdown` report goes to the job summary, and its
 `--html` page is uploaded as an artifact and published to the reports bucket.
-One PR comment, updated in place, lists the modules with a baseline where a
-package moved, each with a link to its page.
+One PR comment, updated in place, lists the modules where a package moved, each
+with a link to its page.
 
 Floors are rounded down to one decimal, and a package may sit `--tolerance`
 below its floor without failing. That absorbs the jitter from suites that depend
@@ -356,6 +406,63 @@ on ports or timing; a real regression is far larger.
 The package floors are the gate. The module total is reported with its delta
 but never fails the check: a package added without tests, or a well-covered
 package deleted, moves the total without any package regressing.
+
+### `type-coverage` - Measure Type Coverage Against a Baseline
+
+Measure type coverage per directory and hold it against a committed baseline.
+Type coverage is the share of identifiers whose type is not `any`. Each type
+cast (`x as T` or `<T>x`) and each non-null assertion (`x!`) also counts as one
+uncovered item. `as const` and `as unknown` do not count, because they do not
+override the checker.
+
+```shell
+ods type-coverage <checker> [flags]
+```
+
+The only checker is `typescript` (alias `ts`), which measures `web/`. Python is
+not supported yet, because `ty` does not report types.
+
+`ods web types:check` type-checks `web/` with the TypeScript 7 API. From the
+same program, it counts the identifiers in each file. A type error fails the
+command before the coverage is compared. The count does not include tests:
+`tests/` and `__tests__/` directories, and `*.test.*` and `*.spec.*` files.
+Tests are still type-checked. This command groups the files into directories
+three levels deep, such as `src/app/admin`, and compares each directory with its
+floor in `web/.type-coverage-baseline.yaml`. The flags and the baseline format
+are the same as for `ods coverage`.
+
+The default tolerance is `0`, because the measurement does not change between
+runs. The TypeScript 7 API is marked unstable, so a TypeScript upgrade can move
+the floors. After an upgrade, run `--update`.
+
+**Flags:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--check` | `false` | Fail when a directory drops below its baseline floor |
+| `--update` | `false` | Rewrite the baseline from this run |
+| `--output` | | Keep the per-file counts as JSON at this path |
+| `--markdown` | | Write the changed directories as a markdown table at this path, for a PR comment |
+| `--tolerance` | `0` | Percentage points a directory may drop below its floor without failing |
+
+**Examples:**
+
+```shell
+# Report where each directory stands
+ods type-coverage ts
+
+# Fail on a regression (what CI runs)
+ods type-coverage ts --check
+
+# Record the new floors after you remove `any` types
+ods type-coverage ts --update
+
+# Type-check and print the total only
+ods web types:check
+```
+
+The `typescript-check` pre-commit hook runs `--check` when a `.ts` or `.tsx`
+file in `web/` changes. `pr-quality-checks.yml` runs the same hook on every PR.
 
 ### `dev` - Devcontainer Management
 
@@ -872,14 +979,54 @@ To build and install the wheel,
 uv pip install .
 ```
 
+## Build constraints
+
+The release workflows build every wheel against
+`tools/requirements/build-constraints.txt`, shared by `cli`, `tools/ods` and
+`tools/ods-audit`. They pass it as `UV_BUILD_CONSTRAINT` with
+`UV_REQUIRE_HASHES`, so the build environment (hatchling, `go-bin`, manygo and
+their dependencies) is pinned and verified.
+
+A plain local `uv build` resolves those dependencies freely. Set the same
+variables to build against the pinned closure:
+
+```shell
+UV_BUILD_CONSTRAINT="$(git rev-parse --show-toplevel)/tools/requirements/build-constraints.txt" \
+  UV_REQUIRE_HASHES=true GOTOOLCHAIN=local \
+  uv build --wheel
+```
+
+`tools/requirements/build-constraints.txt` is compiled from its `.in` by the
+`pip-compile` pre-commit hook, so a plain `pre-commit run pip-compile` refreshes
+it. To upgrade a pinned build dependency, edit `build-constraints.in` and the
+matching `[build-system] requires` in all three `pyproject.toml` files; the
+`build-constraints-drift` hook fails if they disagree.
+
+`go-bin` ships the Go toolchain used to compile the binary. Bumping Go means
+moving it everywhere at once: the `go` directive in `go.mod`, `cli/Dockerfile`,
+the `setup-go` and `GO_VERSION` pins across `.github/workflows/`,
+`.devcontainer/Dockerfile`, the `go-bin` pin in all three `pyproject.toml` files
+and in `tools/requirements/build-constraints.in`, and the compiled `build-constraints.txt`.
+
 ## Deploy
 
 Releases are deployed automatically when git tags prefaced with `ods/` are pushed to [GitHub](https://github.com/onyx-dot-app/onyx/tags).
 
-The [release-tag](https://pypi.org/project/release-tag/) package can be used to calculate and push the next tag automatically,
+`ods release ods` calculates and pushes the next tag for you,
 
 ```shell
-tag --prefix ods
+ods release ods              # bumps the patch version
+ods release ods --bump minor
+ods release ods --version 0.14.0
+ods release ods --dry-run    # computes the version, tags nothing
 ```
+
+The workflow also opens a PR moving every `onyx-devtools==` pin in the repo to
+the new version, so no follow-up commit is needed.
+
+> [!IMPORTANT]
+> `ods release` tags **`HEAD`**, not `main`, and does not check which branch you
+> are on. Compare `git rev-parse HEAD` with `git rev-parse origin/main` first.
+> Tagging from a stale branch publishes that branch under the new version.
 
 See also, [`.github/workflows/release-devtools.yml`](https://github.com/onyx-dot-app/onyx/blob/main/.github/workflows/release-devtools.yml).

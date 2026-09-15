@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useRef, useMemo, JSX } from "react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, {
+  type Components,
+  type ExtraProps,
+} from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeHighlight from "rehype-highlight";
@@ -142,7 +145,7 @@ export const useMarkdownComponents = (
   className?: string
 ) => {
   const paragraphCallback = useCallback(
-    (props: any) => (
+    (props: React.ComponentProps<"p"> & ExtraProps) => (
       <MemoizedParagraph dir={props.dir} className={className}>
         {props.children}
       </MemoizedParagraph>
@@ -151,7 +154,7 @@ export const useMarkdownComponents = (
   );
 
   const anchorCallback = useCallback(
-    (props: any) => {
+    (props: React.ComponentProps<"a"> & ExtraProps) => {
       const imageFileId = extractChatImageFileId(
         props.href,
         String(props.children ?? "")
@@ -184,46 +187,46 @@ export const useMarkdownComponents = (
     ]
   );
 
-  const markdownComponents = useMemo(
+  const markdownComponents = useMemo<Components>(
     () => ({
       a: anchorCallback,
       p: paragraphCallback,
-      pre: ({ node, className, children }: any) => {
+      pre: ({ node, className, children }) => {
         // Don't render the pre wrapper - CodeBlock handles its own wrapper
         return <>{children}</>;
       },
-      b: ({ node, className, children }: any) => {
+      b: ({ node, className, children }) => {
         return <span className={className}>{children}</span>;
       },
-      ul: ({ node, className, children, ...props }: any) => {
+      ul: ({ node, className, children, ...props }) => {
         return (
           <ul className={className} {...props}>
             {children}
           </ul>
         );
       },
-      ol: ({ node, className, children, ...props }: any) => {
+      ol: ({ node, className, children, ...props }) => {
         return (
           <ol className={className} {...props}>
             {children}
           </ol>
         );
       },
-      li: ({ node, className, children, ...props }: any) => {
+      li: ({ node, className, children, ...props }) => {
         return (
           <li className={className} {...props}>
             {children}
           </li>
         );
       },
-      table: ({ node, className, children, ...props }: any) => {
+      table: ({ node, className, children, ...props }) => {
         return (
           <ScrollableTable className={className} {...props}>
             {children}
           </ScrollableTable>
         );
       },
-      code: ({ node, className, children }: any) => {
+      code: ({ node, className, children }) => {
         const codeText = extractCodeText(node, processedContent, children);
 
         return (
@@ -244,7 +247,7 @@ export const useMarkdownComponents = (
  */
 export const renderMarkdown = (
   content: string,
-  markdownComponents: any,
+  markdownComponents: Components,
   textSize: string = "text-base",
   languages: Record<string, LanguageFn> | null = null
 ): JSX.Element => {

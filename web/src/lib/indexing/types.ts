@@ -1,4 +1,12 @@
+import type { useTranslations } from "next-intl";
 import type { IconFunctionComponent } from "@opal/types";
+
+/** Translator for the `admin.indexSettings` namespace, threaded into helpers
+ *  that live outside a component and so cannot call the hook themselves. */
+export type IndexSettingsTranslator = ReturnType<
+  typeof useTranslations<"admin.indexSettings">
+>;
+export type IndexSettingsMessageKey = Parameters<IndexSettingsTranslator>[0];
 
 // ---------------------------------------------------------------------------
 // Enums
@@ -67,10 +75,11 @@ export interface EmbeddingModel {
   normalize: boolean;
   queryPrefix?: string | null;
   passagePrefix?: string | null;
-  description: string;
+  // Absent for custom models, which have no registry description.
+  descriptionKey?: IndexSettingsMessageKey;
 }
 
-export type EmbeddingModelSpec = Omit<EmbeddingModel, "description">;
+export type EmbeddingModelSpec = Omit<EmbeddingModel, "descriptionKey">;
 
 /**
  * Always write all three fields together. A name without its spec and provider forces

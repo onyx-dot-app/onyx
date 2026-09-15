@@ -9,6 +9,7 @@ import { useCreateModal } from "@opal/components";
 import { SettingsLayouts, toast } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import { PageLoader } from "@opal/layouts";
+import type { ErrorResponseBody } from "@/lib/fetcher";
 
 import type { ScimTokenCreatedResponse, ScimModalView } from "./interfaces";
 import { generateScimToken } from "./svc";
@@ -64,7 +65,7 @@ function ScimContent() {
       if (!response.ok) {
         let detail: string;
         try {
-          const body = await response.clone().json();
+          const body: ErrorResponseBody = await response.clone().json();
           detail = body.detail ?? JSON.stringify(body);
         } catch {
           detail = await response.text();

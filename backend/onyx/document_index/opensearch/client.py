@@ -7,7 +7,6 @@ from contextlib import AbstractContextManager, nullcontext
 from http import HTTPStatus
 from typing import Any, Generic, TypeVar
 
-import boto3
 from opensearchpy import (
     NotFoundError,
     OpenSearch,
@@ -294,6 +293,8 @@ class OpenSearchClient(AbstractContextManager):
             # SigV4 signing for an AWS managed domain whose FGAC master is an
             # IAM ARN. Credentials come from the default boto3 chain (env, IRSA,
             # instance/task role); the signer refreshes them per request.
+            import boto3
+
             credentials = boto3.Session().get_credentials()
             if credentials is None:
                 raise ValueError(

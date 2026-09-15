@@ -8,17 +8,37 @@
   @apply w-full overflow-clip;
 }
 
-/* Background variants */
-.opal-card[data-background="none"] {
+/* Surface colors — one rule per token, names match the palette */
+.opal-card[data-color="transparent"] {
   @apply bg-transparent;
 }
 
-.opal-card[data-background="light"] {
+.opal-card[data-color="background-tint-00"] {
   @apply bg-background-tint-00;
 }
 
-.opal-card[data-background="heavy"] {
+.opal-card[data-color="background-tint-01"] {
   @apply bg-background-tint-01;
+}
+
+.opal-card[data-color="status-info-00"] {
+  @apply bg-status-info-00;
+}
+
+.opal-card[data-color="status-success-00"] {
+  @apply bg-status-success-00;
+}
+
+.opal-card[data-color="status-warning-00"] {
+  @apply bg-status-warning-00;
+}
+
+.opal-card[data-color="status-error-00"] {
+  @apply bg-status-error-00;
+}
+
+.opal-card[data-color="theme-amber-01"] {
+  @apply bg-theme-amber-01;
 }
 
 /* Disabled — visual only. The card dims and takes a not-allowed cursor, but
@@ -75,16 +95,36 @@
   @apply w-full overflow-clip transition-[border-radius] duration-200 ease-out;
 }
 
-.opal-card-expandable-header[data-background="none"] {
+.opal-card-expandable-header[data-color="transparent"] {
   @apply bg-transparent;
 }
 
-.opal-card-expandable-header[data-background="light"] {
+.opal-card-expandable-header[data-color="background-tint-00"] {
   @apply bg-background-tint-00;
 }
 
-.opal-card-expandable-header[data-background="heavy"] {
+.opal-card-expandable-header[data-color="background-tint-01"] {
   @apply bg-background-tint-01;
+}
+
+.opal-card-expandable-header[data-color="status-info-00"] {
+  @apply bg-status-info-00;
+}
+
+.opal-card-expandable-header[data-color="status-success-00"] {
+  @apply bg-status-success-00;
+}
+
+.opal-card-expandable-header[data-color="status-warning-00"] {
+  @apply bg-status-warning-00;
+}
+
+.opal-card-expandable-header[data-color="status-error-00"] {
+  @apply bg-status-error-00;
+}
+
+.opal-card-expandable-header[data-color="theme-amber-01"] {
+  @apply bg-theme-amber-01;
 }
 
 .opal-card-expandable-header[data-border="none"] {

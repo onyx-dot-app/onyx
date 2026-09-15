@@ -6,12 +6,14 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type { Tag, ValidSources } from "@/lib/types";
 import type { SourceMetadata } from "@/lib/search/interfaces";
-import type { DateRangePickerValue } from "@/refresh-components/DateRangePicker";
+import type { InputDateRangePickerValue } from "@opal/components";
 import { getConfiguredSources } from "@/lib/sources";
 import type { SearchFilters } from "@/lib/searchFilters/types";
 
 export function useSearchFilters(): SearchFilters {
-  const [timeRange, setTimeRange] = useState<DateRangePickerValue | null>(null);
+  const [timeRange, setTimeRange] = useState<InputDateRangePickerValue | null>(
+    null
+  );
   const [selectedSources, setSelectedSources] = useState<SourceMetadata[]>([]);
   const [selectedDocumentSets, setSelectedDocumentSets] = useState<string[]>(
     []

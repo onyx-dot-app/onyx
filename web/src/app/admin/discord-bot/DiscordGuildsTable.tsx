@@ -14,7 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { DeleteButton } from "@/components/DeleteButton";
 import { Button } from "@opal/components";
-import { Switch } from "@opal/components";
+import { InputSwitch } from "@opal/components";
 import { SvgEdit, SvgServer } from "@opal/icons";
 import { EmptyMessageCard } from "@opal/components";
 import { DiscordGuildConfig } from "@/app/admin/discord-bot/types";
@@ -152,7 +152,7 @@ export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
                 {!guild.guild_id ? (
                   "-"
                 ) : (
-                  <Switch
+                  <InputSwitch
                     checked={guild.enabled}
                     onCheckedChange={() => handleToggleEnabled(guild)}
                     disabled={updatingGuildIds.has(guild.id)}

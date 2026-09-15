@@ -80,6 +80,13 @@ func NewFirstRunModel(cfg config.OnyxCliConfig) Model {
 	return model
 }
 
+// WithSessionAgent overrides the starting agent for this chat session without
+// changing the saved default (used by chat --agent-id / --agent-name).
+func (m Model) WithSessionAgent(agentID int) Model {
+	m.agentID = agentID
+	return m
+}
+
 // Init initializes the model.
 func (m Model) Init() tea.Cmd {
 	if m.client == nil {
@@ -301,7 +308,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				case pickerSession:
 					return cmdResume(m, item.id)
 				case pickerAgent:
-					return cmdSelectAgent(m, item.id)
+					return cmdSelectAgentByID(m, item.id)
 				case pickerModel:
 					return cmdSelectModel(m, item.id)
 				}

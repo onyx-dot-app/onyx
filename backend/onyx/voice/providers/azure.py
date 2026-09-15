@@ -22,10 +22,7 @@ for API reference.
 """
 
 import asyncio
-import io
 import re
-import struct
-import wave
 from collections.abc import AsyncIterator
 from typing import Any
 from urllib.parse import urlparse
@@ -36,7 +33,9 @@ import aiohttp
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import traced_llm_call
 from onyx.utils.logger import setup_logger
+from onyx.voice.audio_utils import Pcm16Resampler, pcm16_to_wav
 from onyx.voice.interface import (
+    STREAM_FAILED_ERROR,
     StreamingSynthesizerProtocol,
     StreamingTranscriberProtocol,
     TranscriptResult,
@@ -144,6 +143,7 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
         self.input_sample_rate = input_sample_rate
         self.target_sample_rate = target_sample_rate
         self.languages = languages or [DEFAULT_LOCALE]
+        self._resampler = Pcm16Resampler(input_sample_rate, target_sample_rate)
         self._transcript_queue: asyncio.Queue[TranscriptResult | None] = asyncio.Queue()
         self._accumulated_transcript = ""
         self._recognizer: Any = None
@@ -261,10 +261,14 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
                 getattr(details, "code", None),  # ods: ignore[getattr]
                 getattr(details, "error_details", None),  # ods: ignore[getattr]
             )
-            # A cancel is terminal — no more transcripts will arrive. Signal
-            # end-of-stream so the consumer loop stops polling instead of
-            # spinning on empty results forever.
+            # A cancel is terminal — no more transcripts will arrive. Report the
+            # failure, then signal end-of-stream so the consumer loop stops
+            # polling instead of spinning on empty results forever.
             if transcriber._loop and not transcriber._closed:
+                transcriber._loop.call_soon_threadsafe(
+                    transcriber._transcript_queue.put_nowait,
+                    TranscriptResult(error=STREAM_FAILED_ERROR),
+                )
                 transcriber._loop.call_soon_threadsafe(
                     transcriber._transcript_queue.put_nowait, None
                 )
@@ -281,32 +285,7 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
     async def send_audio(self, chunk: bytes) -> None:
         """Send audio chunk to Azure."""
         if self._audio_stream and not self._closed:
-            self._audio_stream.write(self._resample_pcm16(chunk))
-
-    def _resample_pcm16(self, data: bytes) -> bytes:
-        """Resample PCM16 audio from input_sample_rate to target_sample_rate."""
-        if self.input_sample_rate == self.target_sample_rate:
-            return data
-
-        num_samples = len(data) // 2
-        if num_samples == 0:
-            return b""
-
-        samples = list(struct.unpack(f"<{num_samples}h", data))
-        ratio = self.input_sample_rate / self.target_sample_rate
-        new_length = int(num_samples / ratio)
-
-        resampled: list[int] = []
-        for i in range(new_length):
-            src_idx = i * ratio
-            idx_floor = int(src_idx)
-            idx_ceil = min(idx_floor + 1, num_samples - 1)
-            frac = src_idx - idx_floor
-            sample = int(samples[idx_floor] * (1 - frac) + samples[idx_ceil] * frac)
-            sample = max(-32768, min(32767, sample))
-            resampled.append(sample)
-
-        return struct.pack(f"<{len(resampled)}h", *resampled)
+            self._audio_stream.write(self._resampler.resample(chunk))
 
     async def receive_transcript(self) -> TranscriptResult | None:
         """Receive next transcript."""
@@ -316,12 +295,22 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
             return TranscriptResult(text="", is_vad_end=False)
 
     async def close(self) -> str:
-        """Stop recognition and return final transcript."""
-        self._closed = True
-        if self._recognizer:
-            self._recognizer.stop_continuous_recognition_async()
+        """Stop recognition and return final transcript. Safe to call more than once."""
+        if self._closed:
+            return self._accumulated_transcript
         if self._audio_stream:
+            # Emit the resampled tail the last chunk held back, then end the
+            # stream so Azure recognizes the audio it still holds.
+            trailing_audio = self._resampler.flush()
+            if trailing_audio:
+                self._audio_stream.write(trailing_audio)
             self._audio_stream.close()
+        if self._recognizer:
+            # Recognition drains before the session is marked closed, because the
+            # result callbacks drop events once it is.
+            stop_result = self._recognizer.stop_continuous_recognition_async()
+            await asyncio.to_thread(stop_result.get)
+        self._closed = True
         self._loop = None
         return self._accumulated_transcript
 
@@ -564,13 +553,7 @@ class AzureVoiceProvider(VoiceProviderInterface):
     @staticmethod
     def _pcm16_to_wav(pcm_data: bytes, sample_rate: int = 24000) -> bytes:
         """Wrap raw PCM16 mono bytes into a WAV container."""
-        buffer = io.BytesIO()
-        with wave.open(buffer, "wb") as wav_file:
-            wav_file.setnchannels(1)
-            wav_file.setsampwidth(2)
-            wav_file.setframerate(sample_rate)
-            wav_file.writeframes(pcm_data)
-        return buffer.getvalue()
+        return pcm16_to_wav(pcm_data, sample_rate=sample_rate)
 
     async def transcribe(self, audio_data: bytes, audio_format: str) -> str:
         if not self.api_key:

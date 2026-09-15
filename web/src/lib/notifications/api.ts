@@ -1,5 +1,6 @@
 import { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import type { ErrorResponseBody } from "@/lib/fetcher";
 
 /** Revalidate every notifications cache: the mixed feed (useSWRInfinite keys
  * serialize with a $inf$ prefix, so match by inclusion), the by-type variants,
@@ -19,7 +20,7 @@ async function handleNotificationMutation(
     return;
   }
 
-  const error = await response.json().catch(() => ({}));
+  const error: ErrorResponseBody = await response.json().catch(() => ({}));
   throw new Error(error.detail || fallbackMessage);
 }
 

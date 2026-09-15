@@ -8,7 +8,7 @@ import { SvgArrowLeft } from "@opal/icons";
 
 export interface BackButtonProps {
   behaviorOverride?: () => void;
-  routerOverride?: string;
+  routerOverride?: Route;
 }
 
 export default function BackButton({
@@ -26,7 +26,7 @@ export default function BackButton({
         if (behaviorOverride) {
           behaviorOverride();
         } else if (routerOverride) {
-          router.push(routerOverride as Route);
+          router.push(routerOverride);
         } else {
           router.back();
         }

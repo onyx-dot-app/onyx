@@ -15,13 +15,13 @@ import type {
   LLMProviderView,
   ModelConfiguration,
 } from "@/lib/languageModels/types";
-import { Checkbox } from "@opal/components";
+import { InputCheckbox } from "@opal/components";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import { InputTypeIn } from "@opal/components";
-import InputComboBox from "@/refresh-components/inputs/InputComboBox";
+import { InputComboBox } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
-import { Switch } from "@opal/components";
+import { InputSwitch } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
 import { BaseLLMFormValues } from "@/sections/modals/languageModels/utils";
@@ -303,7 +303,7 @@ export function ModelAccessField() {
       </InputPadder>
 
       {!isPublic && (
-        <Card background="light" border="none" padding={2}>
+        <Card color="background-tint-00" border="none" padding={2}>
           <Section gap={2}>
             <InputComboBox
               placeholder={t("access.comboBox.placeholder")}
@@ -315,7 +315,7 @@ export function ModelAccessField() {
               searchIcon
             />
 
-            <Card background="heavy" border="none" padding={2}>
+            <Card color="background-tint-01" border="none" padding={2}>
               <ContentAction
                 icon={SvgUserManage}
                 title={t("access.admin.title")}
@@ -339,7 +339,11 @@ export function ModelAccessField() {
                   const memberCount = group?.users.length ?? 0;
                   return (
                     <div key={`group-${id}`} className="min-w-0">
-                      <Card background="heavy" border="none" padding={2}>
+                      <Card
+                        color="background-tint-01"
+                        border="none"
+                        padding={2}
+                      >
                         <ContentAction
                           icon={SvgUsers}
                           title={group?.name ?? t("access.group.name", { id })}
@@ -374,7 +378,11 @@ export function ModelAccessField() {
                   const agent = agentMap.get(id);
                   return (
                     <div key={`agent-${id}`} className="min-w-0">
-                      <Card background="heavy" border="none" padding={2}>
+                      <Card
+                        color="background-tint-01"
+                        border="none"
+                        padding={2}
+                      >
                         <ContentAction
                           icon={
                             agent
@@ -633,7 +641,7 @@ function ModelRow({
               variant="section"
               sizePreset="main-ui"
               center
-              icon={() => <Checkbox checked={isSelected} />}
+              icon={() => <InputCheckbox checked={isSelected} />}
               title={displayName}
               description={buildModelDescription(model)}
               rightChildren={
@@ -813,7 +821,7 @@ export function ModelSelectionField({
   const visibleModels = models.filter((m) => m.is_visible);
 
   return (
-    <Card background="light" border="none" padding={2}>
+    <Card color="background-tint-00" border="none" padding={2}>
       <Section gap={2}>
         <InputHorizontal
           title={t("models.field.title")}
@@ -963,7 +971,7 @@ export function ModelSelectionField({
             description={t("models.autoUpdate.description")}
             withLabel
           >
-            <Switch
+            <InputSwitch
               checked={isAutoMode}
               onCheckedChange={handleToggleAutoMode}
             />

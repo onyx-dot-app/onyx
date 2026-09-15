@@ -15,6 +15,7 @@
  */
 
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import type { ErrorResponseBody } from "@/lib/fetcher";
 import {
   CreateCheckoutSessionRequest,
   CreateCheckoutSessionResponse,
@@ -30,7 +31,16 @@ function getBillingBaseUrl(): string {
   return NEXT_PUBLIC_CLOUD_ENABLED ? "/api/tenants" : "/api/admin/billing";
 }
 
-async function billingPost<T>(endpoint: string, body?: unknown): Promise<T> {
+/** Every JSON body the billing endpoints below accept. */
+type BillingRequestBody =
+  | CreateCheckoutSessionRequest
+  | CreateCustomerPortalSessionRequest
+  | SeatUpdateRequest;
+
+async function billingPost<T>(
+  endpoint: string,
+  body?: BillingRequestBody
+): Promise<T> {
   const response = await fetch(`${getBillingBaseUrl()}${endpoint}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -38,7 +48,7 @@ async function billingPost<T>(endpoint: string, body?: unknown): Promise<T> {
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
+    const error: ErrorResponseBody = await response.json().catch(() => ({}));
     throw new Error(error.detail || "Billing request failed");
   }
 
@@ -80,7 +90,7 @@ export async function endTrial(): Promise<EndTrialResponse> {
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
+    const error: ErrorResponseBody = await response.json().catch(() => ({}));
     const detail = error.detail || "Failed to end trial";
     if (response.status === 402) {
       throw new PaymentMethodRequiredError(detail);
@@ -123,7 +133,7 @@ async function selfHostedPost<T>(endpoint: string): Promise<T> {
   }
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
+    const error: ErrorResponseBody = await response.json().catch(() => ({}));
     throw new Error(error.detail || "License request failed");
   }
 
@@ -171,7 +181,7 @@ export async function uploadLicense(
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
+    const error: ErrorResponseBody = await response.json().catch(() => ({}));
     throw new Error(error.detail || "License upload failed");
   }
 

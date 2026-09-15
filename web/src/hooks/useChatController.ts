@@ -273,6 +273,7 @@ export default function useChatController({
     const isOnChatPage = pathname === "/app";
 
     if (isOnChatPage && !navigatingAway.current) {
+      // SAFETY: buildChatUrl with search=false builds `/app?...`.
       router.push(newUrl as Route, { scroll: false });
     }
 
@@ -404,6 +405,7 @@ export default function useChatController({
           const newUrl = params.toString()
             ? `${pathname}?${params.toString()}`
             : pathname;
+          // SAFETY: built from the current pathname, which is a route of this app.
           router.replace(newUrl as Route, { scroll: false });
         }
       }

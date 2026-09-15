@@ -1,3 +1,5 @@
+import type { JsonValue } from "@/lib/json";
+
 /** Shape of a voice provider returned by the admin API. */
 export interface VoiceProviderView {
   id: number;
@@ -12,7 +14,7 @@ export interface VoiceProviderView {
   api_key: string | null;
   target_uri: string | null;
   /** Provider-specific config (e.g. Azure `speech_region` / `stt_languages`). */
-  custom_config: Record<string, unknown> | null;
+  custom_config: Record<string, JsonValue> | null;
 }
 
 /** A selectable voice option returned by a provider's voices endpoint. */

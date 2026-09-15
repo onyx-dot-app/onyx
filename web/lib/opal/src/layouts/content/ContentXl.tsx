@@ -9,6 +9,7 @@ import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { cn } from "@opal/utils";
 import { useState } from "react";
 import useFocusOnMount from "@opal/hooks/useFocusOnMount";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -121,6 +122,7 @@ function ContentXl({
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(toPlainString(title));
   const focusOnMount = useFocusOnMount<HTMLInputElement>();
+  const strings = useOpalStrings();
 
   const config = CONTENT_XL_PRESETS[sizePreset];
 
@@ -237,7 +239,7 @@ function ContentXl({
               icon={SvgEdit}
               prominence="internal"
               size={config.editButtonSize}
-              tooltip="Edit"
+              tooltip={strings.edit}
               tooltipSide="right"
               onClick={startEditing}
             />

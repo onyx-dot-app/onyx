@@ -51,6 +51,9 @@ export function makeSegmentKeyDownHandler<S extends { [K in keyof S]: string }>(
   ) =>
     (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === "Enter") {
+        // Commit the draft, and stop the keystroke there: inside a <form>,
+        // an unhandled Enter on an input is a native form submission.
+        e.preventDefault();
         commit(segments);
         return;
       }

@@ -20,10 +20,10 @@
     "dompurify": "^3.4.14",
     "lit": "^3.1.0",
     "marked": "^18.0.11",
-    "terser": "^5.51.0"
+    "terser": "^5.51.2"
   },
   "devDependencies": {
-    "@types/node": "^26.2.0",
+    "@types/node": "^26.4.1",
     "typescript": "^7.0.2",
     "vite": "^8.2.2"
   }

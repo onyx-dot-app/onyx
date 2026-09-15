@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getDomain } from "@/lib/redirectSS";
+import type { ErrorResponseBody } from "@/lib/fetcher";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function authErrorRedirect(
@@ -10,7 +11,7 @@ export async function authErrorRedirect(
 ): Promise<NextResponse> {
   const errorUrl = new URL("/auth/error", getDomain(request));
   try {
-    const body = await response.json();
+    const body: ErrorResponseBody | null = await response.json();
     const detail = body?.detail;
     if (typeof detail === "string" && detail) {
       errorUrl.searchParams.set("error", detail);

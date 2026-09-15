@@ -9,7 +9,6 @@ import logging
 import os
 from typing import Any
 
-import braintrust
 import requests
 
 from onyx.configs.app_configs import (
@@ -248,6 +247,8 @@ def main() -> None:
                 "--local-only cannot be used with --remote-dataset-name. Use --local-data-path with a local JSON file instead."
             )
         print(f"Loading data from remote dataset: {args.remote_dataset_name}")
+        import braintrust
+
         dataset = braintrust.init_dataset(
             project=args.braintrust_project, name=args.remote_dataset_name
         )

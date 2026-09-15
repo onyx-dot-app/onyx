@@ -36,6 +36,7 @@ import {
 } from "@/lib/projects/svc";
 import { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import { useSharedSearchFilters } from "@/lib/searchFilters/providers";
+import type { ErrorResponseBody } from "@/lib/fetcher";
 
 // Runs currently being re-attached; module-level so effect re-runs (incl.
 // strict mode) can't start a second tail for the same run.
@@ -211,7 +212,7 @@ export default function useChatSessionController({
         setIsFetchingChatMessages(existingChatSessionId, false);
         let detail = "An unexpected error occurred.";
         try {
-          const errorBody = await response.json();
+          const errorBody: ErrorResponseBody = await response.json();
           detail = errorBody.detail || detail;
         } catch {
           // ignore parse errors
@@ -226,8 +227,8 @@ export default function useChatSessionController({
         return;
       }
 
-      const session = await response.json();
-      const chatSession = session as BackendChatSession;
+      const session: BackendChatSession = await response.json();
+      const chatSession = session;
       // Restore the incognito UI state on reload of a live incognito session.
       // The id must come back too, or a later upload would be sent with none
       // and land as an ordinary indexed file.
@@ -360,8 +361,8 @@ export default function useChatSessionController({
                 `/api/chat/get-chat-session/${sessionId}`
               );
               if (settledResponse.ok && stillCurrent()) {
-                const settled =
-                  (await settledResponse.json()) as BackendChatSession;
+                const settled: BackendChatSession =
+                  await settledResponse.json();
                 updateSessionAndMessageTree(
                   sessionId,
                   processRawChatHistory(settled.messages, settled.packets)

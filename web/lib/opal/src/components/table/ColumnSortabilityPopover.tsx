@@ -11,6 +11,7 @@ import { Button, Divider, LineItemButton, Text } from "@opal/components";
 import { useTableSize } from "@opal/components/table/TableSizeContext";
 import { SvgArrowUpDown, SvgSortOrder, SvgCheck } from "@opal/icons";
 import { Popover } from "@opal/components/popover/components";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Popover UI
@@ -20,18 +21,15 @@ interface SortingPopoverProps<TData extends RowData = RowData> {
   table: Table<TData>;
   sorting: SortingState;
   footerText?: string;
-  ascendingLabel?: string;
-  descendingLabel?: string;
 }
 
 function SortingPopover<TData extends RowData>({
   table,
   sorting,
   footerText,
-  ascendingLabel = "Ascending",
-  descendingLabel = "Descending",
 }: SortingPopoverProps<TData>) {
   const size = useTableSize();
+  const strings = useOpalStrings();
   const [open, setOpen] = useState(false);
   const sortableColumns = table
     .getAllLeafColumns()
@@ -47,7 +45,7 @@ function SortingPopover<TData extends RowData>({
           interaction={open ? "hover" : "rest"}
           size={size === "md" ? "sm" : "md"}
           prominence="tertiary"
-          tooltip="Sort"
+          tooltip={strings.sort}
         />
       </Popover.Trigger>
 
@@ -63,12 +61,12 @@ function SortingPopover<TData extends RowData>({
             ) : undefined
           }
         >
-          <Divider title="Sort by" />
+          <Divider title={strings.sortBy} />
 
           <LineItemButton
             selectVariant="select-heavy"
             state={currentSort === null ? "selected" : "empty"}
-            title="Manual Ordering"
+            title={strings.manualOrdering}
             sizePreset="main-ui"
             rightChildren={
               currentSort === null ? (
@@ -112,12 +110,12 @@ function SortingPopover<TData extends RowData>({
 
           {currentSort !== null && (
             <>
-              <Divider title="Sorting Order" />
+              <Divider title={strings.sortingOrder} />
 
               <LineItemButton
                 selectVariant="select-heavy"
                 state={!currentSort.desc ? "selected" : "empty"}
-                title={ascendingLabel}
+                title={strings.ascending}
                 sizePreset="main-ui"
                 rightChildren={
                   !currentSort.desc ? (
@@ -132,7 +130,7 @@ function SortingPopover<TData extends RowData>({
               <LineItemButton
                 selectVariant="select-heavy"
                 state={currentSort.desc ? "selected" : "empty"}
-                title={descendingLabel}
+                title={strings.descending}
                 sizePreset="main-ui"
                 rightChildren={
                   currentSort.desc ? (
@@ -157,8 +155,6 @@ function SortingPopover<TData extends RowData>({
 
 interface CreateSortingColumnOptions {
   footerText?: string;
-  ascendingLabel?: string;
-  descendingLabel?: string;
 }
 
 function createSortingColumn<TData>(
@@ -175,8 +171,6 @@ function createSortingColumn<TData>(
         table={table}
         sorting={table.getState().sorting}
         footerText={options?.footerText}
-        ascendingLabel={options?.ascendingLabel}
-        descendingLabel={options?.descendingLabel}
       />
     ),
     cell: () => null,

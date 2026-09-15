@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { markdown } from "@opal/utils";
 import { Section } from "@/layouts/general-layouts";
 import { Content, InputErrorText, InputVertical, toast } from "@opal/layouts";
@@ -9,7 +9,7 @@ import Card from "@/refresh-components/cards/Card";
 import { Button, MessageCard } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import InfoBlock from "@/refresh-components/messages/InfoBlock";
-import InputNumber from "@/refresh-components/inputs/InputNumber";
+import { InputNumber } from "@opal/components";
 import {
   SvgUsers,
   SvgExternalLink,
@@ -59,6 +59,7 @@ function trialDaysRemaining(trialEnd: Date, now: number = Date.now()): number {
 
 function getExpirationState(
   billing: BillingInformation,
+  locale: string,
   license?: LicenseStatus
 ) {
   const isAnnualBilling = billing.billing_period === "annual";
@@ -87,7 +88,7 @@ function getExpirationState(
         variant: "error" as const,
         daysRemaining: 0,
         daysUntilDeletion,
-        expirationDate: humanReadableFormatShort(gracePeriodEnd),
+        expirationDate: humanReadableFormatShort(gracePeriodEnd, locale),
       };
     }
 
@@ -96,7 +97,7 @@ function getExpirationState(
       return {
         variant: "warning" as const,
         daysRemaining,
-        expirationDate: humanReadableFormatShort(expiresAt),
+        expirationDate: humanReadableFormatShort(expiresAt, locale),
       };
     }
   }
@@ -123,7 +124,7 @@ function getExpirationState(
         variant: "error" as const,
         daysRemaining: 0,
         daysUntilDeletion,
-        expirationDate: humanReadableFormatShort(gracePeriodEnd),
+        expirationDate: humanReadableFormatShort(gracePeriodEnd, locale),
       };
     }
 
@@ -133,7 +134,7 @@ function getExpirationState(
       return {
         variant: "warning" as const,
         daysRemaining,
-        expirationDate: humanReadableFormatShort(expiresAt),
+        expirationDate: humanReadableFormatShort(expiresAt, locale),
       };
     }
   }
@@ -172,6 +173,7 @@ function SubscriptionCard({
   onRefresh?: () => Promise<void>;
 }) {
   const t = useTranslations("admin.billing");
+  const locale = useLocale();
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [isEndingTrial, setIsEndingTrial] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -184,7 +186,7 @@ function SubscriptionCard({
     : t("subscription.businessPlan.name");
   const PlanIcon = isEnterprise ? SvgOrganization : SvgUsers;
   const expirationDate = billing?.current_period_end ?? license?.expires_at;
-  const formattedDate = formatDateShort(expirationDate);
+  const formattedDate = formatDateShort(expirationDate, locale);
 
   const isExpiredFromBilling =
     billing?.status === "expired" || billing?.status === "cancelled";
@@ -206,7 +208,7 @@ function SubscriptionCard({
   } else if (isOnTrial) {
     // The trial ending and the first charge are one event, so both halves of
     // this line have to come from the same date.
-    const trialDate = formatDateShort(license?.trial_end);
+    const trialDate = formatDateShort(license?.trial_end, locale);
     const daysLeft = trialDaysRemaining(trialEnd);
     subtitle =
       daysLeft <= 0
@@ -417,6 +419,7 @@ function SeatsCard({
   hideUpdateSeats?: boolean;
 }) {
   const t = useTranslations("admin.billing");
+  const locale = useLocale();
   const [isEditing, setIsEditing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -484,7 +487,7 @@ function SeatsCard({
   const seatDifference = newSeatCount - totalSeats;
   const isAdding = seatDifference > 0;
   const isRemoving = seatDifference < 0;
-  const nextBillingDate = formatDateShort(billing?.current_period_end);
+  const nextBillingDate = formatDateShort(billing?.current_period_end, locale);
   const seatCount = Math.abs(seatDifference);
 
   if (isEditing) {
@@ -664,6 +667,7 @@ function SeatsCard({
 
 function PaymentSection({ billing }: { billing: BillingInformation }) {
   const t = useTranslations("admin.billing");
+  const locale = useLocale();
   const handleOpenPortal = async () => {
     try {
       const response = await createCustomerPortalSession({
@@ -679,7 +683,7 @@ function PaymentSection({ billing }: { billing: BillingInformation }) {
 
   if (!billing.payment_method_enabled) return null;
 
-  const lastPaymentDate = formatDateShort(billing.current_period_start);
+  const lastPaymentDate = formatDateShort(billing.current_period_start, locale);
 
   return (
     <div className="billing-payment-section">
@@ -764,7 +768,10 @@ export default function BillingDetailsView({
   isGraceSyncing,
 }: BillingDetailsViewProps) {
   const t = useTranslations("admin.billing");
-  const expirationState = billing ? getExpirationState(billing, license) : null;
+  const locale = useLocale();
+  const expirationState = billing
+    ? getExpirationState(billing, locale, license)
+    : null;
   const disableBillingActions =
     isAirGapped || hasStripeError || isManualLicenseOnly;
 

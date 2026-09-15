@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useMemo, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { deleteChatSession } from "@/app/app/services/lib";
 import {
   moveChatSession as moveChatSessionService,
@@ -54,6 +54,7 @@ function ProjectChatItem({
 }: ProjectChatItemProps) {
   const t = useTranslations("chat");
   const tSidebar = useTranslations("sidebar");
+  const locale = useLocale();
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
@@ -65,8 +66,8 @@ function ProjectChatItem({
   const [searchTerm, setSearchTerm] = useState("");
 
   const lastUpdateTime = useMemo(
-    () => timeAgo(chat.time_updated),
-    [chat.time_updated]
+    () => timeAgo(chat.time_updated, locale),
+    [chat.time_updated, locale]
   );
 
   const { refreshChatSessions, removeSession } = useChatSessions();
@@ -315,7 +316,7 @@ export default function ProjectChatSessionList() {
         {isLoadingProjectDetails && !currentProjectDetails ? (
           <SvgSimpleLoader className="mx-4" />
         ) : projectChats.length === 0 ? (
-          <Card rounding={3} border="dashed" background="none" padding={2}>
+          <Card rounding={3} border="dashed" color="transparent" padding={2}>
             <div className="p-1">
               <Text as="p" font="secondary-body" color="text-02">
                 {t("projects.sessionList.empty.message")}

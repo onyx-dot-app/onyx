@@ -2,7 +2,7 @@
 
 import useSWR from "swr";
 import type { ScopedMutator } from "swr";
-import { errorHandlingFetcher } from "@/lib/fetcher";
+import { errorHandlingFetcher, type ErrorResponseBody } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 /**
@@ -106,7 +106,7 @@ export async function refreshCostOverrides(
 /** Pull the backend's `detail`/`error_code`, falling back to the status text. */
 async function extractError(response: Response): Promise<string> {
   try {
-    const data = await response.json();
+    const data: ErrorResponseBody = await response.json();
     return data.detail || data.error_code || response.statusText;
   } catch {
     return response.statusText;

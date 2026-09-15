@@ -32,11 +32,11 @@ Empty states and placeholder screens share a recurring pattern: a large illustra
 
 ## Props
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `illustration` | `IconFunctionComponent` | — | Optional illustration component rendered at 7.5rem × 7.5rem, centered. Works with any `@opal/illustrations` SVG. |
-| `title` | `string` | **(required)** | Main title text, center-aligned. |
-| `description` | `string` | — | Optional description below the title, center-aligned. |
+| Prop           | Type                    | Default        | Description                                                                                                      |
+| -------------- | ----------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `illustration` | `IconFunctionComponent` | —              | Optional illustration component rendered at 7.5rem × 7.5rem, centered. Works with any `@opal/illustrations` SVG. |
+| `title`        | `string`                | **(required)** | Main title text, center-aligned.                                                                                 |
+| `description`  | `string`                | —              | Optional description below the title, center-aligned.                                                            |
 
 ## Usage Examples
 
@@ -50,7 +50,7 @@ import SvgNoResult from "@opal/illustrations/no-result";
   illustration={SvgNoResult}
   title="No results found"
   description="Try adjusting your search or filters."
-/>
+/>;
 ```
 
 ### Not found page
@@ -63,7 +63,7 @@ import SvgNotFound from "@opal/illustrations/not-found";
   illustration={SvgNotFound}
   title="Page not found"
   description="The page you're looking for doesn't exist or has been moved."
-/>
+/>;
 ```
 
 ### Title only (no illustration, no description)
@@ -71,7 +71,7 @@ import SvgNotFound from "@opal/illustrations/not-found";
 ```tsx
 import { IllustrationContent } from "@opal/layouts";
 
-<IllustrationContent title="Nothing here yet" />
+<IllustrationContent title="Nothing here yet" />;
 ```
 
 ### Empty state with illustration and title (no description)
@@ -80,8 +80,5 @@ import { IllustrationContent } from "@opal/layouts";
 import { IllustrationContent } from "@opal/layouts";
 import SvgEmpty from "@opal/illustrations/empty";
 
-<IllustrationContent
-  illustration={SvgEmpty}
-  title="No items"
-/>
+<IllustrationContent illustration={SvgEmpty} title="No items" />;
 ```

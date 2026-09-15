@@ -1,7 +1,7 @@
 import "@opal/components/cards/shared.css";
 import "@opal/components/cards/card/styles.css";
 import type {
-  BackgroundVariants,
+  CardColor,
   BorderVariants,
   Spacing,
   Rounding,
@@ -53,14 +53,12 @@ type CardBaseProps = {
   rounding?: Rounding;
 
   /**
-   * Background fill intensity.
-   * - `"none"`: transparent background.
-   * - `"light"`: subtle tinted background (`bg-background-tint-00`).
-   * - `"heavy"`: stronger tinted background (`bg-background-tint-01`).
+   * Surface color, named for the token it paints — the card analog of
+   * `Text`'s `color`. `"transparent"` renders no fill.
    *
-   * @default "light"
+   * @default "background-tint-00"
    */
-  background?: BackgroundVariants;
+  color?: CardColor;
 
   /**
    * Border style.
@@ -231,7 +229,7 @@ function Card(props: CardProps) {
   const {
     padding: paddingProp = 4,
     rounding: roundingProp = 3,
-    background = "light",
+    color = "background-tint-00",
     border = "none",
     borderColor = "default",
     shadow = "none",
@@ -261,7 +259,7 @@ function Card(props: CardProps) {
         className="opal-card"
         style={{ ...paddingStyle, borderRadius: radius }}
         {...dataAttributes(props)}
-        data-background={background}
+        data-color={color}
         data-border={border}
         data-opal-status-border={borderColor}
         data-shadow={shadow}
@@ -292,7 +290,7 @@ function Card(props: CardProps) {
       <div
         className="opal-card-expandable-header"
         style={{ ...paddingStyle, ...headerRadius }}
-        data-background={background}
+        data-color={color}
         data-border={border}
         data-opal-status-border={borderColor}
       >

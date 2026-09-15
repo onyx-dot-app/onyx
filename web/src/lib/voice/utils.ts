@@ -1,6 +1,7 @@
 import { SvgAzure, SvgElevenLabs, SvgOpenai } from "@opal/logos";
 import { SvgMicrophone } from "@opal/icons";
 import type { IconProps } from "@opal/types";
+import type { JsonValue } from "@/lib/json";
 
 /** Whether the provider is being configured for speech-to-text or text-to-speech. */
 export type ProviderMode = "stt" | "tts";
@@ -83,7 +84,7 @@ export function parseSttLanguages(value: string): string[] {
 }
 
 /** Renders stored stt_languages config as the form's comma-separated input value. */
-export function sttLanguagesToInput(raw: unknown): string {
+export function sttLanguagesToInput(raw: JsonValue | undefined): string {
   return Array.isArray(raw)
     ? raw.filter((v): v is string => typeof v === "string").join(", ")
     : "";

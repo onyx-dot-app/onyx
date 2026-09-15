@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Button, Modal, ProgressBar, Text, Tooltip } from "@opal/components";
 import { Section } from "@opal/layouts";
 import type { IconFunctionComponent } from "@opal/types";
@@ -173,6 +173,7 @@ function BreakdownList({
 
 function DailySpendStrip({ days }: { days: DailySpend[] }) {
   const t = useTranslations("admin.usage");
+  const locale = useLocale();
   const max = Math.max(...days.map((day) => day.cost_cents));
   if (days.length < 2 || max <= 0 || days.length > MAX_DAILY_COLUMNS) {
     return null;
@@ -195,7 +196,7 @@ function DailySpendStrip({ days }: { days: DailySpend[] }) {
           days: days
             .map((day) =>
               t("detail.dailySpend.day.ariaLabel", {
-                day: formatCalendarDay(day.day),
+                day: formatCalendarDay(day.day, locale),
                 cost: formatCost(day.cost_cents),
               })
             )
@@ -212,7 +213,7 @@ function DailySpendStrip({ days }: { days: DailySpend[] }) {
           <Tooltip
             key={day.day}
             tooltip={t("detail.dailySpend.day.tooltip", {
-              day: formatCalendarDay(day.day),
+              day: formatCalendarDay(day.day, locale),
               cost: formatCost(day.cost_cents),
             })}
             side="top"
@@ -243,10 +244,10 @@ function DailySpendStrip({ days }: { days: DailySpend[] }) {
         height="fit"
       >
         <Text font="secondary-body" color="text-03">
-          {formatCalendarDay(days[0]!.day)}
+          {formatCalendarDay(days[0]!.day, locale)}
         </Text>
         <Text font="secondary-body" color="text-03">
-          {formatCalendarDay(days[days.length - 1]!.day)}
+          {formatCalendarDay(days[days.length - 1]!.day, locale)}
         </Text>
       </Section>
     </Section>
