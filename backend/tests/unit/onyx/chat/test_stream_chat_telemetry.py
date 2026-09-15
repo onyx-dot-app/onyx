@@ -1,19 +1,25 @@
-"""Verify the main streaming chat flow emits an anonymous ``latency`` record.
+"""Verify every path through the send-message endpoint emits a ``latency`` record.
 
-The web UI consumes ``handle_stream_message_objects`` directly, so the timing
-decorator on that entry point is the only thing standing between a chat turn
-and a telemetry record. These tests pin the record type, name, and user id, and
-check the record is still sent when the stream fails or the client disconnects.
+``handle_send_chat_message`` fans out to three flows: single-model streaming,
+multi-model streaming, and the non-streaming API. Each flow ends in a generator
+decorated with ``log_generator_function_time``. These tests call the endpoint
+directly with the LLM turn stubbed out and assert the telemetry record for each
+flow, plus the failure and client-disconnect exits.
 """
 
-from collections.abc import Generator
+import asyncio
+from collections.abc import Generator, Mapping
 from typing import Any, cast
 from unittest.mock import Mock
 
 import pytest
+from fastapi import Request
+from fastapi.responses import StreamingResponse
 
 from onyx.chat import process_message
-from onyx.chat.models import AnswerStream
+from onyx.chat.models import AnswerStream, ChatFullResponse
+from onyx.llm.override_models import LLMOverride
+from onyx.server.query_and_chat import chat_backend
 from onyx.server.query_and_chat.models import MessageResponseIDInfo, SendMessageRequest
 from onyx.utils import timing
 from onyx.utils.telemetry import RecordType
@@ -32,6 +38,20 @@ def _mock_user() -> Mock:
     return user
 
 
+def _request() -> Request:
+    # A bare request with no Authorization header, so the endpoint treats the
+    # caller as a web UI user rather than an API key or PAT client.
+    return Request(
+        scope={
+            "type": "http",
+            "method": "POST",
+            "path": "/chat/send-message",
+            "headers": [],
+            "query_string": b"",
+        }
+    )
+
+
 @pytest.fixture
 def telemetry_sink(monkeypatch: pytest.MonkeyPatch) -> Mock:
     # The decorator resolves ``optional_telemetry`` from the timing module's
@@ -42,44 +62,114 @@ def telemetry_sink(monkeypatch: pytest.MonkeyPatch) -> Mock:
 
 
 def _install_turn(monkeypatch: pytest.MonkeyPatch, turn: Any) -> None:
+    # Both streaming entry points delegate to ``_stream_chat_turn``.
     monkeypatch.setattr(process_message, "_stream_chat_turn", turn)
 
 
-def _assert_single_latency_record(sink: Mock) -> None:
-    assert sink.call_count == 1, sink.call_args_list
-    kwargs = sink.call_args.kwargs
-    assert kwargs["record_type"] == RecordType.LATENCY
-    assert kwargs["user_id"] == _USER_ID
-    data = kwargs["data"]
-    assert data["function"] == "handle_stream_message_objects"
-    float(data["latency"])  # stringified seconds, must parse
+def _two_packet_turn(**_: Any) -> AnswerStream:
+    yield _packet()
+    yield _packet()
 
 
-def test_streaming_turn_emits_latency_record(
-    monkeypatch: pytest.MonkeyPatch, telemetry_sink: Mock
-) -> None:
-    def fake_turn(**_: Any) -> AnswerStream:
-        yield _packet()
-        yield _packet()
-
-    _install_turn(monkeypatch, fake_turn)
-
-    stream = process_message.handle_stream_message_objects(
-        new_msg_req=SendMessageRequest(message="hello"),
+def _call_endpoint(
+    chat_message_req: SendMessageRequest,
+) -> StreamingResponse | ChatFullResponse:
+    return chat_backend.handle_send_chat_message(
+        chat_message_req=chat_message_req,
+        request=_request(),
         user=_mock_user(),
+        _rate_limit_check=None,
+        _api_key_usage_check=None,
     )
 
-    # Nothing is sent until the stream is exhausted: the record covers the turn.
-    first = next(stream)
-    assert isinstance(first, MessageResponseIDInfo)
+
+def _drain(response: StreamingResponse) -> list[str]:
+    """Consume the SSE body the way Starlette would when serving the response."""
+
+    async def collect() -> list[str]:
+        return [
+            chunk if isinstance(chunk, str) else bytes(chunk).decode()
+            async for chunk in response.body_iterator
+        ]
+
+    return asyncio.run(collect())
+
+
+def _latency_records_by_function(sink: Mock) -> dict[str, Mapping[str, Any]]:
+    records: dict[str, Mapping[str, Any]] = {}
+    for call in sink.call_args_list:
+        kwargs = call.kwargs
+        assert kwargs["record_type"] == RecordType.LATENCY
+        float(kwargs["data"]["latency"])  # stringified seconds, must parse
+        records[kwargs["data"]["function"]] = kwargs
+    return records
+
+
+def _assert_turn_record(sink: Mock, function: str) -> dict[str, Mapping[str, Any]]:
+    """Check the record for the chat turn itself carries the caller's user id."""
+    records = _latency_records_by_function(sink)
+    assert function in records, records
+    assert records[function]["user_id"] == _USER_ID
+    return records
+
+
+def test_single_model_stream_emits_latency_record(
+    monkeypatch: pytest.MonkeyPatch, telemetry_sink: Mock
+) -> None:
+    _install_turn(monkeypatch, _two_packet_turn)
+
+    response = _call_endpoint(SendMessageRequest(message="hello"))
+
+    # The endpoint returns before the turn runs, so nothing is sent yet.
+    assert isinstance(response, StreamingResponse)
     telemetry_sink.assert_not_called()
 
-    remaining = list(stream)
-    assert len(remaining) == 1
-    _assert_single_latency_record(telemetry_sink)
+    chunks = _drain(response)
+
+    assert len(chunks) == 2
+    records = _assert_turn_record(telemetry_sink, "handle_stream_message_objects")
+    assert set(records) == {"handle_stream_message_objects"}
 
 
-def test_streaming_turn_emits_latency_record_on_failure(
+def test_multi_model_stream_emits_latency_record(
+    monkeypatch: pytest.MonkeyPatch, telemetry_sink: Mock
+) -> None:
+    _install_turn(monkeypatch, _two_packet_turn)
+
+    response = _call_endpoint(
+        SendMessageRequest(
+            message="hello",
+            llm_overrides=[LLMOverride(), LLMOverride()],
+        )
+    )
+
+    assert isinstance(response, StreamingResponse)
+    telemetry_sink.assert_not_called()
+
+    chunks = _drain(response)
+
+    assert len(chunks) == 2
+    records = _assert_turn_record(telemetry_sink, "handle_multi_model_stream")
+    assert set(records) == {"handle_multi_model_stream"}
+
+
+def test_non_streaming_emits_latency_record(
+    monkeypatch: pytest.MonkeyPatch, telemetry_sink: Mock
+) -> None:
+    _install_turn(monkeypatch, _two_packet_turn)
+
+    response = _call_endpoint(SendMessageRequest(message="hello", stream=False))
+
+    assert isinstance(response, ChatFullResponse)
+    assert response.message_id == 2
+    # The turn record plus the aggregation record this path already emitted.
+    # ``gather_stream_full`` takes no ``user`` argument, so only the turn
+    # record is checked for the user id.
+    records = _assert_turn_record(telemetry_sink, "handle_stream_message_objects")
+    assert set(records) == {"handle_stream_message_objects", "gather_stream_full"}
+
+
+def test_stream_failure_still_emits_latency_record(
     monkeypatch: pytest.MonkeyPatch, telemetry_sink: Mock
 ) -> None:
     def failing_turn(**_: Any) -> AnswerStream:
@@ -88,20 +178,24 @@ def test_streaming_turn_emits_latency_record_on_failure(
 
     _install_turn(monkeypatch, failing_turn)
 
-    stream = process_message.handle_stream_message_objects(
-        new_msg_req=SendMessageRequest(message="hello"),
-        user=_mock_user(),
-    )
+    response = _call_endpoint(SendMessageRequest(message="hello"))
+    assert isinstance(response, StreamingResponse)
 
-    with pytest.raises(RuntimeError, match="llm exploded"):
-        list(stream)
+    chunks = _drain(response)
 
-    _assert_single_latency_record(telemetry_sink)
+    # The endpoint swallows the error into a final JSON line for the client.
+    assert len(chunks) == 2
+    assert "llm exploded" in chunks[-1]
+    records = _assert_turn_record(telemetry_sink, "handle_stream_message_objects")
+    assert set(records) == {"handle_stream_message_objects"}
 
 
-def test_streaming_turn_emits_latency_record_on_client_disconnect(
+def test_client_disconnect_still_emits_latency_record(
     monkeypatch: pytest.MonkeyPatch, telemetry_sink: Mock
 ) -> None:
+    # Starlette closes the underlying sync generator when the client goes away.
+    # That close is not reachable through ``StreamingResponse`` in a unit test,
+    # so drive the decorated generator directly.
     def endless_turn(**_: Any) -> Generator[MessageResponseIDInfo, None, None]:
         while True:
             yield _packet()
@@ -116,7 +210,7 @@ def test_streaming_turn_emits_latency_record_on_client_disconnect(
         ),
     )
     next(stream)
-    # ``StreamingResponse`` closes the generator when the client goes away.
     stream.close()
 
-    _assert_single_latency_record(telemetry_sink)
+    records = _assert_turn_record(telemetry_sink, "handle_stream_message_objects")
+    assert set(records) == {"handle_stream_message_objects"}
