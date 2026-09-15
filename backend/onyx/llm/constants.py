@@ -181,6 +181,18 @@ DYNAMIC_LLM_PROVIDERS: frozenset[str] = frozenset(
     }
 )
 
+# Providers whose `available-models` endpoint reads a context limit from the
+# source API and persists it as `max_input_tokens`. Those values are
+# authoritative and must never be second-guessed against LiteLLM's model map.
+# Nebius TokenFactory and Portkey do this without being dynamic providers, so
+# this is deliberately a superset of DYNAMIC_LLM_PROVIDERS rather than a reuse.
+SOURCE_API_CONTEXT_LIMIT_PROVIDERS: frozenset[str] = DYNAMIC_LLM_PROVIDERS | frozenset(
+    {
+        LlmProviderNames.NEBIUS_TOKENFACTORY,
+        LlmProviderNames.PORTKEY,
+    }
+)
+
 # Model family name mappings for display name generation
 # Used by Bedrock display name generator
 BEDROCK_MODEL_NAME_MAPPINGS: dict[str, str] = {
