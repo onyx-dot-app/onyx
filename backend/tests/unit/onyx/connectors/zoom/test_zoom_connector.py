@@ -1,10 +1,16 @@
 import time
+from collections.abc import Generator
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock
+from typing import Any, Callable, cast
+from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
+from fastapi import HTTPException
+from sqlalchemy.orm import Session
 
+from onyx.auth.permissions import Permission
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.connector_runner import CheckpointOutputWrapper
 from onyx.connectors.exceptions import ConnectorValidationError
@@ -30,8 +36,18 @@ from onyx.connectors.zoom.recordings.models import (
     RecordingsState,
     ZoomSessionType,
 )
-from onyx.server.documents.connector import _validate_indexing_start
-from onyx.server.documents.models import ConnectorBase
+from onyx.db.enums import AccessType
+from onyx.db.models import User
+from onyx.server.documents import connector as connector_router
+from onyx.server.documents.connector import (
+    create_connector_from_model,
+    create_connector_with_mock_credential,
+)
+from onyx.server.documents.models import (
+    ConnectorBase,
+    ConnectorUpdateRequest,
+    ObjectCreationIdResponse,
+)
 from tests.unit.onyx.connectors.utils import (
     _ITERATION_LIMIT,
     load_everything_from_checkpoint_connector,
@@ -174,34 +190,81 @@ class TestPruningDrivesTheConnectorFromTheEpoch:
 
 class TestIndexingStartIsRequiredAtConfigTime:
     """Enforced where the connector cannot: the class above is why a start date
-    cannot be demanded at index time."""
+    cannot be demanded at index time. These drive the endpoints an admin posts to
+    rather than the check itself, which an endpoint could quietly stop calling.
+    """
+
+    _START = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    _ENDPOINTS = [create_connector_from_model, create_connector_with_mock_credential]
 
     @staticmethod
-    def _connector_data(
-        source: DocumentSource, indexing_start: datetime | None = None
-    ) -> ConnectorBase:
-        return ConnectorBase(
-            name="test",
-            source=source,
-            input_type=InputType.POLL,
-            connector_specific_config={},
-            indexing_start=indexing_start,
+    def _admin() -> User:
+        user = MagicMock()
+        user.effective_permissions = [Permission.FULL_ADMIN_PANEL_ACCESS.value]
+        return cast(User, user)
+
+    @staticmethod
+    @contextmanager
+    def _rows_written() -> Generator[list[ConnectorBase]]:
+        """Stands in for the row write, so what an endpoint forwards can be read
+        back without a database."""
+        written: list[ConnectorBase] = []
+
+        def create(
+            db_session: Session,  # noqa: ARG001
+            connector_data: ConnectorBase,
+        ) -> ObjectCreationIdResponse:
+            written.append(connector_data)
+            return ObjectCreationIdResponse(id=1)
+
+        with patch.object(connector_router, "create_connector", create):
+            yield written
+
+    def _post(
+        self,
+        endpoint: Callable[..., Any],
+        source: DocumentSource = DocumentSource.ZOOM,
+        indexing_start: datetime | None = None,
+    ) -> None:
+        endpoint(
+            ConnectorUpdateRequest(
+                name="test",
+                source=source,
+                input_type=InputType.POLL,
+                connector_specific_config={},
+                indexing_start=indexing_start,
+                access_type=AccessType.PUBLIC,
+            ),
+            user=self._admin(),
+            db_session=cast(Session, MagicMock(spec=Session)),
         )
 
-    def test_zoom_without_a_start_date_is_rejected(self) -> None:
-        with pytest.raises(ValueError, match="indexing start date"):
-            _validate_indexing_start(self._connector_data(DocumentSource.ZOOM))
+    @pytest.mark.parametrize("endpoint", _ENDPOINTS, ids=["connector", "mock-cred"])
+    def test_zoom_without_a_start_date_never_reaches_the_row(
+        self, endpoint: Callable[..., Any]
+    ) -> None:
+        with self._rows_written() as written:
+            with pytest.raises(HTTPException) as raised:
+                self._post(endpoint)
 
-    def test_zoom_with_a_start_date_is_accepted(self) -> None:
-        _validate_indexing_start(
-            self._connector_data(
-                DocumentSource.ZOOM, datetime(2026, 1, 1, tzinfo=timezone.utc)
-            )
-        )
+        assert raised.value.status_code == 400
+        assert written == []
 
-    def test_other_sources_are_unaffected(self) -> None:
-        _validate_indexing_start(self._connector_data(DocumentSource.CONFLUENCE))
-        _validate_indexing_start(self._connector_data(DocumentSource.GOOGLE_DRIVE))
+    # Only the plain endpoint: the mock-credential one carries on into credential
+    # creation and a Celery dispatch that a stubbed session cannot answer for.
+    def test_the_start_date_an_admin_sets_is_the_one_stored(self) -> None:
+        """Demanding a date buys nothing if the endpoint then drops it, which is
+        exactly what the update path did."""
+        with self._rows_written() as written:
+            self._post(create_connector_from_model, indexing_start=self._START)
+
+        assert [row.indexing_start for row in written] == [self._START]
+
+    def test_another_source_still_creates_without_one(self) -> None:
+        with self._rows_written() as written:
+            self._post(create_connector_from_model, source=DocumentSource.CONFLUENCE)
+
+        assert [row.indexing_start for row in written] == [None]
 
 
 class TestZoomConnectorValidateSettings:
