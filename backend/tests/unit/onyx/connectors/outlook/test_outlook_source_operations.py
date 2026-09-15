@@ -405,6 +405,17 @@ def test_endless_empty_pages_are_a_failure_not_an_empty_mailbox() -> None:
     assert client.get_json.call_count == EMPTY_PAGE_FOLLOW_LIMIT
 
 
+def test_an_empty_collection_that_ends_on_the_last_budgeted_page_is_empty() -> None:
+    gateway, client = _gateway()
+    client.get_json.side_effect = [
+        page_json([], next_link="https://graph/messages?again")
+        for _ in range(EMPTY_PAGE_FOLLOW_LIMIT - 1)
+    ] + [page_json([])]
+
+    assert gateway.read_any_message(mailbox_id=MAILBOX_ID) is None
+    assert client.get_json.call_count == EMPTY_PAGE_FOLLOW_LIMIT
+
+
 def test_resolve_mailbox_fallback_follows_an_empty_page_with_a_next_link() -> None:
     gateway, client = _gateway()
     client.get_json.side_effect = [
@@ -492,6 +503,29 @@ def test_discovery_service_trouble_keeps_its_status(
         gateway.check_token()
 
     assert exc_info.value.status == status
+
+
+def test_throttled_discovery_wrapped_by_msal_keeps_its_status() -> None:
+    """MSAL raises its own ValueError from the discovery one, so the status
+    sits in the chained exception rather than the outer message."""
+    gateway, _ = _gateway()
+
+    def wrapped_throttle(**kwargs: Any) -> None:
+        del kwargs
+        try:
+            raise ValueError(
+                "OIDC Discovery failed on https://login/x. HTTP status: 429, Error: slow"
+            )
+        except ValueError as e:
+            raise ValueError("Unable to get authority configuration for x") from e
+
+    with (
+        patch(f"{MODULE}.build_msal_app", side_effect=wrapped_throttle),
+        pytest.raises(OutlookGraphError) as exc_info,
+    ):
+        gateway.check_token()
+
+    assert exc_info.value.status == 429
 
 
 def test_token_endpoint_5xx_keeps_its_status() -> None:

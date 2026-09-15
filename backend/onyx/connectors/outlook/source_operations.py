@@ -11,6 +11,7 @@ messages, ``User.Read.All`` to enumerate and resolve mailboxes.
 
 import json
 import re
+from collections.abc import Generator
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import quote
@@ -111,15 +112,18 @@ EPOCH_TIMESTAMP = "1970-01-01T00:00:00Z"
 EMPTY_PAGE_FOLLOW_LIMIT = 20
 
 
-def _is_decode_error(error: BaseException) -> bool:
-    """MSAL wraps a discovery body it cannot parse in a bare ValueError, which
-    must not read as a bad directory id."""
+def _exception_chain(error: BaseException) -> Generator[BaseException, None, None]:
+    """The error and what it was raised from. MSAL wraps its discovery
+    failures in a second ValueError, so the detail sits one level down."""
     current: BaseException | None = error
     while current is not None:
-        if isinstance(current, json.JSONDecodeError):
-            return True
+        yield current
         current = current.__cause__ or current.__context__
-    return False
+
+
+def _is_decode_error(error: BaseException) -> bool:
+    """A discovery body MSAL cannot parse must not read as a bad directory id."""
+    return any(isinstance(e, json.JSONDecodeError) for e in _exception_chain(error))
 
 
 # MSAL reports the HTTP status of a failed discovery or token call only inside
@@ -129,8 +133,11 @@ _MSAL_STATUS_RE = re.compile(r"HTTP (?:status|Error): (\d{3})")
 
 
 def _msal_http_status(error: BaseException) -> int | None:
-    match = _MSAL_STATUS_RE.search(str(error))
-    return int(match.group(1)) if match else None
+    for wrapped in _exception_chain(error):
+        match = _MSAL_STATUS_RE.search(str(wrapped))
+        if match:
+            return int(match.group(1))
+    return None
 
 
 def _msal_error(error: BaseException) -> OutlookGraphError:
@@ -346,16 +353,16 @@ class OutlookSourceOperations(SourceOperations):
         None means the collection is empty. Running out of budget with pages
         left is a failure, never absence.
         """
-        next_url: str | None = url
+        next_url = url
         for _ in range(EMPTY_PAGE_FOLLOW_LIMIT):
-            if next_url is None:
-                return None
             data = self._get(next_url, params, headers)
             params = None
             items = data.get("value", [])
             if items:
                 return items[0]
             next_url = data.get("@odata.nextLink")
+            if next_url is None:
+                return None
         raise OutlookGraphError(
             None,
             "EmptyPages",
