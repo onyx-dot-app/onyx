@@ -81,6 +81,15 @@ MAX_MESSAGES_PER_CONVERSATION = 100
 # thread that is mostly drafts or trashed replies stays bounded.
 CONVERSATION_FETCH_LIMIT = 500
 
+# Conversation ids a mailbox remembers this attempt so a thread is rebuilt once
+# however many of its messages the delta lists. The checkpoint is written after
+# every step, so past this many a repeat rebuild costs less than the ids would.
+MAX_TRACKED_CONVERSATIONS_PER_MAILBOX = 20_000
+
+# Pages of the tenant's user listing one step may read. No tenant has this many
+# users, so running past it means the paging never ends.
+MAX_MAILBOX_LISTING_PAGES = 10_000
+
 
 # Graph stops a filtered delta round at this many messages without saying so.
 # A folder that fills the cap is read again without the filter, which has no
@@ -106,7 +115,8 @@ class OutlookCheckpoint(ConnectorCheckpoint):
     folder_change_count: int = 0
     # True once the current folder is being re-read without the server filter.
     folder_unfiltered: bool = False
-    # Conversations already rebuilt for the current mailbox in this attempt.
+    # Conversations already rebuilt for the current mailbox in this attempt,
+    # capped at MAX_TRACKED_CONVERSATIONS_PER_MAILBOX.
     seen_conversation_ids: set[str] = set()
 
 
@@ -387,13 +397,20 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
                     continue
                 found.append(mailbox)
         else:
+            # TODO(nmgarza5): list across checkpoint steps and carry compact
+            # mailbox records, so a huge tenant survives a failure mid-listing.
             next_link: str | None = None
-            while True:
+            for _ in range(MAX_MAILBOX_LISTING_PAGES):
                 page = self.ops.list_mailbox_users(next_link=next_link)
                 found.extend(page.mailboxes)
                 next_link = page.next_link
                 if next_link is None:
                     break
+            if next_link is not None:
+                raise RuntimeError(
+                    "Outlook: the user listing ran past "
+                    f"{MAX_MAILBOX_LISTING_PAGES} pages without ending"
+                )
         # A UPN and a primary SMTP address, or two listing pages, can name the
         # same mailbox. The dict keeps the first occurrence in order.
         unique = list({mailbox.id: mailbox for mailbox in found}.values())
@@ -550,7 +567,11 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
             result = self._rebuild_conversation(
                 mailbox, change.conversation_id, excluded
             )
-            checkpoint.seen_conversation_ids.add(change.conversation_id)
+            if (
+                len(checkpoint.seen_conversation_ids)
+                < MAX_TRACKED_CONVERSATIONS_PER_MAILBOX
+            ):
+                checkpoint.seen_conversation_ids.add(change.conversation_id)
             if result is not None:
                 yield result
 

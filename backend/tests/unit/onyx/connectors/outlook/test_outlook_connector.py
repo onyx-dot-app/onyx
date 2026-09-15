@@ -17,6 +17,7 @@ from onyx.connectors.models import (
     Document,
     HierarchyNode,
 )
+from onyx.connectors.outlook import connector as connector_module
 from onyx.connectors.outlook.connector import (
     CONVERSATION_FETCH_LIMIT,
     FILTERED_DELTA_CAP,
@@ -504,6 +505,50 @@ def test_users_repeated_across_listing_pages_are_walked_once() -> None:
     docs = [item for item in items if isinstance(item, Document)]
     assert len(docs) == 1
     assert gateway.probe_mailbox.call_count == 1
+
+
+def test_user_listing_that_never_ends_stops_the_step(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(connector_module, "MAX_MAILBOX_LISTING_PAGES", 2)
+    gateway = _happy_gateway()
+    gateway.list_mailbox_users.return_value = OutlookMailboxPage(
+        mailboxes=[mailbox()], next_link="https://graph/users?again"
+    )
+
+    with pytest.raises(RuntimeError, match="2 pages"):
+        _run(_connector(gateway))
+
+    assert gateway.list_mailbox_users.call_count == 2
+
+
+def test_conversation_tracking_is_capped_per_mailbox(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Past the cap a thread is rebuilt once per listed message instead of the
+    checkpoint growing with the mailbox."""
+    monkeypatch.setattr(connector_module, "MAX_TRACKED_CONVERSATIONS_PER_MAILBOX", 1)
+    gateway = _happy_gateway()
+    gateway.fetch_folder_delta_page.side_effect = None
+    gateway.fetch_folder_delta_page.return_value = OutlookDeltaPage(
+        changes=[
+            change(),
+            change(id="msg-a2"),
+            change(id="msg-b1", conversation_id="conv-b"),
+            change(id="msg-b2", conversation_id="conv-b"),
+        ]
+    )
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+    checkpoint = _folder_checkpoint()
+
+    _step(connector, checkpoint)
+
+    rebuilt = [
+        call.kwargs["conversation_id"]
+        for call in gateway.fetch_conversation_messages_page.call_args_list
+    ]
+    assert rebuilt == [CONVERSATION_ID, "conv-b", "conv-b"]
+    assert checkpoint.seen_conversation_ids == {CONVERSATION_ID}
 
 
 def test_failure_part_way_through_a_page_leaves_the_page_uncounted() -> None:
