@@ -1067,6 +1067,58 @@ export const connectorConfigs: Record<
       },
     ],
   },
+  outlook: {
+    description: "Configure Outlook connector",
+    values: [
+      {
+        type: "list",
+        query: "Enter mailboxes to index:",
+        label: "Mailboxes",
+        name: "mailboxes",
+        optional: true,
+        description:
+          "User principal names or primary email addresses of the mailboxes to index. " +
+          "Leave empty to index every mailbox the app registration may open. " +
+          "Shared mailboxes are never picked up automatically and must be listed here.",
+      },
+    ],
+    advanced_values: [
+      {
+        type: "list",
+        query: "Enter folders to skip:",
+        label: "Excluded Folders",
+        name: "excluded_folders",
+        optional: true,
+        description:
+          "Folder names to skip in every mailbox, in addition to Junk Email, " +
+          "Deleted Items, Drafts and Outbox, which are always skipped.",
+      },
+      {
+        type: "text",
+        query: "Microsoft Authority Host:",
+        label: "Authority Host",
+        name: "authority_host",
+        optional: true,
+        default: "https://login.microsoftonline.com",
+        description:
+          "The Microsoft identity authority host used for authentication. " +
+          "For most deployments, leave as default. " +
+          "For GCC High / DoD, use https://login.microsoftonline.us",
+      },
+      {
+        type: "text",
+        query: "Microsoft Graph API Host:",
+        label: "Graph API Host",
+        name: "graph_api_host",
+        optional: true,
+        default: "https://graph.microsoft.com",
+        description:
+          "The Microsoft Graph API host. " +
+          "For most deployments, leave as default. " +
+          "For GCC High / DoD, use https://graph.microsoft.us",
+      },
+    ],
+  },
   discourse: {
     description: "Configure Discourse connector",
     values: [

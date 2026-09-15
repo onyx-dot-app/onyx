@@ -76,11 +76,15 @@ def graph_error_code(response: requests.Response | None) -> str:
 
 
 def log_and_raise_for_status(response: requests.Response) -> None:
-    """Log the response text and raise for status."""
+    """Log the response text and raise for status.
+
+    A warning, not an error: callers handle expected statuses themselves, such
+    as a 404 for a user without a mailbox, and raise when one is fatal.
+    """
     try:
         response.raise_for_status()
     except Exception:
-        logger.error("HTTP request failed: %s", response.text)
+        logger.warning("HTTP request failed: %s", response.text)
         raise
 
 
@@ -166,16 +170,21 @@ def graph_api_get_json(
     get_access_token: Callable[[], str],
     url: str,
     params: dict[str, str] | None = None,
+    headers: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    """Make an authenticated GET request to the Graph API with retry."""
+    """Make an authenticated GET request to the Graph API with retry.
+
+    ``headers`` carries request preferences such as ``Prefer``. Authorization
+    is always set here.
+    """
     for attempt in range(GRAPH_API_MAX_RETRIES + 1):
         # Tokens can expire during long traversals, so re-acquire per attempt.
         access_token = get_access_token()
-        headers = {"Authorization": f"Bearer {access_token}"}
+        request_headers = {**(headers or {}), "Authorization": f"Bearer {access_token}"}
         try:
             response = requests.get(
                 url,
-                headers=headers,
+                headers=request_headers,
                 params=params,
                 timeout=REQUEST_TIMEOUT_SECONDS,
             )
@@ -230,9 +239,12 @@ class GraphApiClient:
         self.graph_api_base = graph_api_base
 
     def get_json(
-        self, url: str, params: dict[str, str] | None = None
+        self,
+        url: str,
+        params: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        return graph_api_get_json(self.get_access_token, url, params)
+        return graph_api_get_json(self.get_access_token, url, params, headers)
 
 
 def iter_graph_collection(
