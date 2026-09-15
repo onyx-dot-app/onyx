@@ -5,8 +5,9 @@ and who was invited. Anyone outside the host's account comes back with an empty
 email and is dropped, because nobody can be granted access without an address.
 Zoom also deletes this data after a retention window and then answers with an
 error rather than an empty list. A session nobody can be named for fails as a
-document instead of being indexed, since indexing it would hand the transcript
-to the connector's whole audience rather than to the people on the call.
+document instead of being indexed: a permission-synced connector grants no group
+or public access, so indexing it would bury a transcript nobody can reach with
+nothing to say why.
 """
 
 from collections.abc import Callable
@@ -167,9 +168,9 @@ def zoom_access_resolver(
         is_public=False,
     )
     # Keep the list rather than enforce the limit, which Onyx documents as
-    # advisory. Dropping it hands the document to connector-level access,
-    # failing it can never succeed on a retry, and truncating silently picks
-    # who loses access.
+    # advisory. Dropping it leaves the document reachable by nobody, failing it
+    # can never succeed on a retry, and truncating silently picks who loses
+    # access.
     if access.num_entries > ExternalAccess.MAX_NUM_ENTRIES:
         logger.warning(
             "Zoom access list for %s occurrence %s has %s entries, over the "
