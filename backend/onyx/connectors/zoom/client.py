@@ -508,7 +508,9 @@ class ZoomClient:
 
     def list_webinar_panelists(self, webinar_id: str) -> list[ZoomPanelist]:
         """A panelist does not have to register, so without this a presenter is
-        missing from the access list of a webinar they spoke at. Not paginated.
+        missing from the access list of a webinar they spoke at. Zoom takes no page
+        parameters here and sends no next_page_token back, unlike the registrant and
+        participant listings.
         """
         identifier = _encode_meeting_identifier(webinar_id)
         response = self._request_webinar(f"/webinars/{identifier}/panelists")
