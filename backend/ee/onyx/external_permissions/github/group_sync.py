@@ -41,13 +41,8 @@ def github_group_sync(
 
     cache = GitHubGroupSyncCache()
     for repo in repos:
-        try:
-            for external_group in get_external_user_group(
-                repo, github_connector.github_client, cache
-            ):
-                logger.info("External group: %s", external_group)
-                yield external_group
-        except Exception as e:
-            logger.error(
-                "Error processing repository %s (%s): %s", repo.id, repo.name, e
-            )
+        for external_group in get_external_user_group(
+            repo, github_connector.github_client, cache
+        ):
+            logger.info("External group: %s", external_group)
+            yield external_group

@@ -39,35 +39,30 @@ def _run_with_retry(
     description: str,
     github_client: Github,
     retry_count: int = 0,
-) -> T | None:
+) -> T:
     """Execute a GitHub operation with retry on rate limit and exception handling."""
     logger.debug("Starting operation '%s', attempt %s", description, retry_count + 1)
     try:
         result = operation()
         logger.debug("Operation '%s' completed successfully", description)
         return result
-    except RateLimitExceededException:
-        if retry_count < MAX_RETRY_COUNT:
-            sleep_after_rate_limit_exception(github_client)
-            logger.warning(
-                "Rate limit exceeded while %s. Retrying... (attempt %s/%s)",
-                description,
-                retry_count + 1,
-                MAX_RETRY_COUNT,
-            )
-            return _run_with_retry(
-                operation, description, github_client, retry_count + 1
-            )
-        else:
-            error_msg = f"Max retries exceeded for {description}"
-            logger.exception(error_msg)
-            raise RuntimeError(error_msg)
+    except RateLimitExceededException as error:
+        if retry_count >= MAX_RETRY_COUNT:
+            raise RuntimeError(f"Max retries exceeded for {description}") from error
+        sleep_after_rate_limit_exception(github_client)
+        logger.warning(
+            "Rate limit exceeded while %s. Retrying... (attempt %s/%s)",
+            description,
+            retry_count + 1,
+            MAX_RETRY_COUNT,
+        )
+        return _run_with_retry(operation, description, github_client, retry_count + 1)
     except GithubException as e:
         logger.warning("GitHub API error during %s: %s", description, e)
-        return None
+        raise
     except Exception as e:
         logger.exception("Unexpected error during %s: %s", description, e)
-        return None
+        raise
 
 
 class UserInfo(BaseModel):
@@ -118,13 +113,10 @@ def _fetch_organization_group(
         logger.error("Failed to fetch organization %s", org_name)
         raise RuntimeError(f"Failed to fetch organization {org_name}")
 
-    members: PaginatedList[NamedUser] | list[NamedUser] = (
-        _run_with_retry(
-            lambda: org.get_members(filter_="all"),
-            f"get members for organization {org_name}",
-            github_client,
-        )
-        or []
+    members: PaginatedList[NamedUser] | list[NamedUser] = _run_with_retry(
+        lambda: org.get_members(filter_="all"),
+        f"get members for organization {org_name}",
+        github_client,
     )
 
     user_emails = {
@@ -146,13 +138,10 @@ def _fetch_repository_collaborator_emails(
     repo: Repository, github_client: Github, cache: GitHubGroupSyncCache
 ) -> set[str]:
     """Fetch every user with repository access, regardless of the grant source."""
-    collaborators: PaginatedList[NamedUser] | list[NamedUser] = (
-        _run_with_retry(
-            repo.get_collaborators,
-            f"get collaborators for repository {repo.full_name}",
-            github_client,
-        )
-        or []
+    collaborators: PaginatedList[NamedUser] | list[NamedUser] = _run_with_retry(
+        repo.get_collaborators,
+        f"get collaborators for repository {repo.full_name}",
+        github_client,
     )
     user_emails = {
         user_info.email
