@@ -91,7 +91,7 @@ async def _transcribe_with_provider(
                 policy=policy, user_id=user_id, session_member_id=session_member_id
             )
         except Exception:
-            logger.warning("Transcribe: failed to release session slot")
+            logger.warning("Transcribe: failed to release session slot", exc_info=True)
 
 
 @router.post("/transcribe")

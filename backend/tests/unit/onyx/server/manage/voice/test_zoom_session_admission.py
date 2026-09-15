@@ -9,7 +9,11 @@ from fastapi import WebSocket
 from onyx.db.models import User
 from onyx.server.manage.voice import websocket_api
 from onyx.voice.interface import VoiceSessionPolicy
-from onyx.voice.providers.zoom import ZOOM_SESSION_POLICY
+from onyx.voice.providers.zoom import (
+    ZOOM_CLOSE_TIMEOUT_SECONDS,
+    ZOOM_SESSION_POLICY,
+    ZOOM_VOICE_SESSION_MAX_SECONDS,
+)
 
 # A tiny cap so hanging handlers end quickly; teardown is zero so the whole
 # cap is the handler budget.
@@ -251,16 +255,12 @@ async def test_zoom_hard_cap_includes_transcriber_setup(
 
 
 def test_zoom_policy_reserves_provider_teardown() -> None:
-    # Teardown runs after the cap ends the handler, so handler plus teardown
-    # must stay inside the Redis admission window.
-    assert (
-        ZOOM_SESSION_POLICY.handler_seconds + ZOOM_SESSION_POLICY.teardown_seconds
-        == ZOOM_SESSION_POLICY.max_session_seconds
-    )
-    assert (
-        ZOOM_SESSION_POLICY.teardown_seconds
-        >= websocket_api.TRANSCRIBER_CLOSE_TIMEOUT_SECONDS
-    )
+    # Teardown runs after the cap ends the handler, so the policy must carry
+    # the real Zoom constants and its teardown budget must cover the
+    # WebSocket layer's own close bound.
+    assert ZOOM_SESSION_POLICY.max_session_seconds == ZOOM_VOICE_SESSION_MAX_SECONDS
+    assert ZOOM_SESSION_POLICY.teardown_seconds == ZOOM_CLOSE_TIMEOUT_SECONDS
+    assert ZOOM_CLOSE_TIMEOUT_SECONDS >= websocket_api.TRANSCRIBER_CLOSE_TIMEOUT_SECONDS
 
 
 class _UnconstrainedProvider(_StreamingZoomProvider):

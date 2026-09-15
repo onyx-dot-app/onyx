@@ -32,6 +32,7 @@ class _FakeRedis:
         self.expires: dict[str, int] = {}
         self.locks: list[dict[str, Any]] = []
         self.lock_held = False
+        self.executed_batches: list[int] = []
 
     def lock(self, name: str, **kwargs: Any) -> Any:
         self.locks.append({"name": name, **kwargs})
@@ -57,17 +58,51 @@ class _FakeRedis:
         assert self.lock_held, "counts must happen under the admission lock"
         return len(self.sets.get(key, {}))
 
-    async def zadd(self, key: str, mapping: dict[str, float]) -> int:
+    def pipeline(self, transaction: bool) -> "_FakePipeline":
+        assert transaction, "reservation writes must run in MULTI/EXEC"
+        return _FakePipeline(self)
+
+    def _zadd(self, key: str, mapping: dict[str, float]) -> None:
         assert self.lock_held, "adds must happen under the admission lock"
         self.sets.setdefault(key, {}).update(mapping)
-        return len(mapping)
 
-    async def expire(self, key: str, seconds: int) -> bool:
+    def _expire(self, key: str, seconds: int) -> None:
         self.expires[key] = seconds
-        return True
 
     async def zrem(self, key: str, member: str) -> int:
         return 1 if self.sets.get(key, {}).pop(member, None) is not None else 0
+
+
+class _FakePipeline:
+    """Queues writes and applies them all on execute(), like MULTI/EXEC."""
+
+    def __init__(self, redis: _FakeRedis) -> None:
+        self.redis = redis
+        self.queued: list[tuple[str, tuple[Any, ...]]] = []
+
+    async def __aenter__(self) -> "_FakePipeline":
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        return None
+
+    def zadd(self, key: str, mapping: dict[str, float]) -> "_FakePipeline":
+        self.queued.append(("zadd", (key, mapping)))
+        return self
+
+    def expire(self, key: str, seconds: int) -> "_FakePipeline":
+        self.queued.append(("expire", (key, seconds)))
+        return self
+
+    async def execute(self) -> list[Any]:
+        assert self.redis.lock_held, "reservation must commit under the lock"
+        for op, args in self.queued:
+            if op == "zadd":
+                self.redis._zadd(*args)
+            else:
+                self.redis._expire(*args)
+        self.redis.executed_batches.append(len(self.queued))
+        return [None] * len(self.queued)
 
 
 @pytest.fixture
@@ -104,10 +139,11 @@ async def test_acquire_admits_scopes_keys_and_locks(redis: _FakeRedis) -> None:
     assert redis.locks == [
         {
             "name": f"{TENANT_KEY}:lock",
-            "timeout": redis_pool.VOICE_SESSION_ADMISSION_LOCK_SECONDS,
-            "blocking_timeout": redis_pool.VOICE_SESSION_ADMISSION_LOCK_SECONDS,
+            "timeout": redis_pool.VOICE_SESSION_ADMISSION_LEASE_SECONDS,
+            "blocking_timeout": redis_pool.VOICE_SESSION_ADMISSION_WAIT_SECONDS,
         }
     ]
+    assert redis.executed_batches == [4]  # both zadds and both expires, one EXEC
     assert redis.lock_held is False
 
 
@@ -153,3 +189,12 @@ async def test_release_removes_member_from_both_keys(redis: _FakeRedis) -> None:
     )
 
     assert redis.sets == {TENANT_KEY: {"other": 9e12}, USER_KEY: {}}
+
+
+def test_admission_lease_outlives_the_wait() -> None:
+    # A caller must never hold a lock that can expire while it still waits on
+    # Redis for the same admission.
+    assert (
+        redis_pool.VOICE_SESSION_ADMISSION_LEASE_SECONDS
+        > redis_pool.VOICE_SESSION_ADMISSION_WAIT_SECONDS
+    )
