@@ -128,3 +128,61 @@ def test_calculate_cost_prices_cache_creation_at_write_rate() -> None:
     )
 
     assert processor._calculate_cost(data) == pytest.approx(0.0105)
+
+
+def _make_generation_end_span(data: GenerationSpanData) -> MagicMock:
+    span = _make_span("trace-123", "span-1")
+    span.error = None
+    span.span_data = data
+    return span
+
+
+def test_on_span_end_masks_reasoning_and_tool_metadata() -> None:
+    """reasoning (chain-of-thought) and tool payloads must pass through the same
+    _mask_if_enabled wrapper as input/output. Otherwise an operator running with
+    TRACING_MASKING_LENGTH=0 still leaks the user's prompt: the reasoning
+    restates it and the tool-call args are derived from it. Regression for #13826.
+    """
+    client, observation = _make_client_with_observation()
+    processor = LangfuseTracingProcessor(client=client, enable_masking=True)
+
+    span = _make_generation_end_span(
+        GenerationSpanData(
+            model="deepseek-reasoner",
+            reasoning="The user is asking about SECRET_LAUNCH_DATE, so I should...",
+            tools=[
+                {"name": "search", "args": {"query": "SECRET_LAUNCH_DATE timeline"}}
+            ],
+        )
+    )
+    processor._spans[span.span_id] = observation
+
+    with patch("onyx.tracing.masking.MASKING_LENGTH", 0):
+        processor.on_span_end(span)
+
+    metadata = observation.update.call_args.kwargs["metadata"]
+    assert "SECRET_LAUNCH_DATE" not in str(metadata["reasoning"])
+    assert "SECRET_LAUNCH_DATE" not in str(metadata["tools"])
+
+
+def test_on_span_end_keeps_reasoning_and_tools_when_masking_disabled() -> None:
+    """The wrapper is a no-op when masking is off, so a normal deployment still
+    gets full reasoning / tool traces in Langfuse."""
+    client, observation = _make_client_with_observation()
+    processor = LangfuseTracingProcessor(client=client, enable_masking=False)
+
+    tools = [{"name": "search", "args": {"query": "quarterly revenue"}}]
+    span = _make_generation_end_span(
+        GenerationSpanData(
+            model="deepseek-reasoner",
+            reasoning="Step 1: find the revenue figure.",
+            tools=tools,
+        )
+    )
+    processor._spans[span.span_id] = observation
+
+    processor.on_span_end(span)
+
+    metadata = observation.update.call_args.kwargs["metadata"]
+    assert metadata["reasoning"] == "Step 1: find the revenue figure."
+    assert metadata["tools"] == tools
