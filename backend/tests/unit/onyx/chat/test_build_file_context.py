@@ -94,5 +94,10 @@ def test_metadata_only_files_omit_file_reader_when_unavailable(
         token_count=0,
     )
     assert "file_reader" not in result.message.message
+    # Pin the replacement hint: dropping tools_hint entirely would otherwise
+    # satisfy the negative assertion above.
+    assert "internal search" in result.message.message
     assert "sheet.xlsx" in result.message.message
+    # The UUID only means something to read_file, which is not attached here.
+    assert "abc" not in result.message.message
     assert CONTENT_UNAVAILABLE_NOTICE not in result.message.message
