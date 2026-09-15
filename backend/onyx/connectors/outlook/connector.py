@@ -17,6 +17,7 @@ until it gains a message or a full re-index rebuilds it.
 
 from collections import deque
 from collections.abc import Generator
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from io import BytesIO
 from typing import Any
@@ -24,7 +25,6 @@ from typing import Any
 from onyx.configs.app_configs import (
     INDEX_BATCH_SIZE,
     OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD,
-    PDF_TEXT_EXTRACTION_TIMEOUT_SECONDS,
 )
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
@@ -108,13 +108,15 @@ MAX_MESSAGES_PER_CONVERSATION = 100
 CONVERSATION_FETCH_LIMIT = 500
 
 # Attachment bytes come from whoever sent the mail, so what one message and
-# one conversation can cost is capped however far the files expand.
+# one conversation can cost is capped however far the files expand or however
+# many of them fail.
 MAX_ATTACHMENTS_PER_MESSAGE = 20
 MAX_ATTACHMENT_TEXT_PER_CONVERSATION = 1_000_000
+MAX_ATTACHMENT_READS_PER_CONVERSATION = 25
 
-# Extraction runs in a child process with this deadline. It sits above the PDF
-# timeout inside, so a hung PDF is killed by its own parent, never orphaned.
-ATTACHMENT_EXTRACTION_TIMEOUT_SECONDS = PDF_TEXT_EXTRACTION_TIMEOUT_SECONDS + 60
+# The deadline of the child process that parses everything but PDFs, which
+# the shared PDF reader already runs under its own.
+ATTACHMENT_EXTRACTION_TIMEOUT_SECONDS = 120
 
 
 # Graph stops a filtered delta round at this many messages without saying so.
@@ -253,6 +255,19 @@ def attachment_skip_reason(attachment: OutlookAttachment) -> str | None:
     if attachment.size > OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD:
         return "over the size threshold"
     return None
+
+
+@dataclass
+class AttachmentBudget:
+    """What one conversation may still spend on attachments: characters kept
+    and download-plus-extraction attempts, successful or not."""
+
+    text: int = MAX_ATTACHMENT_TEXT_PER_CONVERSATION
+    reads: int = MAX_ATTACHMENT_READS_PER_CONVERSATION
+
+    @property
+    def spent(self) -> bool:
+        return self.text <= 0 or self.reads <= 0
 
 
 def extract_attachment_text(data: bytes, name: str, cap: int) -> str:
@@ -780,12 +795,13 @@ class OutlookConnector(
             # document keeps.
             kept = kept[:MAX_MESSAGES_PER_CONVERSATION]
             attachments: dict[str, list[TextSection]] = {}
-            budget = MAX_ATTACHMENT_TEXT_PER_CONVERSATION
+            budget = AttachmentBudget()
             for message in kept:
                 if not (self.include_attachments and message.has_attachments):
                     continue
-                sections, budget = self._attachment_sections(mailbox, message, budget)
-                attachments[message.id] = sections
+                attachments[message.id] = self._attachment_sections(
+                    mailbox, message, budget
+                )
         except OutlookGraphError as e:
             # A recorded failure lets the poll window move past the mail, so a
             # transient failure raises and keeps the checkpoint for the retry.
@@ -802,16 +818,16 @@ class OutlookConnector(
         return build_conversation_document(mailbox, conversation_id, kept, attachments)
 
     def _attachment_sections(
-        self, mailbox: OutlookMailbox, message: OutlookMessage, budget: int
-    ) -> tuple[list[TextSection], int]:
+        self, mailbox: OutlookMailbox, message: OutlookMessage, budget: AttachmentBudget
+    ) -> list[TextSection]:
         """The extracted text of a message's file attachments, one section each,
-        and what is left of the conversation's text budget.
+        charged to the conversation's budget.
 
         An attachment Graph refuses is skipped with a warning. A throttled, 5xx
         or dropped call raises like a message read does, so the checkpoint is kept.
         """
-        if budget <= 0:
-            return [], budget
+        if budget.spent:
+            return []
         try:
             attachments = self.ops.list_message_attachments(
                 mailbox_id=mailbox.id,
@@ -826,39 +842,41 @@ class OutlookConnector(
                 message.id,
                 e.code,
             )
-            return [], budget
+            return []
 
         sections: list[TextSection] = []
         for attachment in attachments:
-            if budget <= 0:
-                logger.info("Outlook: attachment text budget spent in %s", message.id)
+            if budget.spent:
+                logger.info("Outlook: attachment budget spent in %s", message.id)
                 break
             text = self._attachment_text(mailbox, message, attachment, budget)
             if not text:
                 continue
-            budget -= len(text)
+            budget.text -= len(text)
             sections.append(
                 TextSection(
                     link=message.web_link,
                     text=f"Attachment: {attachment.name}\n\n{text}",
                 )
             )
-        return sections, budget
+        return sections
 
     def _attachment_text(
         self,
         mailbox: OutlookMailbox,
         message: OutlookMessage,
         attachment: OutlookAttachment,
-        cap: int,
+        budget: AttachmentBudget,
     ) -> str:
-        """Up to ``cap`` characters of one attachment's text, or "" when it is
-        skipped: not worth reading, over the byte cap, refused by Graph or by
-        the parsers. A transient Graph error raises."""
+        """One attachment's text within the budget, or "" when it is skipped:
+        not worth reading, over the byte cap, refused by Graph or by the
+        parsers. A transient Graph error raises."""
         reason = attachment_skip_reason(attachment)
         if reason is not None:
             logger.debug("Outlook: skipping attachment %s, %s", attachment.name, reason)
             return ""
+        # Charged up front so attachments that fail still count.
+        budget.reads -= 1
         try:
             data = self.ops.download_attachment(
                 mailbox_id=mailbox.id,
@@ -881,11 +899,15 @@ class OutlookConnector(
         # A parser refusing the file, a crash and a timeout all cost this
         # attachment only, the way break_on_unprocessable=False would.
         try:
+            if get_file_ext(attachment.name) == ".pdf":
+                # read_pdf_file isolates PDFium itself. A second layer would
+                # orphan that child when the outer one is killed.
+                return extract_attachment_text(data, attachment.name, budget.text)
             return run_in_isolated_process(
                 extract_attachment_text,
                 data,
                 attachment.name,
-                cap,
+                budget.text,
                 timeout=ATTACHMENT_EXTRACTION_TIMEOUT_SECONDS,
             )
         except Exception as e:

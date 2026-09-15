@@ -25,6 +25,7 @@ from onyx.connectors.outlook.connector import (
     ATTACHMENT_EXTRACTION_TIMEOUT_SECONDS,
     CONVERSATION_FETCH_LIMIT,
     FILTERED_DELTA_CAP,
+    MAX_ATTACHMENT_READS_PER_CONVERSATION,
     MAX_ATTACHMENT_TEXT_PER_CONVERSATION,
     MAX_ATTACHMENTS_PER_MESSAGE,
     MAX_MESSAGES_PER_CONVERSATION,
@@ -201,7 +202,7 @@ def _attachment_gateway() -> MagicMock:
         ]
     )
     gateway.list_message_attachments.return_value = [
-        attachment(),
+        attachment(name="report.docx"),
         attachment(id="att-inline", name="logo.png", is_inline=True),
         attachment(id="att-item", name="Fwd: reminder", is_file=False),
         attachment(id="att-zip", name="build.zip"),
@@ -211,7 +212,7 @@ def _attachment_gateway() -> MagicMock:
             size=OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD + 1,
         ),
     ]
-    gateway.download_attachment.return_value = b"%PDF"
+    gateway.download_attachment.return_value = b"PK"
     return gateway
 
 
@@ -813,7 +814,7 @@ def test_attachment_text_follows_its_message_and_skips_the_rest() -> None:
     texts = [section.text or "" for section in docs[0].sections]
     assert len(texts) == 3
     assert texts[1].startswith("From: Alice")
-    assert texts[2] == "Attachment: report.pdf\n\nQuarterly numbers"
+    assert texts[2] == "Attachment: report.docx\n\nQuarterly numbers"
     assert docs[0].sections[2].link == message().web_link
     gateway.list_message_attachments.assert_called_once_with(
         mailbox_id=mailbox().id, message_id="msg-2", limit=MAX_ATTACHMENTS_PER_MESSAGE
@@ -913,6 +914,50 @@ def test_attachment_text_is_capped_per_conversation() -> None:
     ]
     assert sum(kept) == MAX_ATTACHMENT_TEXT_PER_CONVERSATION
     assert gateway.download_attachment.call_count == 2
+
+
+def test_failed_extractions_spend_the_read_budget() -> None:
+    gateway = _attachment_gateway()
+    gateway.list_message_attachments.return_value = [
+        attachment(id=f"att-{n}", name=f"part-{n}.txt")
+        for n in range(MAX_ATTACHMENT_READS_PER_CONVERSATION + 5)
+    ]
+    connector = _attachment_connector(gateway)
+
+    with patch(
+        f"{CONNECTOR_MODULE}.run_in_isolated_process",
+        side_effect=IsolatedProcessError("timed out"),
+    ):
+        items, _ = _step(connector, _folder_checkpoint())
+
+    docs = [item for item in items if isinstance(item, Document)]
+    assert len(docs[0].sections) == 2
+    assert (
+        gateway.download_attachment.call_count == MAX_ATTACHMENT_READS_PER_CONVERSATION
+    )
+
+
+def test_pdf_attachments_skip_the_outer_isolation() -> None:
+    """The shared PDF reader isolates PDFium itself, so a second child process
+    would only leave that one orphaned on a timeout."""
+    gateway = _attachment_gateway()
+    gateway.list_message_attachments.return_value = [attachment(name="report.pdf")]
+    connector = _attachment_connector(gateway)
+
+    with (
+        patch(f"{CONNECTOR_MODULE}.run_in_isolated_process") as isolated,
+        patch(
+            f"{CONNECTOR_MODULE}.extract_attachment_text", return_value="Page one"
+        ) as extract,
+    ):
+        items, _ = _step(connector, _folder_checkpoint())
+
+    docs = [item for item in items if isinstance(item, Document)]
+    assert docs[0].sections[2].text == "Attachment: report.pdf\n\nPage one"
+    isolated.assert_not_called()
+    extract.assert_called_once_with(
+        b"PK", "report.pdf", MAX_ATTACHMENT_TEXT_PER_CONVERSATION
+    )
 
 
 def test_attachment_skip_reasons() -> None:

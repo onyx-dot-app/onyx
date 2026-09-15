@@ -797,6 +797,8 @@ def extract_file_text_locally(
         ".docx": lambda f: read_docx_file(f, file_name)[0],  # no images
         ".pptx": lambda f: pptx_to_text(f, file_name),
         ".xlsx": lambda f: xlsx_to_text(f, file_name),
+        # openpyxl reads macro-enabled workbooks like any other.
+        ".xlsm": lambda f: xlsx_to_text(f, file_name),
         ".eml": eml_to_text,
         ".epub": epub_to_text,
         ".html": parse_html_page_basic,
