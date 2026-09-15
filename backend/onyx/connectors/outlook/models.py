@@ -21,8 +21,8 @@ INVALID_AUTHORITY_CODE = "invalid_authority"
 # package does not know.
 INVALID_AUTH_METHOD_CODE = "invalid_auth_method"
 
-# The OutlookAuthError code for a PFX bundle that cannot be opened with the
-# given password.
+# The OutlookAuthError code for a PFX bundle the shared package cannot open:
+# not base64, not PKCS12, or the wrong password.
 INVALID_CERTIFICATE_CODE = "invalid_certificate"
 
 
@@ -40,6 +40,12 @@ class OutlookGraphError(Exception):
         self.status = status
         self.code = code
         super().__init__(f"Graph {status} {code}: {message}")
+
+    @property
+    def is_transient(self) -> bool:
+        """Throttling, any 5xx or a dropped connection is the service's trouble,
+        not the mail's, so the attempt raises and runs again later."""
+        return self.status is None or self.status == 429 or self.status >= 500
 
 
 class OutlookAuthError(Exception):
@@ -118,12 +124,11 @@ class OutlookAttachment(BaseModel):
 
     id: str
     name: str
-    content_type: str | None = None
     size: int = 0
-    # Inline attachments are the images embedded in a signature or body.
+    # Inline attachments are embedded in the body, almost always signature images.
     is_inline: bool = False
-    # Only file attachments have bytes to download. Item attachments are
-    # nested Outlook items and reference attachments are cloud links.
+    # Only file attachments are downloaded. Item attachments are nested
+    # Outlook items and reference attachments are cloud links.
     is_file: bool = False
 
 

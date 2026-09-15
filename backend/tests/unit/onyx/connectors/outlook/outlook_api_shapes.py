@@ -154,7 +154,6 @@ def attachment_json(**overrides: Any) -> dict[str, Any]:
         "@odata.type": "#microsoft.graph.fileAttachment",
         "id": "att-1",
         "name": "report.pdf",
-        "contentType": "application/pdf",
         "size": 2048,
         "isInline": False,
     }
@@ -165,7 +164,6 @@ def attachment(**overrides: Any) -> OutlookAttachment:
     fields: dict[str, Any] = {
         "id": "att-1",
         "name": "report.pdf",
-        "content_type": "application/pdf",
         "size": 2048,
         "is_file": True,
     }

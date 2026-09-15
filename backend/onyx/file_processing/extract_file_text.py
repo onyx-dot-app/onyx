@@ -763,16 +763,6 @@ def extract_file_text(
     NOTE: Ignoring seems to be defined as returning an empty string for files it can't
     handle (such as images).
     """
-    extension_to_function: dict[str, Callable[[IO[Any]], str]] = {
-        ".pdf": pdf_to_text,
-        ".docx": lambda f: read_docx_file(f, file_name)[0],  # no images
-        ".pptx": lambda f: pptx_to_text(f, file_name),
-        ".xlsx": lambda f: xlsx_to_text(f, file_name),
-        ".eml": eml_to_text,
-        ".epub": epub_to_text,
-        ".html": parse_html_page_basic,
-    }
-
     try:
         if get_unstructured_api_key():
             try:
@@ -782,20 +772,7 @@ def extract_file_text(
                     "Failed to process with Unstructured: %s. Falling back to normal processing.",
                     str(unstructured_error),
                 )
-        if extension is None:
-            extension = get_file_ext(file_name)
-
-        if extension in OnyxFileExtensions.TEXT_AND_DOCUMENT_EXTENSIONS:
-            func = extension_to_function.get(extension, file_io_to_text)
-            file.seek(0)
-            return func(file)
-
-        # If unknown extension, maybe it's a text file
-        file.seek(0)
-        if is_text_file(file):
-            return file_io_to_text(file)
-
-        raise ValueError("Unknown file extension or not recognized as text data")
+        return extract_file_text_locally(file, file_name, extension)
 
     except Exception as e:
         if break_on_unprocessable:
@@ -804,6 +781,40 @@ def extract_file_text(
             ) from e
         logger.warning("Failed to process file %s: %s", file_name or "Unknown", str(e))
         return ""
+
+
+def extract_file_text_locally(
+    file: IO[Any], file_name: str, extension: str | None = None
+) -> str:
+    """Text by extension from the in-process parsers only.
+
+    Never reaches the database or Redis (the Unstructured key lives there), so
+    it can run in a child process that has neither. Raises on a file no parser
+    accepts.
+    """
+    extension_to_function: dict[str, Callable[[IO[Any]], str]] = {
+        ".pdf": pdf_to_text,
+        ".docx": lambda f: read_docx_file(f, file_name)[0],  # no images
+        ".pptx": lambda f: pptx_to_text(f, file_name),
+        ".xlsx": lambda f: xlsx_to_text(f, file_name),
+        ".eml": eml_to_text,
+        ".epub": epub_to_text,
+        ".html": parse_html_page_basic,
+    }
+    if extension is None:
+        extension = get_file_ext(file_name)
+
+    if extension in OnyxFileExtensions.TEXT_AND_DOCUMENT_EXTENSIONS:
+        func = extension_to_function.get(extension, file_io_to_text)
+        file.seek(0)
+        return func(file)
+
+    # If unknown extension, maybe it's a text file
+    file.seek(0)
+    if is_text_file(file):
+        return file_io_to_text(file)
+
+    raise ValueError("Unknown file extension or not recognized as text data")
 
 
 class ExtractionResult(NamedTuple):

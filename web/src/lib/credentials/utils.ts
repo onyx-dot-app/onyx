@@ -12,9 +12,60 @@ import type {
   CredentialFormValues,
 } from "@/lib/credentials/types";
 
-interface SharedField {
-  def: unknown;
+// What a credential template seeds a field with: "" for a required text
+// field, null for an optional one or a file, a boolean for a checkbox.
+type CredentialFieldSeed = string | boolean | null;
+
+interface FieldMethods {
+  def: CredentialFieldSeed;
   methods: string[];
+}
+
+// The rules for one credential field. With `selected` the required rules
+// apply only while one of the field's auth methods is chosen.
+function fieldSchema(
+  key: string,
+  def: CredentialFieldSeed,
+  selected?: (method: string) => boolean
+): Yup.AnySchema {
+  const displayName = getDisplayNameForCredentialKey(key);
+  if (typeof def === "boolean") {
+    return Yup.boolean()
+      .nullable()
+      .default(false)
+      .transform((v, o) => (o === undefined ? false : v));
+  }
+  if (isTypedFileField(key)) {
+    // TypedFile fields use mixed schema instead of string.
+    const required = Yup.mixed().required(
+      `Please select a ${displayName} file`
+    );
+    if (!selected) return required;
+    return Yup.mixed().when("authentication_method", {
+      is: selected,
+      then: () => required,
+      otherwise: () => Yup.mixed().notRequired(),
+    });
+  }
+  if (def === null) {
+    return Yup.string()
+      .trim()
+      .transform((v) => (v === "" ? null : v))
+      .nullable()
+      .notRequired();
+  }
+  const required = (s: Yup.StringSchema) =>
+    s
+      .min(1, `${displayName} cannot be empty`)
+      .required(`Please enter your ${displayName}`);
+  if (!selected) return required(Yup.string().trim());
+  return Yup.string()
+    .trim()
+    .when("authentication_method", {
+      is: selected,
+      then: required,
+      otherwise: (s) => s.notRequired(),
+    });
 }
 
 export function createValidationSchema(jsonValues: Record<string, any>) {
@@ -28,10 +79,10 @@ export function createValidationSchema(jsonValues: Record<string, any>) {
     );
     // A field several methods share (the app ids of SharePoint and Outlook)
     // is required under every method that lists it, so collect them first.
-    const methodsByField = new Map<string, SharedField>();
+    const methodsByField = new Map<string, FieldMethods>();
     template.authMethods.forEach((method) => {
       Object.entries(method.fields).forEach(([key, def]) => {
-        const entry: SharedField = methodsByField.get(key) ?? {
+        const entry: FieldMethods = methodsByField.get(key) ?? {
           def,
           methods: [],
         };
@@ -40,69 +91,16 @@ export function createValidationSchema(jsonValues: Record<string, any>) {
       });
     });
     methodsByField.forEach(({ def, methods }, key) => {
-      const displayName = getDisplayNameForCredentialKey(key);
-      const selected = (value: string) => methods.includes(value);
-      if (typeof def === "boolean") {
-        schemaFields[key] = Yup.boolean()
-          .nullable()
-          .default(false)
-          .transform((v, o) => (o === undefined ? false : v));
-      } else if (isTypedFileField(key)) {
-        // TypedFile fields use mixed schema instead of string.
-        schemaFields[key] = Yup.mixed().when("authentication_method", {
-          is: selected,
-          then: () =>
-            Yup.mixed().required(`Please select a ${displayName} file`),
-          otherwise: () => Yup.mixed().notRequired(),
-        });
-      } else if (def === null) {
-        schemaFields[key] = Yup.string()
-          .trim()
-          .transform((v) => (v === "" ? null : v))
-          .nullable()
-          .notRequired();
-      } else {
-        schemaFields[key] = Yup.string()
-          .trim()
-          .when("authentication_method", {
-            is: selected,
-            then: (s) =>
-              s
-                .min(1, `${displayName} cannot be empty`)
-                .required(`Please enter your ${displayName}`),
-            otherwise: (s) => s.notRequired(),
-          });
-      }
+      schemaFields[key] = fieldSchema(key, def, (method) =>
+        methods.includes(method)
+      );
     });
   }
   // single-auth templates and other fields
   for (const key in jsonValues) {
     if (!Object.prototype.hasOwnProperty.call(jsonValues, key)) continue;
     if (key === "authentication_method" || key === "authMethods") continue;
-    const displayName = getDisplayNameForCredentialKey(key);
-    const def = jsonValues[key];
-    if (typeof def === "boolean") {
-      schemaFields[key] = Yup.boolean()
-        .nullable()
-        .default(false)
-        .transform((v, o) => (o === undefined ? false : v));
-    } else if (isTypedFileField(key)) {
-      // TypedFile fields use mixed schema instead of string.
-      schemaFields[key] = Yup.mixed().required(
-        `Please select a ${displayName} file`
-      );
-    } else if (def === null) {
-      schemaFields[key] = Yup.string()
-        .trim()
-        .transform((v) => (v === "" ? null : v))
-        .nullable()
-        .notRequired();
-    } else {
-      schemaFields[key] = Yup.string()
-        .trim()
-        .min(1, `${displayName} cannot be empty`)
-        .required(`Please enter your ${displayName}`);
-    }
+    schemaFields[key] = fieldSchema(key, jsonValues[key]);
   }
 
   schemaFields["name"] = Yup.string().optional();

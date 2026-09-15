@@ -9,6 +9,7 @@ Application permissions this gateway needs: ``Mail.Read`` for folders and
 messages, ``User.Read.All`` to enumerate and resolve mailboxes.
 """
 
+import binascii
 import json
 import re
 from collections.abc import Generator
@@ -20,13 +21,12 @@ import bs4
 import requests
 from msal.exceptions import MsalServiceError
 
-from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capabilities import CredentialCapability
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.microsoft_utils.drive_items import (
+    download_graph_url_with_cap,
     parse_graph_datetime,
-    stream_response_to_buffer_with_cap,
 )
 from onyx.connectors.microsoft_utils.graph_auth import (
     MicrosoftAuthContext,
@@ -123,7 +123,7 @@ MESSAGE_SELECT = ",".join(
 )
 # Attachment records without contentBytes, which the listing would otherwise
 # inline for every file attachment.
-ATTACHMENT_SELECT = "id,name,contentType,size,isInline"
+ATTACHMENT_SELECT = "id,name,size,isInline"
 FILE_ATTACHMENT_TYPE = "#microsoft.graph.fileAttachment"
 
 # Graph renders bodies as HTML unless asked for text, and text spares a parse.
@@ -274,7 +274,6 @@ def _parse_attachment(raw: dict[str, Any]) -> OutlookAttachment:
     return OutlookAttachment(
         id=raw["id"],
         name=raw.get("name") or "",
-        content_type=raw.get("contentType"),
         size=raw.get("size") or 0,
         is_inline=bool(raw.get("isInline")),
         is_file=raw.get("@odata.type") == FILE_ATTACHMENT_TYPE,
@@ -325,11 +324,9 @@ class OutlookSourceOperations(SourceOperations):
                 raise OutlookAuthError(
                     MISSING_CREDENTIAL_CODE, "missing " + ", ".join(missing)
                 )
-            # MSAL validates the authority against Microsoft's discovery
-            # endpoint while building the app. An unknown directory answers
-            # 400 and is the credential's fault. Throttling (429), a 5xx, an
-            # unreadable body or a network failure are the service's. A PFX
-            # the password does not open surfaces as a RuntimeError.
+            # MSAL checks the authority against Microsoft's discovery endpoint
+            # while building the app. 400 means a bad directory id. 429, 5xx or
+            # an unreadable body is the service's fault. A bad PFX is a RuntimeError.
             try:
                 self._auth_context = build_msal_app(
                     client_id=credentials[CREDENTIAL_CLIENT_ID],
@@ -344,6 +341,9 @@ class OutlookSourceOperations(SourceOperations):
                         CREDENTIAL_CERTIFICATE_PASSWORD
                     ),
                 )
+            except binascii.Error as e:
+                # The stored PFX is not base64, so the upload is what is bad.
+                raise OutlookAuthError(INVALID_CERTIFICATE_CODE, str(e)) from e
             except ValueError as e:
                 if _is_decode_error(e) or _msal_http_status(e) == 429:
                     raise _msal_error(e) from e
@@ -435,7 +435,7 @@ class OutlookSourceOperations(SourceOperations):
         consumes=OperationConsumes.CREDENTIAL,
     )
     def check_token(self) -> OutlookTokenInfo:
-        """Acquire an app-only token: proves client id, directory id and secret agree."""
+        """Acquire an app-only token: proves client id, directory id and credential agree."""
         response = self._token_response()
         expires_in = response.get("expires_in")
         return OutlookTokenInfo(
@@ -618,28 +618,23 @@ class OutlookSourceOperations(SourceOperations):
         consumes=OperationConsumes.CREDENTIAL,
     )
     def list_message_attachments(
-        self, *, mailbox_id: str, message_id: str
+        self, *, mailbox_id: str, message_id: str, limit: int
     ) -> list[OutlookAttachment]:
-        """Every attachment record of one message, without bytes."""
-        url: str | None = (
-            f"{self._user_url(mailbox_id)}/messages/{message_id}/attachments"
-        )
-        params: dict[str, str] | None = {"$select": ATTACHMENT_SELECT}
-        attachments: list[OutlookAttachment] = []
-        while url is not None:
-            data = self._get(url, params)
-            params = None
-            attachments.extend(_parse_attachment(raw) for raw in data.get("value", []))
-            url = data.get("@odata.nextLink")
-        return attachments
+        """The first ``limit`` attachment records of one message, without bytes.
+
+        One page only, so a message carrying thousands of attachments costs
+        one call whatever the caller does with the records.
+        """
+        url = f"{self._user_url(mailbox_id)}/messages/{message_id}/attachments"
+        data = self._get(url, {"$select": ATTACHMENT_SELECT, "$top": str(limit)})
+        return [_parse_attachment(raw) for raw in data.get("value", [])[:limit]]
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
         untested=(
-            "Needs an attachment id, which only a message with attachments "
-            "provides. The mail-read check lists its sample message's "
-            "attachments, which proves the same permission."
+            "Listing a message's attachments needs the same Mail.Read grant, "
+            "and the mail-read check does that for its sample message."
         ),
     )
     def download_attachment(
@@ -654,16 +649,12 @@ class OutlookSourceOperations(SourceOperations):
             f"{self._user_url(mailbox_id)}/messages/{message_id}"
             f"/attachments/{attachment_id}/$value"
         )
-        headers = {"Authorization": f"Bearer {self._access_token()}"}
-
-        def request() -> requests.Response:
-            return requests.get(
-                url, headers=headers, stream=True, timeout=REQUEST_TIMEOUT_SECONDS
-            )
-
         try:
-            return stream_response_to_buffer_with_cap(
-                request, cap, description=f"outlook attachment {attachment_id}"
+            return download_graph_url_with_cap(
+                access_token=self._access_token(),
+                url=url,
+                cap=cap,
+                description=f"outlook attachment {attachment_id}",
             )
         except requests.RequestException as e:
             raise _to_graph_error(e) from e

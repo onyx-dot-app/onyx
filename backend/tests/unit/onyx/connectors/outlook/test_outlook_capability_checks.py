@@ -253,8 +253,18 @@ def test_mail_read_check_lists_attachments_of_a_sample_that_has_them() -> None:
     _run("outlook_mail_read", _context(gateway))
 
     gateway.list_message_attachments.assert_called_once_with(
-        mailbox_id=MAILBOX_ID, message_id="msg-1"
+        mailbox_id=MAILBOX_ID, message_id="msg-1", limit=1
     )
+
+
+def test_mail_read_check_passes_when_the_sample_vanishes_before_its_attachments() -> (
+    None
+):
+    gateway = _gateway()
+    gateway.read_any_message.return_value = message(has_attachments=True)
+    gateway.list_message_attachments.side_effect = graph_error(404, "ErrorItemNotFound")
+
+    _run("outlook_mail_read", _context(gateway))
 
 
 def test_mail_read_check_skips_attachments_when_the_sample_has_none() -> None:

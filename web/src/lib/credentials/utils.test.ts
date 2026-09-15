@@ -116,7 +116,7 @@ describe("createValidationSchema", () => {
     ).toBe(false);
   });
 
-  it("accepts a complete form and ignores the other method's fields", () => {
+  it("accepts a complete form without the other method's fields", () => {
     expect(
       schema.isValidSync({
         ...ids,

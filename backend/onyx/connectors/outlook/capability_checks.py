@@ -8,7 +8,7 @@ to every check, so they also run at credential-creation time.
 
 Permission-to-capability mapping (application permissions):
 
-- ``Mail.Read``     -> INDEXING (folders, message delta, message bodies)
+- ``Mail.Read``     -> INDEXING (folders, message delta, message bodies, attachments)
 - ``User.Read.All`` -> INDEXING (mailbox enumeration and address resolution)
 
 Exchange RBAC for Applications or an application access policy can narrow the
@@ -138,7 +138,8 @@ def _open_first_readable_mailbox(
 
 class _TokenAuthCheck(CapabilityCheck):
     """Asks Entra for a token. A blank credential field fails here too, since
-    the gateway refuses to build the MSAL app without all three."""
+    the gateway refuses to build the MSAL app without every field its
+    authentication method needs."""
 
     def __init__(self) -> None:
         super().__init__(
@@ -148,7 +149,7 @@ class _TokenAuthCheck(CapabilityCheck):
             requires_connector_instance=False,
             remediation=(
                 "Enter the client id, directory (tenant) id and a current "
-                "client secret of the Entra app registration."
+                "client secret or certificate of the Entra app registration."
             ),
             docs_link=_OUTLOOK_DOCS_LINK,
         )
@@ -234,9 +235,13 @@ class _MailReadCheck(CapabilityCheck):
             return
         try:
             gateway.list_message_attachments(
-                mailbox_id=mailbox.id, message_id=sample.id
+                mailbox_id=mailbox.id, message_id=sample.id, limit=1
             )
         except OutlookGraphError as e:
+            # The sample can be deleted between the two reads. The body read
+            # already proved the grant, so that is not a failure.
+            if e.status == 404:
+                return
             raise_for_graph_error(e, _denied(mailbox))
 
 

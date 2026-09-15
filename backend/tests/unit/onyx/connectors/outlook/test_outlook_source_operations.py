@@ -693,16 +693,23 @@ def test_attachment_listing_selects_records_without_bytes() -> None:
                 **{"@odata.type": "#microsoft.graph.itemAttachment"},
             ),
             attachment_json(id="att-3", name="logo.png", isInline=True),
-        ]
+            attachment_json(id="att-4", name="extra.pdf"),
+        ],
+        next_link="https://graph.microsoft.com/v1.0/next-attachments",
     )
 
-    result = gateway.list_message_attachments(mailbox_id=MAILBOX_ID, message_id="msg-1")
+    result = gateway.list_message_attachments(
+        mailbox_id=MAILBOX_ID, message_id="msg-1", limit=3
+    )
 
     url, params = client.get_json.call_args.args[:2]
     assert url == f"{GRAPH_BASE}/users/{MAILBOX_ID}/messages/msg-1/attachments"
     # contentBytes must stay out of the selection or every listing carries
     # every file attachment whole.
-    assert params == {"$select": "id,name,contentType,size,isInline"}
+    assert params == {"$select": "id,name,size,isInline", "$top": "3"}
+    # The limit holds even when Graph hands back more than asked, and the
+    # next page is never requested.
+    assert client.get_json.call_count == 1
     assert [(a.id, a.is_file, a.is_inline) for a in result] == [
         ("att-1", True, False),
         ("att-2", False, False),
@@ -719,23 +726,19 @@ def test_attachment_download_streams_the_value_endpoint_with_a_cap() -> None:
             f"{MODULE}.acquire_graph_token",
             return_value={"access_token": "tok"},
         ),
-        patch(
-            f"{MODULE}.stream_response_to_buffer_with_cap", return_value=b"pdf"
-        ) as stream,
+        patch(f"{MODULE}.download_graph_url_with_cap", return_value=b"pdf") as download,
     ):
         data = gateway.download_attachment(
             mailbox_id=MAILBOX_ID, message_id="msg-1", attachment_id="att-1", cap=10
         )
 
     assert data == b"pdf"
-    assert stream.call_args.args[1] == 10
-    with patch(f"{MODULE}.requests.get") as get:
-        stream.call_args.args[0]()
-    assert get.call_args.args[0] == (
-        f"{GRAPH_BASE}/users/{MAILBOX_ID}/messages/msg-1/attachments/att-1/$value"
+    download.assert_called_once_with(
+        access_token="tok",
+        url=f"{GRAPH_BASE}/users/{MAILBOX_ID}/messages/msg-1/attachments/att-1/$value",
+        cap=10,
+        description="outlook attachment att-1",
     )
-    assert get.call_args.kwargs["headers"] == {"Authorization": "Bearer tok"}
-    assert get.call_args.kwargs["stream"] is True
 
 
 def test_attachment_download_failure_is_a_graph_error() -> None:
@@ -745,7 +748,7 @@ def test_attachment_download_failure_is_a_graph_error() -> None:
         patch(f"{MODULE}.build_msal_app"),
         patch(f"{MODULE}.acquire_graph_token", return_value={"access_token": "tok"}),
         patch(
-            f"{MODULE}.stream_response_to_buffer_with_cap",
+            f"{MODULE}.download_graph_url_with_cap",
             side_effect=http_error(404, "ErrorItemNotFound"),
         ),
         pytest.raises(OutlookGraphError) as exc_info,

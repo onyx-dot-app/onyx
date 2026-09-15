@@ -34,6 +34,7 @@ from onyx.connectors.outlook.connector import (
     attachment_skip_reason,
     build_conversation_document,
     conversation_document_id,
+    extract_attachment_text,
     indexable_messages,
     mailbox_node_id,
 )
@@ -49,7 +50,6 @@ from onyx.connectors.outlook.models import (
 )
 from onyx.connectors.outlook.source_operations import OutlookSourceOperations
 from onyx.db.enums import HierarchyNodeType
-from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.utils.process_isolation import IsolatedProcessError
 from tests.unit.onyx.connectors.outlook.outlook_api_shapes import (
     CONVERSATION_ID,
@@ -775,20 +775,33 @@ def test_credentials_before_provider_is_a_programming_error() -> None:
 
 
 def _extraction(text: str) -> Callable[..., str]:
-    """A stand-in for the isolated extraction that records what it was asked to run."""
+    """A stand-in for the isolated extraction that asserts what it was asked to
+    run and applies the cap the way the child would."""
 
-    def run(fn: Callable[..., str], *_args: Any, timeout: float, **kwargs: Any) -> str:
-        assert fn is extract_file_text
+    def run(fn: Callable[..., str], *args: Any, timeout: float, **kwargs: Any) -> str:
+        assert fn is extract_attachment_text
         assert timeout == ATTACHMENT_EXTRACTION_TIMEOUT_SECONDS
-        assert kwargs == {"break_on_unprocessable": False}
-        return text
+        assert kwargs == {}
+        data, name, cap = args
+        assert isinstance(data, bytes) and name
+        return text[:cap]
 
     return run
 
 
+def _attachment_connector(gateway: MagicMock) -> OutlookConnector:
+    return _connector(gateway, mailboxes=[MAILBOX_ADDRESS], include_attachments=True)
+
+
+def test_extract_attachment_text_uses_the_local_parsers_and_caps() -> None:
+    assert extract_attachment_text(b"  hello world  ", "note.txt", 5) == "hello"
+    with pytest.raises(ValueError):
+        extract_attachment_text(b"\x00\x01\x02", "blob.bin", 10)
+
+
 def test_attachment_text_follows_its_message_and_skips_the_rest() -> None:
     gateway = _attachment_gateway()
-    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+    connector = _attachment_connector(gateway)
 
     with patch(
         f"{CONNECTOR_MODULE}.run_in_isolated_process",
@@ -802,6 +815,9 @@ def test_attachment_text_follows_its_message_and_skips_the_rest() -> None:
     assert texts[1].startswith("From: Alice")
     assert texts[2] == "Attachment: report.pdf\n\nQuarterly numbers"
     assert docs[0].sections[2].link == message().web_link
+    gateway.list_message_attachments.assert_called_once_with(
+        mailbox_id=mailbox().id, message_id="msg-2", limit=MAX_ATTACHMENTS_PER_MESSAGE
+    )
     # Only the plain file attachment is worth a download: inline images, item
     # attachments, unsupported types and oversize files are skipped unread.
     gateway.download_attachment.assert_called_once_with(
@@ -812,11 +828,9 @@ def test_attachment_text_follows_its_message_and_skips_the_rest() -> None:
     )
 
 
-def test_attachments_are_not_read_when_switched_off() -> None:
+def test_attachments_are_not_read_by_default() -> None:
     gateway = _attachment_gateway()
-    connector = _connector(
-        gateway, mailboxes=[MAILBOX_ADDRESS], include_attachments=False
-    )
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
 
     items, _ = _step(connector, _folder_checkpoint())
 
@@ -827,7 +841,7 @@ def test_attachments_are_not_read_when_switched_off() -> None:
 def test_attachment_over_the_cap_or_refused_is_skipped() -> None:
     gateway = _attachment_gateway()
     gateway.download_attachment.side_effect = SizeCapExceeded("during_download")
-    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+    connector = _attachment_connector(gateway)
 
     items, _ = _step(connector, _folder_checkpoint())
     docs = [item for item in items if isinstance(item, Document)]
@@ -842,7 +856,7 @@ def test_attachment_over_the_cap_or_refused_is_skipped() -> None:
 def test_throttled_attachment_read_keeps_the_checkpoint() -> None:
     gateway = _attachment_gateway()
     gateway.download_attachment.side_effect = graph_error(429, "TooManyRequests")
-    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+    connector = _attachment_connector(gateway)
     checkpoint = _folder_checkpoint()
 
     with pytest.raises(OutlookGraphError):
@@ -854,7 +868,7 @@ def test_throttled_attachment_read_keeps_the_checkpoint() -> None:
 def test_refused_attachment_listing_keeps_the_message_text() -> None:
     gateway = _attachment_gateway()
     gateway.list_message_attachments.side_effect = graph_error(403)
-    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+    connector = _attachment_connector(gateway)
 
     items, _ = _step(connector, _folder_checkpoint())
 
@@ -865,7 +879,7 @@ def test_refused_attachment_listing_keeps_the_message_text() -> None:
 
 def test_attachment_extraction_that_hangs_or_crashes_is_skipped() -> None:
     gateway = _attachment_gateway()
-    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+    connector = _attachment_connector(gateway)
 
     with patch(
         f"{CONNECTOR_MODULE}.run_in_isolated_process",
@@ -880,10 +894,9 @@ def test_attachment_extraction_that_hangs_or_crashes_is_skipped() -> None:
 def test_attachment_text_is_capped_per_conversation() -> None:
     gateway = _attachment_gateway()
     gateway.list_message_attachments.return_value = [
-        attachment(id=f"att-{n}", name=f"part-{n}.txt")
-        for n in range(MAX_ATTACHMENTS_PER_MESSAGE + 5)
+        attachment(id=f"att-{n}", name=f"part-{n}.txt") for n in range(3)
     ]
-    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+    connector = _attachment_connector(gateway)
     # Each attachment expands to over half the budget, so the second one is
     # truncated and the third is never downloaded.
     text = "x" * (MAX_ATTACHMENT_TEXT_PER_CONVERSATION * 3 // 5)
@@ -905,7 +918,7 @@ def test_attachment_text_is_capped_per_conversation() -> None:
 def test_attachment_skip_reasons() -> None:
     assert attachment_skip_reason(attachment()) is None
     assert attachment_skip_reason(attachment(is_file=False)) == "not a file attachment"
-    assert attachment_skip_reason(attachment(is_inline=True)) == "inline image"
+    assert attachment_skip_reason(attachment(is_inline=True)) == "inline attachment"
     assert (
         attachment_skip_reason(attachment(name="tool.exe")) == "unsupported file type"
     )
