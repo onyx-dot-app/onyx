@@ -448,8 +448,21 @@ class _UserRecordingsSource(DiscoverySource):
         """
         key = (host.user_id, from_date)
         if self._listed_key != key:
+            # Consecutive windows share their boundary day, so Zoom returns those
+            # recordings in both, and indexing them a second time repeats a
+            # transcript download. This holds only within an attempt: nothing here
+            # is checkpointed, so a resumed attempt lists its first window with no
+            # record of the one before it.
+            already_listed = (
+                {entry.uuid for entry in self._listed}
+                if self._listed_key is not None and self._listed_key[0] == host.user_id
+                else set()
+            )
             recordings = _list_every_recording(client, host, from_date, to_date)
-            self._listed = sorted(recordings, key=_recording_key)
+            self._listed = sorted(
+                (entry for entry in recordings if entry.uuid not in already_listed),
+                key=_recording_key,
+            )
             self._listed_key = key
         return self._listed
 

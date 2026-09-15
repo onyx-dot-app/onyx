@@ -1199,6 +1199,22 @@ class TestUserRecordingsListingWindow:
         for earlier, later in zip(windows, windows[1:], strict=False):
             assert later[0] == earlier[1]
 
+    def test_a_boundary_day_recording_is_only_processed_once(self) -> None:
+        """Both windows ask Zoom for the shared day, so an inclusive `to` hands the
+        same recording back twice. Indexing it twice repeats its transcript download
+        against an account-wide rate limit."""
+        end = datetime(2026, 3, 17, 12, 0, tzinfo=timezone.utc)
+        start = end - timedelta(days=365)
+        windows = _listing_windows(
+            *_poll_window_dates(start.timestamp(), end.timestamp())
+        )
+        source = GroupSource("group-1")
+        client = _client_recording_on(windows[0][1], _recording("uuid-boundary"))
+
+        found = _walk(source, client, start.timestamp(), end.timestamp())
+
+        assert found.count("uuid-boundary") == 1
+
     def test_a_recording_on_a_boundary_day_survives_an_exclusive_to(self) -> None:
         """The shared day is the whole point of the overlap: if Zoom's `to` excludes
         its own date, abutting windows would ask for every day except this one."""
