@@ -3,6 +3,7 @@ import email
 import imaplib
 import os
 import re
+import ssl
 from datetime import datetime, timezone
 from email.message import Message
 from email.utils import parseaddr
@@ -120,7 +121,13 @@ class ImapConnector(
         username = get_or_raise(_USERNAME_KEY)
         password = get_or_raise(_PASSWORD_KEY)
 
-        mail_client = imaplib.IMAP4_SSL(host=self._host, port=self._port)
+        # imaplib defaults to an unverified context; pass an explicit one so the
+        # certificate and hostname are checked before credentials are sent.
+        mail_client = imaplib.IMAP4_SSL(
+            host=self._host,
+            port=self._port,
+            ssl_context=ssl.create_default_context(),
+        )
         status, _data = mail_client.login(user=username, password=password)
 
         if status != _IMAP_OKAY_STATUS:

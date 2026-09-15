@@ -125,8 +125,13 @@ async def claim_license(
                 timeout=30,
             )
             response.raise_for_status()
+            # A caller-supplied checkout id must not replace the license this
+            # instance holds with another tenant's. Compared under the store
+            # lock, which also leaves the session idle across the call above.
             payload = verify_and_store_license(
-                db_session, license_from_control_plane_response(response)
+                db_session,
+                license_from_control_plane_response(response),
+                keep_stored_tenant=True,
             )
         else:
             if claim_cooldown_is_active():

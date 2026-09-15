@@ -267,9 +267,7 @@ export default function SkillEditorPage({
             description,
             instructions_markdown: instructionsMarkdown,
             auto_enable: isCreatingForApp ? false : !createDisabled,
-            ...(externalAppId !== undefined
-              ? { external_app_id: externalAppId }
-              : {}),
+            external_app_id: externalAppId,
           },
           pendingFilesUpload?.file
         );

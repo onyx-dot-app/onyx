@@ -460,7 +460,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
         </div>
       )}
 
-      <Dropzone onDrop={handleFileUpload} noClick>
+      {/* noPaste: the input bar already uploads pasted files itself. */}
+      <Dropzone onDrop={handleFileUpload} noClick noPaste>
         {({ getRootProps }) => (
           <div
             {...getRootProps()}
