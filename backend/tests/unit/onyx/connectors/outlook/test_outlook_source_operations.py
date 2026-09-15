@@ -77,7 +77,8 @@ def test_list_mailbox_users_builds_the_users_query() -> None:
     assert url == f"{GRAPH_BASE}/users"
     assert params["$filter"] == "accountEnabled eq true"
     assert params["$top"] == "2"
-    assert [m.address for m in result.mailboxes] == [MAILBOX_ADDRESS, "svc@contoso.com"]
+    # An enabled user without a mail address has no mailbox to probe.
+    assert [m.address for m in result.mailboxes] == [MAILBOX_ADDRESS]
     assert result.next_link is None
 
 

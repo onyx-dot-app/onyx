@@ -76,11 +76,15 @@ def graph_error_code(response: requests.Response | None) -> str:
 
 
 def log_and_raise_for_status(response: requests.Response) -> None:
-    """Log the response text and raise for status."""
+    """Log the response text and raise for status.
+
+    A warning, not an error: callers handle expected statuses themselves, such
+    as a 404 for a user without a mailbox, and raise when one is fatal.
+    """
     try:
         response.raise_for_status()
     except Exception:
-        logger.error("HTTP request failed: %s", response.text)
+        logger.warning("HTTP request failed: %s", response.text)
         raise
 
 

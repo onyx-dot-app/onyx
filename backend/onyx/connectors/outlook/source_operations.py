@@ -396,7 +396,8 @@ class OutlookSourceOperations(SourceOperations):
     def list_mailbox_users(
         self, *, page_size: int = USERS_PAGE_SIZE, next_link: str | None = None
     ) -> OutlookMailboxPage:
-        """One page of enabled users, the candidates in every-mailbox mode.
+        """One page of enabled users with a mail address, the candidates in
+        every-mailbox mode.
 
         Needs ``User.Read.All``. Whether a user actually has a mailbox is only
         known once :meth:`probe_mailbox` is called for it.
@@ -411,9 +412,13 @@ class OutlookSourceOperations(SourceOperations):
                 "$top": str(page_size),
             }
         data = self._get(url, params)
+        # No primary SMTP address means no Exchange mailbox, so those users are
+        # dropped here instead of costing a probe each.
         mailboxes = [
             mailbox
-            for mailbox in (_parse_mailbox(raw) for raw in data.get("value", []))
+            for mailbox in (
+                _parse_mailbox(raw) for raw in data.get("value", []) if raw.get("mail")
+            )
             if mailbox is not None
         ]
         return OutlookMailboxPage(
