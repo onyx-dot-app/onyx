@@ -204,14 +204,15 @@ class SyncConfig(BaseModel):
     censoring_config: CensoringConfig | None = None
 
 
-# Mock doc sync function for testing (no-op)
+# No-op doc sync: these sources set permissions while indexing instead.
 def mock_doc_sync(
     cc_pair: "ConnectorCredentialPair",  # noqa: ARG001
     fetch_all_docs_fn: FetchAllDocumentsFunction,  # noqa: ARG001
     fetch_all_docs_ids_fn: FetchAllDocumentsIdsFunction,  # noqa: ARG001
     callback: Optional["IndexingHeartbeatInterface"],  # noqa: ARG001
 ) -> Generator["DocExternalAccess", None, None]:
-    """Mock doc sync function for testing - returns empty list since permissions are fetched during indexing"""
+    """Yields nothing: permissions are set as each document is indexed, and
+    nothing here recomputes them."""
     yield from []
 
 
