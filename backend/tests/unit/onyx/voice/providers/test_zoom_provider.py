@@ -411,21 +411,62 @@ async def test_receive_loop_accumulates_transcription_turns() -> None:
 
 
 @pytest.mark.asyncio
-async def test_receive_loop_ignores_non_object_json_and_binary() -> None:
+async def test_receive_loop_ignores_binary_and_unknown_event_types() -> None:
     ws = FakeWebSocket(
         [
-            SimpleNamespace(type=aiohttp.WSMsgType.TEXT, data='"not-object"'),
+            _text_message({"type": "session.updated"}),
             _binary_message(),
+            _text_message({"type": "some.future.event"}),
             _text_message({"type": "session.closed"}),
         ]
     )
     transcriber = ZoomStreamingTranscriber(api_key="key", api_secret="x" * 32)
     transcriber._ws = cast(Any, ws)
-
     transcriber._closed = True  # client already requested session.close
+
     await transcriber._receive_loop()
 
     assert await transcriber.receive_transcript() is None
+
+
+@pytest.mark.parametrize(
+    "raw",
+    ['"not-object"', "not json", json.dumps({"transcript": "no type"})],
+)
+@pytest.mark.asyncio
+async def test_receive_loop_fails_on_protocol_violations(raw: str) -> None:
+    ws = FakeWebSocket(
+        [
+            _text_message({"type": "session.updated"}),
+            SimpleNamespace(type=aiohttp.WSMsgType.TEXT, data=raw),
+            _text_message({"type": "transcription.completed", "transcript": "late"}),
+        ]
+    )
+    transcriber = ZoomStreamingTranscriber(api_key="key", api_secret="x" * 32)
+    transcriber._ws = cast(Any, ws)
+
+    await transcriber._receive_loop()
+
+    failure = await transcriber.receive_transcript()
+    assert failure is not None
+    assert failure.error is not None
+    assert await transcriber.receive_transcript() is None
+    assert ws.messages  # loop stopped at the bad frame
+
+
+@pytest.mark.asyncio
+async def test_connect_fails_on_protocol_violation_during_setup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ws = FakeWebSocket([SimpleNamespace(type=aiohttp.WSMsgType.TEXT, data="{")])
+    session = FakeSession(ws)
+    monkeypatch.setattr(zoom.aiohttp, "ClientSession", lambda: session)
+    transcriber = ZoomStreamingTranscriber(api_key="key", api_secret="x" * 32)
+
+    with pytest.raises(RuntimeError, match="invalid message during setup"):
+        await transcriber.connect()
+
+    assert session.closed is True
 
 
 @pytest.mark.asyncio
