@@ -42,10 +42,11 @@ class OutlookGraphError(Exception):
         super().__init__(f"Graph {status} {code}: {message}")
 
     @property
-    def is_transient(self) -> bool:
-        """Throttling, any 5xx or a dropped connection is the service's trouble,
-        not the mail's, so the attempt raises and runs again later."""
-        return self.status is None or self.status == 429 or self.status >= 500
+    def fails_the_attempt(self) -> bool:
+        """Throttling, any 5xx, a dropped connection or a rejected token is the
+        service's or the app's trouble, not the item's, so the attempt raises
+        and runs again later instead of recording the item as failed."""
+        return self.status is None or self.status in (401, 429) or self.status >= 500
 
 
 class OutlookAuthError(Exception):
@@ -149,4 +150,42 @@ class OutlookMessageChange(BaseModel):
 
 class OutlookDeltaPage(BaseModel):
     changes: list[OutlookMessageChange]
+    next_link: str | None = None
+
+
+# Graph's event.type for one meeting expanded from a recurring series.
+EVENT_OCCURRENCE = "occurrence"
+
+
+class OutlookEvent(BaseModel):
+    id: str
+    subject: str | None = None
+    body_text: str = ""
+    # False when Graph sent no body property at all, which is how
+    # Calendars.ReadBasic.All answers. An empty body arrives as present.
+    body_present: bool = True
+    start_at: datetime | None = None
+    end_at: datetime | None = None
+    # The zone the event was scheduled in, a Windows name. The times above are
+    # UTC, so a recurring 09:00 meeting keeps its local hour only through this.
+    time_zone: str | None = None
+    is_all_day: bool = False
+    is_cancelled: bool = False
+    # normal, personal, private or confidential.
+    sensitivity: str = "normal"
+    # singleInstance, occurrence, exception or seriesMaster.
+    event_type: str = "singleInstance"
+    series_master_id: str | None = None
+    organizer: OutlookRecipient | None = None
+    attendees: list[OutlookRecipient] = []
+    location: str | None = None
+    web_link: str | None = None
+    created_at: datetime | None = None
+    last_modified_at: datetime | None = None
+    # A plain-language recurrence pattern, series masters only.
+    recurrence: str | None = None
+
+
+class OutlookEventPage(BaseModel):
+    events: list[OutlookEvent]
     next_link: str | None = None

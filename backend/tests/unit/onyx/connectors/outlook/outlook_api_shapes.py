@@ -12,6 +12,7 @@ import requests
 
 from onyx.connectors.outlook.models import (
     OutlookAttachment,
+    OutlookEvent,
     OutlookFolder,
     OutlookGraphError,
     OutlookMailbox,
@@ -147,6 +148,52 @@ def change(**overrides: Any) -> OutlookMessageChange:
         "received_at": RECEIVED,
     }
     return OutlookMessageChange(**(fields | overrides))
+
+
+def event_json(**overrides: Any) -> dict[str, Any]:
+    fields: dict[str, Any] = {
+        "id": "evt-1",
+        "subject": "Quarterly review",
+        "body": {"contentType": "text", "content": "Agenda: numbers"},
+        "start": {"dateTime": "2026-09-02T14:00:00.0000000", "timeZone": "UTC"},
+        "end": {"dateTime": "2026-09-02T15:00:00.0000000", "timeZone": "UTC"},
+        "originalStartTimeZone": "UTC",
+        "isAllDay": False,
+        "isCancelled": False,
+        "sensitivity": "normal",
+        "type": "singleInstance",
+        "seriesMasterId": None,
+        "organizer": recipient_json(MAILBOX_ADDRESS, "Alice"),
+        "attendees": [
+            {"type": "required", **recipient_json("bob@contoso.com", "Bob")},
+            {"type": "optional", **recipient_json(MAILBOX_ADDRESS, "Alice")},
+        ],
+        "location": {"displayName": "Room 4"},
+        "webLink": "https://outlook.office365.com/calendar/item/evt-1",
+        "createdDateTime": "2026-08-20T09:00:00Z",
+        "lastModifiedDateTime": "2026-09-01T09:00:00Z",
+    }
+    return fields | overrides
+
+
+def event(**overrides: Any) -> OutlookEvent:
+    fields: dict[str, Any] = {
+        "id": "evt-1",
+        "subject": "Quarterly review",
+        "body_text": "Agenda: numbers",
+        "start_at": datetime(2026, 9, 2, 14, 0, tzinfo=timezone.utc),
+        "end_at": datetime(2026, 9, 2, 15, 0, tzinfo=timezone.utc),
+        "organizer": OutlookRecipient(address=MAILBOX_ADDRESS, name="Alice"),
+        "attendees": [
+            OutlookRecipient(address="bob@contoso.com", name="Bob"),
+            OutlookRecipient(address=MAILBOX_ADDRESS, name="Alice"),
+        ],
+        "location": "Room 4",
+        "web_link": "https://outlook.office365.com/calendar/item/evt-1",
+        "created_at": datetime(2026, 8, 20, 9, 0, tzinfo=timezone.utc),
+        "last_modified_at": RECEIVED,
+    }
+    return OutlookEvent(**(fields | overrides))
 
 
 def attachment_json(**overrides: Any) -> dict[str, Any]:

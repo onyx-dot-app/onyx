@@ -1085,6 +1085,16 @@ export const connectorConfigs: Record<
         false,
         "Index the text of file attachments. Inline images, nested items and cloud links are skipped."
       ),
+      {
+        type: "checkbox",
+        query: "Include calendar events?",
+        label: "Include Calendar",
+        name: "include_calendar",
+        description:
+          "Index the calendar of each mailbox as well as its mail. " +
+          "Needs the Calendars.Read application permission.",
+        default: false,
+      },
     ],
     advanced_values: [
       {
@@ -1096,6 +1106,29 @@ export const connectorConfigs: Record<
         description:
           "Folder names to skip in every mailbox, in addition to Junk Email, " +
           "Deleted Items, Drafts and Outbox, which are always skipped.",
+      },
+      {
+        type: "number",
+        query: "Days of past calendar to index:",
+        label: "Calendar Past Days",
+        name: "calendar_past_days",
+        optional: true,
+        default: 365,
+        description:
+          "Used when Include Calendar is on. How far back the calendar window " +
+          "reaches. Events before it are not indexed and drop out as the window " +
+          "moves forward.",
+      },
+      {
+        type: "number",
+        query: "Days of future calendar to index:",
+        label: "Calendar Future Days",
+        name: "calendar_future_days",
+        optional: true,
+        default: 180,
+        description:
+          "Used when Include Calendar is on. How far ahead the calendar window " +
+          "reaches.",
       },
       {
         type: "text",
