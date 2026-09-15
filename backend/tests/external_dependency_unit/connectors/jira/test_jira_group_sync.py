@@ -10,12 +10,12 @@ from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
 from onyx.db.models import Connector, ConnectorCredentialPair, Credential
 from shared_configs.contextvars import get_current_tenant_id
 from tests.daily.connectors.confluence.models import ExternalUserGroupSet
+from tests.utils.secret_names import TestSecret
 
-# In order to get these tests to run, use the credentials from Bitwarden.
-# Search up "ENV vars for local and Github tests", and find the Jira relevant key-value pairs.
-# Required env vars: JIRA_USER_EMAIL, JIRA_API_TOKEN
-
-pytestmark = pytest.mark.usefixtures("enable_ee")
+pytestmark = [
+    pytest.mark.usefixtures("enable_ee"),
+    pytest.mark.secrets(TestSecret.JIRA_USER_EMAIL, TestSecret.JIRA_API_TOKEN),
+]
 
 # Expected groups from the danswerai.atlassian.net Jira instance
 # Note: These groups are shared with Confluence since they're both Atlassian products
