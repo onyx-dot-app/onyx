@@ -142,7 +142,13 @@ export async function deleteLlmProvider(
 // Aggregator providers & helpers
 // ---------------------------------------------------------------------------
 
-/** Aggregator providers that host models from multiple vendors. */
+/** Aggregator providers that host models from multiple vendors.
+ *
+ * Kept in step with the set of the same name in `./index`, which the icon
+ * resolver uses. This one gates vendor sub-grouping in the model pickers, so a
+ * provider missing here stays a flat group even when the backend sends a
+ * vendor.
+ */
 export const AGGREGATOR_PROVIDERS = new Set([
   "bedrock",
   "bedrock_converse",
@@ -153,6 +159,7 @@ export const AGGREGATOR_PROVIDERS = new Set([
   "bifrost",
   "openai_compatible",
   "vertex_ai",
+  "venice",
 ]);
 
 export const isAnthropic = (provider: string, modelName?: string) =>

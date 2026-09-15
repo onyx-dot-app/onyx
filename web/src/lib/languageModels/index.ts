@@ -193,6 +193,8 @@ export function getProvider(
 // ─── Aggregator providers ────────────────────────────────────────────────────
 // Providers that host models from multiple vendors (e.g. Bedrock hosts Claude,
 // Llama, etc.) Used by the model-icon resolver to prioritise vendor icons.
+// A second set of the same name in `./svc` gates vendor sub-grouping in the
+// model pickers; a provider added here usually belongs there too.
 
 export const AGGREGATOR_PROVIDERS = new Set([
   LLMProviderName.BEDROCK,
