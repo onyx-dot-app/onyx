@@ -69,7 +69,6 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(NewDesktopCommand())
 	cmd.AddCommand(NewDevCommand())
 	cmd.AddCommand(NewWebCommand())
-	cmd.AddCommand(NewLatestStableTagCommand())
 	cmd.AddCommand(NewWhoisCommand())
 	cmd.AddCommand(NewTraceCommand())
 	cmd.AddCommand(NewUpdateBaseDigestsCommand())

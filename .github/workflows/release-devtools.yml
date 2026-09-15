@@ -17,6 +17,16 @@ jobs:
       contents: read # needed to checkout the repo on private repos (no-op on public)
       id-token: write
     timeout-minutes: 10
+    env:
+      # Build every wheel against the pinned, hash-verified build environment.
+      # The path must be absolute: UV_BUILD_CONSTRAINT resolves against the
+      # process CWD, not the project directory passed to uv build. Set on this
+      # job only -- open-devtools-upgrade-pr locks the root workspace instead.
+      UV_BUILD_CONSTRAINT: ${{ github.workspace }}/tools/requirements/build-constraints.txt
+      UV_REQUIRE_HASHES: "true"
+      # Without this, Go silently downloads a different toolchain when go.mod
+      # asks for a newer one than go-bin ships, defeating the pin.
+      GOTOOLCHAIN: local
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:

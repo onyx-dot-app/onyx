@@ -62,6 +62,7 @@ import binascii
 import io
 import json
 import mimetypes
+import posixpath
 import re
 import secrets
 import shlex
@@ -298,6 +299,38 @@ def _validate_strict_path(path: str) -> None:
         raise ValueError("Invalid path: contains disallowed characters")
     if not re.match(r"^[a-zA-Z0-9_\-./]+$", path.lstrip("/")):
         raise ValueError("Invalid path: contains disallowed characters")
+
+
+def _validate_opencode_history_archive(archive_bytes: bytes) -> None:
+    """Rejects members that would land outside ``OPENCODE_DATA_DIR``.
+
+    The archive is built inside the sandbox, but ``put_archive`` extracts it as
+    the Docker daemon, so an unchecked member could plant a root-run file (e.g.
+    ``firewall-init.sh``) anywhere under ``WORKSPACE_ROOT``.
+    """
+    archive_root = posixpath.basename(OPENCODE_DATA_DIR)
+    try:
+        with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:gz") as tar:
+            members = tar.getmembers()
+    except (tarfile.TarError, EOFError) as e:
+        # A truncated gzip stream raises EOFError, not TarError.
+        raise RuntimeError(f"Opencode history archive is unreadable: {e}") from e
+
+    for member in members:
+        if not (member.isfile() or member.isdir()):
+            raise RuntimeError(
+                f"Opencode history archive member is not a file or directory: "
+                f"{member.name}"
+            )
+        name = posixpath.normpath(member.name)
+        if (
+            member.name.startswith("/")
+            or ".." in member.name.split("/")
+            or (name != archive_root and not name.startswith(f"{archive_root}/"))
+        ):
+            raise RuntimeError(
+                f"Opencode history archive member escapes {archive_root}: {member.name}"
+            )
 
 
 _COMPOSE_INTERNAL_HOSTNAMES = {
@@ -1388,6 +1421,8 @@ echo "Session cleanup complete"
             )
             return
 
+        _validate_opencode_history_archive(archive_bytes)
+
         try:
             # put_archive untars (gzip ok) into the stopped container's writable layer.
             if not container.put_archive(WORKSPACE_ROOT, archive_bytes):
@@ -1461,7 +1496,7 @@ if [ -f "$web_dir/bun.lock" ]; then
     ) 9>{BUN_CACHE_DIR}.lock
     cd "$web_dir"
     BUN_INSTALL_CACHE_DIR={BUN_CACHE_DIR} \\
-        bun install --frozen-lockfile --backend=hardlink
+        bun install --frozen-lockfile --ignore-scripts --backend=hardlink
 fi
 """
         try:

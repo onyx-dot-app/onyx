@@ -88,6 +88,20 @@ func NewBaseline(profile *Profile) *Baseline {
 	return baseline
 }
 
+// Reference makes the committed floors the target of a comparison. A nil
+// baseline, a module that has not opted in, gives a nil reference.
+func (b *Baseline) Reference() *Reference {
+	if b == nil {
+		return nil
+	}
+	return &Reference{
+		Kind:     ReferenceFloor,
+		Label:    "floor",
+		Total:    b.Total,
+		Packages: b.Packages,
+	}
+}
+
 // Save writes the baseline to disk below the kind's header. yaml.v3 sorts map
 // keys, so the output is stable across runs and diffs stay readable.
 func (b *Baseline) Save(path string, kind Kind) error {

@@ -147,10 +147,9 @@ RUN UV_PYTHON_BIN_DIR=/usr/local/bin uv python install 3.13 \
   && ln -s python3.13 /usr/local/bin/python \
   && python --version
 
-# Install the Go toolchain. `cli` pins `go 1.26.5` in its go.mod, while the older
-# `tools/ods` requirement remains compatible. The golangci-lint pre-commit hook builds
-# both modules against this version — keep it in sync with the hook and with GO_VERSION
-# in .github/workflows/pr-golang-tests.yml.
+# Install the Go toolchain. Every Go module in the repo pins `go 1.27.1` in its go.mod.
+# The golangci-lint pre-commit hook builds them against this version — keep it in
+# sync with the hook and with GO_VERSION in .github/workflows/pr-golang-tests.yml.
 #
 # Fetched from go.dev with a pinned per-arch checksum (same shape as the prek install
 # above) rather than copied out of the official golang image: base images here route
@@ -161,13 +160,13 @@ RUN UV_PYTHON_BIN_DIR=/usr/local/bin uv python install 3.13 \
 #
 # Module and build caches are not baked in; they live in the dev user's home
 # (see .devcontainer/zshrc).
-ARG GO_VERSION=1.26.5
+ARG GO_VERSION=1.27.1
 RUN set -eux; \
   case "$(dpkg --print-architecture)" in \
     amd64) GO_ARCH=amd64; \
-           GO_SHA256=5c2c3b16caefa1d968a94c1daca04a7ca301a496d9b086e17ad77bb81393f053 ;; \
+           GO_SHA256=63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445 ;; \
     arm64) GO_ARCH=arm64; \
-           GO_SHA256=fe4789e92b1f33358680864bbe8704289e7bb5fc207d80623c308935bd696d49 ;; \
+           GO_SHA256=3450b45a3f9ee8568792736a5c5e70a1f2e9b36c35a8f74958c03e51d7d92bec ;; \
     *) echo "unsupported arch for go: $(dpkg --print-architecture)" >&2; exit 1 ;; \
   esac; \
   curl -fsSL -o /tmp/go.tar.gz \
