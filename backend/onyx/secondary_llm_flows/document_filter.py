@@ -231,6 +231,8 @@ def select_sections_for_expansion(
         A tuple of:
         - Filtered list of InferenceSection objects selected by the LLM
         - List of document IDs for sections marked with "!" by the LLM, or None if none.
+          Note: The "!" marker support exists in parsing but is not currently used because
+          the prompt does not instruct the LLM to use it.
     """
     if not sections:
         return [], None
