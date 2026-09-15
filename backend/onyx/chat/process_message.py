@@ -2149,7 +2149,13 @@ def remove_answer_citations(answer: str) -> str:
 @log_function_time()
 def gather_stream(
     packets: AnswerStream,
+    user: User | None = None,  # noqa: ARG001
 ) -> ChatBasicResponse:
+    """Aggregate streaming packets into a ``ChatBasicResponse``.
+
+    ``user`` is only read by the timing decorator so the latency record
+    carries the user id. Pass it as a keyword argument.
+    """
     answer: str | None = None
     citations: list[CitationInfo] = []
     error_msg: str | None = None
@@ -2201,9 +2207,13 @@ def gather_stream(
 def gather_stream_full(
     packets: AnswerStream,
     state_container: ChatStateContainer,
+    user: User | None = None,  # noqa: ARG001
 ) -> ChatFullResponse:
     """
     Aggregate streaming packets and state container into a complete ChatFullResponse.
+
+    ``user`` is only read by the timing decorator so the latency record
+    carries the user id. Pass it as a keyword argument.
 
     This function consumes all packets from the stream and combines them with
     the accumulated state from the ChatStateContainer to build a complete response

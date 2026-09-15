@@ -100,16 +100,9 @@ def _latency_records_by_function(sink: Mock) -> dict[str, Mapping[str, Any]]:
     for call in sink.call_args_list:
         kwargs = call.kwargs
         assert kwargs["record_type"] == RecordType.LATENCY
+        assert kwargs["user_id"] == _USER_ID
         float(kwargs["data"]["latency"])  # stringified seconds, must parse
         records[kwargs["data"]["function"]] = kwargs
-    return records
-
-
-def _assert_turn_record(sink: Mock, function: str) -> dict[str, Mapping[str, Any]]:
-    """Check the record for the chat turn itself carries the caller's user id."""
-    records = _latency_records_by_function(sink)
-    assert function in records, records
-    assert records[function]["user_id"] == _USER_ID
     return records
 
 
@@ -127,8 +120,9 @@ def test_single_model_stream_emits_latency_record(
     chunks = _drain(response)
 
     assert len(chunks) == 2
-    records = _assert_turn_record(telemetry_sink, "handle_stream_message_objects")
-    assert set(records) == {"handle_stream_message_objects"}
+    assert set(_latency_records_by_function(telemetry_sink)) == {
+        "handle_stream_message_objects"
+    }
 
 
 def test_multi_model_stream_emits_latency_record(
@@ -149,8 +143,9 @@ def test_multi_model_stream_emits_latency_record(
     chunks = _drain(response)
 
     assert len(chunks) == 2
-    records = _assert_turn_record(telemetry_sink, "handle_multi_model_stream")
-    assert set(records) == {"handle_multi_model_stream"}
+    assert set(_latency_records_by_function(telemetry_sink)) == {
+        "handle_multi_model_stream"
+    }
 
 
 def test_non_streaming_emits_latency_record(
@@ -162,11 +157,11 @@ def test_non_streaming_emits_latency_record(
 
     assert isinstance(response, ChatFullResponse)
     assert response.message_id == 2
-    # The turn record plus the aggregation record this path already emitted.
-    # ``gather_stream_full`` takes no ``user`` argument, so only the turn
-    # record is checked for the user id.
-    records = _assert_turn_record(telemetry_sink, "handle_stream_message_objects")
-    assert set(records) == {"handle_stream_message_objects", "gather_stream_full"}
+    # The turn record plus the aggregation record; both carry the user id.
+    assert set(_latency_records_by_function(telemetry_sink)) == {
+        "handle_stream_message_objects",
+        "gather_stream_full",
+    }
 
 
 def test_stream_failure_still_emits_latency_record(
@@ -186,8 +181,9 @@ def test_stream_failure_still_emits_latency_record(
     # The endpoint swallows the error into a final JSON line for the client.
     assert len(chunks) == 2
     assert "llm exploded" in chunks[-1]
-    records = _assert_turn_record(telemetry_sink, "handle_stream_message_objects")
-    assert set(records) == {"handle_stream_message_objects"}
+    assert set(_latency_records_by_function(telemetry_sink)) == {
+        "handle_stream_message_objects"
+    }
 
 
 def test_client_disconnect_still_emits_latency_record(
@@ -212,5 +208,6 @@ def test_client_disconnect_still_emits_latency_record(
     next(stream)
     stream.close()
 
-    records = _assert_turn_record(telemetry_sink, "handle_stream_message_objects")
-    assert set(records) == {"handle_stream_message_objects"}
+    assert set(_latency_records_by_function(telemetry_sink)) == {
+        "handle_stream_message_objects"
+    }
