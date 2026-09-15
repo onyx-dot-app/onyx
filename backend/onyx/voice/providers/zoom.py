@@ -197,6 +197,10 @@ class ZoomStreamingTranscriber(StreamingTranscriberProtocol):
                         )
                     await self._signal_error("Zoom Scribe stream failed.")
                     break
+            else:
+                # The socket ended without a close frame or session.closed.
+                if not self._closed and not self._error_signaled:
+                    await self._signal_error("Zoom Scribe closed the stream.")
         except asyncio.CancelledError:
             raise
         except Exception:
