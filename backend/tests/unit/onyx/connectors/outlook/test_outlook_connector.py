@@ -602,7 +602,7 @@ def test_conversation_fetch_refusal_is_a_document_failure() -> None:
     )
 
 
-@pytest.mark.parametrize("status", [429, 503, None])
+@pytest.mark.parametrize("status", [429, 503, 509, None])
 def test_transient_conversation_fetch_failure_keeps_the_checkpoint(
     status: int | None,
 ) -> None:

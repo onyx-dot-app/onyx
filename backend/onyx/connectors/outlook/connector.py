@@ -81,9 +81,6 @@ MAX_MESSAGES_PER_CONVERSATION = 100
 # thread that is mostly drafts or trashed replies stays bounded.
 CONVERSATION_FETCH_LIMIT = 500
 
-# Graph statuses that describe the moment, not the conversation. The shared
-# client has already retried them, so the attempt fails and retries later.
-RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
 
 # Graph stops a filtered delta round at this many messages without saying so.
 # A folder that fills the cap is read again without the filter, which has no
@@ -613,8 +610,9 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
                     break
         except OutlookGraphError as e:
             # A recorded failure lets the poll window move past the mail, so a
-            # passing failure raises and keeps the checkpoint for the retry.
-            if e.status is None or e.status in RETRYABLE_STATUSES:
+            # passing failure (throttling, any 5xx, a dropped connection)
+            # raises and keeps the checkpoint for the retry.
+            if e.status is None or e.status == 429 or e.status >= 500:
                 raise
             return ConnectorFailure(
                 failed_document=DocumentFailure(document_id=document_id),
