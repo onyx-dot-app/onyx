@@ -18,8 +18,9 @@ mailboxes those grants reach. A mailbox outside that scope answers 403 exactly
 like a missing grant, so the remediation text names both causes.
 """
 
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, TypeVar
 
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
@@ -47,11 +48,14 @@ from onyx.connectors.outlook.mailboxes import (
 )
 from onyx.connectors.outlook.models import (
     OutlookAuthError,
+    OutlookEventPage,
     OutlookFolder,
     OutlookGraphError,
     OutlookMailbox,
 )
 from onyx.connectors.outlook.source_operations import OutlookSourceOperations
+
+T = TypeVar("T")
 
 _OUTLOOK_DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/outlook"
 
@@ -87,6 +91,10 @@ def _denied(mailbox: OutlookMailbox) -> str:
     return f"The app cannot read mail in `{mailbox.address}`."
 
 
+def _calendar_denied(mailbox: OutlookMailbox) -> str:
+    return f"The app cannot read the calendar of `{mailbox.address}`."
+
+
 def _open_configured_mailbox(
     gateway: OutlookSourceOperations, address: str
 ) -> tuple[OutlookMailbox, OutlookFolder]:
@@ -102,14 +110,21 @@ def _open_configured_mailbox(
         raise_for_graph_error(e, _denied(mailbox))
 
 
-def _open_first_readable_mailbox(
+def _first_mailbox_that(
     gateway: OutlookSourceOperations,
-) -> tuple[OutlookMailbox, OutlookFolder]:
-    """Walk the user listing one user at a time until a mailbox opens.
+    opens: Callable[[OutlookMailbox], T],
+    denied_one: Callable[[OutlookMailbox], str],
+    denied_all: str,
+    remediation: str = EXCHANGE_SCOPE_REMEDIATION,
+) -> tuple[OutlookMailbox, T]:
+    """Walk the user listing one user at a time until ``opens`` succeeds on a
+    mailbox, and return that mailbox with what it opened.
 
     Enabled users without a mailbox, such as directory sync service accounts,
     are common and indexing skips them too, so they must not fail the check.
-    A 403 is remembered: when no mailbox opens it is the likelier cause.
+    Exchange scopes are per grant, so a mailbox the app may read mail in can
+    still refuse its calendar. A 403 is remembered: when nothing opens it is
+    the likelier cause.
     """
     denied: OutlookGraphError | None = None
     next_link: str | None = None
@@ -123,22 +138,31 @@ def _open_first_readable_mailbox(
         if page.mailboxes:
             mailbox = page.mailboxes[0]
             try:
-                return mailbox, gateway.probe_mailbox(mailbox_id=mailbox.id)
+                return mailbox, opens(mailbox)
             except OutlookGraphError as e:
                 if e.status not in MAILBOX_UNAVAILABLE_STATUSES:
-                    raise_for_graph_error(e, _denied(mailbox))
+                    raise_for_graph_error(e, denied_one(mailbox), remediation)
                 if e.status == 403:
                     denied = e
         next_link = page.next_link
         if next_link is None:
             break
     if denied is not None:
-        raise_for_graph_error(
-            denied, "The app cannot read mail in the tenant's first mailboxes."
-        )
+        raise_for_graph_error(denied, denied_all, remediation)
     raise UnexpectedValidationError(
         "None of the tenant's first enabled users has a mailbox to probe. List a "
         "mailbox to verify it."
+    )
+
+
+def _open_first_readable_mailbox(
+    gateway: OutlookSourceOperations,
+) -> tuple[OutlookMailbox, OutlookFolder]:
+    return _first_mailbox_that(
+        gateway,
+        lambda mailbox: gateway.probe_mailbox(mailbox_id=mailbox.id),
+        _denied,
+        "The app cannot read mail in the tenant's first mailboxes.",
     )
 
 
@@ -291,19 +315,31 @@ class _CalendarReadCheck(CapabilityCheck):
         if not (context.connector_specific_config or {}).get(_CONFIG_INCLUDE_CALENDAR):
             return
         gateway = _gateway(context)
-        mailbox, _ = _open_sample_mailbox(gateway, context.connector_specific_config)
         now = datetime.now(timezone.utc)
-        try:
-            gateway.fetch_calendar_delta_page(
+
+        def view(mailbox: OutlookMailbox) -> OutlookEventPage:
+            return gateway.fetch_calendar_delta_page(
                 mailbox_id=mailbox.id,
                 window_start=now - timedelta(days=1),
                 window_end=now + timedelta(days=1),
                 page_size=1,
             )
-        except OutlookGraphError as e:
-            raise_for_graph_error(
-                e,
-                f"The app cannot read the calendar of `{mailbox.address}`.",
+
+        addresses = configured_addresses(context.connector_specific_config)
+        if addresses:
+            mailbox, _ = _open_configured_mailbox(gateway, addresses[0])
+            try:
+                view(mailbox)
+            except OutlookGraphError as e:
+                raise_for_graph_error(
+                    e, _calendar_denied(mailbox), CALENDAR_READ_REMEDIATION
+                )
+        else:
+            mailbox, _ = _first_mailbox_that(
+                gateway,
+                view,
+                _calendar_denied,
+                "The app cannot read the calendar of the tenant's first mailboxes.",
                 CALENDAR_READ_REMEDIATION,
             )
         # An empty calendar proves the listing only. One with events proves

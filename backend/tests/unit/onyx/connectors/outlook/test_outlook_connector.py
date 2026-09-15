@@ -1434,6 +1434,10 @@ def test_all_day_dates_are_read_in_the_zone_they_were_scheduled_in() -> None:
         return text.splitlines()[0]
 
     assert when(tokyo) == "When: 2026-09-02 (all day)"
+    # Graph also reports IANA names.
+    assert when(event(**{**tokyo.model_dump(), "time_zone": "Asia/Tokyo"})) == (
+        "When: 2026-09-02 (all day)"
+    )
     # An unmapped zone falls back to the UTC dates rather than guess.
     assert when(unknown_zone) == "When: 2026-09-01 (all day)"
 

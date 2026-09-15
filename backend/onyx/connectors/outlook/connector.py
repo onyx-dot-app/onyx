@@ -331,15 +331,16 @@ def event_skip_reason(event: OutlookEvent) -> str | None:
     return None
 
 
-def _scheduled_zone(windows_name: str | None) -> ZoneInfo | None:
-    """The IANA zone behind the Windows zone name Graph reports, through the
-    CLDR mapping Babel ships. None for a name it does not know."""
-    iana = get_global("windows_zone_mapping").get(windows_name or "")
-    if not isinstance(iana, str):
+def _scheduled_zone(name: str | None) -> ZoneInfo | None:
+    """The zone Graph reports for an event, given as an IANA name or a Windows
+    one, the latter through the CLDR mapping Babel ships. None for a name
+    neither knows."""
+    if not name:
         return None
+    iana = get_global("windows_zone_mapping").get(name, name)
     try:
         return ZoneInfo(iana)
-    except ZoneInfoNotFoundError:
+    except (ZoneInfoNotFoundError, ValueError):
         return None
 
 

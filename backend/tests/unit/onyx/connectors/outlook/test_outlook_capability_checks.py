@@ -481,6 +481,32 @@ def test_calendar_check_reads_one_page_of_a_two_day_window() -> None:
     gateway.resolve_mailbox.assert_called_once_with(address=MAILBOX_ADDRESS)
 
 
+def test_calendar_check_keeps_looking_for_a_readable_calendar() -> None:
+    """Exchange scopes are per grant, so the first mailbox whose mail opens can
+    still refuse its calendar while the next one does not."""
+    gateway = _gateway()
+    gateway.list_mailbox_users.side_effect = [
+        OutlookMailboxPage(
+            mailboxes=[mailbox(id="scoped-out", address="a@contoso.com")],
+            next_link="https://graph/users?page=2",
+        ),
+        OutlookMailboxPage(mailboxes=[mailbox()]),
+    ]
+    gateway.fetch_calendar_delta_page.side_effect = [
+        graph_error(403),
+        OutlookEventPage(events=[]),
+    ]
+    gateway.read_any_event.return_value = event()
+
+    _run("outlook_calendar_read", _context(gateway, {"include_calendar": True}))
+
+    assert [
+        c.kwargs["mailbox_id"] for c in gateway.fetch_calendar_delta_page.call_args_list
+    ] == ["scoped-out", MAILBOX_ID]
+    gateway.read_any_event.assert_called_once_with(mailbox_id=MAILBOX_ID)
+    gateway.probe_mailbox.assert_not_called()
+
+
 def test_calendar_check_tells_read_basic_apart_from_read() -> None:
     """Calendars.ReadBasic.All answers the view and refuses only the body."""
     gateway = _gateway()
@@ -497,6 +523,13 @@ def test_calendar_check_names_the_missing_grant_on_403() -> None:
 
     with pytest.raises(InsufficientPermissionsError, match="Calendars.Read"):
         _run("outlook_calendar_read", _context(gateway, {"include_calendar": True}))
+    with pytest.raises(InsufficientPermissionsError, match="Calendars.Read"):
+        _run(
+            "outlook_calendar_read",
+            _context(
+                gateway, {"include_calendar": True, "mailboxes": [MAILBOX_ADDRESS]}
+            ),
+        )
 
 
 def test_calendar_check_is_skipped_on_a_credential_only_run() -> None:
