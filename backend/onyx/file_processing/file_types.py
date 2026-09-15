@@ -57,6 +57,16 @@ class OnyxMimeTypes:
     }
 
 
+def is_allowed_avatar_content_type(content_type: str | None) -> bool:
+    """True when `content_type` is safe to store and later serve back as an
+    assistant/persona avatar image. `None` is allowed so callers can fall
+    back to a default file type; any other value must be one of the plain
+    raster image types, so a client cannot get `text/html` or
+    `image/svg+xml` stored (and later served inline) as the avatar's
+    content type."""
+    return content_type is None or content_type in OnyxMimeTypes.IMAGE_MIME_TYPES
+
+
 class OnyxFileExtensions:
     SPREADSHEET_EXTENSIONS = {
         ".xlsx",
