@@ -215,17 +215,28 @@ class ZoomStreamingTranscriber(StreamingTranscriberProtocol):
                 self._handshake_event.set()
             await self._transcript_queue.put(None)
 
+    async def _fail_protocol(self, reason: str) -> bool:
+        """Treat a frame that violates the Scribe protocol as a stream failure."""
+        logger.error("Zoom Scribe protocol violation: %s", reason)
+        if not self._handshake_event.is_set():
+            self._handshake_error = RuntimeError(
+                "Zoom Scribe sent an invalid message during setup."
+            )
+            self._handshake_event.set()
+        await self._signal_error("Zoom Scribe stream failed.")
+        return True
+
     async def _handle_text_message(self, raw_data: str) -> bool:
         try:
             parsed: Any = json.loads(raw_data)
         except json.JSONDecodeError:
-            logger.error("Zoom Scribe returned non-JSON text payload")
-            return False
+            return await self._fail_protocol("non-JSON text payload")
         if not isinstance(parsed, dict):
-            logger.error("Zoom Scribe returned non-object JSON payload")
-            return False
+            return await self._fail_protocol("non-object JSON payload")
 
         msg_type = parsed.get("type")
+        if not isinstance(msg_type, str):
+            return await self._fail_protocol("event without a type")
         if msg_type == ZoomScribeMessageType.SESSION_UPDATED:
             self._handshake_event.set()
             return False
