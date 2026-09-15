@@ -7,8 +7,17 @@ import abc
 from datetime import datetime
 
 from onyx.connectors.zoom.client import ZoomClient
-from onyx.connectors.zoom.models import ZoomSessionDetails, ZoomSessionOccurrence
-from onyx.connectors.zoom.recordings.models import ZoomSessionType
+from onyx.connectors.zoom.models import (
+    APPROVED_REGISTRANT_STATUS,
+    ZoomSessionDetails,
+    ZoomSessionOccurrence,
+)
+from onyx.connectors.zoom.recordings.access import (
+    AccessSource,
+    approved_registrant_emails,
+    union_source_emails,
+)
+from onyx.connectors.zoom.recordings.models import OccurrenceWork, ZoomSessionType
 
 # Zoom's `type` code on an entry of the recording listing. The codes and their
 # meeting/webinar split come from `meetings[].type` on Cloud Recording > List all
@@ -63,6 +72,12 @@ class SessionTypeHandler(abc.ABC):
     ) -> ZoomSessionDetails:
         raise NotImplementedError
 
+    @abc.abstractmethod
+    def fetch_access_list(self, client: ZoomClient, work: OccurrenceWork) -> set[str]:
+        """Must raise ZoomAccessListUnavailable rather than answer with an empty
+        set, which would read as nobody having access."""
+        raise NotImplementedError
+
 
 class MeetingSessionType(SessionTypeHandler):
     session_type = ZoomSessionType.MEETING
@@ -83,6 +98,40 @@ class MeetingSessionType(SessionTypeHandler):
     ) -> ZoomSessionDetails:
         return client.get_past_meeting_details(occurrence_uuid)
 
+    def fetch_access_list(self, client: ZoomClient, work: OccurrenceWork) -> set[str]:
+        """Only participants are per-occurrence. Registrants and invitees hang
+        off the scheduled meeting, so on a recurring series they grant access to
+        every run, which is accepted: being invited to a series counts as access
+        to the series.
+        """
+        sources: list[AccessSource] = [
+            (
+                f"the participants of meeting {work.occurrence_uuid}",
+                lambda: [
+                    p.user_email
+                    for p in client.list_past_meeting_participants(work.occurrence_uuid)
+                ],
+            ),
+            (
+                f"the registrants of meeting {work.session_id}",
+                lambda: approved_registrant_emails(
+                    client.list_meeting_registrants(
+                        work.session_id, status=APPROVED_REGISTRANT_STATUS
+                    )
+                ),
+            ),
+            (
+                f"the invitees of meeting {work.session_id}",
+                # Zoom returns an external invitee's real address here, unlike
+                # the participants endpoint which blanks it. Being invited is what
+                # grants access, so don't filter these on internal_user.
+                lambda: [
+                    i.email for i in client.list_meeting_invitees(work.session_id)
+                ],
+            ),
+        ]
+        return union_source_emails(sources)
+
 
 class WebinarSessionType(SessionTypeHandler):
     session_type = ZoomSessionType.WEBINAR
@@ -101,6 +150,35 @@ class WebinarSessionType(SessionTypeHandler):
         self, client: ZoomClient, occurrence_uuid: str
     ) -> ZoomSessionDetails:
         return client.get_webinar_details(occurrence_uuid)
+
+    def fetch_access_list(self, client: ZoomClient, work: OccurrenceWork) -> set[str]:
+        """A webinar has no invitee list to read. Zoom records only who
+        registered, who presented and who attended.
+        """
+        sources: list[AccessSource] = [
+            (
+                f"the participants of webinar {work.occurrence_uuid}",
+                lambda: [
+                    p.user_email
+                    for p in client.list_past_webinar_participants(work.occurrence_uuid)
+                ],
+            ),
+            (
+                f"the registrants of webinar {work.session_id}",
+                lambda: approved_registrant_emails(
+                    client.list_webinar_registrants(
+                        work.session_id, status=APPROVED_REGISTRANT_STATUS
+                    )
+                ),
+            ),
+            (
+                f"the panelists of webinar {work.session_id}",
+                lambda: [
+                    p.email for p in client.list_webinar_panelists(work.session_id)
+                ],
+            ),
+        ]
+        return union_source_emails(sources)
 
 
 _HANDLERS: dict[ZoomSessionType, SessionTypeHandler] = {

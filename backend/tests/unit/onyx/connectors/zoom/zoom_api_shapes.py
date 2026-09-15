@@ -8,8 +8,12 @@ the field under test as an override.
 from typing import Any
 
 from onyx.connectors.zoom.models import (
+    ZoomInvitee,
+    ZoomPanelist,
+    ZoomParticipant,
     ZoomPastMeetingDetails,
     ZoomRecordingEntry,
+    ZoomRegistrant,
     ZoomSessionOccurrence,
     ZoomTranscript,
     ZoomUser,
@@ -95,3 +99,41 @@ def user(**overrides: Any) -> ZoomUser:
         "id": "_0ctZtY0REqWalTmwvrdIw",
     }
     return ZoomUser(**(fields | overrides))
+
+
+def participant(**overrides: Any) -> ZoomParticipant:
+    fields: dict[str, Any] = {
+        "id": "30R7kT7bTIKSNUFEuH_Qlg",
+        "name": "Jill Chill",
+        "user_id": "27423744",
+        "user_email": "jchill@example.com",
+        "join_time": "2022-03-23T06:58:09Z",
+        "leave_time": "2022-03-23T07:02:28Z",
+        "duration": 259,
+        "failover": False,
+        "status": "in_meeting",
+    }
+    return ZoomParticipant(**(fields | overrides))
+
+
+def registrant(**overrides: Any) -> ZoomRegistrant:
+    fields: dict[str, Any] = {
+        "email": "jchill@example.com",
+        "first_name": "Jill",
+    }
+    return ZoomRegistrant(**(fields | overrides))
+
+
+def invitee(**overrides: Any) -> ZoomInvitee:
+    fields: dict[str, Any] = {"email": "jchill@example.com"}
+    return ZoomInvitee(**(fields | overrides))
+
+
+def panelist(**overrides: Any) -> ZoomPanelist:
+    fields: dict[str, Any] = {
+        "id": "Tg2b6GhcQKKbV7nSCbDKug",
+        "email": "jchill@example.com",
+        "name": "Jill Chill",
+        "join_url": "https://example.com/j/11111",
+    }
+    return ZoomPanelist(**(fields | overrides))

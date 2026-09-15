@@ -209,3 +209,105 @@ class ZoomRecordingPage(BaseModel):
 
     recordings: list[ZoomRecordingEntry] = Field(default_factory=list)
     next_page_token: str | None = None
+
+
+class ZoomParticipant(BaseModel):
+    """Every documented field of one entry from
+    `GET /past_meetings/{meetingId}/participants` or
+    `GET /past_webinars/{webinarId}/participants`. Zoom describes the two
+    identically, so both validate here.
+
+    Zoom empties `user_email` for anyone outside the host's account, and `id`
+    for anyone who joined without logging in. It sends both fields either way,
+    so neither is optional.
+    """
+
+    duration: int
+    failover: bool
+    id: str
+    join_time: str
+    leave_time: str
+    name: str
+    status: str
+    user_email: str
+    user_id: str
+
+    internal_user: bool = False
+
+    # Zoom sends this only when the request asks for it through include_fields.
+    registrant_id: str | None = None
+
+
+# Zoom has no cancelled state: cancelling a registration sets the status to
+# "denied". The other values are "approved" and "pending".
+APPROVED_REGISTRANT_STATUS = "approved"
+
+# Zoom's own error codes, which it sends in the response body under an HTTP 400
+# or 404. NOT_ENTITLED really is "200" — it is a Zoom code, not an HTTP status.
+# Compare them as text: Zoom sends the code as a number on some endpoints and as
+# a string on others.
+ZOOM_MEETING_TOO_OLD_CODE = "12702"
+ZOOM_NOT_FOUND_CODE = "3001"
+ZOOM_NOT_ENTITLED_CODE = "200"
+
+
+class ZoomRegistrant(BaseModel):
+    """Every documented scalar field of one entry from
+    `GET /meetings/{meetingId}/registrants` or
+    `GET /webinars/{webinarId}/registrants`. Zoom marks only `email` and
+    `first_name` as always sent; the rest are answers to a registration form
+    the host can shorten or skip. Zoom also returns `custom_questions`, the
+    host's own questions and their answers, which nothing here reads.
+    """
+
+    email: str
+    first_name: str
+
+    id: str | None = None
+    address: str | None = None
+    city: str | None = None
+    comments: str | None = None
+    country: str | None = None
+    create_time: str | None = None
+    industry: str | None = None
+    job_title: str | None = None
+    join_url: str | None = None
+    last_name: str | None = None
+    no_of_employees: str | None = None
+    org: str | None = None
+    phone: str | None = None
+    purchasing_time_frame: str | None = None
+    role_in_purchase_process: str | None = None
+    state: str | None = None
+    status: str | None = None
+    zip: str | None = None
+
+    # The webinar listing does not document this one.
+    participant_pin_code: int | None = None
+
+
+class ZoomInvitee(BaseModel):
+    """Both documented fields of one entry of `settings.meeting_invitees[]` from
+    `GET /meetings/{meetingId}`. Webinars have no equivalent field."""
+
+    email: str
+    internal_user: bool = False
+
+
+class ZoomPanelist(BaseModel):
+    """Every documented field of one entry from
+    `GET /webinars/{webinarId}/panelists` — a webinar speaker, who does not
+    necessarily register or appear as a participant. The name tag and virtual
+    background fields arrive only when the host set them up.
+    """
+
+    id: str
+    email: str
+    name: str
+    join_url: str
+
+    name_tag_description: str | None = None
+    name_tag_id: str | None = None
+    name_tag_name: str | None = None
+    name_tag_pronouns: str | None = None
+    virtual_background_id: str | None = None

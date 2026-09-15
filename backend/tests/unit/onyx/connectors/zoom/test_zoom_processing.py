@@ -56,10 +56,16 @@ def _client_with_transcript() -> MagicMock:
     return client
 
 
-def _run(client: MagicMock, work: OccurrenceWork) -> list[Document | ConnectorFailure]:
-    """process_occurrence answers with at most one item; the tests read it as a
-    list so an unexpected extra one would show up as a length mismatch."""
-    processed = process_occurrence(client, work)
+def _run(
+    client: MagicMock,
+    work: OccurrenceWork,
+    include_access: bool = False,
+) -> list[Document | ConnectorFailure]:
+    """Leaves the access list off by default: these tests are about transcripts,
+    and access lists have their own file. process_occurrence answers with at most
+    one item; the tests read it as a list so an unexpected extra one would show up
+    as a length mismatch."""
+    processed = process_occurrence(client, work, include_access=include_access)
     return [] if processed is None else [processed]
 
 
