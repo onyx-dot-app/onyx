@@ -293,6 +293,20 @@ class _UserRecordingsCursor(BaseModel):
     after: tuple[str, str] | None = None
 
 
+def _past_the_poll_window(
+    recording: ZoomRecordingEntry, end: SecondsSinceUnixEpoch
+) -> bool:
+    """Zoom scopes a listing by whole UTC days and the last window asks for one more
+    besides, so a session that started after the poll end -- during the attempt, or
+    on the day after a resumed attempt's pinned end -- comes back anyway. The next
+    poll starts at this end and covers those properly, so indexing them here only
+    repeats their transcript downloads against an account-wide rate limit.
+    """
+    if not recording.start_time:
+        return False
+    return time_str_to_utc(recording.start_time).timestamp() > end
+
+
 def _recording_key(recording: ZoomRecordingEntry) -> tuple[str, str]:
     return (recording.start_time or "", recording.uuid)
 
@@ -460,6 +474,7 @@ class _UserRecordingsSource(DiscoverySource):
         host: _Host,
         from_date: date,
         to_date: date,
+        end: SecondsSinceUnixEpoch,
     ) -> list[ZoomRecordingEntry]:
         """Listing a host again on every step costs another pass over its pages, and
         Zoom's rate limit is account-wide, shared with every other integration the
@@ -482,7 +497,12 @@ class _UserRecordingsSource(DiscoverySource):
             )
             recordings = _list_every_recording(client, host, from_date, to_date)
             self._listed = sorted(
-                (entry for entry in recordings if entry.uuid not in already_listed),
+                (
+                    entry
+                    for entry in recordings
+                    if entry.uuid not in already_listed
+                    and not _past_the_poll_window(entry, end)
+                ),
                 key=_recording_key,
             )
             self._listed_key = key
@@ -547,7 +567,7 @@ class _UserRecordingsSource(DiscoverySource):
 
         ordered: list[ZoomRecordingEntry] = []
         try:
-            ordered = self._recordings(client, host, from_date, to_date)
+            ordered = self._recordings(client, host, from_date, to_date, end)
         except Exception as e:
             if fails_the_whole_run(e):
                 raise

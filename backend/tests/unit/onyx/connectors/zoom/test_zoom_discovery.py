@@ -973,7 +973,8 @@ class TestHostListChangesBetweenAttempts:
 
 
 class TestUserRecordingsPollWindow:
-    """This endpoint takes the window itself, so nothing is filtered client-side."""
+    """This endpoint takes the window itself, so what comes back is trusted -- bar
+    the day past the poll end that the last window over-asks for."""
 
     def _window(self, client: MagicMock) -> tuple[str, str]:
         kwargs = client.list_user_recordings.call_args.kwargs
@@ -1249,12 +1250,33 @@ class TestUserRecordingsListingWindow:
         start = end - timedelta(days=90)
         source = GroupSource("group-1")
         client = _client_recording_on(
-            end.date(), _recording("uuid-last-day"), to_is_exclusive=True
+            end.date(),
+            _recording("uuid-last-day", start_time="2026-03-17T09:00:00Z"),
+            to_is_exclusive=True,
         )
 
         found = _walk(source, client, start.timestamp(), end.timestamp())
 
         assert "uuid-last-day" in found
+
+    def test_a_recording_from_the_extra_day_is_left_for_the_next_poll(self) -> None:
+        """That day is asked for only in case `to` is exclusive. Indexing what it
+        returns repeats a transcript download the next poll makes anyway."""
+        end = datetime(2026, 3, 17, 12, 0, tzinfo=timezone.utc)
+        extra_day = end.date() + timedelta(days=1)
+        source = GroupSource("group-1")
+        client = _client_recording_on(
+            extra_day,
+            _recording(
+                "uuid-tomorrow", start_time=f"{extra_day.isoformat()}T09:00:00Z"
+            ),
+        )
+
+        found = _walk(
+            source, client, (end - timedelta(days=90)).timestamp(), end.timestamp()
+        )
+
+        assert found == []
 
     def test_a_window_that_ends_before_it_starts_asks_zoom_for_nothing(self) -> None:
         assert _listing_windows(date(2025, 1, 2), date(2025, 1, 1)) == []
