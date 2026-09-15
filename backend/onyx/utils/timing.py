@@ -28,6 +28,7 @@ def _telemetry_user_id(kwargs: dict[str, Any]) -> str:
             return str(user.id)
         return get_current_user_id() or "Unknown"
     except Exception:
+        logger.warning("Failed to resolve user id for latency telemetry", exc_info=True)
         return "Unknown"
 
 

@@ -1,5 +1,6 @@
 """The timing decorators attach a user id to every latency telemetry record."""
 
+import logging
 from collections.abc import Generator
 from typing import Any
 from unittest.mock import Mock
@@ -68,14 +69,17 @@ def test_function_record_is_unknown_outside_a_request(telemetry_sink: Mock) -> N
 
 
 def test_function_record_is_unknown_when_user_has_no_id(
-    telemetry_sink: Mock,
+    telemetry_sink: Mock, caplog: pytest.LogCaptureFixture
 ) -> None:
     @timing.log_function_time()
     def work(user: Any) -> int:
         return len(user)
 
-    assert work(user="not a user object") == 17
+    with caplog.at_level(logging.WARNING):
+        assert work(user="not a user object") == 17
+
     assert _record_user_id(telemetry_sink) == "Unknown"
+    assert "Failed to resolve user id for latency telemetry" in caplog.text
 
 
 def test_generator_record_uses_request_user_without_user_kwarg(
