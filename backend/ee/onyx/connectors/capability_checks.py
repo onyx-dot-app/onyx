@@ -16,6 +16,9 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CredentialCapability,
 )
+from onyx.connectors.outlook.capability_checks import (
+    build_outlook_doc_permission_sync_checks,
+)
 from onyx.connectors.slack.capability_checks import (
     build_slack_doc_permission_sync_checks,
 )
@@ -25,6 +28,7 @@ from onyx.connectors.source_operations import get_source_operations_class
 # here.
 _DOC_PERMISSION_SYNC_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck]] = {
     DocumentSource.SLACK: build_slack_doc_permission_sync_checks(),
+    DocumentSource.OUTLOOK: build_outlook_doc_permission_sync_checks(),
 }
 
 # Slack registers nothing here by design: it has no group sync (channel access
