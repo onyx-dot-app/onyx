@@ -637,11 +637,13 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
           <Modal.Content width="sm" height="sm">
             <Modal.Header icon={SvgUser} title="Welcome to Onyx" />
             <Modal.Body>
+              {/* Every new tab opens this page, so it never bounces to the IdP on its own. */}
               {authTypeMetadata?.multiTenant === false ? (
                 <LoginPage
                   authUrl={null}
                   authTypeMetadata={authTypeMetadata ?? null}
                   nextUrl="/nrf"
+                  autoRedirectToSso={false}
                 />
               ) : (
                 <div className="flex flex-col items-center">

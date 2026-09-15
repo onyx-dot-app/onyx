@@ -6956,6 +6956,9 @@
       "ssoMissingAuthUrl": {
         "error": "サインインの応答に認可 URL が含まれていませんでした"
       },
+      "ssoRedirecting": {
+        "text": "サインインのため {provider} に移動しています…"
+      },
       "ssoSignInButton": {
         "label": "SSO でサインイン"
       },
