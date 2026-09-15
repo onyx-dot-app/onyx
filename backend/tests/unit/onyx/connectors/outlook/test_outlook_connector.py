@@ -6,7 +6,7 @@ machine and document assembly against the gateway's plain models.
 
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from unittest.mock import MagicMock, create_autospec
+from unittest.mock import MagicMock, call, create_autospec
 
 import pytest
 
@@ -16,12 +16,14 @@ from onyx.connectors.models import (
     ConnectorMissingCredentialError,
     Document,
     HierarchyNode,
+    SlimDocument,
 )
 from onyx.connectors.outlook import connector as connector_module
 from onyx.connectors.outlook.connector import (
     CONVERSATION_FETCH_LIMIT,
     FILTERED_DELTA_CAP,
     MAX_MESSAGES_PER_CONVERSATION,
+    SLIM_BATCH_SIZE,
     OutlookCheckpoint,
     OutlookConnector,
     build_conversation_document,
@@ -770,3 +772,171 @@ def test_mismatched_national_cloud_hosts_are_rejected_at_construction() -> None:
 def test_credentials_before_provider_is_a_programming_error() -> None:
     with pytest.raises(ConnectorMissingCredentialError):
         _ = OutlookConnector().ops
+
+
+# ---------------------------------------------------------------------------
+# pruning
+# ---------------------------------------------------------------------------
+
+
+def _slim_ids(batches: list[list[SlimDocument | HierarchyNode]]) -> list[str]:
+    return [
+        item.id for batch in batches for item in batch if isinstance(item, SlimDocument)
+    ]
+
+
+def test_slim_docs_list_every_conversation_without_reading_bodies() -> None:
+    gateway = _happy_gateway()
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+
+    batches = list(connector.retrieve_all_slim_docs())
+
+    nodes = [item for item in batches[0] if isinstance(item, HierarchyNode)]
+    assert [n.raw_node_id for n in nodes] == [
+        mailbox_node_id(mailbox()),
+        INBOX_ID,
+        ARCHIVE_ID,
+        PROJECTS_ID,
+    ]
+    # The unfiltered delta lists every conversation, old and late alike, and
+    # the removed and conversation-less rows are skipped.
+    assert sorted(_slim_ids(batches)) == sorted(
+        conversation_document_id(mailbox(), cid)
+        for cid in (CONVERSATION_ID, "conv-late", "conv-old")
+    )
+    assert all(
+        item.parent_hierarchy_raw_node_id is None
+        for batch in batches
+        for item in batch
+        if isinstance(item, SlimDocument)
+    )
+    gateway.fetch_conversation_messages_page.assert_not_called()
+    assert all(
+        "received_after" not in call.kwargs
+        for call in gateway.fetch_folder_delta_page.call_args_list
+    )
+
+
+def test_slim_docs_abort_when_a_configured_address_matches_nobody() -> None:
+    """A stale address is a configuration problem. Skipping it would prune
+    every conversation of the mailbox behind it."""
+    gateway = _happy_gateway()
+    gateway.resolve_mailbox.side_effect = [mailbox(), None]
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS, "ghost@contoso.com"])
+
+    with pytest.raises(ConnectorValidationError, match="ghost@contoso.com"):
+        list(connector.retrieve_all_slim_docs())
+
+    gateway.probe_mailbox.assert_not_called()
+
+
+def test_slim_docs_abort_when_a_folder_vanishes_mid_walk() -> None:
+    """A folder deleted between the tree listing and its own children request
+    answers 404 too. Skipping the mailbox would prune all of its live mail."""
+    gateway = _happy_gateway()
+
+    def child_folders(**kwargs: Any) -> OutlookFolderPage:
+        if kwargs["parent_folder_id"] == INBOX_ID:
+            raise graph_error(404, "ErrorItemNotFound")
+        return _child_folders(**kwargs)
+
+    gateway.list_child_folders.side_effect = child_folders
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+
+    with pytest.raises(OutlookGraphError):
+        list(connector.retrieve_all_slim_docs())
+
+
+def test_slim_docs_skip_a_vanished_mailbox_and_abort_on_anything_else() -> None:
+    gateway = _happy_gateway()
+    gateway.probe_mailbox.side_effect = graph_error(404, "MailboxNotEnabledForRESTAPI")
+
+    assert (
+        list(_connector(gateway, mailboxes=[MAILBOX_ADDRESS]).retrieve_all_slim_docs())
+        == []
+    )
+
+    gateway.probe_mailbox.side_effect = graph_error(403)
+    with pytest.raises(OutlookGraphError):
+        list(_connector(gateway, mailboxes=[MAILBOX_ADDRESS]).retrieve_all_slim_docs())
+
+
+def test_slim_docs_abort_when_delta_state_expires_mid_folder() -> None:
+    """Ids already yielded from the expired round cannot be retracted, so a
+    restart could keep a since-deleted conversation alive. Aborting deletes
+    nothing and the next prune starts clean."""
+    gateway = _happy_gateway()
+    inbox_pages: list[OutlookDeltaPage | OutlookGraphError] = [
+        OutlookDeltaPage(changes=[change()], next_link="https://graph/delta?p=2"),
+        graph_error(410, "SyncStateNotFound"),
+    ]
+
+    def delta(**kwargs: Any) -> OutlookDeltaPage:
+        if kwargs["folder_id"] != INBOX_ID:
+            return OutlookDeltaPage(changes=[])
+        page = inbox_pages.pop(0)
+        if isinstance(page, OutlookGraphError):
+            raise page
+        return page
+
+    gateway.fetch_folder_delta_page.side_effect = delta
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+
+    with pytest.raises(OutlookGraphError):
+        list(connector.retrieve_all_slim_docs())
+
+
+def test_slim_docs_batch_and_report_progress() -> None:
+    gateway = _happy_gateway()
+    gateway.fetch_folder_delta_page.side_effect = lambda **kwargs: OutlookDeltaPage(
+        changes=[
+            change(id=f"m-{i}", conversation_id=f"{kwargs['folder_id']}-conv-{i}")
+            for i in range(SLIM_BATCH_SIZE + 1)
+        ]
+    )
+    callback = MagicMock()
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+
+    batches = list(connector.retrieve_all_slim_docs(callback=callback))
+
+    # Three walked folders of 501 each, batched across folder boundaries.
+    slim_batches = [b for b in batches if isinstance(b[0], SlimDocument)]
+    assert [len(b) for b in slim_batches] == [SLIM_BATCH_SIZE] * 3 + [3]
+    assert (
+        callback.progress.call_args_list
+        == [call("outlook_slim_docs", SLIM_BATCH_SIZE + 1)] * 3
+    )
+
+
+def test_slim_docs_follow_delta_pages_by_their_link() -> None:
+    gateway = _happy_gateway()
+    pages_by_link: dict[str | None, OutlookDeltaPage] = {
+        None: OutlookDeltaPage(changes=[change()], next_link="https://graph/delta?p=2"),
+        "https://graph/delta?p=2": OutlookDeltaPage(
+            changes=[], next_link="https://graph/delta?p=3"
+        ),
+        "https://graph/delta?p=3": OutlookDeltaPage(
+            changes=[change(id="msg-2", conversation_id="conv-2")]
+        ),
+    }
+
+    def delta(**kwargs: Any) -> OutlookDeltaPage:
+        if kwargs["folder_id"] != INBOX_ID:
+            return OutlookDeltaPage(changes=[])
+        return pages_by_link[kwargs["next_link"]]
+
+    gateway.fetch_folder_delta_page.side_effect = delta
+    callback = MagicMock()
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+
+    ids = _slim_ids(list(connector.retrieve_all_slim_docs(callback=callback)))
+
+    assert ids == [
+        conversation_document_id(mailbox(), CONVERSATION_ID),
+        conversation_document_id(mailbox(), "conv-2"),
+    ]
+    inbox_progress = [
+        c for c in callback.progress.call_args_list if c == call("outlook_slim_docs", 1)
+    ]
+    assert len(inbox_progress) == 2
+    assert call("outlook_slim_docs", 0) in callback.progress.call_args_list
