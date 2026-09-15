@@ -227,4 +227,4 @@ def keyword_query_expansion(
         return []
 
     queries = [line.strip() for line in content.strip().split("\n") if line.strip()]
-    return queries
+    return queries[:3]

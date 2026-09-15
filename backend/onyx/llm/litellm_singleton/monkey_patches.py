@@ -342,6 +342,33 @@ def _patch_responses_reasoning_summary_newlines() -> None:
             parsed_chunk["response"]["output"] = []
             chunk = parsed_chunk
 
+        if event_type == "response.incomplete" and isinstance(parsed_chunk, dict):
+            response_payload = parsed_chunk.get("response")
+            details = (
+                response_payload.get("incomplete_details")
+                if isinstance(response_payload, dict)
+                else None
+            )
+            reason = details.get("reason") if isinstance(details, dict) else None
+            finish_reason = (
+                {
+                    "max_output_tokens": "length",
+                    "max_tokens": "length",
+                    "content_filter": "content_filter",
+                }.get(reason)
+                if isinstance(reason, str)
+                else None
+            )
+            if finish_reason is not None:
+                terminal = _original_responses_chunk_parser(
+                    self, {**parsed_chunk, "type": "response.completed"}
+                )
+                for choice in terminal.choices:
+                    choice.finish_reason = (
+                        "length" if finish_reason == "length" else "content_filter"
+                    )
+                return terminal
+
         # For all other event types, use the original upstream chunk_parser
         return _original_responses_chunk_parser(self, chunk)
 

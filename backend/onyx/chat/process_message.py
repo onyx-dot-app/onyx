@@ -711,8 +711,8 @@ def build_chat_turn(
             tenant_id=tenant_id,
             llm_provider_api_key=llm.config.api_key,
         )
-        llms.append(llm)
         model_display_names.append(_build_model_display_name(override, llm))
+        llms.append(llm)
     token_counter = get_llm_token_counter(llms[0])
 
     # Verify that the user-specified files actually belong to the user
@@ -1374,8 +1374,20 @@ def _run_models(
                     f"Forced tool {setup.forced_tool_id} not found in tools"
                 )
 
-            # Per-thread copy: run_llm_loop mutates simple_chat_history in-place.
-            if n_models == 1 and setup.new_msg_req.deep_research:
+            from onyx.agents.v2.chat_adapter import (
+                chat_harness_enabled,
+                run_chat_harness,
+            )
+
+            if chat_harness_enabled(setup, n_models, model_tools):
+                run_chat_harness(
+                    setup=setup,
+                    user=user,
+                    emitter=model_emitter,
+                    state=sc,
+                    tools=model_tools,
+                )
+            elif n_models == 1 and setup.new_msg_req.deep_research:
                 if setup.chat_session_project_id:
                     raise RuntimeError("Deep research is not supported for projects")
                 run_deep_research_llm_loop(

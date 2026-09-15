@@ -1,0 +1,29 @@
+{
+  "provider": "OpenAI Default",
+  "model": "gpt-5.6-sol",
+  "reasoning_effort": "off",
+  "policy": {
+    "max_total_tokens": 500000,
+    "max_llm_calls": 300,
+    "decision_max_output_tokens": 4096,
+    "max_result_tokens": 6000,
+    "completion_reserve_tokens": 150000,
+    "duration_mode": "soft",
+    "max_elapsed_seconds": 120,
+    "model_timeout_seconds": 120,
+    "tool_timeout_seconds": 180,
+    "reservation_wait_seconds": 30,
+    "search_feedback": "navigation",
+    "search_max_output_tokens": 16384,
+    "search_model": "gpt-5.6-sol",
+    "search_hierarchical_selection": true,
+    "search_document_read": false,
+    "search_task_anchor": true,
+    "search_candidate_preparation": false,
+    "source_cards": false,
+    "search_final_selection_limit": 10,
+    "preserve_search_evidence": true,
+    "protect_search_budget": true
+  },
+  "search_expansion_strategy": "objective"
+}

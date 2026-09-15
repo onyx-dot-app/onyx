@@ -95,6 +95,7 @@ _VERTEX_ANTHROPIC_MODELS_REJECTING_STREAM_OPTIONS = (
     "claude-opus-4-7",
     "claude-opus-4-8",
 )
+_NATIVE_OPENAI_MODELS_SUPPORTING_REASONING_NONE = frozenset({"gpt-5.6", "gpt-5.6-sol"})
 
 # Best-effort tuning kwargs, never worth failing a chat over. _completion
 # retries provider rejections without them (reasoning keys first, then all),
@@ -387,6 +388,17 @@ def _prompt_contains_tool_call_history(prompt: LanguageModelInput) -> bool:
     return any(isinstance(msg, AssistantMessage) and msg.tool_calls for msg in msgs)
 
 
+def _native_openai_model_supports_reasoning_none(
+    model_provider: str, model_names: list[str]
+) -> bool:
+    if model_provider != LlmProviderNames.OPENAI:
+        return False
+    return any(
+        name.lower().split("/")[-1] in _NATIVE_OPENAI_MODELS_SUPPORTING_REASONING_NONE
+        for name in model_names
+    )
+
+
 @lru_cache(maxsize=None)
 def _log_azure_responses_api_version_override(
     api_base: str | None, configured_api_version: str
@@ -471,6 +483,8 @@ class LitellmLLM(LLM):
         reasoning_effort_default: ReasoningEffort | None = None,
         reasoning_effort_user_default: ReasoningEffort | None = None,
         reasoning_effort_max: ReasoningEffort | None = None,
+        *,
+        temperature_for_reasoning_none: float | None = None,
     ):
         # Timeout in seconds for each socket read operation (i.e., max time between
         # receiving data chunks/tokens). This is NOT a total request timeout - a
@@ -480,6 +494,7 @@ class LitellmLLM(LLM):
         self._timeout = timeout if timeout is not None else LLM_SOCKET_READ_TIMEOUT
 
         self._temperature = GEN_AI_TEMPERATURE if temperature is None else temperature
+        self._temperature_for_reasoning_none = temperature_for_reasoning_none
 
         self._model_provider = model_provider
         self._model_version = model_name
@@ -671,9 +686,14 @@ class LitellmLLM(LLM):
                 for name in model_identity_names
             )
         )
+        native_openai_supports_reasoning_none = (
+            _native_openai_model_supports_reasoning_none(
+                self.config.model_provider, model_identity_names
+            )
+        )
         # All OpenAI models will use responses API for consistency
         # Responses API is needed to get reasoning packets from OpenAI models
-        is_openai_model = any(
+        is_openai_model = native_openai_supports_reasoning_none or any(
             is_true_openai_model(self.config.model_provider, name)
             for name in model_identity_names
         )
@@ -753,6 +773,15 @@ class LitellmLLM(LLM):
         if not tools:
             tool_choice = None
 
+        # Settle before anything reads it, so every branch below and tracing
+        # see the same effort the provider will.
+        reasoning_effort = resolve_reasoning_effort(
+            reasoning_effort,
+            default=self.config.reasoning_effort_default,
+            user_default=self.config.reasoning_effort_user_default,
+            maximum=self.config.reasoning_effort_max,
+        )
+
         # Temperature
         # Some models (e.g. Claude Opus 4.7/4.8) reject a non-default
         # temperature with a 400 invalid_request_error. For those models we
@@ -766,19 +795,18 @@ class LitellmLLM(LLM):
             anthropic_omits_sampling_params(name) for name in model_identity_names
         )
         if not omits_sampling_params:
-            optional_kwargs["temperature"] = 1 if is_reasoning else self._temperature
+            temperature = 1 if is_reasoning else self._temperature
+            if (
+                self._temperature_for_reasoning_none is not None
+                and is_reasoning
+                and reasoning_effort is ReasoningEffort.OFF
+                and native_openai_supports_reasoning_none
+            ):
+                temperature = self._temperature_for_reasoning_none
+            optional_kwargs["temperature"] = temperature
 
         if stream and not is_vertex_model_rejecting_stream_options:
             optional_kwargs["stream_options"] = {"include_usage": True}
-
-        # Settle before anything reads it, so every branch below and tracing
-        # see the same effort the provider will.
-        reasoning_effort = resolve_reasoning_effort(
-            reasoning_effort,
-            default=self.config.reasoning_effort_default,
-            user_default=self.config.reasoning_effort_user_default,
-            maximum=self.config.reasoning_effort_max,
-        )
 
         # Tool turns over chat completions for GPT-5.4+ trade reasoning for a
         # working call. Responses routes, registry bridge included, are exempt.
@@ -799,12 +827,17 @@ class LitellmLLM(LLM):
             required_kwarg_keys = frozenset({"reasoning_effort"})
             _log_chat_completions_tools_disable_reasoning(model, self._api_base)
 
-        # Note, there is a reasoning_effort parameter in LiteLLM but it is completely jank and does not work for any
-        # of the major providers. Not setting it sets it to OFF.
+        # LiteLLM's reasoning_effort mappings are uneven, so use each
+        # provider's native reasoning shape below. Most models keep OFF as an
+        # omitted kwarg, but Sol must receive OpenAI's explicit "none" value or
+        # the provider applies its medium default.
         if (
             is_reasoning
-            # The default of this parameter not set is surprisingly not the equivalent of an Auto but is actually Off
-            and reasoning_effort != ReasoningEffort.OFF
+            # OFF usually omits reasoning kwargs; Sol is the narrow exception.
+            and (
+                reasoning_effort != ReasoningEffort.OFF
+                or native_openai_supports_reasoning_none
+            )
             and not any(
                 openai_model_rejects_reasoning_effort(name)
                 for name in model_identity_names
@@ -819,6 +852,11 @@ class LitellmLLM(LLM):
                 model_identity_names,
                 self._api_surface,
             )
+            if native_openai_supports_reasoning_none and (
+                self._api_surface is None
+                or self._api_surface in OPENAI_COMPATIBLE_SURFACES
+            ):
+                reasoning_style = ReasoningParamStyle.OPENAI
 
             if reasoning_style is ReasoningParamStyle.OPENAI:
                 if is_claude_model:

@@ -1,6 +1,6 @@
 from collections import defaultdict
 from collections.abc import Callable
-from typing import TypeVar
+from typing import Literal, TypeVar
 
 from onyx.context.search.models import (
     ContextExpansionType,
@@ -114,6 +114,53 @@ def weighted_reciprocal_rank_fusion(
         ),
     )
     return [id_to_item[item_id] for item_id in sorted_ids]
+
+
+def document_level_reciprocal_rank_fusion(
+    *,
+    ranked_results: list[list[InferenceChunk]],
+    weights: list[float],
+) -> list[InferenceChunk]:
+    if len(ranked_results) != len(weights):
+        raise ValueError(
+            f"Number of ranked results ({len(ranked_results)}) must match number of weights ({len(weights)})"
+        )
+
+    chunk_order = weighted_reciprocal_rank_fusion(
+        ranked_results=ranked_results,
+        weights=weights,
+        id_extractor=lambda chunk: chunk.unique_id,
+    )
+
+    doc_to_chunks: dict[str, list[InferenceChunk]] = defaultdict(list)
+    seen_chunks: set[str] = set()
+    for chunk in chunk_order:
+        if chunk.unique_id in seen_chunks:
+            continue
+        seen_chunks.add(chunk.unique_id)
+        doc_to_chunks[chunk.document_id].append(chunk)
+
+    per_query_doc_heads: list[list[InferenceChunk]] = []
+    for chunks in ranked_results:
+        seen_docs: set[str] = set()
+        doc_heads: list[InferenceChunk] = []
+        for chunk in chunks:
+            if chunk.document_id in seen_docs:
+                continue
+            seen_docs.add(chunk.document_id)
+            doc_heads.append(chunk)
+        per_query_doc_heads.append(doc_heads)
+
+    ordered_doc_heads = weighted_reciprocal_rank_fusion(
+        ranked_results=per_query_doc_heads,
+        weights=weights,
+        id_extractor=lambda chunk: chunk.document_id,
+    )
+
+    fused_chunks: list[InferenceChunk] = []
+    for doc_head in ordered_doc_heads:
+        fused_chunks.extend(doc_to_chunks[doc_head.document_id])
+    return fused_chunks
 
 
 def section_to_dict(section: InferenceSection, section_num: int) -> dict:
@@ -359,27 +406,48 @@ def expand_section_with_context(
     llm: LLM,
     document_index: DocumentIndex,
     expand_override: bool = False,
+    context_expansion_strategy: Literal["llm", "adjacent_2"] = "llm",
 ) -> InferenceSection | None:
-    """Use LLM to classify section relevance and return expanded section with appropriate context.
+    """Return expanded section context using the configured expansion strategy.
 
-    This function combines classification and expansion into a single operation:
+    The default LLM strategy combines classification and expansion:
     1. Retrieves chunks needed for classification (2 chunks for prompt)
     2. Uses LLM to classify relevance (situations 1-4) unless expand_override is True
     3. For FULL_DOCUMENT, fetches additional chunks (5 total above/below)
     4. Returns the expanded section or None if not relevant
 
+    The adjacent_2 strategy skips classification and always returns 2 chunks
+    above, the original section chunks, and 2 chunks below.
+
     Args:
         section: The InferenceSection to classify and expand
-        search_query: The user's search query
+        user_query: The user's search query
         llm: LLM instance to use for classification
         document_index: Document index for retrieving adjacent chunks
         expand_override: If True, skip LLM classification and use FULL_DOCUMENT expansion
+        context_expansion_strategy: Strategy for expansion after section selection
 
     Returns:
         Expanded InferenceSection with appropriate context, or None if NOT_RELEVANT
     """
     chunks_above_for_prompt: list[InferenceChunk] = []
     chunks_below_for_prompt: list[InferenceChunk] = []
+
+    if context_expansion_strategy == "adjacent_2":
+        chunks_above, chunks_below = _retrieve_adjacent_chunks(
+            section=section,
+            document_index=document_index,
+            num_chunks_above=2,
+            num_chunks_below=2,
+        )
+        all_chunks = chunks_above + section.chunks + chunks_below
+        if not all_chunks:
+            return section
+        expanded_section = inference_section_from_chunks(
+            center_chunk=section.center_chunk,
+            chunks=all_chunks,
+        )
+        return expanded_section if expanded_section else section
 
     # If expand_override is True, skip LLM classification and use FULL_DOCUMENT
     if expand_override:
