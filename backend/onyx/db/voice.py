@@ -1,7 +1,7 @@
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, select, update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from onyx.db.models import User, VoiceProvider
@@ -51,15 +51,17 @@ def fetch_default_tts_provider(db_session: Session) -> VoiceProvider | None:
 def fetch_voice_provider_by_type(
     db_session: Session, provider_type: str
 ) -> VoiceProvider | None:
-    """Fetch one provider by normalized type, rejecting ambiguous matches."""
-    providers = db_session.scalars(
-        select(VoiceProvider)
-        .where(
-            func.lower(func.trim(VoiceProvider.provider_type))
-            == normalize_provider_type(provider_type)
-        )
-        .limit(2)
-    ).all()
+    """Fetch one provider by normalized type, rejecting ambiguous matches.
+
+    Rows are matched in Python with normalize_provider_type so legacy values
+    follow the same rule as requests. The table holds a handful of rows.
+    """
+    wanted = normalize_provider_type(provider_type)
+    providers = [
+        provider
+        for provider in db_session.scalars(select(VoiceProvider)).all()
+        if normalize_provider_type(provider.provider_type) == wanted
+    ]
     if len(providers) > 1:
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
