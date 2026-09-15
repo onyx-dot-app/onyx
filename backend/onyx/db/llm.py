@@ -635,8 +635,9 @@ def fetch_existing_tools(db_session: Session, tool_ids: list[int]) -> list[ToolM
 def fetch_existing_models(
     db_session: Session,
     flow_types: list[LLMModelFlowType],
+    only_visible: bool = False,
 ) -> list[ModelConfiguration]:
-    models = (
+    stmt = (
         select(ModelConfiguration)
         .join(LLMModelFlow)
         .where(LLMModelFlow.llm_model_flow_type.in_(flow_types))
@@ -646,7 +647,10 @@ def fetch_existing_models(
         )
     )
 
-    return list(db_session.scalars(models).all())
+    if only_visible:
+        stmt = stmt.where(ModelConfiguration.is_visible.is_(True))
+
+    return list(db_session.scalars(stmt).all())
 
 
 def fetch_existing_llm_providers(
