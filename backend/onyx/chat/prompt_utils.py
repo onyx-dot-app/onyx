@@ -65,6 +65,7 @@ def get_default_base_system_prompt(db_session: Session) -> str:
 def calculate_reserved_tokens(
     db_session: Session,
     persona_system_prompt: str,
+    base_system_prompt: str,
     token_counter: Callable[[str], int],
     files: list[FileDescriptor] | None = None,
     user_memory_context: UserMemoryContext | None = None,
@@ -86,8 +87,6 @@ def calculate_reserved_tokens(
     Returns:
         Total reserved token count
     """
-    base_system_prompt = get_default_base_system_prompt(db_session)
-
     # This is for token estimation purposes
     fake_system_prompt = build_system_prompt(
         base_system_prompt=base_system_prompt,

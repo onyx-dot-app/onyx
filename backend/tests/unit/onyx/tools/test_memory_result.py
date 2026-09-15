@@ -5,17 +5,17 @@ from uuid import uuid4
 
 import pytest
 
+from onyx.agents.runtime import RunSnapshot
+from onyx.agents.tools import ToolInvocation
+from onyx.agents.transcript import OperationSnapshot, RunStatus
 from onyx.chat.artifacts import project_tool_artifacts
-from onyx.chat.emitter import Emitter
+from onyx.db.memory import UserInfo, UserMemoryContext
+from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import AssistantMessage, Message, ToolCall, ToolResultMessage
-from onyx.server.query_and_chat.placement import Placement
-from onyx.tools.interface import Tool
-from onyx.tools.models import MemoryToolResponseSnapshot
-from onyx.tools.tool_implementations.memory.memory_tool import (
-    MemoryTool,
-    MemoryToolOverrideKwargs,
-)
+from onyx.tools.interface import ToolContext
+from onyx.tools.progress import MemoryUpdated
+from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 
 
 @pytest.mark.parametrize(
@@ -44,21 +44,24 @@ def test_memory_outcome_is_final_before_serialization(
         "onyx.tools.tool_implementations.memory.memory_tool.process_memory_update",
         lambda **_kwargs: ("Prefers tea", 9 if outcome == "invalid_index" else None),
     )
-    result = MemoryTool(1, MagicMock(spec=Emitter), MagicMock(spec=LLM)).run(
-        placement=Placement(turn_index=0),
-        override_kwargs=MemoryToolOverrideKwargs(
-            user_id=None if outcome == "missing_user" else uuid4(),
-            user_name=None,
-            user_email=None,
-            user_role=None,
-            existing_memories=[],
-            chat_history=[],
+    result = MemoryTool(1, MagicMock(spec=LLM)).run(
+        invocation=ToolInvocation(
+            call_id="test",
+            arguments={"memory": "Prefers tea"},
+            cancellation=CancellationSignal(),
+            update=lambda _progress: None,
         ),
-        memory="Prefers tea",
+        context=ToolContext(
+            user_memory_context=UserMemoryContext(
+                user_id=None if outcome == "missing_user" else uuid4(),
+                user_info=UserInfo(name=None, email=None, role=None),
+                memories=tuple([]),
+            )
+        ),
     )
     assert result.is_error is (outcome != "saved")
     if outcome == "saved":
-        assert isinstance(result.details, MemoryToolResponseSnapshot)
+        assert isinstance(result.details, MemoryUpdated)
         assert result.details.memory_id == 42
     else:
         assert result.text.startswith("Error:")
@@ -69,17 +72,28 @@ def test_memory_outcome_is_final_before_serialization(
         details=result.details,
         is_error=result.is_error,
     )
-    tool = MagicMock(spec=Tool)
-    tool.name = "memory"
-    tool.id = 1
     messages: list[Message] = [
         AssistantMessage(
             content=[ToolCall(id="memory-1", name="memory", arguments={})]
         ),
         committed,
     ]
-    first = project_tool_artifacts(messages, [tool], lambda _: Placement(turn_index=0))
-    second = project_tool_artifacts(messages, [tool], lambda _: Placement(turn_index=0))
+    snapshot = RunSnapshot(
+        run_id="memory-run",
+        status=RunStatus.COMPLETE,
+        messages=messages,
+        operations=[
+            OperationSnapshot(step_index=0, message_index=0, status=RunStatus.COMPLETE),
+            OperationSnapshot(
+                step_index=0,
+                message_index=0,
+                tool_call_id="memory-1",
+                status=RunStatus.COMPLETE,
+            ),
+        ],
+    )
+    first = project_tool_artifacts(snapshot, {"memory": 1})
+    second = project_tool_artifacts(snapshot, {"memory": 1})
     assert first == second
     assert first.tool_calls[0].tool_call_response == result.text
     assert write.call_count == (0 if outcome in {"incognito", "missing_user"} else 1)

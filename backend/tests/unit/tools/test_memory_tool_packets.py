@@ -1,34 +1,37 @@
 """Tests for memory tool streaming packet emissions."""
 
-import queue
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
 
-from onyx.chat.emitter import Emitter
-from onyx.server.query_and_chat.placement import Placement
+from onyx.agents.tools import ToolInvocation, ToolProgress
+from onyx.db.memory import UserInfo, UserMemoryContext
+from onyx.llm.cancellation import CancellationSignal
 from onyx.server.query_and_chat.session_loading import create_memory_packets
 from onyx.server.query_and_chat.streaming_models import (
     MemoryToolDelta,
     MemoryToolStart,
     SectionEnd,
 )
-from onyx.tools.models import MemoryToolResponseSnapshot
-from onyx.tools.tool_implementations.memory.memory_tool import (
-    MemoryTool,
-    MemoryToolOverrideKwargs,
-)
+from onyx.tools.interface import ToolContext
+from onyx.tools.progress import MemoryOperation, MemoryUpdated
+from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 
 
 @pytest.fixture
-def emitter_queue() -> queue.Queue:
-    return queue.Queue()
+def progress() -> list[ToolProgress]:
+    return []
 
 
 @pytest.fixture
-def emitter(emitter_queue: queue.Queue) -> Emitter:
-    return Emitter(merged_queue=emitter_queue)
+def invocation(progress: list[ToolProgress]) -> ToolInvocation:
+    return ToolInvocation(
+        call_id="memory",
+        arguments={},
+        cancellation=CancellationSignal(),
+        update=progress.append,
+    )
 
 
 @pytest.fixture
@@ -37,9 +40,7 @@ def mock_llm() -> MagicMock:
 
 
 @pytest.fixture
-def memory_tool(
-    emitter: Emitter, mock_llm: MagicMock, monkeypatch: pytest.MonkeyPatch
-) -> MemoryTool:
+def memory_tool(mock_llm: MagicMock, monkeypatch: pytest.MonkeyPatch) -> MemoryTool:
     monkeypatch.setattr(
         "onyx.tools.tool_implementations.memory.memory_tool.add_memory",
         MagicMock(return_value=42),
@@ -48,53 +49,18 @@ def memory_tool(
         "onyx.tools.tool_implementations.memory.memory_tool.update_memory_at_index",
         MagicMock(return_value=42),
     )
-    return MemoryTool(tool_id=1, emitter=emitter, llm=mock_llm)
+    return MemoryTool(tool_id=1, llm=mock_llm)
 
 
 @pytest.fixture
-def placement() -> Placement:
-    return Placement(turn_index=0, tab_index=0)
-
-
-@pytest.fixture
-def override_kwargs() -> MemoryToolOverrideKwargs:
-    return MemoryToolOverrideKwargs(
-        user_id=uuid4(),
-        user_name="Test User",
-        user_email="test@example.com",
-        user_role=None,
-        existing_memories=["User likes dark mode"],
-        chat_history=[],
+def tool_context() -> ToolContext:
+    return ToolContext(
+        user_memory_context=UserMemoryContext(
+            user_id=uuid4(),
+            user_info=UserInfo(name="Test User", email="test@example.com", role=None),
+            memories=tuple(["User likes dark mode"]),
+        )
     )
-
-
-class TestMemoryToolEmitStart:
-    def test_emit_start_emits_memory_tool_start_packet(
-        self,
-        memory_tool: MemoryTool,
-        emitter_queue: queue.Queue,
-        placement: Placement,
-    ) -> None:
-        memory_tool.emit_start(placement)
-
-        _key, packet = emitter_queue.get_nowait()
-        assert isinstance(packet.obj, MemoryToolStart)
-        assert packet.placement is not None
-        assert packet.placement.turn_index == placement.turn_index
-        assert packet.placement.tab_index == placement.tab_index
-        assert packet.placement.model_index == 0  # emitter stamps model_index=0
-
-    def test_emit_start_with_different_placement(
-        self,
-        memory_tool: MemoryTool,
-        emitter_queue: queue.Queue,
-    ) -> None:
-        placement = Placement(turn_index=2, tab_index=1)
-        memory_tool.emit_start(placement)
-
-        _key, packet = emitter_queue.get_nowait()
-        assert packet.placement.turn_index == 2
-        assert packet.placement.tab_index == 1
 
 
 class TestMemoryToolRun:
@@ -103,66 +69,61 @@ class TestMemoryToolRun:
         self,
         mock_process: MagicMock,
         memory_tool: MemoryTool,
-        emitter_queue: queue.Queue,
-        placement: Placement,
-        override_kwargs: MemoryToolOverrideKwargs,
+        progress: list[ToolProgress],
+        invocation: ToolInvocation,
+        tool_context: ToolContext,
     ) -> None:
         mock_process.return_value = ("User prefers Python", None)
 
-        memory_tool.run(
-            placement=placement,
-            override_kwargs=override_kwargs,
-            memory="User prefers Python",
-        )
+        invocation.arguments = {"memory": "User prefers Python"}
+        memory_tool.run(invocation=invocation, context=tool_context)
 
-        _key, packet = emitter_queue.get_nowait()
-        assert isinstance(packet.obj, MemoryToolDelta)
-        assert packet.obj.memory_text == "User prefers Python"
-        assert packet.obj.operation == "add"
-        assert packet.obj.memory_id == 42
-        assert packet.obj.index is None
+        packet = next(
+            item for item in progress if isinstance(item.details, MemoryUpdated)
+        )
+        assert isinstance(packet.details, MemoryUpdated)
+        assert packet.details.memory_text == "User prefers Python"
+        assert packet.details.operation == "add"
+        assert packet.details.memory_id == 42
+        assert packet.details.index is None
 
     @patch("onyx.tools.tool_implementations.memory.memory_tool.process_memory_update")
     def test_run_emits_delta_for_update_operation(
         self,
         mock_process: MagicMock,
         memory_tool: MemoryTool,
-        emitter_queue: queue.Queue,
-        placement: Placement,
-        override_kwargs: MemoryToolOverrideKwargs,
+        progress: list[ToolProgress],
+        invocation: ToolInvocation,
+        tool_context: ToolContext,
     ) -> None:
         mock_process.return_value = ("User prefers light mode", 0)
 
-        memory_tool.run(
-            placement=placement,
-            override_kwargs=override_kwargs,
-            memory="User prefers light mode",
-        )
+        invocation.arguments = {"memory": "User prefers light mode"}
+        memory_tool.run(invocation=invocation, context=tool_context)
 
-        _key, packet = emitter_queue.get_nowait()
-        assert isinstance(packet.obj, MemoryToolDelta)
-        assert packet.obj.memory_text == "User prefers light mode"
-        assert packet.obj.operation == "update"
-        assert packet.obj.memory_id == 42
-        assert packet.obj.index == 0
+        packet = next(
+            item for item in progress if isinstance(item.details, MemoryUpdated)
+        )
+        assert isinstance(packet.details, MemoryUpdated)
+        assert packet.details.memory_text == "User prefers light mode"
+        assert packet.details.operation == "update"
+        assert packet.details.memory_id == 42
+        assert packet.details.index == 0
 
     @patch("onyx.tools.tool_implementations.memory.memory_tool.process_memory_update")
     def test_run_returns_saved_memory(
         self,
         mock_process: MagicMock,
         memory_tool: MemoryTool,
-        placement: Placement,
-        override_kwargs: MemoryToolOverrideKwargs,
+        invocation: ToolInvocation,
+        tool_context: ToolContext,
     ) -> None:
         mock_process.return_value = ("User prefers Python", None)
 
-        result = memory_tool.run(
-            placement=placement,
-            override_kwargs=override_kwargs,
-            memory="User prefers Python",
-        )
+        invocation.arguments = {"memory": "User prefers Python"}
+        result = memory_tool.run(invocation=invocation, context=tool_context)
 
-        assert isinstance(result.details, MemoryToolResponseSnapshot)
+        assert isinstance(result.details, MemoryUpdated)
         assert result.details.memory_text == "User prefers Python"
         assert result.details.index is None
         assert "User prefers Python" in result.text
@@ -172,7 +133,7 @@ class TestCreateMemoryPackets:
     def test_produces_start_delta_end_for_add(self) -> None:
         packets = create_memory_packets(
             memory_text="User likes Python",
-            operation="add",
+            operation=MemoryOperation.ADD,
             memory_id=None,
             turn_index=1,
             tab_index=0,
@@ -193,7 +154,7 @@ class TestCreateMemoryPackets:
     def test_produces_start_delta_end_for_update(self) -> None:
         packets = create_memory_packets(
             memory_text="User prefers light mode",
-            operation="update",
+            operation=MemoryOperation.UPDATE,
             memory_id=42,
             turn_index=3,
             tab_index=1,
@@ -215,7 +176,7 @@ class TestCreateMemoryPackets:
     def test_placement_is_set_correctly(self) -> None:
         packets = create_memory_packets(
             memory_text="test",
-            operation="add",
+            operation=MemoryOperation.ADD,
             memory_id=None,
             turn_index=5,
             tab_index=2,

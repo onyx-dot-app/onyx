@@ -46,7 +46,6 @@ from onyx.sandbox_proxy.resolvers.mcp_matching import (
 )
 from onyx.server.features.mcp.credentials import (
     MCPCredentialsError,
-    extract_connection_data,
     mcp_token_expired,
     resolve_mcp_credentials,
 )
@@ -177,10 +176,10 @@ class MCPServerResolver(CredentialResolver):
             expired_oauth_config_id: int | None = None
             if (
                 server.auth_type == MCPAuthenticationType.OAUTH
-                and creds.connection_config is not None
-                and mcp_token_expired(extract_connection_data(creds.connection_config))
+                and creds.connection_config_id is not None
+                and mcp_token_expired(creds.connection_data)
             ):
-                expired_oauth_config_id = creds.connection_config.id
+                expired_oauth_config_id = creds.connection_config_id
 
         # Refresh after the session closes — the primitive opens its own.
         if expired_oauth_config_id is not None:

@@ -1,9 +1,4 @@
-"""Unit tests for CodingAgentTool.
-
-Coverage is intentionally narrow — the heavy lifting lives in
-``run_coding_agent_call`` and ``BashTool``, both tested separately. This
-file exists to lock in the wiring this Tool wrapper is responsible for.
-"""
+"""Coding tool availability follows the sandbox service."""
 
 from unittest.mock import MagicMock, patch
 

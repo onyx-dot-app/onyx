@@ -6,6 +6,7 @@ interface BaseObj {
 }
 
 export enum PacketType {
+  OPERATION_STATUS = "operation_status",
   MESSAGE_START = "message_start",
   MESSAGE_DELTA = "message_delta",
   MESSAGE_END = "message_end",
@@ -459,6 +460,7 @@ export type CodingAgentObj =
 
 // Union type for all possible streaming objects
 export type ObjTypes =
+  | OperationStatus
   | ChatObj
   | NewToolObj
   | ReasoningObj
@@ -481,8 +483,25 @@ export interface Placement {
   model_index?: number | null; // For multi-model answer generation - identifies which model produced this packet
 }
 
-// Packet wrapper for streaming objects
+export interface PacketIdentity {
+  response_id: number;
+  run_id: string;
+  message_id: string;
+  parent_run_id?: string | null;
+  parent_message_id?: string | null;
+  parent_tool_call_id?: string | null;
+  tool_call_id?: string | null;
+  part_id: string;
+}
+
+export interface OperationStatus extends BaseObj {
+  type: "operation_status";
+  status: "running" | "complete" | "limit" | "cancelled" | "error";
+  tool_name?: string | null;
+}
+
 export interface Packet {
+  identity?: PacketIdentity | null;
   placement: Placement;
   obj: ObjTypes;
 }

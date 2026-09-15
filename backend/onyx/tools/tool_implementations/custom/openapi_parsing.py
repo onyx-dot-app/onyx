@@ -1,6 +1,7 @@
+from collections.abc import Mapping
 from typing import Any, cast
 
-from pydantic import BaseModel
+from pydantic import BaseModel, JsonValue
 
 from onyx.tools.tool_name import sanitize_tool_name
 
@@ -49,13 +50,16 @@ class MethodSpec(BaseModel):
         ]
 
     def build_url(
-        self, base_url: str, path_params: dict[str, str], query_params: dict[str, str]
+        self,
+        base_url: str,
+        path_params: Mapping[str, JsonValue],
+        query_params: Mapping[str, JsonValue],
     ) -> str:
         url = f"{base_url}{self.path}"
         try:
             url = url.format(**path_params)
         except KeyError as e:
-            raise ValueError(f"Missing path parameter: {e}")
+            raise ValueError(f"Missing path parameter: {e}") from e
         if query_params:
             url += "?"
             for param, value in query_params.items():

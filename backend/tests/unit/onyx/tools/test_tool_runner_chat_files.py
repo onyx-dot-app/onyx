@@ -2,64 +2,13 @@
 Unit tests for chat_files handling in tool_runner.py.
 
 These tests verify that chat files are properly passed to PythonTool
-through the PythonToolOverrideKwargs mechanism.
+through the ToolContext mechanism.
 """
 
 from unittest.mock import patch
 
-import pytest
-
-from onyx.db.models import UserFile
-from onyx.tools.models import ChatFile, PythonToolOverrideKwargs
-
-
-class TestChatFilesPassingToPythonTool:
-    """Tests for passing chat_files to PythonTool."""
-
-    @pytest.fixture
-    def sample_chat_files(self) -> list[ChatFile]:
-        """Create sample chat files for testing."""
-        return [
-            ChatFile(filename="test.xlsx", content=b"excel content"),
-            ChatFile(filename="data.csv", content=b"col1,col2\n1,2\n3,4"),
-        ]
-
-    def test_chat_files_passed_to_python_tool_override_kwargs(
-        self,
-        sample_chat_files: list[ChatFile],
-    ) -> None:
-        """Test that PythonToolOverrideKwargs correctly stores chat_files."""
-        # Verify the override_kwargs structure stores chat_files correctly
-        override_kwargs = PythonToolOverrideKwargs(chat_files=sample_chat_files)
-
-        assert override_kwargs.chat_files == sample_chat_files
-        assert len(override_kwargs.chat_files) == 2
-        assert override_kwargs.chat_files[0].filename == "test.xlsx"
-        assert override_kwargs.chat_files[0].content == b"excel content"
-        assert override_kwargs.chat_files[1].filename == "data.csv"
-
-    def test_empty_chat_files_defaults_to_empty_list(self) -> None:
-        """Test that empty chat_files defaults to empty list."""
-        override_kwargs = PythonToolOverrideKwargs()
-        assert override_kwargs.chat_files == []
-
-    def test_none_chat_files_handled_in_tool_runner(self) -> None:
-        """Test that None chat_files are handled gracefully in the tool_runner code path.
-
-        The tool_runner.py uses `chat_files or []` pattern when creating
-        PythonToolOverrideKwargs, so we verify this pattern works correctly.
-        """
-        # Simulate the pattern used in tool_runner.py:
-        # override_kwargs = PythonToolOverrideKwargs(chat_files=chat_files or [])
-        chat_files_param: list[ChatFile] | None = None
-
-        # This is the exact pattern used in tool_runner.py
-        override_kwargs = PythonToolOverrideKwargs(
-            chat_files=chat_files_param or [],
-        )
-
-        assert override_kwargs.chat_files == []
-        assert isinstance(override_kwargs.chat_files, list)
+from onyx.file_store.models import UserFileMetadata
+from onyx.tools.models import ChatFile
 
 
 class TestChatFileConversion:
@@ -176,9 +125,8 @@ class TestChatFileConversion:
         from onyx.chat.files import _load_context_user_files_for_tools
 
         user_file_id = uuid4()
-        user_file = UserFile(
+        user_file = UserFileMetadata(
             id=user_file_id,
-            user_id=uuid4(),
             file_id="stored-xlsx-file",
             name="review_results.xlsx",
             file_type=(
@@ -217,9 +165,8 @@ class TestChatFileConversion:
 
         from onyx.chat.files import _load_context_user_files_for_tools
 
-        user_file = UserFile(
+        user_file = UserFileMetadata(
             id=uuid4(),
-            user_id=uuid4(),
             file_id="missing-file",
             name="ghost.csv",
             file_type="text/csv",
@@ -243,9 +190,8 @@ class TestChatFileConversion:
 
         from onyx.chat.files import _load_context_user_files_for_tools
 
-        user_file = UserFile(
+        user_file = UserFileMetadata(
             id=uuid4(),
-            user_id=uuid4(),
             file_id="stored-pdf-file",
             name="framework.pdf",
             file_type="application/pdf",
@@ -268,9 +214,8 @@ class TestChatFileConversion:
         from onyx.chat.files import _load_context_user_files_for_tools
 
         user_file_id = uuid4()
-        user_file = UserFile(
+        user_file = UserFileMetadata(
             id=user_file_id,
-            user_id=uuid4(),
             file_id="stored-csv-file",
             name="data.csv",
             file_type="text/csv",

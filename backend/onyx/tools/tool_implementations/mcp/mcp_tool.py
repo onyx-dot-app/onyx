@@ -4,7 +4,7 @@ from typing import Any
 
 from mcp.client.auth import OAuthClientProvider
 
-from onyx.chat.emitter import Emitter
+from onyx.agents.tools import ToolInvocation, ToolProgress
 from onyx.db.enums import MCPAuthenticationType, MCPTransport
 from onyx.db.models import MCPConnectionConfig, MCPServer
 from onyx.llm.models import ToolResult
@@ -12,6 +12,7 @@ from onyx.server.features.mcp.client import call_mcp_tool
 from onyx.server.features.mcp.credentials import ResolvedMCPCredentials
 from onyx.server.features.mcp.models import (
     DENYLISTED_MCP_HEADERS,
+    MCPServerConnection,
     merge_mcp_headers,
 )
 from onyx.server.features.mcp.oauth import (
@@ -21,14 +22,9 @@ from onyx.server.features.mcp.oauth import (
 )
 from onyx.server.metrics.mcp_client import record_mcp_client_tool_outcome
 from onyx.server.metrics.mcp_common import MCPToolCallStatus
-from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import (
-    CustomToolDelta,
-    CustomToolStart,
-    Packet,
-)
-from onyx.tools.interface import Tool
+from onyx.tools.interface import FunctionToolDefinition, Tool, ToolContext
 from onyx.tools.models import CustomToolCallSummary
+from onyx.tools.progress import CustomToolOutput, CustomToolStarted
 from onyx.tools.tool_name import sanitize_tool_name
 from onyx.utils.logger import setup_logger
 
@@ -67,14 +63,13 @@ def _normalize_parameters_schema(schema: dict[str, Any] | None) -> dict[str, Any
     return schema
 
 
-class MCPTool(Tool[None]):
+class MCPTool(Tool):
     """Tool implementation for MCP (Model Context Protocol) servers"""
 
     def __init__(
         self,
         tool_id: int,
-        emitter: Emitter,
-        mcp_server: MCPServer,  # TODO: these should be basemodels instead of db objects
+        mcp_server: MCPServer,
         tool_name: str,
         tool_description: str,
         tool_definition: dict[str, Any],
@@ -85,16 +80,17 @@ class MCPTool(Tool[None]):
         additional_headers: dict[str, str] | None = None,
         resolved_credentials: ResolvedMCPCredentials | None = None,
     ) -> None:
-        super().__init__(emitter=emitter)
 
         self._id = tool_id
-        self.mcp_server = mcp_server
-        self.connection_config = connection_config
-        self.user_email = user_email
+        self.mcp_server = MCPServerConnection.model_validate(mcp_server)
         self._user_id = user_id
-        self._user_oauth_token = user_oauth_token
         self._additional_headers = additional_headers or {}
-        self._resolved_credentials = resolved_credentials
+        self._resolved_credentials = resolved_credentials or ResolvedMCPCredentials(
+            connection_config=connection_config,
+            user_oauth_token=user_oauth_token,
+            auth_type=self.mcp_server.auth_type,
+            user_email=user_email,
+        )
 
         self._mcp_tool_name = tool_name
         self._name = tool_name  # NOTE: this may change in _disambiguate_mcp_tool_names
@@ -122,7 +118,7 @@ class MCPTool(Tool[None]):
     def use_disambiguated_name(self) -> None:
         self._name = self._llm_name
 
-    def tool_definition(self) -> dict:
+    def tool_definition(self) -> FunctionToolDefinition:
         """Return the tool definition from the MCP server"""
         # Convert MCP tool definition to OpenAI function calling format
         return {
@@ -134,21 +130,8 @@ class MCPTool(Tool[None]):
             },
         }
 
-    def emit_start(self, placement: Placement) -> None:
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=CustomToolStart(tool_name=self._name),
-            )
-        )
-
-    def run(
-        self,
-        placement: Placement,
-        override_kwargs: None = None,  # noqa: ARG002
-        **llm_kwargs: Any,
-    ) -> ToolResult:
-        """Execute the MCP tool by calling the MCP server"""
+    def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+        invocation.update(ToolProgress(details=CustomToolStarted(tool_name=self._name)))
         _start = time.monotonic()
         _server = self.mcp_server.name
         outcome = MCPToolCallStatus.ERROR
@@ -166,12 +149,7 @@ class MCPTool(Tool[None]):
                     self._name,
                     denylisted,
                 )
-            credentials = self._resolved_credentials or ResolvedMCPCredentials(
-                connection_config=self.connection_config,
-                user_oauth_token=self._user_oauth_token,
-                auth_type=self.mcp_server.auth_type,
-                user_email=self.user_email,
-            )
+            credentials = self._resolved_credentials
             headers = merge_mcp_headers(
                 request_headers,
                 credentials.build_headers(),
@@ -196,15 +174,13 @@ class MCPTool(Tool[None]):
                 error_result = {"error": auth_error_msg}
                 content = json.dumps(error_result)
 
-                # Emit CustomToolDelta packet
-                self.emitter.emit(
-                    Packet(
-                        placement=placement,
-                        obj=CustomToolDelta(
+                invocation.update(
+                    ToolProgress(
+                        details=CustomToolOutput(
                             tool_name=self._name,
                             response_type="json",
                             data=error_result,
-                        ),
+                        )
                     )
                 )
 
@@ -223,7 +199,7 @@ class MCPTool(Tool[None]):
             auth: OAuthClientProvider | None = None
             if (
                 self.mcp_server.auth_type == MCPAuthenticationType.OAUTH
-                and self.connection_config is not None
+                and credentials.connection_config_id is not None
                 and self._user_id
             ):
                 if self.mcp_server.transport == MCPTransport.SSE:
@@ -232,7 +208,7 @@ class MCPTool(Tool[None]):
                     try:
                         refreshed_header = refresh_mcp_oauth_token_if_expired(
                             self.mcp_server,
-                            self.connection_config.id,
+                            credentials.connection_config_id,
                         )
                         if refreshed_header:
                             headers["Authorization"] = refreshed_header
@@ -244,14 +220,14 @@ class MCPTool(Tool[None]):
                 else:
                     auth = make_oauth_provider(
                         self.mcp_server,
-                        self.connection_config.id,
+                        credentials.connection_config_id,
                         None,
                     )
 
             tool_result = call_mcp_tool(
                 self.mcp_server.server_url,
                 self._mcp_tool_name,
-                llm_kwargs,
+                invocation.arguments,
                 connection_headers=headers,
                 transport=self.mcp_server.transport or MCPTransport.STREAMABLE_HTTP,
                 auth=auth,
@@ -263,15 +239,13 @@ class MCPTool(Tool[None]):
             tool_result_dict = {"tool_result": tool_result}
             content = json.dumps(tool_result_dict)
 
-            # Emit CustomToolDelta packet
-            self.emitter.emit(
-                Packet(
-                    placement=placement,
-                    obj=CustomToolDelta(
+            invocation.update(
+                ToolProgress(
+                    details=CustomToolOutput(
                         tool_name=self._name,
                         response_type="json",
                         data=tool_result_dict,
-                    ),
+                    )
                 )
             )
 
@@ -307,15 +281,13 @@ class MCPTool(Tool[None]):
 
             content = json.dumps(error_result)
 
-            # Emit CustomToolDelta packet
-            self.emitter.emit(
-                Packet(
-                    placement=placement,
-                    obj=CustomToolDelta(
+            invocation.update(
+                ToolProgress(
+                    details=CustomToolOutput(
                         tool_name=self._name,
                         response_type="json",
                         data=error_result,
-                    ),
+                    )
                 )
             )
 

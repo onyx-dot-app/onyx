@@ -102,6 +102,7 @@ def test_save_chat_turn_keeps_the_row_but_writes_no_text(
         reasoning_tokens="secret reasoning",
         tool_calls=[
             ToolCallInfo(
+                message_id="test-run:0",
                 parent_tool_call_id=None,
                 turn_index=0,
                 tab_index=0,

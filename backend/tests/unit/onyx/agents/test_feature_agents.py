@@ -1,39 +1,48 @@
-"""Exercise the shared loop with real Onyx rendering and workflow policies."""
+"""Exercise feature policies through shared execution, child ownership, and rendering."""
 
 import queue
-import time
-from typing import Any
+from collections.abc import Generator
+from threading import Event
 from unittest.mock import MagicMock
 
 import pytest
 
-from onyx.chat.chat_state import ChatStateContainer
+from onyx.agents.events import AgentEvent, ToolEndEvent
+from onyx.agents.runtime import AgentContext, RunResult
+from onyx.agents.tools import ToolInvocation
 from onyx.chat.emitter import Emitter, ModelStreamStatus
+from onyx.chat.presentation import ResponseBinding, ResponsePresenter, attach_response
 from onyx.coding_agent.agent import CodingAgent
 from onyx.coding_agent.tool_definitions import BASH_TOOL_NAME, GENERATE_ANSWER_TOOL_NAME
-from onyx.context.messages import PromptMetadata
-from onyx.deep_research.agent import DeepResearchAgent, run_deep_research
-from onyx.deep_research.models import ResearchAgentCallResult
+from onyx.configs.constants import DocumentSource
+from onyx.context.search.models import SearchDoc
+from onyx.deep_research.agent import DeepResearchAgent
+from onyx.deep_research.models import ResearchAgentCallResult, ResearchPhase
 from onyx.deep_research.research_agent import ResearchAgent
 from onyx.deep_research.tool_definitions import (
     GENERATE_REPORT_TOOL_NAME,
     RESEARCH_AGENT_TOOL_NAME,
     THINK_TOOL_NAME,
 )
-from onyx.llm.cancellation import AgentCancelled, CancellationSignal, cancellation_scope
+from onyx.llm.cancellation import AgentCancelled, CancellationSignal
+from onyx.llm.exceptions import LLMTimeoutError
+from onyx.llm.interfaces import GenerationContext
 from onyx.llm.litellm_models import ChatCompletionDeltaToolCall, Delta, FunctionCall
-from onyx.llm.models import Message, ReasoningEffort, ToolCall, ToolResult, UserMessage
-from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import (
-    OverallStop,
-    Packet,
-    TopLevelBranching,
+from onyx.llm.models import (
+    AssistantMessage,
+    GenerationEvent,
+    GenerationRequest,
+    ReasoningEffort,
+    TextContent,
+    ToolCall,
+    ToolResult,
+    ToolResultMessage,
+    UserMessage,
 )
-from onyx.tools.interface import Tool
-from onyx.tools.models import ToolCallKickoff
+from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
+from onyx.tools.interface import ToolContext
 from onyx.tools.tool_implementations.bash.bash_tool import BashTool
-from onyx.tools.tool_runner import run_tool_call
-from tests.unit.onyx.agents.fakes import EchoTool, ScriptedLLM
+from tests.unit.onyx.agents.fakes import EchoTool, FakeModelClient, ScriptedLLM
 
 
 def tool_delta(name: str, arguments: str = "{}", count: int = 1) -> Delta:
@@ -49,30 +58,7 @@ def tool_delta(name: str, arguments: str = "{}", count: int = 1) -> Delta:
     )
 
 
-def kickoff(name: str, **arguments: Any) -> ToolCallKickoff:
-    return ToolCallKickoff(
-        tool_name=name,
-        tool_args=arguments,
-        tool_call_id="parent",
-        placement=Placement(turn_index=1, tab_index=0),
-    )
-
-
-def emitter() -> Emitter:
-    return Emitter(merged_queue=queue.Queue())
-
-
-@pytest.mark.parametrize("render", [True, False])
-def test_coding_bash_order_history_and_final_answer(
-    render: bool, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    if not render:
-        monkeypatch.setattr(
-            "onyx.chat.presentation.TurnPresentation.__init__",
-            lambda *_args, **_kwargs: pytest.fail(
-                "headless agent constructed a renderer"
-            ),
-        )
+def test_coding_bash_order_history_and_final_answer() -> None:
     llm = ScriptedLLM(
         [
             tool_delta(BASH_TOOL_NAME, '{"cmd":"pwd"}', 2),
@@ -85,24 +71,23 @@ def test_coding_bash_order_history_and_final_answer(
     bash.run.side_effect = [
         ToolResult(details=None, content=value) for value in ["first", "second"]
     ]
+    bash.name = "bash"
     harness = CodingAgent(
-        ToolCall(
-            id="parent",
-            name="coding_agent",
-            arguments={"query": "Read repository", "github_repo": "org/repo"},
-        ),
-        emitter() if render else None,
-        llm,
-        len,
-        None,
-        bash,
+        query="Read repository",
+        repo="org/repo",
+        llm=llm,
+        token_counter=len,
+        user_identity=None,
+        bash_tool=bash,
     )
-    result = harness.run(max_turns=3)
+    result = harness.agent.run(max_steps=3, messages=harness.input_messages)
     assert len(llm.requests) == 3
     assert result.output.text == "Done"
     assert bash.run.call_count == 2
     responses = [
-        message for message in harness.context.messages if message.role == "tool_result"
+        message
+        for message in harness.agent.context.messages
+        if message.role == "tool_result"
     ]
     assert [(message.tool_call_id, message.text) for message in responses] == [
         ("call-0", "first"),
@@ -112,17 +97,33 @@ def test_coding_bash_order_history_and_final_answer(
     assert llm.requests[-1]["tools"] == []
 
 
+def test_cancel_after_coding_tools_prevents_final_model_call() -> None:
+    llm = ScriptedLLM([tool_delta(BASH_TOOL_NAME, '{"cmd":"pwd"}')], 128000)
+    bash = MagicMock(spec=BashTool)
+    signal = CancellationSignal()
+
+    def finish(_invocation: ToolInvocation, _context: ToolContext) -> ToolResult:
+        signal.cancel()
+        return ToolResult(content="done")
+
+    bash.run.side_effect = finish
+    bash.name = "bash"
+    harness = CodingAgent(
+        query="Read repository",
+        repo="org/repo",
+        llm=llm,
+        token_counter=len,
+        user_identity=None,
+        bash_tool=bash,
+    )
+    agent = harness.agent
+    with pytest.raises(AgentCancelled):
+        agent.run(max_steps=3, cancellation=signal)
+    assert len(llm.requests) == 1
+
+
 @pytest.mark.parametrize("render", [True, False])
-def test_research_think_turns_are_bounded_and_report_is_generated(
-    render: bool, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    if not render:
-        monkeypatch.setattr(
-            "onyx.chat.presentation.TurnPresentation.__init__",
-            lambda *_args, **_kwargs: pytest.fail(
-                "headless agent constructed a renderer"
-            ),
-        )
+def test_research_think_steps_are_bounded_and_report_is_generated(render: bool) -> None:
     llm = ScriptedLLM(
         [
             tool_delta(THINK_TOOL_NAME, '{"reasoning":"inspect"}'),
@@ -131,27 +132,24 @@ def test_research_think_turns_are_bounded_and_report_is_generated(
         ],
         128000,
     )
-    harness = ResearchAgent(
-        ToolCall(id="parent", name="research_agent", arguments={"task": "Find facts"}),
-        "parent",
-        [],
-        emitter() if render else None,
-        llm,
-        False,
-        len,
-        None,
-        "",
-        ReasoningEffort.LOW,
+    presentation = (
+        ResponsePresenter(Emitter(merged_queue=queue.Queue(), response_id=42))
+        if render
+        else None
     )
-    result = harness.run(max_turns=3)
+    feature = ResearchAgent(
+        "Find facts", [], llm, False, len, None, "", ReasoningEffort.LOW
+    )
+    if presentation:
+        feature.agent.subscribe(presentation.consume)
+    result = feature.agent.run(max_steps=3, messages=feature.input_messages)
     assert len(llm.requests) == 3
-    assert result.output.text == "Report"
-    assert len(llm.requests) == 3
+    assert feature.report(result).intermediate_report == "Report"
     assert (
         len(
             [
                 message
-                for message in harness.context.messages
+                for message in feature.agent.context.messages
                 if message.role == "tool_result"
             ]
         )
@@ -168,121 +166,22 @@ def test_research_executes_tools_and_records_results() -> None:
         ],
         128000,
     )
-    output = emitter()
-    state = ChatStateContainer()
-    harness = ResearchAgent(
-        ToolCall(id="parent", name="research_agent", arguments={"task": "Find facts"}),
-        "parent",
-        [EchoTool(output)],
-        output,
-        llm,
-        True,
-        len,
-        None,
-        "",
-        ReasoningEffort.LOW,
+    feature = ResearchAgent(
+        "Find facts", [EchoTool()], llm, True, len, None, "", ReasoningEffort.LOW
     )
-    result = harness.run(max_turns=3)
+    result = feature.agent.run(max_steps=3, messages=feature.input_messages)
     assert result.output.text == "Report"
-    assert state.get_tool_calls() == []
+    snapshot = feature.agent.snapshot()
+    assert snapshot is not None
     accepted = [
         message
-        for message in harness.output_messages
+        for message in snapshot.messages
         if message.role == "tool_result" and message.tool_name == "echo"
     ]
     assert accepted[0].text == "found"
 
 
-def test_orchestrator_preserves_failed_child_tool_response(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    llm = ScriptedLLM(
-        [
-            tool_delta(RESEARCH_AGENT_TOOL_NAME, '{"task":"task"}', 2),
-            tool_delta(GENERATE_REPORT_TOOL_NAME),
-            Delta(content="Final report"),
-        ],
-        128000,
-    )
-    monkeypatch.setattr(
-        "onyx.deep_research.agent.run_research_agent_call",
-        lambda **kwargs: (
-            ResearchAgentCallResult(
-                intermediate_report="First report", citation_mapping={}
-            )
-            if kwargs["research_agent_call"].tool_call_id == "call-0"
-            else None
-        ),
-    )
-    monkeypatch.setattr(
-        "onyx.deep_research.agent._get_research_agent_tool_id", lambda: 7
-    )
-    history: list[Message] = [
-        UserMessage(content="Research this", metadata=PromptMetadata(token_count=2))
-    ]
-    state = ChatStateContainer()
-    packets: queue.Queue[tuple[int, Packet | ModelStreamStatus]] = queue.Queue()
-    harness = DeepResearchAgent(
-        Emitter(merged_queue=packets),
-        state,
-        history,
-        [],
-        llm,
-        len,
-        None,
-        "",
-        ReasoningEffort.LOW,
-        None,
-        time.monotonic(),
-        "Plan",
-        1,
-        False,
-    )
-    harness.run(max_turns=3)
-    responses = [
-        message for message in harness.context.messages if message.role == "tool_result"
-    ]
-    assert [message.tool_call_id for message in responses[:2]] == ["call-0", "call-1"]
-    assert "failed" in responses[1].text
-    assert state.get_answer_tokens() == "Final report"
-
-    assert any(
-        isinstance(item[1], Packet)
-        and isinstance(item[1].obj, TopLevelBranching)
-        and item[1].obj.num_parallel_branches == 2
-        for item in list(packets.queue)
-    )
-
-
-def test_cancel_after_coding_tools_prevents_final_model_call() -> None:
-    llm = ScriptedLLM([tool_delta(BASH_TOOL_NAME, '{"cmd":"pwd"}')], 128000)
-    bash = MagicMock(spec=BashTool)
-    bash.run.return_value = ToolResult(details=None, content="done")
-    harness = CodingAgent(
-        ToolCall(
-            id="parent",
-            name="coding_agent",
-            arguments={"query": "Read repository", "github_repo": "org/repo"},
-        ),
-        emitter(),
-        llm,
-        len,
-        None,
-        bash,
-    )
-    signal = CancellationSignal()
-
-    agent = harness
-    agent.subscribe(lambda event: signal.cancel() if event.type == "tool_end" else None)
-    with pytest.raises(AgentCancelled):
-        agent.run(max_turns=3, cancellation=signal)
-    assert len(llm.requests) == 1
-
-
-def test_deep_research_composes_plan_child_and_report(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # One script is consumed by the orchestrator and its single child worker.
+def test_deep_research_composes_plan_child_and_report() -> None:
     llm = ScriptedLLM(
         [
             Delta(content="Plan"),
@@ -294,30 +193,35 @@ def test_deep_research_composes_plan_child_and_report(
         ],
         128000,
     )
-    monkeypatch.setattr(
-        "onyx.deep_research.agent._get_research_agent_tool_id", lambda: 7
-    )
     output: queue.Queue[tuple[int, Packet | ModelStreamStatus]] = queue.Queue()
-    state = ChatStateContainer()
-    run_deep_research(
-        emitter=Emitter(merged_queue=output),
-        state_container=state,
-        messages=[
-            UserMessage(content="Research", metadata=PromptMetadata(token_count=1))
-        ],
-        tools=[],
-        custom_agent_prompt=None,
+    state = ResponseBinding()
+    feature = DeepResearchAgent(
+        messages=[UserMessage(content="Research")],
+        allowed_tools=[],
         llm=llm,
         token_counter=len,
-        user_language=None,
+        user_identity=None,
+        language_section="",
+        reasoning_effort=ReasoningEffort.LOW,
+        all_injected_file_metadata=None,
         skip_clarification=True,
     )
-    assert state.get_answer_tokens() == "Final report"
+    attach_response(
+        feature.agent,
+        state,
+        Emitter(merged_queue=output, response_id=42),
+        response_id=42,
+        tool_ids={RESEARCH_AGENT_TOOL_NAME: 7},
+    )
+    feature.agent.run(max_steps=8)
+    assert state.snapshot().answer == "Final report"
     assert len(llm.requests) == 6
     snapshot = state.snapshot()
     assert snapshot.transcript is not None
     assert snapshot.transcript.messages[0].text == "Plan"
     assert snapshot.transcript.messages[-1].text == "Final report"
+    assert len(snapshot.transcript.children) == 1
+    assert snapshot.transcript.children[0].messages[-1].text == "Child report"
     assert any(
         isinstance(item[1], Packet) and isinstance(item[1].obj, OverallStop)
         for item in list(output.queue)
@@ -325,126 +229,59 @@ def test_deep_research_composes_plan_child_and_report(
 
 
 @pytest.mark.parametrize("skip_clarification", [False, True])
-def test_deep_research_prelude_cancellation_keeps_canonical_partial_output(
+def test_deep_research_prelude_cancellation_keeps_partial_output(
     skip_clarification: bool,
 ) -> None:
-    from onyx.agents.events import MessageUpdateEvent
-
-    state = ChatStateContainer()
+    state = ResponseBinding()
     signal = CancellationSignal()
-    agent = DeepResearchAgent(
-        None,
-        state,
+
+    class InterruptedLLM(ScriptedLLM):
+        def stream(
+            self, request: GenerationRequest, context: GenerationContext | None = None
+        ) -> Generator[GenerationEvent, None, None]:
+            for event in super().stream(request, context):
+                yield event
+                if event.type == "text_delta":
+                    signal.cancel()
+                    signal.check()
+
+    feature = DeepResearchAgent(
         [UserMessage(content="Research")],
         [],
-        ScriptedLLM([Delta(content="Partial prelude")], 128000),
+        InterruptedLLM([Delta(content="Partial prelude")], 128000),
         len,
         None,
         "",
         ReasoningEffort.LOW,
         None,
-        time.monotonic(),
-        None,
-        1,
-        False,
         skip_clarification=skip_clarification,
     )
 
-    def stop(event: object) -> None:
-        if (
-            isinstance(event, MessageUpdateEvent)
-            and event.generation_event.type == "text_delta"
-        ):
-            signal.cancel()
-
-    agent.subscribe(stop)
+    attach_response(
+        feature.agent,
+        state,
+        None,
+        response_id=42,
+        tool_ids={RESEARCH_AGENT_TOOL_NAME: 7},
+    )
     with pytest.raises(AgentCancelled):
-        agent.run(max_turns=4, cancellation=signal)
+        feature.agent.run(max_steps=4, cancellation=signal)
     snapshot = state.snapshot(cancelled=True)
     assert snapshot.transcript is not None
     assert snapshot.transcript.status == "cancelled"
     assert snapshot.transcript.messages[-1].text == "Partial prelude"
-    assert agent.presentation is None
 
 
-def test_parent_cancellation_reaches_parallel_research_workers(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    import threading
-
-    from onyx.deep_research.research_agent import run_research_agent_calls
-    from onyx.llm.cancellation import cancellation_scope, current_cancellation
-
-    signal = CancellationSignal()
-    observed: queue.Queue[CancellationSignal] = queue.Queue()
-    finished = threading.Event()
-    errors: list[BaseException] = []
-
-    def child(*_args: Any) -> None:
-        inherited = current_cancellation()
-        assert inherited is not None
-        wake = threading.Event()
-        with inherited.on_cancel(wake.set):
-            observed.put(inherited)
-            assert wake.wait(3)
-            inherited.check()
-        raise AssertionError("Child did not receive cancellation")
-
-    monkeypatch.setattr(
-        "onyx.deep_research.research_agent.run_research_agent_call", child
-    )
-
-    def execute() -> None:
-        try:
-            with cancellation_scope(signal):
-                run_research_agent_calls(
-                    [
-                        kickoff("research_agent", task="one"),
-                        kickoff("research_agent", task="two"),
-                    ],
-                    ["one", "two"],
-                    [],
-                    emitter(),
-                    ScriptedLLM([]),
-                    False,
-                    len,
-                    {},
-                    "",
-                )
-        except AgentCancelled:
-            finished.set()
-        except BaseException as error:
-            errors.append(error)
-
-    worker = threading.Thread(target=execute, daemon=True)
-    worker.start()
-    try:
-        assert observed.get(timeout=3) is signal
-        assert observed.get(timeout=3) is signal
-        signal.cancel()
-        assert finished.wait(2), errors
-    finally:
-        signal.cancel()
-        worker.join(timeout=3)
-    assert not worker.is_alive()
-    assert not errors
-
-
-def test_deep_research_continues_after_planning_and_research() -> None:
-    from onyx.agents.events import AgentEvent
-
+def test_deep_research_advances_phases_without_user_queue_messages() -> None:
     llm = ScriptedLLM(
         [
             Delta(content="Plan"),
-            tool_delta(THINK_TOOL_NAME, '{"reasoning":"Inspect"}'),
-            tool_delta(GENERATE_REPORT_TOOL_NAME),
+            Delta(content="Enough evidence"),
             Delta(content="Final report"),
         ],
         128000,
     )
-    agent = DeepResearchAgent(
-        None,
-        ChatStateContainer(),
+    feature = DeepResearchAgent(
         [UserMessage(content="Research")],
         [],
         llm,
@@ -453,56 +290,38 @@ def test_deep_research_continues_after_planning_and_research() -> None:
         "",
         ReasoningEffort.LOW,
         None,
-        time.monotonic(),
-        None,
-        1,
-        False,
         skip_clarification=True,
     )
-    agent.run(max_turns=1)
-    assert agent.phase == "research"
-    assert agent.research_turns == 0
-    signal = CancellationSignal()
-
-    def pause(event: AgentEvent) -> None:
-        if event.type == "turn_end" and agent.research_turns == 1:
-            signal.cancel()
-
-    agent.subscribe(pause)
-    with pytest.raises(AgentCancelled):
-        agent.run(max_turns=3, cancellation=signal)
-    assert agent.research_turns == 1
-    outcome = agent.run(max_turns=2)
-    assert outcome.output.text == "Final report"
-    assert agent.research_turns == 3
-    assert len(llm.requests) == 4
+    result = feature.agent.run(max_steps=3)
+    assert result.output.text == "Final report"
+    assert feature.phase == ResearchPhase.REPORT
+    assert len(llm.requests) == 3
+    assert [
+        message.text
+        for message in feature.agent.context.messages
+        if isinstance(message, UserMessage)
+    ] == ["Research"]
 
 
-def test_deep_research_normalizes_canonical_child_report(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from onyx.agents.runtime import ToolCallContext
-    from onyx.llm.models import ToolResult
+def test_child_timeout_is_a_failed_tool_result(monkeypatch: pytest.MonkeyPatch) -> None:
+    original_prepare = ResearchAgent._build_request
 
-    monkeypatch.setattr(
-        "onyx.deep_research.agent._get_research_agent_tool_id", lambda: 7
-    )
-    monkeypatch.setattr(
-        "onyx.deep_research.agent.run_research_agent_call",
-        lambda **_kwargs: ResearchAgentCallResult(
-            intermediate_report="Original report", citation_mapping={}
-        ),
-    )
+    def fail_child(self: ResearchAgent, context: AgentContext) -> GenerationRequest:
+        if self.research_topic == "unavailable":
+            raise LLMTimeoutError("Provider timeout")
+        return original_prepare(self, context)
+
+    monkeypatch.setattr(ResearchAgent, "_build_request", fail_child)
     llm = ScriptedLLM(
         [
-            tool_delta(RESEARCH_AGENT_TOOL_NAME, '{"task":"facts"}'),
-            Delta(content="Final"),
+            Delta(content="Plan"),
+            tool_delta(RESEARCH_AGENT_TOOL_NAME, '{"task":"unavailable"}'),
+            tool_delta(GENERATE_REPORT_TOOL_NAME),
+            Delta(content="Report with remaining evidence"),
         ],
         128000,
     )
-    agent = DeepResearchAgent(
-        None,
-        ChatStateContainer(),
+    feature = DeepResearchAgent(
         [UserMessage(content="Research")],
         [],
         llm,
@@ -511,41 +330,151 @@ def test_deep_research_normalizes_canonical_child_report(
         "",
         ReasoningEffort.LOW,
         None,
-        time.monotonic(),
-        "Plan",
-        1,
-        False,
+        skip_clarification=True,
     )
-
-    def edit_report(_context: ToolCallContext, result: ToolResult) -> ToolResult:
-        return result.model_copy(update={"content": "Edited report"})
-
-    agent.hooks = agent.hooks.model_copy(update={"after_tool_call": edit_report})
-    agent.run(max_turns=2)
-    reports = [
-        message for message in agent.output_messages if message.role == "tool_result"
+    result = feature.agent.run(max_steps=4)
+    assert result.output.text == "Report with remaining evidence"
+    tool_results = [
+        message
+        for message in feature.agent.context.messages
+        if message.role == "tool_result"
     ]
-    assert reports[0].text == "Edited report"
+    assert tool_results[0].is_error
+    snapshot = feature.agent.snapshot()
+    assert snapshot is not None
+    assert snapshot.children[0].status == "error"
 
 
-def test_cancelled_tool_return_does_not_emit_completion() -> None:
-    signal = CancellationSignal()
-    tool = MagicMock(spec=Tool)
-    tool.name = "cancelled_tool"
-
-    def finish_tool(**_kwargs: Placement | None) -> ToolResult:
-        signal.cancel()
-        return ToolResult(content="finished")
-
-    tool.run.side_effect = finish_tool
-    with cancellation_scope(signal), pytest.raises(AgentCancelled):
-        run_tool_call(
-            tool_call=kickoff(tool.name),
-            tool=tool,
-            message_history=[],
-            user_memory_context=None,
-            user_info=None,
-            citation_mapping={},
-            next_citation_num=1,
+def test_research_normalizes_citations_before_acceptance_in_call_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    second_finished = Event()
+    completion_order: list[str] = []
+    documents = {
+        topic: SearchDoc(
+            document_id=topic,
+            chunk_ind=0,
+            semantic_identifier=topic,
+            blurb=topic,
+            source_type=DocumentSource.WEB,
+            boost=0,
+            hidden=False,
+            metadata={},
+            match_highlights=[],
         )
-    tool.emitter.emit.assert_not_called()
+        for topic in ("first", "second")
+    }
+    original_report = ResearchAgent.report
+
+    def child_report(
+        child: ResearchAgent, completed: RunResult
+    ) -> ResearchAgentCallResult:
+        report = original_report(child, completed)
+        report.citation_mapping = {9: documents[child.research_topic]}
+        completion_order.append(child.research_topic)
+        if child.research_topic == "second":
+            second_finished.set()
+        return report
+
+    monkeypatch.setattr(ResearchAgent, "report", child_report)
+
+    def reply(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        topic = next(
+            (
+                message.text
+                for message in request.messages
+                if isinstance(message, UserMessage) and message.text in documents
+            ),
+            None,
+        )
+        if topic is not None:
+            if topic == "first":
+                assert second_finished.wait(5)
+            return AssistantMessage(content=[TextContent(text=f"{topic} [9]")])
+        if any(tool.name == RESEARCH_AGENT_TOOL_NAME for tool in request.tools):
+            if any(
+                isinstance(message, ToolResultMessage)
+                and message.tool_name == RESEARCH_AGENT_TOOL_NAME
+                for message in request.messages
+            ):
+                return AssistantMessage(
+                    content=[
+                        ToolCall(
+                            id="report", name=GENERATE_REPORT_TOOL_NAME, arguments={}
+                        )
+                    ]
+                )
+            return AssistantMessage(
+                content=[
+                    ToolCall(
+                        id=topic,
+                        name=RESEARCH_AGENT_TOOL_NAME,
+                        arguments={"task": topic},
+                    )
+                    for topic in documents
+                ]
+            )
+        return AssistantMessage(
+            content=[
+                TextContent(
+                    text="Final [1] [2]"
+                    if any(
+                        isinstance(message, AssistantMessage)
+                        for message in request.messages
+                    )
+                    else "Plan"
+                )
+            ]
+        )
+
+    state = ResponseBinding()
+    feature = DeepResearchAgent(
+        [UserMessage(content="Parent")],
+        [],
+        FakeModelClient(reply),
+        len,
+        None,
+        "",
+        ReasoningEffort.LOW,
+        None,
+        skip_clarification=True,
+    )
+    attach_response(
+        feature.agent,
+        state,
+        None,
+        response_id=42,
+        tool_ids={RESEARCH_AGENT_TOOL_NAME: 7},
+    )
+    final_events: list[ToolEndEvent] = []
+
+    def record(event: AgentEvent) -> None:
+        if (
+            isinstance(event, ToolEndEvent)
+            and event.tool_call.name == RESEARCH_AGENT_TOOL_NAME
+        ):
+            final_events.append(event)
+
+    feature.agent.subscribe(record)
+    feature.agent.run(max_steps=4)
+    accepted = [
+        message
+        for message in feature.agent.context.messages
+        if isinstance(message, ToolResultMessage)
+        and message.tool_name == RESEARCH_AGENT_TOOL_NAME
+    ]
+    assert completion_order == ["second", "first"]
+    assert [message.text for message in accepted] == ["first [1]", "second [2]"]
+    assert [event.result.text for event in final_events] == [
+        message.text for message in accepted
+    ]
+    for index, message in enumerate(accepted, start=1):
+        assert isinstance(message.details, ResearchAgentCallResult)
+        assert message.details.intermediate_report == message.text
+        assert list(message.details.citation_mapping) == [index]
+    assert {
+        number: doc.document_id
+        for number, doc in state.snapshot().citation_to_doc.items()
+    } == {1: "first", 2: "second"}

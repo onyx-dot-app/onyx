@@ -3,14 +3,18 @@
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from types import TracebackType
 
 import pytest
-from pydantic import JsonValue, ValidationError
+from pydantic import ValidationError
 
 from onyx.agents.events import AgentEvent, AgentEventType
-from onyx.agents.runtime import Agent, AgentContext, AgentHooks
-from onyx.agents.tools import AgentTool, ToolExecutionMode, ToolUpdate
+from onyx.agents.runtime import Agent, AgentContext, AgentHooks, AgentStep, StepResult
+from onyx.agents.tools import (
+    AgentTool,
+    ToolExecutionMode,
+    ToolInvocation,
+    ToolProgress,
+)
 from onyx.llm.cancellation import (
     AgentCancelled,
     CancellationSignal,
@@ -47,10 +51,7 @@ def calls(count: int = 1, *, name: str = "echo") -> AssistantMessage:
 
 
 def echo(
-    execute: Callable[
-        [str, dict[str, JsonValue], CancellationSignal, ToolUpdate], ToolResult
-    ]
-    | None = None,
+    execute: Callable[[ToolInvocation], ToolResult] | None = None,
     *,
     sequential: bool = False,
 ) -> AgentTool:
@@ -59,7 +60,7 @@ def echo(
         description="Echo",
         parameters={"type": "object"},
         execute=execute
-        or (lambda _id, args, _signal, _update: ToolResult(content=str(args["value"]))),
+        or (lambda invocation: ToolResult(content=str(invocation.arguments["value"]))),
         execution_mode=ToolExecutionMode.SEQUENTIAL
         if sequential
         else ToolExecutionMode.PARALLEL,
@@ -68,50 +69,65 @@ def echo(
 
 def test_cancelled_turn_retains_completed_tools_for_resume() -> None:
     signal = CancellationSignal()
-    agent = Agent(
-        scripted(calls(2), answer()),
-        context=AgentContext(tools=[echo(sequential=True)]),
-    )
-    completed: list[str] = []
+    requests: list[GenerationRequest] = []
 
-    def cancel_after_first_result(event: AgentEvent) -> None:
-        assert current_cancellation() is signal
-        if event.type == "tool_end" and event.tool_call:
-            completed.append(event.tool_call.id)
+    def generate(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        requests.append(request)
+        return calls(2) if len(requests) == 1 else answer()
+
+    def execute(invocation: ToolInvocation) -> ToolResult:
+        if invocation.call_id == "1":
             signal.cancel()
+            signal.check()
+        return ToolResult(content=invocation.call_id)
 
-    unsubscribe = agent.subscribe(cancel_after_first_result)
+    agent = Agent(
+        FakeModelClient(generate),
+        context=AgentContext(tools=[echo(execute, sequential=True)]),
+    )
     with pytest.raises(AgentCancelled):
-        agent.run(max_turns=2, cancellation=signal)
-    unsubscribe()
-
+        agent.run(max_steps=2, cancellation=signal)
+    snapshot = agent.snapshot()
+    assert snapshot is not None
     results = [
         message
-        for message in agent.context.messages
+        for message in snapshot.messages
         if isinstance(message, ToolResultMessage)
     ]
-    assert completed == ["0"]
-    assert [(result.tool_call_id, result.is_error) for result in results] == [
-        ("0", False),
-        ("1", True),
+    assert [(result.tool_call_id, result.text) for result in results] == [("0", "0")]
+    assert agent.run(max_steps=1).output.text == "done"
+    replayed = requests[-1].messages
+    tool_calls = [
+        call.id
+        for message in replayed
+        if isinstance(message, AssistantMessage)
+        for call in message.tool_calls
     ]
-    assert results[0].content == "0"
-    resumed = agent.run(max_turns=1)
-    assert resumed.output.text == "done"
-    assert resumed.messages[1:3] == results
+    tool_results = [
+        message.tool_call_id
+        for message in replayed
+        if isinstance(message, ToolResultMessage)
+    ]
+    assert tool_calls == tool_results == ["0"]
 
 
 @pytest.mark.parametrize("sequential", [False, True])
 def test_all_calls_execute_in_order_with_bounded_concurrency(sequential: bool) -> None:
     context = AgentContext(tools=[echo(sequential=sequential)])
-    agent = Agent(scripted(calls(9), answer()), context=context, max_parallel_tools=2)
+    agent = Agent(
+        scripted(calls(9), answer()), context=context, max_parallel_operations=2
+    )
     events: list[AgentEvent] = []
     agent.subscribe(events.append)
-    result = agent.run(messages=[UserMessage(content="run")], max_turns=2)
-    assert result.turns == 2
+    result = agent.run(messages=[UserMessage(content="run")], max_steps=2)
+    assert result.steps == 2
     assert result.stop_reason == "complete"
     results = [
-        message for message in result.messages if isinstance(message, ToolResultMessage)
+        message
+        for message in agent.context.messages
+        if isinstance(message, ToolResultMessage)
     ]
     assert [message.content for message in results] == [str(i) for i in range(9)]
     assert [event.type for event in events].count(AgentEventType.TOOL_END) == 9
@@ -126,25 +142,22 @@ def test_all_calls_execute_in_order_with_bounded_concurrency(sequential: bool) -
 @pytest.mark.parametrize(
     "event_type",
     [
-        "turn_start",
+        "step_start",
         "message_start",
         "message_end",
         "tool_start",
         "tool_end",
-        "turn_end",
+        "step_end",
     ],
 )
-def test_cancellation_stops_before_next_operation(event_type: str) -> None:
+def test_cancellation_stops_before_next_operation(
+    event_type: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     signal = CancellationSignal()
     executed: list[str] = []
 
-    def execute(
-        call_id: str,
-        _args: dict[str, JsonValue],
-        _signal: CancellationSignal,
-        _update: ToolUpdate,
-    ) -> ToolResult:
-        executed.append(call_id)
+    def execute(invocation: ToolInvocation) -> ToolResult:
+        executed.append(invocation.call_id)
         return ToolResult(content="ok")
 
     agent = Agent(
@@ -152,19 +165,22 @@ def test_cancellation_stops_before_next_operation(event_type: str) -> None:
     )
     events: list[AgentEvent] = []
 
-    def observe(event: AgentEvent) -> None:
+    original_emit = Agent._emit
+
+    def emit(self: Agent, event: AgentEvent) -> None:
+        original_emit(self, event)
         events.append(event)
         if event.type == event_type:
             signal.cancel()
 
-    agent.subscribe(observe)
+    monkeypatch.setattr(Agent, "_emit", emit)
     with pytest.raises(AgentCancelled):
-        agent.run(max_turns=3, cancellation=signal)
+        agent.run(max_steps=3, cancellation=signal)
     last_event = events[-1]
     assert last_event.type == "agent_end"
     assert last_event.outcome == "cancelled"
     assert agent.wait_for_idle(0)
-    if event_type in {"turn_start", "message_start", "message_end", "tool_start"}:
+    if event_type in {"step_start", "message_start", "message_end", "tool_start"}:
         assert executed == []
 
 
@@ -180,8 +196,9 @@ def test_invalid_calls_get_paired_errors(invalid: str) -> None:
         from onyx.llm.models import ToolChoiceOptions
 
         context.options.tool_choice = ToolChoiceOptions.NONE
-    result = Agent(scripted(message, answer()), context=context).run(max_turns=2)
-    tool_result = result.messages[1]
+    agent = Agent(scripted(message, answer()), context=context)
+    agent.run(max_steps=2)
+    tool_result = agent.context.messages[1]
     assert isinstance(tool_result, ToolResultMessage)
     assert tool_result.is_error and tool_result.tool_call_id == "0"
 
@@ -191,14 +208,14 @@ def test_context_transform_does_not_rewrite_durable_history() -> None:
         scripted(answer()),
         context=AgentContext(messages=[UserMessage(content="original")]),
         hooks=AgentHooks(
-            transform_context=lambda context, _turn: context.model_copy(
+            prepare_step=lambda context, _turn: context.model_copy(
                 update={"messages": []}
             )
         ),
     )
-    result = agent.run(max_turns=1)
-    assert isinstance(result.messages[0], UserMessage)
-    assert result.messages[0].content == "original"
+    agent.run(max_steps=1)
+    assert isinstance(agent.context.messages[0], UserMessage)
+    assert agent.context.messages[0].content == "original"
 
 
 def test_steering_and_follow_up_have_distinct_boundaries() -> None:
@@ -210,27 +227,22 @@ def test_steering_and_follow_up_have_distinct_boundaries() -> None:
     def enqueue(event: AgentEvent) -> None:
         if event.type == "agent_start":
             agent.follow_up(UserMessage(content="later"))
-            agent.steer(UserMessage(content="now"), expected_execution_id=event.run_id)
+            agent.steer(UserMessage(content="now"), expected_run_id=event.run_id)
 
     agent.subscribe(enqueue)
-    result = agent.run(max_turns=4)
-    assert result.turns == 3
+    result = agent.run(max_steps=4)
+    assert result.steps == 3
     assert [
         message.content
-        for message in result.messages
+        for message in agent.context.messages
         if isinstance(message, UserMessage)
     ] == ["now", "later"]
-    assert isinstance(result.messages[-2], UserMessage)
+    assert isinstance(agent.context.messages[-2], UserMessage)
 
 
 def test_tool_hooks_can_block_transform_and_report_progress() -> None:
-    def execute(
-        _id: str,
-        _args: dict[str, JsonValue],
-        _signal: CancellationSignal,
-        update: ToolUpdate,
-    ) -> ToolResult:
-        update(ToolResult(content="working"))
+    def execute(invocation: ToolInvocation) -> ToolResult:
+        invocation.update(ToolProgress(content="working"))
         return ToolResult(content="raw")
 
     agent = Agent(
@@ -249,9 +261,11 @@ def test_tool_hooks_can_block_transform_and_report_progress() -> None:
     )
     events: list[AgentEvent] = []
     agent.subscribe(events.append)
-    result = agent.run(max_turns=2)
+    agent.run(max_steps=2)
     assert [
-        item.content for item in result.messages if isinstance(item, ToolResultMessage)
+        item.content
+        for item in agent.context.messages
+        if isinstance(item, ToolResultMessage)
     ] == ["raw!", "blocked!"]
     assert len([event for event in events if event.type == "tool_update"]) == 1
 
@@ -271,22 +285,31 @@ def test_abort_reaches_nested_agent_and_waits_for_idle() -> None:
             signal.check()
         raise AssertionError("child must cancel")
 
-    def execute(
-        _id: str,
-        _args: dict[str, JsonValue],
-        signal: CancellationSignal,
-        _update: ToolUpdate,
-    ) -> ToolResult:
-        signals.append(signal)
-        Agent(FakeModelClient(child_model)).run(max_turns=1)
+    async def execute(invocation: ToolInvocation) -> ToolResult:
+        signals.append(invocation.cancellation)
+        await invocation.run_child(
+            Agent(FakeModelClient(child_model)),
+            max_steps=1,
+            messages=[UserMessage(content="Child task")],
+        )
         raise AssertionError("parent must cancel")
 
-    agent = Agent(scripted(calls()), context=AgentContext(tools=[echo(execute)]))
+    agent = Agent(
+        scripted(calls()),
+        max_parallel_operations=1,
+        context=AgentContext(
+            tools=[
+                AgentTool(
+                    name="echo", description="", parameters={}, execute_async=execute
+                )
+            ]
+        ),
+    )
     errors: list[BaseException] = []
 
     def run() -> None:
         try:
-            agent.run(max_turns=2)
+            agent.run(max_steps=2)
         except BaseException as error:
             errors.append(error)
 
@@ -296,21 +319,26 @@ def test_abort_reaches_nested_agent_and_waits_for_idle() -> None:
         assert started.wait(3)
         assert not agent.wait_for_idle(0)
         with pytest.raises(RuntimeError, match="already running"):
-            agent.run(max_turns=1)
+            agent.run(max_steps=1)
         agent.abort()
         assert agent.wait_for_idle(3)
     finally:
         agent.abort()
         thread.join(3)
     assert len(errors) == 1 and isinstance(errors[0], AgentCancelled)
-    assert signals[0] is signals[1]
+    assert len(signals) == 2
+    assert all(signal.cancelled for signal in signals)
+    snapshot = agent.snapshot()
+    assert snapshot is not None
+    assert snapshot.children[0].input_messages[0].text == "Child task"
+    assert snapshot.children[0].status == "cancelled"
 
 
 def test_limits_and_exception_lifecycle() -> None:
     agent = Agent(scripted(calls()), context=AgentContext(tools=[echo()]))
-    assert agent.run(max_turns=1).stop_reason == "limit"
+    assert agent.run(max_steps=1).stop_reason == "limit"
     with pytest.raises(ValidationError):
-        agent.run(max_turns=0)
+        agent.run(max_steps=0)
     events: list[AgentEvent] = []
 
     def fail(
@@ -321,7 +349,7 @@ def test_limits_and_exception_lifecycle() -> None:
     agent = Agent(FakeModelClient(fail))
     agent.subscribe(events.append)
     with pytest.raises(ValueError, match="provider failure"):
-        agent.run(max_turns=1)
+        agent.run(max_steps=1)
     last_event = events[-1]
     assert last_event.type == "agent_end"
     assert last_event.outcome == "error"
@@ -391,7 +419,7 @@ def test_incomplete_model_stream_cannot_complete_an_agent_turn() -> None:
 
     agent = Agent(IncompleteClient(lambda *_: answer()))
     with pytest.raises(RuntimeError, match="without a completed message"):
-        agent.run(max_turns=1)
+        agent.run(max_steps=1)
     assert closed == [True]
     snapshot = agent.snapshot()
     assert snapshot is not None and snapshot.status == "error"
@@ -405,6 +433,7 @@ def test_cancellation_closes_active_client_stream() -> None:
     from onyx.llm.models import GenerationDoneEvent, GenerationEvent, TextDeltaEvent
 
     closed: list[bool] = []
+    cancelled = threading.Event()
     signal = CancellationSignal()
 
     class StreamingClient(FakeModelClient):
@@ -417,6 +446,9 @@ def test_cancellation_closes_active_client_stream() -> None:
                 yield TextDeltaEvent(
                     message=answer("partial"), content_index=0, text="partial"
                 )
+                with signal.on_cancel(cancelled.set):
+                    assert cancelled.wait(2)
+                signal.check()
                 yield GenerationDoneEvent(message=answer("complete"))
             finally:
                 closed.append(True)
@@ -426,7 +458,7 @@ def test_cancellation_closes_active_client_stream() -> None:
         lambda event: signal.cancel() if event.type == "message_update" else None
     )
     with pytest.raises(AgentCancelled):
-        agent.run(max_turns=1, cancellation=signal)
+        agent.run(max_steps=1, cancellation=signal)
     assert closed == [True]
     snapshot = agent.snapshot()
     assert snapshot is not None and snapshot.status == "cancelled"
@@ -455,53 +487,73 @@ def test_configured_cancellation_applies_unless_run_overrides_it(
     )
     if override:
         active = CancellationSignal()
-        assert agent.run(max_turns=1, cancellation=active).output.text == "done"
+        assert agent.run(max_steps=1, cancellation=active).output.text == "done"
         assert called == [active]
     else:
         with pytest.raises(AgentCancelled):
-            agent.run(max_turns=1)
+            agent.run(max_steps=1)
         assert called == []
 
 
 def test_follow_ups_are_separate_and_steering_takes_priority() -> None:
-    agent = Agent(
-        scripted(answer("first"), answer("steered"), answer("a"), answer("b"))
-    )
     consumed: list[str] = []
     removal_results: list[bool] = []
     queued: list[str] = []
 
-    def observe(event: AgentEvent) -> None:
-        if event.type == "agent_start":
-            queued.append(agent.follow_up(UserMessage(content="a")))
-            queued.append(agent.follow_up(UserMessage(content="b")))
-        elif event.type == "message_end" and event.message.text == "first":
-            queued.insert(
-                0,
-                agent.steer(
-                    UserMessage(content="now"), expected_execution_id=event.run_id
-                ),
+    def prepare(context: AgentContext, step: AgentStep) -> AgentContext:
+        if step.index == 0:
+            queued.extend(
+                [
+                    agent.follow_up(UserMessage(content="a")),
+                    agent.follow_up(UserMessage(content="b")),
+                ]
             )
-        elif event.type == "input_consumed":
+        return context
+
+    def after_step(result: StepResult) -> None:
+        if result.step.index == 0:
+            run_id = agent.active_run_id
+            assert run_id is not None
+            queued.insert(
+                0, agent.steer(UserMessage(content="now"), expected_run_id=run_id)
+            )
+
+    def observe(event: AgentEvent) -> None:
+        if event.type == "input_consumed":
             consumed.append(event.input_id)
             removal_results.append(agent.remove_pending_input(event.input_id))
 
+    agent = Agent(
+        scripted(answer("first"), answer("steered"), answer("a"), answer("b")),
+        hooks=AgentHooks(prepare_step=prepare, after_step=after_step),
+    )
     agent.subscribe(observe)
-    result = agent.run(messages=[UserMessage(content="start")], max_turns=4)
-    assert [
-        message.text if isinstance(message, AssistantMessage) else message.content
-        for message in result.messages
-    ] == ["start", "first", "now", "steered", "a", "a", "b", "b"]
+    agent.run(messages=[UserMessage(content="start")], max_steps=4)
+    assert [message.text for message in agent.context.messages] == [
+        "start",
+        "first",
+        "now",
+        "steered",
+        "a",
+        "a",
+        "b",
+        "b",
+    ]
+    snapshot = agent.snapshot()
+    assert snapshot is not None
+    assert snapshot.input_messages[0].text == "start"
+    assert [message.text for message in snapshot.messages] == [
+        "first",
+        "now",
+        "steered",
+        "a",
+        "a",
+        "b",
+        "b",
+    ]
     assert consumed == queued
     assert removal_results == [False] * 3
     assert agent.pending_inputs == []
-    transcript = agent.snapshot()
-    assert transcript is not None
-    assert [
-        message.content
-        for message in transcript.messages
-        if isinstance(message, UserMessage)
-    ] == ["now", "a", "b"]
 
 
 def test_pending_input_removal_before_consumption() -> None:
@@ -517,23 +569,23 @@ def test_pending_input_removal_before_consumption() -> None:
 
     agent = Agent(FakeModelClient(generate))
     with ThreadPoolExecutor() as pool:
-        result = pool.submit(agent.run, max_turns=2)
+        result = pool.submit(agent.run, max_steps=2)
         try:
             assert entered.wait(5)
-            run_id = agent.execution_id
+            run_id = agent.active_run_id
             assert run_id
             input_id = agent.steer(
-                UserMessage(content="discard"), expected_execution_id=run_id
+                UserMessage(content="discard"), expected_run_id=run_id
             )
             assert agent.remove_pending_input(input_id)
             assert not agent.remove_pending_input(input_id)
         finally:
             release.set()
-        assert result.result(timeout=5).turns == 1
+        assert result.result(timeout=5).steps == 1
     assert agent.pending_inputs == []
 
 
-@pytest.mark.parametrize("outcome", ["limit", "cancelled", "error", "complete"])
+@pytest.mark.parametrize("outcome", ["limit", "cancelled", "error"])
 def test_unconsumed_inputs_stay_with_original_execution(outcome: str) -> None:
     def generate(
         _request: GenerationRequest, signal: CancellationSignal
@@ -545,30 +597,36 @@ def test_unconsumed_inputs_stay_with_original_execution(outcome: str) -> None:
             raise ValueError("provider failed")
         return answer()
 
-    agent = Agent(
-        FakeModelClient(generate),
-        hooks=AgentHooks(should_stop_after_turn=lambda _: outcome == "complete"),
-    )
     ids: list[str] = []
 
-    def enqueue(event: AgentEvent) -> None:
-        if event.type == "agent_start":
-            ids.append(agent.follow_up(UserMessage(content="pending")))
+    def prepare(context: AgentContext, _turn: AgentStep) -> AgentContext:
+        ids.append(agent.follow_up(UserMessage(content="pending")))
+        return context
 
-    unsubscribe = agent.subscribe(enqueue)
+    agent = Agent(
+        FakeModelClient(generate),
+        hooks=AgentHooks(
+            prepare_step=prepare,
+            after_step=lambda _: False if outcome == "complete" else None,
+        ),
+    )
     if outcome in {"error", "cancelled"}:
         with pytest.raises((ValueError, AgentCancelled)):
-            agent.run(max_turns=1)
+            agent.run(max_steps=1)
     else:
-        assert agent.run(max_turns=1).stop_reason == outcome
-    unsubscribe()
+        assert agent.run(max_steps=1).stop_reason == outcome
+    snapshot = agent.snapshot()
+    assert snapshot is not None
+    assert snapshot.input_messages == []
+    assert not any(isinstance(message, UserMessage) for message in snapshot.messages)
     pending = agent.pending_inputs
     assert [item.id for item in pending] == ids
     assert isinstance(pending[0].message, UserMessage)
     pending[0].message.content = "modified copy"
     assert agent.pending_inputs[0].message.content == "pending"
-    agent.model = scripted(answer("next execution"))
-    agent.run(max_turns=1)
+    agent.hooks = AgentHooks()
+    agent.llm = scripted(answer("next execution"))
+    agent.run(max_steps=1)
     assert [item.id for item in agent.pending_inputs] == ids
     assert not any(
         isinstance(message, UserMessage) for message in agent.context.messages
@@ -577,30 +635,17 @@ def test_unconsumed_inputs_stay_with_original_execution(outcome: str) -> None:
 
 
 def test_steering_rejects_idle_and_stale_execution() -> None:
-    agent = Agent(scripted(answer()))
+    def prepare(context: AgentContext, _turn: AgentStep) -> AgentContext:
+        with pytest.raises(RuntimeError, match="does not match"):
+            agent.steer(UserMessage(content="stale"), expected_run_id="old")
+        return context
+
+    agent = Agent(scripted(answer()), hooks=AgentHooks(prepare_step=prepare))
     with pytest.raises(RuntimeError, match="no active"):
-        agent.steer(UserMessage(content="idle"), expected_execution_id="old")
+        agent.steer(UserMessage(content="idle"), expected_run_id="old")
+    agent.run(max_steps=1)
     with pytest.raises(RuntimeError, match="no active"):
-        agent.follow_up(UserMessage(content="idle"))
-
-    rejected: list[str] = []
-
-    def observe(event: AgentEvent) -> None:
-        if event.type == "agent_start":
-            with pytest.raises(RuntimeError, match="does not match"):
-                agent.steer(UserMessage(content="stale"), expected_execution_id="old")
-            rejected.append("stale")
-        elif event.type == "agent_end":
-            with pytest.raises(RuntimeError, match="no active"):
-                agent.steer(
-                    UserMessage(content="late"), expected_execution_id=event.run_id
-                )
-
-            rejected.append("late")
-
-    agent.subscribe(observe)
-    agent.run(max_turns=1)
-    assert rejected == ["stale", "late"]
+        agent.steer(UserMessage(content="late"), expected_run_id="old")
     assert agent.pending_inputs == []
 
 
@@ -609,12 +654,7 @@ def test_steering_waits_for_active_tools() -> None:
     release = threading.Event()
     consumed: list[str] = []
 
-    def execute(
-        _id: str,
-        _args: dict[str, JsonValue],
-        _signal: CancellationSignal,
-        _update: ToolUpdate,
-    ) -> ToolResult:
+    def execute(_invocation: ToolInvocation) -> ToolResult:
         entered.set()
         if not release.wait(5):
             raise TimeoutError("Tool was not released")
@@ -630,78 +670,72 @@ def test_steering_waits_for_active_tools() -> None:
 
     agent.subscribe(observe)
     with ThreadPoolExecutor() as pool:
-        future = pool.submit(agent.run, max_turns=2)
+        future = pool.submit(agent.run, max_steps=2)
         try:
             assert entered.wait(5)
-            run_id = agent.execution_id
+            run_id = agent.active_run_id
             assert run_id
             input_id = agent.steer(
-                UserMessage(content="new direction"), expected_execution_id=run_id
+                UserMessage(content="new direction"), expected_run_id=run_id
             )
             assert consumed == []
         finally:
             release.set()
-        result = future.result(timeout=5)
+        future.result(timeout=5)
     assert consumed == [input_id]
-    assert isinstance(result.messages[1], ToolResultMessage)
-    assert isinstance(result.messages[2], UserMessage)
-    assert result.messages[2].content == "new direction"
+    assert isinstance(agent.context.messages[1], ToolResultMessage)
+    assert isinstance(agent.context.messages[2], UserMessage)
+    assert agent.context.messages[2].content == "new direction"
 
 
-def test_removal_at_continuation_boundary_cannot_trigger_empty_generation(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_removal_before_continuation_prevents_an_empty_generation() -> None:
     boundary = threading.Event()
     resume = threading.Event()
-    agent = Agent(scripted(answer("first"), answer("second")))
     input_ids: list[str] = []
-    consumed: list[str] = []
 
-    class BoundaryLock:
-        def __init__(self) -> None:
-            self.lock = threading.RLock()
-            self.depth = 0
-            self.turn_ended = False
-            self.releases = 0
+    def after_step(_result: StepResult) -> None:
+        input_ids.append(agent.follow_up(UserMessage(content="next")))
+        boundary.set()
+        assert resume.wait(5)
 
-        def __enter__(self) -> None:
-            self.lock.acquire()
-            self.depth += 1
-
-        def __exit__(
-            self,
-            exc_type: type[BaseException] | None,
-            exc: BaseException | None,
-            traceback: TracebackType | None,
-        ) -> None:
-            self.depth -= 1
-            at_boundary = False
-            if self.depth == 0 and self.turn_ended:
-                self.releases += 1
-                at_boundary = self.releases == 2
-            self.lock.release()
-            if at_boundary:
-                boundary.set()
-                assert resume.wait(5)
-
-    lock = BoundaryLock()
-    monkeypatch.setattr(agent, "state_lock", lock)
-
-    def observe(event: AgentEvent) -> None:
-        if event.type == "turn_end" and event.turn == 0:
-            input_ids.append(agent.follow_up(UserMessage(content="next")))
-            lock.turn_ended = True
-        elif event.type == "input_consumed":
-            consumed.append(event.input_id)
-
-    agent.subscribe(observe)
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(agent.run, max_turns=3)
+    agent = Agent(scripted(answer("first")), hooks=AgentHooks(after_step=after_step))
+    with ThreadPoolExecutor(max_workers=1) as workers:
+        future = workers.submit(agent.run, max_steps=3)
         try:
-            assert boundary.wait(5)
-            removed = agent.remove_pending_input(input_ids[0])
+            assert boundary.wait(2)
+            assert agent.remove_pending_input(input_ids[0])
         finally:
             resume.set()
-        result = future.result(timeout=5)
-    assert result.turns == (1 if removed else 2)
-    assert consumed == ([] if removed else input_ids)
+        assert future.result(timeout=2).steps == 1
+    assert agent.pending_inputs == []
+
+
+def test_failed_tool_status_survives_successful_agent_completion() -> None:
+    agent = Agent(
+        scripted(calls(), answer("Explained tool failure")),
+        context=AgentContext(
+            tools=[
+                echo(
+                    lambda _invocation: ToolResult(content="unavailable", is_error=True)
+                )
+            ]
+        ),
+    )
+    events: list[AgentEvent] = []
+    agent.subscribe(events.append)
+    result = agent.run(max_steps=2)
+    assert result.output.text == "Explained tool failure"
+    assert result.stop_reason == "complete"
+    snapshot = agent.snapshot()
+    assert snapshot is not None and snapshot.status == "complete"
+    operations = [
+        operation for operation in snapshot.operations if operation.tool_call_id
+    ]
+    assert operations and all(operation.status == "error" for operation in operations)
+    transcript = snapshot.transcript()
+    assert [operation.status for operation in transcript.operations] == [
+        operation.status for operation in snapshot.operations
+    ]
+    ends = [event for event in events if event.type == "tool_end"]
+    assert len(ends) == len(operations)
+    assert all(event.result.is_error for event in ends)

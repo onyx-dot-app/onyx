@@ -1,29 +1,45 @@
 from __future__ import annotations
 
-import json
 from enum import Enum
 from typing import Any, Callable, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, JsonValue
 
-from onyx.chat.emitter import Emitter
-from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT, NUM_RETURNED_HITS
 from onyx.configs.constants import MessageType
-from onyx.context.search.models import SearchDoc
-from onyx.db.memory import UserMemoryContext
+from onyx.context.search.models import PersonaSearchInfo, SearchDoc
 from onyx.file_store.models import (
     install_lazy_content_loader,
     maybe_materialize_lazy_content,
 )
-from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import (
-    CustomToolErrorInfo,
-    GeneratedImage,
-)
+from onyx.tools.progress import CustomToolErrorInfo, GeneratedImage
+from onyx.utils.headers import HeaderItemDict
 
-TOOL_CALL_MSG_FUNC_NAME = "function_name"
-TOOL_CALL_MSG_ARGUMENTS = "arguments"
+
+class ToolConfiguration(BaseModel):
+    model_config = ConfigDict(frozen=True, from_attributes=True)
+
+    id: int
+    name: str
+    description: str | None
+    display_name: str | None
+    in_code_tool_id: str | None
+    enabled: bool
+    openapi_schema: dict[str, JsonValue] | None
+    mcp_input_schema: dict[str, JsonValue] | None
+    custom_headers: list[HeaderItemDict] | None
+    passthrough_auth: bool
+    mcp_server_id: int | None
+    oauth_config_id: int | None
+
+
+class PersonaToolConfiguration(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    persona_id: int
+    persona_name: str
+    tools: list[ToolConfiguration]
+    search: PersonaSearchInfo
 
 
 class ToolCallException(Exception):
@@ -63,22 +79,6 @@ class CustomToolCallSummary(BaseModel):
     error: CustomToolErrorInfo | None = None
 
 
-class ToolCallKickoff(BaseModel):
-    tool_call_id: str
-    tool_name: str
-    tool_args: dict[str, Any]
-
-    placement: Placement
-
-    def to_msg_str(self) -> str:
-        return json.dumps(
-            {
-                TOOL_CALL_MSG_FUNC_NAME: self.tool_name,
-                TOOL_CALL_MSG_ARGUMENTS: self.tool_args,
-            }
-        )
-
-
 class ChatMinimalTextMessage(BaseModel):
     message: str
     message_type: MessageType
@@ -89,43 +89,6 @@ class DynamicSchemaInfo(BaseModel):
     message_id: int | None
     user_id: UUID | None = None
     user_email: str | None = None
-
-
-class WebSearchToolOverrideKwargs(BaseModel):
-    # To know what citation number to start at for constructing the string to the LLM
-    starting_citation_num: int
-
-
-class OpenURLToolOverrideKwargs(BaseModel):
-    # To know what citation number to start at for constructing the string to the LLM
-    starting_citation_num: int
-    citation_mapping: dict[str, int]
-    url_snippet_map: dict[str, str]
-    max_urls: int = 10
-
-
-# None indicates that the default value should be used
-class SearchToolOverrideKwargs(BaseModel):
-    # To know what citation number to start at for constructing the string to the LLM
-    starting_citation_num: int
-    # This is needed because the LLM won't be able to do a really detailed semantic query well
-    # without help and a specific custom prompt for this
-    original_query: str | None = None
-    message_history: list[ChatMinimalTextMessage] | None = None
-    user_memory_context: UserMemoryContext | None = None
-    user_info: str | None = None
-
-    # Used for tool calls after the first one but in the same chat turn. The reason for this is that if the initial pass through
-    # the custom flow did not yield good results, we don't want to go through it again. In that case, we defer entirely to the LLM
-    skip_query_expansion: bool = False
-
-    # Number of results to return in the richer object format so that it can be rendered in the UI
-    num_hits: int | None = NUM_RETURNED_HITS
-    # Number of chunks (token approx) to include in the string to the LLM
-    max_llm_chunks: int | None = MAX_CHUNKS_FED_TO_CHAT
-    include_link: bool = False
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class ChatFile(BaseModel):
@@ -165,38 +128,9 @@ class PythonToolRichResponse(BaseModel):
     generated_files: list[PythonExecutionFile] = []
 
 
-class PythonToolOverrideKwargs(BaseModel):
-    """Override kwargs for the Python/Code Interpreter tool."""
-
-    chat_files: list[ChatFile] = []
-
-
-class SearchToolRunContext(BaseModel):
-    emitter: Emitter
-
-    model_config = {"arbitrary_types_allowed": True}
-
-
-class ImageGenerationToolRunContext(BaseModel):
-    emitter: Emitter
-
-    model_config = {"arbitrary_types_allowed": True}
-
-
-class CustomToolRunContext(BaseModel):
-    emitter: Emitter
-
-    model_config = {"arbitrary_types_allowed": True}
-
-
-class MemoryToolResponseSnapshot(BaseModel):
-    memory_text: str
-    operation: Literal["add", "update"]
-    memory_id: int | None = None
-    index: int | None = None
-
-
 class ToolCallInfo(BaseModel):
+    message_id: str
+    parent_message_id: str | None = None
     # The parent_tool_call_id is the actual generated tool call id
     # It is NOT the DB ID which often does not exist yet when the ToolCallInfo is created
     # None if attached to the Chat Message directly
@@ -214,6 +148,18 @@ class ToolCallInfo(BaseModel):
     generated_files: list[PythonExecutionFile] | None = None
     # File-store ids of blobs custom tools saved during the call.
     generated_file_ids: list[str] | None = None
+
+    @property
+    def execution_key(self) -> tuple[str, str]:
+        return self.message_id, self.tool_call_id
+
+    @property
+    def parent_execution_key(self) -> tuple[str, str] | None:
+        if self.parent_tool_call_id is None:
+            return None
+        if self.parent_message_id is None:
+            raise ValueError("Child tool has no parent message identity")
+        return self.parent_message_id, self.parent_tool_call_id
 
 
 CHAT_SESSION_ID_PLACEHOLDER = "CHAT_SESSION_ID"

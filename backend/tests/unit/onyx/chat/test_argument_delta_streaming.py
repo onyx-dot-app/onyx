@@ -14,7 +14,10 @@ from onyx.llm.litellm_models import (
     StreamingChoice,
 )
 from onyx.llm.models import ToolCallDeltaEvent
-from onyx.server.query_and_chat.streaming_models import ToolCallArgumentDelta
+from onyx.server.query_and_chat.streaming_models import (
+    PacketIdentity,
+    ToolCallArgumentDelta,
+)
 
 
 def chunk(fragment: str, index: int = 0) -> ModelResponseStream:
@@ -60,7 +63,10 @@ def test_decoded_strings_survive_arbitrary_fragment_boundaries(
         {"code": text, "count": 3, "enabled": True, "items": [1, {"x": "y"}]}
     )
     accumulator = MessageAccumulator()
-    renderer = PacketRenderer(RenderConfig(argument_tools={"code"}))
+    renderer = PacketRenderer(
+        RenderConfig(argument_tools={"code"}),
+        PacketIdentity(response_id=1, run_id="root", message_id="root:0"),
+    )
     emitted: list[str] = []
     for offset in range(0, len(raw), size):
         for event in accumulator.add(chunk(raw[offset : offset + size])):
@@ -75,10 +81,13 @@ def test_decoded_strings_survive_arbitrary_fragment_boundaries(
     assert accumulator.message.tool_calls[0].arguments == json.loads(raw)
 
 
-def test_interleaved_calls_have_independent_arguments_and_placements() -> None:
+def test_interleaved_calls_have_independent_arguments_and_identities() -> None:
     accumulator = MessageAccumulator()
-    renderer = PacketRenderer(RenderConfig(argument_tools={"code"}))
-    contents: dict[int, str] = {}
+    renderer = PacketRenderer(
+        RenderConfig(argument_tools={"code"}),
+        PacketIdentity(response_id=1, run_id="root", message_id="root:0"),
+    )
+    contents: dict[str, str] = {}
     for index, fragment in [
         (0, '{"code":"a'),
         (1, '{"code":"b'),
@@ -88,12 +97,14 @@ def test_interleaved_calls_have_independent_arguments_and_placements() -> None:
         for event in accumulator.add(chunk(fragment, index)):
             for packet in renderer.consume(event):
                 if isinstance(packet.obj, ToolCallArgumentDelta):
-                    tab = packet.placement.tab_index or 0
-                    contents[tab] = contents.get(
-                        tab, ""
+                    assert packet.identity is not None
+                    call_id = packet.identity.tool_call_id
+                    assert call_id is not None
+                    contents[call_id] = contents.get(
+                        call_id, ""
                     ) + packet.obj.argument_deltas.get("code", "")
     accumulator.end()
-    assert contents == {0: "ac", 1: "bd"}
+    assert contents == {"call-0": "ac", "call-1": "bd"}
     assert [call.arguments for call in accumulator.message.tool_calls] == [
         {"code": "ac"},
         {"code": "bd"},
@@ -113,7 +124,10 @@ def test_malformed_arguments_remain_error_calls(raw: str) -> None:
 
 def test_argument_rendering_is_opt_in() -> None:
     accumulator = MessageAccumulator()
-    renderer = PacketRenderer(RenderConfig())
+    renderer = PacketRenderer(
+        RenderConfig(),
+        PacketIdentity(response_id=1, run_id="root", message_id="root:0"),
+    )
     packets = [
         packet
         for event in accumulator.add(chunk('{"code":"hello"}'))

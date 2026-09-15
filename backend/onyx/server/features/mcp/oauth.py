@@ -55,6 +55,7 @@ from onyx.server.features.mcp.models import (
     MCPOAuthFlowState,
     MCPOAuthKeys,
     MCPPendingOAuthAuthorization,
+    MCPServerConnection,
     merge_mcp_headers,
 )
 from onyx.server.features.mcp.ssrf import (
@@ -115,7 +116,7 @@ class MCPReauthenticationRequired(OAuthFlowError):
 
 
 def _refresh_log_context(
-    mcp_server: MCPServer, connection_config_id: int
+    mcp_server: MCPServer | MCPServerConnection, connection_config_id: int
 ) -> MCPRefreshLogContext:
     return {
         "mcp_server_id": mcp_server.id,
@@ -202,7 +203,7 @@ def _absolute_token_expiry(tokens: OAuthToken) -> float | None:
 
 
 def refresh_mcp_oauth_token_if_expired(
-    mcp_server: MCPServer,
+    mcp_server: MCPServer | MCPServerConnection,
     connection_config_id: int,
 ) -> str | None:
     """Refresh an MCP OAuth token, single-flighted per connection config.
@@ -255,7 +256,9 @@ def _persisted_auth_header(connection_config_id: int) -> str | None:
     return (config_data.get("headers") or {}).get("Authorization")
 
 
-def _known_provider_oauth_metadata(mcp_server: MCPServer) -> OAuthMetadata | None:
+def _known_provider_oauth_metadata(
+    mcp_server: MCPServer | MCPServerConnection,
+) -> OAuthMetadata | None:
     """Expose a KNOWN_PROVIDER server's configured endpoints as SDK OAuth
     metadata so refresh targets the real token endpoint, not the SDK's
     `<server-origin>/token` fallback."""
@@ -978,7 +981,7 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
 
 
 def make_oauth_provider(
-    mcp_server: MCPServer,
+    mcp_server: MCPServer | MCPServerConnection,
     connection_config_id: int,
     shared_client_config_id: int | None,
     *,

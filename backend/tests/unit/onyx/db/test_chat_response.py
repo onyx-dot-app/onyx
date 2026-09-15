@@ -23,6 +23,7 @@ def _make_tool_call_info(
     tool_name: str = "run_python",
 ) -> ToolCallInfo:
     return ToolCallInfo(
+        message_id="test-run:0",
         parent_tool_call_id=None,
         turn_index=0,
         tab_index=0,

@@ -46,6 +46,7 @@ interface ChatSessionData {
 
   // Streaming duration tracking
   streamingStartTime?: number;
+  processingKey?: number;
 
   // Queued messages
   queuedMessages: QueuedMessage[];
