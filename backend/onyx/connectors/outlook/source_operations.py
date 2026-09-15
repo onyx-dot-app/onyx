@@ -1,4 +1,4 @@
-"""Outlook source-operations gateway: every Graph mail call lives here.
+"""Outlook source-operations gateway: every Graph mail and calendar call lives here.
 
 Indexing and the capability checks compose these operations, and nothing else
 under ``onyx/connectors/outlook`` talks to Graph. Transport, retry and token
