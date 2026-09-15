@@ -125,15 +125,25 @@ def swap_credentials_for_connector(
     user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
+    new_credential_id = credential_swap_req.new_credential_id
+
+    # GATE 2 on the credential: validate_ccpair_for_user builds and probes the
+    # connector, so ownership has to be settled before it runs.
+    if fetch_credential_by_id_for_user(new_credential_id, user, db_session) is None:
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            f"Credential {new_credential_id} does not exist or does not belong to user",
+        )
+
     validate_ccpair_for_user(
         credential_swap_req.connector_id,
-        credential_swap_req.new_credential_id,
+        new_credential_id,
         credential_swap_req.access_type,
         db_session,
     )
 
     connector_credential_pair = swap_credentials_connector(
-        new_credential_id=credential_swap_req.new_credential_id,
+        new_credential_id=new_credential_id,
         connector_id=credential_swap_req.connector_id,
         db_session=db_session,
         user=user,
