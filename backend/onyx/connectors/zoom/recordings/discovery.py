@@ -52,6 +52,10 @@ _MAX_WORK_PER_STEP = 200
 # here, and a wider range comes back clamped rather than refused.
 _MAX_LISTING_WINDOW_DAYS = 30
 
+# Past about two years, a poll window this wide is far more likely a connector with
+# no indexing start date than a deliberate backfill.
+_WIDE_BACKFILL_WINDOWS = 24
+
 
 def _entity_failure(
     entity_id: str,
@@ -466,6 +470,26 @@ class _UserRecordingsSource(DiscoverySource):
             self._listed_key = key
         return self._listed
 
+    def _warn_if_backfill_is_wide(
+        self, windows: list[tuple[date, date]], hosts: int
+    ) -> None:
+        """Nothing bounds how long an indexing run may take, and an empty window
+        looks like progress rather than a stall, so an unset indexing start date
+        stays invisible until Zoom starts refusing calls."""
+        if len(windows) <= _WIDE_BACKFILL_WINDOWS:
+            return
+        logger.warning(
+            "Zoom %s is listing recordings from %s, which Zoom's %s-day range cap "
+            "splits into %s calls per host (%s hosts, about %s calls). Set an "
+            "indexing start date on the connector to narrow this.",
+            self._scope_entity_id,
+            windows[0][0],
+            _MAX_LISTING_WINDOW_DAYS,
+            len(windows),
+            hosts,
+            len(windows) * hosts,
+        )
+
     def discover_step(
         self,
         client: ZoomClient,
@@ -491,6 +515,8 @@ class _UserRecordingsSource(DiscoverySource):
         window_index = (
             _resume_window_at(windows, position.window_start) if on_named_host else 0
         )
+        if cursor is None:
+            self._warn_if_backfill_is_wide(windows, len(hosts))
         if window_index >= len(windows):
             return _advance_host(hosts, index, [], failures)
 

@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 import requests
 
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.connector_runner import CheckpointOutputWrapper
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.models import (
@@ -12,6 +13,7 @@ from onyx.connectors.models import (
     ConnectorMissingCredentialError,
     Document,
     HierarchyNode,
+    InputType,
 )
 from onyx.connectors.zoom.client import ZoomClient
 from onyx.connectors.zoom.connector import ZoomConnector, ZoomConnectorCheckpoint
@@ -28,6 +30,8 @@ from onyx.connectors.zoom.recordings.models import (
     RecordingsState,
     ZoomSessionType,
 )
+from onyx.server.documents.connector import _validate_indexing_start
+from onyx.server.documents.models import ConnectorBase
 from tests.unit.onyx.connectors.utils import (
     load_everything_from_checkpoint_connector,
     load_everything_from_checkpoint_connector_from_checkpoint,
@@ -142,27 +146,58 @@ class TestZoomConnectorCredentials:
             next(connector.load_from_checkpoint(0, 1, checkpoint))
 
 
-class TestIndexingStartDateIsRequired:
-    """Zoom caps its recording listing at a month per request, so without a start
-    date the connector would ask for every month back to 1970 for every host."""
+class TestPruningDrivesTheConnectorFromTheEpoch:
+    """extract_ids_from_runnable_connector drives load_from_checkpoint with a
+    hardcoded epoch start. Rejecting that start stops pruning before it names a
+    single document, on every Zoom connector, every week."""
 
-    def test_an_unset_start_date_is_rejected(self) -> None:
-        connector, _ = _make_connector(meeting_ids=["111"])
-        checkpoint = connector.build_dummy_checkpoint()
+    def test_an_epoch_start_still_runs(self) -> None:
+        connector, mock_client = _make_connector(meeting_ids=["111"])
+        _configure_happy_path(mock_client)
 
-        with pytest.raises(ConnectorValidationError, match="indexing start date"):
-            next(connector.load_from_checkpoint(0, _FULL_HISTORY_END, checkpoint))
+        outputs = load_everything_from_checkpoint_connector(
+            connector, 0, _FULL_HISTORY_END
+        )
 
-    def test_the_perm_sync_entry_point_is_rejected_too(self) -> None:
-        connector, _ = _make_connector(meeting_ids=["111"])
-        checkpoint = connector.build_dummy_checkpoint()
+        documents = [
+            item
+            for output in outputs
+            for item in output.items
+            if isinstance(item, Document)
+        ]
+        assert [d.id for d in documents] == ["ZOOM_MEETING_uuid-111"]
 
-        with pytest.raises(ConnectorValidationError, match="indexing start date"):
-            next(
-                connector.load_from_checkpoint_with_perm_sync(
-                    0, _FULL_HISTORY_END, checkpoint
-                )
+
+class TestIndexingStartIsRequiredAtConfigTime:
+    """Enforced where the connector cannot: the class above is why a start date
+    cannot be demanded at index time."""
+
+    @staticmethod
+    def _connector_data(
+        source: DocumentSource, indexing_start: datetime | None = None
+    ) -> ConnectorBase:
+        return ConnectorBase(
+            name="test",
+            source=source,
+            input_type=InputType.POLL,
+            connector_specific_config={},
+            indexing_start=indexing_start,
+        )
+
+    def test_zoom_without_a_start_date_is_rejected(self) -> None:
+        with pytest.raises(ValueError, match="indexing start date"):
+            _validate_indexing_start(self._connector_data(DocumentSource.ZOOM))
+
+    def test_zoom_with_a_start_date_is_accepted(self) -> None:
+        _validate_indexing_start(
+            self._connector_data(
+                DocumentSource.ZOOM, datetime(2026, 1, 1, tzinfo=timezone.utc)
             )
+        )
+
+    def test_other_sources_are_unaffected(self) -> None:
+        _validate_indexing_start(self._connector_data(DocumentSource.CONFLUENCE))
+        _validate_indexing_start(self._connector_data(DocumentSource.GOOGLE_DRIVE))
 
 
 class TestZoomConnectorValidateSettings:

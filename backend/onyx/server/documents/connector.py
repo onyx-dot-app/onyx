@@ -1439,6 +1439,22 @@ def _apply_federated_connector_status_filters(
     return filtered_statuses
 
 
+# Zoom caps its recording listing at a month per request, so with no start date it
+# asks for every month back to 1970, per host, against an account-wide rate limit.
+_SOURCES_REQUIRING_INDEXING_START = {DocumentSource.ZOOM}
+
+
+def _validate_indexing_start(connector_data: ConnectorBase) -> None:
+    if (
+        connector_data.source in _SOURCES_REQUIRING_INDEXING_START
+        and connector_data.indexing_start is None
+    ):
+        raise ValueError(
+            f"The {connector_data.source.value} connector needs an indexing start "
+            "date. Set one so it knows how far back to look."
+        )
+
+
 def _validate_connector_allowed(source: DocumentSource) -> None:
     valid_connectors = [
         x for x in ENABLED_CONNECTOR_TYPES.replace("_", "").split(",") if x
@@ -1468,6 +1484,7 @@ def create_connector_from_model(
 
     try:
         _validate_connector_allowed(connector_data.source)
+        _validate_indexing_start(connector_data)
 
         connector_base = connector_data.to_connector_base()
         connector_response = create_connector(
@@ -1517,6 +1534,7 @@ def create_connector_with_mock_credential(
 
     try:
         _validate_connector_allowed(connector_data.source)
+        _validate_indexing_start(connector_data)
         connector_response = create_connector(
             db_session=db_session,
             connector_data=connector_data,
@@ -1593,6 +1611,7 @@ def update_connector_from_model(
 ) -> ConnectorSnapshot | StatusResponse[int]:
     try:
         _validate_connector_allowed(connector_data.source)
+        _validate_indexing_start(connector_data)
         connector_base = connector_data.to_connector_base()
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
