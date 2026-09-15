@@ -302,11 +302,10 @@ export function useCustomProviderNames() {
 export interface DefaultLlmReference {
   /**
    * The provider row this default belongs to. `llm_provider.name` carries no
-   * unique constraint, so two providers can share a display name and a
-   * name-only lookup silently picks the wrong one. Always key off this.
+   * unique constraint and is nullable, so it can neither identify a provider
+   * nor be relied on to exist. Always key off this.
    */
   providerId: number;
-  providerName: string;
   modelName: string;
 }
 
@@ -318,19 +317,15 @@ export interface LlmDefaults {
   /** True iff any provider exposes a visible model with `supports_image_input`. */
   hasAnyVisionLlm: boolean;
   /**
-   * The admin-configured default text model, resolved to the form-friendly
-   * `{ providerName, modelName }` shape. The backend stores
-   * `default_text` as `{ provider_id, model_name }`; this hook joins
-   * `provider_id` against the providers list to recover the human-facing
-   * provider `name`, which is what `validate_contextual_rag_model` looks
-   * up via `fetch_existing_llm_provider(name=...)`.
+   * The admin-configured default text model as `{ providerId, modelName }`.
+   * The backend stores `default_text` as `{ provider_id, model_name }`; this
+   * hook only confirms the provider is still in the list.
    */
   defaultLlm: DefaultLlmReference | null;
   /**
-   * The admin-configured default *vision* model, resolved to the same
-   * `{ providerName, modelName }` shape as `defaultLlm`. Mirrors the
-   * resolution path of `defaultLlm` but for `default_vision`. Used by
-   * indexing-time captioning and any other vision-only feature.
+   * The admin-configured default *vision* model, in the same shape as
+   * `defaultLlm`. Used by indexing-time captioning and any other vision-only
+   * feature.
    */
   defaultVision: DefaultLlmReference | null;
   isLoading: boolean;
@@ -369,10 +364,11 @@ export function useLlmDefaults(): LlmDefaults {
       if (!llmProviders || !raw) return null;
       const provider = llmProviders.find((p) => p.id === raw.provider_id);
       if (!provider) return null;
-      if (!provider.name) return null;
+      // No name check: well-known providers are routinely saved with a null
+      // name, and dropping those defaults left the admin pickers showing
+      // nothing for a model that was in fact configured.
       return {
         providerId: provider.id,
-        providerName: provider.name,
         modelName: raw.model_name,
       };
     },

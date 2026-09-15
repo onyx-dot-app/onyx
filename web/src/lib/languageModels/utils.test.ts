@@ -94,3 +94,19 @@ describe("findProviderOwningModelConfig", () => {
     expect(findProviderOwningModelConfig(undefined, 11)).toBeUndefined();
   });
 });
+
+describe("findProviderOwningModelConfig with nameless providers", () => {
+  it("still resolves when the owning provider has no display name", () => {
+    // Well-known providers are frequently saved with a null name, so any
+    // resolution path that requires one drops a valid configured default.
+    const providers = [
+      makeProvider(1, "Named", "openai", [
+        makeModelConfiguration(11, "gpt-4o"),
+      ]),
+      makeProvider(2, null, "openai", [makeModelConfiguration(22, "gpt-4o")]),
+    ];
+
+    expect(findProviderOwningModelConfig(providers, 22)?.id).toBe(2);
+    expect(findProviderOwningModelConfig(providers, 22)?.name).toBeNull();
+  });
+});
