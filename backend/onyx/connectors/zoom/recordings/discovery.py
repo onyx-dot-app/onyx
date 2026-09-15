@@ -113,21 +113,24 @@ def _poll_window_dates(
 
 
 def _listing_windows(from_date: date, to_date: date) -> list[tuple[date, date]]:
-    """Each window starts on the day the one before it ended. Zoom never documents
-    whether `to` includes its own date, and abutting windows would drop that day
-    entirely if it does not; repeating it costs one duplicate listing.
+    """Zoom never documents whether `to` includes its own date, so windows share
+    their boundary day and the last one runs a day past the poll window. Without
+    both, a boundary day or the poll window's last day would be asked for by no
+    window at all.
 
     Boundaries fall off from_date alone, so a resumed attempt rebuilds the same list.
     """
+    if to_date < from_date:
+        return []
+
     windows: list[tuple[date, date]] = []
     window_start = from_date
+    last_date = to_date + timedelta(days=1)
     step = timedelta(days=_MAX_LISTING_WINDOW_DAYS)
     while True:
-        window_end = min(window_start + step - timedelta(days=1), to_date)
-        if window_end < window_start:
-            return windows
+        window_end = min(window_start + step - timedelta(days=1), last_date)
         windows.append((window_start, window_end))
-        if window_end >= to_date:
+        if window_end >= last_date:
             return windows
         window_start = window_end
 

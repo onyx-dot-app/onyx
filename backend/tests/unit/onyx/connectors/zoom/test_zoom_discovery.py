@@ -989,7 +989,8 @@ class TestUserRecordingsPollWindow:
 
         source.discover_step(client, start, end, None)
 
-        assert self._window(client) == ("2026-03-07", "2026-03-17")
+        # A day past the poll end, so an exclusive `to` still covers 2026-03-17.
+        assert self._window(client) == ("2026-03-07", "2026-03-18")
 
     def test_the_lag_buffer_never_pushes_the_start_before_the_epoch(self) -> None:
         source = GroupSource("group-1")
@@ -1196,7 +1197,7 @@ class TestUserRecordingsListingWindow:
         windows = _listing_windows(date(2025, 1, 1), date(2025, 6, 30))
 
         assert windows[0][0] == date(2025, 1, 1)
-        assert windows[-1][1] == date(2025, 6, 30)
+        assert windows[-1][1] == date(2025, 7, 1)
         for from_date, to_date in windows:
             assert from_date <= to_date
             assert to_date - from_date < timedelta(days=_MAX_LISTING_WINDOW_DAYS)
@@ -1239,8 +1240,21 @@ class TestUserRecordingsListingWindow:
 
     def test_a_single_day_is_one_window(self) -> None:
         assert _listing_windows(date(2025, 1, 1), date(2025, 1, 1)) == [
-            (date(2025, 1, 1), date(2025, 1, 1))
+            (date(2025, 1, 1), date(2025, 1, 2))
         ]
+
+    def test_a_recording_on_the_last_day_survives_an_exclusive_to(self) -> None:
+        """Unlike a boundary day, the last day has no later window to re-query it."""
+        end = datetime(2026, 3, 17, 12, 0, tzinfo=timezone.utc)
+        start = end - timedelta(days=90)
+        source = GroupSource("group-1")
+        client = _client_recording_on(
+            end.date(), _recording("uuid-last-day"), to_is_exclusive=True
+        )
+
+        found = _walk(source, client, start.timestamp(), end.timestamp())
+
+        assert "uuid-last-day" in found
 
     def test_a_window_that_ends_before_it_starts_asks_zoom_for_nothing(self) -> None:
         assert _listing_windows(date(2025, 1, 2), date(2025, 1, 1)) == []
