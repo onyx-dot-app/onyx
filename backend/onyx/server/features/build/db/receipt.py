@@ -82,12 +82,14 @@ def finalize_receipt(
 ) -> ActionReceipt | None:
     """Move a PENDING row to its terminal state.
 
+    CONFIRMED and FAILED come from the origin's verdict, UNKNOWN when the
+    outcome is genuinely unknowable (headers arrived but the body did not).
     The conditional UPDATE is the race arbiter: concurrent finalizes cannot
     flip an already-recorded verdict. Returns the row (already-terminal
     included) or None when it does not exist.
     """
-    if status not in (ReceiptStatus.CONFIRMED, ReceiptStatus.FAILED):
-        raise ValueError("finalize_receipt only records CONFIRMED or FAILED")
+    if status is ReceiptStatus.PENDING:
+        raise ValueError("finalize_receipt records terminal states only")
     values: dict[str, Any] = {"status": status}
     if link is not None:
         values["link"] = link
@@ -114,17 +116,26 @@ def finalize_receipt(
     return row
 
 
-def sweep_stale_pending_receipts(db_session: Session) -> int:
-    """Mark orphaned PENDING rows UNKNOWN. Returns the number swept."""
+def sweep_stale_pending_receipts(
+    db_session: Session, *, session_id: UUID | None = None
+) -> int:
+    """Mark orphaned PENDING rows UNKNOWN. Returns the number swept.
+
+    Scope to one session on user-facing reads: the tenant-wide form has no
+    supporting index and belongs to maintenance paths.
+    """
     # DB clock on both sides, created_at is server-generated.
     cutoff = func.now() - PENDING_RECEIPT_TTL
+    conditions = [
+        ActionReceipt.status == ReceiptStatus.PENDING,
+        ActionReceipt.created_at < cutoff,
+    ]
+    if session_id is not None:
+        conditions.append(ActionReceipt.session_id == session_id)
     swept_ids = (
         db_session.execute(
             update(ActionReceipt)
-            .where(
-                ActionReceipt.status == ReceiptStatus.PENDING,
-                ActionReceipt.created_at < cutoff,
-            )
+            .where(*conditions)
             .values(status=ReceiptStatus.UNKNOWN)
             .returning(ActionReceipt.id)
             .execution_options(synchronize_session=False)

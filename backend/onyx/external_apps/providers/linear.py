@@ -4,7 +4,7 @@ from onyx.configs.app_configs import (
     EXT_APP_LINEAR_CLIENT_ID,
     EXT_APP_LINEAR_CLIENT_SECRET,
 )
-from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.enums import ActionEffect, EndpointPolicy, ExternalAppType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.actions import (
@@ -72,24 +72,28 @@ _ENDPOINTS: list[EndpointSpec] = [
     ),
     EndpointSpec(
         id=LinearAction.ISSUES_CREATE,
+        effect=ActionEffect.WRITE,
         normalised_name="Create an issue",
         description="Create a new issue.",
         matches=(GraphQLOp(operation_type="mutation", field="issueCreate"),),
     ),
     EndpointSpec(
         id=LinearAction.COMMENTS_CREATE,
+        effect=ActionEffect.WRITE,
         normalised_name="Comment on an issue",
         description="Add a comment to an issue.",
         matches=(GraphQLOp(operation_type="mutation", field="commentCreate"),),
     ),
     EndpointSpec(
         id=LinearAction.PROJECTS_CREATE,
+        effect=ActionEffect.WRITE,
         normalised_name="Create a project",
         description="Create a new project.",
         matches=(GraphQLOp(operation_type="mutation", field="projectCreate"),),
     ),
     EndpointSpec(
         id=LinearAction.PROJECTS_UPDATE,
+        effect=ActionEffect.WRITE,
         normalised_name="Edit a project",
         description="Update an existing project.",
         matches=(GraphQLOp(operation_type="mutation", field="projectUpdate"),),

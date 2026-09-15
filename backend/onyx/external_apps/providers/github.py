@@ -6,7 +6,7 @@ from onyx.configs.app_configs import (
     EXT_APP_GITHUB_CLIENT_ID,
     EXT_APP_GITHUB_CLIENT_SECRET,
 )
-from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.enums import ActionEffect, EndpointPolicy, ExternalAppType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.actions import (
@@ -175,6 +175,7 @@ _ENDPOINTS: list[EndpointSpec] = [
     ),
     EndpointSpec(
         id=GitHubAction.ISSUES_CREATE,
+        effect=ActionEffect.WRITE,
         normalised_name="Create an issue",
         description="Open a new issue in a repository.",
         matches=(
@@ -184,6 +185,7 @@ _ENDPOINTS: list[EndpointSpec] = [
     ),
     EndpointSpec(
         id=GitHubAction.COMMENTS_CREATE,
+        effect=ActionEffect.WRITE,
         normalised_name="Comment on an issue",
         description="Add a comment to an issue or pull request.",
         matches=(
@@ -195,6 +197,7 @@ _ENDPOINTS: list[EndpointSpec] = [
     ),
     EndpointSpec(
         id=GitHubAction.CONTENTS_WRITE,
+        effect=ActionEffect.WRITE,
         normalised_name="Create, update, or delete files",
         description="Write or delete a file in a repository (a single-file commit).",
         matches=(
@@ -204,6 +207,7 @@ _ENDPOINTS: list[EndpointSpec] = [
     ),
     EndpointSpec(
         id=GitHubAction.REFS_WRITE,
+        effect=ActionEffect.WRITE,
         normalised_name="Create, update, or delete branches",
         description="Create a branch/ref, move it, or delete it.",
         matches=(
@@ -214,6 +218,7 @@ _ENDPOINTS: list[EndpointSpec] = [
     ),
     EndpointSpec(
         id=GitHubAction.PULLS_CREATE,
+        effect=ActionEffect.WRITE,
         normalised_name="Open a pull request",
         description="Open a new pull request.",
         matches=(
