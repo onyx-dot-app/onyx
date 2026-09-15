@@ -9,6 +9,11 @@ from pydantic import BaseModel
 STREAM_FAILED_ERROR = "Streaming transcription failed"
 
 
+def normalize_provider_type(value: str) -> str:
+    """Canonical provider_type used for dispatch, persistence and lookups."""
+    return value.strip().lower()
+
+
 class TranscriptResult(BaseModel):
     """Result from streaming transcription."""
 
