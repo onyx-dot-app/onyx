@@ -25,6 +25,7 @@ from onyx.connectors.zoom.recordings.discovery import (
     _MAX_LISTING_WINDOW_DAYS,
     _MAX_WORK_PER_STEP,
     _OCCURRENCE_POLL_OVERLAP_SECONDS,
+    _WIDE_BACKFILL_WINDOWS,
     GroupSource,
     HostAllowlistSource,
     IdAllowlistSource,
@@ -1281,3 +1282,34 @@ class TestUserRecordingsListingWindow:
         assert result.next_cursor is not None
         # Past the window it just drained, or the same recording comes back forever.
         assert date.fromisoformat(result.next_cursor["window_start"]) > recorded_on
+
+    def test_a_wide_backfill_is_warned_about_once(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        source = GroupSource("group-1")
+        client = _client_for_hosts(members=[user(id="u1")])
+
+        with caplog.at_level("WARNING"):
+            result = source.discover_step(client, 0, _END, None)
+            source.discover_step(client, 0, _END, result.next_cursor)
+
+        said = [r for r in caplog.records if "indexing start date" in r.getMessage()]
+        assert len(said) == 1
+
+    def test_a_narrow_backfill_says_nothing(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        source = GroupSource("group-1")
+        client = _client_for_hosts(members=[user(id="u1")])
+        end = datetime(2026, 3, 17, 12, 0, tzinfo=timezone.utc).timestamp()
+        narrow = (
+            end
+            - (_WIDE_BACKFILL_WINDOWS - 2) * _MAX_LISTING_WINDOW_DAYS * 24 * _ONE_HOUR
+        )
+
+        with caplog.at_level("WARNING"):
+            source.discover_step(client, narrow, end, None)
+
+        assert not [
+            r for r in caplog.records if "indexing start date" in r.getMessage()
+        ]

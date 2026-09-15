@@ -103,14 +103,6 @@ class ZoomConnector(CheckpointedConnectorWithPermSync[ZoomConnectorCheckpoint]):
         if self.client is None:
             raise ConnectorMissingCredentialError("Zoom")
 
-        # Zoom caps its recording listing at a month per request, so an unset start
-        # date would ask for every month back to 1970 for every host.
-        if start <= 0:
-            raise ConnectorValidationError(
-                "Zoom needs an indexing start date. Set one on the connector so it "
-                "knows how far back to look."
-            )
-
         checkpoint = copy.deepcopy(checkpoint)
         state = checkpoint.recordings
 
