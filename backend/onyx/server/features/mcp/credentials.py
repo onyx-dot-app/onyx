@@ -32,6 +32,7 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import MCPAuthenticationPerformer, MCPAuthenticationType
 from onyx.db.mcp import get_user_connection_config
 from onyx.db.models import MCPConnectionConfig, MCPServer, User
+from onyx.db.oauth_accounts import get_live_oauth_token
 from onyx.server.features.mcp.models import (
     DENYLISTED_MCP_HEADERS,
     MCPAuthTemplate,
@@ -255,9 +256,7 @@ def resolve_mcp_credentials(
             )
         return ResolvedMCPCredentials(
             connection_config=user_connection_config,
-            user_oauth_token=(
-                user.oauth_accounts[0].access_token if user.oauth_accounts else None
-            ),
+            user_oauth_token=get_live_oauth_token(user, db_session),
             auth_type=mcp_server.auth_type,
             auth_template=auth_template,
             user_email=user.email,

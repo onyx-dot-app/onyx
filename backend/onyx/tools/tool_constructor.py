@@ -18,6 +18,7 @@ from onyx.db.mcp import (
 )
 from onyx.db.models import Persona, User
 from onyx.db.models import Tool as ToolDBModel
+from onyx.db.oauth_accounts import get_live_oauth_token
 from onyx.db.oauth_config import get_oauth_config
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tools import get_builtin_tool
@@ -199,10 +200,7 @@ def _construct_tools_impl(
     )
 
     mcp_tool_cache: dict[int, dict[int, MCPTool]] = {}
-    # Get user's OAuth token if available
-    user_oauth_token = None
-    if user.oauth_accounts:
-        user_oauth_token = user.oauth_accounts[0].access_token
+    user_oauth_token: str | None = get_live_oauth_token(user, db_session)
 
     search_settings = get_current_search_settings(db_session)
     # This flow is for search so we do not get all indices.
