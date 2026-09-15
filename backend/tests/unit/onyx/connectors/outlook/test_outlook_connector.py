@@ -1442,3 +1442,72 @@ def test_slim_docs_list_events_collapsed_to_their_series() -> None:
         event_document_id(mailbox(), "exc-1"),
     ]
     gateway.get_event.assert_not_called()
+
+
+def test_slim_docs_prune_the_events_of_a_calendar_graph_refuses() -> None:
+    """Indexing stops producing events for such a calendar, so pruning lets
+    them go while the mailbox's conversations stay listed."""
+    gateway = _calendar_gateway()
+    gateway.fetch_calendar_delta_page.side_effect = graph_error(403)
+    connector = _calendar_connector(gateway)
+
+    ids = _slim_ids(list(connector.retrieve_all_slim_docs()))
+
+    assert conversation_document_id(mailbox(), CONVERSATION_ID) in ids
+    assert not [i for i in ids if i.startswith(EVENT_DOCUMENT_ID_PREFIX)]
+
+    gateway.fetch_calendar_delta_page.side_effect = graph_error(429)
+    with pytest.raises(OutlookGraphError):
+        list(connector.retrieve_all_slim_docs())
+
+
+def test_slim_docs_deduplicate_events_per_page_only() -> None:
+    gateway = _calendar_gateway()
+    occurrence = event(id="occ-1", event_type="occurrence", series_master_id=SERIES_ID)
+    gateway.fetch_calendar_delta_page.side_effect = [
+        OutlookEventPage(
+            events=[occurrence, occurrence], next_link="https://graph/next"
+        ),
+        OutlookEventPage(events=[occurrence]),
+    ]
+    connector = _calendar_connector(gateway)
+
+    ids = _slim_ids(list(connector.retrieve_all_slim_docs()))
+
+    # The set pruning builds absorbs the repeat, so nothing grows with the
+    # size of the calendar to prevent it.
+    assert [i for i in ids if i.startswith(EVENT_DOCUMENT_ID_PREFIX)] == [
+        event_document_id(mailbox(), SERIES_ID),
+        event_document_id(mailbox(), SERIES_ID),
+    ]
+
+
+def test_series_tracking_is_capped_per_mailbox() -> None:
+    gateway = _calendar_gateway()
+    gateway.fetch_calendar_delta_page.return_value = OutlookEventPage(
+        events=[
+            event(id="a-1", event_type="occurrence", series_master_id="series-a"),
+            event(id="b-1", event_type="occurrence", series_master_id="series-b"),
+            event(id="b-2", event_type="occurrence", series_master_id="series-b"),
+        ]
+    )
+    gateway.get_event.side_effect = lambda **kwargs: event(
+        id=kwargs["event_id"], event_type="seriesMaster"
+    )
+    connector = _calendar_connector(gateway)
+
+    with patch(f"{CONNECTOR_MODULE}.MAX_TRACKED_SERIES_PER_MAILBOX", 1):
+        items = _run(connector)
+
+    # The first series is remembered, the second is read for each occurrence
+    # and its document written twice, which the index absorbs.
+    assert [c.kwargs["event_id"] for c in gateway.get_event.call_args_list] == [
+        "series-a",
+        "series-b",
+        "series-b",
+    ]
+    assert _event_doc_ids(items) == [
+        event_document_id(mailbox(), "series-a"),
+        event_document_id(mailbox(), "series-b"),
+        event_document_id(mailbox(), "series-b"),
+    ]

@@ -140,6 +140,10 @@ MAX_ATTENDEES_LISTED = 50
 # people search for, so the window reaches further back than ahead.
 DEFAULT_CALENDAR_PAST_DAYS = 365
 DEFAULT_CALENDAR_FUTURE_DAYS = 180
+# Series ids a mailbox remembers this attempt so each master is read once.
+# Past this many, later series are read again per occurrence instead of
+# growing the checkpoint with the size of the calendar.
+MAX_TRACKED_SERIES_PER_MAILBOX = 5000
 # Private hides an event's details from anyone the calendar is shared with,
 # and confidential flags it as not for wider eyes. Neither belongs in a shared
 # index.
@@ -168,7 +172,7 @@ class OutlookCheckpoint(ConnectorCheckpoint):
     calendar_next_link: str | None = None
     calendar_done: bool = False
     # Recurring series already resolved for the current mailbox in this
-    # attempt, written or not.
+    # attempt, written or not, capped at MAX_TRACKED_SERIES_PER_MAILBOX.
     seen_series_ids: set[str] = set()
 
 
@@ -771,28 +775,36 @@ class OutlookConnector(
         self, mailbox: OutlookMailbox
     ) -> Generator[list[str], None, None]:
         """Event document ids of the calendar window, series collapsed to their
-        master like indexing. An unreadable master still lists its id, which
-        prunes nothing. Any Graph error raises, like the folder walk."""
+        master like indexing and deduplicated per page only, since pruning
+        reads the ids as a set. An unreadable master still lists its id, which
+        prunes nothing. A calendar Graph refuses lists nothing, so its events
+        are pruned the way indexing stopped producing them. Anything else
+        raises, like the folder walk."""
         window_start, window_end = self._calendar_window()
-        seen: set[str] = set()
         next_link: str | None = None
         while True:
-            page = self.ops.fetch_calendar_delta_page(
-                mailbox_id=mailbox.id,
-                window_start=window_start,
-                window_end=window_end,
-                next_link=next_link,
+            try:
+                page = self.ops.fetch_calendar_delta_page(
+                    mailbox_id=mailbox.id,
+                    window_start=window_start,
+                    window_end=window_end,
+                    next_link=next_link,
+                )
+            except OutlookGraphError as e:
+                if e.status not in MAILBOX_UNAVAILABLE_STATUSES:
+                    raise
+                logger.info(
+                    "Outlook: calendar of %s unavailable (%s), pruning its events",
+                    mailbox.address,
+                    e.code,
+                )
+                return
+            event_ids = dict.fromkeys(
+                _indexed_event_id(event)
+                for event in page.events
+                if event_skip_reason(event) is None
             )
-            new_ids: list[str] = []
-            for event in page.events:
-                if event_skip_reason(event) is not None:
-                    continue
-                event_id = _indexed_event_id(event)
-                if event_id in seen:
-                    continue
-                seen.add(event_id)
-                new_ids.append(event_id)
-            yield [event_document_id(mailbox, event_id) for event_id in new_ids]
+            yield [event_document_id(mailbox, event_id) for event_id in event_ids]
             next_link = page.next_link
             if next_link is None:
                 break
@@ -1050,7 +1062,8 @@ class OutlookConnector(
             if series_id in seen_series_ids:
                 return None
             master = self._series_master(mailbox, series_id)
-            seen_series_ids.add(series_id)
+            if len(seen_series_ids) < MAX_TRACKED_SERIES_PER_MAILBOX:
+                seen_series_ids.add(series_id)
             if master is None or event_skip_reason(master) is not None:
                 return None
             event = master
