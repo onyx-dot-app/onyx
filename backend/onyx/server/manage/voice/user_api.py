@@ -32,7 +32,8 @@ from onyx.server.manage.models import VoiceSettingsUpdateRequest
 from onyx.server.manage.voice.text_utils import strip_markdown_for_tts
 from onyx.utils.logger import setup_logger
 from onyx.voice.factory import get_voice_provider
-from onyx.voice.interface import VoiceProviderInterface
+from onyx.voice.interface import VoiceProviderInterface, normalize_provider_type
+from onyx.voice.providers.zoom import ZOOM_CLOSE_TIMEOUT_SECONDS
 
 logger = setup_logger()
 
@@ -42,6 +43,11 @@ router = APIRouter(prefix="/voice")
 MAX_AUDIO_SIZE = 25 * 1024 * 1024
 # Chunk size for streaming uploads (8KB)
 UPLOAD_READ_CHUNK_SIZE = 8192
+# A cancelled Zoom transcribe still tears down its session, so the transcribe
+# budget is the cap minus one close budget.
+ZOOM_REST_TRANSCRIBE_SECONDS = (
+    ZOOM_VOICE_SESSION_MAX_SECONDS - ZOOM_CLOSE_TIMEOUT_SECONDS
+)
 
 
 class VoiceStatusResponse(BaseModel):
@@ -83,7 +89,7 @@ async def _transcribe_with_provider(
     except ZoomVoiceSessionLimitExceeded:
         raise OnyxError(OnyxErrorCode.RATE_LIMITED, ZOOM_VOICE_SESSION_LIMIT_MESSAGE)
     try:
-        async with asyncio.timeout(ZOOM_VOICE_SESSION_MAX_SECONDS):
+        async with asyncio.timeout(ZOOM_REST_TRANSCRIBE_SECONDS):
             return await provider.transcribe(audio_data, audio_format)
     finally:
         try:
@@ -139,7 +145,7 @@ async def transcribe_audio(
     try:
         text = await _transcribe_with_provider(
             provider=provider,
-            provider_type=provider_db.provider_type.lower(),
+            provider_type=normalize_provider_type(provider_db.provider_type),
             user_id=str(user.id),
             audio_data=audio_data,
             audio_format=audio_format,

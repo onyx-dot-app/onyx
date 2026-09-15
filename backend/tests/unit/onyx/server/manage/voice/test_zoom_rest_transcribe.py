@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock
@@ -139,3 +140,42 @@ async def test_rest_transcribe_skips_zoom_guards_for_other_providers(
     assert await _transcribe("audio.pcm16") == {"text": "hello"}
 
     acquire.assert_not_awaited()
+
+
+class _HangingZoomProvider(_ZoomProvider):
+    async def transcribe(self, audio_data: bytes, audio_format: str) -> str:
+        _ = (audio_data, audio_format)
+        await asyncio.sleep(60)
+        return self.transcript
+
+
+@pytest.mark.asyncio
+async def test_rest_transcribe_timeout_releases_zoom_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_zoom_provider(monkeypatch, _HangingZoomProvider())
+    release = AsyncMock()
+    monkeypatch.setattr(
+        user_api,
+        "acquire_zoom_voice_session",
+        AsyncMock(return_value="session-member-1"),
+    )
+    monkeypatch.setattr(user_api, "release_zoom_voice_session", release)
+    monkeypatch.setattr(user_api, "ZOOM_REST_TRANSCRIBE_SECONDS", 0.01)
+
+    with pytest.raises(OnyxError) as exc_info:
+        await _transcribe("audio.pcm16")
+
+    assert exc_info.value.error_code == OnyxErrorCode.INTERNAL_ERROR
+    release.assert_awaited_once_with(
+        user_id="user-7", session_member_id="session-member-1"
+    )
+
+
+def test_rest_transcribe_budget_reserves_provider_teardown() -> None:
+    # A cancelled transcribe still closes its Zoom session, so transcribe plus
+    # teardown must stay inside the admission window.
+    assert (
+        user_api.ZOOM_REST_TRANSCRIBE_SECONDS + user_api.ZOOM_CLOSE_TIMEOUT_SECONDS
+        == user_api.ZOOM_VOICE_SESSION_MAX_SECONDS
+    )
