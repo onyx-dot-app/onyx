@@ -1451,9 +1451,10 @@ def _validate_indexing_start(connector_data: ConnectorBase) -> None:
         connector_data.source in _SOURCES_REQUIRING_INDEXING_START
         and connector_data.indexing_start is None
     ):
-        raise ValueError(
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
             f"The {connector_data.source.value} connector needs an indexing start "
-            "date. Set one so it knows how far back to look."
+            "date. Set one so it knows how far back to look.",
         )
 
 
