@@ -417,6 +417,20 @@ def test_failed_address_lookup_fails_the_attempt_instead_of_dropping_it() -> Non
         _run(_connector(gateway, mailboxes=[MAILBOX_ADDRESS]))
 
 
+def test_failures_are_yielded_only_once_every_address_resolved() -> None:
+    """A lookup that raises after an unresolved address must not have yielded
+    that address's failure, or the retry would record it twice."""
+    gateway = _happy_gateway()
+    gateway.resolve_mailbox.side_effect = [None, graph_error(503, "ServiceUnavailable")]
+    connector = _connector(gateway, mailboxes=["ghost@contoso.com", MAILBOX_ADDRESS])
+    generator = connector.load_from_checkpoint(
+        START, END, connector.build_dummy_checkpoint()
+    )
+
+    with pytest.raises(Exception, match="ServiceUnavailable"):
+        next(generator)
+
+
 def test_denied_mailbox_is_a_failure_when_named_and_a_skip_otherwise() -> None:
     gateway = _happy_gateway()
     gateway.probe_mailbox.side_effect = graph_error(403)

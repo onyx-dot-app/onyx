@@ -10,12 +10,14 @@ messages, ``User.Read.All`` to enumerate and resolve mailboxes.
 """
 
 import json
+import re
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import quote
 
 import bs4
 import requests
+from msal.exceptions import MsalServiceError
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capabilities import CredentialCapability
@@ -118,6 +120,21 @@ def _is_decode_error(error: BaseException) -> bool:
             return True
         current = current.__cause__ or current.__context__
     return False
+
+
+# MSAL reports the HTTP status of a failed discovery or token call only inside
+# the exception text: "HTTP status: 429" for a 4xx discovery answer (ValueError)
+# and "HTTP Error: 503" for any 5xx (MsalServiceError).
+_MSAL_STATUS_RE = re.compile(r"HTTP (?:status|Error): (\d{3})")
+
+
+def _msal_http_status(error: BaseException) -> int | None:
+    match = _MSAL_STATUS_RE.search(str(error))
+    return int(match.group(1)) if match else None
+
+
+def _msal_error(error: BaseException) -> OutlookGraphError:
+    return OutlookGraphError(_msal_http_status(error), type(error).__name__, str(error))
 
 
 def _odata_quote(value: str) -> str:
@@ -257,8 +274,9 @@ class OutlookSourceOperations(SourceOperations):
                     MISSING_CREDENTIAL_CODE, "missing " + ", ".join(missing)
                 )
             # MSAL validates the authority against Microsoft's discovery
-            # endpoint while building the app, so an unknown directory and a
-            # network failure both surface here.
+            # endpoint while building the app. An unknown directory answers
+            # 400 and is the credential's fault. Throttling (429), a 5xx, an
+            # unreadable body or a network failure are the service's.
             try:
                 self._auth_context = build_msal_app(
                     client_id=credentials[CREDENTIAL_CLIENT_ID],
@@ -269,19 +287,24 @@ class OutlookSourceOperations(SourceOperations):
                     client_secret=credentials[CREDENTIAL_CLIENT_SECRET],
                 )
             except ValueError as e:
-                if _is_decode_error(e):
-                    raise _to_graph_error(e) from e
+                if _is_decode_error(e) or _msal_http_status(e) == 429:
+                    raise _msal_error(e) from e
                 raise OutlookAuthError(INVALID_AUTHORITY_CODE, str(e)) from e
+            except MsalServiceError as e:
+                raise _msal_error(e) from e
             except requests.RequestException as e:
                 raise _to_graph_error(e) from e
         return self._auth_context
 
     def _token_response(self) -> dict[str, Any]:
-        # MSAL surfaces a token endpoint it cannot reach or parse as a
-        # requests error or a bare ValueError.
+        # MSAL raises for a 5xx from the token endpoint, for one it cannot
+        # reach and for a body it cannot parse. A 4xx comes back as the
+        # OAuth error dict handled below.
         try:
             response = acquire_graph_token(self._auth().app, self._graph_host())
-        except (requests.RequestException, ValueError) as e:
+        except (MsalServiceError, ValueError) as e:
+            raise _msal_error(e) from e
+        except requests.RequestException as e:
             raise _to_graph_error(e) from e
         if "access_token" not in response:
             raise OutlookAuthError(
@@ -318,7 +341,11 @@ class OutlookSourceOperations(SourceOperations):
         params: dict[str, str] | None,
         headers: dict[str, str] | None = None,
     ) -> dict[str, Any] | None:
-        """The first entry of a collection, following empty continuation pages."""
+        """The first entry of a collection, following empty continuation pages.
+
+        None means the collection is empty. Running out of budget with pages
+        left is a failure, never absence.
+        """
         next_url: str | None = url
         for _ in range(EMPTY_PAGE_FOLLOW_LIMIT):
             if next_url is None:
@@ -329,7 +356,11 @@ class OutlookSourceOperations(SourceOperations):
             if items:
                 return items[0]
             next_url = data.get("@odata.nextLink")
-        return None
+        raise OutlookGraphError(
+            None,
+            "EmptyPages",
+            f"{EMPTY_PAGE_FOLLOW_LIMIT} empty pages with more to follow: {url}",
+        )
 
     def _user_url(self, mailbox_id: str) -> str:
         # Graph rejects the slash form for a principal name that starts with

@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
+from msal.exceptions import MsalServiceError
 
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.outlook.models import (
@@ -21,6 +22,7 @@ from onyx.connectors.outlook.models import (
 )
 from onyx.connectors.outlook.source_operations import (
     CHANGE_SELECT,
+    EMPTY_PAGE_FOLLOW_LIMIT,
     EPOCH_TIMESTAMP,
     MESSAGE_SELECT,
     MESSAGES_PAGE_SIZE,
@@ -389,6 +391,20 @@ def test_read_any_message_follows_an_empty_page_with_a_next_link() -> None:
     )
 
 
+def test_endless_empty_pages_are_a_failure_not_an_empty_mailbox() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = page_json(
+        [], next_link="https://graph/messages?again"
+    )
+
+    with pytest.raises(OutlookGraphError) as exc_info:
+        gateway.read_any_message(mailbox_id=MAILBOX_ID)
+
+    assert exc_info.value.status is None
+    assert exc_info.value.code == "EmptyPages"
+    assert client.get_json.call_count == EMPTY_PAGE_FOLLOW_LIMIT
+
+
 def test_resolve_mailbox_fallback_follows_an_empty_page_with_a_next_link() -> None:
     gateway, client = _gateway()
     client.get_json.side_effect = [
@@ -447,6 +463,54 @@ def test_unparseable_discovery_body_is_a_graph_error_not_a_bad_directory() -> No
 
     assert exc_info.value.status is None
     assert exc_info.value.code == "ValueError"
+
+
+@pytest.mark.parametrize(
+    "failure, status",
+    [
+        (
+            ValueError(
+                "OIDC Discovery failed on https://login/x. HTTP status: 429, Error: slow"
+            ),
+            429,
+        ),
+        (
+            MsalServiceError("HTTP Error: 503", error="", error_description=""),
+            503,
+        ),
+    ],
+)
+def test_discovery_service_trouble_keeps_its_status(
+    failure: Exception, status: int
+) -> None:
+    gateway, _ = _gateway()
+
+    with (
+        patch(f"{MODULE}.build_msal_app", side_effect=failure),
+        pytest.raises(OutlookGraphError) as exc_info,
+    ):
+        gateway.check_token()
+
+    assert exc_info.value.status == status
+
+
+def test_token_endpoint_5xx_keeps_its_status() -> None:
+    gateway, _ = _gateway()
+
+    with (
+        patch(f"{MODULE}.build_msal_app"),
+        patch(
+            f"{MODULE}.acquire_graph_token",
+            side_effect=MsalServiceError(
+                "HTTP Error: 502", error="", error_description=""
+            ),
+        ),
+        pytest.raises(OutlookGraphError) as exc_info,
+    ):
+        gateway.check_token()
+
+    assert exc_info.value.status == 502
+    assert exc_info.value.code == "MsalServiceError"
 
 
 def test_unknown_directory_is_an_auth_error_with_a_stable_code() -> None:

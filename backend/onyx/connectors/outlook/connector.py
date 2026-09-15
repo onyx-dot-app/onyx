@@ -368,6 +368,7 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
         self, checkpoint: OutlookCheckpoint
     ) -> Generator[ConnectorFailure, None, None]:
         found: list[OutlookMailbox] = []
+        failures: list[ConnectorFailure] = []
         if self.mailboxes:
             for address in self.mailboxes:
                 # Resolution reads the directory, never the mailbox, so a Graph
@@ -375,9 +376,12 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
                 # attempt instead of dropping the address.
                 mailbox = self.ops.resolve_mailbox(address=address)
                 if mailbox is None:
-                    yield _mailbox_failure(
-                        address,
-                        f"No user matches {address}. {MAILBOX_UNAVAILABLE_REMEDIATION}",
+                    failures.append(
+                        _mailbox_failure(
+                            address,
+                            f"No user matches {address}. "
+                            f"{MAILBOX_UNAVAILABLE_REMEDIATION}",
+                        )
                     )
                     continue
                 found.append(mailbox)
@@ -395,6 +399,9 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
         logger.info("Outlook: %s mailboxes to walk", len(unique))
         # Popped from the end, so reverse to keep the configured order.
         checkpoint.mailboxes = list(reversed(unique))
+        # Yielded once the checkpoint is complete, so a lookup that raises
+        # part way does not repeat them on the retry.
+        yield from failures
 
     def _open_mailbox(
         self, checkpoint: OutlookCheckpoint, mailbox: OutlookMailbox

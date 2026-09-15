@@ -112,6 +112,15 @@ def test_token_check_maps_msal_refusals_to_invalid_credential(code: str) -> None
         _run("outlook_token_auth", _context(gateway))
 
 
+@pytest.mark.parametrize("code", ["temporarily_unavailable", "server_error"])
+def test_token_check_is_indeterminate_on_a_transient_oauth_error(code: str) -> None:
+    gateway = _gateway()
+    gateway.check_token.side_effect = OutlookAuthError(code, "AADSTS90033 try later")
+
+    with pytest.raises(UnexpectedValidationError):
+        _run("outlook_token_auth", _context(gateway))
+
+
 def test_token_check_is_indeterminate_when_the_token_endpoint_is_unreachable() -> None:
     gateway = _gateway()
     gateway.check_token.side_effect = OutlookGraphError(

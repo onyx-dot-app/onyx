@@ -43,8 +43,18 @@ USER_LISTING_DENIED = (
 )
 
 
+# OAuth error codes the token endpoint returns for its own trouble, never for
+# a bad credential (RFC 6749 section 5.2).
+_TRANSIENT_OAUTH_CODES = frozenset({"temporarily_unavailable", "server_error"})
+
+
 def raise_for_auth_error(error: OutlookAuthError) -> NoReturn:
-    """MSAL failures are always about the credential, never the tenant's data."""
+    """Token refusals are about the credential unless the endpoint says otherwise."""
+    if error.code in _TRANSIENT_OAUTH_CODES:
+        raise UnexpectedValidationError(
+            f"Microsoft's token endpoint is unavailable ({error}). Re-run the "
+            "checks in a few minutes."
+        ) from error
     if error.code == MISSING_CREDENTIAL_CODE:
         raise CredentialInvalidError(
             f"Outlook credential is incomplete: {error}"
