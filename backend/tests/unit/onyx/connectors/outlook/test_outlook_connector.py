@@ -525,8 +525,8 @@ def test_user_listing_that_never_ends_stops_the_step(
 def test_conversation_tracking_is_capped_per_mailbox(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Past the cap a thread is rebuilt once per listed message instead of the
-    checkpoint growing with the mailbox."""
+    """Past the cap the oldest thread is forgotten first, so a busy thread stays
+    deduplicated while the checkpoint stays bounded."""
     monkeypatch.setattr(connector_module, "MAX_TRACKED_CONVERSATIONS_PER_MAILBOX", 1)
     gateway = _happy_gateway()
     gateway.fetch_folder_delta_page.side_effect = None
@@ -536,6 +536,7 @@ def test_conversation_tracking_is_capped_per_mailbox(
             change(id="msg-a2"),
             change(id="msg-b1", conversation_id="conv-b"),
             change(id="msg-b2", conversation_id="conv-b"),
+            change(id="msg-a3"),
         ]
     )
     connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
@@ -547,8 +548,8 @@ def test_conversation_tracking_is_capped_per_mailbox(
         call.kwargs["conversation_id"]
         for call in gateway.fetch_conversation_messages_page.call_args_list
     ]
-    assert rebuilt == [CONVERSATION_ID, "conv-b", "conv-b"]
-    assert checkpoint.seen_conversation_ids == {CONVERSATION_ID}
+    assert rebuilt == [CONVERSATION_ID, "conv-b", CONVERSATION_ID]
+    assert checkpoint.seen_conversation_ids == {CONVERSATION_ID: None}
 
 
 def test_failure_part_way_through_a_page_leaves_the_page_uncounted() -> None:
@@ -571,7 +572,7 @@ def test_failure_part_way_through_a_page_leaves_the_page_uncounted() -> None:
 
     assert checkpoint.folder_change_count == 4997
     assert checkpoint.delta_next_link is None
-    assert checkpoint.seen_conversation_ids == {CONVERSATION_ID}
+    assert checkpoint.seen_conversation_ids == {CONVERSATION_ID: None}
 
 
 def test_expired_delta_state_restarts_the_folder_round() -> None:
@@ -663,7 +664,7 @@ def test_transient_conversation_fetch_failure_keeps_the_checkpoint(
     with pytest.raises(OutlookGraphError):
         _step(connector, checkpoint)
 
-    assert checkpoint.seen_conversation_ids == set()
+    assert checkpoint.seen_conversation_ids == {}
     assert checkpoint.delta_next_link is None
 
 

@@ -83,7 +83,7 @@ CONVERSATION_FETCH_LIMIT = 500
 
 # Conversation ids a mailbox remembers this attempt so a thread is rebuilt once
 # however many of its messages the delta lists. The checkpoint is written after
-# every step, so past this many a repeat rebuild costs less than the ids would.
+# every step, so past this many the oldest ids are forgotten first.
 MAX_TRACKED_CONVERSATIONS_PER_MAILBOX = 20_000
 
 # Pages of the tenant's user listing one step may read. No tenant has this many
@@ -116,8 +116,16 @@ class OutlookCheckpoint(ConnectorCheckpoint):
     # True once the current folder is being re-read without the server filter.
     folder_unfiltered: bool = False
     # Conversations already rebuilt for the current mailbox in this attempt,
-    # capped at MAX_TRACKED_CONVERSATIONS_PER_MAILBOX.
-    seen_conversation_ids: set[str] = set()
+    # oldest first, the newest MAX_TRACKED_CONVERSATIONS_PER_MAILBOX kept.
+    seen_conversation_ids: dict[str, None] = {}
+
+
+def _remember_conversation(seen: dict[str, None], conversation_id: str) -> None:
+    """Records a rebuilt conversation, forgetting the oldest past the cap, so a
+    busy thread stays deduplicated while the checkpoint stays bounded."""
+    seen[conversation_id] = None
+    if len(seen) > MAX_TRACKED_CONVERSATIONS_PER_MAILBOX:
+        del seen[next(iter(seen))]
 
 
 def mailbox_node_id(mailbox: OutlookMailbox) -> str:
@@ -353,7 +361,7 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
         checkpoint.folders = None
         checkpoint.current_folder = None
         checkpoint.excluded_folder_ids = []
-        checkpoint.seen_conversation_ids = set()
+        checkpoint.seen_conversation_ids = {}
         self._reset_folder_cursor(checkpoint)
 
     def _mailbox_unavailable(
@@ -458,7 +466,7 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
         checkpoint.folders = list(reversed([folder for folder, _ in tree]))
         checkpoint.excluded_folder_ids = sorted(excluded)
         checkpoint.current_folder = None
-        checkpoint.seen_conversation_ids = set()
+        checkpoint.seen_conversation_ids = {}
         self._reset_folder_cursor(checkpoint)
 
     def _excluded_well_known_folder_ids(self, mailbox: OutlookMailbox) -> set[str]:
@@ -567,11 +575,9 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
             result = self._rebuild_conversation(
                 mailbox, change.conversation_id, excluded
             )
-            if (
-                len(checkpoint.seen_conversation_ids)
-                < MAX_TRACKED_CONVERSATIONS_PER_MAILBOX
-            ):
-                checkpoint.seen_conversation_ids.add(change.conversation_id)
+            _remember_conversation(
+                checkpoint.seen_conversation_ids, change.conversation_id
+            )
             if result is not None:
                 yield result
 
