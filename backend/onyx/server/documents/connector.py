@@ -1444,6 +1444,8 @@ def _apply_federated_connector_status_filters(
 _SOURCES_REQUIRING_INDEXING_START = {DocumentSource.ZOOM}
 
 
+# Creation only: update_connector leaves the stored column alone, so demanding a date
+# on an update would reject callers over a value the endpoint then throws away.
 def _validate_indexing_start(connector_data: ConnectorBase) -> None:
     if (
         connector_data.source in _SOURCES_REQUIRING_INDEXING_START
@@ -1611,7 +1613,6 @@ def update_connector_from_model(
 ) -> ConnectorSnapshot | StatusResponse[int]:
     try:
         _validate_connector_allowed(connector_data.source)
-        _validate_indexing_start(connector_data)
         connector_base = connector_data.to_connector_base()
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
