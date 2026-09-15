@@ -8026,8 +8026,8 @@
           "groups": {
             "header": "Grupos"
           },
-          "lastUpdated": {
-            "header": "Última actualización"
+          "lastActive": {
+            "header": "Última actividad"
           },
           "name": {
             "header": "Nombre"

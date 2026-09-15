@@ -29,6 +29,7 @@ function toUserRow(snapshot: FullUserSnapshot): UserRow {
     personal_name: snapshot.personal_name,
     created_at: snapshot.created_at,
     updated_at: snapshot.updated_at,
+    last_active: snapshot.last_active ?? null,
     groups: snapshot.groups,
   };
 }
@@ -49,6 +50,7 @@ function emailToUserRow(
     personal_name: null,
     created_at: null,
     updated_at: null,
+    last_active: null,
     groups: [],
   };
 }
