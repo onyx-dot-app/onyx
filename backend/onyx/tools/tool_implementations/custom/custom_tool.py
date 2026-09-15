@@ -1,26 +1,18 @@
 import csv
 import json
-import queue
 import uuid
 from io import BytesIO, StringIO
 from typing import Any, Dict, List
 
 import requests
+from pydantic import TypeAdapter
 from requests import JSONDecodeError
 
-from onyx.chat.emitter import Emitter
+from onyx.agents.tools import ToolInvocation, ToolProgress
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.models import ToolResult
-from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import (
-    CustomToolArgs,
-    CustomToolDelta,
-    CustomToolErrorInfo,
-    CustomToolStart,
-    Packet,
-)
-from onyx.tools.interface import Tool
+from onyx.tools.interface import FunctionToolDefinition, Tool, ToolContext
 from onyx.tools.models import (
     CHAT_SESSION_ID_PLACEHOLDER,
     MESSAGE_ID_PLACEHOLDER,
@@ -31,12 +23,17 @@ from onyx.tools.models import (
     DynamicSchemaInfo,
     ToolCallException,
 )
+from onyx.tools.progress import (
+    CustomToolArguments,
+    CustomToolErrorInfo,
+    CustomToolOutput,
+    CustomToolStarted,
+)
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     REQUEST_BODY,
     MethodSpec,
     openapi_to_method_specs,
     openapi_to_url,
-    validate_openapi_schema,
 )
 from onyx.utils.headers import HeaderItemDict, header_list_to_header_dict
 from onyx.utils.logger import setup_logger
@@ -46,22 +43,21 @@ logger = setup_logger()
 CUSTOM_TOOL_RESPONSE_ID = "custom_tool_response"
 
 
-# override_kwargs is not supported for custom tools
-class CustomTool(Tool[None]):
+class CustomTool(Tool):
     def __init__(
         self,
         id: int,
         method_spec: MethodSpec,
         base_url: str,
-        emitter: Emitter,
         custom_headers: list[HeaderItemDict] | None = None,
         user_oauth_token: str | None = None,
     ) -> None:
-        super().__init__(emitter=emitter)
 
         self._base_url = base_url
         self._method_spec = method_spec
-        self._tool_definition = self._method_spec.to_tool_definition()
+        self._tool_definition = TypeAdapter(FunctionToolDefinition).validate_python(
+            self._method_spec.to_tool_definition()
+        )
         self._user_oauth_token = user_oauth_token
         self._id = id
 
@@ -102,7 +98,7 @@ class CustomTool(Tool[None]):
         # (e.g. "ServiceNow.GetIncident" vs "ServiceNow_GetIncident").
         return self._method_spec.raw_name
 
-    def tool_definition(self) -> dict:
+    def tool_definition(self) -> FunctionToolDefinition:
         return self._tool_definition
 
     def _save_and_get_file_references(
@@ -136,27 +132,16 @@ class CustomTool(Tool[None]):
         reader = csv.DictReader(csv_file)
         return list(reader)
 
-    """Actual execution of the tool"""
-
-    def emit_start(self, placement: Placement) -> None:
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=CustomToolStart(tool_name=self._name, tool_id=self._id),
+    def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+        invocation.update(
+            ToolProgress(
+                details=CustomToolStarted(tool_name=self._name, tool_id=self._id)
             )
         )
-
-    def run(
-        self,
-        placement: Placement,
-        override_kwargs: None = None,  # noqa: ARG002
-        **llm_kwargs: Any,
-    ) -> ToolResult:
-        # Build path params
         path_params = {}
         for path_param_schema in self._method_spec.get_path_param_schemas():
             param_name = path_param_schema["name"]
-            if param_name not in llm_kwargs:
+            if param_name not in invocation.arguments:
                 raise ToolCallException(
                     message=f"Missing required path parameter '{param_name}' in {self._name} tool call",
                     llm_facing_message=(
@@ -164,30 +149,28 @@ class CustomTool(Tool[None]):
                         f"Please provide it in the tool call arguments."
                     ),
                 )
-            path_params[param_name] = llm_kwargs[param_name]
+            path_params[param_name] = invocation.arguments[param_name]
 
         # Build query params
         query_params = {}
         for query_param_schema in self._method_spec.get_query_param_schemas():
-            if query_param_schema["name"] in llm_kwargs:
-                query_params[query_param_schema["name"]] = llm_kwargs[
+            if query_param_schema["name"] in invocation.arguments:
+                query_params[query_param_schema["name"]] = invocation.arguments[
                     query_param_schema["name"]
                 ]
 
-        # Emit args packet (path + query params only, no request body)
         tool_args = {**path_params, **query_params}
         if tool_args:
-            self.emitter.emit(
-                Packet(
-                    placement=placement,
-                    obj=CustomToolArgs(
+            invocation.update(
+                ToolProgress(
+                    details=CustomToolArguments(
                         tool_name=self._name,
                         tool_args=tool_args,
-                    ),
+                    )
                 )
             )
 
-        request_body = llm_kwargs.get(REQUEST_BODY)
+        request_body = invocation.arguments.get(REQUEST_BODY)
         url = self._method_spec.build_url(self._base_url, path_params, query_params)
         method = self._method_spec.method
 
@@ -246,18 +229,16 @@ class CustomTool(Tool[None]):
             "Returning tool response for %s with type %s", self._name, response_type
         )
 
-        # Emit CustomToolDelta packet
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=CustomToolDelta(
+        invocation.update(
+            ToolProgress(
+                details=CustomToolOutput(
                     tool_name=self._name,
                     tool_id=self._id,
                     response_type=response_type,
                     data=data,
                     file_ids=file_ids,
                     error=error_info,
-                ),
+                )
             )
         )
 
@@ -277,7 +258,6 @@ class CustomTool(Tool[None]):
 def build_custom_tools_from_openapi_schema_and_headers(
     tool_id: int,
     openapi_schema: dict[str, Any],
-    emitter: Emitter | None = None,
     custom_headers: list[HeaderItemDict] | None = None,
     dynamic_schema_info: DynamicSchemaInfo | None = None,
     user_oauth_token: str | None = None,
@@ -317,97 +297,13 @@ def build_custom_tools_from_openapi_schema_and_headers(
     url = openapi_to_url(openapi_schema)
     method_specs = openapi_to_method_specs(openapi_schema)
 
-    # Use a discard emitter if none provided (packets go nowhere)
-    if emitter is None:
-        emitter = Emitter(merged_queue=queue.Queue())
-
     return [
         CustomTool(
             id=tool_id,
             method_spec=method_spec,
             base_url=url,
-            emitter=emitter,
             custom_headers=custom_headers,
             user_oauth_token=user_oauth_token,
         )
         for method_spec in method_specs
     ]
-
-
-if __name__ == "__main__":
-    import openai
-    from openai.types.chat.chat_completion_message_function_tool_call import (
-        ChatCompletionMessageFunctionToolCall,
-    )
-
-    openapi_schema = {
-        "openapi": "3.0.0",
-        "info": {
-            "version": "1.0.0",
-            "title": "Assistants API",
-            "description": "An API for managing assistants",
-        },
-        "servers": [
-            {"url": "http://localhost:8080"},
-        ],
-        "paths": {
-            "/assistant/{assistant_id}": {
-                "get": {
-                    "summary": "Get a specific Assistant",
-                    "operationId": "getAssistant",
-                    "parameters": [
-                        {
-                            "name": "assistant_id",
-                            "in": "path",
-                            "required": True,
-                            "schema": {"type": "string"},
-                        }
-                    ],
-                },
-                "post": {
-                    "summary": "Create a new Assistant",
-                    "operationId": "createAssistant",
-                    "parameters": [
-                        {
-                            "name": "assistant_id",
-                            "in": "path",
-                            "required": True,
-                            "schema": {"type": "string"},
-                        }
-                    ],
-                    "requestBody": {
-                        "required": True,
-                        "content": {"application/json": {"schema": {"type": "object"}}},
-                    },
-                },
-            }
-        },
-    }
-    validate_openapi_schema(openapi_schema)
-
-    tools = build_custom_tools_from_openapi_schema_and_headers(
-        tool_id=0,  # dummy tool id
-        openapi_schema=openapi_schema,
-        emitter=Emitter(merged_queue=queue.Queue()),
-        dynamic_schema_info=None,
-    )
-
-    openai_client = openai.OpenAI()
-    response = openai_client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "Can you fetch assistant with ID 10"},
-        ],
-        tools=[  # ty: ignore[invalid-argument-type]
-            tool.tool_definition() for tool in tools
-        ],
-    )
-    choice = response.choices[0]
-    if choice.message.tool_calls:
-        print(choice.message.tool_calls)
-        tool_call = choice.message.tool_calls[0]
-        if isinstance(tool_call, ChatCompletionMessageFunctionToolCall):
-            # Note: This example code would need a proper run_context with emitter
-            # For testing purposes, this would need to be updated
-            print("Tool execution requires run_context with emitter")

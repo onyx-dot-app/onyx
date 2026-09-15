@@ -1,44 +1,14 @@
-"""Manual test harness for the coding-agent loop.
-
-Usage (from repo root, with venv active and Onyx services running):
-
-    source .venv/bin/activate
-    python -m backend.scripts.coding_agent_test \\
-        --repo onyx-dot-app/onyx \\
-        --query "What does the docprocessing celery worker do?"
-
-Optional flags:
-    --github-token <pat>   Personal access token for private repos / higher rate limit
-    --dump-packets         Print every emitter packet that was streamed during the run
-    --max-packets-shown N  Limit how many packets are printed (default 50)
-
-The script wires up the same primitives the chat flow does (SqlEngine,
-default LLM, token counter, in-memory emitter + state container) and then
-calls run_coding_agent_call directly so you can iterate on the loop without
-spinning up the full chat backend.
-"""
-
-from __future__ import annotations
+"""Run repository investigation directly through the shared Agent runtime."""
 
 import argparse
-import queue
-from uuid import uuid4
+from collections import deque
 
-from onyx.chat.emitter import Emitter
-from onyx.coding_agent.agent import run_coding_agent_call
-from onyx.coding_agent.tool_definitions import (
-    CODING_AGENT_QUERY_KEY,
-    CODING_AGENT_REPO_KEY,
-    CODING_AGENT_TOOL_NAME,
-)
-from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
-from onyx.db.models import User
+from onyx.agents.events import AgentEvent
+from onyx.coding_agent.agent import BASH_TOOL_SENTINEL_ID, CodingAgent, _setup_session
+from onyx.db.engine.sql_engine import SqlEngine
 from onyx.llm.factory import get_default_llm, get_llm_token_counter
-from onyx.server.query_and_chat.placement import Placement
-from onyx.tools.models import ToolCallKickoff
-from onyx.utils.logger import setup_logger
-
-logger = setup_logger()
+from onyx.prompts.coding_agent.coding_agent import MAX_CODING_AGENT_CYCLES
+from onyx.tools.tool_implementations.bash.bash_tool import BashTool
 
 
 def _parse_args() -> argparse.Namespace:
@@ -61,7 +31,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dump-packets",
         action="store_true",
-        help="Print emitter packets that were streamed during the run",
+        help="Print agent events that were streamed during the run",
     )
     parser.add_argument(
         "--max-packets-shown",
@@ -74,74 +44,27 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = _parse_args()
-
     SqlEngine.set_app_name("coding_agent_test")
     SqlEngine.init_engine(pool_size=5, max_overflow=5)
-
-    with get_session_with_current_tenant() as db_session:
-        # Token counter needs an LLM but the agent loop doesn't need a user / persona
-        # — repo + query are enough — so we just verify a user exists for parity
-        # with the research_agent test harness.
-        user = db_session.query(User).first()
-        if user is None:
-            logger.warning(
-                "No users found in DB; continuing anyway since the coding agent "
-                "doesn't depend on user context."
-            )
-
-        llm = get_default_llm()
-        token_counter = get_llm_token_counter(llm)
-
-        emitter_queue: queue.Queue = queue.Queue()
-        emitter = Emitter(merged_queue=emitter_queue)
-
-        coding_agent_call = ToolCallKickoff(
-            tool_call_id=str(uuid4()),
-            tool_name=CODING_AGENT_TOOL_NAME,
-            tool_args={
-                CODING_AGENT_QUERY_KEY: args.query,
-                CODING_AGENT_REPO_KEY: args.repo,
-            },
-            placement=Placement(turn_index=0, tab_index=0),
-        )
-
-        logger.info("Repo: %s", args.repo)
-        logger.info("Query: %s", args.query)
-        logger.info("LLM: %s/%s", llm.info.model_provider, llm.info.model_name)
-
-        result = run_coding_agent_call(
-            coding_agent_call=coding_agent_call,
-            emitter=emitter,
+    llm = get_default_llm()
+    events: deque[AgentEvent] = deque(maxlen=args.max_packets_shown)
+    with _setup_session(repo=args.repo, github_token=args.github_token) as session_id:
+        feature = CodingAgent(
+            query=args.query,
+            repo=args.repo,
             llm=llm,
-            token_counter=token_counter,
+            token_counter=get_llm_token_counter(llm),
             user_identity=None,
-            github_token=args.github_token,
+            bash_tool=BashTool(tool_id=BASH_TOOL_SENTINEL_ID, session_id=session_id),
         )
-
-        if result is None:
-            logger.error("Coding agent returned no result (see traceback above)")
-            return 1
-
-        print("\n" + "=" * 80)
-        print("CODING AGENT ANSWER")
-        print("=" * 80)
-        print(result.answer)
-        print("=" * 80)
-        print(f"Total packets emitted: {emitter_queue.qsize()}")
-
         if args.dump_packets:
-            print("\n" + "=" * 80)
-            print("EMITTER PACKETS")
-            print("=" * 80)
-            shown = 0
-            while not emitter_queue.empty() and shown < args.max_packets_shown:
-                packet = emitter_queue.get_nowait()
-                print(f"[{shown:03d}] {packet}")
-                shown += 1
-            remaining = emitter_queue.qsize()
-            if remaining:
-                print(f"... ({remaining} more packets not shown)")
-
+            feature.agent.subscribe(events.append)
+        result = feature.agent.run(
+            max_steps=MAX_CODING_AGENT_CYCLES + 1, messages=feature.input_messages
+        )
+        print(result.output.text)
+    for event in events:
+        print(event.model_dump_json())
     return 0
 
 

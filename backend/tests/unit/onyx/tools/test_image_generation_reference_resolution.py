@@ -44,7 +44,6 @@ def _make_tool(
         return ImageGenerationTool(
             image_generation_credentials=MagicMock(),
             tool_id=1,
-            emitter=MagicMock(),
             chat_session_id=uuid4(),
             model=model,
             provider="openai",

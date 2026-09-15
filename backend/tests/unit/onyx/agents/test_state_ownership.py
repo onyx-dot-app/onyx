@@ -2,19 +2,26 @@
 
 import base64
 import threading
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
-from pydantic import BaseModel, JsonValue
+from pydantic import BaseModel
 
 from onyx.agents.events import (
     AgentEvent,
     MessageEndEvent,
     MessageUpdateEvent,
-    TurnEndEvent,
+    StepEndEvent,
 )
-from onyx.agents.runtime import Agent, AgentContext, AgentHooks, TurnResult
-from onyx.agents.tools import AgentTool, ToolUpdate
+from onyx.agents.runtime import (
+    Agent,
+    AgentContext,
+    AgentHooks,
+    StepResult,
+    ToolCallContext,
+)
+from onyx.agents.tools import AgentTool, ToolInvocation, ToolProgress
 from onyx.context.messages import PromptMetadata, prepare_model_messages
 from onyx.file_store.models import ChatFileType, ChatLoadedFile
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
@@ -40,12 +47,13 @@ class ExtraData(BaseModel):
     value: str = "private metadata"
 
 
-def _tool() -> AgentTool:
+def _tool(execute: Callable[[ToolInvocation], ToolResult] | None = None) -> AgentTool:
     return AgentTool(
         name="lookup",
         description="",
         parameters={},
-        execute=lambda *_: ToolResult(content="original", details=ExtraData()),
+        execute=execute
+        or (lambda _invocation: ToolResult(content="original", details=ExtraData())),
     )
 
 
@@ -63,7 +71,7 @@ def _model(
 
 
 @pytest.mark.parametrize("replace", [False, True])
-def test_after_turn_changes_have_one_commit_point(replace: bool) -> None:
+def test_tool_finalization_has_one_commit_point(replace: bool) -> None:
     requests: list[list[Message]] = []
 
     def model(
@@ -72,21 +80,18 @@ def test_after_turn_changes_have_one_commit_point(replace: bool) -> None:
         requests.append(context.messages)
         return _model(context)
 
-    def after_turn(turn: TurnResult) -> None:
-        if turn.tool_results:
-            if replace:
-                turn.tool_results[0] = turn.tool_results[0].model_copy(
-                    update={"content": "accepted"}
-                )
-            else:
-                turn.tool_results[0].content = "accepted"
+    def finalize(_context: ToolCallContext, result: ToolResult) -> ToolResult:
+        if replace:
+            return result.model_copy(update={"content": "accepted"})
+        result.content = "accepted"
+        return result
 
     agent = Agent(
         FakeModelClient(model),
         context=AgentContext(tools=[_tool()]),
-        hooks=AgentHooks(after_turn=after_turn),
+        hooks=AgentHooks(after_tool_call=finalize),
     )
-    result = agent.run(max_turns=2)
+    result = agent.run(max_steps=2)
     snapshot = agent.snapshot()
     assert snapshot is not None
     assert result.output.text == "accepted"
@@ -97,22 +102,21 @@ def test_after_turn_changes_have_one_commit_point(replace: bool) -> None:
         == "accepted"
     )
     assert all(message.metadata is None for message in snapshot.messages)
-    assert "private metadata" not in snapshot.model_dump_json()
+    assert "private metadata" not in snapshot.transcript().model_dump_json()
 
 
-def test_after_turn_cannot_rewrite_executed_calls() -> None:
-    def rewrite(turn: TurnResult) -> None:
-        turn.message.content = []
+def test_step_observer_cannot_rewrite_executed_calls() -> None:
+    def rewrite(step: StepResult) -> None:
+        step.message.content = []
 
     agent = Agent(
         FakeModelClient(_model),
         context=AgentContext(tools=[_tool()]),
-        hooks=AgentHooks(after_turn=rewrite),
+        hooks=AgentHooks(after_step=rewrite),
     )
-    with pytest.raises(ValueError, match="executed tool calls"):
-        agent.run(max_turns=1)
+    agent.run(max_steps=1)
     snapshot = agent.snapshot()
-    assert snapshot is not None and snapshot.status == "error"
+    assert snapshot is not None and snapshot.status == "limit"
     assert isinstance(snapshot.messages[-1], ToolResultMessage)
     assert snapshot.messages[-1].text == "original"
 
@@ -126,14 +130,21 @@ def test_subscribers_cannot_edit_history_or_each_others_events() -> None:
             event.tool_call.arguments["bad"] = True
 
     baseline = Agent(FakeModelClient(_model), context=AgentContext(tools=[_tool()]))
-    expected = baseline.run(max_turns=2)
+    expected = baseline.run(max_steps=2)
     agent = Agent(FakeModelClient(_model), context=AgentContext(tools=[_tool()]))
     observed: list[AgentEvent] = []
     agent.subscribe(corrupt)
     agent.subscribe(observed.append)
-    actual = agent.run(max_turns=2)
-    assert actual == expected
-    assert agent.snapshot() == baseline.snapshot()
+    actual = agent.run(max_steps=2)
+    assert actual.output == expected.output
+    assert actual.steps == expected.steps
+    assert actual.stop_reason == expected.stop_reason
+    assert agent.context.messages == baseline.context.messages
+    actual_snapshot = agent.snapshot()
+    expected_snapshot = baseline.snapshot()
+    assert actual_snapshot is not None and expected_snapshot is not None
+    assert actual_snapshot.messages == expected_snapshot.messages
+    assert actual_snapshot.status == expected_snapshot.status
     assert (
         next(event for event in observed if event.type == "message_end").message.text
         == "Searching"
@@ -148,13 +159,8 @@ def test_running_snapshot_retains_completed_tools_when_another_is_cancelled() ->
     completed = threading.Event()
     snapshots = []
 
-    def execute(
-        call_id: str,
-        _arguments: dict[str, JsonValue],
-        _signal: CancellationSignal,
-        _update: ToolUpdate,
-    ) -> ToolResult:
-        if call_id == "first":
+    def execute(invocation: ToolInvocation) -> ToolResult:
+        if invocation.call_id == "first":
             return ToolResult(content="completed result")
         assert completed.wait(2)
         snapshots.append(agent.snapshot(cancelled=True))
@@ -185,17 +191,17 @@ def test_running_snapshot_retains_completed_tools_when_another_is_cancelled() ->
 
     agent.subscribe(observe)
     with pytest.raises(AgentCancelled):
-        agent.run(max_turns=1, cancellation=signal)
+        agent.run(max_steps=1, cancellation=signal)
     snapshot = agent.snapshot()
     assert snapshot is not None and snapshot.status == "cancelled"
-    assert len(snapshot.messages) == 3
+    assert len(snapshot.messages) == 2
     assert (
         snapshot.messages[1].text == snapshots[0].messages[1].text == "completed result"
     )
-    assert (
-        isinstance(snapshot.messages[2], ToolResultMessage)
-        and snapshot.messages[2].is_error
+    operation = next(
+        item for item in snapshot.operations if item.tool_call_id == "second"
     )
+    assert operation.status == "cancelled"
     assert snapshot.messages == agent.context.messages[1:]
 
 
@@ -236,7 +242,7 @@ def test_lazy_attachments_share_resources_but_not_message_data(
         ),
     )
     agent.hooks = AgentHooks(
-        transform_context=lambda context, _turn: context.model_copy(
+        prepare_step=lambda context, _turn: context.model_copy(
             update={"messages": prepare_model_messages(context.messages, llm.info)}
         )
     )
@@ -248,7 +254,7 @@ def test_lazy_attachments_share_resources_but_not_message_data(
     assert isinstance(metadata, PromptMetadata) and metadata.image_files
     metadata.image_files[0].filename = "changed.png"
     assert attachment.filename == "original.png"
-    agent.run(max_turns=1)
+    agent.run(max_steps=1)
     assert loads == 1
     with ThreadPoolExecutor(max_workers=2) as executor:
         contents = list(executor.map(lambda _: attachment.content, range(2)))
@@ -294,24 +300,25 @@ def test_default_model_accepts_application_metadata_without_chat_policy() -> Non
         )
 
 
-def test_after_turn_cannot_change_published_text() -> None:
-    def rewrite(turn: TurnResult) -> None:
-        turn.message.content = [TextContent(text="replacement")]
+def test_step_observer_cannot_change_published_text() -> None:
+    def rewrite(step: StepResult) -> None:
+        step.message.content = [TextContent(text="replacement")]
 
     agent = Agent(
         FakeModelClient(
             lambda *_: AssistantMessage(content=[TextContent(text="published")])
         ),
-        hooks=AgentHooks(after_turn=rewrite),
+        hooks=AgentHooks(after_step=rewrite),
     )
-    with pytest.raises(ValueError, match="published assistant"):
-        agent.run(max_turns=1)
-    assert agent.output_messages[0].text == "published"
+    agent.run(max_steps=1)
+    snapshot = agent.snapshot()
+    assert snapshot is not None
+    assert snapshot.messages[0].text == "published"
 
 
 def test_observer_failures_do_not_change_agent_or_model_output() -> None:
     def observer(event: AgentEvent) -> None:
-        if isinstance(event, (MessageUpdateEvent, MessageEndEvent, TurnEndEvent)):
+        if isinstance(event, (MessageUpdateEvent, MessageEndEvent, StepEndEvent)):
             event.message.content.clear()
         raise ValueError("observer failed")
 
@@ -321,65 +328,40 @@ def test_observer_failures_do_not_change_agent_or_model_output() -> None:
         )
     )
     agent.subscribe(observer)
-    assert agent.run(max_turns=1).output.text == "answer"
+    assert agent.run(max_steps=1).output.text == "answer"
     snapshot = agent.snapshot()
     assert snapshot is not None and snapshot.status == "complete"
 
 
-def test_cancelled_run_cannot_deliver_result_into_next_run(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    pending = threading.Event()
+def test_cancelled_run_cannot_deliver_result_into_next_run() -> None:
+    entered = threading.Event()
     release = threading.Event()
-    workers: list[threading.Thread] = []
-    original = Agent._emit
+    exited = threading.Event()
 
-    def delayed(self: Agent, event: AgentEvent) -> None:
-        if event.type == "tool_end" and not pending.is_set():
-            event.result.content = "stale"
-            workers.append(threading.current_thread())
-            pending.set()
-            assert release.wait(5)
-        original(self, event)
+    def execute(_invocation: ToolInvocation) -> ToolResult:
+        entered.set()
+        assert release.wait(5)
+        exited.set()
+        return ToolResult(content="stale")
 
-    monkeypatch.setattr(Agent, "_emit", delayed)
-    agent = Agent(
-        FakeModelClient(
-            lambda *_: AssistantMessage(
-                content=[
-                    ToolCall(id="c", name="lookup", arguments={}),
-                    ToolCall(id="d", name="lookup", arguments={}),
-                ]
-            )
-        ),
-        context=AgentContext(tools=[_tool()]),
-    )
+    agent = Agent(FakeModelClient(_model), context=AgentContext(tools=[_tool(execute)]))
     signal = CancellationSignal()
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        old = executor.submit(agent.run, max_turns=1, cancellation=signal)
-        assert pending.wait(5)
-        signal.cancel()
-        with pytest.raises(AgentCancelled):
-            old.result(timeout=5)
-        before = agent.snapshot()
-        agent.model = FakeModelClient(
-            lambda *_: AssistantMessage(
-                content=[
-                    TextContent(text="new"),
-                    ToolCall(id="c", name="lookup", arguments={}),
-                ]
+    with ThreadPoolExecutor(max_workers=1) as workers:
+        previous = workers.submit(agent.run, max_steps=1, cancellation=signal)
+        try:
+            assert entered.wait(2)
+            signal.cancel()
+            with pytest.raises(AgentCancelled):
+                previous.result(timeout=2)
+            agent.llm = FakeModelClient(
+                lambda *_: AssistantMessage(content=[TextContent(text="new")])
             )
-        )
-        assert agent.run(max_turns=1).output.text == "new"
-        release.set()
-        for worker in workers:
-            worker.join(timeout=5)
-            assert not worker.is_alive()
-        assert [message.text for message in agent.output_messages] == [
-            "new",
-            "original",
-        ]
-        assert before is not None and before.status == "cancelled"
+            assert agent.run(max_steps=1).output.text == "new"
+            before = agent.snapshot()
+        finally:
+            release.set()
+        assert exited.wait(2)
+        assert agent.snapshot() == before
 
 
 @pytest.mark.parametrize("accepted", [False, True])
@@ -387,42 +369,35 @@ def test_tool_side_effect_cancellation_cutoff(accepted: bool) -> None:
     signal = CancellationSignal()
     writes: list[str] = []
 
-    def execute(
-        _call_id: str,
-        _arguments: dict[str, JsonValue],
-        _signal: CancellationSignal,
-        _update: ToolUpdate,
-    ) -> ToolResult:
-        writes.append("saved")
+    def execute(_invocation: ToolInvocation) -> ToolResult:
+        writes.append("committed")
         if not accepted:
             signal.cancel()
-        return ToolResult(content="saved", details=ExtraData())
+        return ToolResult(content="saved")
 
-    tool = _tool().model_copy(update={"execute": execute})
-    agent = Agent(FakeModelClient(_model), context=AgentContext(tools=[tool]))
+    def after_step(_result: StepResult) -> None:
+        signal.cancel()
 
-    def stop(event: AgentEvent) -> None:
-        if event.type == "tool_end":
-            signal.cancel()
-
-    agent.subscribe(stop)
+    agent = Agent(
+        FakeModelClient(_model),
+        context=AgentContext(tools=[_tool(execute)]),
+        hooks=AgentHooks(after_step=after_step),
+    )
     with pytest.raises(AgentCancelled):
-        agent.run(max_turns=1, cancellation=signal)
+        agent.run(max_steps=2, cancellation=signal)
     snapshot = agent.snapshot()
-    assert snapshot is not None
-    result = snapshot.messages[-1]
-    assert isinstance(result, ToolResultMessage)
-    assert writes == ["saved"]
-    assert result.is_error is not accepted
-    if accepted:
-        assert result.text == "saved"
-        assert isinstance(agent.output_messages[-1], ToolResultMessage)
-    else:
-        assert "External effects may have occurred" in result.text
+    assert snapshot is not None and snapshot.status == "cancelled"
+    assert writes == ["committed"]
+    results = [
+        message
+        for message in snapshot.messages
+        if isinstance(message, ToolResultMessage)
+    ]
+    assert [result.text for result in results] == (["saved"] if accepted else [])
 
 
 @pytest.mark.parametrize("terminal", [False, True])
-def test_agent_observer_cancellation_propagates(terminal: bool) -> None:
+def test_observer_cancellation_does_not_rewrite_execution(terminal: bool) -> None:
     def cancel(event: AgentEvent) -> None:
         if event.type == ("agent_end" if terminal else "message_end"):
             raise AgentCancelled()
@@ -433,10 +408,10 @@ def test_agent_observer_cancellation_propagates(terminal: bool) -> None:
         )
     )
     agent.subscribe(cancel)
-    with pytest.raises(AgentCancelled):
-        agent.run(max_turns=1)
+    assert agent.run(max_steps=1).output.text == "answer"
     snapshot = agent.snapshot()
-    assert snapshot is not None and snapshot.status == "cancelled"
+    assert snapshot is not None and snapshot.status == "complete"
+    assert snapshot.delivery_failed
     assert agent.wait_for_idle(timeout=0)
 
 
@@ -472,63 +447,113 @@ def test_cancel_between_model_commit_and_publication_keeps_both(
 
     agent.subscribe(observe)
     with pytest.raises(AgentCancelled):
-        agent.run(max_turns=1, cancellation=signal)
-    assert seen[-1] == agent.output_messages[0].text == "answer"
+        agent.run(max_steps=1, cancellation=signal)
+    snapshot = agent.snapshot()
+    assert snapshot is not None
+    assert seen[-1] == snapshot.messages[0].text == "answer"
 
 
-def test_tool_completion_waits_for_accepted_progress_publication(
+def test_slow_progress_observer_does_not_block_result_acceptance() -> None:
+    observer_entered = threading.Event()
+    release_observer = threading.Event()
+    seen: list[str] = []
+
+    def execute(invocation: ToolInvocation) -> ToolResult:
+        invocation.update(ToolProgress(content="working"))
+        return ToolResult(content="finished")
+
+    def observe(event: AgentEvent) -> None:
+        if event.type == "tool_update":
+            observer_entered.set()
+            assert release_observer.wait(5)
+        seen.append(event.type)
+
+    agent = Agent(FakeModelClient(_model), context=AgentContext(tools=[_tool(execute)]))
+    agent.subscribe(observe)
+    with ThreadPoolExecutor(max_workers=1) as workers:
+        result = workers.submit(agent.run, max_steps=1)
+        try:
+            assert observer_entered.wait(2)
+            assert agent.wait_for_idle(2)
+            snapshot = agent.snapshot()
+            assert snapshot is not None
+            assert snapshot.messages[-1].text == "finished"
+            assert "tool_end" not in seen
+        finally:
+            release_observer.set()
+        result.result(timeout=2)
+    assert seen.index("tool_update") < seen.index("tool_end") < seen.index("agent_end")
+
+
+def test_observer_cleanup_timeout_marks_snapshot_delivery_gap(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    update_entered = threading.Event()
-    release_update = threading.Event()
-    return_tool = threading.Event()
-    tool_returned = threading.Event()
-    tool_ended = threading.Event()
-    seen: list[str] = []
-    original_emit = Agent._emit
+    monkeypatch.setattr("onyx.agents.runtime.EVENT_CLEANUP_SECONDS", 0.05)
+    observer_entered = threading.Event()
+    release_observer = threading.Event()
 
-    def emit(self: Agent, event: AgentEvent) -> None:
-        if event.type == "tool_update":
-            update_entered.set()
-            assert release_update.wait(5)
-        original_emit(self, event)
+    def observe(_event: AgentEvent) -> None:
+        observer_entered.set()
+        assert release_observer.wait(3)
 
-    monkeypatch.setattr(Agent, "_emit", emit)
-    with ThreadPoolExecutor(max_workers=2) as workers:
-
-        def execute(
-            _call_id: str,
-            _arguments: dict[str, JsonValue],
-            _signal: CancellationSignal,
-            update: ToolUpdate,
-        ) -> ToolResult:
-            workers.submit(update, ToolResult(content="progress"))
-            assert return_tool.wait(5)
-            tool_returned.set()
-            return ToolResult(content="finished")
-
-        agent = Agent(
-            FakeModelClient(_model),
-            context=AgentContext(
-                tools=[_tool().model_copy(update={"execute": execute})]
-            ),
+    agent = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(content=[TextContent(text="saved answer")])
         )
-
-        def observe(event: AgentEvent) -> None:
-            if event.type in {"tool_update", "tool_end"}:
-                seen.append(event.type)
-            if event.type == "tool_end":
-                tool_ended.set()
-
-        agent.subscribe(observe)
-        future = workers.submit(agent.run, max_turns=1)
+    )
+    agent.subscribe(observe)
+    with ThreadPoolExecutor(max_workers=1) as workers:
+        result = workers.submit(agent.run, max_steps=1)
         try:
-            assert update_entered.wait(5)
-            return_tool.set()
-            assert tool_returned.wait(5)
-            assert not tool_ended.wait(0.1)
+            assert observer_entered.wait(2)
+            assert result.result(timeout=2).output.text == "saved answer"
+            snapshot = agent.snapshot()
+            assert snapshot is not None
+            assert snapshot.status == "complete"
+            assert snapshot.messages[0].text == "saved answer"
+            assert snapshot.delivery_failed
         finally:
-            release_update.set()
-            return_tool.set()
-        future.result(timeout=5)
-    assert seen == ["tool_update", "tool_end"]
+            release_observer.set()
+
+
+def test_request_builder_preserves_tool_context_and_output_metadata() -> None:
+    tool_histories: list[list[str]] = []
+    model_histories: list[list[str]] = []
+    metadata = ExtraData(value="application phase")
+
+    def build_request(context: AgentContext) -> GenerationRequest:
+        request = context.generation_request()
+        request.messages = [UserMessage(content="provider prompt")]
+        return request
+
+    def generate(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        model_histories.append([message.text for message in request.messages])
+        return _model(request)
+
+    def execute(invocation: ToolInvocation) -> ToolResult:
+        tool_histories.append([message.text for message in invocation.messages])
+        return ToolResult(content="saved evidence")
+
+    agent = Agent(
+        FakeModelClient(generate),
+        context=AgentContext(
+            messages=[UserMessage(content="original task")],
+            tools=[_tool(execute)],
+            output_metadata=metadata,
+        ),
+        hooks=AgentHooks(build_request=build_request),
+    )
+    events: list[AgentEvent] = []
+    agent.subscribe(events.append)
+    result = agent.run(max_steps=1)
+    assert model_histories == [["provider prompt"]]
+    assert tool_histories == [["original task"]]
+    assert result.output.metadata == metadata
+    starts = [event for event in events if event.type == "message_start"]
+    assert len(starts) == 1 and starts[0].metadata == metadata
+    snapshot = agent.snapshot()
+    assert snapshot is not None
+    assert snapshot.messages[0].metadata == metadata
+    assert snapshot.transcript().messages[0].metadata is None

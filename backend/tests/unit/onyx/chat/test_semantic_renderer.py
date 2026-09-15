@@ -3,87 +3,87 @@
 from queue import Queue
 
 import pytest
+from pydantic import BaseModel
 
-from onyx.agents.events import AgentEvent
-from onyx.agents.runtime import Agent, AgentContext
-from onyx.agents.tools import AgentTool
-from onyx.chat.chat_state import ChatStateContainer
+from onyx.agents.events import (
+    AgentEndEvent,
+    ToolEndEvent,
+    ToolStartEvent,
+    ToolUpdateEvent,
+)
+from onyx.agents.runtime import Agent, AgentContext, RunSnapshot
+from onyx.agents.tools import AgentTool, ToolInvocation, ToolProgress
+from onyx.agents.transcript import OperationSnapshot, RunStatus
 from onyx.chat.citation_processor import CitationMode, DynamicCitationProcessor
 from onyx.chat.emitter import Emitter, ModelStreamStatus
-from onyx.chat.presentation import TurnPresentation
-from onyx.chat.renderer import PacketRenderer, RenderConfig
-from onyx.llm.cancellation import AgentCancelled, CancellationSignal
+from onyx.chat.models import ChatStepOutput
+from onyx.chat.presentation import ResponsePresenter, project_response
+from onyx.chat.renderer import PacketRenderer, RenderConfig, render_message
+from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.litellm_conversion import MessageAccumulator
 from onyx.llm.litellm_models import (
-    ChatCompletionDeltaToolCall,
     Delta,
-    FunctionCall,
     ModelResponseStream,
     StreamingChoice,
 )
 from onyx.llm.models import (
     AssistantMessage,
-    GenerationDoneEvent,
+    GenerationErrorEvent,
+    GenerationRequest,
     GenerationRequestParams,
+    Message,
     ReasoningEffort,
+    TextContent,
+    TextDeltaEvent,
     ToolCall,
     ToolResult,
     UserMessage,
 )
-from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import AgentResponseDelta, Packet
-from onyx.tools.tool_runner import bind_tool
-from tests.unit.onyx.agents.fakes import FakeModelClient, ScriptedLLM
+from onyx.server.query_and_chat.streaming_models import (
+    OperationStatus,
+    OverallStop,
+    Packet,
+    PacketIdentity,
+    PythonToolDelta,
+)
+from onyx.tools.progress import PythonOutput
+from tests.unit.onyx.agents.fakes import FakeModelClient
 
 
-def test_presentation_saves_request_settings_from_the_event() -> None:
-    state = ChatStateContainer()
-    view = TurnPresentation(Emitter(Queue()))
-    view.configure(RenderConfig(), state)
-    event = GenerationDoneEvent(
-        message=AssistantMessage(),
-        request_params=GenerationRequestParams(
-            model_name="test",
-            model_provider="test",
-            reasoning_effort=ReasoningEffort.LOW,
-            max_tokens=128,
-            sent_kwargs={},
-        ),
-    )
-    view.consume_model(event)
-    assert state.snapshot().request_params == event.request_params
-    assert event.request_params is not None
-    event.request_params.max_tokens = 256
-    snapshot = state.snapshot()
-    assert snapshot.request_params is not None
-    assert snapshot.request_params.max_tokens == 128
+class _Execution(BaseModel):
+    requests: list[GenerationRequest]
+    messages: list[Message]
+    executed: list[str]
 
 
 def test_rendering_does_not_change_requests_transcript_or_execution() -> None:
-    def run(render: bool) -> tuple[object, object, list[str]]:
+    def run(render: bool) -> _Execution:
         executed: list[str] = []
 
-        def echo(
-            _id: str, _args: object, _signal: object, _update: object
-        ) -> ToolResult:
+        def echo(_invocation: ToolInvocation) -> ToolResult:
             executed.append("echo")
             return ToolResult(content="tool value")
 
-        llm = ScriptedLLM(
+        requests: list[GenerationRequest] = []
+        responses = iter(
             [
-                Delta(
-                    content="Let me check.",
-                    tool_calls=[
-                        ChatCompletionDeltaToolCall(
-                            index=0,
-                            id="call",
-                            function=FunctionCall(name="echo", arguments="{}"),
-                        )
+                AssistantMessage(
+                    content=[
+                        TextContent(text="Let me check."),
+                        ToolCall(id="call", name="echo", arguments={}),
                     ],
                 ),
-                Delta(content="Answer [1]."),
+                AssistantMessage(content=[TextContent(text="Answer [1].")]),
             ]
         )
+
+        def reply(
+            request: GenerationRequest, _signal: CancellationSignal
+        ) -> AssistantMessage:
+            requests.append(request.model_copy(deep=True))
+            return next(responses)
+
+        llm = FakeModelClient(reply)
         agent = Agent(
             llm,
             context=AgentContext(
@@ -93,10 +93,12 @@ def test_rendering_does_not_change_requests_transcript_or_execution() -> None:
             ),
         )
         if render:
-            presentation = TurnPresentation(Emitter(Queue()))
+            presentation = ResponsePresenter(Emitter(Queue(), response_id=42))
             agent.subscribe(presentation.consume)
-        result = agent.run(messages=[UserMessage(content="Question")], max_turns=2)
-        return llm.requests, result.messages, executed
+        agent.run(messages=[UserMessage(content="Question")], max_steps=2)
+        return _Execution(
+            requests=requests, messages=agent.context.messages, executed=executed
+        )
 
     assert run(True) == run(False)
 
@@ -117,7 +119,8 @@ def test_citation_display_keeps_raw_transcript(
     renderer = PacketRenderer(
         RenderConfig(
             citations=DynamicCitationProcessor(citation_mode=CitationMode.REMOVE)
-        )
+        ),
+        PacketIdentity(response_id=1, run_id="run", message_id="run:0"),
     )
     for fragment in fragments:
         for event in accumulator.add(
@@ -134,230 +137,112 @@ def test_citation_display_keeps_raw_transcript(
     assert accumulator.message.text == "".join(fragments)
 
 
-def test_tool_packets_cross_the_agent_progress_boundary_once() -> None:
-    queue: Queue[tuple[int, Packet | ModelStreamStatus]] = Queue()
-    emitter = Emitter(queue)
-    presentation = TurnPresentation(emitter)
-
-    def execute(_call: object) -> ToolResult:
-        emitter.emit(
-            Packet(
-                placement=Placement(turn_index=0),
-                obj=AgentResponseDelta(content="progress"),
+def test_snapshot_projects_partial_output_before_observers_receive_it() -> None:
+    snapshot = RunSnapshot(
+        run_id="run",
+        status=RunStatus.CANCELLED,
+        messages=[
+            AssistantMessage(
+                content=[TextContent(text="partial")],
+                stop_reason="aborted",
+                metadata=ChatStepOutput(),
             )
-        )
-        return ToolResult(content="done")
-
-    bound = bind_tool({"function": {"name": "work"}}, execute)
-    llm = ScriptedLLM(
-        [
-            Delta(
-                tool_calls=[
-                    ChatCompletionDeltaToolCall(
-                        index=0,
-                        id="call",
-                        function=FunctionCall(name="work", arguments="{}"),
-                    )
-                ]
-            )
-        ]
+        ],
+        operations=[
+            OperationSnapshot(step_index=0, message_index=0, status=RunStatus.CANCELLED)
+        ],
     )
-    agent = Agent(
-        llm,
-        context=AgentContext(tools=[bound]),
+    snapshot.request_params = GenerationRequestParams(
+        model_name="test",
+        model_provider="test",
+        reasoning_effort=ReasoningEffort.LOW,
+        max_tokens=128,
+        sent_kwargs={},
     )
-    events: list[AgentEvent] = []
-    agent.subscribe(events.append)
-    agent.subscribe(presentation.consume)
-    agent.run(max_turns=1)
-    updates = [event for event in events if event.type == "tool_update"]
-    assert len(updates) == 1
-    assert updates[0].tool_call and updates[0].tool_call.id == "call"
-    assert queue.qsize() == 1
-    packet = queue.get()[1]
-    assert isinstance(packet, Packet) and isinstance(packet.obj, AgentResponseDelta)
-    assert packet.obj.content == "progress"
-
-
-def test_nested_runs_identify_the_parent_tool_call() -> None:
-    child_events: list[AgentEvent] = []
-    child = Agent(ScriptedLLM([Delta(content="child")]))
-    child.subscribe(child_events.append)
-    tool = AgentTool(
-        name="child",
-        description="",
-        parameters={},
-        execute=lambda _id, _args, _signal, _update: ToolResult(
-            content=child.run(max_turns=1).output.text
-        ),
+    before = snapshot.model_dump()
+    response = project_response(
+        snapshot,
+        response_id=42,
+        tool_ids={},
     )
-    parent = Agent(
-        FakeModelClient(
-            lambda _context, _signal: AssistantMessage(
-                content=[ToolCall(id="parent-call", name="child", arguments={})]
-            )
-        ),
-        context=AgentContext(tools=[tool]),
-    )
-    parent_events: list[AgentEvent] = []
-    parent.subscribe(parent_events.append)
-    parent.run(max_turns=1)
-    assert child_events
-    assert all(event.parent_run_id == parent_events[0].run_id for event in child_events)
-    assert all(event.parent_tool_call_id == "parent-call" for event in child_events)
+    assert response.answer == "partial"
+    assert response.request_params == snapshot.request_params
+    assert snapshot.model_dump() == before
 
 
-def test_stop_retains_partial_canonical_message_and_display() -> None:
-    signal = CancellationSignal()
-    agent = Agent(ScriptedLLM([Delta(content="partial")]))
-    presentation = TurnPresentation(Emitter(Queue()))
-    agent.subscribe(presentation.consume)
-
-    def stop(event: AgentEvent) -> None:
-        if (
-            event.type == "message_update"
-            and event.generation_event.type == "text_delta"
-        ):
-            signal.cancel()
-
-    agent.subscribe(stop)
-    with pytest.raises(AgentCancelled):
-        agent.run(max_turns=1, cancellation=signal)
-    assert isinstance(agent.context.messages[-1], AssistantMessage)
-    assert agent.context.messages[-1].text == "partial"
-    assert agent.context.messages[-1].stop_reason == "aborted"
-    assert presentation.renderer.answer == "partial"
-
-
-def test_nested_tool_packets_reach_each_progress_observer_once() -> None:
-    queue: Queue[tuple[int, Packet | ModelStreamStatus]] = Queue()
-    emitter = Emitter(queue)
-    parent_view, child_view = TurnPresentation(emitter), TurnPresentation(emitter)
-    parent_view.configure(RenderConfig(placement=Placement(turn_index=7)))
-    child_view.configure(
-        RenderConfig(placement=Placement(turn_index=0, sub_turn_index=3), nested=True)
-    )
-
-    def leaf(_call: object) -> ToolResult:
-        emitter.emit(
-            Packet(
-                placement=Placement(turn_index=0),
-                obj=AgentResponseDelta(content="nested progress"),
-            )
-        )
-        return ToolResult(content="done")
-
-    child_tool = bind_tool({"function": {"name": "leaf"}}, leaf)
-    child = Agent(
-        FakeModelClient(
-            lambda _context, _signal: AssistantMessage(
-                content=[ToolCall(id="leaf-call", name="leaf", arguments={})]
-            )
-        ),
-        context=AgentContext(tools=[child_tool]),
-    )
-    child_events: list[AgentEvent] = []
-    child.subscribe(child_events.append)
-    child.subscribe(child_view.consume)
-
-    def run_child(_call: object) -> ToolResult:
-        child.run(max_turns=1)
-        return ToolResult(content="child done")
-
-    parent_tool = bind_tool({"function": {"name": "child"}}, run_child)
-    parent = Agent(
-        FakeModelClient(
-            lambda _context, _signal: AssistantMessage(
-                content=[ToolCall(id="parent-call", name="child", arguments={})]
-            )
-        ),
-        context=AgentContext(tools=[parent_tool]),
-    )
-    parent_events: list[AgentEvent] = []
-    parent.subscribe(parent_events.append)
-    parent.subscribe(parent_view.consume)
-    parent.run(max_turns=1)
-    assert len([event for event in child_events if event.type == "tool_update"]) == 1
-    assert len([event for event in parent_events if event.type == "tool_update"]) == 1
-    assert queue.qsize() == 1
-    packet = queue.get()[1]
-    assert isinstance(packet, Packet)
-    assert packet.placement == Placement(turn_index=7, sub_turn_index=3, model_index=0)
-
-
-@pytest.mark.parametrize("text_as_thinking", [False, True])
-@pytest.mark.parametrize("nested", [False, True])
-def test_tool_arguments_progress_and_saved_placement_share_one_policy(
-    text_as_thinking: bool,
-    nested: bool,
-) -> None:
-    from onyx.server.query_and_chat.streaming_models import ToolCallArgumentDelta
-    from onyx.tools.models import ToolCallKickoff
-
-    queue: Queue[tuple[int, Packet | ModelStreamStatus]] = Queue()
-    emitter = Emitter(queue)
-    view = TurnPresentation(emitter)
-    view.configure(
-        RenderConfig(
-            placement=Placement(
-                turn_index=7, tab_index=4, sub_turn_index=2 if nested else None
-            ),
-            nested=nested,
-            text_as_thinking=text_as_thinking,
-            argument_tools={"work"},
+def test_child_progress_and_completion_keep_explicit_ancestry() -> None:
+    output: Queue[tuple[int, Packet | ModelStreamStatus]] = Queue()
+    view = ResponsePresenter(Emitter(output, response_id=42))
+    call = ToolCall(id="leaf", name="search", arguments={})
+    view.consume(
+        ToolStartEvent(
+            run_id="child",
+            parent_run_id="root",
+            parent_message_id="root:2",
+            parent_tool_call_id="research",
+            step_index=1,
+            tool_call=call,
         )
     )
-    neutral_calls: list[ToolCallKickoff] = []
-
-    def execute(call: ToolCallKickoff) -> ToolResult:
-        neutral_calls.append(call)
-        emitter.emit(
-            Packet(
-                placement=call.placement,
-                obj=AgentResponseDelta(content=call.tool_call_id),
-            )
+    view.consume(
+        ToolUpdateEvent(
+            run_id="child",
+            parent_run_id="root",
+            parent_message_id="root:2",
+            parent_tool_call_id="research",
+            step_index=1,
+            tool_call=call,
+            progress=ToolProgress(details=PythonOutput(stdout="progress")),
         )
-        return ToolResult(content="done")
-
-    calls = [
-        ChatCompletionDeltaToolCall(
-            index=index,
-            id=f"call-{index}",
-            function=FunctionCall(name="work", arguments='{"value":"x"}'),
+    )
+    view.consume(
+        ToolEndEvent(
+            run_id="child",
+            parent_run_id="root",
+            parent_message_id="root:2",
+            parent_tool_call_id="research",
+            step_index=1,
+            tool_call=call,
+            result=ToolResult(content="complete"),
         )
-        for index in range(2)
-    ]
-    llm = ScriptedLLM(
-        [Delta(reasoning_content="Consider", content="Searching", tool_calls=calls)]
     )
-    agent = Agent(
-        llm,
-        context=AgentContext(
-            tools=[bind_tool({"function": {"name": "work"}}, execute)]
-        ),
+    view.consume(
+        AgentEndEvent(
+            run_id="child",
+            parent_run_id="root",
+            parent_message_id="root:2",
+            parent_tool_call_id="research",
+            outcome=RunStatus.COMPLETE,
+        )
     )
-    agent.subscribe(view.consume)
-    agent.run(max_turns=1)
-    packets = [entry[1] for entry in list(queue.queue) if isinstance(entry[1], Packet)]
-    arguments = [
-        packet for packet in packets if isinstance(packet.obj, ToolCallArgumentDelta)
-    ]
-    progress = [
-        packet
-        for packet in packets
-        if isinstance(packet.obj, AgentResponseDelta)
-        and packet.obj.content.startswith("call-")
-    ]
-    assert len(arguments) == len(progress) == 2
-    for index, argument in enumerate(arguments):
-        call_id = f"call-{index}"
-        update = next(packet for packet in progress if packet.obj.content == call_id)
-        assert argument.placement == update.placement
-        assert argument.placement.model_copy(
-            update={"model_index": None}
-        ) == view.placement_for(call_id)
-    assert all(call.placement == Placement(turn_index=0) for call in neutral_calls)
-    # Reconfiguring the next turn must retain finalized call placements for storage.
-    expected = view.placement_for("call-0")
-    view.configure(RenderConfig())
-    assert view.placement_for("call-0") == expected
+    packets = [entry[1] for entry in list(output.queue) if isinstance(entry[1], Packet)]
+    progress = [packet for packet in packets if isinstance(packet.obj, PythonToolDelta)]
+    assert len(progress) == 1
+    assert progress[0].identity == PacketIdentity(
+        response_id=42,
+        run_id="child",
+        message_id="child:1",
+        parent_run_id="root",
+        parent_message_id="root:2",
+        parent_tool_call_id="research",
+        tool_call_id="leaf",
+        part_id="tool",
+    )
+    assert not any(isinstance(packet.obj, OverallStop) for packet in packets)
+    assert isinstance(packets[-1].obj, OperationStatus)
+    assert packets[-1].obj.status == "complete"
+
+
+def test_failed_generation_replay_preserves_buffered_citation_text() -> None:
+    message = AssistantMessage(
+        content=[TextContent(text="See [1")], stop_reason="error"
+    )
+    config = RenderConfig(citations=DynamicCitationProcessor())
+    identity = PacketIdentity(response_id=42, run_id="root", message_id="root:0")
+    live = PacketRenderer(config.model_copy(deep=True), identity)
+    live.consume(TextDeltaEvent(message=message, content_index=0, text=message.text))
+    live.consume(GenerationErrorEvent(message=message))
+    replay = PacketRenderer(config.model_copy(deep=True), identity)
+    render_message(replay, message, complete=False)
+    assert live.answer == "See [1"
+    assert replay.answer == live.answer

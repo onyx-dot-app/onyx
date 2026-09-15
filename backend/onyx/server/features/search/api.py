@@ -17,7 +17,6 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission, require_permission
-from onyx.chat.emitter import NullEmitter
 from onyx.configs.constants import PUBLIC_API_TAGS, MessageType
 from onyx.context.search.models import BaseFilters, PersonaSearchInfo, TimeRange
 from onyx.db.engine.sql_engine import get_session
@@ -42,13 +41,13 @@ from onyx.server.features.search.models import (
     SearchResult,
 )
 from onyx.server.manage.llm.models import LLMProviderView
-from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.server.settings.store import load_settings
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.server.utils_vector_db import require_vector_db
 from onyx.tools.constants import SEARCH_TOOL_ID
-from onyx.tools.models import ChatMinimalTextMessage, SearchToolOverrideKwargs
+from onyx.tools.interface import ToolContext
+from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -173,7 +172,6 @@ def search(
     # 6. Construct SearchTool
     search_tool = SearchTool(
         tool_id=tool_id,
-        emitter=NullEmitter(),
         user=user,
         persona_search_info=persona_search_info,
         llm=llm,
@@ -183,26 +181,18 @@ def search(
         persona_id_filter=None,
         slack_context=None,
         enable_slack_search=True,
+        include_link=True,
         auto_detect_filters=load_settings().auto_detect_search_filters is not False,
     )
 
-    # 7. Run search
-    tool_response = search_tool.run(
-        placement=Placement(turn_index=0),
-        override_kwargs=SearchToolOverrideKwargs(
-            starting_citation_num=1,
-            original_query=request.query,
-            skip_query_expansion=request.skip_query_expansion,
-            include_link=True,
-            message_history=request.message_history
-            or [
-                ChatMinimalTextMessage(
-                    message=request.query,
-                    message_type=MessageType.USER,
-                ),
-            ],
-        ),
-        queries=[request.query],
+    tool_response = search_tool.search(
+        [request.query],
+        original_query=request.query,
+        message_history=request.message_history
+        or [
+            ChatMinimalTextMessage(message=request.query, message_type=MessageType.USER)
+        ],
+        context=ToolContext(skip_search_query_expansion=request.skip_query_expansion),
     )
 
     # 8. Map LLM-facing JSON entries to SearchResults (one per merged section).

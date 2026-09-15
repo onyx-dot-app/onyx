@@ -133,13 +133,51 @@ interface UseChatControllerProps {
   resetInputBar: () => void;
 }
 
-async function stopChatSession(chatSessionId: string): Promise<void> {
-  const response = await fetch(`/api/chat/stop-chat-session/${chatSessionId}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+const STOP_ID_WAIT_MS = 10_000;
+
+async function waitForProcessingKey(
+  sessionId: string
+): Promise<number | undefined> {
+  const initial = useChatSessionStore.getState().sessions.get(sessionId);
+  if (!initial || initial.processingKey !== undefined)
+    return initial?.processingKey;
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      unsubscribe();
+      resolve(undefined);
+    }, STOP_ID_WAIT_MS);
+    const unsubscribe = useChatSessionStore.subscribe((state) => {
+      const session = state.sessions.get(sessionId);
+      if (
+        !session ||
+        session.abortController !== initial.abortController ||
+        session.processingKey !== undefined
+      ) {
+        clearTimeout(timeout);
+        unsubscribe();
+        resolve(
+          session?.abortController === initial.abortController
+            ? session.processingKey
+            : undefined
+        );
+      }
+    });
   });
+}
+
+async function stopChatSession(
+  chatSessionId: string,
+  processingKey: number
+): Promise<void> {
+  const response = await fetch(
+    `/api/chat/stop-chat-session/${chatSessionId}?run_id=${processingKey}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    }
+  );
 
   if (!response.ok) {
     throw new Error(`Failed to stop chat session: ${response.statusText}`);
@@ -373,15 +411,28 @@ export default function useChatController({
     const currentSession = getCurrentSessionId();
     const lastMessage = currentMessageHistory[currentMessageHistory.length - 1];
 
-    // Call the backend stop endpoint to set the Redis fence
-    // This signals the backend to stop processing as soon as possible
-    // The backend will emit a STOP packet when it detects the fence
+    const controller = useChatSessionStore
+      .getState()
+      .sessions.get(currentSession)?.abortController;
+    const processingKey = await waitForProcessingKey(currentSession);
+    if (processingKey === undefined) {
+      console.warn("Stop request has no active execution identity", {
+        sessionId: currentSession,
+      });
+      return;
+    }
     try {
-      await stopChatSession(currentSession);
+      await stopChatSession(currentSession, processingKey);
     } catch (error) {
       console.error("Failed to stop chat session:", error);
       // Continue with UI cleanup even if backend call fails
     }
+
+    if (
+      useChatSessionStore.getState().sessions.get(currentSession)
+        ?.abortController !== controller
+    )
+      return;
 
     // Clean up incomplete tool calls for immediate UI feedback
     if (
@@ -626,6 +677,9 @@ export default function useChatController({
       // set the ability to cancel the request
       const controller = new AbortController();
       setAbortController(currChatSessionId, controller);
+      useChatSessionStore.getState().updateSessionData(currChatSessionId, {
+        processingKey: undefined,
+      });
 
       const messageToResend = currentHistory.find(
         (message) => message.messageId === messageIdToResend
@@ -1199,6 +1253,11 @@ export default function useChatController({
             ) {
               newAgentMessageId = (packet as MessageResponseIDInfo)
                 .reserved_assistant_message_id;
+              useChatSessionStore
+                .getState()
+                .updateSessionData(frozenSessionId, {
+                  processingKey: newAgentMessageId,
+                });
             }
 
             // Multi-model: handle reserved IDs for N parallel model responses.
@@ -1213,6 +1272,11 @@ export default function useChatController({
               const multiPacket = packet as MultiModelMessageResponseIDInfo;
               newUserMessageId =
                 multiPacket.user_message_id ?? newUserMessageId;
+              useChatSessionStore
+                .getState()
+                .updateSessionData(frozenSessionId, {
+                  processingKey: newUserMessageId ?? undefined,
+                });
               for (let mi = 0; mi < multiPacket.responses.length; mi++) {
                 const slot = multiPacket.responses[mi]!;
                 assistantMessageIds[mi] = slot.message_id;

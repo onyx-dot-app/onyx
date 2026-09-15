@@ -11,7 +11,6 @@ from onyx.configs.constants import DocumentSource
 from onyx.server.query_and_chat.models import MessageResponseIDInfo
 from onyx.server.query_and_chat.streaming_models import (
     AgentResponseStart,
-    GeneratedImage,
     ImageGenerationFinal,
     ImageGenerationToolHeartbeat,
     ImageGenerationToolStart,
@@ -27,6 +26,7 @@ from onyx.server.query_and_chat.streaming_models import (
     SearchToolStart,
     SectionEnd,
 )
+from onyx.tools.progress import GeneratedImage
 from tests.external_dependency_unit.answer.conftest import ensure_default_llm_provider
 from tests.external_dependency_unit.answer.stream_test_assertions import (
     assert_answer_stream_part_correct,

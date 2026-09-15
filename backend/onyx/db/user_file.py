@@ -9,6 +9,10 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import Persona, Project__UserFile, User, UserFile
+from onyx.file_store.models import ChatFileInput, FileDescriptor
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 def fetch_chunk_counts_for_user_files(
@@ -396,3 +400,32 @@ def get_user_file_processing_info(
         )
     )
     return {str(file_id): (tokens or 0, status) for file_id, tokens, status in rows}
+
+
+def prepare_chat_file_inputs(
+    descriptors: list[FileDescriptor], db_session: Session
+) -> list[ChatFileInput]:
+    """Capture processing status before reading attachment content."""
+    user_file_ids: list[UUID] = []
+    for descriptor in descriptors:
+        raw_id = descriptor.get("user_file_id")
+        if raw_id:
+            try:
+                user_file_ids.append(UUID(raw_id))
+            except ValueError:
+                logger.warning("Invalid user-file ID: %s", raw_id)
+    metadata = get_user_file_processing_info(user_file_ids, db_session)
+    inputs: list[ChatFileInput] = []
+    for descriptor in descriptors:
+        tokens, status = metadata.get(
+            descriptor.get("user_file_id") or "", (0, UserFileStatus.COMPLETED)
+        )
+        inputs.append(
+            ChatFileInput(
+                descriptor=descriptor,
+                token_count=tokens,
+                content_pending=status
+                in (UserFileStatus.PROCESSING, UserFileStatus.INDEXING),
+            )
+        )
+    return inputs

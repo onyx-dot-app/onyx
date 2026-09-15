@@ -309,6 +309,7 @@ function addPacketToGroup(
 // ============================================================================
 
 function processPacket(state: ProcessorState, packet: Packet): void {
+  if (packet.obj.type === PacketType.OPERATION_STATUS) return;
   if (!packet) return;
 
   // Handle turn transitions (inject SECTION_END for previous groups)

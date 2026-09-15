@@ -13,7 +13,6 @@ This test:
 All external HTTP calls are mocked, but Postgres and Redis are running.
 """
 
-import queue
 from typing import Any
 from unittest.mock import patch
 from uuid import uuid4
@@ -21,7 +20,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.chat.emitter import Emitter
+from onyx.agents.tools import ToolInvocation
 from onyx.db.enums import (
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
@@ -29,8 +28,10 @@ from onyx.db.enums import (
 )
 from onyx.db.mcp import create_mcp_server__no_commit
 from onyx.db.models import OAuthAccount, Persona, Tool, User
+from onyx.db.tools import capture_persona_tool_configuration
+from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.factory import get_default_llm
-from onyx.server.query_and_chat.placement import Placement
+from onyx.tools.interface import ToolContext
 from onyx.tools.models import CustomToolCallSummary
 from onyx.tools.tool_constructor import SearchToolConfig, construct_tools
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
@@ -134,9 +135,8 @@ class TestMCPPassThroughOAuth:
         search_tool_config = SearchToolConfig()
 
         tool_dict = construct_tools(
-            persona=persona,
+            configuration=capture_persona_tool_configuration(persona),
             db_session=db_session,
-            emitter=Emitter(merged_queue=queue.Queue()),
             user=user,
             llm=llm,
             search_tool_config=search_tool_config,
@@ -149,8 +149,10 @@ class TestMCPPassThroughOAuth:
         mcp_tool = constructed_tools[0]
         assert isinstance(mcp_tool, MCPTool)
 
-        # Verify the user's OAuth token was passed to the MCPTool
-        assert mcp_tool._user_oauth_token == user_oauth_token
+        assert (
+            mcp_tool._resolved_credentials.build_headers().get("Authorization")
+            == f"Bearer {user_oauth_token}"
+        )
 
     def test_pt_oauth_without_user_oauth_account(self, db_session: Session) -> None:
         """
@@ -197,9 +199,8 @@ class TestMCPPassThroughOAuth:
         llm = get_default_llm()
 
         tool_dict = construct_tools(
-            persona=persona,
+            configuration=capture_persona_tool_configuration(persona),
             db_session=db_session,
-            emitter=Emitter(merged_queue=queue.Queue()),
             user=user,
             llm=llm,
             search_tool_config=SearchToolConfig(),
@@ -212,8 +213,7 @@ class TestMCPPassThroughOAuth:
         mcp_tool = constructed_tools[0]
         assert isinstance(mcp_tool, MCPTool)
 
-        # Verify NO OAuth token was passed (user has no OAuth account)
-        assert mcp_tool._user_oauth_token is None
+        assert "Authorization" not in mcp_tool._resolved_credentials.build_headers()
 
     def test_pt_oauth_vs_api_token_auth(self, db_session: Session) -> None:
         """
@@ -272,9 +272,8 @@ class TestMCPPassThroughOAuth:
         llm = get_default_llm()
 
         tool_dict = construct_tools(
-            persona=persona,
+            configuration=capture_persona_tool_configuration(persona),
             db_session=db_session,
-            emitter=Emitter(merged_queue=queue.Queue()),
             user=user,
             llm=llm,
             search_tool_config=SearchToolConfig(),
@@ -288,7 +287,7 @@ class TestMCPPassThroughOAuth:
 
         # Verify the user's OAuth token was NOT passed (API_TOKEN auth type)
         # API_TOKEN auth should use connection config, not user's login token
-        assert mcp_tool._user_oauth_token is None
+        assert "Authorization" not in mcp_tool._resolved_credentials.build_headers()
 
     def test_mcp_tool_run_sets_authorization_header_for_pt_oauth(
         self, db_session: Session
@@ -347,9 +346,8 @@ class TestMCPPassThroughOAuth:
         llm = get_default_llm()
 
         tool_dict = construct_tools(
-            persona=persona,
+            configuration=capture_persona_tool_configuration(persona),
             db_session=db_session,
-            emitter=Emitter(merged_queue=queue.Queue()),
             user=user,
             llm=llm,
             search_tool_config=SearchToolConfig(),
@@ -381,9 +379,13 @@ class TestMCPPassThroughOAuth:
         ):
             # Run the tool
             response = mcp_tool.run(
-                placement=Placement(turn_index=0, tab_index=0),
-                override_kwargs=None,
-                input="test",
+                invocation=ToolInvocation(
+                    call_id="header-test",
+                    arguments={"input": "test"},
+                    cancellation=CancellationSignal(),
+                    update=lambda _progress: None,
+                ),
+                context=ToolContext(),
             )
             print(response.details)
             assert isinstance(response.details, CustomToolCallSummary)
@@ -455,9 +457,8 @@ class TestMCPPassThroughOAuth:
 
         # Construct tools
         tool_dict = construct_tools(
-            persona=persona,
+            configuration=capture_persona_tool_configuration(persona),
             db_session=db_session,
-            emitter=Emitter(merged_queue=queue.Queue()),
             user=user,
             llm=llm,
             search_tool_config=SearchToolConfig(),
@@ -471,7 +472,10 @@ class TestMCPPassThroughOAuth:
 
         # Verify the OIDC token was passed to the MCPTool
         # (code should work identically for Google OAuth and OIDC)
-        assert mcp_tool._user_oauth_token == oidc_access_token
+        assert (
+            mcp_tool._resolved_credentials.build_headers().get("Authorization")
+            == f"Bearer {oidc_access_token}"
+        )
 
     def test_pt_oauth_uses_latest_oauth_account(self, db_session: Session) -> None:
         """
@@ -538,9 +542,8 @@ class TestMCPPassThroughOAuth:
         llm = get_default_llm()
 
         tool_dict = construct_tools(
-            persona=persona,
+            configuration=capture_persona_tool_configuration(persona),
             db_session=db_session,
-            emitter=Emitter(merged_queue=queue.Queue()),
             user=user,
             llm=llm,
             search_tool_config=SearchToolConfig(),
@@ -550,4 +553,7 @@ class TestMCPPassThroughOAuth:
         assert isinstance(mcp_tool, MCPTool)
 
         # The later expiry wins over row order.
-        assert mcp_tool._user_oauth_token == second_token
+        assert (
+            mcp_tool._resolved_credentials.build_headers().get("Authorization")
+            == f"Bearer {second_token}"
+        )

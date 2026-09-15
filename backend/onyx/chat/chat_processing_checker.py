@@ -27,7 +27,7 @@ def set_processing_status(
     chat_session_id: UUID,
     cache: CacheBackend,
     value: bool,
-    run_id: int | None = None,
+    processing_key: int | None = None,
 ) -> None:
     """Set or clear the fence for a chat session processing a message.
 
@@ -39,23 +39,27 @@ def set_processing_status(
         chat_session_id: The UUID of the chat session
         cache: Tenant-aware cache backend
         value: True to set the fence, False to clear it
-        run_id: Stream-buffer run id to expose to resume readers
+        processing_key: Stream-buffer run id to expose to resume readers
     """
     fence_key = _get_fence_key(chat_session_id)
     if value:
-        cache.set(fence_key, run_id if run_id is not None else 0, ex=FENCE_TTL)
+        cache.set(
+            fence_key, processing_key if processing_key is not None else 0, ex=FENCE_TTL
+        )
     else:
         cache.delete(fence_key)
 
 
-def get_processing_run_id(chat_session_id: UUID, cache: CacheBackend) -> int | None:
+def get_processing_key(chat_session_id: UUID, cache: CacheBackend) -> int | None:
     """Run id of the session's in-flight stream buffer, or None when idle or the
     fence carries no run id."""
     raw = cache.get(_get_fence_key(chat_session_id))
     if raw is None:
         return None
     try:
-        run_id = int(raw.decode("utf-8") if isinstance(raw, bytes) else str(raw))
+        processing_key = int(
+            raw.decode("utf-8") if isinstance(raw, bytes) else str(raw)
+        )
     except (TypeError, ValueError, UnicodeDecodeError):
         logger.warning(
             "invalid processing run id for session %s: %r",
@@ -63,7 +67,7 @@ def get_processing_run_id(chat_session_id: UUID, cache: CacheBackend) -> int | N
             raw,
         )
         return None
-    return run_id if run_id > 0 else None
+    return processing_key if processing_key > 0 else None
 
 
 def is_chat_session_processing(chat_session_id: UUID, cache: CacheBackend) -> bool:

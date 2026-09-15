@@ -7,7 +7,6 @@ used to build every attached tool. Only the tool *listing* endpoints filtered on
 None, and the web client omits it unless the user turned something off in chat).
 """
 
-import queue
 from collections.abc import Generator
 from typing import Any
 from uuid import uuid4
@@ -15,8 +14,8 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.chat.emitter import Emitter
 from onyx.db.models import Persona, Tool, User
+from onyx.db.tools import capture_persona_tool_configuration
 from onyx.llm.factory import get_default_llm
 from onyx.tools.tool_constructor import construct_tools
 from tests.external_dependency_unit.answer.conftest import ensure_default_llm_provider
@@ -122,9 +121,8 @@ def test_disabled_tool_is_not_constructed(db_session: Session) -> None:
     persona = _create_persona(db_session, user, [disabled_tool, enabled_tool])
 
     tool_dict = construct_tools(
-        persona=persona,
+        configuration=capture_persona_tool_configuration(persona),
         db_session=db_session,
-        emitter=Emitter(merged_queue=queue.Queue()),
         user=user,
         llm=get_default_llm(),
     )
@@ -143,12 +141,32 @@ def test_disabled_tool_is_not_constructed_even_when_whitelisted(
     persona = _create_persona(db_session, user, [disabled_tool])
 
     tool_dict = construct_tools(
-        persona=persona,
+        configuration=capture_persona_tool_configuration(persona),
         db_session=db_session,
-        emitter=Emitter(merged_queue=queue.Queue()),
         user=user,
         llm=get_default_llm(),
         allowed_tool_ids=[disabled_tool.id],
     )
 
     assert disabled_tool.id not in tool_dict
+
+
+def test_prepared_configuration_survives_persona_edits(db_session: Session) -> None:
+    user = create_test_user(db_session, USER_EMAIL_PREFIX)
+    tool = _create_tool(db_session, user, enabled=True)
+    persona = _create_persona(db_session, user, [tool])
+    configuration = capture_persona_tool_configuration(persona)
+    tool_id = tool.id
+    persona.tools = []
+    db_session.commit()
+    db_session.expunge(persona)
+
+    tools = construct_tools(
+        configuration=configuration,
+        db_session=db_session,
+        user=user,
+        llm=get_default_llm(),
+    )
+
+    assert tool_id in tools
+    assert tools[tool_id][0].name == "test_operation"

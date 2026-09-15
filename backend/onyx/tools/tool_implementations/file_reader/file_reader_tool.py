@@ -1,26 +1,26 @@
 import io
-from typing import Any, cast
 from uuid import UUID
 
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
-from onyx.chat.emitter import Emitter
+from onyx.agents.tools import ToolInvocation, ToolProgress
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.user_file import get_user_file_by_id
 from onyx.file_processing.extract_file_text import extract_file_text
-from onyx.file_store.models import ChatFileType, InMemoryChatFile
-from onyx.file_store.utils import load_chat_file_by_id, load_user_file
+from onyx.file_store.models import ChatFileType, InMemoryChatFile, UserFileMetadata
+from onyx.file_store.utils import load_chat_file_by_id, load_user_file_content
 from onyx.llm.models import ToolResult
-from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import (
-    FileReaderResult,
-    FileReaderStart,
-    Packet,
+from onyx.tools.interface import (
+    FunctionToolDefinition,
+    Tool,
+    ToolContext,
+    parse_tool_arguments,
 )
-from onyx.tools.interface import Tool
 from onyx.tools.models import ToolCallException
+from onyx.tools.progress import FileReadResult, FileReadStarted
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -34,21 +34,13 @@ DEFAULT_NUM_CHARS = MAX_NUM_CHARS
 PREVIEW_CHARS = 500
 
 
-class FileReadResult(BaseModel):
-    file_name: str
+class FileReaderArguments(BaseModel):
     file_id: str
-    start_char: int
-    end_char: int
-    total_chars: int
-    preview_start: str
-    preview_end: str
+    start_char: int = 0
+    num_chars: int = DEFAULT_NUM_CHARS
 
 
-class FileReaderToolOverrideKwargs:
-    """No override kwargs needed for the file reader tool."""
-
-
-class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
+class FileReaderTool(Tool):
     NAME = "read_file"
     DISPLAY_NAME = "File Reader"
     DESCRIPTION = (
@@ -59,11 +51,9 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
     def __init__(
         self,
         tool_id: int,
-        emitter: Emitter,
         user_file_ids: list[UUID],
         chat_file_ids: list[UUID],
     ) -> None:
-        super().__init__(emitter=emitter)
         self._id = tool_id
         self._user_file_ids = set(user_file_ids)
         self._chat_file_ids = set(chat_file_ids)
@@ -91,7 +81,7 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
         # generalised for standard (vector-DB-enabled) deployments.
         return DISABLE_VECTOR_DB
 
-    def tool_definition(self) -> dict:
+    def tool_definition(self) -> FunctionToolDefinition:
         return {
             "type": "function",
             "function": {
@@ -122,14 +112,6 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
             },
         }
 
-    def emit_start(self, placement: Placement) -> None:
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=FileReaderStart(),
-            )
-        )
-
     def _validate_file_id(self, raw_file_id: str) -> UUID:
         try:
             file_id = UUID(raw_file_id)
@@ -152,16 +134,16 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
     def _load_file(self, file_id: UUID) -> InMemoryChatFile:
         if file_id in self._user_file_ids:
             with get_session_with_current_tenant() as db_session:
-                return load_user_file(file_id, db_session)
+                row = get_user_file_by_id(file_id, db_session)
+                if row is None:
+                    raise ValueError(f"File {file_id} does not exist")
+                metadata = UserFileMetadata.model_validate(row)
+            return load_user_file_content(metadata)
         return load_chat_file_by_id(str(file_id))
 
-    def run(
-        self,
-        placement: Placement,
-        override_kwargs: FileReaderToolOverrideKwargs,  # noqa: ARG002
-        **llm_kwargs: Any,
-    ) -> ToolResult:
-        if FILE_ID_FIELD not in llm_kwargs:
+    def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+        invocation.update(ToolProgress(details=FileReadStarted()))
+        if FILE_ID_FIELD not in invocation.arguments:
             raise ToolCallException(
                 message=f"Missing required '{FILE_ID_FIELD}' parameter",
                 llm_facing_message=(
@@ -170,12 +152,13 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
                 ),
             )
 
-        raw_file_id = cast(str, llm_kwargs[FILE_ID_FIELD])
+        arguments = parse_tool_arguments(FileReaderArguments, invocation.arguments)
+        raw_file_id = arguments.file_id
         file_id = self._validate_file_id(raw_file_id)
-        start_char = max(0, int(llm_kwargs.get(START_CHAR_FIELD, 0)))
+        start_char = max(0, arguments.start_char)
         num_chars = min(
             MAX_NUM_CHARS,
-            max(1, int(llm_kwargs.get(NUM_CHARS_FIELD, DEFAULT_NUM_CHARS))),
+            max(1, arguments.num_chars),
         )
 
         chat_file = self._load_file(file_id)
@@ -223,31 +206,6 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
         preview_start = section[:PREVIEW_CHARS]
         preview_end = section[-PREVIEW_CHARS:] if len(section) > PREVIEW_CHARS else ""
 
-        # Emit result packet so the frontend can display what was read
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=FileReaderResult(
-                    file_name=file_name,
-                    file_id=str(file_id),
-                    start_char=start_char,
-                    end_char=end_char,
-                    total_chars=total_chars,
-                    preview_start=preview_start,
-                    preview_end=preview_end,
-                ),
-            )
-        )
-
-        has_more = end_char < total_chars
-        header = (
-            f"File: {file_name}\nCharacters {start_char}-{end_char} of {total_chars}"
-        )
-        if has_more:
-            header += f" (use start_char={end_char} to continue reading)"
-
-        llm_response = f"{header}\n\n{section}"
-
         summary = FileReadResult(
             file_name=file_name,
             file_id=str(file_id),
@@ -257,6 +215,17 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
             preview_start=preview_start,
             preview_end=preview_end,
         )
+
+        invocation.update(ToolProgress(details=summary))
+
+        has_more = end_char < total_chars
+        header = (
+            f"File: {file_name}\nCharacters {start_char}-{end_char} of {total_chars}"
+        )
+        if has_more:
+            header += f" (use start_char={end_char} to continue reading)"
+
+        llm_response = f"{header}\n\n{section}"
 
         return ToolResult(
             details=summary,

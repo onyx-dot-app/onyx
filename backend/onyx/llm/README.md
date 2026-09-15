@@ -111,34 +111,34 @@ def make_agent(client: LLM, flow: LLMFlow) -> Agent:
     )
 ```
 
-Call `agent.run(messages=[UserMessage(content="Echo hello")], max_turns=2)` to generate, execute tools, and continue.
+Call `agent.run(messages=[UserMessage(content="Echo hello")], max_steps=2)` to generate, execute tools, and continue.
 Call `agent.abort()` to cancel its active execution.
 Tools receive the same cancellation signal and must cooperate with interruption.
 See [Agent execution](../agents/README.md) for snapshots, child execution, and lifecycle behavior.
 
 ## Context hooks
 
-A context hook prepares messages and generation settings for the next turn.
+A context hook prepares messages and generation settings for the next step.
 It receives an isolated copy of agent context.
 
 ```python
-from onyx.agents.runtime import AgentHooks, AgentTurn
+from onyx.agents.runtime import AgentHooks, AgentStep
 
 
-def prepare_turn(context: AgentContext, turn: AgentTurn) -> AgentContext:
-    if turn.is_last:
+def prepare_step(context: AgentContext, step: AgentStep) -> AgentContext:
+    if step.is_last:
         context.tools = []
         context.system_prompt = "Answer using the information already collected."
     context.options.max_tokens = 1000
     return context
 
 
-hooks = AgentHooks(transform_context=prepare_turn)
+hooks = AgentHooks(prepare_step=prepare_step)
 ```
 
 Pass these hooks when constructing an agent.
 Onyx feature hooks use `context/messages.py` for attachments, reminders, and cache hints.
-`context/prompt.py` selects history and files within the input budget.
+`context/prompt.py` assembles instructions and file context. Agent owns compaction and the input budget.
 Chat citation mapping stays in `chat/citation_utils.py`.
 The helper returns shared messages. Ordinary text calls can construct messages directly.
 

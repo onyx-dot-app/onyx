@@ -112,7 +112,7 @@ def test_vertex_workload_identity_omits_credentials() -> None:
     )
     assert "vertex_credentials" not in mapping.model_kwargs
     assert mapping.model_kwargs == {"vertex_project": "proj"}
-    # Workload identity accepts stored credential fields but omits them from requests.
+    # Still consumed: the keys must never fall through to env injection.
     assert "vertex_credentials" in mapping.consumed_keys
     assert "CREDENTIALS_FILE" in mapping.consumed_keys
 
@@ -139,7 +139,8 @@ def test_generic_provider_api_key_applied_when_unset() -> None:
 
 
 def test_generic_provider_api_key_ignored_when_explicit_key_set() -> None:
-    # The provider API key takes precedence over the custom configuration.
+    # Mirrors LiteLLM's param-over-env precedence: the key is recognized
+    # (never env-injected) but the explicit api_key wins.
     mapping = map_custom_config_to_model_kwargs(
         model_provider="groq",
         custom_config={"GROQ_API_KEY": "gk"},
@@ -198,7 +199,7 @@ def test_bedrock_auth_method_ignored_but_not_rejected() -> None:
 
 
 def test_production_observed_key_sets_are_fully_supported() -> None:
-    """Provider settings used in deployed configurations remain supported."""
+    """Key sets observed in cloud env-injection logs must validate cleanly."""
     observed: list[tuple[str, dict[str, str]]] = [
         (
             LlmProviderNames.BEDROCK,

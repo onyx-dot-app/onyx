@@ -3,9 +3,10 @@ from typing import TYPE_CHECKING, Any, Type, cast
 from uuid import UUID
 
 from sqlalchemy import Select, func, or_, select
-from sqlalchemy.orm import InstrumentedAttribute, Session
+from sqlalchemy.orm import InstrumentedAttribute, Session, selectinload
 
 from onyx.auth.permissions import has_permission
+from onyx.context.search.models import PersonaSearchInfo
 from onyx.db.constants import UNSET, UnsetType
 from onyx.db.enums import MCPServerStatus, Permission, PermissionAuthority
 from onyx.db.models import (
@@ -20,6 +21,7 @@ from onyx.db.models import (
 )
 from onyx.server.features.tool.models import Header
 from onyx.tools.built_in_tools import BUILT_IN_TOOL_TYPES
+from onyx.tools.models import PersonaToolConfiguration, ToolConfiguration
 from onyx.utils.headers import HeaderItemDict
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_json_like, sanitize_string
@@ -28,6 +30,21 @@ if TYPE_CHECKING:
     pass
 
 logger = setup_logger()
+
+
+def capture_persona_tool_configuration(persona: Persona) -> PersonaToolConfiguration:
+    """Copy loaded configuration; the caller owns the session and transaction."""
+    return PersonaToolConfiguration(
+        persona_id=persona.id,
+        persona_name=persona.name,
+        tools=[ToolConfiguration.model_validate(tool) for tool in persona.tools],
+        search=PersonaSearchInfo(
+            document_set_names=[item.name for item in persona.document_sets],
+            search_start_date=persona.search_start_date,
+            attached_document_ids=[item.id for item in persona.attached_documents],
+            hierarchy_node_ids=[item.id for item in persona.hierarchy_nodes],
+        ),
+    )
 
 
 def get_tools(
@@ -404,3 +421,20 @@ def create_tool_call_no_commit(
     else:
         db_session.flush()
     return tool_call
+
+
+def get_response_tool_records(
+    record_ids: list[int], chat_session_id: UUID, db_session: Session
+) -> list[ToolCall]:
+    """Load referenced artifacts within their session; the caller owns the session."""
+    if not record_ids:
+        return []
+    return list(
+        db_session.scalars(
+            select(ToolCall)
+            .where(
+                ToolCall.id.in_(record_ids), ToolCall.chat_session_id == chat_session_id
+            )
+            .options(selectinload(ToolCall.search_docs))
+        ).all()
+    )

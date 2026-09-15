@@ -19,7 +19,13 @@ from onyx.chat.files import (
 )
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.db.models import UserFile
-from onyx.file_store.models import ChatFileType, ExtractedContextFiles, InMemoryChatFile
+from onyx.db.user_file import prepare_chat_file_inputs
+from onyx.file_store.models import (
+    ChatFileType,
+    ExtractedContextFiles,
+    InMemoryChatFile,
+    UserFileMetadata,
+)
 from onyx.tools.models import SearchToolUsage
 
 # ---------------------------------------------------------------------------
@@ -38,6 +44,7 @@ def _make_user_file(
         file_id=str(file_uuid),
         name=name,
         token_count=token_count,
+        file_type="text/plain",
     )
 
 
@@ -160,12 +167,10 @@ class TestExtractContextFiles:
     """All-or-nothing context window fit check."""
 
     def test_empty_user_files_returns_empty(self) -> None:
-        db_session = MagicMock()
         result = extract_context_files(
-            user_files=[],
+            user_files=[UserFileMetadata.model_validate(file) for file in []],
             llm_max_context_window=10000,
             reserved_token_count=0,
-            db_session=db_session,
         )
         assert result.file_texts == []
         assert result.image_files == []
@@ -181,10 +186,9 @@ class TestExtractContextFiles:
         ]
 
         result = extract_context_files(
-            user_files=[uf],
+            user_files=[UserFileMetadata.model_validate(file) for file in [uf]],
             llm_max_context_window=10000,
             reserved_token_count=0,
-            db_session=MagicMock(),
         )
 
         assert result.file_texts == ["file content"]
@@ -198,10 +202,9 @@ class TestExtractContextFiles:
         uf = _make_user_file(token_count=7000)
 
         result = extract_context_files(
-            user_files=[uf],
+            user_files=[UserFileMetadata.model_validate(file) for file in [uf]],
             llm_max_context_window=10000,
             reserved_token_count=0,
-            db_session=MagicMock(),
         )
 
         assert result.file_texts == []
@@ -216,10 +219,9 @@ class TestExtractContextFiles:
         uf = _make_user_file(token_count=6000)
 
         result = extract_context_files(
-            user_files=[uf],
+            user_files=[UserFileMetadata.model_validate(file) for file in [uf]],
             llm_max_context_window=10000,
             reserved_token_count=0,
-            db_session=MagicMock(),
         )
 
         assert result.use_as_search_filter is True
@@ -232,10 +234,9 @@ class TestExtractContextFiles:
         mock_load.return_value = [_make_in_memory_file(file_id=file_id, content="data")]
 
         result = extract_context_files(
-            user_files=[uf],
+            user_files=[UserFileMetadata.model_validate(file) for file in [uf]],
             llm_max_context_window=10000,
             reserved_token_count=0,
-            db_session=MagicMock(),
         )
 
         assert result.use_as_search_filter is False
@@ -248,10 +249,9 @@ class TestExtractContextFiles:
         # 3 * 2500 = 7500 > 6000 threshold
 
         result = extract_context_files(
-            user_files=files,
+            user_files=[UserFileMetadata.model_validate(file) for file in files],
             llm_max_context_window=10000,
             reserved_token_count=0,
-            db_session=MagicMock(),
         )
 
         assert result.use_as_search_filter is True
@@ -266,10 +266,9 @@ class TestExtractContextFiles:
         # Available = (10000 - 5000) * 0.6 = 3000. Tokens = 3000 → overflow.
 
         result = extract_context_files(
-            user_files=[uf],
+            user_files=[UserFileMetadata.model_validate(file) for file in [uf]],
             llm_max_context_window=10000,
             reserved_token_count=5000,
-            db_session=MagicMock(),
         )
 
         assert result.use_as_search_filter is True
@@ -289,10 +288,9 @@ class TestExtractContextFiles:
         ]
 
         result = extract_context_files(
-            user_files=[uf],
+            user_files=[UserFileMetadata.model_validate(file) for file in [uf]],
             llm_max_context_window=10000,
             reserved_token_count=0,
-            db_session=MagicMock(),
         )
 
         assert len(result.image_files) == 1
@@ -336,10 +334,9 @@ class TestExtractContextFiles:
 
         # Pathway 1: extract_context_files (project/persona context)
         result = extract_context_files(
-            user_files=[uf],
+            user_files=[UserFileMetadata.model_validate(file) for file in [uf]],
             llm_max_context_window=10000,
             reserved_token_count=0,
-            db_session=MagicMock(),
         )
         assert len(result.file_metadata_for_tool) == 1
         tool_metadata_file_id = result.file_metadata_for_tool[0].file_id
@@ -366,10 +363,9 @@ class TestExtractContextFiles:
         uf = _make_user_file(token_count=7000, name="bigfile.txt")
 
         result = extract_context_files(
-            user_files=[uf],
+            user_files=[UserFileMetadata.model_validate(file) for file in [uf]],
             llm_max_context_window=10000,
             reserved_token_count=0,
-            db_session=MagicMock(),
         )
 
         assert result.use_as_search_filter is False
@@ -402,10 +398,11 @@ class TestExtractContextFiles:
         ]
 
         result = extract_context_files(
-            user_files=[text_uf, tabular_uf],
+            user_files=[
+                UserFileMetadata.model_validate(file) for file in [text_uf, tabular_uf]
+            ],
             llm_max_context_window=10000,
             reserved_token_count=0,
-            db_session=MagicMock(),
         )
 
         # Text file fits (100 < 6000), so files should be loaded
@@ -438,10 +435,11 @@ class TestExtractContextFiles:
         ]
 
         result = extract_context_files(
-            user_files=[text_uf, tabular_uf],
+            user_files=[
+                UserFileMetadata.model_validate(file) for file in [text_uf, tabular_uf]
+            ],
             llm_max_context_window=10000,
             reserved_token_count=0,
-            db_session=MagicMock(),
         )
 
         assert result.file_texts == ["hello"]
@@ -463,10 +461,11 @@ class TestExtractContextFiles:
         )
 
         result = extract_context_files(
-            user_files=[text_uf, tabular_uf],
+            user_files=[
+                UserFileMetadata.model_validate(file) for file in [text_uf, tabular_uf]
+            ],
             llm_max_context_window=10000,
             reserved_token_count=0,
-            db_session=MagicMock(),
         )
 
         # Text files overflow → search filter enabled
@@ -487,10 +486,11 @@ class TestExtractContextFiles:
         )
 
         result = extract_context_files(
-            user_files=[text_uf, tabular_uf],
+            user_files=[
+                UserFileMetadata.model_validate(file) for file in [text_uf, tabular_uf]
+            ],
             llm_max_context_window=10000,
             reserved_token_count=0,
-            db_session=MagicMock(),
         )
 
         assert result.use_as_search_filter is False
@@ -654,7 +654,9 @@ def test_file_reader_uses_the_same_persona_file_scope_as_prompt() -> None:
         "onyx.chat.files.get_user_files_from_project", return_value=[project_file]
     ) as project_files:
         selected = resolve_context_user_files(persona, 99, uuid4(), MagicMock())
-        available = _collect_available_file_ids([], selected)
+        available = _collect_available_file_ids(
+            [], [UserFileMetadata.model_validate(file) for file in selected]
+        )
     assert available.user_file_ids == [persona_file.id]
     project_files.assert_not_called()
 
@@ -724,7 +726,7 @@ class TestGetOrExtractPlaintext:
 def test_attachment_loading_deduplicates_and_reads_database_before_workers() -> None:
     import threading
 
-    from onyx.chat.files import load_all_chat_files
+    from onyx.chat.files import load_chat_files
     from onyx.db.enums import UserFileStatus
     from onyx.db.models import ChatMessage
     from onyx.file_store.models import ChatLoadedFile, FileDescriptor
@@ -760,11 +762,22 @@ def test_attachment_loading_deduplicates_and_reads_database_before_workers() -> 
 
     with (
         patch(
-            "onyx.chat.files.get_user_file_processing_info", side_effect=read_metadata
+            "onyx.db.user_file.get_user_file_processing_info", side_effect=read_metadata
         ) as read,
         patch("onyx.chat.files._load_chat_file", side_effect=load_file) as load,
     ):
-        files = load_all_chat_files(history, session)
+        files = load_chat_files(
+            prepare_chat_file_inputs(
+                list(
+                    {
+                        descriptor["id"]: descriptor
+                        for message in history
+                        for descriptor in message.files or []
+                    }.values()
+                ),
+                session,
+            )
+        )
     read.assert_called_once()
     load.assert_called_once()
     assert len(files) == 1

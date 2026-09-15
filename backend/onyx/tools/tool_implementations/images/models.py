@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from onyx.server.query_and_chat.streaming_models import GeneratedImage
+from onyx.tools.progress import GeneratedImage
 
 
 class ImageGenerationResponse(BaseModel):

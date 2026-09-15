@@ -4,21 +4,20 @@ from typing import Any
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
-from onyx.chat.emitter import Emitter
+from onyx.agents.tools import ToolInvocation, ToolProgress
 from onyx.context.search.models import SearchDocsResponse
 from onyx.context.search.utils import convert_inference_sections_to_search_docs
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.web_search import fetch_active_web_search_provider
 from onyx.llm.models import ToolResult
-from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import (
-    Packet,
-    SearchToolDocumentsDelta,
-    SearchToolQueriesDelta,
-    SearchToolStart,
+from onyx.tools.interface import (
+    CITATIONS_PER_TOOL_CALL,
+    FunctionToolDefinition,
+    Tool,
+    ToolContext,
 )
-from onyx.tools.interface import Tool
-from onyx.tools.models import ToolCallException, WebSearchToolOverrideKwargs
+from onyx.tools.models import ToolCallException
+from onyx.tools.progress import SearchDocuments, SearchQueries, SearchStarted
 from onyx.tools.tool_implementations.utils import (
     convert_inference_sections_to_llm_string,
 )
@@ -79,13 +78,12 @@ def _normalize_queries_input(raw: Any) -> list[str]:
     return result
 
 
-class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
+class WebSearchTool(Tool):
     NAME = "web_search"
     DESCRIPTION = "Search the web for information."
     DISPLAY_NAME = "Web Search"
 
-    def __init__(self, tool_id: int, emitter: Emitter) -> None:
-        super().__init__(emitter=emitter)
+    def __init__(self, tool_id: int) -> None:
         self._id = tool_id
 
         # Get web search provider from database
@@ -141,7 +139,7 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
             provider = fetch_active_web_search_provider(session)
             return provider is not None
 
-    def tool_definition(self) -> dict:
+    def tool_definition(self) -> FunctionToolDefinition:
         return {
             "type": "function",
             "function": {
@@ -162,14 +160,6 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
                 },
             },
         }
-
-    def emit_start(self, placement: Placement) -> None:
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=SearchToolStart(is_internet_search=True),
-            )
-        )
 
     def _safe_execute_single_search(
         self,
@@ -194,14 +184,9 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
             logger.warning("Web search query '%s' failed: %s", query, error_msg)
             return (None, error_msg)
 
-    def run(
-        self,
-        placement: Placement,
-        override_kwargs: WebSearchToolOverrideKwargs,
-        **llm_kwargs: Any,
-    ) -> ToolResult:
-        """Execute the web search tool with multiple queries in parallel"""
-        if QUERIES_FIELD not in llm_kwargs:
+    def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
+        invocation.update(ToolProgress(details=SearchStarted(is_internet_search=True)))
+        if QUERIES_FIELD not in invocation.arguments:
             raise ToolCallException(
                 message=f"Missing required '{QUERIES_FIELD}' parameter in web_search tool call",
                 llm_facing_message=(
@@ -210,7 +195,7 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
                     f'like: {{"queries": ["your search query here"]}}'
                 ),
             )
-        queries = _normalize_queries_input(llm_kwargs[QUERIES_FIELD])
+        queries = _normalize_queries_input(invocation.arguments[QUERIES_FIELD])
         if not queries:
             raise ToolCallException(
                 message=(
@@ -223,12 +208,7 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
             )
 
         # Emit queries
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=SearchToolQueriesDelta(queries=queries),
-            )
-        )
+        invocation.update(ToolProgress(details=SearchQueries(queries=queries)))
 
         # Perform searches in parallel with error capture
         functions_with_args = [
@@ -322,12 +302,7 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
         )
 
         # Emit documents
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=SearchToolDocumentsDelta(documents=search_docs),
-            )
-        )
+        invocation.update(ToolProgress(details=SearchDocuments(documents=search_docs)))
 
         # Format for LLM
         if not all_search_results:
@@ -341,7 +316,8 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
         else:
             docs_str, citation_mapping = convert_inference_sections_to_llm_string(
                 top_sections=inference_sections,
-                citation_start=override_kwargs.starting_citation_num,
+                citation_start=context.next_citation_num
+                + CITATIONS_PER_TOOL_CALL * invocation.call_index,
                 limit=None,  # Already truncated
                 include_source_type=False,
                 include_link=True,

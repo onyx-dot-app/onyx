@@ -1,16 +1,33 @@
+from collections.abc import Iterator
+from contextlib import contextmanager
+from threading import Event
 from unittest.mock import MagicMock, patch
+from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy.orm import Session
 
+from onyx.chat.models import AvailableFiles, ChatHistoryMessage, PersonaPromptConfig
 from onyx.chat.prepare import (
+    _ChatPreparation,
     _resolve_query_processing_hook_result,
     get_custom_agent_prompt,
+    prepare_chat_turn,
 )
-from onyx.configs.constants import DEFAULT_PERSONA_ID
+from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
+from onyx.context.search.models import PersonaSearchInfo
+from onyx.db.memory import UserInfo, UserMemoryContext
+from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_store.models import ExtractedContextFiles, UserFileMetadata
 from onyx.hooks.executor import HookSkipped, HookSoftFailed
 from onyx.hooks.points.query_processing import QueryProcessingResponse
+from onyx.llm.models import ReasoningEffort
+from onyx.server.query_and_chat.models import SendMessageRequest
+from onyx.tools.models import PersonaToolConfiguration
+from onyx.utils.threadpool_concurrency import ContextThreadPoolExecutor
+from tests.unit.onyx.agents.fakes import ScriptedLLM
 
 # ---------------------------------------------------------------------------
 # Query Processing hook response handling (_resolve_query_processing_hook_result)
@@ -102,6 +119,7 @@ def test_document_set_denial_precedes_session_and_model_creation() -> None:
     )
     user = MagicMock(is_anonymous=False)
     with (
+        patch("onyx.chat.prepare.get_session_with_current_tenant"),
         patch(
             "onyx.chat.prepare.filter_document_set_names_by_user_access",
             return_value=[],
@@ -110,7 +128,7 @@ def test_document_set_denial_precedes_session_and_model_creation() -> None:
         patch("onyx.chat.prepare.get_llm_for_persona") as create_model,
         pytest.raises(OnyxError) as error,
     ):
-        prepare_chat_turn(request, user, MagicMock(), llm_overrides=None)
+        prepare_chat_turn(request, user, llm_overrides=None)
     assert error.value.error_code is OnyxErrorCode.INSUFFICIENT_PERMISSIONS
     create_session.assert_not_called()
     create_model.assert_not_called()
@@ -260,3 +278,130 @@ class TestGetCustomAgentPrompt:
 
         # Should return None because replace_base_system_prompt=True
         assert result is None
+
+
+def test_attachment_loading_releases_preparation_session_before_reservation_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    started = Event()
+    release = Event()
+    active_sessions = 0
+    reservation_attempted = False
+    session_id = uuid4()
+    model = ScriptedLLM([])
+    prepared = _ChatPreparation(
+        session_id=session_id,
+        project_id=None,
+        incognito_record_mode=None,
+        persona_id=1,
+        persona=PersonaPromptConfig(
+            system_prompt=None,
+            task_prompt=None,
+            datetime_aware=False,
+            replace_base_system_prompt=False,
+        ),
+        base_system_prompt="System",
+        tool_configuration=PersonaToolConfiguration(
+            persona_id=1,
+            persona_name="Assistant",
+            tools=[],
+            search=PersonaSearchInfo(
+                document_set_names=[],
+                search_start_date=None,
+                attached_document_ids=[],
+                hierarchy_node_ids=[],
+            ),
+        ),
+        research_tool_id=None,
+        selected_models=[(model, "Test")],
+        history=[
+            ChatHistoryMessage(
+                id=2,
+                message_type=MessageType.USER,
+                message="Accepted",
+                token_count=8,
+                files=[],
+                is_clarification=False,
+                assistant_messages=[],
+            )
+        ],
+        file_inputs=[],
+        context_user_files=[],
+        available_files=AvailableFiles(),
+        user_message_id=2,
+        accepted_text="Accepted",
+        user_memory_context=UserMemoryContext(user_info=UserInfo()),
+        custom_agent_prompt=None,
+        reserved_token_count=100,
+        reasoning_effort=ReasoningEffort.LOW,
+        forced_tool_id=None,
+        search_tool_id=None,
+        summary=None,
+        summarized_file_metadata={},
+        skip_clarification=True,
+    )
+
+    @contextmanager
+    def session_scope() -> Iterator[Session]:
+        nonlocal active_sessions
+        active_sessions += 1
+        try:
+            with Session() as session:
+                yield session
+        finally:
+            active_sessions -= 1
+
+    def load_files(
+        user_files: list[UserFileMetadata],
+        llm_max_context_window: int,
+        reserved_token_count: int,
+    ) -> ExtractedContextFiles:
+        del user_files, llm_max_context_window, reserved_token_count
+        started.set()
+        assert release.wait(5)
+        return ExtractedContextFiles(
+            file_texts=[],
+            image_files=[],
+            use_as_search_filter=False,
+            total_token_count=0,
+            file_metadata=[],
+            uncapped_token_count=0,
+        )
+
+    def fail_reservation(
+        db_session: Session,
+        chat_session_id: UUID,
+        parent_message_id: int,
+        model_display_names: list[str],
+    ) -> list[int]:
+        nonlocal reservation_attempted
+        del db_session, chat_session_id, model_display_names
+        reservation_attempted = True
+        assert active_sessions == 1
+        assert parent_message_id == 2
+        raise RuntimeError("Response reservation failed")
+
+    monkeypatch.setattr(
+        "onyx.chat.prepare.get_session_with_current_tenant", session_scope
+    )
+    monkeypatch.setattr(
+        "onyx.chat.prepare._prepare_chat_data", lambda *_args, **_kwargs: prepared
+    )
+    monkeypatch.setattr("onyx.chat.prepare.extract_context_files", load_files)
+    monkeypatch.setattr("onyx.chat.prepare.reserve_chat_response_ids", fail_reservation)
+    request = SendMessageRequest(message="Accepted", chat_session_id=session_id)
+    user = User(id=uuid4(), email="reader@example.com")
+    with ContextThreadPoolExecutor(max_workers=1) as executor:
+        pending = executor.submit(
+            lambda: prepare_chat_turn(request, user, llm_overrides=None)
+        )
+        try:
+            assert started.wait(5)
+            assert active_sessions == 0
+            assert not reservation_attempted
+        finally:
+            release.set()
+        with pytest.raises(RuntimeError, match="Response reservation failed"):
+            pending.result(timeout=5)
+    assert reservation_attempted
+    assert active_sessions == 0

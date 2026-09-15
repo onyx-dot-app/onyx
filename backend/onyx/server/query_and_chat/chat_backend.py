@@ -27,16 +27,16 @@ from onyx.background.task_utils import enqueue_user_file_deletes
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.cancellation import request_stop
 from onyx.chat.chat_processing_checker import (
-    get_processing_run_id,
+    get_processing_key,
     is_chat_session_processing,
 )
-from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.incognito import (
     delete_incognito_generated_files,
     incognito_allowed_for_user,
 )
 from onyx.chat.incognito_context import teardown_incognito_session
 from onyx.chat.models import ChatFullResponse, CreateChatSessionID
+from onyx.chat.presentation import ResponseBinding
 from onyx.chat.process_message import (
     gather_stream_full,
     handle_multi_model_stream,
@@ -131,6 +131,7 @@ from onyx.server.query_and_chat.models import (
     RenameChatSessionResponse,
     SendMessageRequest,
     SetPreferredResponseRequest,
+    StopChatResponse,
     UpdateChatSessionReasoningRequest,
     UpdateChatSessionTemperatureRequest,
     UpdateChatSessionThreadRequest,
@@ -427,9 +428,9 @@ def get_chat_session(
 
     current_run: CurrentRunInfo | None = None
     try:
-        run_id = get_processing_run_id(session_id, get_cache_backend())
-        if run_id is not None:
-            current_run = CurrentRunInfo(run_id=run_id)
+        processing_key = get_processing_key(session_id, get_cache_backend())
+        if processing_key is not None:
+            current_run = CurrentRunInfo(run_id=processing_key)
     except Exception:
         logger.exception(
             "An error occurred while checking if the chat session is processing"
@@ -894,7 +895,7 @@ def handle_send_chat_message(
                 )
                 usage_db_session.commit()
 
-        state_container = ChatStateContainer()
+        response_binding = ResponseBinding()
         packets = handle_stream_message_objects(
             new_msg_req=chat_message_req,
             user=user,
@@ -906,9 +907,9 @@ def handle_send_chat_message(
             ),
             mcp_headers=chat_message_req.mcp_headers,
             additional_context=chat_message_req.additional_context,
-            external_state_container=state_container,
+            response_binding=response_binding,
         )
-        result = gather_stream_full(packets, state_container)
+        result = gather_stream_full(packets, response_binding)
         # CreateChatSessionID is only yielded for newly-created sessions, so for
         # follow-up messages on an existing session the aggregated response would
         # otherwise omit chat_session_id. Backfill it from the request so the
@@ -922,7 +923,7 @@ def handle_send_chat_message(
 
     # Streaming path, normal Onyx UI behavior
     def stream_generator() -> Generator[str, None, None]:
-        state_container = ChatStateContainer()
+        response_binding = ResponseBinding()
         try:
             for obj in handle_stream_message_objects(
                 new_msg_req=chat_message_req,
@@ -935,7 +936,7 @@ def handle_send_chat_message(
                 ),
                 mcp_headers=chat_message_req.mcp_headers,
                 additional_context=chat_message_req.additional_context,
-                external_state_container=state_container,
+                response_binding=response_binding,
             ):
                 yield get_json_line(obj.model_dump())
 
@@ -1318,8 +1319,10 @@ def resume_chat_stream(
             raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND)
 
     cache = get_cache_backend()
-    run_id = get_processing_run_id(session_id, cache)
-    if run_id is None or not has_stream_buffer(cache, session_id, run_id):
+    processing_key = get_processing_key(session_id, cache)
+    if processing_key is None or not has_stream_buffer(
+        cache, session_id, processing_key
+    ):
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND, "No resumable run for this chat session"
         )
@@ -1331,7 +1334,7 @@ def resume_chat_stream(
             read = read_stream_chunks(
                 cache,
                 session_id,
-                run_id,
+                processing_key,
                 chunk_cursor,
                 max_chunks=_RESUME_MAX_CHUNKS_PER_READ,
             )
@@ -1356,7 +1359,7 @@ def resume_chat_stream(
                     read = read_stream_chunks(
                         cache,
                         session_id,
-                        run_id,
+                        processing_key,
                         chunk_cursor,
                         max_chunks=_RESUME_MAX_CHUNKS_PER_READ,
                     )
@@ -1376,21 +1379,24 @@ def resume_chat_stream(
 @router.post("/stop-chat-session/{chat_session_id}", tags=PUBLIC_API_TAGS)
 def stop_chat_session(
     chat_session_id: UUID,
+    processing_key: int | None = Query(default=None, gt=0, alias="run_id"),
     user: User = Depends(require_permission(Permission.WRITE_CHAT)),
     db_session: Session = Depends(get_session),
-) -> dict[str, str]:
-    """
-    Stop a chat session by setting a stop signal.
-    This endpoint is called by the frontend when the user clicks the stop button.
-    """
+) -> StopChatResponse:
+    """Stop the requested execution without affecting a later request."""
     try:
         get_chat_session_by_id(
             chat_session_id=chat_session_id,
             user_id=user.id,
             db_session=db_session,
         )
-    except ValueError:
-        raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Chat session not found")
+    except ValueError as error:
+        raise OnyxError(
+            OnyxErrorCode.SESSION_NOT_FOUND, "Chat session not found"
+        ) from error
 
-    request_stop(chat_session_id, get_cache_backend())
-    return {"message": "Chat session stopped"}
+    cache = get_cache_backend()
+    target_processing_key = processing_key or get_processing_key(chat_session_id, cache)
+    if target_processing_key is not None:
+        request_stop(chat_session_id, cache, processing_key=target_processing_key)
+    return StopChatResponse(message="Chat session stopped")

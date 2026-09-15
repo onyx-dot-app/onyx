@@ -1,5 +1,10 @@
 import os
 
+# Bounds full-response callers waiting after delivery ends; execution keeps its own lifetime.
+CHAT_RESPONSE_WAIT_TIMEOUT_S = int(
+    os.environ.get("CHAT_RESPONSE_WAIT_TIMEOUT_S") or "3600"
+)
+
 NUM_RETURNED_HITS = 50
 
 # May be less depending on model

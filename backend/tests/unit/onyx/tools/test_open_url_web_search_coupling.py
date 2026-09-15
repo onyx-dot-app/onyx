@@ -71,7 +71,6 @@ def _build_tool(web_fetch_disabled: bool) -> OpenURLTool:
     # try to resolve one (and must not raise when none is configured).
     return OpenURLTool(
         tool_id=2,
-        emitter=MagicMock(),
         document_index=MagicMock(),
         user=MagicMock(),
         content_provider=None if web_fetch_disabled else MagicMock(),

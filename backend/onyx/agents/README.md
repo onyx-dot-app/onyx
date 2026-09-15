@@ -1,118 +1,108 @@
 # Python agent runtime
 
-The API process runs the internal chat, coding, research, and deep-research agents.
-They share `Agent.run()`.
+The API process runs chat, coding, research, and deep research through `Agent.run()`.
+Feature code supplies instructions, tools, and hooks. Agent owns execution, history, child lifetime, compaction, and cancellation.
 
 | File | Responsibility |
 | --- | --- |
-| `runtime.py` | Canonical history, turns, hooks, tool scheduling, and snapshots. |
-| `events.py` | Discriminated event types with required payloads. |
-| `tools.py` | Executable tools and progress callbacks. |
-| `transcript.py` | Versioned storage schema. |
+| `runtime.py` | Execution, hooks, child scheduling, and snapshots. |
+| `events.py` | Typed execution updates. |
+| `tools.py` | Executable tools and invocation services. |
+| `compaction.py` | Bounded context summaries and checkpoints. |
+| `transcript.py` | Stored execution data and model-history selection. |
 
-Canonical messages, model requests, and cancellation live in the [model API](../llm/README.md).
+Messages, generation requests, and cancellation signals live in [llm](../llm/README.md).
 
-## Execution
+## Execution scopes
 
-An agent owns messages, executable tools, and hooks. `run()` continues its history and returns an isolated `AgentResult`.
-`run(messages=[UserMessage(content="...")], max_turns=10)` adds input before execution.
-`steer(message, expected_execution_id=...)` queues input before the next model call, after current tools finish.
-`follow_up(message)` delivers one queued message when the active execution would otherwise finish.
-Both require active execution and return an input ID. Steering takes priority over follow-ups.
+A chat turn is one submitted user request and its responses. The application owns that interaction.
+A run is one Agent execution. It contains steps and can start child runs.
+Model comparison creates several root runs within one chat turn. Child runs belong to their parent tool calls.
+SDK run IDs are separate from saved message IDs and processing keys used for Stop and stream replay.
 
-`pending_inputs` returns copies of unconsumed input. `remove_pending_input(id)` returns whether removal succeeded.
-The `input_consumed` event identifies input added to history. Removal cannot withdraw consumed input.
-Unconsumed input remains available after completion, cancellation, errors, or turn limits.
-Each input belongs to one execution and cannot enter a later execution automatically.
+## Execution and input
 
-The frontend owns queued chat requests and submits each through the normal chat endpoint.
-`abort()` cancels the active execution; `wait_for_idle()` waits for the execution loop to exit.
+`run(messages=[UserMessage(content="...")], max_steps=10)` adds input and continues the agent's history.
+A step contains one logical model generation and its tool results. `RunResult` contains the run ID, final assistant output, step count, and stop reason.
+Read full conversation history through `agent.context.messages`.
 
-A turn contains one model response and its tool results. Events carry a run ID and turn index.
-Child executions also carry their parent run and tool-call IDs. These IDs are separate from chat session and display IDs.
+`steer(message, expected_run_id=...)` queues input before the next generation, after current tools finish.
+`follow_up(message)` queues input for when the current task would otherwise finish. Steering takes priority.
+Both require active execution and return an input ID.
 
-Tools execute with bounded concurrency. Results enter history in call order, regardless of completion order.
-A sequential tool makes its batch execute in order. Unknown tools and malformed or truncated arguments produce paired error results.
-Tool-argument schema validation remains deferred.
+`pending_inputs` returns copies. `remove_pending_input(id)` removes input that has not been consumed.
+The `input_consumed` event identifies input added to history. Unconsumed input cannot enter a later execution automatically.
+The frontend owns queued chat requests and submits them through the chat endpoint.
 
-## State and hooks
+## Feature hooks
 
-The agent owns canonical history. `agent.context` returns an isolated copy.
-`transform_context` edits a request copy before generation. It can change instructions, messages, tools, and model options.
-`AgentContext` contains messages, executable tools, generation options, and execution policy.
-Before generation, the runtime converts this context to `GenerationRequest` with tool schemas.
-The model receives a detached request; the agent retains execution ownership.
+`prepare_step` selects instructions, tools, and options once per step.
+`build_request` assembles the generation request. It must remain pure because compaction can cause another assembly.
+`after_step` observes the accepted step and decides whether feature work continues.
 
-`before_tool_call` can return a result instead of executing the tool.
-`after_tool_call` returns the accepted tool result. Both receive detached call context.
-`after_turn` can transform detached tool results. It cannot edit the published assistant message.
-The runtime validates identities and commits accepted changes before the next request.
-Executed calls cannot change, and each must retain exactly one result. `should_stop_after_turn` reads a detached committed turn.
+`before_tool_call` can supply a result without executing the tool.
+`after_tool_call` finalizes results on the parent path, in call order, before acceptance and the final event.
+Completed results cannot change afterward.
 
-`after_turn` and event delivery run under `agent.state_lock`, a reentrant lock.
-Keep these callbacks short. Perform model calls, tool I/O, and memory writes outside this boundary.
-Applications can acquire the same lock to snapshot display state and runtime output together.
+`agent.context` returns an isolated copy. The request builder returns a detached `GenerationRequest`. Tool execution uses the prepared agent context.
 
-## Observation
+## Tools and children
 
-Events are discriminated unions. Tool-end events require a call and result; message updates require model output.
-Use `event.type` to identify the event and its payload.
-Use concrete agent event classes or `agent_event` to construct events.
-Generation events and their factory live in `llm/models.py`.
+`AgentTool` has one synchronous or asynchronous implementation.
+`ToolInvocation` supplies arguments, identity, cancellation, progress, and child execution.
+Tools emit domain progress. Application presentation maps it to packets. Child events carry their ancestry directly.
+Tools preserve typed result details for application artifacts.
 
-Each subscriber receives its own payload copy. Changing it cannot change runtime history or another subscriber's input.
-Subscribers run synchronously under the state lock. Ordinary observer exceptions are logged and do not change execution outcomes.
-Cancellation exceptions still propagate.
-The agent consumes the model client stream and commits each update before notifying subscribers.
-A successful model stream must end with a completed assistant message.
-Applications can subscribe a renderer to produce UI output.
+Child-launching tools pass task input through `invocation.run_child(child, messages=[...], max_steps=...)`.
+Waiting parents consume no blocking-worker capacity.
+`invocation.run_blocking(...)` runs blocking work in the shared context-propagating executor.
+The root bounds leaf work, submissions, child count, and depth. Successful execution joins its children.
 
-## Model requests and resources
+Parallel results enter history in call order. Sequential tools make their batch execute in order.
+Unknown tools and malformed arguments produce paired error results. Existing tool-specific validation remains in place.
 
-`LLM` accepts `GenerationRequest` and `GenerationContext`.
-Direct calls use `invoke`; the agent consumes `stream` for every generation.
-Provider adapters serialize shared messages and preserve signed thinking blocks for replay.
+## Compaction
 
-Onyx context hooks use `context/messages.py` to prepare attachments, reminders, and cache hints as shared messages.
-History selection lives in `context/prompt.py`.
-Optional `PromptMetadata` supplies file references and token estimates.
+Every Agent compacts older completed history when its model context approaches the input limit.
+It retains the current user instruction and a bounded recent tail. Summary inputs and work are bounded.
+Compaction creates a checkpoint; recorded messages remain intact.
 
-Message snapshots copy editable data. Lazy file descriptors share one resource that owns the loader, lock, and cached bytes.
-Copying or serializing messages does not read attachments. Concurrent descriptor copies load a resource only once.
-Custom metadata must contain copyable values or explicitly shared resources with defined copy behavior.
+A provider context rejection can trigger one compacted generation retry. Tools do not execute again for that retry.
+Oversized required instructions fail explicitly when they cannot fit.
 
-## Persistence
+## Events and snapshots
 
-`agent.snapshot()` returns the current execution’s output as a versioned `AgentTranscript`.
-It returns `None` before execution starts.
-The snapshot contains current-run output and queued follow-up input; it excludes initial history and input passed to `run(messages=...)`.
-Each new `run()` starts a new output snapshot while retaining conversation history.
+Events carry run, message, tool-call, and parent identity. Each Agent preserves event order.
+Subscribers receive copies through bounded delivery outside the state lock.
+Observer failure or overflow marks delivery as failed; execution retains its accepted state.
 
-`agent.output_messages` includes application details for building file and tool records.
-Storage snapshots exclude request metadata and application artifacts. Missing tool results receive error placeholders for valid replay.
-`snapshot(cancelled=True)` marks the active assistant response as aborted without changing live execution.
-Cancellation and failure also repair unfinished result pairs in runtime history.
+`agent.snapshot()` returns `RunSnapshot`, or `None` before execution starts.
+`input_messages` contains the messages supplied to `run()`. `messages` contains subsequent output and consumed steering or follow-up input.
+Prior history and unconsumed queued input are excluded. Operation indices address `messages`.
+Each new run replaces the current snapshot while retaining conversation history in `agent.context`.
+Snapshots also contain typed details, operation status, checkpoint, and child snapshots.
+Child snapshots do not form an atomic whole-tree transaction.
 
-Onyx saves snapshots in the chat message row at completion, failure, or Stop.
-Output since the last save can be lost if the process exits unexpectedly.
+Features attach typed output metadata to their steps. Applications project display and artifacts from the snapshot, independently of streaming. `snapshot.transcript()` copies run input and output into storage-safe execution data, removing application metadata and tool details.
+Chat omits root input from that record because its user message is stored separately. Child records retain their task input.
+Incomplete calls remain recorded but are excluded from model requests until matching results exist.
 
-## Cancellation
+Onyx saves terminal snapshots at completion, failure, or Stop. Application records own presentation and artifact references.
+A process exit before saving can lose recent output. Stream cache gaps use persisted-history fallback.
 
-Requests share a cancellation signal across model workers and child agents.
-An explicit run signal takes precedence, followed by the active parent signal, then the configured execution signal.
-A tool result becomes accepted when the runtime commits it under `state_lock`.
-Cancellation closes execution under that same lock. A commit in progress finishes event delivery before closure.
-Stop preserves accepted results and rejects later callbacks, including callbacks received after the Agent starts another execution.
-It interrupts owned provider I/O and waits for transport cleanup.
-Running synchronous tools must cooperate through the signal or `check_cancelled()`.
-An uncooperative tool thread or remote operation can continue after the execution loop exits.
-An unresolved tool result therefore cannot establish whether an external side effect occurred.
+## Cancellation and resources
 
-Browser disconnection detaches a stream reader. Explicit Stop cancels execution.
-Timeouts apply to provider requests, commands, and sandbox operations.
+`abort()` cancels active execution. `wait_for_idle()` waits for the execution loop to exit.
+Stop targets the active request, cancels descendants, and closes result acceptance. Late callbacks cannot alter a later run.
+Owned provider I/O is interrupted, with bounded cleanup.
 
-## Scope
+Synchronous tools must cooperate through cancellation signals. Uncooperative threads or remote operations can outlive execution.
+Cancellation does not reverse completed writes. An unresolved result cannot prove whether a remote side effect occurred.
+Browser disconnection detaches delivery; explicit Stop cancels execution.
 
+Message copies share lazy file resources. Copying messages does not read attachments; concurrent copies load each resource once.
+
+## Other callers
+
+Single-request tasks, including chat naming, use `LLM.invoke` with `GenerationRequest` and `GenerationContext`.
 Craft interactive, scheduled, and subagent work uses external OpenCode.
-One-shot tasks, including chat naming, use `client.invoke(GenerationRequest(...), GenerationContext(...))`.
-The provider adapter recovers compatible tool calls emitted as text; native calls take precedence.

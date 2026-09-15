@@ -2,8 +2,9 @@ import base64
 import threading
 from enum import Enum
 from typing import Any, Callable, NotRequired, Self
+from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing_extensions import TypedDict  # noreorder
 
 
@@ -74,6 +75,22 @@ class FileDescriptor(TypedDict):
     type: ChatFileType
     name: NotRequired[str | None]
     user_file_id: NotRequired[str | None]
+
+
+class UserFileMetadata(BaseModel):
+    model_config = ConfigDict(frozen=True, from_attributes=True)
+
+    id: UUID
+    file_id: str
+    name: str
+    file_type: str
+    token_count: int | None
+
+
+class ChatFileInput(BaseModel):
+    descriptor: FileDescriptor
+    token_count: int
+    content_pending: bool
 
 
 class InMemoryChatFile(BaseModel):

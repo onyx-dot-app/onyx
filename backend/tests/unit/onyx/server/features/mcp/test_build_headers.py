@@ -35,6 +35,18 @@ def test_build_headers_strips_denylisted_stored_headers(wrap) -> None:
     assert creds.build_headers() == {"Authorization": "Bearer stored"}
 
 
+def test_credentials_keep_captured_headers_after_source_changes() -> None:
+    headers = {"Authorization": "Bearer accepted"}
+    config = MCPConnectionConfig(id=7, config={"headers": headers})
+    credentials = ResolvedMCPCredentials(
+        connection_config=config, user_oauth_token=None
+    )
+    headers["Authorization"] = "Bearer changed"
+
+    assert credentials.connection_config_id == 7
+    assert credentials.build_headers() == {"Authorization": "Bearer accepted"}
+
+
 def test_build_headers_pt_oauth_token_takes_precedence() -> None:
     config = MCPConnectionConfig(config={"headers": {"Authorization": "Bearer old"}})
     creds = ResolvedMCPCredentials(
@@ -110,15 +122,17 @@ def test_no_auth_template_requires_user_substitutions() -> None:
         auth_template=template,
         user_email="alice@example.com",
     )
-    connected = disconnected.model_copy(
-        update={
-            "connection_config": MCPConnectionConfig(
-                config={
-                    "headers": {},
-                    "header_substitutions": {"gateway_key": "gateway-secret"},
-                }
-            )
-        }
+    connected = ResolvedMCPCredentials(
+        connection_config=MCPConnectionConfig(
+            config={
+                "headers": {},
+                "header_substitutions": {"gateway_key": "gateway-secret"},
+            }
+        ),
+        user_oauth_token=None,
+        auth_type=MCPAuthenticationType.NONE,
+        auth_template=template,
+        user_email="alice@example.com",
     )
 
     assert not disconnected.can_authenticate()

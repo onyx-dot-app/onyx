@@ -1,23 +1,94 @@
 from collections.abc import Iterator
-from typing import Any
+from enum import Enum
+from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
+from onyx.agents.transcript import AgentTranscript, CompactionCheckpoint
+from onyx.cache.interface import CacheBackend
+from onyx.chat.citation_processor import CitationMapping, CitationMode
+from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
-from onyx.file_store.models import FileToolMetadata
-from onyx.llm.models import Message
+from onyx.db.enums import IncognitoRecordMode
+from onyx.db.memory import UserMemoryContext
+from onyx.file_store.models import (
+    ExtractedContextFiles,
+    FileDescriptor,
+    FileToolMetadata,
+)
+from onyx.llm.interfaces import LLM, LLMUserIdentity
+from onyx.llm.models import GenerationRequestParams, Message, ReasoningEffort
+from onyx.onyxbot.slack.models import SlackContext
 from onyx.server.query_and_chat.models import (
     MessageResponseIDInfo,
     MultiModelMessageResponseIDInfo,
+    SendMessageRequest,
 )
 from onyx.server.query_and_chat.streaming_models import (
     CitationInfo,
-    GeneratedImage,
     Packet,
 )
-from onyx.tools.models import SearchToolUsage
+from onyx.tools.models import (
+    ChatFile,
+    PersonaToolConfiguration,
+    SearchToolUsage,
+    ToolCallInfo,
+)
+from onyx.tools.progress import GeneratedImage
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
+
+
+class ChatStepOutput(BaseModel):
+    sources: dict[int, SearchDoc] = Field(default_factory=dict)
+    documents: list[SearchDoc] = Field(default_factory=list)
+    include_citations: bool = True
+    elapsed_seconds: float = 0
+
+
+class PresentationMode(str, Enum):
+    ANSWER = "answer"
+    PLAN = "plan"
+    REPORT = "report"
+    CODING_THINKING = "coding_thinking"
+    SILENT = "silent"
+
+
+class MessagePresentation(BaseModel):
+    run_id: str
+    step_index: int = Field(validation_alias=AliasChoices("step_index", "turn"))
+    mode: PresentationMode = PresentationMode.ANSWER
+    text_as_thinking: bool = False
+    think_tool: str | None = None
+    argument_tools: set[str] = Field(default_factory=set)
+    citation_mode: CitationMode | None = None
+    citation_documents: dict[int, str] = Field(default_factory=dict)
+    document_ids: list[str] = Field(default_factory=list)
+    pre_answer_seconds: float | None = None
+
+
+class ToolRecordReference(BaseModel):
+    message_id: str
+    tool_call_id: str
+    record_id: int
+
+
+class ChatExecutionRecord(BaseModel):
+    version: Literal[1] = 1
+    transcript: AgentTranscript
+    presentation: list[MessagePresentation] = Field(default_factory=list)
+    tool_records: list[ToolRecordReference] = Field(default_factory=list)
+
+
+class ChatHistoryMessage(BaseModel):
+    id: int
+    message_type: MessageType
+    message: str
+    token_count: int
+    files: list[FileDescriptor]
+    is_clarification: bool
+    assistant_messages: list[Message]
+    checkpoint: CompactionCheckpoint | None = None
 
 
 class StreamingError(BaseModel):
@@ -122,3 +193,134 @@ class ChatHistoryResult(BaseModel):
 
     messages: list[Message]
     all_injected_file_metadata: dict[str, FileToolMetadata]
+
+
+class ChatArtifactSnapshot(BaseModel):
+    """Application records derived from accepted tool results."""
+
+    model_config = ConfigDict(frozen=True)
+
+    tool_calls: list[ToolCallInfo]
+    all_search_docs: dict[str, SearchDoc]
+    citation_to_doc: CitationMapping
+
+
+class ChatResponseSnapshot(BaseModel):
+    """Detached response data for one persistence attempt."""
+
+    model_config = ConfigDict(frozen=True)
+
+    answer: str | None
+    reasoning: str | None
+    request_params: GenerationRequestParams | None
+    citation_to_doc: CitationMapping
+    tool_calls: list[ToolCallInfo]
+    is_clarification: bool
+    all_search_docs: dict[str, SearchDoc]
+    citation_info: list[CitationInfo] = Field(default_factory=list)
+    top_documents: list[SearchDoc] = Field(default_factory=list)
+    pre_answer_processing_time: float | None
+    transcript: AgentTranscript | None
+    presentation: list[MessagePresentation] = Field(default_factory=list)
+    cancelled: bool
+    delivery_failed: bool = False
+    error: str | None = None
+
+
+class PersistenceStatus(str, Enum):
+    SAVED = "saved"
+    FAILED = "failed"
+    UNCONFIRMED = "unconfirmed"
+
+
+PERSISTENCE_ERROR_MESSAGES = {
+    PersistenceStatus.FAILED: "The response could not be saved. Please try again.",
+    PersistenceStatus.UNCONFIRMED: "The response save has not completed. Reload this conversation.",
+}
+
+
+class ChatResponseOutcome(BaseModel):
+    """Frozen execution output and the application's persistence outcome."""
+
+    model_config = ConfigDict(frozen=True)
+
+    response: ChatResponseSnapshot
+    persistence_status: PersistenceStatus
+
+    @property
+    def error(self) -> str | None:
+        errors = [
+            self.response.error,
+            PERSISTENCE_ERROR_MESSAGES.get(self.persistence_status),
+        ]
+        return "\n".join(error for error in errors if error) or None
+
+
+class AvailableFiles(BaseModel):
+    """Separated file IDs for the FileReaderTool so it knows which loader to use."""
+
+    # IDs from the ``user_file`` table (project / persona-attached files).
+    user_file_ids: list[UUID] = []
+    # IDs from the ``file_record`` table (chat-attached files).
+    chat_file_ids: list[UUID] = []
+
+
+class PersonaPromptConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    system_prompt: str | None
+    task_prompt: str | None
+    datetime_aware: bool
+    replace_base_system_prompt: bool
+
+
+class PreparedResponse(BaseModel):
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    llm: LLM
+    message_id: int
+    display_name: str
+
+
+class ChatTurnSetup(BaseModel):
+    """Request values and service references shared by model executions."""
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    initial_packets: list[AnswerStreamPart]
+    new_msg_req: SendMessageRequest
+    chat_session_id: UUID
+    chat_session_project_id: int | None
+    # The session's pinned recording policy. None is an ordinary chat.
+    incognito_record_mode: IncognitoRecordMode | None
+    persona_id: int
+    persona: PersonaPromptConfig
+    base_system_prompt: str
+    tool_configuration: PersonaToolConfiguration
+    research_tool_id: int | None
+    checkpoint: CompactionCheckpoint | None
+    user_message_id: int
+    user_identity: LLMUserIdentity
+    responses: list[PreparedResponse]
+    messages: list[Message]
+    input_messages: list[Message]
+    extracted_context_files: ExtractedContextFiles
+    # Fences processing status and identifies the buffered stream.
+    processing_key: int
+    reserved_token_count: int
+    reasoning_effort: ReasoningEffort
+    search_params: SearchParams
+    all_injected_file_metadata: dict[str, FileToolMetadata]
+    available_files: AvailableFiles
+    forced_tool_id: int | None
+    chat_files_for_tools: list[ChatFile]
+    custom_agent_prompt: str | None
+    user_memory_context: UserMemoryContext
+    # For deep research: was the last assistant message a clarification request?
+    skip_clarification: bool
+    cache: CacheBackend
+    # Execution params forwarded to per-model tool construction
+    bypass_acl: bool
+    slack_context: SlackContext | None
+    custom_tool_additional_headers: dict[str, str] | None
+    mcp_headers: dict[str, str] | None

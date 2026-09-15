@@ -3,6 +3,7 @@
 from collections.abc import Callable, Generator, Iterator
 from typing import Any
 
+from onyx.agents.tools import ToolInvocation
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import LLM, GenerationContext, LLMConfig, LLMInfo
 from onyx.llm.litellm_models import (
@@ -19,8 +20,7 @@ from onyx.llm.models import (
     ToolResult,
 )
 from onyx.llm.multi_llm import LitellmLLM, LitellmTransport
-from onyx.server.query_and_chat.placement import Placement
-from onyx.tools.interface import Tool
+from onyx.tools.interface import FunctionToolDefinition, Tool, ToolContext
 
 
 class ScriptedTransport(LitellmTransport):
@@ -97,7 +97,7 @@ class FakeModelClient(LLM):
         yield GenerationDoneEvent(message=self.invoke(request, context))
 
 
-class EchoTool(Tool[None]):
+class EchoTool(Tool):
     @property
     def id(self) -> int:
         return 1
@@ -114,7 +114,7 @@ class EchoTool(Tool[None]):
     def display_name(self) -> str:
         return "Echo"
 
-    def tool_definition(self) -> dict[str, Any]:
+    def tool_definition(self) -> FunctionToolDefinition:
         return {
             "type": "function",
             "function": {
@@ -127,12 +127,6 @@ class EchoTool(Tool[None]):
             },
         }
 
-    def emit_start(self, placement: Placement) -> None:
-        pass
-
-    def run(
-        self, placement: Placement, override_kwargs: None, **llm_kwargs: Any
-    ) -> ToolResult:
-        assert placement.turn_index >= 0
-        assert override_kwargs is None
-        return ToolResult(details=None, content=str(llm_kwargs["value"]))
+    def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+        invocation.cancellation.check()
+        return ToolResult(content=str(invocation.arguments["value"]))

@@ -7,18 +7,23 @@ import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from alembic.script import ScriptDirectory
-from sqlalchemy import Boolean, Column, Integer, MetaData, Table, inspect, select, text
+from sqlalchemy import Column, Integer, MetaData, Table, inspect, select, text
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema
 
-from onyx.agents.transcript import AgentTranscript
-from onyx.chat.compression import _build_summary_messages
+from onyx.agents.runtime import RunSnapshot
+from onyx.agents.transcript import AgentTranscript, OperationSnapshot, RunStatus
+from onyx.chat.artifacts import project_tool_artifacts
+from onyx.chat.incognito_context import teardown_incognito_session
+from onyx.chat.models import ChatResponseSnapshot, MessagePresentation, PresentationMode
+from onyx.chat.presentation import project_response
 from onyx.configs.constants import MessageType
-from onyx.db.agent_transcript import read_agent_transcript
+from onyx.db.agent_transcript import read_agent_transcript, read_chat_execution
 from onyx.db.chat import reserve_chat_response_ids
-from onyx.db.chat_history import convert_chat_history
-from onyx.db.chat_response import save_chat_turn
-from onyx.db.models import ChatMessage, ChatSession
+from onyx.db.chat_history import capture_chat_history, convert_chat_history
+from onyx.db.chat_response import save_chat_response, save_chat_turn
+from onyx.db.enums import IncognitoRecordMode
+from onyx.db.models import ChatMessage, ChatSession, Tool
 from onyx.llm.models import (
     AssistantMessage,
     TextContent,
@@ -26,7 +31,12 @@ from onyx.llm.models import (
     ThinkingContent,
     ToolCall,
     ToolResultMessage,
+    UserMessage,
 )
+from onyx.server.query_and_chat.session_loading import (
+    translate_assistant_message_to_packets,
+)
+from onyx.server.query_and_chat.streaming_models import IntermediateReportDelta
 
 
 @pytest.mark.parametrize("persist_content", [True, False])
@@ -84,21 +94,18 @@ def test_transcript_round_trip_and_content_free_policy(
         if persist_content:
             assert stored == transcript
             history = convert_chat_history(
-                chat_history=[row],
+                chat_history=capture_chat_history([row], {}, len),
                 files=[],
                 context_image_files=[],
                 additional_context=None,
                 token_counter=len,
-                tool_id_to_name_map={},
             ).messages
             assert history == transcript.messages
-            assert _build_summary_messages([row], {}) == transcript.messages
             assert history[-1].text == "Raw answer [1]."
         else:
             assert stored is None
             assert row.message == ""
             assert row.reasoning_tokens is None
-            assert _build_summary_messages([row], {}) == []
     finally:
         db_session.delete(row)
         db_session.delete(session)
@@ -120,12 +127,11 @@ def test_old_rows_keep_the_legacy_reader(db_session: Session) -> None:
     try:
         assert read_agent_transcript(row) is None
         history = convert_chat_history(
-            chat_history=[row],
+            chat_history=capture_chat_history([row], {}, len),
             files=[],
             context_image_files=[],
             additional_context=None,
             token_counter=len,
-            tool_id_to_name_map={},
         ).messages
         assert [item.text for item in history] == ["Existing answer"]
     finally:
@@ -230,54 +236,234 @@ def test_transcript_migration_is_reversible(db_session: Session) -> None:
         db_session.rollback()
 
 
-def test_environment_setting_removal_is_reversible(db_session: Session) -> None:
-    schema = f"setting_migration_{uuid4().hex}"
-    connection = db_session.connection()
+@pytest.mark.parametrize(
+    "failed,persist_content", [(False, True), (True, True), (True, False)]
+)
+def test_saved_execution_keeps_reused_call_ids_and_sibling_children_distinct(
+    db_session: Session,
+    failed: bool,
+    persist_content: bool,
+) -> None:
+
+    session = ChatSession(
+        id=uuid4(),
+        description="identified execution",
+        incognito_record_mode=None
+        if persist_content
+        else IncognitoRecordMode.USAGE_ONLY,
+    )
+    parent_tool = Tool(name="delegate", description="Delegate work")
+    leaf_tool = Tool(name="lookup", description="Read a value")
+    db_session.add_all([session, parent_tool, leaf_tool])
+    db_session.flush()
+    row = ChatMessage(
+        chat_session_id=session.id,
+        message="",
+        token_count=0,
+        message_type=MessageType.ASSISTANT,
+    )
+    db_session.add(row)
+    db_session.flush()
+
+    def child(run_id: str) -> RunSnapshot:
+        return RunSnapshot(
+            run_id=run_id,
+            input_messages=[UserMessage(content=f"Task {run_id}")],
+            parent_run_id="root",
+            parent_message_id="root:0",
+            parent_tool_call_id="reused",
+            status=RunStatus.COMPLETE,
+            messages=[
+                AssistantMessage(
+                    content=[ToolCall(id="reused", name="lookup", arguments={})]
+                ),
+                ToolResultMessage(
+                    tool_call_id="reused", tool_name="lookup", content=run_id
+                ),
+                AssistantMessage(content=[TextContent(text=f"Report {run_id}")]),
+            ],
+            operations=[
+                OperationSnapshot(
+                    step_index=0, message_index=0, status=RunStatus.COMPLETE
+                ),
+                OperationSnapshot(
+                    step_index=0,
+                    message_index=0,
+                    tool_call_id="reused",
+                    status=RunStatus.COMPLETE,
+                ),
+                OperationSnapshot(
+                    step_index=1, message_index=2, status=RunStatus.COMPLETE
+                ),
+            ],
+        )
+
+    snapshot = RunSnapshot(
+        run_id="root",
+        input_messages=[UserMessage(content="Root question")],
+        status=RunStatus.ERROR if failed else RunStatus.COMPLETE,
+        children=[child("left"), child("right")],
+        messages=[
+            AssistantMessage(
+                content=[ToolCall(id="reused", name="delegate", arguments={})]
+            ),
+            ToolResultMessage(
+                tool_call_id="reused", tool_name="delegate", content="First result"
+            ),
+            AssistantMessage(
+                content=[ToolCall(id="reused", name="delegate", arguments={})]
+            ),
+            ToolResultMessage(
+                tool_call_id="reused", tool_name="delegate", content="Second result"
+            ),
+            AssistantMessage(content=[TextContent(text="Answer")]),
+        ],
+        operations=[
+            OperationSnapshot(step_index=0, message_index=0, status=RunStatus.COMPLETE),
+            OperationSnapshot(
+                step_index=0,
+                message_index=0,
+                tool_call_id="reused",
+                status=RunStatus.COMPLETE,
+            ),
+            OperationSnapshot(step_index=1, message_index=2, status=RunStatus.COMPLETE),
+            OperationSnapshot(
+                step_index=1,
+                message_index=2,
+                tool_call_id="reused",
+                status=RunStatus.COMPLETE,
+            ),
+            OperationSnapshot(step_index=2, message_index=4, status=RunStatus.COMPLETE),
+        ],
+    )
+    artifacts = project_tool_artifacts(
+        snapshot, {"delegate": parent_tool.id, "lookup": leaf_tool.id}
+    )
+    projected = project_response(
+        snapshot,
+        response_id=row.id,
+        tool_ids={"delegate": parent_tool.id, "lookup": leaf_tool.id},
+    )
+    db_session.commit()
     try:
-        connection.execute(CreateSchema(schema))
-        connection.execute(
-            text("SELECT set_config('search_path', :schema, true)"), {"schema": schema}
+        save_chat_response(
+            message_id=row.id,
+            response=ChatResponseSnapshot(
+                error="Provider failed after tool acceptance" if failed else None,
+                answer="Answer",
+                reasoning=None,
+                request_params=None,
+                tool_calls=artifacts.tool_calls,
+                citation_to_doc={},
+                all_search_docs={},
+                is_clarification=False,
+                pre_answer_processing_time=None,
+                transcript=projected.transcript,
+                presentation=[
+                    MessagePresentation(
+                        run_id=run_id, step_index=1, mode=PresentationMode.REPORT
+                    )
+                    for run_id in ("left", "right")
+                ],
+                cancelled=False,
+            ),
         )
-        settings = Table(
-            "security_settings",
-            MetaData(),
-            Column("id", Integer, primary_key=True),
-            Column("llm_custom_config_env_injection", Boolean, nullable=True),
+        db_session.expire(row)
+        if not persist_content:
+            assert row.message == ""
+            assert row.error == "The model encountered an error."
+            assert row.agent_transcript is None
+            assert not row.tool_calls
+            assert not row.search_docs
+            assert row.token_count > 0
+            return
+        assert row.message == "Answer"
+        assert row.error == (
+            "Provider failed after tool acceptance" if failed else None
         )
-        settings.create(connection)
-        connection.execute(
-            settings.insert().values(id=1, llm_custom_config_env_injection=True)
+        record = read_chat_execution(row)
+        assert record is not None
+        assert len(record.tool_records) == 4
+        assert len({reference.record_id for reference in record.tool_records}) == 4
+        assert {
+            (reference.message_id, reference.tool_call_id)
+            for reference in record.tool_records
+        } == {
+            ("root:0", "reused"),
+            ("root:1", "reused"),
+            ("left:0", "reused"),
+            ("right:0", "reused"),
+        }
+        packets = translate_assistant_message_to_packets(row, db_session)
+        reports = [
+            packet
+            for packet in packets
+            if isinstance(packet.obj, IntermediateReportDelta)
+        ]
+        assert len(reports) == 2
+        assert {
+            packet.identity.run_id for packet in reports if packet.identity is not None
+        } == {"left", "right"}
+        assert all(
+            packet.identity is not None
+            and packet.identity.parent_message_id == "root:0"
+            and packet.identity.parent_tool_call_id == "reused"
+            for packet in reports
         )
-        scripts = ScriptDirectory(str(Path(__file__).resolve().parents[3] / "alembic"))
-        revision = scripts.get_revision("7930b74f92fb")
-        assert revision is not None
-        with Operations.context(MigrationContext.configure(connection)):
-            revision.module.upgrade()
-            assert [
-                column["name"]
-                for column in inspect(connection).get_columns(
-                    "security_settings", schema=schema
-                )
-            ] == ["id"]
-            revision.module.downgrade()
-            columns = {
-                column["name"]: column
-                for column in inspect(connection).get_columns(
-                    "security_settings", schema=schema
-                )
-            }
-            assert columns["llm_custom_config_env_injection"]["nullable"]
-            assert (
-                connection.scalar(select(settings.c.llm_custom_config_env_injection))
-                is None
-            )
-            revision.module.upgrade()
-            assert [
-                column["name"]
-                for column in inspect(connection).get_columns(
-                    "security_settings", schema=schema
-                )
-            ] == ["id"]
-            assert connection.scalar(select(settings.c.id)) == 1
+        stored_transcript = read_agent_transcript(row)
+        assert stored_transcript is not None
+        assert stored_transcript.input_messages == []
+        assert [
+            child.input_messages[0].text for child in stored_transcript.children
+        ] == ["Task left", "Task right"]
+        expected = snapshot.transcript()
+        expected.input_messages.clear()
+        assert stored_transcript == expected
     finally:
-        db_session.rollback()
+        if not persist_content:
+            teardown_incognito_session(session.id)
+        db_session.delete(row)
+        db_session.delete(session)
+        db_session.delete(parent_tool)
+        db_session.delete(leaf_tool)
+        db_session.commit()
+
+
+@pytest.mark.parametrize("answer", [None, "Partial answer"])
+def test_execution_error_is_saved_from_response_snapshot(
+    db_session: Session,
+    answer: str | None,
+) -> None:
+    session = ChatSession(id=uuid4(), description="failed response")
+    db_session.add(session)
+    db_session.flush()
+    row = ChatMessage(
+        chat_session_id=session.id,
+        message="",
+        token_count=0,
+        message_type=MessageType.ASSISTANT,
+    )
+    db_session.add(row)
+    db_session.commit()
+    response = ChatResponseSnapshot(
+        answer=answer,
+        reasoning=None,
+        request_params=None,
+        citation_to_doc={},
+        tool_calls=[],
+        is_clarification=False,
+        all_search_docs={},
+        pre_answer_processing_time=None,
+        transcript=None,
+        cancelled=False,
+        error="Generation failed",
+    )
+    try:
+        save_chat_response(message_id=row.id, response=response)
+        db_session.refresh(row)
+        assert row.error == response.error
+        assert row.message == (answer or "")
+    finally:
+        db_session.delete(row)
+        db_session.delete(session)
+        db_session.commit()

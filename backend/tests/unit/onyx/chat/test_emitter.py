@@ -46,7 +46,7 @@ def _packet(
 def _make_emitter(model_idx: int = 0) -> tuple["Emitter", "queue.Queue"]:
     """Return (emitter, queue) wired together."""
     mq: queue.Queue = queue.Queue()
-    return Emitter(merged_queue=mq, model_idx=model_idx), mq
+    return Emitter(merged_queue=mq, model_idx=model_idx, response_id=42), mq
 
 
 # ---------------------------------------------------------------------------

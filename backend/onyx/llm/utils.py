@@ -16,7 +16,7 @@ from onyx.configs.app_configs import (
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.models import LLMProvider, ModelConfiguration
-from onyx.llm.exceptions import ClassifiedLLMError, LLMErrorInfo
+from onyx.llm.exceptions import ClassifiedLLMError, LLMContextLimitError, LLMErrorInfo
 from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
 from onyx.llm.model_capabilities import (
     catalog_model_supports_image_input,
@@ -172,7 +172,7 @@ def litellm_exception_to_error_msg(
 
     # Both subclass BadRequestError, so they must precede the BadRequestError
     # branch or they'd be misclassified as BAD_REQUEST.
-    if isinstance(core_exception, ContextWindowExceededError):
+    if isinstance(core_exception, (ContextWindowExceededError, LLMContextLimitError)):
         error_msg = (
             "Context window exceeded: Your input is too long for the model to process."
         )
