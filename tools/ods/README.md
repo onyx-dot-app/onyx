@@ -1012,10 +1012,21 @@ and in `tools/requirements/build-constraints.in`, and the compiled `build-constr
 
 Releases are deployed automatically when git tags prefaced with `ods/` are pushed to [GitHub](https://github.com/onyx-dot-app/onyx/tags).
 
-The [release-tag](https://pypi.org/project/release-tag/) package can be used to calculate and push the next tag automatically,
+`ods release ods` calculates and pushes the next tag for you,
 
 ```shell
-tag --prefix ods
+ods release ods              # bumps the patch version
+ods release ods --bump minor
+ods release ods --version 0.14.0
+ods release ods --dry-run    # computes the version, tags nothing
 ```
+
+The workflow also opens a PR moving every `onyx-devtools==` pin in the repo to
+the new version, so no follow-up commit is needed.
+
+> [!IMPORTANT]
+> `ods release` tags **`HEAD`**, not `main`, and does not check which branch you
+> are on. Compare `git rev-parse HEAD` with `git rev-parse origin/main` first.
+> Tagging from a stale branch publishes that branch under the new version.
 
 See also, [`.github/workflows/release-devtools.yml`](https://github.com/onyx-dot-app/onyx/blob/main/.github/workflows/release-devtools.yml).

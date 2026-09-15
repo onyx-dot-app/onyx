@@ -63,7 +63,9 @@ Example usage:
 	cmd.Flags().StringVar(&ref, "ref", "HEAD", "Tag to check, or a commit-ish that a single release tag points at")
 
 	cmd.AddCommand(NewReleaseBetaCommand())
+	cmd.AddCommand(NewReleaseCLICommand())
 	cmd.AddCommand(NewReleaseClassifyCommand())
+	cmd.AddCommand(NewReleaseODSCommand())
 	cmd.AddCommand(NewReleaseOpalCommand())
 	cmd.AddCommand(NewReleaseTFProviderCommand())
 
