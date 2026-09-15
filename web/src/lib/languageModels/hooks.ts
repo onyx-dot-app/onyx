@@ -300,6 +300,12 @@ export function useCustomProviderNames() {
 }
 
 export interface DefaultLlmReference {
+  /**
+   * The provider row this default belongs to. `llm_provider.name` carries no
+   * unique constraint, so two providers can share a display name and a
+   * name-only lookup silently picks the wrong one. Always key off this.
+   */
+  providerId: number;
   providerName: string;
   modelName: string;
 }
@@ -364,7 +370,11 @@ export function useLlmDefaults(): LlmDefaults {
       const provider = llmProviders.find((p) => p.id === raw.provider_id);
       if (!provider) return null;
       if (!provider.name) return null;
-      return { providerName: provider.name, modelName: raw.model_name };
+      return {
+        providerId: provider.id,
+        providerName: provider.name,
+        modelName: raw.model_name,
+      };
     },
     [llmProviders]
   );
