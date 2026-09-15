@@ -174,11 +174,6 @@ export function buildIncludeAttachmentsOption(
   };
 }
 
-// The calendar window fields only matter once calendars are on.
-function calendarEnabled(values: { include_calendar?: boolean }): boolean {
-  return values.include_calendar === true;
-}
-
 export const connectorConfigs: Record<
   ConfigurableSources,
   ConnectionConfiguration
@@ -1119,10 +1114,10 @@ export const connectorConfigs: Record<
         name: "calendar_past_days",
         optional: true,
         default: 365,
-        visibleCondition: calendarEnabled,
         description:
-          "How far back the calendar window reaches. Events before it are not " +
-          "indexed and drop out as the window moves forward.",
+          "Used when Include Calendar is on. How far back the calendar window " +
+          "reaches. Events before it are not indexed and drop out as the window " +
+          "moves forward.",
       },
       {
         type: "number",
@@ -1131,8 +1126,9 @@ export const connectorConfigs: Record<
         name: "calendar_future_days",
         optional: true,
         default: 180,
-        visibleCondition: calendarEnabled,
-        description: "How far ahead the calendar window reaches.",
+        description:
+          "Used when Include Calendar is on. How far ahead the calendar window " +
+          "reaches.",
       },
       {
         type: "text",
