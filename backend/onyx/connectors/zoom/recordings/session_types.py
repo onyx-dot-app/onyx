@@ -74,8 +74,8 @@ class SessionTypeHandler(abc.ABC):
 
     @abc.abstractmethod
     def fetch_access_list(self, client: ZoomClient, work: OccurrenceWork) -> set[str]:
-        """An empty set means no source could name anybody, which the caller
-        turns into document-set and group access rather than an empty ACL."""
+        """Must raise ZoomAccessListUnavailable rather than answer with an empty
+        set, which would read as nobody having access."""
         raise NotImplementedError
 
 

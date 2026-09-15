@@ -12,6 +12,7 @@ from onyx.connectors.zoom.models import (
     ZoomRegistrant,
 )
 from onyx.connectors.zoom.recordings.access import (
+    ZoomAccessListUnavailable,
     permanently_unavailable,
     zoom_access_resolver,
 )
@@ -146,7 +147,8 @@ class TestCancelledRegistrations:
             registrants=[registrant(email="denied@example.com", status="denied")]
         )
 
-        assert _resolve(client, _work()) is None
+        with pytest.raises(ZoomAccessListUnavailable):
+            _resolve(client, _work())
 
 
 class TestExternalInvitees:
@@ -180,12 +182,13 @@ class TestBlankEmails:
 
         assert _resolve(client, _work()) == {"real@example.com"}
 
-    def test_all_blank_emails_fall_back_instead_of_hiding_the_document(self) -> None:
+    def test_all_blank_emails_fail_the_document(self) -> None:
+        """Indexing it anyway would put the session on connector-level access,
+        readable by the connector's audience rather than by who was on the call."""
         client = _client(participants=[participant(user_email="")])
 
-        # None means no access list, so document-set and group access applies.
-        # An empty access list would hide the document from everyone.
-        assert _resolve(client, _work()) is None
+        with pytest.raises(ZoomAccessListUnavailable):
+            _resolve(client, _work())
 
 
 class TestWebinarSources:
@@ -305,10 +308,27 @@ class TestPermanentVersusTransientFailures:
         with pytest.raises(InsufficientPermissionsError):
             _resolve(client, _work())
 
-    def test_every_source_gone_falls_back(self) -> None:
+    def test_every_source_gone_fails_the_document(self) -> None:
         client = _client()
         client.list_past_meeting_participants.side_effect = _http_error(400, 12702)
         client.list_meeting_registrants.side_effect = _http_error(404)
         client.list_meeting_invitees.side_effect = _http_error(404)
 
-        assert _resolve(client, _work()) is None
+        with pytest.raises(ZoomAccessListUnavailable):
+            _resolve(client, _work())
+
+    def test_the_failure_repeats_what_each_source_said(self) -> None:
+        client = _client()
+        client.list_past_meeting_participants.side_effect = _http_error(400, 12702)
+        client.list_meeting_registrants.side_effect = _http_error(404)
+        client.list_meeting_invitees.side_effect = _http_error(404)
+
+        with pytest.raises(ZoomAccessListUnavailable) as raised:
+            _resolve(client, _work())
+
+        message = str(raised.value)
+        assert "participants" in message
+        assert "registrants" in message
+        assert "invitees" in message
+        # Every source's own error, not just the first one to fail.
+        assert message.count("boom") == 3

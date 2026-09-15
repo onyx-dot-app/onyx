@@ -1,12 +1,12 @@
 """Builds a document access list from the people Zoom recorded on a Session.
 
 Zoom has no sharing API, so access is inferred from who attended, who registered
-and who was invited. Zoom returns an empty email for anyone outside the host's
-account, and those people are dropped because nobody can be granted access
-without an address. Zoom also deletes this data after a retention window and
-then answers with an error instead of an empty list, so that error means "no
-data" here and never becomes a document failure. Returning None leaves the
-document on document-set and group access.
+and who was invited. Anyone outside the host's account comes back with an empty
+email and is dropped, because nobody can be granted access without an address.
+Zoom also deletes this data after a retention window and then answers with an
+error rather than an empty list. A session nobody can be named for fails as a
+document instead of being indexed, since indexing it would hand the transcript
+to the connector's whole audience rather than to the people on the call.
 """
 
 from collections.abc import Callable
@@ -107,13 +107,23 @@ def _usable_emails(description: str, emails: list[str]) -> set[str]:
 AccessSource = tuple[str, Callable[[], list[str]]]
 
 
+class ZoomAccessListUnavailable(Exception):
+    """No source could name anybody who may read a session.
+
+    The message repeats what every source said, so an admin can tell a retention
+    expiry from a missing add-on. It must stay something `fails_the_whole_run`
+    does not recognise, or one unreadable session would end the whole attempt.
+    """
+
+
 def union_source_emails(sources: list[AccessSource]) -> set[str]:
     """A source Zoom has forgotten contributes nothing; any other failure is
     raised for the caller to turn into a document failure."""
     emails: set[str] = set()
+    reasons: list[str] = []
     for description, fetch in sources:
         try:
-            emails |= _usable_emails(description, fetch())
+            found = _usable_emails(description, fetch())
         except Exception as e:
             if not permanently_unavailable(e):
                 raise
@@ -124,6 +134,14 @@ def union_source_emails(sources: list[AccessSource]) -> set[str]:
                     "Zoom has no %s any more (deleted or past its retention window)",
                     description,
                 )
+            reasons.append(f"{description}: {e}")
+            continue
+        if not found:
+            reasons.append(f"{description}: nobody Onyx can grant access to")
+        emails |= found
+
+    if not emails:
+        raise ZoomAccessListUnavailable("; ".join(reasons))
     return emails
 
 
@@ -131,16 +149,14 @@ def zoom_access_resolver(
     client: ZoomClient,
     work: OccurrenceWork,
     handler: "SessionTypeHandler",
-) -> ExternalAccess | None:
-    emails = handler.fetch_access_list(client, work)
-    if not emails:
-        logger.warning(
-            "No Zoom access list for %s occurrence %s; falling back to "
-            "document-set and group access",
-            work.session_id,
-            work.occurrence_uuid,
-        )
-        return None
+) -> ExternalAccess:
+    try:
+        emails = handler.fetch_access_list(client, work)
+    except ZoomAccessListUnavailable as e:
+        raise ZoomAccessListUnavailable(
+            f"No Zoom access list for {work.session_id} occurrence "
+            f"{work.occurrence_uuid}. Zoom said: {e}"
+        ) from e
 
     access = ExternalAccess(
         external_user_emails=emails,
