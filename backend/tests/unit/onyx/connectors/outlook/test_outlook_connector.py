@@ -1484,7 +1484,31 @@ def test_slim_docs_list_events_collapsed_to_their_series() -> None:
         event_document_id(mailbox(), SERIES_ID),
         event_document_id(mailbox(), "exc-1"),
     ]
-    gateway.get_event.assert_not_called()
+    # One master read per series decides whether the series is listed at all.
+    gateway.get_event.assert_called_once_with(
+        mailbox_id=mailbox().id, event_id=SERIES_ID
+    )
+
+
+def test_slim_docs_leave_out_a_series_whose_master_is_excluded_or_unreadable() -> None:
+    """Indexing writes nothing for such a series, so pruning must not keep it."""
+    gateway = _calendar_gateway()
+    connector = _calendar_connector(gateway)
+
+    gateway.get_event.return_value = event(
+        id=SERIES_ID, event_type="seriesMaster", sensitivity="private"
+    )
+    ids = _slim_ids(list(connector.retrieve_all_slim_docs()))
+    assert event_document_id(mailbox(), SERIES_ID) not in ids
+    assert event_document_id(mailbox(), "exc-1") in ids
+
+    gateway.get_event.side_effect = graph_error(404, "ErrorItemNotFound")
+    ids = _slim_ids(list(connector.retrieve_all_slim_docs()))
+    assert event_document_id(mailbox(), SERIES_ID) not in ids
+
+    gateway.get_event.side_effect = graph_error(401, "InvalidAuthenticationToken")
+    with pytest.raises(OutlookGraphError):
+        list(connector.retrieve_all_slim_docs())
 
 
 @pytest.mark.parametrize("status", [403, 404])

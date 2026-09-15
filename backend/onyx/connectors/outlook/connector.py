@@ -794,10 +794,10 @@ class OutlookConnector(
     def _event_id_pages(
         self, mailbox: OutlookMailbox
     ) -> Generator[list[str], None, None]:
-        """Event document ids of the calendar window, series collapsed to their
-        master like indexing and deduplicated per page only, since pruning
-        reads the ids as a set. An unreadable master still lists its id, which
-        prunes nothing.
+        """Event document ids of the calendar window, admitted by the rule
+        indexing applies: skips on the row, and a series only when its master
+        is readable and not excluded, read once per series per mailbox. Ids
+        are deduplicated per page only, since pruning reads them as a set.
 
         A calendar that is gone or refused on its first page (404 or 403)
         lists nothing, so its events are pruned the way indexing stopped
@@ -806,6 +806,9 @@ class OutlookConnector(
         the round raises, since the ids already listed cannot be retracted.
         """
         window_start, window_end = self._calendar_window()
+        # Capped like the checkpoint's set, so a huge calendar costs repeat
+        # master reads rather than memory.
+        series_included: dict[str, bool] = {}
         next_link: str | None = None
         while True:
             try:
@@ -824,11 +827,26 @@ class OutlookConnector(
                     )
                     return
                 raise
-            event_ids = dict.fromkeys(
-                _indexed_event_id(event)
-                for event in page.events
-                if event_skip_reason(event) is None
-            )
+            event_ids: dict[str, None] = {}
+            for event in page.events:
+                if event_skip_reason(event) is not None:
+                    continue
+                series_id = _occurrence_series_id(event)
+                if series_id is None:
+                    event_ids[event.id] = None
+                    continue
+                if series_id not in series_included:
+                    included = (
+                        self._indexable_series_master(mailbox, series_id) is not None
+                    )
+                    if len(series_included) < MAX_TRACKED_SERIES_PER_MAILBOX:
+                        series_included[series_id] = included
+                elif not series_included[series_id]:
+                    continue
+                else:
+                    included = True
+                if included:
+                    event_ids[series_id] = None
             yield [event_document_id(mailbox, event_id) for event_id in event_ids]
             next_link = page.next_link
             if next_link is None:
@@ -1086,18 +1104,26 @@ class OutlookConnector(
         if series_id is not None:
             if series_id in seen_series_ids:
                 return None
-            master = self._series_master(mailbox, series_id)
+            master = self._indexable_series_master(mailbox, series_id)
             if len(seen_series_ids) < MAX_TRACKED_SERIES_PER_MAILBOX:
                 seen_series_ids.add(series_id)
             if master is None:
                 return None
-            # Occurrence rows carry their master's sensitivity and cancellation,
-            # so the row check above is what pruning sees too. The master is
-            # checked as well, since its text is what gets indexed.
-            if event_skip_reason(master) is not None:
-                return None
             event = master
         return build_event_document(mailbox, event)
+
+    def _indexable_series_master(
+        self, mailbox: OutlookMailbox, series_id: str
+    ) -> OutlookEvent | None:
+        """The master of a series when it is readable and not excluded, None
+        otherwise. Indexing writes a series from it and pruning lists a series
+        by it, so both admit a series by the same rule. Occurrence rows mirror
+        their master, but the master's text is what gets indexed, so it is
+        checked in its own right."""
+        master = self._series_master(mailbox, series_id)
+        if master is None or event_skip_reason(master) is not None:
+            return None
+        return master
 
     def _changed_since(
         self, event: OutlookEvent, modified_after: datetime | None
