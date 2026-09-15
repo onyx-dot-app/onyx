@@ -2,11 +2,28 @@
 database, so it is what a child process may run."""
 
 from io import BytesIO
+from pathlib import Path
+from unittest.mock import patch
 
 import openpyxl
 import pytest
 
 from onyx.file_processing.extract_file_text import extract_file_text_locally
+
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def test_pdfium_runs_in_process_when_the_caller_is_already_isolated() -> None:
+    with (
+        FIXTURES.joinpath("multipage.pdf").open("rb") as pdf,
+        patch(
+            "onyx.file_processing.extract_file_text.run_in_isolated_process"
+        ) as isolated,
+    ):
+        text = extract_file_text_locally(pdf, "multipage.pdf", isolate_pdfium=False)
+
+    assert text.strip()
+    isolated.assert_not_called()
 
 
 def _workbook_bytes() -> bytes:

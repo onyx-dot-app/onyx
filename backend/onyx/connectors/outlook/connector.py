@@ -114,8 +114,8 @@ MAX_ATTACHMENTS_PER_MESSAGE = 20
 MAX_ATTACHMENT_TEXT_PER_CONVERSATION = 1_000_000
 MAX_ATTACHMENT_READS_PER_CONVERSATION = 25
 
-# The deadline of the child process that parses everything but PDFs, which
-# the shared PDF reader already runs under its own.
+# The deadline of the child process that parses an attachment, PDFium and the
+# pypdf fallback included.
 ATTACHMENT_EXTRACTION_TIMEOUT_SECONDS = 120
 
 
@@ -272,9 +272,11 @@ class AttachmentBudget:
 
 def extract_attachment_text(data: bytes, name: str, cap: int) -> str:
     """Runs in a child process: the in-process parsers only, since the
-    Unstructured key lives in a database the child cannot reach, and the cap
-    applied here so the parent never receives more text than it keeps."""
-    return extract_file_text_locally(BytesIO(data), name).strip()[:cap]
+    Unstructured key lives in a database the child cannot reach, PDFium in
+    this process so no grandchild outlives it, and the cap applied here so the
+    parent never receives more text than it keeps."""
+    text = extract_file_text_locally(BytesIO(data), name, isolate_pdfium=False)
+    return text.strip()[:cap]
 
 
 def build_conversation_document(
@@ -899,10 +901,6 @@ class OutlookConnector(
         # A parser refusing the file, a crash and a timeout all cost this
         # attachment only, the way break_on_unprocessable=False would.
         try:
-            if get_file_ext(attachment.name) == ".pdf":
-                # read_pdf_file isolates PDFium itself. A second layer would
-                # orphan that child when the outer one is killed.
-                return extract_attachment_text(data, attachment.name, budget.text)
             return run_in_isolated_process(
                 extract_attachment_text,
                 data,

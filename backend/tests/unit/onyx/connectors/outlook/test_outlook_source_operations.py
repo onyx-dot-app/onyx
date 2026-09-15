@@ -682,6 +682,27 @@ def test_unopenable_pfx_is_an_invalid_certificate() -> None:
     assert exc_info.value.code == INVALID_CERTIFICATE_CODE
 
 
+def test_pfx_that_is_not_base64_is_an_invalid_certificate() -> None:
+    gateway, _ = _gateway(
+        {
+            "authentication_method": "certificate",
+            "outlook_client_id": "client-id",
+            "outlook_directory_id": "tenant-id",
+            "outlook_private_key": "é",
+            "outlook_certificate_password": "pass",
+        }
+    )
+
+    with (
+        patch(f"{MODULE}.build_msal_app") as build,
+        pytest.raises(OutlookAuthError) as exc_info,
+    ):
+        gateway.check_token()
+
+    assert exc_info.value.code == INVALID_CERTIFICATE_CODE
+    build.assert_not_called()
+
+
 def test_attachment_listing_selects_records_without_bytes() -> None:
     gateway, client = _gateway()
     client.get_json.return_value = page_json(

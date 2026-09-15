@@ -212,12 +212,14 @@ def read_text_file(
     return file_content_raw, metadata
 
 
-def pdf_to_text(file: IO[Any], pdf_pass: str | None = None) -> str:
+def pdf_to_text(
+    file: IO[Any], pdf_pass: str | None = None, isolate_pdfium: bool = True
+) -> str:
     """
     Extract text from a PDF. For embedded images, a more complex approach is needed.
     This is a minimal approach returning text only.
     """
-    text, _, _ = read_pdf_file(file, pdf_pass)
+    text, _, _ = read_pdf_file(file, pdf_pass, isolate_pdfium=isolate_pdfium)
     return text
 
 
@@ -253,9 +255,14 @@ def read_pdf_file(
     pdf_pass: str | None = None,
     extract_images: bool = False,
     image_callback: Callable[[bytes, str], None] | None = None,
+    isolate_pdfium: bool = True,
 ) -> tuple[str, dict[str, Any], Sequence[tuple[bytes, str]]]:
     """
     Returns the text, basic PDF metadata, and optionally extracted images.
+
+    ``isolate_pdfium=False`` is for a caller that is itself a child process
+    under a deadline: a child of a child is orphaned when the outer one is
+    killed, so PDFium runs in the caller's process instead.
     """
     from pypdf import PdfReader
     from pypdf.errors import PdfStreamError
@@ -305,12 +312,15 @@ def read_pdf_file(
         # PDFium can hard-abort or hang on a malformed PDF (uncatchable in-process),
         # so run it isolated; a crash, timeout, or PdfiumError falls back to pypdf.
         try:
-            text = run_in_isolated_process(
-                _extract_pdf_text_pdfium,
-                file_bytes,
-                decrypt_password,
-                timeout=PDF_TEXT_EXTRACTION_TIMEOUT_SECONDS,
-            )
+            if isolate_pdfium:
+                text = run_in_isolated_process(
+                    _extract_pdf_text_pdfium,
+                    file_bytes,
+                    decrypt_password,
+                    timeout=PDF_TEXT_EXTRACTION_TIMEOUT_SECONDS,
+                )
+            else:
+                text = _extract_pdf_text_pdfium(file_bytes, decrypt_password)
         except (PdfiumError, IsolatedProcessError) as pdfium_err:
             logger.warning(
                 "PDFium text extraction failed (%s); falling back to pypdf",
@@ -784,16 +794,19 @@ def extract_file_text(
 
 
 def extract_file_text_locally(
-    file: IO[Any], file_name: str, extension: str | None = None
+    file: IO[Any],
+    file_name: str,
+    extension: str | None = None,
+    isolate_pdfium: bool = True,
 ) -> str:
     """Text by extension from the in-process parsers only.
 
     Never reaches the database or Redis (the Unstructured key lives there), so
     it can run in a child process that has neither. Raises on a file no parser
-    accepts.
+    accepts. See ``read_pdf_file`` for ``isolate_pdfium``.
     """
     extension_to_function: dict[str, Callable[[IO[Any]], str]] = {
-        ".pdf": pdf_to_text,
+        ".pdf": lambda f: pdf_to_text(f, isolate_pdfium=isolate_pdfium),
         ".docx": lambda f: read_docx_file(f, file_name)[0],  # no images
         ".pptx": lambda f: pptx_to_text(f, file_name),
         ".xlsx": lambda f: xlsx_to_text(f, file_name),

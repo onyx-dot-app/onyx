@@ -9,7 +9,7 @@ Application permissions this gateway needs: ``Mail.Read`` for folders and
 messages, ``User.Read.All`` to enumerate and resolve mailboxes.
 """
 
-import binascii
+import base64
 import json
 import re
 from collections.abc import Generator
@@ -324,6 +324,13 @@ class OutlookSourceOperations(SourceOperations):
                 raise OutlookAuthError(
                     MISSING_CREDENTIAL_CODE, "missing " + ", ".join(missing)
                 )
+            if method is MicrosoftAuthMethod.CERTIFICATE:
+                # Decoded here first, so a PFX that is not base64 reads as a
+                # bad upload and not as the bad directory id MSAL would report.
+                try:
+                    base64.b64decode(credentials[CREDENTIAL_PRIVATE_KEY])
+                except ValueError as e:
+                    raise OutlookAuthError(INVALID_CERTIFICATE_CODE, str(e)) from e
             # MSAL checks the authority against Microsoft's discovery endpoint
             # while building the app. 400 means a bad directory id. 429, 5xx or
             # an unreadable body is the service's fault. A bad PFX is a RuntimeError.
@@ -341,9 +348,6 @@ class OutlookSourceOperations(SourceOperations):
                         CREDENTIAL_CERTIFICATE_PASSWORD
                     ),
                 )
-            except binascii.Error as e:
-                # The stored PFX is not base64, so the upload is what is bad.
-                raise OutlookAuthError(INVALID_CERTIFICATE_CODE, str(e)) from e
             except ValueError as e:
                 if _is_decode_error(e) or _msal_http_status(e) == 429:
                     raise _msal_error(e) from e

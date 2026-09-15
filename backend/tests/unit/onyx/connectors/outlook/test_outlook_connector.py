@@ -937,29 +937,6 @@ def test_failed_extractions_spend_the_read_budget() -> None:
     )
 
 
-def test_pdf_attachments_skip_the_outer_isolation() -> None:
-    """The shared PDF reader isolates PDFium itself, so a second child process
-    would only leave that one orphaned on a timeout."""
-    gateway = _attachment_gateway()
-    gateway.list_message_attachments.return_value = [attachment(name="report.pdf")]
-    connector = _attachment_connector(gateway)
-
-    with (
-        patch(f"{CONNECTOR_MODULE}.run_in_isolated_process") as isolated,
-        patch(
-            f"{CONNECTOR_MODULE}.extract_attachment_text", return_value="Page one"
-        ) as extract,
-    ):
-        items, _ = _step(connector, _folder_checkpoint())
-
-    docs = [item for item in items if isinstance(item, Document)]
-    assert docs[0].sections[2].text == "Attachment: report.pdf\n\nPage one"
-    isolated.assert_not_called()
-    extract.assert_called_once_with(
-        b"PK", "report.pdf", MAX_ATTACHMENT_TEXT_PER_CONVERSATION
-    )
-
-
 def test_attachment_skip_reasons() -> None:
     assert attachment_skip_reason(attachment()) is None
     assert attachment_skip_reason(attachment(is_file=False)) == "not a file attachment"
