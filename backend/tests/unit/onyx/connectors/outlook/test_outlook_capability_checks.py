@@ -45,6 +45,7 @@ from tests.unit.onyx.connectors.outlook.outlook_api_shapes import (
     INBOX_ID,
     MAILBOX_ADDRESS,
     MAILBOX_ID,
+    event,
     folder,
     graph_error,
     mailbox,
@@ -465,6 +466,7 @@ def test_calendar_check_passes_without_a_call_when_calendars_are_off() -> None:
 def test_calendar_check_reads_one_page_of_a_two_day_window() -> None:
     gateway = _gateway()
     gateway.fetch_calendar_delta_page.return_value = OutlookEventPage(events=[])
+    gateway.read_any_event.return_value = event()
 
     _run(
         "outlook_calendar_read",
@@ -475,7 +477,18 @@ def test_calendar_check_reads_one_page_of_a_two_day_window() -> None:
     assert kwargs["mailbox_id"] == MAILBOX_ID
     assert kwargs["page_size"] == 1
     assert kwargs["window_end"] - kwargs["window_start"] == timedelta(days=2)
+    gateway.read_any_event.assert_called_once_with(mailbox_id=MAILBOX_ID)
     gateway.resolve_mailbox.assert_called_once_with(address=MAILBOX_ADDRESS)
+
+
+def test_calendar_check_tells_read_basic_apart_from_read() -> None:
+    """Calendars.ReadBasic.All answers the view and refuses only the body."""
+    gateway = _gateway()
+    gateway.fetch_calendar_delta_page.return_value = OutlookEventPage(events=[])
+    gateway.read_any_event.side_effect = graph_error(403)
+
+    with pytest.raises(InsufficientPermissionsError, match="ReadBasic"):
+        _run("outlook_calendar_read", _context(gateway, {"include_calendar": True}))
 
 
 def test_calendar_check_names_the_missing_grant_on_403() -> None:

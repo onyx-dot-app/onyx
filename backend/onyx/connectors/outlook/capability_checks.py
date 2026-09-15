@@ -262,11 +262,19 @@ class _MailReadCheck(CapabilityCheck):
 
 _CONFIG_INCLUDE_CALENDAR = "include_calendar"
 
+# Calendars.ReadBasic.All lists events but withholds their bodies, so the
+# calendar probe must read one body to tell the two grants apart.
+_EVENT_BODY_DENIED = (
+    "The app can list events but not read their bodies. "
+    "`Calendars.ReadBasic.All` is not enough, grant `Calendars.Read`."
+)
+
 
 class _CalendarReadCheck(CapabilityCheck):
     """Reads one page of one mailbox's calendar view, the call indexing makes,
-    which proves ``Calendars.Read``. A connector that does not index calendars
-    needs no such grant, so the check passes without a call for it."""
+    then one event with its body, which ``Calendars.ReadBasic.All`` withholds.
+    Together they prove ``Calendars.Read``. A connector that does not index
+    calendars needs no such grant, so the check passes without a call for it."""
 
     def __init__(self) -> None:
         super().__init__(
@@ -298,6 +306,12 @@ class _CalendarReadCheck(CapabilityCheck):
                 f"The app cannot read the calendar of `{mailbox.address}`.",
                 CALENDAR_READ_REMEDIATION,
             )
+        # An empty calendar proves the listing only. One with events proves
+        # the body too.
+        try:
+            gateway.read_any_event(mailbox_id=mailbox.id)
+        except OutlookGraphError as e:
+            raise_for_graph_error(e, _EVENT_BODY_DENIED, CALENDAR_READ_REMEDIATION)
 
 
 class _ConfiguredMailboxesCheck(CapabilityCheck):

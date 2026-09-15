@@ -22,6 +22,9 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from babel.core import get_global
 
 from onyx.configs.app_configs import (
     INDEX_BATCH_SIZE,
@@ -328,16 +331,32 @@ def event_skip_reason(event: OutlookEvent) -> str | None:
     return None
 
 
+def _scheduled_zone(windows_name: str | None) -> ZoneInfo | None:
+    """The IANA zone behind the Windows zone name Graph reports, through the
+    CLDR mapping Babel ships. None for a name it does not know."""
+    iana = get_global("windows_zone_mapping").get(windows_name or "")
+    if not isinstance(iana, str):
+        return None
+    try:
+        return ZoneInfo(iana)
+    except ZoneInfoNotFoundError:
+        return None
+
+
 def _format_event_time(event: OutlookEvent) -> str | None:
     if event.start_at is None:
         return None
     if event.is_all_day:
-        # Graph ends an all-day event at midnight of the day after.
-        last = event.start_at
+        # Graph gives an all-day event as midnight to midnight, converted to
+        # UTC, so its dates are only right read back in the zone it was
+        # scheduled in. It ends at midnight of the day after.
+        zone = _scheduled_zone(event.time_zone) or timezone.utc
+        first_day = event.start_at.astimezone(zone).date().isoformat()
+        last_day = first_day
         if event.end_at is not None:
-            last = event.end_at - timedelta(days=1)
-        first_day = event.start_at.date().isoformat()
-        last_day = last.date().isoformat()
+            last_day = (
+                (event.end_at.astimezone(zone) - timedelta(days=1)).date().isoformat()
+            )
         if last_day <= first_day:
             return f"{first_day} (all day)"
         return f"{first_day} to {last_day} (all day)"
@@ -1071,10 +1090,13 @@ class OutlookConnector(
         if series_id is not None:
             if series_id in seen_series_ids:
                 return None
+            # Whether a series is indexed was decided on its occurrence row
+            # above, the same row pruning sees. The master only supplies the
+            # text and the recurrence.
             master = self._series_master(mailbox, series_id)
             if len(seen_series_ids) < MAX_TRACKED_SERIES_PER_MAILBOX:
                 seen_series_ids.add(series_id)
-            if master is None or event_skip_reason(master) is not None:
+            if master is None:
                 return None
             event = master
         return build_event_document(mailbox, event)

@@ -818,6 +818,29 @@ class OutlookSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "The calendar check reads one event body with it, but only when the "
+            "connector config turns calendars on, which the coverage harness's "
+            "empty config never does."
+        ),
+    )
+    def read_any_event(self, *, mailbox_id: str) -> OutlookEvent | None:
+        """One event from the mailbox's calendar with its body, or None when
+        the calendar holds none.
+
+        Calendars.ReadBasic.All lists events but withholds bodies, so this is
+        the call that tells it apart from Calendars.Read.
+        """
+        raw = self._first_item(
+            f"{self._user_url(mailbox_id)}/events",
+            {"$select": "id,subject,body", "$top": "1"},
+            {"Prefer": EVENT_PREFERENCES},
+        )
+        return _parse_event(raw) if raw else None
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
     )
     def read_any_message(self, *, mailbox_id: str) -> OutlookMessage | None:
         """One message from anywhere in the mailbox with the fields indexing

@@ -1413,6 +1413,31 @@ def test_all_day_and_multi_day_events_read_as_dates() -> None:
     assert when(overnight) == "When: 2026-09-02 22:00 to 2026-09-03 01:00 UTC"
 
 
+def test_all_day_dates_are_read_in_the_zone_they_were_scheduled_in() -> None:
+    """Graph converts an all-day event's midnights to UTC, so a Tokyo
+    September 2 starts on September 1 in UTC."""
+    tokyo = event(
+        is_all_day=True,
+        start_at=datetime(2026, 9, 1, 15, 0, tzinfo=timezone.utc),
+        end_at=datetime(2026, 9, 2, 15, 0, tzinfo=timezone.utc),
+        time_zone="Tokyo Standard Time",
+    )
+    unknown_zone = event(
+        is_all_day=True,
+        start_at=datetime(2026, 9, 1, 15, 0, tzinfo=timezone.utc),
+        end_at=datetime(2026, 9, 2, 15, 0, tzinfo=timezone.utc),
+        time_zone="tzone://Microsoft/Custom",
+    )
+
+    def when(e: OutlookEvent) -> str:
+        text = build_event_document(mailbox(), e).sections[0].text or ""
+        return text.splitlines()[0]
+
+    assert when(tokyo) == "When: 2026-09-02 (all day)"
+    # An unmapped zone falls back to the UTC dates rather than guess.
+    assert when(unknown_zone) == "When: 2026-09-01 (all day)"
+
+
 def test_event_time_names_the_zone_it_was_scheduled_in() -> None:
     scheduled = event(time_zone="Eastern Standard Time")
 

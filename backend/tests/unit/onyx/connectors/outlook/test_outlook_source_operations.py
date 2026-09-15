@@ -959,6 +959,23 @@ def test_recurrence_summaries_cover_numbered_and_open_ended_ranges() -> None:
     assert monthly.recurrence == "every month on day 3 from 2026-09-03"
 
 
+def test_read_any_event_asks_for_one_body_and_reads_an_empty_calendar_as_none() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = page_json([event_json()])
+
+    result = gateway.read_any_event(mailbox_id=MAILBOX_ID)
+
+    assert client.get_json.call_args.args == (
+        f"{GRAPH_BASE}/users/{MAILBOX_ID}/events",
+        {"$select": "id,subject,body", "$top": "1"},
+        {"Prefer": EVENT_PREFERENCES},
+    )
+    assert result is not None and result.body_text == "Agenda: numbers"
+
+    client.get_json.return_value = page_json([])
+    assert gateway.read_any_event(mailbox_id=MAILBOX_ID) is None
+
+
 def test_recurrence_summaries_keep_the_place_and_month_of_relative_patterns() -> None:
     gateway, client = _gateway()
     client.get_json.side_effect = [
