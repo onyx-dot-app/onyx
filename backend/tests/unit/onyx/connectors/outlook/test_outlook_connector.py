@@ -1444,17 +1444,37 @@ def test_slim_docs_list_events_collapsed_to_their_series() -> None:
     gateway.get_event.assert_not_called()
 
 
-def test_slim_docs_prune_the_events_of_a_calendar_graph_refuses() -> None:
-    """Indexing stops producing events for such a calendar, so pruning lets
-    them go while the mailbox's conversations stay listed."""
+def test_slim_docs_prune_the_events_of_a_calendar_that_is_gone() -> None:
+    """Like the mail of a vanished mailbox: nothing listed, so the events go
+    while the mailbox's conversations stay listed."""
     gateway = _calendar_gateway()
-    gateway.fetch_calendar_delta_page.side_effect = graph_error(403)
+    gateway.fetch_calendar_delta_page.side_effect = graph_error(
+        404, "ErrorItemNotFound"
+    )
     connector = _calendar_connector(gateway)
 
     ids = _slim_ids(list(connector.retrieve_all_slim_docs()))
 
     assert conversation_document_id(mailbox(), CONVERSATION_ID) in ids
     assert not [i for i in ids if i.startswith(EVENT_DOCUMENT_ID_PREFIX)]
+
+
+def test_slim_docs_stop_when_a_calendar_is_refused_or_vanishes_mid_round() -> None:
+    """A pruned event only comes back with a full re-index, so a refusal that
+    may be a missing grant aborts the prune with the grant to fix."""
+    gateway = _calendar_gateway()
+    connector = _calendar_connector(gateway)
+
+    gateway.fetch_calendar_delta_page.side_effect = graph_error(403)
+    with pytest.raises(ConnectorValidationError, match="Calendars.Read"):
+        list(connector.retrieve_all_slim_docs())
+
+    gateway.fetch_calendar_delta_page.side_effect = [
+        OutlookEventPage(events=[event()], next_link="https://graph/next"),
+        graph_error(404, "ErrorItemNotFound"),
+    ]
+    with pytest.raises(OutlookGraphError):
+        list(connector.retrieve_all_slim_docs())
 
     gateway.fetch_calendar_delta_page.side_effect = graph_error(429)
     with pytest.raises(OutlookGraphError):

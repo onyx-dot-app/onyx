@@ -777,9 +777,14 @@ class OutlookConnector(
         """Event document ids of the calendar window, series collapsed to their
         master like indexing and deduplicated per page only, since pruning
         reads the ids as a set. An unreadable master still lists its id, which
-        prunes nothing. A calendar Graph refuses lists nothing, so its events
-        are pruned the way indexing stopped producing them. Anything else
-        raises, like the folder walk."""
+        prunes nothing.
+
+        A calendar that is gone (404 on the first page) lists nothing, so its
+        events are pruned like the mail of a vanished mailbox. A refused one
+        (403) stops the prune instead: its events cannot be relisted, and
+        once pruned they would stay out until a full re-index, since the poll
+        window skips events that have not changed. Anything else raises too.
+        """
         window_start, window_end = self._calendar_window()
         next_link: str | None = None
         while True:
@@ -791,14 +796,19 @@ class OutlookConnector(
                     next_link=next_link,
                 )
             except OutlookGraphError as e:
-                if e.status not in MAILBOX_UNAVAILABLE_STATUSES:
-                    raise
-                logger.info(
-                    "Outlook: calendar of %s unavailable (%s), pruning its events",
-                    mailbox.address,
-                    e.code,
-                )
-                return
+                if e.status == 404 and next_link is None:
+                    logger.info(
+                        "Outlook: calendar of %s is gone, pruning its events",
+                        mailbox.address,
+                    )
+                    return
+                if e.status == 403:
+                    raise ConnectorValidationError(
+                        f"Cannot prune while the calendar of {mailbox.address} is "
+                        f"refused ({e.code}). {CALENDAR_READ_REMEDIATION} Or turn "
+                        "Include Calendar off."
+                    ) from e
+                raise
             event_ids = dict.fromkeys(
                 _indexed_event_id(event)
                 for event in page.events
