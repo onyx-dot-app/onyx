@@ -67,6 +67,17 @@ def test_function_record_is_unknown_outside_a_request(telemetry_sink: Mock) -> N
     assert _record_user_id(telemetry_sink) == "Unknown"
 
 
+def test_function_record_is_unknown_when_user_has_no_id(
+    telemetry_sink: Mock,
+) -> None:
+    @timing.log_function_time()
+    def work(user: Any) -> int:
+        return len(user)
+
+    assert work(user="not a user object") == 17
+    assert _record_user_id(telemetry_sink) == "Unknown"
+
+
 def test_generator_record_uses_request_user_without_user_kwarg(
     telemetry_sink: Mock, request_user: str
 ) -> None:

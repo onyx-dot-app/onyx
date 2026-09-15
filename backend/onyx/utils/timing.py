@@ -15,15 +15,20 @@ F = TypeVar("F", bound=Callable)
 FG = TypeVar("FG", bound=Callable[..., Generator | Iterator])
 
 
-def _telemetry_user_id(user: Any) -> str:
+def _telemetry_user_id(kwargs: dict[str, Any]) -> str:
     """User id for a latency record.
 
     Prefer an explicit ``user`` keyword argument. Otherwise use the request's
     user contextvar, which the auth dependencies set for every API call.
+    Never raises: telemetry must not break the decorated function.
     """
-    if user is not None:
-        return str(user.id)
-    return get_current_user_id() or "Unknown"
+    try:
+        user = kwargs.get("user")
+        if user is not None:
+            return str(user.id)
+        return get_current_user_id() or "Unknown"
+    except Exception:
+        return "Unknown"
 
 
 def log_function_time(
@@ -77,7 +82,7 @@ def log_function_time(
                 optional_telemetry(
                     record_type=RecordType.LATENCY,
                     data={"function": log_name, "latency": str(elapsed_time_str)},
-                    user_id=_telemetry_user_id(kwargs.get("user")),
+                    user_id=_telemetry_user_id(kwargs),
                 )
 
         if inspect.iscoroutinefunction(func):
@@ -110,7 +115,7 @@ def log_generator_function_time(
         @wraps(func)
         def wrapped_func(*args: Any, **kwargs: Any) -> Any:
             start_time = time.monotonic()
-            user_id = _telemetry_user_id(kwargs.get("user"))
+            user_id = _telemetry_user_id(kwargs)
             try:
                 # `yield from` delegates send/throw/close to the inner generator,
                 # so its own finally (cleanup) runs synchronously when an exception
