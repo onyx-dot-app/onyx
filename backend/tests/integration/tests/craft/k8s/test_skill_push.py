@@ -155,6 +155,7 @@ def user_group_factory(
     finally:
         for group in reversed(groups):
             try:
+                UserGroupManager.wait_for_sync(k8s_admin_user, [group])
                 UserGroupManager.delete(group, k8s_admin_user)
             except httpx.HTTPStatusError as e:
                 if e.response.status_code != 404:

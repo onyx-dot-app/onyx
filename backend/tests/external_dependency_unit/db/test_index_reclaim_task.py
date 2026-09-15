@@ -31,7 +31,6 @@ from onyx.db.port_attempt import (
 from onyx.db.search_settings import (
     create_search_settings,
     find_unreclaimed_past_by_index_name,
-    get_current_search_settings,
     get_search_settings_by_id,
 )
 from onyx.document_index.opensearch.client import OpenSearchIndexClient
@@ -283,6 +282,7 @@ def test_deleting_complete_marks_reclaimed_and_keeps_row(
     monkeypatch.setattr(
         reclaim_tasks, "reclaim_index_data", lambda *_a, **_k: ReclaimOutcome.COMPLETE
     )
+    present = _make_present_settings(db_session)
     ss = _make_past_settings(db_session, IndexReclaimStatus.DELETING)
     ss_id = ss.id
     try:
@@ -293,6 +293,7 @@ def test_deleting_complete_marks_reclaimed_and_keeps_row(
         assert row.reclaim_status == IndexReclaimStatus.RECLAIMED
     finally:
         _delete_settings(db_session, ss)
+        _delete_settings(db_session, present)
 
 
 def test_deleting_refuses_to_delete_the_live_index(
@@ -308,9 +309,9 @@ def test_deleting_refuses_to_delete_the_live_index(
         "reclaim_index_data",
         lambda name, *_a, **_k: deleted.append(name) or ReclaimOutcome.COMPLETE,
     )
-    live_name = get_current_search_settings(db_session).index_name
+    present = _make_present_settings(db_session)
     ss = _make_past_settings(
-        db_session, IndexReclaimStatus.DELETING, index_name=live_name
+        db_session, IndexReclaimStatus.DELETING, index_name=present.index_name
     )
     try:
         reclaim_tasks.run_old_index_reclaim(db_session, MagicMock(), "tenant", ss)
@@ -321,6 +322,7 @@ def test_deleting_refuses_to_delete_the_live_index(
         assert ss.reclaim_attempts == 1  # recorded as a failure, not a silent skip
     finally:
         _delete_settings(db_session, ss)
+        _delete_settings(db_session, present)
 
 
 def test_deleting_incomplete_stays_deleting(
@@ -332,6 +334,7 @@ def test_deleting_incomplete_stays_deleting(
     monkeypatch.setattr(
         reclaim_tasks, "reclaim_index_data", lambda *_a, **_k: ReclaimOutcome.INCOMPLETE
     )
+    present = _make_present_settings(db_session)
     ss = _make_past_settings(db_session, IndexReclaimStatus.DELETING)
     try:
         reclaim_tasks.run_old_index_reclaim(db_session, MagicMock(), "tenant", ss)
@@ -339,6 +342,7 @@ def test_deleting_incomplete_stays_deleting(
         assert ss.reclaim_status == IndexReclaimStatus.DELETING
     finally:
         _delete_settings(db_session, ss)
+        _delete_settings(db_session, present)
 
 
 def test_deleting_single_tenant_end_to_end_drops_real_index(
@@ -351,6 +355,7 @@ def test_deleting_single_tenant_end_to_end_drops_real_index(
     client = OpenSearchIndexClient(index_name=index_name)
     # Single-tenant reclaim drops the whole index, so it needs no mappings or documents.
     client._client.indices.create(index=index_name)
+    present = _make_present_settings(db_session)
     ss = _make_past_settings(
         db_session, IndexReclaimStatus.DELETING, index_name=index_name
     )
@@ -369,6 +374,7 @@ def test_deleting_single_tenant_end_to_end_drops_real_index(
             pass
         client.close()
         _delete_settings(db_session, ss)
+        _delete_settings(db_session, present)
 
 
 def test_reverted_future_reclaim_gates_on_port_then_drops_index_and_unblocks_retry(
@@ -386,6 +392,7 @@ def test_reverted_future_reclaim_gates_on_port_then_drops_index_and_unblocks_ret
     index_name = f"test_revert_reclaim_{uuid4().hex[:8]}"
     client = OpenSearchIndexClient(index_name=index_name)
     client._client.indices.create(index=index_name)
+    present = _make_present_settings(db_session)
     ss = _make_past_settings(
         db_session, IndexReclaimStatus.DELETING, index_name=index_name
     )
@@ -421,6 +428,7 @@ def test_reverted_future_reclaim_gates_on_port_then_drops_index_and_unblocks_ret
         ).delete(synchronize_session="fetch")
         db_session.commit()
         _delete_settings(db_session, ss)
+        _delete_settings(db_session, present)
         cleanup_cc_pair(db_session, cc_pair)
 
 
@@ -435,6 +443,7 @@ def test_step_failure_bumps_attempts_then_blocks_at_cap(
         raise RuntimeError("opensearch down")
 
     monkeypatch.setattr(reclaim_tasks, "reclaim_index_data", _boom)
+    present = _make_present_settings(db_session)
     ss = _make_past_settings(db_session, IndexReclaimStatus.DELETING)
     try:
         reclaim_tasks.run_old_index_reclaim(db_session, MagicMock(), "tenant", ss)
@@ -449,6 +458,7 @@ def test_step_failure_bumps_attempts_then_blocks_at_cap(
         assert ss.reclaim_status == IndexReclaimStatus.BLOCKED
     finally:
         _delete_settings(db_session, ss)
+        _delete_settings(db_session, present)
 
 
 def _enqueued_settings_ids(celery_app: MagicMock) -> list[int]:
