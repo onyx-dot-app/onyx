@@ -1511,18 +1511,32 @@ def test_slim_docs_leave_out_a_series_whose_master_is_excluded_or_unreadable() -
         list(connector.retrieve_all_slim_docs())
 
 
-@pytest.mark.parametrize("status", [403, 404])
-def test_slim_docs_prune_the_events_of_a_calendar_graph_refuses(status: int) -> None:
-    """Indexing stops producing events for such a calendar, so pruning lets
-    them go while the mailbox's conversations stay listed."""
+def test_slim_docs_prune_the_events_of_a_calendar_that_is_gone() -> None:
+    """A vanished calendar answers 404 on its first page, like a vanished
+    mailbox on its probe, so its events go while the conversations stay."""
     gateway = _calendar_gateway()
-    gateway.fetch_calendar_delta_page.side_effect = graph_error(status)
+    gateway.fetch_calendar_delta_page.side_effect = graph_error(
+        404, "ErrorItemNotFound"
+    )
     connector = _calendar_connector(gateway)
 
     ids = _slim_ids(list(connector.retrieve_all_slim_docs()))
 
     assert conversation_document_id(mailbox(), CONVERSATION_ID) in ids
     assert not [i for i in ids if i.startswith(EVENT_DOCUMENT_ID_PREFIX)]
+
+
+def test_slim_docs_stop_when_a_calendar_is_refused() -> None:
+    """Listing nothing would prune events that only a full re-index brings
+    back, so the prune stops and names the grant and the switch."""
+    gateway = _calendar_gateway()
+    gateway.fetch_calendar_delta_page.side_effect = graph_error(403)
+    connector = _calendar_connector(gateway)
+
+    with pytest.raises(ConnectorValidationError, match="Calendars.Read") as info:
+        list(connector.retrieve_all_slim_docs())
+
+    assert "Include Calendar" in str(info.value)
 
 
 def test_slim_docs_stop_when_a_calendar_fails_mid_round_or_is_throttled() -> None:

@@ -799,11 +799,12 @@ class OutlookConnector(
         is readable and not excluded, read once per series per mailbox. Ids
         are deduplicated per page only, since pruning reads them as a set.
 
-        A calendar that is gone or refused on its first page (404 or 403)
-        lists nothing, so its events are pruned the way indexing stopped
-        producing them and the mailbox's mail is still pruned. They return
-        with the next full re-index once the grant is back. An error later in
-        the round raises, since the ids already listed cannot be retracted.
+        A calendar that is gone (404 on the first page) lists nothing, so its
+        events are pruned like the mail of a vanished mailbox. A refused one
+        (403) aborts the prune with the grant to fix: listing nothing would
+        prune its events, and the poll window skips unchanged events, so they
+        would return only with a full re-index. An error later in the round
+        raises, since the ids already listed cannot be retracted.
         """
         window_start, window_end = self._calendar_window()
         # Capped like the checkpoint's set, so a huge calendar costs repeat
@@ -819,13 +820,18 @@ class OutlookConnector(
                     next_link=next_link,
                 )
             except OutlookGraphError as e:
-                if e.status in MAILBOX_UNAVAILABLE_STATUSES and next_link is None:
-                    logger.warning(
-                        "Outlook: calendar of %s unavailable (%s), pruning its events",
+                if e.status == 404 and next_link is None:
+                    logger.info(
+                        "Outlook: calendar of %s is gone, pruning its events",
                         mailbox.address,
-                        e.code,
                     )
                     return
+                if e.status == 403 and next_link is None:
+                    raise ConnectorValidationError(
+                        f"Cannot prune while the calendar of {mailbox.address} "
+                        f"is refused ({e.code}). {CALENDAR_READ_REMEDIATION} "
+                        "Or turn Include Calendar off."
+                    ) from e
                 raise
             event_ids: dict[str, None] = {}
             for event in page.events:
