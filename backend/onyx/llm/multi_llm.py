@@ -17,7 +17,11 @@ from onyx.configs.chat_configs import (
     LLM_FIRST_CHUNK_MAX_RETRIES,
     LLM_SOCKET_READ_TIMEOUT,
 )
-from onyx.configs.model_configs import GEN_AI_TEMPERATURE, LITELLM_EXTRA_BODY
+from onyx.configs.model_configs import (
+    GEN_AI_NUM_RESERVED_OUTPUT_TOKENS,
+    GEN_AI_TEMPERATURE,
+    LITELLM_EXTRA_BODY,
+)
 from onyx.llm.api_surfaces import (
     OPENAI_COMPATIBLE_SURFACES,
     LlmApiSurface,
@@ -95,6 +99,7 @@ _VERTEX_ANTHROPIC_MODELS_REJECTING_STREAM_OPTIONS = (
     "claude-opus-4-7",
     "claude-opus-4-8",
 )
+_ANTHROPIC_MIN_THINKING_BUDGET_TOKENS = 1024
 
 # Best-effort tuning kwargs, never worth failing a chat over. _completion
 # retries provider rejections without them (reasoning keys first, then all),
@@ -874,16 +879,21 @@ class LitellmLLM(LLM):
                         and not isinstance(tool_choice, NamedToolChoice)
                     ):
                         if max_tokens is not None:
-                            # Anthropic has a weird rule where max token has to be at least as much as budget tokens if set
-                            # and the minimum budget tokens is 1024
-                            # Will note that overwriting a developer set max tokens is not ideal but is the best we can do for now
-                            # It is better to allow the LLM to output more reasoning tokens even if it results in a fairly small tool
-                            # call as compared to reducing the budget for reasoning.
-                            max_tokens = max(budget_tokens + 1, max_tokens)
-                        optional_kwargs["thinking"] = {
-                            "type": "enabled",
-                            "budget_tokens": budget_tokens,
-                        }
+                            response_reserve = max(1, GEN_AI_NUM_RESERVED_OUTPUT_TOKENS)
+                            budget_tokens = min(
+                                budget_tokens, max_tokens - response_reserve
+                            )
+                        if budget_tokens >= _ANTHROPIC_MIN_THINKING_BUDGET_TOKENS:
+                            optional_kwargs["thinking"] = {
+                                "type": "enabled",
+                                "budget_tokens": budget_tokens,
+                            }
+                        else:
+                            logger.warning(
+                                "Skipping Anthropic thinking: max_tokens=%s cannot "
+                                "fit the minimum thinking budget and answer reserve",
+                                max_tokens,
+                            )
 
             else:
                 # Hope for the best from LiteLLM

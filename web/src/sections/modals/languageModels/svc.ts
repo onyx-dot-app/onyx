@@ -169,9 +169,9 @@ export async function submitProvider<T extends BaseLLMFormValues>({
 
   const finalValues = {
     ...rest,
-    ...(nameForRequest !== undefined ? { name: nameForRequest } : {}),
+    name: nameForRequest,
     api_base: normalizedApiBase,
-    ...(apiKeyForRequest !== undefined ? { api_key: apiKeyForRequest } : {}),
+    api_key: apiKeyForRequest,
     api_key_changed: apiKeyForRequest !== undefined,
     custom_config_changed: customConfigChanged,
   };

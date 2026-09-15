@@ -201,7 +201,7 @@ export function createTableColumns<TData>(): TableColumnsBuilder<TData> {
       const id = explicitId ?? (accessor as string);
 
       const def = helper.accessor(accessor as any, {
-        ...(typeof accessor === "function" ? { id } : {}),
+        id: typeof accessor === "function" ? id : undefined,
         header,
         enableSorting,
         enableResizing,

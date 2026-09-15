@@ -114,7 +114,7 @@ export const ComboBoxDropdown = forwardRef<
           ...floatingStyles,
           // Ensure the dropdown can scroll independently
           overscrollBehavior: "contain",
-          ...(dropdownMaxHeight ? { maxHeight: dropdownMaxHeight } : {}),
+          maxHeight: dropdownMaxHeight || undefined,
         }}
         onWheel={(e) => {
           // Prevent event from bubbling to prevent any parent scroll blocking

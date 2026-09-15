@@ -771,11 +771,15 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
         ))}
 
       <div className="w-full h-full overflow-hidden">
+        {/* noPaste: the input bar already uploads pasted files itself. Without
+            it react-dropzone handles the same paste again and attaches the
+            image twice. */}
         <Dropzone
           onDrop={(acceptedFiles) =>
             handleMessageSpecificFileUpload(acceptedFiles)
           }
           noClick
+          noPaste
         >
           {({ getRootProps }) => (
             <div
