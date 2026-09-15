@@ -20,6 +20,7 @@ from onyx.chat.models import (
     FileToolMetadata,
     ToolCallSimple,
 )
+from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import (
     DEFAULT_PERSONA_ID,
     TMP_DRALPHA_PERSONA_NAME,
@@ -110,11 +111,14 @@ def build_file_context(
     — the ID that FileReaderTool accepts (``UserFile.id`` for user files).
     """
     if file_type.use_metadata_only():
-        message_text = (
-            f"File: {filename} (id={tool_file_id})\n"
-            "Use the file_reader or python tools to access "
-            "this file's contents."
+        # Only name the file reader where it is actually attached; see
+        # FileReaderTool.is_available.
+        tools_hint = (
+            "Use the file_reader or python tools to access this file's contents."
+            if DISABLE_VECTOR_DB
+            else "Use the python tool or internal search to access this file's contents."
         )
+        message_text = f"File: {filename} (id={tool_file_id})\n{tools_hint}"
         message = ChatMessageSimple(
             message=message_text,
             token_count=max(1, len(message_text) // 4),

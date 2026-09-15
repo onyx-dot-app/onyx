@@ -36,7 +36,7 @@ from onyx.chat.prompt_utils import (
     process_prompt_template,
 )
 from onyx.chat.token_budget import resolve_chat_token_budget
-from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
+from onyx.configs.app_configs import DISABLE_VECTOR_DB, INTEGRATION_TESTS_MODE
 from onyx.configs.chat_configs import MAX_LLM_CYCLES
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
@@ -656,20 +656,34 @@ def _create_file_tool_metadata_message(
     file_metadata: list[FileToolMetadata],
     token_counter: Callable[[str], int],
 ) -> ChatMessageSimple:
-    """Build a lightweight metadata-only message listing files available via FileReaderTool.
+    """Build a lightweight metadata-only message listing files not held in context.
 
-    Used when files are too large to fit in context and the vector DB is
-    disabled, so the LLM must use ``read_file`` to inspect them.
+    How the model reaches the content depends on the deployment. FileReaderTool
+    is only attached when the vector DB is disabled (see
+    ``FileReaderTool.is_available``); otherwise the content is reachable through
+    search. Naming ``read_file`` where it was never attached makes the model
+    invent workarounds — it searches the web for the document or guesses.
     """
-    lines = [
-        "You have access to the following files. Use the read_file tool to "
-        "read sections of any file. You MUST pass the file_id UUID (not the "
-        "filename) to read_file:"
-    ]
-    lines.extend(
-        f'- file_id="{meta.file_id}" filename="{meta.filename}" (~{meta.approx_char_count:,} chars)'
-        for meta in file_metadata
-    )
+    if DISABLE_VECTOR_DB:
+        lines = [
+            "You have access to the following files. Use the read_file tool to "
+            "read sections of any file. You MUST pass the file_id UUID (not the "
+            "filename) to read_file:"
+        ]
+        lines.extend(
+            f'- file_id="{meta.file_id}" filename="{meta.filename}" (~{meta.approx_char_count:,} chars)'
+            for meta in file_metadata
+        )
+    else:
+        lines = [
+            "These files are attached but too large to include in full. Their "
+            "contents are indexed — use internal search to find the relevant "
+            "passages. Do not guess them or search the web for them:"
+        ]
+        lines.extend(
+            f'- filename="{meta.filename}" (~{meta.approx_char_count:,} chars)'
+            for meta in file_metadata
+        )
 
     message_content = "\n".join(lines)
     return ChatMessageSimple(

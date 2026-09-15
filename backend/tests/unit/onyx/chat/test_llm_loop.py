@@ -640,9 +640,12 @@ class TestConstructMessageHistory:
         assert "Project file 0 content" in project_message.message
         assert "Project file 1 content" in project_message.message
 
-    def test_file_metadata_for_tool_produces_message(self) -> None:
+    def test_file_metadata_for_tool_produces_message(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """When context_files has file_metadata_for_tool, a metadata listing
         message should be injected into the history."""
+        monkeypatch.setattr("onyx.chat.llm_loop.DISABLE_VECTOR_DB", True)
         system_prompt = create_message("System", MessageType.SYSTEM, 10)
         user_msg = create_message("Analyze the spreadsheet", MessageType.USER, 5)
 
@@ -899,8 +902,17 @@ class TestForgottenFileMetadata:
          entry with no corresponding file_id-tagged ChatMessageSimple.
 
     The forgotten-files mechanism must detect both cases and inject a
-    lightweight metadata message so the LLM knows to use read_file.
+    lightweight metadata message pointing the LLM at whichever retrieval path
+    the deployment actually offers (read_file or internal search).
+
+    This class covers the FileReaderTool deployment, so it pins
+    DISABLE_VECTOR_DB on. TestForgottenFilesWithoutFileReader covers the
+    vector-DB-enabled case, where the tool is never attached.
     """
+
+    @pytest.fixture(autouse=True)
+    def _file_reader_available(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("onyx.chat.llm_loop.DISABLE_VECTOR_DB", True)
 
     def _build(
         self,
@@ -924,9 +936,13 @@ class TestForgottenFileMetadata:
     def _find_forgotten_message(
         result: list[ChatMessageSimple],
     ) -> ChatMessageSimple | None:
-        """Find the forgotten-files metadata message in the result, if any."""
+        """Find the forgotten-files metadata message in the result, if any.
+
+        Matches the file listing rather than the header: the header names
+        read_file or internal search depending on the deployment.
+        """
         for msg in result:
-            if "Use the read_file tool" in msg.message:
+            if 'filename="' in msg.message:
                 return msg
         return None
 
@@ -1166,6 +1182,67 @@ class TestForgottenFileMetadata:
                 f"Turn {turn}: forgotten-files message must persist every turn"
             )
             assert "moby_dick.txt" in forgotten.message
+
+
+class TestForgottenFilesWithoutFileReader:
+    """The forgotten-files notice must not name read_file where the tool is absent.
+
+    FileReaderTool is only attached when the vector DB is disabled (see
+    ``FileReaderTool.is_available``), but the notice was emitted whenever the
+    persona had the tool row attached. On a vector-DB deployment that told the
+    model to call a tool it had never been given, so it reported read_file as
+    unavailable and fell back to guessing or web-searching the document.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _file_reader_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("onyx.chat.llm_loop.DISABLE_VECTOR_DB", False)
+
+    def _build_with_dropped_file(self) -> ChatMessageSimple:
+        file_meta = _make_file_metadata("file-abc", "sustainability.pdf")
+        file_msg = create_message("x" * 2000, MessageType.USER, 500)
+        file_msg.file_id = "file-abc"
+
+        result = construct_message_history(
+            system_prompt=create_message("system", MessageType.SYSTEM, 5),
+            custom_agent_prompt=None,
+            simple_chat_history=[
+                file_msg,
+                create_message("Got it", MessageType.ASSISTANT, 10),
+                create_message("Summarize it", MessageType.USER, 10),
+            ],
+            reminder_message=None,
+            context_files=create_context_files(),
+            # Too tight for the 500-token file message.
+            available_tokens=100,
+            token_counter=_simple_token_counter,
+            all_injected_file_metadata={"file-abc": file_meta},
+        )
+        notice = next((m for m in result if 'filename="' in m.message), None)
+        assert notice is not None, "dropped file should still produce a notice"
+        return notice
+
+    def test_notice_does_not_name_read_file(self) -> None:
+        notice = self._build_with_dropped_file()
+        assert "read_file" not in notice.message
+
+    def test_notice_points_at_internal_search(self) -> None:
+        notice = self._build_with_dropped_file()
+        assert "internal search" in notice.message
+        assert "sustainability.pdf" in notice.message
+
+    def test_notice_forbids_guessing_and_web_search(self) -> None:
+        """The failure this replaced was the model web-searching the document."""
+        notice = self._build_with_dropped_file()
+        assert "Do not guess" in notice.message
+        assert "search the web" in notice.message
+
+    def test_notice_omits_the_file_id(self) -> None:
+        """The file_id only means something to read_file; internal search takes
+        a query, so showing the UUID invites another dead end.
+        """
+        notice = self._build_with_dropped_file()
+        assert "file-abc" not in notice.message
 
 
 class TestFallbackToolExtraction:
