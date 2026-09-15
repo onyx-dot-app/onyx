@@ -1,47 +1,13 @@
-from collections.abc import Iterator
-from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from onyx.configs.constants import DocumentSource
-from onyx.context.search.models import InferenceChunk, InferenceSection
 from onyx.llm.interfaces import LLM
 from onyx.secondary_llm_flows.document_filter import select_sections_for_expansion
-
-
-@contextmanager
-def _noop_span(*_args: object, **_kwargs: object) -> Iterator[MagicMock]:
-    yield MagicMock()
-
-
-def _make_section(index: int) -> InferenceSection:
-    chunk = InferenceChunk(
-        document_id=f"doc-{index}",
-        chunk_id=0,
-        content=f"section {index}",
-        source_type=DocumentSource.MOCK_CONNECTOR,
-        semantic_identifier=f"sem-doc-{index}",
-        title=f"doc-{index}",
-        boost=1,
-        score=0.5,
-        hidden=False,
-        metadata={},
-        match_highlights=[],
-        doc_summary="",
-        chunk_context="",
-        updated_at=None,
-        image_file_id=None,
-        source_links={},
-        section_continuation=False,
-        blurb="blurb",
-        file_id=None,
-    )
-    return InferenceSection(
-        center_chunk=chunk,
-        chunks=[chunk],
-        combined_content=chunk.content,
-    )
+from tests.unit.onyx.secondary_llm_flows.test_document_filter import (
+    _make_section,
+    _noop_span,
+)
 
 
 @pytest.mark.parametrize(
@@ -54,6 +20,8 @@ def _make_section(index: int) -> InferenceSection:
         ("Section IDs: [3, 0!, 1]", [3, 0, 1], ["doc-0"]),
         ("0!, 2!, 1!, 4.", [0, 2, 1, 4], ["doc-0", "doc-2", "doc-1"]),
         ("1, 2, 3abc", [1, 2], None),
+        ("0!, 2!.", [0, 2], ["doc-0", "doc-2"]),
+        ("1!!, 2", [2], None),
         ("1st, 2nd", [0, 1, 2, 3, 4], None),
         ("", [0, 1, 2, 3, 4], None),
     ],
