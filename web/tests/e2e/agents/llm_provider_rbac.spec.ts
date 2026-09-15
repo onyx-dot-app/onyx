@@ -119,6 +119,47 @@ test("Restricted LLM Provider should not appear for unauthorized users", async (
   }
 });
 
+test("Agent-restricted provider appears in its default model selector", async ({
+  page,
+}) => {
+  await page.context().clearCookies();
+  await loginAs(page, "admin");
+
+  const client = new OnyxApiClient(page.request);
+  const suffix = Date.now();
+  let agentId: number | null = null;
+  let providerId: number | null = null;
+
+  try {
+    agentId = await client.createAgent(`Restricted Model Agent ${suffix}`);
+    const providerName = `Agent Provider ${suffix}`;
+    providerId = await client.createAgentRestrictedProvider(providerName, [
+      agentId,
+    ]);
+
+    const providerResponse = page.waitForResponse(
+      (response) =>
+        response.url().includes(`/api/llm/persona/${agentId}/providers`) &&
+        response.ok()
+    );
+    await page.goto(`/app/agents/edit/${agentId}`);
+    await providerResponse;
+
+    const defaultModelSection = page.getByText("Default Model").first();
+    await defaultModelSection.scrollIntoViewIfNeeded();
+
+    const options = await getLLMProviderOptions(page);
+    expect(options.some((option) => option.includes(providerName))).toBe(true);
+  } finally {
+    if (providerId) {
+      await client.deleteProvider(providerId);
+    }
+    if (agentId) {
+      await client.deleteAgent(agentId);
+    }
+  }
+});
+
 test("Default Model selector shows available models", async ({ page }) => {
   await page.context().clearCookies();
   await loginAsRandomUser(page);

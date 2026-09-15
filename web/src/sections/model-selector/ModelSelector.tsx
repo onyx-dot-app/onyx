@@ -20,6 +20,8 @@ export interface ModelSelectorProps {
   /** The currently selected model, identified by model_configuration_id. */
   value: number | null;
   onChange: (option: LLMOption) => void;
+  /** Limits the built-in provider list to models available to this agent. */
+  agentId?: number;
   providerOptions?: ModelOptionProvider[];
   includeHiddenModels?: boolean;
   requiresImageInput?: boolean;
@@ -56,6 +58,7 @@ export interface ModelSelectorProps {
 export default function ModelSelector({
   value,
   onChange,
+  agentId,
   providerOptions,
   includeHiddenModels = false,
   requiresImageInput,
@@ -67,19 +70,17 @@ export default function ModelSelector({
   side = "top",
 }: ModelSelectorProps) {
   const t = useTranslations("chat.modelSelector");
-  // Unscoped by default. An agent narrows the model list, but only a chat has
-  // an agent. The admin and settings pages that embed this picker have none,
-  // and must not be filtered by whichever agent happens to be active. A chat
-  // caller passes its own scoped list through providerOptions.
+  // Unscoped by default. Callers must supply agentId or providerOptions when
+  // the host has an agent context.
   // The list stays defined even before it arrives, so the child never sees
   // undefined and never falls through to its own agent-scoped list.
   const {
-    llmProviders: allProviderOptions,
+    llmProviders: fetchedProviderOptions,
     defaultText,
-    isLoading: allProvidersLoading,
-  } = useLLMProviders();
-  const llmProviders = providerOptions ?? allProviderOptions ?? [];
-  const isLoading = providerOptions === undefined && allProvidersLoading;
+    isLoading: providersLoading,
+  } = useLLMProviders(agentId);
+  const llmProviders = providerOptions ?? fetchedProviderOptions ?? [];
+  const isLoading = providerOptions === undefined && providersLoading;
   const [open, setOpen] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 

@@ -1816,6 +1816,7 @@ export default function AgentEditorPage({
                                   )}
                                 >
                                   <ModelSelector
+                                    agentId={existingAgent?.id}
                                     value={
                                       (values.default_model_configuration_id as
                                         | number
