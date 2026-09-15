@@ -206,6 +206,7 @@ export const AGGREGATOR_PROVIDERS = new Set([
   LLMProviderName.NEBIUS_TOKENFACTORY,
   LLMProviderName.PORTKEY,
   LLMProviderName.VERTEX_AI,
+  LLMProviderName.VENICE,
 ]);
 
 // ─── Model-aware icon resolver ───────────────────────────────────────────────

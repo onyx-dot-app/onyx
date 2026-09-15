@@ -374,7 +374,6 @@ export default function LanguageModelsPage() {
           LLMProviderName.VERTEX_AI,
           LLMProviderName.BEDROCK,
           LLMProviderName.AZURE,
-          LLMProviderName.VENICE,
         ],
       },
       {
@@ -386,6 +385,7 @@ export default function LanguageModelsPage() {
           LLMProviderName.PORTKEY,
           LLMProviderName.NEBIUS_TOKENFACTORY,
           LLMProviderName.BIFROST,
+          LLMProviderName.VENICE,
         ],
       },
       {
