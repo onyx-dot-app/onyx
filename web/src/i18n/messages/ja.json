@@ -9449,6 +9449,16 @@
         "downloadButton": {
           "tooltip": "ダウンロード"
         },
+        "indexButton": {
+          "doneTooltip": "保存済み",
+          "error": {
+            "toast": "この画像を保存できませんでした"
+          },
+          "success": {
+            "toast": "画像を保存しました。後のチャットで使えます。"
+          },
+          "tooltip": "後で使えるように保存"
+        },
         "image": {
           "alt": "チャットの添付ファイル"
         },

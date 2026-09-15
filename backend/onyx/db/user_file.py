@@ -1,11 +1,16 @@
 import datetime
+import uuid
 from uuid import UUID
 
 from sqlalchemy import exists, func, select, update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from onyx.db.enums import UserFileStatus
+from onyx.db.file_record import clear_incognito_session_metadata
 from onyx.db.models import Persona, Project__UserFile, User, UserFile
+
+USER_FILE_USER_ID_FILE_ID_CONSTRAINT = "uq_user_file_user_id_file_id"
 
 
 def fetch_chunk_counts_for_user_files(
@@ -102,6 +107,62 @@ def update_last_accessed_at_for_user_files(
         .update({UserFile.last_accessed_at: now}, synchronize_session=False)
     )
     db_session.commit()
+
+
+def get_or_create_user_file_for_existing_store_file(
+    *,
+    user_id: UUID,
+    file_id: str,
+    name: str,
+    content_type: str,
+    db_session: Session,
+) -> UserFile:
+    """Return the user's UserFile for this blob, creating one if needed.
+
+    Concurrent index requests share one row via INSERT ... ON CONFLICT on
+    (user_id, file_id). A no-op UPDATE on conflict locks that row so a
+    concurrent delete cannot hide it from this transaction. A row that is
+    already DELETING is returned as-is so the caller can reject reuse.
+    Indexing promotes the blob: the incognito session stamp is cleared so
+    teardown no longer deletes a file the user asked to keep.
+    """
+    now = datetime.datetime.now(datetime.timezone.utc)
+    stmt = (
+        insert(UserFile)
+        .values(
+            id=uuid.uuid4(),
+            user_id=user_id,
+            file_id=file_id,
+            name=name,
+            token_count=None,
+            content_type=content_type,
+            file_type=content_type,
+            status=UserFileStatus.PROCESSING,
+            created_at=now,
+            needs_project_sync=False,
+            needs_persona_sync=False,
+            last_accessed_at=now,
+        )
+        # DO NOTHING does not lock the conflicting row. A concurrent delete
+        # can then remove it before the following .one() and /file/index
+        # returns 500.
+        .on_conflict_do_update(
+            constraint=USER_FILE_USER_ID_FILE_ID_CONSTRAINT,
+            set_={"file_id": UserFile.file_id},
+        )
+    )
+    db_session.execute(stmt)
+
+    user_file = (
+        db_session.query(UserFile)
+        .filter(UserFile.user_id == user_id, UserFile.file_id == file_id)
+        .one()
+    )
+
+    if user_file.status != UserFileStatus.DELETING:
+        clear_incognito_session_metadata(file_id, db_session)
+        db_session.commit()
+    return user_file
 
 
 def get_user_file_by_id(

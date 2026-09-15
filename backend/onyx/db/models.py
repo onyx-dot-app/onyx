@@ -5621,6 +5621,12 @@ class UserFile(Base):
     )
 
     __table_args__ = (
+        # One UserFile per owner and store blob. Indexing upserts against this.
+        UniqueConstraint(
+            "user_id",
+            "file_id",
+            name="uq_user_file_user_id_file_id",
+        ),
         # Declared here as well as in the migration so autogenerate does not
         # read it as a stray index and propose dropping it.
         Index(

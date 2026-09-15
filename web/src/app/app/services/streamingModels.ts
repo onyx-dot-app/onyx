@@ -159,6 +159,7 @@ interface GeneratedImage {
   url: string;
   revised_prompt: string;
   shape?: ImageShape;
+  file_name?: string;
 }
 
 export interface ImageGenerationToolStart extends BaseObj {
