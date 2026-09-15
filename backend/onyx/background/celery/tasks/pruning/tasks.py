@@ -64,6 +64,9 @@ from onyx.db.hierarchy import (
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import HierarchyNode as DBHierarchyNode
 from onyx.db.sync_record import insert_sync_record, update_sync_record_status
+from onyx.background.celery.tasks.pruning.finalize import (
+    handle_pre_fanout_pruning_failure,
+)
 from onyx.db.tag import delete_orphan_tags_batched
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_prune import (
@@ -762,7 +765,20 @@ def connector_pruning_generator_task(
         # keeping the fence lets the monitor finalize the in-flight taskset, and
         # generator_failed makes it record a FAILED prune instead of a false success.
         if redis_connector.prune.generator_complete is None:
-            redis_connector.prune.reset()
+            # Finalize the SyncRecord as FAILED, then clear Redis state.
+            # Without this, reset() removes the fence/taskset and the monitor
+            # exits early (fence gone), leaving the record stuck IN_PROGRESS.
+            try:
+                with get_session_with_current_tenant() as db_session:
+                    handle_pre_fanout_pruning_failure(
+                        db_session,
+                        cc_pair_id,
+                        redis_connector.prune.reset,
+                    )
+            except Exception:
+                task_logger.exception(
+                    f"Pre-fanout pruning failure handler raised: cc_pair={cc_pair_id}"
+                )
         else:
             redis_connector.prune.set_generator_failed()
 
