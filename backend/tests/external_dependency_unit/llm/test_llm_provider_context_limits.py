@@ -6,6 +6,7 @@ number pins the model to whatever LiteLLM knew at the time, because
 `get_max_input_tokens_from_llm_provider` always prefers the stored value.
 """
 
+import uuid
 from collections.abc import Generator
 
 import pytest
@@ -34,18 +35,21 @@ _FALLBACK_RESOLVED = (
     GEN_AI_MODEL_FALLBACK_MAX_TOKENS - GEN_AI_NUM_RESERVED_OUTPUT_TOKENS
 )
 
-_PROVIDER_NAME = "test-context-limits"
-
 
 def _upsert(
     db_session: Session,
+    provider_name: str,
     provider: str,
     model_name: str,
     max_input_tokens: int | None,
-) -> None:
-    upsert_llm_provider(
+    provider_id: int | None = None,
+) -> int:
+    """Returns the provider id. Pass it back in to update rather than insert —
+    without an id `upsert_llm_provider` always creates a new provider row."""
+    view = upsert_llm_provider(
         LLMProviderUpsertRequest(
-            name=_PROVIDER_NAME,
+            id=provider_id,
+            name=provider_name,
             provider=provider,
             api_key="sk-test-key-00000000000000000000000000000000000",
             api_key_changed=True,
@@ -59,10 +63,11 @@ def _upsert(
         ),
         db_session=db_session,
     )
+    return view.id
 
 
-def _stored(db_session: Session, model_name: str) -> int | None:
-    provider = fetch_existing_llm_provider(name=_PROVIDER_NAME, db_session=db_session)
+def _stored(db_session: Session, provider_name: str, model_name: str) -> int | None:
+    provider = fetch_existing_llm_provider(name=provider_name, db_session=db_session)
     assert provider is not None
     row = (
         db_session.query(ModelConfiguration)
@@ -75,17 +80,20 @@ def _stored(db_session: Session, model_name: str) -> int | None:
     return row.max_input_tokens
 
 
-@pytest.fixture(autouse=True)
-def cleanup_provider(db_session: Session) -> Generator[None, None, None]:
-    yield
-    provider = fetch_existing_llm_provider(name=_PROVIDER_NAME, db_session=db_session)
+@pytest.fixture
+def provider_name(db_session: Session) -> Generator[str, None, None]:
+    """Unique per test: these run against a shared real database, so a fixed name
+    lets parallel runs and stale rows from a failed run interfere."""
+    name = f"test-context-limits-{uuid.uuid4().hex[:12]}"
+    yield name
+    provider = fetch_existing_llm_provider(name=name, db_session=db_session)
     if provider:
         remove_llm_provider(db_session, provider.id)
         db_session.commit()
 
 
 def test_resolved_value_round_tripped_by_the_ui_is_not_persisted(
-    db_session: Session,
+    db_session: Session, provider_name: str
 ) -> None:
     """The admin UI echoes back the value it was served; that must not become an override."""
     model = "gpt-4o-mini"
@@ -93,12 +101,14 @@ def test_resolved_value_round_tripped_by_the_ui_is_not_persisted(
         model_name=model, model_provider=LlmProviderNames.OPENAI
     )
 
-    _upsert(db_session, LlmProviderNames.OPENAI, model, resolved)
+    _upsert(db_session, provider_name, LlmProviderNames.OPENAI, model, resolved)
 
-    assert _stored(db_session, model) is None
+    assert _stored(db_session, provider_name, model) is None
 
 
-def test_admin_supplied_override_is_persisted(db_session: Session) -> None:
+def test_admin_supplied_override_is_persisted(
+    db_session: Session, provider_name: str
+) -> None:
     """A value the admin actually chose differs from the lookup and must survive."""
     model = "gpt-4o-mini"
     resolved = get_max_input_tokens(
@@ -107,12 +117,14 @@ def test_admin_supplied_override_is_persisted(db_session: Session) -> None:
     override = resolved // 2
     assert override != resolved
 
-    _upsert(db_session, LlmProviderNames.OPENAI, model, override)
+    _upsert(db_session, provider_name, LlmProviderNames.OPENAI, model, override)
 
-    assert _stored(db_session, model) == override
+    assert _stored(db_session, provider_name, model) == override
 
 
-def test_unknown_model_does_not_freeze_the_fallback(db_session: Session) -> None:
+def test_unknown_model_does_not_freeze_the_fallback(
+    db_session: Session, provider_name: str
+) -> None:
     """The regression: a deployment name LiteLLM does not know yet.
 
     The UI is served the fallback and sends it back. Persisting it pins the model to
@@ -126,12 +138,20 @@ def test_unknown_model_does_not_freeze_the_fallback(db_session: Session) -> None
         == _FALLBACK_RESOLVED
     )
 
-    _upsert(db_session, LlmProviderNames.AZURE, _UNKNOWN_MODEL, _FALLBACK_RESOLVED)
+    _upsert(
+        db_session,
+        provider_name,
+        LlmProviderNames.AZURE,
+        _UNKNOWN_MODEL,
+        _FALLBACK_RESOLVED,
+    )
 
-    assert _stored(db_session, _UNKNOWN_MODEL) is None
+    assert _stored(db_session, provider_name, _UNKNOWN_MODEL) is None
 
 
-def test_dynamic_provider_value_is_persisted(db_session: Session) -> None:
+def test_dynamic_provider_value_is_persisted(
+    db_session: Session, provider_name: str
+) -> None:
     """Dynamic providers report real limits from their own APIs, and Ollama feeds num_ctx
     from the stored value, so those are kept even when they match the LiteLLM lookup."""
     model = "llama3.2"
@@ -139,6 +159,59 @@ def test_dynamic_provider_value_is_persisted(db_session: Session) -> None:
         model_name=model, model_provider=LlmProviderNames.OLLAMA_CHAT
     )
 
-    _upsert(db_session, LlmProviderNames.OLLAMA_CHAT, model, resolved)
+    _upsert(db_session, provider_name, LlmProviderNames.OLLAMA_CHAT, model, resolved)
 
-    assert _stored(db_session, model) == resolved
+    assert _stored(db_session, provider_name, model) == resolved
+
+
+def test_existing_override_is_never_cleared(
+    db_session: Session, provider_name: str
+) -> None:
+    """Numeric equality cannot tell a deliberate pin from a UI echo.
+
+    So the guard only declines to *create* an override. Once a value is stored,
+    a later save that happens to match the live lookup must leave it alone —
+    otherwise rotating an API key would silently unpin an intentional cap.
+    """
+    model = "gpt-4o-mini"
+    resolved = get_max_input_tokens(
+        model_name=model, model_provider=LlmProviderNames.OPENAI
+    )
+    pinned = resolved // 2
+
+    provider_id = _upsert(
+        db_session, provider_name, LlmProviderNames.OPENAI, model, pinned
+    )
+    assert _stored(db_session, provider_name, model) == pinned
+
+    # A later save echoing the resolved value must not wipe the stored pin.
+    _upsert(
+        db_session,
+        provider_name,
+        LlmProviderNames.OPENAI,
+        model,
+        resolved,
+        provider_id=provider_id,
+    )
+
+    assert _stored(db_session, provider_name, model) == resolved
+
+
+@pytest.mark.parametrize(
+    "provider",
+    [LlmProviderNames.NEBIUS_TOKENFACTORY, LlmProviderNames.PORTKEY],
+)
+def test_source_api_providers_keep_their_reported_limit(
+    db_session: Session, provider_name: str, provider: str
+) -> None:
+    """Nebius and Portkey read `context_length` from their own APIs and persist it.
+
+    Neither is a dynamic provider, so exempting only DYNAMIC_LLM_PROVIDERS would
+    let a matching LiteLLM value discard an authoritative source-API limit.
+    """
+    model = "unknown-model-from-source-api"
+    resolved = get_max_input_tokens(model_name=model, model_provider=provider)
+
+    _upsert(db_session, provider_name, provider, model, resolved)
+
+    assert _stored(db_session, provider_name, model) == resolved

@@ -26,7 +26,7 @@ from onyx.db.persona import get_raw_personas_for_user
 from onyx.db.user_group import assert_not_shared_with_default_group
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.llm.constants import DYNAMIC_LLM_PROVIDERS
+from onyx.llm.constants import SOURCE_API_CONTEXT_LIMIT_PROVIDERS
 from onyx.llm.model_capabilities import get_max_input_tokens
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.utils import model_supports_image_input
@@ -317,8 +317,9 @@ def _stored_max_input_tokens(
     provider: str,
     model_name: str,
     max_input_tokens: int | None,
+    existing_max_input_tokens: int | None,
 ) -> int | None:
-    """Drop a max_input_tokens that only echoes what the live lookup already returns.
+    """Refuse to *create* an override that only echoes the live LiteLLM lookup.
 
     `ModelConfigurationView.from_model` serves `stored or get_max_input_tokens(...)`,
     so a client that round-trips a provider it never edited sends the *resolved*
@@ -326,13 +327,19 @@ def _stored_max_input_tokens(
     `get_max_input_tokens_from_llm_provider` prefers the stored value forever — so
     a model LiteLLM has since learned stays pinned to the old fallback.
 
-    Storing None instead keeps resolution at read time. Nothing is lost: a value
-    equal to the live lookup resolves back to the same number.
+    Numeric equality cannot tell a deliberate pin from that echo, so this only
+    declines to write a *new* override and never clears one that is already
+    stored. Rows already frozen by the old behaviour are cleared by migration
+    `d4e7a1b93c22` instead, which can key off the fallback arithmetic exactly.
 
-    Dynamic providers are exempt. Their limits come from their own APIs rather
-    than LiteLLM, and Ollama feeds `num_ctx` from the stored value.
+    Providers that read a context limit from their own source API are exempt
+    entirely: those values are authoritative, and Ollama feeds `num_ctx` from
+    the stored value.
     """
-    if max_input_tokens is None or provider in DYNAMIC_LLM_PROVIDERS:
+    if max_input_tokens is None or provider in SOURCE_API_CONTEXT_LIMIT_PROVIDERS:
+        return max_input_tokens
+
+    if existing_max_input_tokens is not None:
         return max_input_tokens
 
     if max_input_tokens == get_max_input_tokens(
@@ -525,6 +532,7 @@ def upsert_llm_provider(
                     provider=llm_provider_upsert_request.provider,
                     model_name=model_config.name,
                     max_input_tokens=model_config.max_input_tokens,
+                    existing_max_input_tokens=existing.max_input_tokens,
                 ),
                 display_name=model_config.display_name,
                 custom_display_name=model_config.custom_display_name,
@@ -543,6 +551,8 @@ def upsert_llm_provider(
                     provider=llm_provider_upsert_request.provider,
                     model_name=model_config.name,
                     max_input_tokens=model_config.max_input_tokens,
+                    # New row, so there is no stored override to preserve.
+                    existing_max_input_tokens=None,
                 ),
                 display_name=model_config.display_name,
                 custom_display_name=model_config.custom_display_name,
