@@ -1226,6 +1226,9 @@ def test_calendar_window_comes_from_the_configured_days() -> None:
     kwargs = gateway.fetch_calendar_delta_page.call_args.kwargs
     assert kwargs["window_end"] - kwargs["window_start"] == timedelta(days=15)
     assert kwargs["next_link"] is None
+
+
+def test_negative_calendar_days_are_rejected() -> None:
     with pytest.raises(ConnectorValidationError):
         OutlookConnector(calendar_past_days=-1)
 
@@ -1246,6 +1249,35 @@ def test_calendar_skips_events_untouched_since_the_poll_window_opened() -> None:
         event_document_id(mailbox(), "fresh"),
         event_document_id(mailbox(), "undated"),
     ]
+
+
+def test_untouched_events_entering_the_front_of_the_window_are_indexed() -> None:
+    """The future edge moves with time, so an old event can appear in the view
+    for the first time without having changed."""
+    gateway = _calendar_gateway()
+    stale = RECEIVED - timedelta(days=30)
+    gateway.fetch_calendar_delta_page.return_value = OutlookEventPage(
+        events=[
+            event(
+                id="entered",
+                last_modified_at=stale,
+                start_at=RECEIVED + timedelta(days=9),
+                end_at=RECEIVED + timedelta(days=9, hours=1),
+            ),
+            event(
+                id="already-inside",
+                last_modified_at=stale,
+                start_at=RECEIVED + timedelta(days=2),
+                end_at=RECEIVED + timedelta(days=2, hours=1),
+            ),
+        ]
+    )
+
+    items = _run(_calendar_connector(gateway, calendar_future_days=10))
+
+    # START is one day before RECEIVED, so the front of the window at the
+    # previous poll sat nine days after it.
+    assert _event_doc_ids(items) == [event_document_id(mailbox(), "entered")]
 
 
 def test_calendar_pages_follow_their_link_then_the_mailbox_finishes() -> None:
@@ -1359,9 +1391,8 @@ def test_all_day_and_multi_day_events_read_as_dates() -> None:
     )
 
     def when(e: OutlookEvent) -> str:
-        return (build_event_document(mailbox(), e).sections[0].text or "").split("\n")[
-            0
-        ]
+        text = build_event_document(mailbox(), e).sections[0].text or ""
+        return text.splitlines()[0]
 
     assert when(one_day) == "When: 2026-09-02 (all day)"
     assert when(three_days) == "When: 2026-09-02 to 2026-09-04 (all day)"

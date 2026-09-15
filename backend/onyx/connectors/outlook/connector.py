@@ -1,22 +1,23 @@
-"""Outlook connector: Microsoft 365 mail over Graph.
+"""Outlook connector: Microsoft 365 mail and calendar over Graph.
 
-One document per conversation per mailbox. Every Graph call goes through
-``OutlookSourceOperations``. The walk is mailbox by mailbox, folder by folder,
-one delta page per checkpoint step, so a large tenant survives worker restarts.
+One document per conversation per mailbox, and with calendars on, one per event
+or recurring series. Every Graph call goes through ``OutlookSourceOperations``.
+The walk is mailbox by mailbox, folder by folder, then the calendar view, one
+delta page per checkpoint step, so a large tenant survives worker restarts.
 
 Incremental runs come from the poll window rather than saved delta links: an
 index attempt starts from a fresh checkpoint, so each folder's delta round
 opens with ``receivedDateTime ge start`` and any conversation that gained a
 message in the window is rebuilt whole.
 
-Pruning walks the same mailboxes and folders but reads only conversation ids,
-so a conversation whose every message was deleted leaves the index without a
-full re-index. A conversation that lost one message keeps the stale text
+Pruning walks the same mailboxes, folders and calendar windows but reads only
+conversation and event ids, so a conversation whose every message was deleted
+leaves the index without a full re-index. A conversation that lost one message keeps the stale text
 until it gains a message or a full re-index rebuilds it.
 """
 
 from collections import deque
-from collections.abc import Generator
+from collections.abc import Generator, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
@@ -57,6 +58,7 @@ from onyx.connectors.models import (
     TextSection,
 )
 from onyx.connectors.outlook.errors import (
+    CALENDAR_READ_REMEDIATION,
     EXCHANGE_SCOPE_REMEDIATION,
     MAILBOX_UNAVAILABLE_REMEDIATION,
     raise_for_auth_error,
@@ -95,7 +97,7 @@ from onyx.utils.process_isolation import run_in_isolated_process
 
 logger = setup_logger()
 
-# Conversation ids per batch handed to pruning.
+# Document ids per batch handed to pruning.
 SLIM_BATCH_SIZE = 500
 
 # Skipped by default. Resolved by well-known name per mailbox, because display
@@ -138,8 +140,9 @@ MAX_ATTENDEES_LISTED = 50
 # people search for, so the window reaches further back than ahead.
 DEFAULT_CALENDAR_PAST_DAYS = 365
 DEFAULT_CALENDAR_FUTURE_DAYS = 180
-# Outlook hides the details of these events from everyone but the owner, so
-# indexing them into a shared corpus would undo that choice.
+# Private hides an event's details from anyone the calendar is shared with,
+# and confidential flags it as not for wider eyes. Neither belongs in a shared
+# index.
 SKIPPED_EVENT_SENSITIVITIES = frozenset({"private", "confidential"})
 
 
@@ -160,10 +163,12 @@ class OutlookCheckpoint(ConnectorCheckpoint):
     folder_unfiltered: bool = False
     # Conversations already rebuilt for the current mailbox in this attempt.
     seen_conversation_ids: set[str] = set()
-    # The calendar view round of the current mailbox, read after its folders.
+    # The calendar view round of the current mailbox, one page per step after
+    # its folders.
     calendar_next_link: str | None = None
     calendar_done: bool = False
-    # Recurring series already written for the current mailbox in this attempt.
+    # Recurring series already resolved for the current mailbox in this
+    # attempt, written or not.
     seen_series_ids: set[str] = set()
 
 
@@ -291,12 +296,23 @@ def attachment_skip_reason(attachment: OutlookAttachment) -> str | None:
     return None
 
 
+def _poll_bound(seconds: SecondsSinceUnixEpoch | None) -> datetime | None:
+    """A poll window edge as a moment, None for an open edge."""
+    return datetime.fromtimestamp(seconds, tz=timezone.utc) if seconds else None
+
+
+def _occurrence_series_id(event: OutlookEvent) -> str | None:
+    """The series an occurrence expands from, None for anything else. The one
+    rule the series collapse hinges on."""
+    if event.event_type == EVENT_OCCURRENCE and event.series_master_id:
+        return event.series_master_id
+    return None
+
+
 def _indexed_event_id(event: OutlookEvent) -> str:
     """The id the event's document is keyed by: its series master for an
     occurrence, itself otherwise."""
-    if event.event_type == EVENT_OCCURRENCE and event.series_master_id:
-        return event.series_master_id
-    return event.id
+    return _occurrence_series_id(event) or event.id
 
 
 def event_skip_reason(event: OutlookEvent) -> str | None:
@@ -313,7 +329,9 @@ def _format_event_time(event: OutlookEvent) -> str | None:
         return None
     if event.is_all_day:
         # Graph ends an all-day event at midnight of the day after.
-        last = (event.end_at - timedelta(days=1)) if event.end_at else event.start_at
+        last = event.start_at
+        if event.end_at is not None:
+            last = event.end_at - timedelta(days=1)
         first_day = event.start_at.date().isoformat()
         last_day = last.date().isoformat()
         if last_day <= first_day:
@@ -338,8 +356,9 @@ def build_event_document(mailbox: OutlookMailbox, event: OutlookEvent) -> Docume
         lines.append(f"Repeats: {event.recurrence}")
     if event.location:
         lines.append(f"Where: {event.location}")
-    if event.organizer is not None:
-        lines.append(f"Organizer: {_format_recipient(event.organizer)}")
+    organizer = event.organizer
+    if organizer is not None:
+        lines.append(f"Organizer: {_format_recipient(organizer)}")
     if event.attendees:
         listed = ", ".join(
             _format_recipient(a) for a in event.attendees[:MAX_ATTENDEES_LISTED]
@@ -352,9 +371,9 @@ def build_event_document(mailbox: OutlookMailbox, event: OutlookEvent) -> Docume
         lines.append(f"Subject: {event.subject}")
     text = "\n".join(lines) + "\n\n" + event.body_text
 
-    attendees = {a.address.lower(): a for a in event.attendees}
-    if event.organizer is not None:
-        attendees.pop(event.organizer.address.lower(), None)
+    others = {a.address.lower(): a for a in event.attendees}
+    if organizer is not None:
+        others.pop(organizer.address.lower(), None)
     subject = event.subject or "(no subject)"
     metadata: dict[str, str | list[str]] = {
         "mailbox": mailbox.address,
@@ -374,8 +393,8 @@ def build_event_document(mailbox: OutlookMailbox, event: OutlookEvent) -> Docume
         title=subject,
         doc_created_at=event.created_at,
         doc_updated_at=event.last_modified_at or event.created_at,
-        primary_owners=[_expert(event.organizer)] if event.organizer else [],
-        secondary_owners=[_expert(a) for a in attendees.values()],
+        primary_owners=[_expert(organizer)] if organizer is not None else [],
+        secondary_owners=[_expert(a) for a in others.values()],
         metadata=metadata,
         parent_hierarchy_raw_node_id=calendar_node_id(mailbox),
     )
@@ -545,7 +564,6 @@ class OutlookConnector(
 
         if checkpoint.current_folder is None:
             if not checkpoint.folders:
-                # The calendar follows the folders, one view page per step.
                 if self.include_calendar and not checkpoint.calendar_done:
                     yield from self._read_calendar_page(checkpoint, start)
                     return checkpoint
@@ -573,23 +591,36 @@ class OutlookConnector(
         checkpoint.seen_series_ids = set()
         self._reset_folder_cursor(checkpoint)
 
+    def _unavailable(
+        self, entity_id: str, message: str, error: OutlookGraphError
+    ) -> Generator[ConnectorFailure, None, None]:
+        """Something Graph refuses is a recorded failure when the admin named
+        its mailbox and a log line in every-mailbox mode."""
+        if self.mailboxes:
+            yield _mailbox_failure(entity_id, message, error)
+            return
+        logger.info("Outlook: skipping %s, unavailable (%s)", entity_id, error.code)
+
     def _mailbox_unavailable(
         self, mailbox: OutlookMailbox, error: OutlookGraphError
     ) -> Generator[ConnectorFailure, None, None]:
-        """A mailbox that is unlicensed or out of the app's Exchange scope is a
-        recorded failure when the admin named it and a log line otherwise."""
-        if self.mailboxes:
-            yield _mailbox_failure(
-                mailbox.address,
-                f"Mailbox {mailbox.address} is unavailable ({error.code}). "
-                f"{EXCHANGE_SCOPE_REMEDIATION}",
-                error,
-            )
-            return
-        logger.info(
-            "Outlook: skipping %s, mailbox unavailable (%s)",
+        """Unlicensed, or out of the app's Exchange scope."""
+        yield from self._unavailable(
             mailbox.address,
-            error.code,
+            f"Mailbox {mailbox.address} is unavailable ({error.code}). "
+            f"{EXCHANGE_SCOPE_REMEDIATION}",
+            error,
+        )
+
+    def _calendar_unavailable(
+        self, mailbox: OutlookMailbox, error: OutlookGraphError
+    ) -> Generator[ConnectorFailure, None, None]:
+        """No calendar grant, or none for this mailbox. Its mail stays indexed."""
+        yield from self._unavailable(
+            f"{mailbox.address} calendar",
+            f"Calendar of {mailbox.address} is unavailable ({error.code}). "
+            f"{CALENDAR_READ_REMEDIATION}",
+            error,
         )
 
     def _resolve_mailboxes(
@@ -645,8 +676,8 @@ class OutlookConnector(
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
-        """Every conversation document id the walk would produce today, so
-        pruning drops the conversations that vanished.
+        """Every conversation and event document id the walk would produce
+        today, so pruning drops the ones that vanished.
 
         Reads folder and delta metadata only, never a body. A mailbox whose
         probe answers 404 is gone and contributes nothing, so its documents go
@@ -681,21 +712,34 @@ class OutlookConnector(
             excluded = self._excluded_well_known_folder_ids(mailbox)
             tree = list(self._walk_folder_tree(mailbox, excluded))
             yield list(self._hierarchy_nodes(mailbox, tree))
-            yield from self._slim_conversations(mailbox, tree, callback)
+            yield from self._slim_batches(
+                self._conversation_id_pages(mailbox, tree), callback
+            )
             if self.include_calendar:
-                yield from self._slim_events(mailbox, callback)
+                yield from self._slim_batches(self._event_id_pages(mailbox), callback)
 
-    def _slim_conversations(
-        self,
-        mailbox: OutlookMailbox,
-        tree: list[tuple[OutlookFolder, str]],
-        callback: IndexingHeartbeatInterface | None,
+    def _slim_batches(
+        self, id_pages: Iterable[list[str]], callback: IndexingHeartbeatInterface | None
     ) -> GenerateSlimDocumentOutput:
-        """Conversation ids of every folder in the tree, batched across folders
-        and deduplicated per page. The parent is left unset so pruning keeps the
-        folder indexing chose. Any Graph error raises, since pruning must see
-        the whole mailbox or nothing."""
+        """Document ids batched across pages, each page reported to the heartbeat."""
         batch: list[SlimDocument | HierarchyNode] = []
+        for ids in id_pages:
+            batch.extend(SlimDocument(id=document_id) for document_id in ids)
+            while len(batch) >= SLIM_BATCH_SIZE:
+                yield batch[:SLIM_BATCH_SIZE]
+                batch = batch[SLIM_BATCH_SIZE:]
+            if callback is not None:
+                callback.progress("outlook_slim_docs", len(ids))
+        if batch:
+            yield batch
+
+    def _conversation_id_pages(
+        self, mailbox: OutlookMailbox, tree: list[tuple[OutlookFolder, str]]
+    ) -> Generator[list[str], None, None]:
+        """Conversation document ids of every folder in the tree, one list per
+        delta page and deduplicated within it. The parent is left unset so
+        pruning keeps the folder indexing chose. Any Graph error raises, since
+        pruning must see the whole mailbox or nothing."""
         for folder, _ in tree:
             next_link: str | None = None
             while True:
@@ -710,30 +754,21 @@ class OutlookConnector(
                     for change in page.changes
                     if not change.removed and change.conversation_id
                 )
-                batch.extend(
-                    SlimDocument(id=conversation_document_id(mailbox, conversation_id))
+                yield [
+                    conversation_document_id(mailbox, conversation_id)
                     for conversation_id in conversation_ids
-                )
-                while len(batch) >= SLIM_BATCH_SIZE:
-                    yield batch[:SLIM_BATCH_SIZE]
-                    batch = batch[SLIM_BATCH_SIZE:]
-                if callback is not None:
-                    callback.progress("outlook_slim_docs", len(conversation_ids))
+                ]
                 next_link = page.next_link
                 if next_link is None:
                     break
-        if batch:
-            yield batch
 
-    def _slim_events(
-        self, mailbox: OutlookMailbox, callback: IndexingHeartbeatInterface | None
-    ) -> GenerateSlimDocumentOutput:
+    def _event_id_pages(
+        self, mailbox: OutlookMailbox
+    ) -> Generator[list[str], None, None]:
         """Event document ids of the calendar window, series collapsed to their
-        master the way indexing does. A series whose master Graph refuses is
-        listed anyway, which keeps a document that was never written and
+        master like indexing. An unreadable master still lists its id, which
         prunes nothing. Any Graph error raises, like the folder walk."""
         window_start, window_end = self._calendar_window()
-        batch: list[SlimDocument | HierarchyNode] = []
         seen: set[str] = set()
         next_link: str | None = None
         while True:
@@ -752,20 +787,10 @@ class OutlookConnector(
                     continue
                 seen.add(event_id)
                 new_ids.append(event_id)
-            batch.extend(
-                SlimDocument(id=event_document_id(mailbox, event_id))
-                for event_id in new_ids
-            )
-            while len(batch) >= SLIM_BATCH_SIZE:
-                yield batch[:SLIM_BATCH_SIZE]
-                batch = batch[SLIM_BATCH_SIZE:]
-            if callback is not None:
-                callback.progress("outlook_slim_docs", len(new_ids))
+            yield [event_document_id(mailbox, event_id) for event_id in new_ids]
             next_link = page.next_link
             if next_link is None:
                 break
-        if batch:
-            yield batch
 
     def _open_mailbox(
         self, checkpoint: OutlookCheckpoint, mailbox: OutlookMailbox
@@ -792,6 +817,9 @@ class OutlookConnector(
         checkpoint.excluded_folder_ids = sorted(excluded)
         checkpoint.current_folder = None
         checkpoint.seen_conversation_ids = set()
+        checkpoint.calendar_next_link = None
+        checkpoint.calendar_done = False
+        checkpoint.seen_series_ids = set()
         self._reset_folder_cursor(checkpoint)
 
     def _hierarchy_nodes(
@@ -875,7 +903,7 @@ class OutlookConnector(
         folder = checkpoint.current_folder
         assert mailbox is not None and folder is not None
 
-        window_start = datetime.fromtimestamp(start, tz=timezone.utc) if start else None
+        window_start = _poll_bound(start)
         try:
             page = self.ops.fetch_folder_delta_page(
                 mailbox_id=mailbox.id,
@@ -906,7 +934,7 @@ class OutlookConnector(
                 return
             raise
 
-        end_at = datetime.fromtimestamp(end, tz=timezone.utc) if end else None
+        end_at = _poll_bound(end)
         excluded = set(checkpoint.excluded_folder_ids)
         for change in page.changes:
             if change.removed or not change.conversation_id:
@@ -961,26 +989,6 @@ class OutlookConnector(
             now + timedelta(days=self.calendar_future_days),
         )
 
-    def _calendar_unavailable(
-        self, mailbox: OutlookMailbox, error: OutlookGraphError
-    ) -> Generator[ConnectorFailure, None, None]:
-        """No calendar grant, or none for this mailbox: its mail stays indexed
-        and the calendar is a recorded failure when the admin named the mailbox."""
-        if self.mailboxes:
-            yield _mailbox_failure(
-                f"{mailbox.address} calendar",
-                f"Calendar of {mailbox.address} is unavailable ({error.code}). "
-                f"Grant `Calendars.Read` to the app registration. "
-                f"{EXCHANGE_SCOPE_REMEDIATION}",
-                error,
-            )
-            return
-        logger.info(
-            "Outlook: skipping calendar of %s, unavailable (%s)",
-            mailbox.address,
-            error.code,
-        )
-
     def _read_calendar_page(
         self, checkpoint: OutlookCheckpoint, start: SecondsSinceUnixEpoch
     ) -> Generator[Document | ConnectorFailure, None, None]:
@@ -1006,9 +1014,7 @@ class OutlookConnector(
                 return
             raise
 
-        modified_after = (
-            datetime.fromtimestamp(start, tz=timezone.utc) if start else None
-        )
+        modified_after = _poll_bound(start)
         for event in page.events:
             document = self._event_document(
                 mailbox, event, modified_after, checkpoint.seen_series_ids
@@ -1027,28 +1033,37 @@ class OutlookConnector(
     ) -> Document | None:
         """The document for one calendar view row, or None when the row adds
         nothing: unchanged since the poll window opened, skipped, or one more
-        occurrence of a series already written this attempt."""
-        # The view takes no filter, so the poll window is applied here. An
-        # occurrence carries its series' modification time.
-        if (
-            modified_after is not None
-            and event.last_modified_at is not None
-            and event.last_modified_at < modified_after
-        ):
+        occurrence of a series already resolved this attempt."""
+        if not self._changed_since(event, modified_after):
             return None
         reason = event_skip_reason(event)
         if reason is not None:
             logger.debug("Outlook: skipping event %s, %s", event.id, reason)
             return None
-        if event.event_type == EVENT_OCCURRENCE and event.series_master_id:
-            if event.series_master_id in seen_series_ids:
+        series_id = _occurrence_series_id(event)
+        if series_id is not None:
+            if series_id in seen_series_ids:
                 return None
-            master = self._series_master(mailbox, event.series_master_id)
-            seen_series_ids.add(event.series_master_id)
+            master = self._series_master(mailbox, series_id)
+            seen_series_ids.add(series_id)
             if master is None or event_skip_reason(master) is not None:
                 return None
             event = master
         return build_event_document(mailbox, event)
+
+    def _changed_since(
+        self, event: OutlookEvent, modified_after: datetime | None
+    ) -> bool:
+        """Whether the poll window admits the event. The view takes no filter,
+        so it is applied here to the event's modification time, and an untouched
+        event that has just entered the front of the window is admitted by its
+        start time, since no earlier poll could have seen it."""
+        if modified_after is None or event.last_modified_at is None:
+            return True
+        if event.last_modified_at >= modified_after:
+            return True
+        window_front = modified_after + timedelta(days=self.calendar_future_days)
+        return event.start_at is not None and event.start_at >= window_front
 
     def _series_master(
         self, mailbox: OutlookMailbox, series_master_id: str

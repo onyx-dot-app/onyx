@@ -10,7 +10,8 @@ Permission-to-capability mapping (application permissions):
 
 - ``Mail.Read``     -> INDEXING (folders, message delta, message bodies, attachments)
 - ``User.Read.All`` -> INDEXING (mailbox enumeration and address resolution)
-- ``Calendars.Read`` -> INDEXING (calendar view, only when the connector indexes calendars)
+- ``Calendars.Read`` -> INDEXING (calendar view and series masters, only when the
+  connector indexes calendars)
 
 Exchange RBAC for Applications or an application access policy can narrow the
 mailboxes those grants reach. A mailbox outside that scope answers 403 exactly
@@ -18,6 +19,7 @@ like a missing grant, so the remediation text names both causes.
 """
 
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
@@ -29,6 +31,7 @@ from onyx.connectors.exceptions import (
     UnexpectedValidationError,
 )
 from onyx.connectors.outlook.errors import (
+    CALENDAR_READ_REMEDIATION,
     EXCHANGE_SCOPE_REMEDIATION,
     MAILBOX_UNAVAILABLE_REMEDIATION,
     USER_LISTING_DENIED,
@@ -139,6 +142,17 @@ def _open_first_readable_mailbox(
     )
 
 
+def _open_sample_mailbox(
+    gateway: OutlookSourceOperations, config: dict[str, Any] | None
+) -> tuple[OutlookMailbox, OutlookFolder]:
+    """The first configured mailbox, or the first readable one when the
+    connector indexes every mailbox."""
+    addresses = configured_addresses(config)
+    if addresses:
+        return _open_configured_mailbox(gateway, addresses[0])
+    return _open_first_readable_mailbox(gateway)
+
+
 class _TokenAuthCheck(CapabilityCheck):
     """Asks Entra for a token. A blank credential field fails here too, since
     the gateway refuses to build the MSAL app without every field its
@@ -206,11 +220,9 @@ class _MailReadCheck(CapabilityCheck):
 
     def run(self, context: CapabilityCheckContext) -> None:
         gateway = _gateway(context)
-        addresses = configured_addresses(context.connector_specific_config)
-        if addresses:
-            mailbox, inbox = _open_configured_mailbox(gateway, addresses[0])
-        else:
-            mailbox, inbox = _open_first_readable_mailbox(gateway)
+        mailbox, inbox = _open_sample_mailbox(
+            gateway, context.connector_specific_config
+        )
         try:
             gateway.get_well_known_folder(
                 mailbox_id=mailbox.id, name=_PROBE_WELL_KNOWN_FOLDER
@@ -251,13 +263,6 @@ class _MailReadCheck(CapabilityCheck):
 _CONFIG_INCLUDE_CALENDAR = "include_calendar"
 
 
-def _calendar_denied(mailbox: OutlookMailbox) -> str:
-    return (
-        f"The app cannot read the calendar of `{mailbox.address}`. Grant "
-        "`Calendars.Read` (application) to the app registration."
-    )
-
-
 class _CalendarReadCheck(CapabilityCheck):
     """Reads one page of one mailbox's calendar view, the call indexing makes,
     which proves ``Calendars.Read``. A connector that does not index calendars
@@ -270,10 +275,7 @@ class _CalendarReadCheck(CapabilityCheck):
             display_name="Calendar of one mailbox is readable",
             requires_connector_instance=False,
             requires_connector_config=True,
-            remediation=(
-                "Grant `Calendars.Read` (application) to the app registration. "
-                f"{EXCHANGE_SCOPE_REMEDIATION}"
-            ),
+            remediation=CALENDAR_READ_REMEDIATION,
             docs_link=_OUTLOOK_DOCS_LINK,
         )
 
@@ -281,11 +283,7 @@ class _CalendarReadCheck(CapabilityCheck):
         if not (context.connector_specific_config or {}).get(_CONFIG_INCLUDE_CALENDAR):
             return
         gateway = _gateway(context)
-        addresses = configured_addresses(context.connector_specific_config)
-        if addresses:
-            mailbox, _ = _open_configured_mailbox(gateway, addresses[0])
-        else:
-            mailbox, _ = _open_first_readable_mailbox(gateway)
+        mailbox, _ = _open_sample_mailbox(gateway, context.connector_specific_config)
         now = datetime.now(timezone.utc)
         try:
             gateway.fetch_calendar_delta_page(
@@ -295,7 +293,11 @@ class _CalendarReadCheck(CapabilityCheck):
                 page_size=1,
             )
         except OutlookGraphError as e:
-            raise_for_graph_error(e, _calendar_denied(mailbox))
+            raise_for_graph_error(
+                e,
+                f"The app cannot read the calendar of `{mailbox.address}`.",
+                CALENDAR_READ_REMEDIATION,
+            )
 
 
 class _ConfiguredMailboxesCheck(CapabilityCheck):

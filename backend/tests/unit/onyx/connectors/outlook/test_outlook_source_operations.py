@@ -28,11 +28,11 @@ from onyx.connectors.outlook.source_operations import (
     CHANGE_SELECT,
     EMPTY_PAGE_FOLLOW_LIMIT,
     EPOCH_TIMESTAMP,
+    EVENT_PREFERENCES,
     EVENTS_PAGE_SIZE,
     MESSAGE_SELECT,
     MESSAGES_PAGE_SIZE,
     TEXT_BODY_PREFERENCE,
-    UTC_TIMEZONE_PREFERENCE,
     OutlookSourceOperations,
 )
 from tests.unit.onyx.connectors.outlook.outlook_api_shapes import (
@@ -822,7 +822,6 @@ def test_check_token_reports_expiry() -> None:
 
 WINDOW_START = datetime(2026, 1, 1, tzinfo=timezone.utc)
 WINDOW_END = datetime(2026, 12, 31, tzinfo=timezone.utc)
-CALENDAR_PREFER = f"{TEXT_BODY_PREFERENCE}, {UTC_TIMEZONE_PREFERENCE}"
 
 
 def test_calendar_delta_first_page_carries_the_window_and_preferences() -> None:
@@ -858,7 +857,7 @@ def test_calendar_delta_first_page_carries_the_window_and_preferences() -> None:
         "startDateTime": "2026-01-01T00:00:00Z",
         "endDateTime": "2026-12-31T00:00:00Z",
     }
-    assert headers == {"Prefer": f"odata.maxpagesize=5, {CALENDAR_PREFER}"}
+    assert headers == {"Prefer": f"odata.maxpagesize=5, {EVENT_PREFERENCES}"}
     assert result.next_link == "https://graph/calendarView/delta?$skiptoken=abc"
     # The removed row is dropped and the rest parse whole.
     assert [e.id for e in result.events] == ["evt-1", "occ-1"]
@@ -892,7 +891,7 @@ def test_calendar_delta_next_page_resends_only_the_preferences() -> None:
     assert client.get_json.call_args.args == (
         "https://graph/calendarView/delta?$skiptoken=abc",
         None,
-        {"Prefer": f"odata.maxpagesize={EVENTS_PAGE_SIZE}, {CALENDAR_PREFER}"},
+        {"Prefer": f"odata.maxpagesize={EVENTS_PAGE_SIZE}, {EVENT_PREFERENCES}"},
     )
     # A delta link in place of a next link ends the round.
     assert result.events == []
@@ -923,7 +922,7 @@ def test_get_event_reads_the_series_master_with_its_recurrence_in_words() -> Non
     assert client.get_json.call_args.args == (
         f"{GRAPH_BASE}/users/{MAILBOX_ID}/events/series-1",
         None,
-        {"Prefer": CALENDAR_PREFER},
+        {"Prefer": EVENT_PREFERENCES},
     )
     assert result.event_type == "seriesMaster"
     assert result.recurrence == (
@@ -956,4 +955,41 @@ def test_recurrence_summaries_cover_numbered_and_open_ended_ranges() -> None:
     monthly = gateway.get_event(mailbox_id=MAILBOX_ID, event_id="b")
 
     assert daily.recurrence == "every day from 2026-09-01 for 10 occurrences"
-    assert monthly.recurrence == "every month from 2026-09-03"
+    assert monthly.recurrence == "every month on day 3 from 2026-09-03"
+
+
+def test_recurrence_summaries_keep_the_place_and_month_of_relative_patterns() -> None:
+    gateway, client = _gateway()
+    client.get_json.side_effect = [
+        event_json(
+            recurrence={
+                "pattern": {
+                    "type": "relativeYearly",
+                    "interval": 1,
+                    "daysOfWeek": ["monday"],
+                    "index": "first",
+                    "month": 3,
+                },
+                "range": {"type": "noEnd", "startDate": "2026-03-02"},
+            }
+        ),
+        event_json(
+            recurrence={
+                "pattern": {
+                    "type": "relativeMonthly",
+                    "interval": 1,
+                    "daysOfWeek": ["friday"],
+                    "index": "last",
+                },
+                "range": {"type": "noEnd", "startDate": "2026-01-30"},
+            }
+        ),
+    ]
+
+    yearly = gateway.get_event(mailbox_id=MAILBOX_ID, event_id="a")
+    monthly = gateway.get_event(mailbox_id=MAILBOX_ID, event_id="b")
+
+    assert (
+        yearly.recurrence == "every year on the first monday of March from 2026-03-02"
+    )
+    assert monthly.recurrence == "every month on the last friday from 2026-01-30"

@@ -6,7 +6,8 @@ acquisition come from the shared Microsoft package. Each operation returns the
 plain models in ``models.py`` so a Graph schema change surfaces in one file.
 
 Application permissions this gateway needs: ``Mail.Read`` for folders and
-messages, ``User.Read.All`` to enumerate and resolve mailboxes.
+messages, ``Calendars.Read`` for the calendar view, ``User.Read.All`` to
+enumerate and resolve mailboxes.
 """
 
 import base64
@@ -101,7 +102,7 @@ CONFIG_GRAPH_API_HOST = "graph_api_host"
 USERS_PAGE_SIZE = 999
 FOLDERS_PAGE_SIZE = 250
 MESSAGES_PAGE_SIZE = 100
-# The calendar view delta ignores $select, so every row carries a full body.
+# The calendar view delta takes no $select, so every row carries a full body.
 EVENTS_PAGE_SIZE = 50
 
 MAILBOX_SELECT = "id,mail,userPrincipalName,displayName"
@@ -132,9 +133,10 @@ FILE_ATTACHMENT_TYPE = "#microsoft.graph.fileAttachment"
 
 # Graph renders bodies as HTML unless asked for text, and text spares a parse.
 TEXT_BODY_PREFERENCE = 'outlook.body-content-type="text"'
-# Event times arrive as a naive clock plus a zone name. Asking for UTC means
-# they parse without a Windows time zone table.
+# Graph defaults event times to UTC. Pinned so the naive dateTime never
+# needs a Windows zone table.
 UTC_TIMEZONE_PREFERENCE = 'outlook.timezone="UTC"'
+EVENT_PREFERENCES = f"{TEXT_BODY_PREFERENCE}, {UTC_TIMEZONE_PREFERENCE}"
 SEARCH_FOLDER_TYPE = "#microsoft.graph.mailSearchFolder"
 
 # Graph only orders by a property that leads the filter, so conversation reads
@@ -277,15 +279,6 @@ def _parse_message(raw: dict[str, Any]) -> OutlookMessage:
     )
 
 
-def _parse_event_time(raw: dict[str, Any] | None) -> datetime | None:
-    """A dateTimeTimeZone read as UTC, which every event request asks for."""
-    value = (raw or {}).get("dateTime")
-    if not value:
-        return None
-    parsed = datetime.fromisoformat(value)
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
-
-
 _RECURRENCE_UNITS = {
     "daily": "day",
     "weekly": "week",
@@ -294,20 +287,45 @@ _RECURRENCE_UNITS = {
     "absoluteYearly": "year",
     "relativeYearly": "year",
 }
+_MONTH_NAMES = (
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+)
 
 
 def _recurrence_summary(raw: dict[str, Any] | None) -> str | None:
     """The pattern and range of a series in words, so a search for the weekly
-    standup finds the series document."""
+    standup or the first-Monday review finds the series document."""
     if not raw:
         return None
     pattern = raw.get("pattern") or {}
     range_ = raw.get("range") or {}
+    kind = pattern.get("type") or ""
     interval = pattern.get("interval") or 1
-    unit = _RECURRENCE_UNITS.get(pattern.get("type") or "", "time")
+    unit = _RECURRENCE_UNITS.get(kind, "time")
     parts = [f"every {unit}" if interval == 1 else f"every {interval} {unit}s"]
-    if pattern.get("daysOfWeek"):
-        parts.append("on " + ", ".join(pattern["daysOfWeek"]))
+    days = ", ".join(pattern.get("daysOfWeek") or [])
+    # Relative patterns pick a weekday by its place in the month ("the last
+    # friday"), absolute ones a day number.
+    if days and kind.startswith("relative"):
+        parts.append(f"on the {pattern.get('index') or 'first'} {days}")
+    elif days:
+        parts.append(f"on {days}")
+    if kind.startswith("absolute") and pattern.get("dayOfMonth"):
+        parts.append(f"on day {pattern['dayOfMonth']}")
+    month = pattern.get("month") or 0
+    if kind.endswith("Yearly") and 1 <= month <= len(_MONTH_NAMES):
+        parts.append(f"of {_MONTH_NAMES[month - 1]}")
     if range_.get("startDate"):
         parts.append(f"from {range_['startDate']}")
     if range_.get("type") == "endDate" and range_.get("endDate"):
@@ -318,14 +336,14 @@ def _recurrence_summary(raw: dict[str, Any] | None) -> str | None:
 
 
 def _parse_event(raw: dict[str, Any]) -> OutlookEvent:
-    created = raw.get("createdDateTime")
-    modified = raw.get("lastModifiedDateTime")
+    # Event times arrive as a naive clock in the zone every request asks for,
+    # UTC, and the shared parser reads a naive value as UTC.
     return OutlookEvent(
         id=raw["id"],
         subject=raw.get("subject"),
         body_text=_body_text(raw.get("body")),
-        start_at=_parse_event_time(raw.get("start")),
-        end_at=_parse_event_time(raw.get("end")),
+        start_at=parse_graph_datetime((raw.get("start") or {}).get("dateTime")),
+        end_at=parse_graph_datetime((raw.get("end") or {}).get("dateTime")),
         is_all_day=bool(raw.get("isAllDay")),
         is_cancelled=bool(raw.get("isCancelled")),
         sensitivity=raw.get("sensitivity") or "normal",
@@ -335,8 +353,8 @@ def _parse_event(raw: dict[str, Any]) -> OutlookEvent:
         attendees=_recipients(raw.get("attendees")),
         location=(raw.get("location") or {}).get("displayName") or None,
         web_link=raw.get("webLink"),
-        created_at=parse_graph_datetime(created) if created else None,
-        last_modified_at=parse_graph_datetime(modified) if modified else None,
+        created_at=parse_graph_datetime(raw.get("createdDateTime")),
+        last_modified_at=parse_graph_datetime(raw.get("lastModifiedDateTime")),
         recurrence=_recurrence_summary(raw.get("recurrence")),
     )
 
@@ -706,13 +724,10 @@ class OutlookSourceOperations(SourceOperations):
         page_size: int = EVENTS_PAGE_SIZE,
         next_link: str | None = None,
     ) -> OutlookEventPage:
-        """One page of the events between ``window_start`` and ``window_end``,
-        recurring series expanded into their occurrences.
-
-        The window is baked into the state tokens, so it goes on the first
-        request only. Removed rows are dropped: pruning owns deletions, and a
-        removal here can also mean the event merely left the window.
-        """
+        """One page of the events in the window, recurring series expanded into
+        their occurrences. The window rides in the state tokens, so it goes on
+        the first request only. Removed rows are dropped: pruning owns deletions,
+        and Graph also files events outside the window under @removed."""
         params = None
         url = next_link
         if url is None:
@@ -724,12 +739,7 @@ class OutlookSourceOperations(SourceOperations):
         data = self._get(
             url,
             params,
-            {
-                "Prefer": (
-                    f"odata.maxpagesize={page_size}, {TEXT_BODY_PREFERENCE}, "
-                    f"{UTC_TIMEZONE_PREFERENCE}"
-                )
-            },
+            {"Prefer": f"odata.maxpagesize={page_size}, {EVENT_PREFERENCES}"},
         )
         return OutlookEventPage(
             events=[
@@ -754,7 +764,7 @@ class OutlookSourceOperations(SourceOperations):
             self._get(
                 f"{self._user_url(mailbox_id)}/events/{event_id}",
                 None,
-                {"Prefer": f"{TEXT_BODY_PREFERENCE}, {UTC_TIMEZONE_PREFERENCE}"},
+                {"Prefer": EVENT_PREFERENCES},
             )
         )
 
