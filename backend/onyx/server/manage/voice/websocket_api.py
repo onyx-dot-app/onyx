@@ -31,6 +31,7 @@ from onyx.voice.interface import (
     StreamingSynthesizerProtocol,
     StreamingTranscriberProtocol,
     TranscriptResult,
+    normalize_provider_type,
 )
 
 logger = setup_logger()
@@ -828,7 +829,7 @@ async def websocket_transcribe(
                 provider_db.provider_type,
             )
             try:
-                provider_type = provider_db.provider_type.lower()
+                provider_type = normalize_provider_type(provider_db.provider_type)
                 provider = get_voice_provider(provider_db)
                 logger.info(
                     "WebSocket transcribe: voice provider created, streaming supported: %s",
