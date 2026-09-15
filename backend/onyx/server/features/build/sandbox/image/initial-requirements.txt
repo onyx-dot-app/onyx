@@ -22,7 +22,7 @@ click==8.4.1
     # via uvicorn
 contourpy==1.3.3
     # via matplotlib
-cryptography==49.0.0
+cryptography==50.0.0
     # via
     #   -r initial-requirements.in
     #   pdfminer-six
