@@ -539,6 +539,8 @@ async def test_transcribe_is_pcm_only_and_traced(
         yield
 
     class FakeTranscriber:
+        failed = False
+
         def __init__(self, **kwargs: Any):
             self.kwargs = kwargs
 
@@ -571,6 +573,8 @@ async def test_transcribe_sends_source_pcm_in_bounded_chunks(
         yield
 
     class FakeTranscriber:
+        failed = False
+
         def __init__(self, **kwargs: Any):
             self.kwargs = kwargs
 
@@ -602,6 +606,38 @@ async def test_transcribe_sends_source_pcm_in_bounded_chunks(
 
 
 @pytest.mark.asyncio
+async def test_transcribe_raises_when_session_failed_before_close(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    @contextmanager
+    def fake_trace(**kwargs: Any) -> Iterator[None]:
+        _ = kwargs
+        yield
+
+    class FakeTranscriber:
+        failed = True
+
+        def __init__(self, **kwargs: Any):
+            self.kwargs = kwargs
+
+        async def connect(self) -> None:
+            return None
+
+        async def send_audio(self, audio_data: bytes) -> None:
+            _ = audio_data
+
+        async def close(self) -> str:
+            return "partial"
+
+    monkeypatch.setattr(zoom, "traced_llm_call", fake_trace)
+    monkeypatch.setattr(zoom, "ZoomStreamingTranscriber", FakeTranscriber)
+    provider = ZoomVoiceProvider(api_key="key", api_secret="secret")
+
+    with pytest.raises(RuntimeError, match="Zoom Scribe stream failed"):
+        await provider.transcribe(b"pcm", "pcm16")
+
+
+@pytest.mark.asyncio
 async def test_transcribe_closes_after_successful_connect_on_cancellation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -613,6 +649,8 @@ async def test_transcribe_closes_after_successful_connect_on_cancellation(
         yield
 
     class FakeTranscriber:
+        failed = False
+
         def __init__(self, **kwargs: Any):
             self.kwargs = kwargs
 
@@ -645,6 +683,8 @@ async def test_validate_credentials_closes_after_successful_connect_on_cancellat
     close_count = 0
 
     class FakeTranscriber:
+        failed = False
+
         def __init__(self, **kwargs: Any):
             self.kwargs = kwargs
 

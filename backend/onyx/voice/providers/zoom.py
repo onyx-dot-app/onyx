@@ -358,6 +358,11 @@ class ZoomStreamingTranscriber(StreamingTranscriberProtocol):
     def reset_transcript(self) -> None:
         self._accumulated_transcript = ""
 
+    @property
+    def failed(self) -> bool:
+        """True once the session reported a provider failure."""
+        return self._error_signaled
+
 
 class ZoomVoiceProvider(VoiceProviderInterface):
     """Zoom Scribe provider for streaming and short-session PCM16 STT."""
@@ -402,8 +407,13 @@ class ZoomVoiceProvider(VoiceProviderInterface):
                     await transcriber.send_audio(
                         audio_data[offset : offset + ZOOM_TRANSCRIBE_SEND_CHUNK_BYTES]
                     )
-                transcript = await transcriber.close()
+                transcript = await asyncio.wait_for(
+                    transcriber.close(), timeout=ZOOM_CLOSE_TIMEOUT_SECONDS
+                )
                 closed = True
+                if transcriber.failed:
+                    # A partial transcript is not a successful result.
+                    raise RuntimeError("Zoom Scribe stream failed.")
                 return transcript
             finally:
                 if not closed:
