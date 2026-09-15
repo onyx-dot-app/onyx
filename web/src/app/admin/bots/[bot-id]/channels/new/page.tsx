@@ -72,9 +72,9 @@ function NewChannelConfigContent({ slackBotId }: { slackBotId: number }) {
       ? {
           paidEnterpriseFeaturesEnabled: true,
           categories: standardAnswerCategories ?? [],
-          ...(stdAnswerError
-            ? { error: { message: String(stdAnswerError) } }
-            : {}),
+          error: stdAnswerError
+            ? { message: String(stdAnswerError) }
+            : undefined,
         }
       : { paidEnterpriseFeaturesEnabled: false };
 

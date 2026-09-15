@@ -654,9 +654,11 @@ export default function BuildChatPanel({
     <div className="h-full w-full">
       {/* Content wrapper - shrinks when output panel opens. Wrapped in a
           dropzone so files can be dropped anywhere in the chat area. */}
+      {/* noPaste: the input bar already uploads pasted files itself. */}
       <Dropzone
         noClick
         noKeyboard
+        noPaste
         onDrop={(accepted) => {
           if (accepted.length > 0) uploadFiles(accepted);
         }}

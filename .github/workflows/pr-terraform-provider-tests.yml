@@ -45,7 +45,7 @@ permissions:
   contents: read
 
 env:
-  GO_VERSION: "1.26.5"
+  GO_VERSION: "1.27.1"
   IMAGE_TAG: "latest"
   POSTGRES_USER: "postgres"
   POSTGRES_PASSWORD: "password"
