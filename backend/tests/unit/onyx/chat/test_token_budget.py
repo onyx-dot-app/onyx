@@ -143,22 +143,29 @@ def test_provider_precedes_bare_model(
     assert resolve_chat_token_budget(llm) == ChatTokenBudget(90_000, 10_000, 100_000, 0)
 
 
-def test_partial_metadata_uses_complete_alias(
+@pytest.mark.parametrize("model_output", [None, 100_000, 200_000])
+@pytest.mark.parametrize("input_cap", [100_000, 1_000_000])
+def test_unusable_metadata_uses_complete_alias(
     model_map: ModelMap,
     llm: Mock,
     monkeypatch: pytest.MonkeyPatch,
+    model_output: int | None,
+    input_cap: int,
 ) -> None:
     monkeypatch.setattr("onyx.chat.token_budget.GEN_AI_INPUT_TOKEN_SAFETY_MARGIN", 0)
     llm.config.deployment_name = "alias"
-    llm.config.max_input_tokens = 100_000
+    llm.config.max_input_tokens = input_cap
     model_map.update(
         {
-            "openai/model": {"max_input_tokens": 100_000},
+            "openai/model": {
+                "max_input_tokens": 100_000,
+                "max_output_tokens": model_output,
+            },
             "openai/alias": {"max_input_tokens": 200_000, "max_output_tokens": 20_000},
         }
     )
     assert resolve_chat_token_budget(llm) == ChatTokenBudget(
-        100_000, 20_000, 200_000, 0
+        min(input_cap, 180_000), 20_000, 200_000, 0
     )
 
 

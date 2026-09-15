@@ -62,7 +62,7 @@ def resolve_chat_token_budget(llm: LLM) -> ChatTokenBudget:
                 raw_input_tokens, model_input, context_tokens - model_output
             )
             if reserved_input <= 0:
-                break
+                continue
             input_tokens = max(
                 0, int(reserved_input * (1 - GEN_AI_INPUT_TOKEN_SAFETY_MARGIN))
             )

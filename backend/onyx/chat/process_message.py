@@ -376,7 +376,8 @@ def _extract_text_from_in_memory_file(f: InMemoryChatFile) -> str | None:
 
 def extract_context_files(
     user_files: list[UserFile],
-    input_token_budget: int,
+    llm_max_context_window: int,
+    reserved_token_count: int,
     db_session: Session,
     # Because the tokenizer is a generic tokenizer, the token count may be incorrect.
     # to account for this, the maximum context that is allowed for this function is
@@ -393,7 +394,8 @@ def extract_context_files(
     Args:
         project_id: The project ID to load files from
         user_id: The user ID for authorization
-        input_token_budget: Output-reserved input tokens available to the model.
+        llm_max_context_window: Maximum tokens allowed in the LLM context window
+        reserved_token_count: Number of tokens to reserve for other content
         db_session: Database session
         max_llm_context_percentage: Maximum percentage of the LLM context window to use.
     Returns:
@@ -417,7 +419,9 @@ def extract_context_files(
         for uf in user_files
         if not mime_type_to_chat_file_type(uf.file_type).use_metadata_only()
     )
-    max_actual_tokens = max(0, input_token_budget) * max_llm_context_percentage
+    max_actual_tokens = (
+        llm_max_context_window - reserved_token_count
+    ) * max_llm_context_percentage
 
     if aggregate_tokens >= max_actual_tokens:
         use_as_search_filter = not DISABLE_VECTOR_DB
@@ -889,14 +893,14 @@ def build_chat_turn(
     )
 
     # Use the smallest usable input budget across models for safety (harmless for N=1).
-    input_token_budget = min(
+    llm_max_context_window = min(
         resolve_chat_token_budget(llm).input_tokens for llm in llms
     )
-    project_input_token_budget = max(0, input_token_budget - reserved_token_count)
 
     extracted_context_files = extract_context_files(
         user_files=context_user_files,
-        input_token_budget=project_input_token_budget,
+        llm_max_context_window=llm_max_context_window,
+        reserved_token_count=reserved_token_count,
         db_session=db_session,
     )
 
@@ -1209,11 +1213,6 @@ def _run_models(
     model_error_info: list[LLMErrorInfo | None] = [None] * n_models
     persist_lock = threading.Lock()
     persisted: list[bool] = [False] * n_models
-    persistence_settled: list[bool] = [False] * n_models
-    model_finished: list[bool] = [False] * n_models
-    # All models share one mainline chain, so history compression runs once,
-    # after every model has a persisted outcome.
-    compression_done = False
     post_steps_done = threading.Event()
 
     # Set only on stop-button: workers can't be interrupted, so their remaining
@@ -1251,61 +1250,47 @@ def _run_models(
                 return
             persisted[model_idx] = True
 
+        if errored:
+            _save_errored_message(model_idx, context)
+            return
+
+        completed_normally = succeeded if stop_button else True
+
+        def _is_connected(value: bool = completed_normally) -> bool:
+            return value
+
         try:
-            if errored:
-                _save_errored_message(model_idx, context)
-                return
-
-            completed_normally = succeeded if stop_button else True
-
-            def _is_connected(value: bool = completed_normally) -> bool:
-                return value
-
-            try:
-                llm_loop_completion_handle(
-                    state_container=state_containers[model_idx],
-                    is_connected=_is_connected,
-                    assistant_message=setup.reserved_messages[model_idx],
-                    llm=setup.llms[model_idx],
-                    reserved_tokens=setup.reserved_token_count,
-                    run_compression=False,
-                )
-            except Exception:
-                logger.exception(
-                    "%s completion failed for model %d (%s)",
-                    context.value,
-                    model_idx,
-                    setup.model_display_names[model_idx],
-                )
-        finally:
-            with persist_lock:
-                persistence_settled[model_idx] = True
-
-    def _run_compression_after_all_persisted(context: _PersistContext) -> None:
-        nonlocal compression_done
-        with persist_lock:
-            if (
-                compression_done
-                or drain_done.is_set()
-                or not all(model_finished)
-                or not all(persistence_settled)
-            ):
-                return
-            compression_done = True
-            compression_model_idx = next(
-                (i for i in range(n_models) if persisted[i] and not model_errored[i]),
-                None,
+            llm_loop_completion_handle(
+                state_container=state_containers[model_idx],
+                is_connected=_is_connected,
+                assistant_message=setup.reserved_messages[model_idx],
+                llm=setup.llms[model_idx],
+                reserved_tokens=setup.reserved_token_count,
+                run_compression=False,
             )
-            if compression_model_idx is None:
-                return
-            measured_overheads = [
-                state_container.get_reserved_input_tokens()
-                for state_container in state_containers
-            ]
-            max_reserved_input_tokens = max(
-                overhead if overhead is not None else setup.reserved_token_count
-                for overhead in measured_overheads
+        except Exception:
+            logger.exception(
+                "%s completion failed for model %d (%s)",
+                context.value,
+                model_idx,
+                setup.model_display_names[model_idx],
             )
+
+    def _run_compression_after_all_persisted() -> None:
+        compression_model_idx = next(
+            (i for i in range(n_models) if persisted[i] and not model_errored[i]),
+            None,
+        )
+        if compression_model_idx is None:
+            return
+        measured_overheads = [
+            state_container.get_reserved_input_tokens()
+            for state_container in state_containers
+        ]
+        max_reserved_input_tokens = max(
+            overhead if overhead is not None else setup.reserved_token_count
+            for overhead in measured_overheads
+        )
         compression_input_token_budget = max(
             0,
             min(
@@ -1324,10 +1309,7 @@ def _run_models(
                 compression_input_token_budget=compression_input_token_budget,
             )
         except Exception:
-            logger.exception(
-                "%s compression failed after multi-model completion",
-                context.value,
-            )
+            logger.exception("compression failed after multi-model completion")
 
     def _run_post_steps() -> None:
         with persist_lock:
@@ -1337,7 +1319,6 @@ def _run_models(
 
         for i in range(n_models):
             _persist_model_outcome(i, _PersistContext.POST_STEPS)
-        _run_compression_after_all_persisted(_PersistContext.POST_STEPS)
 
         # The writer thread is the run's authoritative end — it owns the fence
         # reset so the session never sticks at (or prematurely leaves)
@@ -1459,8 +1440,6 @@ def _run_models(
 
         finally:
             _persist_model_outcome(model_idx, _PersistContext.WORKER)
-            with persist_lock:
-                model_finished[model_idx] = True
             merged_queue.put((model_idx, _MODEL_DONE))
 
     def _save_errored_message(model_idx: int, context: _PersistContext) -> None:
@@ -1553,9 +1532,6 @@ def _run_models(
                             _persist_model_outcome(
                                 i, _PersistContext.STOP_BUTTON, stop_button=True
                             )
-                        _run_compression_after_all_persisted(
-                            _PersistContext.STOP_BUTTON
-                        )
                         _publish(
                             Packet(
                                 placement=Placement(turn_index=0),
@@ -1608,7 +1584,8 @@ def _run_models(
 
             for i in range(n_models):
                 _persist_model_outcome(i, _PersistContext.NORMAL)
-            _run_compression_after_all_persisted(_PersistContext.NORMAL)
+            # Each completion signal follows its worker's persistence attempt.
+            _run_compression_after_all_persisted()
         except Exception:
             logger.exception("chat stream writer crashed")
             # With the writer dead, merged_queue has no consumer — flip the
@@ -2048,22 +2025,19 @@ def run_chat_history_compression(
             effective_history
         )
 
-    reserved_input_tokens = state_container.get_reserved_input_tokens()
-    legacy_input_token_budget = max(
-        0,
-        resolve_chat_token_budget(llm).input_tokens
-        - (
-            reserved_input_tokens
-            if reserved_input_tokens is not None
-            else reserved_tokens
-        ),
-    )
+    if compression_input_token_budget is None:
+        reserved_input_tokens = state_container.get_reserved_input_tokens()
+        compression_input_token_budget = max(
+            0,
+            resolve_chat_token_budget(llm).input_tokens
+            - (
+                reserved_input_tokens
+                if reserved_input_tokens is not None
+                else reserved_tokens
+            ),
+        )
     compression_params = get_compression_params(
-        input_token_budget=(
-            compression_input_token_budget
-            if compression_input_token_budget is not None
-            else legacy_input_token_budget
-        ),
+        input_token_budget=compression_input_token_budget,
         current_history_tokens=total_tokens,
     )
     if compression_params.should_compress:

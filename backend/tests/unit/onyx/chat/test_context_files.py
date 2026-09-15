@@ -161,7 +161,8 @@ class TestExtractContextFiles:
         db_session = MagicMock()
         result = extract_context_files(
             user_files=[],
-            input_token_budget=10000,
+            llm_max_context_window=10000,
+            reserved_token_count=0,
             db_session=db_session,
         )
         assert result.file_texts == []
@@ -179,7 +180,8 @@ class TestExtractContextFiles:
 
         result = extract_context_files(
             user_files=[uf],
-            input_token_budget=10000,
+            llm_max_context_window=10000,
+            reserved_token_count=0,
             db_session=MagicMock(),
         )
 
@@ -195,7 +197,8 @@ class TestExtractContextFiles:
 
         result = extract_context_files(
             user_files=[uf],
-            input_token_budget=10000,
+            llm_max_context_window=10000,
+            reserved_token_count=0,
             db_session=MagicMock(),
         )
 
@@ -212,7 +215,8 @@ class TestExtractContextFiles:
 
         result = extract_context_files(
             user_files=[uf],
-            input_token_budget=10000,
+            llm_max_context_window=10000,
+            reserved_token_count=0,
             db_session=MagicMock(),
         )
 
@@ -227,7 +231,8 @@ class TestExtractContextFiles:
 
         result = extract_context_files(
             user_files=[uf],
-            input_token_budget=10000,
+            llm_max_context_window=10000,
+            reserved_token_count=0,
             db_session=MagicMock(),
         )
 
@@ -242,7 +247,8 @@ class TestExtractContextFiles:
 
         result = extract_context_files(
             user_files=files,
-            input_token_budget=10000,
+            llm_max_context_window=10000,
+            reserved_token_count=0,
             db_session=MagicMock(),
         )
 
@@ -259,7 +265,8 @@ class TestExtractContextFiles:
 
         result = extract_context_files(
             user_files=[uf],
-            input_token_budget=5000,
+            llm_max_context_window=10000,
+            reserved_token_count=5000,
             db_session=MagicMock(),
         )
 
@@ -281,7 +288,8 @@ class TestExtractContextFiles:
 
         result = extract_context_files(
             user_files=[uf],
-            input_token_budget=10000,
+            llm_max_context_window=10000,
+            reserved_token_count=0,
             db_session=MagicMock(),
         )
 
@@ -327,7 +335,8 @@ class TestExtractContextFiles:
         # Pathway 1: extract_context_files (project/persona context)
         result = extract_context_files(
             user_files=[uf],
-            input_token_budget=10000,
+            llm_max_context_window=10000,
+            reserved_token_count=0,
             db_session=MagicMock(),
         )
         assert len(result.file_metadata_for_tool) == 1
@@ -356,7 +365,8 @@ class TestExtractContextFiles:
 
         result = extract_context_files(
             user_files=[uf],
-            input_token_budget=10000,
+            llm_max_context_window=10000,
+            reserved_token_count=0,
             db_session=MagicMock(),
         )
 
@@ -391,7 +401,8 @@ class TestExtractContextFiles:
 
         result = extract_context_files(
             user_files=[text_uf, tabular_uf],
-            input_token_budget=10000,
+            llm_max_context_window=10000,
+            reserved_token_count=0,
             db_session=MagicMock(),
         )
 
@@ -426,7 +437,8 @@ class TestExtractContextFiles:
 
         result = extract_context_files(
             user_files=[text_uf, tabular_uf],
-            input_token_budget=10000,
+            llm_max_context_window=10000,
+            reserved_token_count=0,
             db_session=MagicMock(),
         )
 
@@ -450,7 +462,8 @@ class TestExtractContextFiles:
 
         result = extract_context_files(
             user_files=[text_uf, tabular_uf],
-            input_token_budget=10000,
+            llm_max_context_window=10000,
+            reserved_token_count=0,
             db_session=MagicMock(),
         )
 
@@ -473,7 +486,8 @@ class TestExtractContextFiles:
 
         result = extract_context_files(
             user_files=[text_uf, tabular_uf],
-            input_token_budget=10000,
+            llm_max_context_window=10000,
+            reserved_token_count=0,
             db_session=MagicMock(),
         )
 

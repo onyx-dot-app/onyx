@@ -384,8 +384,12 @@ def count_message_replay_tokens(
     image_files_replayed_as_markers: bool = False,
     token_counter: Callable[[str], int] | None = None,
 ) -> int:
-    if not image_files_replayed_as_markers:
+    if not msg.image_files:
         return msg.token_count
+    if not image_files_replayed_as_markers:
+        return max(0, msg.token_count - msg.image_token_count) + sum(
+            image.token_count for image in msg.image_files
+        )
     # Include images whose stored cost is zero, such as project images.
     num_images = sum(
         1 for f in msg.image_files or [] if f.file_type == ChatFileType.IMAGE
@@ -706,10 +710,11 @@ def _create_context_files_message(
     documents_json = json.dumps({"documents": documents_list}, indent=2)
     message_content = f"Here are some documents provided for context, they may not all be relevant:\n{documents_json}"
 
-    # Use pre-calculated token count from context_files
+    # Images are counted on the user message that carries them.
     return ChatMessageSimple(
         message=message_content,
-        token_count=context_files.total_token_count,
+        token_count=context_files.total_token_count
+        - sum(image.token_count for image in context_files.image_files),
         message_type=MessageType.USER,
     )
 
