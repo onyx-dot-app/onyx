@@ -1607,3 +1607,51 @@ def test_series_tracking_is_capped_per_mailbox() -> None:
         event_document_id(mailbox(), "series-b"),
         event_document_id(mailbox(), "series-b"),
     ]
+
+
+# ---------------------------------------------------------------------------
+# permission sync
+# ---------------------------------------------------------------------------
+
+
+def _readers(item: SlimDocument | HierarchyNode) -> set[str]:
+    assert item.external_access is not None
+    assert item.external_access.is_public is False
+    assert item.external_access.external_user_group_ids == set()
+    return item.external_access.external_user_emails
+
+
+def test_perm_sync_slim_docs_carry_each_readership() -> None:
+    gateway = _calendar_gateway()
+    connector = _calendar_connector(gateway)
+
+    items = [i for batch in connector.retrieve_all_slim_docs_perm_sync() for i in batch]
+
+    nodes = [i for i in items if isinstance(i, HierarchyNode)]
+    assert len(nodes) == 5
+    assert all(_readers(n) == {MAILBOX_ADDRESS} for n in nodes)
+    by_id = {i.id: i for i in items if isinstance(i, SlimDocument)}
+    assert _readers(by_id[conversation_document_id(mailbox(), CONVERSATION_ID)]) == {
+        MAILBOX_ADDRESS
+    }
+    # The owner, the organizer (the owner here) and the attendees.
+    assert _readers(by_id[event_document_id(mailbox(), "evt-1")]) == {
+        MAILBOX_ADDRESS,
+        "bob@contoso.com",
+    }
+    assert _readers(by_id[event_document_id(mailbox(), SERIES_ID)]) == {
+        MAILBOX_ADDRESS,
+        "bob@contoso.com",
+    }
+
+
+def test_pruning_slim_docs_carry_no_readership() -> None:
+    gateway = _calendar_gateway()
+
+    items = [
+        i
+        for batch in _calendar_connector(gateway).retrieve_all_slim_docs()
+        for i in batch
+    ]
+
+    assert items and all(i.external_access is None for i in items)

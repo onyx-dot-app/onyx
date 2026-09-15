@@ -27,7 +27,10 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
     UnexpectedValidationError,
 )
-from onyx.connectors.outlook.capability_checks import build_outlook_indexing_checks
+from onyx.connectors.outlook.capability_checks import (
+    build_outlook_doc_permission_sync_checks,
+    build_outlook_indexing_checks,
+)
 from onyx.connectors.outlook.models import (
     INVALID_AUTHORITY_CODE,
     MISSING_CREDENTIAL_CODE,
@@ -52,7 +55,11 @@ from tests.unit.onyx.connectors.outlook.outlook_api_shapes import (
     message,
 )
 
-_CHECKS_BY_ID = {check.check_id: check for check in build_outlook_indexing_checks()}
+_CHECKS_BY_ID = {
+    check.check_id: check
+    for check in build_outlook_indexing_checks()
+    + build_outlook_doc_permission_sync_checks()
+}
 
 
 def _gateway() -> MagicMock:
@@ -580,3 +587,24 @@ def test_calendar_check_is_skipped_on_a_credential_only_run() -> None:
     )
 
     assert results[0].status is CapabilityCheckStatus.SKIPPED
+
+
+# ---------------------------------------------------------------------------
+# outlook_doc_permission_sync
+# ---------------------------------------------------------------------------
+
+
+def test_perm_sync_check_proves_the_user_listing_under_its_own_capability() -> None:
+    check = _CHECKS_BY_ID["outlook_doc_permission_sync"]
+    assert check.capability is CredentialCapability.DOC_PERMISSION_SYNC
+    gateway = _gateway()
+
+    check.run(_context(gateway))
+
+    gateway.list_mailbox_users.assert_called_once_with(page_size=1)
+
+    gateway.list_mailbox_users.side_effect = graph_error(
+        403, "Authorization_RequestDenied"
+    )
+    with pytest.raises(InsufficientPermissionsError, match="User.Read.All"):
+        check.run(_context(gateway))

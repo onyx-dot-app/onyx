@@ -26,6 +26,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from babel.core import get_global
 
+from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import (
     INDEX_BATCH_SIZE,
     OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD,
@@ -41,6 +42,7 @@ from onyx.connectors.interfaces import (
     GenerateSlimDocumentOutput,
     SecondsSinceUnixEpoch,
     SlimConnector,
+    SlimConnectorWithPermSync,
 )
 from onyx.connectors.microsoft_utils.drive_items import SizeCapExceeded
 from onyx.connectors.microsoft_utils.graph_env import (
@@ -322,6 +324,29 @@ def _indexed_event_id(event: OutlookEvent) -> str:
     return _occurrence_series_id(event) or event.id
 
 
+def owner_access(mailbox: OutlookMailbox) -> ExternalAccess:
+    """The mailbox's owner reads everything in it. A shared mailbox has no owner
+    who signs in, so its documents stay hidden until a follow-up maps it to the
+    group that reads it."""
+    return ExternalAccess(
+        external_user_emails={mailbox.address.lower()},
+        external_user_group_ids=set(),
+        is_public=False,
+    )
+
+
+def event_access(mailbox: OutlookMailbox, event: OutlookEvent) -> ExternalAccess:
+    """The owner plus the organizer and attendees, whom Outlook shows the
+    meeting to as well."""
+    emails = {mailbox.address.lower()}
+    if event.organizer is not None:
+        emails.add(event.organizer.address.lower())
+    emails.update(attendee.address.lower() for attendee in event.attendees)
+    return ExternalAccess(
+        external_user_emails=emails, external_user_group_ids=set(), is_public=False
+    )
+
+
 def event_skip_reason(event: OutlookEvent) -> str | None:
     """Why an event is not indexed, None when it is."""
     if event.is_cancelled:
@@ -489,7 +514,10 @@ def build_conversation_document(
 
 
 class OutlookConnector(
-    CredentialsConnector, CheckpointedConnector[OutlookCheckpoint], SlimConnector
+    CredentialsConnector,
+    CheckpointedConnector[OutlookCheckpoint],
+    SlimConnector,
+    SlimConnectorWithPermSync,
 ):
     def __init__(
         self,
@@ -714,6 +742,25 @@ class OutlookConnector(
         while a silent skip would delete every document of that mailbox.
         """
         del start, end
+        yield from self._slim_docs(callback, with_access=False)
+
+    def retrieve_all_slim_docs_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        """The same walk with each document's readers attached, for permission
+        sync. A mailbox is read by its owner, so its nodes and conversations
+        carry the owner. An event is read by its organizer and attendees too,
+        who each hold a copy in their own mailbox when that one is indexed.
+        """
+        del start, end
+        yield from self._slim_docs(callback, with_access=True)
+
+    def _slim_docs(
+        self, callback: IndexingHeartbeatInterface | None, with_access: bool
+    ) -> GenerateSlimDocumentOutput:
         mailboxes, failures = self._resolve_mailboxes()
         # An address that matches no user is a configuration problem, not a
         # verdict on the mailbox behind it, so the prune stops here rather than
@@ -740,32 +787,40 @@ class OutlookConnector(
             # mailbox, so it aborts the prune like any other error.
             excluded = self._excluded_well_known_folder_ids(mailbox)
             tree = list(self._walk_folder_tree(mailbox, excluded))
-            yield list(self._hierarchy_nodes(mailbox, tree))
+            access = owner_access(mailbox) if with_access else None
+            yield list(self._hierarchy_nodes(mailbox, tree, access))
             yield from self._slim_batches(
-                self._conversation_id_pages(mailbox, tree), callback
+                self._conversation_slim_pages(mailbox, tree, access), callback
             )
             if self.include_calendar:
-                yield from self._slim_batches(self._event_id_pages(mailbox), callback)
+                yield from self._slim_batches(
+                    self._event_slim_pages(mailbox, with_access), callback
+                )
 
     def _slim_batches(
-        self, id_pages: Iterable[list[str]], callback: IndexingHeartbeatInterface | None
+        self,
+        pages: Iterable[list[SlimDocument]],
+        callback: IndexingHeartbeatInterface | None,
     ) -> GenerateSlimDocumentOutput:
-        """Document ids batched across pages, each page reported to the heartbeat."""
+        """Documents batched across pages, each page reported to the heartbeat."""
         batch: list[SlimDocument | HierarchyNode] = []
-        for ids in id_pages:
-            batch.extend(SlimDocument(id=document_id) for document_id in ids)
+        for docs in pages:
+            batch.extend(docs)
             while len(batch) >= SLIM_BATCH_SIZE:
                 yield batch[:SLIM_BATCH_SIZE]
                 batch = batch[SLIM_BATCH_SIZE:]
             if callback is not None:
-                callback.progress("outlook_slim_docs", len(ids))
+                callback.progress("outlook_slim_docs", len(docs))
         if batch:
             yield batch
 
-    def _conversation_id_pages(
-        self, mailbox: OutlookMailbox, tree: list[tuple[OutlookFolder, str]]
-    ) -> Generator[list[str], None, None]:
-        """Conversation document ids of every folder in the tree, one list per
+    def _conversation_slim_pages(
+        self,
+        mailbox: OutlookMailbox,
+        tree: list[tuple[OutlookFolder, str]],
+        access: ExternalAccess | None,
+    ) -> Generator[list[SlimDocument], None, None]:
+        """Conversation documents of every folder in the tree, one list per
         delta page and deduplicated within it. The parent is left unset so
         pruning keeps the folder indexing chose. Any Graph error raises, since
         pruning must see the whole mailbox or nothing."""
@@ -784,20 +839,25 @@ class OutlookConnector(
                     if not change.removed and change.conversation_id
                 )
                 yield [
-                    conversation_document_id(mailbox, conversation_id)
+                    SlimDocument(
+                        id=conversation_document_id(mailbox, conversation_id),
+                        external_access=access,
+                    )
                     for conversation_id in conversation_ids
                 ]
                 next_link = page.next_link
                 if next_link is None:
                     break
 
-    def _event_id_pages(
-        self, mailbox: OutlookMailbox
-    ) -> Generator[list[str], None, None]:
-        """Event document ids of the calendar window, admitted by the rule
+    def _event_slim_pages(
+        self, mailbox: OutlookMailbox, with_access: bool
+    ) -> Generator[list[SlimDocument], None, None]:
+        """Event documents of the calendar window, admitted by the rule
         indexing applies: skips on the row, and a series only when its master
         is readable and not excluded, read once per series per mailbox. Ids
-        are deduplicated per page only, since pruning reads them as a set.
+        are deduplicated per page only, since pruning reads them as a set. With
+        access, each carries the owner, organizer and attendees, a series those
+        of its first occurrence on the page.
 
         A calendar that is gone (404 on the first page) lists nothing, so its
         events are pruned like the mail of a vanished mailbox. A refused one
@@ -833,27 +893,33 @@ class OutlookConnector(
                         "Or turn Include Calendar off."
                     ) from e
                 raise
-            event_ids: dict[str, None] = {}
+            docs: dict[str, SlimDocument] = {}
             for event in page.events:
                 if event_skip_reason(event) is not None:
                     continue
                 series_id = _occurrence_series_id(event)
-                if series_id is None:
-                    event_ids[event.id] = None
+                event_id = series_id or event.id
+                if event_id in docs:
                     continue
-                if series_id not in series_included:
-                    included = (
-                        self._indexable_series_master(mailbox, series_id) is not None
-                    )
-                    if len(series_included) < MAX_TRACKED_SERIES_PER_MAILBOX:
-                        series_included[series_id] = included
-                elif not series_included[series_id]:
-                    continue
-                else:
-                    included = True
-                if included:
-                    event_ids[series_id] = None
-            yield [event_document_id(mailbox, event_id) for event_id in event_ids]
+                if series_id is not None:
+                    if series_id not in series_included:
+                        included = (
+                            self._indexable_series_master(mailbox, series_id)
+                            is not None
+                        )
+                        if len(series_included) < MAX_TRACKED_SERIES_PER_MAILBOX:
+                            series_included[series_id] = included
+                    else:
+                        included = series_included[series_id]
+                    if not included:
+                        continue
+                docs[event_id] = SlimDocument(
+                    id=event_document_id(mailbox, event_id),
+                    external_access=event_access(mailbox, event)
+                    if with_access
+                    else None,
+                )
+            yield list(docs.values())
             next_link = page.next_link
             if next_link is None:
                 break
@@ -889,7 +955,10 @@ class OutlookConnector(
         self._reset_folder_cursor(checkpoint)
 
     def _hierarchy_nodes(
-        self, mailbox: OutlookMailbox, tree: list[tuple[OutlookFolder, str]]
+        self,
+        mailbox: OutlookMailbox,
+        tree: list[tuple[OutlookFolder, str]],
+        access: ExternalAccess | None = None,
     ) -> Generator[HierarchyNode, None, None]:
         yield HierarchyNode(
             raw_node_id=mailbox_node_id(mailbox),
@@ -897,6 +966,7 @@ class OutlookConnector(
             display_name=mailbox.display_name or mailbox.address,
             link=_mailbox_link(mailbox),
             node_type=HierarchyNodeType.MAILBOX,
+            external_access=access,
         )
         for folder, parent_node_id in tree:
             yield HierarchyNode(
@@ -904,6 +974,7 @@ class OutlookConnector(
                 raw_parent_id=parent_node_id,
                 display_name=folder.display_name,
                 node_type=HierarchyNodeType.FOLDER,
+                external_access=access,
             )
         if self.include_calendar:
             yield HierarchyNode(
@@ -912,6 +983,7 @@ class OutlookConnector(
                 display_name="Calendar",
                 link=_calendar_link(mailbox),
                 node_type=HierarchyNodeType.FOLDER,
+                external_access=access,
             )
 
     def _excluded_well_known_folder_ids(self, mailbox: OutlookMailbox) -> set[str]:
