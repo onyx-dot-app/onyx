@@ -9,7 +9,8 @@ to every check, so they also run at credential-creation time.
 Permission-to-capability mapping (application permissions):
 
 - ``Mail.Read``     -> INDEXING (folders, message delta, message bodies, attachments)
-- ``User.Read.All`` -> INDEXING (mailbox enumeration and address resolution)
+- ``User.Read.All`` -> INDEXING (mailbox enumeration and address resolution) and
+  DOC_PERMISSION_SYNC (the owner address every access list is built from)
 - ``Calendars.Read`` -> INDEXING (calendar view and series masters, only when the
   connector indexes calendars)
 
@@ -215,20 +216,15 @@ class _TokenAuthCheck(CapabilityCheck):
 
 
 class _MailboxListingCheck(CapabilityCheck):
-    """Lists one user. Proves ``User.Read.All``, which indexing needs to find
-    mailboxes and permission sync needs for the owner address every access
-    list is built from."""
+    """Lists one user. Proves ``User.Read.All``."""
 
     def __init__(
-        self,
-        capability: CredentialCapability = CredentialCapability.INDEXING,
-        check_id: str = "outlook_mailbox_listing",
-        display_name: str = "Tenant users can be listed",
+        self, capability: CredentialCapability = CredentialCapability.INDEXING
     ) -> None:
         super().__init__(
             capability=capability,
-            check_id=check_id,
-            display_name=display_name,
+            check_id="outlook_mailbox_listing",
+            display_name="Tenant users can be listed",
             requires_connector_instance=False,
             remediation=(
                 "Grant the `User.Read.All` application permission to the app "
@@ -432,12 +428,8 @@ def build_outlook_indexing_checks() -> list[CapabilityCheck]:
 
 
 def build_outlook_doc_permission_sync_checks() -> list[CapabilityCheck]:
-    """Permission sync reads what indexing reads and derives every access list
-    from mailbox owner addresses, so the user listing is the one grant to prove."""
-    return [
-        _MailboxListingCheck(
-            capability=CredentialCapability.DOC_PERMISSION_SYNC,
-            check_id="outlook_doc_permission_sync",
-            display_name="Mailbox owners can be listed for permission sync",
-        )
-    ]
+    """The permission walk shares indexing's mail and calendar grants, proven by
+    its checks in the same run, so this capability proves only the user listing
+    every owner address comes from. The runner executes a check id once and
+    mirrors the outcome onto each capability that registers it."""
+    return [_MailboxListingCheck(CredentialCapability.DOC_PERMISSION_SYNC)]

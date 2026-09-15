@@ -148,6 +148,12 @@ def _load_jira_group_sync() -> GroupSyncFuncType:
     return jira_group_sync
 
 
+def _load_outlook_doc_sync() -> DocSyncFuncType:
+    from ee.onyx.external_permissions.outlook.doc_sync import outlook_doc_sync
+
+    return outlook_doc_sync
+
+
 def _load_censor_salesforce_chunks() -> CensoringFuncType:
     from ee.onyx.external_permissions.salesforce.postprocessing import (
         censor_salesforce_chunks,
@@ -178,12 +184,6 @@ def _load_teams_doc_sync() -> DocSyncFuncType:
     from ee.onyx.external_permissions.teams.doc_sync import teams_doc_sync
 
     return teams_doc_sync
-
-
-def _load_outlook_doc_sync() -> DocSyncFuncType:
-    from ee.onyx.external_permissions.outlook.doc_sync import outlook_doc_sync
-
-    return outlook_doc_sync
 
 
 class DocSyncConfig(BaseModel):

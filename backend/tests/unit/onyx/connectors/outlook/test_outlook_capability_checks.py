@@ -55,11 +55,7 @@ from tests.unit.onyx.connectors.outlook.outlook_api_shapes import (
     message,
 )
 
-_CHECKS_BY_ID = {
-    check.check_id: check
-    for check in build_outlook_indexing_checks()
-    + build_outlook_doc_permission_sync_checks()
-}
+_CHECKS_BY_ID = {check.check_id: check for check in build_outlook_indexing_checks()}
 
 
 def _gateway() -> MagicMock:
@@ -595,8 +591,11 @@ def test_calendar_check_is_skipped_on_a_credential_only_run() -> None:
 
 
 def test_perm_sync_check_proves_the_user_listing_under_its_own_capability() -> None:
-    check = _CHECKS_BY_ID["outlook_doc_permission_sync"]
+    """The same check id as indexing's listing check, so the runner probes
+    once and mirrors the outcome onto both capabilities."""
+    (check,) = build_outlook_doc_permission_sync_checks()
     assert check.capability is CredentialCapability.DOC_PERMISSION_SYNC
+    assert check.check_id == _CHECKS_BY_ID["outlook_mailbox_listing"].check_id
     gateway = _gateway()
 
     check.run(_context(gateway))
