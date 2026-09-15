@@ -24,6 +24,7 @@ import {
   deleteLlmProvider,
   setDefaultLlmModel,
 } from "@/lib/languageModels/svc";
+import { findProviderOwningModelConfig } from "@/lib/languageModels/utils";
 import ModelSelector from "@/sections/model-selector/ModelSelector";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { useCreateModal } from "@opal/components";
@@ -408,10 +409,15 @@ export default function LanguageModelsPage() {
               <ModelSelector
                 value={defaultModelConfigId}
                 onChange={(opt) => {
-                  const provider = existingLlmProviders?.find(
-                    (p) =>
-                      p.provider === opt.provider &&
-                      (p.name === opt.name || (!p.name && !opt.name))
+                  // Keyed on the model configuration id. Matching on
+                  // provider type plus display name picks the first of several
+                  // same-named providers — and nameless providers are the
+                  // common case, so `!p.name && !opt.name` matched any of
+                  // them. The backend accepts the wrong provider whenever it
+                  // also hosts a model of that name, so this failed silently.
+                  const provider = findProviderOwningModelConfig(
+                    existingLlmProviders,
+                    opt.modelConfigurationId
                   );
                   if (provider) {
                     void handleDefaultModelChange(

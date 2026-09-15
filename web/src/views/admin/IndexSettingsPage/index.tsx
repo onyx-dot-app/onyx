@@ -77,6 +77,7 @@ import { ContentAction } from "@opal/layouts";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { useSettings } from "@/lib/settings/hooks";
 import { Settings, toSettings } from "@/lib/settings/types";
+import { findProviderOwningModelConfig } from "@/lib/languageModels/utils";
 import {
   useConfiguredEmbeddingProviders,
   useCurrentEmbeddingModel,
@@ -733,12 +734,15 @@ export default function IndexSettingsPage() {
   const handleCaptioningModelChange = useCallback(
     async ({
       modelName,
-      providerName,
+      modelConfigurationId,
     }: {
       modelName: string;
-      providerName: string | null;
+      modelConfigurationId: number | null | undefined;
     }) => {
-      const provider = llmProviders?.find((p) => p.name === providerName);
+      const provider = findProviderOwningModelConfig(
+        llmProviders,
+        modelConfigurationId
+      );
       if (!provider) {
         toast.error("Could not resolve provider");
         return;
@@ -768,17 +772,18 @@ export default function IndexSettingsPage() {
     [llmProviders]
   );
 
-  // Resolve defaultVision (name-based) to a model_configuration_id for ModelSelector
+  // Resolve defaultVision to a model_configuration_id for ModelSelector. Keyed on
+  // providerId: display names are not unique, so a name match can land on a
+  // provider that does not own this model.
   const captioningModelConfigId = useMemo(() => {
     if (!defaultVision?.modelName || !llmProviders) return null;
-    for (const p of llmProviders) {
-      if (p.name !== defaultVision.providerName) continue;
-      const mc = p.model_configurations.find(
-        (m) => m.name === defaultVision.modelName
-      );
-      if (mc?.id != null) return mc.id;
-    }
-    return null;
+    const provider = llmProviders.find(
+      (p) => p.id === defaultVision.providerId
+    );
+    const mc = provider?.model_configurations.find(
+      (m) => m.name === defaultVision.modelName
+    );
+    return mc?.id ?? null;
   }, [llmProviders, defaultVision]);
 
   const initialFormValues: IndexSettingsFormValues = useMemo(
@@ -1756,7 +1761,8 @@ export default function IndexSettingsPage() {
                                     onChange={(opt) =>
                                       void handleCaptioningModelChange({
                                         modelName: opt.modelName,
-                                        providerName: opt.name,
+                                        modelConfigurationId:
+                                          opt.modelConfigurationId,
                                       })
                                     }
                                   />
