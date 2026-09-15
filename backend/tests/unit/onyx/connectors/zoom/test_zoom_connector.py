@@ -55,9 +55,12 @@ _ZOOM_CREDS = {
 
 _FULL_HISTORY_END = time.time()
 
-# An epoch start would split into hundreds of 30-day windows per host. This still
-# covers the oldest occurrence these tests build.
-_POLL_START = _FULL_HISTORY_END - 20 * 24 * 60 * 60
+_OLDEST_OCCURRENCE_DAYS_AGO = 21
+
+# An epoch start would split into hundreds of 30-day windows per host. Derived from
+# the oldest occurrence rather than picked, so the window holds it even where
+# ZOOM_TRANSCRIPT_LAG_BUFFER_HOURS is set to zero and widens the start by nothing.
+_POLL_START = _FULL_HISTORY_END - (_OLDEST_OCCURRENCE_DAYS_AGO + 1) * 24 * 60 * 60
 
 
 def _days_ago(days: int) -> str:
@@ -298,7 +301,9 @@ class TestZoomConnectorCheckpoint:
         _configure_happy_path(mock_client)
         mock_client.list_past_meeting_occurrences.side_effect = None
         mock_client.list_past_meeting_occurrences.return_value = [
-            ZoomSessionOccurrence(uuid="uuid-1", start_time=_days_ago(21)),
+            ZoomSessionOccurrence(
+                uuid="uuid-1", start_time=_days_ago(_OLDEST_OCCURRENCE_DAYS_AGO)
+            ),
             ZoomSessionOccurrence(uuid="uuid-2", start_time=_days_ago(14)),
             ZoomSessionOccurrence(uuid="uuid-3", start_time=_days_ago(7)),
         ]
@@ -325,7 +330,9 @@ class TestZoomConnectorCheckpoint:
         _configure_happy_path(mock_client)
         mock_client.list_past_meeting_occurrences.side_effect = None
         mock_client.list_past_meeting_occurrences.return_value = [
-            ZoomSessionOccurrence(uuid="uuid-1", start_time=_days_ago(21)),
+            ZoomSessionOccurrence(
+                uuid="uuid-1", start_time=_days_ago(_OLDEST_OCCURRENCE_DAYS_AGO)
+            ),
             ZoomSessionOccurrence(uuid="uuid-2", start_time=_days_ago(14)),
             ZoomSessionOccurrence(uuid="uuid-3", start_time=_days_ago(7)),
         ]
