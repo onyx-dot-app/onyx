@@ -862,6 +862,69 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  jira_service_management: {
+    description: "Configure Jira Service Management connector",
+    subtext: `Configure which Jira Service Management project to index. All customer requests, incidents, and service desk tickets will be ingested.`,
+    values: [
+      {
+        type: "text",
+        query: "Enter the Jira base URL:",
+        label: "Jira Base URL",
+        name: "jira_base_url",
+        optional: false,
+        description:
+          "The base URL of your Jira instance (e.g., https://your-domain.atlassian.net)",
+      },
+      {
+        type: "text",
+        query: "Enter the Service Management project key:",
+        label: "Project Key",
+        name: "project_key",
+        optional: false,
+        description:
+          "The project key of your Jira Service Management service desk (e.g., 'ITSM', 'HELP').",
+      },
+      {
+        type: "checkbox",
+        query: "Using scoped token?",
+        label: "Using scoped token",
+        name: "scoped_token",
+        optional: true,
+        default: false,
+      },
+      {
+        type: "checkbox",
+        query: "Include internal agent notes?",
+        label: "Include internal notes",
+        name: "include_internal_comments",
+        optional: true,
+        default: false,
+        description:
+          "Whether to index internal agent notes in addition to customer-visible comments.",
+      },
+      buildIncludeAttachmentsOption(false),
+      {
+        type: "list",
+        query: "Enter email addresses to blacklist from comments:",
+        label: "Comment Email Blacklist",
+        name: "comment_email_blacklist",
+        description:
+          "This is generally useful to ignore certain bots. Add user emails whose comments should NOT be indexed.",
+        optional: true,
+      },
+    ],
+    advanced_values: [
+      {
+        type: "text",
+        query: "Custom JQL filter (optional):",
+        label: "Custom JQL Query",
+        name: "jql_query",
+        optional: true,
+        description:
+          "Optional additional JQL filtering criteria (e.g., 'issuetype in (Incident, Problem)').",
+      },
+    ],
+  },
   salesforce: {
     description: "Configure Salesforce connector",
     values: [
@@ -2192,6 +2255,16 @@ export interface JiraConfig {
   project_key?: string;
   comment_email_blacklist?: string[];
   jql_query?: string;
+}
+
+export interface JiraServiceManagementConfig {
+  jira_base_url: string;
+  project_key: string;
+  scoped_token?: boolean;
+  comment_email_blacklist?: string[];
+  jql_query?: string;
+  include_attachments?: boolean;
+  include_internal_comments?: boolean;
 }
 
 export interface SalesforceConfig {
