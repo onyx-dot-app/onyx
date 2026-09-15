@@ -385,6 +385,7 @@ export default function LanguageModelsPage() {
           LLMProviderName.PORTKEY,
           LLMProviderName.NEBIUS_TOKENFACTORY,
           LLMProviderName.BIFROST,
+          LLMProviderName.VENICE,
         ],
       },
       {

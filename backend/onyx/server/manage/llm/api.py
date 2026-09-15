@@ -111,6 +111,8 @@ from onyx.server.manage.llm.models import (
     PortkeyModelsRequest,
     SyncModelEntry,
     TestLLMRequest,
+    VeniceFinalModelResponse,
+    VeniceModelsRequest,
     VisionProviderResponse,
 )
 from onyx.server.manage.llm.provider_cache import (
@@ -2372,6 +2374,182 @@ def get_portkey_available_models(
                 for r in sorted_results
             ],
             source_label="Portkey",
+        )
+
+    return sorted_results
+
+
+def _get_venice_models_response(api_base: str, api_key: str | None = None) -> dict:
+    """Fetch text models from Venice's /models endpoint.
+
+    Venice filters server-side by model type, which is exact where Onyx's usual
+    `is_embedding_model` name check is a guess.
+    """
+    cleaned_api_base = api_base.strip().rstrip("/")
+    if cleaned_api_base.endswith("/v1"):
+        url = f"{cleaned_api_base}/models"
+    else:
+        url = f"{cleaned_api_base}/v1/models"
+
+    return _get_openai_compatible_models_response(
+        url=f"{url}?type=text",
+        source_name="Venice",
+        api_key=api_key,
+    )
+
+
+def _get_venice_traits(api_base: str, api_key: str | None = None) -> dict[str, str]:
+    """Venice's recommended model per role, e.g. `{"default": "...",
+    "function_calling_default": "..."}`.
+
+    Advisory only: a Venice outage on this endpoint must not fail the model
+    fetch, so any error degrades to an empty mapping.
+    """
+    cleaned_api_base = api_base.strip().rstrip("/")
+    if cleaned_api_base.endswith("/v1"):
+        url = f"{cleaned_api_base}/models/traits"
+    else:
+        url = f"{cleaned_api_base}/v1/models/traits"
+
+    try:
+        response_json = _get_openai_compatible_models_response(
+            url=url,
+            source_name="Venice",
+            api_key=api_key,
+        )
+    except Exception:
+        logger.warning("Could not fetch Venice model traits", exc_info=True)
+        return {}
+
+    traits = response_json.get("data")
+    if not isinstance(traits, dict):
+        return {}
+    return {k: v for k, v in traits.items() if isinstance(v, str)}
+
+
+def _venice_capabilities(model: dict) -> dict:
+    capabilities = (model.get("model_spec") or {}).get("capabilities")
+    return capabilities if isinstance(capabilities, dict) else {}
+
+
+@admin_router.post("/venice/available-models")
+def get_venice_available_models(
+    request: VeniceModelsRequest,
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
+    db_session: Session = Depends(get_session),
+) -> list[VeniceFinalModelResponse]:
+    """Fetch chat models from Venice, with context window and capabilities read
+    from the source API.
+
+    LiteLLM's cost map has no Venice entries, so without `model_spec` every
+    model would fall back to a 32k context and no capability flags.
+    """
+    api_key = _resolve_api_key(
+        request.api_key, request.provider_id, request.api_base, db_session
+    )
+
+    response_json = _get_venice_models_response(
+        api_base=request.api_base, api_key=api_key
+    )
+
+    models = response_json.get("data", [])
+    if not isinstance(models, list) or len(models) == 0:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No models found from your Venice endpoint",
+        )
+
+    results: list[VeniceFinalModelResponse] = []
+    for model in models:
+        try:
+            model_id = model.get("id", "")
+            if not model_id:
+                continue
+            if is_embedding_model(model_id):
+                continue
+
+            model_spec = model.get("model_spec") or {}
+            capabilities = _venice_capabilities(model)
+            display_name = model_spec.get("name") or model_id
+
+            # Venice reports the usable prompt budget separately from the
+            # advertised context length; prefer it, since it is what Onyx
+            # actually has to fit a prompt into.
+            max_input_tokens = model_spec.get("availableContextTokens") or model.get(
+                "context_length"
+            )
+
+            # Venice's own answer wins. The LiteLLM map knows no Venice models,
+            # so its fallbacks only fire when Venice omits a capability.
+            supports_vision = capabilities.get("supportsVision")
+            if not isinstance(supports_vision, bool):
+                supports_vision = litellm_thinks_model_supports_image_input(
+                    model_id, LlmProviderNames.VENICE
+                )
+
+            supports_reasoning = capabilities.get("supportsReasoning")
+            if not isinstance(supports_reasoning, bool):
+                supports_reasoning = model_is_reasoning_model(
+                    model_id, LlmProviderNames.VENICE
+                ) or is_reasoning_model(model_id, display_name)
+
+            supports_function_calling = capabilities.get("supportsFunctionCalling")
+
+            results.append(
+                VeniceFinalModelResponse(
+                    name=model_id,
+                    display_name=display_name,
+                    max_input_tokens=(
+                        max_input_tokens if isinstance(max_input_tokens, int) else None
+                    ),
+                    supports_image_input=bool(supports_vision),
+                    supports_reasoning=bool(supports_reasoning),
+                    supports_function_calling=(
+                        supports_function_calling
+                        if isinstance(supports_function_calling, bool)
+                        else None
+                    ),
+                )
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to parse Venice model entry",
+                extra={"error": str(e), "item": str(model)[:1000]},
+            )
+
+    if not results:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No compatible models found from Venice",
+        )
+
+    # Venice names the model it recommends for tool use; Onyx sends tools to
+    # every model, so starting the admin on that one is the only steering
+    # available. Falls back to the general-purpose default.
+    traits = _get_venice_traits(api_base=request.api_base, api_key=api_key)
+    preferred_default = traits.get("function_calling_default") or traits.get("default")
+
+    sorted_results = sorted(
+        results,
+        key=lambda m: (m.name != preferred_default, m.name.lower()),
+    )
+
+    # Sync new models to DB if provider_id is specified
+    if request.provider_id is not None:
+        _sync_fetched_models(
+            db_session=db_session,
+            provider_id=request.provider_id,
+            models=[
+                SyncModelEntry(
+                    name=r.name,
+                    display_name=r.display_name,
+                    max_input_tokens=r.max_input_tokens,
+                    supports_image_input=r.supports_image_input,
+                    supports_reasoning=r.supports_reasoning,
+                )
+                for r in sorted_results
+            ],
+            source_label="Venice",
         )
 
     return sorted_results

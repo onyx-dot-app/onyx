@@ -23,6 +23,14 @@ OPENAI_COMPATIBLE_PROVIDER_NAME = "openai_compatible"
 
 NEBIUS_TOKENFACTORY_PROVIDER_NAME = "nebius_tokenfactory"
 
+VENICE_PROVIDER_NAME = "venice"
+VENICE_DEFAULT_API_BASE = "https://api.venice.ai/api/v1"
+# Venice prepends its own system prompts to the caller's unless told not to.
+# Onyx builds system prompts precisely for personas, RAG grounding, and tool
+# use, so an injected upstream prompt is drift an admin cannot see or diagnose.
+VENICE_PARAMETERS_KWARG = "venice_parameters"
+VENICE_INCLUDE_SYSTEM_PROMPT_KEY = "include_venice_system_prompt"
+
 PORTKEY_PROVIDER_NAME = "portkey"
 # Which API surface a Portkey provider targets; stored in custom_config.
 PORTKEY_API_MODE_CONFIG_KEY = "portkey_api_mode"

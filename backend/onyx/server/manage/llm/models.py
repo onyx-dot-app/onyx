@@ -821,3 +821,23 @@ class PortkeyFinalModelResponse(BaseModel):
     max_input_tokens: int | None
     supports_image_input: bool
     supports_reasoning: bool
+
+
+# Venice dynamic models fetch
+class VeniceModelsRequest(BaseModel):
+    api_base: str
+    api_key: str | None = None
+    # Existing provider id; resolves the stored key and syncs fetched models on edit
+    provider_id: int | None = None
+
+
+class VeniceFinalModelResponse(BaseModel):
+    name: str  # Model ID (e.g. "z-ai-glm-5-3", "venice-uncensored-1-2")
+    display_name: str  # Human-readable name from `model_spec.name`
+    max_input_tokens: int | None
+    supports_image_input: bool
+    supports_reasoning: bool
+    # Display-only metadata shown in the model picker (not persisted). Onyx has
+    # no tool-calling capability gate, so this advises the admin rather than
+    # changing whether tools are sent.
+    supports_function_calling: bool | None = None
