@@ -329,8 +329,9 @@ def _stored_max_input_tokens(
 
     Numeric equality cannot tell a deliberate pin from that echo, so this only
     declines to write a *new* override and never clears one that is already
-    stored. Rows already frozen by the old behaviour are cleared by migration
-    `d4e7a1b93c22` instead, which can key off the fallback arithmetic exactly.
+    stored. That makes this purely preventive: rows already frozen by the old
+    behaviour keep their value and need a targeted repair by an operator who can
+    check the specific rows first.
 
     Providers that read a context limit from their own source API are exempt
     entirely: those values are authoritative, and Ollama feeds `num_ctx` from
@@ -345,6 +346,14 @@ def _stored_max_input_tokens(
     if max_input_tokens == get_max_input_tokens(
         model_name=model_name, model_provider=provider
     ):
+        logger.info(
+            "Not storing max_input_tokens=%s for %s/%s: it matches the current "
+            "LiteLLM lookup, so it resolves to the same value at read time and "
+            "would only freeze this model if LiteLLM's answer later changes.",
+            max_input_tokens,
+            provider,
+            model_name,
+        )
         return None
 
     return max_input_tokens

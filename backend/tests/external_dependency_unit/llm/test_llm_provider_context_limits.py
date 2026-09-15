@@ -164,14 +164,15 @@ def test_dynamic_provider_value_is_persisted(
     assert _stored(db_session, provider_name, model) == resolved
 
 
-def test_existing_override_is_never_cleared(
+def test_stored_override_is_not_nulled_by_a_save_matching_the_lookup(
     db_session: Session, provider_name: str
 ) -> None:
     """Numeric equality cannot tell a deliberate pin from a UI echo.
 
-    So the guard only declines to *create* an override. Once a value is stored,
-    a later save that happens to match the live lookup must leave it alone —
-    otherwise rotating an API key would silently unpin an intentional cap.
+    So the guard only declines to *create* an override, and a model that already
+    carries one is left alone. The load-bearing assertion is that the row is
+    still non-null: without the guard, a save whose value matches the live lookup
+    nulls it, and the model silently follows LiteLLM from then on.
     """
     model = "gpt-4o-mini"
     resolved = get_max_input_tokens(
@@ -184,7 +185,6 @@ def test_existing_override_is_never_cleared(
     )
     assert _stored(db_session, provider_name, model) == pinned
 
-    # A later save echoing the resolved value must not wipe the stored pin.
     _upsert(
         db_session,
         provider_name,
@@ -194,7 +194,40 @@ def test_existing_override_is_never_cleared(
         provider_id=provider_id,
     )
 
-    assert _stored(db_session, provider_name, model) == resolved
+    stored = _stored(db_session, provider_name, model)
+    # The override survives as an override. This is what the guard buys.
+    assert stored is not None
+    # And the submitted value is honoured — an admin editing the field means it.
+    assert stored == resolved
+
+
+def test_ui_echo_of_a_stored_override_preserves_it(
+    db_session: Session, provider_name: str
+) -> None:
+    """The realistic round trip for a pinned model.
+
+    The API serves `stored or resolved`, so for a pinned model the UI is served
+    the pin and echoes the pin. It must come back unchanged.
+    """
+    model = "gpt-4o-mini"
+    resolved = get_max_input_tokens(
+        model_name=model, model_provider=LlmProviderNames.OPENAI
+    )
+    pinned = resolved // 2
+
+    provider_id = _upsert(
+        db_session, provider_name, LlmProviderNames.OPENAI, model, pinned
+    )
+    _upsert(
+        db_session,
+        provider_name,
+        LlmProviderNames.OPENAI,
+        model,
+        pinned,
+        provider_id=provider_id,
+    )
+
+    assert _stored(db_session, provider_name, model) == pinned
 
 
 @pytest.mark.parametrize(
