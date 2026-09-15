@@ -383,17 +383,17 @@ class ZoomStreamingTranscriber(StreamingTranscriberProtocol):
             except asyncio.CancelledError:
                 pass
             except Exception:
-                logger.debug("Zoom Scribe receive task cleanup failed", exc_info=True)
+                logger.warning("Zoom Scribe receive task cleanup failed", exc_info=True)
         if self._ws and not self._ws.closed:
             try:
                 await self._ws.close()
             except Exception:
-                logger.debug("Zoom Scribe WebSocket cleanup failed", exc_info=True)
+                logger.warning("Zoom Scribe WebSocket cleanup failed", exc_info=True)
         if self._session and not self._session.closed:
             try:
                 await self._session.close()
             except Exception:
-                logger.debug("Zoom Scribe session cleanup failed", exc_info=True)
+                logger.warning("Zoom Scribe session cleanup failed", exc_info=True)
 
     def reset_transcript(self) -> None:
         self._accumulated_transcript = ""
@@ -462,7 +462,7 @@ class ZoomVoiceProvider(VoiceProviderInterface):
                             transcriber.close(), timeout=ZOOM_CLOSE_TIMEOUT_SECONDS
                         )
                     except Exception:
-                        logger.debug(
+                        logger.warning(
                             "Zoom Scribe transcriber close failed", exc_info=True
                         )
 
