@@ -2397,6 +2397,9 @@
         "retryButton": {
           "label": "Tentar novamente"
         },
+        "rollbackFailed": {
+          "toast": "Não foi possível remover o conector após o tempo limite: {detail}. Verifique /admin/indexing/status; talvez um administrador precise removê-lo."
+        },
         "timeout": {
           "toast": "A operação expirou após {seconds} segundos. Verifique se há erros na sua configuração."
         },

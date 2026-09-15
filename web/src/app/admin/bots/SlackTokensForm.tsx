@@ -26,6 +26,7 @@ export const SlackTokensForm = ({
   onValuesChange?: (values: any) => void;
 }) => {
   const t = useTranslations("admin.slackBots");
+  const tErrors = useTranslations("common.errors");
 
   useEffect(() => {
     if (onValuesChange) {
@@ -68,7 +69,11 @@ export const SlackTokensForm = ({
           router.push(`/admin/bots/${encodeURIComponent(botId)}`);
         } else {
           const responseJson = await response.json();
-          let errorMsg = responseJson.detail || responseJson.message;
+          // Some error bodies carry neither field, and `includes` throws on undefined.
+          let errorMsg =
+            responseJson.detail ||
+            responseJson.message ||
+            tErrors("unknown.message");
 
           if (errorMsg.includes("Invalid bot token:")) {
             errorMsg = t("tokensForm.invalidBotToken.message");

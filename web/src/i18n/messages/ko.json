@@ -2397,6 +2397,9 @@
         "retryButton": {
           "label": "다시 시도"
         },
+        "rollbackFailed": {
+          "toast": "시간 초과 후 커넥터를 제거하지 못했습니다: {detail}. /admin/indexing/status를 확인하세요. 관리자가 제거해야 할 수 있습니다."
+        },
         "timeout": {
           "toast": "{seconds}초 후 작업 시간이 초과되었습니다. 설정에 오류가 있는지 확인하세요."
         },

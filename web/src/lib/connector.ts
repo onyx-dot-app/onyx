@@ -4,9 +4,19 @@ import {
   ConnectorBase,
   ConnectorSnapshot,
 } from "./connectors/connectors";
-async function handleResponse(
+
+export interface ObjectCreationIdResponse {
+  id: number;
+}
+
+/** Backend `StatusResponse`, where `data` is the cc-pair id. */
+interface MockCredentialStatusResponse {
+  data: number;
+}
+
+async function handleResponse<T>(
   response: Response
-): Promise<[string | null, any]> {
+): Promise<[string | null, T | null]> {
   const responseJson = await response.json();
   if (response.ok) {
     return [null, responseJson];
@@ -28,7 +38,7 @@ export async function fetchConnectors(
 
 export async function createConnector<T>(
   connector: ConnectorBase<T>
-): Promise<[string | null, Connector<T> | null]> {
+): Promise<[string | null, ObjectCreationIdResponse | null]> {
   const response = await fetch(`/api/manage/admin/connector`, {
     method: "POST",
     headers: {
@@ -36,7 +46,26 @@ export async function createConnector<T>(
     },
     body: JSON.stringify(connector),
   });
-  return handleResponse(response);
+  return handleResponse<ObjectCreationIdResponse>(response);
+}
+
+/** Returns the **cc-pair** id, not the connector id. */
+export async function createConnectorWithMockCredential<T>(
+  connector: ConnectorBase<T>
+): Promise<[string | null, number | null]> {
+  const response = await fetch(
+    `/api/manage/admin/connector-with-mock-credential`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(connector),
+    }
+  );
+  const [errorMsg, created] =
+    await handleResponse<MockCredentialStatusResponse>(response);
+  return [errorMsg, created?.data ?? null];
 }
 
 export async function updateConnectorCredentialPairName(
