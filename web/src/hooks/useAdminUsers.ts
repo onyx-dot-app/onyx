@@ -7,10 +7,7 @@ import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { UserStatus } from "@/lib/types";
 import type { InvitedUserSnapshot } from "@/lib/types";
-import type {
-  FullUserSnapshot,
-  UserRow,
-} from "@/views/admin/UsersPage/interfaces";
+import type { FullUserSnapshot, UserRow } from "@/views/admin/UsersPage/types";
 
 // ---------------------------------------------------------------------------
 // Converters

@@ -24,7 +24,7 @@ import type {
   GroupOption,
   StatusFilter,
   StatusCountMap,
-} from "./interfaces";
+} from "./types";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
 import type { User } from "@/lib/types";
 

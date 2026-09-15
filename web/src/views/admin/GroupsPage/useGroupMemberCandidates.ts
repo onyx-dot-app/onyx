@@ -6,7 +6,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useUser } from "@/providers/UserProvider";
 import { AccountType, UserStatus } from "@/lib/types";
-import type { FullUserSnapshot } from "@/views/admin/UsersPage/interfaces";
+import type { FullUserSnapshot } from "@/views/admin/UsersPage/types";
 import type { ApiKeyDescriptor, MemberRow } from "./interfaces";
 
 interface ManageUsersResponse {
