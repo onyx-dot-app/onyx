@@ -1,5 +1,6 @@
 import time
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -21,11 +22,14 @@ from onyx.connectors.zoom.models import (
     ZoomUserPage,
 )
 from onyx.connectors.zoom.recordings.discovery import (
+    _MAX_LISTING_WINDOW_DAYS,
     _MAX_WORK_PER_STEP,
     _OCCURRENCE_POLL_OVERLAP_SECONDS,
     GroupSource,
     HostAllowlistSource,
     IdAllowlistSource,
+    _listing_windows,
+    _poll_window_dates,
     build_discovery_sources,
 )
 from onyx.connectors.zoom.recordings.models import ZoomSessionType
@@ -39,6 +43,9 @@ from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
 # datetime keeps, so a value that round-trips through one stops comparing equal.
 _START = 0.0
 _END = 2_000_000_000.0
+# An epoch start would split into hundreds of 30-day windows. Tests that are not
+# about the windowing use a range Zoom takes in one call; the ones that are pass 0.
+_HOST_START = _END - 20 * 24 * 60 * 60
 _ONE_HOUR = 60 * 60
 
 # A window this narrow excludes any occurrence whose date parsed, so a test using
@@ -581,7 +588,7 @@ class TestHostAllowlistSource:
             recordings=[_recording("uuid-1")],
         )
 
-        result = source.discover_step(client, _START, _END, None)
+        result = source.discover_step(client, _HOST_START, _END, None)
 
         assert client.list_user_recordings.call_args.kwargs["user_id"] == "u1"
         assert [w.occurrence_uuid for w in result.work] == ["uuid-1"]
@@ -594,7 +601,7 @@ class TestHostAllowlistSource:
             recordings=[_recording("uuid-1")],
         )
 
-        work = source.discover_step(client, _START, _END, None).work[0]
+        work = source.discover_step(client, _HOST_START, _END, None).work[0]
 
         assert work.session_type == ZoomSessionType.MEETING
         assert work.session_id == "6840331990"
@@ -609,7 +616,7 @@ class TestHostAllowlistSource:
             recordings=[_recording("uuid-1")],
         )
 
-        result = source.discover_step(client, _START, _END, None)
+        result = source.discover_step(client, _HOST_START, _END, None)
 
         assert [w.occurrence_uuid for w in result.work] == ["uuid-1"]
 
@@ -617,7 +624,7 @@ class TestHostAllowlistSource:
         source = HostAllowlistSource(["typo@example.com"])
         client = _client_for_hosts(users=[user(id="u1", email="host@example.com")])
 
-        result = source.discover_step(client, _START, _END, None)
+        result = source.discover_step(client, _HOST_START, _END, None)
 
         assert result.work == []
         assert len(result.failures) == 1
@@ -630,7 +637,7 @@ class TestHostAllowlistSource:
         source = HostAllowlistSource(["pending@example.com"])
         client = _client_for_hosts(users=[user(email="pending@example.com", id=None)])
 
-        result = source.discover_step(client, _START, _END, None)
+        result = source.discover_step(client, _HOST_START, _END, None)
 
         assert result.failures[0].failed_entity is not None
         assert result.failures[0].failed_entity.entity_id == "host:pending@example.com"
@@ -647,7 +654,7 @@ class TestHostAllowlistSource:
             ZoomUserPage(users=[user(id="u2", email="another@example.com")]),
         ]
 
-        source.discover_step(client, _START, _END, None)
+        source.discover_step(client, _HOST_START, _END, None)
 
         assert client.list_users.call_count == 1
 
@@ -662,7 +669,7 @@ class TestHostAllowlistSource:
             ZoomUserPage(users=[user(id="u1", email="host@example.com")]),
         ]
 
-        result = source.discover_step(client, _START, _END, None)
+        result = source.discover_step(client, _HOST_START, _END, None)
 
         assert client.list_users.call_args.kwargs["page_token"] == "tok"
         assert [w.occurrence_uuid for w in result.work] == ["uuid-1"]
@@ -677,8 +684,8 @@ class TestHostAllowlistSource:
             recordings=[_recording("uuid-1")],
         )
 
-        first = source.discover_step(client, _START, _END, None)
-        source.discover_step(client, _START, _END, first.next_cursor)
+        first = source.discover_step(client, _HOST_START, _END, None)
+        source.discover_step(client, _HOST_START, _END, first.next_cursor)
 
         assert client.list_users.call_count == 1
 
@@ -689,8 +696,8 @@ class TestHostAllowlistSource:
             recordings=[_recording("uuid-1")],
         )
 
-        first = source.discover_step(client, _START, _END, None)
-        second = source.discover_step(client, _START, _END, first.next_cursor)
+        first = source.discover_step(client, _HOST_START, _END, None)
+        second = source.discover_step(client, _HOST_START, _END, first.next_cursor)
 
         assert len(first.failures) == 1
         assert second.failures == []
@@ -709,8 +716,8 @@ class TestGroupSource:
             ZoomRecordingPage(recordings=[_recording(f"uuid-{user_id}")])
         )
 
-        first = source.discover_step(client, _START, _END, None)
-        second = source.discover_step(client, _START, _END, first.next_cursor)
+        first = source.discover_step(client, _HOST_START, _END, None)
+        second = source.discover_step(client, _HOST_START, _END, first.next_cursor)
 
         assert [w.occurrence_uuid for w in first.work] == ["uuid-u1"]
         assert first.done is False
@@ -725,7 +732,7 @@ class TestGroupSource:
             recordings=[_recording("uuid-1")],
         )
 
-        source.discover_step(client, _START, _END, None)
+        source.discover_step(client, _HOST_START, _END, None)
 
         assert client.list_user_recordings.call_args.kwargs["user_id"] == "u1"
 
@@ -737,7 +744,7 @@ class TestGroupSource:
             ZoomUserPage(users=[user(id="u2")]),
         ]
 
-        first = source.discover_step(client, _START, _END, None)
+        first = source.discover_step(client, _HOST_START, _END, None)
 
         assert client.list_group_members.call_count == 2
         assert first.done is False
@@ -747,7 +754,7 @@ class TestGroupSource:
         source = GroupSource("group-1")
         client = _client_for_hosts(members=[])
 
-        result = source.discover_step(client, _START, _END, None)
+        result = source.discover_step(client, _HOST_START, _END, None)
 
         assert result.work == []
         assert result.done is True
@@ -760,7 +767,7 @@ class TestGroupSource:
             recordings=[_recording("uuid-1")],
         )
 
-        result = source.discover_step(client, _START, _END, None)
+        result = source.discover_step(client, _HOST_START, _END, None)
 
         assert client.list_user_recordings.call_count == 1
         assert result.done is True
@@ -770,7 +777,7 @@ class TestGroupSource:
         client = _client_for_hosts()
         client.list_group_members.side_effect = RuntimeError("boom")
 
-        result = source.discover_step(client, _START, _END, None)
+        result = source.discover_step(client, _HOST_START, _END, None)
 
         assert result.failures[0].failed_entity is not None
         assert result.failures[0].failed_entity.entity_id == "group:group-1"
@@ -786,7 +793,7 @@ class TestUserRecordingsPaging:
             ZoomRecordingPage(recordings=[_recording("uuid-2")]),
         ]
 
-        result = source.discover_step(client, _START, _END, None)
+        result = source.discover_step(client, _HOST_START, _END, None)
 
         assert client.list_user_recordings.call_count == 2
         assert [w.occurrence_uuid for w in result.work] == ["uuid-1", "uuid-2"]
@@ -806,12 +813,12 @@ class TestUserRecordingsPaging:
             ],
         )
 
-        first = source.discover_step(client, _START, _END, None)
+        first = source.discover_step(client, _HOST_START, _END, None)
         assert first.next_cursor is not None
         assert first.next_cursor["host_id"] == "u1"
         assert first.done is False
 
-        second = source.discover_step(client, _START, _END, first.next_cursor)
+        second = source.discover_step(client, _HOST_START, _END, first.next_cursor)
 
         seen = [w.occurrence_uuid for w in first.work + second.work]
         assert len(seen) == total
@@ -830,8 +837,8 @@ class TestUserRecordingsPaging:
             ],
         )
 
-        first = source.discover_step(client, _START, _END, None)
-        source.discover_step(client, _START, _END, first.next_cursor)
+        first = source.discover_step(client, _HOST_START, _END, None)
+        source.discover_step(client, _HOST_START, _END, first.next_cursor)
 
         assert client.list_user_recordings.call_count == 1
 
@@ -842,7 +849,7 @@ class TestUserRecordingsPaging:
         ]
         first = GroupSource("group-1").discover_step(
             _client_for_hosts(members=[user(id="u1")], recordings=batch),
-            _START,
+            _HOST_START,
             _END,
             None,
         )
@@ -855,7 +862,7 @@ class TestUserRecordingsPaging:
                     *batch,
                 ],
             ),
-            _START,
+            _HOST_START,
             _END,
             first.next_cursor,
         )
@@ -872,7 +879,9 @@ class TestUserRecordingsPaging:
             for i in range(_MAX_WORK_PER_STEP + 5)
         ]
         first_client = _client_for_hosts(members=[user(id="u1")], recordings=batch)
-        first = GroupSource("group-1").discover_step(first_client, _START, _END, None)
+        first = GroupSource("group-1").discover_step(
+            first_client, _HOST_START, _END, None
+        )
 
         resumed_client = _client_for_hosts(
             members=[user(id="u1")],
@@ -882,7 +891,7 @@ class TestUserRecordingsPaging:
             ],
         )
         second = GroupSource("group-1").discover_step(
-            resumed_client, _START, _END, first.next_cursor
+            resumed_client, _HOST_START, _END, first.next_cursor
         )
 
         seen = [w.occurrence_uuid for w in first.work + second.work]
@@ -895,7 +904,7 @@ class TestUserRecordingsPaging:
             members=[user(id="u1")], recordings=[_recording("uuid-1")]
         )
 
-        result = source.discover_step(client, _START, _END, {"bogus": "value"})
+        result = source.discover_step(client, _HOST_START, _END, {"bogus": "value"})
 
         assert [w.occurrence_uuid for w in result.work] == ["uuid-1"]
 
@@ -903,7 +912,7 @@ class TestUserRecordingsPaging:
         source = GroupSource("group-1")
         client = _client_for_hosts(members=[user(id="u1")])
 
-        result = source.discover_step(client, _START, _END, {"host_id": "zzz"})
+        result = source.discover_step(client, _HOST_START, _END, {"host_id": "zzz"})
 
         assert result.work == []
         assert result.done is True
@@ -924,7 +933,7 @@ class TestHostListChangesBetweenAttempts:
         source = GroupSource("group-1")
         seen: list[str] = []
         for _ in range(10):
-            result = source.discover_step(client, _START, _END, cursor)
+            result = source.discover_step(client, _HOST_START, _END, cursor)
             seen.extend(w.occurrence_uuid for w in result.work)
             cursor = result.next_cursor
             if result.done:
@@ -956,7 +965,7 @@ class TestHostListChangesBetweenAttempts:
         )
 
         result = source.discover_step(
-            client, _START, _END, {"host_id": "b", "offset": 150}
+            client, _HOST_START, _END, {"host_id": "b", "offset": 150}
         )
 
         assert [w.occurrence_uuid for w in result.work] == ["rec-c"]
@@ -981,11 +990,11 @@ class TestUserRecordingsPollWindow:
 
         assert self._window(client) == ("2026-03-07", "2026-03-17")
 
-    def test_a_first_run_never_asks_for_a_date_before_the_epoch(self) -> None:
+    def test_the_lag_buffer_never_pushes_the_start_before_the_epoch(self) -> None:
         source = GroupSource("group-1")
         client = _client_for_hosts(members=[user(id="u1")])
 
-        source.discover_step(client, 0, _END, None)
+        source.discover_step(client, _ONE_HOUR, _ONE_HOUR * 2, None)
 
         assert self._window(client)[0] == "1970-01-01"
 
@@ -1009,7 +1018,7 @@ class TestUserRecordingsSessionTypes:
             recordings=[_recording("uuid-1", recording_type="5")],
         )
 
-        work = source.discover_step(client, _START, _END, None).work[0]
+        work = source.discover_step(client, _HOST_START, _END, None).work[0]
 
         assert work.session_type == ZoomSessionType.WEBINAR
 
@@ -1023,7 +1032,7 @@ class TestUserRecordingsSessionTypes:
             ],
         )
 
-        result = source.discover_step(client, _START, _END, None)
+        result = source.discover_step(client, _HOST_START, _END, None)
 
         assert [w.occurrence_uuid for w in result.work] == ["uuid-meeting"]
 
@@ -1041,7 +1050,7 @@ class TestUserRecordingsSessionTypes:
         )
 
         with pytest.raises(ValueError, match="'42'"):
-            source.discover_step(client, _START, _END, None)
+            source.discover_step(client, _HOST_START, _END, None)
 
     def test_a_recording_with_no_type_at_all_stops_the_attempt(self) -> None:
         # Zoom documents no case where it omits this, so an entry without one is
@@ -1057,7 +1066,7 @@ class TestUserRecordingsSessionTypes:
         )
 
         with pytest.raises(ValueError, match="no session type"):
-            source.discover_step(client, _START, _END, None)
+            source.discover_step(client, _HOST_START, _END, None)
 
 
 class TestUserRecordingsFailures:
@@ -1077,15 +1086,15 @@ class TestUserRecordingsFailures:
 
         client.list_user_recordings.side_effect = _recordings
 
-        first = source.discover_step(client, _START, _END, None)
-        second = source.discover_step(client, _START, _END, first.next_cursor)
+        first = source.discover_step(client, _HOST_START, _END, None)
+        second = source.discover_step(client, _HOST_START, _END, first.next_cursor)
 
         assert first.work == []
         assert first.failures[0].failed_entity is not None
         assert first.failures[0].failed_entity.entity_id == "host:jill@example.com"
         missed = first.failures[0].failed_entity.missed_time_range
         assert missed is not None
-        assert missed[0].timestamp() == _START - _OCCURRENCE_POLL_OVERLAP_SECONDS
+        assert missed[0].timestamp() == _HOST_START - _OCCURRENCE_POLL_OVERLAP_SECONDS
         assert missed[1].timestamp() == _END
         assert [w.occurrence_uuid for w in second.work] == ["uuid-2"]
 
@@ -1099,7 +1108,7 @@ class TestUserRecordingsFailures:
         )
 
         with pytest.raises(requests.HTTPError):
-            source.discover_step(client, _START, _END, None)
+            source.discover_step(client, _HOST_START, _END, None)
 
     def test_a_rate_limit_while_resolving_stops_discovery(self) -> None:
         source = GroupSource("group-1")
@@ -1111,7 +1120,7 @@ class TestUserRecordingsFailures:
         )
 
         with pytest.raises(requests.HTTPError):
-            source.discover_step(client, _START, _END, None)
+            source.discover_step(client, _HOST_START, _END, None)
 
     def test_a_missing_scope_stops_discovery_rather_than_emptying_the_group(
         self,
@@ -1125,7 +1134,7 @@ class TestUserRecordingsFailures:
         )
 
         with pytest.raises(InsufficientPermissionsError):
-            source.discover_step(client, _START, _END, None)
+            source.discover_step(client, _HOST_START, _END, None)
 
     def test_expired_credentials_while_resolving_stop_discovery(self) -> None:
         source = HostAllowlistSource(["host@example.com"])
@@ -1133,4 +1142,126 @@ class TestUserRecordingsFailures:
         client.list_users.side_effect = CredentialExpiredError("token expired")
 
         with pytest.raises(CredentialExpiredError):
-            source.discover_step(client, _START, _END, None)
+            source.discover_step(client, _HOST_START, _END, None)
+
+
+def _client_recording_on(
+    day: date, entry: ZoomRecordingEntry, to_is_exclusive: bool = False
+) -> MagicMock:
+    """Zoom answers only for the window it was asked about, which is what makes an
+    unsplit window lose everything outside its last month.
+
+    Zoom never documents whether `to` includes its own date, so tests can ask for
+    either reading.
+    """
+    client = MagicMock(spec=ZoomClient)
+    client.list_users.return_value = ZoomUserPage(users=[])
+    client.list_group_members.return_value = ZoomUserPage(users=[user(id="u1")])
+
+    def listing(**kwargs: Any) -> ZoomRecordingPage:
+        if to_is_exclusive:
+            asked_for = kwargs["from_date"] <= day < kwargs["to_date"]
+        else:
+            asked_for = kwargs["from_date"] <= day <= kwargs["to_date"]
+        return ZoomRecordingPage(recordings=[entry] if asked_for else [])
+
+    client.list_user_recordings.side_effect = listing
+    return client
+
+
+def _walk(
+    source: GroupSource, client: MagicMock, start: float, end: float, steps: int = 40
+) -> list[str]:
+    found: list[str] = []
+    cursor: dict[str, Any] | None = None
+    for _ in range(steps):
+        result = source.discover_step(client, start, end, cursor)
+        found.extend(work.occurrence_uuid for work in result.work)
+        if result.done:
+            return found
+        cursor = result.next_cursor
+    raise AssertionError("the source never finished")
+
+
+class TestUserRecordingsListingWindow:
+    """Unsplit, a first run indexes the last month and skips every older recording,
+    and the next run moves the window on rather than coming back for them.
+    """
+
+    def test_each_window_starts_on_the_day_the_last_one_ended(self) -> None:
+        windows = _listing_windows(date(2025, 1, 1), date(2025, 6, 30))
+
+        assert windows[0][0] == date(2025, 1, 1)
+        assert windows[-1][1] == date(2025, 6, 30)
+        for from_date, to_date in windows:
+            assert from_date <= to_date
+            assert to_date - from_date < timedelta(days=_MAX_LISTING_WINDOW_DAYS)
+        for earlier, later in zip(windows, windows[1:], strict=False):
+            assert later[0] == earlier[1]
+
+    def test_a_recording_on_a_boundary_day_survives_an_exclusive_to(self) -> None:
+        """The shared day is the whole point of the overlap: if Zoom's `to` excludes
+        its own date, abutting windows would ask for every day except this one."""
+        end = datetime(2026, 3, 17, 12, 0, tzinfo=timezone.utc)
+        start = end - timedelta(days=365)
+        windows = _listing_windows(
+            *_poll_window_dates(start.timestamp(), end.timestamp())
+        )
+        boundary = windows[0][1]
+        source = GroupSource("group-1")
+        client = _client_recording_on(
+            boundary, _recording("uuid-boundary"), to_is_exclusive=True
+        )
+
+        found = _walk(source, client, start.timestamp(), end.timestamp())
+
+        assert "uuid-boundary" in found
+
+    def test_a_single_day_is_one_window(self) -> None:
+        assert _listing_windows(date(2025, 1, 1), date(2025, 1, 1)) == [
+            (date(2025, 1, 1), date(2025, 1, 1))
+        ]
+
+    def test_a_window_that_ends_before_it_starts_asks_zoom_for_nothing(self) -> None:
+        assert _listing_windows(date(2025, 1, 2), date(2025, 1, 1)) == []
+
+    def test_no_single_call_asks_for_more_than_zoom_allows(self) -> None:
+        source = GroupSource("group-1")
+        client = _client_for_hosts(members=[user(id="u1")])
+        end = datetime(2026, 3, 17, 12, 0, tzinfo=timezone.utc).timestamp()
+
+        _walk(source, client, end - 365 * 24 * _ONE_HOUR, end)
+
+        assert client.list_user_recordings.call_count > 1
+        for call in client.list_user_recordings.call_args_list:
+            span = call.kwargs["to_date"] - call.kwargs["from_date"]
+            assert span < timedelta(days=_MAX_LISTING_WINDOW_DAYS)
+
+    def test_a_recording_older_than_a_month_is_still_reached(self) -> None:
+        end = datetime(2026, 3, 17, 12, 0, tzinfo=timezone.utc)
+        source = GroupSource("group-1")
+        client = _client_recording_on(date(2025, 6, 1), _recording("uuid-old"))
+
+        found = _walk(
+            source,
+            client,
+            (end - timedelta(days=365)).timestamp(),
+            end.timestamp(),
+        )
+
+        assert found == ["uuid-old"]
+
+    def test_a_step_that_finds_work_resumes_at_the_window_after_it(self) -> None:
+        end = datetime(2026, 3, 17, 12, 0, tzinfo=timezone.utc)
+        recorded_on = date(2025, 3, 20)
+        source = GroupSource("group-1")
+        client = _client_recording_on(recorded_on, _recording("uuid-first"))
+
+        result = source.discover_step(
+            client, (end - timedelta(days=365)).timestamp(), end.timestamp(), None
+        )
+
+        assert [w.occurrence_uuid for w in result.work] == ["uuid-first"]
+        assert result.next_cursor is not None
+        # Past the window it just drained, or the same recording comes back forever.
+        assert date.fromisoformat(result.next_cursor["window_start"]) > recorded_on

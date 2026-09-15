@@ -51,6 +51,10 @@ _ZOOM_CREDS = {
 
 _FULL_HISTORY_END = time.time()
 
+# An epoch start would split into hundreds of 30-day windows per host. This still
+# covers the oldest occurrence these tests build.
+_POLL_START = _FULL_HISTORY_END - 20 * 24 * 60 * 60
+
 
 def _days_ago(days: int) -> str:
     # Build these off the same clock as _FULL_HISTORY_END. A pinned calendar date
@@ -138,6 +142,29 @@ class TestZoomConnectorCredentials:
             next(connector.load_from_checkpoint(0, 1, checkpoint))
 
 
+class TestIndexingStartDateIsRequired:
+    """Zoom caps its recording listing at a month per request, so without a start
+    date the connector would ask for every month back to 1970 for every host."""
+
+    def test_an_unset_start_date_is_rejected(self) -> None:
+        connector, _ = _make_connector(meeting_ids=["111"])
+        checkpoint = connector.build_dummy_checkpoint()
+
+        with pytest.raises(ConnectorValidationError, match="indexing start date"):
+            next(connector.load_from_checkpoint(0, _FULL_HISTORY_END, checkpoint))
+
+    def test_the_perm_sync_entry_point_is_rejected_too(self) -> None:
+        connector, _ = _make_connector(meeting_ids=["111"])
+        checkpoint = connector.build_dummy_checkpoint()
+
+        with pytest.raises(ConnectorValidationError, match="indexing start date"):
+            next(
+                connector.load_from_checkpoint_with_perm_sync(
+                    0, _FULL_HISTORY_END, checkpoint
+                )
+            )
+
+
 class TestZoomConnectorValidateSettings:
     def test_no_discovery_mechanism_rejected(self) -> None:
         connector = ZoomConnector(meeting_ids=[])
@@ -207,7 +234,7 @@ class TestZoomConnectorCheckpoint:
         _configure_happy_path(mock_client)
 
         outputs = load_everything_from_checkpoint_connector(
-            connector, 0, _FULL_HISTORY_END
+            connector, _POLL_START, _FULL_HISTORY_END
         )
         docs = [
             item
@@ -242,7 +269,7 @@ class TestZoomConnectorCheckpoint:
         ]
 
         outputs = load_everything_from_checkpoint_connector(
-            connector, 0, _FULL_HISTORY_END
+            connector, _POLL_START, _FULL_HISTORY_END
         )
         docs = [
             item
@@ -276,7 +303,7 @@ class TestZoomConnectorCheckpoint:
         mock_client.get_meeting_transcript.side_effect = _transcript
 
         outputs = load_everything_from_checkpoint_connector(
-            connector, 0, _FULL_HISTORY_END
+            connector, _POLL_START, _FULL_HISTORY_END
         )
         items = [item for output in outputs for item in output.items]
         docs = [item for item in items if isinstance(item, Document)]
@@ -309,7 +336,7 @@ class TestZoomConnectorCheckpoint:
         mock_client.list_past_meeting_occurrences.side_effect = _occurrences
 
         outputs = load_everything_from_checkpoint_connector(
-            connector, 0, _FULL_HISTORY_END
+            connector, _POLL_START, _FULL_HISTORY_END
         )
         items = [item for output in outputs for item in output.items]
         docs = [item for item in items if isinstance(item, Document)]
@@ -326,7 +353,7 @@ class TestZoomConnectorCheckpoint:
         mock_client.list_past_meeting_occurrences.return_value = []
 
         outputs = load_everything_from_checkpoint_connector(
-            connector, 0, _FULL_HISTORY_END
+            connector, _POLL_START, _FULL_HISTORY_END
         )
 
         assert all(output.items == [] for output in outputs)
@@ -338,7 +365,7 @@ class TestZoomConnectorCheckpoint:
         mock_client.list_past_meeting_occurrences.side_effect = RuntimeError("boom")
 
         outputs = load_everything_from_checkpoint_connector(
-            connector, 0, _FULL_HISTORY_END
+            connector, _POLL_START, _FULL_HISTORY_END
         )
         failures = [
             item
@@ -357,7 +384,7 @@ class TestZoomConnectorCheckpoint:
         _configure_happy_path(mock_client)
 
         outputs = load_everything_from_checkpoint_connector(
-            connector, 0, _FULL_HISTORY_END
+            connector, _POLL_START, _FULL_HISTORY_END
         )
 
         # Discover and process each of the two ids in turn.
@@ -382,7 +409,9 @@ class TestZoomConnectorCheckpoint:
         # The real worker serializes the checkpoint between invocations, so round-trip
         # it through JSON here and finish the run from the restored copy.
         checkpoint = connector.build_dummy_checkpoint()
-        generator = connector.load_from_checkpoint(0, _FULL_HISTORY_END, checkpoint)
+        generator = connector.load_from_checkpoint(
+            _POLL_START, _FULL_HISTORY_END, checkpoint
+        )
         try:
             while True:
                 next(generator)
@@ -391,7 +420,7 @@ class TestZoomConnectorCheckpoint:
         restored = connector.validate_checkpoint_json(checkpoint.model_dump_json())
 
         outputs = load_everything_from_checkpoint_connector_from_checkpoint(
-            connector, 0, _FULL_HISTORY_END, restored
+            connector, _POLL_START, _FULL_HISTORY_END, restored
         )
         docs = [
             item
@@ -410,7 +439,7 @@ class TestZoomConnectorCheckpoint:
         connector, mock_client = _make_connector(meeting_ids=[])
 
         outputs = load_everything_from_checkpoint_connector(
-            connector, 0, _FULL_HISTORY_END
+            connector, _POLL_START, _FULL_HISTORY_END
         )
 
         assert len(outputs) == 1
@@ -450,7 +479,7 @@ class TestSystemicFailureDoesNotAdvanceWork:
 
         emitted = 0
         generator = connector.load_from_checkpoint(
-            0, _FULL_HISTORY_END, self._checkpoint()
+            _POLL_START, _FULL_HISTORY_END, self._checkpoint()
         )
         with pytest.raises(requests.HTTPError):
             for _ in generator:
@@ -469,7 +498,7 @@ class TestSystemicFailureDoesNotAdvanceWork:
         )
 
         generator = connector.load_from_checkpoint(
-            0, _FULL_HISTORY_END, self._checkpoint()
+            _POLL_START, _FULL_HISTORY_END, self._checkpoint()
         )
         items: list[Document | HierarchyNode | ConnectorFailure] = []
         try:
@@ -488,7 +517,7 @@ class TestSessionSourceTypes:
 
     def _documents(self, connector: ZoomConnector) -> list[Document]:
         outputs = load_everything_from_checkpoint_connector(
-            connector, 0, _FULL_HISTORY_END
+            connector, _POLL_START, _FULL_HISTORY_END
         )
         assert outputs[-1].next_checkpoint.has_more is False
         return [
@@ -632,7 +661,7 @@ class TestDiscoveryMechanismUnion:
 
     def _documents(self, connector: ZoomConnector) -> list[Document]:
         outputs = load_everything_from_checkpoint_connector(
-            connector, 0, _FULL_HISTORY_END
+            connector, _POLL_START, _FULL_HISTORY_END
         )
         assert outputs[-1].next_checkpoint.has_more is False
         return [
@@ -760,7 +789,9 @@ class TestDiscoveryMechanismUnion:
         )
 
         checkpoint = connector.build_dummy_checkpoint()
-        generator = connector.load_from_checkpoint(0, _FULL_HISTORY_END, checkpoint)
+        generator = connector.load_from_checkpoint(
+            _POLL_START, _FULL_HISTORY_END, checkpoint
+        )
         try:
             while True:
                 next(generator)
@@ -773,7 +804,7 @@ class TestDiscoveryMechanismUnion:
 
         restored = connector.validate_checkpoint_json(checkpoint.model_dump_json())
         outputs = load_everything_from_checkpoint_connector_from_checkpoint(
-            connector, 0, _FULL_HISTORY_END, restored
+            connector, _POLL_START, _FULL_HISTORY_END, restored
         )
         docs = [
             item
@@ -801,7 +832,7 @@ def _run_with_perm_sync(
     while checkpoint.has_more:
         generator = CheckpointOutputWrapper[ZoomConnectorCheckpoint]()(
             connector.load_from_checkpoint_with_perm_sync(
-                0, _FULL_HISTORY_END, checkpoint
+                _POLL_START, _FULL_HISTORY_END, checkpoint
             )
         )
         for document, _hierarchy, failure, next_checkpoint in generator:
@@ -858,7 +889,7 @@ class TestPermissionSyncEntryPoint:
         self._access_configured(mock_client)
 
         outputs = load_everything_from_checkpoint_connector(
-            connector, 0, _FULL_HISTORY_END
+            connector, _POLL_START, _FULL_HISTORY_END
         )
         documents = [
             item
