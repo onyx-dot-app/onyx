@@ -481,18 +481,6 @@ export function processRawChatHistory(
         messageInfo.alternate_assistant_id !== null
           ? Number(messageInfo.alternate_assistant_id)
           : null,
-      // only include these fields if this is an agent message so that
-      // this is identical to what is computed at streaming time
-      ...(messageInfo.message_type === "assistant"
-        ? {
-            retrievalType: retrievalType,
-            researchType: messageInfo.research_type as ResearchType | undefined,
-            query: messageInfo.rephrased_query,
-            documents: messageInfo?.context_docs || [],
-            citations: messageInfo?.citations || {},
-            processingDurationSeconds: messageInfo.processing_duration_seconds,
-          }
-        : {}),
       toolCall: messageInfo.tool_call,
       parentNodeId: messageInfo.parent_message,
       childrenNodeIds: [],
@@ -504,6 +492,20 @@ export function processRawChatHistory(
       preferredResponseId: messageInfo.preferred_response_id ?? null,
       modelDisplayName: messageInfo.model_display_name ?? null,
     };
+
+    // Only agent messages carry these fields, so that a reloaded message is
+    // identical to what is computed at streaming time.
+    if (messageInfo.message_type === "assistant") {
+      message.retrievalType = retrievalType;
+      message.researchType = messageInfo.research_type as
+        | ResearchType
+        | undefined;
+      message.query = messageInfo.rephrased_query;
+      message.documents = messageInfo?.context_docs || [];
+      message.citations = messageInfo?.citations || {};
+      message.processingDurationSeconds =
+        messageInfo.processing_duration_seconds;
+    }
 
     messages.set(messageInfo.message_id, message);
 
@@ -577,24 +579,4 @@ export function buildChatUrl(
   }
 
   return `/${search ? "search" : "app"}`;
-}
-
-export async function uploadFilesForChat(
-  files: File[]
-): Promise<[FileDescriptor[], string | null]> {
-  const formData = new FormData();
-  files.forEach((file) => {
-    formData.append("files", file);
-  });
-
-  const response = await fetch("/api/chat/file", {
-    method: "POST",
-    body: formData,
-  });
-  if (!response.ok) {
-    return [[], `Failed to upload files - ${(await response.json()).detail}`];
-  }
-  const responseJson = await response.json();
-
-  return [responseJson.files as FileDescriptor[], null];
 }

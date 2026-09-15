@@ -25,7 +25,7 @@ func TestNewBaseline_isSelfConsistent(t *testing.T) {
 		"internal/empty": {0, 0},
 	})
 
-	report := Compare(profile, NewBaseline(profile), 0)
+	report := Compare(profile, NewBaseline(profile).Reference(), 0)
 
 	if got := len(report.Regressions()); got != 0 {
 		t.Fatalf("a fresh baseline must not fail its own run, got %d regressions", got)

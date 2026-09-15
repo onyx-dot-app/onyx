@@ -985,6 +985,18 @@ REDIS_HEALTH_CHECK_INTERVAL = int(os.environ.get("REDIS_HEALTH_CHECK_INTERVAL", 
 # our redis client only, not celery's
 REDIS_POOL_MAX_CONNECTIONS = int(os.environ.get("REDIS_POOL_MAX_CONNECTIONS", 128))
 
+# Per-recv and connect deadlines in seconds for our redis client, not celery's.
+# A peer that keeps the TCP session open without replying raises after this
+# instead of holding the thread until restart. The read value caps BLPOP too.
+REDIS_SOCKET_CONNECT_TIMEOUT = float(
+    os.environ.get("REDIS_SOCKET_CONNECT_TIMEOUT") or 10
+)
+REDIS_SOCKET_TIMEOUT = float(os.environ.get("REDIS_SOCKET_TIMEOUT") or 30)
+REDIS_SOCKET_TIMEOUT_KWARGS: dict[str, float] = {
+    "socket_connect_timeout": REDIS_SOCKET_CONNECT_TIMEOUT,
+    "socket_timeout": REDIS_SOCKET_TIMEOUT,
+}
+
 # https://docs.celeryq.dev/en/stable/userguide/configuration.html#redis-backend-settings
 # should be one of "required", "optional", or "none"
 REDIS_SSL_CERT_REQS = os.getenv("REDIS_SSL_CERT_REQS", "none")

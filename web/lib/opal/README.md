@@ -12,7 +12,7 @@ Peer dependencies (install whichever the lib actually exercises in your usage):
 
 ```sh
 bun add react react-dom next \
-  @radix-ui/react-popover @radix-ui/react-separator \
+  @radix-ui/react-popover \
   @radix-ui/react-slot @radix-ui/react-tooltip \
   @dnd-kit/core @dnd-kit/sortable @dnd-kit/modifiers @dnd-kit/utilities \
   @tanstack/react-table formik \

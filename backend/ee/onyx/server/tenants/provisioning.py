@@ -86,6 +86,9 @@ from shared_configs.enums import EmbeddingProvider
 
 logger = setup_logger()
 
+# Matches billing.py. Without it a hung control plane pins the caller forever.
+_CONTROL_PLANE_TIMEOUT_S = 30
+
 
 async def get_or_provision_tenant(
     email: str,
@@ -666,6 +669,7 @@ def get_tenant_by_domain_from_control_plane(
             f"{CONTROL_PLANE_API_BASE_URL}/tenant-by-domain",
             headers=headers,
             json={"domain": domain, "tenant_id": tenant_id},
+            timeout=_CONTROL_PLANE_TIMEOUT_S,
         )
 
         if response.status_code != 200:

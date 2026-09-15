@@ -7,8 +7,36 @@ from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.llm.model_capabilities import (
     get_llm_max_output_tokens,
     get_max_input_tokens,
+    get_model_map,
     llm_max_input_tokens,
 )
+
+
+def test_model_context_metadata_is_not_inferred_or_overwritten() -> None:
+    metadata = {
+        "gpt-5.6-sol": {"max_input_tokens": 922000, "max_output_tokens": 128000},
+        "gpt-5.6-luna": {"max_input_tokens": 922000, "max_output_tokens": 128000},
+        "openrouter/openai/gpt-5.6-sol": {
+            "max_input_tokens": 64000,
+            "max_output_tokens": 8000,
+        },
+        "gpt-5.6-terra": {
+            "max_input_tokens": 922000,
+            "max_output_tokens": 128000,
+            "max_context_tokens": 1048000,
+        },
+    }
+    get_model_map.cache_clear()
+    try:
+        with patch("litellm.model_cost", metadata):
+            model_map = get_model_map()
+        for name, limits in metadata.items():
+            assert model_map[name] == limits
+        assert "gpt-5.6" not in model_map
+        assert "openai/gpt-5.6" not in model_map
+        assert "max_context_tokens" not in metadata["gpt-5.6-sol"]
+    finally:
+        get_model_map.cache_clear()
 
 
 class TestLlmMaxInputTokens:

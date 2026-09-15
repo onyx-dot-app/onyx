@@ -977,13 +977,9 @@ export default function AgentEditorPage({
         // Sharing on saved agents is managed by the share dialog — omitting
         // the fields here keeps form saves from clobbering it. Creates carry
         // the draft share state captured before the agent existed.
-        ...(existingAgent
-          ? {}
-          : {
-              is_public: values.is_public,
-              users: values.shared_user_ids,
-              groups: values.shared_group_ids,
-            }),
+        is_public: existingAgent ? undefined : values.is_public,
+        users: existingAgent ? undefined : values.shared_user_ids,
+        groups: existingAgent ? undefined : values.shared_group_ids,
         default_model_configuration_id:
           values.default_model_configuration_id ?? null,
         starter_messages: finalAgentStarterMessages,
@@ -1112,7 +1108,7 @@ export default function AgentEditorPage({
   function handlePickRecentFile(
     file: ProjectFile,
     currentFileIds: string[],
-    setFieldValue: (field: string, value: unknown) => void
+    setFieldValue: (field: string, value: string[]) => void
   ) {
     if (!currentFileIds.includes(file.id)) {
       setFieldValue("user_file_ids", [...currentFileIds, file.id]);
@@ -1122,7 +1118,7 @@ export default function AgentEditorPage({
   function handleUnpickRecentFile(
     file: ProjectFile,
     currentFileIds: string[],
-    setFieldValue: (field: string, value: unknown) => void
+    setFieldValue: (field: string, value: string[]) => void
   ) {
     setFieldValue(
       "user_file_ids",
@@ -1140,7 +1136,7 @@ export default function AgentEditorPage({
   async function handleUploadChange(
     e: React.ChangeEvent<HTMLInputElement>,
     currentFileIds: string[],
-    setFieldValue: (field: string, value: unknown) => void
+    setFieldValue: (field: string, value: string[]) => void
   ) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
