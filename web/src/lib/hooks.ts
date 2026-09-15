@@ -119,7 +119,7 @@ export const useConnectorIndexingStatusWithPagination = (
     : null;
 
   // Main data fetch with auto-refresh
-  const { data, isLoading, error } = useSWR<
+  const { data, isLoading, isValidating, error } = useSWR<
     ConnectorIndexingStatusLiteResponse[]
   >(
     swrKey,
@@ -190,6 +190,7 @@ export const useConnectorIndexingStatusWithPagination = (
   return {
     data: mergedData,
     isLoading,
+    isValidating,
     error,
     handlePageChange,
     sourcePages,
