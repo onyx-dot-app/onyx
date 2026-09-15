@@ -7,16 +7,23 @@ from sqlalchemy.orm import Session
 from ee.onyx.external_permissions.jira.doc_sync import jira_doc_sync
 from onyx.access.models import DocExternalAccess
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.models import InputType
+from onyx.connectors.jira.connector import JiraConnector
+from onyx.connectors.models import InputType, SlimDocument
 from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
 from onyx.db.models import Connector, ConnectorCredentialPair, Credential
 from onyx.db.utils import DocumentRow, SortOrder
+from tests.external_dependency_unit.connectors.jira.conftest import JiraTestCredentials
+from tests.utils.secret_names import TestSecret
 
-# In order to get these tests to run, use the credentials from Bitwarden.
-# Search up "ENV vars for local and Github tests", and find the Jira relevant key-value pairs.
-# Required env vars: JIRA_USER_EMAIL, JIRA_API_TOKEN
+JIRA_BASE_URL = "https://danswerai.atlassian.net"
+TEAM_MANAGED_PROJECT_KEY = "TP"
+TEAM_MANAGED_USER_EMAIL = "hagen@danswer.ai"
+TEAM_MANAGED_GROUP_ID = "org-admins"
 
-pytestmark = pytest.mark.usefixtures("enable_ee")
+pytestmark = [
+    pytest.mark.usefixtures("enable_ee"),
+    pytest.mark.secrets(TestSecret.JIRA_USER_EMAIL, TestSecret.JIRA_API_TOKEN),
+]
 
 
 class DocExternalAccessSet(BaseModel):
@@ -39,28 +46,21 @@ class DocExternalAccessSet(BaseModel):
         )
 
 
-def test_jira_doc_sync(
+def _sync_project_permissions(
     db_session: Session,
     jira_connector_config: dict[str, Any],
-    jira_credential_json: dict[str, Any],
-) -> None:
-    """Test that Jira doc sync returns documents with correct permissions.
-
-    This test uses the AS project which has applicationRole permission,
-    meaning all documents should be marked as public.
-    """
+    jira_credentials: JiraTestCredentials,
+    project_key: str,
+) -> list[DocExternalAccessSet]:
     try:
-        # Use AS project specifically for this test
-        connector_config = {
-            **jira_connector_config,
-            "project_key": "AS",  # DailyConnectorTestProject
-        }
-
         connector = Connector(
-            name="Test Jira Doc Sync Connector",
+            name=f"Test Jira {project_key} Doc Sync Connector",
             source=DocumentSource.JIRA,
             input_type=InputType.POLL,
-            connector_specific_config=connector_config,
+            connector_specific_config={
+                **jira_connector_config,
+                "project_key": project_key,
+            },
             refresh_freq=None,
             prune_freq=None,
             indexing_start=None,
@@ -70,17 +70,16 @@ def test_jira_doc_sync(
 
         credential = Credential(
             source=DocumentSource.JIRA,
-            credential_json=jira_credential_json,
+            credential_json=jira_credentials.as_credential_json(),
         )
         db_session.add(credential)
         db_session.flush()
-        # Expire the credential so it reloads from DB with SensitiveValue wrapper
         db_session.expire(credential)
 
         cc_pair = ConnectorCredentialPair(
             connector_id=connector.id,
             credential_id=credential.id,
-            name="Test Jira Doc Sync CC Pair",
+            name=f"Test Jira {project_key} Doc Sync CC Pair",
             status=ConnectorCredentialPairStatus.ACTIVE,
             access_type=AccessType.SYNC,
             auto_sync_options=None,
@@ -89,7 +88,6 @@ def test_jira_doc_sync(
         db_session.flush()
         db_session.refresh(cc_pair)
 
-        # Mock functions - we don't have existing docs in the test DB
         def fetch_all_existing_docs_fn(
             sort_order: SortOrder | None = None,  # noqa: ARG001
         ) -> list[DocumentRow]:
@@ -98,129 +96,97 @@ def test_jira_doc_sync(
         def fetch_all_existing_docs_ids_fn() -> list[str]:
             return []
 
-        doc_sync_iter = jira_doc_sync(
-            cc_pair=cc_pair,
-            fetch_all_existing_docs_fn=fetch_all_existing_docs_fn,
-            fetch_all_existing_docs_ids_fn=fetch_all_existing_docs_ids_fn,
-        )
-
-        # Expected documents from the danswerai.atlassian.net Jira instance
-        # The AS project has applicationRole permission, so all docs should be public
-        _EXPECTED_JIRA_DOCS = [
-            DocExternalAccessSet(
-                doc_id="https://danswerai.atlassian.net/browse/AS-3",
-                external_user_emails=set(),
-                external_user_group_ids=set(),
-                is_public=True,
-            ),
-            DocExternalAccessSet(
-                doc_id="https://danswerai.atlassian.net/browse/AS-4",
-                external_user_emails=set(),
-                external_user_group_ids=set(),
-                is_public=True,
-            ),
-        ]
-
-        expected_docs = {doc.doc_id: doc for doc in _EXPECTED_JIRA_DOCS}
-        actual_docs = {
-            doc.doc_id: DocExternalAccessSet.from_doc_external_access(doc)
-            for doc in doc_sync_iter
+        return [
+            DocExternalAccessSet.from_doc_external_access(doc)
+            for doc in jira_doc_sync(
+                cc_pair=cc_pair,
+                fetch_all_existing_docs_fn=fetch_all_existing_docs_fn,
+                fetch_all_existing_docs_ids_fn=fetch_all_existing_docs_ids_fn,
+            )
             if isinstance(doc, DocExternalAccess)
-        }
-        assert expected_docs == actual_docs, (
-            f"Expected docs: {expected_docs}\nActual docs: {actual_docs}"
-        )
+        ]
     finally:
         db_session.rollback()
+
+
+def test_jira_team_managed_project_doc_sync(
+    jira_credentials: JiraTestCredentials,
+) -> None:
+    """A team-managed project maps its roles to a private document ACL."""
+    connector = JiraConnector(
+        jira_base_url=JIRA_BASE_URL,
+        project_key=TEAM_MANAGED_PROJECT_KEY,
+    )
+    connector.load_credentials(jira_credentials.as_credential_json())
+
+    documents = [
+        item
+        for batch in connector.retrieve_all_slim_docs_perm_sync()
+        for item in batch
+        if isinstance(item, SlimDocument)
+    ]
+    assert len(documents) == 1
+
+    document = documents[0]
+    assert document.id == f"{JIRA_BASE_URL}/browse/{TEAM_MANAGED_PROJECT_KEY}-2"
+    assert document.external_access is not None
+    assert document.external_access.external_user_emails == {TEAM_MANAGED_USER_EMAIL}
+    assert document.external_access.external_user_group_ids == {TEAM_MANAGED_GROUP_ID}
+    assert not document.external_access.is_public
+
+
+def test_jira_doc_sync(
+    db_session: Session,
+    jira_connector_config: dict[str, Any],
+    jira_credentials: JiraTestCredentials,
+) -> None:
+    expected_docs = {
+        f"{JIRA_BASE_URL}/browse/AS-3": DocExternalAccessSet(
+            doc_id=f"{JIRA_BASE_URL}/browse/AS-3",
+            external_user_emails=set(),
+            external_user_group_ids=set(),
+            is_public=True,
+        ),
+        f"{JIRA_BASE_URL}/browse/AS-4": DocExternalAccessSet(
+            doc_id=f"{JIRA_BASE_URL}/browse/AS-4",
+            external_user_emails=set(),
+            external_user_group_ids=set(),
+            is_public=True,
+        ),
+    }
+    actual_docs = {
+        doc.doc_id: doc
+        for doc in _sync_project_permissions(
+            db_session=db_session,
+            jira_connector_config=jira_connector_config,
+            jira_credentials=jira_credentials,
+            project_key="AS",
+        )
+    }
+    assert actual_docs == expected_docs
 
 
 def test_jira_doc_sync_with_specific_permissions(
     db_session: Session,
     jira_connector_config: dict[str, Any],
-    jira_credential_json: dict[str, Any],
+    jira_credentials: JiraTestCredentials,
 ) -> None:
-    """Test that Jira doc sync returns documents with specific permissions.
+    docs = _sync_project_permissions(
+        db_session=db_session,
+        jira_connector_config=jira_connector_config,
+        jira_credentials=jira_credentials,
+        project_key="SUP",
+    )
+    assert docs
 
-    This test uses a project that has specific user permissions to verify
-    that specific users are correctly extracted.
-    """
-    try:
-        # Use SUP project which has specific user permissions
-        connector_config = {
-            **jira_connector_config,
-            "project_key": "SUP",
-        }
-
-        connector = Connector(
-            name="Test Jira Doc Sync with Groups Connector",
-            source=DocumentSource.JIRA,
-            input_type=InputType.POLL,
-            connector_specific_config=connector_config,
-            refresh_freq=None,
-            prune_freq=None,
-            indexing_start=None,
-        )
-        db_session.add(connector)
-        db_session.flush()
-
-        credential = Credential(
-            source=DocumentSource.JIRA,
-            credential_json=jira_credential_json,
-        )
-        db_session.add(credential)
-        db_session.flush()
-        # Expire the credential so it reloads from DB with SensitiveValue wrapper
-        db_session.expire(credential)
-
-        cc_pair = ConnectorCredentialPair(
-            connector_id=connector.id,
-            credential_id=credential.id,
-            name="Test Jira Doc Sync with Groups CC Pair",
-            status=ConnectorCredentialPairStatus.ACTIVE,
-            access_type=AccessType.SYNC,
-            auto_sync_options=None,
-        )
-        db_session.add(cc_pair)
-        db_session.flush()
-        db_session.refresh(cc_pair)
-
-        # Mock functions
-        def fetch_all_existing_docs_fn(
-            sort_order: SortOrder | None = None,  # noqa: ARG001
-        ) -> list[DocumentRow]:
-            return []
-
-        def fetch_all_existing_docs_ids_fn() -> list[str]:
-            return []
-
-        doc_sync_iter = jira_doc_sync(
-            cc_pair=cc_pair,
-            fetch_all_existing_docs_fn=fetch_all_existing_docs_fn,
-            fetch_all_existing_docs_ids_fn=fetch_all_existing_docs_ids_fn,
-        )
-
-        docs = list(doc_sync_iter)
-
-        # SUP project should have user-specific permissions (not public)
-        assert len(docs) > 0, "Expected at least one document from SUP project"
-
-        _EXPECTED_USER_EMAILS = set(
-            ["yuhong@onyx.app", "chris@onyx.app", "founders@onyx.app", "oauth@onyx.app"]
-        )
-        _EXPECTED_USER_GROUP_IDS = set(["jira-users-danswerai"])
-
-        for doc in docs:
-            if not isinstance(doc, DocExternalAccess):
-                continue
-            assert doc.doc_id.startswith("https://danswerai.atlassian.net/browse/SUP-")
-            # SUP project has specific users assigned, not applicationRole
-            assert not doc.external_access.is_public, (
-                f"Document {doc.doc_id} should not be public"
-            )
-            # Should have user emails
-            assert doc.external_access.external_user_emails == _EXPECTED_USER_EMAILS
-            assert (
-                doc.external_access.external_user_group_ids == _EXPECTED_USER_GROUP_IDS
-            )
-    finally:
-        db_session.rollback()
+    expected_user_emails = {
+        "yuhong@onyx.app",
+        "chris@onyx.app",
+        "founders@onyx.app",
+        "oauth@onyx.app",
+    }
+    for doc in docs:
+        assert doc.doc_id.startswith(f"{JIRA_BASE_URL}/browse/SUP-")
+        assert not doc.is_public
+        assert doc.external_user_emails == expected_user_emails
+        assert doc.external_user_group_ids == {"jira-users-danswerai"}
