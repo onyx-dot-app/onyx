@@ -3443,6 +3443,26 @@ def test_venice_system_prompt_default_yields_to_deployment_config() -> None:
     assert venice_parameters["include_venice_system_prompt"] is True
 
 
+def test_venice_system_prompt_default_survives_a_policy_extra_body() -> None:
+    """Incognito policy kwargs reach the constructor through a shallow
+    `.update()` (`factory._build_llm`), so a policy that sets `extra_body` hands
+    over a whole replacement dict. The suppression flag has to merge with it
+    rather than be dropped — losing it would put Venice's system prompt back in
+    front of every incognito turn, silently."""
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.VENICE,
+        model_name="zai-org-glm-5-2",
+        api_base="https://api.venice.ai/api/v1",
+        max_input_tokens=32000,
+        model_kwargs={"extra_body": {"store": False}},
+    )
+    extra_body = llm._model_kwargs["extra_body"]
+    assert extra_body["venice_parameters"]["include_venice_system_prompt"] is False
+    assert extra_body["store"] is False
+
+
 def test_venice_routes_through_the_openai_chat_completions_surface() -> None:
     """LiteLLM has no Venice integration, so the call must impersonate OpenAI."""
     assert _venice_llm()._custom_llm_provider == "openai"

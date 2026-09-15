@@ -169,8 +169,10 @@ AGGREGATOR_PROVIDERS: set[str] = {
     LlmProviderNames.OPENAI_COMPATIBLE,
     LlmProviderNames.NEBIUS_TOKENFACTORY,
     LlmProviderNames.PORTKEY,
-    # Venice serves its own models alongside Google, Z.ai, xAI, Qwen and
-    # DeepSeek ones, so model names read as "Gemini (Venice - Google)".
+    # Venice serves Anthropic, Google, xAI and open-source models alongside
+    # its own. Like Portkey and Nebius, its IDs carry no vendor prefix that
+    # `extract_vendor_from_model_name` parses, so the picker shows one flat
+    # Venice group rather than per-vendor subgroups.
     LlmProviderNames.VENICE,
 }
 
