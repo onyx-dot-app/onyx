@@ -30,6 +30,7 @@ function snapshotToMemberRow(snapshot: FullUserSnapshot): MemberRow {
     personal_name: snapshot.personal_name,
     created_at: snapshot.created_at,
     updated_at: snapshot.updated_at,
+    last_active: snapshot.last_active,
     groups: snapshot.groups,
   };
 }
@@ -50,6 +51,7 @@ function serviceAccountToMemberRow(
       apiKey?.api_key_name ?? snapshot.personal_name ?? "Unnamed Key",
     created_at: null,
     updated_at: null,
+    last_active: null,
     groups: [],
     api_key_display: apiKey?.api_key_display,
   };

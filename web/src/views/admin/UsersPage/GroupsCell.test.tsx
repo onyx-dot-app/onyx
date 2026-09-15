@@ -32,6 +32,7 @@ const user: UserRow = {
   personal_name: null,
   created_at: null,
   updated_at: null,
+  last_active: null,
   groups: [],
 };
 

@@ -57,7 +57,7 @@ function renderStatusColumn(value: UserStatus, row: UserRow) {
   );
 }
 
-function renderLastUpdatedColumn(value: string | null) {
+function renderLastActiveColumn(value: string | null) {
   return (
     <Text as="span" secondaryBody text03>
       {value ? (timeAgo(value) ?? "\u2014") : "\u2014"}
@@ -109,10 +109,10 @@ function buildColumns(onMutate: () => void) {
       weight: 14,
       cell: renderStatusColumn,
     }),
-    tc.column("updated_at", {
-      header: "Last Updated",
+    tc.column("last_active", {
+      header: "Last Active",
       weight: 14,
-      cell: renderLastUpdatedColumn,
+      cell: renderLastActiveColumn,
     }),
     tc.actions({
       cell: (row) => <UserRowActions user={row} onMutate={onMutate} />,
