@@ -120,6 +120,16 @@ def _validate_tts_activation_supported(
         )
 
 
+def _validate_target_uri_supported(
+    voice_provider: VoiceProviderInterface, api_base: str | None
+) -> None:
+    if api_base is not None and not voice_provider.supports_target_uri():
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "This voice provider does not support a target URI.",
+        )
+
+
 def _validate_voice_api_base(provider_type: str, api_base: str | None) -> str | None:
     """Validate and normalize provider api_base / target URI."""
     if api_base is None:
@@ -247,6 +257,7 @@ async def upsert_voice_provider_endpoint(
     # Validate credentials before committing - rollback on failure
     try:
         voice_provider = get_voice_provider(provider)
+        _validate_target_uri_supported(voice_provider, api_base)
         if request.activate_tts or provider.is_default_tts:
             _validate_tts_activation_supported(voice_provider)
         await voice_provider.validate_credentials()
@@ -411,6 +422,7 @@ async def test_voice_provider(
         provider = get_voice_provider(temp_provider)
     except ValueError as exc:
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(exc)) from exc
+    _validate_target_uri_supported(provider, api_base)
 
     # Validate credentials with a real API call
     try:
