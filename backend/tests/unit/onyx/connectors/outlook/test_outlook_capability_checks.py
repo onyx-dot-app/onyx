@@ -5,6 +5,7 @@ operations return the gateway's plain models. Probe reach (which operations a
 check exercises) is enforced by the auto-discovering coverage harness.
 """
 
+from datetime import timedelta
 from typing import Any
 from unittest.mock import MagicMock, create_autospec
 
@@ -32,6 +33,7 @@ from onyx.connectors.outlook.models import (
     MISSING_CREDENTIAL_CODE,
     OutlookAuthError,
     OutlookDeltaPage,
+    OutlookEventPage,
     OutlookFolderPage,
     OutlookGraphError,
     OutlookMailboxPage,
@@ -43,6 +45,7 @@ from tests.unit.onyx.connectors.outlook.outlook_api_shapes import (
     INBOX_ID,
     MAILBOX_ADDRESS,
     MAILBOX_ID,
+    event,
     folder,
     graph_error,
     mailbox,
@@ -444,3 +447,136 @@ def test_healthy_tenant_passes_indexing() -> None:
     assert all(result.status is CapabilityCheckStatus.PASSED for result in results)
     verdicts = compute_capability_verdicts({CredentialCapability.INDEXING}, results)
     assert verdicts[CredentialCapability.INDEXING] is CapabilityVerdict.PASSED
+
+
+# ---------------------------------------------------------------------------
+# outlook_calendar_read
+# ---------------------------------------------------------------------------
+
+
+def test_calendar_check_passes_without_a_call_when_calendars_are_off() -> None:
+    gateway = _gateway()
+
+    _run("outlook_calendar_read", _context(gateway, {"include_calendar": False}))
+
+    gateway.fetch_calendar_delta_page.assert_not_called()
+    gateway.probe_mailbox.assert_not_called()
+
+
+def test_calendar_check_reads_one_page_of_a_two_day_window() -> None:
+    gateway = _gateway()
+    gateway.fetch_calendar_delta_page.return_value = OutlookEventPage(events=[])
+    gateway.read_any_event.return_value = event()
+
+    _run(
+        "outlook_calendar_read",
+        _context(gateway, {"include_calendar": True, "mailboxes": [MAILBOX_ADDRESS]}),
+    )
+
+    kwargs = gateway.fetch_calendar_delta_page.call_args.kwargs
+    assert kwargs["mailbox_id"] == MAILBOX_ID
+    assert kwargs["page_size"] == 1
+    assert kwargs["window_end"] - kwargs["window_start"] == timedelta(days=2)
+    gateway.read_any_event.assert_called_once_with(mailbox_id=MAILBOX_ID)
+    gateway.resolve_mailbox.assert_called_once_with(address=MAILBOX_ADDRESS)
+
+
+def test_calendar_check_keeps_looking_for_a_readable_calendar() -> None:
+    """Exchange scopes are per grant, so the first mailbox whose mail opens can
+    still refuse its calendar while the next one does not."""
+    gateway = _gateway()
+    gateway.list_mailbox_users.side_effect = [
+        OutlookMailboxPage(
+            mailboxes=[mailbox(id="scoped-out", address="a@contoso.com")],
+            next_link="https://graph/users?page=2",
+        ),
+        OutlookMailboxPage(mailboxes=[mailbox()]),
+    ]
+    gateway.fetch_calendar_delta_page.side_effect = [
+        graph_error(403),
+        OutlookEventPage(events=[]),
+    ]
+    gateway.read_any_event.return_value = event()
+
+    _run("outlook_calendar_read", _context(gateway, {"include_calendar": True}))
+
+    assert [
+        c.kwargs["mailbox_id"] for c in gateway.fetch_calendar_delta_page.call_args_list
+    ] == ["scoped-out", MAILBOX_ID]
+    gateway.read_any_event.assert_called_once_with(mailbox_id=MAILBOX_ID)
+    gateway.probe_mailbox.assert_not_called()
+
+
+def test_calendar_check_tells_read_basic_apart_from_read() -> None:
+    """Calendars.ReadBasic.All answers the view and refuses or withholds only
+    the body, and no other mailbox cures a grant, so the walk stops there."""
+    gateway = _gateway()
+    gateway.fetch_calendar_delta_page.return_value = OutlookEventPage(events=[])
+    gateway.list_mailbox_users.return_value = OutlookMailboxPage(
+        mailboxes=[mailbox()], next_link="https://graph/users?page=2"
+    )
+
+    gateway.read_any_event.side_effect = graph_error(403)
+    with pytest.raises(InsufficientPermissionsError, match="ReadBasic"):
+        _run("outlook_calendar_read", _context(gateway, {"include_calendar": True}))
+
+    gateway.read_any_event.side_effect = None
+    gateway.read_any_event.return_value = event(body_present=False)
+    with pytest.raises(InsufficientPermissionsError, match="ReadBasic"):
+        _run("outlook_calendar_read", _context(gateway, {"include_calendar": True}))
+    gateway.list_mailbox_users.assert_called_with(page_size=1, next_link=None)
+
+
+def test_calendar_check_moves_past_an_empty_calendar_and_needs_one_with_events() -> (
+    None
+):
+    gateway = _gateway()
+    gateway.fetch_calendar_delta_page.return_value = OutlookEventPage(events=[])
+    gateway.list_mailbox_users.side_effect = [
+        OutlookMailboxPage(
+            mailboxes=[mailbox(id="empty", address="new@contoso.com")],
+            next_link="https://graph/users?page=2",
+        ),
+        OutlookMailboxPage(mailboxes=[mailbox()]),
+    ]
+    gateway.read_any_event.side_effect = [None, event()]
+
+    _run("outlook_calendar_read", _context(gateway, {"include_calendar": True}))
+
+    assert [c.kwargs["mailbox_id"] for c in gateway.read_any_event.call_args_list] == [
+        "empty",
+        MAILBOX_ID,
+    ]
+
+    gateway.read_any_event.side_effect = None
+    gateway.read_any_event.return_value = None
+    with pytest.raises(UnexpectedValidationError, match="no events"):
+        _run(
+            "outlook_calendar_read",
+            _context(
+                gateway, {"include_calendar": True, "mailboxes": [MAILBOX_ADDRESS]}
+            ),
+        )
+
+
+def test_calendar_check_names_the_missing_grant_on_403() -> None:
+    gateway = _gateway()
+    gateway.fetch_calendar_delta_page.side_effect = graph_error(403)
+
+    with pytest.raises(InsufficientPermissionsError, match="Calendars.Read"):
+        _run("outlook_calendar_read", _context(gateway, {"include_calendar": True}))
+    with pytest.raises(InsufficientPermissionsError, match="Calendars.Read"):
+        _run(
+            "outlook_calendar_read",
+            _context(
+                gateway, {"include_calendar": True, "mailboxes": [MAILBOX_ADDRESS]}
+            ),
+        )
+
+
+def test_calendar_check_is_skipped_on_a_credential_only_run() -> None:
+    results = run_capability_checks(
+        [_CHECKS_BY_ID["outlook_calendar_read"]], _context(_gateway())
+    )
+
+    assert results[0].status is CapabilityCheckStatus.SKIPPED
