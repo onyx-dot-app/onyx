@@ -38,10 +38,7 @@ from onyx.db.projects import (
     get_project_token_count,
     upload_files_to_user_files_with_indexing,
 )
-from onyx.db.user_file import (
-    create_user_file_for_existing_store_file,
-    get_user_file_by_storage_file_id,
-)
+from onyx.db.user_file import get_or_create_user_file_for_existing_store_file
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
@@ -254,23 +251,21 @@ def index_file(
     if not user_can_access_chat_file(request.file_id, user, db_session):
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")
 
-    user_file = get_user_file_by_storage_file_id(request.file_id, user.id, db_session)
-    if user_file is None:
-        file_store = get_default_file_store()
-        try:
-            file_record = file_store.read_file_record(request.file_id)
-        except FileRecordNotFoundError:
-            raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")
-        mime_type = (file_record.file_type or "application/octet-stream").split(";", 1)[
-            0
-        ]
-        user_file = create_user_file_for_existing_store_file(
-            user_id=user.id,
-            file_id=request.file_id,
-            name=request.name or file_record.display_name or "file",
-            content_type=mime_type,
-            db_session=db_session,
-        )
+    file_store = get_default_file_store()
+    try:
+        file_record = file_store.read_file_record(request.file_id)
+    except FileRecordNotFoundError:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")
+    mime_type = (file_record.file_type or "application/octet-stream").split(";", 1)[0]
+    user_file = get_or_create_user_file_for_existing_store_file(
+        user_id=user.id,
+        file_id=request.file_id,
+        name=request.name or file_record.display_name or "file",
+        content_type=mime_type,
+        db_session=db_session,
+    )
+    if user_file.status == UserFileStatus.DELETING:
+        raise OnyxError(OnyxErrorCode.CONFLICT, "File is being deleted")
 
     tenant_id = get_current_tenant_id()
     if DISABLE_VECTOR_DB:

@@ -1,6 +1,7 @@
 from sqlalchemy import String, and_, case, cast, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from onyx.background.task_utils import QUERY_REPORT_NAME_PREFIX
 from onyx.configs.constants import FileOrigin, FileType
@@ -229,6 +230,23 @@ def upsert_filerecord(
     db_session.execute(stmt)
 
     return db_session.get(FileRecord, file_id)  # ty: ignore[invalid-return-type]
+
+
+def clear_incognito_session_metadata(file_id: str, db_session: Session) -> None:
+    """Drop the content-free session stamp so teardown no longer owns this blob."""
+    record = get_filerecord_by_file_id_optional(file_id, db_session)
+    if record is None:
+        return
+    metadata = record.file_metadata
+    if not isinstance(metadata, dict) or INCOGNITO_SESSION_METADATA_KEY not in metadata:
+        return
+    updated = {
+        key: value
+        for key, value in metadata.items()
+        if key != INCOGNITO_SESSION_METADATA_KEY
+    }
+    record.file_metadata = updated or None
+    flag_modified(record, "file_metadata")
 
 
 def get_incognito_file_ids(session_id: str, db_session: Session) -> list[str]:

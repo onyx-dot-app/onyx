@@ -21,6 +21,14 @@ def test_slugify_image_name_falls_back_when_empty() -> None:
     assert slugify_image_name("!!!") == "generated-image"
 
 
+def test_slugify_image_name_treats_underscores_as_separators() -> None:
+    assert slugify_image_name("sweet_cat_on_bike") == "sweet-cat-on-bike"
+    assert (
+        slugify_image_name("a_photorealistic_image_of_a_fluffy_orange_cat")
+        == "a-photorealistic-image-of-a"
+    )
+
+
 def test_filename_from_image_prompt_adds_random_id_and_extension() -> None:
     name = filename_from_image_prompt("Sweet cat on a bike", "image/png")
     match = _FILENAME.fullmatch(name)

@@ -25,7 +25,7 @@ from onyx.utils.timing import log_function_time
 logger = setup_logger()
 
 _IMAGE_PROMPT_UNSAFE = re.compile(r"[^\w\s-]", re.UNICODE)
-_IMAGE_PROMPT_SPACES = re.compile(r"[-\s]+")
+_IMAGE_PROMPT_SPACES = re.compile(r"[-\s_]+")
 _IMAGE_MIME_TO_EXT = {
     "image/png": ".png",
     "image/jpeg": ".jpg",

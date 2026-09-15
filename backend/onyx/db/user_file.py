@@ -1,11 +1,14 @@
 import datetime
+import hashlib
+import struct
 import uuid
 from uuid import UUID
 
-from sqlalchemy import exists, func, select, update
+from sqlalchemy import exists, func, select, text, update
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from onyx.db.enums import UserFileStatus
+from onyx.db.file_record import clear_incognito_session_metadata
 from onyx.db.models import Persona, Project__UserFile, User, UserFile
 
 
@@ -109,21 +112,25 @@ def get_user_file_by_storage_file_id(
     file_id: str,
     user_id: UUID,
     db_session: Session,
+    *,
+    include_deleting: bool = False,
 ) -> UserFile | None:
-    """Return the latest non-deleting UserFile for this store file and user."""
-    return (
-        db_session.query(UserFile)
-        .filter(
-            UserFile.file_id == file_id,
-            UserFile.user_id == user_id,
-            UserFile.status != UserFileStatus.DELETING,
-        )
-        .order_by(UserFile.created_at.desc())
-        .first()
+    """Return the latest UserFile for this store file and user."""
+    query = db_session.query(UserFile).filter(
+        UserFile.file_id == file_id,
+        UserFile.user_id == user_id,
     )
+    if not include_deleting:
+        query = query.filter(UserFile.status != UserFileStatus.DELETING)
+    return query.order_by(UserFile.created_at.desc()).first()
 
 
-def create_user_file_for_existing_store_file(
+def _user_file_storage_lock_id(user_id: UUID, file_id: str) -> int:
+    digest = hashlib.sha256(f"user_file:{user_id}:{file_id}".encode()).digest()
+    return struct.unpack("q", digest[:8])[0]
+
+
+def get_or_create_user_file_for_existing_store_file(
     *,
     user_id: UUID,
     file_id: str,
@@ -131,7 +138,26 @@ def create_user_file_for_existing_store_file(
     content_type: str,
     db_session: Session,
 ) -> UserFile:
-    """Create a UserFile that points at an existing file-store object."""
+    """Return the user's UserFile for this blob, creating one if needed.
+
+    Serializes concurrent index requests for the same (user, blob). A row that
+    is already DELETING is returned as-is so the caller can reject reuse.
+    Indexing promotes the blob: the incognito session stamp is cleared so
+    teardown no longer deletes a file the user asked to keep.
+    """
+    db_session.execute(
+        text("SELECT pg_advisory_xact_lock(:lock_id)"),
+        {"lock_id": _user_file_storage_lock_id(user_id, file_id)},
+    )
+    existing = get_user_file_by_storage_file_id(
+        file_id, user_id, db_session, include_deleting=True
+    )
+    if existing is not None:
+        if existing.status != UserFileStatus.DELETING:
+            clear_incognito_session_metadata(file_id, db_session)
+            db_session.commit()
+        return existing
+
     new_file = UserFile(
         id=uuid.uuid4(),
         user_id=user_id,
@@ -144,6 +170,7 @@ def create_user_file_for_existing_store_file(
         last_accessed_at=datetime.datetime.now(datetime.timezone.utc),
     )
     db_session.add(new_file)
+    clear_incognito_session_metadata(file_id, db_session)
     db_session.commit()
     return new_file
 

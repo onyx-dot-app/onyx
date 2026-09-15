@@ -48,6 +48,7 @@ from onyx.connectors.file.connector import LocalFileConnector
 from onyx.connectors.models import Document, HierarchyNode
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import UserFileStatus
+from onyx.db.file_record import FileRecordNotFoundError
 from onyx.db.models import SearchSettings, UserFile
 from onyx.db.port_attempt import port_backfill_has_pending_work
 from onyx.db.port_orphan_candidate import record_port_orphan_candidates_for_user_file
@@ -960,7 +961,8 @@ def delete_user_file_impl(
             try:
                 file_record = file_store.read_file_record(file_id)
                 skip_source_blob = file_record.file_origin != FileOrigin.USER_FILE
-            except Exception:
+            except FileRecordNotFoundError:
+                # Orphan blob with no metadata: delete it with this user-file.
                 skip_source_blob = False
             if not skip_source_blob:
                 file_store.delete_file(file_id, error_on_missing=False)

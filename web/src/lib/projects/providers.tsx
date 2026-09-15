@@ -738,35 +738,40 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
           return changed ? Array.from(map.values()) : prev;
         });
 
-        // Remove completed/skipped/failed from tracking
-        const remaining = new Set(trackedUploadIds);
+        // Remove completed/skipped/failed from tracking. Start from current
+        // state so ids registered while this request was in flight stay.
         const newlyFailed: ProjectFile[] = [];
         for (const f of statuses) {
-          const s = String(f.status).toLowerCase();
-          if (s === "completed" || s === "skipped") {
-            remaining.delete(f.id);
-          } else if (s === "failed") {
-            remaining.delete(f.id);
+          if (String(f.status).toLowerCase() === "failed") {
             newlyFailed.push(f);
-          }
-        }
-        // Requested ids the server no longer reports are deleted files: stop
-        // tracking them. Ids registered after this request went out stay.
-        for (const id of ids) {
-          if (!statusById.has(id)) {
-            remaining.delete(id);
           }
         }
         if (newlyFailed.length > 0) {
           setLastFailedFiles(newlyFailed);
         }
-        const trackingChanged = remaining.size !== trackedUploadIds.size;
-        if (trackingChanged) {
-          setTrackedUploadIds(remaining);
-        }
+        let remainingSize = 0;
+        setTrackedUploadIds((prev) => {
+          const next = new Set(prev);
+          for (const f of statuses) {
+            const s = String(f.status).toLowerCase();
+            if (s === "completed" || s === "skipped" || s === "failed") {
+              next.delete(f.id);
+            }
+          }
+          // Requested ids the server no longer reports are deleted files.
+          for (const id of ids) {
+            if (!statusById.has(id)) {
+              next.delete(id);
+            }
+          }
+          remainingSize = next.size;
+          const unchanged =
+            next.size === prev.size && [...next].every((id) => prev.has(id));
+          return unchanged ? prev : next;
+        });
 
         // If all tracked uploads finished (completed or failed), do a single refresh
-        if (remaining.size === 0) {
+        if (remainingSize === 0) {
           if (currentProjectId) {
             await refreshCurrentProjectDetails();
           }

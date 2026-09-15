@@ -9450,7 +9450,7 @@
           "tooltip": "Baixar"
         },
         "indexButton": {
-          "doneTooltip": "Salva",
+          "doneTooltip": "Salva para depois",
           "error": {
             "toast": "Não foi possível salvar esta imagem"
           },

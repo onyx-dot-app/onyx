@@ -44,7 +44,10 @@ from onyx.tools.tool_implementations.images.models import (
 )
 from onyx.utils.b64 import get_image_type, get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
+from onyx.utils.threadpool_concurrency import (
+    run_functions_tuples_in_parallel,
+    start_thread_with_context,
+)
 
 logger = setup_logger()
 
@@ -68,14 +71,12 @@ class ImageGenerationTool(Tool[None]):
         model: str = IMAGE_MODEL_NAME,
         provider: str = IMAGE_MODEL_PROVIDER,
         num_imgs: int = 1,
-        available_models: list[str] | None = None,
         llm: LLM | None = None,
     ) -> None:
         super().__init__(emitter=emitter)
         self.model = model
         self.provider = provider
         self.num_imgs = num_imgs
-        self.available_models = available_models or [model]
         self.llm = llm
 
         self.img_provider = get_image_generation_provider(
@@ -339,8 +340,10 @@ class ImageGenerationTool(Tool[None]):
             stem_holder[0] = generate_image_file_stem(prompt, self.llm)
 
         # Name the file while the image model runs. The prompt is already known.
-        naming_thread = threading.Thread(target=name_generated_image)
-        naming_thread.start()
+        # Inherit tenant and tracing context; a raw Thread starts empty.
+        naming_thread = start_thread_with_context(
+            name_generated_image, name="image-file-naming"
+        )
 
         # TODO allow the LLM to determine number of images
         def generate_all_images() -> None:

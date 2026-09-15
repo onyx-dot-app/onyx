@@ -1,0 +1,131 @@
+"""Indexing an existing store blob must reuse one UserFile and promote it."""
+
+from collections.abc import Generator
+from io import BytesIO
+from uuid import UUID, uuid4
+
+import pytest
+from sqlalchemy.orm import Session
+
+from onyx.configs.constants import FileOrigin
+from onyx.db.enums import UserFileStatus
+from onyx.db.file_record import get_incognito_file_ids
+from onyx.db.models import User, UserFile
+from onyx.db.user_file import get_or_create_user_file_for_existing_store_file
+from onyx.file_store.file_store import get_default_file_store
+from shared_configs.contextvars import CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR
+from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
+
+
+@pytest.fixture
+def owner(db_session: Session) -> Generator[User, None, None]:
+    user = create_test_user(db_session, "user-file-index")
+    yield user
+
+    db_session.rollback()
+    file_ids = [
+        file_id
+        for (file_id,) in db_session.query(UserFile.file_id)
+        .filter(UserFile.user_id == user.id)
+        .all()
+    ]
+    db_session.query(UserFile).filter(UserFile.user_id == user.id).delete()
+    db_session.commit()
+    file_store = get_default_file_store()
+    for file_id in file_ids:
+        file_store.delete_file(file_id, error_on_missing=False)
+    delete_test_user(db_session, user)
+    db_session.commit()
+
+
+def _save_blob(session_id: UUID | None = None) -> str:
+    token = None
+    if session_id is not None:
+        token = CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR.set(str(session_id))
+    try:
+        return get_default_file_store().save_file(
+            content=BytesIO(b"generated image bytes"),
+            display_name="chart.png",
+            file_origin=FileOrigin.CHAT_IMAGE_GEN,
+            file_type="image/png",
+        )
+    finally:
+        if token is not None:
+            CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR.reset(token)
+
+
+def test_get_or_create_is_idempotent(db_session: Session, owner: User) -> None:
+    file_id = _save_blob()
+
+    first = get_or_create_user_file_for_existing_store_file(
+        user_id=owner.id,
+        file_id=file_id,
+        name="chart.png",
+        content_type="image/png",
+        db_session=db_session,
+    )
+    second = get_or_create_user_file_for_existing_store_file(
+        user_id=owner.id,
+        file_id=file_id,
+        name="other-name.png",
+        content_type="image/png",
+        db_session=db_session,
+    )
+
+    assert first.id == second.id
+    assert (
+        db_session.query(UserFile)
+        .filter(UserFile.user_id == owner.id, UserFile.file_id == file_id)
+        .count()
+        == 1
+    )
+
+
+def test_get_or_create_does_not_replace_a_deleting_row(
+    db_session: Session, owner: User
+) -> None:
+    file_id = _save_blob()
+    existing = get_or_create_user_file_for_existing_store_file(
+        user_id=owner.id,
+        file_id=file_id,
+        name="chart.png",
+        content_type="image/png",
+        db_session=db_session,
+    )
+    existing.status = UserFileStatus.DELETING
+    db_session.commit()
+
+    result = get_or_create_user_file_for_existing_store_file(
+        user_id=owner.id,
+        file_id=file_id,
+        name="chart.png",
+        content_type="image/png",
+        db_session=db_session,
+    )
+
+    assert result.id == existing.id
+    assert result.status == UserFileStatus.DELETING
+    assert (
+        db_session.query(UserFile)
+        .filter(UserFile.user_id == owner.id, UserFile.file_id == file_id)
+        .count()
+        == 1
+    )
+
+
+def test_indexing_clears_incognito_blob_stamp(db_session: Session, owner: User) -> None:
+    session_id = uuid4()
+    file_id = _save_blob(session_id)
+    assert get_incognito_file_ids(str(session_id), db_session) == [file_id]
+
+    user_file = get_or_create_user_file_for_existing_store_file(
+        user_id=owner.id,
+        file_id=file_id,
+        name="chart.png",
+        content_type="image/png",
+        db_session=db_session,
+    )
+
+    assert user_file.incognito is False
+    assert user_file.incognito_session_id is None
+    assert get_incognito_file_ids(str(session_id), db_session) == []
