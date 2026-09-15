@@ -81,13 +81,13 @@ repos:
         # Keep the pinned version in sync with `onyx-devtools` in the dev
         # dependency group in pyproject.toml, here and in every `ods` hook
         # below. Without the pin, `--with` resolves the latest published wheel.
-        args: ["--no-project", "--with=onyx-devtools==0.13.6", "ods", "check-getattr"]
+        args: ["--no-project", "--with=onyx-devtools==0.13.7", "ods", "check-getattr"]
         pass_filenames: true
         files: ^backend/.*\.py$
       - id: uv-run
         name: Check lazy imports
         args:
-          ["--no-project", "--with=onyx-devtools==0.13.6", "ods", "check-lazy-imports"]
+          ["--no-project", "--with=onyx-devtools==0.13.7", "ods", "check-lazy-imports"]
         pass_filenames: true
         files: ^backend/(?!\.venv/|scripts/).*\.py$
       - id: uv-run
@@ -102,7 +102,7 @@ repos:
         # release that adds the embedded-copy sync, the extra trigger paths below
         # are harmless no-ops (the cli module's drift test still gates staleness).
         args:
-          ["--no-project", "--with=onyx-devtools==0.13.6", "ods", "generate-compose", "--write"]
+          ["--no-project", "--with=onyx-devtools==0.13.7", "ods", "generate-compose", "--write"]
         pass_filenames: false
         files: >-
           (?x)^(
@@ -171,7 +171,7 @@ repos:
         # `--with=onyx-devtools==` resolves a published wheel, so both hooks
         # need an ods release and a version bump before they can run. Tag
         # `ods/` first.
-        args: ["--no-project", "--with=onyx-devtools==0.13.6", "ods", "fmt", "tf"]
+        args: ["--no-project", "--with=onyx-devtools==0.13.7", "ods", "fmt", "tf"]
         pass_filenames: true
         files: \.tf$
       - id: uv-run
@@ -181,7 +181,7 @@ repos:
         # an internal value can travel across by accident. Fails on account
         # ids, access key ids, routable IPv4 CIDRs, and email addresses.
         # Append '# public-safe: ok' to accept a line.
-        args: ["--no-project", "--with=onyx-devtools==0.13.6", "ods", "lint", "tf"]
+        args: ["--no-project", "--with=onyx-devtools==0.13.7", "ods", "lint", "tf"]
         pass_filenames: true
         files: ^deployment/terraform/.*\.tf$
       - id: uv-run
@@ -191,7 +191,7 @@ repos:
         # drops below its type coverage floor in web/.type-coverage-baseline.yaml.
         # Raise the floors with `ods type-coverage typescript --update`.
         args:
-          ["--no-project", "--with=onyx-devtools==0.13.6", "ods", "type-coverage", "typescript", "--check"]
+          ["--no-project", "--with=onyx-devtools==0.13.7", "ods", "type-coverage", "typescript", "--check"]
         pass_filenames: false
         # The i18n catalogs are part of the type graph: keyParity.ts turns a
         # missing or extra locale key into a compile error.
