@@ -771,6 +771,19 @@ def test_slim_docs_list_every_conversation_without_reading_bodies() -> None:
     )
 
 
+def test_slim_docs_abort_when_a_configured_address_matches_nobody() -> None:
+    """A stale address is a configuration problem. Skipping it would prune
+    every conversation of the mailbox behind it."""
+    gateway = _happy_gateway()
+    gateway.resolve_mailbox.side_effect = [mailbox(), None]
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS, "ghost@contoso.com"])
+
+    with pytest.raises(ConnectorValidationError, match="ghost@contoso.com"):
+        list(connector.retrieve_all_slim_docs())
+
+    gateway.probe_mailbox.assert_not_called()
+
+
 def test_slim_docs_abort_when_a_folder_vanishes_mid_walk() -> None:
     """A folder deleted between the tree listing and its own children request
     answers 404 too. Skipping the mailbox would prune all of its live mail."""

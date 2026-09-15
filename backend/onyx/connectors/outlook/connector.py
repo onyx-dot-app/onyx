@@ -23,6 +23,7 @@ from typing import Any
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import (
     CheckpointedConnector,
     CheckpointOutput,
@@ -441,7 +442,20 @@ class OutlookConnector(
         while a silent skip would delete every document of that mailbox.
         """
         del start, end
-        mailboxes, _ = self._resolve_mailboxes()
+        mailboxes, failures = self._resolve_mailboxes()
+        # An address that matches no user is a configuration problem, not a
+        # verdict on the mailbox behind it, so the prune stops here rather than
+        # treat every conversation of that mailbox as gone.
+        if failures:
+            addresses = ", ".join(
+                failure.failed_entity.entity_id
+                for failure in failures
+                if failure.failed_entity is not None
+            )
+            raise ConnectorValidationError(
+                f"Cannot prune while these mailboxes match no user: {addresses}. "
+                "Fix or remove them from the mailbox list."
+            )
         for mailbox in mailboxes:
             try:
                 self.ops.probe_mailbox(mailbox_id=mailbox.id)
