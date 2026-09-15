@@ -6,7 +6,7 @@ machine and document assembly against the gateway's plain models.
 
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from unittest.mock import MagicMock, create_autospec
+from unittest.mock import MagicMock, call, create_autospec
 
 import pytest
 
@@ -826,4 +826,41 @@ def test_slim_docs_batch_and_report_progress() -> None:
     # Three walked folders of 501 each, batched across folder boundaries.
     slim_batches = [b for b in batches if isinstance(b[0], SlimDocument)]
     assert [len(b) for b in slim_batches] == [SLIM_BATCH_SIZE] * 3 + [3]
-    callback.progress.assert_any_call("outlook_slim_docs", SLIM_BATCH_SIZE + 1)
+    assert (
+        callback.progress.call_args_list
+        == [call("outlook_slim_docs", SLIM_BATCH_SIZE + 1)] * 3
+    )
+
+
+def test_slim_docs_follow_delta_pages_by_their_link() -> None:
+    gateway = _happy_gateway()
+    pages_by_link: dict[str | None, OutlookDeltaPage] = {
+        None: OutlookDeltaPage(changes=[change()], next_link="https://graph/delta?p=2"),
+        "https://graph/delta?p=2": OutlookDeltaPage(
+            changes=[], next_link="https://graph/delta?p=3"
+        ),
+        "https://graph/delta?p=3": OutlookDeltaPage(
+            changes=[change(id="msg-2", conversation_id="conv-2")]
+        ),
+    }
+
+    def delta(**kwargs: Any) -> OutlookDeltaPage:
+        if kwargs["folder_id"] != INBOX_ID:
+            return OutlookDeltaPage(changes=[])
+        return pages_by_link[kwargs["next_link"]]
+
+    gateway.fetch_folder_delta_page.side_effect = delta
+    callback = MagicMock()
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+
+    ids = _slim_ids(list(connector.retrieve_all_slim_docs(callback=callback)))
+
+    assert ids == [
+        conversation_document_id(mailbox(), CONVERSATION_ID),
+        conversation_document_id(mailbox(), "conv-2"),
+    ]
+    inbox_progress = [
+        c for c in callback.progress.call_args_list if c == call("outlook_slim_docs", 1)
+    ]
+    assert len(inbox_progress) == 2
+    assert call("outlook_slim_docs", 0) in callback.progress.call_args_list
