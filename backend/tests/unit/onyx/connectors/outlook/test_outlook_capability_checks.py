@@ -508,13 +508,55 @@ def test_calendar_check_keeps_looking_for_a_readable_calendar() -> None:
 
 
 def test_calendar_check_tells_read_basic_apart_from_read() -> None:
-    """Calendars.ReadBasic.All answers the view and refuses only the body."""
+    """Calendars.ReadBasic.All answers the view and refuses or withholds only
+    the body, and no other mailbox cures a grant, so the walk stops there."""
     gateway = _gateway()
     gateway.fetch_calendar_delta_page.return_value = OutlookEventPage(events=[])
-    gateway.read_any_event.side_effect = graph_error(403)
+    gateway.list_mailbox_users.return_value = OutlookMailboxPage(
+        mailboxes=[mailbox()], next_link="https://graph/users?page=2"
+    )
 
+    gateway.read_any_event.side_effect = graph_error(403)
     with pytest.raises(InsufficientPermissionsError, match="ReadBasic"):
         _run("outlook_calendar_read", _context(gateway, {"include_calendar": True}))
+
+    gateway.read_any_event.side_effect = None
+    gateway.read_any_event.return_value = event(body_present=False)
+    with pytest.raises(InsufficientPermissionsError, match="ReadBasic"):
+        _run("outlook_calendar_read", _context(gateway, {"include_calendar": True}))
+    gateway.list_mailbox_users.assert_called_with(page_size=1, next_link=None)
+
+
+def test_calendar_check_moves_past_an_empty_calendar_and_needs_one_with_events() -> (
+    None
+):
+    gateway = _gateway()
+    gateway.fetch_calendar_delta_page.return_value = OutlookEventPage(events=[])
+    gateway.list_mailbox_users.side_effect = [
+        OutlookMailboxPage(
+            mailboxes=[mailbox(id="empty", address="new@contoso.com")],
+            next_link="https://graph/users?page=2",
+        ),
+        OutlookMailboxPage(mailboxes=[mailbox()]),
+    ]
+    gateway.read_any_event.side_effect = [None, event()]
+
+    _run("outlook_calendar_read", _context(gateway, {"include_calendar": True}))
+
+    assert [c.kwargs["mailbox_id"] for c in gateway.read_any_event.call_args_list] == [
+        "empty",
+        MAILBOX_ID,
+    ]
+
+    gateway.read_any_event.side_effect = None
+    gateway.read_any_event.return_value = None
+    with pytest.raises(UnexpectedValidationError, match="no events"):
+        _run(
+            "outlook_calendar_read",
+            _context(
+                gateway, {"include_calendar": True, "mailboxes": [MAILBOX_ADDRESS]}
+            ),
+        )
 
 
 def test_calendar_check_names_the_missing_grant_on_403() -> None:

@@ -975,6 +975,13 @@ def test_read_any_event_asks_for_one_body_and_reads_an_empty_calendar_as_none() 
     client.get_json.return_value = page_json([])
     assert gateway.read_any_event(mailbox_id=MAILBOX_ID) is None
 
+    # Calendars.ReadBasic.All leaves the body property out altogether.
+    bodyless = {k: v for k, v in event_json().items() if k != "body"}
+    client.get_json.return_value = page_json([bodyless])
+    withheld = gateway.read_any_event(mailbox_id=MAILBOX_ID)
+    assert withheld is not None and withheld.body_present is False
+    assert result.body_present is True
+
 
 def test_recurrence_summaries_keep_the_place_and_month_of_relative_patterns() -> None:
     gateway, client = _gateway()

@@ -1356,6 +1356,20 @@ def test_unreadable_series_master_skips_the_series_once() -> None:
     gateway.get_event.assert_called_once()
 
 
+def test_excluded_series_master_is_not_indexed() -> None:
+    """Occurrence rows mirror their master, but the master's text is what gets
+    indexed, so it is checked as well."""
+    gateway = _calendar_gateway()
+    gateway.get_event.return_value = event(
+        id=SERIES_ID, event_type="seriesMaster", sensitivity="private"
+    )
+
+    items = _run(_calendar_connector(gateway))
+
+    assert event_document_id(mailbox(), SERIES_ID) not in _event_doc_ids(items)
+    gateway.get_event.assert_called_once()
+
+
 def test_rejected_token_on_a_series_master_keeps_the_checkpoint() -> None:
     """A 401 is the app's trouble, not the series', so nothing is skipped."""
     gateway = _calendar_gateway()
@@ -1473,13 +1487,12 @@ def test_slim_docs_list_events_collapsed_to_their_series() -> None:
     gateway.get_event.assert_not_called()
 
 
-def test_slim_docs_prune_the_events_of_a_calendar_that_is_gone() -> None:
-    """Like the mail of a vanished mailbox: nothing listed, so the events go
-    while the mailbox's conversations stay listed."""
+@pytest.mark.parametrize("status", [403, 404])
+def test_slim_docs_prune_the_events_of_a_calendar_graph_refuses(status: int) -> None:
+    """Indexing stops producing events for such a calendar, so pruning lets
+    them go while the mailbox's conversations stay listed."""
     gateway = _calendar_gateway()
-    gateway.fetch_calendar_delta_page.side_effect = graph_error(
-        404, "ErrorItemNotFound"
-    )
+    gateway.fetch_calendar_delta_page.side_effect = graph_error(status)
     connector = _calendar_connector(gateway)
 
     ids = _slim_ids(list(connector.retrieve_all_slim_docs()))
@@ -1488,15 +1501,11 @@ def test_slim_docs_prune_the_events_of_a_calendar_that_is_gone() -> None:
     assert not [i for i in ids if i.startswith(EVENT_DOCUMENT_ID_PREFIX)]
 
 
-def test_slim_docs_stop_when_a_calendar_is_refused_or_vanishes_mid_round() -> None:
-    """A pruned event only comes back with a full re-index, so a refusal that
-    may be a missing grant aborts the prune with the grant to fix."""
+def test_slim_docs_stop_when_a_calendar_fails_mid_round_or_is_throttled() -> None:
+    """Ids already listed cannot be retracted, so a round that breaks after
+    its first page aborts the prune."""
     gateway = _calendar_gateway()
     connector = _calendar_connector(gateway)
-
-    gateway.fetch_calendar_delta_page.side_effect = graph_error(403)
-    with pytest.raises(ConnectorValidationError, match="Calendars.Read"):
-        list(connector.retrieve_all_slim_docs())
 
     gateway.fetch_calendar_delta_page.side_effect = [
         OutlookEventPage(events=[event()], next_link="https://graph/next"),

@@ -342,6 +342,7 @@ def _parse_event(raw: dict[str, Any]) -> OutlookEvent:
         id=raw["id"],
         subject=raw.get("subject"),
         body_text=_body_text(raw.get("body")),
+        body_present="body" in raw,
         start_at=parse_graph_datetime((raw.get("start") or {}).get("dateTime")),
         end_at=parse_graph_datetime((raw.get("end") or {}).get("dateTime")),
         time_zone=raw.get("originalStartTimeZone") or None,

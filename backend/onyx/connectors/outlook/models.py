@@ -161,6 +161,9 @@ class OutlookEvent(BaseModel):
     id: str
     subject: str | None = None
     body_text: str = ""
+    # False when Graph sent no body property at all, which is how
+    # Calendars.ReadBasic.All answers. An empty body arrives as present.
+    body_present: bool = True
     start_at: datetime | None = None
     end_at: datetime | None = None
     # The zone the event was scheduled in, a Windows name. The times above are

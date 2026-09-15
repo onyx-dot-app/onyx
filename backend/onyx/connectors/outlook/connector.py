@@ -799,11 +799,11 @@ class OutlookConnector(
         reads the ids as a set. An unreadable master still lists its id, which
         prunes nothing.
 
-        A calendar that is gone (404 on the first page) lists nothing, so its
-        events are pruned like the mail of a vanished mailbox. A refused one
-        (403) stops the prune instead: its events cannot be relisted, and
-        once pruned they would stay out until a full re-index, since the poll
-        window skips events that have not changed. Anything else raises too.
+        A calendar that is gone or refused on its first page (404 or 403)
+        lists nothing, so its events are pruned the way indexing stopped
+        producing them and the mailbox's mail is still pruned. They return
+        with the next full re-index once the grant is back. An error later in
+        the round raises, since the ids already listed cannot be retracted.
         """
         window_start, window_end = self._calendar_window()
         next_link: str | None = None
@@ -816,18 +816,13 @@ class OutlookConnector(
                     next_link=next_link,
                 )
             except OutlookGraphError as e:
-                if e.status == 404 and next_link is None:
-                    logger.info(
-                        "Outlook: calendar of %s is gone, pruning its events",
+                if e.status in MAILBOX_UNAVAILABLE_STATUSES and next_link is None:
+                    logger.warning(
+                        "Outlook: calendar of %s unavailable (%s), pruning its events",
                         mailbox.address,
+                        e.code,
                     )
                     return
-                if e.status == 403:
-                    raise ConnectorValidationError(
-                        f"Cannot prune while the calendar of {mailbox.address} is "
-                        f"refused ({e.code}). {CALENDAR_READ_REMEDIATION} Or turn "
-                        "Include Calendar off."
-                    ) from e
                 raise
             event_ids = dict.fromkeys(
                 _indexed_event_id(event)
@@ -1091,13 +1086,15 @@ class OutlookConnector(
         if series_id is not None:
             if series_id in seen_series_ids:
                 return None
-            # Whether a series is indexed was decided on its occurrence row
-            # above, the same row pruning sees. The master only supplies the
-            # text and the recurrence.
             master = self._series_master(mailbox, series_id)
             if len(seen_series_ids) < MAX_TRACKED_SERIES_PER_MAILBOX:
                 seen_series_ids.add(series_id)
             if master is None:
+                return None
+            # Occurrence rows carry their master's sensitivity and cancellation,
+            # so the row check above is what pruning sees too. The master is
+            # checked as well, since its text is what gets indexed.
+            if event_skip_reason(master) is not None:
                 return None
             event = master
         return build_event_document(mailbox, event)
