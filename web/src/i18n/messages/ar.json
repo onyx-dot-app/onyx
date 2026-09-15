@@ -8026,8 +8026,8 @@
           "groups": {
             "header": "المجموعات"
           },
-          "lastUpdated": {
-            "header": "آخر تحديث"
+          "lastActive": {
+            "header": "آخر نشاط"
           },
           "name": {
             "header": "الاسم"

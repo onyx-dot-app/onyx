@@ -10,7 +10,7 @@ import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import useUserCounts from "@/hooks/useUserCounts";
 import { UserStatus } from "@/lib/types";
-import type { StatusFilter } from "./interfaces";
+import type { StatusFilter } from "./types";
 
 import UsersSummary from "./UsersSummary";
 import UsersTable from "./UsersTable";

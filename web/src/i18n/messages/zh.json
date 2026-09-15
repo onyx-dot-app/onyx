@@ -8026,8 +8026,8 @@
           "groups": {
             "header": "用户组"
           },
-          "lastUpdated": {
-            "header": "最后更新"
+          "lastActive": {
+            "header": "最近活跃"
           },
           "name": {
             "header": "名称"
