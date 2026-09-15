@@ -37,6 +37,8 @@ ZOOM_JWT_TTL_SECONDS = 15 * 60
 ZOOM_JWT_IAT_SKEW_SECONDS = 30
 ZOOM_HANDSHAKE_TIMEOUT_SECONDS = 10.0
 ZOOM_CLOSE_DRAIN_SECONDS = 3.0
+# Teardown after a cancelled or failed transcribe must not outlive the session cap.
+ZOOM_CLOSE_TIMEOUT_SECONDS = 10.0
 ZOOM_STT_MODEL = "scribe-live"
 
 ZOOM_SUPPORTED_LANGUAGES = frozenset(
@@ -118,7 +120,7 @@ class ZoomStreamingTranscriber(StreamingTranscriberProtocol):
         self._handshake_event = asyncio.Event()
         self._handshake_error: Exception | None = None
         self._close_event = asyncio.Event()
-        self._resampler = Pcm16Resampler(
+        self._resampler: Pcm16Resampler = Pcm16Resampler(
             ZOOM_INPUT_SAMPLE_RATE, ZOOM_TARGET_SAMPLE_RATE
         )
         self._buffer = bytearray()
@@ -402,7 +404,9 @@ class ZoomVoiceProvider(VoiceProviderInterface):
             finally:
                 if not closed:
                     try:
-                        await transcriber.close()
+                        await asyncio.wait_for(
+                            transcriber.close(), timeout=ZOOM_CLOSE_TIMEOUT_SECONDS
+                        )
                     except Exception:
                         logger.debug(
                             "Zoom Scribe transcriber close failed", exc_info=True
@@ -424,18 +428,14 @@ class ZoomVoiceProvider(VoiceProviderInterface):
             language=self.language,
         )
         await transcriber.connect()
-        closed = False
         try:
-            return None
-        finally:
-            if not closed:
-                try:
-                    await transcriber.close()
-                    closed = True
-                except Exception:
-                    logger.debug(
-                        "Zoom Scribe credential validation close failed", exc_info=True
-                    )
+            await asyncio.wait_for(
+                transcriber.close(), timeout=ZOOM_CLOSE_TIMEOUT_SECONDS
+            )
+        except Exception:
+            logger.debug(
+                "Zoom Scribe credential validation close failed", exc_info=True
+            )
 
     def get_available_voices(self) -> list[dict[str, str]]:
         return []
