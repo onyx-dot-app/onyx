@@ -363,3 +363,70 @@ def test_from_litellm_model_response_parses_tool_calls() -> None:
     assert tool_call.type == "function"
     assert tool_call.function.name == "search_documents"
     assert tool_call.function.arguments == '{"query": "test"}'
+
+
+# ---------------------------------------------------------------------------
+# Issue #14039 — OpenAI-compatible ``reasoning`` fallback.
+# ---------------------------------------------------------------------------
+
+
+def _stream_payload(delta: dict) -> dict:
+    return {
+        "id": "chatcmpl-14039",
+        "created": 1762544538,
+        "model": "m",
+        "object": "chat.completion.chunk",
+        "choices": [{"finish_reason": None, "index": 0, "delta": delta}],
+    }
+
+
+def _non_stream_payload(message: dict) -> dict:
+    return {
+        "id": "chatcmpl-14039",
+        "created": 1762544538,
+        "model": "m",
+        "object": "chat.completion",
+        "choices": [
+            {"finish_reason": "stop", "index": 0, "message": message}
+        ],
+    }
+
+
+@pytest.mark.parametrize(
+    "delta, expected",
+    [
+        ({"reasoning": "fallback"}, "fallback"),
+        ({"reasoning_content": "primary", "reasoning": "other"}, "primary"),
+        ({"content": "only"}, None),
+    ],
+    ids=["reasoning-fallback", "reasoning_content-wins", "no-reasoning"],
+)
+def test_stream_reasoning_fallback(delta: dict, expected: str | None) -> None:
+    response = from_litellm_model_response_stream(
+        _make_stream_double(_stream_payload(delta))
+    )
+    assert response.choice.delta.reasoning_content == expected
+
+
+@pytest.mark.parametrize(
+    "message, expected",
+    [
+        ({"content": "ok", "role": "assistant", "reasoning": "fallback"}, "fallback"),
+        (
+            {
+                "content": "ok",
+                "role": "assistant",
+                "reasoning_content": "primary",
+                "reasoning": "other",
+            },
+            "primary",
+        ),
+        ({"content": "ok", "role": "assistant"}, None),
+    ],
+    ids=["reasoning-fallback", "reasoning_content-wins", "no-reasoning"],
+)
+def test_non_streaming_reasoning_fallback(message: dict, expected: str | None) -> None:
+    response = from_litellm_model_response(
+        _make_response_double(_non_stream_payload(message))
+    )
+    assert response.choice.message.reasoning_content == expected
