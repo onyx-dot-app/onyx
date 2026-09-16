@@ -55,8 +55,26 @@ class Message(BaseModel):
     last_edited_date_time: datetime | None
     deleted_date_time: datetime | None
     web_url: str
+    # Graph also lists system events (member added, channel renamed) as messages.
+    message_type: str | None = None
 
     model_config = ConfigDict(
         alias_generator=to_camel,
         populate_by_name=True,
     )
+
+    @property
+    def is_indexable(self) -> bool:
+        """A deleted message keeps its row with an empty body, and a system
+        event carries no conversation."""
+        if self.deleted_date_time is not None:
+            return False
+        return self.message_type in (None, "message")
+
+
+class ChannelRef(BaseModel):
+    """What a checkpoint keeps of a channel: enough to walk it and name its threads."""
+
+    team_id: str
+    id: str
+    display_name: str

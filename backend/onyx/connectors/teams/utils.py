@@ -224,19 +224,47 @@ def fetch_channel_readers(
     return expert_infos, channel_access(expert_infos)
 
 
+# The largest page Graph serves for channel messages.
+MESSAGE_PAGE_SIZE = 50
+
+
+def message_delta_url(
+    team_id: str, channel_id: str, start: SecondsSinceUnixEpoch
+) -> str:
+    startfmt = datetime.fromtimestamp(start, tz=timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+    return (
+        f"teams/{team_id}/channels/{channel_id}/messages/delta"
+        f"?$filter=lastModifiedDateTime gt {startfmt}&$top={MESSAGE_PAGE_SIZE}"
+    )
+
+
+def fetch_message_page(
+    graph_client: GraphClient, request_url: str
+) -> tuple[list[Message], str | None]:
+    """One page of root messages and the link to the next, so a checkpoint can
+    resume mid-channel."""
+    json_response = _retry(graph_client=graph_client, request_url=request_url)
+    messages = [
+        Message(**_sanitize_message_user_display_name(value))
+        for value in json_response.get("value", [])
+        if isinstance(value, dict)
+    ]
+    return messages, _get_next_url(
+        graph_client=graph_client, json_response=json_response
+    )
+
+
 def fetch_messages(
     graph_client: GraphClient,
     team_id: str,
     channel_id: str,
     start: SecondsSinceUnixEpoch,
 ) -> Generator[Message]:
-    startfmt = datetime.fromtimestamp(start, tz=timezone.utc).strftime(
-        "%Y-%m-%dT%H:%M:%SZ"
-    )
-
-    request_url = f"teams/{team_id}/channels/{channel_id}/messages/delta?$filter=lastModifiedDateTime gt {startfmt}"
-
-    for value in _iter_values(graph_client, request_url):
+    for value in _iter_values(
+        graph_client, message_delta_url(team_id, channel_id, start)
+    ):
         yield Message(**_sanitize_message_user_display_name(value))
 
 
