@@ -39,8 +39,10 @@ from onyx.connectors.onedrive.models import (
     OneDriveCredentials,
     OneDriveDeltaResult,
     OneDriveDrive,
+    OneDriveGroup,
     OneDriveGroupMember,
     OneDriveGroupMemberPage,
+    OneDriveGroupPage,
     OneDrivePermission,
     OneDrivePermissionPage,
     OneDriveTokenInfo,
@@ -57,6 +59,9 @@ from onyx.file_store.staging import RawFileCallback
 GRAPH_API_VERSION = "v1.0"
 USERS_PAGE_SIZE = 999
 USER_SELECT = "id,userPrincipalName,mail,displayName,userType,accountEnabled"
+GROUP_SELECT = "id,displayName,visibility"
+GROUP_MEMBER_SELECT = "id,displayName,userPrincipalName,mail"
+GROUPS_PAGE_SIZE = 999
 CONFIG_AUTHORITY_HOST = "authority_host"
 CONFIG_GRAPH_API_HOST = "graph_api_host"
 CONFIG_USERS = "users"
@@ -277,6 +282,24 @@ class OneDriveSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
+    )
+    def list_groups(
+        self, *, next_link: str | None = None, page_size: int = GROUPS_PAGE_SIZE
+    ) -> OneDriveGroupPage:
+        params = None
+        url = next_link
+        if url is None:
+            url = f"{self._base()}/groups"
+            params = {"$select": GROUP_SELECT, "$top": str(page_size)}
+        data = self._get(url, params)
+        return OneDriveGroupPage(
+            groups=[OneDriveGroup.model_validate(raw) for raw in data.get("value", [])],
+            next_link=data.get("@odata.nextLink"),
+        )
+
+    @source_operation(
+        capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
+        consumes=OperationConsumes.CREDENTIAL,
         untested=(
             "Group expansion needs a concrete group id unavailable to "
             "credential checks."
@@ -285,8 +308,12 @@ class OneDriveSourceOperations(SourceOperations):
     def list_transitive_group_members(
         self, *, group_id: str, next_link: str | None = None
     ) -> OneDriveGroupMemberPage:
-        url = next_link or f"{self._base()}/groups/{group_id}/transitiveMembers"
-        data = self._get(url)
+        params = None
+        url = next_link
+        if url is None:
+            url = f"{self._base()}/groups/{quote(group_id)}/transitiveMembers"
+            params = {"$select": GROUP_MEMBER_SELECT, "$top": str(GROUPS_PAGE_SIZE)}
+        data = self._get(url, params)
         return OneDriveGroupMemberPage(
             members=[
                 OneDriveGroupMember.model_validate(raw) for raw in data.get("value", [])

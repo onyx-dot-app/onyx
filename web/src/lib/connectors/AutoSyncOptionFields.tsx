@@ -24,4 +24,5 @@ export const autoSyncConfigBySource: Record<
   teams: {},
   outlook: {},
   canvas: {},
+  onedrive: {},
 };
