@@ -1,4 +1,5 @@
 import hashlib
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any, Self
 
@@ -161,6 +162,7 @@ class DocumentChunkWithoutVectors(BaseModel):
     content: str
 
     source_type: str
+    source_types: tuple[str, ...] = Field(default_factory=tuple, exclude=True)
     # A list of key-value pairs separated by INDEX_SEPARATOR. See
     # convert_metadata_dict_to_list_of_strings.
     metadata_list: list[str] | None = None
@@ -237,8 +239,36 @@ class DocumentChunkWithoutVectors(BaseModel):
             The return of handler but with None items excluded.
         """
         serialized: dict[str, object] = handler(self)
+        serialized[SOURCE_TYPE_FIELD_NAME] = (
+            self.source_type if len(self.source_types) == 1 else list(self.source_types)
+        )
         serialized_exclude_none = {k: v for k, v in serialized.items() if v is not None}
         return serialized_exclude_none
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_source_types(cls, value: Any) -> Any:
+        if not isinstance(value, Mapping):
+            return value
+
+        raw_sources = value.get("source_types", value.get(SOURCE_TYPE_FIELD_NAME))
+        if isinstance(raw_sources, str):
+            sources = (raw_sources,)
+        elif isinstance(raw_sources, (list, tuple)) and all(
+            isinstance(source, str) for source in raw_sources
+        ):
+            sources = tuple(raw_sources)
+        else:
+            raise ValueError("source_type must be a string or a list of strings")
+
+        normalized_sources = tuple(sorted(set(sources)))
+        if not normalized_sources:
+            raise ValueError("source_type must contain at least one source")
+
+        normalized_value = dict(value)
+        normalized_value[SOURCE_TYPE_FIELD_NAME] = normalized_sources[0]
+        normalized_value["source_types"] = normalized_sources
+        return normalized_value
 
     @field_serializer("last_updated", "created_at", mode="wrap")
     def serialize_datetime_fields_to_epoch_seconds(

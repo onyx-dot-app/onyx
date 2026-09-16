@@ -6,7 +6,7 @@ from typing import Self
 from pydantic import BaseModel, model_validator
 
 from onyx.access.models import DocumentAccess
-from onyx.configs.constants import PUBLIC_DOC_PAT
+from onyx.configs.constants import PUBLIC_DOC_PAT, DocumentSource
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters, InferenceChunk
 from onyx.db.enums import EmbeddingPrecision
@@ -149,6 +149,7 @@ class MetadataUpdateRequest(BaseModel):
     secondary_index_updated: bool | None = None
     project_ids: set[int] | None = None
     persona_ids: set[int] | None = None
+    source_types: tuple[DocumentSource, ...] | None = None
     # Source creation time. Patched onto existing chunks without re-embedding when
     # a connector supplies a creation time for an already-indexed document.
     # TODO: Can be removed after some time - used for backfill sync
