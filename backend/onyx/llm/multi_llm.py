@@ -46,6 +46,7 @@ from onyx.llm.model_capabilities import (
     ReasoningParamStyle,
     anthropic_omits_sampling_params,
     anthropic_supports_thinking,
+    anthropic_thinking_is_always_on,
     anthropic_uses_adaptive_thinking,
     is_true_openai_model,
     model_is_reasoning_model,
@@ -804,6 +805,23 @@ class LitellmLLM(LLM):
             required_kwarg_keys = frozenset({"reasoning_effort"})
             _log_chat_completions_tools_disable_reasoning(model, self._api_base)
 
+        reasoning_style = resolve_reasoning_param_style(
+            self.config.model_provider,
+            model_identity_names,
+            self._api_surface,
+        )
+
+        # Fable and Mythos never stop thinking, so off there means the least
+        # reasoning they take rather than the API's own default.
+        if (
+            reasoning_effort is ReasoningEffort.OFF
+            and reasoning_style is ReasoningParamStyle.ANTHROPIC_ADAPTIVE
+            and any(
+                anthropic_thinking_is_always_on(name) for name in model_identity_names
+            )
+        ):
+            reasoning_effort = ReasoningEffort.LOW
+
         # Note, there is a reasoning_effort parameter in LiteLLM but it is completely jank and does not work for any
         # of the major providers. Not setting it sets it to OFF.
         if (
@@ -819,11 +837,6 @@ class LitellmLLM(LLM):
                 "effort": OPENAI_REASONING_EFFORT[reasoning_effort],
                 "summary": "auto",
             }
-            reasoning_style = resolve_reasoning_param_style(
-                self.config.model_provider,
-                model_identity_names,
-                self._api_surface,
-            )
 
             if reasoning_style is ReasoningParamStyle.OPENAI:
                 if is_claude_model:
@@ -908,6 +921,19 @@ class LitellmLLM(LLM):
                     optional_kwargs["reasoning_effort"] = ReasoningEffort.HIGH.value
                 else:
                     optional_kwargs["reasoning_effort"] = ReasoningEffort.MEDIUM.value
+
+        # Claude 5 thinks unless told not to, and 4.7/4.8 take the same param.
+        # No effort with it, which Opus 5 caps, and no signed-block guard like
+        # the sibling branch: that one binds only while thinking is on.
+        if (
+            is_reasoning
+            and reasoning_effort is ReasoningEffort.OFF
+            and reasoning_style is ReasoningParamStyle.ANTHROPIC_ADAPTIVE
+            and not any(
+                anthropic_thinking_is_always_on(name) for name in model_identity_names
+            )
+        ):
+            optional_kwargs["thinking"] = {"type": "disabled"}
 
         if tools:
             # OpenAI will error if parallel_tool_calls is True and tools are not specified
