@@ -80,6 +80,24 @@ export class IndexingStatusPage {
     return Number(match[1]);
   }
 
+  async expectRowOpens(connectorName: string, ccPairId: number) {
+    await expect(this.connectorRow(connectorName)).toHaveClass(
+      /cursor-pointer/
+    );
+    expect(await this.openConnector(connectorName)).toBe(ccPairId);
+  }
+
+  async expectRowInert(connectorName: string) {
+    const row = this.connectorRow(connectorName);
+    await expect(row).not.toHaveClass(/cursor-pointer/);
+
+    await row.click();
+    // Without this wait the URL check runs before a navigation could even start,
+    // so the assertion below would pass whether or not the row was clickable.
+    await this.page.waitForLoadState("networkidle");
+    await expect(this.page).toHaveURL(/\/admin\/indexing\/status/);
+  }
+
   /**
    * Capture a full-page visual snapshot. Masks the same dynamic columns the
    * admin-pages sweep masked so the relocated baseline stays comparable.
