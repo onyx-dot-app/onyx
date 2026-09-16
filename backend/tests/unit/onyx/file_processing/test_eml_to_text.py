@@ -70,6 +70,61 @@ def test_body_without_a_transfer_encoding_header_is_unchanged() -> None:
     )
 
 
+def test_an_html_only_body_is_read() -> None:
+    """A mail with no plain-text alternative used to reach the index empty."""
+    raw = (
+        _HEADERS
+        + "Content-Type: text/html; charset=utf-8\r\n"
+        + "Content-Transfer-Encoding: 7bit\r\n\r\n"
+        + "<html><body><p>Quarterly revenue rose to 12.4 million euros.</p>"
+        + "<p>Contact: Ana Mueller.</p></body></html>\r\n"
+    ).encode()
+
+    text = eml_to_text(io.BytesIO(raw))
+
+    assert "Quarterly revenue rose to 12.4 million euros." in text
+    assert "Contact: Ana Mueller." in text
+    assert "<p>" not in text
+
+
+def test_an_html_only_body_is_decoded_first() -> None:
+    """The HTML part carries a transfer encoding of its own."""
+    encoded = base64.b64encode(
+        b"<html><body><p>Quarterly revenue rose to 12.4 million euros.</p></body></html>"
+    ).decode()
+    raw = (
+        _HEADERS
+        + "Content-Type: text/html; charset=utf-8\r\n"
+        + "Content-Transfer-Encoding: base64\r\n\r\n"
+        + encoded
+        + "\r\n"
+    ).encode()
+
+    assert "Quarterly revenue rose to 12.4 million euros." in eml_to_text(
+        io.BytesIO(raw)
+    )
+
+
+def test_an_html_part_is_ignored_when_there_is_plain_text() -> None:
+    """The plain half of a multipart/alternative still wins."""
+    raw = (
+        _HEADERS
+        + 'Content-Type: multipart/alternative; boundary="b1"\r\n\r\n'
+        + "--b1\r\n"
+        + "Content-Type: text/plain; charset=utf-8\r\n\r\n"
+        + "PLAIN WINS\r\n"
+        + "--b1\r\n"
+        + "Content-Type: text/html; charset=utf-8\r\n\r\n"
+        + "<p>HTML LOSES</p>\r\n"
+        + "--b1--\r\n"
+    ).encode()
+
+    text = eml_to_text(io.BytesIO(raw))
+
+    assert "PLAIN WINS" in text
+    assert "HTML LOSES" not in text
+
+
 def test_multipart_alternative_reads_the_plain_part() -> None:
     """The plain half of a multipart/alternative carries its own encoding."""
     raw = (

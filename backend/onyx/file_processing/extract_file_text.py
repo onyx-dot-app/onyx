@@ -764,15 +764,31 @@ def eml_to_text(file: IO[Any]) -> str:
             pass
 
     text_content = []
+    html_content = []
     for part in message.walk():
-        if part.get_content_type().startswith("text/plain"):
-            payload = part.get_payload()
-            if isinstance(payload, str):
-                text_content.append(_decode_text_payload(part, payload))
-            elif isinstance(payload, list):
-                text_content.extend(item for item in payload if isinstance(item, str))
-            else:
-                logger.warning("Unexpected payload type: %s", type(payload))
+        content_type = part.get_content_type()
+        if not content_type.startswith("text/"):
+            continue
+
+        payload = part.get_payload()
+        if isinstance(payload, str):
+            decoded = _decode_text_payload(part, payload)
+        elif isinstance(payload, list):
+            decoded = "".join(item for item in payload if isinstance(item, str))
+        else:
+            logger.warning("Unexpected payload type: %s", type(payload))
+            continue
+
+        if content_type.startswith("text/plain"):
+            text_content.append(decoded)
+        elif content_type == "text/html":
+            html_content.append(decoded)
+
+    # A mail with no plain-text alternative is ordinary -- it is what Outlook and
+    # most newsletters send -- and its body is in the HTML part.
+    if not any(part.strip() for part in text_content) and html_content:
+        text_content = [parse_html_page_basic(part) for part in html_content]
+
     return TEXT_SECTION_SEPARATOR.join(text_content)
 
 
