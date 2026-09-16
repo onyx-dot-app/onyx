@@ -38,8 +38,9 @@ from onyx.connectors.zoom.endpoints import (
 )
 from onyx.connectors.zoom.models import ZoomTranscript
 from onyx.connectors.zoom.rate_limit import (
-    _MAX_RATE_LIMIT_SLEEP_SECONDS,
     _MAX_RATE_LIMIT_SLEEPS,
+    _MAX_RETRY_SLEEP_SECONDS,
+    _MAX_SERVER_ERROR_SLEEPS,
     _RATE_LIMIT_PERIOD_SECONDS,
     DEFAULT_RATE_LIMIT_SHARE,
     ZoomPlanTier,
@@ -379,20 +380,19 @@ class TestRetryPolicy:
         adapter = client._session.get_adapter(url)
         assert isinstance(adapter, HTTPAdapter)
         assert adapter.max_retries.total == 5
-        assert 500 in adapter.max_retries.status_forcelist
 
-    def test_the_transport_does_not_also_retry_429(self) -> None:
-        # Two layers backing off on the same 429 multiply the wait, and a spent
-        # urllib3 retry raises RetryError, which carries no response to classify
-        # on. Asserting on status_forcelist alone would miss it: urllib3 retries
-        # a 429 that carries a Retry-After header whatever the forcelist says.
+    @pytest.mark.parametrize("status", [429, 500, 502, 503, 504])
+    def test_the_transport_never_re_sends_on_a_status(self, status: int) -> None:
+        # Asserting on status_forcelist alone would miss it: urllib3 re-sends a
+        # response carrying Retry-After whatever the forcelist says.
         client = ZoomClient(account_id="a", client_id="c", client_secret="s")
 
         adapter = client._session.get_adapter(_API_BASE_URL)
         assert isinstance(adapter, HTTPAdapter)
         retry = adapter.max_retries
-        assert 429 not in retry.status_forcelist
-        assert not retry.is_retry("GET", 429, has_retry_after=True)
+        assert status not in retry.status_forcelist
+        assert not retry.is_retry("GET", status, has_retry_after=True)
+        assert not retry.is_retry("GET", status, has_retry_after=False)
 
 
 class TestRequestErrorMapping:
@@ -1086,8 +1086,11 @@ class TestZoomErrorMessages:
         response.json.side_effect = ValueError("not json")
         client._session.request.return_value = response
 
-        with pytest.raises(requests.HTTPError):
-            client.list_past_meeting_occurrences("111")
+        # A 5xx is sent again before it reaches the caller, and this test is
+        # about the message, not the waiting.
+        with patch("onyx.connectors.zoom.rate_limit.time.sleep"):
+            with pytest.raises(requests.HTTPError):
+                client.list_past_meeting_occurrences("111")
 
 
 class TestDownloadRedirects:
@@ -1495,9 +1498,7 @@ class TestRateLimitBackoff:
         with patch("onyx.connectors.zoom.rate_limit.time.sleep") as sleep:
             client.list_users()
 
-        assert [c.args[0] for c in sleep.call_args_list] == [
-            _MAX_RATE_LIMIT_SLEEP_SECONDS
-        ]
+        assert [c.args[0] for c in sleep.call_args_list] == [_MAX_RETRY_SLEEP_SECONDS]
 
     def test_sustained_throttling_gives_up_and_fails_the_whole_run(self) -> None:
         client, session = _client_answering(
@@ -1512,9 +1513,62 @@ class TestRateLimitBackoff:
         assert fails_the_whole_run(exc.value)
 
     def test_an_exhausted_transport_retry_also_fails_the_whole_run(self) -> None:
-        # urllib3 still retries 5xx, and a spent Retry raises RetryError, which
-        # is not an HTTPError and so carries no status code to classify on.
+        # A spent transport Retry raises RetryError, which is not an HTTPError
+        # and so carries no status code to classify on.
         assert fails_the_whole_run(requests.exceptions.RetryError("gave up"))
+
+    def test_a_server_error_is_sent_again(self) -> None:
+        client, session = _client_answering(
+            _response(502), _response(200, {"users": []})
+        )
+
+        with patch("onyx.connectors.zoom.rate_limit.time.sleep") as sleep:
+            page = client.list_users()
+
+        assert [c.args[0] for c in sleep.call_args_list] == [2.0]
+        assert session.request.call_count == 2
+        assert page.users == []
+
+    def test_a_server_error_after_throttling_still_gets_its_own_tries(self) -> None:
+        client, session = _client_answering(
+            *[_rate_limited() for _ in range(4)],
+            _response(502),
+            _response(200, {"users": []}),
+        )
+
+        with patch("onyx.connectors.zoom.rate_limit.time.sleep") as sleep:
+            page = client.list_users()
+
+        # The 502 starts its own backoff rather than inheriting the 429's.
+        assert [c.args[0] for c in sleep.call_args_list] == [2.0, 4.0, 8.0, 16.0, 2.0]
+        assert session.request.call_count == 6
+        assert page.users == []
+
+    def test_server_errors_do_not_spend_the_throttling_patience(self) -> None:
+        client, session = _client_answering(
+            *[_response(502) for _ in range(_MAX_SERVER_ERROR_SLEEPS)],
+            *[_rate_limited() for _ in range(_MAX_RATE_LIMIT_SLEEPS + 1)],
+        )
+
+        with patch("onyx.connectors.zoom.rate_limit.time.sleep"):
+            with pytest.raises(ZoomRateLimitError):
+                client.list_users()
+
+        assert session.request.call_count == (
+            _MAX_SERVER_ERROR_SLEEPS + _MAX_RATE_LIMIT_SLEEPS + 1
+        )
+
+    def test_a_sustained_server_error_fails_the_whole_run(self) -> None:
+        client, session = _client_answering(
+            *[_response(502) for _ in range(_MAX_SERVER_ERROR_SLEEPS + 1)]
+        )
+
+        with patch("onyx.connectors.zoom.rate_limit.time.sleep"):
+            with pytest.raises(requests.HTTPError) as exc:
+                client.list_users()
+
+        assert session.request.call_count == _MAX_SERVER_ERROR_SLEEPS + 1
+        assert fails_the_whole_run(exc.value)
 
 
 class TestPacing:
@@ -1538,6 +1592,31 @@ class TestPacing:
         started = clock.now
         client._get(zoom_endpoints.MEETING_TRANSCRIPT, "2")
 
+        assert clock.now - started >= _RATE_LIMIT_PERIOD_SECONDS
+
+    def test_a_send_again_waits_for_its_own_slot(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # urllib3's first retry has no backoff at all, so a re-send inside one
+        # paced call spent two requests on a single slot.
+        clock = _FakeClock()
+        monkeypatch.setattr(rate_limit_wrapper, "time", clock)
+        monkeypatch.setattr(
+            zoom_rate_limit,
+            "_PLAN_CALLS_PER_SECOND",
+            {plan: {tier: 1 for tier in ZoomRateLimitTier} for plan in ZoomPlanTier},
+        )
+
+        client = _client(ZoomRateLimitSettings(share=1.0))
+        session = MagicMock()
+        session.request.side_effect = [_response(502), _response(200, {"users": []})]
+        client._session = session
+
+        started = clock.now
+        with patch("onyx.connectors.zoom.rate_limit.time.sleep"):
+            client.list_users()
+
+        assert session.request.call_count == 2
         assert clock.now - started >= _RATE_LIMIT_PERIOD_SECONDS
 
     def test_the_tiers_are_paced_separately(

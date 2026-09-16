@@ -55,9 +55,13 @@ _PACING_POLL_SECONDS = 0.05
 
 # Zoom can send a Retry-After of an hour, so each sleep is capped and the
 # retries run out. The checkpoint then resumes on the same occurrence.
+_BASE_RETRY_SLEEP_SECONDS = 2.0
+_MAX_RETRY_SLEEP_SECONDS = 60.0
+
+# A 429 names when to come back, so it is worth waiting out. A 5xx is only a
+# guess, and the run resumes from the checkpoint anyway.
 _MAX_RATE_LIMIT_SLEEPS = 6
-_RATE_LIMIT_BASE_SLEEP_SECONDS = 2.0
-_MAX_RATE_LIMIT_SLEEP_SECONDS = 60.0
+_MAX_SERVER_ERROR_SLEEPS = 4
 
 # Half, because Zoom's limit is account-wide and the customer's other
 # integrations spend from the same allowance.
@@ -94,13 +98,32 @@ def _tier_calls_per_second(
     return max(1, int(_PLAN_CALLS_PER_SECOND[plan][tier] * share))
 
 
-def _rate_limit_sleep_seconds(response: requests.Response, sleeps_so_far: int) -> float:
+def _retry_sleep_seconds(response: requests.Response, sleeps_so_far: int) -> float:
     retry_after: float | None = parse_retry_after_seconds(
         response.headers.get("Retry-After")
     )
     if retry_after is None:
-        retry_after = _RATE_LIMIT_BASE_SLEEP_SECONDS * (2**sleeps_so_far)
-    return min(retry_after, _MAX_RATE_LIMIT_SLEEP_SECONDS)
+        retry_after = _BASE_RETRY_SLEEP_SECONDS * (2**sleeps_so_far)
+    return min(retry_after, _MAX_RETRY_SLEEP_SECONDS)
+
+
+class _RetryKind(str, Enum):
+    RATE_LIMITED = "rate_limited"
+    SERVER_ERROR = "server_error"
+
+
+_MAX_SLEEPS: dict[_RetryKind, int] = {
+    _RetryKind.RATE_LIMITED: _MAX_RATE_LIMIT_SLEEPS,
+    _RetryKind.SERVER_ERROR: _MAX_SERVER_ERROR_SLEEPS,
+}
+
+
+def _retry_kind(response: requests.Response) -> _RetryKind | None:
+    if response.status_code == 429:
+        return _RetryKind.RATE_LIMITED
+    if response.status_code >= 500:
+        return _RetryKind.SERVER_ERROR
+    return None
 
 
 def _build_pacer(
@@ -121,7 +144,10 @@ def _build_pacer(
 
 
 class ZoomRateLimiter:
-    """Zoom's limit is account-wide but there is one of these per client, so it
+    """Owns when a request goes out and whether it goes out again, so that every
+    attempt Zoom counts spends a slot from the same budget.
+
+    Zoom's limit is account-wide but there is one of these per client, so it
     cannot see the customer's other integrations. Two connectors on one account
     spend twice the share.
     """
@@ -140,25 +166,30 @@ class ZoomRateLimiter:
     ) -> requests.Response:
         response = self._pacers[tier](send)
 
-        for sleeps_so_far in range(_MAX_RATE_LIMIT_SLEEPS):
-            if response.status_code != 429:
-                return response
-
-            sleep_seconds = _rate_limit_sleep_seconds(response, sleeps_so_far)
+        # Counted per kind of answer, so a run of server errors does not spend
+        # the patience a later 429 deserves, and the other way round.
+        sleeps_so_far = {kind: 0 for kind in _RetryKind}
+        while (kind := _retry_kind(response)) is not None:
+            if sleeps_so_far[kind] >= _MAX_SLEEPS[kind]:
+                break
+            sleep_seconds = _retry_sleep_seconds(response, sleeps_so_far[kind])
             logger.notice(
-                "Zoom rate limited %s (%s tier). Waiting %.1fs before retrying.",
+                "Zoom answered %s with %s (%s tier). Waiting %.1fs before retrying.",
                 description,
+                response.status_code,
                 tier.value,
                 sleep_seconds,
             )
             time.sleep(sleep_seconds)
             response = self._pacers[tier](send)
+            sleeps_so_far[kind] += 1
 
-        if response.status_code != 429:
-            return response
-
-        raise ZoomRateLimitError(
-            f"Zoom kept rate limiting {description} after "
-            f"{_MAX_RATE_LIMIT_SLEEPS} backoffs",
-            response=response,
-        )
+        # Only a 429 needs the typed error. A spent 5xx goes back as the
+        # response it is, and _raise_for_zoom_error keeps Zoom's own message.
+        if response.status_code == 429:
+            raise ZoomRateLimitError(
+                f"Zoom kept rate limiting {description} after "
+                f"{_MAX_RATE_LIMIT_SLEEPS} backoffs",
+                response=response,
+            )
+        return response
