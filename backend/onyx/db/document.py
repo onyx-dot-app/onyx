@@ -1230,7 +1230,7 @@ def get_document_id_to_file_id_map(
         .filter(DbDocument.file_id.isnot(None))
         .all()
     )
-    return {doc_id: file_id for doc_id, file_id in rows}
+    return {doc_id: file_id for doc_id, file_id in rows}  # noqa: C416  # unpacking types the SQLAlchemy Row
 
 
 def delete_documents_complete__no_commit(
@@ -1522,7 +1522,7 @@ def get_document_sources(
     )
 
     results = db_session.execute(stmt).all()
-    return {doc_id: source for doc_id, source in results}
+    return {doc_id: source for doc_id, source in results}  # noqa: C416  # unpacking types the SQLAlchemy Row
 
 
 def fetch_chunk_counts_for_documents(

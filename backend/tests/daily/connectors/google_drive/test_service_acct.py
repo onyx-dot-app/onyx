@@ -670,7 +670,7 @@ def test_specific_user_email_shared_with_me(
     # expected += ['perm_sync_doc_0ACOrCU1EMD1hUk9PVA_ab63b976-effb-49af-84e7-423d17a17dd7']
     # expected += ['file_22.txt'] # Shared drive
 
-    doc_titles = set(doc.semantic_identifier for doc in output.documents)
+    doc_titles = {doc.semantic_identifier for doc in output.documents}
     assert doc_titles == set(expected)
 
 

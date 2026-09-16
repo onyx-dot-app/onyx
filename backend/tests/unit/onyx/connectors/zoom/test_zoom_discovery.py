@@ -349,7 +349,7 @@ class TestIdAllowlistPaging:
         second = source.discover_step(client, _START, _END, first.next_cursor)
 
         seen = [w.occurrence_uuid for w in first.work + second.work]
-        assert set(o.uuid for o in base).issubset(set(seen))
+        assert {o.uuid for o in base}.issubset(set(seen))
         assert len(seen) == len(set(seen))
 
     def test_old_cursor_without_offset_still_loads(self) -> None:

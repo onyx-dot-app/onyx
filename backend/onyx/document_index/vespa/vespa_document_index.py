@@ -523,16 +523,12 @@ def _update_single_chunk(
         else None
     )
     document_sets_update: _DocumentSets | None = (
-        _DocumentSets(
-            assign={document_set: 1 for document_set in update_request.document_sets}
-        )
+        _DocumentSets(assign=dict.fromkeys(update_request.document_sets, 1))
         if update_request.document_sets is not None
         else None
     )
     access_update: _AccessControl | None = (
-        _AccessControl(
-            assign={acl_entry: 1 for acl_entry in update_request.access.to_acl()}
-        )
+        _AccessControl(assign=dict.fromkeys(update_request.access.to_acl(), 1))
         if update_request.access is not None
         else None
     )

@@ -45,7 +45,7 @@ TEAMS_THREAD = [
     TeamsThread(
         thread="This is a test post. Raunak should not be able to see this!",
         external_access=ExternalAccess(
-            external_user_emails=set(["test@danswerai.onmicrosoft.com"]),
+            external_user_emails={"test@danswerai.onmicrosoft.com"},
             external_user_group_ids=set(),
             is_public=False,
         ),
@@ -55,9 +55,7 @@ TEAMS_THREAD = [
         thread="This is a test post in a private channel that Raunak does have access to! Hello, Raunak!"
         "Hello, world! I am just a member in this chat, but not an owner.",
         external_access=ExternalAccess(
-            external_user_emails=set(
-                ["test@danswerai.onmicrosoft.com", "raunak@onyx.app"]
-            ),
+            external_user_emails={"test@danswerai.onmicrosoft.com", "raunak@onyx.app"},
             external_user_group_ids=set(),
             is_public=False,
         ),
@@ -67,9 +65,7 @@ TEAMS_THREAD = [
         thread="This is a test post in a private channel that Raunak is an owner of! Whoa!"
         "Hello, world! I am an owner of this chat. The power!",
         external_access=ExternalAccess(
-            external_user_emails=set(
-                ["test@danswerai.onmicrosoft.com", "raunak@onyx.app"]
-            ),
+            external_user_emails={"test@danswerai.onmicrosoft.com", "raunak@onyx.app"},
             external_user_group_ids=set(),
             is_public=False,
         ),

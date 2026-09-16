@@ -1624,15 +1624,15 @@ class TestSelectReminderText:
     "open_url is not available" replies)."""
 
     def _select(self, **overrides: Any) -> str | None:
-        kwargs: dict[str, Any] = dict(
-            ran_image_gen=False,
-            just_ran_web_search=False,
-            has_open_url_tool=True,
-            out_of_cycles=False,
-            persona_task_prompt=None,
-            include_citation_reminder=False,
-            include_file_reminder=False,
-        )
+        kwargs: dict[str, Any] = {
+            "ran_image_gen": False,
+            "just_ran_web_search": False,
+            "has_open_url_tool": True,
+            "out_of_cycles": False,
+            "persona_task_prompt": None,
+            "include_citation_reminder": False,
+            "include_file_reminder": False,
+        }
         kwargs.update(overrides)
         return select_reminder_text(**kwargs)
 

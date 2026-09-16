@@ -564,7 +564,7 @@ def update_cc_pair_status(
     # this speeds up the start of indexing by firing the check immediately
     client_app.send_task(
         OnyxCeleryTask.CHECK_FOR_INDEXING,
-        kwargs=dict(tenant_id=tenant_id),
+        kwargs={"tenant_id": tenant_id},
         priority=OnyxCeleryPriority.HIGH,
     )
 
