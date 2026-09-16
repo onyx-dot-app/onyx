@@ -145,9 +145,7 @@ Each adapter implements:
 
 2. **Keep Dynamic Content in Suffix**: User queries, search results, and other dynamic content should be in the suffix.
 
-3. **Monitor Cache Effectiveness**: Check logs for cache hits/misses and adjust your caching strategy accordingly.
-
-4. **Provider Selection**: Different providers have different caching characteristics - choose based on your use case.
+3. **Provider Selection**: Different providers have different caching characteristics - choose based on your use case.
 
 ## Error Handling
 
