@@ -90,12 +90,16 @@ export interface StringTabOption extends Option {
   default?: string;
 }
 
+export type TabSelectionValue = string | number | boolean | null;
+
 export interface TabOption extends Option {
   type: "tab";
   defaultTab?: string;
+  selectionField?: string;
   tabs: {
     label: string;
     value: string;
+    selectionValue?: TabSelectionValue;
     fields: (
       | BooleanOption
       | ListOption

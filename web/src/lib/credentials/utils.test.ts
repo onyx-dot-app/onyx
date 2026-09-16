@@ -70,6 +70,28 @@ describe("credential edit helpers", () => {
     });
   });
 
+  it("restores the legacy OneDrive certificate auth method", () => {
+    const credential = buildCredential({
+      credential_json: {
+        onedrive_authentication_method: "certificate",
+        onedrive_client_id: "client-id",
+        onedrive_directory_id: "directory-id",
+        onedrive_private_key: "masked-certificate",
+      },
+      source: ValidSources.OneDrive,
+    });
+
+    expect(
+      getEditableCredentialFields(credential, ValidSources.OneDrive)
+    ).toEqual({
+      authentication_method: "certificate",
+      onedrive_client_id: "client-id",
+      onedrive_directory_id: "directory-id",
+      onedrive_certificate_password: "",
+      onedrive_private_key: "masked-certificate",
+    });
+  });
+
   it("does not expose OAuth-managed credential internals in the edit form", () => {
     const credential = buildCredential({
       credential_json: {

@@ -14,6 +14,15 @@ export const FILE_TYPE_DEFINITIONS: Record<
     description:
       "Please upload the .pfx file containing the private key of the app registration. The file size must be under 10KB.",
   },
+  [FileTypeCategory.ONEDRIVE_PFX_FILE]: {
+    category: FileTypeCategory.ONEDRIVE_PFX_FILE,
+    validation: {
+      maxSizeKB: 10,
+      allowedExtensions: [".pfx"],
+    },
+    description:
+      "Please upload a .pfx file containing the private key for OneDrive. The file size must be under 10KB.",
+  },
 };
 
 export class TypedFile {

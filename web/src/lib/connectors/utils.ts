@@ -41,11 +41,63 @@ export function isLoadState(connector_name: string): boolean {
 
 type ConnectorField = ConnectionConfiguration["values"][number];
 
+export function getSelectedTabValue(
+  field: Extract<ConnectorField, { type: "tab" }>,
+  values: Record<string, unknown>
+): string {
+  if (field.selectionField) {
+    const selectedValue = values[field.selectionField];
+    const selectedTab = field.tabs.find((tab) =>
+      Object.is(tab.selectionValue, selectedValue)
+    );
+    if (selectedTab) {
+      return selectedTab.value;
+    }
+  }
+  return field.defaultTab ?? field.tabs[0]?.value ?? "";
+}
+
+export function getTabValueUpdates(
+  field: Extract<ConnectorField, { type: "tab" }>,
+  selectedTabValue: string,
+  values: Record<string, unknown>
+): Record<string, unknown> {
+  const updates: Record<string, unknown> = {};
+  const selectedTab = field.tabs.find((tab) => tab.value === selectedTabValue);
+
+  if (field.selectionField && selectedTab?.selectionValue !== undefined) {
+    updates[field.selectionField] = selectedTab.selectionValue;
+  }
+
+  field.tabs.forEach((tab) => {
+    if (tab.value === selectedTabValue) {
+      return;
+    }
+    tab.fields.forEach((tabField) => {
+      if (!Object.is(values[tabField.name], tabField.default)) {
+        updates[tabField.name] = tabField.default;
+      }
+    });
+  });
+  return updates;
+}
+
 const buildInitialValuesForFields = (
   fields: ConnectorField[]
 ): Record<string, any> =>
   fields.reduce<Record<string, any>>((acc, field) => {
-    if (field.type === "select") {
+    if (field.type === "tab" && field.selectionField) {
+      const defaultTab =
+        field.tabs.find((tab) => tab.value === field.defaultTab) ??
+        field.tabs[0];
+      if (defaultTab?.selectionValue !== undefined) {
+        acc[field.selectionField] = defaultTab.selectionValue;
+      }
+      Object.assign(
+        acc,
+        buildInitialValuesForFields(field.tabs.flatMap((tab) => tab.fields))
+      );
+    } else if (field.type === "select") {
       acc[field.name] = null;
     } else if (field.type === "list") {
       acc[field.name] = field.default || [];
@@ -162,6 +214,7 @@ export function isTypedFileField(fieldKey: string): boolean {
   // Define which fields should be typed files
   const typedFileFields = new Set([
     "sp_private_key",
+    "onedrive_private_key",
     "outlook_private_key",
     "teams_private_key",
   ]);
@@ -174,6 +227,7 @@ export function getFileTypeDefinitionForField(
 ): FileTypeCategory | null {
   const fieldToTypeMap: Record<string, FileTypeCategory> = {
     sp_private_key: FileTypeCategory.SHAREPOINT_PFX_FILE,
+    onedrive_private_key: FileTypeCategory.ONEDRIVE_PFX_FILE,
     // The same PFX bundle rules apply to every Microsoft app registration.
     outlook_private_key: FileTypeCategory.SHAREPOINT_PFX_FILE,
     teams_private_key: FileTypeCategory.SHAREPOINT_PFX_FILE,

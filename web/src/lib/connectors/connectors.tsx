@@ -2,6 +2,9 @@ import { ConfigurableSources } from "../types";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
 import type { BooleanOption, ConnectionConfiguration } from "./types";
 
+const DEFAULT_MICROSOFT_AUTHORITY_HOST = "https://login.microsoftonline.com";
+const DEFAULT_MICROSOFT_GRAPH_API_HOST = "https://graph.microsoft.com";
+
 // Shared "Include Attachments" checkbox. Pair with an `include_attachments`
 // kwarg on the backend connector; see backend/onyx/connectors/README.md for
 // the convention, including how to pick the default.
@@ -479,6 +482,89 @@ export const connectorConfigs: Record<
         name: "exclude_domain_link_only",
         optional: true,
         default: false,
+      },
+    ],
+  },
+  onedrive: {
+    description: "Configure OneDrive connector",
+    values: [
+      {
+        type: "tab",
+        name: "indexing_scope",
+        label: "Whose OneDrive files should Onyx index?",
+        optional: true,
+        selectionField: "all_users",
+        tabs: [
+          {
+            value: "general",
+            label: "General",
+            selectionValue: true,
+            fields: [
+              {
+                type: "string_tab",
+                label: "General",
+                name: "all_users_description",
+                description:
+                  "Index all eligible users that the Microsoft application can access.",
+              },
+            ],
+          },
+          {
+            value: "specific",
+            label: "Specific",
+            selectionValue: false,
+            fields: [
+              {
+                type: "list",
+                label: "Users",
+                name: "users",
+                optional: true,
+                default: [],
+                description:
+                  "Add each user principal name or primary email address to index.",
+              },
+            ],
+          },
+        ],
+        defaultTab: "general",
+      },
+    ],
+    advanced_values: [
+      {
+        type: "list",
+        label: "Excluded Paths",
+        name: "excluded_paths",
+        optional: true,
+        default: [],
+        description:
+          "Glob patterns matched against each file path and filename, such as '*.tmp' or 'Archive/*'.",
+      },
+      {
+        type: "checkbox",
+        label: "Treat organization links as public",
+        name: "treat_organization_link_as_public",
+        optional: true,
+        default: false,
+        description:
+          "Treat files shared through an organization-wide link as visible to all Onyx users.",
+      },
+      {
+        type: "text",
+        label: "Authority Host",
+        name: "authority_host",
+        optional: true,
+        default: DEFAULT_MICROSOFT_AUTHORITY_HOST,
+        description:
+          "Microsoft identity authority host. Use https://login.microsoftonline.us for GCC High or DoD.",
+      },
+      {
+        type: "text",
+        label: "Graph API Host",
+        name: "graph_api_host",
+        optional: true,
+        default: DEFAULT_MICROSOFT_GRAPH_API_HOST,
+        description:
+          "Microsoft Graph host. Use https://graph.microsoft.us for GCC High or DoD.",
       },
     ],
   },

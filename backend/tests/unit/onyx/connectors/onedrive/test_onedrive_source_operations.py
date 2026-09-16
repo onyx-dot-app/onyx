@@ -1,8 +1,10 @@
+from io import BytesIO
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
+from fastapi import UploadFile
 
 from onyx.connectors.microsoft_utils.drive_delta import (
     DRIVE_DELTA_SELECT_FIELDS,
@@ -21,6 +23,14 @@ from onyx.connectors.microsoft_utils.graph_errors import (
 )
 from onyx.connectors.onedrive.models import OneDriveCredentials
 from onyx.connectors.onedrive.source_operations import OneDriveSourceOperations
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.server.documents.private_key_types import (
+    FILE_TYPE_TO_FILE_PROCESSOR,
+    PrivateKeyFileTypes,
+    process_pkcs12_private_key_file,
+    process_sharepoint_private_key_file,
+)
 
 
 def _gateway() -> tuple[OneDriveSourceOperations, Any]:
@@ -184,3 +194,55 @@ def test_onedrive_classifies_invalid_certificate() -> None:
             _ = gateway._gateway().auth_context
 
     assert raised.value.code == INVALID_CERTIFICATE_CODE
+
+
+def test_onedrive_accepts_standard_and_legacy_authentication_method_keys() -> None:
+    standard = OneDriveCredentials.model_validate(
+        {
+            "onedrive_client_id": "client",
+            "onedrive_directory_id": "tenant",
+            "authentication_method": "certificate",
+        }
+    )
+    legacy = OneDriveCredentials.model_validate(
+        {
+            "onedrive_client_id": "client",
+            "onedrive_directory_id": "tenant",
+            "onedrive_authentication_method": "client_secret",
+        }
+    )
+
+    assert standard.onedrive_authentication_method == "certificate"
+    assert legacy.onedrive_authentication_method == "client_secret"
+
+
+def test_onedrive_uses_shared_pkcs12_processor() -> None:
+    assert (
+        FILE_TYPE_TO_FILE_PROCESSOR[PrivateKeyFileTypes.ONEDRIVE_PFX_FILE]
+        is FILE_TYPE_TO_FILE_PROCESSOR[PrivateKeyFileTypes.SHAREPOINT_PFX_FILE]
+    )
+    assert process_sharepoint_private_key_file is process_pkcs12_private_key_file
+
+
+@pytest.mark.parametrize(
+    ("filename", "is_valid"),
+    [
+        ("certificate.pem", True),
+        ("certificate.pfx", False),
+    ],
+)
+def test_pkcs12_processor_raises_typed_input_errors(
+    filename: str, is_valid: bool
+) -> None:
+    upload = UploadFile(BytesIO(b"not-a-certificate"), filename=filename)
+
+    with (
+        patch(
+            "onyx.server.documents.private_key_types.validate_pkcs12_content",
+            return_value=is_valid,
+        ),
+        pytest.raises(OnyxError) as exc_info,
+    ):
+        process_pkcs12_private_key_file(upload)
+
+    assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT

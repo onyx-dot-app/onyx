@@ -1,5 +1,6 @@
 export enum FileTypeCategory {
   SHAREPOINT_PFX_FILE = "sharepoint_pfx_file",
+  ONEDRIVE_PFX_FILE = "onedrive_pfx_file",
 }
 
 export interface FileValidationRule {
