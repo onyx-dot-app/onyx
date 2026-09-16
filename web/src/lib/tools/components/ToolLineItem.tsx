@@ -260,7 +260,7 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
         return (
           <Button
             icon={needsConnectors ? SvgSettings : SvgChevronRight}
-            prominence="internal"
+            prominence="tertiary"
             size="sm"
             aria-label={connectorsLabel}
             tooltip={connectorsLabel}
