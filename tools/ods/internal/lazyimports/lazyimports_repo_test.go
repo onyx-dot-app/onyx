@@ -3,6 +3,7 @@ package lazyimports
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"testing"
 
@@ -90,6 +91,9 @@ func TestCheckLazyImports_providedPaths(t *testing.T) {
 		}
 	})
 	t.Run("an unreadable file is an error", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("creating a symlink needs extra privileges on Windows")
+		}
 		root := newBackendRepo(t, map[string]string{"onyx/a.py": ""})
 		if err := os.Symlink(filepath.Join(root, "gone.py"), filepath.Join(root, "backend", "onyx", "b.py")); err != nil {
 			t.Fatal(err)

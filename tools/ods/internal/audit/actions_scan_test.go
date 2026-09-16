@@ -132,6 +132,7 @@ func loginActionAdvisory() osvVuln {
 	v := ecoVuln("GHSA-dock", map[string]string{"introduced": "0"}, map[string]string{"fixed": "3.1.0"})
 	v.Details = "Login action leaks credentials\nMore detail."
 	v.DatabaseSpecific = map[string]any{"severity": "moderate"}
+	v.Affected[0].Package.Name = "docker/login-action"
 	return v
 }
 

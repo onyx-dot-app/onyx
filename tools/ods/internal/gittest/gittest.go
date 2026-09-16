@@ -77,6 +77,7 @@ func InitOriginAndWork(t *testing.T) (origin, work string) {
 	Git(t, work, "config", "user.email", "test@test.com")
 	Git(t, work, "config", "user.name", "Test")
 	Git(t, work, "config", "commit.gpgsign", "false")
+	Git(t, work, "config", "tag.gpgSign", "false")
 	Git(t, work, "remote", "add", "origin", origin)
 	Git(t, work, "config", "remote.origin.fetch", "+refs/heads/main:refs/remotes/origin/main")
 

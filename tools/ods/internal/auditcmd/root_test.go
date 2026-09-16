@@ -20,8 +20,20 @@ func restoreLogger(t *testing.T) {
 	})
 }
 
+// captureLog sends the standard logger to a buffer for the rest of the test.
+// Logrus writes there, not to the command's stderr.
+func captureLog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	out := log.StandardLogger().Out
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(out) })
+	return &buf
+}
+
 func TestRootCommand_flagsReachTheAudit(t *testing.T) {
 	restoreLogger(t)
+	logs := captureLog(t)
 	bin := fakeBinDir(t)
 	chdirNewRepo(t)
 	fakeDependabot(t, bin, criticalAlert)
@@ -52,7 +64,10 @@ func TestRootCommand_flagsReachTheAudit(t *testing.T) {
 		t.Fatalf("expected the Dependabot alert to be suppressed by the allowlist, got %s", stdout.String())
 	}
 	if stderr.Len() != 0 {
-		t.Fatalf("expected nothing on stderr, got %q", stderr.String())
+		t.Fatalf("expected no text report on stderr with the JSON format, got %q", stderr.String())
+	}
+	if want := `level=debug msg="Suppressing GHSA-aaaa-bbbb-cccc`; !strings.Contains(logs.String(), want) {
+		t.Fatalf("expected --debug to log the suppression %q, got %q", want, logs.String())
 	}
 }
 

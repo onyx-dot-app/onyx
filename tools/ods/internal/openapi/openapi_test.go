@@ -85,12 +85,13 @@ func readLines(t *testing.T, path string) []string {
 func TestResolvePath(t *testing.T) {
 	root := newRepo(t)
 	t.Chdir(filepath.Join(root, "backend"))
+	abs := filepath.Join(root, "elsewhere", "x.json")
 
 	cases := []struct {
 		name, user, want string
 	}{
 		{"empty uses the default under the root", "", filepath.Join(root, "generated", "x.json")},
-		{"absolute is kept", "/abs/x.json", "/abs/x.json"},
+		{"absolute is kept", abs, abs},
 		{"relative joins the working directory", "out/x.json", filepath.Join(root, "backend", "out", "x.json")},
 	}
 	for _, c := range cases {
