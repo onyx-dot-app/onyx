@@ -31,7 +31,7 @@ Examples:
 func runDevStop() error {
 	root, err := paths.GitRoot()
 	if err != nil {
-		return composeErrorf("Failed to find git root: %w", err)
+		return fatalErrorf("Failed to find git root: %w", err)
 	}
 
 	// Find the container by the devcontainer label
@@ -40,7 +40,7 @@ func runDevStop() error {
 		"--filter", "label=devcontainer.local_folder="+root,
 	).Output()
 	if err != nil {
-		return composeErrorf("Failed to find devcontainer: %w", err)
+		return fatalErrorf("Failed to find devcontainer: %w", err)
 	}
 
 	containerID := strings.TrimSpace(string(out))
@@ -52,7 +52,7 @@ func runDevStop() error {
 	log.Infof("Stopping devcontainer %s...", containerID)
 	c := exec.Command("docker", "stop", containerID)
 	if err := c.Run(); err != nil {
-		return composeErrorf("Failed to stop devcontainer: %w", err)
+		return fatalErrorf("Failed to stop devcontainer: %w", err)
 	}
 	log.Info("Devcontainer stopped")
 	return nil

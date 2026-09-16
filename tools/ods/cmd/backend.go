@@ -101,11 +101,11 @@ Examples:
 func resolvePort(port string) (string, error) {
 	portNum, err := strconv.Atoi(port)
 	if err != nil {
-		return "", fmt.Errorf("Invalid port %q: %v", port, err)
+		return "", fatalErrorf("Invalid port %q: %v", port, err)
 	}
 	resolved, err := portutil.FindAvailable(portNum, 65535-portNum, nil)
 	if err != nil {
-		return "", fmt.Errorf("No available ports found starting from %d", portNum)
+		return "", fatalErrorf("No available ports found starting from %d", portNum)
 	}
 	return strconv.Itoa(resolved), nil
 }
@@ -129,7 +129,7 @@ func exitBackendService(err error) {
 func runBackendService(name, module, port string, opts *BackendOptions) error {
 	root, err := paths.GitRoot()
 	if err != nil {
-		return fmt.Errorf("Failed to find git root: %v", err)
+		return fatalErrorf("Failed to find git root: %v", err)
 	}
 
 	port, err = resolvePort(port)
@@ -173,7 +173,7 @@ func runBackendService(name, module, port string, opts *BackendOptions) error {
 	svcCmd.Env = mergedEnv
 
 	if err := svcCmd.Run(); err != nil {
-		return fmt.Errorf("Failed to run %s: %w", name, err)
+		return fatalErrorf("Failed to run %s: %w", name, err)
 	}
 	return nil
 }
@@ -201,7 +201,7 @@ func ensureBackendEnvFile(root string) (string, error) {
 
 	if _, err := os.Stat(envFile); err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
-			return "", fmt.Errorf("Failed to stat env file %s: %v", envFile, err)
+			return "", fatalErrorf("Failed to stat env file %s: %v", envFile, err)
 		}
 	} else {
 		log.Debugf("Using existing env file: %s", envFile)
@@ -210,15 +210,15 @@ func ensureBackendEnvFile(root string) (string, error) {
 
 	templateData, err := os.ReadFile(templateFile)
 	if err != nil {
-		return "", fmt.Errorf("Failed to read env template %s: %v", templateFile, err)
+		return "", fatalErrorf("Failed to read env template %s: %v", templateFile, err)
 	}
 
 	if err := os.MkdirAll(vscodeDir, 0755); err != nil {
-		return "", fmt.Errorf("Failed to create .vscode directory: %v", err)
+		return "", fatalErrorf("Failed to create .vscode directory: %v", err)
 	}
 
 	if err := os.WriteFile(envFile, templateData, 0644); err != nil {
-		return "", fmt.Errorf("Failed to write env file %s: %v", envFile, err)
+		return "", fatalErrorf("Failed to write env file %s: %v", envFile, err)
 	}
 
 	log.Infof("Created %s from template (review and fill in <REPLACE THIS> values)", envFile)
@@ -255,7 +255,7 @@ func mergeEnv(shellEnv, fileVars []string) []string {
 func loadBackendEnvFile(path string) ([]string, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to open env file %s: %v", path, err)
+		return nil, fatalErrorf("Failed to open env file %s: %v", path, err)
 	}
 	defer func() { _ = f.Close() }()
 
@@ -275,7 +275,7 @@ func loadBackendEnvFile(path string) ([]string, error) {
 	}
 
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("Failed to read env file %s: %v", path, err)
+		return nil, fatalErrorf("Failed to read env file %s: %v", path, err)
 	}
 
 	return envVars, nil

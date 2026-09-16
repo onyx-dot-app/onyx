@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -70,32 +69,30 @@ Examples:
 
 // runUpdateBaseDigests returns what Run prints, and an error whose text is the
 // message Run logs before exiting.
-//
-//nolint:staticcheck // ST1005: the error text is the log message, kept as it was.
 func runUpdateBaseDigests(write bool, summaryFile, family string, listStaleFamilies bool, cacheFile string) (string, error) {
 	var out strings.Builder
 
 	root, err := paths.GitRoot()
 	if err != nil {
-		return out.String(), fmt.Errorf("Could not find the repository root: %v", err)
+		return out.String(), fatalErrorf("Could not find the repository root: %v", err)
 	}
 
 	files, err := basedigest.TrackedFiles(root)
 	if err != nil {
-		return out.String(), fmt.Errorf("Could not list the tracked files: %v", err)
+		return out.String(), fatalErrorf("Could not list the tracked files: %v", err)
 	}
 
 	refs, err := basedigest.FindRefs(root, files)
 	if err != nil {
-		return out.String(), fmt.Errorf("Could not read the tracked files: %v", err)
+		return out.String(), fatalErrorf("Could not read the tracked files: %v", err)
 	}
 	if len(refs) == 0 {
-		return out.String(), errors.New("No pinned image references found.")
+		return out.String(), fatalErrorf("No pinned image references found.")
 	}
 
 	resolved, err := resolveWithCache(refs, cacheFile)
 	if err != nil {
-		return out.String(), fmt.Errorf("Could not resolve every tag:\n%v", err)
+		return out.String(), fatalErrorf("Could not resolve every tag:\n%v", err)
 	}
 
 	stale := basedigest.Stale(refs, resolved)
@@ -111,7 +108,7 @@ func runUpdateBaseDigests(write bool, summaryFile, family string, listStaleFamil
 		refs = basedigest.FilterFamily(refs, family)
 		stale = basedigest.FilterFamily(stale, family)
 		if len(refs) == 0 {
-			return out.String(), fmt.Errorf("No references in family %q.", family)
+			return out.String(), fatalErrorf("No references in family %q.", family)
 		}
 	}
 
@@ -129,7 +126,7 @@ func runUpdateBaseDigests(write bool, summaryFile, family string, listStaleFamil
 		out.WriteString("\nAll pinned digests are current.\n")
 	} else if write {
 		if err := basedigest.Rewrite(root, stale, resolved); err != nil {
-			return out.String(), fmt.Errorf("Could not rewrite the digests: %v", err)
+			return out.String(), fatalErrorf("Could not rewrite the digests: %v", err)
 		}
 		fmt.Fprintf(&out, "\nUpdated %d reference(s).\n", len(stale))
 	} else {
@@ -138,7 +135,7 @@ func runUpdateBaseDigests(write bool, summaryFile, family string, listStaleFamil
 
 	if summaryFile != "" {
 		if err := os.WriteFile(summaryFile, []byte(summary), 0o644); err != nil {
-			return out.String(), fmt.Errorf("Could not write the summary: %v", err)
+			return out.String(), fatalErrorf("Could not write the summary: %v", err)
 		}
 	}
 	return out.String(), nil

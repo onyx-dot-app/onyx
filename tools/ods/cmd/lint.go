@@ -67,7 +67,7 @@ func runLintTerraform(args []string, stderr io.Writer) (bool, error) {
 	// so explicit arguments still work outside a checkout.
 	root, err := paths.GitRoot()
 	if err != nil && len(args) == 0 {
-		return false, fmt.Errorf("Cannot locate the repository root: %v", err)
+		return false, fatalErrorf("Cannot locate the repository root: %v", err)
 	}
 
 	roots := args
@@ -77,14 +77,14 @@ func runLintTerraform(args []string, stderr io.Writer) (bool, error) {
 
 	files, err := terraform.Discover(roots)
 	if err != nil {
-		return false, fmt.Errorf("Cannot collect Terraform files: %v", err)
+		return false, fatalErrorf("Cannot collect Terraform files: %v", err)
 	}
 
 	var findings []terraform.Finding
 	for _, file := range files {
 		found, err := terraform.LintFile(file, relativeTo(root, file))
 		if err != nil {
-			return false, fmt.Errorf("Cannot read %s: %v", file, err)
+			return false, fatalErrorf("Cannot read %s: %v", file, err)
 		}
 		findings = append(findings, found...)
 	}
@@ -94,13 +94,13 @@ func runLintTerraform(args []string, stderr io.Writer) (bool, error) {
 		return true, nil
 	}
 
-	fmt.Fprintln(stderr, "Internal values found in published Terraform modules:")
-	fmt.Fprintln(stderr)
+	_, _ = fmt.Fprintln(stderr, "Internal values found in published Terraform modules:")
+	_, _ = fmt.Fprintln(stderr)
 	for _, finding := range findings {
-		fmt.Fprintf(stderr, "  %s\n", finding)
+		_, _ = fmt.Fprintf(stderr, "  %s\n", finding)
 	}
-	fmt.Fprintln(stderr)
-	fmt.Fprintln(stderr, "Move the value to the caller, or append '# public-safe: ok' if the line is genuinely safe to publish.")
+	_, _ = fmt.Fprintln(stderr)
+	_, _ = fmt.Fprintln(stderr, "Move the value to the caller, or append '# public-safe: ok' if the line is genuinely safe to publish.")
 	return false, nil
 }
 

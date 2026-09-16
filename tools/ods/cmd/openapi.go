@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -86,13 +85,13 @@ Examples:
 func runOpenAPISchema(opts *OpenAPIOptions) error {
 	outputPath, err := openapi.ResolvePath(opts.OutputPath, DefaultSchemaPath)
 	if err != nil {
-		return fmt.Errorf("Failed to resolve output path: %w", err)
+		return fatalErrorf("Failed to resolve output path: %w", err)
 	}
 
 	log.Infof("Generating OpenAPI schema to: %s", outputPath)
 
 	if err := openapi.GenerateSchema(outputPath); err != nil {
-		return fmt.Errorf("Failed to generate OpenAPI schema: %w", err)
+		return fatalErrorf("Failed to generate OpenAPI schema: %w", err)
 	}
 
 	log.Info("Schema generation completed successfully")
@@ -136,19 +135,19 @@ Examples:
 func runOpenAPIClient(opts *OpenAPIOptions) error {
 	schemaPath, err := openapi.ResolvePath(opts.SchemaPath, DefaultSchemaPath)
 	if err != nil {
-		return fmt.Errorf("Failed to resolve schema path: %w", err)
+		return fatalErrorf("Failed to resolve schema path: %w", err)
 	}
 
 	clientDir, err := openapi.ResolvePath(opts.ClientOutputDir, DefaultClientDir)
 	if err != nil {
-		return fmt.Errorf("Failed to resolve client output path: %w", err)
+		return fatalErrorf("Failed to resolve client output path: %w", err)
 	}
 
 	log.Infof("Generating Python client from: %s", schemaPath)
 	log.Infof("Output directory: %s", clientDir)
 
 	if err := openapi.GenerateClient(schemaPath, clientDir); err != nil {
-		return fmt.Errorf("Failed to generate Python client: %w", err)
+		return fatalErrorf("Failed to generate Python client: %w", err)
 	}
 
 	log.Info("Client generation completed successfully")
@@ -192,12 +191,12 @@ Examples:
 func runOpenAPIAll(opts *OpenAPIOptions) error {
 	schemaPath, err := openapi.ResolvePath(opts.OutputPath, DefaultSchemaPath)
 	if err != nil {
-		return fmt.Errorf("Failed to resolve schema path: %w", err)
+		return fatalErrorf("Failed to resolve schema path: %w", err)
 	}
 
 	clientDir, err := openapi.ResolvePath(opts.ClientOutputDir, DefaultClientDir)
 	if err != nil {
-		return fmt.Errorf("Failed to resolve client output path: %w", err)
+		return fatalErrorf("Failed to resolve client output path: %w", err)
 	}
 
 	log.Infof("Generating OpenAPI schema and Python client")
@@ -205,7 +204,7 @@ func runOpenAPIAll(opts *OpenAPIOptions) error {
 	log.Infof("Client output: %s", clientDir)
 
 	if err := openapi.GenerateAll(schemaPath, clientDir); err != nil {
-		return fmt.Errorf("Failed to generate OpenAPI schema and client: %w", err)
+		return fatalErrorf("Failed to generate OpenAPI schema and client: %w", err)
 	}
 
 	log.Info("Generation completed successfully")

@@ -72,7 +72,7 @@ Examples:
 func runDBUpgrade(revision string, opts *MigrateOptions) error {
 	schema, valid := getAlembicSchema(opts.Schema)
 	if !valid {
-		return dbErrorf("Invalid schema: %s (must be 'default' or 'private')", opts.Schema)
+		return fatalErrorf("Invalid schema: %s (must be 'default' or 'private')", opts.Schema)
 	}
 
 	log.Infof("Upgrading database to revision: %s", revision)
@@ -81,7 +81,7 @@ func runDBUpgrade(revision string, opts *MigrateOptions) error {
 	}
 
 	if err := alembic.Upgrade(revision, schema); err != nil {
-		return dbErrorf("Failed to upgrade database: %w", err)
+		return fatalErrorf("Failed to upgrade database: %w", err)
 	}
 
 	log.Info("Upgrade completed successfully")
@@ -119,7 +119,7 @@ Examples:
 func runDBDowngrade(revision string, opts *MigrateOptions) error {
 	schema, valid := getAlembicSchema(opts.Schema)
 	if !valid {
-		return dbErrorf("Invalid schema: %s (must be 'default' or 'private')", opts.Schema)
+		return fatalErrorf("Invalid schema: %s (must be 'default' or 'private')", opts.Schema)
 	}
 
 	log.Infof("Downgrading database to revision: %s", revision)
@@ -128,7 +128,7 @@ func runDBDowngrade(revision string, opts *MigrateOptions) error {
 	}
 
 	if err := alembic.Downgrade(revision, schema); err != nil {
-		return dbErrorf("Failed to downgrade database: %w", err)
+		return fatalErrorf("Failed to downgrade database: %w", err)
 	}
 
 	log.Info("Downgrade completed successfully")
@@ -162,7 +162,7 @@ Examples:
 func runDBCurrent(opts *MigrateOptions) error {
 	schema, valid := getAlembicSchema(opts.Schema)
 	if !valid {
-		return dbErrorf("Invalid schema: %s (must be 'default' or 'private')", opts.Schema)
+		return fatalErrorf("Invalid schema: %s (must be 'default' or 'private')", opts.Schema)
 	}
 
 	if schema == alembic.SchemaPrivate {
@@ -170,7 +170,7 @@ func runDBCurrent(opts *MigrateOptions) error {
 	}
 
 	if err := alembic.Current(schema); err != nil {
-		return dbErrorf("Failed to get current revision: %w", err)
+		return fatalErrorf("Failed to get current revision: %w", err)
 	}
 	return nil
 }
@@ -210,7 +210,7 @@ Examples:
 func runDBHistory(opts *HistoryOptions) error {
 	schema, valid := getAlembicSchema(opts.Schema)
 	if !valid {
-		return dbErrorf("Invalid schema: %s (must be 'default' or 'private')", opts.Schema)
+		return fatalErrorf("Invalid schema: %s (must be 'default' or 'private')", opts.Schema)
 	}
 
 	if schema == alembic.SchemaPrivate {
@@ -218,7 +218,7 @@ func runDBHistory(opts *HistoryOptions) error {
 	}
 
 	if err := alembic.History(schema, opts.Verbose); err != nil {
-		return dbErrorf("Failed to get migration history: %w", err)
+		return fatalErrorf("Failed to get migration history: %w", err)
 	}
 	return nil
 }

@@ -29,7 +29,7 @@ func String(prompt string) string {
 
 func readString(in *bufio.Reader, out io.Writer, prompt string) (string, error) {
 	for {
-		fmt.Fprint(out, prompt)
+		_, _ = fmt.Fprint(out, prompt)
 		response, err := in.ReadString('\n')
 		if err != nil {
 			return "", err
@@ -38,7 +38,7 @@ func readString(in *bufio.Reader, out io.Writer, prompt string) (string, error) 
 		if response != "" {
 			return response, nil
 		}
-		fmt.Fprintln(out, "Value cannot be empty.")
+		_, _ = fmt.Fprintln(out, "Value cannot be empty.")
 	}
 }
 
@@ -97,11 +97,11 @@ func Choose(header string, options []string, defaultIndex int) int {
 
 func readChoice(in *bufio.Reader, out io.Writer, header string, options []string, defaultIndex int) (int, error) {
 	for {
-		fmt.Fprintln(out, header)
+		_, _ = fmt.Fprintln(out, header)
 		for i, option := range options {
-			fmt.Fprintf(out, "  %d) %s\n", i+1, option)
+			_, _ = fmt.Fprintf(out, "  %d) %s\n", i+1, option)
 		}
-		fmt.Fprintf(out, "Choose 1-%d [%d]: ", len(options), defaultIndex+1)
+		_, _ = fmt.Fprintf(out, "Choose 1-%d [%d]: ", len(options), defaultIndex+1)
 
 		response, err := in.ReadString('\n')
 		if err != nil {
@@ -115,7 +115,7 @@ func readChoice(in *bufio.Reader, out io.Writer, header string, options []string
 		if err == nil && choice >= 1 && choice <= len(options) {
 			return choice - 1, nil
 		}
-		fmt.Fprintf(out, "Please enter a number between 1 and %d\n", len(options))
+		_, _ = fmt.Fprintf(out, "Please enter a number between 1 and %d\n", len(options))
 	}
 }
 
@@ -132,7 +132,7 @@ func Confirm(prompt string) bool {
 
 func readConfirm(in *bufio.Reader, out io.Writer, prompt string) (bool, error) {
 	for {
-		fmt.Fprint(out, prompt)
+		_, _ = fmt.Fprint(out, prompt)
 		response, err := in.ReadString('\n')
 		if err != nil {
 			return false, err
@@ -144,6 +144,6 @@ func readConfirm(in *bufio.Reader, out io.Writer, prompt string) (bool, error) {
 		if response == "no" || response == "n" {
 			return false, nil
 		}
-		fmt.Fprintln(out, "Please enter 'yes' or 'no'")
+		_, _ = fmt.Fprintln(out, "Please enter 'yes' or 'no'")
 	}
 }

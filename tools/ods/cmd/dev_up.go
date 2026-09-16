@@ -37,22 +37,22 @@ Examples:
 func devcontainerImage() (string, error) {
 	root, err := paths.GitRoot()
 	if err != nil {
-		return "", composeErrorf("Failed to find git root: %w", err)
+		return "", fatalErrorf("Failed to find git root: %w", err)
 	}
 
 	data, err := os.ReadFile(filepath.Join(root, ".devcontainer", "devcontainer.json"))
 	if err != nil {
-		return "", composeErrorf("Failed to read devcontainer.json: %w", err)
+		return "", fatalErrorf("Failed to read devcontainer.json: %w", err)
 	}
 
 	var cfg struct {
 		Image string `json:"image"`
 	}
 	if err := json.Unmarshal(data, &cfg); err != nil {
-		return "", composeErrorf("Failed to parse devcontainer.json: %w", err)
+		return "", fatalErrorf("Failed to parse devcontainer.json: %w", err)
 	}
 	if cfg.Image == "" {
-		return "", composeErrorf("No image field in devcontainer.json")
+		return "", fatalErrorf("No image field in devcontainer.json")
 	}
 	return cfg.Image, nil
 }
@@ -229,7 +229,7 @@ func runDevcontainer(action string, extraArgs []string) error {
 
 	root, err := paths.GitRoot()
 	if err != nil {
-		return composeErrorf("Failed to find git root: %w", err)
+		return fatalErrorf("Failed to find git root: %w", err)
 	}
 
 	args := []string{action, "--workspace-folder", root}

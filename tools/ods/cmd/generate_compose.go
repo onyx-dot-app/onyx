@@ -88,7 +88,7 @@ func runGenerateCompose(write bool) (bool, error) {
 
 	data, err := os.ReadFile(filepath.Join(dir, composegen.TemplateName))
 	if err != nil {
-		return false, composeErrorf("Failed to read template: %w", err)
+		return false, fatalErrorf("Failed to read template: %w", err)
 	}
 	templateLines := strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
 
@@ -105,7 +105,7 @@ func runGenerateCompose(write bool) (bool, error) {
 
 		current, err := os.ReadFile(path)
 		if err != nil && !os.IsNotExist(err) {
-			return false, composeErrorf("Failed to read %s: %w", filename, err)
+			return false, fatalErrorf("Failed to read %s: %w", filename, err)
 		}
 		if string(current) == content {
 			continue
@@ -113,7 +113,7 @@ func runGenerateCompose(write bool) (bool, error) {
 
 		if write {
 			if err := os.WriteFile(path, []byte(content), 0644); err != nil {
-				return false, composeErrorf("Failed to write %s: %w", filename, err)
+				return false, fatalErrorf("Failed to write %s: %w", filename, err)
 			}
 			fmt.Printf("regenerated %s\n", filename)
 		} else {
@@ -126,7 +126,7 @@ func runGenerateCompose(write bool) (bool, error) {
 	// of docker-compose.yml reflects the freshly rendered output.
 	repoRoot, err := paths.GitRoot()
 	if err != nil {
-		return false, composeErrorf("Failed to find git root: %w", err)
+		return false, fatalErrorf("Failed to find git root: %w", err)
 	}
 	var results []deployfilessync.Result
 	if write {

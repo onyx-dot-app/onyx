@@ -95,16 +95,10 @@ Examples:
 	return cmd
 }
 
-// composeErrorf builds an error whose text a command's Run prints with
-// log.Fatal, so it keeps the capitalized wording of that log message.
-func composeErrorf(format string, args ...any) error {
-	return fmt.Errorf(format, args...)
-}
-
 // validateProfile checks that the given profile is valid.
 func validateProfile(profile string) error {
 	if profile != "" && profile != "dev" && profile != "multitenant" {
-		return composeErrorf("Invalid profile %q. Valid profiles: dev, multitenant", profile)
+		return fatalErrorf("Invalid profile %q. Valid profiles: dev, multitenant", profile)
 	}
 	return nil
 }
@@ -184,7 +178,7 @@ func execDockerCompose(args []string, extraEnv []string) error {
 	}
 
 	if err := dockerCmd.Run(); err != nil {
-		return composeErrorf("Docker compose failed: %w", err)
+		return fatalErrorf("Docker compose failed: %w", err)
 	}
 	return nil
 }
@@ -228,7 +222,7 @@ func envForTag(tag string) []string {
 func composeDir() (string, error) {
 	gitRoot, err := paths.GitRoot()
 	if err != nil {
-		return "", composeErrorf("Failed to find git root: %w", err)
+		return "", fatalErrorf("Failed to find git root: %w", err)
 	}
 	return filepath.Join(gitRoot, "deployment", "docker_compose"), nil
 }
@@ -245,7 +239,7 @@ func setEnvValue(key, value string) error {
 
 	data, err := os.ReadFile(envPath)
 	if err != nil && !os.IsNotExist(err) {
-		return composeErrorf("Failed to read %s: %w", envPath, err)
+		return fatalErrorf("Failed to read %s: %w", envPath, err)
 	}
 
 	entry := fmt.Sprintf("%s=%s", key, value)
@@ -254,7 +248,7 @@ func setEnvValue(key, value string) error {
 	if len(data) == 0 {
 		// File missing or empty – create with just this entry.
 		if err := os.WriteFile(envPath, []byte(entry+"\n"), 0644); err != nil {
-			return composeErrorf("Failed to write %s: %w", envPath, err)
+			return fatalErrorf("Failed to write %s: %w", envPath, err)
 		}
 		return nil
 	}
@@ -280,7 +274,7 @@ func setEnvValue(key, value string) error {
 	}
 
 	if err := os.WriteFile(envPath, []byte(strings.Join(lines, "\n")), 0644); err != nil {
-		return composeErrorf("Failed to write %s: %w", envPath, err)
+		return fatalErrorf("Failed to write %s: %w", envPath, err)
 	}
 	return nil
 }
@@ -314,7 +308,7 @@ func runCompose(profile string, opts *ComposeOptions) error {
 		if profile == "dev" || profile == "multitenant" {
 			ports, err := docker.FindAvailablePorts()
 			if err != nil {
-				return composeErrorf("Failed to find available ports: %w", err)
+				return fatalErrorf("Failed to find available ports: %w", err)
 			}
 			for k, v := range ports.ComposeEnv() {
 				if err := setEnvValue(k, v); err != nil {

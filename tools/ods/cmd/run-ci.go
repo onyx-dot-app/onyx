@@ -94,14 +94,14 @@ func runCI(prNumber string, opts *RunCIOptions) error {
 	// Save the current branch to switch back later
 	originalBranch, err := git.GetCurrentBranch()
 	if err != nil {
-		return fatalLinef("Failed to get current branch: %w", err)
+		return fatalErrorf("Failed to get current branch: %w", err)
 	}
 	log.Debugf("Original branch: %s", originalBranch)
 
 	// Get PR info using GitHub CLI
 	prInfo, err := getPRInfo(prNumber)
 	if err != nil {
-		return fatalLinef("Failed to get PR info: %w", err)
+		return fatalErrorf("Failed to get PR info: %w", err)
 	}
 
 	forkRepo := prInfo.ForkRepo()
@@ -109,7 +109,7 @@ func runCI(prNumber string, opts *RunCIOptions) error {
 	log.Infof("Fork: %s, Branch: %s", forkRepo, prInfo.HeadRefName)
 
 	if !prInfo.IsCrossRepository {
-		return fatalLinef("PR #%s is not from a fork - CI should already run automatically", prNumber)
+		return fatalErrorf("PR #%s is not from a fork - CI should already run automatically", prNumber)
 	}
 
 	// Create the CI branch
@@ -120,7 +120,7 @@ func runCI(prNumber string, opts *RunCIOptions) error {
 	// Check if a CI PR already exists for this branch
 	existingPRURL, err := findExistingCIPR(ciBranch)
 	if err != nil {
-		return fatalLinef("Failed to check for existing CI PR: %w", err)
+		return fatalErrorf("Failed to check for existing CI PR: %w", err)
 	}
 
 	if existingPRURL != "" && !opts.Rerun {
@@ -152,12 +152,12 @@ func runCI(prNumber string, opts *RunCIOptions) error {
 
 	// Fetch the fork's branch
 	if forkRepo == "" {
-		return fatalLinef("Could not determine fork repository - headRepositoryOwner or headRepository.name is empty")
+		return fatalErrorf("Could not determine fork repository - headRepositoryOwner or headRepository.name is empty")
 	}
 	forkRemote := fmt.Sprintf("https://github.com/%s.git", forkRepo)
 	log.Infof("Fetching branch %s from %s", prInfo.HeadRefName, forkRepo)
 	if err := git.RunCommand("fetch", "--quiet", forkRemote, prInfo.HeadRefName); err != nil {
-		return fatalLinef("Failed to fetch fork branch: %w", err)
+		return fatalErrorf("Failed to fetch fork branch: %w", err)
 	}
 
 	// Create or update the CI branch from FETCH_HEAD
@@ -165,11 +165,11 @@ func runCI(prNumber string, opts *RunCIOptions) error {
 		// Already on the CI branch - stash any uncommitted changes before resetting
 		stashResult, err := git.StashChanges()
 		if err != nil {
-			return fatalLinef("Failed to stash changes: %w", err)
+			return fatalErrorf("Failed to stash changes: %w", err)
 		}
 		log.Infof("Already on %s, resetting to fork's HEAD", ciBranch)
 		if err := git.RunCommand("reset", "--hard", "FETCH_HEAD"); err != nil {
-			return fatalLinef("Failed to reset branch to fork's HEAD: %w", err)
+			return fatalErrorf("Failed to reset branch to fork's HEAD: %w", err)
 		}
 		git.RestoreStash(stashResult)
 	} else {
@@ -177,12 +177,12 @@ func runCI(prNumber string, opts *RunCIOptions) error {
 		if git.BranchExists(ciBranch) {
 			log.Infof("Deleting existing local branch: %s", ciBranch)
 			if err := git.RunCommand("branch", "-D", ciBranch); err != nil {
-				return fatalLinef("Failed to delete existing branch: %w", err)
+				return fatalErrorf("Failed to delete existing branch: %w", err)
 			}
 		}
 		log.Infof("Creating CI branch: %s", ciBranch)
 		if err := git.RunCommand("checkout", "--quiet", "-b", ciBranch, "FETCH_HEAD"); err != nil {
-			return fatalLinef("Failed to create CI branch: %w", err)
+			return fatalErrorf("Failed to create CI branch: %w", err)
 		}
 	}
 
@@ -212,7 +212,7 @@ func runCI(prNumber string, opts *RunCIOptions) error {
 		if switchErr := git.RunCommand("switch", "--quiet", originalBranch); switchErr != nil {
 			log.Warnf("Failed to switch back to original branch: %v", switchErr)
 		}
-		return fatalLinef("Failed to push CI branch: %w", err)
+		return fatalErrorf("Failed to push CI branch: %w", err)
 	}
 
 	if existingPRURL != "" {
@@ -234,7 +234,7 @@ func runCI(prNumber string, opts *RunCIOptions) error {
 		if switchErr := git.RunCommand("switch", "--quiet", originalBranch); switchErr != nil {
 			log.Warnf("Failed to switch back to original branch: %v", switchErr)
 		}
-		return fatalLinef("Failed to create PR: %w", err)
+		return fatalErrorf("Failed to create PR: %w", err)
 	}
 
 	// Switch back to the original branch

@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -102,13 +101,13 @@ func deployEdge(opts *DeployEdgeOptions, polling runPolling) error {
 	// can reliably identify the new run we trigger and not pick up a stale one.
 	priorBuildRunID, err := latestWorkflowRunID(onyxRepo, deploymentWorkflowFile, "push", edgeTagName)
 	if err != nil {
-		return fmt.Errorf("Failed to query existing deployment runs: %w", err)
+		return fatalErrorf("Failed to query existing deployment runs: %w", err)
 	}
 	log.Debugf("Most recent prior edge build run id: %d", priorBuildRunID)
 
 	log.Info("Fetching origin/main...")
 	if err := git.RunCommand("fetch", "origin", "main"); err != nil {
-		return fmt.Errorf("Failed to fetch origin/main: %w", err)
+		return fatalErrorf("Failed to fetch origin/main: %w", err)
 	}
 
 	if opts.DryRun {
@@ -120,42 +119,42 @@ func deployEdge(opts *DeployEdgeOptions, polling runPolling) error {
 
 	log.Infof("Moving local '%s' tag to origin/main...", edgeTagName)
 	if err := git.RunCommand("tag", "-f", edgeTagName, "origin/main"); err != nil {
-		return fmt.Errorf("Failed to move local tag: %w", err)
+		return fatalErrorf("Failed to move local tag: %w", err)
 	}
 
 	log.Infof("Force-pushing tag '%s' to origin...", edgeTagName)
 	if err := git.PushTag(edgeTagName, true, opts.Verify); err != nil {
-		return fmt.Errorf("Failed to push edge tag: %w", err)
+		return fatalErrorf("Failed to push edge tag: %w", err)
 	}
 
 	// Find the new build run, then poll it to completion.
 	log.Info("Waiting for build workflow to start...")
 	buildRun, err := waitForNewRun(polling, onyxRepo, deploymentWorkflowFile, "push", edgeTagName, priorBuildRunID)
 	if err != nil {
-		return fmt.Errorf("Failed to find triggered build run: %w", err)
+		return fatalErrorf("Failed to find triggered build run: %w", err)
 	}
 	log.Infof("Build run started: %s", buildRun.URL)
 
 	if err := waitForRunCompletion(polling, onyxRepo, buildRun.DatabaseID, buildPollTimeout, "build"); err != nil {
-		return fmt.Errorf("Build did not complete successfully: %w", err)
+		return fatalErrorf("Build did not complete successfully: %w", err)
 	}
 	log.Info("Build completed successfully.")
 
 	// Dispatch the deploy workflow.
 	priorDeployRunID, err := latestWorkflowRunID(deployRepo, deployWorkflow, "workflow_dispatch", "")
 	if err != nil {
-		return fmt.Errorf("Failed to query existing deploy runs: %w", err)
+		return fatalErrorf("Failed to query existing deploy runs: %w", err)
 	}
 	log.Debugf("Most recent prior deploy run id: %d", priorDeployRunID)
 
 	log.Info("Dispatching deploy workflow with version_tag=edge...")
 	if err := dispatchWorkflow(deployRepo, deployWorkflow, map[string]string{"version_tag": edgeTagName}); err != nil {
-		return fmt.Errorf("Failed to dispatch deploy workflow: %w", err)
+		return fatalErrorf("Failed to dispatch deploy workflow: %w", err)
 	}
 
 	deployRun, err := waitForNewRun(polling, deployRepo, deployWorkflow, "workflow_dispatch", "", priorDeployRunID)
 	if err != nil {
-		return fmt.Errorf("Failed to find dispatched deploy run: %w", err)
+		return fatalErrorf("Failed to find dispatched deploy run: %w", err)
 	}
 	log.Infof("Deploy run started: %s", deployRun.URL)
 	log.Info("A kickoff Slack message will appear in the deployments Slack channel.")
@@ -166,7 +165,7 @@ func deployEdge(opts *DeployEdgeOptions, polling runPolling) error {
 	}
 
 	if err := waitForRunCompletion(polling, deployRepo, deployRun.DatabaseID, deployPollTimeout, "deploy"); err != nil {
-		return fmt.Errorf("Deploy did not complete successfully: %w", err)
+		return fatalErrorf("Deploy did not complete successfully: %w", err)
 	}
 	log.Info("Deploy completed successfully.")
 	return nil

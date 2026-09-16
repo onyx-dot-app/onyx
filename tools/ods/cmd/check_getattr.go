@@ -58,7 +58,7 @@ func runCheckGetattr(providedPaths []string, annotate bool, stderr io.Writer) (b
 
 	violations, err := pycheck.Check(rule, providedPaths)
 	if err != nil {
-		return false, fmt.Errorf("Error checking getattr references: %v", err)
+		return false, fatalErrorf("Error checking getattr references: %v", err)
 	}
 
 	if len(violations) > 0 {
@@ -71,7 +71,7 @@ func runCheckGetattr(providedPaths []string, annotate bool, stderr io.Writer) (b
 			total += len(v.ViolationLines)
 		}
 		log.Errorf("\n💡 getattr hides attribute access from the type checker. Use plain attribute access when the name is statically known; if it is genuinely dynamic, add '# ods: ignore[getattr]' with a brief justification.")
-		fmt.Fprintf(stderr, "\nFound %d getattr reference(s) in %d file(s).\n", total, len(violations))
+		_, _ = fmt.Fprintf(stderr, "\nFound %d getattr reference(s) in %d file(s).\n", total, len(violations))
 		return false, nil
 	}
 
@@ -82,7 +82,7 @@ func runCheckGetattr(providedPaths []string, annotate bool, stderr io.Writer) (b
 func runAnnotateGetattr(rule pycheck.BannedName, providedPaths []string, stderr io.Writer) (bool, error) {
 	result, err := pycheck.Annotate(rule, providedPaths)
 	if err != nil {
-		return false, fmt.Errorf("Error annotating getattr references: %v", err)
+		return false, fatalErrorf("Error annotating getattr references: %v", err)
 	}
 
 	log.Infof("Annotated %d line(s) in %d file(s)", result.AnnotatedLines, result.AnnotatedFiles)
@@ -94,7 +94,7 @@ func runAnnotateGetattr(rule pycheck.BannedName, providedPaths []string, stderr 
 				log.Errorf("  Line %d: %s", line.LineNum, line.Content)
 			}
 		}
-		fmt.Fprintf(stderr, "\nSome lines need a manual 'ods: ignore[getattr]' marker.\n")
+		_, _ = fmt.Fprintf(stderr, "\nSome lines need a manual 'ods: ignore[getattr]' marker.\n")
 		return false, nil
 	}
 	return true, nil

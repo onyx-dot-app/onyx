@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -133,24 +132,24 @@ func deployWiki(opts *DeployWikiOptions, polling runPolling) error {
 func runBuild(polling runPolling) error {
 	priorRunID, err := latestWorkflowRunID(wikiBuildRepo, wikiBuildWorkflow, "workflow_dispatch", "")
 	if err != nil {
-		return fmt.Errorf("Failed to query existing build runs: %w", err)
+		return fatalErrorf("Failed to query existing build runs: %w", err)
 	}
 	log.Debugf("Most recent prior build run id: %d", priorRunID)
 
 	log.Infof("Dispatching %s in %s...", wikiBuildWorkflow, wikiBuildRepo)
 	if err := dispatchWorkflow(wikiBuildRepo, wikiBuildWorkflow, nil); err != nil {
-		return fmt.Errorf("Failed to dispatch build workflow: %w", err)
+		return fatalErrorf("Failed to dispatch build workflow: %w", err)
 	}
 
 	log.Info("Waiting for build workflow to start...")
 	buildRun, err := waitForNewRun(polling, wikiBuildRepo, wikiBuildWorkflow, "workflow_dispatch", "", priorRunID)
 	if err != nil {
-		return fmt.Errorf("Failed to find triggered build run: %w", err)
+		return fatalErrorf("Failed to find triggered build run: %w", err)
 	}
 	log.Infof("Build run started: %s", buildRun.URL)
 
 	if err := waitForRunCompletion(polling, wikiBuildRepo, buildRun.DatabaseID, wikiBuildPollLimit, "build"); err != nil {
-		return fmt.Errorf("Build did not complete successfully: %w", err)
+		return fatalErrorf("Build did not complete successfully: %w", err)
 	}
 	log.Info("Build completed successfully.")
 	return nil
@@ -159,19 +158,19 @@ func runBuild(polling runPolling) error {
 func runDeploy(polling runPolling, deployRepo, deployWorkflow, versionTag string, noWait bool) error {
 	priorRunID, err := latestWorkflowRunID(deployRepo, deployWorkflow, "workflow_dispatch", "")
 	if err != nil {
-		return fmt.Errorf("Failed to query existing deploy runs: %w", err)
+		return fatalErrorf("Failed to query existing deploy runs: %w", err)
 	}
 	log.Debugf("Most recent prior deploy run id: %d", priorRunID)
 
 	log.Infof("Dispatching %s with version_tag=%s...", deployWorkflow, versionTag)
 	if err := dispatchWorkflow(deployRepo, deployWorkflow, map[string]string{"version_tag": versionTag}); err != nil {
-		return fmt.Errorf("Failed to dispatch deploy workflow: %w", err)
+		return fatalErrorf("Failed to dispatch deploy workflow: %w", err)
 	}
 
 	log.Info("Waiting for deploy workflow to start...")
 	deployRun, err := waitForNewRun(polling, deployRepo, deployWorkflow, "workflow_dispatch", "", priorRunID)
 	if err != nil {
-		return fmt.Errorf("Failed to find dispatched deploy run: %w", err)
+		return fatalErrorf("Failed to find dispatched deploy run: %w", err)
 	}
 	log.Infof("Deploy run started: %s", deployRun.URL)
 	log.Info("A kickoff Slack message will appear in #monitor-deployments.")
@@ -182,7 +181,7 @@ func runDeploy(polling runPolling, deployRepo, deployWorkflow, versionTag string
 	}
 
 	if err := waitForRunCompletion(polling, deployRepo, deployRun.DatabaseID, wikiDeployPollLimit, "deploy"); err != nil {
-		return fmt.Errorf("Deploy did not complete successfully: %w", err)
+		return fatalErrorf("Deploy did not complete successfully: %w", err)
 	}
 	log.Info("Deploy completed successfully.")
 	return nil

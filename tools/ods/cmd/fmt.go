@@ -66,7 +66,7 @@ func runFmtTerraform(args []string, check bool, stderr io.Writer) (bool, error) 
 	// so explicit arguments still work outside a checkout.
 	root, err := paths.GitRoot()
 	if err != nil && len(args) == 0 {
-		return false, fmt.Errorf("Cannot locate the repository root: %v", err)
+		return false, fatalErrorf("Cannot locate the repository root: %v", err)
 	}
 
 	roots := args
@@ -76,7 +76,7 @@ func runFmtTerraform(args []string, check bool, stderr io.Writer) (bool, error) 
 
 	files, err := terraform.Discover(roots)
 	if err != nil {
-		return false, fmt.Errorf("Cannot collect Terraform files: %v", err)
+		return false, fatalErrorf("Cannot collect Terraform files: %v", err)
 	}
 
 	results, errs := terraform.FormatFiles(files, !check)
@@ -85,7 +85,7 @@ func runFmtTerraform(args []string, check bool, stderr io.Writer) (bool, error) 
 	var failed bool
 	for i, file := range files {
 		if err := errs[i]; err != nil {
-			fmt.Fprintf(stderr, "%s: %v\n", relativeTo(root, file), err)
+			_, _ = fmt.Fprintf(stderr, "%s: %v\n", relativeTo(root, file), err)
 			failed = true
 			continue
 		}
@@ -95,7 +95,7 @@ func runFmtTerraform(args []string, check bool, stderr io.Writer) (bool, error) 
 	}
 
 	for _, path := range changed {
-		fmt.Fprintln(stderr, path)
+		_, _ = fmt.Fprintln(stderr, path)
 	}
 
 	// pre-commit treats a rewritten file as a failure so the commit restages it.

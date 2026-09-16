@@ -51,10 +51,10 @@ func (r prefixedTagRelease) addFlags(cmd *cobra.Command, opts *prefixedTagOption
 func (r prefixedTagRelease) run(opts *prefixedTagOptions) error {
 	if opts.Version != "" {
 		if !release.IsBareVersion(opts.Version) {
-			return fatalLinef("--version must be X.Y.Z with no leading v, got %q", opts.Version)
+			return fatalErrorf("--version must be X.Y.Z with no leading v, got %q", opts.Version)
 		}
 	} else if opts.Bump != "patch" && opts.Bump != "minor" && opts.Bump != "major" {
-		return fatalLinef("--bump must be one of patch|minor|major, got %q", opts.Bump)
+		return fatalErrorf("--bump must be one of patch|minor|major, got %q", opts.Bump)
 	}
 
 	// Fetch only this target's tags so the next version is computed against
@@ -71,11 +71,11 @@ func (r prefixedTagRelease) run(opts *prefixedTagOptions) error {
 	if newVersion == "" {
 		current, err := r.latestVersion()
 		if err != nil {
-			return fatalLinef("Failed to determine the latest version (pass --version): %w", err)
+			return fatalErrorf("Failed to determine the latest version (pass --version): %w", err)
 		}
 		next, err := bumpSemver(current, opts.Bump)
 		if err != nil {
-			return fatalLinef("Failed to compute next version: %w", err)
+			return fatalErrorf("Failed to compute next version: %w", err)
 		}
 		newVersion = next
 		log.Infof("Latest %s release: v%s -> v%s", r.subject, current, newVersion)
@@ -83,7 +83,7 @@ func (r prefixedTagRelease) run(opts *prefixedTagOptions) error {
 
 	tag := r.tagPrefix + newVersion
 	if tagExists(tag) {
-		return fatalLinef("Tag %s already exists", tag)
+		return fatalErrorf("Tag %s already exists", tag)
 	}
 
 	if opts.DryRun {
@@ -99,14 +99,14 @@ func (r prefixedTagRelease) run(opts *prefixedTagOptions) error {
 	}
 
 	if err := git.RunCommand("tag", tag); err != nil {
-		return fatalLinef("Failed to create tag %s: %w", tag, err)
+		return fatalErrorf("Failed to create tag %s: %w", tag, err)
 	}
 	if err := git.PushTag(tag, false, opts.Verify); err != nil {
 		// Roll back the local tag so the command stays retryable after a failed push.
 		if delErr := git.RunCommand("tag", "-d", tag); delErr != nil {
 			log.Warnf("Also failed to delete local tag %s; remove it before retrying: %v", tag, delErr)
 		}
-		return fatalLinef("Failed to push tag %s: %w", tag, err)
+		return fatalErrorf("Failed to push tag %s: %w", tag, err)
 	}
 	log.Infof("Pushed %s — %s", tag, r.publishes)
 	return nil

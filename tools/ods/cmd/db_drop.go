@@ -55,7 +55,7 @@ func runDBDrop(opts *DBDropOptions) error {
 	// Find PostgreSQL container.
 	container, err := docker.FindPostgresContainer(docker.ProjectName())
 	if err != nil {
-		return dbErrorf("Failed to find PostgreSQL container: %w", err)
+		return fatalErrorf("Failed to find PostgreSQL container: %w", err)
 	}
 	log.Infof("Found PostgreSQL container: %s", container)
 
@@ -83,7 +83,7 @@ func runDBDrop(opts *DBDropOptions) error {
 	if opts.Schema != "" {
 		// Validate schema name to prevent SQL injection.
 		if !validIdentifier.MatchString(opts.Schema) {
-			return dbErrorf("Invalid schema name: %s", opts.Schema)
+			return fatalErrorf("Invalid schema name: %s", opts.Schema)
 		}
 
 		// Drop and recreate schema.
@@ -93,12 +93,12 @@ func runDBDrop(opts *DBDropOptions) error {
 
 		args := append(config.PsqlArgs(), "-c", dropSchemaSQL)
 		if err := docker.ExecWithEnv(container, env, append([]string{"psql"}, args...)...); err != nil {
-			return dbErrorf("Failed to drop schema: %w", err)
+			return fatalErrorf("Failed to drop schema: %w", err)
 		}
 
 		args = append(config.PsqlArgs(), "-c", createSchemaSQL)
 		if err := docker.ExecWithEnv(container, env, append([]string{"psql"}, args...)...); err != nil {
-			return dbErrorf("Failed to create schema: %w", err)
+			return fatalErrorf("Failed to create schema: %w", err)
 		}
 
 		log.Infof("Schema '%s' dropped and recreated successfully", opts.Schema)
@@ -113,7 +113,7 @@ func runDBDrop(opts *DBDropOptions) error {
 		// Terminate existing connections.
 		// Validate database name to prevent SQL injection.
 		if !validIdentifier.MatchString(config.Database) {
-			return dbErrorf("Invalid database name: %s", config.Database)
+			return fatalErrorf("Invalid database name: %s", config.Database)
 		}
 
 		// Terminate existing connections.
@@ -130,24 +130,18 @@ func runDBDrop(opts *DBDropOptions) error {
 		dropSQL := fmt.Sprintf("DROP DATABASE IF EXISTS %s;", config.Database)
 		args = []string{"psql", "-U", config.User, "-d", maintenanceDB, "-c", dropSQL}
 		if err := docker.ExecWithEnv(container, env, args...); err != nil {
-			return dbErrorf("Failed to drop database: %w", err)
+			return fatalErrorf("Failed to drop database: %w", err)
 		}
 
 		// Create database.
 		createSQL := fmt.Sprintf("CREATE DATABASE %s;", config.Database)
 		args = []string{"psql", "-U", config.User, "-d", maintenanceDB, "-c", createSQL}
 		if err := docker.ExecWithEnv(container, env, args...); err != nil {
-			return dbErrorf("Failed to create database: %w", err)
+			return fatalErrorf("Failed to create database: %w", err)
 		}
 
 		log.Infof("Database '%s' dropped and recreated successfully", config.Database)
 		log.Info("Run 'ods db upgrade' to apply migrations")
 	}
 	return nil
-}
-
-// dbErrorf builds the error a db command reports through log.Fatal. The
-// message keeps the capitalized wording of the log line.
-func dbErrorf(format string, args ...any) error {
-	return fmt.Errorf(format, args...)
 }

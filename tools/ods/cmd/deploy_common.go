@@ -63,7 +63,7 @@ func defaultRunPolling() runPolling {
 func resolveDeployTarget(flagRepo, flagWorkflow string, workflowSelector func(*config.Config) *string) (string, string, error) {
 	cfg, err := config.Load()
 	if err != nil {
-		return "", "", fmt.Errorf("Failed to load ods config: %w", err)
+		return "", "", fatalErrorf("Failed to load ods config: %w", err)
 	}
 	repoPtr := &cfg.Deploy.TargetRepo
 	workflowPtr := workflowSelector(cfg)
@@ -92,7 +92,7 @@ func resolveDeployTarget(flagRepo, flagWorkflow string, workflowSelector func(*c
 		*repoPtr = repo
 		*workflowPtr = workflow
 		if err := config.Save(cfg); err != nil {
-			return "", "", fmt.Errorf("Failed to save ods config: %w", err)
+			return "", "", fatalErrorf("Failed to save ods config: %w", err)
 		}
 		log.Infof("Saved deploy target to %s", paths.ConfigFilePath())
 	}

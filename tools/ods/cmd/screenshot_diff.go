@@ -309,8 +309,6 @@ func downloadS3Dir(s3URL string, prefix string) (string, error) {
 }
 
 // runCompare returns errors whose text is the message Run logs before exiting.
-//
-//nolint:staticcheck // ST1005: the error text is the log message, kept as it was.
 func runCompare(opts *ScreenshotDiffCompareOptions) error {
 	// Validate cross-revision flags are used together
 	if (opts.FromRev != "") != (opts.ToRev != "") {
@@ -346,7 +344,7 @@ func runCompare(opts *ScreenshotDiffCompareOptions) error {
 	if strings.HasPrefix(opts.Baseline, "s3://") {
 		dir, err := downloadS3Dir(opts.Baseline, "screenshot-baseline-*")
 		if err != nil {
-			return fmt.Errorf("Failed to download baselines: %v", err)
+			return fatalErrorf("Failed to download baselines: %v", err)
 		}
 		tempDirs = append(tempDirs, dir)
 		baselineDir = dir
@@ -357,7 +355,7 @@ func runCompare(opts *ScreenshotDiffCompareOptions) error {
 	if strings.HasPrefix(opts.Current, "s3://") {
 		dir, err := downloadS3Dir(opts.Current, "screenshot-current-*")
 		if err != nil {
-			return fmt.Errorf("Failed to download current screenshots: %v", err)
+			return fatalErrorf("Failed to download current screenshots: %v", err)
 		}
 		tempDirs = append(tempDirs, dir)
 		currentDir = dir
@@ -369,7 +367,7 @@ func runCompare(opts *ScreenshotDiffCompareOptions) error {
 		log.Warn("This may be the first run -- no baselines to compare against.")
 		// Create an empty dir so CompareDirectories works (all files will be "added")
 		if err := os.MkdirAll(baselineDir, 0755); err != nil {
-			return fmt.Errorf("Failed to create baseline directory: %v", err)
+			return fatalErrorf("Failed to create baseline directory: %v", err)
 		}
 	}
 
@@ -378,7 +376,7 @@ func runCompare(opts *ScreenshotDiffCompareOptions) error {
 	if !filepath.IsAbs(outputPath) {
 		cwd, err := os.Getwd()
 		if err != nil {
-			return fmt.Errorf("Failed to get working directory: %v", err)
+			return fatalErrorf("Failed to get working directory: %v", err)
 		}
 		outputPath = filepath.Join(cwd, outputPath)
 	}
@@ -391,7 +389,7 @@ func runCompare(opts *ScreenshotDiffCompareOptions) error {
 
 		summary := imgdiff.Summary{Project: project}
 		if err := imgdiff.WriteSummary(summary, summaryPath); err != nil {
-			return fmt.Errorf("Failed to write summary: %v", err)
+			return fatalErrorf("Failed to write summary: %v", err)
 		}
 		log.Infof("Summary written to: %s", summaryPath)
 		return nil
@@ -404,7 +402,7 @@ func runCompare(opts *ScreenshotDiffCompareOptions) error {
 
 	results, err := imgdiff.CompareDirectories(baselineDir, currentDir, opts.Threshold)
 	if err != nil {
-		return fmt.Errorf("Comparison failed: %v", err)
+		return fatalErrorf("Comparison failed: %v", err)
 	}
 
 	// Print terminal summary
@@ -413,7 +411,7 @@ func runCompare(opts *ScreenshotDiffCompareOptions) error {
 	// Build and write JSON summary (always)
 	summary := imgdiff.BuildSummary(project, results)
 	if err := imgdiff.WriteSummary(summary, summaryPath); err != nil {
-		return fmt.Errorf("Failed to write summary: %v", err)
+		return fatalErrorf("Failed to write summary: %v", err)
 	}
 	log.Infof("Summary written to: %s", summaryPath)
 
@@ -421,7 +419,7 @@ func runCompare(opts *ScreenshotDiffCompareOptions) error {
 	if summary.HasDifferences {
 		log.Infof("Generating report: %s", outputPath)
 		if err := imgdiff.GenerateReport(results, outputPath); err != nil {
-			return fmt.Errorf("Failed to generate report: %v", err)
+			return fatalErrorf("Failed to generate report: %v", err)
 		}
 		log.Infof("Report generated successfully: %s", outputPath)
 	} else {
@@ -431,8 +429,6 @@ func runCompare(opts *ScreenshotDiffCompareOptions) error {
 }
 
 // runUploadBaselines returns errors whose text is the message Run logs before exiting.
-//
-//nolint:staticcheck // ST1005: the error text is the log message, kept as it was.
 func runUploadBaselines(opts *ScreenshotDiffUploadOptions) error {
 	resolveUploadDefaults(opts)
 
@@ -445,11 +441,11 @@ func runUploadBaselines(opts *ScreenshotDiffUploadOptions) error {
 	}
 
 	if _, err := os.Stat(opts.Dir); os.IsNotExist(err) {
-		return fmt.Errorf("Screenshots directory does not exist: %s", opts.Dir)
+		return fatalErrorf("Screenshots directory does not exist: %s", opts.Dir)
 	}
 
 	if !strings.HasPrefix(opts.Dest, "s3://") {
-		return fmt.Errorf("Destination must be an S3 URL (s3://...): %s", opts.Dest)
+		return fatalErrorf("Destination must be an S3 URL (s3://...): %s", opts.Dest)
 	}
 
 	log.Infof("Uploading baselines...")
@@ -457,7 +453,7 @@ func runUploadBaselines(opts *ScreenshotDiffUploadOptions) error {
 	log.Infof("  Dest:   %s", opts.Dest)
 
 	if err := s3.SyncUp(opts.Dir, opts.Dest, opts.Delete); err != nil {
-		return fmt.Errorf("Failed to upload baselines: %v", err)
+		return fatalErrorf("Failed to upload baselines: %v", err)
 	}
 
 	log.Info("Baselines uploaded successfully.")

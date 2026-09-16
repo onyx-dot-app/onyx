@@ -67,7 +67,7 @@ func runEnv(dryRun bool) error {
 
 	gitRoot, err := paths.GitRoot()
 	if err != nil {
-		return composeErrorf("Failed to find git root: %w", err)
+		return fatalErrorf("Failed to find git root: %w", err)
 	}
 
 	envPath := filepath.Join(gitRoot, ".vscode", ".env")
@@ -83,7 +83,7 @@ func runEnv(dryRun bool) error {
 	}
 
 	if err := setEnvValues(envPath, appEnv); err != nil {
-		return composeErrorf("Failed to update %s: %w", envPath, err)
+		return fatalErrorf("Failed to update %s: %w", envPath, err)
 	}
 
 	log.Infof("Updated %s", envPath)

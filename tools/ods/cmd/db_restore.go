@@ -110,16 +110,16 @@ func runDBRestoreSeeded(opts *DBRestoreOptions) error {
 
 	log.Infof("Downloading seeded snapshot from %s...", seededSnapshotURL)
 	if err := s3.FetchToFile(seededSnapshotURL, destPath); err != nil {
-		return dbErrorf("Failed to download seeded snapshot: %w", err)
+		return fatalErrorf("Failed to download seeded snapshot: %w", err)
 	}
 
 	// Verify download is non-empty.
 	info, err := os.Stat(destPath)
 	if err != nil {
-		return dbErrorf("Failed to stat downloaded snapshot: %w", err)
+		return fatalErrorf("Failed to stat downloaded snapshot: %w", err)
 	}
 	if info.Size() == 0 {
-		return dbErrorf("Downloaded snapshot is empty (0 bytes). The S3 object may be missing or the download was corrupted.")
+		return fatalErrorf("Downloaded snapshot is empty (0 bytes). The S3 object may be missing or the download was corrupted.")
 	}
 
 	log.Infof("Downloaded seeded snapshot to: %s (%d bytes)", destPath, info.Size())
@@ -134,13 +134,13 @@ func runDBRestore(input string, opts *DBRestoreOptions) error {
 
 	// Check if file exists.
 	if _, err := os.Stat(inputPath); os.IsNotExist(err) {
-		return dbErrorf("Input file not found: %s", inputPath)
+		return fatalErrorf("Input file not found: %s", inputPath)
 	}
 
 	// Find PostgreSQL container.
 	container, err := docker.FindPostgresContainer(docker.ProjectName())
 	if err != nil {
-		return dbErrorf("Failed to find PostgreSQL container: %w", err)
+		return fatalErrorf("Failed to find PostgreSQL container: %w", err)
 	}
 	log.Infof("Found PostgreSQL container: %s", container)
 
@@ -164,7 +164,7 @@ func runDBRestore(input string, opts *DBRestoreOptions) error {
 	// Copy file to container.
 	containerTmpFile := "/tmp/onyx_restore_tmp"
 	if err := docker.CopyToContainer(container, inputPath, containerTmpFile); err != nil {
-		return dbErrorf("Failed to copy file to container: %w", err)
+		return fatalErrorf("Failed to copy file to container: %w", err)
 	}
 
 	env := config.Env()
@@ -189,7 +189,7 @@ func runDBRestore(input string, opts *DBRestoreOptions) error {
 
 		psqlArgs := append([]string{"psql"}, args...)
 		if err := docker.ExecWithEnv(container, env, psqlArgs...); err != nil {
-			return dbErrorf("Failed to restore from SQL file: %w", err)
+			return fatalErrorf("Failed to restore from SQL file: %w", err)
 		}
 	}
 

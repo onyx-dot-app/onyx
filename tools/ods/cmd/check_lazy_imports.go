@@ -49,7 +49,7 @@ func runCheckLazyImports(providedPaths []string, stderr io.Writer) (bool, error)
 
 	violations, allViolatedModules, err := lazyimports.CheckLazyImports(modules, providedPaths)
 	if err != nil {
-		return false, fmt.Errorf("Error checking lazy imports: %v", err)
+		return false, fatalErrorf("Error checking lazy imports: %v", err)
 	}
 
 	if len(violations) > 0 {
@@ -67,7 +67,7 @@ func runCheckLazyImports(providedPaths []string, stderr io.Writer) (bool, error)
 		}
 
 		violatedModulesStr := lazyimports.FormatViolatedModules(allViolatedModules)
-		fmt.Fprintf(stderr, "\nFound eager imports of %s. You must import them only when needed.\n", violatedModulesStr)
+		_, _ = fmt.Fprintf(stderr, "\nFound eager imports of %s. You must import them only when needed.\n", violatedModulesStr)
 		return false, nil
 	}
 

@@ -136,14 +136,14 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) e
 	// Save the current branch to switch back later
 	originalBranch, err := git.GetCurrentBranch()
 	if err != nil {
-		return fatalLinef("Failed to get current branch: %w", err)
+		return fatalErrorf("Failed to get current branch: %w", err)
 	}
 	log.Debugf("Original branch: %s", originalBranch)
 
 	// Stash any uncommitted changes before switching branches
 	stashResult, err := git.StashChanges()
 	if err != nil {
-		return fatalLinef("Failed to stash changes: %w", err)
+		return fatalErrorf("Failed to stash changes: %w", err)
 	}
 
 	// Fetch commits from remote before cherry-picking
@@ -185,7 +185,7 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) e
 		version, err := release.FindTargetVersion(commitSHAs[0])
 		if err != nil {
 			git.RestoreStash(stashResult)
-			return fatalLinef("Failed to auto-detect the target release (pass --release explicitly): %w", err)
+			return fatalErrorf("Failed to auto-detect the target release (pass --release explicitly): %w", err)
 		}
 
 		// Prompt user for confirmation
@@ -234,7 +234,7 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) e
 	assignees, err := resolveAssignees(cmd, opts.Assignees)
 	if err != nil {
 		git.RestoreStash(stashResult)
-		return fatalLinef("Failed to parse assignees: %w", err)
+		return fatalErrorf("Failed to parse assignees: %w", err)
 	}
 
 	state := &git.CherryPickState{
@@ -286,7 +286,7 @@ func finishCherryPick(state *git.CherryPickState, stashResult *git.StashResult) 
 				}
 				git.RestoreStash(stashResult)
 			}
-			return fatalLinef("Failed to cherry-pick to release %s: %w", release, err)
+			return fatalErrorf("Failed to cherry-pick to release %s: %w", release, err)
 		}
 
 		// Mark release as completed and persist so --continue skips it
@@ -322,14 +322,14 @@ func runCherryPickContinue() error {
 
 	state, err := git.LoadCherryPickState()
 	if err != nil {
-		return fatalLinef("Cannot continue: %w", err)
+		return fatalErrorf("Cannot continue: %w", err)
 	}
 
 	log.Infof("Resuming cherry-pick (original branch: %s, releases: %v)", state.OriginalBranch, state.Releases)
 
 	// If a rebase is in progress (REBASE_HEAD exists), it must be resolved first
 	if git.IsRebaseInProgress() {
-		return fatalLinef("A git rebase is in progress. Resolve it first:\n  To continue: git rebase --continue\n  To abort:    git rebase --abort\nThen re-run: ods cherry-pick --continue")
+		return fatalErrorf("A git rebase is in progress. Resolve it first:\n  To continue: git rebase --continue\n  To abort:    git rebase --abort\nThen re-run: ods cherry-pick --continue")
 	}
 
 	// If git cherry-pick is still in progress (CHERRY_PICK_HEAD exists), continue it
@@ -385,7 +385,7 @@ func runCherryPickDispatch(args []string, opts *CherryPickOptions) error {
 
 		log.Infof("Dispatching cherry-pick workflow for %s (%s)", labels[i], sha)
 		if err := git.DispatchCherryPickWorkflow(sha, prNumber, release, opts.DryRun); err != nil {
-			return fatalLinef("Failed to dispatch cherry-pick workflow for %s: %w", labels[i], err)
+			return fatalErrorf("Failed to dispatch cherry-pick workflow for %s: %w", labels[i], err)
 		}
 	}
 
@@ -556,7 +556,7 @@ func resolveArgs(args []string) (commitSHAs []string, labels []string, err error
 			log.Infof("Resolving PR #%s to merge commit...", arg)
 			sha, err := git.ResolvePRToMergeCommit(arg)
 			if err != nil {
-				return nil, nil, fatalLinef("Failed to resolve PR #%s: %w", arg, err)
+				return nil, nil, fatalErrorf("Failed to resolve PR #%s: %w", arg, err)
 			}
 			log.Infof("PR #%s → %s", arg, sha)
 			commitSHAs[i] = sha
@@ -646,13 +646,6 @@ func createCherryPickPR(headBranch, baseBranch, title string, commitSHAs, commit
 
 	prURL := strings.TrimSpace(string(output))
 	return prURL, nil
-}
-
-// fatalLinef builds an error whose text is the complete, capitalised line a
-// command logs before it exits. Run functions return it so their fatal log
-// messages stay unchanged.
-func fatalLinef(format string, a ...any) error {
-	return fmt.Errorf(format, a...)
 }
 
 func parseCSVEnv(name string) ([]string, error) {

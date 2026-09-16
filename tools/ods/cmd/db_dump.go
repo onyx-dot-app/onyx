@@ -59,7 +59,7 @@ func runDBDump(opts *DBDumpOptions) error {
 	// Find PostgreSQL container.
 	container, err := docker.FindPostgresContainer(docker.ProjectName())
 	if err != nil {
-		return dbErrorf("Failed to find PostgreSQL container: %w", err)
+		return fatalErrorf("Failed to find PostgreSQL container: %w", err)
 	}
 	log.Infof("Found PostgreSQL container: %s", container)
 
@@ -71,7 +71,7 @@ func runDBDump(opts *DBDumpOptions) error {
 	// Ensure output directory exists.
 	outputDir := filepath.Dir(outputPath)
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		return dbErrorf("Failed to create output directory: %w", err)
+		return fatalErrorf("Failed to create output directory: %w", err)
 	}
 
 	log.Infof("Dumping database '%s' to: %s", config.Database, outputPath)
@@ -90,12 +90,12 @@ func runDBDump(opts *DBDumpOptions) error {
 	env := config.Env()
 	pgDumpArgs := append([]string{"pg_dump"}, args...)
 	if err := docker.ExecWithEnv(container, env, pgDumpArgs...); err != nil {
-		return dbErrorf("Failed to run pg_dump: %w", err)
+		return fatalErrorf("Failed to run pg_dump: %w", err)
 	}
 
 	// Copy the dump file from container to host.
 	if err := docker.CopyFromContainer(container, containerTmpFile, outputPath); err != nil {
-		return dbErrorf("Failed to copy dump file: %w", err)
+		return fatalErrorf("Failed to copy dump file: %w", err)
 	}
 
 	// Clean up temporary file in container.
