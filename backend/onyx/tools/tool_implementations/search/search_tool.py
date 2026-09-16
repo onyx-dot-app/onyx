@@ -775,9 +775,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
         # Run semantic and keyword query expansion in parallel (unless skipped)
         # Use message history, memories, and user info from override_kwargs
-        message_history = (
-            override_kwargs.message_history if override_kwargs.message_history else []
-        )
+        message_history = override_kwargs.message_history or []
         memories = (
             override_kwargs.user_memory_context.as_formatted_list()
             if override_kwargs.user_memory_context

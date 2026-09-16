@@ -20,11 +20,11 @@ from .framework.traces import Trace
 
 
 def _span_type(span: Span[Any]) -> braintrust.SpanTypeAttribute:
-    if span.span_data.type in ["agent"]:
+    if span.span_data.type == "agent":
         return braintrust.SpanTypeAttribute.TASK
-    elif span.span_data.type in ["function"]:
+    elif span.span_data.type == "function":
         return braintrust.SpanTypeAttribute.TOOL
-    elif span.span_data.type in ["generation"]:
+    elif span.span_data.type == "generation":
         return braintrust.SpanTypeAttribute.LLM
     else:
         return braintrust.SpanTypeAttribute.TASK

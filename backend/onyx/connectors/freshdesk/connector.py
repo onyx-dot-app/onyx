@@ -101,7 +101,7 @@ def _parse_freshdesk_datetime(raw: str | None) -> datetime | None:
     """
     if not raw:
         return None
-    return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    return datetime.fromisoformat(raw)
 
 
 def _create_metadata_from_ticket(ticket: dict) -> dict:

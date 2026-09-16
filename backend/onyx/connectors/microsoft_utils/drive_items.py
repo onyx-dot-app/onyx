@@ -106,7 +106,7 @@ def parse_graph_datetime(value: str | datetime | None) -> datetime | None:
     if not value:
         return None
     if isinstance(value, str):
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(value)
     elif isinstance(value, datetime):
         parsed = value
     else:
@@ -201,7 +201,7 @@ def extract_folder_path_from_parent_reference(
     # Path format: /drives/{drive_id}/root:/folder/path
     if "root:/" in parent_reference_path:
         folder_path = parent_reference_path.split("root:/")[1]
-        return folder_path if folder_path else None
+        return folder_path or None
 
     # Item is at drive root
     return None

@@ -557,8 +557,7 @@ def get_relationship_types_of_entity_types(
         List of relationship ID names where the entity is either source or target
     """
 
-    if entity_types_id.endswith(":*"):
-        entity_types_id = entity_types_id[:-2]
+    entity_types_id = entity_types_id.removesuffix(":*")
 
     return [
         row[0]
