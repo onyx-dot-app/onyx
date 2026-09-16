@@ -437,7 +437,7 @@ def openai_model_supports_reasoning_none(model_name: str) -> bool:
     """Name-only, like `openai_model_rejects_reasoning_effort`: the names are
     OpenAI's wherever they're hosted. Reads LiteLLM's per-model flag, which
     is false for gpt-5, gpt-5-mini, the pro and chat variants and GPT-6."""
-    base_model_name = model_name.lower().split("/")[-1]
+    base_model_name = model_name.lower().split("/")[-1].removeprefix("openai.")
     try:
         model_map = get_model_map()
         entry = model_map.get(base_model_name) or model_map.get(

@@ -256,6 +256,7 @@ def test_azure_alias_unknown_to_registry_still_omits() -> None:
 def test_capability_is_registry_gated() -> None:
     assert openai_model_supports_reasoning_none("gpt-5.6")
     assert openai_model_supports_reasoning_none("openai/gpt-5.6-sol")
+    assert openai_model_supports_reasoning_none("openai.gpt-5.6-sol")
     assert openai_model_supports_reasoning_none("gpt-5.5")
     assert openai_model_supports_reasoning_none("gpt-5.4")
     assert openai_model_supports_reasoning_none("gpt-5.1")
