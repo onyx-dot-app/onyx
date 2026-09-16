@@ -30,6 +30,7 @@ type gitrelTagRepo struct {
 func gitrelSetupTagRepo(t *testing.T, originTags ...string) gitrelTagRepo {
 	t.Helper()
 	origin, work := gittest.InitOriginAndWork(t)
+	gittest.Git(t, work, "config", "tag.gpgSign", "false")
 	gitrelHooks(t, work, nil)
 	head := gitrelCommit(t, work, "a.txt", "a\n", "chore: base")
 	gittest.PublishMain(t, work)
@@ -100,6 +101,7 @@ func TestReleasePrefixedTag_pushFailureRollsBackLocalTag(t *testing.T) {
 	gittest.Git(t, work, "config", "user.email", "test@test.com")
 	gittest.Git(t, work, "config", "user.name", "Test")
 	gittest.Git(t, work, "config", "commit.gpgsign", "false")
+	gittest.Git(t, work, "config", "tag.gpgSign", "false")
 	gitrelHooks(t, work, nil)
 	gitrelCommit(t, work, "a.txt", "a\n", "chore: base")
 	gittest.Git(t, work, "tag", "cli/v1.0.0")

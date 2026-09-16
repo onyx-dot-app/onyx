@@ -11,8 +11,8 @@ import (
 
 // TestDeployEdge walks the edge flow against a real origin and a fake gh. Each
 // case lists how many of the full flow's gh calls must happen, so a failing
-// step must stop every later step. Repeated discovery polls are collapsed
-// before comparing.
+// step must stop every later step. Consecutive identical run list polls are
+// collapsed before comparing.
 func TestDeployEdge(t *testing.T) {
 	fullCalls := []string{
 		"--version",
@@ -101,7 +101,7 @@ func TestDeployEdge(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			path := deployIsolateConfig(t)
+			path := deployIsolateConfigAndAppData(t)
 			deploySaveConfig(t, &config.Config{
 				Deploy:     config.DeployConfig{TargetRepo: "org/deploys"},
 				DeployEdge: config.DeployCommandConfig{TargetWorkflow: "edge.yml"},
@@ -134,7 +134,7 @@ func TestDeployEdge(t *testing.T) {
 			if c.wantErr != "" && (err == nil || !strings.Contains(err.Error(), c.wantErr)) {
 				t.Fatalf("expected error containing %q, got %v", c.wantErr, err)
 			}
-			if calls, want := slices.Compact(gh.calls()), fullCalls[:c.wantCalls]; !slices.Equal(calls, want) {
+			if calls, want := deployCompactRunListPolls(gh.calls()), fullCalls[:c.wantCalls]; !slices.Equal(calls, want) {
 				t.Fatalf("expected gh calls %q, got %q", want, calls)
 			}
 			pushed := gittest.TagExists(repo.Origin, edgeTagName)
@@ -151,7 +151,7 @@ func TestDeployEdge(t *testing.T) {
 }
 
 func TestDeployEdge_forcePushMovesAnExistingEdgeTag(t *testing.T) {
-	deployIsolateConfig(t)
+	deployIsolateConfigAndAppData(t)
 	repo := gittest.SetupReleaseBranchRepo(t)
 	gittest.Git(t, repo.Work, "tag", "edge", repo.PreCutSHA)
 	gittest.Git(t, repo.Work, "push", "--quiet", "origin", "edge")
@@ -174,4 +174,17 @@ func TestDeployEdge_forcePushMovesAnExistingEdgeTag(t *testing.T) {
 	if sha := gittest.Git(t, repo.Origin, "rev-parse", "refs/tags/edge^{commit}"); sha != repo.PostCutSHA {
 		t.Fatalf("expected edge moved to %s, got %s", repo.PostCutSHA, sha)
 	}
+}
+
+// deployCompactRunListPolls collapses consecutive identical "run list" calls,
+// which come from discovery polling. Other repeated calls stay visible.
+func deployCompactRunListPolls(calls []string) []string {
+	var out []string
+	for i, call := range calls {
+		if i > 0 && call == calls[i-1] && strings.HasPrefix(call, "run list ") {
+			continue
+		}
+		out = append(out, call)
+	}
+	return out
 }

@@ -191,7 +191,7 @@ func TestDeployCloud_attachWatchesWithoutCutting(t *testing.T) {
 	if got, want := out.printed(t), deployRunURL+"\n"+deployPRURL+"\n"; got != want {
 		t.Errorf("expected stdout %q, got %q", want, got)
 	}
-	deployAssertBumpPRPolls(t, gh.calls(), 1)
+	deployAssertBumpPRPolls(t, gh.calls(), 1, false)
 	if gittest.TagExists(repo.Origin, "v4.6.0-cloud.0") {
 		t.Error("attach must not cut a tag")
 	}

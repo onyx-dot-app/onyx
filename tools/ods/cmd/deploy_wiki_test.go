@@ -1,19 +1,21 @@
 package cmd
 
 import (
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/config"
 )
 
 // TestDeployWiki checks the gh calls of each wiki flow and that a failing step
 // stops every later step. Repeated discovery polls are collapsed before
-// comparing.
+// comparing. The expected calls use a placeholder for the date-based tag, which
+// is replaced by the tag the command reports.
 func TestDeployWiki(t *testing.T) {
-	versionTag := "nightly-latest-" + time.Now().UTC().Format("20060102")
+	const versionTag = "<version-tag>"
+	reportedTag := regexp.MustCompile(`Target version tag: (nightly-latest-\d{8})\b`)
 	checkGH := "--version"
 	build := []string{
 		"run list -R onyx-dot-app/agent-wiki --workflow nightly-build.yml --limit 10 " + deployRunJSONFields + " --event workflow_dispatch",
@@ -110,13 +112,13 @@ func TestDeployWiki(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			deployIsolateConfig(t)
+			deployIsolateConfigAndAppData(t)
 			deploySaveConfig(t, &config.Config{
 				Deploy:     config.DeployConfig{TargetRepo: "org/deploys"},
 				DeployWiki: config.DeployCommandConfig{TargetWorkflow: "wiki.yml"},
 			})
 			gh := deployNewFakeGH(t, c.replies)
-			deployCaptureOutput(t)
+			out := deployCaptureOutput(t)
 
 			opts := c.opts
 			opts.Yes = true
@@ -128,15 +130,23 @@ func TestDeployWiki(t *testing.T) {
 			if c.wantErr != "" && (err == nil || !strings.Contains(err.Error(), c.wantErr)) {
 				t.Fatalf("expected error containing %q, got %v", c.wantErr, err)
 			}
-			if calls := slices.Compact(gh.calls()); !slices.Equal(calls, c.wantCalls) {
-				t.Fatalf("expected gh calls %q, got %q", c.wantCalls, calls)
+			match := reportedTag.FindStringSubmatch(out.logs.String())
+			if match == nil {
+				t.Fatalf("expected a reported nightly-latest-YYYYMMDD tag, got logs %q", out.logs.String())
+			}
+			wantCalls := make([]string, len(c.wantCalls))
+			for i, call := range c.wantCalls {
+				wantCalls[i] = strings.ReplaceAll(call, versionTag, match[1])
+			}
+			if calls := deployCompactRunListPolls(gh.calls()); !slices.Equal(calls, wantCalls) {
+				t.Fatalf("expected gh calls %q, got %q", wantCalls, calls)
 			}
 		})
 	}
 }
 
 func TestDeployWiki_unreadableConfigStopsBeforeGitHub(t *testing.T) {
-	path := deployIsolateConfig(t)
+	path := deployIsolateConfigAndAppData(t)
 	deployWriteFile(t, path, "[]")
 	gh := deployNewFakeGH(t, nil)
 	deployCaptureOutput(t)

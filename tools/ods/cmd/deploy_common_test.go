@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -30,7 +31,7 @@ func TestResolveDeployTarget_prefersFlagsThenSavedConfig(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			path := deployIsolateConfig(t)
+			path := deployIsolateConfigAndAppData(t)
 			deploySaveConfig(t, &config.Config{
 				Deploy:     config.DeployConfig{TargetRepo: "org/deploys"},
 				DeployEdge: config.DeployCommandConfig{TargetWorkflow: "edge.yml"},
@@ -61,7 +62,7 @@ func TestResolveDeployTarget_prefersFlagsThenSavedConfig(t *testing.T) {
 }
 
 func TestResolveDeployTarget_failsOnUnreadableConfig(t *testing.T) {
-	path := deployIsolateConfig(t)
+	path := deployIsolateConfigAndAppData(t)
 	deployWriteFile(t, path, "{not json")
 
 	_, _, err := resolveDeployTarget("org/repo", "deploy.yml", func(c *config.Config) *string { return &c.DeployEdge.TargetWorkflow })
@@ -334,4 +335,13 @@ func TestAnnounceDeploymentRun_onlyWarnsWhenTheLookupFails(t *testing.T) {
 			t.Fatalf("expected logs to contain %q, got %q", want, logs)
 		}
 	}
+}
+
+// deployIsolateConfigAndAppData also points APPDATA at the temp config dir,
+// because paths.ConfigDir reads APPDATA on Windows.
+func deployIsolateConfigAndAppData(t *testing.T) string {
+	t.Helper()
+	path := deployIsolateConfig(t)
+	t.Setenv("APPDATA", filepath.Dir(filepath.Dir(path)))
+	return path
 }

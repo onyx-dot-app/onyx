@@ -70,7 +70,7 @@ Examples:
   ods trace --list                   # list available traces without opening`,
 		Args: cobra.MaximumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			runTrace(cmd.OutOrStdout(), args, opts)
+			runTrace(cmd.OutOrStdout(), cmd.InOrStdin(), args, opts)
 		},
 	}
 
@@ -92,7 +92,7 @@ type ghRun struct {
 	URL        string `json:"url"`
 }
 
-func runTrace(out io.Writer, args []string, opts *TraceOptions) {
+func runTrace(out io.Writer, in io.Reader, args []string, opts *TraceOptions) {
 	git.CheckGitHubCLI()
 
 	runID, err := resolveRunID(args, opts)
@@ -132,7 +132,7 @@ func runTrace(out io.Writer, args []string, opts *TraceOptions) {
 	}
 
 	for {
-		selected, err := selectTraces(traces, projects)
+		selected, err := selectTraces(out, in, traces, projects)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -417,7 +417,7 @@ func printTraceList(out io.Writer, traces []traceInfo, projects []string) {
 
 // selectTraces tries the TUI picker first, falling back to a plain-text
 // prompt when the terminal cannot be initialised (e.g. piped output).
-func selectTraces(traces []traceInfo, projects []string) ([]traceInfo, error) {
+func selectTraces(out io.Writer, in io.Reader, traces []traceInfo, projects []string) ([]traceInfo, error) {
 	// Build picker groups in the same order as the sorted traces slice.
 	var groups []tui.PickerGroup
 	for _, proj := range projects {
@@ -434,8 +434,7 @@ func selectTraces(traces []traceInfo, projects []string) ([]traceInfo, error) {
 	if err != nil {
 		// Terminal not available — fall back to text prompt
 		log.Debugf("TUI picker unavailable: %v", err)
-		printTraceList(os.Stdout, traces, projects)
-		return promptTraceSelection(os.Stdin, traces, projects)
+		return promptTraceSelectionAsText(out, in, traces, projects)
 	}
 	if indices == nil {
 		return nil, nil // user cancelled
@@ -448,10 +447,16 @@ func selectTraces(traces []traceInfo, projects []string) ([]traceInfo, error) {
 	return selected, nil
 }
 
+// promptTraceSelectionAsText lists the traces and then prompts for a selection.
+func promptTraceSelectionAsText(out io.Writer, in io.Reader, traces []traceInfo, projects []string) ([]traceInfo, error) {
+	printTraceList(out, traces, projects)
+	return promptTraceSelection(out, in, traces, projects)
+}
+
 // promptTraceSelection asks the user which traces to open via plain text.
 // Accepts numbers (1,3,5), ranges (1-5), "all", or a project name.
-func promptTraceSelection(in io.Reader, traces []traceInfo, projects []string) ([]traceInfo, error) {
-	fmt.Printf("\nOpen which traces? (e.g. 1,3,5 | 1-5 | all | %s): ", strings.Join(projects, " | "))
+func promptTraceSelection(out io.Writer, in io.Reader, traces []traceInfo, projects []string) ([]traceInfo, error) {
+	_, _ = fmt.Fprintf(out, "\nOpen which traces? (e.g. 1,3,5 | 1-5 | all | %s): ", strings.Join(projects, " | "))
 
 	reader := bufio.NewReader(in)
 	input, err := reader.ReadString('\n')

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -215,7 +216,7 @@ func TestPromptTraceSelection(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			selected, err := promptTraceSelection(strings.NewReader(c.input), traces, []string{"admin", "lite"})
+			selected, err := promptTraceSelection(io.Discard, strings.NewReader(c.input), traces, []string{"admin", "lite"})
 			if err != nil {
 				t.Fatalf("promptTraceSelection: %v", err)
 			}
@@ -230,11 +231,35 @@ func TestPromptTraceSelection(t *testing.T) {
 	}
 
 	t.Run("closed input", func(t *testing.T) {
-		_, err := promptTraceSelection(strings.NewReader(""), traces, []string{"admin", "lite"})
+		_, err := promptTraceSelection(io.Discard, strings.NewReader(""), traces, []string{"admin", "lite"})
 		if err == nil || err.Error() != "Failed to read input: EOF" {
 			t.Fatalf("expected an EOF error, got %v", err)
 		}
 	})
+}
+
+func TestPromptTraceSelectionAsText_writesTheListAndPromptToOut(t *testing.T) {
+	traces := []traceInfo{
+		{Path: "1", Project: "admin", TestDir: "login"},
+		{Path: "2", Project: "lite", TestDir: "chat"},
+	}
+
+	var out bytes.Buffer
+	selected, err := promptTraceSelectionAsText(&out, strings.NewReader("2\n"), traces, []string{"admin", "lite"})
+	if err != nil {
+		t.Fatalf("promptTraceSelectionAsText: %v", err)
+	}
+
+	if len(selected) != 1 || selected[0].Path != "2" {
+		t.Fatalf("expected trace 2, got %+v", selected)
+	}
+	want := "\nFound 2 trace(s) across 2 project(s):\n" +
+		"\n  admin (1):\n    [ 1] login\n" +
+		"\n  lite (1):\n    [ 2] chat\n" +
+		"\nOpen which traces? (e.g. 1,3,5 | 1-5 | all | admin | lite): "
+	if out.String() != want {
+		t.Fatalf("expected %q, got %q", want, out.String())
+	}
 }
 
 func TestResolveRunID(t *testing.T) {
@@ -532,7 +557,7 @@ func TestRunTrace_stopsWhenTheRunHasNoTraces(t *testing.T) {
 	})
 
 	var out bytes.Buffer
-	runTrace(&out, []string{"42"}, &TraceOptions{})
+	runTrace(&out, strings.NewReader(""), []string{"42"}, &TraceOptions{})
 
 	if out.Len() != 0 {
 		t.Fatalf("expected no output, got %q", out.String())

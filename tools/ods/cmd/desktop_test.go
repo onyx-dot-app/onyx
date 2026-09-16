@@ -26,18 +26,19 @@ func TestRunDesktopScript_installsAtTheRootThenRunsNpm(t *testing.T) {
 			if err := os.MkdirAll(desktopDir, 0o755); err != nil {
 				t.Fatal(err)
 			}
-			bunCalls := devtoolFakeTool(t, binDir, "bun", "")
-			npmCalls := devtoolFakeTool(t, binDir, "npm", "")
+			calls := desktopSharedCallLog(t, binDir, "bun", "npm")
 
 			if err := runDesktopScript(c.args); err != nil {
 				t.Fatalf("runDesktopScript failed: %v", err)
 			}
 
-			// desktop is a root workspace member, so dependencies install at the root.
-			if got, want := devtoolCalls(t, bunCalls), []devtoolCall{{Dir: root, Args: []string{"install", "--frozen-lockfile"}}}; !reflect.DeepEqual(got, want) {
-				t.Fatalf("expected %q, got %q", want, got)
+			// desktop is a root workspace member, so dependencies install at the root
+			// before npm runs the script.
+			want := []devtoolCall{
+				{Dir: root, Args: []string{"bun", "install", "--frozen-lockfile"}},
+				{Dir: desktopDir, Args: append([]string{"npm"}, c.want...)},
 			}
-			if got, want := devtoolCalls(t, npmCalls), []devtoolCall{{Dir: desktopDir, Args: c.want}}; !reflect.DeepEqual(got, want) {
+			if got := devtoolCalls(t, calls); !reflect.DeepEqual(got, want) {
 				t.Fatalf("expected %q, got %q", want, got)
 			}
 		})
@@ -71,4 +72,19 @@ func TestRunDesktopScript_failures(t *testing.T) {
 			t.Fatalf("expected npm not to run, got %q", calls)
 		}
 	})
+}
+
+// desktopSharedCallLog installs a fake for each tool that records
+// its calls into one shared log in the devtoolCalls format, with the tool name
+// as the first argument, so tests can check call order.
+func desktopSharedCallLog(t *testing.T, binDir string, tools ...string) string {
+	t.Helper()
+	calls := filepath.Join(binDir, "shared.calls")
+	for _, tool := range tools {
+		script := "#!/bin/sh\nprintf '%s\\0' \"$(pwd -P)\" \"$(($# + 1))\" \"${0##*/}\" \"$@\" >> \"${0%/*}/shared.calls\"\n"
+		if err := os.WriteFile(filepath.Join(binDir, tool), []byte(script), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return calls
 }

@@ -32,6 +32,9 @@ func TestWatchCloudRelease(t *testing.T) {
 		wantStdout  string
 		wantLogs    []string
 		wantPRPolls int
+		// pollsUntilTimeout means the PR poll count depends on timing, so only
+		// at least one poll is required.
+		pollsUntilTimeout bool
 	}{
 		{
 			name: "build succeeds and the bump PR opens after a poll",
@@ -51,8 +54,9 @@ func TestWatchCloudRelease(t *testing.T) {
 				"run-view": {deployRun(t, succeeded)},
 				"pr-list":  {noPR},
 			},
-			wantErr:    "no bump PR for v4.7.0-cloud.3 appeared within 500ms; check https://github.com/onyx-dot-app/onyx-infra/actions/workflows/bump-cloud-version.yml",
-			wantStdout: deployRunURL + "\n",
+			wantErr:           "no bump PR for v4.7.0-cloud.3 appeared within 500ms; check https://github.com/onyx-dot-app/onyx-infra/actions/workflows/bump-cloud-version.yml",
+			wantStdout:        deployRunURL + "\n",
+			pollsUntilTimeout: true,
 		},
 		{
 			name: "re-attach finds an already merged PR",
@@ -153,16 +157,15 @@ func TestWatchCloudRelease(t *testing.T) {
 					t.Fatalf("expected logs to contain %q, got %q", want, logs)
 				}
 			}
-			if c.wantPRPolls > 0 {
-				deployAssertBumpPRPolls(t, gh.calls(), c.wantPRPolls)
-			}
+			deployAssertBumpPRPolls(t, gh.calls(), c.wantPRPolls, c.pollsUntilTimeout)
 		})
 	}
 }
 
 // deployAssertBumpPRPolls checks the watcher looked up the tag's bump branch in
-// the infra repo, and did so wantPolls times.
-func deployAssertBumpPRPolls(t *testing.T, calls []string, wantPolls int) {
+// the infra repo, and did so wantPolls times. With untilTimeout it only
+// requires at least one poll.
+func deployAssertBumpPRPolls(t *testing.T, calls []string, wantPolls int, untilTimeout bool) {
 	t.Helper()
 	want := "pr list -R onyx-dot-app/onyx-infra --head bump-version/" + deployCloudTag + " --state all --json number,state,url"
 	var got int
@@ -173,6 +176,12 @@ func deployAssertBumpPRPolls(t *testing.T, calls []string, wantPolls int) {
 			}
 			got++
 		}
+	}
+	if untilTimeout {
+		if got == 0 {
+			t.Fatalf("expected bump PR polls until the timeout, got none in %q", calls)
+		}
+		return
 	}
 	if got != wantPolls {
 		t.Fatalf("expected %d bump PR polls, got %d in %q", wantPolls, got, calls)
