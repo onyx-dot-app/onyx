@@ -97,7 +97,7 @@ async def test_openai_compatible_embedding_with_dimensions_and_base_url(
             provider=EmbeddingProvider.OPENAI_COMPATIBLE,
             api_url=custom_base_url,
         )
-        result = await embedding._embed(
+        result = await embedding.embed(
             texts=["test1", "test2"],
             text_type=EmbedTextType.QUERY,
             model_name="qwen3-embedding-8b",

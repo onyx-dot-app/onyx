@@ -614,7 +614,7 @@ class CloudEmbedding:
             else:
                 raise ValueError(f"Unsupported provider: {self.provider}")
         except openai.AuthenticationError:
-            raise AuthenticationError(provider="OpenAI")
+            raise AuthenticationError(provider=str(self.provider))
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 401:
                 raise AuthenticationError(provider=str(self.provider))
