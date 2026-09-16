@@ -138,6 +138,13 @@ def maybe_append_search_receipt(
         _log_unavailable("missing_retrieval_diagnostics", tool_call_id)
         return
     if diagnostics.receipt_scope is None:
+        # No receipt, but the search still ran: its candidates count as seen so a
+        # later receipt in this turn does not report them as new.
+        seen_document_ids.update(
+            chunk.document_id
+            for lane in diagnostics.retrieval_candidates
+            for chunk in lane.returned_chunks
+        )
         _log_unavailable("unrepresentable_scope", tool_call_id)
         return
 

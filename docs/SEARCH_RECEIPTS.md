@@ -59,7 +59,8 @@ something else, the receipt is not appended and the loop logs
 - project scope (`project_id_filter`) or `persona_id_filter`
 - persona `search_start_date`, attached documents or hierarchy nodes
 
-Search results on those paths are unchanged. This is a deliberate limitation: a receipt
+Search results on those paths are unchanged, but their candidate documents still count
+as seen for later receipts in the same turn. This is a deliberate limitation: a receipt
 must not claim a scope it does not fully describe. The evaluated experiment ran with
 none of these active (`user_filters: null`, `persona_document_sets: []`,
 `acl_enforced: true`).

@@ -281,6 +281,33 @@ class TestMaybeAppendSearchReceipt:
             for r in caplog.records
         )
 
+    def test_gated_scope_still_marks_candidates_seen(self) -> None:
+        gated = self._response(
+            SearchDocsResponse(
+                search_docs=[],
+                citation_mapping={1: "A"},
+                retrieval_diagnostics=_diagnostics(
+                    [_lane("q", ["A", "B"])], scope=None
+                ),
+            )
+        )
+        seen: set[str] = set()
+        maybe_append_search_receipt(tool_response=gated, seen_document_ids=seen)
+        assert gated.llm_facing_response == "evidence"
+        assert seen == {"A", "B"}
+
+        later = self._response(
+            SearchDocsResponse(
+                search_docs=[],
+                citation_mapping={2: "C"},
+                retrieval_diagnostics=_diagnostics([_lane("q2", ["B", "C"])]),
+            )
+        )
+        maybe_append_search_receipt(tool_response=later, seen_document_ids=seen)
+        receipt = _parse_receipt(later.llm_facing_response, "evidence")
+        assert receipt["new_candidate_documents"] == 1
+        assert receipt["repeated_candidate_documents"] == 1
+
     def test_appends_once(self) -> None:
         response = self._response(
             SearchDocsResponse(
