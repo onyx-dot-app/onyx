@@ -856,16 +856,13 @@ class LitellmLLM(LLM):
                 has_tool_call_history = _prompt_contains_tool_call_history(prompt)
 
                 if reasoning_style is ReasoningParamStyle.ANTHROPIC_ADAPTIVE:
-                    # Newer Anthropic models (Claude Opus 4.7+) reject
-                    # thinking.type.enabled — they require the adaptive
-                    # thinking config with output_config.effort.
+                    # No signed blocks to lose, and without it Claude 5 picks
+                    # its own effort rather than ours.
+                    optional_kwargs["output_config"] = {
+                        "effort": ANTHROPIC_ADAPTIVE_REASONING_EFFORT[reasoning_effort],
+                    }
                     if not has_tool_call_history:
                         optional_kwargs["thinking"] = {"type": "adaptive"}
-                        optional_kwargs["output_config"] = {
-                            "effort": ANTHROPIC_ADAPTIVE_REASONING_EFFORT[
-                                reasoning_effort
-                            ],
-                        }
                 else:
                     budget_tokens: int | None = ANTHROPIC_REASONING_EFFORT_BUDGET.get(
                         reasoning_effort
