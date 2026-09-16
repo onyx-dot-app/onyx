@@ -45,6 +45,7 @@ import {
   SvgLumapps,
   SvgMediawiki,
   SvgNotion,
+  SvgOnedrive,
   SvgOracle,
   SvgOutline,
   SvgOutlook,
@@ -208,6 +209,11 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     docs: `${DOCS_ADMINS_PATH}/connectors/official/google_drive/overview`,
     oauthSupported: true,
     isPopular: true,
+  },
+  onedrive: {
+    icon: SvgOnedrive,
+    displayName: "OneDrive",
+    category: SourceCategory.Storage,
   },
   box: {
     icon: BoxIcon,

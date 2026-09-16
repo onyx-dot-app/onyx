@@ -200,6 +200,17 @@ export interface SharepointCredentialJson {
   sp_private_key?: TypedFile;
 }
 
+export type OneDriveAuthenticationMethod = "client_secret" | "certificate";
+
+export interface OneDriveCredentialJson {
+  authentication_method: OneDriveAuthenticationMethod;
+  onedrive_client_id: string;
+  onedrive_directory_id: string;
+  onedrive_client_secret?: string;
+  onedrive_certificate_password?: string;
+  onedrive_private_key?: TypedFile | null;
+}
+
 export interface AsanaCredentialJson {
   asana_api_token_secret: string;
 }

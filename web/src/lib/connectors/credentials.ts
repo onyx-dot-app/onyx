@@ -37,6 +37,8 @@ import type {
   LumAppsCredentialJson,
   NotionCredentialJson,
   OCICredentialJson,
+  OneDriveAuthenticationMethod,
+  OneDriveCredentialJson,
   OutlineCredentialJson,
   OutlookCredentialJson,
   ProductboardCredentialJson,
@@ -78,6 +80,10 @@ type CredentialTemplateMap = Record<ValidSources, object | null> & {
   dropbox: DropboxCredentialJson;
   salesforce: SalesforceCredentialJson;
   sharepoint: CredentialTemplateWithAuth<SharepointCredentialJson>;
+  onedrive: CredentialTemplateWithAuth<
+    OneDriveCredentialJson,
+    OneDriveAuthenticationMethod
+  >;
   asana: AsanaCredentialJson;
   teams: CredentialTemplateWithAuth<TeamsCredentialJson>;
   outlook: CredentialTemplateWithAuth<OutlookCredentialJson>;
@@ -207,6 +213,33 @@ export const credentialTemplates: Record<ValidSources, any> = {
       },
     ],
   } as CredentialTemplateWithAuth<SharepointCredentialJson>,
+  onedrive: {
+    authentication_method: "client_secret",
+    authMethods: [
+      {
+        value: "client_secret",
+        label: "Client Secret",
+        fields: {
+          onedrive_client_id: "",
+          onedrive_directory_id: "",
+          onedrive_client_secret: "",
+        },
+      },
+      {
+        value: "certificate",
+        label: "Certificate",
+        fields: {
+          onedrive_client_id: "",
+          onedrive_directory_id: "",
+          onedrive_certificate_password: "",
+          onedrive_private_key: null,
+        },
+      },
+    ],
+  } satisfies CredentialTemplateWithAuth<
+    OneDriveCredentialJson,
+    OneDriveAuthenticationMethod
+  >,
   asana: {
     asana_api_token_secret: "",
   },
@@ -530,6 +563,13 @@ export const credentialDisplayNames: Record<string, string> = {
   sp_directory_id: "SharePoint Directory ID",
   sp_certificate_password: "SharePoint Certificate Password",
   sp_private_key: "SharePoint Private Key",
+
+  // OneDrive
+  onedrive_client_id: "OneDrive Client ID",
+  onedrive_client_secret: "OneDrive Client Secret",
+  onedrive_directory_id: "OneDrive Directory ID",
+  onedrive_certificate_password: "OneDrive Certificate Password",
+  onedrive_private_key: "OneDrive Certificate",
 
   // Asana
   asana_api_token_secret: "Asana API Token",
