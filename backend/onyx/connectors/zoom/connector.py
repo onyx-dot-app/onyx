@@ -20,10 +20,13 @@ from onyx.connectors.models import (
     ConnectorCheckpoint,
     ConnectorMissingCredentialError,
 )
-from onyx.connectors.zoom.client import (
-    ZoomClient,
-    parse_plan_tier,
-    parse_rate_limit_percent,
+from onyx.connectors.zoom.client import ZoomClient
+from onyx.connectors.zoom.rate_limit import (
+    DEFAULT_RATE_LIMIT_SHARE,
+    MAX_RATE_LIMIT_PERCENT,
+    MIN_RATE_LIMIT_PERCENT,
+    ZoomPlanTier,
+    ZoomRateLimitSettings,
 )
 from onyx.connectors.zoom.recordings.discovery import build_discovery_sources
 from onyx.connectors.zoom.recordings.models import RecordingsState
@@ -31,6 +34,29 @@ from onyx.connectors.zoom.recordings.processing import process_occurrence
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+def parse_plan_tier(value: str | None) -> ZoomPlanTier:
+    """Blank means Pro, the lowest plan this connector supports, because
+    guessing high spends an allowance the account may not have."""
+    if not value or not value.strip():
+        return ZoomPlanTier.PRO
+    try:
+        return ZoomPlanTier(value.strip().lower())
+    except ValueError as e:
+        known = ", ".join(plan.value for plan in ZoomPlanTier)
+        raise ValueError(f"Unknown Zoom plan {value!r}. Use one of: {known}") from e
+
+
+def parse_rate_limit_percent(value: int | float | None) -> float:
+    if value is None:
+        return DEFAULT_RATE_LIMIT_SHARE
+    if not MIN_RATE_LIMIT_PERCENT <= value <= MAX_RATE_LIMIT_PERCENT:
+        raise ValueError(
+            f"Zoom rate limit percent must be between {MIN_RATE_LIMIT_PERCENT} "
+            f"and {MAX_RATE_LIMIT_PERCENT}, got {value}"
+        )
+    return value / 100
 
 
 class ZoomConnectorCheckpoint(ConnectorCheckpoint):
@@ -66,8 +92,10 @@ class ZoomConnector(CheckpointedConnectorWithPermSync[ZoomConnectorCheckpoint]):
             account_id=account_id,
             client_id=client_id,
             client_secret=client_secret,
-            plan_tier=parse_plan_tier(self.plan_tier),
-            rate_limit_share=parse_rate_limit_percent(self.rate_limit_percent),
+            rate_limit_settings=ZoomRateLimitSettings(
+                plan_tier=parse_plan_tier(self.plan_tier),
+                share=parse_rate_limit_percent(self.rate_limit_percent),
+            ),
         )
         return None
 

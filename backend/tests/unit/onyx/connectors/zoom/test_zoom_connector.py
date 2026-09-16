@@ -20,7 +20,7 @@ from onyx.connectors.models import (
     HierarchyNode,
     InputType,
 )
-from onyx.connectors.zoom.client import ZoomClient, ZoomPlanTier
+from onyx.connectors.zoom.client import ZoomClient
 from onyx.connectors.zoom.connector import ZoomConnector, ZoomConnectorCheckpoint
 from onyx.connectors.zoom.models import (
     ZoomRecordingEntry,
@@ -29,6 +29,11 @@ from onyx.connectors.zoom.models import (
     ZoomTranscript,
     ZoomUser,
     ZoomUserPage,
+)
+from onyx.connectors.zoom.rate_limit import (
+    DEFAULT_RATE_LIMIT_SHARE,
+    ZoomPlanTier,
+    ZoomRateLimitSettings,
 )
 from onyx.connectors.zoom.recordings.models import (
     OccurrenceWork,
@@ -169,7 +174,7 @@ class TestZoomConnectorCredentials:
     @pytest.mark.parametrize(
         "plan, percent, expected_plan, expected_share",
         [
-            (None, None, ZoomPlanTier.PRO, None),
+            (None, None, ZoomPlanTier.PRO, DEFAULT_RATE_LIMIT_SHARE),
             ("business_plus", 10, ZoomPlanTier.BUSINESS_PLUS, 0.1),
         ],
         ids=["unset falls back to the defaults", "configured"],
@@ -179,7 +184,7 @@ class TestZoomConnectorCredentials:
         plan: str | None,
         percent: int | None,
         expected_plan: ZoomPlanTier,
-        expected_share: float | None,
+        expected_share: float,
     ) -> None:
         connector = ZoomConnector(
             meeting_ids=["111"], plan_tier=plan, rate_limit_percent=percent
@@ -188,8 +193,10 @@ class TestZoomConnectorCredentials:
         with patch.object(ZoomClient, "__init__", return_value=None) as build:
             connector.load_credentials(_ZOOM_CREDS)
 
-        assert build.call_args.kwargs["plan_tier"] == expected_plan
-        assert build.call_args.kwargs["rate_limit_share"] == expected_share
+        settings = build.call_args.kwargs["rate_limit_settings"]
+        assert settings == ZoomRateLimitSettings(
+            plan_tier=expected_plan, share=expected_share
+        )
 
 
 class TestPruningDrivesTheConnectorFromTheEpoch:
