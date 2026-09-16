@@ -20,6 +20,7 @@ from onyx.db.document import (
     fetch_chunk_count_for_document,
     get_document,
     get_document_connector_count,
+    get_indexable_document_sources_after_cc_pair_removal,
     mark_document_as_modified,
     mark_document_as_synced,
 )
@@ -183,6 +184,12 @@ def document_by_cc_pair_cleanup_task(
                 )
 
                 doc_sets = fetch_document_sets_for_document(document_id, db_session)
+                source_types = get_indexable_document_sources_after_cc_pair_removal(
+                    db_session=db_session,
+                    document_id=document_id,
+                    connector_id=connector_id,
+                    credential_id=credential_id,
+                )
 
                 update_request = MetadataUpdateRequest(
                     document_ids=[document_id],
@@ -195,6 +202,7 @@ def document_by_cc_pair_cleanup_task(
                     document_sets=set(doc_sets),
                     boost=doc.boost,
                     hidden=doc.hidden,
+                    source_types=source_types or None,
                 )
 
         # Build document-index clients outside the DB session — construction
