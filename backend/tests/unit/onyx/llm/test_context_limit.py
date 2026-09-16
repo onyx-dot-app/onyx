@@ -6,11 +6,10 @@ from unittest.mock import patch
 import pytest
 from litellm.exceptions import ContextWindowExceededError
 
-from onyx.llm.exceptions import LLMContextLimitError
+from onyx.llm.exceptions import LLMContextLimitError, litellm_exception_to_safe_error
 from onyx.llm.litellm_models import Delta, ModelResponseStream, StreamingChoice
 from onyx.llm.models import GenerationRequest
 from onyx.llm.multi_llm import LitellmLLM, LitellmTransport
-from onyx.llm.utils import litellm_exception_to_safe_error
 
 
 @pytest.mark.parametrize(
@@ -49,12 +48,6 @@ def test_context_limit_normalization(streaming: bool, after_chunk: bool) -> None
             else:
                 client.invoke(GenerationRequest())
     assert caught.value.__cause__ is failure
-    assert (
-        litellm_exception_to_safe_error(caught.value).error_code == "CONTEXT_TOO_LONG"
-    )
-
-
-def test_provider_neutral_context_error_keeps_application_classification() -> None:
-    classified = litellm_exception_to_safe_error(LLMContextLimitError("too large"))
+    classified = litellm_exception_to_safe_error(caught.value)
     assert classified.error_code == "CONTEXT_TOO_LONG"
     assert not classified.is_retryable

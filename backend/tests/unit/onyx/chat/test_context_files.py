@@ -723,12 +723,11 @@ class TestGetOrExtractPlaintext:
         store_plaintext.assert_called_once_with("file-3", "")
 
 
-def test_attachment_loading_deduplicates_and_reads_database_before_workers() -> None:
+def test_attachment_loading_reads_database_before_workers() -> None:
     import threading
 
     from onyx.chat.files import load_chat_files
     from onyx.db.enums import UserFileStatus
-    from onyx.db.models import ChatMessage
     from onyx.file_store.models import ChatLoadedFile, FileDescriptor
 
     user_file_id = uuid4()
@@ -738,7 +737,6 @@ def test_attachment_loading_deduplicates_and_reads_database_before_workers() -> 
         "name": "file.txt",
         "user_file_id": str(user_file_id),
     }
-    history = [ChatMessage(files=[descriptor]), ChatMessage(files=[descriptor])]
     owner_thread = threading.get_ident()
     session = MagicMock()
 
@@ -766,18 +764,7 @@ def test_attachment_loading_deduplicates_and_reads_database_before_workers() -> 
         ) as read,
         patch("onyx.chat.files._load_chat_file", side_effect=load_file) as load,
     ):
-        files = load_chat_files(
-            prepare_chat_file_inputs(
-                list(
-                    {
-                        descriptor["id"]: descriptor
-                        for message in history
-                        for descriptor in message.files or []
-                    }.values()
-                ),
-                session,
-            )
-        )
+        files = load_chat_files(prepare_chat_file_inputs([descriptor], session))
     read.assert_called_once()
     load.assert_called_once()
     assert len(files) == 1

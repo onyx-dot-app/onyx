@@ -2,7 +2,8 @@
 
 import pytest
 
-from onyx.agents.runtime import Agent, AgentContext
+from onyx.agents.models import AgentContext
+from onyx.agents.runtime import Agent
 from onyx.llm.models import (
     AssistantMessage,
     GenerationOptions,
@@ -60,16 +61,13 @@ def test_compacted_tool_history_preserves_answer_and_source(
         )
     agent = Agent(
         model,
-        context=AgentContext(
-            messages=history,
-            options=GenerationOptions(
-                reasoning_effort=ReasoningEffort.LOW, max_tokens=2048
-            ),
+        options=GenerationOptions(
+            reasoning_effort=ReasoningEffort.LOW, max_tokens=2048
         ),
+        context=AgentContext(messages=history),
     )
     result = agent.run(max_steps=1)
-    snapshot = agent.snapshot()
-    assert snapshot is not None and snapshot.checkpoint is not None
+    assert agent.context.checkpoint is not None
     assert "731" in result.output.text
     assert "[1]" in result.output.text
     assert agent.context.messages[: len(history)] == history

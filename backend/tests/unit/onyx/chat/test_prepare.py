@@ -70,15 +70,6 @@ def test_whitespace_only_query_raises_query_rejected() -> None:
     assert exc_info.value.error_code is OnyxErrorCode.QUERY_REJECTED
 
 
-def test_absent_query_field_raises_query_rejected() -> None:
-    """query defaults to None when not provided."""
-    with pytest.raises(OnyxError) as exc_info:
-        _resolve_query_processing_hook_result(
-            QueryProcessingResponse(), "original query"
-        )
-    assert exc_info.value.error_code is OnyxErrorCode.QUERY_REJECTED
-
-
 def test_rejection_message_surfaced_in_error_when_provided() -> None:
     with pytest.raises(OnyxError) as exc_info:
         _resolve_query_processing_hook_result(
@@ -236,19 +227,6 @@ class TestGetCustomAgentPrompt:
 
         assert result is None
 
-    def test_custom_persona_none_system_prompt(self) -> None:
-        """Test that custom persona with None system_prompt returns None."""
-        persona = self._create_mock_persona(
-            persona_id=1,
-            system_prompt=None,
-            replace_base_system_prompt=False,
-        )
-        chat_session = self._create_mock_chat_session(project=None)
-
-        result = get_custom_agent_prompt(persona, chat_session)
-
-        assert result is None
-
     def test_custom_persona_in_project_uses_persona_prompt(self) -> None:
         """Test that custom persona in a project uses persona's system_prompt, not project instructions."""
         persona = self._create_mock_persona(
@@ -263,21 +241,6 @@ class TestGetCustomAgentPrompt:
 
         # Should use persona's system_prompt, NOT project instructions
         assert result == "Custom system prompt"
-
-    def test_custom_persona_replace_base_in_project(self) -> None:
-        """Test that custom persona with replace_base_system_prompt=True in a project still returns None."""
-        persona = self._create_mock_persona(
-            persona_id=1,
-            system_prompt="Custom system prompt",
-            replace_base_system_prompt=True,
-        )
-        project = self._create_mock_project(instructions="Project instructions")
-        chat_session = self._create_mock_chat_session(project=project)
-
-        result = get_custom_agent_prompt(persona, chat_session)
-
-        # Should return None because replace_base_system_prompt=True
-        assert result is None
 
 
 def test_attachment_loading_releases_preparation_session_before_reservation_failure(

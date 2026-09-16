@@ -1,9 +1,16 @@
-"""Project semantic generation events into Onyx packets without model or storage I/O."""
+"""Convert one assistant message into frontend content packets.
+
+Handles text, reasoning, citations, and streamed tool arguments. Presentation settings
+select answer, plan, report, or coding output. Live updates and saved history use the
+same conversion so citation formatting and content boundaries agree.
+"""
+
+from collections.abc import Mapping
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from onyx.chat.citation_processor import DynamicCitationProcessor
-from onyx.chat.models import PresentationMode
+from onyx.chat.models import MessagePresentation, PresentationMode
 from onyx.context.search.models import SearchDoc
 from onyx.llm.models import (
     AssistantMessage,
@@ -39,6 +46,8 @@ from onyx.server.query_and_chat.streaming_models import (
 
 
 class RenderConfig(BaseModel):
+    """Resolved display settings and a citation processor for one message conversion."""
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
     citations: DynamicCitationProcessor | None = None
     documents: list[SearchDoc] | None = None
@@ -49,16 +58,51 @@ class RenderConfig(BaseModel):
     pre_answer_seconds: float | None = None
 
 
+def render_config(
+    presentation: MessagePresentation,
+    documents: Mapping[str, SearchDoc],
+) -> RenderConfig:
+    """Resolve saved document IDs and create a fresh citation processor."""
+    citations = None
+    if presentation.citation_mode is not None:
+        citations = DynamicCitationProcessor(citation_mode=presentation.citation_mode)
+        citations.update_citation_mapping(
+            {
+                number: documents[doc_id]
+                for number, doc_id in presentation.citation_documents.items()
+                if doc_id in documents
+            }
+        )
+    return RenderConfig(
+        mode=presentation.mode,
+        text_as_thinking=presentation.text_as_thinking,
+        think_tool=presentation.think_tool,
+        argument_tools=set(presentation.argument_tools),
+        pre_answer_seconds=presentation.pre_answer_seconds,
+        documents=[
+            documents[doc_id]
+            for doc_id in presentation.document_ids
+            if doc_id in documents
+        ]
+        or None,
+        citations=citations,
+    )
+
+
 class PacketRenderer:
+    """Accumulate one message's display text while producing content packets.
+
+    consume accepts live generation events. render_message feeds saved content through
+    the same path. The frontend renders the resulting packets as UI components.
+    """
+
     def __init__(self, config: RenderConfig, identity: PacketIdentity) -> None:
         self.config = config
         self.identity = identity
         self.answer = ""
         self.reasoning = ""
-        self.has_reasoned = False
         self.reasoning_active = False
         self.answer_started = False
-        self.citations_emitted: set[int] = set()
 
     def _packet(
         self,
@@ -79,7 +123,6 @@ class PacketRenderer:
             return []
         packets = [self._packet(ReasoningDone(), part_id="reasoning")]
         self.reasoning_active = False
-        self.has_reasoned = True
         return packets
 
     def _thinking(self, text: str) -> list[Packet]:
@@ -123,7 +166,6 @@ class PacketRenderer:
             if isinstance(item, str):
                 packets.extend(self._answer(item))
             else:
-                self.citations_emitted.add(item.citation_number)
                 packets.append(self._packet(item))
         return packets
 
@@ -177,9 +219,9 @@ class PacketRenderer:
                     )
                 )
                 packets.append(self._packet(SectionEnd()))
-        return self._project(packets)
+        return self._apply_presentation_mode(packets)
 
-    def _project(self, packets: list[Packet]) -> list[Packet]:
+    def _apply_presentation_mode(self, packets: list[Packet]) -> list[Packet]:
         result: list[Packet] = []
         for packet in packets:
             obj = packet.obj
@@ -207,7 +249,10 @@ class PacketRenderer:
 def render_message(
     renderer: PacketRenderer, message: AssistantMessage, *, complete: bool
 ) -> list[Packet]:
-    """Project a recorded prefix through the same renderer used for live updates."""
+    """Convert saved message content into packets using a fresh PacketRenderer.
+
+    complete flushes a normal message end. Recorded errors flush an error end.
+    """
     packets: list[Packet] = []
     for index, content in enumerate(message.content):
         if isinstance(content, TextContent):

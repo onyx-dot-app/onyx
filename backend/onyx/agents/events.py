@@ -10,7 +10,6 @@ from onyx.agents.transcript import RunStatus
 from onyx.llm.models import (
     AssistantMessage,
     GenerationEvent,
-    Message,
     ToolCall,
     ToolResult,
     ToolResultMessage,
@@ -20,7 +19,6 @@ from onyx.llm.models import (
 class AgentEventType(str, Enum):
     AGENT_START = "agent_start"
     AGENT_END = "agent_end"
-    INPUT_CONSUMED = "input_consumed"
     STEP_START = "step_start"
     MESSAGE_START = "message_start"
     MESSAGE_UPDATE = "message_update"
@@ -31,16 +29,12 @@ class AgentEventType(str, Enum):
     TOOL_END = "tool_end"
 
 
-class InputKind(str, Enum):
-    STEER = "steer"
-    FOLLOW_UP = "follow_up"
-
-
 class _Event(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
 class _AgentEvent(_Event):
+    agent_id: str | None = None
     run_id: str
     parent_run_id: str | None = None
     parent_tool_call_id: str | None = None
@@ -58,17 +52,9 @@ class AgentEndEvent(_AgentEvent):
     ]
 
 
-class InputConsumedEvent(_AgentEvent):
-    type: Literal[AgentEventType.INPUT_CONSUMED] = AgentEventType.INPUT_CONSUMED
-    step_index: int = Field(ge=0)
-    input_id: str
-    kind: InputKind
-
-
 class StepStartEvent(_AgentEvent):
     type: Literal[AgentEventType.STEP_START] = AgentEventType.STEP_START
     step_index: int = Field(ge=0)
-    input_messages: list[Message] = Field(default_factory=list)
 
 
 class MessageStartEvent(_AgentEvent):
@@ -126,7 +112,6 @@ class ToolEndEvent(ToolResultEvent):
 AgentEvent = Annotated[
     AgentStartEvent
     | AgentEndEvent
-    | InputConsumedEvent
     | StepStartEvent
     | MessageStartEvent
     | MessageUpdateEvent

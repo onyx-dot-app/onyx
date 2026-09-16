@@ -4,11 +4,14 @@ from collections.abc import Generator
 
 import pytest
 
-from onyx.agents.compaction import ContextLimitError, context_budget, request_tokens
-from onyx.agents.runtime import Agent, AgentContext, AgentHooks, AgentStep
+from onyx.agents.compaction import context_budget, request_tokens
+from onyx.agents.models import AgentContext, PreparedStep, StepInput
+from onyx.agents.runtime import Agent, RunFailed
 from onyx.agents.tools import AgentTool, ToolInvocation
+from onyx.agents.transcript import CompactionCheckpoint
+from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.exceptions import LLMContextLimitError
-from onyx.llm.interfaces import LLM, GenerationContext, LLMInfo
+from onyx.llm.interfaces import LLM, GenerationContext, LLMInfo, LLMUserIdentity
 from onyx.llm.models import (
     AssistantMessage,
     GenerationDoneEvent,
@@ -23,6 +26,7 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.tracing.flows import LLMFlow
+from onyx.tracing.framework.traces import TraceContentMode
 
 TASK = "Compare the evidence and preserve citations."
 
@@ -33,6 +37,7 @@ class ContextModel(LLM):
         self.reject_first = reject_first
         self.generations: list[GenerationRequest] = []
         self.summaries: list[GenerationRequest] = []
+        self.contexts: list[GenerationContext] = []
 
     @property
     def info(self) -> LLMInfo:
@@ -49,6 +54,8 @@ class ContextModel(LLM):
     def invoke(
         self, request: GenerationRequest, context: GenerationContext | None = None
     ) -> AssistantMessage:
+        if context:
+            self.contexts.append(context.model_copy())
         if context and context.cancellation:
             context.cancellation.check()
         if context and context.flow == LLMFlow.CHAT_HISTORY_SUMMARIZATION:
@@ -79,7 +86,10 @@ class ContextModel(LLM):
         yield GenerationDoneEvent(message=self.invoke(request, context))
 
 
-def test_compaction_within_task_preserves_tool_effects_and_prepared_steps() -> None:
+@pytest.mark.asyncio
+async def test_compaction_within_task_preserves_tool_effects_and_prepared_steps() -> (
+    None
+):
     model = ContextModel(tool_rounds=5)
     calls: list[str] = []
     prepared: list[int] = []
@@ -88,29 +98,25 @@ def test_compaction_within_task_preserves_tool_effects_and_prepared_steps() -> N
         calls.append(invocation.call_id)
         return ToolResult(content="Evidence [1] 東京 " * 180)
 
-    def prepare(context: AgentContext, step: AgentStep) -> AgentContext:
+    def prepare(decision: StepInput) -> PreparedStep:
+        step = decision.step
         prepared.append(step.index)
-        return context
+        return PreparedStep(tools=tools, assemble_messages=render)
 
-    def render(context: AgentContext) -> GenerationRequest:
-        context.messages.append(
-            SystemMessage(content="Use the required report format.")
-        )
-        return context.generation_request()
+    def render(messages: list[Message]) -> list[Message]:
+        return [*messages, SystemMessage(content="Use the required report format.")]
 
+    tools = [
+        AgentTool(name="lookup", description="Search", parameters={}, execute=execute)
+    ]
     agent = Agent(
         model,
-        context=AgentContext(
-            messages=[UserMessage(content=TASK)],
-            tools=[
-                AgentTool(
-                    name="lookup", description="Search", parameters={}, execute=execute
-                )
-            ],
-        ),
-        hooks=AgentHooks(prepare_step=prepare, build_request=render),
+        context=AgentContext(messages=[UserMessage(content=TASK)]),
+        prepare_step=prepare,
     )
-    agent.run(max_steps=6)
+    run = agent.start(max_steps=6)
+    await run.wait()
+    assert await run.wait_for_idle(2)
     assert len(model.summaries) >= 2
     for summary_request in model.summaries:
         assert "tool_result lookup (call-" in summary_request.messages[0].text
@@ -133,7 +139,7 @@ def test_compaction_within_task_preserves_tool_effects_and_prepared_steps() -> N
                 assert message.tool_call_id in pending
                 pending.remove(message.tool_call_id)
         assert not pending
-    snapshot = agent.snapshot()
+    snapshot = run.snapshot()
     assert snapshot is not None and snapshot.checkpoint is not None
     reloaded = Agent(
         model,
@@ -141,24 +147,61 @@ def test_compaction_within_task_preserves_tool_effects_and_prepared_steps() -> N
             messages=agent.context.messages, checkpoint=snapshot.checkpoint
         ),
     )
-    reloaded.run(
+    reloaded_run = reloaded.start(
         max_steps=1, messages=[UserMessage(content="Summarize the conclusion.")]
     )
+    await reloaded_run.wait()
+    assert await reloaded_run.wait_for_idle(2)
     assert any(
         "Conversation summary:" in message.text
         for message in model.generations[-1].messages
     )
 
 
-def test_provider_context_rejection_retries_only_generation() -> None:
+@pytest.mark.parametrize("step_timeout", [None, 37])
+def test_provider_context_rejection_preserves_execution_settings(
+    step_timeout: int | None,
+) -> None:
     model = ContextModel(reject_first=True)
     history: list[Message] = [
         UserMessage(content="Old question"),
         AssistantMessage(content=[TextContent(text="Old evidence " * 100)]),
         UserMessage(content=TASK),
     ]
-    agent = Agent(model, context=AgentContext(messages=history))
+    prepared: list[int] = []
+
+    def prepare(state: StepInput) -> PreparedStep:
+        prepared.append(state.step.index)
+        return PreparedStep(timeout=step_timeout)
+
+    signal = CancellationSignal()
+    identity = LLMUserIdentity(user_id="user", session_id="session")
+    agent = Agent(
+        model,
+        context=AgentContext(messages=history),
+        execution=GenerationContext(
+            cancellation=signal,
+            timeout=23,
+            total_timeout=71,
+            user_identity=identity,
+            flow=LLMFlow.RESEARCH_AGENT,
+            content_mode=TraceContentMode.METADATA_ONLY,
+        ),
+        prepare_step=prepare,
+    )
     result = agent.run(max_steps=1)
+    assert prepared == [0]
+    assert [context.flow for context in model.contexts] == [
+        LLMFlow.RESEARCH_AGENT,
+        LLMFlow.CHAT_HISTORY_SUMMARIZATION,
+        LLMFlow.RESEARCH_AGENT,
+    ]
+    for context in model.contexts:
+        assert context.cancellation is signal
+        assert context.timeout == (step_timeout or 23)
+        assert context.total_timeout == 71
+        assert context.user_identity == identity
+        assert context.content_mode == TraceContentMode.METADATA_ONLY
     assert len(model.generations) == 2
     assert len(model.summaries) == 1
     assert result.steps == 1
@@ -166,14 +209,35 @@ def test_provider_context_rejection_retries_only_generation() -> None:
     assert result.output.text.endswith("[1].")
 
 
-def test_oversized_required_instruction_fails_without_losing_snapshot() -> None:
+@pytest.mark.asyncio
+async def test_oversized_required_instruction_fails_without_losing_snapshot() -> None:
     model = ContextModel()
     agent = Agent(
         model, context=AgentContext(messages=[UserMessage(content="mandatory " * 2000)])
     )
-    with pytest.raises(ContextLimitError):
-        agent.run(max_steps=1)
+    run = agent.start(max_steps=1)
+    with pytest.raises(RunFailed):
+        await run.wait()
+    assert await run.wait_for_idle(2)
     assert not model.generations
     assert agent.context.messages[0].text == "mandatory " * 2000
-    snapshot = agent.snapshot()
+    snapshot = run.snapshot()
     assert snapshot is not None and snapshot.status == "error"
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_from_another_branch_is_removed_from_context() -> None:
+    agent = Agent(
+        ContextModel(),
+        context=AgentContext(
+            messages=[UserMessage(content="Current branch")],
+            checkpoint=CompactionCheckpoint(
+                summary="Other branch", covered_count=1, covered_digest="different"
+            ),
+        ),
+    )
+    run = agent.start(max_steps=1)
+    await run.wait()
+    assert await run.wait_for_idle(2)
+    assert run.snapshot().checkpoint is None
+    assert agent.context.checkpoint is None

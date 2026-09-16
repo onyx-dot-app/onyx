@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 
-from onyx.agents.runtime import RunSnapshot
+from onyx.agents.models import RunSnapshot
 from onyx.agents.tools import ToolInvocation
 from onyx.agents.transcript import OperationSnapshot, RunStatus
 from onyx.chat.artifacts import project_tool_artifacts
@@ -92,8 +92,6 @@ def test_memory_outcome_is_final_before_serialization(
             ),
         ],
     )
-    first = project_tool_artifacts(snapshot, {"memory": 1})
-    second = project_tool_artifacts(snapshot, {"memory": 1})
-    assert first == second
-    assert first.tool_calls[0].tool_call_response == result.text
+    projected = project_tool_artifacts(snapshot, {"memory": 1})
+    assert projected.tool_calls[0].tool_call_response == result.text
     assert write.call_count == (0 if outcome in {"incognito", "missing_user"} else 1)

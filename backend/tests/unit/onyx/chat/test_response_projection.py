@@ -1,23 +1,26 @@
 """Persistence projects canonical output without waiting for stream observers."""
 
+import asyncio
 import threading
-from collections.abc import Generator
-from queue import Queue
+from collections.abc import Callable, Generator
+from concurrent.futures import Future
 
 import pytest
 
 from onyx.agents.events import AgentEvent, MessageEndEvent
-from onyx.agents.runtime import Agent, AgentContext
-from onyx.chat.emitter import Emitter, ModelStreamStatus
+from onyx.agents.models import PreparedStep, RunSnapshot
+from onyx.agents.runtime import Agent, Run
+from onyx.agents.transcript import OperationSnapshot, RunStatus
+from onyx.chat.emitter import Emitter
 from onyx.chat.models import (
     AnswerStreamPart,
     ChatResponseOutcome,
     ChatStepOutput,
     PersistenceStatus,
-    StreamingError,
 )
-from onyx.chat.presentation import ResponseBinding, attach_response
+from onyx.chat.presentation import ResponsePresenter, project_response
 from onyx.chat.process_message import gather_stream_full
+from onyx.chat.stream_buffer import ChatDelivery
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc
 from onyx.deep_research.models import ResearchPhase, ResearchStepOutput
@@ -33,9 +36,23 @@ from onyx.llm.models import (
     TextContent,
 )
 from onyx.server.query_and_chat.models import MessageResponseIDInfo
-from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.utils.threadpool_concurrency import ContextThreadPoolExecutor
 from tests.unit.onyx.agents.fakes import FakeModelClient
+
+
+async def _run_observed(
+    agent: Agent,
+    observe: Callable[[Run], None] | None = None,
+    observer: Callable[[AgentEvent], None] | None = None,
+) -> Run:
+    run = agent.start(max_steps=1)
+    if observe:
+        observe(run)
+    if observer:
+        run.subscribe(observer)
+    await run.wait()
+    assert await run.wait_for_idle(timeout=5)
+    return run
 
 
 def test_snapshot_retains_partial_output_after_producer_continues() -> None:
@@ -65,62 +82,55 @@ def test_snapshot_retains_partial_output_after_producer_continues() -> None:
                 request_params=params,
             )
 
-    state = ResponseBinding()
+    started: Future[Run] = Future()
     agent = Agent(
         StreamingClient(lambda *_: AssistantMessage()),
-        context=AgentContext(
+        prepare_step=lambda _input: PreparedStep(
             output_metadata=ResearchStepOutput(
                 phase=ResearchPhase.CLARIFICATION, is_reasoning_model=False
             )
         ),
     )
-    attach_response(
-        agent,
-        state,
-        Emitter(Queue(), response_id=42),
-        response_id=42,
-        tool_ids={},
-    )
+
     with ContextThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(lambda: agent.run(max_steps=1))
+        future = executor.submit(
+            lambda: asyncio.run(_run_observed(agent, started.set_result))
+        )
         try:
             assert partial_ready.wait(2)
-            saved = state.snapshot(cancelled=True)
+            saved = project_response(
+                started.result(timeout=2).snapshot(), response_id=42, tool_ids={}
+            )
             params.sent_kwargs["temperature"] = 0.7
         finally:
             finish.set()
         future.result(timeout=2)
 
-    assert saved.cancelled
+    assert not saved.cancelled
     assert not saved.is_clarification
     assert saved.answer == "partial"
     assert saved.request_params is not None
     assert saved.request_params.sent_kwargs == {"temperature": 0.2}
-    assert saved.transcript is not None
-    assert saved.transcript.status == "cancelled"
-    assistant = saved.transcript.messages[-1]
-    assert isinstance(assistant, AssistantMessage)
-    assert assistant.text == "partial"
-    assert assistant.stop_reason == "aborted"
-    assert state.snapshot().answer == "complete"
-    assert state.snapshot().is_clarification
+    assert saved.transcript is None
+    assert (
+        project_response(
+            started.result(timeout=2).snapshot(), response_id=42, tool_ids={}
+        ).answer
+        == "complete"
+    )
+    assert project_response(
+        started.result(timeout=2).snapshot(), response_id=42, tool_ids={}
+    ).is_clarification
 
 
 def test_snapshot_does_not_wait_for_slow_stream_observer() -> None:
     updating = threading.Event()
     finish_update = threading.Event()
-    state = ResponseBinding()
+    started: Future[Run] = Future()
     agent = Agent(
         FakeModelClient(
             lambda *_: AssistantMessage(content=[TextContent(text="answer")])
         ),
-    )
-    attach_response(
-        agent,
-        state,
-        Emitter(Queue(), response_id=42),
-        response_id=42,
-        tool_ids={},
     )
 
     def display(event: AgentEvent) -> None:
@@ -128,12 +138,17 @@ def test_snapshot_does_not_wait_for_slow_stream_observer() -> None:
             updating.set()
             assert finish_update.wait(2)
 
-    agent.subscribe(display)
     with ContextThreadPoolExecutor(max_workers=2) as executor:
-        running = executor.submit(lambda: agent.run(max_steps=1))
+        running = executor.submit(
+            lambda: asyncio.run(_run_observed(agent, started.set_result, display))
+        )
         try:
             assert updating.wait(2)
-            saving = executor.submit(state.snapshot)
+            saving = executor.submit(
+                lambda: project_response(
+                    started.result(timeout=2).snapshot(), response_id=42, tool_ids={}
+                )
+            )
             result = saving.result(timeout=0.5)
             assert result.answer == "answer"
             assert result.transcript is not None
@@ -146,7 +161,7 @@ def test_snapshot_does_not_wait_for_slow_stream_observer() -> None:
 @pytest.mark.parametrize("delivery", ["complete", "detached", "overflow"])
 @pytest.mark.parametrize("sources_known_at_generation", [True, False])
 def test_full_response_content_survives_delivery_gaps(
-    delivery: str, sources_known_at_generation: bool
+    delivery: str, sources_known_at_generation: bool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     documents = [
         SearchDoc(
@@ -169,7 +184,7 @@ def test_full_response_content_survives_delivery_gaps(
                 content=[TextContent(text="Second [2], then first [1].")]
             )
         ),
-        context=AgentContext(
+        prepare_step=lambda _input: PreparedStep(
             output_metadata=ChatStepOutput(
                 sources={1: documents[0], 2: documents[1]}
                 if sources_known_at_generation
@@ -178,35 +193,33 @@ def test_full_response_content_survives_delivery_gaps(
             )
         ),
     )
-    binding = ResponseBinding()
-    output: Queue[tuple[int, Packet | ModelStreamStatus]] = Queue(
-        maxsize=1 if delivery == "overflow" else 0
-    )
-    closed = threading.Event()
-    attach_response(
-        agent,
-        binding,
-        None if delivery == "detached" else Emitter(output, 42, drain_done=closed),
-        response_id=42,
-        tool_ids={},
-        initial_citations={1: documents[0], 2: documents[1]},
-    )
-    agent.run(max_steps=1)
-    binding.finish(
+    response_future: Future[ChatResponseOutcome] = Future()
+    if delivery == "overflow":
+        monkeypatch.setattr("onyx.chat.stream_buffer._STREAM_QUEUE_CAPACITY", 2)
+    output = ChatDelivery(None)
+
+    def observe(run: Run) -> None:
+        if delivery != "detached":
+            run.subscribe(ResponsePresenter(Emitter(output.publish, 42)).consume)
+
+    run = asyncio.run(_run_observed(agent, observe))
+    response_future.set_result(
         ChatResponseOutcome(
-            response=binding.snapshot(), persistence_status=PersistenceStatus.SAVED
+            response=project_response(
+                run.snapshot(),
+                response_id=42,
+                tool_ids={},
+                initial_citations={1: documents[0], 2: documents[1]},
+            ),
+            persistence_status=PersistenceStatus.SAVED,
         )
     )
     packets: list[AnswerStreamPart] = [
         MessageResponseIDInfo(user_message_id=41, reserved_assistant_message_id=42)
     ]
-    packets.extend(
-        packet for _, packet in list(output.queue) if isinstance(packet, Packet)
-    )
-    if delivery == "overflow":
-        assert closed.is_set()
-        packets.append(StreamingError(error="Delivery gap", error_code="STREAM_GAP"))
-    response = gather_stream_full(iter(packets), binding)
+    output.finish()
+    packets.extend(output.reader)
+    response = gather_stream_full(iter(packets), response_future)
     assert response.answer_citationless == (
         "Second, then first."
         if sources_known_at_generation
@@ -217,4 +230,46 @@ def test_full_response_content_survives_delivery_gaps(
         (citation.citation_number, citation.document_id)
         for citation in response.citation_info
     ] == ([(2, "doc-2"), (1, "doc-1")] if sources_known_at_generation else [])
-    assert response.error_msg == ("Delivery gap" if delivery == "overflow" else None)
+    assert response.error_msg == (
+        "The live stream is incomplete. Reload this conversation."
+        if delivery == "overflow"
+        else None
+    )
+
+
+def test_response_projection_uses_the_selected_run_after_agent_reuse() -> None:
+    replies = iter(["First response", "Second response"])
+    agent = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(content=[TextContent(text=next(replies))])
+        )
+    )
+    first_run = asyncio.run(_run_observed(agent))
+    first = project_response(first_run.snapshot(), response_id=42, tool_ids={})
+    latest = agent.run(max_steps=1)
+    assert project_response(first_run.snapshot(), response_id=42, tool_ids={}) == first
+    assert first.answer == "First response"
+    assert latest.output.text == "Second response"
+
+
+def test_unfinished_descendant_preserves_answer_without_saving_running_history() -> (
+    None
+):
+    snapshot = RunSnapshot(
+        run_id="parent",
+        status=RunStatus.ERROR,
+        messages=[
+            AssistantMessage(
+                content=[TextContent(text="Partial answer")],
+                metadata=ChatStepOutput(),
+            )
+        ],
+        operations=[
+            OperationSnapshot(step_index=0, message_index=0, status=RunStatus.ERROR)
+        ],
+        child_runs=[RunSnapshot(run_id="child", status=RunStatus.RUNNING, messages=[])],
+    )
+    response = project_response(snapshot, response_id=42, tool_ids={})
+    assert response.answer == "Partial answer"
+    assert response.transcript is None
+    assert snapshot.child_runs[0].status == RunStatus.RUNNING

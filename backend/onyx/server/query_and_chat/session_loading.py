@@ -4,10 +4,15 @@ from pydantic import BaseModel, Field, JsonValue, TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.agents.transcript import AgentTranscript, RunStatus
-from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.citation_utils import extract_citation_order_from_text
 from onyx.chat.models import ChatExecutionRecord, MessagePresentation, PresentationMode
-from onyx.chat.renderer import PacketRenderer, RenderConfig, render_message
+from onyx.chat.renderer import (
+    PacketRenderer,
+    RenderConfig,
+    render_config,
+    render_message,
+)
+from onyx.chat.tool_progress import project_tool_progress, tool_display_progress
 from onyx.coding_agent.tool_definitions import (
     CODING_AGENT_QUERY_KEY,
     CODING_AGENT_REPO_KEY,
@@ -20,12 +25,17 @@ from onyx.db.chat import (
     translate_db_search_doc_to_saved_search_doc,
 )
 from onyx.db.models import ChatMessage, Tool, ToolCall
-from onyx.db.tools import get_response_tool_records, get_tool_by_id, get_tools_by_ids
+from onyx.db.tools import (
+    get_response_tool_records,
+    get_tool_by_id,
+    get_tools_by_ids,
+    restore_tool_result,
+)
 from onyx.deep_research.tool_definitions import (
     RESEARCH_AGENT_IN_CODE_ID,
     RESEARCH_AGENT_TASK_KEY,
 )
-from onyx.llm.models import AssistantMessage
+from onyx.llm.models import AssistantMessage, ToolResultMessage
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     AgentResponseDelta,
@@ -938,6 +948,8 @@ def _execution_run_packets(
     base = PacketIdentity(
         response_id=response_id,
         run_id=transcript.run_id,
+        agent_id=transcript.agent_id,
+        agent_path=transcript.agent_path,
         message_id=f"{transcript.run_id}:0",
         parent_run_id=transcript.parent_run_id,
         parent_message_id=transcript.parent_message_id,
@@ -961,36 +973,19 @@ def _execution_run_packets(
         setting = settings.get((transcript.run_id, operation.step_index))
         config = RenderConfig(mode=default_mode)
         if setting is not None:
-            config = RenderConfig(
-                mode=setting.mode,
-                text_as_thinking=setting.text_as_thinking,
-                think_tool=setting.think_tool,
-                argument_tools=setting.argument_tools,
-                pre_answer_seconds=setting.pre_answer_seconds,
-                documents=[
-                    documents[doc_id]
-                    for doc_id in setting.document_ids
-                    if doc_id in documents
-                ]
-                or None,
-            )
-            if setting.citation_mode is not None:
-                config.citations = DynamicCitationProcessor(
-                    citation_mode=setting.citation_mode
-                )
-                config.citations.update_citation_mapping(
-                    {
-                        number: documents[doc_id]
-                        for number, doc_id in setting.citation_documents.items()
-                        if doc_id in documents
-                    }
-                )
+            config = render_config(setting, documents)
         renderer = PacketRenderer(config, identity)
         packets.extend(
             render_message(
                 renderer, message, complete=operation.status == RunStatus.COMPLETE
             )
         )
+        results: dict[str, ToolResultMessage] = {}
+        for following in transcript.messages[operation.message_index + 1 :]:
+            if isinstance(following, AssistantMessage):
+                break
+            if isinstance(following, ToolResultMessage):
+                results[following.tool_call_id] = following
         for call in message.tool_calls:
             call_identity = identity.model_copy(
                 update={"tool_call_id": call.id, "part_id": "tool"}
@@ -1003,38 +998,22 @@ def _execution_run_packets(
             )
             record = records.get((identity.message_id, call.id))
             tool = tools.get(record.tool_id) if record is not None else None
+            result = results.get(call.id)
             content: list[Packet] = []
-            if record is not None:
-                if tool is not None:
-                    content = _saved_tool_packets(record, tool)
-                else:
-                    logger.info(
-                        "Saved tool definition %s is unavailable", record.tool_id
-                    )
-                    content = create_custom_tool_packets(
-                        tool_name=call.name,
-                        response_type="text",
-                        turn_index=0,
-                        data=record.tool_call_response,
-                    )
+            if result is not None and record is not None:
+                result = restore_tool_result(result, record, tool)
+            for progress in tool_display_progress(
+                call, result, tool_id=record.tool_id if record else None
+            ):
+                obj = project_tool_progress(progress)
+                if obj is not None:
+                    content.append(Packet(identity=call_identity, obj=obj))
             children = [
                 child
-                for child in transcript.children
+                for child in transcript.child_runs
                 if child.parent_message_id == identity.message_id
                 and child.parent_tool_call_id == call.id
             ]
-            if (
-                children
-                and tool is not None
-                and tool.in_code_tool_id == RESEARCH_AGENT_IN_CODE_ID
-            ):
-                content = [
-                    packet
-                    for packet in content
-                    if not isinstance(
-                        packet.obj, (IntermediateReportStart, IntermediateReportDelta)
-                    )
-                ]
             if content:
                 packets.append(
                     content[0].model_copy(update={"identity": call_identity})

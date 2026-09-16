@@ -4,7 +4,7 @@ import mimetypes
 from sqlalchemy.orm import Session
 
 from onyx.agents.transcript import AgentTranscript
-from onyx.chat.incognito_context import append_incognito_messages
+from onyx.chat.incognito_context import save_incognito_response
 from onyx.chat.models import (
     ChatResponseSnapshot,
     MessagePresentation,
@@ -12,7 +12,9 @@ from onyx.chat.models import (
 )
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc
-from onyx.db.agent_transcript import set_agent_transcript
+from onyx.db.agent_transcript import (
+    set_agent_transcript,
+)
 from onyx.db.chat import (
     add_search_docs_to_chat_message,
     add_search_docs_to_tool_call,
@@ -280,6 +282,7 @@ def save_chat_turn(
     set_agent_transcript(
         assistant_message,
         agent_transcript,
+        db_session=db_session,
         persist_content=persist_content,
         presentation=presentation,
         tool_records=tool_records,
@@ -317,7 +320,8 @@ def save_chat_response(*, message_id: int, response: ChatResponseSnapshot) -> No
     with get_session_with_current_tenant() as session:
         message = session.get(ChatMessage, message_id)
         if message is None:
-            raise RuntimeError(f"ChatMessage {message_id} not found during completion")
+            raise ValueError("Chat response is unavailable")
+        chat_session_id = message.chat_session_id
         keeps_content = record_mode_persists_content(
             message.chat_session.incognito_record_mode
         )
@@ -348,10 +352,27 @@ def save_chat_response(*, message_id: int, response: ChatResponseSnapshot) -> No
             agent_transcript=response.transcript,
             presentation=response.presentation,
         )
-        if not keeps_content:
-            messages = (
-                list(response.transcript.messages)
-                if response.transcript and response.transcript.messages
-                else [AssistantMessage(content=[TextContent(text=answer)])]
-            )
-            append_incognito_messages(message.chat_session_id, messages)
+    if not keeps_content:
+        messages = (
+            list(response.transcript.messages)
+            if response.transcript and response.transcript.messages
+            else [AssistantMessage(content=[TextContent(text=answer)])]
+        )
+        sources_by_run: dict[str, dict[int, SearchDoc]] = {}
+        if response.transcript is not None:
+            documents = {
+                **{doc.document_id: doc for doc in response.citation_to_doc.values()},
+                **response.all_search_docs,
+            }
+            for item in response.presentation:
+                sources = sources_by_run.setdefault(item.run_id, {})
+                for number, document_id in item.citation_documents.items():
+                    if document_id in documents:
+                        sources[number] = documents[document_id]
+        save_incognito_response(
+            chat_session_id,
+            response.transcript,
+            sources_by_run,
+            message_id=message_id,
+            messages=messages,
+        )

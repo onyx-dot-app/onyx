@@ -4,10 +4,10 @@ import asyncio
 import os
 import threading
 from collections.abc import Callable, Coroutine, Generator, Iterator
-from concurrent.futures import CancelledError
+from concurrent.futures import CancelledError, Future
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from contextlib import contextmanager, suppress
-from contextvars import Context, ContextVar, copy_context
+from contextvars import ContextVar, copy_context
 from functools import wraps
 from typing import TYPE_CHECKING, ParamSpec, TypeVar
 
@@ -15,7 +15,7 @@ from pydantic import JsonValue
 
 from onyx.llm.exceptions import LLMTimeoutError
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import start_thread_with_context
+from onyx.utils.threadpool_concurrency import get_background_event_loop
 
 logger = setup_logger()
 
@@ -31,6 +31,7 @@ class CancellationSignal:
         self._cancelled = threading.Event()
         self._lock = threading.Lock()
         self._callbacks: set[Callable[[], object]] = set()
+        self._operation_listeners: set[Callable[[Future[None]], None]] = set()
 
     @property
     def cancelled(self) -> bool:
@@ -67,6 +68,23 @@ class CancellationSignal:
             with self._lock:
                 self._callbacks.discard(callback)
 
+    def track_operation(self, completion: Future[None]) -> None:
+        with self._lock:
+            listeners = tuple(self._operation_listeners)
+        for listener in listeners:
+            listener(completion)
+
+    @contextmanager
+    def on_operation(self, listener: Callable[[Future[None]], None]) -> Iterator[None]:
+        """Observe provider work until actual cleanup finishes, including after timeout."""
+        with self._lock:
+            self._operation_listeners.add(listener)
+        try:
+            yield
+        finally:
+            with self._lock:
+                self._operation_listeners.discard(listener)
+
 
 _current_signal: ContextVar[CancellationSignal | None] = ContextVar(
     "agent_cancellation", default=None
@@ -101,13 +119,8 @@ if TYPE_CHECKING:
 class _NetworkLoop:
     def __init__(self) -> None:
         self.pid = os.getpid()
-        self.loop = asyncio.new_event_loop()
-        self.thread = start_thread_with_context(
-            self.loop.run_forever,
-            name="agent-model-io",
-            daemon=True,
-            context=Context(),
-        )
+        self.loop = get_background_event_loop()
+        self._tasks: set[asyncio.Task[None]] = set()
 
     def call[T](
         self,
@@ -115,28 +128,70 @@ class _NetworkLoop:
         signal: CancellationSignal | None,
         *,
         timeout: float,
+        ownership_signal: CancellationSignal | None = None,
     ) -> T:
-        async def run() -> T:
-            task = asyncio.current_task()
-            if task is None:
-                coroutine.close()
-                raise RuntimeError("Provider I/O must run in an asyncio task")
-            if signal is None:
-                return await coroutine
-            if signal.cancelled:
-                coroutine.close()
-                signal.check()
-            with signal.on_cancel(lambda: self.loop.call_soon_threadsafe(task.cancel)):
-                return await coroutine
+        result: Future[T] = Future()
+        completion: Future[None] = Future()
+        result.set_running_or_notify_cancel()
+        completion.set_running_or_notify_cancel()
+        cancelled = False
+        entered = False
+        task: asyncio.Task[None] | None = None
 
-        # Cancellation normally waits for task cleanup; the operation bound also covers stalled cleanup.
-        future = asyncio.run_coroutine_threadsafe(run(), self.loop)
+        async def run() -> None:
+            nonlocal entered
+            entered = True
+            try:
+                result.set_result(await coroutine)
+            except asyncio.CancelledError:
+                result.set_exception(CancelledError())
+            except BaseException as error:
+                result.set_exception(error)
+
+        def cancel_task() -> None:
+            nonlocal cancelled
+            cancelled = True
+            if task is not None:
+                task.cancel()
+
+        def cancel() -> None:
+            self.loop.call_soon_threadsafe(cancel_task)
+
+        def finish(done: asyncio.Task[None]) -> None:
+            self._tasks.discard(done)
+            if not entered:
+                coroutine.close()
+                result.set_exception(CancelledError())
+            completion.set_result(None)
+
+        def start() -> None:
+            nonlocal task
+            task = self.loop.create_task(run())
+            self._tasks.add(task)
+            task.add_done_callback(finish)
+            if cancelled:
+                task.cancel()
+
+        owner = ownership_signal or signal
         try:
-            return future.result(timeout=timeout)
+            if signal is not None:
+                signal.check()
+            if owner is not None:
+                owner.track_operation(completion)
+            self.loop.call_soon_threadsafe(start)
+        except BaseException:
+            coroutine.close()
+            completion.set_result(None)
+            raise
+        try:
+            if signal is None:
+                return result.result(timeout=timeout)
+            with signal.on_cancel(cancel):
+                return result.result(timeout=timeout)
         except FutureTimeoutError as error:
-            if future.done():
+            if result.done():
                 raise
-            future.cancel()
+            cancel()
             if signal is not None:
                 signal.check()
             raise LLMTimeoutError(
@@ -159,6 +214,29 @@ def _network_loop() -> _NetworkLoop:
         if _network is None or _network.pid != os.getpid():
             _network = _NetworkLoop()
         return _network
+
+
+@contextmanager
+def cancellation_deadline(
+    seconds: float, callback: Callable[[], None]
+) -> Iterator[None]:
+    loop = get_background_event_loop()
+    handle: asyncio.TimerHandle | None = None
+    expires_at = loop.time() + seconds
+
+    def start() -> None:
+        nonlocal handle
+        handle = loop.call_at(expires_at, callback)
+
+    def stop() -> None:
+        if handle is not None:
+            handle.cancel()
+
+    loop.call_soon_threadsafe(start)
+    try:
+        yield
+    finally:
+        loop.call_soon_threadsafe(stop)
 
 
 class CancellableStream(Iterator["ModelResponseStream"]):
@@ -261,7 +339,10 @@ class CancellableStream(Iterator["ModelResponseStream"]):
             self._closed = True
             try:
                 self._network.call(
-                    self._close(), None, timeout=2 * _PROVIDER_CLEANUP_TIMEOUT_SECONDS
+                    self._close(),
+                    None,
+                    timeout=2 * _PROVIDER_CLEANUP_TIMEOUT_SECONDS,
+                    ownership_signal=self._signal,
                 )
             except LLMTimeoutError:
                 logger.exception("Provider stream cleanup exceeded its wait bound")

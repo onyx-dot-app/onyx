@@ -6,15 +6,11 @@ from echoing API keys back through error messages.
 from collections.abc import Iterable
 from typing import Any
 
-from onyx.llm.exceptions import ClassifiedLLMError
+from onyx.llm.exceptions import ClassifiedLLMError, litellm_exception_to_safe_error
 from onyx.llm.interfaces import LLMConfig, LLMInfo
 from onyx.llm.litellm_models import Choice, Message, ModelResponse
 from onyx.llm.multi_llm import LitellmLLM, LitellmTransport
-from onyx.llm.utils import (
-    collect_credential_values,
-    is_sensitive_custom_config_key,
-    litellm_exception_to_safe_error,
-)
+from onyx.llm.utils import collect_credential_values, is_sensitive_custom_config_key
 from onyx.llm.utils import (
     test_llm as run_test_llm,
 )  # aliased to avoid pytest collection

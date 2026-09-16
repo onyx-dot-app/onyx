@@ -462,3 +462,23 @@ class TestPipeline:
 
         members = raw_redis.smembers(f"{tenant_id}:{key}")
         assert members == {b"a", b"b", b"c"}
+
+
+def test_watched_transaction_reads_and_updates_only_tenant_keys(
+    tenant_redis: TenantRedisClient, tenant_id: str, raw_redis: Redis
+) -> None:
+    value_key, hash_key = _unique_key(), _unique_key()
+    tenant_redis.set(value_key, "first")
+    tenant_redis.hset(hash_key, "item", "one")
+    with tenant_redis.pipeline() as pipeline:
+        pipeline.watch(value_key, hash_key)
+        assert pipeline.get_watched(value_key) == b"first"
+        assert pipeline.hgetall_watched(hash_key) == {b"item": b"one"}
+        pipeline.multi()
+        pipeline.set(value_key, "second")
+        pipeline.hset(hash_key, {b"item": b"two"})
+        pipeline.execute()
+    assert raw_redis.get(f"{tenant_id}:{value_key}") == b"second"
+    assert raw_redis.hget(f"{tenant_id}:{hash_key}", "item") == b"two"
+    assert raw_redis.get(value_key) is None
+    assert raw_redis.hgetall(hash_key) == {}

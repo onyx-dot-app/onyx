@@ -1,19 +1,21 @@
 """Accepted artifacts survive cancellation of their parent or sibling operation."""
 
+import asyncio
 from queue import Queue
 from threading import Event
 
 import pytest
 
+from onyx.agents.coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent
-from onyx.agents.runtime import Agent, AgentContext
+from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.chat.emitter import Emitter
-from onyx.chat.presentation import ResponseBinding, attach_response
+from onyx.chat.presentation import ResponsePresenter, project_response
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.models import AssistantMessage, ToolCall, ToolResult
+from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.models import PythonExecutionFile, PythonToolRichResponse
-from onyx.utils.threadpool_concurrency import ContextThreadPoolExecutor
 from tests.unit.onyx.agents.fakes import FakeModelClient
 
 
@@ -48,23 +50,28 @@ def test_stop_preserves_accepted_file_and_unfinished_parent(
                 ]
             )
         ),
-        context=AgentContext(
-            tools=[
-                AgentTool(name="write", description="", parameters={}, execute=write),
-                AgentTool(name="wait", description="", parameters={}, execute=wait),
-            ]
-        ),
+        tools=[
+            AgentTool(name="write", description="", parameters={}, execute=write),
+            AgentTool(name="wait", description="", parameters={}, execute=wait),
+        ],
     )
 
     def on_event(event: AgentEvent) -> None:
         if event.type == "tool_end" and event.tool_call.id == "file":
             accepted.set()
 
-    worker.subscribe(on_event)
     if child_run:
 
         async def research(invocation: ToolInvocation) -> ToolResult:
-            result = await invocation.run_child(worker, max_steps=1)
+            submission = await invocation.agents.spawn_agent(
+                worker,
+                name="research",
+                description="Research",
+                max_steps=1,
+                messages=[],
+            )
+            result = await invocation.agents.wait_run(submission.run_id)
+            assert result is not None
             return ToolResult(content=result.output.text)
 
         agent = Agent(
@@ -73,39 +80,51 @@ def test_stop_preserves_accepted_file_and_unfinished_parent(
                     content=[ToolCall(id="parent", name="research", arguments={})]
                 )
             ),
-            context=AgentContext(
-                tools=[
-                    AgentTool(
-                        name="research",
-                        description="",
-                        parameters={},
-                        execute_async=research,
-                    )
-                ]
-            ),
+            tools=[
+                AgentTool(
+                    name="research",
+                    description="",
+                    parameters={},
+                    execute_async=research,
+                )
+            ],
         )
     else:
         agent = worker
-    state = ResponseBinding()
-    attach_response(
-        agent,
-        state,
-        Emitter(Queue(), response_id=42) if render else None,
-        response_id=42,
-        tool_ids={"write": 1, "wait": 2, "research": 7},
-    )
     signal = CancellationSignal()
-    with ContextThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(lambda: agent.run(max_steps=2, cancellation=signal))
+
+    async def exercise() -> Run:
+        coordinator = AgentCoordinator() if child_run else None
+        run = agent.start(max_steps=2, cancellation=signal, coordinator=coordinator)
+        run.subscribe(on_event)
+        if render:
+            run.subscribe(
+                ResponsePresenter(
+                    Emitter(Queue[Packet]().put_nowait, response_id=42)
+                ).consume
+            )
         try:
-            assert accepted.wait(5)
+            async with asyncio.timeout(5):
+                while not accepted.is_set():
+                    await asyncio.sleep(0.01)
             signal.cancel()
             with pytest.raises(AgentCancelled):
-                future.result(timeout=5)
+                await run.wait(timeout=2)
+            assert not await run.wait_for_idle(timeout=0)
         finally:
             release.set()
+            assert await run.wait_for_idle(timeout=3)
+            if coordinator is not None:
+                assert await coordinator.close(timeout=3)
+        return run
+
+    run = asyncio.run(exercise())
     for _ in range(2):
-        snapshot = state.snapshot(cancelled=True)
+        snapshot = project_response(
+            run.snapshot(),
+            response_id=42,
+            tool_ids={"write": 1, "wait": 2, "research": 7},
+        )
         assert snapshot.transcript is not None
         file_record = next(
             record for record in snapshot.tool_calls if record.tool_call_id == "file"
@@ -120,5 +139,5 @@ def test_stop_preserves_accepted_file_and_unfinished_parent(
             )
             assert file_record.parent_execution_key == parent.execution_key
             assert parent.tool_call_response == ""
-            assert snapshot.transcript.children
+            assert snapshot.transcript.child_runs
         file_record.generated_files = []

@@ -1,7 +1,13 @@
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from functools import partial
 
-from onyx.agents.runtime import Agent, AgentContext, AgentHooks, AgentStep, StepResult
+from onyx.agents.models import (
+    PreparedStep,
+    StepInput,
+    StepResult,
+)
+from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolExecutionMode, ToolInvocation
 from onyx.coding_agent.tool_definitions import (
     BASH_TOOL_DESCRIPTION,
@@ -9,15 +15,14 @@ from onyx.coding_agent.tool_definitions import (
     GENERATE_ANSWER_TOOL_DESCRIPTION,
     GENERATE_ANSWER_TOOL_NAME,
 )
-from onyx.context.messages import PromptMetadata, prepare_model_messages
+from onyx.context.messages import PromptMetadata
 from onyx.context.prompt import prepare_prompt
 from onyx.deep_research.tool_definitions import THINK_TOOL_RESPONSE_MESSAGE
 from onyx.llm.cancellation import check_cancelled
 from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
 from onyx.llm.model_capabilities import model_is_reasoning_model
 from onyx.llm.models import (
-    GenerationRequest,
-    Message,
+    GenerationOptions,
     ReasoningEffort,
     SystemMessage,
     ToolChoiceOptions,
@@ -124,103 +129,107 @@ class CodingAgent:
     def __init__(
         self,
         *,
-        query: str,
         repo: str,
         llm: LLM,
         token_counter: Callable[[str], int],
         user_identity: LLMUserIdentity | None,
         bash_tool: BashTool,
     ) -> None:
-        self.query = query
         self.repo = repo
         self.llm = llm
         self.token_counter = token_counter
         self.bash_tool = bash_tool
+        self.is_sandbox_available = True
         self.is_reasoning_model = model_is_reasoning_model(
             llm.info.model_name, llm.info.model_provider
         )
-        self.requested_final = False
-        self.is_final_step = False
-        self._system_prompt = ""
         self.agent = Agent(
             llm,
-            context=AgentContext(
-                execution=GenerationContext(
-                    flow=LLMFlow.CODING_AGENT, user_identity=user_identity
-                ),
-            ),
-            hooks=AgentHooks(
-                prepare_step=self.prepare_step,
-                build_request=self.build_request,
-                after_step=self.after_step,
+            prepare_step=self.prepare_step,
+            after_step=self.after_step,
+            execution=GenerationContext(
+                flow=LLMFlow.CODING_AGENT, user_identity=user_identity
             ),
         )
 
-    @property
-    def input_messages(self) -> list[Message]:
-        return [UserMessage(content=f"Repository: {self.repo}\n\nQuery:\n{self.query}")]
-
-    def prepare_step(self, context: AgentContext, step: AgentStep) -> AgentContext:
-        self.is_final_step = self.requested_final or step.is_last
-        if self.is_final_step:
-            self._system_prompt = CODING_AGENT_FINAL_ANSWER_PROMPT
-            context.tools = []
-            context.options.tool_choice = ToolChoiceOptions.NONE
+    def prepare_step(self, state: StepInput) -> PreparedStep:
+        if state.previous is None and not self.is_sandbox_available:
+            raise ValueError("The coding agent's sandbox is no longer available")
+        previous = state.previous
+        step = state.step
+        query = "\n\n".join(message.text for message in state.input_messages)
+        options = GenerationOptions()
+        is_final_step = step.is_last or bool(
+            previous
+            and (
+                not previous.message.tool_calls
+                or any(
+                    call.name == GENERATE_ANSWER_TOOL_NAME
+                    for call in previous.message.tool_calls
+                )
+            )
+        )
+        if is_final_step:
+            system_prompt = CODING_AGENT_FINAL_ANSWER_PROMPT
+            tools = []
+            options.tool_choice = ToolChoiceOptions.NONE
         else:
             template = (
                 CODING_AGENT_PROMPT_REASONING
                 if self.is_reasoning_model
                 else CODING_AGENT_PROMPT
             )
-            self._system_prompt = template.format(
+            system_prompt = template.format(
                 current_datetime=get_current_llm_day_time(full_sentence=False),
                 current_cycle_count=step.index,
             )
-            context.tools = [
+            tools = [
                 self._tool(BASH_TOOL_DESCRIPTION, self._bash),
                 self._tool(GENERATE_ANSWER_TOOL_DESCRIPTION, self._request_answer),
             ]
             if not self.is_reasoning_model:
-                context.tools.append(
+                tools.append(
                     self._tool(CODING_AGENT_THINK_TOOL_DESCRIPTION, self._think)
                 )
-            context.options.tool_choice = ToolChoiceOptions.REQUIRED
-        context.options.max_tokens = (
-            MAX_FINAL_ANSWER_TOKENS if self.is_final_step else MAX_INVESTIGATION_TOKENS
+            options.tool_choice = ToolChoiceOptions.REQUIRED
+        options.max_tokens = (
+            MAX_FINAL_ANSWER_TOKENS if is_final_step else MAX_INVESTIGATION_TOKENS
         )
-        context.options.reasoning_effort = ReasoningEffort.LOW
-        return context
-
-    def build_request(self, context: AgentContext) -> GenerationRequest:
-        prompt = self._system_prompt
-        reminder = USER_FINAL_ANSWER_QUERY.format(query=self.query, repo=self.repo)
-        messages = prepare_prompt(
-            token_counter=self.token_counter,
-            system_prompt=SystemMessage(
-                content=prompt,
-                metadata=PromptMetadata(token_count=self.token_counter(prompt)),
+        options.reasoning_effort = ReasoningEffort.LOW
+        prompt = f"Repository: {self.repo}\n\n{system_prompt}"
+        reminder = (
+            USER_FINAL_ANSWER_QUERY.format(query=query, repo=self.repo)
+            if is_final_step
+            else None
+        )
+        return PreparedStep(
+            tools=tools,
+            options=options,
+            assemble_messages=partial(
+                prepare_prompt,
+                system_prompt=SystemMessage(
+                    content=prompt,
+                    metadata=PromptMetadata(token_count=self.token_counter(prompt)),
+                ),
+                custom_agent_prompt=None,
+                reminder_message=UserMessage(
+                    content=reminder,
+                    metadata=PromptMetadata(token_count=self.token_counter(reminder)),
+                )
+                if reminder
+                else None,
+                context_files=None,
+                token_counter=self.token_counter,
+                llm_info=self.llm.info,
             ),
-            custom_agent_prompt=None,
-            messages=context.messages,
-            reminder_message=UserMessage(
-                content=reminder,
-                metadata=PromptMetadata(token_count=self.token_counter(reminder)),
-            )
-            if self.is_final_step
-            else None,
-            context_files=None,
         )
-        context.messages = prepare_model_messages(messages, self.llm.info)
-        return context.generation_request()
 
     def after_step(self, result: StepResult) -> bool:
-        if self.is_final_step:
-            return False
-        if not result.message.tool_calls or any(
-            call.name == GENERATE_ANSWER_TOOL_NAME for call in result.message.tool_calls
-        ):
-            self.requested_final = True
-        return True
+        if result.request.options.tool_choice != ToolChoiceOptions.NONE:
+            return True
+        if not result.message.text:
+            raise ValueError("Coding agent produced no final answer")
+        return False
 
     def _tool(
         self,

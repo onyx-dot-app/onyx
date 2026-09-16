@@ -442,6 +442,8 @@ PacketObj = Union[
 
 
 class PacketIdentity(BaseModel):
+    agent_id: str | None = None
+    agent_path: str | None = None
     response_id: int
     run_id: str
     message_id: str

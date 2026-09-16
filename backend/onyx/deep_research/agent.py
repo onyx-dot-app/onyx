@@ -1,19 +1,23 @@
 import time
 from collections.abc import Callable
+from functools import partial
 
 from pydantic import BaseModel
 
-from onyx.agents.runtime import (
-    Agent,
+from onyx.agents.models import (
     AgentContext,
-    AgentHooks,
-    AgentStep,
+    PreparedStep,
+    StepInput,
     StepResult,
-    ToolCallContext,
 )
+from onyx.agents.runtime import Agent, RunFailed
 from onyx.agents.tools import AgentTool, ToolInvocation, ToolProgress
-from onyx.agents.transcript import CompactionCheckpoint
-from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
+from onyx.agents.transcript import (
+    AgentConfiguration,
+    CompactionCheckpoint,
+    RunFailureKind,
+)
+from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.citation_utils import (
     collapse_citations,
     extract_citation_order_from_text,
@@ -22,14 +26,14 @@ from onyx.chat.prompt_utils import with_language_section
 from onyx.configs.chat_configs import (
     DR_REPORT_LLM_TIMEOUT_S,
 )
-from onyx.context.messages import PromptMetadata, prepare_model_messages
+from onyx.context.messages import PromptMetadata
 from onyx.context.prompt import prepare_prompt
 from onyx.deep_research.models import (
     ResearchAgentCallResult,
     ResearchPhase,
     ResearchStepOutput,
 )
-from onyx.deep_research.research_agent import ResearchAgent
+from onyx.deep_research.research_agent import ResearchAgent, ResearchConfiguration
 from onyx.deep_research.tool_definitions import (
     GENERATE_REPORT_TOOL_NAME,
     RESEARCH_AGENT_TOOL_NAME,
@@ -38,16 +42,17 @@ from onyx.deep_research.tool_definitions import (
     get_orchestrator_tools,
 )
 from onyx.file_store.models import FileToolMetadata
-from onyx.llm.exceptions import ClassifiedLLMError, LLMRateLimitError, LLMTimeoutError
 from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
 from onyx.llm.model_capabilities import model_is_reasoning_model
 from onyx.llm.models import (
-    GenerationRequest,
+    AssistantMessage,
+    GenerationOptions,
     Message,
     ReasoningEffort,
     SystemMessage,
     ToolChoiceOptions,
     ToolResult,
+    ToolResultMessage,
     UserMessage,
 )
 from onyx.prompts.deep_research.orchestration_layer import (
@@ -66,9 +71,7 @@ from onyx.prompts.deep_research.research_agent import MAX_RESEARCH_CYCLES
 from onyx.prompts.prompt_utils import get_current_llm_day_time
 from onyx.tools.interface import FunctionToolDefinition, Tool, parse_tool_arguments
 from onyx.tools.progress import ResearchStarted
-from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
-from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tracing.flows import LLMFlow
 from onyx.utils.logger import setup_logger
 
@@ -100,9 +103,9 @@ class DeepResearchAgent:
         all_injected_file_metadata: dict[str, FileToolMetadata] | None,
         skip_clarification: bool = False,
         checkpoint: CompactionCheckpoint | None = None,
+        previous_run_id: str | None = None,
     ) -> None:
-        allowed_names = {SearchTool.NAME, WebSearchTool.NAME, OpenURLTool.NAME}
-        self.tools = [tool for tool in allowed_tools if tool.name in allowed_names]
+        self.tools = allowed_tools
         self.llm = llm
         self.token_counter = token_counter
         self.user_identity = user_identity
@@ -110,13 +113,7 @@ class DeepResearchAgent:
         self.reasoning_effort = reasoning_effort
         self.file_metadata = all_injected_file_metadata
         self.started = time.monotonic()
-        self.plan = ""
-        self.phase = (
-            ResearchPhase.PLANNING
-            if skip_clarification
-            else ResearchPhase.CLARIFICATION
-        )
-        self.research_steps = 0
+        self.skip_clarification = skip_clarification
         self.is_reasoning_model = model_is_reasoning_model(
             llm.info.model_name, llm.info.model_provider
         )
@@ -130,43 +127,53 @@ class DeepResearchAgent:
             tool.name == SearchTool.NAME for tool in self.tools
         )
         self.citation_mapping: CitationMapping = {}
-        self.report_citations = DynamicCitationProcessor()
-        self.system_prompt = ""
-        self.reminder: str | None = None
         self.agent = Agent(
             llm,
+            previous_run_id=previous_run_id,
             context=AgentContext(
                 messages=messages,
                 checkpoint=checkpoint,
-                execution=GenerationContext(flow=LLMFlow.DEEP_RESEARCH),
             ),
-            hooks=AgentHooks(
-                prepare_step=self._prepare_step,
-                build_request=self._build_request,
-                after_tool_call=self._finalize_tool,
-                after_step=self._after_step,
+            prepare_step=self.prepare_step,
+            after_step=self.after_step,
+            execution=GenerationContext(
+                flow=LLMFlow.DEEP_RESEARCH, user_identity=user_identity
             ),
         )
 
-    def _prepare_step(self, context: AgentContext, step: AgentStep) -> AgentContext:
-        if self.phase == ResearchPhase.RESEARCH and step.is_last:
-            self.phase = ResearchPhase.REPORT
-        context.execution.user_identity = self.user_identity
-        context.options.reasoning_effort = self.reasoning_effort
-        context.execution.timeout = (
-            DR_REPORT_LLM_TIMEOUT_S if self.phase == ResearchPhase.REPORT else None
-        )
-        context.options.max_tokens = (
+    def prepare_step(self, state: StepInput) -> PreparedStep:
+        if state.previous is None:
+            self.started = time.monotonic()
+            for message in state.history:
+                if isinstance(message, ToolResultMessage) and isinstance(
+                    message.details, ResearchAgentCallResult
+                ):
+                    self.citation_mapping.update(message.details.citation_mapping)
+        phase = self._next_phase(state)
+        plan = ""
+        research_steps = 0
+        for message in state.messages:
+            if not isinstance(message, AssistantMessage) or not isinstance(
+                message.metadata, ResearchStepOutput
+            ):
+                continue
+            if message.metadata.phase == ResearchPhase.PLANNING:
+                plan = message.text
+            elif message.metadata.phase == ResearchPhase.RESEARCH:
+                research_steps += 1
+        options = GenerationOptions()
+        options.reasoning_effort = self.reasoning_effort
+        options.max_tokens = (
             MAX_FINAL_REPORT_TOKENS
-            if self.phase == ResearchPhase.REPORT
+            if phase == ResearchPhase.REPORT
             else ORCHESTRATION_OUTPUT_TOKENS
         )
-        context.tools = []
-        context.options.tool_choice = ToolChoiceOptions.NONE
-        self.reminder = None
+        tools = []
+        options.tool_choice = ToolChoiceOptions.NONE
+        reminder = None
         now = get_current_llm_day_time(full_sentence=False)
-        if self.phase == ResearchPhase.CLARIFICATION:
-            self.system_prompt = with_language_section(
+        if phase == ResearchPhase.CLARIFICATION:
+            system_prompt = with_language_section(
                 CLARIFICATION_PROMPT.format(
                     current_datetime=now,
                     internal_search_clarification_guidance=INTERNAL_SEARCH_CLARIFICATION_GUIDANCE
@@ -175,33 +182,33 @@ class DeepResearchAgent:
                 ),
                 self.language_section,
             )
-            context.tools = [
+            tools = [
                 self._control_tool(definition, "Proceed to planning.")
                 for definition in get_clarification_tool_definitions()
             ]
-            context.options.tool_choice = ToolChoiceOptions.AUTO
-        elif self.phase == ResearchPhase.PLANNING:
-            self.system_prompt = RESEARCH_PLAN_PROMPT.format(current_datetime=now)
-            self.reminder = RESEARCH_PLAN_REMINDER
-        elif self.phase == ResearchPhase.RESEARCH:
+            options.tool_choice = ToolChoiceOptions.AUTO
+        elif phase == ResearchPhase.PLANNING:
+            system_prompt = RESEARCH_PLAN_PROMPT.format(current_datetime=now)
+            reminder = RESEARCH_PLAN_REMINDER
+        elif phase == ResearchPhase.RESEARCH:
             template = (
                 ORCHESTRATOR_PROMPT_REASONING
                 if self.is_reasoning_model
                 else ORCHESTRATOR_PROMPT
             )
-            self.system_prompt = template.format(
+            system_prompt = template.format(
                 current_datetime=now,
-                current_cycle_count=self.research_steps,
+                current_cycle_count=research_steps,
                 max_cycles=self.max_orchestrator_cycles,
-                research_plan=self.plan,
+                research_plan=plan,
                 internal_search_research_task_guidance=INTERNAL_SEARCH_RESEARCH_TASK_GUIDANCE
                 if self.has_internal_search
                 else "",
             )
-            self.reminder = FIRST_CYCLE_REMINDER if self.research_steps == 1 else None
+            reminder = FIRST_CYCLE_REMINDER if research_steps == 1 else None
             for definition in get_orchestrator_tools(not self.is_reasoning_model):
                 function = definition["function"]
-                context.tools.append(
+                tools.append(
                     AgentTool(
                         name=function["name"],
                         description=function["description"],
@@ -216,21 +223,77 @@ class DeepResearchAgent:
                         else THINK_TOOL_RESPONSE_MESSAGE,
                     )
                 )
-            context.options.tool_choice = ToolChoiceOptions.REQUIRED
+            options.tool_choice = ToolChoiceOptions.REQUIRED
         else:
-            self.system_prompt = with_language_section(
+            system_prompt = with_language_section(
                 FINAL_REPORT_PROMPT.format(current_datetime=now), self.language_section
             )
-            self.reminder = USER_FINAL_REPORT_QUERY.format(research_plan=self.plan)
-            self.report_citations = DynamicCitationProcessor()
-            self.report_citations.update_citation_mapping(self.citation_mapping)
-        context.output_metadata = ResearchStepOutput(
-            phase=self.phase,
+            reminder = USER_FINAL_REPORT_QUERY.format(research_plan=plan)
+        output_metadata = ResearchStepOutput(
+            phase=phase,
             is_reasoning_model=self.is_reasoning_model,
             sources=dict(self.citation_mapping),
             elapsed_seconds=time.monotonic() - self.started,
         )
-        return context
+        return PreparedStep(
+            tools=tools,
+            options=options,
+            timeout=DR_REPORT_LLM_TIMEOUT_S if phase == ResearchPhase.REPORT else None,
+            output_metadata=output_metadata,
+            assemble_messages=partial(
+                prepare_prompt,
+                system_prompt=SystemMessage(content=system_prompt),
+                custom_agent_prompt=None,
+                reminder_message=UserMessage(
+                    content=reminder, metadata=PromptMetadata(is_reminder=True)
+                )
+                if reminder
+                else None,
+                context_files=None,
+                token_counter=self.token_counter,
+                llm_info=self.llm.info,
+                all_injected_file_metadata=dict(self.file_metadata)
+                if self.file_metadata
+                else None,
+            ),
+        )
+
+    def _next_phase(self, state: StepInput) -> ResearchPhase:
+        previous = state.previous
+        if previous is None:
+            return (
+                ResearchPhase.PLANNING
+                if self.skip_clarification
+                else ResearchPhase.CLARIFICATION
+            )
+        metadata = previous.message.metadata
+        if not isinstance(metadata, ResearchStepOutput):
+            raise ValueError("Research output requires phase metadata")
+        if metadata.phase == ResearchPhase.CLARIFICATION:
+            return ResearchPhase.PLANNING
+        if metadata.phase != ResearchPhase.PLANNING and (
+            not previous.message.tool_calls
+            or any(
+                result.tool_name == GENERATE_REPORT_TOOL_NAME
+                for result in previous.tool_results
+            )
+        ):
+            return ResearchPhase.REPORT
+        return ResearchPhase.REPORT if state.step.is_last else ResearchPhase.RESEARCH
+
+    def after_step(self, result: StepResult) -> bool:
+        metadata = result.message.metadata
+        if not isinstance(metadata, ResearchStepOutput):
+            raise ValueError("Research output requires phase metadata")
+        if metadata.phase == ResearchPhase.CLARIFICATION:
+            return bool(result.message.tool_calls)
+        if metadata.phase == ResearchPhase.REPORT:
+            if not result.message.text:
+                raise ValueError("Model failed to produce the final report")
+            return False
+        if metadata.phase == ResearchPhase.PLANNING and not result.message.text:
+            raise ValueError("Model failed to produce a research plan")
+        return True
 
     @staticmethod
     def _control_tool(definition: FunctionToolDefinition, result: str) -> AgentTool:
@@ -242,35 +305,14 @@ class DeepResearchAgent:
             execute=lambda _invocation: ToolResult(content=result),
         )
 
-    def _build_request(self, context: AgentContext) -> GenerationRequest:
-        context.messages = prepare_model_messages(
-            prepare_prompt(
-                system_prompt=SystemMessage(content=self.system_prompt),
-                custom_agent_prompt=None,
-                messages=context.messages,
-                reminder_message=UserMessage(
-                    content=self.reminder, metadata=PromptMetadata(is_reminder=True)
-                )
-                if self.reminder
-                else None,
-                context_files=None,
-                token_counter=self.token_counter,
-                all_injected_file_metadata=self.file_metadata,
-            ),
-            self.llm.info,
-        )
-        return context.generation_request()
-
     async def _research(self, invocation: ToolInvocation) -> ToolResult:
         task = parse_tool_arguments(ResearchTask, invocation.arguments)
         invocation.update(
             ToolProgress(details=ResearchStarted(research_task=task.task))
         )
         child = ResearchAgent(
-            research_topic=task.task,
             tools=self.tools,
             llm=self.llm,
-            is_reasoning_model=self.is_reasoning_model,
             token_counter=self.token_counter,
             user_identity=self.user_identity,
             language_section=self.language_section,
@@ -279,60 +321,58 @@ class DeepResearchAgent:
             else ReasoningEffort.LOW,
         )
         try:
-            completed = await invocation.run_child(
+            submission = await invocation.agents.spawn_agent(
                 child.agent,
+                name="research-"
+                + "".join(
+                    char if char.isascii() and char.isalnum() else "-"
+                    for char in invocation.call_id.lower()
+                ),
+                description=task.task,
                 max_steps=MAX_RESEARCH_CYCLES + 1,
-                messages=child.input_messages,
+                messages=[UserMessage(content=task.task)],
+                restoration_config=AgentConfiguration(
+                    feature="research",
+                    settings=ResearchConfiguration(
+                        language_section=self.language_section,
+                        reasoning_effort=self.reasoning_effort
+                        if self.reasoning_effort != ReasoningEffort.AUTO
+                        else ReasoningEffort.LOW,
+                    ).model_dump(mode="json"),
+                ),
             )
-        except (ClassifiedLLMError, LLMTimeoutError, LLMRateLimitError):
+            while (
+                completed := await invocation.agents.wait_run(submission.run_id)
+            ) is None:
+                invocation.cancellation.check()
+
+        except RunFailed as error:
+            if error.failure.kind not in {
+                RunFailureKind.LLM,
+                RunFailureKind.LLM_TIMEOUT,
+                RunFailureKind.LLM_RATE_LIMIT,
+            }:
+                raise
             logger.exception("Research child generation failed")
             return ToolResult(
                 content="Research failed. Continue with other sources or try a different task.",
                 is_error=True,
             )
         result = child.report(completed)
-        return ToolResult(content=result.intermediate_report, details=result)
-
-    def _finalize_tool(
-        self, _context: ToolCallContext, result: ToolResult
-    ) -> ToolResult:
-        if isinstance(result.details, ResearchAgentCallResult):
-            report, self.citation_mapping = collapse_citations(
-                answer_text=result.text,
-                existing_citation_mapping=self.citation_mapping,
-                new_citation_mapping=result.details.citation_mapping,
-            )
-            result.content = report
-            result.details = ResearchAgentCallResult(
+        # No await between allocation and publication: sibling reports share this map.
+        report, self.citation_mapping = collapse_citations(
+            answer_text=result.intermediate_report,
+            existing_citation_mapping=self.citation_mapping,
+            new_citation_mapping=result.citation_mapping,
+        )
+        return ToolResult(
+            content=report,
+            details=ResearchAgentCallResult(
                 intermediate_report=report,
                 citation_mapping={
                     number: self.citation_mapping[number]
                     for number in extract_citation_order_from_text(report)
                     if number in self.citation_mapping
                 },
-            )
-        return result
-
-    def _after_step(self, result: StepResult) -> bool:
-        if self.phase == ResearchPhase.CLARIFICATION:
-            if result.message.tool_calls:
-                self.phase = ResearchPhase.PLANNING
-                return True
-            return False
-        if self.phase == ResearchPhase.PLANNING:
-            self.plan = result.message.text
-            if not self.plan:
-                raise ValueError("Model failed to produce a research plan")
-            self.phase = ResearchPhase.RESEARCH
-            return True
-        if self.phase == ResearchPhase.REPORT:
-            if not result.message.text:
-                raise ValueError("Model failed to produce the final report")
-            return False
-        self.research_steps += 1
-        if not result.message.tool_calls or any(
-            response.tool_name == GENERATE_REPORT_TOOL_NAME
-            for response in result.tool_results
-        ):
-            self.phase = ResearchPhase.REPORT
-        return True
+            ),
+        )

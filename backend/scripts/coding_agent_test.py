@@ -1,12 +1,15 @@
 """Run repository investigation directly through the shared Agent runtime."""
 
 import argparse
+import asyncio
 from collections import deque
 
 from onyx.agents.events import AgentEvent
+from onyx.agents.models import RunResult
 from onyx.coding_agent.agent import BASH_TOOL_SENTINEL_ID, CodingAgent, _setup_session
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.llm.factory import get_default_llm, get_llm_token_counter
+from onyx.llm.models import UserMessage
 from onyx.prompts.coding_agent.coding_agent import MAX_CODING_AGENT_CYCLES
 from onyx.tools.tool_implementations.bash.bash_tool import BashTool
 
@@ -50,18 +53,27 @@ def main() -> int:
     events: deque[AgentEvent] = deque(maxlen=args.max_packets_shown)
     with _setup_session(repo=args.repo, github_token=args.github_token) as session_id:
         feature = CodingAgent(
-            query=args.query,
             repo=args.repo,
             llm=llm,
             token_counter=get_llm_token_counter(llm),
             user_identity=None,
             bash_tool=BashTool(tool_id=BASH_TOOL_SENTINEL_ID, session_id=session_id),
         )
-        if args.dump_packets:
-            feature.agent.subscribe(events.append)
-        result = feature.agent.run(
-            max_steps=MAX_CODING_AGENT_CYCLES + 1, messages=feature.input_messages
-        )
+
+        async def execute() -> RunResult:
+            run = feature.agent.start(
+                max_steps=MAX_CODING_AGENT_CYCLES + 1,
+                messages=[UserMessage(content=args.query)],
+            )
+            if args.dump_packets:
+                run.subscribe(events.append)
+            try:
+                return await run.wait()
+            finally:
+                if not await run.wait_for_idle(timeout=60):
+                    raise TimeoutError("Coding tools have not released their workspace")
+
+        result = asyncio.run(execute())
         print(result.output.text)
     for event in events:
         print(event.model_dump_json())

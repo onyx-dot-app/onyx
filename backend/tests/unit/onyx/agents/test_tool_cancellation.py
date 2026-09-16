@@ -4,8 +4,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
+from onyx.agents.coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent
-from onyx.agents.runtime import Agent, AgentContext
+from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.llm.cancellation import (
     AgentCancelled,
@@ -21,7 +22,7 @@ from onyx.llm.models import (
     ToolResultMessage,
 )
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
-from tests.unit.onyx.agents.fakes import FakeModelClient
+from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
 
 
 def test_cancel_returns_without_waiting_and_does_not_start_queued_tool() -> None:
@@ -66,7 +67,7 @@ def test_cancel_returns_without_waiting_and_does_not_start_queued_tool() -> None
     assert not errors
 
 
-def test_nested_children_share_one_leaf_slot_without_parent_deadlock() -> None:
+def test_nested_child_runs_share_one_leaf_slot_without_parent_deadlock() -> None:
 
     def nested(depth: int) -> Agent:
         if depth == 0:
@@ -77,7 +78,15 @@ def test_nested_children_share_one_leaf_slot_without_parent_deadlock() -> None:
             )
 
         async def execute(invocation: ToolInvocation) -> ToolResult:
-            child = await invocation.run_child(nested(depth - 1), max_steps=2)
+            submission = await invocation.agents.spawn_agent(
+                nested(depth - 1),
+                name="child",
+                description="Run child work",
+                max_steps=2,
+                messages=[],
+            )
+            child = await invocation.agents.wait_run(submission.run_id)
+            assert child is not None
             return ToolResult(content=child.output.text)
 
         def reply(
@@ -94,29 +103,36 @@ def test_nested_children_share_one_leaf_slot_without_parent_deadlock() -> None:
         return Agent(
             FakeModelClient(reply),
             max_parallel_operations=1,
-            context=AgentContext(
-                tools=[
-                    AgentTool(
-                        name="child",
-                        description="",
-                        parameters={},
-                        execute_async=execute,
-                    )
-                ]
-            ),
+            tools=[
+                AgentTool(
+                    name="child",
+                    description="",
+                    parameters={},
+                    execute_async=execute,
+                )
+            ],
         )
 
     root = nested(3)
     events: list[AgentEvent] = []
-    root.subscribe(events.append)
-    assert root.run(max_steps=2).output.text == "leaf"
-    snapshot = root.snapshot()
+    runs: list[Run] = []
+    assert (
+        run_agent(
+            root,
+            max_steps=2,
+            runs=runs,
+            listener=events.append,
+            coordinator=AgentCoordinator(),
+        ).output.text
+        == "leaf"
+    )
+    snapshot = runs[-1].snapshot()
     assert snapshot is not None
     assert len([event for event in events if event.type == "agent_start"]) == 4
     assert not any(event.type == "tool_update" for event in events)
     for _ in range(3):
-        assert len(snapshot.children) == 1
-        child = snapshot.children[0]
+        assert len(snapshot.child_runs) == 1
+        child = snapshot.child_runs[0]
         assert child.parent_run_id == snapshot.run_id
         assert child.status == "complete"
         end_index = next(
@@ -141,6 +157,7 @@ def test_cancelled_child_holds_leaf_capacity_until_its_worker_exits() -> None:
     release = threading.Event()
     recovering = threading.Event()
     replacement_started = threading.Event()
+    cancel_child = threading.Event()
 
     def blocked_reply(
         _request: GenerationRequest, _signal: CancellationSignal
@@ -153,7 +170,17 @@ def test_cancelled_child_holds_leaf_capacity_until_its_worker_exits() -> None:
 
     async def execute(invocation: ToolInvocation) -> ToolResult:
         try:
-            await invocation.run_child(child, max_steps=1)
+            submission = await invocation.agents.spawn_agent(
+                child,
+                name="child",
+                description="Run child work",
+                max_steps=1,
+                messages=[],
+            )
+            while not cancel_child.is_set():
+                await asyncio.sleep(0.01)
+            await invocation.agents.cancel_run(submission.run_id)
+            await invocation.agents.wait_run(submission.run_id)
         except AgentCancelled:
             recovering.set()
         await invocation.run_blocking(replacement_started.set)
@@ -173,19 +200,19 @@ def test_cancelled_child_holds_leaf_capacity_until_its_worker_exits() -> None:
     root = Agent(
         FakeModelClient(reply),
         max_parallel_operations=1,
-        context=AgentContext(
-            tools=[
-                AgentTool(
-                    name="child", description="", parameters={}, execute_async=execute
-                )
-            ]
-        ),
+        tools=[
+            AgentTool(
+                name="child", description="", parameters={}, execute_async=execute
+            )
+        ],
     )
     with ThreadPoolExecutor(max_workers=1) as workers:
-        result = workers.submit(root.run, max_steps=2)
+        result = workers.submit(
+            lambda: run_agent(root, max_steps=2, coordinator=AgentCoordinator())
+        )
         try:
             assert entered.wait(2)
-            child.abort()
+            cancel_child.set()
             assert recovering.wait(2)
             assert not replacement_started.wait(0.1)
         finally:
@@ -212,18 +239,17 @@ def test_stop_cancels_an_async_tool_wait() -> None:
                 content=[ToolCall(id="wait", name="wait", arguments={})]
             )
         ),
-        context=AgentContext(
-            tools=[
-                AgentTool(
-                    name="wait", description="", parameters={}, execute_async=execute
-                )
-            ]
-        ),
+        tools=[
+            AgentTool(name="wait", description="", parameters={}, execute_async=execute)
+        ],
     )
+    signal = CancellationSignal()
     with ThreadPoolExecutor(max_workers=1) as workers:
-        result = workers.submit(root.run, max_steps=1)
+        result = workers.submit(
+            lambda: run_agent(root, max_steps=1, cancellation=signal)
+        )
         assert entered.wait(2)
-        root.abort()
+        signal.cancel()
         with pytest.raises(AgentCancelled):
             result.result(timeout=2)
     assert exited.is_set()
@@ -256,30 +282,32 @@ def test_parallel_failure_cancels_a_blocked_earlier_call() -> None:
                 ]
             )
         ),
-        context=AgentContext(
-            tools=[
-                AgentTool(
-                    name="work", description="", parameters={}, execute_async=execute
-                )
-            ]
-        ),
+        tools=[
+            AgentTool(name="work", description="", parameters={}, execute_async=execute)
+        ],
     )
-    with ThreadPoolExecutor(max_workers=1) as workers:
-        result = workers.submit(root.run, max_steps=1)
+
+    async def exercise() -> None:
+        run = root.start(max_steps=1)
         try:
-            assert entered.wait(2)
-            with pytest.raises(ValueError) as caught:
-                result.result(timeout=2)
-            assert caught.value is failed
+            async with asyncio.timeout(2):
+                while not entered.is_set():
+                    await asyncio.sleep(0.01)
+            with pytest.raises(RunFailed):
+                await run.wait(timeout=2)
+            assert not await run.wait_for_idle(timeout=0)
         finally:
             release.set()
-    snapshot = root.snapshot()
-    assert snapshot is not None and snapshot.status == "error"
-    assert all(operation.status != "running" for operation in snapshot.operations)
+            assert await run.wait_for_idle(timeout=2)
+        snapshot = run.snapshot()
+        assert snapshot.status == "error"
+        assert all(operation.status != "running" for operation in snapshot.operations)
+
+    asyncio.run(exercise())
 
 
 @pytest.mark.parametrize("child_fails", [False, True])
-def test_tool_completion_joins_unawaited_children(child_fails: bool) -> None:
+def test_parent_completion_joins_unawaited_child_runs(child_fails: bool) -> None:
     child_error = ValueError("child failed")
     child_finished = threading.Event()
 
@@ -294,34 +322,37 @@ def test_tool_completion_joins_unawaited_children(child_fails: bool) -> None:
     child = Agent(FakeModelClient(child_reply))
 
     async def execute(invocation: ToolInvocation) -> ToolResult:
-        invocation.run_child(child, max_steps=1)
+        await invocation.agents.spawn_agent(
+            child, name="child", description="Run child work", max_steps=1, messages=[]
+        )
         return ToolResult(content="parent tool complete")
 
     parent = Agent(
         FakeModelClient(
-            lambda *_: AssistantMessage(
-                content=[ToolCall(id="child", name="child", arguments={})]
+            lambda request, _signal: AssistantMessage(
+                content=[TextContent(text="parent complete")]
+                if request.messages
+                else [ToolCall(id="child", name="child", arguments={})]
             )
         ),
-        context=AgentContext(
-            tools=[
-                AgentTool(
-                    name="child", description="", parameters={}, execute_async=execute
-                )
-            ]
-        ),
+        tools=[
+            AgentTool(
+                name="child", description="", parameters={}, execute_async=execute
+            )
+        ],
     )
+    runs: list[Run] = []
+    coordinator = AgentCoordinator()
     if child_fails:
-        with pytest.raises(ValueError) as error:
-            parent.run(max_steps=1)
-        assert error.value is child_error
+        with pytest.raises(RunFailed):
+            run_agent(parent, max_steps=2, runs=runs, coordinator=coordinator)
     else:
-        parent.run(max_steps=1)
+        run_agent(parent, max_steps=2, runs=runs, coordinator=coordinator)
     assert child_finished.is_set()
-    snapshot = parent.snapshot()
+    snapshot = runs[-1].snapshot()
     assert snapshot is not None
-    assert snapshot.children[0].status == ("error" if child_fails else "complete")
-    assert snapshot.operations[-1].status == ("error" if child_fails else "complete")
+    assert snapshot.child_runs[0].status == ("error" if child_fails else "complete")
+    assert snapshot.operations[-1].status == "complete"
 
 
 def test_cancelled_tool_cleanup_uses_its_own_live_signal() -> None:
@@ -348,24 +379,25 @@ def test_cancelled_tool_cleanup_uses_its_own_live_signal() -> None:
                 content=[ToolCall(id="cleanup", name="cleanup", arguments={})]
             )
         ),
-        context=AgentContext(
-            tools=[
-                AgentTool(
-                    name="cleanup", description="", parameters={}, execute_async=execute
-                )
-            ]
-        ),
+        tools=[
+            AgentTool(
+                name="cleanup", description="", parameters={}, execute_async=execute
+            )
+        ],
     )
+    signal = CancellationSignal()
     with ThreadPoolExecutor(max_workers=1) as executor:
-        task = executor.submit(lambda: agent.run(max_steps=1))
+        task = executor.submit(
+            lambda: run_agent(agent, max_steps=1, cancellation=signal)
+        )
         try:
             assert started.wait(3)
-            agent.abort()
+            signal.cancel()
             with pytest.raises(AgentCancelled):
                 task.result(timeout=3)
             assert cleaned.is_set()
         finally:
-            agent.abort()
+            signal.cancel()
 
 
 def test_tool_failure_logs_unobserved_child_failure(
@@ -374,6 +406,7 @@ def test_tool_failure_logs_unobserved_child_failure(
     child_error = ValueError("child failure")
     tool_error = RuntimeError("parent tool failure")
     child_started = threading.Event()
+    child_completed = threading.Event()
 
     def fail_child(
         _request: GenerationRequest, _signal: CancellationSignal
@@ -383,13 +416,13 @@ def test_tool_failure_logs_unobserved_child_failure(
 
     child = Agent(FakeModelClient(fail_child))
 
-    def wait_for_child() -> None:
-        assert child_started.wait(2)
-        assert child.wait_for_idle(2)
-
     async def execute(invocation: ToolInvocation) -> ToolResult:
-        invocation.run_child(child, max_steps=1)
-        await invocation.run_blocking(wait_for_child)
+        await invocation.agents.spawn_agent(
+            child, name="child", description="Run child work", max_steps=1, messages=[]
+        )
+        async with asyncio.timeout(2):
+            while not child_completed.is_set():
+                await asyncio.sleep(0.01)
         raise tool_error
 
     parent = Agent(
@@ -398,22 +431,25 @@ def test_tool_failure_logs_unobserved_child_failure(
                 content=[ToolCall(id="child", name="child", arguments={})]
             )
         ),
-        context=AgentContext(
-            tools=[
-                AgentTool(
-                    name="child", description="", parameters={}, execute_async=execute
-                )
-            ]
-        ),
+        tools=[
+            AgentTool(
+                name="child", description="", parameters={}, execute_async=execute
+            )
+        ],
     )
-    with pytest.raises(RuntimeError) as caught:
-        parent.run(max_steps=1)
-    assert caught.value is tool_error
+
+    def on_event(event: AgentEvent) -> None:
+        if event.type == "agent_end" and event.agent_id == child.id:
+            child_completed.set()
+
+    with pytest.raises(RunFailed):
+        run_agent(
+            parent, max_steps=1, coordinator=AgentCoordinator(), listener=on_event
+        )
     failures = [
         record
         for record in caplog.records
-        if record.message == "Unobserved child execution failure"
+        if record.exc_info is not None and record.exc_info[1] is child_error
     ]
     assert len(failures) == 1
-    assert failures[0].exc_info is not None
-    assert failures[0].exc_info[1] is child_error
+    assert child_completed.is_set()

@@ -1,13 +1,13 @@
 import traceback
 
+from onyx.agents.runtime import RunFailed
 from onyx.chat.models import StreamingError
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.exceptions import ClassifiedLLMError
+from onyx.llm.exceptions import ClassifiedLLMError, litellm_exception_to_safe_error
 from onyx.llm.interfaces import LLM
 from onyx.llm.model_capabilities import is_true_openai_model
 from onyx.llm.models import AssistantMessage, ToolChoiceOptions
-from onyx.llm.utils import litellm_exception_to_safe_error
 
 
 class EmptyLLMResponseError(ClassifiedLLMError):
@@ -133,6 +133,14 @@ def chat_error(
     model_index: int | None = None,
 ) -> StreamingError:
     """Apply the same classification and credential redaction to every chat error."""
+    if isinstance(error, RunFailed):
+        info = error.failure.llm_error
+        return StreamingError(
+            error=info.message if info else error.failure.message,
+            error_code=info.error_code if info else "AGENT_EXECUTION_FAILED",
+            is_retryable=info.is_retryable if info else False,
+            details={"model_index": model_index} if model_index is not None else {},
+        )
     if isinstance(error, OnyxError):
         return StreamingError(
             error=error.detail,

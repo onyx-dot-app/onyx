@@ -1,5 +1,6 @@
 import time
 from collections.abc import Callable, Generator
+from concurrent.futures import Future
 from contextlib import contextmanager
 from typing import Any
 
@@ -7,8 +8,7 @@ from sqlalchemy import Engine, event
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.orm.session import SessionTransaction
 
-from onyx.chat.models import ChatFullResponse
-from onyx.chat.presentation import ResponseBinding
+from onyx.chat.models import ChatFullResponse, ChatResponseOutcome
 from onyx.chat.process_message import gather_stream_full, handle_stream_message_objects
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.db.chat import create_chat_session
@@ -232,13 +232,13 @@ def _get_answer_with_tools(
             )
 
             stream_start_time = time.time()
-            response_binding = ResponseBinding()
+            response_future: Future[ChatResponseOutcome] = Future()
             packets = handle_stream_message_objects(
                 new_msg_req=request,
                 user=user,
-                response_binding=response_binding,
+                response_future=response_future,
             )
-            full = gather_stream_full(packets, response_binding)
+            full = gather_stream_full(packets, response_future)
 
             result = _chat_full_response_to_eval_result(full, stream_start_time)
 
@@ -389,13 +389,13 @@ def _get_multi_turn_answer_with_tools(
 
                 # Stream and gather results for this turn via handle_stream_message_objects + gather_stream_full
                 stream_start_time = time.time()
-                response_binding = ResponseBinding()
+                response_future: Future[ChatResponseOutcome] = Future()
                 packets = handle_stream_message_objects(
                     new_msg_req=request,
                     user=user,
-                    response_binding=response_binding,
+                    response_future=response_future,
                 )
-                full = gather_stream_full(packets, response_binding)
+                full = gather_stream_full(packets, response_future)
 
                 result = _chat_full_response_to_eval_result(full, stream_start_time)
 

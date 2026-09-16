@@ -1648,6 +1648,8 @@ configMap:
   LLM_SOCKET_READ_TIMEOUT: "60"
   # Maximum full-response wait after delivery ends; does not stop agent execution.
   CHAT_RESPONSE_WAIT_TIMEOUT_S: "3600"
+  # Active model responses per API process; excess requests receive a retryable error.
+  MAX_ACTIVE_CHAT_RESPONSES: "32"
   IMAGE_SUMMARIZATION_TIMEOUT: "300"
   CONTEXTUAL_RAG_LLM_TIMEOUT: "180"
   MAX_CHUNKS_FED_TO_CHAT: ""

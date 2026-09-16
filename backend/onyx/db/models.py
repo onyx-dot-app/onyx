@@ -3283,6 +3283,66 @@ class ChatSession(Base):
     persona: Mapped["Persona"] = relationship("Persona")
 
 
+class ChatSessionAgent(Base):
+    __tablename__ = "chat_session_agent"
+    __table_args__ = (
+        Index("ix_chat_session_agent_chat_session_id", "chat_session_id"),
+        Index("ix_chat_session_agent_parent_agent_id", "parent_agent_id"),
+        Index("ix_chat_session_agent_creation_message_id", "creation_message_id"),
+        Index(
+            "uq_chat_session_agent_root",
+            "chat_session_id",
+            unique=True,
+            postgresql_where=text("parent_agent_id IS NULL"),
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    chat_session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("chat_session.id", ondelete="CASCADE")
+    )
+    parent_agent_id: Mapped[str | None] = mapped_column(
+        ForeignKey("chat_session_agent.id", ondelete="CASCADE"), nullable=True
+    )
+    creation_message_id: Mapped[int | None] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=True
+    )
+    name: Mapped[str] = mapped_column(String)
+    description: Mapped[str] = mapped_column(Text, default="", server_default="")
+    restoration_config: Mapped[dict[str, JsonValue]] = mapped_column(
+        postgresql.JSONB(), default=dict, server_default=text("'{}'::jsonb")
+    )
+
+
+class AgentRun(Base):
+    __tablename__ = "agent_run"
+    __table_args__ = (
+        Index("ix_agent_run_agent_id", "agent_id"),
+        Index("ix_agent_run_chat_message_id", "chat_message_id"),
+        Index("ix_agent_run_parent_run_id", "parent_run_id"),
+        Index("ix_agent_run_previous_run_id", "previous_run_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    agent_id: Mapped[str] = mapped_column(
+        ForeignKey("chat_session_agent.id", ondelete="CASCADE")
+    )
+    chat_message_id: Mapped[int] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="CASCADE")
+    )
+    previous_run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("agent_run.id", ondelete="SET NULL"), nullable=True
+    )
+    parent_run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("agent_run.id", ondelete="CASCADE"), nullable=True
+    )
+    parent_tool_call_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    parent_message_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    run_index: Mapped[int] = mapped_column(Integer)
+    transcript: Mapped[dict[str, JsonValue]] = mapped_column(postgresql.JSONB())
+    agent: Mapped[ChatSessionAgent] = relationship("ChatSessionAgent", lazy="joined")
+
+
 class ChatMessage(Base):
     """Note, the first message in a chain has no contents, it's a workaround to allow edits
     on the first message of a session, an empty root node basically
@@ -3339,9 +3399,15 @@ class ChatMessage(Base):
         postgresql.JSONB(), nullable=True
     )
 
-    # Ordered runtime output; display text and artifact relationships remain separate.
-    agent_transcript: Mapped[dict[str, JsonValue] | None] = mapped_column(
+    response_rendering: Mapped[dict[str, JsonValue] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
+    )
+    agent_runs: Mapped[list["AgentRun"]] = relationship(
+        "AgentRun",
+        foreign_keys="AgentRun.chat_message_id",
+        order_by="AgentRun.run_index",
+        lazy="raise",
+        passive_deletes="all",
     )
 
     # What does this message contain

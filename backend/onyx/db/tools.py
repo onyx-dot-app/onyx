@@ -2,11 +2,13 @@ from collections.abc import Collection
 from typing import TYPE_CHECKING, Any, Type, cast
 from uuid import UUID
 
+from pydantic import TypeAdapter, ValidationError
 from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import InstrumentedAttribute, Session, selectinload
 
 from onyx.auth.permissions import has_permission
-from onyx.context.search.models import PersonaSearchInfo
+from onyx.context.search.models import PersonaSearchInfo, SearchDocsResponse
+from onyx.db.chat import translate_db_search_doc_to_saved_search_doc
 from onyx.db.constants import UNSET, UnsetType
 from onyx.db.enums import MCPServerStatus, Permission, PermissionAuthority
 from onyx.db.models import (
@@ -19,9 +21,25 @@ from onyx.db.models import (
     ToolCall,
     User,
 )
+from onyx.llm.models import ToolResultMessage
 from onyx.server.features.tool.models import Header
 from onyx.tools.built_in_tools import BUILT_IN_TOOL_TYPES
-from onyx.tools.models import PersonaToolConfiguration, ToolConfiguration
+from onyx.tools.models import (
+    CustomToolCallSummary,
+    CustomToolUserFileSnapshot,
+    PersonaToolConfiguration,
+    ToolConfiguration,
+)
+from onyx.tools.progress import FileReadResult, GeneratedImage, MemoryUpdated
+from onyx.tools.tool_implementations.file_reader.file_reader_tool import FileReaderTool
+from onyx.tools.tool_implementations.images.image_generation_tool import (
+    ImageGenerationTool,
+)
+from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
+from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
+from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
+from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.utils.headers import HeaderItemDict
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_json_like, sanitize_string
@@ -30,6 +48,7 @@ if TYPE_CHECKING:
     pass
 
 logger = setup_logger()
+_SAVED_TOOL_TEXT = TypeAdapter(str)
 
 
 def capture_persona_tool_configuration(persona: Persona) -> PersonaToolConfiguration:
@@ -438,3 +457,53 @@ def get_response_tool_records(
             .options(selectinload(ToolCall.search_docs))
         ).all()
     )
+
+
+def restore_tool_result(
+    result: ToolResultMessage, record: ToolCall, tool: Tool | None
+) -> ToolResultMessage:
+    """Attach saved application artifacts to a canonical completed tool result."""
+    restored = result.model_copy(deep=True)
+    if result.is_error or tool is None:
+        return restored
+    if tool.in_code_tool_id in {
+        SearchTool.__name__,
+        WebSearchTool.__name__,
+        OpenURLTool.__name__,
+    }:
+        restored.details = SearchDocsResponse(
+            search_docs=[
+                translate_db_search_doc_to_saved_search_doc(doc)
+                for doc in record.search_docs
+            ],
+            citation_mapping={},
+        )
+    elif tool.in_code_tool_id == ImageGenerationTool.__name__:
+        restored.details = FinalImageGenerationResponse(
+            generated_images=[
+                GeneratedImage.model_validate(image)
+                for image in record.generated_images or []
+            ]
+        )
+    elif tool.in_code_tool_id == FileReaderTool.__name__:
+        restored.details = FileReadResult.model_validate_json(
+            _SAVED_TOOL_TEXT.validate_python(record.tool_call_response)
+        )
+    elif tool.in_code_tool_id == MemoryTool.__name__:
+        restored.details = MemoryUpdated.model_validate_json(
+            _SAVED_TOOL_TEXT.validate_python(record.tool_call_response)
+        )
+    elif tool.in_code_tool_id is None:
+        try:
+            summary = CustomToolCallSummary.model_validate_json(
+                _SAVED_TOOL_TEXT.validate_python(record.tool_call_response)
+            )
+        except ValidationError:
+            logger.debug("Tool result has no structured custom output")
+            return restored
+        if summary.response_type in {"image", "csv"}:
+            summary.tool_result = CustomToolUserFileSnapshot.model_validate(
+                summary.tool_result
+            )
+        restored.details = summary
+    return restored
