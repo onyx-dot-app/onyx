@@ -90,6 +90,11 @@ STOP_STREAM_PAT = os.environ.get("STOP_STREAM_PAT") or None
 # As opposed to soft deleting them, which just hides them from non-admin users
 HARD_DELETE_CHATS = os.environ.get("HARD_DELETE_CHATS", "").lower() == "true"
 
+# Experimental. When "true", the main chat loop appends a deterministic retrieval
+# receipt (executed queries, distinct document counts, scope) to each internal
+# search tool response before it reaches the model. Off by default.
+ENABLE_SEARCH_RECEIPTS = os.environ.get("ENABLE_SEARCH_RECEIPTS", "").lower() == "true"
+
 # Internet Search
 NUM_INTERNET_SEARCH_RESULTS = int(os.environ.get("NUM_INTERNET_SEARCH_RESULTS") or 10)
 NUM_INTERNET_SEARCH_CHUNKS = int(os.environ.get("NUM_INTERNET_SEARCH_CHUNKS") or 50)
