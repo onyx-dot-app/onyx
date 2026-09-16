@@ -11,9 +11,13 @@ import { ValidSources } from "@/lib/types";
 
 const CHAT_KEY = "onyx:tools:chat:abc";
 
+// Mutable so a test can move the composer between chats; the hook re-keys
+// from what useAppPosition reports on each render.
+let mockChatId = "abc";
+
 jest.mock("@/lib/position/hooks", () => ({
   useAppPosition: () => ({
-    chat: () => "abc",
+    chat: () => mockChatId,
     agent: () => null,
     project: () => null,
   }),
@@ -25,6 +29,7 @@ jest.mock("@/lib/agents/hooks", () => ({
 
 beforeEach(() => {
   sessionStorage.clear();
+  mockChatId = "abc";
 });
 
 function source(internalName: ValidSources, uniqueKey: string): SourceMetadata {
@@ -60,6 +65,38 @@ describe("useToolConfiguration — stored shapes", () => {
 
     const { result: reread } = renderHook(() => useToolConfiguration());
     expect(reread.current.filters.selectedSources).toEqual(["notion"]);
+  });
+});
+
+describe("useToolConfiguration — chat scoping", () => {
+  test("each chat keeps its own configuration", () => {
+    const { result, rerender } = renderHook(() => useToolConfiguration());
+    act(() => {
+      result.current.setFilters((current) => ({
+        ...current,
+        selectedSources: ["notion"],
+      }));
+    });
+    act(() => result.current.toggleToolState(7, "forced"));
+
+    // Another chat reads its own (neutral) configuration...
+    mockChatId = "other";
+    rerender();
+    expect(result.current.filters.selectedSources).toBeNull();
+    expect(result.current.forcedToolId).toBeNull();
+
+    // ...and edits it without touching the first chat's.
+    act(() => {
+      result.current.setFilters((current) => ({
+        ...current,
+        selectedSources: [],
+      }));
+    });
+
+    mockChatId = "abc";
+    rerender();
+    expect(result.current.filters.selectedSources).toEqual(["notion"]);
+    expect(result.current.forcedToolId).toBe(7);
   });
 });
 
