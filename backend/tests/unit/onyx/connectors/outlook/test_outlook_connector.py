@@ -4,7 +4,7 @@ The gateway is autospecced, so these tests drive the real checkpoint state
 machine and document assembly against the gateway's plain models.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import MagicMock, call, create_autospec, patch
@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, call, create_autospec, patch
 import pytest
 
 from onyx.configs.app_configs import OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD
+from onyx.connectors.connector_runner import ConnectorRunner
 from onyx.connectors.exceptions import ConnectorValidationError, CredentialInvalidError
 from onyx.connectors.microsoft_utils.drive_items import SizeCapExceeded
 from onyx.connectors.models import (
@@ -226,10 +227,17 @@ def _attachment_gateway() -> MagicMock:
 
 
 def _step(
-    connector: OutlookConnector, checkpoint: OutlookCheckpoint
+    connector: OutlookConnector,
+    checkpoint: OutlookCheckpoint,
+    include_permissions: bool = False,
 ) -> tuple[list[Document | HierarchyNode | ConnectorFailure], OutlookCheckpoint]:
     items: list[Document | HierarchyNode | ConnectorFailure] = []
-    generator = connector.load_from_checkpoint(START, END, checkpoint)
+    load = (
+        connector.load_from_checkpoint_with_perm_sync
+        if include_permissions
+        else connector.load_from_checkpoint
+    )
+    generator = load(START, END, checkpoint)
     while True:
         try:
             items.append(next(generator))
@@ -238,14 +246,14 @@ def _step(
 
 
 def _run(
-    connector: OutlookConnector,
+    connector: OutlookConnector, include_permissions: bool = False
 ) -> list[Document | HierarchyNode | ConnectorFailure]:
     """Drive the walk to completion, round-tripping the checkpoint as JSON each
     step the way the indexing pipeline persists it."""
     checkpoint = connector.build_dummy_checkpoint()
     collected: list[Document | HierarchyNode | ConnectorFailure] = []
     for _ in range(50):
-        items, checkpoint = _step(connector, checkpoint)
+        items, checkpoint = _step(connector, checkpoint, include_permissions)
         collected.extend(items)
         checkpoint = connector.validate_checkpoint_json(checkpoint.model_dump_json())
         if not checkpoint.has_more:
@@ -1653,3 +1661,115 @@ def test_series_tracking_is_capped_per_mailbox() -> None:
         event_document_id(mailbox(), "series-b"),
         event_document_id(mailbox(), "series-b"),
     ]
+
+
+# ---------------------------------------------------------------------------
+# permission sync
+# ---------------------------------------------------------------------------
+
+
+def _readers(item: Document | SlimDocument | HierarchyNode) -> set[str]:
+    assert item.external_access is not None
+    assert item.external_access.is_public is False
+    assert item.external_access.external_user_group_ids == set()
+    return item.external_access.external_user_emails
+
+
+def _assert_each_readership(
+    items: Sequence[Document | SlimDocument | HierarchyNode | ConnectorFailure],
+) -> None:
+    nodes = [i for i in items if isinstance(i, HierarchyNode)]
+    assert len(nodes) == 5
+    assert all(_readers(n) == {MAILBOX_ADDRESS} for n in nodes)
+    by_id = {i.id: i for i in items if isinstance(i, (Document, SlimDocument))}
+    assert _readers(by_id[conversation_document_id(mailbox(), CONVERSATION_ID)]) == {
+        MAILBOX_ADDRESS
+    }
+    # The owner, the organizer (the owner here) and the attendees.
+    assert _readers(by_id[event_document_id(mailbox(), "evt-1")]) == {
+        MAILBOX_ADDRESS,
+        "bob@contoso.com",
+    }
+    assert _readers(by_id[event_document_id(mailbox(), SERIES_ID)]) == {
+        MAILBOX_ADDRESS,
+        "bob@contoso.com",
+    }
+
+
+def test_perm_sync_slim_docs_carry_each_readership() -> None:
+    connector = _calendar_connector(_calendar_gateway())
+
+    items = [i for batch in connector.retrieve_all_slim_docs_perm_sync() for i in batch]
+
+    _assert_each_readership(items)
+
+
+def test_series_readers_come_from_the_master_in_both_walks() -> None:
+    """The series document holds the master's text, so an attendee an
+    occurrence row names must not read it unless the master names them too."""
+    gateway = _calendar_gateway()
+    gateway.fetch_calendar_delta_page.return_value = OutlookEventPage(
+        events=[
+            event(
+                id="occ-1",
+                event_type="occurrence",
+                series_master_id=SERIES_ID,
+                attendees=[OutlookRecipient(address="carol@contoso.com", name="C")],
+            )
+        ]
+    )
+    connector = _calendar_connector(gateway)
+    series_doc_id = event_document_id(mailbox(), SERIES_ID)
+
+    slim = [i for batch in connector.retrieve_all_slim_docs_perm_sync() for i in batch]
+    indexed = _run(connector, include_permissions=True)
+
+    for items in (slim, indexed):
+        by_id = {i.id: i for i in items if isinstance(i, (Document, SlimDocument))}
+        assert _readers(by_id[series_doc_id]) == {MAILBOX_ADDRESS, "bob@contoso.com"}
+
+
+def test_perm_sync_indexing_carries_each_readership() -> None:
+    """A connector set to Auto Sync Permissions indexes with its readers
+    attached, so its documents are searchable before the first sync."""
+    items = _run(_calendar_connector(_calendar_gateway()), include_permissions=True)
+
+    _assert_each_readership(items)
+
+
+def test_runner_indexes_with_permissions_from_the_first_step() -> None:
+    """The runner refuses a connector without the permission-aware checkpoint
+    walk, which would have blocked the first index of an Auto Sync connector."""
+    connector = _calendar_connector(_calendar_gateway())
+    runner = ConnectorRunner(
+        connector,
+        batch_size=100,
+        include_permissions=True,
+        time_range=(
+            datetime.fromtimestamp(START, tz=timezone.utc),
+            datetime.fromtimestamp(END, tz=timezone.utc),
+        ),
+    )
+
+    checkpoint = connector.build_dummy_checkpoint()
+    items: list[Document | HierarchyNode] = []
+    for _ in range(50):
+        for docs, nodes, _failure, next_checkpoint in runner.run(checkpoint):
+            items.extend(docs or [])
+            items.extend(nodes or [])
+            if next_checkpoint is not None:
+                checkpoint = next_checkpoint
+        if not checkpoint.has_more:
+            break
+
+    _assert_each_readership(items)
+
+
+def test_plain_walks_carry_no_readership() -> None:
+    connector = _calendar_connector(_calendar_gateway())
+
+    pruned = [i for batch in connector.retrieve_all_slim_docs() for i in batch]
+    indexed = [i for i in _run(connector) if not isinstance(i, ConnectorFailure)]
+
+    assert pruned and all(i.external_access is None for i in pruned)
+    assert indexed and all(i.external_access is None for i in indexed)
