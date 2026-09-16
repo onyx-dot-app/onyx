@@ -667,6 +667,41 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         override_kwargs: SearchToolOverrideKwargs,
         **llm_kwargs: Any,
     ) -> ToolResponse:
+        # Malformed calls fail loudly whatever the source selection says, so
+        # the argument check comes before any short-circuit.
+        if QUERIES_FIELD not in llm_kwargs:
+            raise ToolCallException(
+                message=f"Missing required '{QUERIES_FIELD}' parameter in internal_search tool call",
+                llm_facing_message=(
+                    f"The internal_search tool requires a '{QUERIES_FIELD}' parameter "
+                    f"containing an array of search queries. Please provide the queries "
+                    f'like: {{"queries": ["your search query here"]}}'
+                ),
+            )
+
+        # An explicitly empty source selection is a statement, not an absent
+        # filter: the tool still runs (it may be forced), and it honestly
+        # finds nothing. `None` keeps its meaning of "no source filter".
+        # Project mode ignores user filters entirely, so the guard must too.
+        if (
+            self.user_selected_filters is not None
+            and self.project_id_filter is None
+            and self.user_selected_filters.source_type is not None
+            and len(self.user_selected_filters.source_type) == 0
+        ):
+            empty_response, _ = convert_inference_sections_to_llm_string(
+                top_sections=[],
+                note=None,
+            )
+            return ToolResponse(
+                rich_response=SearchDocsResponse(
+                    search_docs=[],
+                    citation_mapping={},
+                    displayed_docs=None,
+                ),
+                llm_facing_response=empty_response,
+            )
+
         # Start overall timing
         overall_start_time = time.time()
 
@@ -762,15 +797,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 )
         # Session is closed here — all parallel work uses plain Python objects only
 
-        if QUERIES_FIELD not in llm_kwargs:
-            raise ToolCallException(
-                message=f"Missing required '{QUERIES_FIELD}' parameter in internal_search tool call",
-                llm_facing_message=(
-                    f"The internal_search tool requires a '{QUERIES_FIELD}' parameter "
-                    f"containing an array of search queries. Please provide the queries "
-                    f'like: {{"queries": ["your search query here"]}}'
-                ),
-            )
         llm_queries = cast(list[str], llm_kwargs[QUERIES_FIELD])
 
         # Run semantic and keyword query expansion in parallel (unless skipped)
