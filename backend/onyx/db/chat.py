@@ -1003,5 +1003,3 @@ def translate_db_message_to_chat_message_detail(
     )
 
     return chat_msg_detail
-
-    # No commit - the caller is responsible for committing the transaction
