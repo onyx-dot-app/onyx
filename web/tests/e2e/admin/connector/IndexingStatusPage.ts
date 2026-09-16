@@ -91,11 +91,15 @@ export class IndexingStatusPage {
     const row = this.connectorRow(connectorName);
     await expect(row).not.toHaveClass(/cursor-pointer/);
 
+    // Arm the watcher before the click. Asserting the URL afterwards cannot fail,
+    // because it matches the page we are already on and passes on the first poll.
+    const navigated = this.page
+      .waitForURL(/\/admin\/connector\/\d+/, { timeout: 3_000 })
+      .then(() => true)
+      .catch(() => false);
+
     await row.click();
-    // Without this wait the URL check runs before a navigation could even start,
-    // so the assertion below would pass whether or not the row was clickable.
-    await this.page.waitForLoadState("networkidle");
-    await expect(this.page).toHaveURL(/\/admin\/indexing\/status/);
+    expect(await navigated).toBe(false);
   }
 
   /**
