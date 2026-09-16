@@ -1422,11 +1422,15 @@ class TestRateLimitTiers:
             ),
         ],
     )
+    @patch("onyx.connectors.zoom.client.validate_outbound_http_url")
     def test_each_endpoint_is_paced_at_its_documented_tier(
         self,
+        ssrf: MagicMock,  # noqa: ARG002
         call: Any,
         expected_tier: ZoomRateLimitTier,
     ) -> None:
+        # Without this the download case resolves zoom.us for real, which fails
+        # wherever there is no DNS.
         client = _client()
         client._session = MagicMock()
         used: list[ZoomRateLimitTier] = []
