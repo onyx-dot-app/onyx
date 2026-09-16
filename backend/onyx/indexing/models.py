@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Optional, Protocol
 from pydantic import BaseModel, Field
 
 from onyx.access.models import DocumentAccess
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
 from onyx.db.enums import EmbeddingPrecision, SwitchoverType
 from onyx.utils.logger import setup_logger
@@ -112,6 +113,7 @@ class DocMetadataAwareIndexChunk(IndexChunk):
     personas: list[int]
     boost: int
     aggregated_chunk_boost_factor: float
+    source_types: tuple[DocumentSource, ...] = ()
     # Full ancestor path from root hierarchy node to document's parent.
     # Stored as an integer array in OpenSearch for hierarchy-based filtering.
     # Empty list means no hierarchy info (document excluded from hierarchy searches).
@@ -129,6 +131,7 @@ class DocMetadataAwareIndexChunk(IndexChunk):
         aggregated_chunk_boost_factor: float,
         tenant_id: str,
         ancestor_hierarchy_node_ids: list[int] | None = None,
+        source_types: tuple[DocumentSource, ...] | None = None,
     ) -> "DocMetadataAwareIndexChunk":
         return cls.model_construct(
             **shallow_model_dump(index_chunk),
@@ -140,6 +143,7 @@ class DocMetadataAwareIndexChunk(IndexChunk):
             aggregated_chunk_boost_factor=aggregated_chunk_boost_factor,
             tenant_id=tenant_id,
             ancestor_hierarchy_node_ids=ancestor_hierarchy_node_ids or [],
+            source_types=source_types or (index_chunk.source_document.source,),
         )
 
 

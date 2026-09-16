@@ -216,6 +216,7 @@ class InferenceChunk(BaseChunk):
     match_highlights: list[str]
     doc_summary: str
     chunk_context: str
+    source_types: tuple[DocumentSource, ...] | None = None
 
     # when the doc was last updated
     updated_at: datetime | None
@@ -321,6 +322,7 @@ class SearchDoc(BaseModel):
     # to specify that a set of words should be highlighted. For example:
     # ["<hi>the</hi> <hi>answer</hi> is 42", "the answer is <hi>42</hi>""]
     match_highlights: list[str]
+    source_types: tuple[DocumentSource, ...] | None = None
     # when the doc was last updated
     updated_at: datetime | None = None
     primary_owners: list[str] | None = None
@@ -354,6 +356,7 @@ class SearchDoc(BaseModel):
                 link=chunk.source_links[0] if chunk.source_links else None,
                 blurb=chunk.blurb,
                 source_type=chunk.source_type,
+                source_types=chunk.source_types,
                 boost=chunk.boost,
                 hidden=chunk.hidden,
                 metadata=chunk.metadata,
