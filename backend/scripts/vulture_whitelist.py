@@ -215,7 +215,6 @@ _.last_get_webapp_url_payload
 _.last_health_check_payload
 _.last_list_directory_payload
 _.last_list_session_workspaces_payload
-_.last_outputs_manifest_payload
 _.last_prompt_slot_payload
 _.last_provision_payload
 _.last_read_file_payload
