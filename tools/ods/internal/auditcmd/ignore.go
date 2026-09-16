@@ -2,6 +2,7 @@ package auditcmd
 
 import (
 	"fmt"
+	"io"
 	"os/exec"
 	"strings"
 
@@ -33,7 +34,7 @@ fetched from S3 by default; pass a local file path to --ignore-url to edit a fil
 on disk instead.`,
 		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			runAuditEdit(opts.IgnoreURL)
+			exitOnError(runAuditEdit(opts.IgnoreURL, cmd.OutOrStdout()))
 		},
 	}
 
@@ -59,15 +60,15 @@ add, edit, and delete suppressions, then uploads the result back after a
 confirmation prompt.`,
 		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			runAuditEdit(opts.IgnoreURL)
+			exitOnError(runAuditEdit(opts.IgnoreURL, cmd.OutOrStdout()))
 		},
 	}
 }
 
-func runAuditEdit(url string) {
+func runAuditEdit(url string, out io.Writer) error {
 	orig, err := audit.LoadIgnoresForEdit(url)
 	if err != nil {
-		log.Fatalf("Failed to fetch allowlist from %s: %v", url, err)
+		return failf("Failed to fetch allowlist from %s: %v", url, err)
 	}
 
 	rows := make([]map[string]string, len(orig))
@@ -82,20 +83,20 @@ func runAuditEdit(url string) {
 		// No usable terminal (e.g. piped input): show a read-only dump instead of
 		// crashing, and leave the allowlist untouched.
 		log.Debugf("TUI editor unavailable: %v", err)
-		printIgnores(orig)
+		printIgnores(out, orig)
 		log.Warnf("An interactive terminal is required to edit; edit %s manually.", url)
-		return
+		return nil
 	}
 	if !saved {
-		fmt.Println("No changes made.")
-		return
+		_, _ = fmt.Fprintln(out, "No changes made.")
+		return nil
 	}
 
 	edited := make([]audit.IgnoreEntry, len(editedRows))
 	for i, r := range editedRows {
 		e := rowToEntry(r)
 		if err := audit.ValidateEntry(e); err != nil {
-			log.Fatalf("Invalid allowlist entry %q: %v", e.ID, err)
+			return failf("Invalid allowlist entry %q: %v", e.ID, err)
 		}
 		edited[i] = e
 	}
@@ -103,27 +104,28 @@ func runAuditEdit(url string) {
 
 	if dups := audit.DuplicateKeys(edited); len(dups) > 0 {
 		log.Errorf("Duplicate entries (id + ecosystem): %s", strings.Join(dups, ", "))
-		fmt.Println("Nothing uploaded; remove the duplicates and try again.")
-		return
+		_, _ = fmt.Fprintln(out, "Nothing uploaded; remove the duplicates and try again.")
+		return nil
 	}
 
 	added, removed, changed := audit.DiffIgnores(orig, edited)
 	if len(added) == 0 && len(removed) == 0 && len(changed) == 0 {
-		fmt.Println("No changes to save.")
-		return
+		_, _ = fmt.Fprintln(out, "No changes to save.")
+		return nil
 	}
 
-	printDiff(added, removed, changed)
+	printDiff(out, added, removed, changed)
 
 	if !prompt.Confirm(fmt.Sprintf("Upload updated allowlist (%d entries) to %s? [Y/n] ", len(edited), url)) {
-		fmt.Println("Aborted; nothing uploaded.")
-		return
+		_, _ = fmt.Fprintln(out, "Aborted; nothing uploaded.")
+		return nil
 	}
 
 	if err := audit.SaveIgnores(url, edited); err != nil {
-		log.Fatalf("Failed to save allowlist: %v", err)
+		return failf("Failed to save allowlist: %v", err)
 	}
-	fmt.Printf("Uploaded %d entries to %s\n", len(edited), url)
+	_, _ = fmt.Fprintf(out, "Uploaded %d entries to %s\n", len(edited), url)
+	return nil
 }
 
 // ignoreColumns is the table/form schema for an IgnoreEntry. defaultAddedBy
@@ -158,27 +160,27 @@ func rowToEntry(r map[string]string) audit.IgnoreEntry {
 	}
 }
 
-func printIgnores(entries []audit.IgnoreEntry) {
+func printIgnores(out io.Writer, entries []audit.IgnoreEntry) {
 	if len(entries) == 0 {
-		fmt.Println("Allowlist is empty.")
+		_, _ = fmt.Fprintln(out, "Allowlist is empty.")
 		return
 	}
-	fmt.Printf("Allowlist (%d entries):\n", len(entries))
+	_, _ = fmt.Fprintf(out, "Allowlist (%d entries):\n", len(entries))
 	for _, e := range entries {
-		fmt.Printf("  - %s\n", formatEntry(e))
+		_, _ = fmt.Fprintf(out, "  - %s\n", formatEntry(e))
 	}
 }
 
-func printDiff(added, removed, changed []audit.IgnoreEntry) {
-	fmt.Println("Changes:")
+func printDiff(out io.Writer, added, removed, changed []audit.IgnoreEntry) {
+	_, _ = fmt.Fprintln(out, "Changes:")
 	for _, e := range added {
-		fmt.Printf("  + %s\n", formatEntry(e))
+		_, _ = fmt.Fprintf(out, "  + %s\n", formatEntry(e))
 	}
 	for _, e := range removed {
-		fmt.Printf("  - %s\n", formatEntry(e))
+		_, _ = fmt.Fprintf(out, "  - %s\n", formatEntry(e))
 	}
 	for _, e := range changed {
-		fmt.Printf("  ~ %s\n", formatEntry(e))
+		_, _ = fmt.Fprintf(out, "  ~ %s\n", formatEntry(e))
 	}
 }
 
