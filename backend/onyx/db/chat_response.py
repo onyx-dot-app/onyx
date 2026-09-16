@@ -1,36 +1,57 @@
-import json
 import mimetypes
+from uuid import UUID
 
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.orm import Session, aliased, joinedload, object_session, selectinload
 
-from onyx.agents.transcript import AgentTranscript
+from onyx.agents.compaction import count_tokens
+from onyx.agents.items import (
+    ResponseItemKind,
+    ResponseText,
+    TextPurpose,
+    messages_from_items,
+)
+from onyx.agents.transcript import RunStatus
 from onyx.chat.incognito_context import save_incognito_response
 from onyx.chat.models import (
+    ChatExecutionRecord,
     ChatResponseSnapshot,
-    MessagePresentation,
+    MessageRendering,
+    ResponseRecord,
     ToolRecordReference,
 )
-from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc
-from onyx.db.agent_transcript import (
-    set_agent_transcript,
-)
 from onyx.db.chat import (
     add_search_docs_to_chat_message,
     add_search_docs_to_tool_call,
     create_db_search_doc,
 )
+from onyx.db.chat_history import checkpoint_from_summary, find_summary_for_ancestry
+from onyx.db.chat_response_items import read_response_record, write_response_items
+from onyx.db.chat_subagents import (
+    MAX_AGENT_DEPTH,
+    MAX_AGENT_HISTORY_RUNS,
+    MAX_CONVERSATION_MESSAGES,
+    agent_session_path,
+    root_response_id,
+    visible_message_ids,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import record_mode_persists_content
-from onyx.db.models import ChatMessage, ToolCall
-from onyx.db.tools import create_tool_call_no_commit
+from onyx.db.models import ChatMessage, ChatResponseItem, ChatSession, ToolCall
 from onyx.file_store.models import FileDescriptor
-from onyx.llm.models import AssistantMessage, GenerationRequestParams, TextContent
-from onyx.natural_language_processing.utils import BaseTokenizer, get_tokenizer
+from onyx.llm.models import (
+    AssistantMessage,
+    GenerationRequestParams,
+    TextContent,
+    UserMessage,
+)
+from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.tools.models import ToolCallInfo
 from onyx.utils.logger import setup_logger
-from onyx.utils.postgres_sanitization import sanitize_string
+from onyx.utils.postgres_sanitization import sanitize_json_like, sanitize_string
 
 logger = setup_logger()
 
@@ -60,51 +81,38 @@ def _extract_referenced_file_descriptors(
     return descriptors
 
 
-def _create_and_link_tool_calls(
+def _attach_tool_artifacts(
     tool_calls: list[ToolCallInfo],
-    assistant_message: ChatMessage,
+    tool_records: list[ToolRecordReference],
     db_session: Session,
-    default_tokenizer: BaseTokenizer,
     tool_call_to_search_doc_ids: dict[tuple[str, str], list[int]],
-) -> list[ToolRecordReference]:
-    """Link message-scoped tool identities; the caller owns the transaction."""
-    keys = {info.execution_key for info in tool_calls}
-    if len(keys) != len(tool_calls):
-        raise ValueError("Duplicate tool identity within one response")
-    if any(
-        info.parent_execution_key is not None and info.parent_execution_key not in keys
-        for info in tool_calls
-    ):
-        raise ValueError("Child artifact has no parent operation")
+) -> None:
+    """Attach display metadata to canonical tools; the caller owns the transaction."""
+    references = {
+        (ref.message_id, ref.tool_call_id): ref.record_id for ref in tool_records
+    }
     records: dict[tuple[str, str], ToolCall] = {}
     for info in tool_calls:
-        record = create_tool_call_no_commit(
-            chat_session_id=assistant_message.chat_session_id,
-            parent_chat_message_id=assistant_message.id
-            if info.parent_execution_key is None
-            else None,
-            turn_number=info.turn_index,
-            tool_id=info.tool_id,
-            tool_call_id=info.tool_call_id,
-            tool_call_arguments=info.tool_call_arguments,
-            tool_call_response=info.tool_call_response,
-            tool_call_tokens=len(
-                default_tokenizer.encode(json.dumps(info.tool_call_arguments))
-            ),
-            db_session=db_session,
-            reasoning_tokens=info.reasoning_tokens,
-            generated_images=[image.model_dump() for image in info.generated_images]
-            if info.generated_images
-            else None,
-            tab_index=info.tab_index,
-            add_only=True,
-        )
+        record_id = references.get(info.execution_key)
+        if record_id is None:
+            raise ValueError("Tool display metadata has no accepted tool call")
+        record = db_session.get(ToolCall, record_id)
+        if record is None:
+            raise ValueError("Accepted tool call is unavailable")
+        record.tool_id = info.tool_id
+        record.turn_number = info.turn_index
+        record.tab_index = info.tab_index
+        record.generated_images = [
+            image.model_dump() for image in info.generated_images or []
+        ] or None
         records[info.execution_key] = record
-    db_session.flush()
     for info in tool_calls:
         record = records[info.execution_key]
         if info.parent_execution_key is not None:
-            record.parent_tool_call_id = records[info.parent_execution_key].id
+            parent = records.get(info.parent_execution_key)
+            if parent is None:
+                raise ValueError("Child artifact has no parent operation")
+            record.parent_tool_call_id = parent.id
         search_doc_ids = tool_call_to_search_doc_ids.get(info.execution_key, [])
         if search_doc_ids:
             add_search_docs_to_tool_call(
@@ -112,11 +120,6 @@ def _create_and_link_tool_calls(
                 search_doc_ids=search_doc_ids,
                 db_session=db_session,
             )
-
-    return [
-        ToolRecordReference(message_id=key[0], tool_call_id=key[1], record_id=record.id)
-        for key, record in records.items()
-    ]
 
 
 def save_chat_turn(
@@ -132,13 +135,20 @@ def save_chat_turn(
     pre_answer_processing_time: float | None = None,
     persist_content: bool = True,
     request_params: GenerationRequestParams | None = None,
-    agent_transcript: AgentTranscript | None = None,
-    presentation: list[MessagePresentation] | None = None,
+    response_record: ResponseRecord | None = None,
+    presentation: dict[str, MessageRendering] | None = None,
 ) -> None:
-    """Persist answer content, transcript, and tool records, then commit the session.
+    """Persist accepted output, display content, and tool artifacts, then commit the session.
 
     Content retention applies to related records; request attribution remains stored.
     """
+    tool_records = save_response_content(
+        assistant_message,
+        response_record,
+        db_session=db_session,
+        persist_content=persist_content,
+        presentation=presentation,
+    )
     sanitized_message_text = (
         sanitize_string(message_text) if message_text else message_text
     )
@@ -174,7 +184,6 @@ def save_chat_turn(
     else:
         assistant_message.token_count = 0
 
-    # 2. Create DB SearchDoc entries from pre-deduplicated all_search_docs
     search_doc_key_to_id: dict[str, int] = {}
     for key, search_doc_py in all_search_docs.items():
         db_search_doc = create_db_search_doc(
@@ -184,7 +193,6 @@ def save_chat_turn(
         )
         search_doc_key_to_id[key] = db_search_doc.id
 
-    # 3. Build tool_call -> search_doc mapping (for displayed docs in each tool call)
     tool_call_to_search_doc_ids: dict[tuple[str, str], list[int]] = {}
     for tool_call_info in tool_calls:
         if tool_call_info.search_docs:
@@ -207,11 +215,8 @@ def save_chat_turn(
                 set(search_doc_ids_for_tool)
             )
 
-    # Collect all search doc IDs for ChatMessage linking
     all_search_doc_ids_set: set[int] = set(search_doc_key_to_id.values())
 
-    # 4. Build a citation mapping from the citation number to the saved DB SearchDoc ID
-    # Only include citations that were actually emitted during streaming
     citation_number_to_search_doc_id: dict[int, int] = {}
 
     for citation_num, search_doc_py in citation_to_doc.items():
@@ -219,10 +224,8 @@ def save_chat_turn(
         if emitted_citations is not None and citation_num not in emitted_citations:
             continue
 
-        # Create the unique key for this SearchDoc version
         search_doc_key = search_doc_py.document_id
 
-        # Get the search doc ID (should already exist from processing tool_calls)
         if search_doc_key in search_doc_key_to_id:
             db_search_doc_id = search_doc_key_to_id[search_doc_key]
         else:
@@ -261,7 +264,6 @@ def save_chat_turn(
         # Build mapping from citation number to search doc ID
         citation_number_to_search_doc_id[citation_num] = db_search_doc_id
 
-    # 5. Link all unique SearchDocs (from both tool calls and citations) to ChatMessage
     final_search_doc_ids: list[int] = list(all_search_doc_ids_set)
     if final_search_doc_ids:
         add_search_docs_to_chat_message(
@@ -270,26 +272,13 @@ def save_chat_turn(
             db_session=db_session,
         )
 
-    # 6. Create ToolCall entries and link SearchDocs to them
-    tool_records = _create_and_link_tool_calls(
-        tool_calls=tool_calls,
-        assistant_message=assistant_message,
-        db_session=db_session,
-        default_tokenizer=default_tokenizer,
-        tool_call_to_search_doc_ids=tool_call_to_search_doc_ids,
+    _attach_tool_artifacts(
+        tool_calls, tool_records, db_session, tool_call_to_search_doc_ids
     )
 
-    set_agent_transcript(
-        assistant_message,
-        agent_transcript,
-        db_session=db_session,
-        persist_content=persist_content,
-        presentation=presentation,
-        tool_records=tool_records,
+    assistant_message.citations = (
+        citation_number_to_search_doc_id if citation_number_to_search_doc_id else None
     )
-
-    # 7. Build citations mapping - use the mapping we already built in step 4
-    assistant_message.citations = citation_number_to_search_doc_id or None
 
     # Preserve referenced generated files for subsequent turns. Unreferenced
     # files remain intermediate artifacts.
@@ -301,7 +290,6 @@ def save_chat_turn(
             existing_files = assistant_message.files or []
             assistant_message.files = existing_files + referenced
 
-    # Finally save the messages, tool calls, and docs
     db_session.commit()
 
 
@@ -349,30 +337,321 @@ def save_chat_response(*, message_id: int, response: ChatResponseSnapshot) -> No
             },
             pre_answer_processing_time=response.pre_answer_processing_time,
             persist_content=keeps_content,
-            agent_transcript=response.transcript,
+            response_record=response.response,
             presentation=response.presentation,
         )
     if not keeps_content:
         messages = (
-            list(response.transcript.messages)
-            if response.transcript and response.transcript.messages
+            messages_from_items(response.response.items)
+            if response.response and response.response.items
             else [AssistantMessage(content=[TextContent(text=answer)])]
         )
         sources_by_run: dict[str, dict[int, SearchDoc]] = {}
-        if response.transcript is not None:
+        if response.response is not None:
             documents = {
                 **{doc.document_id: doc for doc in response.citation_to_doc.values()},
                 **response.all_search_docs,
             }
-            for item in response.presentation:
-                sources = sources_by_run.setdefault(item.run_id, {})
-                for number, document_id in item.citation_documents.items():
-                    if document_id in documents:
-                        sources[number] = documents[document_id]
+            pending = list(response.response.child_runs)
+            while pending:
+                record = pending.pop()
+                sources = sources_by_run.setdefault(record.run_id, {})
+                for item in record.items:
+                    setting = response.presentation.get(item.id)
+                    if setting is None:
+                        continue
+                    for number, document_id in setting.citation_documents.items():
+                        if document_id in documents:
+                            sources[number] = documents[document_id]
+                pending.extend(record.child_runs)
         save_incognito_response(
             chat_session_id,
-            response.transcript,
+            response.response,
             sources_by_run,
             message_id=message_id,
             messages=messages,
         )
+
+
+def _child_responses(db_session: Session, response_id: int) -> list[ChatMessage]:
+    question = aliased(ChatMessage)
+    return list(
+        db_session.scalars(
+            select(ChatMessage)
+            .join(question, ChatMessage.parent_message_id == question.id)
+            .join(ToolCall, question.invoking_tool_call_id == ToolCall.id)
+            .join(ChatResponseItem, ChatResponseItem.tool_call_id == ToolCall.id)
+            .where(
+                ChatResponseItem.kind == ResponseItemKind.TOOL_CALL,
+                ToolCall.parent_chat_message_id == response_id,
+                ChatMessage.response_status.is_not(None),
+            )
+            .options(
+                joinedload(ChatMessage.chat_session),
+                joinedload(ChatMessage.parent_message).joinedload(
+                    ChatMessage.invoking_tool_call
+                ),
+                joinedload(ChatMessage.parent_message).joinedload(
+                    ChatMessage.parent_message
+                ),
+                selectinload(ChatMessage.response_items),
+            )
+            # Stable display order; predecessor links determine child history.
+            .order_by(ChatResponseItem.position, ChatMessage.id)
+            .limit(MAX_AGENT_HISTORY_RUNS + 1)
+        )
+    )
+
+
+def read_chat_execution(message: ChatMessage) -> ChatExecutionRecord | None:
+    if message.response_status is None or not record_mode_persists_content(
+        message.chat_session.incognito_record_mode
+    ):
+        return None
+    db_session = object_session(message)
+    if db_session is None:
+        raise ValueError("Response content must be loaded inside its database session")
+    presentation: dict[str, MessageRendering] = {}
+    tool_records: list[ToolRecordReference] = []
+    visited: set[int] = set()
+
+    def read(
+        response: ChatMessage,
+        depth: int,
+        agent_path: str,
+        invoking_generation_id: str | None = None,
+    ) -> ResponseRecord:
+        if (
+            depth > MAX_AGENT_DEPTH
+            or len(visited) >= MAX_AGENT_HISTORY_RUNS
+            or response.id in visited
+        ):
+            raise ValueError("Response hierarchy exceeds its limit or contains a cycle")
+        visited.add(response.id)
+        record = read_response_record(
+            response, agent_path, invoking_generation_id=invoking_generation_id
+        )
+        generation_ids = {
+            item.step_index: item.id
+            for item in response.response_items
+            if item.kind == ResponseItemKind.GENERATION
+        }
+        generation_by_tool: dict[int, str] = {}
+        for item in response.response_items:
+            if item.rendering:
+                presentation[item.id] = MessageRendering.model_validate(item.rendering)
+            if item.kind == ResponseItemKind.TOOL_CALL and item.tool_call is not None:
+                generation_by_tool[item.tool_call.id] = generation_ids[item.step_index]
+                tool_records.append(
+                    ToolRecordReference(
+                        message_id=generation_ids[item.step_index],
+                        tool_call_id=item.tool_call.tool_call_id,
+                        record_id=item.tool_call.id,
+                    )
+                )
+        for child in _child_responses(db_session, response.id):
+            question = child.parent_message
+            name = child.chat_session.agent_name
+            if (
+                question is None
+                or question.invoking_tool_call_id is None
+                or name is None
+            ):
+                raise ValueError("Child response has no invocation or agent name")
+            record.child_runs.append(
+                read(
+                    child,
+                    depth + 1,
+                    f"{agent_path}/{name}",
+                    generation_by_tool[question.invoking_tool_call_id],
+                )
+            )
+        return record
+
+    root = read(message, 0, agent_session_path(db_session, message.chat_session))
+    return ChatExecutionRecord(
+        response=root, presentation=presentation, tool_records=tool_records
+    )
+
+
+def save_response_content(
+    message: ChatMessage,
+    record: ResponseRecord | None,
+    *,
+    db_session: Session,
+    persist_content: bool,
+    presentation: dict[str, MessageRendering] | None = None,
+) -> list[ToolRecordReference]:
+    """Save accepted response content; the caller owns the transaction."""
+    if record is None:
+        return []
+    pending = [record]
+    while pending:
+        pending_record = pending.pop()
+        if pending_record.status == RunStatus.RUNNING:
+            raise ValueError("Saving a response requires settled execution records")
+        pending.extend(pending_record.child_runs)
+    if not persist_content:
+        message.response_status = record.status
+        return []
+    if message.response_status is not None:
+        raise ValueError("Response content has already been saved")
+    if record.agent_id != str(message.chat_session_id):
+        raise ValueError("Root response must use its session identity")
+    record = ResponseRecord.model_validate(
+        sanitize_json_like(record.model_dump(mode="json"))
+    )
+    writer = _ResponseWriter(db_session, message, presentation or {})
+    writer.store(record, None)
+    if writer.presentation:
+        raise ValueError("Display settings do not match response generations")
+    db_session.flush()
+    return [
+        ToolRecordReference(message_id=key[0], tool_call_id=key[1], record_id=tool.id)
+        for key, tool in writer.tools.items()
+    ]
+
+
+class _ResponseWriter:
+    def __init__(
+        self,
+        db_session: Session,
+        response: ChatMessage,
+        presentation: dict[str, MessageRendering],
+    ) -> None:
+        self.db_session = db_session
+        self.response = response
+        self.branch_ids = visible_message_ids(db_session, response)
+        self.sessions = {response.chat_session_id: response.chat_session}
+        self.tools: dict[tuple[str, str], ToolCall] = {}
+        self.presentation = dict(presentation)
+        self.responses: dict[str, ChatMessage] = {}
+
+    def store(
+        self, record: ResponseRecord, parent: ChatMessage | None, depth: int = 0
+    ) -> None:
+        if depth > MAX_AGENT_DEPTH or len(self.responses) >= MAX_AGENT_HISTORY_RUNS:
+            raise ValueError("Response hierarchy exceeds its limit")
+        if record.agent_id is None or record.run_id in self.responses:
+            raise ValueError("Execution identity is missing or repeated")
+        if len(record.items) > MAX_CONVERSATION_MESSAGES:
+            raise ValueError("Response exceeds its content limit")
+        if len(record.input_messages) != 1 or not isinstance(
+            record.input_messages[0], UserMessage
+        ):
+            raise ValueError("A saved chat response requires one user instruction")
+        instruction = record.input_messages[0]
+        if parent is None:
+            response = self.response
+            question = response.parent_message
+            if question is None or question.message_type != MessageType.USER:
+                raise ValueError("Root response has no question")
+        else:
+            if not isinstance(instruction.content, str):
+                raise ValueError("Saved child instructions must contain text only")
+            invocation = self.tools.get(
+                (record.parent_message_id or "", record.parent_tool_call_id or "")
+            )
+            if invocation is None or invocation.parent_chat_message_id != parent.id:
+                raise ValueError("Child instruction has no parent invocation")
+            session_id = UUID(record.agent_id)
+            session = self.sessions.get(session_id) or self.db_session.get(
+                ChatSession, session_id
+            )
+            if session is None:
+                session = ChatSession(
+                    id=session_id,
+                    spawned_by_message_id=parent.id,
+                    agent_name=record.agent_path.rsplit("/", 1)[-1],
+                    description=record.agent_description,
+                    restoration_config=record.restoration_config,
+                )
+                self.db_session.add(session)
+                self.db_session.flush()
+            creation_response = (
+                self.db_session.get(ChatMessage, session.spawned_by_message_id)
+                if session.spawned_by_message_id is not None
+                else None
+            )
+            if (
+                creation_response is None
+                or creation_response.chat_session_id != parent.chat_session_id
+                or root_response_id(self.db_session, creation_response)
+                not in self.branch_ids
+            ):
+                raise ValueError("Child session is unavailable on this branch")
+            self.sessions[session.id] = session
+            predecessor = self.responses.get(record.previous_run_id or "")
+            if predecessor is None and record.previous_run_id:
+                predecessor = self.db_session.get(
+                    ChatMessage, int(record.previous_run_id)
+                )
+                if (
+                    predecessor is None
+                    or root_response_id(self.db_session, predecessor)
+                    not in self.branch_ids
+                ):
+                    raise ValueError("Child predecessor is unavailable on this branch")
+            if predecessor is not None and predecessor.chat_session_id != session.id:
+                raise ValueError("Child predecessor belongs to another conversation")
+            question = ChatMessage(
+                chat_session_id=session.id,
+                parent_message_id=predecessor.id if predecessor else None,
+                invoking_tool_call_id=invocation.id,
+                message=instruction.text,
+                token_count=count_tokens(instruction.text),
+                message_type=MessageType.USER,
+            )
+            self.db_session.add(question)
+            self.db_session.flush()
+            response = ChatMessage(
+                chat_session_id=session.id,
+                parent_message_id=question.id,
+                message="",
+                token_count=0,
+                message_type=MessageType.ASSISTANT,
+            )
+            self.db_session.add(response)
+            self.db_session.flush()
+            question.latest_child_message_id = response.id
+        response.response_status = record.status
+        response.response_failure = record.failure
+        self.responses[record.run_id] = response
+        self.tools.update(
+            write_response_items(
+                self.db_session,
+                response,
+                record.items,
+                self.presentation,
+            )
+        )
+        if parent is not None:
+            response.message = "".join(
+                item.content.value.text
+                for item in response.response_items
+                if item.content is not None
+                and isinstance(item.content.value, ResponseText)
+                and item.content.value.purpose == TextPurpose.ANSWER
+            )
+            response.token_count = count_tokens(response.message)
+        if record.checkpoint is not None:
+            previous_summary = find_summary_for_ancestry(
+                self.db_session,
+                response.chat_session_id,
+                visible_message_ids(self.db_session, response),
+            )
+            if record.checkpoint != checkpoint_from_summary(previous_summary):
+                checkpoint = record.checkpoint
+                summary = ChatMessage(
+                    chat_session_id=response.chat_session_id,
+                    parent_message_id=response.id,
+                    message_type=MessageType.SUMMARY,
+                    message=checkpoint.summary,
+                    token_count=count_tokens(checkpoint.summary),
+                    summary_covered_count=checkpoint.covered_count,
+                    summary_covered_digest=checkpoint.covered_digest,
+                )
+                self.db_session.add(summary)
+                self.db_session.flush()
+        for child in record.child_runs:
+            self.store(child, response, depth + 1)

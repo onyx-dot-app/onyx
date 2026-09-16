@@ -17,7 +17,9 @@ class ResearchPhase(str, Enum):
     REPORT = "report"
 
 
-class ResearchStepOutput(BaseModel):
+class ResearchMessageMetadata(BaseModel):
+    """Research phase and source references attached to a generated message."""
+
     phase: ResearchPhase
     is_intermediate: bool = False
     is_reasoning_model: bool

@@ -18,7 +18,7 @@ from onyx.chat.context import (
 )
 from onyx.chat.errors import _build_empty_llm_response_error
 from onyx.chat.files import build_python_chat_files_from_search_docs
-from onyx.chat.models import ChatStepOutput, PersonaPromptConfig
+from onyx.chat.models import ChatMessageMetadata, PersonaPromptConfig
 from onyx.configs.chat_configs import MAX_LLM_CYCLES
 from onyx.context.prompt import prepare_prompt
 from onyx.context.search.models import SearchDocsResponse
@@ -156,7 +156,7 @@ class ChatAgent:
             options=GenerationOptions(
                 tool_choice=tool_choice, reasoning_effort=self.reasoning_effort
             ),
-            output_metadata=ChatStepOutput(
+            output_metadata=ChatMessageMetadata(
                 sources=dict(self.artifacts.citation_processor.citation_to_doc),
                 documents=list(self.artifacts.gathered_documents),
                 include_citations=self.include_citations,

@@ -2,24 +2,30 @@
 
 import asyncio
 import threading
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Generator
 from unittest.mock import patch
 
 import pytest
 
 from onyx.agents.concurrency import ExecutionServices
 from onyx.agents.coordination import AgentCoordinator, AgentInfo, RunCoordination
-from onyx.agents.events import AgentEvent, StepEndEvent
-from onyx.agents.models import PreparedStep, StepInput
+from onyx.agents.events import AgentEvent, MessageEndEvent
+from onyx.agents.items import messages_from_items
+from onyx.agents.models import PreparedStep, RunSnapshot, StepInput
 from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import AgentControl, AgentTool, SpawnResult, ToolInvocation
 from onyx.agents.transcript import RunFailureKind, RunStatus
+from onyx.chat.presentation import project_response
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.exceptions import LLMTimeoutError
+from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
     AssistantMessage,
+    GenerationDoneEvent,
+    GenerationEvent,
     GenerationRequest,
     TextContent,
+    TextDeltaEvent,
     ToolCall,
     ToolResult,
     UserMessage,
@@ -72,7 +78,7 @@ def test_saved_failure_matches_live_failure(
     handles = []
     with pytest.raises(RunFailed) as live:
         run_agent(child, max_steps=1, runs=handles)
-    transcript = handles[0].snapshot().transcript()
+    transcript = handles[0].snapshot()
     assert live.value.failure.kind == kind
     assert "private input" not in transcript.model_dump_json()
 
@@ -357,7 +363,7 @@ def test_parent_join_allows_child_to_start_nested_work() -> None:
 
     def observe(event: AgentEvent) -> None:
         if (
-            isinstance(event, StepEndEvent)
+            isinstance(event, MessageEndEvent)
             and event.parent_run_id is None
             and event.step_index == 1
         ):
@@ -489,7 +495,9 @@ def test_child_terminal_timeout_fails_parent_and_retains_cleanup_ownership() -> 
                     await run.wait(timeout=2)
                 record = run.snapshot()
                 assert record.status == RunStatus.ERROR
-                assert record.child_runs[0].status == RunStatus.RUNNING
+                assert record.child_runs[0].status == RunStatus.ERROR
+                assert record.child_runs[0].failure is not None
+                assert record.child_runs[0].failure.kind == RunFailureKind.EXECUTION
                 assert not await run.wait_for_idle(timeout=0.01)
                 with pytest.raises(RuntimeError, match="running or draining"):
                     parent.start(max_steps=1, coordinator=coordinator)
@@ -503,3 +511,95 @@ def test_child_terminal_timeout_fails_parent_and_retains_cleanup_ownership() -> 
             assert await coordinator.close(timeout=2)
 
     asyncio.run(exercise())
+
+
+@pytest.mark.asyncio
+async def test_failed_child_settlement_retains_accepted_partial_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    partial_accepted = threading.Event()
+    release = threading.Event()
+
+    class PartialModel(FakeModelClient):
+        def stream(
+            self, request: GenerationRequest, context: GenerationContext | None = None
+        ) -> Generator[GenerationEvent, None, None]:
+            assert request.messages[-1].text == "Find facts"
+            assert context is not None and context.cancellation is not None
+            message = AssistantMessage(
+                content=[TextContent(text="Child partial output")]
+            )
+            yield TextDeltaEvent(message=message, content_index=0, text=message.text)
+            partial_accepted.set()
+            assert release.wait(3)
+            yield GenerationDoneEvent(message=message)
+
+    child = Agent(PartialModel(lambda _request, _signal: AssistantMessage()))
+
+    async def coordinate(invocation: ToolInvocation) -> ToolResult:
+        await invocation.agents.spawn_agent(
+            child,
+            name="research",
+            description="Facts",
+            messages=[UserMessage(content="Find facts")],
+            max_steps=1,
+        )
+        async with asyncio.timeout(2):
+            while not partial_accepted.is_set():
+                await asyncio.sleep(0.005)
+        return ToolResult(content="Child started")
+
+    parent = parent_agent(coordinate)
+    original_finish = RunCoordination.finish
+    failed_coordinators: list[RunCoordination] = []
+
+    async def fail_parent_finish(
+        coordination: RunCoordination, cancel: bool
+    ) -> list[RunSnapshot]:
+        if coordination.run.agent_id == parent.id:
+            failed_coordinators.append(coordination)
+            raise TimeoutError("Forced settlement timeout")
+        return await original_finish(coordination, cancel)
+
+    monkeypatch.setattr(RunCoordination, "finish", fail_parent_finish)
+    coordinator = AgentCoordinator()
+    run = parent.start(max_steps=2, coordinator=coordinator)
+    try:
+        with pytest.raises(RunFailed):
+            await run.wait(2)
+        snapshot = run.snapshot()
+        assert snapshot.status == RunStatus.ERROR
+        assert snapshot.messages[-1].text == "first finished"
+        captured_child = snapshot.child_runs[0]
+        assert captured_child.status == RunStatus.ERROR
+        assert captured_child.messages[0].text == "Child partial output"
+        assert captured_child.failure is not None
+        assert captured_child.failure.kind == RunFailureKind.EXECUTION
+        assert (
+            captured_child.failure.message
+            == "Child execution did not settle before its parent ended."
+        )
+        assert all(
+            operation.status != RunStatus.RUNNING
+            for operation in captured_child.operations
+        )
+        projected = project_response(
+            snapshot,
+            response_id=42,
+            tool_ids={"coordinate": 1},
+            registrations=coordinator.registrations(),
+        )
+        assert projected.response is not None
+        assert (
+            messages_from_items(projected.response.items)[-1].text == "first finished"
+        )
+        assert (
+            messages_from_items(projected.response.child_runs[0].items)[0].text
+            == "Child partial output"
+        )
+    finally:
+        release.set()
+        monkeypatch.setattr(RunCoordination, "finish", original_finish)
+        for coordination in failed_coordinators[:1]:
+            await original_finish(coordination, cancel=True)
+        assert await run.wait_for_idle(3)

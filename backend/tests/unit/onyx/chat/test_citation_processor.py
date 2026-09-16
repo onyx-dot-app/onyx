@@ -18,11 +18,8 @@ from datetime import datetime
 
 import pytest
 
-from onyx.chat.citation_processor import (
-    CitationMapping,
-    CitationMode,
-    DynamicCitationProcessor,
-)
+from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
+from onyx.chat.models import CitationMode
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc
 from onyx.server.query_and_chat.streaming_models import CitationInfo

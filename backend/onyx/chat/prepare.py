@@ -54,6 +54,7 @@ from onyx.db.chat import (
 )
 from onyx.db.chat_history import (
     capture_chat_history,
+    checkpoint_from_summary,
     convert_chat_history,
     find_summary_for_branch,
     is_last_assistant_message_clarification,
@@ -381,6 +382,12 @@ def _prepare_chat_data(
     if forced_tool_id in {tool.id for tool in tools if not tool.enabled}:
         forced_tool_id = None
     summary_message = find_summary_for_branch(db_session, chat_history)
+    checkpoint = checkpoint_from_summary(summary_message)
+    if checkpoint is not None:
+        # Exact coverage was measured after applying any legacy summary baseline.
+        summary_message = find_summary_for_branch(
+            db_session, chat_history, legacy_only=True
+        )
     summarized_file_metadata: dict[str, FileToolMetadata] = {}
     if summary_message and summary_message.last_summarized_message_id:
         cutoff = summary_message.last_summarized_message_id
@@ -408,7 +415,12 @@ def _prepare_chat_data(
         tool_configuration=capture_persona_tool_configuration(persona),
         research_tool_id=research_tool_id,
         selected_models=selected_models,
-        history=capture_chat_history(chat_history, tool_names, token_counter),
+        history=capture_chat_history(
+            chat_history,
+            tool_names,
+            token_counter,
+            checkpoint,
+        ),
         file_inputs=prepare_chat_file_inputs(list(descriptors.values()), db_session),
         context_user_files=context_user_files,
         available_files=available_files,
@@ -426,7 +438,7 @@ def _prepare_chat_data(
             content=[TextContent(text=summary_message.message)],
             metadata=PromptMetadata(token_count=summary_message.token_count),
         )
-        if summary_message
+        if summary_message and summary_message.last_summarized_message_id is not None
         else None,
         summarized_file_metadata=summarized_file_metadata,
         skip_clarification=is_last_assistant_message_clarification(chat_history),

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Protocol
 
 from pydantic import BaseModel, ConfigDict, JsonValue, SerializeAsAny
 
-from onyx.agents.transcript import AgentConfiguration
+from onyx.agents.transcript import AgentRestorationConfig
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import Message, ToolDefinition, ToolResult
 
@@ -38,7 +38,7 @@ class AgentControl(Protocol):
         description: str,
         max_steps: int,
         messages: Sequence[Message],
-        restoration_config: AgentConfiguration | None = None,
+        restoration_config: AgentRestorationConfig | None = None,
     ) -> SpawnResult: ...
 
     async def start_run(
@@ -145,11 +145,3 @@ class AgentTool:
     @property
     def name(self) -> str:
         return self.definition.name
-
-    @property
-    def description(self) -> str:
-        return self.definition.description
-
-    @property
-    def parameters(self) -> dict[str, JsonValue]:
-        return self.definition.parameters

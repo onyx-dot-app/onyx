@@ -1,5 +1,6 @@
 """Bounded temporary replay state, committed atomically within tenant Redis."""
 
+import hashlib
 import json
 from collections.abc import Collection, Sequence
 from typing import Any, cast
@@ -9,10 +10,11 @@ from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 from redis.exceptions import WatchError
 
 from onyx.agents.coordination import AgentInfo
-from onyx.agents.transcript import AgentTranscript
+from onyx.agents.items import messages_from_items
+from onyx.agents.transcript import AgentRestorationConfig
 from onyx.cache.interface import CacheBackendType
 from onyx.chat.citation_processor import CitationMapping
-from onyx.chat.models import MAX_DISCOVERED_AGENTS, RestoredAgent
+from onyx.chat.models import MAX_DISCOVERED_AGENTS, ResponseRecord, SavedAgentContext
 from onyx.chat.stream_buffer import stream_buffer_key_pattern
 from onyx.configs import app_configs
 from onyx.configs.constants import MessageType
@@ -72,11 +74,6 @@ def _read_message(item: dict[str, Any]) -> Message:
         metadata = PromptMetadata.model_validate(data.pop("metadata", {}))
         message = _MESSAGE_ADAPTER.validate_python(data)
         message.metadata = metadata
-        return message
-    if isinstance(item.get("message"), dict):
-        # Transitional records wrapped a canonical message with prompt metadata.
-        message = _MESSAGE_ADAPTER.validate_python(item["message"])
-        message.metadata = PromptMetadata.model_validate(item)
         return message
     legacy = _LegacyMessage.model_validate(item)
     metadata = PromptMetadata(
@@ -375,30 +372,36 @@ def _read_agent_fields(
     )
 
 
+class _IncognitoAgent(BaseModel):
+    parent_agent_id: str | None = None
+    agent_id: str
+    agent_path: str
+    description: str
+    configuration: AgentRestorationConfig | None
+    responses: list[ResponseRecord]
+    sources: CitationMapping = Field(default_factory=dict)
+
+
 class IncognitoAgentResponse(BaseModel):
-    agents: list[RestoredAgent] = Field(default_factory=list)
-
-
-def _decode_agent_field(raw: bytes | None) -> IncognitoAgentResponse:
-    if raw is None:
-        return IncognitoAgentResponse()
-    return IncognitoAgentResponse.model_validate_json(raw)
+    replay_digest: str
+    agents: list[_IncognitoAgent] = Field(default_factory=list)
 
 
 def _incognito_records(
     chat_session_id: UUID, visible_message_ids: Sequence[int]
-) -> list[RestoredAgent]:
+) -> list[_IncognitoAgent]:
     if not visible_message_ids:
         return []
     return [
         agent
         for raw in reversed(_read_agent_fields(chat_session_id, visible_message_ids))
-        for agent in _decode_agent_field(raw).agents
+        if raw is not None
+        for agent in IncognitoAgentResponse.model_validate_json(raw).agents
     ]
 
 
-def _incognito_metadata(records: list[RestoredAgent]) -> dict[str, AgentInfo]:
-    by_id: dict[str, RestoredAgent] = {}
+def _incognito_metadata(records: list[_IncognitoAgent]) -> dict[str, AgentInfo]:
+    by_id: dict[str, _IncognitoAgent] = {}
     for agent in records:
         by_id.pop(agent.agent_id, None)
         by_id[agent.agent_id] = agent
@@ -409,8 +412,8 @@ def _incognito_metadata(records: list[RestoredAgent]) -> dict[str, AgentInfo]:
             parent_id=agent.parent_agent_id,
             description=agent.description,
             restoration_config=agent.configuration,
-            latest_run_id=agent.transcripts[-1].run_id if agent.transcripts else None,
-            status=agent.transcripts[-1].status if agent.transcripts else None,
+            latest_run_id=agent.responses[-1].run_id if agent.responses else None,
+            status=agent.responses[-1].status if agent.responses else None,
         )
         for agent_id, agent in by_id.items()
     }
@@ -452,7 +455,7 @@ def lookup_incognito_agent(
 
 def load_incognito_agent_history(
     chat_session_id: UUID, visible_message_ids: Sequence[int], agent_id: str
-) -> RestoredAgent:
+) -> SavedAgentContext:
     records = [
         agent
         for agent in _incognito_records(chat_session_id, visible_message_ids)
@@ -461,10 +464,10 @@ def load_incognito_agent_history(
     if not records:
         raise ValueError("Agent is not visible on the selected incognito branch")
     latest = records[-1]
-    by_id = {run.run_id: run for record in records for run in record.transcripts}
-    selected: list[AgentTranscript] = []
+    by_id = {run.run_id: run for record in records for run in record.responses}
+    selected: list[ResponseRecord] = []
     visited: set[str] = set()
-    run_id = latest.transcripts[-1].run_id if latest.transcripts else None
+    run_id = latest.responses[-1].run_id if latest.responses else None
     while run_id is not None:
         if run_id in visited:
             raise ValueError("Incognito agent history contains a cycle")
@@ -476,10 +479,22 @@ def load_incognito_agent_history(
         run_id = run.previous_run_id
     sources: CitationMapping = {}
     for record in records:
-        if any(run.run_id in visited for run in record.transcripts):
+        if any(run.run_id in visited for run in record.responses):
             sources.update(record.sources)
-    return latest.model_copy(
-        update={"transcripts": list(reversed(selected)), "sources": sources}
+    return SavedAgentContext(
+        agent_id=latest.agent_id,
+        configuration=latest.configuration,
+        messages=[
+            message
+            for response in reversed(selected)
+            for message in [
+                *response.input_messages,
+                *messages_from_items(response.items),
+            ]
+        ],
+        checkpoint=selected[0].checkpoint if selected else None,
+        previous_run_id=selected[0].run_id if selected else None,
+        sources=sources,
     )
 
 
@@ -488,13 +503,13 @@ def load_incognito_saved_run(
     visible_message_ids: Sequence[int],
     run_id: str,
     parent_id: str,
-) -> AgentTranscript | None:
+) -> ResponseRecord | None:
     records = _incognito_records(chat_session_id, visible_message_ids)
     metadata = _incognito_metadata(records)
     for agent in records:
         if metadata[agent.agent_id].parent_id != parent_id:
             continue
-        for run in agent.transcripts:
+        for run in agent.responses:
             if run.run_id == run_id:
                 return run
     return None
@@ -527,42 +542,46 @@ def get_or_create_incognito_root_id(
 
 
 def _response_records(
-    transcript: AgentTranscript | None,
+    response: ResponseRecord | None,
     sources_by_run: dict[str, CitationMapping],
+    replay_digest: str,
 ) -> IncognitoAgentResponse:
-    response = IncognitoAgentResponse()
-    local: dict[str, RestoredAgent] = {}
+    records = IncognitoAgentResponse(replay_digest=replay_digest)
+    local: dict[str, _IncognitoAgent] = {}
 
-    def append(run: AgentTranscript, parent_id: str | None = None) -> None:
-        if run.agent_id is None or run.run_id is None:
+    def append(run: ResponseRecord, parent_id: str | None = None) -> None:
+        if run.agent_id is None:
             raise ValueError("Temporary agent runs require agent and run identities")
         saved = local.get(run.agent_id)
         if saved is None:
-            saved = RestoredAgent(
+            saved = _IncognitoAgent(
                 agent_id=run.agent_id,
                 agent_path=run.agent_path,
                 parent_agent_id=parent_id,
                 description=run.agent_description,
                 configuration=run.restoration_config,
-                transcripts=[],
+                responses=[],
             )
-            response.agents.append(saved)
+            records.agents.append(saved)
             local[run.agent_id] = saved
-        if any(item.run_id == run.run_id for item in saved.transcripts):
+        if any(item.run_id == run.run_id for item in saved.responses):
             raise ValueError("Duplicate temporary agent run")
-        saved.transcripts.append(run.model_copy(deep=True, update={"child_runs": []}))
+        saved.responses.append(run.model_copy(deep=True, update={"child_runs": []}))
         saved.sources.update(sources_by_run.get(run.run_id, {}))
         for child in run.child_runs:
             append(child, run.agent_id)
 
-    if transcript is not None:
-        append(transcript)
-    return response
+    if response is not None:
+        if response.agent_id is None:
+            raise ValueError("Temporary responses require an agent identity")
+        for child in response.child_runs:
+            append(child, response.agent_id)
+    return records
 
 
 def save_incognito_response(
     chat_session_id: UUID,
-    transcript: AgentTranscript | None,
+    response: ResponseRecord | None,
     sources_by_run: dict[str, CitationMapping],
     *,
     message_id: int,
@@ -571,7 +590,18 @@ def save_incognito_response(
     """Atomically save replay, evicting old records before old root messages.
     Evicted child histories cannot resume; oversized responses leave both stores unchanged.
     """
-    body = _response_records(transcript, sources_by_run).model_dump_json().encode()
+    # Detect conflicting retries without keeping another copy of root output.
+    replay = json.dumps(
+        [_write_message(message) for message in messages], sort_keys=True
+    ).encode()
+    digest = hashlib.sha256(replay)
+    if response is not None:
+        digest.update(response.run_id.encode())
+    body = (
+        _response_records(response, sources_by_run, digest.hexdigest())
+        .model_dump_json()
+        .encode()
+    )
     response_key = str(message_id).encode()
     for _ in range(_MAX_COMMIT_ATTEMPTS):
         with get_redis_client().pipeline() as pipeline:
@@ -582,16 +612,14 @@ def save_incognito_response(
             agents = pipeline.hgetall_watched(_agents_key(chat_session_id))
             if previous := agents.get(response_key):
                 if previous != body:
-                    raise ValueError(
-                        "Incognito response already has different agent records"
-                    )
+                    raise ValueError("Incognito response already has different content")
                 return
             context = _decode_context(
                 chat_session_id, raw, agents.get(_PREVIOUS_RUN_FIELD)
             )
             context.messages.extend(messages)
-            if transcript is not None:
-                context.previous_run_id = transcript.run_id
+            if response is not None:
+                context.previous_run_id = response.run_id
             agents[response_key] = body
             state = _retained_state(
                 context,

@@ -15,6 +15,7 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy.orm import Session
 
+from onyx.agents.items import build_response_items, messages_from_items
 from onyx.chat.incognito import delete_incognito_generated_files
 from onyx.chat.incognito_context import (
     append_incognito_message,
@@ -24,7 +25,7 @@ from onyx.chat.incognito_context import (
     save_incognito_context,
     teardown_incognito_session,
 )
-from onyx.chat.models import RestoredAgent
+from onyx.chat.models import ResponseRecord, SavedAgentContext
 from onyx.configs.constants import DocumentSource, FileOrigin
 from onyx.context.messages import PromptMetadata
 from onyx.context.search.models import SearchDoc
@@ -285,7 +286,7 @@ def test_the_sweep_lookup_samples_under_a_limit(db_session: Session) -> None:
 
 def _load_agent_history(
     session_id: UUID, message_ids: list[int]
-) -> list[RestoredAgent]:
+) -> list[SavedAgentContext]:
     return [
         load_incognito_agent_history(session_id, message_ids, agent.id)
         for agent in load_incognito_agent_metadata(session_id, message_ids)
@@ -293,7 +294,7 @@ def _load_agent_history(
 
 
 def test_temporary_agent_history_sources_and_lifetime() -> None:
-    from onyx.agents.transcript import AgentTranscript, RunStatus
+    from onyx.agents.transcript import RunStatus
     from onyx.chat.incognito_context import (
         INCOGNITO_CONTEXT_TTL_SECONDS,
         get_or_create_incognito_root_id,
@@ -302,20 +303,24 @@ def test_temporary_agent_history_sources_and_lifetime() -> None:
 
     session_id = uuid4()
     root_id, child_id = str(uuid4()), str(uuid4())
-    child = AgentTranscript(
+    child = ResponseRecord(
         agent_id=child_id,
         agent_path="/root/research",
         agent_description="Private task",
         run_id=str(uuid4()),
         status=RunStatus.COMPLETE,
         input_messages=[UserMessage(content="private question")],
-        messages=[AssistantMessage(content=[TextContent(text="private answer")])],
+        items=build_response_items(
+            "test-generation",
+            [AssistantMessage(content=[TextContent(text="private answer")])],
+            [],
+        ),
     )
-    root = AgentTranscript(
+    root = ResponseRecord(
         agent_id=root_id,
         run_id=str(uuid4()),
         status=RunStatus.COMPLETE,
-        messages=[],
+        items=build_response_items("test-generation", [], []),
         child_runs=[child],
     )
     key = f"incognito_ctx:{session_id}:agents"
@@ -328,14 +333,25 @@ def test_temporary_agent_history_sources_and_lifetime() -> None:
         assert child.run_id is not None
         sources = {child.run_id: {1: _search_doc("private-source")}}
         save_incognito_response(
-            session_id, root, sources, message_id=1, messages=root.messages
+            session_id,
+            root,
+            sources,
+            message_id=1,
+            messages=messages_from_items(root.items),
         )
         save_incognito_response(
-            session_id, root, sources, message_id=1, messages=root.messages
+            session_id,
+            root,
+            sources,
+            message_id=1,
+            messages=messages_from_items(root.items),
         )
-        restored = _load_agent_history(session_id, [1])[1]
-        assert len(restored.transcripts) == 1
-        assert restored.transcripts[0].messages[0].text == "private answer"
+        restored = _load_agent_history(session_id, [1])[0]
+        assert restored.previous_run_id == child.run_id
+        assert [message.text for message in restored.messages] == [
+            "private question",
+            "private answer",
+        ]
         assert restored.sources[1].document_id == "private-source"
 
         next_child = child.model_copy(
@@ -355,12 +371,19 @@ def test_temporary_agent_history_sources_and_lifetime() -> None:
             },
         )
         save_incognito_response(
-            session_id, next_root, {}, message_id=2, messages=next_root.messages
+            session_id,
+            next_root,
+            {},
+            message_id=2,
+            messages=messages_from_items(next_root.items),
         )
-        restored = _load_agent_history(session_id, [2, 1])[1]
-        assert [run.run_id for run in restored.transcripts] == [
-            child.run_id,
-            next_child.run_id,
+        restored = _load_agent_history(session_id, [2, 1])[0]
+        assert restored.previous_run_id == next_child.run_id
+        assert [message.text for message in restored.messages] == [
+            "private question",
+            "private answer",
+            "next question",
+            "private answer",
         ]
         assert restored.sources[1].document_id == "private-source"
         client.expire(key, 10)
@@ -370,7 +393,11 @@ def test_temporary_agent_history_sources_and_lifetime() -> None:
         assert _load_agent_history(session_id, [2, 1]) == []
         with pytest.raises(RuntimeError, match="session ended"):
             save_incognito_response(
-                session_id, next_root, {}, message_id=3, messages=next_root.messages
+                session_id,
+                next_root,
+                {},
+                message_id=3,
+                messages=messages_from_items(next_root.items),
             )
         assert not client.exists(key)
         with pytest.raises(RuntimeError, match="session ended"):
@@ -423,11 +450,11 @@ def test_incognito_response_restores_agents_without_database_content(
 
     from onyx.agents.runtime import Agent
     from onyx.agents.tools import AgentTool, ToolInvocation
-    from onyx.chat.agent_registry import bind_chat_agents
-    from onyx.chat.models import ChatResponseSnapshot, MessagePresentation
+    from onyx.chat.models import ChatResponseSnapshot, MessageRendering
+    from onyx.chat.subagents import create_chat_agent_coordinator
     from onyx.db.chat_response import save_chat_response
     from onyx.db.enums import IncognitoRecordMode
-    from onyx.db.models import AgentRun, ChatSessionAgent
+    from onyx.db.models import ChatResponseItem
     from onyx.llm.interfaces import LLMUserIdentity
     from onyx.llm.models import ToolCall, ToolResult
     from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
@@ -477,7 +504,7 @@ def test_incognito_response_restores_agents_without_database_content(
         append_incognito_message(
             session.id, UserMessage(content="private root question")
         )
-        coordinator = bind_chat_agents(
+        coordinator = create_chat_agent_coordinator(
             root,
             previous_run_id=None,
             message_id=assistant.id,
@@ -503,7 +530,7 @@ def test_incognito_response_restores_agents_without_database_content(
             response_id=assistant.id,
             tool_ids={},
             registrations=coordinator.registrations(),
-        ).transcript
+        ).response
         assert transcript is not None
         child_run_id = transcript.child_runs[0].run_id
         assert child_run_id is not None
@@ -516,14 +543,12 @@ def test_incognito_response_restores_agents_without_database_content(
             is_clarification=False,
             all_search_docs={source.document_id: source},
             pre_answer_processing_time=None,
-            transcript=transcript,
-            presentation=[
-                MessagePresentation(
-                    run_id=child_run_id,
-                    step_index=0,
+            response=transcript,
+            presentation={
+                transcript.child_runs[0].items[0].id: MessageRendering(
                     citation_documents={1: source.document_id},
                 )
-            ],
+            },
             cancelled=False,
         )
         if history_full:
@@ -541,24 +566,26 @@ def test_incognito_response_restores_agents_without_database_content(
         save_chat_response(message_id=assistant.id, response=response_snapshot)
         assert load_incognito_context(session.id).previous_run_id == transcript.run_id
         db_session.expire_all()
-        assert assistant.message == "" and assistant.response_rendering is None
+        assert assistant.message == "" and not assistant.response_items
         assert (
             db_session.scalars(
-                select(ChatSessionAgent).where(
-                    ChatSessionAgent.chat_session_id == session.id
-                )
+                select(ChatSession)
+                .join(ChatMessage, ChatMessage.id == ChatSession.spawned_by_message_id)
+                .where(ChatMessage.chat_session_id == session.id)
             ).all()
             == []
         )
         assert (
             db_session.scalars(
-                select(AgentRun).where(AgentRun.chat_message_id == assistant.id)
+                select(ChatResponseItem).where(
+                    ChatResponseItem.chat_message_id == assistant.id
+                )
             ).all()
             == []
         )
 
         restored_root = Agent(llm)
-        restored_coordinator = bind_chat_agents(
+        restored_coordinator = create_chat_agent_coordinator(
             restored_root,
             previous_run_id=transcript.run_id,
             message_id=assistant.id,
@@ -577,7 +604,7 @@ def test_incognito_response_restores_agents_without_database_content(
         ]
 
         assert (
-            _load_agent_history(session.id, [assistant.id])[1].sources[1].document_id
+            _load_agent_history(session.id, [assistant.id])[0].sources[1].document_id
             == source.document_id
         )
     finally:
@@ -591,12 +618,12 @@ def test_incognito_sibling_responses_keep_independent_agents_and_history(
     from concurrent.futures import ThreadPoolExecutor
     from threading import Barrier
 
-    from onyx.agents.transcript import AgentTranscript, RunStatus
+    from onyx.agents.transcript import RunStatus
     from onyx.chat.incognito_context import (
         get_or_create_incognito_root_id,
         save_incognito_response,
     )
-    from onyx.db.agent_transcript import load_agent_branch
+    from onyx.db.chat_subagents import load_chat_branch
 
     session = _new_session(db_session, owner.id)
     ancestor = _reserve_assistant(db_session, session.id)
@@ -614,17 +641,21 @@ def test_incognito_sibling_responses_keep_independent_agents_and_history(
     )
     db_session.commit()
     session_id = session.id
-    ancestor_branch = load_agent_branch(ancestor.id).message_ids
+    ancestor_branch = load_chat_branch(ancestor.id).message_ids
     branches = {
-        message_id: load_agent_branch(message_id).message_ids
+        message_id: load_chat_branch(message_id).message_ids
         for message_id in sibling_ids
     }
     root_id = str(uuid4())
-    ancestor_run = AgentTranscript(
+    ancestor_run = ResponseRecord(
         agent_id=root_id,
         run_id=str(uuid4()),
         status=RunStatus.COMPLETE,
-        messages=[AssistantMessage(content=[TextContent(text="shared ancestor")])],
+        items=build_response_items(
+            "test-generation",
+            [AssistantMessage(content=[TextContent(text="shared ancestor")])],
+            [],
+        ),
     )
     barrier = Barrier(2)
 
@@ -634,21 +665,23 @@ def test_incognito_sibling_responses_keep_independent_agents_and_history(
 
         barrier.wait(timeout=5)
 
-        child = AgentTranscript(
+        child = ResponseRecord(
             agent_id=child_id,
             agent_path="/root/research",
             run_id=child_run_id,
             status=RunStatus.COMPLETE,
-            messages=[
-                AssistantMessage(content=[TextContent(text=f"answer {message_id}")])
-            ],
+            items=build_response_items(
+                "test-generation",
+                [AssistantMessage(content=[TextContent(text=f"answer {message_id}")])],
+                [],
+            ),
         )
-        result = AgentTranscript(
+        result = ResponseRecord(
             agent_id=root_id,
             run_id=root_run_id,
             previous_run_id=ancestor_run.run_id if ancestor_finishes_first else None,
             status=RunStatus.COMPLETE,
-            messages=[],
+            items=build_response_items("test-generation", [], []),
             child_runs=[child],
         )
         save_incognito_response(
@@ -656,7 +689,7 @@ def test_incognito_sibling_responses_keep_independent_agents_and_history(
             result,
             {child_run_id: {1: _search_doc(f"source-{message_id}")}},
             message_id=message_id,
-            messages=result.messages,
+            messages=messages_from_items(result.items),
         )
         return root_run_id, child_id
 
@@ -671,7 +704,7 @@ def test_incognito_sibling_responses_keep_independent_agents_and_history(
                 ancestor_run,
                 {},
                 message_id=ancestor.id,
-                messages=ancestor_run.messages,
+                messages=messages_from_items(ancestor_run.items),
             )
         with ThreadPoolExecutor(max_workers=2) as executor:
             results = list(executor.map(save_sibling, sibling_ids))
@@ -681,29 +714,30 @@ def test_incognito_sibling_responses_keep_independent_agents_and_history(
                 ancestor_run,
                 {},
                 message_id=ancestor.id,
-                messages=ancestor_run.messages,
+                messages=messages_from_items(ancestor_run.items),
             )
         assert results[0][1] != results[1][1]
-        for message_id, (run_id, child_id) in zip(sibling_ids, results, strict=True):
+        for message_id, (_, child_id) in zip(sibling_ids, results, strict=True):
             agents = {
-                agent.agent_path: agent
-                for agent in _load_agent_history(session_id, branches[message_id])
+                info.path: load_incognito_agent_history(
+                    session_id, branches[message_id], info.id
+                )
+                for info in load_incognito_agent_metadata(
+                    session_id, branches[message_id]
+                )
             }
-            expected_runs = (
-                [ancestor_run.run_id, run_id] if ancestor_finishes_first else [run_id]
-            )
-            assert [run.run_id for run in agents["/root"].transcripts] == expected_runs
+            assert "/root" not in agents
             child = agents["/root/research"]
             assert child.agent_id == child_id
-            assert [run.messages[0].text for run in child.transcripts] == [
+            assert [message.text for message in child.messages] == [
                 f"answer {message_id}"
             ]
             assert child.sources[1].document_id == f"source-{message_id}"
         followup = _load_agent_history(
-            session_id, load_agent_branch(followup_id).message_ids
+            session_id, load_chat_branch(followup_id).message_ids
         )
-        assert followup[1].agent_id == results[0][1]
-        assert followup[1].sources[1].document_id == f"source-{sibling_ids[0]}"
-        assert len(_load_agent_history(session_id, ancestor_branch)) == 1
+        assert followup[0].agent_id == results[0][1]
+        assert followup[0].sources[1].document_id == f"source-{sibling_ids[0]}"
+        assert _load_agent_history(session_id, ancestor_branch) == []
     finally:
         teardown_incognito_session(session_id)

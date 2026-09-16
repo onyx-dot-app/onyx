@@ -1650,6 +1650,16 @@ configMap:
   CHAT_RESPONSE_WAIT_TIMEOUT_S: "3600"
   # Active model responses per API process; excess requests receive a retryable error.
   MAX_ACTIVE_CHAT_RESPONSES: "32"
+  # Shared agent operation worker threads per process.
+  AGENT_WORKER_THREADS: "32"
+  # Running and queued agent operation jobs per process.
+  AGENT_WORKER_PENDING: "256"
+  # Shared agent event-delivery worker threads per process.
+  AGENT_OBSERVER_THREADS: "8"
+  # Running and queued agent event-delivery jobs per process.
+  AGENT_OBSERVER_PENDING: "256"
+  # Maximum queued event payload bytes per agent run (4 MiB).
+  AGENT_EVENT_BUFFER_MAX_BYTES: "4194304"
   IMAGE_SUMMARIZATION_TIMEOUT: "300"
   CONTEXTUAL_RAG_LLM_TIMEOUT: "180"
   MAX_CHUNKS_FED_TO_CHAT: ""

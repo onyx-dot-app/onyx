@@ -13,8 +13,9 @@ streaming events, cancellation, and record-keeping.
 | `coordination.py` | Optional child discovery, execution control, and archive access. |
 | `tools.py` | `AgentTool`, `ToolInvocation`, and the `AgentControl` interface. |
 | `events.py` | Typed execution events. |
+| `items.py` | Ordered response content and generation boundaries. |
 | `compaction.py` | Token budgets, checkpoints, and history summarization. |
-| `transcript.py` | Storage-safe run records and model-history selection. |
+| `transcript.py` | Run outcomes, compaction checkpoints, and model-history replay. |
 
 Message and request types, and `CancellationSignal`, come from [`onyx/llm`](../llm/README.md).
 
@@ -34,7 +35,8 @@ model produces a final answer (`COMPLETE`), the budget runs out (`LIMIT`), someo
 A **step** is one model generation together with the results of any tool calls it made. A run
 is a loop over steps: generate, execute tools, decide whether to continue.
 
-Run IDs are internal to this runtime. They are not chat message IDs or stream replay keys.
+Run IDs identify live execution. Stored responses use the existing chat message ID.
+Generation and content item IDs remain stable across streaming and storage.
 
 ## Quick start
 
@@ -177,7 +179,7 @@ capacity.
 Reuse the same coordinator to reuse children across root runs.
 The application can supply `lookup_agent`, `resolve_agent`, and `read_run` callbacks for saved conversation branches.
 Archive reads run on bounded workers; discovery can list saved metadata without constructing Agents.
-Chat's binding lives in `onyx/chat/agent_registry.py`; the research tool lives in `onyx/deep_research/agent.py`.
+Chat's binding lives in `onyx/chat/subagents.py`; the research tool lives in `onyx/deep_research/agent.py`.
 
 Coordination retains current child runs and the latest completed run per loaded child.
 Older run IDs require archive access. Caller-held Run handles keep their own independent records.
@@ -235,18 +237,35 @@ It holds the run's input messages, everything produced since (including partial 
 output), per-operation status records that index into those messages, and nested snapshots
 of every child run.
 
-For storage, `snapshot.transcript()` converts the record into an `AgentTranscript`,
-stripping feature metadata and tool `details` along the way; the transcript type rejects
-records that still carry them. When a stored history is later replayed to a model,
-`messages_for_model` drops tool calls that never got results, while the recorded history
-keeps them.
+`snapshot.items` exposes accepted content with stable generation identities and outcomes.
+Chat captures these items in a detached `ResponseRecord`, removing application metadata
+and tool details before persistence. Saved rendering reads items directly. Model-context
+loading converts items into messages and excludes unfinished tool calls.
 
-Chat omits the transcript if a bounded cancellation wait leaves any child record unfinished.
-It still saves partial response output and the failure.
+Agent restoration receives conversation messages, a compaction checkpoint, and the previous
+run identity. Archived child inspection reconstructs a `RunSnapshot` at the SDK boundary.
 
-Chat persists terminal snapshots as `agent_run` rows and reusable agent identities as
-`chat_session_agent` rows (`onyx/db/agent_transcript.py`). The application joins readable labels and restoration settings when saving.
-Failed runs contain safe typed failure data. Records do not retain original exceptions or traceback graphs.
+If child cancellation cannot settle within its bound, the parent records an execution failure
+and retains captured partial child content. Worker cleanup continues under the existing idle boundary.
+
+Chat stores root and child conversations in `chat_session`. A child has its own history
+and references the parent response that created it. The root controls access, sharing, and retention.
+The runtime agent ID identifies this session.
+
+An assistant `chat_message` owns one complete or partial response, its outcome, and feedback.
+Its user-message parent owns the input. Ordered `chat_response_item` rows preserve narration,
+reasoning, tool references, and final text. `tool_call` owns arguments and results.
+Generation boundary items retain status and provider metadata, including empty generations.
+
+The runtime selects final-answer content when its completion decision finishes execution.
+The application derives formatted answer text for existing clients from those items.
+Chat rendering settings belong to generation items and do not affect model input.
+
+A child instruction references its parent tool invocation and the child response it continues.
+Restoring a child follows the selected root branch. Separate root branches can continue the
+same child without combining their histories. Predecessor links must form one chain within
+the selected branch; restoration selects its final response. Stored child instructions support text.
+Root attachments use the existing user-message file associations.
 
 ## Compaction
 
@@ -258,7 +277,11 @@ messages never change — a checkpoint only changes what the model sees: the ret
 messages, the summary, the latest user message, and the tail.
 
 Each checkpoint carries a digest of the messages it covers, so a checkpoint from a different
-history branch is detected and discarded. If a provider still rejects a request for size,
+history branch is detected and discarded. Chat stores each new checkpoint as a summary message row.
+History loading selects summaries from the chosen branch. Exact covered-count and digest
+fields identify the model-history prefix, including attachment expansion. Reusing a checkpoint
+does not create another summary row. Historical summaries retain their message-ID cutoff.
+If a provider still rejects a request for size,
 the runtime compacts and retries the generation once, provided no partial output has
 streamed. Instructions that cannot fit after compaction fail the run. Public waits raise `RunFailed` with safe failure data.
 

@@ -363,7 +363,7 @@ def handle_openai_responses_passthrough(
             if isinstance(part, dict) and part.get("type") == "output_text"
         )
         converted_usage = _usage_from_openai_wire(usage) if usage else None
-        if converted_usage is not None and isinstance(llm, LitellmTransport):
+        if converted_usage is not None:
             # Managed-key cost accounting normally happens inside
             # LitellmTransport.invoke/stream, which this path bypasses.
             llm._track_llm_cost(converted_usage)
@@ -561,5 +561,5 @@ def _openai_passthrough_stream_worker(
                         next_sequence_number = frame_next_sequence
             # Managed-key cost accounting normally happens inside
             # LitellmTransport.invoke/stream, which this path bypasses.
-            if state.usage is not None and isinstance(llm, LitellmTransport):
+            if state.usage is not None:
                 llm._track_llm_cost(state.usage)

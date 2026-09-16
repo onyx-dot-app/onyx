@@ -46,7 +46,7 @@ from onyx.chat.process_message import (
 from onyx.chat.stream_buffer import ChatStream, StreamBufferWriter
 from onyx.configs.constants import MessageType
 from onyx.db.chat import set_preferred_response
-from onyx.db.models import User
+from onyx.db.models import ChatMessage, ChatSession, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.models import ExtractedContextFiles
@@ -224,8 +224,12 @@ class TestSetPreferredResponseValidation:
 
     def test_assistant_message_not_found(self) -> None:
         db = MagicMock()
-        user_msg = MagicMock()
-        user_msg.message_type = MessageType.USER
+        user_msg = ChatMessage(
+            message_type=MessageType.USER,
+            summary_covered_count=None,
+            last_summarized_message_id=None,
+            chat_session=ChatSession(spawned_by_message_id=None),
+        )
 
         # First call returns user_msg, second call (for assistant) returns None
         db.get.side_effect = [user_msg, None]
@@ -237,11 +241,14 @@ class TestSetPreferredResponseValidation:
 
     def test_assistant_not_child_of_user(self) -> None:
         db = MagicMock()
-        user_msg = MagicMock()
-        user_msg.message_type = MessageType.USER
+        user_msg = ChatMessage(
+            message_type=MessageType.USER,
+            summary_covered_count=None,
+            last_summarized_message_id=None,
+            chat_session=ChatSession(spawned_by_message_id=None),
+        )
 
-        assistant_msg = MagicMock()
-        assistant_msg.parent_message_id = 999  # different parent
+        assistant_msg = ChatMessage(parent_message_id=999)
 
         db.get.side_effect = [user_msg, assistant_msg]
 
@@ -252,11 +259,19 @@ class TestSetPreferredResponseValidation:
 
     def test_valid_call_sets_preferred_response_id(self) -> None:
         db = MagicMock()
-        user_msg = MagicMock()
-        user_msg.message_type = MessageType.USER
+        user_msg = ChatMessage(
+            message_type=MessageType.USER,
+            summary_covered_count=None,
+            last_summarized_message_id=None,
+            chat_session=ChatSession(spawned_by_message_id=None),
+        )
 
-        assistant_msg = MagicMock()
-        assistant_msg.parent_message_id = 1  # correct parent
+        assistant_msg = ChatMessage(
+            parent_message_id=1,
+            message_type=MessageType.ASSISTANT,
+            summary_covered_count=None,
+            last_summarized_message_id=None,
+        )
 
         db.get.side_effect = [user_msg, assistant_msg]
 
@@ -1220,7 +1235,7 @@ def mock_settings() -> Generator[None, None, None]:
     with (
         patch("onyx.chat.execution.load_settings"),
         patch(
-            "onyx.chat.execution.bind_chat_agents",
+            "onyx.chat.execution.create_chat_agent_coordinator",
             side_effect=lambda *_args, **_kwargs: AgentCoordinator(),
         ),
     ):
@@ -1421,7 +1436,6 @@ def test_slow_reader_receives_gap_instead_of_incomplete_success() -> None:
 def test_overflowed_stream_storage_finishes_retention_cleanup() -> None:
     from onyx.chat.emitter import Emitter
     from onyx.chat.models import ChatTurnSetup
-    from onyx.db.models import User
     from onyx.llm.cancellation import CancellationSignal
 
     writing = threading.Event()

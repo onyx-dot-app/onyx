@@ -1,14 +1,17 @@
-"""Transcript recording follows runtime order without retaining application objects."""
+"""Response capture preserves accepted output and excludes live application objects."""
 
 from collections.abc import Generator
 
 import pytest
 from pydantic import BaseModel
 
+from onyx.agents.items import messages_from_items
 from onyx.agents.models import AgentContext, PreparedStep, RunSnapshot, ToolCallContext
 from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import AgentTool
-from onyx.agents.transcript import AgentTranscript
+from onyx.agents.transcript import RunStatus
+from onyx.chat.models import ResponseRecord
+from onyx.chat.response import response_record, response_snapshot
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
@@ -20,6 +23,7 @@ from onyx.llm.models import (
     ToolCall,
     ToolResult,
     ToolResultMessage,
+    Usage,
     UserMessage,
 )
 from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
@@ -63,10 +67,10 @@ def test_result_order_hook_updates_and_application_data_exclusion() -> None:
         for message in transcript.messages
         if isinstance(message, ToolResultMessage)
     ] == ["updated a", "updated b"]
-    canonical = transcript.transcript()
+    canonical = response_record(transcript)
     serialized = canonical.model_dump_json()
     assert "application-only" not in serialized
-    assert AgentTranscript.model_validate_json(serialized) == canonical
+    assert ResponseRecord.model_validate_json(serialized) == canonical
 
 
 @pytest.mark.parametrize("cancelled", [False, True])
@@ -107,9 +111,9 @@ def test_partial_run_keeps_input_and_replayable_output(cancelled: bool) -> None:
     assert snapshot is not None
     assert snapshot.status == ("cancelled" if cancelled else "error")
     assert [message.text for message in snapshot.input_messages] == ["Question"]
-    assert snapshot.transcript().input_messages[0].metadata is None
+    assert response_record(snapshot).input_messages[0].metadata is None
     assert snapshot.messages[0].metadata == ApplicationData()
-    message = snapshot.transcript().messages[0]
+    message = messages_from_items(response_record(snapshot).items)[0]
     assert message.metadata is None
     assert isinstance(message, AssistantMessage)
     assert message.text == "partial"
@@ -174,4 +178,42 @@ def test_run_record_is_isolated_from_caller_and_snapshot_mutations() -> None:
     assert first_record is not None
     assert first_record.input_messages[0].text == "First question"
     assert first_record.messages[0].text == "First answer"
-    assert first_record.transcript().input_messages[0].metadata is None
+    assert response_record(first_record).input_messages[0].metadata is None
+
+
+def test_captured_and_restored_usage_is_isolated_from_mutation() -> None:
+    snapshot = RunSnapshot(
+        run_id="run",
+        status=RunStatus.COMPLETE,
+        messages=[
+            AssistantMessage(
+                content=[TextContent(text="Answer")],
+                usage=Usage(
+                    completion_tokens=3,
+                    prompt_tokens=7,
+                    total_tokens=10,
+                    cache_creation_input_tokens=0,
+                    cache_read_input_tokens=0,
+                ),
+            )
+        ],
+    )
+    record = response_record(snapshot)
+    restored = response_snapshot(record)
+    source_message = snapshot.messages[0]
+    restored_message = restored.messages[0]
+    assert (
+        isinstance(source_message, AssistantMessage)
+        and source_message.usage is not None
+    )
+    assert (
+        isinstance(restored_message, AssistantMessage)
+        and restored_message.usage is not None
+    )
+    source_message.usage.total_tokens = 999
+    restored_message.usage.total_tokens = 888
+    saved_message = messages_from_items(record.items)[0]
+    assert (
+        isinstance(saved_message, AssistantMessage) and saved_message.usage is not None
+    )
+    assert saved_message.usage.total_tokens == 10

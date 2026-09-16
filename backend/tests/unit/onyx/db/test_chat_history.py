@@ -1,18 +1,28 @@
 from typing import cast
 from unittest.mock import MagicMock
 
-import pytest
-
+from onyx.agents.items import (
+    GenerationOutcome,
+    ResponseGeneration,
+    ResponseItemKind,
+    ResponseText,
+)
+from onyx.agents.transcript import RunStatus, messages_for_model
 from onyx.configs.constants import MessageType
 from onyx.context.messages import prompt_metadata
-from onyx.db.agent_transcript import read_chat_execution, read_root_transcript
 from onyx.db.chat_history import (
     _build_tool_call_response_history_message,
     capture_chat_history,
     convert_chat_history,
 )
-from onyx.db.models import AgentRun, ChatMessage
+from onyx.db.models import (
+    ChatMessage,
+    ChatResponseItem,
+    ChatSession,
+    StoredResponseContent,
+)
 from onyx.file_store.models import ChatFileType, ChatLoadedFile
+from onyx.llm.models import AssistantMessage, TextContent, ToolCall, ToolResultMessage
 from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
 
 
@@ -46,7 +56,9 @@ class TestConvertChatHistory:
         msg = MagicMock()
         msg.id = 1
         msg.is_clarification = False
-        msg.response_rendering = None
+        msg.reasoning_tokens = None
+        msg.response_status = None
+        msg.search_docs = []
         msg.message = message
         msg.message_type = message_type
         msg.token_count = token_count
@@ -140,14 +152,6 @@ class TestConvertChatHistory:
 
 
 def test_replay_preserves_completed_tools_and_drops_partial_arguments() -> None:
-    from onyx.agents.transcript import messages_for_model
-    from onyx.llm.models import (
-        AssistantMessage,
-        TextContent,
-        ToolCall,
-        ToolResultMessage,
-    )
-
     completed_call = AssistantMessage(
         content=[ToolCall(id="reused", name="lookup", arguments={})]
     )
@@ -171,28 +175,46 @@ def test_replay_preserves_completed_tools_and_drops_partial_arguments() -> None:
     assert len(partial.tool_calls) == 1
 
 
-@pytest.mark.parametrize("parent_id,expected", [(3, True), (5, False)])
-def test_legacy_summary_matches_branch(parent_id: int, expected: bool) -> None:
-    from onyx.db.chat_history import find_summary_for_branch
-
-    history = [ChatMessage(id=identifier) for identifier in (1, 2, 3)]
-    summary = ChatMessage(id=100, parent_message_id=parent_id)
-    session = MagicMock()
-    session.query.return_value.filter.return_value.order_by.return_value.all.return_value = [
-        summary
-    ]
-    assert find_summary_for_branch(session, history) is (summary if expected else None)
-
-
-@pytest.mark.parametrize("root_count", [0, 2])
-def test_saved_rendering_requires_exactly_one_root(root_count: int) -> None:
-    message = ChatMessage(
-        response_rendering={},
-        agent_runs=[
-            AgentRun(id=f"root-{index}", parent_run_id=None)
-            for index in range(root_count)
-        ],
+def test_saved_response_history_preserves_generation_content() -> None:
+    response = ChatMessage(
+        id=42,
+        chat_session=ChatSession(),
+        message_type=MessageType.ASSISTANT,
+        message="Display answer",
+        token_count=2,
+        is_clarification=False,
+        response_status=RunStatus.CANCELLED,
     )
-    for read in (read_chat_execution, read_root_transcript):
-        with pytest.raises(ValueError, match="exactly one root"):
-            read(message)
+    response.response_items = [
+        ChatResponseItem(
+            id="generation-1",
+            chat_message_id=42,
+            position=0,
+            step_index=0,
+            kind=ResponseItemKind.GENERATION,
+            content=StoredResponseContent(
+                value=ResponseGeneration(
+                    outcome=GenerationOutcome(status=RunStatus.CANCELLED)
+                )
+            ),
+        ),
+        ChatResponseItem(
+            id="generation-1:0",
+            chat_message_id=42,
+            position=1,
+            step_index=0,
+            kind=ResponseItemKind.TEXT,
+            content=StoredResponseContent(
+                value=ResponseText(text="Accepted partial output")
+            ),
+        ),
+    ]
+
+    history = capture_chat_history([response], {}, len)
+
+    assert history[0].agent_run_id == "42"
+    assert len(history[0].response_messages) == 1
+    assistant = history[0].response_messages[0]
+    assert isinstance(assistant, AssistantMessage)
+    assert assistant.id == "generation-1"
+    assert assistant.text == "Accepted partial output"

@@ -8,7 +8,6 @@ from onyx.agents.coordination import AgentCoordinator
 from onyx.agents.runtime import Run
 from onyx.agents.transcript import RunStatus
 from onyx.chat.agent import ChatAgent
-from onyx.chat.agent_registry import bind_chat_agents
 from onyx.chat.cancellation import clear_stop, is_stop_requested
 from onyx.chat.chat_processing_checker import set_processing_status
 from onyx.chat.emitter import Emitter
@@ -24,6 +23,7 @@ from onyx.chat.models import (
 from onyx.chat.prepare import create_chat_agent
 from onyx.chat.presentation import ResponsePresenter, project_response
 from onyx.chat.stream_buffer import ChatDelivery, ChatStream, StreamBufferWriter
+from onyx.chat.subagents import create_chat_agent_coordinator
 from onyx.configs.chat_configs import (
     CHAT_RESPONSE_WAIT_TIMEOUT_S,
     MAX_ACTIVE_CHAT_RESPONSES,
@@ -354,7 +354,7 @@ class ChatTurnExecution:
                 chat_agent = create_chat_agent(
                     self.setup, self.user, index, cancellation, auto_filters
                 )
-                coordinator = bind_chat_agents(
+                coordinator = create_chat_agent_coordinator(
                     chat_agent.agent,
                     message_id=self.setup.responses[index].message_id,
                     previous_run_id=self.setup.previous_run_id,
@@ -507,7 +507,7 @@ class ChatTurnExecution:
                 is_clarification=False,
                 all_search_docs={},
                 pre_answer_processing_time=None,
-                transcript=None,
+                response=None,
                 cancelled=isinstance(error, AgentCancelled),
             )
         return snapshot

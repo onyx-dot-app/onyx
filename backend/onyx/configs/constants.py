@@ -405,15 +405,9 @@ class MessageType(str, Enum):
     SYSTEM = "system"  # SystemMessage
     USER = "user"  # HumanMessage
     ASSISTANT = "assistant"  # AIMessage - Can include tool_calls field for parallel tool calling
+    SUMMARY = "summary"
     TOOL_CALL_RESPONSE = "tool_call_response"
     USER_REMINDER = "user_reminder"  # Custom Onyx message type which is translated into a USER message when passed to the LLM
-
-
-class ChatMessageSimpleType(str, Enum):
-    USER = "user"
-    ASSISTANT = "assistant"
-    TOOL_CALL = "tool_call"
-    FILE_TEXT = "file_text"
 
 
 class TokenRateLimitScope(str, Enum):

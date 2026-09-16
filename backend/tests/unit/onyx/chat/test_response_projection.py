@@ -7,15 +7,17 @@ from concurrent.futures import Future
 
 import pytest
 
+from onyx.agents.coordination import AgentInfo
 from onyx.agents.events import AgentEvent, MessageEndEvent
+from onyx.agents.items import messages_from_items
 from onyx.agents.models import PreparedStep, RunSnapshot
 from onyx.agents.runtime import Agent, Run
 from onyx.agents.transcript import OperationSnapshot, RunStatus
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import (
     AnswerStreamPart,
+    ChatMessageMetadata,
     ChatResponseOutcome,
-    ChatStepOutput,
     PersistenceStatus,
 )
 from onyx.chat.presentation import ResponsePresenter, project_response
@@ -23,7 +25,7 @@ from onyx.chat.process_message import gather_stream_full
 from onyx.chat.stream_buffer import ChatDelivery
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc
-from onyx.deep_research.models import ResearchPhase, ResearchStepOutput
+from onyx.deep_research.models import ResearchMessageMetadata, ResearchPhase
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
     AssistantMessage,
@@ -86,7 +88,7 @@ def test_snapshot_retains_partial_output_after_producer_continues() -> None:
     agent = Agent(
         StreamingClient(lambda *_: AssistantMessage()),
         prepare_step=lambda _input: PreparedStep(
-            output_metadata=ResearchStepOutput(
+            output_metadata=ResearchMessageMetadata(
                 phase=ResearchPhase.CLARIFICATION, is_reasoning_model=False
             )
         ),
@@ -111,7 +113,8 @@ def test_snapshot_retains_partial_output_after_producer_continues() -> None:
     assert saved.answer == "partial"
     assert saved.request_params is not None
     assert saved.request_params.sent_kwargs == {"temperature": 0.2}
-    assert saved.transcript is None
+    assert saved.response is not None
+    assert saved.response.status == RunStatus.RUNNING
     assert (
         project_response(
             started.result(timeout=2).snapshot(), response_id=42, tool_ids={}
@@ -151,8 +154,8 @@ def test_snapshot_does_not_wait_for_slow_stream_observer() -> None:
             )
             result = saving.result(timeout=0.5)
             assert result.answer == "answer"
-            assert result.transcript is not None
-            assert result.transcript.messages[-1].text == "answer"
+            assert result.response is not None
+            assert messages_from_items(result.response.items)[-1].text == "answer"
         finally:
             finish_update.set()
         running.result(timeout=2)
@@ -185,7 +188,7 @@ def test_full_response_content_survives_delivery_gaps(
             )
         ),
         prepare_step=lambda _input: PreparedStep(
-            output_metadata=ChatStepOutput(
+            output_metadata=ChatMessageMetadata(
                 sources={1: documents[0], 2: documents[1]}
                 if sources_known_at_generation
                 else {},
@@ -252,24 +255,43 @@ def test_response_projection_uses_the_selected_run_after_agent_reuse() -> None:
     assert latest.output.text == "Second response"
 
 
-def test_unfinished_descendant_preserves_answer_without_saving_running_history() -> (
-    None
-):
+def test_projection_retains_unfinished_descendant_for_inspection() -> None:
     snapshot = RunSnapshot(
         run_id="parent",
         status=RunStatus.ERROR,
         messages=[
             AssistantMessage(
                 content=[TextContent(text="Partial answer")],
-                metadata=ChatStepOutput(),
+                metadata=ChatMessageMetadata(),
             )
         ],
         operations=[
             OperationSnapshot(step_index=0, message_index=0, status=RunStatus.ERROR)
         ],
-        child_runs=[RunSnapshot(run_id="child", status=RunStatus.RUNNING, messages=[])],
+        child_runs=[
+            RunSnapshot(
+                run_id="child",
+                agent_id="child-agent",
+                status=RunStatus.RUNNING,
+                messages=[],
+            )
+        ],
     )
-    response = project_response(snapshot, response_id=42, tool_ids={})
+    response = project_response(
+        snapshot,
+        response_id=42,
+        tool_ids={},
+        registrations=[
+            AgentInfo(
+                id="child-agent",
+                path="/root/child",
+                parent_id="root",
+                description="",
+                restoration_config=None,
+            )
+        ],
+    )
     assert response.answer == "Partial answer"
-    assert response.transcript is None
+    assert response.response is not None
+    assert response.response.child_runs[0].status == RunStatus.RUNNING
     assert snapshot.child_runs[0].status == RunStatus.RUNNING

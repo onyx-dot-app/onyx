@@ -3,14 +3,24 @@ from collections.abc import Mapping
 from pydantic import BaseModel, Field, JsonValue, TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
 
-from onyx.agents.transcript import AgentTranscript, RunStatus
+from onyx.agents.items import (
+    ResponseGeneration,
+    ResponseToolCall,
+    ResponseToolResult,
+    group_response_items_by_step,
+)
+from onyx.agents.transcript import RunStatus
 from onyx.chat.citation_utils import extract_citation_order_from_text
-from onyx.chat.models import ChatExecutionRecord, MessagePresentation, PresentationMode
+from onyx.chat.models import (
+    ChatExecutionRecord,
+    MessageRendering,
+    PresentationMode,
+    ResponseRecord,
+)
 from onyx.chat.renderer import (
     PacketRenderer,
     RenderConfig,
     render_config,
-    render_message,
 )
 from onyx.chat.tool_progress import project_tool_progress, tool_display_progress
 from onyx.coding_agent.tool_definitions import (
@@ -19,11 +29,11 @@ from onyx.coding_agent.tool_definitions import (
 )
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SavedSearchDoc, SearchDoc
-from onyx.db.agent_transcript import read_chat_execution
 from onyx.db.chat import (
     get_db_search_doc_by_id,
     translate_db_search_doc_to_saved_search_doc,
 )
+from onyx.db.chat_response import read_chat_execution
 from onyx.db.models import ChatMessage, Tool, ToolCall
 from onyx.db.tools import (
     get_response_tool_records,
@@ -35,7 +45,6 @@ from onyx.deep_research.tool_definitions import (
     RESEARCH_AGENT_IN_CODE_ID,
     RESEARCH_AGENT_TASK_KEY,
 )
-from onyx.llm.models import AssistantMessage, ToolResultMessage
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     AgentResponseDelta,
@@ -724,13 +733,9 @@ def translate_assistant_message_to_packets(
     chat_message: ChatMessage,
     db_session: Session,
 ) -> list[Packet]:
-    """
-    Translates an assistant message and tool calls to packet format.
-    It needs to be a list of list of packets combined into indices for "steps".
-    The final answer and citations are also a "step".
-    """
+    """Rebuild frontend packets from saved response items or legacy display fields."""
     execution = read_chat_execution(chat_message)
-    if execution is not None and execution.transcript.run_id is not None:
+    if execution is not None:
         return _execution_packets(chat_message, execution, db_session)
     packet_list: list[Packet] = []
 
@@ -907,16 +912,19 @@ def _execution_packets(
     tools = {
         tool.id: tool
         for tool in get_tools_by_ids(
-            list({record.tool_id for record in records.values()}), db_session
+            list(
+                {
+                    record.tool_id
+                    for record in records.values()
+                    if record.tool_id is not None
+                }
+            ),
+            db_session,
         )
     }
     references = {
         (reference.message_id, reference.tool_call_id): records[reference.record_id]
         for reference in execution.tool_records
-    }
-    settings = {
-        (setting.run_id, setting.step_index): setting
-        for setting in execution.presentation
     }
     documents = {
         doc.document_id: translate_db_search_doc_to_saved_search_doc(doc)
@@ -929,31 +937,34 @@ def _execution_packets(
                 for doc in record.search_docs
             }
         )
-    return _execution_run_packets(
-        execution.transcript, chat_message.id, references, tools, settings, documents
+    return _response_packets(
+        execution.response,
+        chat_message.id,
+        references,
+        tools,
+        execution.presentation,
+        documents,
     )
 
 
-def _execution_run_packets(
-    transcript: AgentTranscript,
+def _response_packets(
+    response: ResponseRecord,
     response_id: int,
     records: dict[tuple[str, str], ToolCall],
     tools: dict[int, Tool],
-    settings: dict[tuple[str, int], MessagePresentation],
+    settings: dict[str, MessageRendering],
     documents: Mapping[str, SearchDoc],
     default_mode: PresentationMode = PresentationMode.ANSWER,
 ) -> list[Packet]:
-    if transcript.run_id is None:
-        raise ValueError("Execution record has no run identity")
     base = PacketIdentity(
         response_id=response_id,
-        run_id=transcript.run_id,
-        agent_id=transcript.agent_id,
-        agent_path=transcript.agent_path,
-        message_id=f"{transcript.run_id}:0",
-        parent_run_id=transcript.parent_run_id,
-        parent_message_id=transcript.parent_message_id,
-        parent_tool_call_id=transcript.parent_tool_call_id,
+        run_id=response.run_id,
+        agent_id=response.agent_id,
+        agent_path=response.agent_path,
+        message_id=f"{response.run_id}:0",
+        parent_run_id=response.parent_run_id,
+        parent_message_id=response.parent_message_id,
+        parent_tool_call_id=response.parent_tool_call_id,
     )
     packets = [
         Packet(
@@ -961,32 +972,26 @@ def _execution_run_packets(
             obj=OperationStatus(status=RunStatus.RUNNING),
         )
     ]
-    for operation in transcript.operations:
-        if operation.tool_call_id is not None:
-            continue
-        message = transcript.messages[operation.message_index]
-        if not isinstance(message, AssistantMessage):
-            raise ValueError("Recorded message operation has invalid output")
-        identity = base.model_copy(
-            update={"message_id": f"{transcript.run_id}:{operation.step_index}"}
-        )
-        setting = settings.get((transcript.run_id, operation.step_index))
+    for items in group_response_items_by_step(response.items).values():
+        generation = items[0]
+        if not isinstance(generation.content, ResponseGeneration):
+            raise ValueError("Response step has no generation boundary")
+        identity = base.model_copy(update={"message_id": generation.id})
+        setting = settings.get(generation.id)
         config = RenderConfig(mode=default_mode)
         if setting is not None:
             config = render_config(setting, documents)
         renderer = PacketRenderer(config, identity)
-        packets.extend(
-            render_message(
-                renderer, message, complete=operation.status == RunStatus.COMPLETE
-            )
-        )
-        results: dict[str, ToolResultMessage] = {}
-        for following in transcript.messages[operation.message_index + 1 :]:
-            if isinstance(following, AssistantMessage):
-                break
-            if isinstance(following, ToolResultMessage):
-                results[following.tool_call_id] = following
-        for call in message.tool_calls:
+        packets.extend(renderer.consume_items(items))
+        results = {
+            item.content.result.tool_call_id: item.content.result
+            for item in items
+            if isinstance(item.content, ResponseToolResult)
+        }
+        for item in items:
+            if not isinstance(item.content, ResponseToolCall):
+                continue
+            call = item.content.call
             call_identity = identity.model_copy(
                 update={"tool_call_id": call.id, "part_id": "tool"}
             )
@@ -1010,7 +1015,7 @@ def _execution_run_packets(
                     content.append(Packet(identity=call_identity, obj=obj))
             children = [
                 child
-                for child in transcript.child_runs
+                for child in response.child_runs
                 if child.parent_message_id == identity.message_id
                 and child.parent_tool_call_id == call.id
             ]
@@ -1026,7 +1031,7 @@ def _execution_run_packets(
                     else PresentationMode.ANSWER
                 )
                 packets.extend(
-                    _execution_run_packets(
+                    _response_packets(
                         child,
                         response_id,
                         records,
@@ -1041,20 +1046,7 @@ def _execution_run_packets(
                 for packet in content[1:]
                 if not isinstance(packet.obj, SectionEnd)
             )
-            tool_operation = next(
-                (
-                    item
-                    for item in transcript.operations
-                    if item.message_index == operation.message_index
-                    and item.tool_call_id == call.id
-                ),
-                None,
-            )
-            status = (
-                tool_operation.status
-                if tool_operation is not None
-                else transcript.status
-            )
+            status = item.content.status or response.status
             packets.append(
                 Packet(
                     identity=call_identity,
@@ -1066,16 +1058,16 @@ def _execution_run_packets(
     packets.append(
         Packet(
             identity=base.model_copy(update={"part_id": "run"}),
-            obj=OperationStatus(status=transcript.status),
+            obj=OperationStatus(status=response.status),
         )
     )
-    if transcript.parent_run_id is None and transcript.status != RunStatus.RUNNING:
+    if response.parent_run_id is None and response.status != RunStatus.RUNNING:
         packets.append(
             Packet(
                 identity=base.model_copy(update={"part_id": "run"}),
                 obj=OverallStop(
                     stop_reason="user_cancelled"
-                    if transcript.status == RunStatus.CANCELLED
+                    if response.status == RunStatus.CANCELLED
                     else "finished"
                 ),
             )

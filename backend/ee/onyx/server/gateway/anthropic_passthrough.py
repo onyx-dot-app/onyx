@@ -340,7 +340,7 @@ def handle_anthropic_passthrough(
             if isinstance(block, dict) and block.get("type") == "text"
         )
         converted_usage = _usage_from_anthropic_wire(usage) if usage else None
-        if converted_usage is not None and isinstance(llm, LitellmTransport):
+        if converted_usage is not None:
             # Managed-key cost accounting normally happens inside
             # LitellmTransport.invoke/stream, which this path bypasses.
             llm._track_llm_cost(converted_usage)
@@ -498,7 +498,7 @@ def _passthrough_stream_worker(
                 _put_stream_item(out, "\n".join(frame_lines) + "\n\n", cancelled)
             # Managed-key cost accounting normally happens inside
             # LitellmTransport.invoke/stream, which this path bypasses.
-            if state.usage is not None and isinstance(llm, LitellmTransport):
+            if state.usage is not None:
                 llm._track_llm_cost(state.usage)
 
 

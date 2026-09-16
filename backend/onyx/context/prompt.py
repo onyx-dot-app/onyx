@@ -13,7 +13,8 @@ from onyx.context.messages import (
 )
 from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
 from onyx.llm.interfaces import LLMInfo
-from onyx.llm.models import Message, UserMessage
+from onyx.llm.models import Message, ToolResultMessage, UserMessage
+from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
 
 
 class _ContextDocument(BaseModel):
@@ -61,6 +62,10 @@ def prepare_prompt(
     history = [message.model_copy(deep=True) for message in messages]
     for message in history:
         metadata = prompt_metadata(message)
+        if isinstance(message, ToolResultMessage) and metadata.omit_tool_result_content:
+            # Keep stored evidence intact; later questions use the existing placeholder.
+            message.content = TOOL_CALL_RESPONSE_CROSS_MESSAGE
+            metadata.token_count = None
         metadata.token_count = count_message_tokens(message, token_counter)
         message.metadata = metadata
     insertion = next(
