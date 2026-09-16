@@ -11,6 +11,7 @@ import json
 from typing import TypedDict
 
 from onyx.context.search.models import (
+    RetrievalCandidateLane,
     SearchDocsResponse,
     SearchReceiptScope,
     SearchRetrievalDiagnostics,
@@ -55,6 +56,11 @@ class SearchReceipt(TypedDict):
     interpretation: str
 
 
+def _lane_document_ids(lane: RetrievalCandidateLane) -> set[str]:
+    """Distinct documents a lane returned. The single definition of "candidate"."""
+    return {chunk.document_id for chunk in lane.returned_chunks}
+
+
 def build_search_receipt(
     *,
     diagnostics: SearchRetrievalDiagnostics,
@@ -69,7 +75,7 @@ def build_search_receipt(
     # `seen` is only updated after every lane is counted, so a document returned by
     # two lanes of the same response is new in both lanes.
     for lane in diagnostics.retrieval_candidates:
-        ids = {chunk.document_id for chunk in lane.returned_chunks}
+        ids = _lane_document_ids(lane)
         docs.update(ids)
         query_entries.append(
             {
@@ -140,11 +146,8 @@ def maybe_append_search_receipt(
     if diagnostics.receipt_scope is None:
         # No receipt, but the search still ran: its candidates count as seen so a
         # later receipt in this turn does not report them as new.
-        seen_document_ids.update(
-            chunk.document_id
-            for lane in diagnostics.retrieval_candidates
-            for chunk in lane.returned_chunks
-        )
+        for lane in diagnostics.retrieval_candidates:
+            seen_document_ids.update(_lane_document_ids(lane))
         _log_unavailable("unrepresentable_scope", tool_call_id)
         return
 
