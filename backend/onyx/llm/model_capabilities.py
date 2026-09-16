@@ -431,6 +431,23 @@ def openai_model_rejects_reasoning_effort(model_name: str) -> bool:
     return base_model_name.startswith(_OPENAI_MODELS_REJECTING_REASONING_EFFORT)
 
 
+# OpenAI models whose reasoning default is medium and that accept the explicit
+# "none" effort, per their model pages. Omitting the parameter does not turn
+# reasoning off for them. gpt-5.6 is OpenAI's alias for Sol. Exact names only:
+# other models, and these names on other providers, keep OFF as an omitted
+# parameter.
+_NATIVE_OPENAI_MODELS_SUPPORTING_REASONING_NONE = frozenset(
+    {"gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"}
+)
+
+
+def openai_model_supports_reasoning_none(model_provider: str, model_name: str) -> bool:
+    if model_provider != LlmProviderNames.OPENAI:
+        return False
+    base_model_name = model_name.lower().split("/")[-1]
+    return base_model_name in _NATIVE_OPENAI_MODELS_SUPPORTING_REASONING_NONE
+
+
 # Providers that reach OpenAI models over OpenAI's own API shapes: a registry
 # model takes the responses bridge there, anything else chat completions.
 OPENAI_API_PROVIDERS = frozenset(
