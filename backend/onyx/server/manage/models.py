@@ -488,11 +488,6 @@ class AllUsersResponse(BaseModel):
     slack_users_pages: int
 
 
-class SlackChannel(BaseModel):
-    id: str
-    name: str
-
-
 """
 Standard Answer Models
 

@@ -477,8 +477,11 @@ class ZoomVoiceProvider(VoiceProviderInterface):
         self, text: str, voice: str | None = None, speed: float = 1.0
     ) -> AsyncIterator[bytes]:
         _ = (text, voice, speed)
+        # The empty loop keeps this an async generator, so the error is raised on
+        # iteration.
+        for chunk in ():
+            yield chunk
         raise NotImplementedError("Zoom Scribe does not support TTS in Onyx.")
-        yield b""
 
     async def validate_credentials(self) -> None:
         if not self.api_key or not self.api_secret:

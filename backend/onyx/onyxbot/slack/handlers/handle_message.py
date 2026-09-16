@@ -33,8 +33,6 @@ from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.configs import SLACK_CHANNEL_ID
 from shared_configs.contextvars import get_current_tenant_id
 
-logger_base = setup_logger()
-
 _SEAT_LIMIT_TEXT = (
     "We weren't able to respond because your organization "
     "has reached its user seat limit. Please contact your "

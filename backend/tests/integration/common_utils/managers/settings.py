@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
@@ -48,13 +48,3 @@ class SettingsManager:
             )
 
         return response.json(), ""
-
-    @staticmethod
-    def get_setting(
-        key: str,
-        user_performing_action: DATestUser,
-    ) -> Optional[Any]:
-        settings, error = SettingsManager.get_settings(user_performing_action)
-        if error:
-            return None
-        return settings.get(key)

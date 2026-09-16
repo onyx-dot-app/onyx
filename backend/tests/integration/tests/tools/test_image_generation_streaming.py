@@ -19,8 +19,6 @@ from tests.integration.common_utils.test_models import (
     ToolName,
 )
 
-ART_PERSONA_ID = -3
-
 
 def test_image_generation_streaming(
     basic_user: DATestUser,

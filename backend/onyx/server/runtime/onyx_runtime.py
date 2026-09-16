@@ -89,16 +89,6 @@ class OnyxRuntime:
         return onyx_file
 
     @staticmethod
-    def get_logotype() -> FileWithMimeType:
-        STATIC_FILENAME = "static/images/logotype.png"
-
-        db_filename: str | None = fetch_ee_implementation_or_noop(
-            "onyx.server.enterprise_settings.store", "get_logotype_filename", None
-        )
-
-        return OnyxRuntime._get_with_static_fallback(db_filename, STATIC_FILENAME)
-
-    @staticmethod
     def get_beat_multiplier() -> float:
         """the beat multiplier is used to scale up or down the frequency of certain beat
         tasks in the cloud. It has a significant effect on load and is useful to adjust

@@ -981,45 +981,6 @@ def list_llm_provider_basics(
     return response
 
 
-def get_valid_model_names_for_persona(
-    persona_id: int,
-    user: User,
-    db_session: Session,
-) -> list[str]:
-    """Get all valid model names that a user can access for this persona.
-
-    Returns a list of model names (e.g., ["gpt-4o", "claude-3-5-sonnet"]) that are
-    available to the user when using this persona, respecting all RBAC restrictions.
-    Public providers are included unless they have persona restrictions that exclude this persona.
-    """
-    persona = fetch_persona_with_groups(db_session, persona_id)
-    if not persona:
-        return []
-
-    can_manage_llms = has_global_permission(user, Permission.MANAGE_LLMS)
-    all_providers = fetch_existing_llm_providers(
-        db_session, [LLMModelFlowType.CHAT, LLMModelFlowType.VISION]
-    )
-    user_group_ids = (
-        set() if can_manage_llms else fetch_user_group_ids(db_session, user)
-    )
-
-    valid_models = []
-    for llm_provider_model in all_providers:
-        # Check access with persona context — respects all RBAC restrictions
-        if can_user_access_llm_provider(
-            llm_provider_model, user_group_ids, persona, can_manage_llms=can_manage_llms
-        ):
-            # Collect all model names from this provider
-            valid_models.extend(
-                model_config.name
-                for model_config in llm_provider_model.model_configurations
-                if model_config.is_visible
-            )
-
-    return valid_models
-
-
 def get_valid_model_configuration_ids_for_persona(
     persona: Persona,
     user: User,
@@ -1027,8 +988,8 @@ def get_valid_model_configuration_ids_for_persona(
 ) -> set[int]:
     """Get the set of ModelConfiguration IDs that a user can access for this persona.
 
-    Unlike `get_valid_model_names_for_persona`, this check is unambiguous when
-    multiple providers expose a model with the same name.
+    Matches by ID, so the check is unambiguous when multiple providers expose a
+    model with the same name.
     """
     can_manage_llms = has_global_permission(user, Permission.MANAGE_LLMS)
     all_providers = fetch_existing_llm_providers(

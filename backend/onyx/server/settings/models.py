@@ -18,11 +18,6 @@ DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_NO_VECTOR_DB = 10000
 CRAFT_INSTRUCTIONS_MAX_LENGTH = 4000
 
 
-class PageType(str, Enum):
-    CHAT = "chat"
-    SEARCH = "search"
-
-
 class ApplicationStatus(str, Enum):
     ACTIVE = "active"
     PAYMENT_REMINDER = "payment_reminder"

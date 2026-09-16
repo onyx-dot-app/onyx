@@ -64,7 +64,6 @@ logger = setup_logger()
 class _Readiness:
     def __init__(self) -> None:
         self.ca_ready = False
-        self.lookup_ready = False
         self.shutting_down = False
 
 
@@ -246,7 +245,6 @@ def main() -> int:
                 f"{_LOOKUP_INITIAL_SYNC_TIMEOUT_S:.1f}s; refusing to serve traffic "
                 "with unbacked identity."
             )
-        readiness.lookup_ready = True
         logger.info("Informer initial sync complete.")
 
         identity = IdentityResolver(ip_lookup=lookup)

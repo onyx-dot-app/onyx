@@ -319,51 +319,6 @@ def send_email_with_smtplib(
         s.send_message(msg, to_addrs=[user_email, *archive_bcc_addresses])
 
 
-def send_subscription_cancellation_email(user_email: str) -> None:
-    """This is templated but isn't meaningful for whitelabeling."""
-
-    # Example usage of the reusable HTML
-    try:
-        load_runtime_settings_fn = fetch_versioned_implementation(
-            "onyx.server.enterprise_settings.store", "load_runtime_settings"
-        )
-        settings = load_runtime_settings_fn()
-        application_name = settings.application_name
-    except ModuleNotFoundError:
-        application_name = ONYX_DEFAULT_APPLICATION_NAME
-
-    onyx_file = OnyxRuntime.get_emailable_logo()
-
-    subject = f"Your {application_name} Subscription Has Been Canceled"
-    heading = "Subscription Canceled"
-    message = (
-        "<p>We're sorry to see you go.</p>"
-        "<p>Your subscription has been canceled and will end on your next billing date.</p>"
-        "<p>If you change your mind, you can always come back!</p>"
-    )
-    cta_text = "Renew Subscription"
-    cta_link = "https://www.onyx.app/pricing"
-    html_content = build_html_email(
-        application_name,
-        heading,
-        message,
-        cta_text,
-        cta_link,
-    )
-    text_content = (
-        "We're sorry to see you go.\n"
-        "Your subscription has been canceled and will end on your next billing date.\n"
-        "If you change your mind, visit https://www.onyx.app/pricing"
-    )
-    send_email(
-        user_email,
-        subject,
-        html_content,
-        text_content,
-        inline_png=("logo.png", onyx_file.data),
-    )
-
-
 def build_user_email_invite(
     from_email: str, to_email: str, application_name: str
 ) -> tuple[str, str]:

@@ -601,8 +601,8 @@ def test_lock_contention_returns_persisted_header_or_none(
 
     @contextmanager
     def _contended_lock(*_args: Any, **_kwargs: Any) -> Iterator[None]:
+        yield from ()
         raise CacheLockAcquisitionError("held by a concurrent refresher")
-        yield  # pragma: no cover — unreachable, satisfies the generator contract
 
     monkeypatch.setattr(mcp_oauth, "cache_shared_lock", _contended_lock)
 

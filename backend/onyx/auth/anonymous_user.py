@@ -12,18 +12,6 @@ from onyx.key_value_store.store import KeyValueStore, KvKeyNotFoundError
 from onyx.server.manage.models import UserInfo, UserPersonalization, UserPreferences
 
 
-def set_anonymous_user_preferences(
-    store: KeyValueStore, preferences: UserPreferences
-) -> None:
-    store.store(KV_ANONYMOUS_USER_PREFERENCES_KEY, preferences.model_dump())
-
-
-def set_anonymous_user_personalization(
-    store: KeyValueStore, personalization: UserPersonalization
-) -> None:
-    store.store(KV_ANONYMOUS_USER_PERSONALIZATION_KEY, personalization.model_dump())
-
-
 def load_anonymous_user_preferences(store: KeyValueStore) -> UserPreferences:
     try:
         preferences_data = cast(

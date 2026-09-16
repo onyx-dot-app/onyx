@@ -227,12 +227,3 @@ class DocumentAccess(ExternalAccess):
         object.__setattr__(obj, "is_public", is_public)
 
         return obj
-
-
-default_public_access = DocumentAccess.build(
-    external_user_emails=[],
-    external_user_group_ids=[],
-    user_emails=[],
-    user_groups=[],
-    is_public=True,
-)

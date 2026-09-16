@@ -95,8 +95,6 @@ def mock_discord_guild() -> MagicMock:
     private_channel.permissions_for.return_value = private_perms
 
     guild.channels = [text_channel, forum_channel, private_channel]
-    guild.text_channels = [text_channel, private_channel]
-    guild.forum_channels = [forum_channel]
 
     return guild
 

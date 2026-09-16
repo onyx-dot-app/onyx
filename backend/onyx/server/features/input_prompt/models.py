@@ -20,13 +20,6 @@ class UpdateInputPromptRequest(BaseModel):
     active: bool
 
 
-class InputPromptResponse(BaseModel):
-    id: int
-    prompt: str
-    content: str
-    active: bool
-
-
 class InputPromptSnapshot(BaseModel):
     id: int
     prompt: str

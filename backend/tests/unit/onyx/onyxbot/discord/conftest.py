@@ -86,8 +86,6 @@ def mock_discord_guild() -> MagicMock:
     forum_channel.permissions_for.return_value = perms
 
     guild.channels = [text_channel, forum_channel]
-    guild.text_channels = [text_channel]
-    guild.forum_channels = [forum_channel]
 
     return guild
 
@@ -165,27 +163,6 @@ def mock_thread_forum_parent() -> MagicMock:
     thread.parent = MagicMock(spec=discord.ForumChannel)
     thread.parent.id = 222222222
     return thread
-
-
-@pytest.fixture
-def mock_reply_chain() -> MagicMock:
-    """Mock message with reply chain."""
-    # Build chain backwards: msg3 -> msg2 -> msg1
-    ref3 = MagicMock()
-    ref3.message_id = 1003
-
-    ref2 = MagicMock()
-    ref2.message_id = 1002
-
-    msg3 = mock_message(content="Third message", reference=None, message_id=1003)
-    msg2 = mock_message(content="Second message", reference=ref3, message_id=1002)
-    msg1 = mock_message(content="First message", reference=ref2, message_id=1001)
-
-    # Store messages for lookup
-    msg1._chain = {1002: msg2, 1003: msg3}
-    msg2._chain = {1003: msg3}
-
-    return msg1
 
 
 @pytest.fixture

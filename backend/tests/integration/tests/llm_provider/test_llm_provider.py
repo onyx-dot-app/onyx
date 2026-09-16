@@ -1021,30 +1021,6 @@ def _validate_default_model(
     assert default["model_name"] == model_name
 
 
-def _get_provider_by_name_admin(
-    admin_user: DATestUser, provider_name: str
-) -> dict | None:
-    """Utility function to fetch an LLM provider by name via admin endpoint."""
-    response = client.get(
-        f"{API_SERVER_URL}/admin/llm/provider",
-        headers=admin_user.headers,
-    )
-    assert response.status_code == 200
-    providers = response.json()
-    return next((p for p in providers if p["name"] == provider_name), None)
-
-
-def _get_provider_by_name_basic(user: DATestUser, provider_name: str) -> dict | None:
-    """Utility function to fetch an LLM provider by name via basic (non-admin) endpoint."""
-    response = client.get(
-        f"{API_SERVER_URL}/llm/provider",
-        headers=user.headers,
-    )
-    assert response.status_code == 200
-    providers = response.json()["providers"]
-    return next((p for p in providers if p["name"] == provider_name), None)
-
-
 def _validate_model_configurations(
     actual_configs: list[dict],
     expected_model_names: list[str],
@@ -1338,26 +1314,6 @@ def test_default_model_persistence_and_update(
         expected_model_names=expected_model_names,
         expected_visible=expected_visible,
     )
-
-
-def _get_all_providers_basic(user: DATestUser) -> list[dict]:
-    """Utility function to fetch all LLM providers via basic endpoint."""
-    response = client.get(
-        f"{API_SERVER_URL}/llm/provider",
-        headers=user.headers,
-    )
-    assert response.status_code == 200
-    return response.json()["providers"]
-
-
-def _get_all_providers_admin(admin_user: DATestUser) -> list[dict]:
-    """Utility function to fetch all LLM providers via admin endpoint."""
-    response = client.get(
-        f"{API_SERVER_URL}/admin/llm/provider",
-        headers=admin_user.headers,
-    )
-    assert response.status_code == 200
-    return response.json()["providers"]
 
 
 def _set_default_provider(
@@ -2106,17 +2062,6 @@ def _create_image_gen_config(
         f"Failed to create image gen config: {response.text}"
     )
     return response.json()
-
-
-def _set_image_gen_config_default(
-    admin_user: DATestUser, image_provider_id: str
-) -> None:
-    """Utility function to set an image generation config as default."""
-    response = client.post(
-        f"{API_SERVER_URL}/admin/image-generation/config/{image_provider_id}/default",
-        headers=admin_user.headers,
-    )
-    assert response.status_code == 200
 
 
 def _delete_image_gen_config(admin_user: DATestUser, image_provider_id: str) -> None:

@@ -66,13 +66,6 @@ class ElevenLabsSTTMessageType(StrEnum):
     ERROR = "error"
 
 
-class ElevenLabsTTSMessageType(StrEnum):
-    """Message types from ElevenLabs stream-input TTS API."""
-
-    AUDIO = "audio"
-    ERROR = "error"
-
-
 def _http_to_ws_url(http_url: str) -> str:
     """Convert http(s) URL to ws(s) URL for WebSocket connections."""
     if http_url.startswith("https://"):

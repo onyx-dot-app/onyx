@@ -37,11 +37,8 @@ class _FakeStreamingResponse:
 
 
 class _FakeDbSession:
-    def __init__(self) -> None:
-        self.expire_all_calls = 0
-
     def expire_all(self) -> None:
-        self.expire_all_calls += 1
+        pass
 
 
 @contextmanager

@@ -29,8 +29,8 @@ def _make_request(headers: list[tuple[bytes, bytes]] | None = None) -> Request:
 
 
 async def _no_bytes(chunk_size: int = 8192) -> AsyncGenerator[bytes, None]:  # noqa: ARG001
-    return
-    yield b""  # pragma: no cover
+    for chunk in ():
+        yield chunk
 
 
 def _make_upstream() -> MagicMock:
