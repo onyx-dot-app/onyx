@@ -17,8 +17,8 @@ from onyx.connectors.exceptions import (
 from onyx.connectors.zoom import endpoints as zoom_endpoints
 from onyx.connectors.zoom import rate_limit as zoom_rate_limit
 from onyx.connectors.zoom.client import (
-    _MAX_ACCESS_LIST_PAGES,
     _MAX_PAGE_SIZE,
+    MAX_LISTING_PAGES,
     ZoomClient,
     ZoomNotEntitledError,
     _reject_non_zoom_download_url,
@@ -1863,7 +1863,7 @@ class TestAccessListPagingGuards:
     def test_a_cursor_that_never_repeats_still_hits_the_page_cap(self) -> None:
         client = _client()
         client._session = MagicMock()
-        pages = iter(range(_MAX_ACCESS_LIST_PAGES + 10))
+        pages = iter(range(MAX_LISTING_PAGES + 10))
         client._session.request.side_effect = [
             _response(200, {"participants": [], "next_page_token": f"page-{n}"})
             for n in pages
@@ -1872,5 +1872,5 @@ class TestAccessListPagingGuards:
         with pytest.raises(ValueError) as caught:
             client.list_past_meeting_participants("uuid-abc")
 
-        assert str(_MAX_ACCESS_LIST_PAGES) in str(caught.value)
-        assert client._session.request.call_count == _MAX_ACCESS_LIST_PAGES
+        assert str(MAX_LISTING_PAGES) in str(caught.value)
+        assert client._session.request.call_count == MAX_LISTING_PAGES

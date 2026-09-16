@@ -4,7 +4,7 @@ from datetime import date, timedelta
 import pytest
 
 from onyx.connectors.models import Document
-from onyx.connectors.zoom.client import ZoomClient
+from onyx.connectors.zoom.client import MAX_LISTING_PAGES, ZoomClient
 from onyx.connectors.zoom.connector import ZoomConnector
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 from tests.utils.secret_names import TestSecret
@@ -154,14 +154,26 @@ def _zoom_client(test_secrets: dict[TestSecret, str]) -> ZoomClient:
 def _user_id_for(client: ZoomClient, email: str) -> str:
     wanted = email.strip().lower()
     page_token: str | None = None
-    while True:
+    seen_tokens: set[str] = set()
+
+    for _ in range(MAX_LISTING_PAGES):
         page = client.list_users(page_token=page_token)
         for user in page.users:
             if (user.email or "").strip().lower() == wanted and user.id:
                 return user.id
+
         page_token = page.next_page_token
         if not page_token:
             raise AssertionError(f"No active Zoom user has the email {email}")
+        if page_token in seen_tokens:
+            raise AssertionError(
+                f"Zoom stopped advancing the user cursor while looking for {email}"
+            )
+        seen_tokens.add(page_token)
+
+    raise AssertionError(
+        f"Zoom kept paging users past {MAX_LISTING_PAGES} pages looking for {email}"
+    )
 
 
 def test_recording_listing_accepts_a_multi_month_range(

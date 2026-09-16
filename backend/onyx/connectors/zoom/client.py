@@ -62,7 +62,7 @@ _MAX_PAGE_SIZE = 300
 # _paginate catches one that repeats. A Celery task has no working time limit,
 # so nothing else would stop either loop. Tripping this drops the document
 # rather than truncating its access list.
-_MAX_ACCESS_LIST_PAGES = 200
+MAX_LISTING_PAGES = 200
 
 _AccessRecordT = TypeVar("_AccessRecordT")
 
@@ -313,7 +313,7 @@ class ZoomClient:
         page_token: str | None = None
         seen_tokens: set[str] = set()
 
-        for _ in range(_MAX_ACCESS_LIST_PAGES):
+        for _ in range(MAX_LISTING_PAGES):
             params: dict[str, Any] = {
                 "page_size": _MAX_PAGE_SIZE,
                 **(extra_params or {}),
@@ -336,7 +336,7 @@ class ZoomClient:
 
         raise ValueError(
             f"Zoom kept paging {endpoint.description(identifier)} past "
-            f"{_MAX_ACCESS_LIST_PAGES} pages"
+            f"{MAX_LISTING_PAGES} pages"
         )
 
     def get_meeting_transcript(self, meeting_identifier: str) -> ZoomTranscript:
