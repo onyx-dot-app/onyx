@@ -6,7 +6,6 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 from requests.adapters import HTTPAdapter
-from urllib3.util import Retry
 
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.connectors.exceptions import (
@@ -148,23 +147,12 @@ class ZoomClient:
             rate_limit_settings or ZoomRateLimitSettings()
         )
 
+        # urllib3 re-sends inside one call, which skips the pacer, and Zoom
+        # counts a request it received however slowly it answered. So nothing
+        # retries here: ZoomRateLimiter sends every attempt, a slot each.
         self._session = requests.Session()
-        # Retries here cover a request Zoom never answered, and so never
-        # counted: a dropped connection, a reset, a read timeout. Every status
-        # Zoom does answer belongs to ZoomRateLimiter, because urllib3 re-sends
-        # inside one call and skips the pacer. Both settings below are needed to
-        # keep it out: an empty forcelist alone still lets urllib3 re-send
-        # anything carrying Retry-After.
-        retry_strategy = Retry(
-            total=5,
-            backoff_factor=1,
-            status_forcelist=[],
-            allowed_methods=["GET", "POST"],
-            respect_retry_after_header=False,
-        )
-        # Mount on the scheme, not per URL: the API, token endpoint and download
-        # are three different Zoom hosts, and a missed one silently gets no retries.
-        self._session.mount("https://", HTTPAdapter(max_retries=retry_strategy))
+        for scheme in ("https://", "http://"):
+            self._session.mount(scheme, HTTPAdapter(max_retries=0))
 
     def _fetch_access_token(self) -> str:
         endpoint = endpoints.OAUTH_TOKEN

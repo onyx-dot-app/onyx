@@ -60,10 +60,11 @@ _PACING_POLL_SECONDS = 0.05
 _BASE_RETRY_SLEEP_SECONDS = 2.0
 _MAX_RETRY_SLEEP_SECONDS = 60.0
 
-# A 429 names when to come back, so it is worth waiting out. A 5xx is only a
-# guess, and the run resumes from the checkpoint anyway.
+# A 429 names when to come back, so it is worth waiting out. A 5xx or a silence
+# is only a guess, and the run resumes from the checkpoint anyway.
 _MAX_RATE_LIMIT_SLEEPS = 6
 _MAX_SERVER_ERROR_SLEEPS = 4
+_MAX_NO_ANSWER_SLEEPS = 4
 
 # Half, because Zoom's limit is account-wide and the customer's other
 # integrations spend from the same allowance.
@@ -109,9 +110,13 @@ def _pacing_window(calls_per_second: float) -> tuple[int, float]:
     return 1, seconds_per_call
 
 
-def _retry_sleep_seconds(response: requests.Response, sleeps_so_far: int) -> float:
-    retry_after: float | None = parse_retry_after_seconds(
-        response.headers.get("Retry-After")
+def _retry_sleep_seconds(
+    response: requests.Response | None, sleeps_so_far: int
+) -> float:
+    retry_after: float | None = (
+        parse_retry_after_seconds(response.headers.get("Retry-After"))
+        if response is not None
+        else None
     )
     if retry_after is None:
         retry_after = _BASE_RETRY_SLEEP_SECONDS * (2**sleeps_so_far)
@@ -121,11 +126,23 @@ def _retry_sleep_seconds(response: requests.Response, sleeps_so_far: int) -> flo
 class _RetryKind(str, Enum):
     RATE_LIMITED = "rate_limited"
     SERVER_ERROR = "server_error"
+    NO_ANSWER = "no_answer"
+
+
+# These mean the exchange broke after the request was on its way. Anything else
+# requests raises, such as a malformed URL, never reached Zoom.
+_NO_ANSWER_ERRORS = (
+    requests.ConnectionError,
+    requests.Timeout,
+    requests.exceptions.ChunkedEncodingError,
+    requests.exceptions.ContentDecodingError,
+)
 
 
 _MAX_SLEEPS: dict[_RetryKind, int] = {
     _RetryKind.RATE_LIMITED: _MAX_RATE_LIMIT_SLEEPS,
     _RetryKind.SERVER_ERROR: _MAX_SERVER_ERROR_SLEEPS,
+    _RetryKind.NO_ANSWER: _MAX_NO_ANSWER_SLEEPS,
 }
 
 
@@ -171,31 +188,68 @@ class ZoomRateLimiter:
             for tier in ZoomRateLimitTier
         }
 
+    def _wait(
+        self,
+        description: str,
+        tier: ZoomRateLimitTier,
+        kind: _RetryKind,
+        sleeps_so_far: dict[_RetryKind, int],
+        response: requests.Response | None,
+        reason: str,
+    ) -> bool:
+        """False once this kind of answer has used up its sleeps."""
+        if sleeps_so_far[kind] >= _MAX_SLEEPS[kind]:
+            return False
+
+        sleep_seconds = _retry_sleep_seconds(response, sleeps_so_far[kind])
+        logger.notice(
+            "Zoom %s for %s (%s tier). Waiting %.1fs before retrying.",
+            reason,
+            description,
+            tier.value,
+            sleep_seconds,
+        )
+        time.sleep(sleep_seconds)
+        sleeps_so_far[kind] += 1
+        return True
+
     def call(
         self,
         description: str,
         tier: ZoomRateLimitTier,
         send: Callable[[], requests.Response],
     ) -> requests.Response:
-        response = self._pacers[tier](send)
-
         # Counted per kind of answer, so a run of server errors does not spend
         # the patience a later 429 deserves, and the other way round.
         sleeps_so_far = {kind: 0 for kind in _RetryKind}
-        while (kind := _retry_kind(response)) is not None:
-            if sleeps_so_far[kind] >= _MAX_SLEEPS[kind]:
+
+        while True:
+            try:
+                response = self._pacers[tier](send)
+            except _NO_ANSWER_ERRORS as e:
+                if not self._wait(
+                    description,
+                    tier,
+                    _RetryKind.NO_ANSWER,
+                    sleeps_so_far,
+                    None,
+                    f"did not answer ({e})",
+                ):
+                    raise
+                continue
+
+            kind = _retry_kind(response)
+            if kind is None:
                 break
-            sleep_seconds = _retry_sleep_seconds(response, sleeps_so_far[kind])
-            logger.notice(
-                "Zoom answered %s with %s (%s tier). Waiting %.1fs before retrying.",
+            if not self._wait(
                 description,
-                response.status_code,
-                tier.value,
-                sleep_seconds,
-            )
-            time.sleep(sleep_seconds)
-            response = self._pacers[tier](send)
-            sleeps_so_far[kind] += 1
+                tier,
+                kind,
+                sleeps_so_far,
+                response,
+                f"answered with {response.status_code}",
+            ):
+                break
 
         # Only a 429 needs the typed error. A spent 5xx goes back as the
         # response it is, and _raise_for_zoom_error keeps Zoom's own message.

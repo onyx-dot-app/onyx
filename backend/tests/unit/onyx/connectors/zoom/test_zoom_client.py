@@ -38,6 +38,7 @@ from onyx.connectors.zoom.endpoints import (
 )
 from onyx.connectors.zoom.models import ZoomTranscript
 from onyx.connectors.zoom.rate_limit import (
+    _MAX_NO_ANSWER_SLEEPS,
     _MAX_RATE_LIMIT_SLEEPS,
     _MAX_RETRY_SLEEP_SECONDS,
     _MAX_SERVER_ERROR_SLEEPS,
@@ -375,26 +376,16 @@ class TestRetryPolicy:
         [_API_BASE_URL, _OAUTH_TOKEN_URL, _ZOOM_DOWNLOAD_URL],
         ids=["api", "token", "download"],
     )
-    def test_every_zoom_host_retries(self, url: str) -> None:
-        # Mounting per URL left the download host on the no-retry default.
+    def test_no_zoom_host_re_sends_below_the_pacer(self, url: str) -> None:
         client = ZoomClient(account_id="a", client_id="c", client_secret="s")
 
         adapter = client._session.get_adapter(url)
         assert isinstance(adapter, HTTPAdapter)
-        assert adapter.max_retries.total == 5
-
-    @pytest.mark.parametrize("status", [429, 500, 502, 503, 504])
-    def test_the_transport_never_re_sends_on_a_status(self, status: int) -> None:
-        # Asserting on status_forcelist alone would miss it: urllib3 re-sends a
-        # response carrying Retry-After whatever the forcelist says.
-        client = ZoomClient(account_id="a", client_id="c", client_secret="s")
-
-        adapter = client._session.get_adapter(_API_BASE_URL)
-        assert isinstance(adapter, HTTPAdapter)
         retry = adapter.max_retries
-        assert status not in retry.status_forcelist
-        assert not retry.is_retry("GET", status, has_retry_after=True)
-        assert not retry.is_retry("GET", status, has_retry_after=False)
+        assert retry.total == 0
+        for status in (429, 500, 502, 503, 504):
+            assert not retry.is_retry("GET", status, has_retry_after=True)
+            assert not retry.is_retry("GET", status, has_retry_after=False)
 
 
 class TestRequestErrorMapping:
@@ -1362,7 +1353,9 @@ def _rate_limited(retry_after: str | None = None) -> MagicMock:
     return response
 
 
-def _client_answering(*responses: MagicMock) -> tuple[ZoomClient, MagicMock]:
+def _client_answering(
+    *responses: MagicMock | Exception,
+) -> tuple[ZoomClient, MagicMock]:
     client = _client()
     session = MagicMock()
     session.request.side_effect = list(responses)
@@ -1554,10 +1547,71 @@ class TestRateLimitBackoff:
         assert session.request.call_count == _MAX_RATE_LIMIT_SLEEPS + 1
         assert fails_the_whole_run(exc.value)
 
-    def test_an_exhausted_transport_retry_also_fails_the_whole_run(self) -> None:
-        # A spent transport Retry raises RetryError, which is not an HTTPError
-        # and so carries no status code to classify on.
-        assert fails_the_whole_run(requests.exceptions.RetryError("gave up"))
+    @pytest.mark.parametrize(
+        "error",
+        [
+            requests.ReadTimeout("timed out"),
+            requests.ConnectionError("reset"),
+            requests.exceptions.RetryError("gave up"),
+        ],
+    )
+    def test_a_request_zoom_never_answered_fails_the_whole_run(
+        self, error: Exception
+    ) -> None:
+        assert fails_the_whole_run(error)
+
+    def test_a_timeout_is_sent_again(self) -> None:
+        client, session = _client_answering(
+            requests.ReadTimeout("timed out"), _response(200, {"users": []})
+        )
+
+        with patch("onyx.connectors.zoom.rate_limit.time.sleep") as sleep:
+            page = client.list_users()
+
+        assert [c.args[0] for c in sleep.call_args_list] == [2.0]
+        assert session.request.call_count == 2
+        assert page.users == []
+
+    def test_a_request_that_never_left_is_not_sent_again(self) -> None:
+        client, session = _client_answering(
+            requests.exceptions.InvalidURL("bad url"), _response(200, {"users": []})
+        )
+
+        with patch("onyx.connectors.zoom.rate_limit.time.sleep") as sleep:
+            with pytest.raises(requests.exceptions.InvalidURL):
+                client.list_users()
+
+        assert session.request.call_count == 1
+        sleep.assert_not_called()
+
+    def test_a_sustained_timeout_reaches_the_caller(self) -> None:
+        client, session = _client_answering(
+            *[
+                requests.ReadTimeout("timed out")
+                for _ in range(_MAX_NO_ANSWER_SLEEPS + 1)
+            ]
+        )
+
+        with patch("onyx.connectors.zoom.rate_limit.time.sleep"):
+            with pytest.raises(requests.ReadTimeout) as exc:
+                client.list_users()
+
+        assert session.request.call_count == _MAX_NO_ANSWER_SLEEPS + 1
+        assert fails_the_whole_run(exc.value)
+
+    def test_a_timeout_does_not_spend_the_throttling_patience(self) -> None:
+        client, session = _client_answering(
+            *[requests.ReadTimeout("timed out") for _ in range(_MAX_NO_ANSWER_SLEEPS)],
+            *[_rate_limited() for _ in range(_MAX_RATE_LIMIT_SLEEPS + 1)],
+        )
+
+        with patch("onyx.connectors.zoom.rate_limit.time.sleep"):
+            with pytest.raises(ZoomRateLimitError):
+                client.list_users()
+
+        assert session.request.call_count == (
+            _MAX_NO_ANSWER_SLEEPS + _MAX_RATE_LIMIT_SLEEPS + 1
+        )
 
     def test_a_server_error_is_sent_again(self) -> None:
         client, session = _client_answering(
@@ -1652,6 +1706,32 @@ class TestPacing:
         client = _client(ZoomRateLimitSettings(share=1.0))
         session = MagicMock()
         session.request.side_effect = [_response(502), _response(200, {"users": []})]
+        client._session = session
+
+        started = clock.now
+        with patch("onyx.connectors.zoom.rate_limit.time.sleep"):
+            client.list_users()
+
+        assert session.request.call_count == 2
+        assert clock.now - started >= _RATE_LIMIT_PERIOD_SECONDS
+
+    def test_a_timeout_sent_again_waits_for_its_own_slot(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        clock = _FakeClock()
+        monkeypatch.setattr(rate_limit_wrapper, "time", clock)
+        monkeypatch.setattr(
+            zoom_rate_limit,
+            "_PLAN_CALLS_PER_SECOND",
+            {plan: {tier: 1 for tier in ZoomRateLimitTier} for plan in ZoomPlanTier},
+        )
+
+        client = _client(ZoomRateLimitSettings(share=1.0))
+        session = MagicMock()
+        session.request.side_effect = [
+            requests.ReadTimeout("timed out"),
+            _response(200, {"users": []}),
+        ]
         client._session = session
 
         started = clock.now
