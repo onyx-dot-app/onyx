@@ -689,6 +689,7 @@ export const validAutoSyncSources = [
   ValidSources.Outlook,
   ValidSources.Canvas,
   ValidSources.Box,
+  ValidSources.OneDrive,
 ] as const;
 
 // Create a type from the array elements

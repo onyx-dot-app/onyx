@@ -125,7 +125,7 @@ def test_onedrive_preserves_msal_throttle_status() -> None:
     assert raised.value.status == 429
 
 
-def test_onedrive_source_operation_inventory_marks_pr6_operations_untested() -> None:
+def test_onedrive_source_operation_inventory_includes_permission_sync() -> None:
     specs = OneDriveSourceOperations.operation_specs()
 
     assert set(specs) == {
@@ -136,12 +136,49 @@ def test_onedrive_source_operation_inventory_marks_pr6_operations_untested() -> 
         "get_delta_page",
         "download_item",
         "list_permissions",
+        "list_groups",
         "list_transitive_group_members",
     }
     assert "document context" in (specs["list_permissions"].untested or "")
     assert "concrete group id" in (
         specs["list_transitive_group_members"].untested or ""
     )
+
+
+def test_onedrive_group_operations_use_graph_pagination_links() -> None:
+    gateway, client = _gateway()
+    client.get_json.side_effect = [
+        {
+            "value": [
+                {
+                    "id": "group",
+                    "displayName": "Group",
+                    "visibility": "HiddenMembership",
+                }
+            ],
+            "@odata.nextLink": "groups-next",
+        },
+        {
+            "value": [
+                {
+                    "@odata.type": "#microsoft.graph.user",
+                    "id": "user",
+                    "userPrincipalName": "user@example.com",
+                }
+            ],
+            "@odata.nextLink": "members-next",
+        },
+    ]
+
+    groups = gateway.list_groups(page_size=17)
+    members = gateway.list_transitive_group_members(group_id="group")
+
+    assert groups.next_link == "groups-next"
+    assert groups.groups[0].visibility == "HiddenMembership"
+    assert members.next_link == "members-next"
+    assert members.members[0].user_principal_name == "user@example.com"
+    assert client.get_json.call_args_list[0].args[1]["$top"] == "17"
+    assert client.get_json.call_args_list[1].args[1]["$top"] == "999"
 
 
 @pytest.mark.parametrize(
