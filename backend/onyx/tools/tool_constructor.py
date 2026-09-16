@@ -199,10 +199,7 @@ def _construct_tools_impl(
     )
 
     mcp_tool_cache: dict[int, dict[int, MCPTool]] = {}
-    # Get user's OAuth token if available
-    user_oauth_token = None
-    if user.oauth_accounts:
-        user_oauth_token = user.oauth_accounts[0].access_token
+    user_oauth_token: str | None = user.live_oauth_token
 
     search_settings = get_current_search_settings(db_session)
     # This flow is for search so we do not get all indices.
