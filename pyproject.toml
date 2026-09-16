@@ -152,9 +152,6 @@ dev = [
     "pytest-repeat==0.9.4",
     "pytest-xdist==3.8.0",
     "pytest==9.0.3",
-    # Keep in sync with the pinned `ruff==` in the ruff / ruff-format hooks in
-    # .pre-commit-config.yaml, which install ruff into an isolated overlay.
-    "ruff==0.16.1",
     "types-docker==7.1.0.20260518",
     "types-beautifulsoup4==4.12.0.3",
     "types-html5lib==1.1.11.13",
@@ -170,17 +167,15 @@ dev = [
     "types-regex==2023.3.23.1",
     "types-requests==2.32.0.20250328",
     { include-group = "ods" },
+    { include-group = "ruff" },
     { include-group = "zizmor" },
 ]
 
-# Isolated group so CI can `uv sync --only-group ods` and run ods from
-# hash-verified uv.lock artifacts instead of an unlocked `uv run --with`.
-# Keep in sync with the pinned `onyx-devtools==` in the `ods` hooks in
-# .pre-commit-config.yaml, which install ods into an isolated overlay.
+# One-tool groups, installed with `--only-group` by the pre-commit hooks: each
+# tool comes from hash-verified uv.lock artifacts without a full project sync,
+# and each pin below is the only one in the repo.
 ods = ["onyx-devtools[audit]==0.13.7"]
-
-# Isolated group so CI can `uv sync --only-group zizmor` without pulling
-# the rest of the dev toolchain.
+ruff = ["ruff==0.16.1"]
 zizmor = ["zizmor==1.25.2"]
 
 # Enterprise Edition features

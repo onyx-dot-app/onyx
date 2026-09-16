@@ -4335,6 +4335,9 @@ model-server = [
 ods = [
     { name = "onyx-devtools", extra = ["audit"] },
 ]
+ruff = [
+    { name = "ruff" },
+]
 zizmor = [
     { name = "zizmor" },
 ]
@@ -4508,6 +4511,7 @@ model-server = [
     { name = "transformers", specifier = "==5.14.1" },
 ]
 ods = [{ name = "onyx-devtools", extras = ["audit"], specifier = "==0.13.7" }]
+ruff = [{ name = "ruff", specifier = "==0.16.1" }]
 zizmor = [{ name = "zizmor", specifier = "==1.25.2" }]
 
 [[package]]
