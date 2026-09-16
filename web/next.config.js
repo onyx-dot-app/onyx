@@ -14,6 +14,11 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: process.env.SKIP_TYPE_CHECK === "1",
   },
+  experimental: {
+    // TypeScript 7 has no classic JS API, so `next build` must type-check
+    // through the `tsc` CLI.
+    useTypeScriptCli: true,
+  },
   transpilePackages: ["@onyx-ai/opal", "@onyx-ai/shared"],
   typedRoutes: true,
   // `next dev` otherwise appends its own managed block to web/AGENTS.md on every
