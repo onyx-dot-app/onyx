@@ -4,9 +4,11 @@ from collections import deque
 from collections.abc import Iterable, Iterator
 from datetime import datetime, timezone
 from typing import Any, TypeVar
+from urllib.parse import urlsplit
 
 import gitlab
 import pytz
+import requests
 from gitlab.v4.objects import Project
 
 from onyx.configs.app_configs import (
@@ -15,6 +17,7 @@ from onyx.configs.app_configs import (
 )
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import (
     GenerateDocumentsOutput,
     LoadConnector,
@@ -28,8 +31,11 @@ from onyx.connectors.models import (
     HierarchyNode,
     TextSection,
 )
+from onyx.server.security.models import web_connector_ssrf_enforced
+from onyx.server.security.store import get_security_settings
 from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
+from onyx.utils.url import SSRFException, validate_outbound_http_url
 
 T = TypeVar("T")
 
@@ -150,6 +156,42 @@ def _should_exclude(path: str) -> bool:
     return any(fnmatch.fnmatch(path, pattern) for pattern in exclude_patterns)
 
 
+def _validate_credential_url(gitlab_url: str) -> None:
+    enforced: bool = web_connector_ssrf_enforced(
+        get_security_settings().ssrf_protection_level
+    )
+    try:
+        _ = urlsplit(gitlab_url).port
+        validate_outbound_http_url(
+            gitlab_url,
+            https_only=True,
+            allow_private_network=not enforced,
+            block_link_local_only=not enforced,
+        )
+    except (SSRFException, ValueError) as e:
+        raise ConnectorValidationError(f"Invalid GitLab URL '{gitlab_url}': {e}") from e
+
+
+class _GitlabSession(requests.Session):
+    def __init__(self, base_url: str) -> None:
+        super().__init__()
+        parsed = urlsplit(base_url)
+        self._host: str | None = parsed.hostname
+        self._port: int = parsed.port if parsed.port is not None else 443
+
+    def send(
+        self, request: requests.PreparedRequest, **kwargs: Any
+    ) -> requests.Response:
+        if request.url is None:
+            raise ConnectorValidationError("GitLab request has no destination")
+        _validate_credential_url(request.url)
+        parsed = urlsplit(request.url)
+        port = parsed.port if parsed.port is not None else 443
+        if parsed.hostname != self._host or port != self._port:
+            raise ConnectorValidationError("GitLab request changed credential origin")
+        return super().send(request, **kwargs)
+
+
 class GitlabConnector(LoadConnector, PollConnector):
     def __init__(
         self,
@@ -171,8 +213,12 @@ class GitlabConnector(LoadConnector, PollConnector):
         self.gitlab_client: gitlab.Gitlab | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
+        gitlab_url: str = credentials["gitlab_url"].strip()
+        _validate_credential_url(gitlab_url)
         self.gitlab_client = gitlab.Gitlab(
-            credentials["gitlab_url"], private_token=credentials["gitlab_access_token"]
+            gitlab_url,
+            private_token=credentials["gitlab_access_token"],
+            session=_GitlabSession(gitlab_url),
         )
         return None
 
