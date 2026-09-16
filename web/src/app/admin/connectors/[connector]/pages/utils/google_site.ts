@@ -4,15 +4,15 @@ import { linkCredential } from "@/lib/credential";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 import type { FileUploadResponse } from "@/lib/fileConnector";
 import { GoogleSitesConfig } from "@/lib/connectors/connectors";
-import { ValidSources } from "@/lib/types";
+import { AccessType, ValidSources } from "@/lib/types";
 
 export const submitGoogleSite = async (
   selectedFiles: File[],
-  base_url: any,
+  base_url: string,
   refreshFreq: number,
   pruneFreq: number,
   indexingStart: Date,
-  access_type: string,
+  access_type: AccessType,
   groups: number[],
   name?: string
 ) => {
@@ -76,7 +76,7 @@ export const submitGoogleSite = async (
       connector.id,
       0,
       base_url,
-      undefined,
+      access_type,
       groups
     );
     if (!credentialResponse.ok) {

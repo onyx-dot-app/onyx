@@ -89,3 +89,12 @@ describe("selectSources", () => {
     expect(selected.hasSources).toBe(false);
   });
 });
+
+it("omits URL credentials and ports from favicon requests", () => {
+  expect(domainOf("https://user:password@example.com:8443/doc")).toBe(
+    "example.com",
+  );
+  expect(faviconUrl("https://user:password@example.com:8443/doc")).not.toMatch(
+    /user|password|8443/,
+  );
+});
