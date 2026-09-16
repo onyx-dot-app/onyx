@@ -151,7 +151,7 @@ from onyx.tools.tool_constructor import (
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
-from onyx.utils.timing import log_function_time
+from onyx.utils.timing import log_function_time, log_generator_function_time
 from shared_configs.contextvars import (
     CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR,
     CURRENT_INCOGNITO_RECORD_MODE_CONTEXTVAR,
@@ -1885,6 +1885,7 @@ def _stream_chat_turn(
             logger.exception("Error in setting processing status")
 
 
+@log_generator_function_time()
 def handle_stream_message_objects(
     new_msg_req: SendMessageRequest,
     user: User,
@@ -1896,7 +1897,12 @@ def handle_stream_message_objects(
     slack_context: SlackContext | None = None,
     external_state_container: ChatStateContainer | None = None,
 ) -> AnswerStream:
-    """Single-model streaming entrypoint. For multi-model comparison, use ``handle_multi_model_stream``."""
+    """Single-model streaming entrypoint. For multi-model comparison, use ``handle_multi_model_stream``.
+
+    Emits a ``latency`` telemetry record for the whole turn once the stream is
+    exhausted or closed. Callers must pass ``user`` as a keyword argument so the
+    record carries the user id.
+    """
     yield from _stream_chat_turn(
         new_msg_req=new_msg_req,
         user=user,
@@ -1925,6 +1931,7 @@ def _build_model_display_name(override: LLMOverride | None, llm: LLM) -> str:
     return llm.config.model_name
 
 
+@log_generator_function_time()
 def handle_multi_model_stream(
     new_msg_req: SendMessageRequest,
     user: User,
