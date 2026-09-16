@@ -12,24 +12,6 @@ from onyx.server.kg.models import EntityType
 UNGROUNDED_SOURCE_NAME = "Ungrounded"
 
 
-def get_entity_types(
-    db_session: Session,
-    active: bool | None = True,
-) -> list[KGEntityType]:
-    # Query the database for all distinct entity types
-
-    if active is None:
-        return db_session.query(KGEntityType).order_by(KGEntityType.id_name).all()
-
-    else:
-        return (
-            db_session.query(KGEntityType)
-            .filter(KGEntityType.active == active)
-            .order_by(KGEntityType.id_name)
-            .all()
-        )
-
-
 def get_configured_entity_types(db_session: Session) -> dict[str, list[KGEntityType]]:
     # get entity types from configured sources
     configured_connector_sources = {

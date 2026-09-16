@@ -757,11 +757,6 @@ else:
     REDIS_SOCKET_KEEPALIVE_OPTIONS[getattr(socket, "TCP_KEEPIDLE")] = 60  # noqa: B009  # ods: ignore[getattr]
 
 
-class OnyxCallTypes(str, Enum):
-    FIREFLIES = "FIREFLIES"
-    GONG = "GONG"
-
-
 NUM_DAYS_TO_KEEP_CHECKPOINTS = 7
 # checkpoints are queried based on index attempts, so we need to keep index attempts for one more day
 NUM_DAYS_TO_KEEP_INDEX_ATTEMPTS = NUM_DAYS_TO_KEEP_CHECKPOINTS + 1

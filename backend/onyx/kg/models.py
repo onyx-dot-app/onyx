@@ -88,34 +88,6 @@ class KGEntityTypeDefinition(BaseModel):
     entity_values: list[str] = []
 
 
-class KGChunkFormat(BaseModel):
-    connector_id: int | None = None
-    document_id: str
-    chunk_id: int
-    title: str
-    content: str
-    primary_owners: list[str]
-    secondary_owners: list[str]
-    source_type: str
-    metadata: dict[str, str | list[str]] | None = None
-
-
-class KGClassificationInstructions(BaseModel):
-    classification_enabled: bool
-    classification_options: str
-    classification_class_definitions: dict[str, KGEntityTypeClassificationInfo]
-
-
-class KGEnhancedDocumentMetadata(BaseModel):
-    entity_type: str | None
-    metadata_attribute_conversion: dict[str, KGAttributeProperty] | None
-    document_metadata: dict[str, Any] | None
-    deep_extraction: bool
-    classification_enabled: bool
-    classification_instructions: KGClassificationInstructions | None
-    skip: bool
-
-
 class KGStage(str, Enum):
     EXTRACTED = "extracted"
     NORMALIZED = "normalized"
@@ -124,22 +96,3 @@ class KGStage(str, Enum):
     NOT_STARTED = "not_started"
     EXTRACTING = "extracting"
     DO_NOT_EXTRACT = "do_not_extract"
-
-
-class KGClassificationResult(BaseModel):
-    document_entity: str
-    classification_class: str
-
-
-class KGImpliedExtractionResults(BaseModel):
-    document_entity: str
-    implied_entities: set[str]
-    implied_relationships: set[str]
-    company_participant_emails: set[str]
-    account_participant_emails: set[str]
-
-
-class KGDocumentDeepExtractionResults(BaseModel):
-    classification_result: KGClassificationResult | None
-    deep_extracted_entities: set[str]
-    deep_extracted_relationships: set[str]

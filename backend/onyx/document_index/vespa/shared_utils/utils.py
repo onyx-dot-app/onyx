@@ -14,19 +14,6 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-# NOTE: This does not seem to be used in reality despite the Vespa Docs pointing to this code
-# See here for reference: https://docs.vespa.ai/en/documents.html
-# https://github.com/vespa-engine/vespa/blob/master/vespajlib/src/main/java/com/yahoo/text/Text.java
-
-# Define allowed ASCII characters
-ALLOWED_ASCII_CHARS: list[bool] = [False] * 0x80
-ALLOWED_ASCII_CHARS[0x9] = True  # tab
-ALLOWED_ASCII_CHARS[0xA] = True  # newline
-ALLOWED_ASCII_CHARS[0xD] = True  # carriage return
-for i in range(0x20, 0x7F):
-    ALLOWED_ASCII_CHARS[i] = True  # printable ASCII chars
-ALLOWED_ASCII_CHARS[0x7F] = True  # del - discouraged, but allowed
-
 
 def replace_invalid_doc_id_characters(text: str) -> str:
     """Replaces invalid document ID characters in text.
