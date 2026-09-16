@@ -1,8 +1,13 @@
 """Run the chat adapter through model streaming, tools, and packet rendering."""
 
-from collections.abc import Callable, Generator, Iterator
+import asyncio
+from collections.abc import Callable, Generator, Iterator, Sequence
 from typing import Any
 
+from onyx.agents.coordination import AgentCoordinator
+from onyx.agents.events import AgentEvent
+from onyx.agents.models import RunResult
+from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import ToolInvocation
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import LLM, GenerationContext, LLMConfig, LLMInfo
@@ -17,6 +22,7 @@ from onyx.llm.models import (
     GenerationDoneEvent,
     GenerationEvent,
     GenerationRequest,
+    Message,
     ToolResult,
 )
 from onyx.llm.multi_llm import LitellmLLM, LitellmTransport
@@ -130,3 +136,35 @@ class EchoTool(Tool):
     def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
         invocation.cancellation.check()
         return ToolResult(content=str(invocation.arguments["value"]))
+
+
+def run_agent(
+    agent: Agent,
+    *,
+    max_steps: int,
+    messages: Sequence[Message] = (),
+    cancellation: CancellationSignal | None = None,
+    runs: list[Run] | None = None,
+    observe_run: Callable[[Run], None] | None = None,
+    listener: Callable[[AgentEvent], None] | None = None,
+    coordinator: AgentCoordinator | None = None,
+) -> RunResult:
+    async def execute() -> RunResult:
+        run = agent.start(
+            max_steps=max_steps,
+            messages=messages,
+            cancellation=cancellation,
+            coordinator=coordinator,
+        )
+        if runs is not None:
+            runs.append(run)
+        if listener is not None:
+            run.subscribe(listener)
+        if observe_run is not None:
+            observe_run(run)
+        try:
+            return await run.wait()
+        finally:
+            assert await run.wait_for_idle(timeout=5)
+
+    return asyncio.run(execute())

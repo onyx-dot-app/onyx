@@ -5,8 +5,14 @@ from collections.abc import Callable
 
 from pydantic import BaseModel, Field
 
-from onyx.context.messages import PromptMetadata, count_message_tokens, prompt_metadata
+from onyx.context.messages import (
+    PromptMetadata,
+    count_message_tokens,
+    prepare_model_messages,
+    prompt_metadata,
+)
 from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
+from onyx.llm.interfaces import LLMInfo
 from onyx.llm.models import Message, UserMessage
 
 
@@ -41,13 +47,15 @@ def _build_project_message(
 
 
 def prepare_prompt(
+    messages: list[Message],
+    *,
     system_prompt: Message | None,
     custom_agent_prompt: Message | None,
-    messages: list[Message],
     reminder_message: Message | None,
     context_files: ExtractedContextFiles | None,
     token_counter: Callable[[str], int],
     all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
+    llm_info: LLMInfo | None = None,
 ) -> list[Message]:
     """Assemble instructions and file context without discarding execution history."""
     history = [message.model_copy(deep=True) for message in messages]
@@ -86,7 +94,7 @@ def prepare_prompt(
     result.extend(history[insertion:])
     if reminder_message is not None:
         result.append(reminder_message)
-    return result
+    return prepare_model_messages(result, llm_info) if llm_info else result
 
 
 def _create_file_tool_metadata_message(

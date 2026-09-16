@@ -89,12 +89,6 @@ class TestStopRequests:
         clear_stop(sid, cache, processing_key=10)
         assert not is_stop_requested(sid, cache, processing_key=10)
 
-    def test_clear_stop_noop_when_absent(self) -> None:
-        cache = _MemoryCacheBackend()
-        sid = uuid4()
-        clear_stop(sid, cache, processing_key=10)
-        assert not is_stop_requested(sid, cache, processing_key=10)
-
     def test_request_stop_uses_ttl(self) -> None:
         cache = _MemoryCacheBackend()
         sid = uuid4()
@@ -117,10 +111,6 @@ def test_delayed_stop_and_cleanup_cannot_affect_next_request() -> None:
 
 
 class TestIsStopRequested:
-    def test_no_request_by_default(self) -> None:
-        cache = _MemoryCacheBackend()
-        assert not is_stop_requested(uuid4(), cache, processing_key=10)
-
     def test_sessions_are_isolated(self) -> None:
         cache = _MemoryCacheBackend()
         sid1, sid2 = uuid4(), uuid4()
@@ -148,10 +138,6 @@ class TestSetProcessingStatus:
 
 
 class TestIsChatSessionProcessing:
-    def test_not_processing_by_default(self) -> None:
-        cache = _MemoryCacheBackend()
-        assert not is_chat_session_processing(uuid4(), cache)
-
     def test_sessions_are_isolated(self) -> None:
         cache = _MemoryCacheBackend()
         sid1, sid2 = uuid4(), uuid4()

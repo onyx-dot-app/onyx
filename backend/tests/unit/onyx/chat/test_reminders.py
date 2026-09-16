@@ -1,6 +1,6 @@
 from typing import Any
 
-from onyx.chat.context_policy import ChatReminderContext, ChatReminderPolicy
+from onyx.chat.context import ChatReminderContext, ChatReminders
 from onyx.chat.prompt_utils import select_reminder_text
 from onyx.llm.models import ToolResultMessage
 from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER, OPEN_URL_REMINDER
@@ -19,14 +19,14 @@ def test_search_reminder_can_be_removed_without_changing_tool_results() -> None:
         persona_task_prompt="User instructions",
         has_context_documents=False,
     )
-    enabled = ChatReminderPolicy()
-    disabled = ChatReminderPolicy(enabled=False)
-    enabled.after_tools([response])
-    disabled.after_tools([response])
-    assert enabled.cite_documents
-    assert not disabled.cite_documents
-    assert enabled.render(context) != disabled.render(context)
-    assert disabled.render(context) == "User instructions"
+    enabled = ChatReminders()
+    disabled = ChatReminders(enabled=False)
+    assert enabled.should_cite([response])
+    assert not disabled.should_cite([response])
+    assert enabled.render(context, [response], [response]) != disabled.render(
+        context, [response], [response]
+    )
+    assert disabled.render(context, [response], [response]) == "User instructions"
     assert response == original
 
 

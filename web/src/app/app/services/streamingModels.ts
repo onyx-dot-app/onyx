@@ -484,6 +484,8 @@ export interface Placement {
 }
 
 export interface PacketIdentity {
+  agent_id?: string | null;
+  agent_path?: string | null;
   response_id: number;
   run_id: string;
   message_id: string;

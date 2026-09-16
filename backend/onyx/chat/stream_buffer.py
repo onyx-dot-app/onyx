@@ -348,7 +348,7 @@ class ChatDelivery:
         self._lines: queue.Queue[str] = queue.Queue(_BUFFER_WORK_CAPACITY)
         self._finished = threading.Event()
         self._gap = threading.Event()
-        self._gap_lock = threading.Lock()
+        self._publish_lock = threading.RLock()
         self._worker: threading.Thread | None = None
 
     def start(self) -> None:
@@ -363,24 +363,34 @@ class ChatDelivery:
             self.report_gap()
 
     def publish(self, item: Packet | StreamingError) -> None:
-        self.reader.publish(item)
-        if self._buffer is None or self._gap.is_set():
-            return
-        try:
-            self._lines.put_nowait(get_json_line(item.model_dump()))
-        except queue.Full:
-            logger.warning("Chat cache delivery exceeded its backlog bound")
-            self.report_gap()
+        line = get_json_line(item.model_dump()) if self._buffer is not None else None
+        # Concurrent model writers must produce the same order in both destinations.
+        with self._publish_lock:
+            if self._finished.is_set():
+                return
+            self.reader.publish(item)
+            if line is None or self._gap.is_set():
+                return
+            try:
+                self._lines.put_nowait(line)
+            except queue.Full:
+                logger.warning("Chat cache delivery exceeded its backlog bound")
+                self.report_gap()
 
     def report_gap(self) -> None:
-        with self._gap_lock:
+        with self._publish_lock:
             if self._gap.is_set():
                 return
             self._gap.set()
             self.reader.publish(_stream_gap())
 
     def finish(self) -> None:
-        self._finished.set()
+        with self._publish_lock:
+            if self._finished.is_set():
+                return
+            self._finished.set()
+        if self._worker is None and self._buffer is not None:
+            self._store()
         if self._worker is not None:
             self._worker.join(timeout=_BUFFER_CLEANUP_SECONDS)
             if self._worker.is_alive():

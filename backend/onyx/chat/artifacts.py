@@ -1,6 +1,6 @@
 from collections.abc import Mapping
 
-from onyx.agents.runtime import RunSnapshot
+from onyx.agents.models import RunSnapshot
 from onyx.chat.citation_processor import (
     CitationMapping,
     CitationMode,
@@ -66,7 +66,7 @@ class ChatArtifacts:
         message: AssistantMessage,
         responses: list[ToolResultMessage],
     ) -> None:
-        """Apply completed-step artifacts to the next request's context policy."""
+        """Apply accepted tool results to the next request's context policy."""
         for response in responses:
             data = response.details
             if response.tool_name == SearchTool.NAME:
@@ -144,7 +144,7 @@ def project_tool_artifacts(
                 for document in result.details.citation_mapping.values():
                     documents.setdefault(document.document_id, document)
             update_citation_processor_from_tool_result(result, citations)
-    for child in snapshot.children:
+    for child in snapshot.child_runs:
         child_artifacts = project_tool_artifacts(child, tool_ids)
         records.extend(child_artifacts.tool_calls)
         documents.update(child_artifacts.all_search_docs)

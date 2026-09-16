@@ -80,6 +80,10 @@ def parse_tool_arguments[T: BaseModel](
 class Tool(abc.ABC):
     """An application tool bound to the runtime with a ToolContext."""
 
+    def for_agent(self) -> "Tool":
+        """Return an instance safe to bind to one agent's conversation."""
+        return self
+
     @property
     def execution_mode(self) -> ToolExecutionMode:
         return ToolExecutionMode.PARALLEL

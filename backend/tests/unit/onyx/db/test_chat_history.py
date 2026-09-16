@@ -5,12 +5,13 @@ import pytest
 
 from onyx.configs.constants import MessageType
 from onyx.context.messages import prompt_metadata
+from onyx.db.agent_transcript import read_chat_execution, read_root_transcript
 from onyx.db.chat_history import (
     _build_tool_call_response_history_message,
     capture_chat_history,
     convert_chat_history,
 )
-from onyx.db.models import ChatMessage
+from onyx.db.models import AgentRun, ChatMessage
 from onyx.file_store.models import ChatFileType, ChatLoadedFile
 from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
 
@@ -45,7 +46,7 @@ class TestConvertChatHistory:
         msg = MagicMock()
         msg.id = 1
         msg.is_clarification = False
-        msg.agent_transcript = None
+        msg.response_rendering = None
         msg.message = message
         msg.message_type = message_type
         msg.token_count = token_count
@@ -181,3 +182,17 @@ def test_legacy_summary_matches_branch(parent_id: int, expected: bool) -> None:
         summary
     ]
     assert find_summary_for_branch(session, history) is (summary if expected else None)
+
+
+@pytest.mark.parametrize("root_count", [0, 2])
+def test_saved_rendering_requires_exactly_one_root(root_count: int) -> None:
+    message = ChatMessage(
+        response_rendering={},
+        agent_runs=[
+            AgentRun(id=f"root-{index}", parent_run_id=None)
+            for index in range(root_count)
+        ],
+    )
+    for read in (read_chat_execution, read_root_transcript):
+        with pytest.raises(ValueError, match="exactly one root"):
+            read(message)

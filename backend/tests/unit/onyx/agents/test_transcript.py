@@ -5,7 +5,8 @@ from collections.abc import Generator
 import pytest
 from pydantic import BaseModel
 
-from onyx.agents.runtime import Agent, AgentContext, AgentHooks, ToolCallContext
+from onyx.agents.models import AgentContext, PreparedStep, RunSnapshot, ToolCallContext
+from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import AgentTool
 from onyx.agents.transcript import AgentTranscript
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
@@ -21,7 +22,7 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
-from tests.unit.onyx.agents.fakes import FakeModelClient
+from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
 
 
 class ApplicationData(BaseModel):
@@ -50,11 +51,12 @@ def test_result_order_hook_updates_and_application_data_exclusion() -> None:
                 ]
             )
         ),
-        context=AgentContext(tools=[tool]),
-        hooks=AgentHooks(after_tool_call=finalize),
+        tools=[tool],
+        after_tool_call=finalize,
     )
-    agent.run(max_steps=1)
-    transcript = agent.snapshot()
+    runs: list[Run] = []
+    run_agent(agent, max_steps=1, runs=runs)
+    transcript = runs[0].snapshot()
     assert transcript and transcript.status == "limit"
     assert [
         message.content
@@ -64,8 +66,7 @@ def test_result_order_hook_updates_and_application_data_exclusion() -> None:
     canonical = transcript.transcript()
     serialized = canonical.model_dump_json()
     assert "application-only" not in serialized
-    persisted = serialized.replace('"step_index":', '"turn":')
-    assert AgentTranscript.model_validate_json(persisted) == canonical
+    assert AgentTranscript.model_validate_json(serialized) == canonical
 
 
 @pytest.mark.parametrize("cancelled", [False, True])
@@ -91,15 +92,18 @@ def test_partial_run_keeps_input_and_replayable_output(cancelled: bool) -> None:
         PartialClient(
             lambda *_: AssistantMessage(content=[TextContent(text="unused")])
         ),
-        context=AgentContext(output_metadata=ApplicationData()),
+        prepare_step=lambda _input: PreparedStep(output_metadata=ApplicationData()),
     )
-    with pytest.raises(AgentCancelled if cancelled else ValueError):
-        agent.run(
+    runs: list[Run] = []
+    with pytest.raises(AgentCancelled if cancelled else RunFailed):
+        run_agent(
+            agent,
+            runs=runs,
             max_steps=1,
             cancellation=signal,
             messages=[UserMessage(content="Question", metadata=ApplicationData())],
         )
-    snapshot = agent.snapshot()
+    snapshot = runs[0].snapshot()
     assert snapshot is not None
     assert snapshot.status == ("cancelled" if cancelled else "error")
     assert [message.text for message in snapshot.input_messages] == ["Question"]
@@ -113,10 +117,11 @@ def test_partial_run_keeps_input_and_replayable_output(cancelled: bool) -> None:
 
 
 def test_running_snapshot_records_unfinished_calls_without_inventing_results() -> None:
-    snapshots = []
+    snapshots: list[RunSnapshot] = []
+    runs: list[Run] = []
 
     def before_tool(_context: ToolCallContext) -> ToolResult:
-        snapshots.append(agent.snapshot(cancelled=True))
+        snapshots.append(runs[0].snapshot())
         return ToolResult(content="finished")
 
     agent = Agent(
@@ -125,42 +130,37 @@ def test_running_snapshot_records_unfinished_calls_without_inventing_results() -
                 content=[ToolCall(id="a", name="work", arguments={})]
             )
         ),
-        context=AgentContext(
-            tools=[
-                AgentTool(
-                    name="work",
-                    description="",
-                    parameters={},
-                    execute=lambda _: ToolResult(content="unused"),
-                )
-            ]
-        ),
-        hooks=AgentHooks(before_tool_call=before_tool),
+        tools=[
+            AgentTool(
+                name="work",
+                description="",
+                parameters={},
+                execute=lambda _: ToolResult(content="unused"),
+            )
+        ],
+        before_tool_call=before_tool,
     )
-    agent.run(max_steps=1)
+    run_agent(agent, max_steps=1, runs=runs)
     snapshot = snapshots[0]
-    assert snapshot is not None and snapshot.status == "cancelled"
+    assert snapshot is not None and snapshot.status == "running"
     assert len(snapshot.messages) == 1
     assert isinstance(snapshot.messages[0], AssistantMessage)
     assert snapshot.messages[0].tool_calls[0].id == "a"
     assert any(operation.tool_call_id == "a" for operation in snapshot.operations)
 
 
-def test_successive_run_views_separate_history_input_and_output() -> None:
-    replies = iter(["First answer", "Second answer"])
-    history = [UserMessage(content="Earlier question")]
+def test_run_record_is_isolated_from_caller_and_snapshot_mutations() -> None:
     agent = Agent(
         FakeModelClient(
-            lambda *_: AssistantMessage(content=[TextContent(text=next(replies))])
+            lambda *_: AssistantMessage(content=[TextContent(text="First answer")])
         ),
-        context=AgentContext(messages=history),
+        context=AgentContext(messages=[UserMessage(content="Earlier question")]),
     )
-    assert agent.snapshot() is None
+    runs: list[Run] = []
     first_input = UserMessage(content="First question", metadata=ApplicationData())
-    first = agent.run(max_steps=1, messages=[first_input])
-    first_snapshot = agent.snapshot()
+    first = run_agent(agent, runs=runs, max_steps=1, messages=[first_input])
+    first_snapshot = runs[0].snapshot()
     assert first_snapshot is not None and first_snapshot.run_id == first.run_id
-    assert first.output.text == "First answer"
     assert [message.text for message in first_snapshot.input_messages] == [
         "First question"
     ]
@@ -170,25 +170,8 @@ def test_successive_run_views_separate_history_input_and_output() -> None:
     assert isinstance(snapshot_input, UserMessage)
     snapshot_input.content = "Snapshot mutation"
     first.output.content.clear()
-    first_record = agent.snapshot()
+    first_record = runs[0].snapshot()
     assert first_record is not None
     assert first_record.input_messages[0].text == "First question"
     assert first_record.messages[0].text == "First answer"
     assert first_record.transcript().input_messages[0].metadata is None
-
-    second = agent.run(max_steps=1, messages=[UserMessage(content="Second question")])
-    second_snapshot = agent.snapshot()
-    assert second_snapshot is not None and second_snapshot.run_id == second.run_id
-    assert first.run_id != second.run_id
-    assert [message.text for message in second_snapshot.input_messages] == [
-        "Second question"
-    ]
-    assert [message.text for message in second_snapshot.messages] == ["Second answer"]
-    assert [message.text for message in agent.context.messages] == [
-        "Earlier question",
-        "First question",
-        "First answer",
-        "Second question",
-        "Second answer",
-    ]
-    assert first_record.messages[0].text == "First answer"

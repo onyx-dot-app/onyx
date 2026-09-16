@@ -2,8 +2,6 @@ from collections.abc import Sequence
 
 from pydantic import BaseModel, ConfigDict
 
-from onyx.agents.runtime import AgentStep
-from onyx.chat.artifacts import ChatArtifacts
 from onyx.chat.models import PersonaPromptConfig
 from onyx.chat.prompt_utils import (
     build_system_prompt,
@@ -17,7 +15,6 @@ from onyx.file_store.models import ExtractedContextFiles
 from onyx.llm.models import (
     Message,
     SystemMessage,
-    ToolChoiceOptions,
     ToolResultMessage,
     UserMessage,
 )
@@ -38,60 +35,53 @@ class ChatReminderContext(BaseModel):
     has_context_documents: bool
 
 
-class ChatReminderPolicy:
+class ChatReminders:
     def __init__(self, *, enabled: bool = True) -> None:
         self.enabled = enabled
-        self._cite_documents = False
-        self.just_ran_web_search = False
-        self.file_generated = False
 
-    @property
-    def cite_documents(self) -> bool:
-        return self.enabled and self._cite_documents
+    def should_cite(self, results: Sequence[ToolResultMessage]) -> bool:
+        return self.enabled and any(
+            result.tool_name in CITEABLE_TOOLS_NAMES for result in results
+        )
 
-    def after_tools(self, responses: Sequence[ToolResultMessage]) -> None:
-        self.just_ran_web_search = False
-        if not self.enabled:
-            return
-        for response in responses:
-            data = response.details
-            if response.tool_name in CITEABLE_TOOLS_NAMES:
-                self._cite_documents = True
-            if isinstance(data, SearchDocsResponse):
-                if data.search_docs and response.tool_name == WebSearchTool.NAME:
-                    self.just_ran_web_search = True
-            if (
-                response.tool_name == PythonTool.NAME
-                and isinstance(data, PythonToolRichResponse)
-                and data.generated_files
-            ):
-                self.file_generated = True
-
-    def render(self, context: ChatReminderContext) -> str | None:
+    def render(
+        self,
+        context: ChatReminderContext,
+        results: Sequence[ToolResultMessage],
+        previous_results: Sequence[ToolResultMessage],
+    ) -> str | None:
         if not self.enabled:
             return context.persona_task_prompt
         return select_reminder_text(
             ran_image_gen=context.ran_image_gen,
-            just_ran_web_search=self.just_ran_web_search,
+            just_ran_web_search=any(
+                result.tool_name == WebSearchTool.NAME
+                and isinstance(result.details, SearchDocsResponse)
+                and result.details.search_docs
+                for result in previous_results
+            ),
             has_open_url_tool=context.has_open_url_tool,
             out_of_cycles=context.out_of_cycles,
             persona_task_prompt=context.persona_task_prompt,
-            include_citation_reminder=self.cite_documents
+            include_citation_reminder=self.should_cite(results)
             or context.has_context_documents,
-            include_file_reminder=self.file_generated,
+            include_file_reminder=any(
+                result.tool_name == PythonTool.NAME
+                and isinstance(result.details, PythonToolRichResponse)
+                and result.details.generated_files
+                for result in results
+            ),
         )
 
 
-class PreparedChatStep(BaseModel):
+class ChatPrompt(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     system_prompt: Message | None
     custom_prompt: Message | None
     reminder: Message | None
-    tools: list[Tool]
-    tool_choice: ToolChoiceOptions
 
 
-class ChatContextPolicy:
+class ChatContext:
     def __init__(
         self,
         *,
@@ -101,18 +91,14 @@ class ChatContextPolicy:
         base_prompt: str,
         files: ExtractedContextFiles,
         memory: UserMemoryContext | None,
-        artifacts: ChatArtifacts,
-        reminders: ChatReminderPolicy,
-        forced_tool_id: int | None = None,
+        reminders: ChatReminders,
         inject_memories: bool = True,
     ) -> None:
         self.tools = tools
         self.persona = persona
         self.files = files
         self.memory = memory
-        self.artifacts = artifacts
         self.reminders = reminders
-        self.forced_tool_id = forced_tool_id
         self.inject_memories = inject_memories
         self.base_prompt = base_prompt
         values = memory.user_info.placeholder_values if memory else {}
@@ -124,23 +110,18 @@ class ChatContextPolicy:
         self.persona_system = substitute(persona.system_prompt if persona else None)
         self.persona_task = substitute(persona.task_prompt if persona else None)
 
-    def prepare(self, step: AgentStep) -> PreparedChatStep:
-        tools = self.tools
-        choice = ToolChoiceOptions.AUTO
-        if self.forced_tool_id is not None:
-            tools = [tool for tool in tools if tool.id == self.forced_tool_id]
-            if not tools:
-                raise ValueError(f"Tool {self.forced_tool_id} not found")
-            self.forced_tool_id = None
-            choice = ToolChoiceOptions.REQUIRED
-        elif step.is_last or self.artifacts.ran_image_gen:
-            tools = []
-            choice = ToolChoiceOptions.NONE
-
+    def prepare(
+        self,
+        results: Sequence[ToolResultMessage],
+        previous_results: Sequence[ToolResultMessage],
+        *,
+        is_last_step: bool,
+        ran_image_gen: bool,
+    ) -> ChatPrompt:
         context_documents = bool(
             self.files.use_as_search_filter or self.files.file_texts
         )
-        cite = self.reminders.cite_documents or context_documents
+        cite = self.reminders.should_cite(results) or context_documents
         datetime_aware = self.persona.datetime_aware if self.persona else True
 
         def render(text: str | None, append_datetime: bool = False) -> str | None:
@@ -178,16 +159,18 @@ class ChatContextPolicy:
             system = render(self.custom_prompt, True)
         reminder = self.reminders.render(
             ChatReminderContext(
-                ran_image_gen=self.artifacts.ran_image_gen,
+                ran_image_gen=ran_image_gen,
                 has_open_url_tool=any(
                     isinstance(tool, OpenURLTool) for tool in self.tools
                 ),
-                out_of_cycles=step.is_last,
+                out_of_cycles=is_last_step,
                 persona_task_prompt=render(self.persona_task),
                 has_context_documents=context_documents,
-            )
+            ),
+            results,
+            previous_results,
         )
-        return PreparedChatStep(
+        return ChatPrompt(
             system_prompt=SystemMessage(content=system) if system else None,
             custom_prompt=UserMessage(content=custom) if custom else None,
             reminder=UserMessage(
@@ -195,6 +178,4 @@ class ChatContextPolicy:
             )
             if reminder
             else None,
-            tools=tools,
-            tool_choice=choice,
         )

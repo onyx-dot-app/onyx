@@ -1335,6 +1335,41 @@ class TenantRedisPipeline:
     # Passthrough
     # --------------------------------------------------------------------------
 
+    def get(self, name: KeyArg) -> TenantRedisPipeline:
+        self._p.get(_prefix_key(self._prefix, name))
+        return self
+
+    def hget(self, name: KeyArg, key: str | bytes) -> TenantRedisPipeline:
+        self._p.hget(_prefix_key(self._prefix, name), key)
+        return self
+
+    def watch(self, *names: KeyArg) -> None:
+        """Watch tenant keys until EXEC or reset."""
+        self._p.watch(*(_prefix_key(self._prefix, name) for name in names))
+
+    def get_watched(self, name: KeyArg) -> bytes | None:
+        """Read immediately after WATCH and before MULTI."""
+        if not self._p.watching:
+            raise RuntimeError("An immediate read requires WATCH")
+        # redis-py returns bytes in WATCH mode with decode_responses disabled.
+        return cast(bytes | None, self._p.get(_prefix_key(self._prefix, name)))
+
+    def hgetall_watched(self, name: KeyArg) -> dict[bytes, bytes]:
+        """Read a hash immediately after WATCH and before MULTI."""
+        if not self._p.watching:
+            raise RuntimeError("An immediate read requires WATCH")
+        # redis-py returns byte keys and values for this client's encoding.
+        return cast(
+            dict[bytes, bytes], self._p.hgetall(_prefix_key(self._prefix, name))
+        )
+
+    def multi(self) -> None:
+        self._p.multi()
+
+    def hset(self, name: KeyArg, mapping: Mapping[bytes, bytes]) -> TenantRedisPipeline:
+        self._p.hset(_prefix_key(self._prefix, name), mapping=mapping)
+        return self
+
     def execute(self) -> list[Any]:
         """Sends every queued command to Redis and returns their results.
 

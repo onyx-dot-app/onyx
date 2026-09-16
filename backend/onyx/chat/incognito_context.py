@@ -1,25 +1,18 @@
-"""Ephemeral conversation context for incognito chat turns.
-
-USAGE_ONLY must carry the live conversation outside Postgres, so it lives in
-Redis: one value per session, a sliding TTL that starts over on every save,
-and explicit teardown when the chat closes. Keys are tenant-prefixed by the
-Redis client. Redis may evict or expire the value mid-session: an expired
-value loads as empty and the turn continues without earlier context.
-
-Concurrent turns on one session are possible (the chat processing fence is a
-status marker, not admission control), so save is a compare-and-set on a
-version. A lost save means a concurrent writer won or the session ended, and
-the caller must not retry with the history it loaded.
-"""
+"""Bounded temporary replay state, committed atomically within tenant Redis."""
 
 import json
 from collections.abc import Collection, Sequence
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
-from pydantic import BaseModel, TypeAdapter, ValidationError
+from pydantic import BaseModel, Field, TypeAdapter, ValidationError
+from redis.exceptions import WatchError
 
+from onyx.agents.coordination import AgentInfo
+from onyx.agents.transcript import AgentTranscript
 from onyx.cache.interface import CacheBackendType
+from onyx.chat.citation_processor import CitationMapping
+from onyx.chat.models import MAX_DISCOVERED_AGENTS, RestoredAgent
 from onyx.chat.stream_buffer import stream_buffer_key_pattern
 from onyx.configs import app_configs
 from onyx.configs.constants import MessageType
@@ -36,6 +29,7 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.tenant_redis_client import TenantRedisPipeline
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -49,8 +43,10 @@ _TOMBSTONE_TTL_SECONDS = INCOGNITO_CONTEXT_TTL_SECONDS
 # These only bound what one session may hold in Redis.
 _MAX_CONTEXT_MESSAGES = 200
 _MAX_CONTEXT_BYTES = 1_000_000
-# 15 digits stay exact in a Lua double, and turn counts never approach it.
 _MAX_VERSION_DIGITS = 15
+_MAX_COMMIT_ATTEMPTS = 8
+_ROOT_ID_FIELD = b"root_id"
+_PREVIOUS_RUN_FIELD = b"previous_run_id"
 
 _KEY_PREFIX = "incognito_ctx"
 
@@ -131,28 +127,7 @@ def _write_message(message: Message) -> dict[str, Any]:
     return data
 
 
-# Stored value grammar: ``<version>:<messages json>``. Lua and Python agree
-# only on the digits-before-colon prefix, mirrored by _parse_version_prefix.
-# Non-matching values read as version 0. Applies when stored version == ARGV[1].
 _TOMBSTONE = b"tombstone"
-_CAS_SCRIPT = """
-local cur = redis.call('GET', KEYS[1])
-if cur == 'tombstone' then
-  return 0
-end
-local cur_version = 0
-if cur then
-  local v = string.match(cur, '^(%d+):')
-  if v ~= nil and #v <= 15 then
-    cur_version = tonumber(v)
-  end
-end
-if cur_version ~= tonumber(ARGV[1]) then
-  return 0
-end
-redis.call('SET', KEYS[1], ARGV[2], 'EX', tonumber(ARGV[3]))
-return 1
-"""
 
 
 class IncognitoContext(BaseModel):
@@ -160,6 +135,7 @@ class IncognitoContext(BaseModel):
 
     version: int
     messages: list[Message]
+    previous_run_id: str | None = None
 
 
 def incognito_context_available() -> bool:
@@ -180,12 +156,7 @@ def _stored_context(chat_session_id: UUID) -> bytes | None:
 
 
 def _parse_version_prefix(raw: bytes) -> tuple[int, bytes | None]:
-    """The value's version and JSON body, or (0, None) for a tombstone or a
-    value this store did not write.
-
-    Byte-for-byte the same rule as the CAS script: ASCII digits, at most
-    ``_MAX_VERSION_DIGITS`` of them, immediately followed by a colon.
-    """
+    """Read the version prefix without accepting unbounded integer input."""
     prefix, sep, body = raw.partition(b":")
     if sep and prefix.isdigit() and len(prefix) <= _MAX_VERSION_DIGITS:
         return int(prefix), body
@@ -193,13 +164,18 @@ def _parse_version_prefix(raw: bytes) -> tuple[int, bytes | None]:
 
 
 def load_incognito_context(chat_session_id: UUID) -> IncognitoContext:
-    """The session's context, messages oldest first.
+    """Read root replay state and its predecessor from one Redis transaction."""
+    with get_redis_client().pipeline() as pipeline:
+        pipeline.get(_context_key(chat_session_id))
+        pipeline.hget(_agents_key(chat_session_id), _PREVIOUS_RUN_FIELD)
+        # Redis pipelines return untyped results in queued command order.
+        raw, previous_run = cast(list[bytes | None], pipeline.execute())
+    return _decode_context(chat_session_id, raw, previous_run)
 
-    Empty messages mean nothing was written, the session was torn down, the
-    value expired, or its body failed to parse. The turn proceeds with whatever
-    loads: missing context is degraded recall, never an error.
-    """
-    raw = _stored_context(chat_session_id)
+
+def _decode_context(
+    chat_session_id: UUID, raw: bytes | None, previous_run: bytes | None
+) -> IncognitoContext:
     if raw is None:
         return IncognitoContext(version=0, messages=[])
 
@@ -223,40 +199,85 @@ def load_incognito_context(chat_session_id: UUID) -> IncognitoContext:
             "Dropping unparseable incognito context for session %s", chat_session_id
         )
         return IncognitoContext(version=version, messages=[])
-    return IncognitoContext(version=version, messages=messages)
+    return IncognitoContext(
+        version=version,
+        messages=messages,
+        previous_run_id=previous_run.decode() if previous_run else None,
+    )
+
+
+class _IncognitoWrite(BaseModel):
+    context: bytes
+    agents: dict[bytes, bytes]
+
+
+def _retained_state(
+    context: IncognitoContext,
+    agents: dict[bytes, bytes],
+    *,
+    protected_response: bytes | None = None,
+    required_messages: int = 1,
+) -> _IncognitoWrite:
+    retained = dict(agents)
+    retained.pop(b"bytes", None)
+    retained.pop(_PREVIOUS_RUN_FIELD, None)
+    if context.previous_run_id is not None:
+        retained[_PREVIOUS_RUN_FIELD] = context.previous_run_id.encode()
+    messages = [
+        _write_message(message) for message in context.messages[-_MAX_CONTEXT_MESSAGES:]
+    ]
+    required_messages = min(required_messages, len(messages))
+    removable = sorted(
+        (key for key in retained if key.isdigit() and key != protected_response),
+        key=int,
+    )
+    payload = f"{context.version + 1}:".encode() + json.dumps(messages).encode()
+    size = len(payload) + sum(len(key) + len(value) for key, value in retained.items())
+    for key in removable:
+        if size <= _MAX_CONTEXT_BYTES:
+            break
+        size -= len(key) + len(retained.pop(key))
+    while size > _MAX_CONTEXT_BYTES and len(messages) > required_messages:
+        old_size = len(payload)
+        messages = messages[1:]
+        payload = f"{context.version + 1}:".encode() + json.dumps(messages).encode()
+        size += len(payload) - old_size
+    if size > _MAX_CONTEXT_BYTES:
+        raise ValueError("Incognito response exceeds its storage limit")
+    return _IncognitoWrite(context=payload, agents=retained)
+
+
+def _queue_write(
+    pipeline: TenantRedisPipeline, chat_session_id: UUID, state: _IncognitoWrite
+) -> None:
+    pipeline.multi()
+    pipeline.set(
+        _context_key(chat_session_id), state.context, ex=INCOGNITO_CONTEXT_TTL_SECONDS
+    )
+    pipeline.delete(_agents_key(chat_session_id))
+    if state.agents:
+        pipeline.hset(_agents_key(chat_session_id), state.agents)
+        pipeline.expire(_agents_key(chat_session_id), INCOGNITO_CONTEXT_TTL_SECONDS)
 
 
 def save_incognito_context(chat_session_id: UUID, context: IncognitoContext) -> bool:
-    """Write the full history, bump the version, restart the idle clock.
-
-    Applies only while the stored version still equals ``context.version``
-    and the session has not been torn down. False means the write was
-    discarded.
-
-    Images are stripped: file bytes do not round-trip JSON, and incognito
-    attachments only live within their own turn. Oldest messages fall off
-    past the count and byte caps.
-    """
-    trimmed = [
-        _write_message(message) for message in context.messages[-_MAX_CONTEXT_MESSAGES:]
-    ]
-    body = json.dumps(trimmed).encode()
-    while len(body) > _MAX_CONTEXT_BYTES and len(trimmed) > 1:
-        trimmed = trimmed[1:]
-        body = json.dumps(trimmed).encode()
-    payload = f"{context.version + 1}:".encode() + body
-
-    client = get_redis_client()
-    result = client.eval(
-        _CAS_SCRIPT,
-        keys=[_context_key(chat_session_id)],
-        args=[
-            str(context.version).encode(),
-            payload,
-            str(INCOGNITO_CONTEXT_TTL_SECONDS).encode(),
-        ],
-    )
-    return bool(result)
+    """Replace the expected root context and apply the shared storage bound."""
+    with get_redis_client().pipeline() as pipeline:
+        pipeline.watch(_context_key(chat_session_id), _agents_key(chat_session_id))
+        raw = pipeline.get_watched(_context_key(chat_session_id))
+        if raw == _TOMBSTONE:
+            return False
+        version = _parse_version_prefix(raw)[0] if raw is not None else 0
+        if version != context.version:
+            return False
+        agents = pipeline.hgetall_watched(_agents_key(chat_session_id))
+        state = _retained_state(context, agents)
+        _queue_write(pipeline, chat_session_id, state)
+        try:
+            pipeline.execute()
+        except WatchError:
+            return False
+    return True
 
 
 def append_incognito_message(chat_session_id: UUID, message: Message) -> None:
@@ -264,7 +285,10 @@ def append_incognito_message(chat_session_id: UUID, message: Message) -> None:
 
 
 def append_incognito_messages(
-    chat_session_id: UUID, messages: Sequence[Message]
+    chat_session_id: UUID,
+    messages: Sequence[Message],
+    *,
+    previous_run_id: str | None = None,
 ) -> None:
     """Append one message to the session's live context, tolerating failure.
 
@@ -276,6 +300,8 @@ def append_incognito_messages(
     try:
         context = load_incognito_context(chat_session_id)
         context.messages.extend(messages)
+        if previous_run_id is not None:
+            context.previous_run_id = previous_run_id
         if not save_incognito_context(chat_session_id, context):
             logger.warning(
                 "Incognito context save lost the CAS for session %s", chat_session_id
@@ -328,6 +354,255 @@ def teardown_incognito_session(chat_session_id: UUID) -> None:
     stream chunks holding the streamed answer NDJSON."""
     client = get_redis_client()
     client.set(_context_key(chat_session_id), _TOMBSTONE, ex=_TOMBSTONE_TTL_SECONDS)
+    client.delete(_agents_key(chat_session_id))
     buffered = list(client.scan_iter(match=stream_buffer_key_pattern(chat_session_id)))
     if buffered:
         client.delete(*buffered)
+
+
+def _agents_key(chat_session_id: UUID) -> str:
+    return f"{_KEY_PREFIX}:{chat_session_id}:agents"
+
+
+def _read_agent_fields(
+    chat_session_id: UUID, message_ids: Sequence[int]
+) -> list[bytes | None]:
+    if _stored_context(chat_session_id) in (None, _TOMBSTONE):
+        return [None] * len(message_ids)
+    return get_redis_client().hmget(
+        _agents_key(chat_session_id),
+        [str(message_id) for message_id in message_ids],
+    )
+
+
+class IncognitoAgentResponse(BaseModel):
+    agents: list[RestoredAgent] = Field(default_factory=list)
+
+
+def _decode_agent_field(raw: bytes | None) -> IncognitoAgentResponse:
+    if raw is None:
+        return IncognitoAgentResponse()
+    return IncognitoAgentResponse.model_validate_json(raw)
+
+
+def _incognito_records(
+    chat_session_id: UUID, visible_message_ids: Sequence[int]
+) -> list[RestoredAgent]:
+    if not visible_message_ids:
+        return []
+    return [
+        agent
+        for raw in reversed(_read_agent_fields(chat_session_id, visible_message_ids))
+        for agent in _decode_agent_field(raw).agents
+    ]
+
+
+def _incognito_metadata(records: list[RestoredAgent]) -> dict[str, AgentInfo]:
+    by_id: dict[str, RestoredAgent] = {}
+    for agent in records:
+        by_id.pop(agent.agent_id, None)
+        by_id[agent.agent_id] = agent
+    return {
+        agent_id: AgentInfo(
+            id=agent_id,
+            path=agent.agent_path,
+            parent_id=agent.parent_agent_id,
+            description=agent.description,
+            restoration_config=agent.configuration,
+            latest_run_id=agent.transcripts[-1].run_id if agent.transcripts else None,
+            status=agent.transcripts[-1].status if agent.transcripts else None,
+        )
+        for agent_id, agent in by_id.items()
+    }
+
+
+def load_incognito_agent_metadata(
+    chat_session_id: UUID, visible_message_ids: Sequence[int]
+) -> list[AgentInfo]:
+    metadata = _incognito_metadata(
+        _incognito_records(chat_session_id, visible_message_ids)
+    )
+    selected: dict[str, AgentInfo] = {}
+    for info in list(metadata.values())[-MAX_DISCOVERED_AGENTS:]:
+        selected[info.id] = info
+        parent_id = info.parent_id
+        while (
+            parent_id is not None
+            and parent_id in metadata
+            and parent_id not in selected
+        ):
+            parent = metadata[parent_id]
+            selected[parent_id] = parent
+            parent_id = parent.parent_id
+    return sorted(selected.values(), key=lambda info: info.path.count("/"))
+
+
+def lookup_incognito_agent(
+    chat_session_id: UUID,
+    visible_message_ids: Sequence[int],
+    agent_id: str,
+    parent_id: str,
+) -> AgentInfo | None:
+    metadata = _incognito_metadata(
+        _incognito_records(chat_session_id, visible_message_ids)
+    )
+    info = metadata.get(agent_id)
+    return info if info and info.parent_id == parent_id else None
+
+
+def load_incognito_agent_history(
+    chat_session_id: UUID, visible_message_ids: Sequence[int], agent_id: str
+) -> RestoredAgent:
+    records = [
+        agent
+        for agent in _incognito_records(chat_session_id, visible_message_ids)
+        if agent.agent_id == agent_id
+    ]
+    if not records:
+        raise ValueError("Agent is not visible on the selected incognito branch")
+    latest = records[-1]
+    by_id = {run.run_id: run for record in records for run in record.transcripts}
+    selected: list[AgentTranscript] = []
+    visited: set[str] = set()
+    run_id = latest.transcripts[-1].run_id if latest.transcripts else None
+    while run_id is not None:
+        if run_id in visited:
+            raise ValueError("Incognito agent history contains a cycle")
+        visited.add(run_id)
+        run = by_id.get(run_id)
+        if run is None:
+            raise ValueError("Incognito agent history expired and cannot be resumed")
+        selected.append(run)
+        run_id = run.previous_run_id
+    sources: CitationMapping = {}
+    for record in records:
+        if any(run.run_id in visited for run in record.transcripts):
+            sources.update(record.sources)
+    return latest.model_copy(
+        update={"transcripts": list(reversed(selected)), "sources": sources}
+    )
+
+
+def load_incognito_saved_run(
+    chat_session_id: UUID,
+    visible_message_ids: Sequence[int],
+    run_id: str,
+    parent_id: str,
+) -> AgentTranscript | None:
+    records = _incognito_records(chat_session_id, visible_message_ids)
+    metadata = _incognito_metadata(records)
+    for agent in records:
+        if metadata[agent.agent_id].parent_id != parent_id:
+            continue
+        for run in agent.transcripts:
+            if run.run_id == run_id:
+                return run
+    return None
+
+
+def get_or_create_incognito_root_id(
+    chat_session_id: UUID, proposed_agent_id: str
+) -> str:
+    for _ in range(_MAX_COMMIT_ATTEMPTS):
+        with get_redis_client().pipeline() as pipeline:
+            pipeline.watch(_context_key(chat_session_id), _agents_key(chat_session_id))
+            raw = pipeline.get_watched(_context_key(chat_session_id))
+            if raw is None or raw == _TOMBSTONE:
+                raise RuntimeError("Incognito session ended")
+            agents = pipeline.hgetall_watched(_agents_key(chat_session_id))
+            if root_id := agents.get(_ROOT_ID_FIELD):
+                return root_id.decode()
+            agents[_ROOT_ID_FIELD] = proposed_agent_id.encode()
+            context = _decode_context(
+                chat_session_id, raw, agents.get(_PREVIOUS_RUN_FIELD)
+            )
+            state = _retained_state(context, agents)
+            _queue_write(pipeline, chat_session_id, state)
+            try:
+                pipeline.execute()
+            except WatchError:
+                continue
+            return proposed_agent_id
+    raise RuntimeError("Incognito context changed repeatedly during registration")
+
+
+def _response_records(
+    transcript: AgentTranscript | None,
+    sources_by_run: dict[str, CitationMapping],
+) -> IncognitoAgentResponse:
+    response = IncognitoAgentResponse()
+    local: dict[str, RestoredAgent] = {}
+
+    def append(run: AgentTranscript, parent_id: str | None = None) -> None:
+        if run.agent_id is None or run.run_id is None:
+            raise ValueError("Temporary agent runs require agent and run identities")
+        saved = local.get(run.agent_id)
+        if saved is None:
+            saved = RestoredAgent(
+                agent_id=run.agent_id,
+                agent_path=run.agent_path,
+                parent_agent_id=parent_id,
+                description=run.agent_description,
+                configuration=run.restoration_config,
+                transcripts=[],
+            )
+            response.agents.append(saved)
+            local[run.agent_id] = saved
+        if any(item.run_id == run.run_id for item in saved.transcripts):
+            raise ValueError("Duplicate temporary agent run")
+        saved.transcripts.append(run.model_copy(deep=True, update={"child_runs": []}))
+        saved.sources.update(sources_by_run.get(run.run_id, {}))
+        for child in run.child_runs:
+            append(child, run.agent_id)
+
+    if transcript is not None:
+        append(transcript)
+    return response
+
+
+def save_incognito_response(
+    chat_session_id: UUID,
+    transcript: AgentTranscript | None,
+    sources_by_run: dict[str, CitationMapping],
+    *,
+    message_id: int,
+    messages: Sequence[Message],
+) -> None:
+    """Atomically save replay, evicting old records before old root messages.
+    Evicted child histories cannot resume; oversized responses leave both stores unchanged.
+    """
+    body = _response_records(transcript, sources_by_run).model_dump_json().encode()
+    response_key = str(message_id).encode()
+    for _ in range(_MAX_COMMIT_ATTEMPTS):
+        with get_redis_client().pipeline() as pipeline:
+            pipeline.watch(_context_key(chat_session_id), _agents_key(chat_session_id))
+            raw = pipeline.get_watched(_context_key(chat_session_id))
+            if raw is None or raw == _TOMBSTONE:
+                raise RuntimeError("Incognito session ended")
+            agents = pipeline.hgetall_watched(_agents_key(chat_session_id))
+            if previous := agents.get(response_key):
+                if previous != body:
+                    raise ValueError(
+                        "Incognito response already has different agent records"
+                    )
+                return
+            context = _decode_context(
+                chat_session_id, raw, agents.get(_PREVIOUS_RUN_FIELD)
+            )
+            context.messages.extend(messages)
+            if transcript is not None:
+                context.previous_run_id = transcript.run_id
+            agents[response_key] = body
+            state = _retained_state(
+                context,
+                agents,
+                protected_response=response_key,
+                required_messages=len(messages),
+            )
+            _queue_write(pipeline, chat_session_id, state)
+            try:
+                pipeline.execute()
+            except WatchError:
+                continue
+            return
+    raise RuntimeError("Incognito context changed repeatedly during response save")
