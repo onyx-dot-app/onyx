@@ -172,6 +172,9 @@ def is_craft_enabled_for_user(
     if user.account_type == AccountType.ANONYMOUS:
         return False
 
+    if not user.is_active:
+        return False
+
     override = user.craft_enabled
     if override is False:
         return False

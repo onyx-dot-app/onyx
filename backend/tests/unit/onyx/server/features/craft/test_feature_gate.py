@@ -16,6 +16,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from onyx.db.enums import AccountType
+from onyx.db.models import User
 from onyx.feature_flags.interface import FeatureFlagProvider, NoOpFeatureFlagProvider
 from onyx.server.features.build import utils as build_utils
 from onyx.server.features.build.utils import is_craft_enabled_for_user
@@ -225,3 +226,17 @@ def test_posthog_flag_disables_when_false(monkeypatch: pytest.MonkeyPatch) -> No
             {"tenant_id": "tenant_other", "email": "user@tenant-dev.example"},
         )
     ]
+
+
+@pytest.mark.parametrize("override", [True, None])
+def test_inactive_owner_cannot_enable_craft(override: bool | None) -> None:
+    user = User(
+        id=uuid4(),
+        email="owner@example.com",
+        account_type=AccountType.STANDARD,
+        is_active=True,
+        craft_enabled=override,
+    )
+    assert is_craft_enabled_for_user(user, True, True) is True
+    user.is_active = False
+    assert is_craft_enabled_for_user(user, True, True) is False

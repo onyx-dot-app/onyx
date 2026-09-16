@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import httpx
+import pytest
 from starlette.requests import Request
 from starlette.responses import Response
 
@@ -101,3 +102,101 @@ def test_proxy_strips_browser_context_request_headers() -> None:
     assert not any(name.startswith("sec-fetch-") for name in forwarded_names)
     assert "cookie" not in forwarded_names
     assert forwarded_names >= {"accept", "user-agent"}
+
+
+def test_proxy_client_does_not_follow_redirects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(webapp_proxy, "_ASYNC_PROXY_CLIENT", None)
+    client = webapp_proxy._get_proxy_client()
+    requests: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if len(requests) == 1:
+            return httpx.Response(302, headers={"location": "http://other.example/"})
+        return httpx.Response(200)
+
+    async def send() -> httpx.Response:
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(respond),
+            follow_redirects=client.follow_redirects,
+        ) as transport_client:
+            return await transport_client.get("http://sandbox.example/")
+
+    try:
+        response = asyncio.run(send())
+        assert response.status_code == 302
+        assert len(requests) == 1
+    finally:
+        asyncio.run(client.aclose())
+
+
+@pytest.mark.parametrize(
+    "location",
+    [
+        "https://other.example/",
+        "//other.example/",
+        "/auth/login",
+        "{base}/../outside",
+        "{base}/%2e%2e/outside",
+        "{base}/..%2foutside",
+        "{base}/..\\outside",
+        "{base}-other/page",
+    ],
+)
+def test_proxy_restricts_redirects_to_session(location: str) -> None:
+    session_id = uuid4()
+    base_path = webapp_proxy.webapp_base_path(session_id)
+    upstream = _make_upstream()
+    upstream.status_code = 302
+    client = MagicMock()
+    client.send = AsyncMock(return_value=upstream)
+    with (
+        patch.object(
+            webapp_proxy,
+            "_get_sandbox_url",
+            AsyncMock(return_value="http://sandbox.example"),
+        ),
+        patch.object(webapp_proxy, "_get_proxy_client", return_value=client),
+    ):
+        for allowed in (base_path, f"{base_path}/page", f"{base_path}?page=1#section"):
+            upstream.headers = httpx.Headers({"location": allowed})
+            response = asyncio.run(
+                webapp_proxy._proxy_request("", _make_request(), session_id)
+            )
+            assert response.headers["location"] == allowed
+        upstream.headers = httpx.Headers({"location": location.format(base=base_path)})
+        response = asyncio.run(
+            webapp_proxy._proxy_request("", _make_request(), session_id)
+        )
+        assert response.status_code == 302
+        assert "location" not in response.headers
+
+
+@pytest.mark.parametrize("location", ["child", "?page=2", "#section"])
+@pytest.mark.parametrize("path", ["page", "directory/"])
+def test_proxy_preserves_relative_session_redirects(location: str, path: str) -> None:
+    session_id = uuid4()
+    base_path = webapp_proxy.webapp_base_path(session_id)
+    request = _make_request()
+    request.scope["path"] = f"{base_path}/{path}"
+    upstream = _make_upstream()
+    upstream.status_code = 302
+    upstream.headers = httpx.Headers({"location": location})
+    client = MagicMock()
+    client.send = AsyncMock(return_value=upstream)
+    with (
+        patch.object(
+            webapp_proxy,
+            "_get_sandbox_url",
+            AsyncMock(return_value="http://sandbox.example"),
+        ),
+        patch.object(webapp_proxy, "_get_proxy_client", return_value=client),
+    ):
+        response = asyncio.run(webapp_proxy._proxy_request(path, request, session_id))
+        assert response.status_code == 302
+        assert response.headers["location"] == location
+        upstream.headers = httpx.Headers({"location": "../outside"})
+        response = asyncio.run(webapp_proxy._proxy_request(path, request, session_id))
+        assert "location" not in response.headers
