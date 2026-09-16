@@ -475,40 +475,6 @@ class MCPServerSimpleUpdateRequest(BaseModel):
     )
 
 
-class MCPToolResponse(BaseModel):
-    id: int
-    name: str
-    display_name: str
-    description: str
-    definition: Optional[dict] = None  # MCP tools don't use OpenAPI definitions
-    custom_headers: List[dict] = []
-    in_code_tool_id: Optional[str] = None
-    passthrough_auth: bool = False
-    # MCP-specific fields
-    server_url: str
-    auth_type: str
-    auth_performer: Optional[str] = None
-    user_can_authenticate: bool
-
-
-class MCPOAuthConnectRequest(BaseModel):
-    name: str = Field(..., description="Name of the MCP tool")
-    description: Optional[str] = Field(None, description="Description of the MCP tool")
-    server_url: str = Field(..., description="URL of the MCP server")
-    selected_tools: Optional[List[str]] = Field(
-        None, description="List of selected tool names to create"
-    )
-    existing_server_id: Optional[int] = Field(
-        None, description="ID of existing server to update (for editing)"
-    )
-
-
-class MCPOAuthConnectResponse(BaseModel):
-    oauth_url: str = Field(..., description="OAuth URL to redirect user to")
-    state: str = Field(..., description="OAuth state parameter")
-    pending_tool: dict = Field(..., description="Pending tool configuration")
-
-
 class MCPUserOAuthConnectRequest(BaseModel):
     server_id: int = Field(..., description="ID of the MCP server")
     return_path: str = Field(..., description="Path to redirect to after callback")
@@ -606,15 +572,6 @@ class MCPOAuthFlowState(BaseModel):
     resource: AnyUrl | None = None
 
 
-class MCPOAuthCallbackRequest(BaseModel):
-    """Request payload for completing OAuth flow (authorization code exchange)."""
-
-    code: str = Field(..., description="Authorization code returned by the IdP")
-    state: Optional[str] = Field(
-        None, description="State parameter for CSRF protection"
-    )
-
-
 class MCPOAuthCallbackResponse(BaseModel):
     success: bool
     message: str
@@ -630,37 +587,6 @@ class MCPOAuthClientMetadataDocument(BaseModel):
     grant_types: list[Literal["authorization_code", "refresh_token"]]
     response_types: list[Literal["code"]]
     token_endpoint_auth_method: Literal["none"]
-
-
-class MCPDynamicClientRegistrationRequest(BaseModel):
-    """Request for dynamic client registration per RFC 7591"""
-
-    server_id: int = Field(..., description="MCP server ID")
-    authorization_server_url: str = Field(
-        ...,
-        description="Authorization server URL discovered from WWW-Authenticate or metadata",
-    )
-
-
-class MCPDynamicClientRegistrationResponse(BaseModel):
-    """Response from dynamic client registration"""
-
-    client_id: str = Field(..., description="Registered client ID")
-    client_secret: Optional[str] = Field(
-        None, description="Client secret if confidential client"
-    )
-    registration_access_token: Optional[str] = Field(
-        None, description="Token for managing this client registration"
-    )
-    registration_client_uri: Optional[str] = Field(
-        None, description="URI for managing this client registration"
-    )
-
-
-class MCPApiKeyRequest(BaseModel):
-    server_id: int = Field(..., description="ID of the MCP server")
-    api_key: str = Field(..., description="API key to store")
-    transport: str = Field(..., description="Transport type")
 
 
 class MCPUserCredentialsRequest(BaseModel):

@@ -2,13 +2,6 @@ import json
 from collections.abc import Callable
 from typing import Any
 
-from sqlalchemy.orm import Session
-
-from onyx.configs.app_configs import AZURE_IMAGE_API_KEY
-from onyx.db.connector import check_connectors_exist
-from onyx.db.document import check_docs_exist
-from onyx.db.models import LLMProvider
-from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_capabilities import find_model_obj, get_model_map
 from onyx.tools.interface import Tool
 
@@ -43,21 +36,6 @@ def compute_tool_definition_tokens(
         token_counter(json.dumps(tool_definition))
         for tool_definition in tool_definitions
     )
-
-
-def is_image_generation_available(db_session: Session) -> bool:
-    providers = db_session.query(LLMProvider).all()
-    for provider in providers:
-        if provider.provider == LlmProviderNames.OPENAI:
-            return True
-
-    return bool(AZURE_IMAGE_API_KEY)
-
-
-def is_document_search_available(db_session: Session) -> bool:
-    docs_exist = check_docs_exist(db_session)
-    connectors_exist = check_connectors_exist(db_session)
-    return docs_exist or connectors_exist
 
 
 def generate_tools_description(tools: list[Tool]) -> str:

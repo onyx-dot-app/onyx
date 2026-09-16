@@ -3,7 +3,6 @@ import os
 import socket
 import subprocess
 import sys
-import time
 from datetime import datetime
 from threading import Thread
 from typing import IO
@@ -53,47 +52,11 @@ def _run_command(command: str, stream_output: bool = False) -> tuple[str, str]:
     return "".join(stdout_lines), "".join(stderr_lines)
 
 
-def get_current_commit_sha() -> str:
-    print("Getting current commit SHA...")
-    stdout, _ = _run_command("git rev-parse HEAD")
-    sha = stdout.strip()
-    print(f"Current commit SHA: {sha}")
-    return sha
-
-
 def switch_to_commit(commit_sha: str) -> None:
     print(f"Switching to commit: {commit_sha}...")
     _run_command(f"git checkout {commit_sha}")
     print(f"Successfully switched to commit: {commit_sha}")
     print("Repository updated successfully.")
-
-
-def get_docker_container_env_vars(env_name: str) -> dict:
-    """
-    Retrieves environment variables from "background" and "api_server" Docker containers.
-    """
-    print(f"Getting environment variables for containers with env_name: {env_name}")
-
-    combined_env_vars = {}
-    for container_type in ["background", "api_server"]:
-        container_name = _run_command(
-            f"docker ps -a --format '{{{{.Names}}}}' | awk '/{container_type}/ && /{env_name}/'"
-        )[0].strip()
-        if not container_name:
-            raise RuntimeError(
-                f"No {container_type} container found with env_name: {env_name}"
-            )
-
-        env_vars_json = _run_command(
-            f"docker inspect --format='{{{{json .Config.Env}}}}' {container_name}"
-        )[0]
-        env_vars_list = json.loads(env_vars_json.strip())
-
-        for env_var in env_vars_list:
-            key, value = env_var.split("=", 1)
-            combined_env_vars[key] = value
-
-    return combined_env_vars
 
 
 def manage_data_directories(env_name: str, base_path: str, use_cloud_gpu: bool) -> None:
@@ -285,28 +248,6 @@ def get_api_server_host_port(env_name: str) -> str:
             f"No port found containing: {client_port} for container: {container_name} and env_name: {env_name}"
         )
     return matching_ports[0]
-
-
-# Added function to restart Vespa container
-def restart_vespa_container(env_name: str) -> None:
-    print(f"Restarting Vespa container for env_name: {env_name}")
-
-    # Find the Vespa container
-    stdout, _ = _run_command(
-        f"docker ps -a --format '{{{{.Names}}}}' | awk '/index-1/ && /{env_name}/'"
-    )
-    container_name = stdout.strip()
-
-    if not container_name:
-        raise RuntimeError(f"No Vespa container found with env_name: {env_name}")
-
-    # Restart the container
-    _run_command(f"docker restart {container_name}")
-
-    print(f"Vespa container '{container_name}' has begun restarting")
-
-    time.sleep(30)
-    print(f"Vespa container '{container_name}' has been restarted")
 
 
 if __name__ == "__main__":

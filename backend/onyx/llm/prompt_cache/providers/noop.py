@@ -39,15 +39,3 @@ class NoOpPromptCacheProvider(PromptCacheProvider):
             continuation=continuation,
             transform_cacheable=None,
         )
-
-    def extract_cache_metadata(
-        self,
-        response: dict,  # noqa: ARG002
-        cache_key: str,  # noqa: ARG002
-    ) -> CacheMetadata | None:
-        """No cache metadata to extract."""
-        return None
-
-    def get_cache_ttl_seconds(self) -> int:
-        """Return default TTL (not used for no-op)."""
-        return 0

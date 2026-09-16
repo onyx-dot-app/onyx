@@ -124,39 +124,6 @@ def _extract_section(salesforce_object_data: dict[str, Any], link: str) -> TextS
     )
 
 
-def _extract_primary_owner(
-    sf_db: OnyxSalesforceSQLite,
-    sf_object: SalesforceObject,
-) -> BasicExpertInfo | None:
-    object_dict = sf_object.data
-    if not (last_modified_by_id := object_dict.get("LastModifiedById")):
-        logger.warning("No LastModifiedById found for %s", sf_object.id)
-        return None
-    if not (last_modified_by := sf_db.get_record(last_modified_by_id)):
-        logger.warning("No LastModifiedBy found for %s", last_modified_by_id)
-        return None
-
-    user_data = last_modified_by.data
-    expert_info = BasicExpertInfo(
-        first_name=user_data.get("FirstName"),
-        last_name=user_data.get("LastName"),
-        email=user_data.get("Email"),
-        display_name=user_data.get(NAME_FIELD),
-    )
-
-    # Check if all fields are None
-    if (
-        expert_info.first_name is None
-        and expert_info.last_name is None
-        and expert_info.email is None
-        and expert_info.display_name is None
-    ):
-        logger.warning("No identifying information found for user %s", user_data)
-        return None
-
-    return expert_info
-
-
 def convert_sf_query_result_to_doc(
     record_id: str,
     record: dict[str, Any],

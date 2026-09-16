@@ -46,12 +46,6 @@ class FileTestData(TypedDict):
     origin: FileOrigin
 
 
-class WorkerResult(TypedDict):
-    worker_id: int
-    file_name: str
-    content: str
-
-
 def _get_all_backend_configs() -> List[BackendConfig]:
     """Get configurations for all available backends"""
     from onyx.configs.app_configs import AWS_REGION_NAME, S3_ENDPOINT_URL

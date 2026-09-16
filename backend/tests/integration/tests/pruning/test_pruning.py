@@ -1,4 +1,3 @@
-import http.server
 import os
 import shutil
 import tempfile
@@ -7,7 +6,6 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from time import sleep
-from typing import Any
 
 import uvicorn
 from fastapi import FastAPI
@@ -58,42 +56,6 @@ def fastapi_server_context(
     finally:
         # Shutdown the server
         server.should_exit = True
-        server_thread.join()
-
-
-# Leaving this here for posterity and experimentation, but the reason we're
-# not using this is python's web servers hang frequently when crawled
-# this is obviously not good for a unit test
-@contextmanager
-def http_server_context(
-    directory: str, port: int = 8000
-) -> Generator[http.server.ThreadingHTTPServer, None, None]:
-    # Create a handler that serves files from the specified directory
-    def handler_class(
-        *args: Any, **kwargs: Any
-    ) -> http.server.SimpleHTTPRequestHandler:
-        return http.server.SimpleHTTPRequestHandler(
-            *args, directory=directory, **kwargs
-        )
-
-    # Create an HTTPServer instance
-    httpd = http.server.ThreadingHTTPServer(("0.0.0.0", port), handler_class)
-
-    # Define a thread that runs the server in the background
-    server_thread = threading.Thread(target=httpd.serve_forever)
-    server_thread.daemon = (
-        True  # Ensures the thread will exit when the main program exits
-    )
-
-    try:
-        # Start the server in the background
-        server_thread.start()
-        sleep(5)  # give it a few seconds to start
-        yield httpd
-    finally:
-        # Shutdown the server and wait for the thread to finish
-        httpd.shutdown()
-        httpd.server_close()
         server_thread.join()
 
 

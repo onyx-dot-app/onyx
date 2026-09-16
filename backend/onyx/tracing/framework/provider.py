@@ -145,10 +145,6 @@ class TraceProvider(ABC):
         """Generate a new span identifier."""
 
     @abstractmethod
-    def gen_group_id(self) -> str:
-        """Generate a new group identifier."""
-
-    @abstractmethod
     def create_trace(
         self,
         name: str,
@@ -215,10 +211,6 @@ class DefaultTraceProvider(TraceProvider):
     def gen_span_id(self) -> str:
         """Generate a new span ID."""
         return f"span_{uuid.uuid4().hex[:24]}"
-
-    def gen_group_id(self) -> str:
-        """Generate a new group ID."""
-        return f"group_{uuid.uuid4().hex[:24]}"
 
     def create_trace(
         self,

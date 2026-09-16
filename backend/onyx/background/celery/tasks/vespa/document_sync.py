@@ -64,11 +64,6 @@ def set_document_sync_fence(r: TenantRedisClient, payload: int | None) -> None:
     r.sadd(OnyxRedisConstants.ACTIVE_FENCES, DOCUMENT_SYNC_FENCE_KEY)
 
 
-def delete_document_sync_taskset(r: TenantRedisClient) -> None:
-    """Clear the document sync taskset."""
-    r.delete(DOCUMENT_SYNC_TASKSET_KEY)
-
-
 def reset_document_sync(r: TenantRedisClient) -> None:
     """Reset all document sync tracking data."""
     r.srem(OnyxRedisConstants.ACTIVE_FENCES, DOCUMENT_SYNC_FENCE_KEY)

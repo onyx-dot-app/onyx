@@ -70,7 +70,7 @@ from onyx.llm.request_context import get_llm_mock_response, set_llm_request_para
 from onyx.llm.utils import build_litellm_passthrough_kwargs
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
 from onyx.tracing.llm_utils import record_llm_request_params
-from onyx.utils.encryption import mask_env_value_for_logging, mask_string
+from onyx.utils.encryption import mask_env_value_for_logging
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -84,10 +84,6 @@ _env_rwlock = rwlock.RWLockWrite()
 if TYPE_CHECKING:
     from litellm import CustomStreamWrapper, HTTPHandler
 
-
-_LLM_PROMPT_LONG_TERM_LOG_CATEGORY = "llm_prompt"
-LEGACY_MAX_TOKENS_KWARG = "max_tokens"
-STANDARD_MAX_TOKENS_KWARG = "max_completion_tokens"
 
 # Azure api-versions that route to the modern /openai/v1/* surface. Mirrors
 # LiteLLM's BaseAzureLLM._is_azure_v1_api_version.
@@ -576,18 +572,6 @@ class LitellmLLM(LLM):
             )
 
         self._model_kwargs = model_kwargs
-
-    def _safe_model_config(self) -> dict:
-        dump = self.config.model_dump()
-        dump["api_key"] = mask_string(dump.get("api_key") or "")
-        custom_config = dump.get("custom_config")
-        if isinstance(custom_config, dict):
-            # Mask sensitive values in custom_config
-            masked_config = {}
-            for k, v in custom_config.items():
-                masked_config[k] = mask_string(v) if v else v
-            dump["custom_config"] = masked_config
-        return dump
 
     def _track_llm_cost(self, usage: Usage) -> None:
         """

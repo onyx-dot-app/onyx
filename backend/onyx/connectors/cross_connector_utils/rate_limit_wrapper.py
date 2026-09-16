@@ -43,7 +43,6 @@ class _RateLimitDecorator:
         self.max_num_sleep = max_num_sleep
 
         self.call_history: list[float] = []
-        self.curr_calls = 0
 
     def __call__(self, func: F) -> F:
         @wraps(func)

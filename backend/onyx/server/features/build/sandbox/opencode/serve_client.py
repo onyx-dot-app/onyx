@@ -971,7 +971,6 @@ class OpencodeServeClient:
         password: str | None,
         *,
         event_bus: PodEventBus | None = None,
-        client_info: dict[str, Any] | None = None,
         timeouts: ClientTimeouts | None = None,
         transport: httpx.BaseTransport | None = None,
         reload_password: Callable[[], str | None] | None = None,
@@ -985,10 +984,6 @@ class OpencodeServeClient:
         disables the self-heal (e.g. health probes)."""
         self._base_url = base_url.rstrip("/")
         self._password = password
-        self._client_info = client_info or {
-            "name": "onyx-opencode-serve-client",
-            "version": "1.0.0",
-        }
         self._timeouts = timeouts or ClientTimeouts()
         self._reload_password = reload_password
         self._event_bus = event_bus

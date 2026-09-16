@@ -1,7 +1,6 @@
 # The following prompts are used for extracting filters to apply along with the query in the
 # document index. For example, a filter for dates or a filter by source type such as GitHub
 # or Slack
-SOURCES_KEY = "sources"
 
 # Used in source_filter.py: decide which connected source(s) an internal search
 # cycle should cover, given the conversation, the prior cycles this turn, and the

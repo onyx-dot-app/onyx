@@ -95,20 +95,6 @@ RESEARCH_AGENT_THINK_TOOL_DESCRIPTION = {
 }
 
 
-RESEARCH_AGENT_GENERATE_REPORT_TOOL_DESCRIPTION = {
-    "type": "function",
-    "function": {
-        "name": "generate_report",
-        "description": "Generate the final research report from all findings. Should be called when research is complete.",
-        "parameters": {
-            "type": "object",
-            "properties": {},
-            "required": [],
-        },
-    },
-}
-
-
 THINK_TOOL_RESPONSE_MESSAGE = "Acknowledged, please continue."
 THINK_TOOL_RESPONSE_TOKEN_COUNT = 10
 

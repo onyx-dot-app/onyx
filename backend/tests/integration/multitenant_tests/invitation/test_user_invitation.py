@@ -5,7 +5,6 @@ from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
 INVITED_BASIC_USER = "basic_user"
-INVITED_BASIC_USER_EMAIL = "basic_user@example.com"
 
 
 def test_admin_can_invite_users(reset_multitenant: None) -> None:  # noqa: ARG001

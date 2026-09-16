@@ -1375,10 +1375,6 @@ def set_pinned_personas_api(
     )
 
 
-class ChosenAssistantsRequest(BaseModel):
-    chosen_assistants: list[int]
-
-
 def update_assistant_visibility(
     preferences: UserPreferences, assistant_id: int, show: bool
 ) -> UserPreferences:

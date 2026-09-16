@@ -138,8 +138,6 @@ Each provider has its own adapter in `providers/`:
 Each adapter implements:
 - `supports_caching()`: Whether caching is supported
 - `prepare_messages_for_caching()`: Transform messages for caching
-- `extract_cache_metadata()`: Extract metadata from responses
-- `get_cache_ttl_seconds()`: Cache TTL
 
 ## Best Practices
 

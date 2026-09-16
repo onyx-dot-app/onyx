@@ -11,7 +11,7 @@ from sqlalchemy.sql.expression import ColumnElement
 
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import MessageType
-from onyx.context.search.models import InferenceSection, SavedSearchDoc
+from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SearchDoc as ServerSearchDoc
 from onyx.db.enums import IncognitoRecordMode, record_mode_persists_content
 from onyx.db.models import (
@@ -918,18 +918,6 @@ def get_db_search_doc_by_id(doc_id: int, db_session: Session) -> DBSearchDoc | N
     return search_doc
 
 
-def get_db_search_doc_by_document_id(
-    document_id: str, db_session: Session
-) -> DBSearchDoc | None:
-    """Get SearchDoc by document_id field. There are no safety checks here like user permission etc., use with caution"""
-    search_doc = (
-        db_session.query(DBSearchDoc)
-        .filter(DBSearchDoc.document_id == document_id)
-        .first()
-    )
-    return search_doc
-
-
 def translate_db_search_doc_to_saved_search_doc(
     db_search_doc: DBSearchDoc,
     remove_doc_content: bool = False,
@@ -1016,145 +1004,4 @@ def translate_db_message_to_chat_message_detail(
 
     return chat_msg_detail
 
-
-def update_chat_session_updated_at_timestamp(
-    chat_session_id: UUID, db_session: Session
-) -> None:
-    """
-    Explicitly update the timestamp on a chat session without modifying other fields.
-    This is useful when adding messages to a chat session to reflect recent activity.
-    """
-
-    # Direct SQL update to avoid loading the entire object if it's not already loaded
-    db_session.execute(
-        update(ChatSession)
-        .where(ChatSession.id == chat_session_id)
-        .values(time_updated=func.now())
-    )
     # No commit - the caller is responsible for committing the transaction
-
-
-def create_search_doc_from_inference_section(
-    inference_section: InferenceSection,
-    is_internet: bool,
-    db_session: Session,
-    score: float = 0.0,
-    is_relevant: bool | None = None,
-    relevance_explanation: str | None = None,
-    commit: bool = False,
-) -> DBSearchDoc:
-    """Create a SearchDoc in the database from an InferenceSection."""
-
-    db_search_doc = DBSearchDoc(
-        document_id=inference_section.center_chunk.document_id,
-        chunk_ind=inference_section.center_chunk.chunk_id,
-        semantic_id=inference_section.center_chunk.semantic_identifier,
-        link=(
-            inference_section.center_chunk.source_links.get(0)
-            if inference_section.center_chunk.source_links
-            else None
-        ),
-        blurb=inference_section.center_chunk.blurb,
-        source_type=inference_section.center_chunk.source_type,
-        boost=inference_section.center_chunk.boost,
-        hidden=inference_section.center_chunk.hidden,
-        doc_metadata=inference_section.center_chunk.metadata,
-        score=score,
-        is_relevant=is_relevant,
-        relevance_explanation=relevance_explanation,
-        match_highlights=inference_section.center_chunk.match_highlights,
-        updated_at=inference_section.center_chunk.updated_at,
-        primary_owners=inference_section.center_chunk.primary_owners or [],
-        secondary_owners=inference_section.center_chunk.secondary_owners or [],
-        is_internet=is_internet,
-    )
-
-    db_session.add(db_search_doc)
-    if commit:
-        db_session.commit()
-    else:
-        db_session.flush()
-
-    return db_search_doc
-
-
-def create_search_doc_from_saved_search_doc(
-    saved_search_doc: SavedSearchDoc,
-) -> DBSearchDoc:
-    """Convert SavedSearchDoc (server model) into DB SearchDoc with correct field mapping."""
-    return DBSearchDoc(
-        document_id=saved_search_doc.document_id,
-        chunk_ind=saved_search_doc.chunk_ind,
-        # Map Pydantic semantic_identifier -> DB semantic_id; ensure non-null
-        semantic_id=saved_search_doc.semantic_identifier or "Unknown",
-        link=saved_search_doc.link,
-        blurb=saved_search_doc.blurb,
-        source_type=saved_search_doc.source_type,
-        boost=saved_search_doc.boost,
-        hidden=saved_search_doc.hidden,
-        # Map metadata -> doc_metadata (DB column name)
-        doc_metadata=saved_search_doc.metadata,
-        # SavedSearchDoc.score exists and defaults to 0.0
-        score=saved_search_doc.score or 0.0,
-        match_highlights=saved_search_doc.match_highlights,
-        updated_at=saved_search_doc.updated_at,
-        primary_owners=saved_search_doc.primary_owners,
-        secondary_owners=saved_search_doc.secondary_owners,
-        is_internet=saved_search_doc.is_internet,
-        is_relevant=saved_search_doc.is_relevant,
-        relevance_explanation=saved_search_doc.relevance_explanation,
-    )
-
-
-def update_db_session_with_messages(
-    db_session: Session,
-    chat_message_id: int,
-    chat_session_id: UUID,
-    message: str | None = None,
-    message_type: str | None = None,
-    token_count: int | None = None,
-    error: str | None = None,
-    update_parent_message: bool = True,
-    files: list[FileDescriptor] | None = None,
-    reasoning_tokens: str | None = None,
-    commit: bool = False,
-) -> ChatMessage:
-    chat_message = (
-        db_session.query(ChatMessage)
-        .filter(
-            ChatMessage.id == chat_message_id,
-            ChatMessage.chat_session_id == chat_session_id,
-        )
-        .first()
-    )
-    if not chat_message:
-        raise ValueError("Chat message with id not found")  # should never happen
-
-    if message:
-        chat_message.message = message
-    if message_type:
-        chat_message.message_type = MessageType(message_type)
-    if token_count:
-        chat_message.token_count = token_count
-    if error:
-        chat_message.error = error
-    if files is not None:
-        chat_message.files = files
-    if reasoning_tokens is not None:
-        chat_message.reasoning_tokens = reasoning_tokens
-
-    if update_parent_message:
-        parent_chat_message = (
-            db_session.query(ChatMessage)
-            .filter(ChatMessage.id == chat_message.parent_message_id)
-            .first()
-        )
-        if parent_chat_message:
-            parent_chat_message.latest_child_message_id = chat_message.id
-
-    if commit:
-        db_session.commit()
-    else:
-        db_session.flush()
-
-    return chat_message

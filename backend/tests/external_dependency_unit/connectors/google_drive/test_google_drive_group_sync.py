@@ -414,8 +414,7 @@ class TestPerformExternalGroupSync:
                 cc_pair: ConnectorCredentialPair,  # noqa: ARG001
             ) -> Generator[ExternalUserGroup, None, None]:
                 # No groups yielded
-                return
-                yield  # This line is never reached but satisfies the generator type
+                yield from ()
 
             # Update the mock function
             mock_group_config.group_sync_func = empty_group_sync_func

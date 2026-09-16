@@ -245,14 +245,6 @@ def fetch_and_cache_channel_metadata(
     return {}
 
 
-def get_available_channels(
-    access_token: str, team_id: str, include_private: bool = False
-) -> list[str]:
-    """Fetch list of available channel names using cached metadata."""
-    metadata = fetch_and_cache_channel_metadata(access_token, team_id, include_private)
-    return [meta["name"] for meta in metadata.values() if meta["name"]]
-
-
 def get_cached_user_profile(
     access_token: str, team_id: str, user_id: str
 ) -> str | None:

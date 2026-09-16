@@ -11,7 +11,6 @@ from onyx.context.search.models import SavedSearchDoc, SearchDoc
 from onyx.db.enums import AccessType
 from onyx.server.documents.models import (
     DocumentSource,
-    IndexAttemptSnapshot,
     IndexingStatus,
     InputType,
 )
@@ -260,25 +259,6 @@ class DATestIndexAttempt:
     error_msg: str | None
     time_started: datetime | None
     time_updated: datetime | None
-
-    @classmethod
-    def from_index_attempt_snapshot(
-        cls, index_attempt: IndexAttemptSnapshot
-    ) -> "DATestIndexAttempt":
-        return cls(
-            id=index_attempt.id,
-            status=index_attempt.status,
-            new_docs_indexed=index_attempt.new_docs_indexed,
-            total_docs_indexed=index_attempt.total_docs_indexed,
-            docs_removed_from_index=index_attempt.docs_removed_from_index,
-            error_msg=index_attempt.error_msg,
-            time_started=(
-                datetime.fromisoformat(index_attempt.time_started)
-                if index_attempt.time_started
-                else None
-            ),
-            time_updated=datetime.fromisoformat(index_attempt.time_updated),
-        )
 
 
 class DATestTool(BaseModel):

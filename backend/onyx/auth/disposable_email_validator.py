@@ -244,15 +244,3 @@ def is_disposable_email(email: str) -> bool:
         True if the email uses a disposable domain, False otherwise
     """
     return _validator.is_disposable(email)
-
-
-def refresh_disposable_domains() -> None:
-    """
-    Force a refresh of the disposable domains list.
-
-    This can be called manually if you want to update the list
-    without waiting for the cache to expire. Unlike normal cache
-    expiry, this blocks until the refresh completes.
-    """
-    _validator._last_fetch_time = 0
-    _validator._start_refresh().join()

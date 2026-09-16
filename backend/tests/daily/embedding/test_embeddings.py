@@ -12,7 +12,6 @@ from shared_configs.model_server_models import EmbeddingProvider
 from tests.utils.secret_names import TestSecret
 
 VALID_SAMPLE = ["hi", "hello my name is bob", "woah there!!!. 😃"]
-VALID_LONG_SAMPLE = ["hi " * 999]
 # openai limit is 2048, cohere is supposed to be 96 but in practice that doesn't
 # seem to be true
 TOO_LONG_SAMPLE = ["a"] * 2500

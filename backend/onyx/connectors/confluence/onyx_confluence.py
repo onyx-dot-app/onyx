@@ -116,10 +116,6 @@ _MIN_DC_VERSION_FOR_REST_SPACE_PERMISSIONS: tuple[int, int] = (9, 1)
 _DC_SERVER_INFORMATION_PATH = "rest/api/server-information"
 
 
-class ConfluenceRateLimitError(Exception):
-    pass
-
-
 class Confcloud77618Error(Exception):
     """Signal to the perm-sync caller that the ancestor-restrictions
     expand 404'd on a draft / outdated / trashed ancestor and the run
@@ -1010,30 +1006,6 @@ class OnyxConfluence:
         url = f"rest/api/user/memberof?{user_query}"
         yield from self._paginate_url(url, limit, force_offset_pagination=True)
 
-    def paginated_groups_retrieval(
-        self,
-        limit: int | None = None,
-    ) -> Iterator[dict[str, Any]]:
-        """
-        This is not an SQL like query.
-        It's a confluence specific endpoint that can be used to fetch groups.
-        """
-        yield from self._paginate_url("rest/api/group", limit)
-
-    def paginated_group_members_retrieval(
-        self,
-        group_name: str,
-        limit: int | None = None,
-    ) -> Iterator[dict[str, Any]]:
-        """
-        This is not an SQL like query.
-        It's a confluence specific endpoint that can be used to fetch the members of a group.
-        THIS DOESN'T WORK FOR SERVER because it breaks when there is a slash in the group name.
-        E.g. neither "test/group" nor "test%2Fgroup" works for confluence.
-        """
-        group_name = quote(group_name)
-        yield from self._paginate_url(f"rest/api/group/{group_name}/member", limit)
-
     def get_all_space_permissions_server(
         self,
         space_key: str,
@@ -1274,32 +1246,6 @@ class OnyxConfluence:
         if not isinstance(payload, list):
             return []
         return payload
-
-    def get_current_user(self, expand: str | None = None) -> Any:
-        """
-        Implements a method that isn't in the third party client.
-
-        Get information about the current user
-        :param expand: OPTIONAL expand for get status of user.
-                Possible param is "status". Results are "Active, Deactivated"
-        :return: Returns the user details
-        """
-
-        from atlassian.errors import ApiPermissionError
-
-        url = "rest/api/user/current"
-        params = {}
-        if expand:
-            params["expand"] = expand
-        try:
-            response = self.get(url, params=params)
-        except HTTPError as e:
-            if e.response.status_code == 403:
-                raise ApiPermissionError(
-                    "The calling user does not have permission", reason=e
-                )
-            raise
-        return response
 
 
 def get_user_email_from_username__server(

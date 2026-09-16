@@ -49,15 +49,6 @@ def get_mcp_server_by_id(server_id: int, db_session: Session) -> MCPServer:
     return server
 
 
-def get_mcp_servers_by_owner(owner_email: str, db_session: Session) -> list[MCPServer]:
-    """Get all MCP servers owned by a specific user"""
-    return list(
-        db_session.scalars(
-            select(MCPServer).where(MCPServer.owner == owner_email)
-        ).all()
-    )
-
-
 def get_craft_enabled_mcp_servers(
     db_session: Session, user: User | None
 ) -> list[MCPServer]:
@@ -354,22 +345,6 @@ def add_user_to_mcp_server(server_id: int, user_id: UUID, db_session: Session) -
         db_session.commit()
 
 
-def remove_user_from_mcp_server(
-    server_id: int, user_id: UUID, db_session: Session
-) -> None:
-    """Remove a user's access to an MCP server"""
-    server = get_mcp_server_by_id(server_id, db_session)
-    user = db_session.scalar(
-        select(User).where(User.id == user_id)  # ty: ignore[invalid-argument-type]
-    )
-    if not user:
-        raise ValueError("User not found")
-
-    if user in server.users:
-        server.users.remove(user)
-        db_session.commit()
-
-
 # MCPConnectionConfig operations
 def get_connection_config_by_id(
     config_id: int, db_session: Session, *, for_update: bool = False
@@ -415,19 +390,6 @@ def get_user_connection_configs(
         )
     )
     return {row.mcp_server_id: row for row in rows if row.mcp_server_id is not None}
-
-
-def get_user_connection_configs_for_server(
-    server_id: int, db_session: Session
-) -> list[MCPConnectionConfig]:
-    """Get all user connection configs for a specific MCP server"""
-    return list(
-        db_session.scalars(
-            select(MCPConnectionConfig).where(
-                MCPConnectionConfig.mcp_server_id == server_id
-            )
-        ).all()
-    )
 
 
 def create_connection_config(

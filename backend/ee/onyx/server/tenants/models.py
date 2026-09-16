@@ -7,15 +7,6 @@ from ee.onyx.server.license.models import CustomerTier
 from onyx.server.settings.models import ApplicationStatus
 
 
-class CheckoutSessionCreationRequest(BaseModel):
-    quantity: int
-
-
-class CreateTenantRequest(BaseModel):
-    tenant_id: str
-    initial_admin_email: str
-
-
 class ProductGatingRequest(BaseModel):
     tenant_id: str
     application_status: ApplicationStatus
@@ -60,10 +51,6 @@ class CreateCheckoutSessionRequest(BaseModel):
     billing_period: Literal["monthly", "annual"] = "monthly"
     seats: int | None = None
     email: str | None = None
-
-
-class CheckoutSessionCreationResponse(BaseModel):
-    id: str
 
 
 class ImpersonateRequest(BaseModel):
@@ -116,17 +103,8 @@ class TenantByDomainResponse(BaseModel):
     creator_email: str
 
 
-class TenantByDomainRequest(BaseModel):
-    email: str
-
-
 class RequestInviteRequest(BaseModel):
     tenant_id: str
-
-
-class RequestInviteResponse(BaseModel):
-    success: bool
-    message: str
 
 
 class PendingUserSnapshot(BaseModel):

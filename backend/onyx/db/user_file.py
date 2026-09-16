@@ -1,4 +1,3 @@
-import datetime
 from uuid import UUID
 
 from sqlalchemy import exists, func, select, update
@@ -88,22 +87,6 @@ def fetch_persona_ids_for_user_files(
     }
 
 
-def update_last_accessed_at_for_user_files(
-    user_file_ids: list[UUID],
-    db_session: Session,
-) -> None:
-    """Update `last_accessed_at` to now (UTC) for the given user files."""
-    if not user_file_ids:
-        return
-    now = datetime.datetime.now(datetime.timezone.utc)
-    (
-        db_session.query(UserFile)
-        .filter(UserFile.id.in_(user_file_ids))
-        .update({UserFile.last_accessed_at: now}, synchronize_session=False)
-    )
-    db_session.commit()
-
-
 def get_user_file_by_id(
     user_file_id: UUID | str, db_session: Session
 ) -> UserFile | None:
@@ -123,13 +106,6 @@ def get_file_id_by_user_file_id(user_file_id: str, db_session: Session) -> str |
     if user_file:
         return user_file.file_id
     return None
-
-
-def get_file_ids_by_user_file_ids(
-    user_file_ids: list[UUID], db_session: Session
-) -> list[str]:
-    user_files = db_session.query(UserFile).filter(UserFile.id.in_(user_file_ids)).all()
-    return [user_file.file_id for user_file in user_files]
 
 
 def fetch_user_files_with_access_relationships(

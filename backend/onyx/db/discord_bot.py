@@ -319,22 +319,6 @@ def update_discord_channel_config(
     return config
 
 
-def delete_discord_channel_config(
-    db_session: Session,
-    guild_config_id: int,
-    channel_config_id: int,
-) -> bool:
-    """Delete a channel config. Returns True if deleted."""
-    result = db_session.execute(
-        delete(DiscordChannelConfig).where(
-            DiscordChannelConfig.guild_config_id == guild_config_id,
-            DiscordChannelConfig.id == channel_config_id,
-        )
-    )
-    db_session.flush()
-    return result.rowcount > 0  # ty: ignore[unresolved-attribute]
-
-
 def create_channel_config(
     db_session: Session,
     guild_config_id: int,

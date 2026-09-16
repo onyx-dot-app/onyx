@@ -1,7 +1,6 @@
 import codecs
 import json
 import re
-import string
 from urllib.parse import quote
 
 from onyx.utils.logger import setup_logger
@@ -24,13 +23,6 @@ ZERO_WIDTH_CHARS: set[str] = {
     "\ufeff",  # Byte order mark / zero-width no-break space
     "\u2060",  # Word joiner
 }
-
-
-def normalize_curly_quotes(text: str) -> str:
-    """Convert curly/smart quotes to straight quotes."""
-    for curly, straight in CURLY_TO_STRAIGHT_QUOTES.items():
-        text = text.replace(curly, straight)
-    return text
 
 
 def is_zero_width_char(c: str) -> bool:
@@ -85,46 +77,7 @@ def make_url_compatible(s: str) -> str:
     return quote(s_with_underscores, safe="")
 
 
-def has_unescaped_quote(s: str) -> bool:
-    pattern = r'(?<!\\)"'
-    return bool(re.search(pattern, s))
-
-
-def escape_newlines(s: str) -> str:
-    return re.sub(r"(?<!\\)\n", "\\\\n", s)
-
-
-def replace_whitespaces_w_space(s: str) -> str:
-    return re.sub(r"\s", " ", s)
-
-
 # Function to remove punctuation from a string
-def remove_punctuation(s: str) -> str:
-    return s.translate(str.maketrans("", "", string.punctuation))
-
-
-def escape_quotes(original_json_str: str) -> str:
-    result = []
-    in_string = False
-    for i, char in enumerate(original_json_str):
-        if char == '"':
-            if not in_string:
-                in_string = True
-                result.append(char)
-            else:
-                next_char = (
-                    original_json_str[i + 1] if i + 1 < len(original_json_str) else None
-                )
-                if result and result[-1] == "\\":
-                    result.append(char)
-                elif next_char not in [",", ":", "}", "\n"]:
-                    result.append("\\" + char)
-                else:
-                    result.append(char)
-                    in_string = False
-        else:
-            result.append(char)
-    return "".join(result)
 
 
 def find_all_json_objects(text: str) -> list[dict]:
@@ -238,17 +191,6 @@ def parse_bracketed_list(content: str | None) -> list[str] | None:
     return [item for item in items if item]
 
 
-def clean_model_quote(quote: str, trim_length: int) -> str:
-    quote_clean = quote.strip()
-    if quote_clean[0] == '"':
-        quote_clean = quote_clean[1:]
-    if quote_clean[-1] == '"':
-        quote_clean = quote_clean[:-1]
-    if trim_length > 0:
-        quote_clean = quote_clean[:trim_length]
-    return quote_clean
-
-
 def shared_precompare_cleanup(text: str) -> str:
     """LLMs models sometime restructure whitespaces or edits special characters to fit a more likely
     distribution of characters found in its training data, but this hurts exact quote matching
@@ -283,10 +225,6 @@ def is_valid_email(text: str) -> bool:
         return True
     else:
         return False
-
-
-def count_punctuation(text: str) -> int:
-    return sum(1 for char in text if char in string.punctuation)
 
 
 def remove_markdown_image_references(text: str) -> str:

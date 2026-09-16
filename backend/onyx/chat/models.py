@@ -17,7 +17,6 @@ from onyx.server.query_and_chat.streaming_models import (
     Packet,
 )
 from onyx.tools.models import SearchToolUsage, ToolCallKickoff
-from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
 
 
 class StreamingError(BaseModel):
@@ -28,11 +27,6 @@ class StreamingError(BaseModel):
     )
     is_retryable: bool = True  # Hint to frontend if retry might help
     details: dict | None = None  # Additional context (tool name, model name, etc.)
-
-
-class CustomToolResponse(BaseModel):
-    response: ToolResultType
-    tool_name: str
 
 
 class CreateChatSessionID(BaseModel):
@@ -109,9 +103,6 @@ class ChatLoadedFile(InMemoryChatFile):
     # canonical plaintext (e.g. including image captions) doesn't exist yet.
     content_pending: bool = False
 
-    # Named distinctly from the base ``lazy_from_descriptor`` so the subclass
-    # can require ``content_text`` / ``token_count`` without violating LSP on
-    # the override (ty correctly flag the broader subclass signature).
     @classmethod
     def lazy_loaded(
         cls,

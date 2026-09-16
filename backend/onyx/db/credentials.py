@@ -126,15 +126,6 @@ def fetch_credentials_by_source_for_user(
     return list(credentials)
 
 
-def fetch_credentials_by_source(
-    db_session: Session,
-    document_source: DocumentSource | None = None,
-) -> list[Credential]:
-    base_query = select(Credential).where(Credential.source == document_source)
-    credentials = db_session.execute(base_query).scalars().all()
-    return list(credentials)
-
-
 def swap_credentials_connector(
     new_credential_id: int, connector_id: int, user: User, db_session: Session
 ) -> ConnectorCredentialPair:
@@ -427,13 +418,4 @@ def create_initial_public_credential(db_session: Session) -> None:
         user_id=None,
     )
     db_session.add(credential)
-    db_session.commit()
-
-
-def cleanup_gmail_credentials(db_session: Session) -> None:
-    gmail_credentials = fetch_credentials_by_source(
-        db_session=db_session, document_source=DocumentSource.GMAIL
-    )
-    for credential in gmail_credentials:
-        db_session.delete(credential)
     db_session.commit()

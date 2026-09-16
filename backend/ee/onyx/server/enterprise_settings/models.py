@@ -126,9 +126,6 @@ class EnterpriseSettings(BaseModel):
             )
         return v
 
-    def check_validity(self) -> None:
-        return
-
 
 class AnalyticsScriptUpload(BaseModel):
     script: str

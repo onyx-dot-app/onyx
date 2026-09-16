@@ -71,27 +71,3 @@ class AnthropicPromptCacheProvider(PromptCacheProvider):
             continuation=continuation,
             transform_cacheable=_add_anthropic_cache_control,
         )
-
-    def extract_cache_metadata(
-        self,
-        response: dict,  # noqa: ARG002
-        cache_key: str,  # noqa: ARG002
-    ) -> CacheMetadata | None:
-        """Extract cache metadata from Anthropic response.
-
-        Anthropic may return cache identifiers in the response.
-        For now, we don't extract detailed metadata (future explicit caching support).
-
-        Args:
-            response: Anthropic API response dictionary
-            cache_key: Cache key used for this request
-
-        Returns:
-            CacheMetadata if extractable, None otherwise
-        """
-        # TODO: Extract cache identifiers from response when implementing explicit caching
-        return None
-
-    def get_cache_ttl_seconds(self) -> int:
-        """Get cache TTL for Anthropic (5 minutes default)."""
-        return 300

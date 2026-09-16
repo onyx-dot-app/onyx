@@ -39,9 +39,6 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from shared_configs.contextvars import get_current_tenant_id
 
-SLACK_API_CHANNELS_PER_PAGE = 100
-SLACK_MAX_RETURNED_CHANNELS = 500
-
 logger = setup_logger()
 
 

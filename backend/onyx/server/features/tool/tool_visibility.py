@@ -55,34 +55,6 @@ def should_expose_tool_to_fe(tool: Tool) -> bool:
     return config.expose_to_frontend if config else True
 
 
-def is_chat_selectable(tool: Tool) -> bool:
-    """Return True if the tool should appear in the chat input bar dropdown.
-
-    Tools can be excluded from the chat dropdown while remaining available
-    in agent creation and configuration pages.
-    """
-    if tool.in_code_tool_id is None:
-        # Custom tools are always chat selectable
-        return True
-
-    config = TOOL_VISIBILITY_CONFIG.get(tool.in_code_tool_id)
-
-    return config.chat_selectable if config else True
-
-
-def is_agent_creation_selectable(tool: Tool) -> bool:
-    """Return True if the tool should appear in agent creation/default behavior pages.
-
-    Most tools should be visible in these admin contexts.
-    """
-    if tool.in_code_tool_id is None:
-        # Custom tools are always agent creation selectable
-        return True
-
-    config = TOOL_VISIBILITY_CONFIG.get(tool.in_code_tool_id)
-    return config.agent_creation_selectable if config else True
-
-
 def get_tool_visibility_config(tool: Tool) -> ToolVisibilitySettings | None:
     """Get visibility configuration for a tool, or None if not configured."""
     if tool.in_code_tool_id is None:

@@ -105,7 +105,6 @@ class ScrapeSessionContext:
 
         self.at_least_one_doc: bool = False
         self.last_error: str | None = None
-        self.needs_retry: bool = False
 
         self.playwright: Playwright | None = None
         self.playwright_context: BrowserContext | None = None

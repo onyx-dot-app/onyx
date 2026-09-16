@@ -1242,7 +1242,7 @@ class TestLoadFromCheckpoint:
             announcements=[announcement]
         )
 
-        items3, cp = _run_checkpoint(connector, cp, start, end)
+        _, cp = _run_checkpoint(connector, cp, start, end)
 
         assert cp.current_course_index == 1
         assert cp.stage == CanvasStage.PAGES

@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import SystemUsageAttribution, UsageActorKind
 from onyx.db.llm_usage import LLMUsageRecord, build_usage_upsert_values
 from onyx.db.models import UserUsage
-from onyx.utils.datetime import datetime_to_utc
 
 _CONFLICT_COLUMNS = [
     "system_attribution",
@@ -21,11 +20,6 @@ _CONFLICT_COLUMNS = [
 _SYSTEM_ACTOR_INDEX_PREDICATE = text("actor_kind = 'SYSTEM'")
 UNATTRIBUTED_SYSTEM_USAGE_CATEGORY = "unattributed"
 OTHER_SYSTEM_USAGE_CATEGORY = "other"
-
-
-class SystemTokenUsageBucket(BaseModel):
-    window_start: datetime
-    tokens: int
 
 
 class SystemUsageExportRow(BaseModel):
@@ -69,56 +63,6 @@ def record_system_usage(
     )
     db_session.execute(statement)
     db_session.flush()
-
-
-def get_system_cost_cents_since(db_session: Session, cutoff: datetime) -> float:
-    total = db_session.scalar(
-        select(func.coalesce(func.sum(UserUsage.cost_cents), 0.0)).where(
-            UserUsage.actor_kind == UsageActorKind.SYSTEM,
-            UserUsage.window_start >= cutoff,
-        )
-    )
-    return float(total or 0.0)
-
-
-def get_system_cost_cents_buckets_since(
-    db_session: Session, cutoff: datetime
-) -> list[tuple[datetime, float]]:
-    rows = db_session.execute(
-        select(
-            UserUsage.window_start,
-            func.coalesce(func.sum(UserUsage.cost_cents), 0.0),
-        )
-        .where(
-            UserUsage.actor_kind == UsageActorKind.SYSTEM,
-            UserUsage.window_start >= cutoff,
-        )
-        .group_by(UserUsage.window_start)
-    ).all()
-    return [(datetime_to_utc(window_start), float(cost)) for window_start, cost in rows]
-
-
-def get_system_token_buckets_since(
-    db_session: Session, cutoff: datetime
-) -> list[SystemTokenUsageBucket]:
-    rows = db_session.execute(
-        select(
-            UserUsage.window_start,
-            func.sum(UserUsage.input_tokens + UserUsage.output_tokens),
-        )
-        .where(
-            UserUsage.actor_kind == UsageActorKind.SYSTEM,
-            UserUsage.window_start >= cutoff,
-        )
-        .group_by(UserUsage.window_start)
-        .order_by(UserUsage.window_start)
-    ).all()
-    return [
-        SystemTokenUsageBucket(
-            window_start=datetime_to_utc(window_start), tokens=int(tokens)
-        )
-        for window_start, tokens in rows
-    ]
 
 
 def iter_system_usage_export(

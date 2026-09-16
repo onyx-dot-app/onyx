@@ -374,47 +374,6 @@ def construct_document_id_select_by_usergroup(
     return stmt
 
 
-def fetch_documents_for_user_group_paginated(
-    db_session: Session,
-    user_group_id: int,
-    last_document_id: str | None = None,
-    limit: int = 100,
-) -> tuple[Sequence[Document], str | None]:
-    stmt = (
-        select(Document)
-        .join(
-            DocumentByConnectorCredentialPair,
-            Document.id == DocumentByConnectorCredentialPair.id,
-        )
-        .join(
-            ConnectorCredentialPair,
-            and_(
-                DocumentByConnectorCredentialPair.connector_id
-                == ConnectorCredentialPair.connector_id,
-                DocumentByConnectorCredentialPair.credential_id
-                == ConnectorCredentialPair.credential_id,
-            ),
-        )
-        .join(
-            UserGroup__ConnectorCredentialPair,
-            UserGroup__ConnectorCredentialPair.cc_pair_id == ConnectorCredentialPair.id,
-        )
-        .join(
-            UserGroup,
-            UserGroup__ConnectorCredentialPair.user_group_id == UserGroup.id,
-        )
-        .where(UserGroup.id == user_group_id)
-        .order_by(Document.id)
-        .limit(limit)
-    )
-    if last_document_id is not None:
-        stmt = stmt.where(Document.id > last_document_id)
-    stmt = stmt.distinct()
-
-    documents = db_session.scalars(stmt).all()
-    return documents, documents[-1].id if documents else None
-
-
 def fetch_user_groups_for_documents(
     db_session: Session,
     document_ids: list[str],

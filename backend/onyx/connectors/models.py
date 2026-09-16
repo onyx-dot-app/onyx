@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import INDEX_SEPARATOR, RETURN_SEPARATOR, DocumentSource
-from onyx.db.enums import HierarchyNodeType, IndexModelStatus
+from onyx.db.enums import HierarchyNodeType
 from onyx.utils.text_processing import make_url_compatible
 
 
@@ -568,24 +568,3 @@ class OnyxMetadata(BaseModel):
     secondary_owners: list[BasicExpertInfo] | None = None
     doc_updated_at: datetime | None = None
     title: str | None = None
-
-
-class DocExtractionContext(BaseModel):
-    index_name: str
-    cc_pair_id: int
-    connector_id: int
-    credential_id: int
-    source: DocumentSource
-    earliest_index_time: float
-    from_beginning: bool
-    is_primary: bool
-    should_fetch_permissions_during_indexing: bool
-    search_settings_status: IndexModelStatus
-    doc_extraction_complete_batch_num: int | None
-
-
-class DocIndexingContext(BaseModel):
-    batches_done: int
-    total_failures: int
-    net_doc_change: int
-    total_chunks: int

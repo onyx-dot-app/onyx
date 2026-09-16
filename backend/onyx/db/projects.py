@@ -216,27 +216,6 @@ def get_user_files_from_project(
     )
 
 
-def get_project_instructions(db_session: Session, project_id: int | None) -> str | None:
-    """Return the project's instruction text from the project, else None.
-
-    Safe helper that swallows DB errors and returns None on any failure.
-    """
-    if not project_id:
-        return None
-    try:
-        project = (
-            db_session.query(UserProject)
-            .filter(UserProject.id == project_id)
-            .one_or_none()
-        )
-        if not project or not project.instructions:
-            return None
-        instructions = project.instructions.strip()
-        return instructions or None
-    except Exception:
-        return None
-
-
 def get_project_token_count(
     project_id: int | None,
     user_id: UUID | None,

@@ -29,7 +29,6 @@ logger = setup_logger()
 USER_USAGE_BUCKET_SECONDS = 24 * 60 * 60
 USER_USAGE_BUCKET_HOURS = USER_USAGE_BUCKET_SECONDS // (60 * 60)
 TOKEN_BUDGET_PERIOD_ERROR = "Token budget periods must be whole UTC days"
-COST_BUDGET_PERIOD_ERROR = "Cost budget periods must be whole UTC days"
 COST_BUDGET_PERIOD_HOURS = {24, 168, 720}
 _INVALID_COST_BUDGET_WARNING_TTL_SECONDS = 5 * 60
 _invalid_cost_budget_warning_lock = RLock()

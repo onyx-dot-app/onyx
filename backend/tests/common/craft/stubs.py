@@ -57,9 +57,6 @@ from typing import Any, cast
 from uuid import UUID
 
 from onyx.server.features.build.sandbox.base import SandboxEvent, SandboxManager
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
-    OutputsManifestResponse,
-)
 from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
     CraftMCPServerConfig,
@@ -159,7 +156,6 @@ class StubSandboxManager(SandboxManager):
         ] = {}
         self.create_opencode_history_snapshot_returns: bool | object = _UNSET
         self.list_directory_returns: list[FilesystemEntry] | None = None
-        self.outputs_manifest_returns: OutputsManifestResponse | None = None
         self.list_directory_returns_by_path: dict[str, list[FilesystemEntry]] | None = (
             None
         )
@@ -205,7 +201,6 @@ class StubSandboxManager(SandboxManager):
         self.create_snapshot_count: int = 0
         self.create_opencode_history_snapshot_count: int = 0
         self.restore_snapshot_count: int = 0
-        self.session_workspace_exists_count: int = 0
         self.list_session_workspaces_count: int = 0
         self.list_session_workspaces_returns: list[UUID] | None = None
         self.list_session_workspaces_payloads: list[dict[str, Any]] = []
@@ -214,21 +209,11 @@ class StubSandboxManager(SandboxManager):
         self.ensure_opencode_session_count: int = 0
         self.last_ensure_opencode_session_payload: dict[str, Any] | None = None
         self.session_runtime_call_order: list[str] = []
-        self.send_message_count: int = 0
         self.subscribe_to_opencode_session_count: int = 0
         self.list_directory_count: int = 0
-        self.get_outputs_manifest_count: int = 0
-        self.read_file_count: int = 0
-        self.upload_file_count: int = 0
-        self.delete_file_count: int = 0
         self.delete_opencode_session_count: int = 0
-        self.prompt_slot_count: int = 0
         self.dispose_opencode_instance_count: int = 0
-        self.write_sandbox_file_count: int = 0
-        self.get_upload_stats_count: int = 0
         self.write_files_to_sandbox_count: int = 0
-        self.get_webapp_url_count: int = 0
-        self.generate_pptx_preview_count: int = 0
 
         self.last_provision_payload: dict[str, Any] | None = None
         self.last_terminate_sandbox_id: UUID | None = None
@@ -447,7 +432,6 @@ class StubSandboxManager(SandboxManager):
         sandbox_id: UUID,
         session_id: UUID,
     ) -> bool:
-        self.session_workspace_exists_count += 1
         self.last_session_workspace_exists_payload = {
             "sandbox_id": sandbox_id,
             "session_id": session_id,
@@ -485,7 +469,6 @@ class StubSandboxManager(SandboxManager):
         *,
         fail_open: bool = True,
     ) -> Generator[PromptSlot, None, None]:
-        self.prompt_slot_count += 1
         self.last_prompt_slot_payload = {
             "sandbox_id": sandbox_id,
             "build_session_id": build_session_id,
@@ -544,7 +527,6 @@ class StubSandboxManager(SandboxManager):
         should_abort_on_teardown: Callable[[], bool] | None = None,
         turn_timeout_seconds: float | None = None,
     ) -> Generator[SandboxEvent, None, None]:
-        self.send_message_count += 1
         self.last_send_message_payload = {
             "sandbox_id": sandbox_id,
             "session_id": session_id,
@@ -609,20 +591,7 @@ class StubSandboxManager(SandboxManager):
             raise _not_configured("list_directory")
         return self.list_directory_returns
 
-    def get_outputs_manifest(
-        self, sandbox_id: UUID, session_id: UUID
-    ) -> OutputsManifestResponse:
-        self.get_outputs_manifest_count += 1
-        self.last_outputs_manifest_payload = {
-            "sandbox_id": sandbox_id,
-            "session_id": session_id,
-        }
-        if self.outputs_manifest_returns is None:
-            raise _not_configured("get_outputs_manifest")
-        return self.outputs_manifest_returns
-
     def read_file(self, sandbox_id: UUID, session_id: UUID, path: str) -> bytes:
-        self.read_file_count += 1
         self.last_read_file_payload = {
             "sandbox_id": sandbox_id,
             "session_id": session_id,
@@ -639,7 +608,6 @@ class StubSandboxManager(SandboxManager):
         filename: str,
         content: bytes,
     ) -> str:
-        self.upload_file_count += 1
         self.last_upload_file_payload = {
             "sandbox_id": sandbox_id,
             "session_id": session_id,
@@ -656,7 +624,6 @@ class StubSandboxManager(SandboxManager):
         session_id: UUID,
         path: str,
     ) -> bool:
-        self.delete_file_count += 1
         self.last_delete_file_payload = {
             "sandbox_id": sandbox_id,
             "session_id": session_id,
@@ -688,7 +655,6 @@ class StubSandboxManager(SandboxManager):
         path: str,
         content: str,
     ) -> None:
-        self.write_sandbox_file_count += 1
         self.last_write_sandbox_file_payload = {
             "sandbox_id": sandbox_id,
             "path": path,
@@ -702,7 +668,6 @@ class StubSandboxManager(SandboxManager):
         sandbox_id: UUID,
         session_id: UUID,
     ) -> tuple[int, int]:
-        self.get_upload_stats_count += 1
         self.last_get_upload_stats_payload = {
             "sandbox_id": sandbox_id,
             "session_id": session_id,
@@ -746,7 +711,6 @@ class StubSandboxManager(SandboxManager):
             raise _not_configured("write_files_to_sandbox")
 
     def get_webapp_url(self, sandbox_id: UUID, port: int) -> str:
-        self.get_webapp_url_count += 1
         self.last_get_webapp_url_payload = {
             "sandbox_id": sandbox_id,
             "port": port,
@@ -762,7 +726,6 @@ class StubSandboxManager(SandboxManager):
         pptx_path: str,
         cache_dir: str,
     ) -> tuple[list[str], bool]:
-        self.generate_pptx_preview_count += 1
         self.last_generate_pptx_preview_payload = {
             "sandbox_id": sandbox_id,
             "session_id": session_id,

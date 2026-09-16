@@ -22,10 +22,6 @@ class FolderPosition(str, Enum):
     MIXED = "mixed"
 
 
-class HierarchyNodesRequest(BaseModel):
-    source: DocumentSource
-
-
 class HierarchyNodeSummary(BaseModel):
     id: int
     title: str

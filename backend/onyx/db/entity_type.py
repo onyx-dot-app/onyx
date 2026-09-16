@@ -12,24 +12,6 @@ from onyx.server.kg.models import EntityType
 UNGROUNDED_SOURCE_NAME = "Ungrounded"
 
 
-def get_entity_types_with_grounded_source_name(
-    db_session: Session,
-) -> list[KGEntityType]:
-    """Get all entity types that have non-null grounded_source_name.
-
-    Args:
-        db_session: SQLAlchemy session
-
-    Returns:
-        List of KGEntityType objects that have grounded_source_name defined
-    """
-    return (
-        db_session.query(KGEntityType)
-        .filter(KGEntityType.grounded_source_name.isnot(None))
-        .all()
-    )
-
-
 def get_entity_types(
     db_session: Session,
     active: bool | None = True,

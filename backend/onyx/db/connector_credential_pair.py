@@ -1,5 +1,4 @@
 from datetime import datetime
-from enum import Enum
 from typing import TypeVarTuple
 from uuid import UUID
 
@@ -86,11 +85,6 @@ def build_user_cc_pair_access_filter(user_id: UUID) -> ColumnElement[bool]:
             or_(credential_owner, current_group_member),
         ),
     )
-
-
-class ConnectorType(str, Enum):
-    STANDARD = "standard"
-    USER_FILE = "user_file"
 
 
 class ConnectorStateSnapshot(BaseModel):
@@ -384,16 +378,6 @@ def user_owns_groupless_cc_pair(
             db_session=db_session, cc_pair_ids=[cc_pair.id]
         )
     )
-
-
-# For use with our thread-level parallelism utils. Note that any relationships
-# you wish to use MUST be eagerly loaded, as the session will not be available
-# after this function to allow lazy loading.
-def get_cc_pair_groups_for_ids_parallel(
-    cc_pair_ids: list[int],
-) -> list[UserGroup__ConnectorCredentialPair]:
-    with get_session_with_current_tenant() as db_session:
-        return get_cc_pair_groups_for_ids(db_session, cc_pair_ids)
 
 
 def get_connector_credential_pair_for_user(

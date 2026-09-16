@@ -163,13 +163,6 @@ def fetch_input_prompt_by_id(
     return result
 
 
-def fetch_public_input_prompts(
-    db_session: Session,
-) -> list[InputPrompt]:
-    query = select(InputPrompt).where(InputPrompt.is_public)
-    return list(db_session.scalars(query).all())
-
-
 def fetch_input_prompts_by_user(
     db_session: Session,
     user_id: UUID | None,

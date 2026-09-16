@@ -351,8 +351,8 @@ class _ExplodingLLM(LLM):
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
     ) -> Iterator[ModelResponseStream]:
+        yield from ()
         raise RuntimeError("stream-boom")
-        yield  # pragma: no cover — unreachable, keeps this a generator
 
 
 def test_invoke_propagates_exception_from_inner_call() -> None:

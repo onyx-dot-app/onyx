@@ -131,20 +131,6 @@ def update_federated_connector_oauth_token(
         return oauth_token
 
 
-def get_federated_connector_oauth_token(
-    db_session: Session,
-    federated_connector_id: int,
-    user_id: UUID,
-) -> FederatedConnectorOAuthToken | None:
-    """Get OAuth token for a federated connector and user."""
-    stmt = select(FederatedConnectorOAuthToken).where(
-        FederatedConnectorOAuthToken.federated_connector_id == federated_connector_id,
-        FederatedConnectorOAuthToken.user_id == user_id,
-    )
-    result = db_session.execute(stmt)
-    return result.scalar_one_or_none()
-
-
 def list_federated_connector_oauth_tokens(
     db_session: Session,
     user_id: UUID,
@@ -182,61 +168,6 @@ def create_federated_connector_document_set_mapping__no_commit(
     )
     db_session.add(mapping)
     return mapping
-
-
-def update_federated_connector_document_set_entities(
-    db_session: Session,
-    federated_connector_id: int,
-    document_set_id: int,
-    entities: dict[str, Any],
-) -> FederatedConnector__DocumentSet | None:
-    """Update entities for a federated connector document set mapping."""
-    stmt = select(FederatedConnector__DocumentSet).where(
-        FederatedConnector__DocumentSet.federated_connector_id
-        == federated_connector_id,
-        FederatedConnector__DocumentSet.document_set_id == document_set_id,
-    )
-    mapping = db_session.execute(stmt).scalar_one_or_none()
-
-    if mapping:
-        mapping.entities = entities
-        db_session.commit()
-        return mapping
-
-    return None
-
-
-def get_federated_connector_document_set_mappings(
-    db_session: Session,
-    federated_connector_id: int,
-) -> list[FederatedConnector__DocumentSet]:
-    """Get all document set mappings for a federated connector."""
-    stmt = select(FederatedConnector__DocumentSet).where(
-        FederatedConnector__DocumentSet.federated_connector_id == federated_connector_id
-    )
-    result = db_session.execute(stmt)
-    return list(result.scalars().all())
-
-
-def delete_federated_connector_document_set_mapping(
-    db_session: Session,
-    federated_connector_id: int,
-    document_set_id: int,
-) -> bool:
-    """Delete a federated connector document set mapping."""
-    stmt = select(FederatedConnector__DocumentSet).where(
-        FederatedConnector__DocumentSet.federated_connector_id
-        == federated_connector_id,
-        FederatedConnector__DocumentSet.document_set_id == document_set_id,
-    )
-    mapping = db_session.execute(stmt).scalar_one_or_none()
-
-    if mapping:
-        db_session.delete(mapping)
-        db_session.commit()
-        return True
-
-    return False
 
 
 def get_federated_connector_document_set_mappings_by_document_set_names(

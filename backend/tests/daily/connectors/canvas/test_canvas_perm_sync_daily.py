@@ -32,10 +32,8 @@ CANVAS_BASE_URL = "https://canvas.onyx.app"
 COURSE_A_NAME = "intro to python"
 COURSE_B_NAME = "introductory data structures"
 
-TEACHER_EMAILS = {"justin@onyx.app", "admin-test@onyx.app", "test_user_3@onyx-test.com"}
 STUDENT_1_EMAIL = "test_user_1@onyx-test.com"
 STUDENT_2_EMAIL = "test_user_2@onyx-test.com"
-COURSE_A_EMAILS = TEACHER_EMAILS | {STUDENT_1_EMAIL, STUDENT_2_EMAIL}
 
 PAGE_A_TITLE = "home page"
 ANN_ALL_TITLE = "A Ann All"

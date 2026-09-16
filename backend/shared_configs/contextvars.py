@@ -18,10 +18,6 @@ SESSION_TENANT_OVERRIDE_CONTEXTVAR: contextvars.ContextVar[str | None] = (
     contextvars.ContextVar("session_tenant_override", default=None)
 )
 
-# set by every route in the API server
-INDEXING_REQUEST_ID_CONTEXTVAR: contextvars.ContextVar[str | None] = (
-    contextvars.ContextVar("indexing_request_id", default=None)
-)
 
 # set by every route in the API server
 ONYX_REQUEST_ID_CONTEXTVAR: contextvars.ContextVar[str | None] = contextvars.ContextVar(
@@ -94,7 +90,3 @@ def get_current_user_id() -> str | None:
 def get_current_incognito_record_mode() -> str | None:
     """The incognito record-mode value of the current turn, None outside one."""
     return CURRENT_INCOGNITO_RECORD_MODE_CONTEXTVAR.get()
-
-
-def get_current_usage_credential() -> UsageCredentialIdentity | None:
-    return CURRENT_USAGE_CREDENTIAL_CONTEXTVAR.get()

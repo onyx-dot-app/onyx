@@ -16,11 +16,6 @@ MAX_LLM_CYCLES: int = int(os.environ.get("MAX_LLM_CYCLES") or 6)
 DOC_TIME_DECAY = float(
     os.environ.get("DOC_TIME_DECAY") or 0.5  # Hits limit at 2 years by default
 )
-# For the highest matching base size chunk, how many chunks above and below do we pull in by default
-# Note this is not in any of the deployment configs yet
-# Currently only applies to search flow not chat
-CONTEXT_CHUNKS_ABOVE = int(os.environ.get("CONTEXT_CHUNKS_ABOVE") or 1)
-CONTEXT_CHUNKS_BELOW = int(os.environ.get("CONTEXT_CHUNKS_BELOW") or 1)
 # Fairly long but this is to account for edge cases where the LLM pauses for much longer than usual
 # The alternative is to fail the request completely so this is intended to be fairly lenient.
 LLM_SOCKET_READ_TIMEOUT = int(
@@ -89,10 +84,6 @@ STOP_STREAM_PAT = os.environ.get("STOP_STREAM_PAT") or None
 # This will make chats unviewable by admins after a user deletes them
 # As opposed to soft deleting them, which just hides them from non-admin users
 HARD_DELETE_CHATS = os.environ.get("HARD_DELETE_CHATS", "").lower() == "true"
-
-# Internet Search
-NUM_INTERNET_SEARCH_RESULTS = int(os.environ.get("NUM_INTERNET_SEARCH_RESULTS") or 10)
-NUM_INTERNET_SEARCH_CHUNKS = int(os.environ.get("NUM_INTERNET_SEARCH_CHUNKS") or 50)
 
 VESPA_SEARCHER_THREADS = int(os.environ.get("VESPA_SEARCHER_THREADS") or 2)
 

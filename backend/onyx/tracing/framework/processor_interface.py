@@ -121,15 +121,3 @@ class TracingProcessor(abc.ABC):
             - Useful before shutdown or when immediate processing is needed
             - May block while processing completes
         """
-
-
-class TracingExporter(abc.ABC):
-    """Exports traces and spans. For example, could log them or send them to a backend."""
-
-    @abc.abstractmethod
-    def export(self, items: list["Trace | Span[Any]"]) -> None:
-        """Exports a list of traces and spans.
-
-        Args:
-            items: The items to export.
-        """

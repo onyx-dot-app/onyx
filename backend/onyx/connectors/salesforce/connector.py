@@ -37,7 +37,6 @@ from onyx.connectors.interfaces import (
 )
 from onyx.connectors.models import (
     BasicExpertInfo,
-    ConnectorCheckpoint,
     ConnectorMissingCredentialError,
     Document,
     HierarchyNode,
@@ -111,11 +110,6 @@ _DEFAULT_ATTRIBUTES_TO_KEEP: dict[str, dict[str, str]] = {
         MODIFIED_FIELD: "last_modified_date",
     },
 }
-
-
-class SalesforceCheckpoint(ConnectorCheckpoint):
-    initial_sync_complete: bool
-    current_timestamp: SecondsSinceUnixEpoch
 
 
 class SalesforceConnectorContext:

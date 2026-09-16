@@ -994,7 +994,3 @@ def _extract_text_and_images(
     except Exception as e:
         logger.exception("Failed to extract text/images from %s: %s", file_name, e)
         return ExtractionResult(text_content="", embedded_images=[], metadata={})
-
-
-def docx_to_txt_filename(file_path: str) -> str:
-    return file_path.rsplit(".", 1)[0] + ".txt"

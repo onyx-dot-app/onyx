@@ -303,13 +303,6 @@ def get_parent_id_from_cache(
     return parent_id, True
 
 
-def is_cache_populated(redis_client: TenantRedisClient, source: DocumentSource) -> bool:
-    """Check if the cache has any entries for this source."""
-    cache_key = _cache_key(source)
-    # redis.exists returns int (number of keys that exist)
-    return redis_client.exists(cache_key) > 0
-
-
 def refresh_hierarchy_cache_from_db(
     redis_client: TenantRedisClient,
     db_session: Session,
@@ -533,18 +526,6 @@ def get_source_node_id_from_cache(
 
     logger.error("SOURCE node not found for source %s", source.value)
     return None
-
-
-def clear_hierarchy_cache(
-    redis_client: TenantRedisClient, source: DocumentSource
-) -> None:
-    """Clear the hierarchy cache for a source (useful for testing)."""
-    cache_key = _cache_key(source)
-    raw_id_key = _raw_id_cache_key(source)
-    source_node_key = _source_node_key(source)
-    redis_client.delete(cache_key)
-    redis_client.delete(raw_id_key)
-    redis_client.delete(source_node_key)
 
 
 def ensure_source_node_exists(

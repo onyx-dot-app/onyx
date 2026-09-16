@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from shared_configs.enums import EmbeddingProvider, EmbedTextType, RerankerProvider
+from shared_configs.enums import EmbeddingProvider, EmbedTextType
 
 Embedding = list[float]
 
@@ -31,32 +31,3 @@ class EmbedRequest(BaseModel):
 
 class EmbedResponse(BaseModel):
     embeddings: list[Embedding]
-
-
-class RerankRequest(BaseModel):
-    query: str
-    documents: list[str]
-    model_name: str
-    provider_type: RerankerProvider | None = None
-    api_key: str | None = None
-    api_url: str | None = None
-
-    # This disables the "model_" protected namespace for pydantic
-    model_config = {"protected_namespaces": ()}
-
-
-class RerankResponse(BaseModel):
-    scores: list[float]
-
-
-class IntentRequest(BaseModel):
-    query: str
-    # Sequence classification threshold
-    semantic_percent_threshold: float
-    # Token classification threshold
-    keyword_percent_threshold: float
-
-
-class IntentResponse(BaseModel):
-    is_keyword: bool
-    keywords: list[str]

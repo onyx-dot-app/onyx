@@ -391,35 +391,6 @@ def decompose_action_id(feedback_id: str) -> tuple[int, str | None, int | None]:
         raise ValueError("Received invalid Feedback Identifier")
 
 
-def get_view_values(state_values: dict[str, Any]) -> dict[str, Any]:
-    """Extract view values
-
-    Args:
-        state_values (dict): The Slack view-submission values
-
-    Returns:
-        dict: keys/values of the view state content
-    """
-    view_values = {}
-    for view_data in state_values.values():
-        for k, v in view_data.items():
-            if (
-                "selected_option" in v
-                and isinstance(v["selected_option"], dict)
-                and "value" in v["selected_option"]
-            ):
-                view_values[k] = v["selected_option"]["value"]
-            elif "selected_options" in v and isinstance(v["selected_options"], list):
-                view_values[k] = [
-                    x["value"] for x in v["selected_options"] if "value" in x
-                ]
-            elif "selected_date" in v:
-                view_values[k] = v["selected_date"]
-            elif "value" in v:
-                view_values[k] = v["value"]
-    return view_values
-
-
 def remove_slack_text_interactions(slack_str: str) -> str:
     slack_str = SlackTextCleaner.replace_tags_basic(slack_str)
     slack_str = SlackTextCleaner.replace_channels_basic(slack_str)

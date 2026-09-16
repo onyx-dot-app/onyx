@@ -169,6 +169,9 @@ dev = [
     "types-pytz==2023.3.1.1",
     "types-regex==2023.3.23.1",
     "types-requests==2.32.0.20250328",
+    # Keep in sync with the pinned `vulture==` in the vulture hook in
+    # .pre-commit-config.yaml.
+    "vulture==2.16",
     { include-group = "ods" },
     { include-group = "zizmor" },
 ]
@@ -263,6 +266,77 @@ missing-type-argument = "ignore"  # ~1k bare generics across ~350 files.
 [tool.uv.workspace]
 members = ["tools/ods"]
 
+[tool.vulture]
+# Finds unused functions, classes, methods, and module attributes. Ruff covers
+# unused imports and locals. Scan the whole backend (tests included) so a name
+# used anywhere counts as used. Names that are only referenced dynamically go in
+# backend/scripts/vulture_whitelist.py. check_dead_code.py scans alembic
+# migrations for references but does not report on them.
+paths = [
+    "backend/onyx",
+    "backend/ee",
+    "backend/shared_configs",
+    "backend/model_server",
+    "backend/scripts",
+    "backend/tests",
+    "backend/alembic",
+    "backend/alembic_tenants",
+]
+exclude = [
+    "*/generated/*",
+    "*/.venv/*",
+    "*/onyx/server/features/build/sandbox/image/sandbox_daemon/*",
+    "*/onyx/server/features/build/sandbox/image/templates/*",
+    "*/onyx/skills/builtin/*",
+]
+ignore_decorators = [
+    "@*.get",
+    "@*.post",
+    "@*.put",
+    "@*.patch",
+    "@*.delete",
+    "@*.api_route",
+    "@*.websocket",
+    "@*.on_event",
+    "@*.exception_handler",
+    "@*.middleware",
+    "@*.task",
+    "@shared_task",
+    "@field_validator",
+    "@model_validator",
+    "@field_serializer",
+    "@computed_field",
+    "@*.listens_for",
+    "@pytest.fixture",
+    "@*.command",
+    "@*.connect",
+    "@control_command",
+    "@*.resource",
+    "@*.tool",
+    "@compiles",
+    "@validates",
+    "@model_serializer",
+    "@pytest_asyncio.fixture",
+    "@source_operation",
+]
+ignore_names = [
+    "test_*",
+    "pytest_*",
+    "pytestmark",
+    "model_config",
+    "Config",
+    "upgrade",
+    "downgrade",
+    "revision",
+    "down_revision",
+    "branch_labels",
+    "depends_on",
+    # Test SourceOperations subclasses register through __init_subclass__.
+    "_*Operations",
+]
+min_confidence = 60
+sort_by_size = true
+
 [tool.basedpyright]
 include = ["backend"]
 exclude = [
@@ -347,6 +421,8 @@ known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 # pipe shell commands, and build ad-hoc SQL against trusted internal inputs
 # (tenant IDs, schema names). Other S rules still apply.
 "backend/scripts/**" = ["S108", "S602", "S608"]
+# A vulture whitelist is a list of bare attribute reads.
+"backend/scripts/vulture_whitelist.py" = ["B018"]
 # Functions above the max-complexity of 20 when C901 was enabled. The trailing
 # number is the highest complexity in that file at the time. Remove an entry
 # once its functions are simplified. NOTE: the ignore is per file, so it also

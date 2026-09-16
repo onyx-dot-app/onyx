@@ -611,14 +611,6 @@ class CCPairFullInfo(BaseModel):
         )
 
 
-class CeleryTaskStatus(BaseModel):
-    id: str
-    name: str
-    status: TaskStatus
-    start_time: datetime | None
-    register_time: datetime | None
-
-
 class FailedConnectorIndexingStatus(BaseModel):
     """Simplified version of ConnectorIndexingStatus for failed indexing attempts"""
 
@@ -642,22 +634,6 @@ class ConnectorStatus(BaseModel):
     credential: CredentialSnapshot
     access_type: AccessType
     groups: list[int]
-
-
-class ConnectorIndexingStatus(ConnectorStatus):
-    """Represents the full indexing status of a connector"""
-
-    cc_pair_status: ConnectorCredentialPairStatus
-    # this is separate from the `status` above, since a connector can be `INITIAL_INDEXING`, `ACTIVE`,
-    # or `PAUSED` and still be in a repeated error state.
-    in_repeated_error_state: bool
-    owner: str
-    last_finished_status: IndexingStatus | None
-    last_status: IndexingStatus | None
-    last_success: datetime | None
-    latest_index_attempt: IndexAttemptSnapshot | None
-    docs_indexed: int
-    in_progress: bool
 
 
 class DocsCountOperator(str, Enum):
@@ -732,17 +708,6 @@ class CCPairSummary(BaseModel):
     name: str
     source: DocumentSource
     access_type: AccessType
-
-    @classmethod
-    def from_cc_pair_descriptor(
-        cls, descriptor: ConnectorCredentialPairDescriptor
-    ) -> "CCPairSummary":
-        return cls(
-            id=descriptor.id,
-            name=descriptor.name,
-            source=descriptor.connector.source,
-            access_type=descriptor.access_type,
-        )
 
 
 class RunConnectorRequest(BaseModel):

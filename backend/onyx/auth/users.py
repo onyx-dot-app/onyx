@@ -9,7 +9,7 @@ from collections.abc import AsyncGenerator, Sequence
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from functools import partial
-from typing import Any, Dict, List, Literal, Optional, Protocol, Tuple, TypeVar, cast
+from typing import Any, Dict, List, Literal, Optional, Tuple, TypeVar, cast
 from urllib.parse import urlparse
 
 import jwt
@@ -183,8 +183,6 @@ from shared_configs.contextvars import (
 from shared_configs.enums import UsageCredentialType
 
 logger = setup_logger()
-
-REGISTER_INVITE_ONLY_CODE = "REGISTER_INVITE_ONLY"
 
 
 def is_user_admin(user: User) -> bool:
@@ -1662,18 +1660,6 @@ bearer_transport = BearerTransport(tokenUrl="auth/mobile/login")
 
 T = TypeVar("T", covariant=True)
 ID = TypeVar("ID", contravariant=True)
-
-
-# Protocol for strategies that support token refreshing without inheritance.
-class RefreshableStrategy(Protocol):
-    """Protocol for authentication strategies that support token refreshing."""
-
-    async def refresh_token(self, token: Optional[str], user: Any) -> str:
-        """
-        Refresh an existing token by extending its lifetime.
-        Returns either the same token with extended expiration or a new token.
-        """
-        ...
 
 
 class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):

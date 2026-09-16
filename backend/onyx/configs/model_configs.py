@@ -28,10 +28,6 @@ OLD_DEFAULT_DOCUMENT_ENCODER_MODEL = "thenlper/gte-small"
 OLD_DEFAULT_MODEL_DOC_EMBEDDING_DIM = 384
 OLD_DEFAULT_MODEL_NORMALIZE_EMBEDDINGS = False
 
-# These are only used if reranking is turned off, to normalize the direct retrieval scores for display
-# Currently unused
-SIM_SCORE_RANGE_LOW = float(os.environ.get("SIM_SCORE_RANGE_LOW") or 0.0)
-SIM_SCORE_RANGE_HIGH = float(os.environ.get("SIM_SCORE_RANGE_HIGH") or 1.0)
 # Certain models like e5, BGE, etc use a prefix for asymmetric retrievals (query generally shorter than docs)
 ASYM_QUERY_PREFIX = os.environ.get("ASYM_QUERY_PREFIX", "search_query: ")
 ASYM_PASSAGE_PREFIX = os.environ.get("ASYM_PASSAGE_PREFIX", "search_document: ")
@@ -136,10 +132,4 @@ if _LITELLM_EXTRA_BODY_RAW:
 # Enable prompt caching framework
 ENABLE_PROMPT_CACHING = (
     os.environ.get("ENABLE_PROMPT_CACHING", "true").lower() != "false"
-)
-
-# Cache TTL multiplier - store caches slightly longer than provider TTL
-# This allows for some clock skew and ensures we don't lose cache metadata prematurely
-PROMPT_CACHE_REDIS_TTL_MULTIPLIER = float(
-    os.environ.get("PROMPT_CACHE_REDIS_TTL_MULTIPLIER") or 1.2
 )

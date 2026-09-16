@@ -2,7 +2,7 @@ import time
 from collections import defaultdict
 from collections.abc import Callable, Generator, Iterator
 from contextlib import contextmanager, nullcontext
-from typing import NamedTuple, Protocol
+from typing import NamedTuple
 
 import sentry_sdk
 from pydantic import BaseModel, ConfigDict
@@ -188,14 +188,6 @@ class IndexingPipelineResult(BaseModel):
 class ChunkEmbeddingResult(BaseModel):
     successful_chunk_ids: list[tuple[int, str]]  # (chunk_id, document_id)
     connector_failures: list[ConnectorFailure]
-
-
-class IndexingPipelineProtocol(Protocol):
-    def __call__(
-        self,
-        document_batch: list[Document],
-        index_attempt_metadata: IndexAttemptMetadata,
-    ) -> IndexingPipelineResult: ...
 
 
 def _upsert_documents_in_db(

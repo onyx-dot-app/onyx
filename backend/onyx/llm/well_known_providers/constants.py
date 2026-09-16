@@ -30,8 +30,6 @@ PORTKEY_API_MODE_CHAT_COMPLETIONS = "chat_completions"
 PORTKEY_API_MODE_RESPONSES = "responses"
 PORTKEY_API_MODE_MESSAGES = "messages"
 PORTKEY_DEFAULT_API_MODE = PORTKEY_API_MODE_CHAT_COMPLETIONS
-PORTKEY_DEFAULT_API_BASE_OPENAI = "https://api.portkey.ai/v1"
-PORTKEY_DEFAULT_API_BASE_ANTHROPIC = "https://api.portkey.ai"
 
 # Providers that use optional Bearer auth from custom_config
 PROVIDERS_WITH_SPECIAL_API_KEY_HANDLING: dict[str, str] = {

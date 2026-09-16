@@ -21,17 +21,6 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-def get_pinned_persona_ids(db_session: Session, user_id: UUID) -> list[int]:
-    """The user's pinned agent ids, in the order they should be shown."""
-    return list(
-        db_session.scalars(
-            select(User__PinnedPersona.persona_id)
-            .where(User__PinnedPersona.user_id == user_id)
-            .order_by(User__PinnedPersona.display_order.asc())
-        ).all()
-    )
-
-
 def set_pinned_personas(
     db_session: Session,
     user: User,

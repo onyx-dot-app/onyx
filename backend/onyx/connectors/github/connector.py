@@ -429,11 +429,6 @@ def _convert_pr_to_document(
     )
 
 
-def _fetch_issue_comments(issue: Issue) -> str:
-    comments = issue.get_comments()
-    return "\nComment: ".join(comment.body for comment in comments)
-
-
 def _convert_issue_to_document(
     issue: Issue, repo_external_access: ExternalAccess | None
 ) -> Document:

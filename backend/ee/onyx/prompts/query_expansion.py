@@ -13,15 +13,3 @@ CRITICAL: Do not include any additional formatting, comments, or anything aside 
 The user query is:
 {user_query}
 """.strip()
-
-
-QUERY_TYPE_PROMPT = """
-Determine if the provided query is better suited for a keyword search or a semantic search.
-Respond with "keyword" or "semantic" literally and nothing else.
-Do not provide any additional text or reasoning to your response.
-
-CRITICAL: It must only be 1 single word - EITHER "keyword" or "semantic".
-
-The user query is:
-{user_query}
-""".strip()

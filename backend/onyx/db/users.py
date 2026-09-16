@@ -1043,7 +1043,6 @@ def batch_get_last_active(
     `ChatSession.time_updated` alone is not either. It has `onupdate=func.now()`, so
     it advances when the session row is written — creation, and auto-naming on the
     first turn — but sending a follow-up message only inserts a `ChatMessage`.
-    (`update_chat_session_updated_at_timestamp` exists for this and has no callers.)
     Measured against production, that left 65% of users with a stale value, the worst
     understated by 174 days.
 

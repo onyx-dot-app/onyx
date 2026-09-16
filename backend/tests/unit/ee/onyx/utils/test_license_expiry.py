@@ -14,13 +14,6 @@ from ee.onyx.utils.license_expiry import (
 NOW = datetime(2026, 5, 1, 12, 0, 0, tzinfo=timezone.utc)
 
 
-def _patch_now() -> object:
-    p = patch("ee.onyx.utils.license_expiry.datetime")
-    mock = p.start()
-    mock.now.return_value = NOW
-    return p
-
-
 @pytest.mark.parametrize(
     "delta,want",
     [

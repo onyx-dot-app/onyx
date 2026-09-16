@@ -1,13 +1,10 @@
 import os
 from abc import ABC, abstractmethod
-from copy import copy
 
 from tokenizers import Encoding, Tokenizer
 
 from onyx.configs.model_configs import DOCUMENT_ENCODER_MODEL
-from onyx.context.search.models import InferenceChunk
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
 from shared_configs.enums import EmbeddingProvider
 
 TRIM_SEP_PAT = "\n... {n} tokens removed...\n"
@@ -259,18 +256,3 @@ def tokenizer_trim_middle(
         + sep_str
         + tokenizer.decode(tokens[-slice_size:])
     )
-
-
-def tokenizer_trim_chunks(
-    chunks: list[InferenceChunk],
-    tokenizer: BaseTokenizer,
-    max_chunk_toks: int = DOC_EMBEDDING_CONTEXT_SIZE,
-) -> list[InferenceChunk]:
-    new_chunks = copy(chunks)
-    for ind, chunk in enumerate(new_chunks):
-        new_content = tokenizer_trim_content(chunk.content, max_chunk_toks, tokenizer)
-        if len(new_content) != len(chunk.content):
-            new_chunk = copy(chunk)
-            new_chunk.content = new_content
-            new_chunks[ind] = new_chunk
-    return new_chunks

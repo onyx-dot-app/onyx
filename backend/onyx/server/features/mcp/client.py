@@ -7,7 +7,7 @@ and handles connection initialization, session management, and protocol communic
 
 from collections.abc import Callable, Coroutine
 from enum import Enum
-from typing import Any, Dict, TypeVar
+from typing import Any, TypeVar
 
 from mcp import ClientSession
 from mcp.client.auth import OAuthClientProvider
@@ -16,11 +16,9 @@ from mcp.client.streamable_http import streamablehttp_client  # or use stdio_cli
 from mcp.types import (
     CallToolResult,
     InitializeResult,
-    ListResourcesResult,
     TextResourceContents,
 )
 from mcp.types import Tool as MCPLibTool
-from pydantic import BaseModel
 
 from onyx.configs.app_configs import MCP_TOOL_CALL_TIMEOUT_SECONDS
 from onyx.db.enums import MCPTransport
@@ -35,14 +33,6 @@ T = TypeVar("T", covariant=True)
 MCPClientFunction = Callable[[ClientSession], Coroutine[Any, Any, T]]
 
 
-class MCPMessageType(str, Enum):
-    """MCP message types"""
-
-    REQUEST = "request"
-    RESPONSE = "response"
-    NOTIFICATION = "notification"
-
-
 class ContentBlockTypes(str, Enum):
     """MCP content block types"""  # Unfortunstely these aren't exposed by the mcp library
 
@@ -51,38 +41,6 @@ class ContentBlockTypes(str, Enum):
     AUDIO = "audio"
     RESOURCE = "resource"
     RESOURCE_LINK = "resource_link"
-
-
-class MCPMessage(BaseModel):
-    """Base MCP message following JSON-RPC 2.0"""
-
-    jsonrpc: str = "2.0"
-    method: str | None = None
-    params: Dict[str, Any] | None = None
-    id: Any | None = None
-    result: Any | None = None
-    error: Dict[str, Any] | None = None
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to JSON-RPC message dict"""
-        msg: Dict[str, Any] = {"jsonrpc": self.jsonrpc}
-
-        if self.id is not None:
-            msg["id"] = self.id
-
-        if self.method is not None:
-            msg["method"] = self.method
-
-        if self.params is not None:
-            msg["params"] = self.params
-
-        if self.result is not None:
-            msg["result"] = self.result
-
-        if self.error is not None:
-            msg["error"] = self.error
-
-        return msg
 
 
 # TODO: in the future we should do things like manage sessions and handle errors better
@@ -314,28 +272,5 @@ def discover_mcp_tools(
         server_url,
         connection_headers,
         transport,
-        auth,
-    )
-
-
-async def _discover_mcp_resources(session: ClientSession) -> ListResourcesResult:
-    return await session.list_resources()
-
-
-def discover_mcp_resources_sync(
-    server_url: str,
-    connection_headers: dict[str, str] | None = None,
-    transport: str = "streamable-http",
-    auth: OAuthClientProvider | None = None,
-) -> ListResourcesResult:
-    """
-    Synchronous wrapper for discovering MCP resources.
-    This is for compatibility with the existing codebase.
-    """
-    return _call_mcp_client_function_sync(
-        _discover_mcp_resources,
-        server_url,
-        connection_headers,
-        MCPTransport(transport),
         auth,
     )

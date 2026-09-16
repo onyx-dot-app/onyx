@@ -1785,12 +1785,6 @@ USER_USAGE_TRACKING_ENABLED = (
     os.environ.get("USER_USAGE_TRACKING_ENABLED", "true").lower() != "false"
 )
 
-# Defined custom query/answer conditions to validate the query and the LLM answer.
-# Format: list of strings
-CUSTOM_ANSWER_VALIDITY_CONDITIONS = json.loads(
-    os.environ.get("CUSTOM_ANSWER_VALIDITY_CONDITIONS", "[]")
-)
-
 VESPA_REQUEST_TIMEOUT = int(os.environ.get("VESPA_REQUEST_TIMEOUT") or "15")
 # This is the timeout for the client side of the Vespa migration task. When
 # exceeded, an exception is raised in our code. This value should be higher than
@@ -1858,12 +1852,6 @@ ENTERPRISE_EDITION_ENABLED = (
 # These environment variables will be deprecated soon.
 # To configure image generation, please visit the Image Generation page in the Admin Panel.
 #####
-# Azure Image Configurations
-AZURE_IMAGE_API_VERSION = os.environ.get("AZURE_IMAGE_API_VERSION")
-AZURE_IMAGE_API_KEY = os.environ.get("AZURE_IMAGE_API_KEY")
-AZURE_IMAGE_API_BASE = os.environ.get("AZURE_IMAGE_API_BASE")
-AZURE_IMAGE_DEPLOYMENT_NAME = os.environ.get("AZURE_IMAGE_DEPLOYMENT_NAME")
-
 # configurable image model
 IMAGE_MODEL_NAME = os.environ.get("IMAGE_MODEL_NAME", "gpt-image-1")
 IMAGE_MODEL_PROVIDER = os.environ.get("IMAGE_MODEL_PROVIDER", "openai")
@@ -1987,8 +1975,6 @@ MOCK_LLM_RESPONSE = (
     os.environ.get("MOCK_LLM_RESPONSE") if os.environ.get("MOCK_LLM_RESPONSE") else None
 )
 
-
-DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB = 20
 
 # Number of pre-provisioned tenants to maintain
 TARGET_AVAILABLE_TENANTS = int(os.environ.get("TARGET_AVAILABLE_TENANTS", "5"))

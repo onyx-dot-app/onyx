@@ -1,7 +1,6 @@
 from abc import abstractmethod
 from collections.abc import Sequence
 from datetime import datetime
-from enum import Enum
 
 from pydantic import BaseModel, field_validator
 
@@ -13,13 +12,6 @@ from onyx.utils.url import normalize_url
 DEFAULT_MAX_RESULTS = 20
 
 WEB_SEARCH_PREFIX = "WEB_SEARCH_DOC_"
-
-
-class ProviderType(Enum):
-    """Enum for internet search provider types"""
-
-    GOOGLE = "google"
-    EXA = "exa"
 
 
 class WebSearchResult(BaseModel):

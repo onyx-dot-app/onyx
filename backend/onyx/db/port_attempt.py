@@ -469,21 +469,6 @@ def is_active_port_backfill_source(
     )
 
 
-def get_port_attempts_for_future(
-    db_session: Session, search_settings_id: int
-) -> list[PortAttempt]:
-    """All attempts (any status) for a FUTURE, newest first."""
-    return list(
-        db_session.execute(
-            select(PortAttempt)
-            .where(PortAttempt.search_settings_id == search_settings_id)
-            .order_by(PortAttempt.time_created.desc())
-        )
-        .scalars()
-        .all()
-    )
-
-
 def get_latest_port_attempt(
     db_session: Session,
     cc_pair_id: int | None,

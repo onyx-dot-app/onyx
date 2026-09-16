@@ -256,10 +256,6 @@ def get_default_shard_name() -> str:
     return ONYX_DB_DEFAULT_SHARD
 
 
-def get_catalog_shard_name() -> str:
-    return ONYX_DB_CATALOG_SHARD
-
-
 def get_new_tenant_shard_name() -> str:
     """Shard that newly created tenants are placed on."""
     return ONYX_DB_NEW_TENANT_SHARD

@@ -14,7 +14,6 @@ from onyx.document_index.vespa.shared_utils.utils import (
     replace_invalid_doc_id_characters,
 )
 from onyx.llm.interfaces import LLM
-from onyx.prompts.prompt_utils import clean_up_source
 from onyx.secondary_llm_flows.document_filter import classify_section_relevance
 from onyx.tools.tool_implementations.search.constants import (
     FULL_DOC_NUM_CHUNKS_AROUND,
@@ -114,21 +113,6 @@ def weighted_reciprocal_rank_fusion(
         ),
     )
     return [id_to_item[item_id] for item_id in sorted_ids]
-
-
-def section_to_dict(section: InferenceSection, section_num: int) -> dict:
-    doc_dict = {
-        "document_number": section_num + 1,
-        "title": section.center_chunk.semantic_identifier,
-        "content": section.combined_content,
-        "source": clean_up_source(section.center_chunk.source_type),
-        "metadata": section.center_chunk.metadata,
-    }
-    if section.center_chunk.updated_at:
-        doc_dict["updated_at"] = section.center_chunk.updated_at.strftime(
-            "%B %d, %Y %H:%M"
-        )
-    return doc_dict
 
 
 def _retrieve_adjacent_chunks(

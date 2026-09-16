@@ -1,6 +1,5 @@
 import time
 
-from ee.onyx.db.external_perm import fetch_external_groups_for_user_email_and_group_ids
 from ee.onyx.external_permissions.salesforce.utils import (
     get_any_salesforce_client_for_doc_id,
     get_objects_access_for_user_id,
@@ -17,19 +16,6 @@ logger = setup_logger()
 # Types
 ChunkKey = tuple[str, int]  # (doc_id, chunk_id)
 ContentRange = tuple[int, int | None]  # (start_index, end_index) None means to the end
-
-
-# NOTE: Used for testing timing
-def _get_dummy_object_access_map(
-    object_ids: set[str],
-    user_email: str,  # noqa: ARG001
-    chunks: list[InferenceChunk],  # noqa: ARG001
-) -> dict[str, bool]:
-    time.sleep(0.15)
-    # return {object_id: True for object_id in object_ids}
-    import random
-
-    return {object_id: random.choice([True, False]) for object_id in object_ids}
 
 
 def _get_objects_access_for_user_email_from_salesforce(
@@ -211,18 +197,3 @@ def censor_salesforce_chunks(
             censored_chunks[chunk_key] = censored_chunk
 
     return list(censored_chunks.values())
-
-
-# NOTE: This is not used anywhere.
-def _get_objects_access_for_user_email(
-    object_ids: set[str], user_email: str
-) -> dict[str, bool]:
-    with get_session_with_current_tenant() as db_session:
-        external_groups = fetch_external_groups_for_user_email_and_group_ids(
-            db_session=db_session,
-            user_email=user_email,
-            # Maybe make a function that adds a salesforce prefix to the group ids
-            group_ids=list(object_ids),
-        )
-        external_group_ids = {group.external_user_group_id for group in external_groups}
-        return {group_id: group_id in external_group_ids for group_id in object_ids}

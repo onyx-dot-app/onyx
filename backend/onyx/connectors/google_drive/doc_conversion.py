@@ -377,7 +377,7 @@ def _download_and_extract_sections_basic(
         # Store images for later processing
         sections: list[TextSection | ImageSection | TabularSection] = []
         try:
-            section, embedded_id = store_image_and_create_section(
+            section, _ = store_image_and_create_section(
                 image_data=response_call(),
                 file_id=file_id,
                 display_name=file_name,
@@ -485,7 +485,7 @@ def _download_and_extract_sections_basic(
         # Process embedded images in the PDF
         try:
             for idx, (img_data, img_name) in enumerate(images):
-                section, embedded_id = store_image_and_create_section(
+                section, _ = store_image_and_create_section(
                     image_data=img_data,
                     file_id=f"{file_id}_img_{idx}",
                     display_name=img_name or f"{file_name} - image {idx}",

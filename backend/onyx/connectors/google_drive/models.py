@@ -27,9 +27,6 @@ class GDriveMimeType(str, Enum):
 GoogleDriveFileType = dict[str, Any]
 
 
-TOKEN_EXPIRATION_TIME = 3600  # 1 hour
-
-
 # These correspond to The major stages of retrieval for google drive.
 # The stages for the oauth flow are:
 # get_all_files_for_oauth(),

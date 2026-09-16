@@ -3,7 +3,6 @@
 from unittest.mock import patch
 from uuid import uuid4
 
-from prometheus_client import REGISTRY
 from redis.exceptions import RedisError
 
 from onyx.cache.factory import get_cache_backend
@@ -17,22 +16,6 @@ from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 def _unique_query() -> str:
     return f"hello world {uuid4().hex[:8]}"
-
-
-def _lookup_count(provider: str, outcome: str) -> float:
-    value = REGISTRY.get_sample_value(
-        "onyx_query_embedding_cache_lookups_total",
-        {"provider": provider, "outcome": outcome},
-    )
-    return value or 0.0
-
-
-def _write_count(provider: str, outcome: str) -> float:
-    value = REGISTRY.get_sample_value(
-        "onyx_query_embedding_cache_writes_total",
-        {"provider": provider, "outcome": outcome},
-    )
-    return value or 0.0
 
 
 class TestCacheThenRetrieve:

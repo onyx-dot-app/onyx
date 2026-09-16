@@ -28,16 +28,6 @@ class ToolManager:
         ]
 
     @staticmethod
-    def get_by_in_code_id(
-        in_code_tool_id: str,
-        user_performing_action: DATestUser,
-    ) -> DATestTool | None:
-        for tool in ToolManager.list_tools(user_performing_action):
-            if tool.in_code_tool_id == in_code_tool_id:
-                return tool
-        return None
-
-    @staticmethod
     def set_enabled(
         tool_ids: list[int],
         enabled: bool,

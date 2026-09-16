@@ -35,8 +35,8 @@ def _raising_connector(message: str) -> SlimConnector:
     connector = MagicMock(spec=SlimConnector)
 
     def raising_iter() -> Iterator:
+        yield from ()
         raise Exception(message)
-        yield
 
     connector.retrieve_all_slim_docs.return_value = raising_iter()
     return connector

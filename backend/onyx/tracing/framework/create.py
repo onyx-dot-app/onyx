@@ -10,7 +10,7 @@ from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
 from .setup import get_trace_provider
-from .span_data import AgentSpanData, FunctionSpanData, GenerationSpanData
+from .span_data import FunctionSpanData, GenerationSpanData
 from .spans import Span
 from .traces import Trace, TraceContentMode
 
@@ -110,43 +110,6 @@ def get_current_trace() -> Trace | None:
 def get_current_span() -> Span[Any] | None:
     """Returns the currently active span, if present."""
     return get_trace_provider().get_current_span()
-
-
-def agent_span(
-    name: str,
-    handoffs: list[str] | None = None,
-    tools: list[str] | None = None,
-    output_type: str | None = None,
-    span_id: str | None = None,
-    parent: Trace | Span[Any] | None = None,
-    disabled: bool = False,
-) -> Span[AgentSpanData]:
-    """Create a new agent span. The span will not be started automatically, you should either do
-    `with agent_span() ...` or call `span.start()` + `span.finish()` manually.
-
-    Args:
-        name: The name of the agent.
-        handoffs: Optional list of agent names to which this agent could hand off control.
-        tools: Optional list of tool names available to this agent.
-        output_type: Optional name of the output type produced by the agent.
-        span_id: The ID of the span. Optional. If not provided, we will generate an ID. We
-            recommend using `util.gen_span_id()` to generate a span ID, to guarantee that IDs are
-            correctly formatted.
-        parent: The parent span or trace. If not provided, we will automatically use the current
-            trace/span as the parent.
-        disabled: If True, we will return a Span but the Span will not be recorded.
-
-    Returns:
-        The newly created agent span.
-    """
-    return get_trace_provider().create_span(
-        span_data=AgentSpanData(
-            name=name, handoffs=handoffs, tools=tools, output_type=output_type
-        ),
-        span_id=span_id,
-        parent=parent,
-        disabled=disabled,
-    )
 
 
 def function_span(

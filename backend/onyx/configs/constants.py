@@ -45,7 +45,6 @@ NEXT_LOCALE_COOKIE_NAME = "NEXT_LOCALE"
 # ID used in UserInfo API responses for anonymous users (not a UUID, just a string identifier)
 ANONYMOUS_USER_INFO_ID = "__anonymous_user__"
 # Placeholder user for migrating no-auth data to first registered user
-NO_AUTH_PLACEHOLDER_USER_UUID = "00000000-0000-0000-0000-000000000001"
 NO_AUTH_PLACEHOLDER_USER_EMAIL = "no-auth-placeholder@onyx.app"
 # Real anonymous user in DB for anonymous access feature
 ANONYMOUS_USER_UUID = "00000000-0000-0000-0000-000000000002"
@@ -348,11 +347,6 @@ class BlobType(str, Enum):
     OCI_STORAGE = "oci_storage"
 
 
-class DocumentIndexType(str, Enum):
-    COMBINED = "combined"  # Vespa
-    SPLIT = "split"  # Typesense + Qdrant
-
-
 class QueryHistoryType(str, Enum):
     DISABLED = "disabled"
     ANONYMIZED = "anonymized"
@@ -390,13 +384,6 @@ class MessageType(str, Enum):
     ASSISTANT = "assistant"  # AIMessage - Can include tool_calls field for parallel tool calling
     TOOL_CALL_RESPONSE = "tool_call_response"
     USER_REMINDER = "user_reminder"  # Custom Onyx message type which is translated into a USER message when passed to the LLM
-
-
-class ChatMessageSimpleType(str, Enum):
-    USER = "user"
-    ASSISTANT = "assistant"
-    TOOL_CALL = "tool_call"
-    FILE_TEXT = "file_text"
 
 
 class TokenRateLimitScope(str, Enum):

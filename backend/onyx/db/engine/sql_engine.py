@@ -434,10 +434,6 @@ def get_sqlalchemy_engine() -> Engine:
     return SqlEngine.get_engine()
 
 
-def get_readonly_sqlalchemy_engine() -> Engine:
-    return SqlEngine.get_readonly_engine()
-
-
 @contextmanager
 def get_session_with_current_tenant() -> Generator[Session, None, None]:
     """Standard way to get a DB session."""
@@ -563,32 +559,3 @@ def get_session() -> Generator[Session, None, None]:
 
     with get_session_with_current_tenant() as db_session:
         yield db_session
-
-
-@contextmanager
-def get_db_readonly_user_session_with_current_tenant() -> Generator[
-    Session, None, None
-]:
-    """
-    Generate a database session using a custom database user for the current tenant.
-    The custom user credentials are obtained from environment variables.
-    """
-    tenant_id = get_current_tenant_id()
-
-    readonly_engine = get_readonly_sqlalchemy_engine()
-
-    if not is_valid_schema_name(tenant_id):
-        raise HTTPException(status_code=400, detail="Invalid tenant ID")
-
-    # no need to use the schema translation map for self-hosted + default schema
-    if not MULTI_TENANT and tenant_id == POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE:
-        with Session(readonly_engine, expire_on_commit=False) as session:
-            yield session
-        return
-
-    schema_translate_map = {None: tenant_id}
-    with readonly_engine.connect().execution_options(
-        schema_translate_map=schema_translate_map
-    ) as connection:
-        with Session(bind=connection, expire_on_commit=False) as session:
-            yield session

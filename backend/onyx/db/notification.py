@@ -242,15 +242,6 @@ def dismiss_notification(notification: Notification, db_session: Session) -> Non
     db_session.commit()
 
 
-def batch_dismiss_notifications(
-    notifications: list[Notification],
-    db_session: Session,
-) -> None:
-    for notification in notifications:
-        notification.dismissed = True
-    db_session.commit()
-
-
 def batch_create_notifications(
     user_ids: list[UUID],
     notif_type: NotificationType,

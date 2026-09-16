@@ -16,7 +16,6 @@ from onyx.document_index.vespa_constants import (
     TENANT_ID,
     USER_PROJECT,
 )
-from onyx.kg.utils.formatting_utils import split_relationship_id
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
@@ -58,71 +57,6 @@ def build_vespa_filters(
             return ""
         items = ", ".join(f'"{val}":1' for val in filtered)
         return f"weightedSet({key}, {{{items}}})"
-
-    def _build_int_or_filters(key: str, vals: list[int] | None) -> str:
-        """For an integer field filter.
-        Returns a bare clause or ""."""
-        if vals is None or not vals:
-            return ""
-        eq_elems = [f"{key} = {val}" for val in vals]
-        return f"({' or '.join(eq_elems)})"
-
-    def _build_kg_filter(
-        kg_entities: list[str] | None,
-        kg_relationships: list[str] | None,
-        kg_terms: list[str] | None,
-    ) -> str:
-        if not kg_entities and not kg_relationships and not kg_terms:
-            return ""
-
-        combined_filter_parts = []
-
-        def _build_kge(entity: str) -> str:
-            GENERAL = "::*"
-            if entity.endswith(GENERAL):
-                return f'({{prefix: true}}"{entity.split(GENERAL, 1)[0]}")'
-            else:
-                return f'"{entity}"'
-
-        if kg_entities:
-            filter_parts = [
-                f"(kg_entities contains {_build_kge(kg_entity)})"
-                for kg_entity in kg_entities
-            ]
-            combined_filter_parts.append(f"({' or '.join(filter_parts)})")
-
-        # TODO: handle complex nested relationship logic (e.g., A participated, and B or C participated)
-        if kg_relationships:
-            filter_parts = []
-            for kg_relationship in kg_relationships:
-                source, rel_type, target = split_relationship_id(kg_relationship)
-                filter_parts.append(
-                    "(kg_relationships contains sameElement("
-                    f"source contains {_build_kge(source)},"
-                    f'rel_type contains "{rel_type}",'
-                    f"target contains {_build_kge(target)}))"
-                )
-            combined_filter_parts.append(f"{' and '.join(filter_parts)}")
-
-        # TODO: remove kg terms entirely from prompts and codebase
-
-        return f"({' and '.join(combined_filter_parts)})"
-
-    def _build_kg_source_filters(
-        kg_sources: list[str] | None,
-    ) -> str:
-        if not kg_sources:
-            return ""
-
-        source_phrases = [f'{DOCUMENT_ID} contains "{source}"' for source in kg_sources]
-        return f"({' or '.join(source_phrases)})"
-
-    def _build_kg_chunk_id_zero_only_filter(
-        kg_chunk_id_zero_only: bool,
-    ) -> str:
-        if not kg_chunk_id_zero_only:
-            return ""
-        return "(chunk_id = 0)"
 
     def _build_time_filter(
         cutoff: datetime | None,
@@ -253,19 +187,6 @@ def build_vespa_filters(
             updated_at_range.end if updated_at_range else None,
         ),
     )
-
-    # # Knowledge Graph Filters
-    # _append(filter_parts, _build_kg_filter(
-    #     kg_entities=filters.kg_entities,
-    #     kg_relationships=filters.kg_relationships,
-    #     kg_terms=filters.kg_terms,
-    # ))
-
-    # _append(filter_parts, _build_kg_source_filters(filters.kg_sources))
-
-    # _append(filter_parts, _build_kg_chunk_id_zero_only_filter(
-    #     filters.kg_chunk_id_zero_only or False
-    # ))
 
     filter_str = " and ".join(filter_parts)
 

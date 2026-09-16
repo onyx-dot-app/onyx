@@ -44,12 +44,7 @@ class AsanaConnector(LoadConnector, PollConnector):
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self.api_token = credentials["asana_api_token_secret"]
-        self.asana_client = asana_api.AsanaAPI(
-            api_token=self.api_token,
-            workspace_gid=self.workspace_id,
-            team_gid=self.asana_team_id,
-        )
-        logger.info("Asana credentials loaded and API client initialized")
+        logger.info("Asana credentials loaded")
         return None
 
     def poll_source(

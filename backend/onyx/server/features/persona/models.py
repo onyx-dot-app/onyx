@@ -147,15 +147,6 @@ class PromptSnapshot(BaseModel):
         )
 
 
-# More minimal request for generating a persona prompt
-class GenerateStarterMessageRequest(BaseModel):
-    name: str
-    description: str
-    instructions: str
-    document_set_ids: list[int]
-    generation_count: int
-
-
 class PersonaUpsertRequest(BaseModel):
     name: str
     description: str
@@ -486,16 +477,8 @@ class FullPersonaSnapshot(PersonaSnapshot):
         )
 
 
-class PromptTemplateResponse(BaseModel):
-    final_prompt_template: str
-
-
 class PersonaSharedNotificationData(BaseModel):
     persona_id: int
-
-
-class ImageGenerationToolStatus(BaseModel):
-    is_available: bool
 
 
 class PersonaLabelCreate(BaseModel):

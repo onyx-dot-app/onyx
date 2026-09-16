@@ -140,11 +140,3 @@ def sync_llm_models_from_github(
 
     _set_cached_last_updated_at(config.updated_at)
     return results
-
-
-def reset_cache() -> None:
-    """Reset the cache timestamp. Useful for testing."""
-    try:
-        get_cache_backend().delete(_CACHE_KEY_LAST_UPDATED_AT)
-    except Exception as e:
-        logger.warning("Failed to reset cache: %s", e)

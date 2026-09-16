@@ -149,35 +149,3 @@ class ImageGenerationCredentials(BaseModel):
             api_version=llm_provider.api_version,
             deployment_name=llm_provider.deployment_name,
         )
-
-
-class DefaultImageGenerationConfig(BaseModel):
-    """Contains all info needed for image generation tool."""
-
-    model_configuration_id: int
-    model_name: str  # From model_configuration.name
-    provider: str  # e.g., "openai", "azure" - from llm_provider.provider
-    api_key: str | None
-    api_base: str | None
-    api_version: str | None
-    deployment_name: str | None
-
-    @classmethod
-    def from_model(
-        cls, config: "ImageGenerationConfigModel"
-    ) -> "DefaultImageGenerationConfig":
-        """Convert database model to default config model."""
-        llm_provider = config.model_configuration.llm_provider
-        return cls(
-            model_configuration_id=config.model_configuration_id,
-            model_name=config.model_configuration.name,
-            provider=llm_provider.provider,
-            api_key=(
-                llm_provider.api_key.get_value(apply_mask=False)
-                if llm_provider.api_key
-                else None
-            ),
-            api_base=llm_provider.api_base,
-            api_version=llm_provider.api_version,
-            deployment_name=llm_provider.deployment_name,
-        )

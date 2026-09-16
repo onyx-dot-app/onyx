@@ -5,27 +5,26 @@ import os
 # hack to work around excessive use of globals in other functions
 os.environ["MULTI_TENANT"] = "True"
 
-if True:  # noqa: E402
-    import argparse
-    import csv
-    import heapq
+import argparse  # noqa: E402
+import csv  # noqa: E402
+import heapq  # noqa: E402
 
-    from pydantic import BaseModel
-    from sqlalchemy import func
+from pydantic import BaseModel  # noqa: E402
+from sqlalchemy import func  # noqa: E402
 
-    from onyx.db.engine.sql_engine import (
-        SYNC_DB_API,
-        USE_IAM_AUTH,
-        SqlEngine,
-        build_connection_string,
-        get_session_with_tenant,
-    )
-    from onyx.db.engine.tenant_utils import get_all_tenant_ids
-    from onyx.db.models import Document, User
-    from onyx.utils.logger import setup_logger
-    from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+from onyx.db.engine.sql_engine import (  # noqa: E402
+    SYNC_DB_API,
+    USE_IAM_AUTH,
+    SqlEngine,
+    build_connection_string,
+    get_session_with_tenant,
+)
+from onyx.db.engine.tenant_utils import get_all_tenant_ids  # noqa: E402
+from onyx.db.models import Document, User  # noqa: E402
+from onyx.utils.logger import setup_logger  # noqa: E402
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR  # noqa: E402
 
-    logger = setup_logger()
+logger = setup_logger()
 
 
 class TenantMetadata(BaseModel):

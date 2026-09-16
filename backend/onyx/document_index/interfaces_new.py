@@ -6,7 +6,6 @@ from typing import Self
 from pydantic import BaseModel, model_validator
 
 from onyx.access.models import DocumentAccess
-from onyx.configs.constants import PUBLIC_DOC_PAT
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters, InferenceChunk
 from onyx.db.enums import EmbeddingPrecision
@@ -165,26 +164,6 @@ class SecondaryIndexDocumentMissingError(Exception):
         super().__init__(
             f"{len(document_ids)} document(s) missing from the secondary index."
         )
-
-
-class IndexRetrievalFilters(BaseModel):
-    """
-    Filters for retrieving chunks from the index.
-
-    Used to filter on permissions and other Onyx-specific metadata rather than
-    chunk content. Should be passed in for every retrieval method.
-
-    TODO(andrei): Currently unused, use this when making retrieval methods more
-    strict.
-    """
-
-    model_config = {"frozen": True}
-
-    # frozenset gets around the issue of python's mutable defaults.
-    # WARNING: Falls back to only public docs as default for security. If
-    # callers want no access filtering they must explicitly supply an empty set.
-    # Doing so should be done sparingly.
-    access_control_list: frozenset[str] = frozenset({PUBLIC_DOC_PAT})
 
 
 class SchemaVerifiable(abc.ABC):

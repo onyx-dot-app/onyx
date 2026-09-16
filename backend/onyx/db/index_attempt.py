@@ -180,13 +180,6 @@ def create_synthetic_seed_attempt(
     return seed.id
 
 
-def delete_index_attempt(db_session: Session, index_attempt_id: int) -> None:
-    index_attempt = get_index_attempt(db_session, index_attempt_id)
-    if index_attempt:
-        db_session.delete(index_attempt)
-        db_session.commit()
-
-
 def mock_successful_index_attempt(
     connector_credential_pair_id: int,
     search_settings_id: int,
@@ -228,21 +221,6 @@ def get_in_progress_index_attempts(
     return list(incomplete_attempts.all())
 
 
-def get_all_index_attempts_by_status(
-    status: IndexingStatus, db_session: Session
-) -> list[IndexAttempt]:
-    """Returns index attempts with the given status.
-    Only recommend calling this with non-terminal states as the full list of
-    terminal statuses may be quite large.
-
-    Results are ordered by time_created (oldest to newest)."""
-    stmt = select(IndexAttempt)
-    stmt = stmt.where(IndexAttempt.status == status)
-    stmt = stmt.order_by(IndexAttempt.time_created)
-    new_attempts = db_session.scalars(stmt)
-    return list(new_attempts.all())
-
-
 def transition_attempt_to_in_progress(
     index_attempt_id: int,
     db_session: Session,
@@ -273,35 +251,6 @@ def transition_attempt_to_in_progress(
     except Exception:
         db_session.rollback()
         logger.exception("transition_attempt_to_in_progress exceptioned.")
-        raise
-
-
-def mark_attempt_in_progress(
-    index_attempt: IndexAttempt,
-    db_session: Session,
-) -> None:
-    try:
-        attempt = db_session.execute(
-            select(IndexAttempt)
-            .where(IndexAttempt.id == index_attempt.id)
-            .with_for_update()
-        ).scalar_one()
-
-        attempt.status = IndexingStatus.IN_PROGRESS
-        attempt.time_started = index_attempt.time_started or func.now()
-        db_session.commit()
-
-        # Add telemetry for index attempt status change
-        optional_telemetry(
-            record_type=RecordType.INDEX_ATTEMPT_STATUS,
-            data={
-                "index_attempt_id": index_attempt.id,
-                "status": IndexingStatus.IN_PROGRESS.value,
-                "cc_pair_id": index_attempt.connector_credential_pair_id,
-            },
-        )
-    except Exception:
-        db_session.rollback()
         raise
 
 
@@ -520,36 +469,6 @@ def mark_attempt_interrupted(
             )
     except Exception:
         db_session.rollback()
-        raise
-
-
-def update_docs_indexed(
-    db_session: Session,
-    index_attempt_id: int,
-    total_docs_indexed: int,
-    new_docs_indexed: int,
-    docs_removed_from_index: int,
-) -> None:
-    """Updates the docs_indexed and new_docs_indexed fields of an index attempt.
-    Adds the given values to the current values in the db"""
-    try:
-        attempt = db_session.execute(
-            select(IndexAttempt)
-            .where(IndexAttempt.id == index_attempt_id)
-            .with_for_update()  # Locks the row when we try to update
-        ).scalar_one()
-
-        attempt.total_docs_indexed = (
-            attempt.total_docs_indexed or 0
-        ) + total_docs_indexed
-        attempt.new_docs_indexed = (attempt.new_docs_indexed or 0) + new_docs_indexed
-        attempt.docs_removed_from_index = (
-            attempt.docs_removed_from_index or 0
-        ) + docs_removed_from_index
-        db_session.commit()
-    except Exception:
-        db_session.rollback()
-        logger.exception("update_docs_indexed exceptioned.")
         raise
 
 

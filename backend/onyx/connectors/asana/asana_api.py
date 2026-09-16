@@ -50,7 +50,6 @@ class AsanaAPI:
         self.stories_api = asana.StoriesApi(self.api_client)
         self.users_api = asana.UsersApi(self.api_client)
         self.project_api = asana.ProjectsApi(self.api_client)
-        self.workspaces_api = asana.WorkspacesApi(self.api_client)
 
         self.api_error_count = 0
         self.configuration.access_token = api_token
@@ -269,6 +268,3 @@ class AsanaAPI:
     def format_date(self, date_str: str) -> str:
         date = datetime.fromisoformat(date_str)
         return time.strftime("%Y-%m-%d", date.timetuple())
-
-    def get_time(self) -> str:
-        return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())

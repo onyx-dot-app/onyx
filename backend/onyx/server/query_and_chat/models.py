@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, model_validator
 
-from onyx.configs.constants import DocumentSource, MessageType, SessionType
+from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import BaseFilters, SavedSearchDoc, SearchDoc, Tag
 from onyx.db.enums import ChatSessionSharedStatus
 from onyx.db.models import ChatSession
@@ -179,10 +179,6 @@ class ChatRenameRequest(BaseModel):
 
 class ChatSessionUpdateRequest(BaseModel):
     sharing_status: ChatSessionSharedStatus
-
-
-class DeleteAllSessionsRequest(BaseModel):
-    session_type: SessionType
 
 
 class RenameChatSessionResponse(BaseModel):

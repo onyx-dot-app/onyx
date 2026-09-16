@@ -7,8 +7,6 @@ from onyx.background.celery.tasks.vespa import tasks as vespa_tasks
 class _StubRedisDocumentSet:
     """Lightweight stand-in for RedisDocumentSet used by monitor tests."""
 
-    reset_called = False
-
     @staticmethod
     def get_id_from_fence_key(key: str) -> str | None:
         parts = key.split("_")
@@ -27,7 +25,7 @@ class _StubRedisDocumentSet:
         return self._payload
 
     def reset(self) -> None:
-        self.__class__.reset_called = True
+        pass
 
 
 def _setup_common_patches(monkeypatch: Any, document_set: Any) -> dict[str, bool]:

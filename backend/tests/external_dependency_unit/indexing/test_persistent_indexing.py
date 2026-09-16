@@ -29,7 +29,6 @@ from onyx.connectors import factory as connector_factory
 from onyx.connectors.interfaces import (
     CheckpointedConnector,
     CheckpointOutput,
-    GenerateSlimDocumentOutput,
     SecondsSinceUnixEpoch,
 )
 from onyx.connectors.models import (
@@ -111,9 +110,6 @@ class MockCheckpointedConnector(CheckpointedConnector[_MockCheckpoint]):
         if _MOCK_BEHAVIOR["raise_at_end"]:
             raise RuntimeError(_MOCK_BEHAVIOR["raise_message"])
         return _MockCheckpoint(has_more=False)
-
-    def retrieve_all_slim_documents(self) -> GenerateSlimDocumentOutput:
-        yield from []
 
 
 # ---------------------------------------------------------------------------

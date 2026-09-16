@@ -15,11 +15,9 @@ DISABLE_MODEL_SERVER = os.environ.get("DISABLE_MODEL_SERVER", "").lower() == "tr
 # If model server is disabled, use "disabled" as host to trigger proper handling
 if DISABLE_MODEL_SERVER:
     MODEL_SERVER_HOST = "disabled"
-    MODEL_SERVER_ALLOWED_HOST = "disabled"
     INDEXING_MODEL_SERVER_HOST = "disabled"
 else:
     MODEL_SERVER_HOST = os.environ.get("MODEL_SERVER_HOST") or "localhost"
-    MODEL_SERVER_ALLOWED_HOST = os.environ.get("MODEL_SERVER_HOST") or "0.0.0.0"  # noqa: S104 — model server allowed-host default; intentional for containerized deployment
     INDEXING_MODEL_SERVER_HOST = (
         os.environ.get("INDEXING_MODEL_SERVER_HOST") or MODEL_SERVER_HOST
     )
@@ -32,27 +30,13 @@ INDEXING_MODEL_SERVER_PORT = int(
 )
 
 # Onyx custom Deep Learning Models
-CONNECTOR_CLASSIFIER_MODEL_REPO = "Danswer/filter-extraction-model"
-CONNECTOR_CLASSIFIER_MODEL_TAG = "1.0.0"
-INTENT_MODEL_VERSION = "onyx-dot-app/hybrid-intent-token-classifier"
 DEFAULT_DOCUMENT_ENCODER_MODEL = "nomic-ai/nomic-embed-text-v1"
-# INTENT_MODEL_TAG = "v1.0.3"
-INTENT_MODEL_TAG: str | None = None
 # Bi-Encoder, other details
 DOC_EMBEDDING_CONTEXT_SIZE = 512
 
 # Used to distinguish alternative indices
 ALT_INDEX_SUFFIX = "__danswer_alt_index"
 
-# Used for loading defaults for automatic deployments and dev flows
-# For local, use: mixedbread-ai/mxbai-rerank-xsmall-v1
-DEFAULT_CROSS_ENCODER_MODEL_NAME = (
-    os.environ.get("DEFAULT_CROSS_ENCODER_MODEL_NAME") or None
-)
-DEFAULT_CROSS_ENCODER_API_KEY = os.environ.get("DEFAULT_CROSS_ENCODER_API_KEY") or None
-DEFAULT_CROSS_ENCODER_PROVIDER_TYPE = (
-    os.environ.get("DEFAULT_CROSS_ENCODER_PROVIDER_TYPE") or None
-)
 DISABLE_RERANK_FOR_STREAMING = (
     os.environ.get("DISABLE_RERANK_FOR_STREAMING", "").lower() == "true"
 )

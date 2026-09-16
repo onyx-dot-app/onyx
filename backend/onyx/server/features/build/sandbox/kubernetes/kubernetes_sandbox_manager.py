@@ -73,7 +73,6 @@ from onyx.server.features.build.configs import (
     SANDBOX_NEXTJS_PORT_START,
     SANDBOX_PROXY_HOST,
     SANDBOX_PROXY_NAMESPACE,
-    SANDBOX_SERVICE_ACCOUNT_NAME,
 )
 from onyx.server.features.build.sandbox.base import (
     SandboxManager,
@@ -85,7 +84,6 @@ from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     SIDECAR_OPENCODE_HISTORY_RESTORE_PATH,
     SIDECAR_PUSH_PUBLIC_KEY_ENV_VAR,
     SIDECAR_SNAPSHOT_CREATE_PATH,
-    OutputsManifestResponse,
     SnapshotCreateRequest,
     sidecar_snapshot_restore_path,
 )
@@ -291,15 +289,12 @@ class KubernetesSandboxManager(SandboxManager):
 
         # Use the REST client for standard CRUD operations
         self._core_api = client.CoreV1Api(api_client=self._rest_api_client)
-        self._batch_api = client.BatchV1Api(api_client=self._rest_api_client)
-        self._networking_api = client.NetworkingV1Api(api_client=self._rest_api_client)
 
         # Use a separate client for streaming/exec operations
         self._stream_core_api = client.CoreV1Api(api_client=self._stream_api_client)
 
         self._namespace = SANDBOX_NAMESPACE
         self._image = SANDBOX_CONTAINER_IMAGE
-        self._service_account = SANDBOX_SERVICE_ACCOUNT_NAME
         self._snapshot_manager = SnapshotManager(get_default_file_store())
         self._sidecar_client = SidecarClient(
             host=lambda sandbox_id: (
@@ -2032,16 +2027,6 @@ fi
             raise RuntimeError(f"Failed to list directory: {e}") from e
         except SidecarRequestError as e:
             raise RuntimeError(f"Failed to list directory: {e}") from e
-
-    def get_outputs_manifest(
-        self, sandbox_id: UUID, session_id: UUID
-    ) -> OutputsManifestResponse:
-        try:
-            return self._sidecar_client.outputs_manifest(
-                sandbox_id=sandbox_id, session_id=session_id
-            )
-        except SidecarRequestError as e:
-            raise RuntimeError(f"Failed to build outputs manifest: {e}") from e
 
     def read_file(self, sandbox_id: UUID, session_id: UUID, path: str) -> bytes:
         """Read a file from the session's workspace.

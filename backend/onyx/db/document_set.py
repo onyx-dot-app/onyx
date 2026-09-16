@@ -202,14 +202,6 @@ def get_document_set_by_id(
     return db_session.scalar(stmt)
 
 
-def get_document_set_by_name(
-    db_session: Session, document_set_name: str
-) -> DocumentSetDBModel | None:
-    return db_session.scalar(
-        select(DocumentSetDBModel).where(DocumentSetDBModel.name == document_set_name)
-    )
-
-
 def get_document_sets_by_name(
     db_session: Session, document_set_names: list[str]
 ) -> Sequence[DocumentSetDBModel]:
@@ -689,54 +681,6 @@ def fetch_all_document_sets_for_user(
     return db_session.scalars(stmt).unique().all()
 
 
-def fetch_documents_for_document_set_paginated(
-    document_set_id: int,
-    db_session: Session,
-    current_only: bool = True,
-    last_document_id: str | None = None,
-    limit: int = 100,
-) -> tuple[Sequence[Document], str | None]:
-    stmt = (
-        select(Document)
-        .join(
-            DocumentByConnectorCredentialPair,
-            DocumentByConnectorCredentialPair.id == Document.id,
-        )
-        .join(
-            ConnectorCredentialPair,
-            and_(
-                ConnectorCredentialPair.connector_id
-                == DocumentByConnectorCredentialPair.connector_id,
-                ConnectorCredentialPair.credential_id
-                == DocumentByConnectorCredentialPair.credential_id,
-            ),
-        )
-        .join(
-            DocumentSet__ConnectorCredentialPair,
-            DocumentSet__ConnectorCredentialPair.connector_credential_pair_id
-            == ConnectorCredentialPair.id,
-        )
-        .join(
-            DocumentSetDBModel,
-            DocumentSetDBModel.id
-            == DocumentSet__ConnectorCredentialPair.document_set_id,
-        )
-        .where(DocumentSetDBModel.id == document_set_id)
-        .order_by(Document.id)
-        .limit(limit)
-    )
-    if last_document_id is not None:
-        stmt = stmt.where(Document.id > last_document_id)
-    if current_only:
-        stmt = stmt.where(
-            DocumentSet__ConnectorCredentialPair.is_current == True  # noqa: E712
-        )
-    stmt = stmt.distinct()
-
-    documents = db_session.scalars(stmt).all()
-    return documents, documents[-1].id if documents else None
-
-
 def construct_document_id_select_by_docset(
     document_set_id: int,
     current_only: bool = True,
@@ -866,30 +810,6 @@ def fetch_document_sets_for_documents(
         .group_by(Document.id)
     )
     return db_session.execute(stmt).all()  # ty: ignore[invalid-return-type]
-
-
-def get_or_create_document_set_by_name(
-    db_session: Session,
-    document_set_name: str,
-    document_set_description: str = "Default Persona created Document-Set, please update description",
-) -> DocumentSetDBModel:
-    """This is used by the default personas which need to attach to document sets
-    on server startup"""
-    doc_set = get_document_set_by_name(db_session, document_set_name)
-    if doc_set is not None:
-        return doc_set
-
-    new_doc_set = DocumentSetDBModel(
-        name=document_set_name,
-        description=document_set_description,
-        user_id=None,
-        is_up_to_date=True,
-    )
-
-    db_session.add(new_doc_set)
-    db_session.commit()
-
-    return new_doc_set
 
 
 def check_document_sets_are_public(

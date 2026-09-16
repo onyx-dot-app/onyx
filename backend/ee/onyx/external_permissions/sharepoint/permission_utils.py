@@ -48,7 +48,6 @@ logger = setup_logger()
 
 # These values represent different types of SharePoint principals used in permission assignments
 USER_PRINCIPAL_TYPE = 1  # Individual user accounts
-ANONYMOUS_USER_PRINCIPAL_TYPE = 3  # Anonymous/unauthenticated users (public access)
 AZURE_AD_GROUP_PRINCIPAL_TYPE = 4  # Azure Active Directory security groups
 SHAREPOINT_GROUP_PRINCIPAL_TYPE = 8  # SharePoint site groups (local to the site)
 SHAREPOINT_GROUP_SCOPE_SEPARATOR = "::"

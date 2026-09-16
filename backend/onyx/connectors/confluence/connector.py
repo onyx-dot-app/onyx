@@ -135,8 +135,6 @@ _PAGE_ID_FROM_URL_PATTERNS = [
 ONE_HOUR = 3600
 ONE_DAY = ONE_HOUR * 24
 
-MAX_CACHED_IDS = 100
-
 
 def _get_page_id(page: dict[str, Any], allow_missing: bool = False) -> str:
     if allow_missing and "id" not in page:
