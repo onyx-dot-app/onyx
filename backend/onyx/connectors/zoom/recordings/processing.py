@@ -12,6 +12,7 @@ from onyx.connectors.models import (
     TextSection,
 )
 from onyx.connectors.zoom.client import ZoomClient
+from onyx.connectors.zoom.recordings.access import zoom_access_resolver
 from onyx.connectors.zoom.recordings.models import (
     OccurrenceWork,
     ZoomSessionType,
@@ -33,11 +34,12 @@ def zoom_document_id(session_type: ZoomSessionType, occurrence_uuid: str) -> str
 
 
 def process_occurrence(
-    client: ZoomClient, work: OccurrenceWork
+    client: ZoomClient, work: OccurrenceWork, *, include_access: bool
 ) -> Document | ConnectorFailure | None:
     """One occurrence is at most one transcript, so this answers with the
     document, the failure that replaces it, or nothing when the occurrence has
     no transcript to index."""
+    handler = get_session_type_handler(work.session_type)
     occurrence_uuid = work.occurrence_uuid
 
     try:
@@ -121,7 +123,6 @@ def process_occurrence(
     started_at = work.start_time
     if not topic or not started_at:
         try:
-            handler = get_session_type_handler(work.session_type)
             details = handler.get_occurrence_details(client, occurrence_uuid)
             topic = topic or details.topic
             started_at = started_at or details.start_time
@@ -137,6 +138,29 @@ def process_occurrence(
     topic = topic or f"Zoom {work.session_type.value.capitalize()} {work.session_id}"
     occurrence_time = time_str_to_utc(started_at) if started_at else None
 
+    # Resolved last so a session with nothing to index never pays for the extra
+    # calls. Failing the document beats indexing it with an access list we know
+    # is wrong, and a targeted reindex can come back for it later.
+    try:
+        external_access = (
+            zoom_access_resolver(client, work, handler) if include_access else None
+        )
+    except Exception as e:
+        if fails_the_whole_run(e):
+            raise
+        logger.exception(
+            "Failed to build the Zoom access list for session %s occurrence %s",
+            work.session_id,
+            occurrence_uuid,
+        )
+        return ConnectorFailure(
+            failed_document=DocumentFailure(
+                document_id=zoom_document_id(work.session_type, occurrence_uuid)
+            ),
+            failure_message=f"Failed to build the access list for Zoom session {work.session_id} occurrence {occurrence_uuid}: {e}",
+            exception=e,
+        )
+
     return Document(
         id=zoom_document_id(work.session_type, occurrence_uuid),
         sections=[TextSection(text=transcript_text)],
@@ -145,4 +169,5 @@ def process_occurrence(
         doc_created_at=occurrence_time,
         doc_updated_at=occurrence_time,
         metadata={"session_type": work.session_type.value},
+        external_access=external_access,
     )
