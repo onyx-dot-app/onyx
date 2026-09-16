@@ -66,7 +66,6 @@ from onyx.db.mcp import (
 )
 from onyx.db.models import MCPConnectionConfig, Tool, User
 from onyx.db.models import MCPServer as DbMCPServer
-from onyx.db.oauth_accounts import get_live_oauth_token
 from onyx.db.tools import (
     can_manage_mcp_server,
     can_manage_tool,
@@ -1051,7 +1050,7 @@ def save_user_credentials(
     if mcp_server.auth_type != MCPAuthenticationType.OAUTH:
         validation_headers = config_data["headers"]
         if mcp_server.auth_type == MCPAuthenticationType.PT_OAUTH:
-            live_oauth_token: str | None = get_live_oauth_token(user, db_session)
+            live_oauth_token: str | None = user.live_oauth_token
             if live_oauth_token is None:
                 raise OnyxError(
                     OnyxErrorCode.INVALID_INPUT,
