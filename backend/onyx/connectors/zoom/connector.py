@@ -30,6 +30,7 @@ from onyx.connectors.models import (
     HierarchyNode,
 )
 from onyx.connectors.zoom.client import ZoomClient
+from onyx.connectors.zoom.models import ZoomSessionDetails
 from onyx.connectors.zoom.rate_limit import (
     DEFAULT_RATE_LIMIT_SHARE,
     MAX_RATE_LIMIT_PERCENT,
@@ -37,7 +38,6 @@ from onyx.connectors.zoom.rate_limit import (
     ZoomPlanTier,
     ZoomRateLimitSettings,
 )
-from onyx.connectors.zoom.models import ZoomSessionDetails
 from onyx.connectors.zoom.recordings.access import (
     ZoomAccessListUnavailable,
     is_plan_denial,
@@ -142,6 +142,24 @@ def _rebuilt_work(
     )
 
 
+def _entity_target_unsupported(error: ConnectorFailure) -> ConnectorFailure:
+    """Don't mint a synthetic document id to make this replayable: reindex
+    would yield the real occurrence documents instead, so the synthetic id
+    would never land and the row would keep failing forever.
+    """
+    return ConnectorFailure(
+        failed_entity=error.failed_entity,
+        failure_message=(
+            "Zoom targeted reindex can only replay individual sessions. This "
+            "failure is from discovery, so recovery means a wider "
+            "ZOOM_TRANSCRIPT_LAG_BUFFER_HOURS or a reindex from the "
+            "beginning — neither of which reaches a session Zoom has stopped "
+            "listing, which it does for a meeting id after 15 months. "
+            f"Original failure: {error.failure_message}"
+        ),
+    )
+
+
 class ZoomConnectorCheckpoint(ConnectorCheckpoint):
     recordings: RecordingsState = Field(default_factory=RecordingsState)
 
@@ -234,7 +252,7 @@ class ZoomConnector(
         for error in errors:
             failed_document = error.failed_document
             if failed_document is None:
-                yield self._entity_target_unsupported(error)
+                yield _entity_target_unsupported(error)
                 continue
 
             document_id = failed_document.document_id
@@ -282,24 +300,6 @@ class ZoomConnector(
                     failure_message=f"Failed to reindex Zoom document {document_id}: {e}",
                     exception=e,
                 )
-
-    @staticmethod
-    def _entity_target_unsupported(error: ConnectorFailure) -> ConnectorFailure:
-        """Don't mint a synthetic document id to make this replayable: reindex
-        would yield the real occurrence documents instead, so the synthetic id
-        would never land and the row would keep failing forever.
-        """
-        return ConnectorFailure(
-            failed_entity=error.failed_entity,
-            failure_message=(
-                "Zoom targeted reindex can only replay individual sessions. This "
-                "failure is from discovery, so recovery means a wider "
-                "ZOOM_TRANSCRIPT_LAG_BUFFER_HOURS or a reindex from the "
-                "beginning — neither of which reaches a session Zoom has stopped "
-                "listing, which it does for a meeting id after 15 months. "
-                f"Original failure: {error.failure_message}"
-            ),
-        )
 
     def _advance(
         self,
