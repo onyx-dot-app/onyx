@@ -537,6 +537,9 @@ def get_all_hierarchy_nodes_for_source(
     return list(db_session.execute(stmt).scalars().all())
 
 
+# MIT hierarchy queries intentionally omit permission filters.
+# Supported Community connectors are public; private/group and permission-sync
+# connector access are Business features handled by the EE implementation.
 def _get_accessible_hierarchy_nodes_for_source(
     db_session: Session,
     source: DocumentSource,
