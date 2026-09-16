@@ -3,15 +3,20 @@
 The shared Agent compacts context during execution. Chat, coding, research, and child agents use the same stage.
 See [the runtime guide](../agents/README.md#compaction) for its behavior.
 
-The runtime stores summaries as transcript checkpoints. Each checkpoint records a summary, covered message count, and source-history digest.
-Context loading verifies the digest before applying the summary. Recorded messages remain available for display and artifacts.
+Each checkpoint records summary text, a covered model-message count, and a source-history digest.
+The runtime verifies the digest before applying the summary. Original response items remain available for display.
 
-## Legacy summary records
+A checkpoint can end within one saved response. Model context also contains synthetic file messages without saved response-item identities.
+The count locates the covered prefix; the digest rejects it if reconstructed inputs change. A response-item ID alone cannot establish this boundary.
 
-History loading also accepts summaries stored as `ChatMessage` rows:
+Chat saves a new checkpoint as a summary `ChatMessage`:
 
-- `parent_message_id` identifies the branch where the summary applies.
-- `last_summarized_message_id` identifies the last covered message.
+- `message_type=SUMMARY` excludes the row from public chat history.
+- `parent_message_id` identifies the response where compaction occurred.
+- `message` contains the summary.
+- `summary_covered_count` and `summary_covered_digest` identify the exact covered prefix.
 
-`find_summary_for_branch` selects a summary whose parent belongs to the loaded branch.
-Messages after its cutoff remain in context. New compaction writes transcript checkpoints.
+History loading selects the applicable summary from the chosen branch. Continuing with an unchanged checkpoint creates no new summary.
+
+Historical summaries use `last_summarized_message_id` as their cutoff. Their baseline remains intact when applying a newer exact checkpoint.
+Model-request preparation filters historical tool results after checkpoint selection. This keeps the saved history and its digest unchanged.

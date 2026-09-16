@@ -31,8 +31,6 @@ from onyx.agents.events import (
     MessageEndEvent,
     MessageStartEvent,
     MessageUpdateEvent,
-    StepEndEvent,
-    StepStartEvent,
     ToolEndEvent,
     ToolStartEvent,
     ToolUpdateEvent,
@@ -251,6 +249,26 @@ class Run:
         except TimeoutError:
             return False
         return True
+
+
+def _capture_unsettled_child(run: Run) -> RunSnapshot:
+    """Retain accepted output after settlement fails without changing live execution."""
+    snapshot = run.snapshot()
+    pending = [snapshot]
+    while pending:
+        record = pending.pop()
+        pending.extend(record.child_runs)
+        if record.status != RunStatus.RUNNING:
+            continue
+        record.status = RunStatus.ERROR
+        record.failure = RunFailure(
+            kind=RunFailureKind.EXECUTION,
+            message="Child execution did not settle before its parent ended.",
+        )
+        for operation in record.operations:
+            if operation.status == RunStatus.RUNNING:
+                operation.status = RunStatus.ERROR
+    return snapshot
 
 
 class Agent:
@@ -608,16 +626,7 @@ class _Execution:
                         if prepare
                         else self.defaults
                     )
-                    self._emit(StepStartEvent(**self.ancestry, step_index=index))
                     previous = await self._step(prepared, decision.step)
-                    self._emit(
-                        StepEndEvent(
-                            **self.ancestry,
-                            step_index=index,
-                            message=previous.message,
-                            tool_results=previous.tool_results,
-                        )
-                    )
                     after_step = self.after_step
                     completed = previous.model_copy(deep=True)
                     should_continue = (
@@ -638,6 +647,8 @@ class _Execution:
                     )
                     signal.check()
                     if not should_continue:
+                        with self.state.lock:
+                            self.state.record.answer_message_index = self.step_start
                         outcome = RunStatus.COMPLETE
                         break
                     if decision.step.is_last:
@@ -675,7 +686,7 @@ class _Execution:
                 logger.exception("Child executions did not reach terminal output")
                 outcome = RunStatus.ERROR
                 children = [
-                    child.run.snapshot()
+                    _capture_unsettled_child(child.run)
                     for child in self.coordination.children.values()
                 ]
                 with self.state.lock:
@@ -690,7 +701,19 @@ class _Execution:
                     partial.stop_reason = (
                         "aborted" if outcome == RunStatus.CANCELLED else "error"
                     )
-            self._emit(AgentEndEvent(**self.ancestry, outcome=outcome))
+            answer_message_id = None
+            if self.state.record.answer_message_index is not None:
+                answer = self.messages[self.state.record.answer_message_index]
+                if not isinstance(answer, AssistantMessage):
+                    raise RuntimeError("Selected answer is not an assistant message")
+                answer_message_id = answer.id
+            self._emit(
+                AgentEndEvent(
+                    **self.ancestry,
+                    outcome=outcome,
+                    answer_message_id=answer_message_id,
+                )
+            )
             record = self.state.record.model_copy(deep=True)
         self.commit(record)
         self.state.completed.set_result(None)
@@ -750,7 +773,12 @@ class _Execution:
             self.step_start = len(self.messages)
             start = self.step_start
             self.generating = True
-            self.messages.append(AssistantMessage(metadata=prepared.output_metadata))
+            self.messages.append(
+                AssistantMessage(
+                    id=f"{self.state.record.run_id}:{step.index}",
+                    metadata=prepared.output_metadata,
+                )
+            )
             self._emit(
                 MessageStartEvent(
                     **self.ancestry,
@@ -767,6 +795,7 @@ class _Execution:
                     self.state.record.request_params = event.request_params.model_copy(
                         deep=True
                     )
+                event.message.id = f"{self.state.record.run_id}:{step.index}"
                 event.message.metadata = (
                     prepared.output_metadata.model_copy(deep=True)
                     if prepared.output_metadata
@@ -803,6 +832,7 @@ class _Execution:
             message = await self.work.blocking(generate, signal)
         with self.state.lock:
             signal.check()
+            message.id = f"{self.state.record.run_id}:{step.index}"
             self.messages[start] = message
             self.generating = False
             self._emit(
@@ -1099,7 +1129,7 @@ class _Execution:
                 content=f"Tool {call.name} is unavailable for this step.",
                 is_error=True,
             )
-        if call.argument_error or is_truncated:
+        if call.argument_error or not call.arguments_complete or is_truncated:
             return ToolResult(
                 content=call.argument_error or "Tool arguments were truncated.",
                 is_error=True,

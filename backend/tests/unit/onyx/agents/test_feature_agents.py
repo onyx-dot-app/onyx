@@ -10,6 +10,7 @@ import pytest
 
 from onyx.agents.coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent, ToolEndEvent
+from onyx.agents.items import messages_from_items
 from onyx.agents.models import AgentStep, PreparedStep, RunResult, StepInput
 from onyx.agents.runtime import Run, RunFailed
 from onyx.agents.tools import ToolInvocation
@@ -24,8 +25,8 @@ from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.deep_research.agent import DeepResearchAgent
 from onyx.deep_research.models import (
     ResearchAgentCallResult,
+    ResearchMessageMetadata,
     ResearchPhase,
-    ResearchStepOutput,
 )
 from onyx.deep_research.research_agent import ResearchAgent
 from onyx.deep_research.tool_definitions import (
@@ -281,6 +282,7 @@ def test_deep_research_composes_plan_child_and_report() -> None:
         skip_clarification=True,
     )
     feature.agent.execution.timeout = 11
+    coordinator = AgentCoordinator()
     project = partial(
         project_response,
         response_id=42,
@@ -289,12 +291,15 @@ def test_deep_research_composes_plan_child_and_report() -> None:
     run_agent(
         feature.agent,
         runs=runs,
-        coordinator=AgentCoordinator(),
+        coordinator=coordinator,
         messages=[UserMessage(content="Research")],
         listener=ResponsePresenter(Emitter(output.put_nowait, response_id=42)).consume,
         max_steps=8,
     )
-    assert project(runs[-1].snapshot()).answer == "Final report"
+    assert (
+        project(runs[-1].snapshot(), registrations=coordinator.registrations()).answer
+        == "Final report"
+    )
     assert len(llm.requests) == 6
     assert [context.flow for context in contexts] == [
         LLMFlow.DEEP_RESEARCH,
@@ -313,12 +318,15 @@ def test_deep_research_composes_plan_child_and_report() -> None:
         11,
         DR_REPORT_LLM_TIMEOUT_S,
     ]
-    snapshot = project(runs[-1].snapshot())
-    assert snapshot.transcript is not None
-    assert snapshot.transcript.messages[0].text == "Plan"
-    assert snapshot.transcript.messages[-1].text == "Final report"
-    assert len(snapshot.transcript.child_runs) == 1
-    assert snapshot.transcript.child_runs[0].messages[-1].text == "Child report"
+    snapshot = project(runs[-1].snapshot(), registrations=coordinator.registrations())
+    assert snapshot.response is not None
+    assert messages_from_items(snapshot.response.items)[0].text == "Plan"
+    assert messages_from_items(snapshot.response.items)[-1].text == "Final report"
+    assert len(snapshot.response.child_runs) == 1
+    assert (
+        messages_from_items(snapshot.response.child_runs[0].items)[-1].text
+        == "Child report"
+    )
     assert any(isinstance(item.obj, OverallStop) for item in list(output.queue))
 
 
@@ -351,6 +359,7 @@ def test_deep_research_prelude_cancellation_keeps_partial_output(
         skip_clarification=skip_clarification,
     )
 
+    coordinator = AgentCoordinator()
     project = partial(
         project_response,
         response_id=42,
@@ -360,15 +369,15 @@ def test_deep_research_prelude_cancellation_keeps_partial_output(
         run_agent(
             feature.agent,
             runs=runs,
-            coordinator=AgentCoordinator(),
+            coordinator=coordinator,
             messages=[UserMessage(content="Research")],
             max_steps=4,
             cancellation=signal,
         )
-    snapshot = project(runs[-1].snapshot())
-    assert snapshot.transcript is not None
-    assert snapshot.transcript.status == "cancelled"
-    assert snapshot.transcript.messages[-1].text == "Partial prelude"
+    snapshot = project(runs[-1].snapshot(), registrations=coordinator.registrations())
+    assert snapshot.response is not None
+    assert snapshot.response.status == "cancelled"
+    assert messages_from_items(snapshot.response.items)[-1].text == "Partial prelude"
 
 
 def test_deep_research_advances_phases_without_user_queue_messages() -> None:
@@ -401,7 +410,7 @@ def test_deep_research_advances_phases_without_user_queue_messages() -> None:
     )
     assert result.output.text == "Final report"
     metadata = runs[-1].snapshot().messages[-1].metadata
-    assert isinstance(metadata, ResearchStepOutput)
+    assert isinstance(metadata, ResearchMessageMetadata)
     assert metadata.phase == ResearchPhase.REPORT
     assert len(llm.requests) == 3
     assert [
@@ -556,6 +565,7 @@ def test_research_preserves_citation_identity_across_completion_and_call_order(
         None,
         skip_clarification=True,
     )
+    coordinator = AgentCoordinator()
     project = partial(
         project_response,
         response_id=42,
@@ -573,7 +583,7 @@ def test_research_preserves_citation_identity_across_completion_and_call_order(
     run_agent(
         feature.agent,
         runs=runs,
-        coordinator=AgentCoordinator(),
+        coordinator=coordinator,
         messages=[UserMessage(content="Parent")],
         listener=record,
         max_steps=4,
@@ -593,7 +603,9 @@ def test_research_preserves_citation_identity_across_completion_and_call_order(
         assert list(message.details.citation_mapping) == [index]
     assert {
         number: doc.document_id
-        for number, doc in project(runs[-1].snapshot()).citation_to_doc.items()
+        for number, doc in project(
+            runs[-1].snapshot(), registrations=coordinator.registrations()
+        ).citation_to_doc.items()
     } == {1: "second", 2: "first"}
 
 

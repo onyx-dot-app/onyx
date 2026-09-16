@@ -315,6 +315,7 @@ class _PendingToolCall:
             self.call.name = delta.function.name
         text = delta.function.arguments or ""
         self.arguments += text
+        self.call.raw_arguments = self.arguments
         if self.parser is None or not text:
             return {}
         try:
@@ -420,6 +421,7 @@ class MessageAccumulator:
                     id=call.id or f"fallback_{uuid4().hex}",
                     name=call.function.name or "" if call.function else "",
                     arguments={},
+                    arguments_complete=False,
                 )
                 pending = _PendingToolCall(len(self.message.content), block)
                 self.calls[call.index] = pending
@@ -452,6 +454,8 @@ class MessageAccumulator:
                 pending.call.arguments = _ARGUMENTS.validate_json(
                     pending.arguments or "{}"
                 )
+                pending.call.arguments_complete = True
+                pending.call.raw_arguments = None
             except ValidationError:
                 logger.debug("Tool arguments are not a JSON object", exc_info=True)
                 pending.call.arguments = {}

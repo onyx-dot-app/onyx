@@ -5,17 +5,22 @@ from typing import TypedDict
 from uuid import UUID
 
 from pydantic import JsonValue
-from sqlalchemy import select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import case, select
+from sqlalchemy.orm import Session, load_only, selectinload
 
-from onyx.agents.transcript import messages_for_model
+from onyx.agents.items import messages_from_items
+from onyx.agents.transcript import CompactionCheckpoint, messages_for_model
 from onyx.chat.files import build_file_context
 from onyx.chat.models import ChatHistoryMessage, ChatHistoryResult
 from onyx.configs.constants import MessageType
 from onyx.context.messages import PromptMetadata, count_message_tokens
-from onyx.db.agent_transcript import read_root_transcript
-from onyx.db.chat import get_chat_messages_by_session, get_or_create_root_message
-from onyx.db.models import AgentRun, ChatMessage
+from onyx.db.chat import (
+    get_chat_messages_by_session,
+    get_or_create_root_message,
+)
+from onyx.db.chat_response_items import read_response_items
+from onyx.db.enums import record_mode_persists_content
+from onyx.db.models import ChatMessage
 from onyx.file_store.models import (
     ChatFileType,
     ChatLoadedFile,
@@ -123,7 +128,7 @@ def convert_chat_history_basic(
         if chat_message.message_type not in (MessageType.USER, MessageType.ASSISTANT):
             continue
 
-        message = chat_message.message or ""
+        message = chat_message.message
         token_count = chat_message.token_count
         if token_count is None:
             token_count = token_counter(message)
@@ -206,7 +211,7 @@ def _legacy_tool_messages(
     tool_names: dict[int, str],
     token_counter: Callable[[str], int],
 ) -> list[Message]:
-    """Reconstruct tool turns only for rows without a canonical transcript."""
+    """Reconstruct tool steps for responses saved without response items."""
     messages: list[Message] = []
     calls = sorted(
         message.tool_calls or [], key=lambda call: (call.turn_number, call.tool_id)
@@ -252,23 +257,32 @@ def capture_chat_history(
     messages: list[ChatMessage],
     tool_names: dict[int, str],
     token_counter: Callable[[str], int],
+    checkpoint: CompactionCheckpoint | None = None,
 ) -> list[ChatHistoryMessage]:
     """Copy replay data while ORM relationships are available; the caller owns the session."""
     history: list[ChatHistoryMessage] = []
     for message in messages:
-        assistant_messages: list[Message] = []
-        checkpoint = None
+        response_messages: list[Message] = []
         agent_run_id = None
         if message.message_type == MessageType.ASSISTANT:
-            if transcript := read_root_transcript(message):
-                assistant_messages = messages_for_model(transcript.messages)
-                checkpoint = transcript.checkpoint
-                agent_run_id = transcript.run_id
+            if message.response_status is not None and record_mode_persists_content(
+                message.chat_session.incognito_record_mode
+            ):
+                response_messages = messages_for_model(
+                    messages_from_items(read_response_items(message))
+                )
+                for response_message in response_messages:
+                    if isinstance(response_message, ToolResultMessage):
+                        response_message.metadata = PromptMetadata(
+                            omit_tool_result_content=response_message.tool_name
+                            != IMAGE_GENERATION_TOOL_NAME
+                        )
+                agent_run_id = str(message.id)
             else:
-                assistant_messages = _legacy_tool_messages(
+                response_messages = _legacy_tool_messages(
                     message, tool_names, token_counter
                 )
-                assistant_messages.append(
+                response_messages.append(
                     AssistantMessage(
                         content=[TextContent(text=message.message)],
                         metadata=PromptMetadata(token_count=message.token_count),
@@ -282,11 +296,15 @@ def capture_chat_history(
                 token_count=message.token_count,
                 files=message.files or [],
                 is_clarification=message.is_clarification,
-                assistant_messages=assistant_messages,
-                checkpoint=checkpoint,
+                response_messages=response_messages,
                 agent_run_id=agent_run_id,
             )
         )
+    if checkpoint is not None:
+        for message in reversed(history):
+            if message.message_type == MessageType.ASSISTANT:
+                message.checkpoint = checkpoint
+                break
     return history
 
 
@@ -387,7 +405,7 @@ def convert_chat_history(
             )
 
         elif chat_message.message_type == MessageType.ASSISTANT:
-            messages.extend(chat_message.assistant_messages)
+            messages.extend(chat_message.response_messages)
         else:
             raise ValueError(
                 f"Invalid message type when constructing simple history: {chat_message.message_type}"
@@ -413,63 +431,98 @@ def load_message_branch(
     db_session: Session,
 ) -> tuple[list[ChatMessage], ChatMessage]:
     """Select the requested branch before adding a user message."""
-    history = create_chat_history_chain(chat_session_id, db_session)
-    if history:
-        db_session.scalars(
-            select(ChatMessage)
-            .where(ChatMessage.id.in_([message.id for message in history]))
-            .options(
-                selectinload(
-                    ChatMessage.agent_runs.and_(AgentRun.parent_run_id.is_(None))
-                )
-            )
-        ).all()
+    history = create_chat_history_chain(
+        chat_session_id, db_session, prefetch_top_two_level_tool_calls=False
+    )
     root = get_or_create_root_message(chat_session_id, db_session)
     if parent_id == AUTO_PLACE_AFTER_LATEST_MESSAGE:
-        return history, history[-1] if history else root
-    if parent_id is None or parent_id == root.id:
+        parent = history[-1] if history else root
+    elif parent_id is None or parent_id == root.id:
         return [], root
-    for index in range(len(history) - 1, -1, -1):
-        if history[index].id == parent_id:
-            return history[: index + 1], history[index]
-    raise ValueError("The new message sent is not on the latest mainline of messages")
+    else:
+        parent_index = next(
+            (index for index, message in enumerate(history) if message.id == parent_id),
+            None,
+        )
+        if parent_index is None:
+            raise ValueError(
+                "The new message sent is not on the latest mainline of messages"
+            )
+        history = history[: parent_index + 1]
+        parent = history[-1]
+
+    response_ids = [
+        message.id
+        for message in history
+        if message.message_type == MessageType.ASSISTANT
+    ]
+    if response_ids:
+        db_session.scalars(
+            select(ChatMessage)
+            .where(ChatMessage.id.in_(response_ids))
+            .options(
+                load_only(ChatMessage.id),
+                selectinload(ChatMessage.response_items),
+                selectinload(ChatMessage.tool_calls),
+            )
+        ).all()
+    return history, parent
+
+
+def find_summary_for_ancestry(
+    db_session: Session,
+    session_id: UUID,
+    message_ids: list[int],
+    *,
+    legacy_only: bool = False,
+) -> ChatMessage | None:
+    """Find a summary on selected ancestry; IDs must run from newest to oldest."""
+    if not message_ids:
+        return None
+    query = select(ChatMessage).where(
+        ChatMessage.chat_session_id == session_id,
+        ChatMessage.parent_message_id.in_(message_ids),
+        ChatMessage.message_type == MessageType.SUMMARY,
+    )
+    if legacy_only:
+        query = query.where(ChatMessage.last_summarized_message_id.is_not(None))
+    return db_session.scalar(
+        query.order_by(
+            case(
+                {message_id: index for index, message_id in enumerate(message_ids)},
+                value=ChatMessage.parent_message_id,
+            ),
+            ChatMessage.id.desc(),
+        ).limit(1)
+    )
+
+
+def checkpoint_from_summary(message: ChatMessage | None) -> CompactionCheckpoint | None:
+    if message is None:
+        return None
+    if message.summary_covered_count is None and message.summary_covered_digest is None:
+        return None
+    if message.summary_covered_count is None or message.summary_covered_digest is None:
+        raise ValueError("Summary coverage is missing")
+    return CompactionCheckpoint(
+        summary=message.message,
+        covered_count=message.summary_covered_count,
+        covered_digest=message.summary_covered_digest,
+    )
 
 
 def find_summary_for_branch(
     db_session: Session,
     chat_history: list[ChatMessage],
+    *,
+    legacy_only: bool = False,
 ) -> ChatMessage | None:
-    """
-    Find the most recent summary that applies to the current branch.
-
-    A summary applies if its parent_message_id is in the current chat history,
-    meaning it was created on this branch.
-
-    Args:
-        db_session: Database session
-        chat_history: Branch-aware list of messages
-
-    Returns:
-        The applicable summary message, or None if no summary exists for this branch
-    """
+    """Find the summary on the nearest selected ancestor, regardless of save time."""
     if not chat_history:
         return None
-
-    history_ids = {m.id for m in chat_history}
-    chat_session_id = chat_history[0].chat_session_id
-
-    # Filter branch membership locally to avoid an unbounded history-ID IN clause.
-    summaries = (
-        db_session.query(ChatMessage)
-        .filter(
-            ChatMessage.chat_session_id == chat_session_id,
-            ChatMessage.last_summarized_message_id.isnot(None),
-        )
-        .order_by(ChatMessage.time_sent.desc())
-        .all()
+    return find_summary_for_ancestry(
+        db_session,
+        chat_history[0].chat_session_id,
+        [message.id for message in reversed(chat_history)],
+        legacy_only=legacy_only,
     )
-    for summary in summaries:
-        if summary.parent_message_id in history_ids:
-            return summary
-
-    return None

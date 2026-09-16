@@ -8,10 +8,10 @@ import pytest
 
 from onyx.agents.coordination import AgentCoordinator, AgentInfo
 from onyx.agents.events import AgentEvent, ToolEndEvent
-from onyx.agents.models import PreparedStep, StepInput, StepResult
+from onyx.agents.models import PreparedStep, RunSnapshot, StepInput, StepResult
 from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import AgentTool, ToolInvocation
-from onyx.agents.transcript import AgentTranscript, OperationSnapshot, RunStatus
+from onyx.agents.transcript import OperationSnapshot, RunStatus
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.models import (
     AssistantMessage,
@@ -52,7 +52,7 @@ def test_first_step_failure_is_recorded_and_agent_can_retry() -> None:
 @pytest.mark.parametrize("in_discovery", [False, True])
 def test_archive_lookup_does_not_restore_an_agent(in_discovery: bool) -> None:
     resolutions: list[str] = []
-    archived = AgentTranscript(
+    archived = RunSnapshot(
         agent_id="research",
         run_id="saved",
         status=RunStatus.COMPLETE,
@@ -172,7 +172,7 @@ def test_cancelled_work_keeps_agent_and_coordinator_reserved(kind: str) -> None:
 def test_archive_timeout_does_not_cancel_parent_or_release_its_work_early() -> None:
     entered, release, finished = Event(), Event(), Event()
 
-    def read(_run_id: str, _parent_id: str) -> AgentTranscript | None:
+    def read(_run_id: str, _parent_id: str) -> RunSnapshot | None:
         entered.set()
         try:
             assert release.wait(3)
@@ -388,7 +388,7 @@ def test_child_restart_waits_for_its_timed_out_archive_read() -> None:
     entered, release = Event(), Event()
     calls = 0
 
-    def read(_run_id: str, _parent_id: str) -> AgentTranscript | None:
+    def read(_run_id: str, _parent_id: str) -> RunSnapshot | None:
         entered.set()
         assert release.wait(5)
         return None

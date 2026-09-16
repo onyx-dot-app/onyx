@@ -285,7 +285,7 @@ def test_attachment_loading_releases_preparation_session_before_reservation_fail
                 token_count=8,
                 files=[],
                 is_clarification=False,
-                assistant_messages=[],
+                response_messages=[],
             )
         ],
         file_inputs=[],

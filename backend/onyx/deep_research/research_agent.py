@@ -13,15 +13,12 @@ from onyx.agents.models import (
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool
 from onyx.agents.transcript import CompactionCheckpoint
-from onyx.chat.citation_processor import (
-    CitationMapping,
-    CitationMode,
-    DynamicCitationProcessor,
-)
+from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
 from onyx.chat.citation_utils import (
     extract_citation_order_from_text,
     update_citation_processor_from_tool_result,
 )
+from onyx.chat.models import CitationMode
 from onyx.chat.prompt_utils import with_language_section
 from onyx.configs.chat_configs import DR_REPORT_LLM_TIMEOUT_S
 from onyx.context.messages import PromptMetadata
@@ -29,8 +26,8 @@ from onyx.context.prompt import prepare_prompt
 from onyx.context.search.models import SearchDocsResponse
 from onyx.deep_research.models import (
     ResearchAgentCallResult,
+    ResearchMessageMetadata,
     ResearchPhase,
-    ResearchStepOutput,
 )
 from onyx.deep_research.tool_definitions import (
     GENERATE_REPORT_TOOL_NAME,
@@ -225,7 +222,7 @@ class ResearchAgent:
                 if just_ran_web_search and has_open_url
                 else None
             )
-        output_metadata = ResearchStepOutput(
+        output_metadata = ResearchMessageMetadata(
             phase=ResearchPhase.REPORT if is_final_step else ResearchPhase.RESEARCH,
             is_intermediate=True,
             is_reasoning_model=self.is_reasoning_model,

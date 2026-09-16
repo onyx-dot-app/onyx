@@ -1,10 +1,10 @@
-"""Bind branch-visible agent identities to current feature dependencies."""
+"""Restore subagents from the selected chat branch with current tools and LLM settings."""
 
 from uuid import UUID
 
 from onyx.agents.coordination import AgentCoordinator, AgentInfo
+from onyx.agents.models import RunSnapshot
 from onyx.agents.runtime import Agent
-from onyx.agents.transcript import AgentTranscript
 from onyx.chat.incognito_context import (
     get_or_create_incognito_root_id,
     load_incognito_agent_history,
@@ -12,11 +12,11 @@ from onyx.chat.incognito_context import (
     load_incognito_saved_run,
     lookup_incognito_agent,
 )
-from onyx.chat.models import RestoredAgent
-from onyx.db.agent_transcript import (
-    get_or_create_root_agent,
-    load_agent_branch,
+from onyx.chat.models import SavedAgentContext
+from onyx.chat.response import response_snapshot
+from onyx.db.chat_subagents import (
     load_agent_history,
+    load_chat_branch,
     load_saved_run,
     load_session_agent_metadata,
     lookup_session_agent,
@@ -28,7 +28,7 @@ from onyx.tools.interface import Tool
 
 
 def _restore_agent(
-    saved: RestoredAgent,
+    saved: SavedAgentContext,
     llm: LLM,
     tools: list[Tool],
     user_identity: LLMUserIdentity,
@@ -37,15 +37,10 @@ def _restore_agent(
     if configuration is None or configuration.feature != "research":
         raise ValueError("This agent's external resources are no longer available")
     settings = ResearchConfiguration.model_validate(configuration.settings)
-    latest = saved.transcripts[-1] if saved.transcripts else None
     agent = ResearchAgent(
-        messages=[
-            message.model_copy(deep=True)
-            for run in saved.transcripts
-            for message in [*run.input_messages, *run.messages]
-        ],
-        checkpoint=latest.checkpoint if latest else None,
-        previous_run_id=latest.run_id if latest else None,
+        messages=saved.messages,
+        checkpoint=saved.checkpoint,
+        previous_run_id=saved.previous_run_id,
         sources=saved.sources,
         tools=tools,
         llm=llm,
@@ -58,7 +53,7 @@ def _restore_agent(
     return agent
 
 
-def bind_chat_agents(
+def create_chat_agent_coordinator(
     root: Agent,
     *,
     message_id: int,
@@ -69,12 +64,12 @@ def bind_chat_agents(
     tools: list[Tool],
     user_identity: LLMUserIdentity,
 ) -> AgentCoordinator:
-    """Bind agent restoration to the authorized request and selected branch."""
-    branch = load_agent_branch(message_id)
+    """Create a coordinator that can discover and restore subagents on this chat branch."""
+    branch = load_chat_branch(message_id)
     if branch.chat_session_id != chat_session_id:
         raise ValueError("Response belongs to another chat session")
+    root.id = str(chat_session_id)
     if persist_content:
-        root.id = get_or_create_root_agent(message_id, root.id)
         saved_agents = load_session_agent_metadata(message_id)
     else:
         root.id = get_or_create_incognito_root_id(chat_session_id, root.id)
@@ -104,12 +99,14 @@ def bind_chat_agents(
         )
         return _restore_agent(history, llm, tools, user_identity)
 
-    def read_run(run_id: str, parent_id: str) -> AgentTranscript | None:
+    def read_run(run_id: str, parent_id: str) -> RunSnapshot | None:
         if persist_content:
-            return load_saved_run(message_id, run_id, parent_id)
-        return load_incognito_saved_run(
-            chat_session_id, branch.message_ids, run_id, parent_id
-        )
+            record = load_saved_run(message_id, run_id, parent_id)
+        else:
+            record = load_incognito_saved_run(
+                chat_session_id, branch.message_ids, run_id, parent_id
+            )
+        return response_snapshot(record) if record is not None else None
 
     coordinator = AgentCoordinator(
         agents=saved_agents,

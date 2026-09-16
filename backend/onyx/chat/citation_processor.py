@@ -12,9 +12,9 @@ This module provides a citation processor that can:
 
 import re
 from collections.abc import Generator
-from enum import Enum
 from typing import TypeAlias
 
+from onyx.chat.models import CitationMode
 from onyx.configs.chat_configs import STOP_STREAM_PAT
 from onyx.context.search.models import SearchDoc
 from onyx.prompts.constants import TRIPLE_BACKTICK
@@ -22,29 +22,6 @@ from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-
-class CitationMode(Enum):
-    """Defines how citations should be handled in the output.
-
-    REMOVE: Citations are completely removed from output text.
-            No CitationInfo objects are emitted.
-            Use case: When you need to remove citations from the output if they are not shared with the user
-            (e.g. in discord bot, public slack bot).
-
-    KEEP_MARKERS: Original citation markers like [1], [2] are preserved unchanged.
-                  No CitationInfo objects are emitted.
-                  Use case: When you need to track citations in research agent and later process
-                  them with collapse_citations() to renumber.
-
-    HYPERLINK: Citations are replaced with markdown links like [[1]](url).
-               CitationInfo objects are emitted for UI tracking.
-               Use case: Final reports shown to users with clickable links.
-    """
-
-    REMOVE = "remove"
-    KEEP_MARKERS = "keep_markers"
-    HYPERLINK = "hyperlink"
 
 
 CitationMapping: TypeAlias = dict[int, SearchDoc]

@@ -5,25 +5,25 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny
 
+from onyx.agents.items import ResponseItem, build_response_items
 from onyx.agents.tools import ToolProgress
-from onyx.agents.transcript import RunStatus
+from onyx.agents.transcript import OperationSnapshot, RunStatus
 from onyx.llm.models import (
     AssistantMessage,
+    GenerationDoneEvent,
+    GenerationErrorEvent,
     GenerationEvent,
     ToolCall,
     ToolResult,
-    ToolResultMessage,
 )
 
 
 class AgentEventType(str, Enum):
     AGENT_START = "agent_start"
     AGENT_END = "agent_end"
-    STEP_START = "step_start"
     MESSAGE_START = "message_start"
     MESSAGE_UPDATE = "message_update"
     MESSAGE_END = "message_end"
-    STEP_END = "step_end"
     TOOL_START = "tool_start"
     TOOL_UPDATE = "tool_update"
     TOOL_END = "tool_end"
@@ -46,15 +46,11 @@ class AgentStartEvent(_AgentEvent):
 
 
 class AgentEndEvent(_AgentEvent):
+    answer_message_id: str | None = None
     type: Literal[AgentEventType.AGENT_END] = AgentEventType.AGENT_END
     outcome: Literal[
         RunStatus.COMPLETE, RunStatus.LIMIT, RunStatus.CANCELLED, RunStatus.ERROR
     ]
-
-
-class StepStartEvent(_AgentEvent):
-    type: Literal[AgentEventType.STEP_START] = AgentEventType.STEP_START
-    step_index: int = Field(ge=0)
 
 
 class MessageStartEvent(_AgentEvent):
@@ -69,8 +65,25 @@ class MessageUpdateEvent(_AgentEvent):
     generation_event: GenerationEvent
 
     @property
-    def message(self) -> AssistantMessage:
-        return self.generation_event.message
+    def items(self) -> list[ResponseItem]:
+        return build_response_items(
+            self.run_id,
+            [self.generation_event.message],
+            [
+                OperationSnapshot(
+                    step_index=self.step_index,
+                    message_index=0,
+                    status=(
+                        RunStatus.COMPLETE
+                        if isinstance(self.generation_event, GenerationDoneEvent)
+                        else RunStatus.ERROR
+                        if isinstance(self.generation_event, GenerationErrorEvent)
+                        else RunStatus.RUNNING
+                    ),
+                )
+            ],
+            step_offset=self.step_index,
+        )
 
 
 class MessageEndEvent(_AgentEvent):
@@ -78,12 +91,20 @@ class MessageEndEvent(_AgentEvent):
     step_index: int = Field(ge=0)
     message: AssistantMessage
 
-
-class StepEndEvent(_AgentEvent):
-    type: Literal[AgentEventType.STEP_END] = AgentEventType.STEP_END
-    step_index: int = Field(ge=0)
-    message: AssistantMessage
-    tool_results: list[ToolResultMessage]
+    @property
+    def items(self) -> list[ResponseItem]:
+        return build_response_items(
+            self.run_id,
+            [self.message],
+            [
+                OperationSnapshot(
+                    step_index=self.step_index,
+                    message_index=0,
+                    status=RunStatus.COMPLETE,
+                )
+            ],
+            step_offset=self.step_index,
+        )
 
 
 class ToolStartEvent(_AgentEvent):
@@ -112,11 +133,9 @@ class ToolEndEvent(ToolResultEvent):
 AgentEvent = Annotated[
     AgentStartEvent
     | AgentEndEvent
-    | StepStartEvent
     | MessageStartEvent
     | MessageUpdateEvent
     | MessageEndEvent
-    | StepEndEvent
     | ToolStartEvent
     | ToolUpdateEvent
     | ToolEndEvent,

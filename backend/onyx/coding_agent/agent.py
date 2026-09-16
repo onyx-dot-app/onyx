@@ -124,7 +124,7 @@ def _setup_session(
 
 
 class CodingAgent:
-    """Repository investigation and final-answer policy."""
+    """Configure an agent to investigate a repository and produce a final answer."""
 
     def __init__(
         self,

@@ -156,12 +156,10 @@ def test_all_calls_execute_in_order_with_bounded_concurrency(sequential: bool) -
 @pytest.mark.parametrize(
     "event_type",
     [
-        "step_start",
         "message_start",
         "message_end",
         "tool_start",
         "tool_end",
-        "step_end",
     ],
 )
 def test_cancellation_stops_before_next_operation(
@@ -193,16 +191,21 @@ def test_cancellation_stops_before_next_operation(
     assert last_event.type == "agent_end"
     assert last_event.outcome == "cancelled"
     assert asyncio.run(runs[-1].wait_for_idle(timeout=0))
-    if event_type in {"step_start", "message_start", "message_end", "tool_start"}:
+    if event_type in {"message_start", "message_end", "tool_start"}:
         assert executed == []
 
 
-@pytest.mark.parametrize("invalid", ["unknown", "arguments", "truncated", "disabled"])
+@pytest.mark.parametrize(
+    "invalid", ["unknown", "arguments", "incomplete", "truncated", "disabled"]
+)
 def test_invalid_calls_get_paired_errors(invalid: str) -> None:
     runs: list[Run] = []
     message = calls(name="missing") if invalid == "unknown" else calls()
     if invalid == "arguments":
         message.tool_calls[0].argument_error = "Bad arguments"
+    if invalid == "incomplete":
+        message.tool_calls[0].arguments_complete = False
+        message.tool_calls[0].raw_arguments = '{"value":'
     if invalid == "truncated":
         message.stop_reason = "length"
     options = GenerationOptions()
@@ -515,10 +518,6 @@ def test_failed_tool_status_survives_successful_agent_completion() -> None:
         operation for operation in snapshot.operations if operation.tool_call_id
     ]
     assert operations and all(operation.status == "error" for operation in operations)
-    transcript = snapshot.transcript()
-    assert [operation.status for operation in transcript.operations] == [
-        operation.status for operation in snapshot.operations
-    ]
     ends = [event for event in events if event.type == "tool_end"]
     assert len(ends) == len(operations)
     assert all(event.result.is_error for event in ends)
