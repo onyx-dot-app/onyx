@@ -85,8 +85,10 @@ retrieval call is made.
 
 A paired experiment ran the same 107 benchmark questions in each arm, 214 attempts
 total, on the native v1 loop and native `SearchTool` with GPT-5.6-Luna and explicit
-provider reasoning `none`. Both arms collected identical diagnostics; only the treatment
-exposed the receipt. Setup: persona-less single-turn internal search, no memory, no
+provider reasoning `none`. The experiment harness, not this flag, requested retrieval
+diagnostics in both arms so that the only difference the model saw was the receipt
+text; the control arm never exposed the receipt. In production the flag-off path collects
+no diagnostics at all. Setup: persona-less single-turn internal search, no memory, no
 files, no user-selected filters, automatic search filters disabled.
 
 | Metric | Native v1 | Native v1 + receipts |
