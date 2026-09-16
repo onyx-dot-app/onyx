@@ -1,5 +1,4 @@
 import os
-from functools import lru_cache
 
 import requests
 
@@ -42,9 +41,3 @@ def _get_gpu_status_from_model_server(indexing: bool) -> bool:
 @retry_builder(tries=5, delay=5, backoff=1, jitter=0)
 def gpu_status_request(indexing: bool) -> bool:
     return _get_gpu_status_from_model_server(indexing)
-
-
-@lru_cache(maxsize=1)
-def fast_gpu_status_request(indexing: bool) -> bool:
-    """For use in sync flows, where we don't want to retry / we want to cache this."""
-    return gpu_status_request(indexing=indexing)
