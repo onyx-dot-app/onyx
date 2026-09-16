@@ -83,8 +83,21 @@ export function toggleSourceSelection(
   const next = selected.includes(uniqueKey)
     ? selected.filter((key) => key !== uniqueKey)
     : [...selected, uniqueKey];
+  return normalizeSourceSelection(next, configuredKeys);
+}
+
+/**
+ * The edit-boundary half of the sentinel invariant on its own: an explicit
+ * selection covering every configured source collapses to `null`, so "all"
+ * has one representation and stays dynamic. Every write of an explicit
+ * selection goes through this, whichever surface produced it.
+ */
+export function normalizeSourceSelection(
+  selected: readonly string[],
+  configuredKeys: readonly string[]
+): readonly string[] | null {
   const coversAll =
     configuredKeys.length > 0 &&
-    configuredKeys.every((key) => next.includes(key));
-  return coversAll ? null : next;
+    configuredKeys.every((key) => selected.includes(key));
+  return coversAll ? null : selected;
 }

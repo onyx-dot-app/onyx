@@ -4,6 +4,7 @@ import {
   selectedSourcesFrom,
   buildFilters,
   toggleSourceSelection,
+  normalizeSourceSelection,
 } from "@/lib/searchFilters/utils";
 import type { SourceMetadata } from "@/lib/search/interfaces";
 import { ValidSources } from "@/lib/types";
@@ -166,5 +167,11 @@ describe("toggleSourceSelection — edit-boundary normalization", () => {
 
   test("toggling the last source off leaves the explicit empty set", () => {
     expect(toggleSourceSelection(["notion"], "notion", keys)).toEqual([]);
+  });
+
+  test("a covering write from any surface collapses to the sentinel", () => {
+    expect(normalizeSourceSelection(["slack", "notion"], keys)).toBeNull();
+    expect(normalizeSourceSelection(["notion"], keys)).toEqual(["notion"]);
+    expect(normalizeSourceSelection([], keys)).toEqual([]);
   });
 });

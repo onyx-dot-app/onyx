@@ -9,6 +9,7 @@ import { useAvailableSources } from "@/lib/connectors/hooks";
 import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
 import { useProjectsContext } from "@/lib/projects/providers";
 import { useTags } from "@/lib/searchFilters/hooks";
+import { normalizeSourceSelection } from "@/lib/searchFilters/utils";
 import { getConfiguredSources } from "@/lib/sources";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 
@@ -149,9 +150,12 @@ export function useSendChatMessageFromURL({
     toolConfiguration.setFilters((current) => ({
       selectedSources:
         sourceNames.length > 0 && !sourcesError
-          ? configuredSources
-              .filter((source) => sourceNames.includes(source.internalName))
-              .map((source) => source.uniqueKey)
+          ? normalizeSourceSelection(
+              configuredSources
+                .filter((source) => sourceNames.includes(source.internalName))
+                .map((source) => source.uniqueKey),
+              configuredSources.map((source) => source.uniqueKey)
+            )
           : current.selectedSources,
       documentSets:
         docSetNames.length > 0
