@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+from onyx.agents.events import MessageUpdateEvent
 from onyx.chat.renderer import PacketRenderer, RenderConfig
 from onyx.llm.litellm_conversion import MessageAccumulator
 from onyx.llm.litellm_models import (
@@ -72,11 +73,19 @@ def test_decoded_strings_survive_arbitrary_fragment_boundaries(
         for event in accumulator.add(chunk(raw[offset : offset + size])):
             emitted.extend(
                 packet.obj.argument_deltas.get("code", "")
-                for packet in renderer.consume(event)
+                for packet in renderer.consume_items(
+                    MessageUpdateEvent(
+                        run_id="root", step_index=0, generation_event=event
+                    ).items
+                )
                 if isinstance(packet.obj, ToolCallArgumentDelta)
             )
     for event in accumulator.end():
-        renderer.consume(event)
+        renderer.consume_items(
+            MessageUpdateEvent(
+                run_id="root", step_index=0, generation_event=event
+            ).items
+        )
     assert "".join(emitted) == text
     assert accumulator.message.tool_calls[0].arguments == json.loads(raw)
 
@@ -95,7 +104,11 @@ def test_interleaved_calls_have_independent_arguments_and_identities() -> None:
         (1, 'd"}'),
     ]:
         for event in accumulator.add(chunk(fragment, index)):
-            for packet in renderer.consume(event):
+            for packet in renderer.consume_items(
+                MessageUpdateEvent(
+                    run_id="root", step_index=0, generation_event=event
+                ).items
+            ):
                 if isinstance(packet.obj, ToolCallArgumentDelta):
                     assert packet.identity is not None
                     call_id = packet.identity.tool_call_id
@@ -131,7 +144,11 @@ def test_argument_rendering_is_opt_in() -> None:
     packets = [
         packet
         for event in accumulator.add(chunk('{"code":"hello"}'))
-        for packet in renderer.consume(event)
+        for packet in renderer.consume_items(
+            MessageUpdateEvent(
+                run_id="root", step_index=0, generation_event=event
+            ).items
+        )
     ]
     assert not any(isinstance(packet.obj, ToolCallArgumentDelta) for packet in packets)
     assert accumulator.finish().tool_calls[0].arguments == {"code": "hello"}

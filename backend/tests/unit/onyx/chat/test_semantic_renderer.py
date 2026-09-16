@@ -1,5 +1,6 @@
 """The packet view cannot drive model requests or tool execution."""
 
+from collections.abc import Mapping
 from queue import Queue
 
 import pytest
@@ -7,20 +8,23 @@ from pydantic import BaseModel
 
 from onyx.agents.events import (
     AgentEndEvent,
+    MessageUpdateEvent,
     ToolEndEvent,
     ToolStartEvent,
     ToolUpdateEvent,
 )
+from onyx.agents.items import build_response_items, messages_from_items
 from onyx.agents.models import RunSnapshot
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolInvocation, ToolProgress
 from onyx.agents.transcript import OperationSnapshot, RunStatus
-from onyx.chat.citation_processor import CitationMode, DynamicCitationProcessor
+from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.emitter import Emitter
-from onyx.chat.models import ChatStepOutput
+from onyx.chat.models import ChatMessageMetadata, CitationMode, MessageRendering
 from onyx.chat.presentation import ResponsePresenter, project_response
-from onyx.chat.renderer import PacketRenderer, RenderConfig, render_message
+from onyx.chat.renderer import PacketRenderer, RenderConfig
 from onyx.chat.tool_progress import tool_display_progress
+from onyx.context.search.models import SearchDoc
 from onyx.deep_research.tool_definitions import THINK_TOOL_NAME
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.litellm_conversion import MessageAccumulator
@@ -31,13 +35,12 @@ from onyx.llm.litellm_models import (
 )
 from onyx.llm.models import (
     AssistantMessage,
-    GenerationErrorEvent,
     GenerationRequest,
     GenerationRequestParams,
     Message,
     ReasoningEffort,
     TextContent,
-    TextDeltaEvent,
+    ThinkingContent,
     ToolCall,
     ToolResult,
     UserMessage,
@@ -48,6 +51,8 @@ from onyx.server.query_and_chat.streaming_models import (
     Packet,
     PacketIdentity,
     PythonToolDelta,
+    ReasoningDone,
+    ReasoningStart,
 )
 from onyx.tools.progress import PythonOutput
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
@@ -110,7 +115,17 @@ def test_rendering_does_not_change_requests_transcript_or_execution() -> None:
             requests=requests, messages=agent.context.messages, executed=executed
         )
 
-    assert run(True) == run(False)
+    rendered = run(True)
+    plain = run(False)
+    for execution in (rendered, plain):
+        for message in execution.messages:
+            if isinstance(message, AssistantMessage):
+                message.id = None
+        for request in execution.requests:
+            for message in request.messages:
+                if isinstance(message, AssistantMessage):
+                    message.id = None
+    assert rendered == plain
 
 
 @pytest.mark.parametrize(
@@ -140,9 +155,15 @@ def test_citation_display_keeps_raw_transcript(
                 choice=StreamingChoice(delta=Delta(content=fragment)),
             )
         ):
-            renderer.consume(event)
+            renderer.consume_items(
+                MessageUpdateEvent(
+                    run_id="run", step_index=0, generation_event=event
+                ).items
+            )
     for event in accumulator.end():
-        renderer.consume(event)
+        renderer.consume_items(
+            MessageUpdateEvent(run_id="run", step_index=0, generation_event=event).items
+        )
     assert renderer.answer == expected
     assert accumulator.message.text == "".join(fragments)
 
@@ -155,7 +176,7 @@ def test_snapshot_projects_partial_output_before_observers_receive_it() -> None:
             AssistantMessage(
                 content=[TextContent(text="partial")],
                 stop_reason="aborted",
-                metadata=ChatStepOutput(),
+                metadata=ChatMessageMetadata(),
             )
         ],
         operations=[
@@ -243,21 +264,6 @@ def test_child_progress_and_completion_keep_explicit_ancestry() -> None:
     assert packets[-1].obj.status == "complete"
 
 
-def test_failed_generation_replay_preserves_buffered_citation_text() -> None:
-    message = AssistantMessage(
-        content=[TextContent(text="See [1")], stop_reason="error"
-    )
-    config = RenderConfig(citations=DynamicCitationProcessor())
-    identity = PacketIdentity(response_id=42, run_id="root", message_id="root:0")
-    live = PacketRenderer(config.model_copy(deep=True), identity)
-    live.consume(TextDeltaEvent(message=message, content_index=0, text=message.text))
-    live.consume(GenerationErrorEvent(message=message))
-    replay = PacketRenderer(config.model_copy(deep=True), identity)
-    render_message(replay, message, complete=False)
-    assert live.answer == "See [1"
-    assert replay.answer == live.answer
-
-
 def test_tool_display_handles_incomplete_calls_without_fabricated_arguments() -> None:
     call = ToolCall(id="partial", name=PythonTool.NAME, arguments={})
     assert tool_display_progress(call, None) == []
@@ -292,3 +298,78 @@ def test_framework_control_tool_finishes_without_a_custom_tool_card() -> None:
         not isinstance(packet, Packet) or not packet.obj.type.startswith("custom_tool")
         for packet in packets
     )
+
+
+def test_formatting_failure_keeps_accepted_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_formatting(
+        _presentation: MessageRendering, _documents: Mapping[str, SearchDoc]
+    ) -> RenderConfig:
+        raise ValueError("Invalid display metadata")
+
+    agent = Agent(
+        FakeModelClient(
+            lambda _request, _signal: AssistantMessage(
+                content=[TextContent(text="Accepted answer")]
+            )
+        )
+    )
+    run = agent.start(messages=[UserMessage(content="Question")], max_steps=1)
+    run.result(timeout=10)
+    monkeypatch.setattr("onyx.chat.presentation.render_config", fail_formatting)
+    response = project_response(run.snapshot(), response_id=42, tool_ids={})
+    assert response.response is not None
+    assert messages_from_items(response.response.items)[-1].text == "Accepted answer"
+    assert response.answer == "Accepted answer"
+    assert (
+        response.error
+        == "Response formatting failed. The accepted content has been retained."
+    )
+
+
+def test_repeated_tool_snapshot_does_not_split_later_reasoning() -> None:
+    renderer = PacketRenderer(
+        RenderConfig(), PacketIdentity(response_id=42, run_id="run", message_id="run:0")
+    )
+    message = AssistantMessage(
+        content=[
+            ToolCall(id="call", name="search", arguments={}),
+            ThinkingContent(text="First"),
+        ]
+    )
+    operation = OperationSnapshot(
+        step_index=0, message_index=0, status=RunStatus.RUNNING
+    )
+    packets = renderer.consume_items(
+        build_response_items("run", [message], [operation])
+    )
+    message.content[1] = ThinkingContent(text="First, then second")
+    packets.extend(
+        renderer.consume_items(build_response_items("run", [message], [operation]))
+    )
+    assert renderer.reasoning == "First, then second"
+    assert sum(isinstance(packet.obj, ReasoningStart) for packet in packets) == 1
+    assert not any(isinstance(packet.obj, ReasoningDone) for packet in packets)
+    packets.extend(renderer.finish(RunStatus.CANCELLED))
+    assert sum(isinstance(packet.obj, ReasoningDone) for packet in packets) == 1
+
+
+@pytest.mark.parametrize("status", [RunStatus.CANCELLED, RunStatus.ERROR])
+def test_interrupted_item_stream_flushes_buffered_citation_like_reload(
+    status: RunStatus,
+) -> None:
+    message = AssistantMessage(content=[TextContent(text="See [1")])
+    operation = OperationSnapshot(
+        step_index=0, message_index=0, status=RunStatus.RUNNING
+    )
+    config = RenderConfig(citations=DynamicCitationProcessor())
+    identity = PacketIdentity(response_id=42, run_id="run", message_id="run:0")
+    live = PacketRenderer(config.model_copy(deep=True), identity)
+    live.consume_items(build_response_items("run", [message], [operation]))
+    live.finish(status)
+    operation.status = status
+    saved = PacketRenderer(config.model_copy(deep=True), identity)
+    saved.consume_items(build_response_items("run", [message], [operation]))
+    assert live.answer == saved.answer == "See [1"
+    assert live.finish(status) == []

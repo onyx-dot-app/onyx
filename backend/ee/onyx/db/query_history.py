@@ -9,7 +9,10 @@ from sqlalchemy.sql.expression import UnaryExpression, literal
 
 from ee.onyx.background.task_name_builders import QUERY_HISTORY_TASK_NAME_PREFIX
 from onyx.configs.constants import QAFeedbackType
-from onyx.db.chat import content_persisting_sessions_filter
+from onyx.db.chat import (
+    content_persisting_sessions_filter,
+    visible_chat_messages_filter,
+)
 from onyx.db.models import ChatMessage, ChatMessageFeedback, ChatSession, TaskQueueState
 from onyx.db.tasks import get_all_tasks_with_prefix
 
@@ -27,7 +30,10 @@ def _build_filter_conditions(
     feedback_filter: Feedback type to filter by
     Returns: List of filter conditions
     """
-    conditions = [content_persisting_sessions_filter()]
+    conditions = [
+        content_persisting_sessions_filter(),
+        ChatSession.spawned_by_message_id.is_(None),
+    ]
 
     if start_time is not None:
         conditions.append(ChatSession.time_created >= start_time)
@@ -102,13 +108,18 @@ def get_page_of_chat_sessions(
     stmt = (
         select(ChatSession)
         .join(subquery, ChatSession.id == subquery.c.id)
-        .outerjoin(ChatMessage, ChatSession.id == ChatMessage.chat_session_id)
+        .outerjoin(
+            ChatMessage,
+            (ChatSession.id == ChatMessage.chat_session_id)
+            & visible_chat_messages_filter(),
+        )
         .options(
             joinedload(ChatSession.user),
             joinedload(ChatSession.persona),
             contains_eager(ChatSession.messages).joinedload(
                 ChatMessage.chat_message_feedbacks
             ),
+            contains_eager(ChatSession.messages).selectinload(ChatMessage.search_docs),
         )
         .order_by(
             desc(ChatSession.time_created),
@@ -133,6 +144,7 @@ def fetch_persisting_chat_session_by_id(
     chat_session = db_session.scalar(
         select(ChatSession).where(
             ChatSession.id == chat_session_id,
+            ChatSession.spawned_by_message_id.is_(None),
             content_persisting_sessions_filter(),
         )
     )
@@ -157,6 +169,7 @@ def fetch_chat_sessions_eagerly_by_time(
     # token counts and no message content, and every mode meters usage.
     filters: list[ColumnElement | BinaryExpression] = [
         ChatSession.time_created.between(start, end),
+        ChatSession.spawned_by_message_id.is_(None),
     ]
 
     if initial_time:
@@ -173,13 +186,18 @@ def fetch_chat_sessions_eagerly_by_time(
     query = (
         db_session.query(ChatSession)
         .join(subquery, ChatSession.id == subquery.c.id)
-        .outerjoin(ChatMessage, ChatSession.id == ChatMessage.chat_session_id)
+        .outerjoin(
+            ChatMessage,
+            (ChatSession.id == ChatMessage.chat_session_id)
+            & visible_chat_messages_filter(),
+        )
         .options(
             joinedload(ChatSession.user),
             joinedload(ChatSession.persona),
             contains_eager(ChatSession.messages).joinedload(
                 ChatMessage.chat_message_feedbacks
             ),
+            contains_eager(ChatSession.messages).selectinload(ChatMessage.search_docs),
         )
         .order_by(asc_time_order, message_order)
     )

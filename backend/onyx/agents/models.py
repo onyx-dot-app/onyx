@@ -3,9 +3,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny
 
+from onyx.agents.items import ResponseItem, build_response_items
 from onyx.agents.tools import AgentTool
 from onyx.agents.transcript import (
-    AgentTranscript,
     CompactionCheckpoint,
     OperationSnapshot,
     RunFailure,
@@ -113,34 +113,17 @@ class RunSnapshot(BaseModel):
     status: RunStatus
     messages: list[Message]
     operations: list[OperationSnapshot] = Field(default_factory=list)
+    answer_message_index: int | None = None
     child_runs: list["RunSnapshot"] = Field(default_factory=list)
     request_params: GenerationRequestParams | None = None
     failure: RunFailure | None = None
     checkpoint: CompactionCheckpoint | None = None
 
-    def transcript(self) -> AgentTranscript:
-        input_messages = [
-            message.model_copy(deep=True) for message in self.input_messages
-        ]
-        messages = [message.model_copy(deep=True) for message in self.messages]
-        for message in [*input_messages, *messages]:
-            message.metadata = None
-            if isinstance(message, ToolResultMessage):
-                message.details = None
-        return AgentTranscript(
-            agent_id=self.agent_id,
-            previous_run_id=self.previous_run_id,
-            run_id=self.run_id,
-            parent_run_id=self.parent_run_id,
-            parent_tool_call_id=self.parent_tool_call_id,
-            parent_message_id=self.parent_message_id,
-            operations=[operation.model_copy() for operation in self.operations],
-            child_runs=[child.transcript() for child in self.child_runs],
-            status=self.status,
-            failure=self.failure,
-            input_messages=input_messages,
-            messages=messages,
-            checkpoint=self.checkpoint.model_copy(deep=True)
-            if self.checkpoint
-            else None,
+    @property
+    def items(self) -> list[ResponseItem]:
+        return build_response_items(
+            self.run_id,
+            self.messages,
+            self.operations,
+            answer_message_index=self.answer_message_index,
         )

@@ -2,6 +2,8 @@
 
 import pytest
 
+from onyx.agents.compaction import checkpoint_matches, history_digest, working_messages
+from onyx.agents.transcript import CompactionCheckpoint
 from onyx.context.messages import PromptMetadata, prompt_metadata
 from onyx.context.prompt import prepare_prompt
 from onyx.file_store.models import (
@@ -20,6 +22,7 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
+from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
 
 
 def test_instructions_files_and_reminder_surround_current_task() -> None:
@@ -171,3 +174,56 @@ def test_prompt_can_be_rebuilt_without_a_user_message(history: list[Message]) ->
         *[message.text for message in history],
         "Task",
     ]
+
+
+def test_historical_tool_filter_preserves_checkpoint_and_current_evidence() -> None:
+    prior_result = ToolResultMessage(
+        tool_call_id="old",
+        tool_name="web_search",
+        content="Old evidence",
+        metadata=PromptMetadata(omit_tool_result_content=True),
+    )
+    image_result = ToolResultMessage(
+        tool_call_id="image",
+        tool_name="generate_image",
+        content='[{"file_id":"image"}]',
+    )
+    current_result = ToolResultMessage(
+        tool_call_id="new",
+        tool_name="web_search",
+        content="Current evidence",
+    )
+    history: list[Message] = [
+        UserMessage(content="First question"),
+        AssistantMessage(content=[TextContent(text="First answer")]),
+        prior_result,
+        image_result,
+        UserMessage(content="Next question"),
+        current_result,
+    ]
+    checkpoint = CompactionCheckpoint(
+        summary="First exchange",
+        covered_count=2,
+        covered_digest=history_digest(history[:2]),
+    )
+    original_digest = history_digest(history)
+    request = prepare_prompt(
+        working_messages(history, checkpoint),
+        system_prompt=None,
+        custom_agent_prompt=None,
+        reminder_message=None,
+        context_files=None,
+        token_counter=len,
+    )
+    results = [message for message in request if isinstance(message, ToolResultMessage)]
+    assert [message.text for message in results] == [
+        TOOL_CALL_RESPONSE_CROSS_MESSAGE,
+        image_result.text,
+        "Current evidence",
+    ]
+    assert prompt_metadata(results[0]).token_count == len(
+        TOOL_CALL_RESPONSE_CROSS_MESSAGE
+    )
+    assert prior_result.text == "Old evidence"
+    assert history_digest(history) == original_digest
+    assert checkpoint_matches(history, checkpoint)

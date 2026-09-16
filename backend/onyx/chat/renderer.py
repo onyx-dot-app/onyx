@@ -1,4 +1,4 @@
-"""Convert one assistant message into frontend content packets.
+"""Render one generation’s response items as frontend content packets.
 
 Handles text, reasoning, citations, and streamed tool arguments. Presentation settings
 select answer, plan, report, or coding output. Live updates and saved history use the
@@ -9,22 +9,17 @@ from collections.abc import Mapping
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from onyx.chat.citation_processor import DynamicCitationProcessor
-from onyx.chat.models import MessagePresentation, PresentationMode
-from onyx.context.search.models import SearchDoc
-from onyx.llm.models import (
-    AssistantMessage,
-    GenerationDoneEvent,
-    GenerationErrorEvent,
-    GenerationEvent,
-    GenerationTextEvent,
-    GenerationToolCallEvent,
-    TextContent,
-    TextDeltaEvent,
-    ThinkingContent,
-    ThinkingDeltaEvent,
-    ToolCallDeltaEvent,
+from onyx.agents.items import (
+    ResponseGeneration,
+    ResponseItem,
+    ResponseReasoning,
+    ResponseText,
+    ResponseToolCall,
 )
+from onyx.agents.transcript import RunStatus
+from onyx.chat.citation_processor import DynamicCitationProcessor
+from onyx.chat.models import MessageRendering, PresentationMode
+from onyx.context.search.models import SearchDoc
 from onyx.server.query_and_chat.streaming_models import (
     AgentResponseDelta,
     AgentResponseStart,
@@ -59,7 +54,7 @@ class RenderConfig(BaseModel):
 
 
 def render_config(
-    presentation: MessagePresentation,
+    presentation: MessageRendering,
     documents: Mapping[str, SearchDoc],
 ) -> RenderConfig:
     """Resolve saved document IDs and create a fresh citation processor."""
@@ -90,11 +85,7 @@ def render_config(
 
 
 class PacketRenderer:
-    """Accumulate one message's display text while producing content packets.
-
-    consume accepts live generation events. render_message feeds saved content through
-    the same path. The frontend renders the resulting packets as UI components.
-    """
+    """Render live or saved response items for one generation into frontend packets."""
 
     def __init__(self, config: RenderConfig, identity: PacketIdentity) -> None:
         self.config = config
@@ -103,6 +94,84 @@ class PacketRenderer:
         self.reasoning = ""
         self.reasoning_active = False
         self.answer_started = False
+        self._item_offsets: dict[str, int] = {}
+        self._seen_tool_items: set[str] = set()
+        self._generation_finished = False
+
+    def consume_items(self, items: list[ResponseItem]) -> list[Packet]:
+        """Render accepted item updates; offsets prevent repeated streamed content."""
+        if not items:
+            return []
+        boundary = items[0].content
+        if not isinstance(boundary, ResponseGeneration):
+            raise ValueError("Rendering requires a generation boundary")
+        packets: list[Packet] = []
+        for item in items[1:]:
+            content = item.content
+            if isinstance(content, (ResponseText, ResponseReasoning)):
+                text = (
+                    content.text
+                    if isinstance(content, ResponseText)
+                    else content.content.text
+                )
+                offset = self._item_offsets.get(item.id, 0)
+                self._item_offsets[item.id] = len(text)
+                if len(text) == offset:
+                    continue
+                packets.extend(
+                    self._content(text[offset:])
+                    if isinstance(content, ResponseText)
+                    else self._thinking(text[offset:])
+                )
+            elif isinstance(content, ResponseToolCall):
+                fragments: dict[str, str] = {}
+                for name, value in content.call.arguments.items():
+                    if not isinstance(value, str):
+                        continue
+                    key = f"{item.id}:{name}"
+                    offset = self._item_offsets.get(key, 0)
+                    self._item_offsets[key] = len(value)
+                    if len(value) > offset:
+                        fragments[name] = value[offset:]
+                if item.id in self._seen_tool_items and not fragments:
+                    continue
+                self._seen_tool_items.add(item.id)
+                call = content.call
+                if call.name == self.config.think_tool:
+                    packets.extend(self._thinking(fragments.get("reasoning", "")))
+                else:
+                    packets.extend(self._close_reasoning())
+                    if call.name in self.config.argument_tools and fragments:
+                        packets.append(
+                            self._packet(
+                                ToolCallArgumentDelta(
+                                    tool_type=call.name,
+                                    argument_deltas=fragments,
+                                ),
+                                tool_call_id=call.id,
+                                part_id="tool",
+                            )
+                        )
+        if (
+            boundary.outcome.status != RunStatus.RUNNING
+            and not self._generation_finished
+        ):
+            packets.extend(self._finish_packets(boundary.outcome.status))
+            if (
+                not self.answer.strip()
+                and not self.config.text_as_thinking
+                and not any(
+                    isinstance(item.content, ResponseToolCall) for item in items
+                )
+            ):
+                text = "".join(
+                    item.content.text
+                    for item in items
+                    if isinstance(item.content, ResponseText)
+                )
+                if text.strip():
+                    packets.extend(self._answer(text))
+        return self._apply_presentation_mode(packets)
 
     def _packet(
         self,
@@ -169,57 +238,30 @@ class PacketRenderer:
                 packets.append(self._packet(item))
         return packets
 
-    def consume(self, event: GenerationEvent) -> list[Packet]:
-        packets: list[Packet] = []
-        if isinstance(event, GenerationTextEvent) and event.type == "thinking_delta":
-            packets.extend(self._thinking(event.text))
-        elif isinstance(event, GenerationTextEvent) and event.type == "text_delta":
-            packets.extend(self._content(event.text))
-        elif isinstance(event, GenerationToolCallEvent):
-            call = event.tool_call
-            if call.name == self.config.think_tool:
-                packets.extend(
-                    self._thinking(event.argument_deltas.get("reasoning", ""))
-                )
-                if event.type == "tool_call_end":
-                    packets.extend(self._close_reasoning())
-            else:
-                packets.extend(self._close_reasoning())
-                if call.name in self.config.argument_tools and event.argument_deltas:
-                    packets.append(
-                        self._packet(
-                            ToolCallArgumentDelta(
-                                tool_type=call.name,
-                                argument_deltas=event.argument_deltas,
-                            ),
-                            tool_call_id=call.id,
-                            part_id="tool",
+    def finish(self, status: RunStatus) -> list[Packet]:
+        """Flush display buffers when execution ends before a generation-end event."""
+        return self._apply_presentation_mode(self._finish_packets(status))
+
+    def _finish_packets(self, status: RunStatus) -> list[Packet]:
+        if self._generation_finished:
+            return []
+        self._generation_finished = True
+        packets = self._close_reasoning()
+        packets.extend(self._content(None))
+        if status == RunStatus.COMPLETE and self.config.mode == PresentationMode.REPORT:
+            packets.append(
+                self._packet(
+                    IntermediateReportCitedDocs(
+                        cited_docs=list(
+                            self.config.citations.get_seen_citations().values()
                         )
-                    )
-        elif event.type in {"done", "error"}:
-            packets.extend(self._close_reasoning())
-            packets.extend(self._content(None))
-            if (
-                not self.answer.strip()
-                and event.message.text.strip()
-                and not event.message.tool_calls
-                and not self.config.text_as_thinking
-            ):
-                packets.extend(self._answer(event.message.text))
-            if event.type == "done" and self.config.mode == "report":
-                packets.append(
-                    self._packet(
-                        IntermediateReportCitedDocs(
-                            cited_docs=list(
-                                self.config.citations.get_seen_citations().values()
-                            )
-                            if self.config.citations
-                            else []
-                        )
+                        if self.config.citations
+                        else [],
                     )
                 )
-                packets.append(self._packet(SectionEnd()))
-        return self._apply_presentation_mode(packets)
+            )
+            packets.append(self._packet(SectionEnd()))
+        return packets
 
     def _apply_presentation_mode(self, packets: list[Packet]) -> list[Packet]:
         result: list[Packet] = []
@@ -244,39 +286,3 @@ class PacketRenderer:
                     obj = CodingAgentThinkingDelta(content=obj.content)
             result.append(packet.model_copy(update={"obj": obj}))
         return result
-
-
-def render_message(
-    renderer: PacketRenderer, message: AssistantMessage, *, complete: bool
-) -> list[Packet]:
-    """Convert saved message content into packets using a fresh PacketRenderer.
-
-    complete flushes a normal message end. Recorded errors flush an error end.
-    """
-    packets: list[Packet] = []
-    for index, content in enumerate(message.content):
-        if isinstance(content, TextContent):
-            event = TextDeltaEvent(
-                message=message, content_index=index, text=content.text
-            )
-        elif isinstance(content, ThinkingContent):
-            event = ThinkingDeltaEvent(
-                message=message, content_index=index, text=content.text
-            )
-        else:
-            event = ToolCallDeltaEvent(
-                message=message,
-                content_index=index,
-                tool_call=content,
-                argument_deltas={
-                    key: value
-                    for key, value in content.arguments.items()
-                    if isinstance(value, str)
-                },
-            )
-        packets.extend(renderer.consume(event))
-    if complete:
-        packets.extend(renderer.consume(GenerationDoneEvent(message=message)))
-    elif message.stop_reason == "error":
-        packets.extend(renderer.consume(GenerationErrorEvent(message=message)))
-    return packets

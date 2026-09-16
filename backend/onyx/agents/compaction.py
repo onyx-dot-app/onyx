@@ -98,7 +98,7 @@ def context_budget(model: LLM) -> ContextBudget:
 def history_digest(messages: list[Message]) -> str:
     digest = hashlib.sha256()
     for message in messages:
-        data = message.model_dump(mode="json", exclude={"details", "metadata"})
+        data = message.model_dump(mode="json", exclude={"details", "metadata", "id"})
         digest.update(json.dumps(data, sort_keys=True, separators=(",", ":")).encode())
         digest.update(b"\n")
     return digest.hexdigest()

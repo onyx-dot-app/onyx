@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from typing_extensions import override
 
 from onyx.agents.tools import ToolInvocation, ToolProgress
-from onyx.agents.transcript import AgentConfiguration
+from onyx.agents.transcript import AgentRestorationConfig
 from onyx.coding_agent.agent import BASH_TOOL_SENTINEL_ID, CodingAgent, _setup_session
 from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.coding_agent.tool_definitions import (
@@ -150,7 +150,7 @@ class CodingAgentTool(Tool):
                 description=arguments.query,
                 max_steps=MAX_CODING_AGENT_CYCLES + 1,
                 messages=[UserMessage(content=arguments.query)],
-                restoration_config=AgentConfiguration(
+                restoration_config=AgentRestorationConfig(
                     feature="coding", settings={"repo": arguments.github_repo}
                 ),
             )

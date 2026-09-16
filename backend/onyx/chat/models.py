@@ -1,17 +1,18 @@
 from collections.abc import Iterator
 from enum import Enum
-from typing import Any, Literal
+from typing import Any
 from uuid import UUID
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field
 
+from onyx.agents.items import ResponseItem
 from onyx.agents.transcript import (
-    AgentConfiguration,
-    AgentTranscript,
+    AgentRestorationConfig,
     CompactionCheckpoint,
+    RunFailure,
+    RunStatus,
 )
 from onyx.cache.interface import CacheBackend
-from onyx.chat.citation_processor import CitationMapping, CitationMode
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.db.enums import IncognitoRecordMode
@@ -45,21 +46,10 @@ from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultTyp
 MAX_DISCOVERED_AGENTS = 128
 
 
-class RestoredAgent(BaseModel):
-    parent_agent_id: str | None = None
-    agent_id: str
-    agent_path: str
-    description: str
-    configuration: AgentConfiguration | None
-    transcripts: list[AgentTranscript]
-    sources: CitationMapping = Field(default_factory=dict)
-
-
-class ChatStepOutput(BaseModel):
-    sources: dict[int, SearchDoc] = Field(default_factory=dict)
-    documents: list[SearchDoc] = Field(default_factory=list)
-    include_citations: bool = True
-    elapsed_seconds: float = 0
+class CitationMode(str, Enum):
+    REMOVE = "remove"
+    KEEP_MARKERS = "keep_markers"
+    HYPERLINK = "hyperlink"
 
 
 class PresentationMode(str, Enum):
@@ -70,9 +60,9 @@ class PresentationMode(str, Enum):
     SILENT = "silent"
 
 
-class MessagePresentation(BaseModel):
-    run_id: str
-    step_index: int = Field(validation_alias=AliasChoices("step_index", "turn"))
+class MessageRendering(BaseModel):
+    """Chat display settings retained with one generated message for history replay."""
+
     mode: PresentationMode = PresentationMode.ANSWER
     text_as_thinking: bool = False
     think_tool: str | None = None
@@ -84,6 +74,46 @@ class MessagePresentation(BaseModel):
     pre_answer_seconds: float | None = None
 
 
+class ResponseRecord(BaseModel):
+    """Accepted response items and lineage, without live application objects."""
+
+    run_id: str
+    agent_id: str | None = None
+    agent_path: str = "/root"
+    agent_description: str = ""
+    restoration_config: AgentRestorationConfig | None = None
+    previous_run_id: str | None = None
+    parent_run_id: str | None = None
+    parent_tool_call_id: str | None = None
+    parent_message_id: str | None = None
+    input_messages: list[Message] = Field(default_factory=list)
+    items: list[ResponseItem] = Field(default_factory=list)
+    child_runs: list["ResponseRecord"] = Field(default_factory=list)
+    status: RunStatus
+    failure: RunFailure | None = None
+    checkpoint: CompactionCheckpoint | None = None
+
+
+class SavedAgentContext(BaseModel):
+    """Saved history, settings, and sources used to rebuild an agent."""
+
+    agent_id: str
+    configuration: AgentRestorationConfig | None
+    messages: list[Message]
+    checkpoint: CompactionCheckpoint | None = None
+    previous_run_id: str | None = None
+    sources: dict[int, SearchDoc] = Field(default_factory=dict)
+
+
+class ChatMessageMetadata(BaseModel):
+    """Source references and display settings attached to a generated chat message."""
+
+    sources: dict[int, SearchDoc] = Field(default_factory=dict)
+    documents: list[SearchDoc] = Field(default_factory=list)
+    include_citations: bool = True
+    elapsed_seconds: float = 0
+
+
 class ToolRecordReference(BaseModel):
     message_id: str
     tool_call_id: str
@@ -91,9 +121,8 @@ class ToolRecordReference(BaseModel):
 
 
 class ChatExecutionRecord(BaseModel):
-    version: Literal[1] = 1
-    transcript: AgentTranscript
-    presentation: list[MessagePresentation] = Field(default_factory=list)
+    response: ResponseRecord
+    presentation: dict[str, MessageRendering] = Field(default_factory=dict)
     tool_records: list[ToolRecordReference] = Field(default_factory=list)
 
 
@@ -104,7 +133,7 @@ class ChatHistoryMessage(BaseModel):
     token_count: int
     files: list[FileDescriptor]
     is_clarification: bool
-    assistant_messages: list[Message]
+    response_messages: list[Message]
     agent_run_id: str | None = None
     checkpoint: CompactionCheckpoint | None = None
 
@@ -220,7 +249,7 @@ class ChatArtifactSnapshot(BaseModel):
 
     tool_calls: list[ToolCallInfo]
     all_search_docs: dict[str, SearchDoc]
-    citation_to_doc: CitationMapping
+    citation_to_doc: dict[int, SearchDoc]
 
 
 class ChatResponseSnapshot(BaseModel):
@@ -231,15 +260,15 @@ class ChatResponseSnapshot(BaseModel):
     answer: str | None
     reasoning: str | None
     request_params: GenerationRequestParams | None
-    citation_to_doc: CitationMapping
+    citation_to_doc: dict[int, SearchDoc]
     tool_calls: list[ToolCallInfo]
     is_clarification: bool
     all_search_docs: dict[str, SearchDoc]
     citation_info: list[CitationInfo] = Field(default_factory=list)
     top_documents: list[SearchDoc] = Field(default_factory=list)
     pre_answer_processing_time: float | None
-    transcript: AgentTranscript | None
-    presentation: list[MessagePresentation] = Field(default_factory=list)
+    response: ResponseRecord | None
+    presentation: dict[str, MessageRendering] = Field(default_factory=dict)
     cancelled: bool
     delivery_failed: bool = False
     error: str | None = None

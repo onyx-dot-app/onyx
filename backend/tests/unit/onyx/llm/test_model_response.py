@@ -352,6 +352,7 @@ def test_accumulator_keeps_interleaved_calls_and_signed_thinking_separate() -> N
                 choice=StreamingChoice(delta=Delta(tool_calls=[call])),
             )
         )
+    assert all(not call.arguments_complete for call in accumulator.message.tool_calls)
     events = accumulator.end()
     message = events[-1].message
     assert message.thinking_blocks == [signed]
@@ -361,6 +362,16 @@ def test_accumulator_keeps_interleaved_calls_and_signed_thinking_separate() -> N
         ("invalid", {}),
     ]
     assert message.tool_calls[-1].argument_error is not None
+    assert [call.raw_arguments for call in message.tool_calls] == [
+        None,
+        None,
+        '{"query":broken',
+    ]
+    assert [call.arguments_complete for call in message.tool_calls] == [
+        True,
+        True,
+        False,
+    ]
     assert [
         event.content_index for event in events if isinstance(event, ToolCallEndEvent)
     ] == [1, 2, 3]

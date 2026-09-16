@@ -8,6 +8,7 @@ from functools import partial
 import pytest
 
 from onyx.agents.events import AgentEvent
+from onyx.agents.items import messages_from_items
 from onyx.agents.runtime import Run
 from onyx.chat.agent import ChatAgent
 from onyx.chat.emitter import Emitter
@@ -126,8 +127,8 @@ def test_chat_preserves_parallel_tool_history_forcing_and_packets(
     snapshot = project(runs[-1].snapshot())
     assert snapshot.answer == "Final answer"
     assert snapshot.reasoning == "Compare the evidence"
-    assert snapshot.transcript is not None
-    assert snapshot.transcript.messages[-1].text == "Final answer"
+    assert snapshot.response is not None
+    assert messages_from_items(snapshot.response.items)[-1].text == "Final answer"
     assert [call.tool_call_response for call in snapshot.tool_calls] == [
         "hello",
         "hello",
@@ -225,8 +226,8 @@ def test_source_file_staging_does_not_block_cancelled_snapshot(
             with pytest.raises(AgentCancelled):
                 await run.wait(timeout=0.5)
             snapshot = project(run.snapshot())
-            assert snapshot.transcript is not None
-            assert snapshot.transcript.status == "cancelled"
+            assert snapshot.response is not None
+            assert snapshot.response.status == "cancelled"
             assert not await run.wait_for_idle(timeout=0)
         finally:
             release.set()

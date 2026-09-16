@@ -14,27 +14,28 @@ from onyx.agents.events import (
     AgentEndEvent,
     AgentEvent,
     AgentStartEvent,
+    MessageEndEvent,
     MessageStartEvent,
     MessageUpdateEvent,
     ToolEndEvent,
     ToolStartEvent,
     ToolUpdateEvent,
 )
+from onyx.agents.items import ResponseText, TextPurpose, group_response_items_by_step
 from onyx.agents.models import RunSnapshot
 from onyx.agents.transcript import RunStatus
 from onyx.chat.artifacts import project_tool_artifacts
-from onyx.chat.citation_processor import (
-    CitationMapping,
-    CitationMode,
-)
+from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import (
+    ChatMessageMetadata,
     ChatResponseSnapshot,
-    ChatStepOutput,
-    MessagePresentation,
+    CitationMode,
+    MessageRendering,
     PresentationMode,
 )
-from onyx.chat.renderer import PacketRenderer, render_config, render_message
+from onyx.chat.renderer import PacketRenderer, render_config
+from onyx.chat.response import response_record
 from onyx.chat.tool_progress import (
     ToolProgressTracker,
     project_tool_progress,
@@ -42,7 +43,7 @@ from onyx.chat.tool_progress import (
 )
 from onyx.coding_agent.tool_definitions import CODING_AGENT_TOOL_NAME
 from onyx.context.search.models import SearchDoc
-from onyx.deep_research.models import ResearchPhase, ResearchStepOutput
+from onyx.deep_research.models import ResearchMessageMetadata, ResearchPhase
 from onyx.deep_research.tool_definitions import THINK_TOOL_NAME
 from onyx.llm.models import AssistantMessage
 from onyx.server.query_and_chat.streaming_models import (
@@ -65,20 +66,16 @@ _ARGUMENT_TOOLS = frozenset({BashTool.NAME, PythonTool.NAME})
 def message_presentation(
     metadata: BaseModel | None,
     *,
-    run_id: str,
-    step_index: int,
     parent_tool_name: str | None = None,
-) -> MessagePresentation:
+) -> MessageRendering:
     """Resolve feature metadata into display settings retained for history replay."""
-    presentation = MessagePresentation(
-        run_id=run_id,
-        step_index=step_index,
+    presentation = MessageRendering(
         argument_tools=set(_ARGUMENT_TOOLS),
         mode=PresentationMode.CODING_THINKING
         if parent_tool_name == CODING_AGENT_TOOL_NAME
         else PresentationMode.ANSWER,
     )
-    if isinstance(metadata, ChatStepOutput):
+    if isinstance(metadata, ChatMessageMetadata):
         presentation.citation_mode = (
             CitationMode.HYPERLINK
             if metadata.include_citations
@@ -89,7 +86,7 @@ def message_presentation(
         }
         presentation.document_ids = [doc.document_id for doc in metadata.documents]
         presentation.pre_answer_seconds = metadata.elapsed_seconds
-    elif isinstance(metadata, ResearchStepOutput):
+    elif isinstance(metadata, ResearchMessageMetadata):
         presentation.pre_answer_seconds = metadata.elapsed_seconds
         presentation.is_clarification = metadata.phase == ResearchPhase.CLARIFICATION
         if metadata.phase == ResearchPhase.PLANNING:
@@ -120,12 +117,12 @@ def message_presentation(
 
 
 def message_documents(metadata: BaseModel | None) -> dict[str, SearchDoc]:
-    if isinstance(metadata, ChatStepOutput):
+    if isinstance(metadata, ChatMessageMetadata):
         return {
             doc.document_id: doc
             for doc in [*metadata.sources.values(), *metadata.documents]
         }
-    if isinstance(metadata, ResearchStepOutput):
+    if isinstance(metadata, ResearchMessageMetadata):
         return {doc.document_id: doc for doc in metadata.sources.values()}
     return {}
 
@@ -141,60 +138,73 @@ def project_response(
     """Build saved output from a snapshot, independently of live packet delivery.
 
     Message conversion shares citation and text handling with the live stream, so saved
-    answers match streamed answers. Unfinished run trees omit the durable transcript.
+    answers match streamed answers. Canonical content survives display failures.
     """
-    artifacts = project_tool_artifacts(snapshot, tool_ids, initial_citations)
-    transcript = snapshot.transcript()
-    metadata = {info.id: info for info in registrations}
-    records = [transcript]
-    has_unfinished_run = False
-    while records:
-        record = records.pop()
-        has_unfinished_run |= record.status == RunStatus.RUNNING
-        if info := metadata.get(record.agent_id):
-            record.agent_path = info.path
-            record.agent_description = info.description
-            record.restoration_config = info.restoration_config
-        records.extend(record.child_runs)
-    if has_unfinished_run:
-        logger.warning("Omitting unfinished run transcript: %s", snapshot.run_id)
-    # The root input is stored in the chat user record; child tasks remain in their records.
-    transcript.input_messages.clear()
+    record = response_record(snapshot, registrations)
     response = ChatResponseSnapshot(
-        answer=None,
+        answer="".join(
+            item.content.text
+            for item in snapshot.items
+            if isinstance(item.content, ResponseText)
+            and item.content.purpose == TextPurpose.ANSWER
+        ),
         reasoning=None,
         request_params=snapshot.request_params,
-        citation_to_doc=artifacts.citation_to_doc,
-        tool_calls=artifacts.tool_calls,
+        citation_to_doc={},
+        tool_calls=[],
         is_clarification=False,
-        all_search_docs=artifacts.all_search_docs,
+        all_search_docs={},
         pre_answer_processing_time=None,
-        transcript=None if has_unfinished_run else transcript,
+        response=record,
         cancelled=snapshot.status == RunStatus.CANCELLED,
         delivery_failed=False,
     )
-    presentation: list[MessagePresentation] = []
+    try:
+        artifacts = project_tool_artifacts(snapshot, tool_ids, initial_citations)
+        response = response.model_copy(
+            update={
+                "citation_to_doc": artifacts.citation_to_doc,
+                "tool_calls": artifacts.tool_calls,
+                "all_search_docs": artifacts.all_search_docs,
+            }
+        )
+    except Exception:
+        logger.exception("Could not project response artifacts: %s", snapshot.run_id)
+    try:
+        return _project_response_display(snapshot, response_id, response)
+    except Exception:
+        logger.exception("Could not format accepted response: %s", snapshot.run_id)
+        return response.model_copy(
+            update={
+                "error": "Response formatting failed. The accepted content has been retained.",
+            }
+        )
+
+
+def _project_response_display(
+    snapshot: RunSnapshot, response_id: int, response: ChatResponseSnapshot
+) -> ChatResponseSnapshot:
+    presentation: dict[str, MessageRendering] = {}
     pending: list[tuple[RunSnapshot, str | None]] = [(snapshot, None)]
     while pending:
         node, parent_tool_name = pending.pop()
         call_names: dict[tuple[str, str], str] = {}
+        items_by_step = group_response_items_by_step(node.items)
         for operation in node.operations:
             if operation.tool_call_id is not None:
                 continue
             message = node.messages[operation.message_index]
             if not isinstance(message, AssistantMessage):
                 raise ValueError("Message operation has invalid output")
-            message_id = f"{node.run_id}:{operation.step_index}"
+            message_id = message.id or f"{node.run_id}:{operation.step_index}"
             call_names.update(
                 {(message_id, call.id): call.name for call in message.tool_calls}
             )
             setting = message_presentation(
                 message.metadata,
-                run_id=node.run_id,
-                step_index=operation.step_index,
                 parent_tool_name=parent_tool_name,
             )
-            presentation.append(setting)
+            presentation[message_id] = setting
             config = render_config(setting, message_documents(message.metadata))
             if node is not snapshot or config.mode != PresentationMode.ANSWER:
                 continue
@@ -206,9 +216,15 @@ def project_response(
                     message_id=message_id,
                 ),
             )
-            packets = render_message(
-                renderer, message, complete=operation.status == RunStatus.COMPLETE
+            generation_items = items_by_step[operation.step_index]
+            packets = renderer.consume_items(generation_items)
+            is_answer = any(
+                isinstance(item.content, ResponseText)
+                and item.content.purpose == TextPurpose.ANSWER
+                for item in generation_items
             )
+            if not is_answer and snapshot.status == RunStatus.COMPLETE:
+                continue
             response = response.model_copy(
                 update={
                     "answer": renderer.answer,
@@ -285,8 +301,6 @@ class ResponsePresenter:
         if isinstance(event, MessageStartEvent):
             setting = message_presentation(
                 event.metadata,
-                run_id=event.run_id,
-                step_index=event.step_index,
                 parent_tool_name=self.call_names.get(
                     (event.parent_message_id or "", event.parent_tool_call_id or "")
                 ),
@@ -295,8 +309,8 @@ class ResponsePresenter:
             self.renderers[event.run_id] = PacketRenderer(
                 config, self._identity(event, event.step_index)
             )
-        elif isinstance(event, MessageUpdateEvent):
-            for packet in self.renderers[event.run_id].consume(event.generation_event):
+        elif isinstance(event, (MessageUpdateEvent, MessageEndEvent)):
+            for packet in self.renderers[event.run_id].consume_items(event.items):
                 self.emitter.emit(packet)
         elif isinstance(event, (ToolStartEvent, ToolUpdateEvent, ToolEndEvent)):
             identity = self._identity(event, event.step_index).model_copy(
@@ -346,6 +360,9 @@ class ResponsePresenter:
                 event.outcome if isinstance(event, AgentEndEvent) else RunStatus.RUNNING
             )
             if isinstance(event, AgentEndEvent):
+                if renderer := self.renderers.pop(event.run_id, None):
+                    for packet in renderer.finish(status):
+                        self.emitter.emit(packet)
                 for key, active in list(self.active_calls.items()):
                     call_identity = active.identity
                     if call_identity.run_id != event.run_id:

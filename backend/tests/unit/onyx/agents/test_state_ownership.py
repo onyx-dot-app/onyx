@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from onyx.agents.events import (
     AgentEvent,
 )
+from onyx.agents.items import messages_from_items
 from onyx.agents.models import (
     AgentContext,
     PreparedStep,
@@ -201,7 +202,9 @@ async def test_tool_finalization_has_one_commit_point(replace: bool) -> None:
         == snapshot.messages[1].text
         == "accepted"
     )
-    assert "private metadata" not in snapshot.transcript().model_dump_json()
+    assert "private metadata" not in "".join(
+        item.model_dump_json() for item in snapshot.items
+    )
 
 
 @pytest.mark.asyncio
@@ -348,6 +351,6 @@ async def test_request_assembly_keeps_logical_tool_context_and_metadata() -> Non
     assert tool_histories == [["original task"]]
     assert result.output.metadata == metadata
     assert run.snapshot().messages[0].metadata == metadata
-    assert run.snapshot().transcript().messages[0].metadata is None
+    assert messages_from_items(run.snapshot().items)[0].metadata is None
     starts = [event for event in events if event.type == "message_start"]
     assert len(starts) == 1 and starts[0].metadata == metadata

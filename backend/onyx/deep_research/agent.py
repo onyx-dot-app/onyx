@@ -13,7 +13,7 @@ from onyx.agents.models import (
 from onyx.agents.runtime import Agent, RunFailed
 from onyx.agents.tools import AgentTool, ToolInvocation, ToolProgress
 from onyx.agents.transcript import (
-    AgentConfiguration,
+    AgentRestorationConfig,
     CompactionCheckpoint,
     RunFailureKind,
 )
@@ -30,8 +30,8 @@ from onyx.context.messages import PromptMetadata
 from onyx.context.prompt import prepare_prompt
 from onyx.deep_research.models import (
     ResearchAgentCallResult,
+    ResearchMessageMetadata,
     ResearchPhase,
-    ResearchStepOutput,
 )
 from onyx.deep_research.research_agent import ResearchAgent, ResearchConfiguration
 from onyx.deep_research.tool_definitions import (
@@ -154,7 +154,7 @@ class DeepResearchAgent:
         research_steps = 0
         for message in state.messages:
             if not isinstance(message, AssistantMessage) or not isinstance(
-                message.metadata, ResearchStepOutput
+                message.metadata, ResearchMessageMetadata
             ):
                 continue
             if message.metadata.phase == ResearchPhase.PLANNING:
@@ -229,7 +229,7 @@ class DeepResearchAgent:
                 FINAL_REPORT_PROMPT.format(current_datetime=now), self.language_section
             )
             reminder = USER_FINAL_REPORT_QUERY.format(research_plan=plan)
-        output_metadata = ResearchStepOutput(
+        output_metadata = ResearchMessageMetadata(
             phase=phase,
             is_reasoning_model=self.is_reasoning_model,
             sources=dict(self.citation_mapping),
@@ -267,7 +267,7 @@ class DeepResearchAgent:
                 else ResearchPhase.CLARIFICATION
             )
         metadata = previous.message.metadata
-        if not isinstance(metadata, ResearchStepOutput):
+        if not isinstance(metadata, ResearchMessageMetadata):
             raise ValueError("Research output requires phase metadata")
         if metadata.phase == ResearchPhase.CLARIFICATION:
             return ResearchPhase.PLANNING
@@ -283,7 +283,7 @@ class DeepResearchAgent:
 
     def after_step(self, result: StepResult) -> bool:
         metadata = result.message.metadata
-        if not isinstance(metadata, ResearchStepOutput):
+        if not isinstance(metadata, ResearchMessageMetadata):
             raise ValueError("Research output requires phase metadata")
         if metadata.phase == ResearchPhase.CLARIFICATION:
             return bool(result.message.tool_calls)
@@ -331,7 +331,7 @@ class DeepResearchAgent:
                 description=task.task,
                 max_steps=MAX_RESEARCH_CYCLES + 1,
                 messages=[UserMessage(content=task.task)],
-                restoration_config=AgentConfiguration(
+                restoration_config=AgentRestorationConfig(
                     feature="research",
                     settings=ResearchConfiguration(
                         language_section=self.language_section,

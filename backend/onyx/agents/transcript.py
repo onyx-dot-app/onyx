@@ -1,9 +1,8 @@
-"""Versioned canonical output, independent of packets and application objects."""
+"""Execution outcomes and conversation replay rules."""
 
 from enum import Enum
-from typing import Literal
 
-from pydantic import BaseModel, Field, JsonValue, model_validator
+from pydantic import BaseModel, Field, JsonValue
 
 from onyx.llm.exceptions import LLMErrorInfo
 from onyx.llm.models import AssistantMessage, Message, ToolCall, ToolResultMessage
@@ -46,42 +45,9 @@ class OperationSnapshot(BaseModel):
     status: RunStatus
 
 
-class AgentConfiguration(BaseModel):
+class AgentRestorationConfig(BaseModel):
     feature: str
     settings: dict[str, JsonValue] = Field(default_factory=dict)
-
-
-class AgentTranscript(BaseModel):
-    """Storage-safe run record; operation indices address messages, excluding input."""
-
-    input_messages: list[Message] = Field(default_factory=list)
-    agent_id: str | None = None
-    agent_path: str = "/root"
-    agent_description: str = ""
-    restoration_config: AgentConfiguration | None = None
-    previous_run_id: str | None = None
-    version: Literal[2] = 2
-    run_id: str | None = None
-    parent_run_id: str | None = None
-    parent_tool_call_id: str | None = None
-    parent_message_id: str | None = None
-    operations: list[OperationSnapshot] = Field(default_factory=list)
-    child_runs: list["AgentTranscript"] = Field(default_factory=list)
-    status: RunStatus
-    messages: list[Message]
-    failure: RunFailure | None = None
-    checkpoint: CompactionCheckpoint | None = None
-
-    @model_validator(mode="after")
-    def reject_application_details(self) -> "AgentTranscript":
-        if any(
-            isinstance(message, ToolResultMessage) and message.details is not None
-            for message in [*self.input_messages, *self.messages]
-        ):
-            raise ValueError(
-                "Application details do not belong in a durable transcript"
-            )
-        return self
 
 
 def completed_tool_call_ids(messages: list[Message], assistant_index: int) -> set[str]:
@@ -96,7 +62,7 @@ def completed_tool_call_ids(messages: list[Message], assistant_index: int) -> se
 
 def messages_for_model(messages: list[Message]) -> list[Message]:
     """Exclude unfinished tool calls while preserving recorded partial output."""
-    replay: list[Message] = []
+    result: list[Message] = []
     accepted: set[str] = set()
     for index, message in enumerate(messages):
         if isinstance(message, AssistantMessage):
@@ -109,14 +75,14 @@ def messages_for_model(messages: list[Message]) -> list[Message]:
                 if not isinstance(part, ToolCall) or part.id in accepted
             ]
             if copy.content:
-                replay.append(copy)
+                result.append(copy)
             else:
                 logger.debug(
                     "Omitting an unfinished empty assistant message from model context"
                 )
         elif isinstance(message, ToolResultMessage):
             if message.tool_call_id in accepted:
-                replay.append(message.model_copy(deep=True))
+                result.append(message.model_copy(deep=True))
                 accepted.remove(message.tool_call_id)
             else:
                 logger.debug(
@@ -125,5 +91,5 @@ def messages_for_model(messages: list[Message]) -> list[Message]:
                 )
         else:
             accepted.clear()
-            replay.append(message.model_copy(deep=True))
-    return replay
+            result.append(message.model_copy(deep=True))
+    return result

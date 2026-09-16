@@ -18,7 +18,7 @@ from onyx.agents.events import AgentEvent
 from onyx.agents.models import RunResult, RunSnapshot
 from onyx.agents.runtime import Agent, Run, RunFailed, result_from_snapshot
 from onyx.agents.tools import DEFAULT_AGENT_WAIT_SECONDS, AgentControl, SpawnResult
-from onyx.agents.transcript import AgentConfiguration, AgentTranscript, RunStatus
+from onyx.agents.transcript import AgentRestorationConfig, RunStatus
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.models import Message
 from onyx.utils.logger import setup_logger
@@ -39,7 +39,7 @@ class AgentInfo(BaseModel):
     path: str
     parent_id: str | None
     description: str
-    restoration_config: AgentConfiguration | None
+    restoration_config: AgentRestorationConfig | None
     latest_run_id: str | None = None
     status: RunStatus | None = None
 
@@ -51,7 +51,7 @@ class AgentCoordinator:
         agents: Sequence[AgentInfo] = (),
         lookup_agent: Callable[[str, str], AgentInfo | None] | None = None,
         resolve_agent: Callable[[str, str], Agent] | None = None,
-        read_run: Callable[[str, str], AgentTranscript | None] | None = None,
+        read_run: Callable[[str, str], RunSnapshot | None] | None = None,
     ) -> None:
         self._registrations = {info.id: info.model_copy(deep=True) for info in agents}
         if len(self._registrations) != len(agents):
@@ -189,12 +189,12 @@ class AgentCoordinator:
             self._agents[agent_id] = restored
         return restored
 
-    def _saved(self, run_id: str, parent_id: str) -> RunSnapshot | AgentTranscript:
+    def _saved(self, run_id: str, parent_id: str) -> RunSnapshot:
         with self._lock:
             saved = next(
                 (item for item in self._latest.values() if item.run_id == run_id), None
             )
-        record: RunSnapshot | AgentTranscript | None = saved
+        record: RunSnapshot | None = saved
         if record is None and self._read_run is not None:
             record = self._read_run(run_id, parent_id)
         if record is None:
@@ -324,7 +324,7 @@ class _ToolControl(AgentControl):
         description: str,
         max_steps: int,
         messages: Sequence[Message],
-        restoration_config: AgentConfiguration | None = None,
+        restoration_config: AgentRestorationConfig | None = None,
     ) -> SpawnResult:
         self._check()
         if not name or "/" in name:
@@ -490,9 +490,7 @@ class _ToolControl(AgentControl):
             if deadline.expired():
                 return None
             raise
-        return result_from_snapshot(
-            RunSnapshot.model_validate(record, from_attributes=True)
-        )
+        return result_from_snapshot(record)
 
     async def cancel_run(self, run_id: str) -> None:
         self._check()

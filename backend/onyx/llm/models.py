@@ -93,6 +93,8 @@ class ToolCall(BaseModel):
     name: str
     arguments: dict[str, JsonValue]
     argument_error: str | None = None
+    raw_arguments: str | None = None
+    arguments_complete: bool = True
 
 
 AssistantContent = Annotated[
@@ -125,6 +127,7 @@ class UserMessage(BaseMessage):
 
 
 class AssistantMessage(BaseMessage):
+    id: str | None = None
     role: Literal[MessageRole.ASSISTANT] = MessageRole.ASSISTANT
     content: list[AssistantContent] = Field(default_factory=list)
     stop_reason: str | None = None

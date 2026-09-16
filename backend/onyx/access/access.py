@@ -258,6 +258,7 @@ def user_can_access_chat_file(file_id: str, user: User, db_session: Session) -> 
     chat_file_stmt = (
         select(ChatMessage.id)
         .join(ChatSession, ChatMessage.chat_session_id == ChatSession.id)
+        .where(ChatSession.spawned_by_message_id.is_(None))
         .where(ChatMessage.files.op("@>")([{"id": file_id}]))
         .where(
             or_(

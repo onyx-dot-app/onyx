@@ -1,16 +1,12 @@
 from collections.abc import Mapping
 
 from onyx.agents.models import RunSnapshot
-from onyx.chat.citation_processor import (
-    CitationMapping,
-    CitationMode,
-    DynamicCitationProcessor,
-)
+from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
 from onyx.chat.citation_utils import (
     build_context_file_citation_mapping,
     update_citation_processor_from_tool_result,
 )
-from onyx.chat.models import ChatArtifactSnapshot
+from onyx.chat.models import ChatArtifactSnapshot, CitationMode
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.file_store.models import ExtractedContextFiles
@@ -187,7 +183,7 @@ def _tool_record(
     saved_response = _saved_tool_response(tool_response) if tool_response else ""
 
     return ToolCallInfo(
-        message_id=f"{snapshot.run_id}:{turn}",
+        message_id=output.id or f"{snapshot.run_id}:{turn}",
         parent_message_id=snapshot.parent_message_id,
         parent_tool_call_id=snapshot.parent_tool_call_id,
         turn_index=turn,

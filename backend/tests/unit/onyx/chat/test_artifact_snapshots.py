@@ -93,8 +93,9 @@ def test_stop_preserves_accepted_file_and_unfinished_parent(
         agent = worker
     signal = CancellationSignal()
 
+    coordinator = AgentCoordinator() if child_run else None
+
     async def exercise() -> Run:
-        coordinator = AgentCoordinator() if child_run else None
         run = agent.start(max_steps=2, cancellation=signal, coordinator=coordinator)
         run.subscribe(on_event)
         if render:
@@ -124,8 +125,9 @@ def test_stop_preserves_accepted_file_and_unfinished_parent(
             run.snapshot(),
             response_id=42,
             tool_ids={"write": 1, "wait": 2, "research": 7},
+            registrations=coordinator.registrations() if coordinator else (),
         )
-        assert snapshot.transcript is not None
+        assert snapshot.response is not None
         file_record = next(
             record for record in snapshot.tool_calls if record.tool_call_id == "file"
         )
@@ -139,5 +141,5 @@ def test_stop_preserves_accepted_file_and_unfinished_parent(
             )
             assert file_record.parent_execution_key == parent.execution_key
             assert parent.tool_call_response == ""
-            assert snapshot.transcript.child_runs
+            assert snapshot.response.child_runs
         file_record.generated_files = []
