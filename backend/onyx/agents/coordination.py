@@ -5,14 +5,14 @@ import threading
 import time
 from collections.abc import Callable, Sequence
 from contextlib import ExitStack
+from typing import Literal, overload
 
 from pydantic import BaseModel, ConfigDict
 
 from onyx.agents.concurrency import (
     CLEANUP_SECONDS,
     OPERATION_TIMEOUT_SECONDS,
-    ExecutionServices,
-    WorkTracker,
+    ExecutionWork,
 )
 from onyx.agents.events import AgentEvent
 from onyx.agents.models import RunResult, RunSnapshot
@@ -45,6 +45,8 @@ class AgentInfo(BaseModel):
 
 
 class AgentCoordinator:
+    """Own agent identities, loaded conversations, and their active or saved runs."""
+
     def __init__(
         self,
         *,
@@ -63,6 +65,7 @@ class AgentCoordinator:
         self._resolve_agent = resolve_agent
         self._read_run = read_run
         self._closed = False
+        # Registration and execution state change together under one lock.
         self._lock = threading.RLock()
 
     def register(self, info: AgentInfo) -> None:
@@ -114,7 +117,7 @@ class AgentCoordinator:
     def bind(
         self,
         run: Run,
-        services: ExecutionServices,
+        work: ExecutionWork,
         publish: Callable[[AgentEvent], None],
         cancellation: CancellationSignal,
     ) -> "RunCoordination":
@@ -131,7 +134,7 @@ class AgentCoordinator:
                         restoration_config=None,
                     )
                 )
-            binding = RunCoordination(self, run, services, publish, cancellation)
+            binding = RunCoordination(self, run, work, publish, cancellation)
             self._bindings[run.id] = binding
             return binding
 
@@ -155,6 +158,91 @@ class AgentCoordinator:
             self._latest.clear()
         return True
 
+    def check_open(self) -> None:
+        with self._lock:
+            if self._closed:
+                raise RuntimeError("Agent coordination is closed")
+
+    def register_child(
+        self,
+        agent: Agent,
+        *,
+        parent_id: str,
+        name: str,
+        description: str,
+        restoration_config: AgentRestorationConfig | None,
+    ) -> AgentInfo:
+        if not name or "/" in name:
+            raise ValueError("Agent name must be a nonempty label without slashes")
+        with self._lock:
+            self.check_open()
+            parent = self._registrations[parent_id]
+            ancestor = parent
+            depth = 0
+            while ancestor.parent_id is not None:
+                depth += 1
+                ancestor = self._registrations[ancestor.parent_id]
+            if depth >= MAX_CHILD_DEPTH:
+                raise ValueError("Agent nesting limit exceeded")
+            if (
+                agent.id in self._registrations
+                or len(self._agents) >= MAX_LOADED_AGENTS
+            ):
+                raise ValueError(
+                    "Agent already registered or loaded agent limit exceeded"
+                )
+            info = AgentInfo(
+                id=agent.id,
+                path=f"{parent.path}/{name}",
+                parent_id=parent_id,
+                description=description,
+                restoration_config=restoration_config,
+            )
+            self._registrations[agent.id] = info.model_copy(deep=True)
+            self._agents[agent.id] = agent
+            return info
+
+    def unregister_child(self, agent_id: str) -> None:
+        with self._lock:
+            self._agents.pop(agent_id)
+            self._registrations.pop(agent_id)
+
+    def loaded_child(self, agent_id: str, parent_id: str) -> Agent | None:
+        with self._lock:
+            info = self._registrations.get(agent_id)
+            if info is not None and info.parent_id != parent_id:
+                raise ValueError("Agent is not available to this parent")
+            agent = self._agents.get(agent_id)
+            if agent is None and self._resolve_agent is None:
+                raise ValueError("Agent restoration is unavailable")
+            return agent
+
+    def active_run(self, agent_id: str) -> Run | None:
+        with self._lock:
+            return next(
+                (
+                    binding.run
+                    for binding in reversed(self._bindings.values())
+                    if binding.run.agent_id == agent_id
+                ),
+                None,
+            )
+
+    def child_run(self, run_id: str, parent_id: str) -> Run | None:
+        with self._lock:
+            binding = self._bindings.get(run_id)
+            if binding is None:
+                return None
+            if self._registrations[binding.run.agent_id].parent_id != parent_id:
+                raise ValueError("Run is not available to this parent")
+            return binding.run
+
+    def release(self, run: Run) -> None:
+        with self._lock:
+            if self._registrations[run.agent_id].parent_id is not None:
+                self._latest[run.agent_id] = run.snapshot()
+            self._bindings.pop(run.id, None)
+
     def _lookup(self, agent_id: str, parent_id: str) -> AgentInfo | None:
         with self._lock:
             info = self._registrations.get(agent_id)
@@ -168,7 +256,7 @@ class AgentCoordinator:
             raise ValueError("Agent is not available to this parent")
         return info
 
-    def _resolve(self, agent_id: str, parent_id: str) -> Agent:
+    def resolve_child(self, agent_id: str, parent_id: str) -> Agent:
         if self._lookup(agent_id, parent_id) is None:
             raise ValueError("Agent is not available to this parent")
         with self._lock:
@@ -189,13 +277,27 @@ class AgentCoordinator:
             self._agents[agent_id] = restored
         return restored
 
-    def _saved(self, run_id: str, parent_id: str) -> RunSnapshot:
+    @overload
+    def saved_run(
+        self, run_id: str, parent_id: str, *, load_archive: Literal[True] = True
+    ) -> RunSnapshot: ...
+
+    @overload
+    def saved_run(
+        self, run_id: str, parent_id: str, *, load_archive: Literal[False]
+    ) -> RunSnapshot | None: ...
+
+    def saved_run(
+        self, run_id: str, parent_id: str, *, load_archive: bool = True
+    ) -> RunSnapshot | None:
         with self._lock:
             saved = next(
                 (item for item in self._latest.values() if item.run_id == run_id), None
             )
         record: RunSnapshot | None = saved
         if record is None and self._read_run is not None:
+            if not load_archive:
+                return None
             record = self._read_run(run_id, parent_id)
         if record is None:
             raise ValueError("Run history is unavailable")
@@ -213,28 +315,55 @@ class _ChildExecution:
 
 
 class RunCoordination:
+    """Own child runs and cancellation links for one parent execution."""
+
     def __init__(
         self,
         coordinator: AgentCoordinator,
         run: Run,
-        services: ExecutionServices,
+        work: ExecutionWork,
         publish: Callable[[AgentEvent], None],
         cancellation: CancellationSignal,
     ) -> None:
         self.coordinator = coordinator
         self.run = run
-        self.services = services
+        self.work = work
         self.publish = publish
         self.cancellation = cancellation
         self.children: dict[str, _ChildExecution] = {}
         self._links = ExitStack()
-        self._archive_work = WorkTracker()
         self._finished = False
 
     def for_tool(
         self, call_id: str, parent_message_id: str, active: threading.Event
     ) -> AgentControl:
         return _ToolControl(self, call_id, parent_message_id, active)
+
+    def start_child(
+        self,
+        agent: Agent,
+        messages: Sequence[Message],
+        max_steps: int,
+        *,
+        call_id: str,
+        message_id: str,
+    ) -> Run:
+        run = agent.start(
+            messages=messages,
+            max_steps=max_steps,
+            coordinator=self.coordinator,
+            execution_services=self.work.services,
+            cancellation=CancellationSignal(),
+            parent_run_id=self.run.id,
+            parent_tool_call_id=call_id,
+            parent_message_id=message_id,
+            inherited_event_sink=self.publish,
+        )
+        self.children[run.id] = _ChildExecution(run)
+        self.work.tracker.started()
+        run.add_idle_callback(self.work.tracker.finished)
+        self._links.enter_context(self.cancellation.on_cancel(run.cancel))
+        return run
 
     async def finish(self, cancel: bool) -> list[RunSnapshot]:
         self._finished = True
@@ -269,22 +398,8 @@ class RunCoordination:
             raise failure
         return records
 
-    def add_idle_callback(self, callback: Callable[[], None]) -> None:
-        children = tuple(self.children.values())
-        pending = WorkTracker()
-        for _ in range(len(children) + 1):
-            pending.started()
-        self._archive_work.on_idle(pending.finished)
-        for child in children:
-            child.run.add_idle_callback(pending.finished)
-
-        pending.on_idle(callback)
-
     def release(self) -> None:
-        with self.coordinator._lock:
-            if self.coordinator._registrations[self.run.agent_id].parent_id is not None:
-                self.coordinator._latest[self.run.agent_id] = self.run.snapshot()
-            self.coordinator._bindings.pop(self.run.id, None)
+        self.coordinator.release(self.run)
         self.children.clear()
 
 
@@ -303,14 +418,11 @@ class _ToolControl(AgentControl):
 
     def _check(self) -> None:
         self.owner.cancellation.check()
-        if asyncio.get_running_loop() is not self.owner.services.loop:
+        if asyncio.get_running_loop() is not self.owner.work.loop:
             raise RuntimeError("Coordination requires its owning event loop")
-        if (
-            not self.active.is_set()
-            or self.owner._finished
-            or self.owner.coordinator._closed
-        ):
+        if not self.active.is_set() or self.owner._finished:
             raise RuntimeError("Coordination requires an active tool invocation")
+        self.owner.coordinator.check_open()
 
     def discovery(self) -> list[AgentInfo]:
         self._check()
@@ -327,93 +439,46 @@ class _ToolControl(AgentControl):
         restoration_config: AgentRestorationConfig | None = None,
     ) -> SpawnResult:
         self._check()
-        if not name or "/" in name:
-            raise ValueError("Agent name must be a nonempty label without slashes")
         coordinator = self.owner.coordinator
-        with coordinator._lock:
-            parent = coordinator._registrations[self.owner.run.agent_id]
-            depth = 0
-            ancestor = parent
-            while ancestor.parent_id is not None:
-                depth += 1
-                ancestor = coordinator._registrations[ancestor.parent_id]
-            if depth >= MAX_CHILD_DEPTH:
-                raise ValueError("Agent nesting limit exceeded")
-            if (
-                agent.id in coordinator._registrations
-                or len(coordinator._agents) >= MAX_LOADED_AGENTS
-            ):
-                raise ValueError(
-                    "Agent already registered or loaded agent limit exceeded"
-                )
-            info = AgentInfo(
-                id=agent.id,
-                path=f"{parent.path}/{name}",
-                parent_id=parent.id,
-                description=description,
-                restoration_config=restoration_config,
-            )
-            coordinator.register(info)
-            coordinator._agents[agent.id] = agent
+        info = coordinator.register_child(
+            agent,
+            parent_id=self.owner.run.agent_id,
+            name=name,
+            description=description,
+            restoration_config=restoration_config,
+        )
         try:
-            run = self._start(agent, messages, max_steps)
+            run = self.owner.start_child(
+                agent,
+                messages,
+                max_steps,
+                call_id=self.call_id,
+                message_id=self.message_id,
+            )
         except BaseException:
-            with coordinator._lock:
-                coordinator._agents.pop(agent.id)
-                coordinator._registrations.pop(agent.id)
+            coordinator.unregister_child(agent.id)
             raise
         return SpawnResult(agent_id=agent.id, agent_path=info.path, run_id=run.id)
-
-    def _start(self, agent: Agent, messages: Sequence[Message], max_steps: int) -> Run:
-        run = agent.start(
-            messages=messages,
-            max_steps=max_steps,
-            coordinator=self.owner.coordinator,
-            execution_services=self.owner.services,
-            cancellation=CancellationSignal(),
-            parent_run_id=self.owner.run.id,
-            parent_tool_call_id=self.call_id,
-            parent_message_id=self.message_id,
-            inherited_event_sink=self.owner.publish,
-        )
-        self.owner.children[run.id] = _ChildExecution(run)
-        self.owner._links.enter_context(self.owner.cancellation.on_cancel(run.cancel))
-        return run
 
     async def start_run(
         self, agent_id: str, *, max_steps: int, messages: Sequence[Message]
     ) -> str:
         self._check()
         coordinator = self.owner.coordinator
-        with coordinator._lock:
-            agent = coordinator._agents.get(agent_id)
-            info = coordinator._registrations.get(agent_id)
-            if info is not None and info.parent_id != self.owner.run.agent_id:
-                raise ValueError("Agent is not available to this parent")
+        agent = coordinator.loaded_child(agent_id, self.owner.run.agent_id)
         if agent is None:
-            if coordinator._resolve_agent is None:
-                raise ValueError("Agent restoration is unavailable")
-            agent = await self.owner.services.blocking(
-                lambda: coordinator._resolve(agent_id, self.owner.run.agent_id),
+            agent = await self.owner.work.blocking(
+                lambda: coordinator.resolve_child(agent_id, self.owner.run.agent_id),
                 self.owner.cancellation,
-                tracker=self.owner._archive_work,
             )
         self._check()
-        with coordinator._lock:
-            previous = next(
-                (
-                    binding.run
-                    for binding in reversed(list(coordinator._bindings.values()))
-                    if binding.run.agent_id == agent_id
-                ),
-                None,
-            )
+        previous = coordinator.active_run(agent_id)
         if previous is not None and previous.status != RunStatus.RUNNING:
             waiting = asyncio.create_task(
                 previous.wait_for_idle(timeout=OPERATION_TIMEOUT_SECONDS)
             )
             with self.owner.cancellation.on_cancel(
-                lambda: self.owner.services.loop.call_soon_threadsafe(waiting.cancel)
+                lambda: self.owner.work.loop.call_soon_threadsafe(waiting.cancel)
             ):
                 try:
                     idle = await waiting
@@ -423,18 +488,9 @@ class _ToolControl(AgentControl):
             if not idle:
                 raise TimeoutError("Previous agent execution is still draining")
         self._check()
-        return self._start(agent, messages, max_steps).id
-
-    def _local(self, run_id: str) -> Run | None:
-        coordinator = self.owner.coordinator
-        with coordinator._lock:
-            binding = coordinator._bindings.get(run_id)
-            if binding is None:
-                return None
-            info = coordinator._registrations[binding.run.agent_id]
-            if info.parent_id != self.owner.run.agent_id:
-                raise ValueError("Run is not available to this parent")
-            return binding.run
+        return self.owner.start_child(
+            agent, messages, max_steps, call_id=self.call_id, message_id=self.message_id
+        ).id
 
     async def wait_run(
         self, run_id: str, *, timeout: float = DEFAULT_AGENT_WAIT_SECONDS
@@ -443,7 +499,11 @@ class _ToolControl(AgentControl):
         if not 0 <= timeout <= OPERATION_TIMEOUT_SECONDS:
             raise ValueError("Wait timeout is outside its allowed bounds")
         child = self.owner.children.get(run_id)
-        run = child.run if child else self._local(run_id)
+        run = (
+            child.run
+            if child
+            else self.owner.coordinator.child_run(run_id, self.owner.run.agent_id)
+        )
         if run is not None:
             try:
                 result = await run.wait(timeout=timeout)
@@ -457,34 +517,19 @@ class _ToolControl(AgentControl):
                 child.observed = True
             return result
         coordinator = self.owner.coordinator
-        with coordinator._lock:
-            latest = next(
-                (
-                    record
-                    for record in coordinator._latest.values()
-                    if record.run_id == run_id
-                ),
-                None,
-            )
-            if latest is not None:
-                if latest.agent_id is None:
-                    raise ValueError("Saved run has no agent identity")
-                info = coordinator._registrations[latest.agent_id]
-                if info.parent_id != self.owner.run.agent_id:
-                    raise ValueError("Run is not available to this parent")
+        latest = coordinator.saved_run(
+            run_id, self.owner.run.agent_id, load_archive=False
+        )
         if latest is not None:
             return result_from_snapshot(latest)
         if timeout == 0:
-            if coordinator._read_run is None:
-                raise ValueError("Run history is unavailable")
             return None
         deadline = asyncio.timeout(timeout)
         try:
             async with deadline:
-                record = await self.owner.services.blocking(
-                    lambda: coordinator._saved(run_id, self.owner.run.agent_id),
+                record = await self.owner.work.blocking(
+                    lambda: coordinator.saved_run(run_id, self.owner.run.agent_id),
                     self.owner.cancellation,
-                    tracker=self.owner._archive_work,
                 )
         except TimeoutError:
             if deadline.expired():
@@ -495,12 +540,15 @@ class _ToolControl(AgentControl):
     async def cancel_run(self, run_id: str) -> None:
         self._check()
         child = self.owner.children.get(run_id)
-        run = child.run if child else self._local(run_id)
+        run = (
+            child.run
+            if child
+            else self.owner.coordinator.child_run(run_id, self.owner.run.agent_id)
+        )
         if run is not None:
             run.cancel()
             return
-        await self.owner.services.blocking(
-            lambda: self.owner.coordinator._saved(run_id, self.owner.run.agent_id),
+        await self.owner.work.blocking(
+            lambda: self.owner.coordinator.saved_run(run_id, self.owner.run.agent_id),
             self.owner.cancellation,
-            tracker=self.owner._archive_work,
         )

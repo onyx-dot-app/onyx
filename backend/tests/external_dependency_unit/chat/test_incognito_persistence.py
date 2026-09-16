@@ -596,7 +596,7 @@ def test_incognito_response_restores_agents_without_database_content(
             user_identity=identity,
         )
         assert restored_root.id == root.id
-        saved_run = restored_coordinator._saved(child_run_id, restored_root.id)
+        saved_run = restored_coordinator.saved_run(child_run_id, restored_root.id)
         assert saved_run is not None
         assert saved_run.agent_id == child.id
         assert [message.text for message in saved_run.messages] == [
