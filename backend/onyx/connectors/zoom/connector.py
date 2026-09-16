@@ -36,10 +36,18 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-def parse_plan_tier(value: str | None) -> ZoomPlanTier:
+# Nothing between the API and here checks the type of a stored config value,
+# and only a ValueError becomes a message the admin can read.
+
+
+def parse_plan_tier(value: Any) -> ZoomPlanTier:
     """Blank means Pro, the lowest plan this connector supports, because
     guessing high spends an allowance the account may not have."""
-    if not value or not value.strip():
+    if value is None:
+        return ZoomPlanTier.PRO
+    if not isinstance(value, str):
+        raise ValueError(f"Zoom plan must be text, got {value!r}")
+    if not value.strip():
         return ZoomPlanTier.PRO
     try:
         return ZoomPlanTier(value.strip().lower())
@@ -48,9 +56,13 @@ def parse_plan_tier(value: str | None) -> ZoomPlanTier:
         raise ValueError(f"Unknown Zoom plan {value!r}. Use one of: {known}") from e
 
 
-def parse_rate_limit_percent(value: int | float | None) -> float:
+def parse_rate_limit_percent(value: Any) -> float:
     if value is None:
         return DEFAULT_RATE_LIMIT_SHARE
+    # bool is an int in Python, so True would otherwise pass as 1 percent and
+    # throttle the connector to a single call per second.
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"Zoom rate limit percent must be a number, got {value!r}")
     if not MIN_RATE_LIMIT_PERCENT <= value <= MAX_RATE_LIMIT_PERCENT:
         raise ValueError(
             f"Zoom rate limit percent must be between {MIN_RATE_LIMIT_PERCENT} "

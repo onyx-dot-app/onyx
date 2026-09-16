@@ -351,6 +351,20 @@ class TestZoomConnectorValidateSettings:
         with pytest.raises(ConnectorValidationError):
             connector.validate_connector_settings()
 
+    @pytest.mark.parametrize("percent", ["50", True])
+    def test_a_rate_limit_percent_of_the_wrong_type_is_rejected(
+        self, percent: Any
+    ) -> None:
+        connector = ZoomConnector(meeting_ids=["111"], rate_limit_percent=percent)
+        with pytest.raises(ConnectorValidationError):
+            connector.validate_connector_settings()
+
+    @pytest.mark.parametrize("plan", [5, ["pro"]])
+    def test_a_plan_that_is_not_text_is_rejected(self, plan: Any) -> None:
+        connector = ZoomConnector(meeting_ids=["111"], plan_tier=plan)
+        with pytest.raises(ConnectorValidationError):
+            connector.validate_connector_settings()
+
 
 class TestZoomConnectorCheckpoint:
     def test_build_dummy_checkpoint(self) -> None:

@@ -1729,6 +1729,17 @@ class TestRateLimitPercent:
         with pytest.raises(ValueError):
             parse_rate_limit_percent(percent)
 
+    @pytest.mark.parametrize("percent", ["50", "", [50], {"percent": 50}])
+    def test_a_percent_that_is_not_a_number_is_rejected(self, percent: Any) -> None:
+        with pytest.raises(ValueError):
+            parse_rate_limit_percent(percent)
+
+    @pytest.mark.parametrize("percent", [True, False])
+    def test_a_boolean_percent_is_rejected(self, percent: bool) -> None:
+        # bool is an int in Python, so True would pass the range check as 1.
+        with pytest.raises(ValueError):
+            parse_rate_limit_percent(percent)
+
     def test_a_configured_share_overrides_the_default(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
