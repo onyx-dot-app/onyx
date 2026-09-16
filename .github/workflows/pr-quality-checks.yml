@@ -39,6 +39,9 @@ jobs:
       - uses: j178/prek-action@4e14d07f9231acabce116ccfca13b13dd9755ece
         env:
           SKIP: ty,desktop-rust-fmt,desktop-rust-clippy
+          # Lets the zizmor hook run its online audits. Read-only: the job
+          # grants `contents: read` and nothing else.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           prek-version: '0.3.4'
           extra-args: ${{ github.event_name == 'pull_request' && format('--from-ref {0} --to-ref {1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || github.event_name == 'merge_group' && format('--from-ref {0} --to-ref {1}', github.event.merge_group.base_sha, github.event.merge_group.head_sha) || github.ref_name == 'main' && '--all-files' || '' }}
