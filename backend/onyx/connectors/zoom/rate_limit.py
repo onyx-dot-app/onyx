@@ -3,7 +3,7 @@ from collections.abc import Callable
 from enum import Enum
 
 import requests
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
     rate_limit_builder,
@@ -47,6 +47,8 @@ _PLAN_CALLS_PER_SECOND: dict[ZoomPlanTier, dict[ZoomRateLimitTier, int]] = {
     },
 }
 
+# This is the "per second" in the table above rather than a window size to
+# tune. Widening it would leave the counts unchanged and halve the real rate.
 _RATE_LIMIT_PERIOD_SECONDS = 1.0
 
 # rate_limit_builder sleeps 2 seconds by default and doubles from there, which
@@ -87,15 +89,24 @@ class ZoomRateLimitSettings(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     plan_tier: ZoomPlanTier = ZoomPlanTier.PRO
-    share: float = DEFAULT_RATE_LIMIT_SHARE
+    # A share of nothing divides by zero when the pacing window is worked out.
+    share: float = Field(default=DEFAULT_RATE_LIMIT_SHARE, gt=0, le=1)
 
 
 def _tier_calls_per_second(
     plan: ZoomPlanTier, tier: ZoomRateLimitTier, share: float
-) -> int:
-    """A share that rounds down to no calls would stall the pacer forever, so
-    the budget never drops below one call per second."""
-    return max(1, int(_PLAN_CALLS_PER_SECOND[plan][tier] * share))
+) -> float:
+    return _PLAN_CALLS_PER_SECOND[plan][tier] * share
+
+
+def _pacing_window(calls_per_second: float) -> tuple[int, float]:
+    """The admin can ask for 1 percent, which on Pro is a fifth of a call a
+    second, and rounding that up to a whole call would spend five times the
+    share they asked for."""
+    if calls_per_second >= 1:
+        return int(calls_per_second), _RATE_LIMIT_PERIOD_SECONDS
+    seconds_per_call = 1 / calls_per_second
+    return 1, seconds_per_call
 
 
 def _retry_sleep_seconds(response: requests.Response, sleeps_so_far: int) -> float:
@@ -131,9 +142,11 @@ def _build_pacer(
     tier: ZoomRateLimitTier,
     share: float,
 ) -> _Pacer:
+    max_calls, period = _pacing_window(_tier_calls_per_second(plan, tier, share))
+
     @rate_limit_builder(
-        max_calls=_tier_calls_per_second(plan, tier, share),
-        period=_RATE_LIMIT_PERIOD_SECONDS,
+        max_calls=max_calls,
+        period=period,
         sleep_time=_PACING_POLL_SECONDS,
         sleep_backoff=1.0,
     )

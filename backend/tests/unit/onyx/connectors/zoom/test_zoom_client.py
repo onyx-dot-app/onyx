@@ -43,10 +43,12 @@ from onyx.connectors.zoom.rate_limit import (
     _MAX_SERVER_ERROR_SLEEPS,
     _RATE_LIMIT_PERIOD_SECONDS,
     DEFAULT_RATE_LIMIT_SHARE,
+    MIN_RATE_LIMIT_PERCENT,
     ZoomPlanTier,
     ZoomRateLimitError,
     ZoomRateLimitSettings,
     ZoomRateLimitTier,
+    _pacing_window,
     _tier_calls_per_second,
 )
 from onyx.connectors.zoom.recordings.models import fails_the_whole_run
@@ -1457,10 +1459,46 @@ class TestRateLimitTiers:
         assert client._rate_limiter.call.call_count == 1
 
     def test_the_budget_never_reaches_zero(self) -> None:
-        assert (
+        calls, period = _pacing_window(
             _tier_calls_per_second(ZoomPlanTier.PRO, ZoomRateLimitTier.MEDIUM, 0.001)
-            == 1
         )
+        assert calls == 1
+        assert 0 < period < float("inf")
+
+    @pytest.mark.parametrize(
+        "calls_per_second, expected",
+        [(0.2, (1, 5.0)), (0.8, (1, 1.25)), (1.0, (1, 1.0)), (20.0, (20, 1.0))],
+    )
+    def test_a_share_below_one_call_a_second_widens_the_window(
+        self, calls_per_second: float, expected: tuple[int, float]
+    ) -> None:
+        assert _pacing_window(calls_per_second) == expected
+
+    def test_the_smallest_share_an_admin_can_pick_is_honoured(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        clock = _FakeClock()
+        monkeypatch.setattr(rate_limit_wrapper, "time", clock)
+
+        # Pro medium is 20 calls a second, so 1 percent is one call every 5.
+        client = _client(
+            ZoomRateLimitSettings(
+                plan_tier=ZoomPlanTier.PRO,
+                share=parse_rate_limit_percent(MIN_RATE_LIMIT_PERCENT),
+            )
+        )
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200)
+
+        client._get(zoom_endpoints.MEETING_TRANSCRIPT, "1")
+        started = clock.now
+        client._get(zoom_endpoints.MEETING_TRANSCRIPT, "2")
+
+        assert clock.now - started >= 5.0
+
+    def test_a_share_of_nothing_is_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            ZoomRateLimitSettings(share=0)
 
 
 class TestRateLimitBackoff:
