@@ -215,7 +215,7 @@ def validation_exception_handler(request: Request, exc: Exception) -> JSONRespon
         raise exc
 
     exc_str = f"{exc}".replace("\n", " ").replace("   ", " ")
-    logger.exception("%s: %s", request, exc_str)
+    logger.error("%s: %s", request, exc_str, exc_info=exc)
     # message/status_code/data are kept for existing clients; error_code and
     # detail make the body match every other error the API returns.
     content = {

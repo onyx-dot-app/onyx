@@ -279,6 +279,11 @@ target-version = "py313"
 [tool.ruff.lint]
 ignore = [
     "E501", # Long lines are handled by `ruff format`.
+    # flake8-async (ASYNC) rule ignored as inapplicable: it prescribes trio/anyio
+    # timeout scopes in place of a `timeout` parameter. This codebase is asyncio
+    # and times out with `asyncio.wait_for`, so the parameter is the right shape.
+    # Revisit only if we adopt trio or anyio cancel scopes.
+    "ASYNC109", # async-function-with-timeout.
     # flake8-bandit (S) rules ignored as noisy / low-signal:
     "S101", # `assert` — used heavily in pytest and as runtime invariant checks.
     "S105", # Hardcoded password string — very high false-positive rate.
@@ -299,15 +304,18 @@ ignore = [
 # G004: f-strings in logging break Sentry's message-pattern grouping.
 select = [
   "ARG",
+  "ASYNC",
   "B",
   "C901",
   "E",
   "F",
   "G004",
   "I",
+  "LOG",
   "PERF",
   "PIE",
   "S",
+  "TID",
   "W",
 ]
 
