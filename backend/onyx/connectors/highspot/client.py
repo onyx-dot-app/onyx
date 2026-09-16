@@ -210,20 +210,6 @@ class HighspotClient:
         logger.info("Total spots retrieved: %s", len(all_spots))
         return all_spots
 
-    def get_spot(self, spot_id: str) -> Dict[str, Any]:
-        """
-        Get details for a specific spot.
-
-        Args:
-            spot_id: ID of the spot
-
-        Returns:
-            Spot details
-        """
-        if not spot_id:
-            raise ValueError("spot_id is required")
-        return self._make_request("GET", f"spots/{spot_id}")
-
     def get_spot_items(
         self, spot_id: str, offset: int = 0, page_size: int = PAGE_SIZE
     ) -> Dict[str, Any]:

@@ -60,7 +60,6 @@ THREAD_LIST_FIELDS = "nextPageToken, threads(id)"
 PARTS_FIELDS = "parts(body(data), mimeType)"
 PAYLOAD_FIELDS = f"payload(headers, {PARTS_FIELDS})"
 MESSAGES_FIELDS = f"messages(id, {PAYLOAD_FIELDS})"
-THREADS_FIELDS = f"threads(id, {MESSAGES_FIELDS})"
 THREAD_FIELDS = f"id, {MESSAGES_FIELDS}"
 
 EMAIL_FIELDS = [
@@ -348,24 +347,6 @@ def _full_thread_from_id(
             failure_message=f"Failed to retrieve thread {thread_id}",
             exception=e,
         )
-
-
-def _slim_thread_from_id(
-    thread_id: str,
-    user_email: str,
-    gmail_service: GmailService,  # noqa: ARG001
-) -> SlimDocument:
-    # doc_created_at is left None: the Gmail thread list returns only IDs, and
-    # fetching the Date header would cost an extra API call per thread. Going-
-    # forward creation time is set on the full indexing path (thread_to_document).
-    return SlimDocument(
-        id=thread_id,
-        external_access=ExternalAccess(
-            external_user_emails={user_email},
-            external_user_group_ids=set(),
-            is_public=False,
-        ),
-    )
 
 
 class GmailCheckpoint(ConnectorCheckpoint):

@@ -8,7 +8,6 @@ from onyx.connectors.models import Document, HierarchyNode, TextSection
 from onyx.db.enums import HierarchyNodeType
 from tests.daily.connectors.utils import ConnectorOutput, load_all_from_connector
 
-ALL_FILES = list(range(60))
 SHARED_DRIVE_FILES = list(range(20, 25))
 
 
@@ -235,8 +234,6 @@ EXTERNAL_SHARED_DOC_SINGLETON = (
     "https://docs.google.com/document/d/11kmisDfdvNcw5LYZbkdPVjTOdj-Uc5ma6Jep68xzeeA"
 )
 
-SHARED_DRIVE_3_URL = "https://drive.google.com/drive/folders/0AJYm2K_I_vtNUk9PVA"
-
 RESTRICTED_ACCESS_FOLDER_URL = (
     "https://drive.google.com/drive/folders/1HK4wZ16ucz8QGywlcS87Y629W7i7KdeN"
 )
@@ -251,16 +248,6 @@ RESTRICTED_ACCESS_FOLDER_URL = (
 # PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A: Shared with admin and test_user_1
 # PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B: Shared with admin and test_user_1
 # ============================================================================
-
-PERM_SYNC_DRIVE_ADMIN_ONLY_URL = (
-    "https://drive.google.com/drive/folders/0ACOrCU1EMD1hUk9PVA"
-)
-PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A_URL = (
-    "https://drive.google.com/drive/folders/0ABec4pV29sMuUk9PVA"
-)
-PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B_URL = (
-    "https://drive.google.com/drive/folders/0ANpbToRgjHD4Uk9PVA"
-)
 
 PERM_SYNC_DRIVE_ADMIN_ONLY_ID = "0ACOrCU1EMD1hUk9PVA"
 PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A_ID = "0ABec4pV29sMuUk9PVA"
@@ -306,13 +293,6 @@ ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS = (
     SHORTCUTTED_FOLDER_ID,
     SHORTCUTTED_2_FOLDER_ID,
 )
-
-PADDING_DRIVE_URLS = [
-    "0AOorXE6AfJRAUk9PVA",
-    "0ANn2MSqGi74JUk9PVA",
-    "0ANI_NFCPzaRwUk9PVA",
-    "0ABu8fYjvA21dUk9PVA",
-]
 
 ADMIN_EMAIL = "admin@onyx-test.com"
 TEST_USER_1_EMAIL = "test_user_1@onyx-test.com"
@@ -531,10 +511,6 @@ file_text_template = "This is file {}"
 _VALID_PREFIX = "file_"
 
 
-def filter_invalid_prefixes(names: set[str]) -> set[str]:
-    return {name for name in names if name.startswith(_VALID_PREFIX)}
-
-
 def print_discrepancies(
     expected: set[str],
     retrieved: set[str],
@@ -741,16 +717,6 @@ def get_expected_hierarchy_for_shared_drives(
         result.update(EXPECTED_SHARED_DRIVE_2_NODES)
 
     return result
-
-
-def get_expected_hierarchy_for_folder_1() -> dict[str, ExpectedHierarchyNode]:
-    """Get expected hierarchy for folder_1 and its children only."""
-    return _pick(FOLDER_1_ID, FOLDER_1_1_ID, FOLDER_1_2_ID)
-
-
-def get_expected_hierarchy_for_folder_2() -> dict[str, ExpectedHierarchyNode]:
-    """Get expected hierarchy for folder_2 and its children only."""
-    return _pick(FOLDER_2_ID, FOLDER_2_1_ID, FOLDER_2_2_ID)
 
 
 def get_expected_hierarchy_for_test_user_1() -> dict[str, ExpectedHierarchyNode]:

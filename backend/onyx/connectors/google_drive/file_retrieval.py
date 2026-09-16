@@ -744,24 +744,6 @@ def _extract_file_id_from_web_view_link(web_view_link: str) -> str:
     )
 
 
-def get_file_by_web_view_link(
-    service: GoogleDriveService,
-    web_view_link: str,
-    fields: str,
-) -> GoogleDriveFileType:
-    """Retrieve a Google Drive file using its webViewLink."""
-    file_id = _extract_file_id_from_web_view_link(web_view_link)
-    return (
-        service.files()  # ty: ignore[unresolved-attribute]
-        .get(
-            fileId=file_id,
-            supportsAllDrives=True,
-            fields=fields,
-        )
-        .execute()
-    )
-
-
 class BatchRetrievalResult:
     """Result of a batch file retrieval, separating successes from errors."""
 

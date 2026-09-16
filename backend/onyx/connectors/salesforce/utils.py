@@ -61,11 +61,6 @@ class SalesforceObject:
 BASE_DATA_PATH = os.path.join(os.path.dirname(__file__), "data")
 
 
-def get_sqlite_db_path(directory: str) -> str:
-    """Get the path to the sqlite db file."""
-    return os.path.join(directory, "salesforce_db.sqlite")
-
-
 def remove_sqlite_db_files(db_path: str) -> None:
     """Remove SQLite database and all associated files (WAL, SHM).
 

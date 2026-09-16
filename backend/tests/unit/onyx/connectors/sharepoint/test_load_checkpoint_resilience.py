@@ -231,8 +231,8 @@ class TestBfsIterationFailure:
             end: datetime | None = None,  # noqa: ARG001
             page_size: int = 200,  # noqa: ARG001
         ) -> Generator[DriveItemData, None, None]:
+            yield from ()
             raise RuntimeError("connection reset")
-            yield  # pragma: no cover  # make this a generator
 
         monkeypatch.setattr(sp_connector, "iter_drive_items_paged", fake_iter_paged)
 

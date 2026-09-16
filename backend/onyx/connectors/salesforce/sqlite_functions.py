@@ -274,43 +274,6 @@ class OnyxSalesforceSQLite:
                 "init_db - update_user_email_map: elapsed=%s", format(elapsed, ".2f")
             )
 
-    def get_user_id_by_email(self, email: str) -> str | None:
-        """Get the Salesforce User ID for a given email address.
-
-        Args:
-            email: The email address to look up
-
-        Returns:
-            A tuple of (was_found, user_id):
-                - was_found: True if the email exists in the table, False if not found
-                - user_id: The Salesforce User ID if exists, None otherwise
-        """
-        if self._conn is None:
-            raise RuntimeError("Database connection is closed")
-
-        with self._conn:
-            cursor = self._conn.cursor()
-            cursor.execute(
-                "SELECT user_id FROM user_email_map WHERE email = ?", (email,)
-            )
-            result = cursor.fetchone()
-            if result is None:
-                return None
-            return result[0]
-
-    def update_email_to_id_table(self, email: str, id: str | None) -> None:
-        """Update the email to ID map table with a new email and ID."""
-        if self._conn is None:
-            raise RuntimeError("Database connection is closed")
-
-        id_to_use = id or self.NULL_ID_STRING
-        with self._conn:
-            cursor = self._conn.cursor()
-            cursor.execute(
-                "INSERT OR REPLACE INTO user_email_map (email, user_id) VALUES (?, ?)",
-                (email, id_to_use),
-            )
-
     def log_stats(self) -> None:
         if self._conn is None:
             raise RuntimeError("Database connection is closed")
@@ -492,27 +455,6 @@ class OnyxSalesforceSQLite:
                 yield parent_id, parent_type, num_examined
                 changed_parent_ids.add(parent_id)
                 break
-
-    def object_type_count(self, object_type: str) -> int:
-        """Check if there is at least one object of the specified type in the database.
-
-        Args:
-            object_type: The Salesforce object type to check
-
-        Returns:
-            bool: True if at least one object exists, False otherwise
-        """
-        if self._conn is None:
-            raise RuntimeError("Database connection is closed")
-
-        with self._conn:
-            cursor = self._conn.cursor()
-            cursor.execute(
-                "SELECT COUNT(*) FROM salesforce_objects WHERE object_type = ?",
-                (object_type,),
-            )
-            count = cursor.fetchone()[0]
-            return count
 
     @staticmethod
     def normalize_record(

@@ -67,7 +67,6 @@ class DiscourseConnector(PollConnector):
 
         self.batch_size = batch_size
         self.permissions: DiscoursePerms | None = None
-        self.active_categories: set | None = None
 
     @rate_limit_builder(max_calls=50, period=60)
     def _make_request(self, endpoint: str, params: dict | None = None) -> Response:
@@ -90,7 +89,6 @@ class DiscourseConnector(PollConnector):
             for cat in categories
             if not self.categories or cat["name"].lower() in self.categories
         }
-        self.active_categories = set(self.category_id_map)
 
     def _get_doc_from_topic(self, topic_id: int) -> Document:
         assert self.permissions is not None

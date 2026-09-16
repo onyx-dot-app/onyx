@@ -7,7 +7,6 @@ import ssl
 from datetime import datetime, timezone
 from email.message import Message
 from email.utils import parseaddr
-from enum import Enum
 from typing import Any, cast
 
 import bs4
@@ -59,11 +58,6 @@ class CurrentMailbox(BaseModel):
 class ImapCheckpoint(ConnectorCheckpoint):
     todo_mailboxes: list[str] | None = None
     current_mailbox: CurrentMailbox | None = None
-
-
-class LoginState(str, Enum):
-    LoggedIn = "logged_in"
-    LoggedOut = "logged_out"
 
 
 class ImapConnector(

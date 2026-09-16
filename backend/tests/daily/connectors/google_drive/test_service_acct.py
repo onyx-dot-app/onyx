@@ -572,36 +572,6 @@ def test_specific_emails(
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
 )
-def get_specific_folders_in_my_drive(
-    mock_get_api_key: MagicMock,  # noqa: ARG001
-    google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
-) -> None:
-    print("\n\nRunning get_specific_folders_in_my_drive")
-    folder_urls = [
-        FOLDER_3_URL,
-    ]
-    connector = google_drive_service_acct_connector_factory(
-        primary_admin_email=ADMIN_EMAIL,
-        include_shared_drives=False,
-        include_my_drives=False,
-        include_files_shared_with_me=False,
-        shared_folder_urls=",".join([str(url) for url in folder_urls]),
-        shared_drive_urls=None,
-        my_drive_emails=None,
-    )
-    output = load_connector_outputs(connector)
-
-    expected_file_ids = ADMIN_FOLDER_3_FILE_IDS
-    assert_expected_docs_in_retrieved_docs(
-        retrieved_docs=output.documents,
-        expected_file_ids=expected_file_ids,
-    )
-
-
-@patch(
-    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
-    return_value=None,
-)
 def test_specific_user_emails_restricted_folder(
     mock_get_api_key: MagicMock,  # noqa: ARG001
     google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],

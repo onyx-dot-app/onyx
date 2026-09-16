@@ -78,8 +78,8 @@ def load_certificate_from_pfx(pfx_data: bytes, password: str) -> CertificateData
     """Load certificate from .pfx file for MSAL authentication"""
     try:
         # Load the certificate and private key
-        private_key, certificate, additional_certificates = (
-            pkcs12.load_key_and_certificates(pfx_data, password.encode("utf-8"))
+        private_key, certificate, _ = pkcs12.load_key_and_certificates(
+            pfx_data, password.encode("utf-8")
         )
 
         # Validate that certificate and private key are not None

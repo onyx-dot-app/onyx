@@ -76,17 +76,6 @@ def _build_connector(drives: Sequence[_FakeDrive]) -> SharepointConnector:
     return connector
 
 
-def _fake_iter_drive_items_paged(
-    client: GraphApiClient,  # noqa: ARG001
-    drive_id: str,  # noqa: ARG001
-    folder_path: str | None = None,  # noqa: ARG001
-    start: datetime | None = None,  # noqa: ARG001
-    end: datetime | None = None,  # noqa: ARG001
-    page_size: int = 200,  # noqa: ARG001
-) -> Generator[DriveItemData, None, None]:
-    yield _SAMPLE_ITEM
-
-
 def _fake_iter_drive_items_delta(
     client: GraphApiClient,  # noqa: ARG001
     drive_id: str,  # noqa: ARG001

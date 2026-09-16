@@ -1,13 +1,12 @@
 import json
 from abc import ABC, abstractmethod
-from enum import Enum
 from io import StringIO
-from typing import List, Optional, TypeAlias
+from typing import List, Optional
 
 from pydantic import BaseModel
 
 from onyx.configs.constants import FileOrigin
-from onyx.connectors.models import DocExtractionContext, DocIndexingContext, Document
+from onyx.connectors.models import Document
 from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.utils.logger import setup_logger
 
@@ -26,19 +25,6 @@ def _has_legacy_tabular_section(doc_dict: dict) -> bool:
         isinstance(s, dict) and s.get("type") == "tabular" and not s.get("csv_file_id")
         for s in sections
     )
-
-
-class DocumentBatchStorageStateType(str, Enum):
-    EXTRACTION = "extraction"
-    INDEXING = "indexing"
-
-
-DocumentStorageState: TypeAlias = DocExtractionContext | DocIndexingContext
-
-STATE_TYPE_TO_MODEL: dict[str, type[DocumentStorageState]] = {
-    DocumentBatchStorageStateType.EXTRACTION.value: DocExtractionContext,
-    DocumentBatchStorageStateType.INDEXING.value: DocIndexingContext,
-}
 
 
 class BatchStoragePathInfo(BaseModel):

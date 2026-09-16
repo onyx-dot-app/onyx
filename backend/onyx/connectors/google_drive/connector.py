@@ -111,7 +111,6 @@ logger = setup_logger()
 # TODO: Improve this by using the batch utility: https://googleapis.github.io/google-api-python-client/docs/batch.html
 # All file retrievals could be batched and made at once
 
-BATCHES_PER_CHECKPOINT = 1
 
 # Documents converted per sub-batch. At up to CONNECTOR_MAX_EXTRACTED_TEXT_CHARS
 # (~10 MB) each, 50 caps resident docs near ~500 MB regardless of drive size.
@@ -357,7 +356,6 @@ class GoogleDriveConnector(
         self._primary_admin_email: str | None = None
 
         self._creds: OAuthCredentials | ServiceAccountCredentials | None = None
-        self._creds_dict: dict[str, Any] | None = None
 
         # ids of folders and shared drives that have been traversed
         self._retrieved_folder_and_drive_ids: set[str] = set()
@@ -457,8 +455,6 @@ class GoogleDriveConnector(
             and not self.specific_requests_made
         ):
             self.include_files_shared_with_me = True
-
-        self._creds_dict = new_creds_dict
 
         return new_creds_dict
 

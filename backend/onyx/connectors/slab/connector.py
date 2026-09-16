@@ -1,5 +1,5 @@
 import json
-from collections.abc import Callable, Generator
+from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urljoin
@@ -135,55 +135,6 @@ def get_post_by_id(post_id: str, bot_token: str) -> dict[str, str]:
     graphql_query = {"query": query, "variables": {"postId": post_id}}
     results = json.loads(run_graphql_request(graphql_query, bot_token))
     return results["data"]["post"]
-
-
-def iterate_post_batches(
-    batch_size: int, bot_token: str
-) -> Generator[list[dict[str, str]], None, None]:
-    """This may not be safe to use, not sure if page edits will change the order of results"""
-    query = """
-        query IteratePostBatches($query: String!, $first: Int, $types: [SearchType], $after: String) {
-            search(query: $query, first: $first, types: $types, after: $after) {
-                edges {
-                    node {
-                        ... on PostSearchResult {
-                            post {
-                                id
-                                title
-                                content
-                                updatedAt
-                            }
-                        }
-                    }
-                }
-                pageInfo {
-                    endCursor
-                    hasNextPage
-                }
-            }
-        }
-    """
-    pagination_start = None
-    exists_more_pages = True
-    while exists_more_pages:
-        graphql_query = {
-            "query": query,
-            "variables": {
-                "query": "",
-                "first": batch_size,
-                "types": ["POST"],
-                "after": pagination_start,
-            },
-        }
-        results = json.loads(run_graphql_request(graphql_query, bot_token))
-        pagination_start = results["data"]["search"]["pageInfo"]["endCursor"]
-        hits = results["data"]["search"]["edges"]
-
-        posts = [hit["node"] for hit in hits]
-        if posts:
-            yield posts
-
-        exists_more_pages = results["data"]["search"]["pageInfo"]["hasNextPage"]
 
 
 def get_slab_url_from_title_id(base_url: str, title: str, page_id: str) -> str:

@@ -1,4 +1,3 @@
-import math
 import uuid
 from uuid import UUID
 
@@ -13,9 +12,6 @@ from onyx.db.search_settings import (
 from onyx.document_index.vespa.internal_types import EnrichedDocumentIndexingInfo
 from onyx.indexing.models import DocMetadataAwareIndexChunk, MultipassConfig
 from shared_configs.configs import MULTI_TENANT
-
-DEFAULT_BATCH_SIZE = 30
-DEFAULT_INDEX_NAME = "danswer_chunk"
 
 
 def should_use_multipass(search_settings: SearchSettings | None) -> bool:
@@ -59,19 +55,6 @@ def get_both_index_properties(
         config_1.enable_large_chunks,
         config_2.enable_large_chunks,
     )
-
-
-def translate_boost_count_to_multiplier(boost: int) -> float:
-    """Mapping boost integer values to a multiplier according to a sigmoid curve
-    Piecewise such that at many downvotes, its 0.5x the score and with many upvotes
-    it is 2x the score. This should be in line with the Vespa calculation."""
-    # 3 in the equation below stretches it out to hit asymptotes slower
-    if boost < 0:
-        # 0.5 + sigmoid -> range of 0.5 to 1
-        return 0.5 + (1 / (1 + math.exp(-1 * boost / 3)))
-
-    # 2 x sigmoid -> range of 1 to 2
-    return 2 / (1 + math.exp(-1 * boost / 3))
 
 
 # Assembles a list of Vespa chunk IDs for a document
@@ -189,17 +172,4 @@ def get_uuid_from_chunk(chunk: DocMetadataAwareIndexChunk) -> uuid.UUID:
         chunk_id=chunk.chunk_id,
         tenant_id=chunk.tenant_id,
         large_chunk_id=chunk.large_chunk_id,
-    )
-
-
-def get_uuid_from_chunk_old(
-    chunk: DocMetadataAwareIndexChunk,
-    large_chunk_reference_ids: list[int] | None = None,
-) -> UUID:
-    if large_chunk_reference_ids is None:
-        large_chunk_reference_ids = []
-    return get_uuid_from_chunk_info_old(
-        document_id=chunk.source_document.id,
-        chunk_id=chunk.chunk_id,
-        large_chunk_reference_ids=large_chunk_reference_ids,
     )

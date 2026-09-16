@@ -35,14 +35,6 @@ def _noop_load_credentials(connector: SharepointConnector) -> MagicMock:
     return mock
 
 
-def _fresh_client_context() -> MagicMock:
-    """Return a MagicMock for ClientContext that produces a distinct object per call."""
-    mock_cls = MagicMock()
-    # Each ClientContext(url).with_access_token(cb) returns a unique sentinel
-    mock_cls.side_effect = lambda url: MagicMock()  # noqa: ARG005
-    return mock_cls
-
-
 @patch("onyx.connectors.sharepoint.connector.acquire_token_for_rest")
 @patch("onyx.connectors.sharepoint.connector.ClientContext")
 def test_returns_cached_context_within_max_age(
