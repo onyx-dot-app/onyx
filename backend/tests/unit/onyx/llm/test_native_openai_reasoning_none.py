@@ -1,7 +1,3 @@
-"""Native OpenAI Sol models default to medium reasoning when the request omits
-the reasoning parameter, so ReasoningEffort.OFF must reach them as an explicit
-"none". Every other model keeps OFF as an omitted parameter."""
-
 from typing import Any
 from unittest.mock import patch
 
@@ -95,8 +91,6 @@ def test_default_still_sends_medium_to_native_openai_sol() -> None:
 
 
 def test_off_beats_a_high_admin_default() -> None:
-    """An explicit OFF request outranks the per-model default the answering
-    model runs at."""
     llm = _llm("gpt-5.6-sol", reasoning_effort_default=ReasoningEffort.HIGH)
     assert _sent_kwargs(llm, ReasoningEffort.OFF)["reasoning"] == {"effort": "none"}
     assert _sent_kwargs(llm, ReasoningEffort.AUTO)["reasoning"]["effort"] == "high"
@@ -150,8 +144,6 @@ def test_capability_is_provider_and_model_gated() -> None:
 
 
 def test_explicit_none_survives_the_retry_ladder() -> None:
-    """A rejection of another optional kwarg must not strip "none" on retry,
-    or the retry silently runs at the medium default."""
     calls: list[dict[str, Any]] = []
 
     def completion(**kwargs: Any) -> Any:
@@ -178,8 +170,6 @@ def test_explicit_none_survives_the_retry_ladder() -> None:
     assert calls[1]["reasoning"] == {"effort": "none"}
 
 
-# Internal search calls pin OFF themselves. With a Sol answering model at a
-# user-selected HIGH default, these calls must still go out as "none".
 _HISTORY = [
     ChatMinimalTextMessage(message="what is onyx", message_type=MessageType.USER)
 ]

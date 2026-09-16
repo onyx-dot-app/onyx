@@ -805,9 +805,6 @@ class LitellmLLM(LLM):
             required_kwarg_keys = frozenset({"reasoning_effort"})
             _log_chat_completions_tools_disable_reasoning(model, self._api_base)
 
-        # OFF omits the reasoning kwargs, which most providers read as no
-        # reasoning. Native OpenAI Sol reads the omission as its medium default
-        # and needs the explicit "none" instead.
         sends_explicit_reasoning_none = reasoning_effort is ReasoningEffort.OFF and any(
             openai_model_supports_reasoning_none(self.config.model_provider, name)
             for name in model_identity_names
@@ -854,8 +851,7 @@ class LitellmLLM(LLM):
                 if send_reasoning:
                     optional_kwargs["reasoning"] = openai_style_reasoning
                     if sends_explicit_reasoning_none:
-                        # A retry that drops "none" reverts to the medium
-                        # default this value exists to avoid.
+                        # A retry without "none" runs at the medium default.
                         required_kwarg_keys = required_kwarg_keys | {"reasoning"}
 
             elif reasoning_style in (
