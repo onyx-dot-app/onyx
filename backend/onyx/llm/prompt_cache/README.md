@@ -118,7 +118,7 @@ processed_prompt, _ = process_with_prompt_cache(
 ### Core Components
 
 1. **`processor.py`**: Main entry point (`process_with_prompt_cache`)
-2. **`cache_manager.py`**: Cache metadata storage and retrieval
+2. **`cache_manager.py`**: Cache key hashing (`generate_cache_key_hash`)
 3. **`models.py`**: Pydantic models for cache metadata (`CacheMetadata`)
 4. **`providers/`**: Provider-specific adapters
 5. **`utils.py`**: Shared utility functions
@@ -153,10 +153,7 @@ Each adapter implements:
 
 The framework is **best-effort** - if caching fails, it gracefully falls back to non-cached behavior:
 
-- Cache lookup failures: Logged and continue without caching
 - Provider adapter failures: Fall back to no-op adapter
-- Cache storage failures: Logged and continue (caching is best-effort)
-- Invalid cache metadata: Cleared and proceed without cache
 
 ## Future Enhancements
 
