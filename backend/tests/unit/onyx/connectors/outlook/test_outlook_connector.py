@@ -4,13 +4,16 @@ The gateway is autospecced, so these tests drive the real checkpoint state
 machine and document assembly against the gateway's plain models.
 """
 
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from unittest.mock import MagicMock, call, create_autospec
+from unittest.mock import MagicMock, call, create_autospec, patch
 
 import pytest
 
+from onyx.configs.app_configs import OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD
 from onyx.connectors.exceptions import ConnectorValidationError, CredentialInvalidError
+from onyx.connectors.microsoft_utils.drive_items import SizeCapExceeded
 from onyx.connectors.models import (
     ConnectorFailure,
     ConnectorMissingCredentialError,
@@ -20,14 +23,20 @@ from onyx.connectors.models import (
 )
 from onyx.connectors.outlook import connector as connector_module
 from onyx.connectors.outlook.connector import (
+    ATTACHMENT_EXTRACTION_TIMEOUT_SECONDS,
     CONVERSATION_FETCH_LIMIT,
     FILTERED_DELTA_CAP,
+    MAX_ATTACHMENT_READS_PER_CONVERSATION,
+    MAX_ATTACHMENT_TEXT_PER_CONVERSATION,
+    MAX_ATTACHMENTS_PER_MESSAGE,
     MAX_MESSAGES_PER_CONVERSATION,
     SLIM_BATCH_SIZE,
     OutlookCheckpoint,
     OutlookConnector,
+    attachment_skip_reason,
     build_conversation_document,
     conversation_document_id,
+    extract_attachment_text,
     indexable_messages,
     mailbox_node_id,
 )
@@ -43,17 +52,21 @@ from onyx.connectors.outlook.models import (
 )
 from onyx.connectors.outlook.source_operations import OutlookSourceOperations
 from onyx.db.enums import HierarchyNodeType
+from onyx.utils.process_isolation import IsolatedProcessError
 from tests.unit.onyx.connectors.outlook.outlook_api_shapes import (
     CONVERSATION_ID,
     INBOX_ID,
     MAILBOX_ADDRESS,
     RECEIVED,
+    attachment,
     change,
     folder,
     graph_error,
     mailbox,
     message,
 )
+
+CONNECTOR_MODULE = "onyx.connectors.outlook.connector"
 
 JUNK_ID = "folder-junk"
 DELETED_ID = "folder-deleted"
@@ -172,6 +185,35 @@ def _happy_gateway() -> MagicMock:
             message(id="msg-draft", is_draft=True),
         ]
     )
+    gateway.list_message_attachments.return_value = []
+    return gateway
+
+
+def _attachment_gateway() -> MagicMock:
+    """The happy gateway whose newest message carries a mixed bag of attachments."""
+    gateway = _happy_gateway()
+    gateway.fetch_conversation_messages_page.return_value = OutlookMessagePage(
+        messages=[
+            message(
+                id="msg-2",
+                received_at=RECEIVED + timedelta(hours=1),
+                has_attachments=True,
+            ),
+            message(),
+        ]
+    )
+    gateway.list_message_attachments.return_value = [
+        attachment(name="report.docx"),
+        attachment(id="att-inline", name="logo.png", is_inline=True),
+        attachment(id="att-item", name="Fwd: reminder", is_file=False),
+        attachment(id="att-zip", name="build.zip"),
+        attachment(
+            id="att-huge",
+            name="huge.pdf",
+            size=OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD + 1,
+        ),
+    ]
+    gateway.download_attachment.return_value = b"PK"
     return gateway
 
 
@@ -772,6 +814,188 @@ def test_mismatched_national_cloud_hosts_are_rejected_at_construction() -> None:
 def test_credentials_before_provider_is_a_programming_error() -> None:
     with pytest.raises(ConnectorMissingCredentialError):
         _ = OutlookConnector().ops
+
+
+# ---------------------------------------------------------------------------
+# attachments
+# ---------------------------------------------------------------------------
+
+
+def _extraction(text: str) -> Callable[..., str]:
+    """A stand-in for the isolated extraction that asserts what it was asked to
+    run and applies the cap the way the child would."""
+
+    def run(fn: Callable[..., str], *args: Any, timeout: float, **kwargs: Any) -> str:
+        assert fn is extract_attachment_text
+        assert timeout == ATTACHMENT_EXTRACTION_TIMEOUT_SECONDS
+        assert kwargs == {}
+        data, name, cap = args
+        assert isinstance(data, bytes) and name
+        return text[:cap]
+
+    return run
+
+
+def _attachment_connector(gateway: MagicMock) -> OutlookConnector:
+    return _connector(gateway, mailboxes=[MAILBOX_ADDRESS], include_attachments=True)
+
+
+def test_extract_attachment_text_uses_the_local_parsers_and_caps() -> None:
+    assert extract_attachment_text(b"  hello world  ", "note.txt", 5) == "hello"
+    with pytest.raises(ValueError):
+        extract_attachment_text(b"\x00\x01\x02", "blob.bin", 10)
+
+
+def test_attachment_text_follows_its_message_and_skips_the_rest() -> None:
+    gateway = _attachment_gateway()
+    connector = _attachment_connector(gateway)
+
+    with patch(
+        f"{CONNECTOR_MODULE}.run_in_isolated_process",
+        side_effect=_extraction("Quarterly numbers"),
+    ):
+        items, _ = _step(connector, _folder_checkpoint())
+
+    docs = [item for item in items if isinstance(item, Document)]
+    texts = [section.text or "" for section in docs[0].sections]
+    assert len(texts) == 3
+    assert texts[1].startswith("From: Alice")
+    assert texts[2] == "Attachment: report.docx\n\nQuarterly numbers"
+    assert docs[0].sections[2].link == message().web_link
+    gateway.list_message_attachments.assert_called_once_with(
+        mailbox_id=mailbox().id, message_id="msg-2", limit=MAX_ATTACHMENTS_PER_MESSAGE
+    )
+    # Only the plain file attachment is worth a download: inline images, item
+    # attachments, unsupported types and oversize files are skipped unread.
+    gateway.download_attachment.assert_called_once_with(
+        mailbox_id=mailbox().id,
+        message_id="msg-2",
+        attachment_id="att-1",
+        cap=OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD,
+    )
+
+
+def test_attachments_are_not_read_by_default() -> None:
+    gateway = _attachment_gateway()
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+
+    items, _ = _step(connector, _folder_checkpoint())
+
+    assert len([item for item in items if isinstance(item, Document)]) == 1
+    gateway.list_message_attachments.assert_not_called()
+
+
+def test_attachment_over_the_cap_or_refused_is_skipped() -> None:
+    gateway = _attachment_gateway()
+    gateway.download_attachment.side_effect = SizeCapExceeded("during_download")
+    connector = _attachment_connector(gateway)
+
+    items, _ = _step(connector, _folder_checkpoint())
+    docs = [item for item in items if isinstance(item, Document)]
+    assert len(docs[0].sections) == 2
+
+    gateway.download_attachment.side_effect = graph_error(404, "ErrorItemNotFound")
+    items, _ = _step(connector, _folder_checkpoint())
+    docs = [item for item in items if isinstance(item, Document)]
+    assert len(docs[0].sections) == 2
+
+
+def test_throttled_attachment_read_keeps_the_checkpoint() -> None:
+    gateway = _attachment_gateway()
+    gateway.download_attachment.side_effect = graph_error(429, "TooManyRequests")
+    connector = _attachment_connector(gateway)
+    checkpoint = _folder_checkpoint()
+
+    with pytest.raises(OutlookGraphError):
+        _step(connector, checkpoint)
+
+    assert checkpoint.seen_conversation_ids == {}
+
+
+def test_refused_attachment_listing_keeps_the_message_text() -> None:
+    gateway = _attachment_gateway()
+    gateway.list_message_attachments.side_effect = graph_error(403)
+    connector = _attachment_connector(gateway)
+
+    items, _ = _step(connector, _folder_checkpoint())
+
+    docs = [item for item in items if isinstance(item, Document)]
+    assert len(docs[0].sections) == 2
+    gateway.download_attachment.assert_not_called()
+
+
+def test_attachment_extraction_that_hangs_or_crashes_is_skipped() -> None:
+    gateway = _attachment_gateway()
+    connector = _attachment_connector(gateway)
+
+    with patch(
+        f"{CONNECTOR_MODULE}.run_in_isolated_process",
+        side_effect=IsolatedProcessError("timed out"),
+    ):
+        items, _ = _step(connector, _folder_checkpoint())
+
+    docs = [item for item in items if isinstance(item, Document)]
+    assert len(docs[0].sections) == 2
+
+
+def test_attachment_text_is_capped_per_conversation() -> None:
+    gateway = _attachment_gateway()
+    gateway.list_message_attachments.return_value = [
+        attachment(id=f"att-{n}", name=f"part-{n}.txt") for n in range(3)
+    ]
+    connector = _attachment_connector(gateway)
+    # Each attachment expands to over half the budget, so the second one is
+    # truncated and the third is never downloaded.
+    text = "x" * (MAX_ATTACHMENT_TEXT_PER_CONVERSATION * 3 // 5)
+
+    with patch(
+        f"{CONNECTOR_MODULE}.run_in_isolated_process", side_effect=_extraction(text)
+    ):
+        items, _ = _step(connector, _folder_checkpoint())
+
+    docs = [item for item in items if isinstance(item, Document)]
+    kept = [
+        len(section.text or "") - len("Attachment: part-0.txt\n\n")
+        for section in docs[0].sections[2:]
+    ]
+    assert sum(kept) == MAX_ATTACHMENT_TEXT_PER_CONVERSATION
+    assert gateway.download_attachment.call_count == 2
+
+
+def test_failed_extractions_spend_the_read_budget() -> None:
+    gateway = _attachment_gateway()
+    gateway.list_message_attachments.return_value = [
+        attachment(id=f"att-{n}", name=f"part-{n}.txt")
+        for n in range(MAX_ATTACHMENT_READS_PER_CONVERSATION + 5)
+    ]
+    connector = _attachment_connector(gateway)
+
+    with patch(
+        f"{CONNECTOR_MODULE}.run_in_isolated_process",
+        side_effect=IsolatedProcessError("timed out"),
+    ):
+        items, _ = _step(connector, _folder_checkpoint())
+
+    docs = [item for item in items if isinstance(item, Document)]
+    assert len(docs[0].sections) == 2
+    assert (
+        gateway.download_attachment.call_count == MAX_ATTACHMENT_READS_PER_CONVERSATION
+    )
+
+
+def test_attachment_skip_reasons() -> None:
+    assert attachment_skip_reason(attachment()) is None
+    assert attachment_skip_reason(attachment(is_file=False)) == "not a file attachment"
+    assert attachment_skip_reason(attachment(is_inline=True)) == "inline attachment"
+    assert (
+        attachment_skip_reason(attachment(name="tool.exe")) == "unsupported file type"
+    )
+    assert (
+        attachment_skip_reason(
+            attachment(size=OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD + 1)
+        )
+        == "over the size threshold"
+    )
 
 
 # ---------------------------------------------------------------------------

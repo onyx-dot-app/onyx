@@ -161,15 +161,15 @@ export interface ConnectionConfiguration {
 // kwarg on the backend connector; see backend/onyx/connectors/README.md for
 // the convention, including how to pick the default.
 export function buildIncludeAttachmentsOption(
-  defaultValue: boolean
+  defaultValue: boolean,
+  description: string = "Enable processing of page attachments including images and documents"
 ): BooleanOption {
   return {
     type: "checkbox",
     query: "Include attachments?",
     label: "Include Attachments",
     name: "include_attachments",
-    description:
-      "Enable processing of page attachments including images and documents",
+    description,
     default: defaultValue,
   };
 }
@@ -1081,6 +1081,10 @@ export const connectorConfigs: Record<
           "Leave empty to index every mailbox the app registration may open. " +
           "Shared mailboxes are never picked up automatically and must be listed here.",
       },
+      buildIncludeAttachmentsOption(
+        false,
+        "Index the text of file attachments. Inline images, nested items and cloud links are skipped."
+      ),
     ],
     advanced_values: [
       {
