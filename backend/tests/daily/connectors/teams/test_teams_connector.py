@@ -15,31 +15,27 @@ pytestmark = pytest.mark.secrets(
     TestSecret.TEAMS_SECRET,
 )
 
+# A standard channel is visible to its team, not the tenant, so the "Public
+# Channel" threads are shared with the team's two members.
+TEAM_ACCESS = ExternalAccess(
+    external_user_emails={"test@danswerai.onmicrosoft.com", "raunak@onyx.app"},
+    external_user_group_ids=set(),
+    is_public=False,
+)
+
 TEAMS_THREAD = [
     # Posted in "Public Channel"
     TeamsThread(
         thread="This is the first message in Onyx-Testing ...This is a reply!This is a second reply.Third.4th.5",
-        external_access=ExternalAccess(
-            external_user_emails=set(),
-            external_user_group_ids=set(),
-            is_public=True,
-        ),
+        external_access=TEAM_ACCESS,
     ),
     TeamsThread(
         thread="Testing body.",
-        external_access=ExternalAccess(
-            external_user_emails=set(),
-            external_user_group_ids=set(),
-            is_public=True,
-        ),
+        external_access=TEAM_ACCESS,
     ),
     TeamsThread(
         thread="Hello, world! Nice to meet you all.",
-        external_access=ExternalAccess(
-            external_user_emails=set(),
-            external_user_group_ids=set(),
-            is_public=True,
-        ),
+        external_access=TEAM_ACCESS,
     ),
     # Posted in "Private Channel (Raunak is excluded)"
     TeamsThread(
@@ -113,15 +109,10 @@ def _assert_is_valid_external_access(
     assert not external_access.external_user_group_ids, (
         f"{external_access.external_user_group_ids=} should be empty for MS Teams"
     )
-
-    if external_access.is_public:
-        assert not external_access.external_user_emails, (
-            f"{external_access.external_user_emails=} should be empty for public channels"
-        )
-    else:
-        assert external_access.external_user_emails, (
-            f"{external_access.external_user_emails=} should contains at least one user for private channels"
-        )
+    assert not external_access.is_public, "No Teams channel is visible to the tenant"
+    assert external_access.external_user_emails, (
+        f"{external_access.external_user_emails=} should hold the channel's members"
+    )
 
 
 @pytest.mark.parametrize(

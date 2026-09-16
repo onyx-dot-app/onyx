@@ -33,6 +33,17 @@ class From(BaseModel):
     )
 
 
+class ChannelMember(BaseModel):
+    display_name: str | None = None
+    email: str | None = None
+    user_id: str | None = None
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+    )
+
+
 class Message(BaseModel):
     id: str
     replyToId: str | None
