@@ -3,9 +3,9 @@ from collections.abc import Generator
 from datetime import datetime, timezone
 from typing import Any
 
+import requests
 from office365.graph_client import GraphClient
 from office365.runtime.queries.client_query import ClientQuery
-from office365.teams.channels.channel import Channel, ConversationMember
 
 from onyx.access.models import ExternalAccess
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
@@ -16,13 +16,10 @@ from onyx.connectors.microsoft_utils.graph_client import (
     sleep_and_retry,
 )
 from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.teams.models import Message
+from onyx.connectors.teams.models import ChannelMember, Message
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-
-_PUBLIC_MEMBERSHIP_TYPE = "standard"  # public teams channel
 
 
 def execute_query_with_retry(
@@ -60,6 +57,10 @@ def _sanitize_message_user_display_name(value: dict) -> dict:
     return value
 
 
+class GraphRetriesExhausted(RuntimeError):
+    """Graph kept answering with a retryable status for every attempt."""
+
+
 def _retry(
     graph_client: GraphClient,
     request_url: str,
@@ -68,7 +69,14 @@ def _retry(
     retry_number = 0
 
     while retry_number < MAX_RETRIES:
-        response = graph_client.execute_request_direct(request_url)
+        # The SDK raises on every non-2xx status, so the response is taken from
+        # the exception to apply one retry policy to raised and returned errors.
+        try:
+            response = graph_client.execute_request_direct(request_url)
+        except requests.HTTPError as e:
+            if e.response is None:
+                raise
+            response = e.response
         if response.ok:
             json = response.json()
             if not isinstance(json, dict):
@@ -103,7 +111,7 @@ def _retry(
 
         response.raise_for_status()
 
-    raise RuntimeError(
+    raise GraphRetriesExhausted(
         f"Max number of retries for hitting {request_url=} exceeded; unable to fetch data"
     )
 
@@ -125,32 +133,95 @@ def _get_next_url(
     return next_url.removeprefix(graph_client.service_root_url()).removeprefix("/")
 
 
-def _get_or_fetch_email(
-    graph_client: GraphClient,
-    member: ConversationMember,
-) -> str | None:
-    if email := member.properties.get("email"):
-        return email
+def _iter_values(
+    graph_client: GraphClient, request_url: str
+) -> Generator[dict[str, Any]]:
+    """Every row of a paged Graph collection."""
+    url: str | None = request_url
+    while url:
+        json_response = _retry(graph_client=graph_client, request_url=url)
+        for value in json_response.get("value", []):
+            if isinstance(value, dict):
+                yield value
+        url = _get_next_url(graph_client=graph_client, json_response=json_response)
 
-    user_id = member.properties.get("userId")
-    if not user_id:
-        logger.warning("No user-id found for this member; member=%r", member)
+
+def _member_email(graph_client: GraphClient, member: ChannelMember) -> str | None:
+    """A member row carries its email for users of any tenant. A row without
+    one is looked up by user id, which only resolves users of this tenant."""
+    if member.email:
+        return member.email
+
+    if not member.user_id:
+        logger.warning("Channel member %r has no user id; skipping", member)
         return None
 
-    json_data = _retry(graph_client=graph_client, request_url=f"users/{user_id}")
+    # Only a missing user is skipped: a user of another tenant is not in this
+    # directory. Any other refusal propagates, or a partial list would revoke access.
+    try:
+        json_data = _retry(
+            graph_client=graph_client, request_url=f"users/{member.user_id}"
+        )
+    except requests.HTTPError as e:
+        if e.response is not None and e.response.status_code == 404:
+            logger.warning(
+                "Channel member %s is not in this directory; skipping",
+                member.display_name,
+            )
+            return None
+        raise
+
     email = json_data.get("userPrincipalName")
-
-    if not isinstance(email, str):
-        logger.warning("Expected email to be of type str, instead got email=%r", email)
+    if not isinstance(email, str) or not email:
+        logger.warning(
+            "Channel member %s has no principal name; skipping", member.user_id
+        )
         return None
-
     return email
 
 
-def _is_channel_public(channel: Channel) -> bool:
-    return (
-        channel.membership_type and channel.membership_type == _PUBLIC_MEMBERSHIP_TYPE
+def fetch_channel_members(
+    graph_client: GraphClient, team_id: str, channel_id: str
+) -> list[ChannelMember]:
+    """Everyone who can read the channel. Graph's plain members call omits the
+    members a shared channel gains from the teams it is shared with, so the
+    all-members call serves every channel type."""
+    return [
+        ChannelMember(**row)
+        for row in _iter_values(
+            graph_client, f"teams/{team_id}/channels/{channel_id}/allMembers"
+        )
+    ]
+
+
+def channel_access(expert_infos: list[BasicExpertInfo]) -> ExternalAccess:
+    """A channel is readable by its members and no one else. A standard channel
+    is visible to its team, not the tenant, so no channel is ever public."""
+    return ExternalAccess(
+        external_user_emails={
+            expert_info.email.lower()
+            for expert_info in expert_infos
+            if expert_info.email
+        },
+        external_user_group_ids=set(),
+        is_public=False,
     )
+
+
+def fetch_channel_readers(
+    graph_client: GraphClient, team_id: str, channel_id: str
+) -> tuple[list[BasicExpertInfo], ExternalAccess]:
+    """The channel's members as document owners and as its access list."""
+    expert_infos: list[BasicExpertInfo] = []
+    for member in fetch_channel_members(graph_client, team_id, channel_id):
+        email = _member_email(graph_client, member)
+        if email is None:
+            continue
+        # The email is what grants access, so a member without a name still reads.
+        expert_infos.append(
+            BasicExpertInfo(display_name=member.display_name, email=email)
+        )
+    return expert_infos, channel_access(expert_infos)
 
 
 def fetch_messages(
@@ -163,19 +234,10 @@ def fetch_messages(
         "%Y-%m-%dT%H:%M:%SZ"
     )
 
-    initial_request_url = f"teams/{team_id}/channels/{channel_id}/messages/delta?$filter=lastModifiedDateTime gt {startfmt}"
+    request_url = f"teams/{team_id}/channels/{channel_id}/messages/delta?$filter=lastModifiedDateTime gt {startfmt}"
 
-    request_url: str | None = initial_request_url
-
-    while request_url:
-        json_response = _retry(graph_client=graph_client, request_url=request_url)
-
-        for value in json_response.get("value", []):
-            yield Message(**_sanitize_message_user_display_name(value))
-
-        request_url = _get_next_url(
-            graph_client=graph_client, json_response=json_response
-        )
+    for value in _iter_values(graph_client, request_url):
+        yield Message(**_sanitize_message_user_display_name(value))
 
 
 def fetch_replies(
@@ -184,73 +246,9 @@ def fetch_replies(
     channel_id: str,
     root_message_id: str,
 ) -> Generator[Message]:
-    initial_request_url = (
+    request_url = (
         f"teams/{team_id}/channels/{channel_id}/messages/{root_message_id}/replies"
     )
 
-    request_url: str | None = initial_request_url
-
-    while request_url:
-        json_response = _retry(graph_client=graph_client, request_url=request_url)
-
-        for value in json_response.get("value", []):
-            yield Message(**_sanitize_message_user_display_name(value))
-
-        request_url = _get_next_url(
-            graph_client=graph_client, json_response=json_response
-        )
-
-
-def fetch_expert_infos(
-    graph_client: GraphClient, channel: Channel
-) -> list[BasicExpertInfo]:
-    members = channel.members.get_all(
-        # explicitly needed because of incorrect type definitions provided by the `office365` library
-        page_loaded=lambda _: None
-    ).execute_query_retry()
-
-    expert_infos = []
-    for member in members:
-        if not member.display_name:
-            logger.warning(
-                "Failed to grab the display-name of member=%r; skipping", member
-            )
-            continue
-
-        email = _get_or_fetch_email(graph_client=graph_client, member=member)
-        if not email:
-            logger.warning("Failed to grab the email of member=%r; skipping", member)
-            continue
-
-        expert_infos.append(
-            BasicExpertInfo(
-                display_name=member.display_name,
-                email=email,
-            )
-        )
-
-    return expert_infos
-
-
-def fetch_external_access(
-    graph_client: GraphClient,
-    channel: Channel,
-    expert_infos: list[BasicExpertInfo] | None = None,
-) -> ExternalAccess:
-    is_public = _is_channel_public(channel=channel)
-
-    if is_public:
-        return ExternalAccess.public()
-
-    expert_infos = (
-        expert_infos
-        if expert_infos is not None
-        else fetch_expert_infos(graph_client=graph_client, channel=channel)
-    )
-    emails = {expert_info.email for expert_info in expert_infos if expert_info.email}
-
-    return ExternalAccess(
-        external_user_emails=emails,
-        external_user_group_ids=set(),
-        is_public=is_public,
-    )
+    for value in _iter_values(graph_client, request_url):
+        yield Message(**_sanitize_message_user_display_name(value))

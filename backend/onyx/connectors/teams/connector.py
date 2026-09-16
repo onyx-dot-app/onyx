@@ -6,12 +6,14 @@ from functools import partial
 from typing import Any
 
 import msal
+import requests
 from office365.graph_client import GraphClient
 from office365.runtime.client_request_exception import ClientRequestException
 from office365.runtime.http.request_options import RequestOptions
 from office365.teams.channels.channel import Channel
 from office365.teams.team import Team
 
+from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -36,6 +38,7 @@ from onyx.connectors.microsoft_utils.graph_env import (
     resolve_microsoft_environment,
 )
 from onyx.connectors.models import (
+    BasicExpertInfo,
     ConnectorCheckpoint,
     ConnectorFailure,
     ConnectorMissingCredentialError,
@@ -47,9 +50,9 @@ from onyx.connectors.models import (
 )
 from onyx.connectors.teams.models import Message
 from onyx.connectors.teams.utils import (
+    GraphRetriesExhausted,
     execute_query_with_retry,
-    fetch_expert_infos,
-    fetch_external_access,
+    fetch_channel_readers,
     fetch_messages,
     fetch_replies,
 )
@@ -278,8 +281,8 @@ class TeamsConnector(
         end: SecondsSinceUnixEpoch,
         checkpoint: TeamsCheckpoint,
     ) -> CheckpointOutput[TeamsCheckpoint]:
-        # Teams already fetches external_access (permissions) for each document
-        # in _convert_thread_to_document, so we can just delegate to load_from_checkpoint
+        # Every document already carries its channel's access list, so the plain
+        # walk is the permission walk.
         return self.load_from_checkpoint(start, end, checkpoint)
 
     # impls for SlimConnectorWithPermSync
@@ -316,9 +319,12 @@ class TeamsConnector(
                     )
                     continue
 
-                external_access = fetch_external_access(
+                # A refused members call raises: a listing without its readers
+                # would let pruning and permission sync act on a partial picture.
+                _, external_access = fetch_channel_readers(
                     graph_client=self.graph_client,  # ty: ignore[invalid-argument-type]
-                    channel=channel,
+                    team_id=team.id,
+                    channel_id=channel.id,
                 )
 
                 messages = fetch_messages(
@@ -456,9 +462,10 @@ def _construct_semantic_identifier(channel: Channel, top_message: Message) -> st
 
 
 def _convert_thread_to_document(
-    graph_client: GraphClient,
     channel: Channel,
     thread: list[Message],
+    expert_infos: list[BasicExpertInfo],
+    external_access: ExternalAccess,
 ) -> Document | None:
     if len(thread) == 0:
         return None
@@ -485,10 +492,6 @@ def _convert_thread_to_document(
         return None
 
     semantic_string = _construct_semantic_identifier(channel, top_message)
-    expert_infos = fetch_expert_infos(graph_client=graph_client, channel=channel)
-    external_access = fetch_external_access(
-        graph_client=graph_client, channel=channel, expert_infos=expert_infos
-    )
 
     return Document(
         id=top_message.id,
@@ -771,27 +774,15 @@ def _collect_all_channels_from_team(
     if not team.id:
         raise RuntimeError(f"The {team=} has an empty `id` field")
 
-    channels: list[Channel] = []
-    next_url = None
-
-    while True:
-        query = team.channels.get_all(
-            # explicitly needed because of incorrect type definitions provided by the `office365` library
-            page_loaded=lambda _: None
-        )
-        if next_url:
-            url = next_url
-            query = query.before_execute(partial(_update_request_url, next_url=url))
-
-        channel_collection = execute_query_with_retry(
-            query, method_name="_collect_all_channels_from_team"
-        )
-        channels.extend(channel for channel in channel_collection if channel.id)
-
-        if not channel_collection.has_next:
-            break
-
-    return channels
+    # `get_all` follows the collection's pages itself.
+    query = team.channels.get_all(
+        # explicitly needed because of incorrect type definitions provided by the `office365` library
+        page_loaded=lambda _: None
+    )
+    channel_collection = execute_query_with_retry(
+        query, method_name="_collect_all_channels_from_team"
+    )
+    return [channel for channel in channel_collection if channel.id]
 
 
 def _collect_documents_for_channel(
@@ -805,6 +796,20 @@ def _collect_documents_for_channel(
 
     A "thread" is the conjunction of the "root" message and all of its replies.
     """
+    # Every thread in a channel has the channel's readers, so they are read once.
+    # Without them the channel cannot be indexed safely, so a refusal or a Graph
+    # outage is one recorded failure for the channel and the walk moves on.
+    try:
+        expert_infos, external_access = fetch_channel_readers(
+            graph_client=graph_client, team_id=team.id, channel_id=channel.id
+        )
+    except (requests.HTTPError, GraphRetriesExhausted) as e:
+        yield ConnectorFailure(
+            failed_entity=EntityFailure(entity_id=channel.id),
+            failure_message=f"Could not read the members of channel {channel.id}",
+            exception=e,
+        )
+        return
 
     for message in fetch_messages(
         graph_client=graph_client,
@@ -829,9 +834,10 @@ def _collect_documents_for_channel(
             # We convert an entire *thread* (including the root message and its replies) into one, singular `Document`.
             # I.e., we don't convert each individual message and each individual reply into their own individual `Document`s.
             if doc := _convert_thread_to_document(
-                graph_client=graph_client,
                 channel=channel,
                 thread=thread,
+                expert_infos=expert_infos,
+                external_access=external_access,
             ):
                 yield doc
 
