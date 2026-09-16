@@ -95,13 +95,13 @@ describe("OneDrive connector metadata", () => {
     });
   });
 
-  it("uses the OneDrive logo and PKCS12 upload type without sync controls", () => {
+  it("uses the OneDrive logo, PKCS12 upload type, and sync controls", () => {
     expect(getSourceMetadata(ValidSources.OneDrive).displayName).toBe(
       "OneDrive"
     );
     expect(getFileTypeDefinitionForField("onedrive_private_key")).toBe(
       FileTypeCategory.ONEDRIVE_PFX_FILE
     );
-    expect(validAutoSyncSources).not.toContain(ValidSources.OneDrive);
+    expect(validAutoSyncSources).toContain(ValidSources.OneDrive);
   });
 });
