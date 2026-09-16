@@ -465,7 +465,7 @@ def start_thread_with_context(
     with an empty context, so tenant-scoped DB access inside the thread would
     raise "Tenant ID is not set".
 
-    Unlike ``run_in_background`` / ``run_multiple_in_background``, this is for
+    Unlike ``run_in_background``, this is for
     daemon producer threads that are never joined.
     """
     ctx = contextvars.copy_context()
