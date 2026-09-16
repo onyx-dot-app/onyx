@@ -39,10 +39,6 @@ assert (
 assert (
     CHECK_FOR_DOCUMENTS_TASK_TIME_LIMIT_S < CHECK_FOR_DOCUMENTS_TASK_LOCK_TIMEOUT_S
 ), "The time limit must be less than the lock timeout."
-# Time to wait to acquire the lock.
-CHECK_FOR_DOCUMENTS_TASK_LOCK_BLOCKING_TIMEOUT_S = 30  # 30 seconds.
-
-TOTAL_ALLOWABLE_DOC_MIGRATION_ATTEMPTS_BEFORE_PERMANENT_FAILURE = 15
 
 # WARNING: Do not change these values without knowing what changes also need to
 # be made to OpenSearchTenantMigrationRecord.

@@ -9,7 +9,6 @@ from typing import Any
 
 from celery import Celery, Task, current_app, shared_task
 from celery.exceptions import SoftTimeLimitExceeded
-from pydantic import BaseModel
 from redis.lock import Lock as RedisLock
 from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
@@ -1381,16 +1380,6 @@ def cleanup_index_attempt_task(
             f"index_attempt_ids={index_attempt_ids} "
             f"elapsed={elapsed:.2f}"
         )
-
-
-class DocumentProcessingBatch(BaseModel):
-    """Data structure for a document processing batch."""
-
-    batch_id: str
-    index_attempt_id: int
-    cc_pair_id: int
-    tenant_id: str
-    batch_num: int
 
 
 def _check_failure_threshold(

@@ -112,8 +112,6 @@ from shared_configs.contextvars import INDEX_ATTEMPT_INFO_CONTEXTVAR
 
 logger = setup_logger(propagate=False)
 
-INDEXING_TRACER_NUM_PRINT_ENTRIES = 5
-
 
 def _get_connector_runner(
     db_session: Session,

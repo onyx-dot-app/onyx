@@ -42,13 +42,6 @@ T = TypeVar(
     SavedSearchDocWithContent,
 )
 
-TSection = TypeVar(
-    "TSection",
-    InferenceSection,
-    SearchDoc,
-    SavedSearchDoc,
-    SavedSearchDocWithContent,
-)
 
 _UNSAFE_CHARS_RE = re.compile(r"[\x00-\x1f/\\:\*\?\"<>\|]+")
 _SANDBOX_FILENAME_MAX_LENGTH = 200
@@ -67,17 +60,6 @@ def inference_section_from_chunks(
         center_chunk=center_chunk,
         chunks=chunks,
         combined_content=combined_content,
-    )
-
-
-# If it should be a real section, don't use this one
-def inference_section_from_single_chunk(
-    chunk: InferenceChunk,
-) -> InferenceSection:
-    return InferenceSection(
-        center_chunk=chunk,
-        chunks=[chunk],
-        combined_content=chunk.content,
     )
 
 

@@ -101,32 +101,6 @@ class InMemoryChatFile(BaseModel):
     file_type: ChatFileType
     filename: str | None = None
 
-    @classmethod
-    def lazy_from_descriptor(
-        cls,
-        *,
-        file_id: str,
-        file_type: "ChatFileType",
-        filename: str | None,
-        loader: Callable[[], bytes],
-    ) -> "InMemoryChatFile":
-        """Construct an instance whose ``content`` bytes are loaded only on
-        first access.
-
-        Eager construction (``InMemoryChatFile(file_id=..., content=...)``) is
-        unchanged. Lazy instances start with ``content=b""`` and a stashed
-        loader; the first read of ``.content`` invokes the loader and memoizes
-        the result.
-        """
-        inst = cls(
-            file_id=file_id,
-            content=b"",
-            file_type=file_type,
-            filename=filename,
-        )
-        install_lazy_content_loader(inst, loader)
-        return inst
-
     def __getattribute__(self, name: str):
         if name == "content":
             maybe_materialize_lazy_content(self)

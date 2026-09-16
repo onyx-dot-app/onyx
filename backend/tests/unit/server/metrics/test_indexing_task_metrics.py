@@ -33,22 +33,6 @@ def _make_task(name: str) -> MagicMock:
     return task
 
 
-def _mock_db_lookup(
-    source: str = "google_drive", name: str = "My Google Drive"
-) -> tuple:
-    """Return (session_patch, cc_pair_patch) context managers for DB mocking."""
-    mock_cc_pair = MagicMock()
-    mock_cc_pair.name = name
-    mock_cc_pair.connector.source.value = source
-
-    session_patch = patch("onyx.db.engine.sql_engine.get_session_with_tenant")
-    cc_pair_patch = patch(
-        "onyx.db.connector_credential_pair.get_connector_credential_pair_from_id",
-        return_value=mock_cc_pair,
-    )
-    return session_patch, cc_pair_patch
-
-
 class TestIndexingTaskPrerun:
     def test_skips_non_indexing_task(self) -> None:
         task = _make_task("some_other_task")

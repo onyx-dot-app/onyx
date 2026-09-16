@@ -29,8 +29,7 @@ class _HierarchyCapableConnector(HierarchyConnector):
         start: SecondsSinceUnixEpoch,  # noqa: ARG002
         end: SecondsSinceUnixEpoch,  # noqa: ARG002
     ) -> HierarchyOutput:
-        return
-        yield
+        yield from ()
 
 
 def _build_cc_pair_mock() -> MagicMock:

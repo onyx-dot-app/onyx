@@ -11,16 +11,6 @@ from onyx.indexing.models import BaseChunk, IndexingSetting
 from onyx.tools.tool_implementations.web_search.models import WEB_SEARCH_PREFIX
 
 
-class QueryExpansions(BaseModel):
-    keywords_expansions: list[str] | None = None
-    semantic_expansions: list[str] | None = None
-
-
-class QueryExpansionType(Enum):
-    KEYWORD = "keyword"
-    SEMANTIC = "semantic"
-
-
 class SearchSettingsCreationRequest(IndexingSetting):
     # cc_pairs the admin consented to delete (shown as "won't be ported"). Gates deletion:
     # the server rejects if its authoritative recompute includes an unacknowledged cc_pair.
@@ -379,15 +369,6 @@ class SearchDoc(BaseModel):
         # Remove db_doc_id as it's not part of SearchDoc
         saved_search_doc_data.pop("db_doc_id", None)
         return cls(**saved_search_doc_data)
-
-    @classmethod
-    def from_saved_search_docs(
-        cls, saved_search_docs: list["SavedSearchDoc"]
-    ) -> list["SearchDoc"]:
-        return [
-            cls.from_saved_search_doc(saved_search_doc)
-            for saved_search_doc in saved_search_docs
-        ]
 
     def model_dump(  # ty: ignore[invalid-method-override]
         self, *args: list, **kwargs: dict[str, Any]

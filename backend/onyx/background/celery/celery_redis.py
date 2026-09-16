@@ -64,19 +64,6 @@ def celery_get_broker_client(app: Celery) -> Redis:
         return _broker_client
 
 
-def celery_get_unacked_length(r: Redis) -> int:
-    """Checking the unacked queue is useful because a non-zero length tells us there
-    may be prefetched tasks.
-
-    There can be other tasks in here besides indexing tasks, so this is mostly useful
-    just to see if the task count is non zero.
-
-    ref: https://blog.hikaru.run/2022/08/29/get-waiting-tasks-count-in-celery.html
-    """
-    length = cast(int, r.hlen("unacked"))
-    return length
-
-
 def celery_get_unacked_task_ids(queue: str, r: Redis) -> set[str]:
     """Gets the set of task id's matching the given queue in the unacked hash.
 
@@ -173,74 +160,3 @@ def celery_get_queued_task_ids(queue: str, r: Redis) -> set[str]:
                 task_set.add(task_id)
 
     return task_set
-
-
-def celery_inspect_get_workers(name_filter: str | None, app: Celery) -> list[str]:
-    """Returns a list of current workers containing name_filter, or all workers if
-    name_filter is None.
-
-    We've empirically discovered that the celery inspect API is potentially unstable
-    and may hang or return empty results when celery is under load. Suggest using this
-    more to debug and troubleshoot than in production code.
-    """
-    worker_names: list[str] = []
-
-    # filter for and create an indexing specific inspect object
-    inspect = app.control.inspect()
-    workers: dict[str, Any] = inspect.ping()  # ty: ignore[invalid-assignment]
-    if workers:
-        for worker_name in list(workers.keys()):
-            # if the name filter not set, return all worker names
-            if not name_filter:
-                worker_names.append(worker_name)
-                continue
-
-            # if the name filter is set, return only worker names that contain the name filter
-            if name_filter not in worker_name:
-                continue
-
-            worker_names.append(worker_name)
-
-    return worker_names
-
-
-def celery_inspect_get_reserved(worker_names: list[str], app: Celery) -> set[str]:
-    """Returns a list of reserved tasks on the specified workers.
-
-    We've empirically discovered that the celery inspect API is potentially unstable
-    and may hang or return empty results when celery is under load. Suggest using this
-    more to debug and troubleshoot than in production code.
-    """
-    reserved_task_ids: set[str] = set()
-
-    inspect = app.control.inspect(destination=worker_names)
-
-    # get the list of reserved tasks
-    reserved_tasks: dict[str, list] | None = inspect.reserved()
-    if reserved_tasks:
-        for task_list in reserved_tasks.values():
-            for task in task_list:
-                reserved_task_ids.add(task["id"])
-
-    return reserved_task_ids
-
-
-def celery_inspect_get_active(worker_names: list[str], app: Celery) -> set[str]:
-    """Returns a list of active tasks on the specified workers.
-
-    We've empirically discovered that the celery inspect API is potentially unstable
-    and may hang or return empty results when celery is under load. Suggest using this
-    more to debug and troubleshoot than in production code.
-    """
-    active_task_ids: set[str] = set()
-
-    inspect = app.control.inspect(destination=worker_names)
-
-    # get the list of reserved tasks
-    active_tasks: dict[str, list] | None = inspect.active()
-    if active_tasks:
-        for task_list in active_tasks.values():
-            for task in task_list:
-                active_task_ids.add(task["id"])
-
-    return active_task_ids

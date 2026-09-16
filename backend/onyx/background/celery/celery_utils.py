@@ -253,19 +253,6 @@ def extract_ids_from_runnable_connector(
     )
 
 
-def celery_is_listening_to_queue(worker: Any, name: str) -> bool:
-    """Checks to see if we're listening to the named queue"""
-
-    # how to get a list of queues this worker is listening to
-    # https://stackoverflow.com/questions/29790523/how-to-determine-which-queues-a-celery-worker-is-consuming-at-runtime
-    queue_names = list(worker.app.amqp.queues.consume_from.keys())
-    for queue_name in queue_names:
-        if queue_name == name:
-            return True
-
-    return False
-
-
 def celery_is_worker_primary(worker: Any) -> bool:
     """There are multiple approaches that could be taken to determine if a celery worker
     is 'primary', as defined by us. But the way we do it is to check the hostname set

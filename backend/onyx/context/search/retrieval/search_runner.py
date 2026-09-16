@@ -7,12 +7,10 @@ from onyx.configs.chat_configs import HYBRID_ALPHA, NUM_RETURNED_HITS
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import (
     ChunkIndexRequest,
-    IndexFilters,
     InferenceChunk,
-    InferenceSection,
 )
-from onyx.context.search.utils import get_query_embedding, inference_section_from_chunks
-from onyx.document_index.interfaces_new import DocumentIndex, DocumentSectionRequest
+from onyx.context.search.utils import get_query_embedding
+from onyx.document_index.interfaces_new import DocumentIndex
 from onyx.federated_connectors.federated_retrieval import (
     FederatedRetrievalInfo,
     get_federated_retrieval_functions,
@@ -161,49 +159,3 @@ def search_chunks(
         )
 
     return top_chunks
-
-
-# TODO: This is unused code.
-def inference_sections_from_ids(
-    doc_identifiers: list[tuple[str, int]],
-    document_index: DocumentIndex,
-) -> list[InferenceSection]:
-    # Currently only fetches whole docs
-    doc_ids_set = set(doc_id for doc_id, _ in doc_identifiers)
-
-    chunk_requests: list[DocumentSectionRequest] = [
-        DocumentSectionRequest(document_id=doc_id) for doc_id in doc_ids_set
-    ]
-
-    # No need for ACL here because the doc ids were validated beforehand
-    filters = IndexFilters(access_control_list=None)
-
-    retrieved_chunks = document_index.id_based_retrieval(
-        chunk_requests=chunk_requests,
-        filters=filters,
-    )
-
-    if not retrieved_chunks:
-        return []
-
-    # Group chunks by document ID
-    chunks_by_doc_id: dict[str, list[InferenceChunk]] = {}
-    for chunk in retrieved_chunks:
-        chunks_by_doc_id.setdefault(chunk.document_id, []).append(chunk)
-
-    inference_sections = [
-        section
-        for chunks in chunks_by_doc_id.values()
-        if chunks
-        and (
-            section := inference_section_from_chunks(
-                # The scores will always be 0 because the fetching by id gives back
-                # no search scores. This is not needed though if the user is explicitly
-                # selecting a document.
-                center_chunk=chunks[0],
-                chunks=chunks,
-            )
-        )
-    ]
-
-    return inference_sections

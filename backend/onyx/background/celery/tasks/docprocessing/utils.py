@@ -52,7 +52,6 @@ class IndexingCallbackBase(IndexingHeartbeatInterface):
         self.last_lock_reacquire: datetime = datetime.now(timezone.utc)
         self.last_lock_monotonic = time.monotonic()
 
-        self.last_parent_check = time.monotonic()
         self.start_monotonic = time.monotonic()
         self.timeout_seconds = timeout_seconds
 
