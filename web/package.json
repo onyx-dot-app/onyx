@@ -136,9 +136,7 @@
     "stats.js": "^0.17.0",
     "storybook": "10.5.0",
     "tailwindcss": "^4.3.3",
-    "ts-unused-exports": "^11.0.1",
-    "typescript": "^5.9.3",
-    "typescript-7": "npm:typescript@^7.0.2",
+    "typescript": "7.1.0-dev.20260916.1",
     "whatwg-fetch": "^3.6.20"
   },
   "overrides": {
