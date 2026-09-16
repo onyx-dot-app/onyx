@@ -678,9 +678,16 @@ def _create_file_tool_metadata_message(
 
     Preference order is read_file, then internal search, then the python tool.
     read_file pages through a file directly; search retrieves from the indexed
-    copy; the python tool receives the file itself (``chat_files_for_tools`` is
-    assembled from the whole chat chain, independent of this truncation) and
-    addresses it by filename.
+    copy; the python tool is handed the files themselves, so prompt truncation
+    does not take them away from it.
+
+    The python tier applies only when every listed file actually reached
+    ``chat_files_for_tools`` (see ``FileToolMetadata.staged_for_tools``) —
+    summary-truncated files are listed for the LLM but never staged, so naming
+    python for them would send the model after bytes it does not have. The
+    notice also stops short of promising a path, because PythonTool normalizes
+    and de-duplicates filenames at staging time and applies its own count and
+    byte caps.
 
     An unreported tool set names no tool. Steps that offer none are common (a
     deep-research final report runs with no tools), and under-promising is the
@@ -706,11 +713,14 @@ def _create_file_tool_metadata_message(
             "contents are indexed — use internal search to find the relevant "
             "passages. Do not guess them or search the web for them:"
         ]
-    elif PythonTool.NAME in offered:
+    elif PythonTool.NAME in offered and all(
+        meta.staged_for_tools for meta in file_metadata
+    ):
         lines = [
             "These files are attached but too large to include in full. The "
-            "python tool receives them as files — read them there by filename. "
-            "Do not guess their contents or search the web for them:"
+            "python tool receives them — read them there, listing the working "
+            "directory if a name does not resolve. Do not guess their contents "
+            "or search the web for them:"
         ]
     else:
         lines = [

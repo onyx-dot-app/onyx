@@ -842,6 +842,10 @@ def build_chat_turn(
                     # We don't know the exact size without loading the file,
                     # but 0 signals "unknown" to the LLM.
                     approx_char_count=0,
+                    # These messages are filtered out of chat_history just
+                    # below, so load_all_chat_files never sees them and the
+                    # bytes never reach chat_files_for_tools.
+                    staged_for_tools=False,
                 )
         # Filter chat_history to only messages after the cutoff
         chat_history = [m for m in chat_history if m.id > cutoff_id]
