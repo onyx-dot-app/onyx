@@ -450,7 +450,7 @@ def test_cancelled_capacity_wait_does_not_start_operation() -> None:
             services.capacity.release()
             with pytest.raises(AgentCancelled):
                 await asyncio.wait_for(waiting, timeout=1)
-            assert await services.wait_idle(timeout=1)
+            assert await services.tracker.wait_idle(timeout=1)
             assert not started.is_set()
         finally:
             signal.cancel()

@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from onyx.agents.concurrency import ExecutionServices
+from onyx.agents.concurrency import ExecutionWork
 from onyx.agents.coordination import AgentCoordinator, AgentInfo, RunCoordination
 from onyx.agents.events import AgentEvent, MessageEndEvent
 from onyx.agents.items import messages_from_items
@@ -292,11 +292,11 @@ def test_immediate_restart_waits_for_terminal_child_delivery_to_drain() -> None:
         def bind(
             self,
             run: Run,
-            services: ExecutionServices,
+            work: ExecutionWork,
             publish: Callable[[AgentEvent], None],
             cancellation: CancellationSignal,
         ) -> RunCoordination:
-            binding = super().bind(run, services, publish, cancellation)
+            binding = super().bind(run, work, publish, cancellation)
             if run.agent_id == child.id:
 
                 def observe(_event: AgentEvent) -> None:
