@@ -7,12 +7,13 @@ import (
 	"text/tabwriter"
 )
 
-// WriteReport renders a report as an aligned table. Rows with no floor yet
-// show a blank floor column rather than a misleading zero.
+// WriteReport renders a report as an aligned table. Rows with no reference
+// value yet show a blank column rather than a misleading zero.
 func WriteReport(w io.Writer, report *Report, kind Kind) error {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 
-	if _, err := fmt.Fprintf(tw, "%s\tCOVERAGE\tFLOOR\t\n", strings.ToUpper(kind.Unit)); err != nil {
+	if _, err := fmt.Fprintf(tw, "%s\tCOVERAGE\t%s\t\n",
+		strings.ToUpper(kind.Unit), strings.ToUpper(referenceColumn(report))); err != nil {
 		return err
 	}
 	for _, pkg := range report.Packages {
@@ -32,23 +33,23 @@ func WriteReport(w io.Writer, report *Report, kind Kind) error {
 
 func writeRow(w io.Writer, result Result) error {
 	percent := fmt.Sprintf("%.1f%%", result.Percent)
-	floor := fmt.Sprintf("%.1f%%", result.Floor)
+	reference := fmt.Sprintf("%.1f%%", result.Reference)
 	note := ""
 
 	switch result.Status {
 	case StatusNew:
-		floor = "-"
+		reference = "-"
 		note = "new"
 	case StatusRemoved:
 		percent = "-"
 		note = "removed"
 	case StatusRegressed:
-		note = fmt.Sprintf("REGRESSED by %.1f", result.Floor-result.Percent)
+		note = fmt.Sprintf("REGRESSED by %.1f", result.Reference-result.Percent)
 	case StatusImproved:
-		note = fmt.Sprintf("+%.1f", result.Percent-result.Floor)
+		note = fmt.Sprintf("+%.1f", result.Percent-result.Reference)
 	}
 
-	_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", result.Package, percent, floor, note)
+	_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", result.Package, percent, reference, note)
 	return err
 }
 
@@ -60,6 +61,6 @@ func writeTotalRow(w io.Writer, result Result) error {
 		return err
 	}
 	_, err := fmt.Fprintf(w, "%s\t%.1f%%\t%.1f%%\t%+.1f\n",
-		result.Package, result.Percent, result.Floor, result.Percent-result.Floor)
+		result.Package, result.Percent, result.Reference, result.Percent-result.Reference)
 	return err
 }

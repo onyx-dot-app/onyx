@@ -60,97 +60,13 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
         run: |
           set -eo pipefail
-          TAG="${GITHUB_REF_NAME}"
-          # Sanitize tag name by replacing slashes with hyphens (for Docker tag compatibility)
-          SANITIZED_TAG=$(echo "$TAG" | tr '/' '-')
-          SHORT_SHA="${GITHUB_SHA::7}"
-
-          # Initialize all flags to false
-          IS_CLOUD=false
-          IS_NIGHTLY=false
-          IS_VERSION_TAG=false
-          IS_STABLE=false
-          IS_BETA=false
-          IS_BETA_STANDALONE=false
-          IS_LATEST=false
-          IS_PROD_TAG=false
-          IS_TEST_RUN=false
-          BUILD_DESKTOP=false
-          BUILD_WEB=false
-          BUILD_WEB_CLOUD=false
-          BUILD_BACKEND=true
-          BUILD_MODEL_SERVER=true
-
-          # Determine tag type based on pattern matching (do regex checks once)
-          if [[ "$TAG" == *cloud* ]]; then
-            IS_CLOUD=true
-          fi
-          if [[ "$TAG" == nightly* ]]; then
-            IS_NIGHTLY=true
-          fi
-          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-            IS_VERSION_TAG=true
-          fi
-          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            IS_STABLE=true
-          fi
-          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-beta(\.[0-9]+)?$ ]]; then
-            IS_BETA=true
-          fi
-
-          # Determine what to build based on tag type
-          if [[ "$IS_CLOUD" == "true" ]]; then
-            BUILD_WEB_CLOUD=true
-          else
-            BUILD_WEB=true
-            # Only build desktop for semver tags (excluding beta)
-            if [[ "$IS_VERSION_TAG" == "true" ]] && [[ "$IS_BETA" != "true" ]]; then
-              BUILD_DESKTOP=true
-            fi
-          fi
-
-          # Standalone version checks (for backend/model-server - version excluding cloud tags)
-          if [[ "$IS_BETA" == "true" ]] && [[ "$IS_CLOUD" != "true" ]]; then
-            IS_BETA_STANDALONE=true
-          fi
-
-          # Determine if this tag should get the "latest" Docker tag.
-          # Only the highest semver stable tag (vX.Y.Z exactly) gets "latest".
-          if [[ "$IS_STABLE" == "true" ]]; then
-            HIGHEST_STABLE=$(uv run --no-sync ods latest-stable-tag) || {
-              echo "::error::Failed to determine highest stable tag via 'ods latest-stable-tag'"
-              exit 1
-            }
-            if [[ "$TAG" == "$HIGHEST_STABLE" ]]; then
-              IS_LATEST=true
-            fi
-          fi
-
-          # Determine if this is a production tag
-          # Production tags are: version tags (v1.2.3*) or nightly tags
-          if [[ "$IS_VERSION_TAG" == "true" ]] || [[ "$IS_NIGHTLY" == "true" ]]; then
-            IS_PROD_TAG=true
-          fi
-
-          # Determine if this is a test run (workflow_dispatch on non-production ref)
-          if [[ "$EVENT_NAME" == "workflow_dispatch" ]] && [[ "$IS_PROD_TAG" != "true" ]]; then
-            IS_TEST_RUN=true
-          fi
-          {
-            echo "build-desktop=$BUILD_DESKTOP"
-            echo "build-web=$BUILD_WEB"
-            echo "build-web-cloud=$BUILD_WEB_CLOUD"
-            echo "build-backend=$BUILD_BACKEND"
-            echo "build-model-server=$BUILD_MODEL_SERVER"
-            echo "is-cloud-tag=$IS_CLOUD"
-            echo "is-beta=$IS_BETA"
-            echo "is-beta-standalone=$IS_BETA_STANDALONE"
-            echo "is-stable=$IS_STABLE"
-            echo "is-latest=$IS_LATEST"
-            echo "is-test-run=$IS_TEST_RUN"
-            echo "sanitized-tag=$SANITIZED_TAG"
-            echo "short-sha=$SHORT_SHA"
-          } >> "$GITHUB_OUTPUT"
+          # `ods release classify` owns the routing rules; see
+          # tools/ods/internal/release/classify.go. The checkout above fetches
+          # all tags, which the "latest" decision needs.
+          uv run --no-sync ods release classify \
+            --ref "${GITHUB_REF_NAME}" \
+            --sha "${GITHUB_SHA}" \
+            --event "${EVENT_NAME}" >> "$GITHUB_OUTPUT"
 
   # Block the release when dependencies carry unignored critical vulnerabilities.
   # Runs the same `ods audit` gate used on PRs and nightly. Always runs (no skip

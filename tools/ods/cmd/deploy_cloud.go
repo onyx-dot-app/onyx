@@ -123,7 +123,7 @@ func deployCloud(opts *DeployCloudOptions) (string, error) {
 		log.Warnf("Could not fetch cloud tags (using local tags): %v", err)
 	}
 
-	sha, err := release.ResolveCommit(opts.Ref)
+	sha, err := git.ResolveCommit(opts.Ref)
 	if err != nil {
 		return "", err
 	}

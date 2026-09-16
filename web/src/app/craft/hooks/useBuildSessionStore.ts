@@ -1141,10 +1141,11 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const session = sessions.get(currentSessionId);
       if (session) {
         const closing = session.outputPanelOpen;
-        updateSessionData(currentSessionId, {
+        const update: Partial<BuildSessionData> = {
           outputPanelOpen: !session.outputPanelOpen,
-          ...(closing ? { panelManuallyDismissed: true } : {}),
-        });
+        };
+        if (closing) update.panelManuallyDismissed = true;
+        updateSessionData(currentSessionId, update);
       }
     } else {
       // No session - toggle temporary state
@@ -1943,7 +1944,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       // Using a counter ensures each edit triggers a new refresh
       get().updateSessionData(sessionId, {
         webappNeedsRefresh: (session.webappNeedsRefresh || 0) + 1,
-        ...(session.outputPanelOpen ? {} : { outputPanelOpen: true }),
+        outputPanelOpen: true,
       });
     }
   },

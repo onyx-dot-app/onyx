@@ -17,7 +17,7 @@ func TestWriteMarkdown_showsEachStatus(t *testing.T) {
 	}
 
 	var out strings.Builder
-	if err := WriteMarkdown(&out, "tools/ods", Compare(profile, baseline, DefaultTolerance), GoTests); err != nil {
+	if err := WriteMarkdown(&out, "tools/ods", Compare(profile, floorReference(baseline), DefaultTolerance), GoTests); err != nil {
 		t.Fatalf("failed to write the markdown: %v", err)
 	}
 	got := out.String()
@@ -43,7 +43,7 @@ func TestWriteMarkdown_omitsUnchangedPackages(t *testing.T) {
 	baseline := &Baseline{Total: 50, Packages: map[string]float64{"cmd": 50, "internal/audit": 50}}
 
 	var out strings.Builder
-	if err := WriteMarkdown(&out, "tools/ods", Compare(profile, baseline, DefaultTolerance), GoTests); err != nil {
+	if err := WriteMarkdown(&out, "tools/ods", Compare(profile, floorReference(baseline), DefaultTolerance), GoTests); err != nil {
 		t.Fatalf("failed to write the markdown: %v", err)
 	}
 
@@ -60,7 +60,7 @@ func TestWriteMarkdown_holdingBaselineSaysSo(t *testing.T) {
 	baseline := &Baseline{Total: 50, Packages: map[string]float64{"cmd": 50}}
 
 	var out strings.Builder
-	if err := WriteMarkdown(&out, "tools/ods", Compare(profile, baseline, DefaultTolerance), GoTests); err != nil {
+	if err := WriteMarkdown(&out, "tools/ods", Compare(profile, floorReference(baseline), DefaultTolerance), GoTests); err != nil {
 		t.Fatalf("failed to write the markdown: %v", err)
 	}
 
@@ -98,7 +98,7 @@ func TestWriteMarkdown_typeScriptWording(t *testing.T) {
 	baseline := &Baseline{Total: 50, Packages: map[string]float64{"src/app": 50, "src/lib": 50}}
 
 	var out strings.Builder
-	if err := WriteMarkdown(&out, "web", Compare(profile, baseline, TypeScript.DefaultTolerance), TypeScript); err != nil {
+	if err := WriteMarkdown(&out, "web", Compare(profile, floorReference(baseline), TypeScript.DefaultTolerance), TypeScript); err != nil {
 		t.Fatalf("failed to write the markdown: %v", err)
 	}
 
@@ -109,5 +109,44 @@ func TestWriteMarkdown_typeScriptWording(t *testing.T) {
 		"| **total** | **33.3%** | 50.0% | -16.7 |\n"
 	if out.String() != want {
 		t.Errorf("expected:\n%s\ngot:\n%s", want, out.String())
+	}
+}
+
+func TestWriteMarkdown_againstABase(t *testing.T) {
+	profile := profileOf(map[string][2]int{"cmd": {1, 2}, "internal/audit": {3, 4}})
+	reference := baseReference(map[string][2]int{"cmd": {1, 2}, "internal/audit": {1, 2}})
+
+	var out strings.Builder
+	if err := WriteMarkdown(&out, "tools/ods", Compare(profile, reference, DefaultTolerance), GoTests); err != nil {
+		t.Fatalf("failed to write the markdown: %v", err)
+	}
+
+	for _, want := range []string{
+		MarkerChanged,
+		"| Package | Coverage | Base | Change |",
+		"Packages: 1 improved. Total coverage is 66.7% (+16.7 against base `abc1234`).",
+		"| internal/audit | 75.0% | 50.0% | +25.0 |",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("expected %q in:\n%s", want, out.String())
+		}
+	}
+}
+
+// A module the change did not touch must read as unchanged, so the PR comment
+// can leave it out.
+func TestWriteMarkdown_holdingAgainstABaseSaysSo(t *testing.T) {
+	profile := profileOf(map[string][2]int{"cmd": {1, 2}})
+	reference := baseReference(map[string][2]int{"cmd": {1, 2}})
+
+	var out strings.Builder
+	if err := WriteMarkdown(&out, "tools/ods", Compare(profile, reference, DefaultTolerance), GoTests); err != nil {
+		t.Fatalf("failed to write the markdown: %v", err)
+	}
+
+	for _, want := range []string{MarkerUnchanged, "No package moved against base `abc1234`."} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("expected %q in:\n%s", want, out.String())
+		}
 	}
 }

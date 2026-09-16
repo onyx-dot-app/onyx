@@ -28,6 +28,7 @@ import {
 } from "@/lib/languageModels/cache";
 import { deleteLlmProvider } from "@/lib/languageModels/svc";
 import { buildLlmOptions, groupLlmOptions } from "@/lib/languageModels/options";
+import { findProviderOwningModelConfig } from "@/lib/languageModels/utils";
 import { useSettings } from "@/lib/settings/hooks";
 import { updateAdminSettings } from "@/lib/settings/svc";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -474,10 +475,15 @@ export default function LanguageModelsPage() {
                 <ModelSelector
                   value={defaultModelConfigId}
                   onChange={(opt) => {
-                    const provider = existingLlmProviders?.find(
-                      (p) =>
-                        p.provider === opt.provider &&
-                        (p.name === opt.name || (!p.name && !opt.name))
+                    // Keyed on the model configuration id. Matching on provider
+                    // type plus display name picks the first of several
+                    // same-named providers — and nameless providers are the
+                    // common case, so `!p.name && !opt.name` matched any of
+                    // them. The backend accepts the wrong provider whenever it
+                    // also hosts a model of that name, so this failed silently.
+                    const provider = findProviderOwningModelConfig(
+                      existingLlmProviders,
+                      opt.modelConfigurationId
                     );
                     if (provider) {
                       void handleDefaultModelChange(

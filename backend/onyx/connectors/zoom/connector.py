@@ -12,7 +12,7 @@ from pydantic import Field
 
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import (
-    CheckpointedConnector,
+    CheckpointedConnectorWithPermSync,
     CheckpointOutput,
     SecondsSinceUnixEpoch,
 )
@@ -33,9 +33,17 @@ class ZoomConnectorCheckpoint(ConnectorCheckpoint):
     recordings: RecordingsState = Field(default_factory=RecordingsState)
 
 
-class ZoomConnector(CheckpointedConnector[ZoomConnectorCheckpoint]):
-    def __init__(self, meeting_ids: list[str] | None = None) -> None:
-        self._sources = build_discovery_sources(meeting_ids)
+class ZoomConnector(CheckpointedConnectorWithPermSync[ZoomConnectorCheckpoint]):
+    def __init__(
+        self,
+        meeting_ids: list[str] | None = None,
+        webinar_ids: list[str] | None = None,
+        host_emails: list[str] | None = None,
+        group_id: str | None = None,
+    ) -> None:
+        self._sources = build_discovery_sources(
+            meeting_ids, webinar_ids, host_emails, group_id
+        )
         self.client: ZoomClient | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
@@ -71,6 +79,27 @@ class ZoomConnector(CheckpointedConnector[ZoomConnectorCheckpoint]):
         end: SecondsSinceUnixEpoch,
         checkpoint: ZoomConnectorCheckpoint,
     ) -> CheckpointOutput[ZoomConnectorCheckpoint]:
+        # Don't collapse this into the method below: a connector that is not
+        # permission synced would then pay two or three extra Zoom calls per
+        # document for an access list it cannot use.
+        return self._advance(start, end, checkpoint, include_access=False)
+
+    def load_from_checkpoint_with_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: ZoomConnectorCheckpoint,
+    ) -> CheckpointOutput[ZoomConnectorCheckpoint]:
+        return self._advance(start, end, checkpoint, include_access=True)
+
+    def _advance(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: ZoomConnectorCheckpoint,
+        *,
+        include_access: bool,
+    ) -> CheckpointOutput[ZoomConnectorCheckpoint]:
         if self.client is None:
             raise ConnectorMissingCredentialError("Zoom")
 
@@ -79,7 +108,9 @@ class ZoomConnector(CheckpointedConnector[ZoomConnectorCheckpoint]):
 
         if state.work_index < len(state.pending_work):
             processed = process_occurrence(
-                self.client, state.pending_work[state.work_index]
+                self.client,
+                state.pending_work[state.work_index],
+                include_access=include_access,
             )
             if processed is not None:
                 yield processed

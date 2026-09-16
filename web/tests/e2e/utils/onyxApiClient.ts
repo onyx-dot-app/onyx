@@ -539,6 +539,41 @@ export class OnyxApiClient {
     return responseData.id;
   }
 
+  async createAgentRestrictedProvider(
+    providerName: string,
+    agentIds: number[]
+  ): Promise<number> {
+    const response = await this.request.put(
+      `${this.baseUrl}/admin/llm/provider?is_creation=true`,
+      {
+        data: {
+          name: providerName,
+          provider: "openai",
+          api_key: E2E_LLM_PROVIDER_API_KEY,
+          is_public: false,
+          groups: [],
+          personas: agentIds,
+          model_configurations: [
+            {
+              name: "gpt-4o",
+              custom_display_name: providerName,
+              is_visible: true,
+            },
+          ],
+        },
+      }
+    );
+
+    const responseData = await this.handleResponse<{ id: number }>(
+      response,
+      "Failed to create agent-restricted provider"
+    );
+    this.log(
+      `Created agent-restricted LLM provider: ${providerName} (ID: ${responseData.id}, Agents: ${agentIds.join(", ")})`
+    );
+    return responseData.id;
+  }
+
   /**
    * Creates a public LLM provider and returns its ID.
    *

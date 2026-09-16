@@ -212,12 +212,14 @@ def read_text_file(
     return file_content_raw, metadata
 
 
-def pdf_to_text(file: IO[Any], pdf_pass: str | None = None) -> str:
+def pdf_to_text(
+    file: IO[Any], pdf_pass: str | None = None, isolate_pdfium: bool = True
+) -> str:
     """
     Extract text from a PDF. For embedded images, a more complex approach is needed.
     This is a minimal approach returning text only.
     """
-    text, _, _ = read_pdf_file(file, pdf_pass)
+    text, _, _ = read_pdf_file(file, pdf_pass, isolate_pdfium=isolate_pdfium)
     return text
 
 
@@ -253,9 +255,14 @@ def read_pdf_file(
     pdf_pass: str | None = None,
     extract_images: bool = False,
     image_callback: Callable[[bytes, str], None] | None = None,
+    isolate_pdfium: bool = True,
 ) -> tuple[str, dict[str, Any], Sequence[tuple[bytes, str]]]:
     """
     Returns the text, basic PDF metadata, and optionally extracted images.
+
+    ``isolate_pdfium=False`` is for a caller that is itself a child process
+    under a deadline: a child of a child is orphaned when the outer one is
+    killed, so PDFium runs in the caller's process instead.
     """
     from pypdf import PdfReader
     from pypdf.errors import PdfStreamError
@@ -305,12 +312,15 @@ def read_pdf_file(
         # PDFium can hard-abort or hang on a malformed PDF (uncatchable in-process),
         # so run it isolated; a crash, timeout, or PdfiumError falls back to pypdf.
         try:
-            text = run_in_isolated_process(
-                _extract_pdf_text_pdfium,
-                file_bytes,
-                decrypt_password,
-                timeout=PDF_TEXT_EXTRACTION_TIMEOUT_SECONDS,
-            )
+            if isolate_pdfium:
+                text = run_in_isolated_process(
+                    _extract_pdf_text_pdfium,
+                    file_bytes,
+                    decrypt_password,
+                    timeout=PDF_TEXT_EXTRACTION_TIMEOUT_SECONDS,
+                )
+            else:
+                text = _extract_pdf_text_pdfium(file_bytes, decrypt_password)
         except (PdfiumError, IsolatedProcessError) as pdfium_err:
             logger.warning(
                 "PDFium text extraction failed (%s); falling back to pypdf",
@@ -763,16 +773,6 @@ def extract_file_text(
     NOTE: Ignoring seems to be defined as returning an empty string for files it can't
     handle (such as images).
     """
-    extension_to_function: dict[str, Callable[[IO[Any]], str]] = {
-        ".pdf": pdf_to_text,
-        ".docx": lambda f: read_docx_file(f, file_name)[0],  # no images
-        ".pptx": lambda f: pptx_to_text(f, file_name),
-        ".xlsx": lambda f: xlsx_to_text(f, file_name),
-        ".eml": eml_to_text,
-        ".epub": epub_to_text,
-        ".html": parse_html_page_basic,
-    }
-
     try:
         if get_unstructured_api_key():
             try:
@@ -782,20 +782,7 @@ def extract_file_text(
                     "Failed to process with Unstructured: %s. Falling back to normal processing.",
                     str(unstructured_error),
                 )
-        if extension is None:
-            extension = get_file_ext(file_name)
-
-        if extension in OnyxFileExtensions.TEXT_AND_DOCUMENT_EXTENSIONS:
-            func = extension_to_function.get(extension, file_io_to_text)
-            file.seek(0)
-            return func(file)
-
-        # If unknown extension, maybe it's a text file
-        file.seek(0)
-        if is_text_file(file):
-            return file_io_to_text(file)
-
-        raise ValueError("Unknown file extension or not recognized as text data")
+        return extract_file_text_locally(file, file_name, extension)
 
     except Exception as e:
         if break_on_unprocessable:
@@ -804,6 +791,45 @@ def extract_file_text(
             ) from e
         logger.warning("Failed to process file %s: %s", file_name or "Unknown", str(e))
         return ""
+
+
+def extract_file_text_locally(
+    file: IO[Any],
+    file_name: str,
+    extension: str | None = None,
+    isolate_pdfium: bool = True,
+) -> str:
+    """Text by extension from the in-process parsers only.
+
+    Never reaches the database or Redis (the Unstructured key lives there), so
+    it can run in a child process that has neither. Raises on a file no parser
+    accepts. See ``read_pdf_file`` for ``isolate_pdfium``.
+    """
+    extension_to_function: dict[str, Callable[[IO[Any]], str]] = {
+        ".pdf": lambda f: pdf_to_text(f, isolate_pdfium=isolate_pdfium),
+        ".docx": lambda f: read_docx_file(f, file_name)[0],  # no images
+        ".pptx": lambda f: pptx_to_text(f, file_name),
+        ".xlsx": lambda f: xlsx_to_text(f, file_name),
+        # openpyxl reads macro-enabled workbooks like any other.
+        ".xlsm": lambda f: xlsx_to_text(f, file_name),
+        ".eml": eml_to_text,
+        ".epub": epub_to_text,
+        ".html": parse_html_page_basic,
+    }
+    if extension is None:
+        extension = get_file_ext(file_name)
+
+    if extension in OnyxFileExtensions.TEXT_AND_DOCUMENT_EXTENSIONS:
+        func = extension_to_function.get(extension, file_io_to_text)
+        file.seek(0)
+        return func(file)
+
+    # If unknown extension, maybe it's a text file
+    file.seek(0)
+    if is_text_file(file):
+        return file_io_to_text(file)
+
+    raise ValueError("Unknown file extension or not recognized as text data")
 
 
 class ExtractionResult(NamedTuple):
