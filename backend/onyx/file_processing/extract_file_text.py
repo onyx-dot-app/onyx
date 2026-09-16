@@ -7,6 +7,7 @@ import re
 import tempfile
 import zipfile
 from collections.abc import Callable, Iterator, Sequence
+from email.message import Message
 from email.parser import Parser as EmailParser
 from io import BytesIO
 from pathlib import Path
@@ -710,6 +711,37 @@ def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
     )
 
 
+# A body is stored in the file the way it was transferred, and only these two
+# transfer encodings actually change the bytes.
+_ENCODED_TRANSFER_ENCODINGS = frozenset({"base64", "quoted-printable"})
+
+
+def _decode_text_payload(part: Message, payload: str) -> str:
+    """Undo the transfer encoding a text part was stored with.
+
+    ``get_payload()`` hands back the part exactly as it sits in the file, so a
+    base64 body reaches the index as base64 and a quoted-printable body keeps
+    its ``=0D=0A`` and ``=C3=BC`` escapes. Parts stored as 7bit or 8bit are
+    already text and are left alone: for those ``get_payload(decode=True)``
+    would first push the string back through ``raw-unicode-escape``, which is
+    lossy for anything outside Latin-1.
+    """
+    transfer_encoding = str(part.get("content-transfer-encoding", "")).strip().lower()
+    if transfer_encoding not in _ENCODED_TRANSFER_ENCODINGS:
+        return payload
+
+    decoded = part.get_payload(decode=True)
+    if not isinstance(decoded, bytes):
+        return payload
+
+    charset = part.get_content_charset() or "utf-8"
+    try:
+        return decoded.decode(charset, errors="replace")
+    except LookupError:
+        logger.warning("Unknown charset in EML part: %s", charset)
+        return decoded.decode("utf-8", errors="replace")
+
+
 def eml_to_text(file: IO[Any]) -> str:
     encoding = detect_encoding(file)
     text_file = io.TextIOWrapper(file, encoding=encoding)
@@ -736,7 +768,7 @@ def eml_to_text(file: IO[Any]) -> str:
         if part.get_content_type().startswith("text/plain"):
             payload = part.get_payload()
             if isinstance(payload, str):
-                text_content.append(payload)
+                text_content.append(_decode_text_payload(part, payload))
             elif isinstance(payload, list):
                 text_content.extend(item for item in payload if isinstance(item, str))
             else:
