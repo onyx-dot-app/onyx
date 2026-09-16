@@ -25,6 +25,13 @@ import { ValidSources } from "@/lib/types";
 export function useAvailableSources(): {
   availableSources: ValidSources[];
   isLoading: boolean;
+  /**
+   * Whether the roster is complete: every constituent fetch holds a
+   * snapshot, stale allowed. A nonempty array is no proof of this — one
+   * constituent can fail its first load while the other returns — so
+   * callers resolving a selection must gate on this, not on length.
+   */
+  settled: boolean;
   error: unknown;
 } {
   // `vectorDbEnabled` reads false while settings load, which would make
@@ -34,6 +41,7 @@ export function useAvailableSources(): {
   const {
     ccPairs,
     isLoading: ccPairsLoading,
+    hasLoaded: ccPairsHasLoaded,
     error: ccPairsError,
   } = useCCPairs(vectorDbEnabled);
   const {
@@ -53,6 +61,8 @@ export function useAvailableSources(): {
   return {
     availableSources,
     isLoading: settingsLoading || ccPairsLoading || federatedLoading,
+    settled:
+      !settingsLoading && ccPairsHasLoaded && federatedConnectors !== undefined,
     error: ccPairsError ?? federatedError,
   };
 }

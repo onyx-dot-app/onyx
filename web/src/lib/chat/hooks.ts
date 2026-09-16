@@ -64,7 +64,7 @@ export function useSendChatMessageFromURL({
   const {
     availableSources,
     isLoading: sourcesLoading,
-    error: sourcesError,
+    settled: sourcesSettled,
   } = useAvailableSources();
   const { documentSets, isLoading: documentSetsLoading } = useDocumentSets();
   const { tags, isLoading: tagsLoading } = useTags();
@@ -149,7 +149,7 @@ export function useSendChatMessageFromURL({
     // scope, where one wide send does not.
     toolConfiguration.setFilters((current) => ({
       selectedSources:
-        sourceNames.length > 0 && !sourcesError
+        sourceNames.length > 0 && sourcesSettled
           ? normalizeSourceSelection(
               configuredSources
                 .filter((source) => sourceNames.includes(source.internalName))
@@ -180,7 +180,7 @@ export function useSendChatMessageFromURL({
   }, [
     queuedQuery,
     sourcesLoading,
-    sourcesError,
+    sourcesSettled,
     documentSetsLoading,
     tagsLoading,
     configuredSources,

@@ -61,6 +61,7 @@ import {
   updateCurrentMessageFIFO,
 } from "@/app/app/services/currentMessageFIFO";
 import {
+  agentDeclaresOwnSources,
   buildFilters,
   effectiveAvailableSourcesFor,
   selectedSourcesFrom,
@@ -155,23 +156,15 @@ export default function useChatController({
   resetInputBar,
 }: UseChatControllerProps) {
   // The chat's search filters ride the tool configuration, resolved against
-  // the sources the active agent can reach. Deselections are only resolved
-  // once the source fetch has settled successfully: resolving against a
-  // partial or failed list would narrow the send to an accidental `[]`,
-  // so an unresolvable selection sends no source filter instead.
-  const {
-    availableSources,
-    isLoading: sourcesLoading,
-    error: sourcesError,
-  } = useAvailableSources();
-  // A failed revalidation keeps the stale roster usable: dropping an explicit
-  // restriction and sending unfiltered would be worse than resolving against
-  // slightly old data. Only a fetch that never produced anything degrades.
-  const sourcesSettled =
-    !sourcesLoading && (!sourcesError || availableSources.length > 0);
+  // the sources the active agent can reach. An explicit selection resolves
+  // only against a complete roster — `settled` allows stale data (a failed
+  // revalidation must not drop a restriction) but never a partial first
+  // load, which would narrow the send wrongly. An agent declaring its own
+  // knowledge_sources carries its complete roster and never waits.
+  const { availableSources, settled: sourcesSettled } = useAvailableSources();
   const selectedSearchSources = useMemo<SourceMetadata[] | null>(
     () =>
-      activeAgent && sourcesSettled
+      activeAgent && (sourcesSettled || agentDeclaresOwnSources(activeAgent))
         ? selectedSourcesFrom(
             toolConfiguration.filters,
             getConfiguredSources(

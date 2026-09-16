@@ -39,13 +39,25 @@ export function effectiveAvailableSourcesFor(
   agent: MinimalAgent,
   availableSources: ValidSources[]
 ): ValidSources[] {
-  if (isAssistant(agent)) return availableSources;
+  if (agentDeclaresOwnSources(agent)) {
+    return (agent.knowledge_sources ?? []) as ValidSources[];
+  }
+  return availableSources;
+}
+
+/**
+ * Whether this agent's `knowledge_sources` is its complete roster. False for
+ * assistants and for custom agents declaring nothing while carrying the
+ * search tool, where "nothing declared" means "everything accessible".
+ */
+export function agentDeclaresOwnSources(agent: MinimalAgent): boolean {
+  if (isAssistant(agent)) return false;
   const declared = agent.knowledge_sources ?? [];
+  if (declared.length > 0) return true;
   const hasSearchTool = agent.tools.some(
     (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
   );
-  if (declared.length === 0 && hasSearchTool) return availableSources;
-  return declared as ValidSources[];
+  return !hasSearchTool;
 }
 
 /**
