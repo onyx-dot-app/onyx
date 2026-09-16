@@ -68,6 +68,7 @@ export enum LLMProviderName {
   OPENAI_COMPATIBLE = "openai_compatible",
   NEBIUS_TOKENFACTORY = "nebius_tokenfactory",
   PORTKEY = "portkey",
+  CHEAPERINFERENCE = "cheaperinference",
   CUSTOM = "custom",
 }
 
@@ -271,6 +272,21 @@ export interface PortkeyFetchParams {
 }
 
 export interface PortkeyModelResponse {
+  name: string;
+  display_name: string;
+  max_input_tokens: number | null;
+  supports_image_input: boolean;
+  supports_reasoning: boolean;
+}
+
+export interface CheaperInferenceFetchParams {
+  api_base?: string;
+  api_key?: string;
+  provider_id?: number;
+  signal?: AbortSignal;
+}
+
+export interface CheaperInferenceModelResponse {
   name: string;
   display_name: string;
   max_input_tokens: number | null;

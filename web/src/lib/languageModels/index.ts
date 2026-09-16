@@ -39,6 +39,7 @@ import BifrostModal from "@/sections/modals/languageModels/BifrostModal";
 import OpenAICompatibleModal from "@/sections/modals/languageModels/OpenAICompatibleModal";
 import NebiusTokenfactoryModal from "@/sections/modals/languageModels/NebiusTokenfactoryModal";
 import PortkeyModal from "@/sections/modals/languageModels/PortkeyModal";
+import CheaperInferenceModal from "@/sections/modals/languageModels/CheaperInferenceModal";
 
 // ─── Text (LLM) providers ────────────────────────────────────────────────────
 
@@ -134,6 +135,14 @@ const PROVIDERS: Record<string, ProviderEntry> = {
     companyName: "Portkey",
     Modal: PortkeyModal,
   },
+  [LLMProviderName.CHEAPERINFERENCE]: {
+    // No brand logo asset yet; the generic plug mark is the fallback that
+    // OpenAI-compatible endpoints already use.
+    icon: SvgPlug,
+    productName: "Cheaper Inference",
+    companyName: "Cheaper Inference",
+    Modal: CheaperInferenceModal,
+  },
   [LLMProviderName.CUSTOM]: {
     icon: SvgServer,
     productName: "Custom Models",
@@ -197,6 +206,7 @@ export const AGGREGATOR_PROVIDERS = new Set([
   LLMProviderName.OPENAI_COMPATIBLE,
   LLMProviderName.NEBIUS_TOKENFACTORY,
   LLMProviderName.PORTKEY,
+  LLMProviderName.CHEAPERINFERENCE,
   LLMProviderName.VERTEX_AI,
 ]);
 
@@ -215,6 +225,7 @@ const MODEL_ICON_MAP: Record<string, IconFunctionComponent> = {
   [LLMProviderName.OPENAI_COMPATIBLE]: SvgPlug,
   [LLMProviderName.NEBIUS_TOKENFACTORY]: SvgNebius,
   [LLMProviderName.PORTKEY]: SvgPortkey,
+  [LLMProviderName.CHEAPERINFERENCE]: SvgPlug,
 
   amazon: SvgAws,
   gpt: SvgOpenai,
