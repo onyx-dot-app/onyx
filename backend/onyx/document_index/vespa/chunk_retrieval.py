@@ -26,6 +26,7 @@ from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
 from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
     build_vespa_filters,
     build_vespa_id_based_retrieval_yql,
+    escape_vespa_string,
 )
 from onyx.document_index.vespa_constants import (
     ACCESS_CONTROL_LIST,
@@ -199,7 +200,8 @@ def get_chunks_via_visit_api(
         field_set = None
 
     # build filters
-    selection = f"{index_name}.document_id=='{chunk_request.document_id}'"
+    document_id = escape_vespa_string(chunk_request.document_id)
+    selection = f'{index_name}.document_id=="{document_id}"'
 
     if chunk_request.is_capped:
         selection += f" and {index_name}.chunk_id>={chunk_request.min_chunk_ind or 0}"
@@ -210,7 +212,8 @@ def get_chunks_via_visit_api(
     # enforcing tenant_id through a == condition
     if MULTI_TENANT:
         if filters.tenant_id:
-            selection += f" and {index_name}.tenant_id=='{filters.tenant_id}'"
+            tenant_id = escape_vespa_string(filters.tenant_id)
+            selection += f' and {index_name}.tenant_id=="{tenant_id}"'
         else:
             raise ValueError("Tenant ID is required for multi-tenant")
 
@@ -608,15 +611,11 @@ def _get_chunks_via_batch_search(
 
     filters_str = build_vespa_filters(filters=filters, include_hidden=True)
 
-    yql = (
-        YQL_BASE.format(index_name=index_name)
-        + filters_str
-        + build_vespa_id_based_retrieval_yql(chunk_requests[0])
+    id_clauses = " or ".join(
+        build_vespa_id_based_retrieval_yql(request) for request in chunk_requests
     )
-    chunk_requests.pop(0)
 
-    for request in chunk_requests:
-        yql += " or " + build_vespa_id_based_retrieval_yql(request)
+    yql = YQL_BASE.format(index_name=index_name) + filters_str + f"({id_clauses})"
     params: dict[str, str | int | float] = {
         "yql": yql,
         "hits": MAX_ID_SEARCH_QUERY_SIZE,

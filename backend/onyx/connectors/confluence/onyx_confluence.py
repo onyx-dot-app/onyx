@@ -1425,6 +1425,10 @@ def sanitize_attachment_title(title: str) -> str:
     return title.replace("<", "_").replace(">", "_").replace(" ", "_").replace(":", "_")
 
 
+def _escape_cql_literal(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("'", "\\'")
+
+
 def extract_text_from_confluence_html(
     confluence_client: OnyxConfluence,
     confluence_object: dict[str, Any],
@@ -1496,7 +1500,9 @@ def extract_text_from_confluence_html(
 
         # Wrap this in a try-except because there are some pages that might not exist
         try:
-            page_query = f"type=page and title='{quote(page_title)}'"
+            page_query = (
+                f"type=page and title='{quote(_escape_cql_literal(page_title))}'"
+            )
 
             page_contents: dict[str, Any] | None = None
             # Confluence enforces title uniqueness, so we should only get one result here

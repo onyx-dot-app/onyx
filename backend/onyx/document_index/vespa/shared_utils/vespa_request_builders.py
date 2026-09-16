@@ -23,8 +23,12 @@ from shared_configs.configs import MULTI_TENANT
 logger = setup_logger()
 
 
+def escape_vespa_string(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
 def build_tenant_id_filter(tenant_id: str) -> str:
-    return f'({TENANT_ID} contains "{tenant_id}")'
+    return f'({TENANT_ID} contains "{escape_vespa_string(tenant_id)}")'
 
 
 def build_vespa_filters(
@@ -38,7 +42,9 @@ def build_vespa_filters(
         Returns a bare clause like '(key contains "v1" or key contains "v2")' or ""."""
         if not key or not vals:
             return ""
-        eq_elems = [f'{key} contains "{val}"' for val in vals if val]
+        eq_elems = [
+            f'{key} contains "{escape_vespa_string(val)}"' for val in vals if val
+        ]
         if not eq_elems:
             return ""
         return f"({' or '.join(eq_elems)})"
@@ -56,7 +62,7 @@ def build_vespa_filters(
         filtered = [val for val in vals if val]
         if not filtered:
             return ""
-        items = ", ".join(f'"{val}":1' for val in filtered)
+        items = ", ".join(f'"{escape_vespa_string(val)}":1' for val in filtered)
         return f"weightedSet({key}, {{{items}}})"
 
     def _build_int_or_filters(key: str, vals: list[int] | None) -> str:
@@ -80,9 +86,10 @@ def build_vespa_filters(
         def _build_kge(entity: str) -> str:
             GENERAL = "::*"
             if entity.endswith(GENERAL):
-                return f'({{prefix: true}}"{entity.split(GENERAL, 1)[0]}")'
+                prefix = escape_vespa_string(entity.split(GENERAL, 1)[0])
+                return f'({{prefix: true}}"{prefix}")'
             else:
-                return f'"{entity}"'
+                return f'"{escape_vespa_string(entity)}"'
 
         if kg_entities:
             filter_parts = [
@@ -99,7 +106,7 @@ def build_vespa_filters(
                 filter_parts.append(
                     "(kg_relationships contains sameElement("
                     f"source contains {_build_kge(source)},"
-                    f'rel_type contains "{rel_type}",'
+                    f'rel_type contains "{escape_vespa_string(rel_type)}",'
                     f"target contains {_build_kge(target)}))"
                 )
             combined_filter_parts.append(f"{' and '.join(filter_parts)}")
@@ -114,7 +121,10 @@ def build_vespa_filters(
         if not kg_sources:
             return ""
 
-        source_phrases = [f'{DOCUMENT_ID} contains "{source}"' for source in kg_sources]
+        source_phrases = [
+            f'{DOCUMENT_ID} contains "{escape_vespa_string(source)}"'
+            for source in kg_sources
+        ]
         return f"({' or '.join(source_phrases)})"
 
     def _build_kg_chunk_id_zero_only_filter(
@@ -278,9 +288,8 @@ def build_vespa_filters(
 def build_vespa_id_based_retrieval_yql(
     chunk_request: VespaChunkRequest,
 ) -> str:
-    id_based_retrieval_yql_section = (
-        f'({DOCUMENT_ID} contains "{chunk_request.document_id}"'
-    )
+    document_id = escape_vespa_string(chunk_request.document_id)
+    id_based_retrieval_yql_section = f'({DOCUMENT_ID} contains "{document_id}"'
 
     if chunk_request.is_capped:
         id_based_retrieval_yql_section += (

@@ -149,11 +149,15 @@ def remove_old_tags() -> None:
             # delete old document__tags
             bind = op.get_bind()
             result = bind.execute(
-                sa.text(f"""
+                sa.text("""
                     DELETE FROM document__tag
-                    WHERE document_id = '{document_id}'
-                    AND tag_id IN ({",".join(to_delete)})
-                    """)
+                    WHERE document_id = :document_id
+                    AND tag_id = ANY(:tag_ids)
+                    """),
+                {
+                    "document_id": document_id,
+                    "tag_ids": [int(tag_id) for tag_id in to_delete],
+                },
             )
             n_deleted += result.rowcount
         logger.info("Processed %s documents and deleted %s tags", len(batch), n_deleted)
@@ -208,6 +212,7 @@ def _get_batch_documents_with_multiple_tags(
     old tags from reindexing.
     """
     offset_clause = ""
+    params: dict[str, str] = {}
     bind = op.get_bind()
 
     while True:
@@ -220,13 +225,15 @@ def _get_batch_documents_with_multiple_tags(
                 HAVING count(*) > 1 {offset_clause}
                 ORDER BY document__tag.document_id
                 LIMIT {batch_size}
-                """)
+                """),
+            params,
         ).fetchall()
         if not batch:
             break
         doc_ids = [document_id for (document_id,) in batch]
         yield doc_ids
-        offset_clause = f"AND document__tag.document_id > '{doc_ids[-1]}'"
+        offset_clause = "AND document__tag.document_id > :last_doc_id"
+        params = {"last_doc_id": doc_ids[-1]}
 
 
 def _get_vespa_metadata(
@@ -234,10 +241,8 @@ def _get_vespa_metadata(
 ) -> dict[str, str | list[str]]:
     url = DOCUMENT_ID_ENDPOINT.format(index_name=index_name)
 
-    # Document-Selector language
-    selection = (
-        f"{index_name}.document_id=='{document_id}' and {index_name}.chunk_id==0"
-    )
+    escaped_document_id = document_id.replace("\\", "\\\\").replace('"', '\\"')
+    selection = f'{index_name}.document_id=="{escaped_document_id}" and {index_name}.chunk_id==0'
 
     params: dict[str, str | int] = {
         "selection": selection,
@@ -261,12 +266,13 @@ def _get_vespa_metadata(
 def _get_document_tags(document_id: str) -> list[tuple[int, str, str]]:
     bind = op.get_bind()
     result = bind.execute(
-        sa.text(f"""
+        sa.text("""
             SELECT tag.id, tag.tag_key, tag.tag_value
             FROM tag
             JOIN document__tag ON tag.id = document__tag.tag_id
-            WHERE document__tag.document_id = '{document_id}'
-            """)
+            WHERE document__tag.document_id = :document_id
+            """),
+        {"document_id": document_id},
     ).fetchall()
     return cast(list[tuple[int, str, str]], result)
 
