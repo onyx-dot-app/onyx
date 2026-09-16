@@ -207,15 +207,15 @@ file_handlers = [
 setup_uvicorn_logger(shared_file_handlers=file_handlers)
 
 
-def validation_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+def validation_exception_handler(_: Request, exc: Exception) -> JSONResponse:
     if not isinstance(exc, RequestValidationError):
         logger.error(
             "Unexpected exception type in validation_exception_handler - %s", type(exc)
         )
         raise exc
 
-    exc_str = f"{exc}".replace("\n", " ").replace("   ", " ")
-    logger.error("%s: %s", request, exc_str, exc_info=exc)
+    exc_str = "Request validation failed."
+    logger.warning(exc_str)
     # message/status_code/data are kept for existing clients; error_code and
     # detail make the body match every other error the API returns.
     content = {
