@@ -275,7 +275,8 @@ class TestMaybeAppendSearchReceipt:
         with caplog.at_level(logging.INFO, logger="onyx.chat.search_receipts"):
             maybe_append_search_receipt(tool_response=response, seen_document_ids=seen)
         assert response.llm_facing_response == "evidence"
-        assert seen == set()
+        # A gated search still ran, so its candidates count as seen.
+        assert seen == ({"A"} if reason == "unrepresentable_scope" else set())
         assert any(
             f"search_receipt_unavailable reason={reason}" in r.getMessage()
             for r in caplog.records
