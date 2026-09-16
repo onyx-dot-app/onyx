@@ -109,7 +109,12 @@ func fetch(s3url string, destPath string, quiet bool) error {
 	if err != nil {
 		return err
 	}
+	return fetchFrom(parsed.HTTPEndpoint(), s3url, destPath, quiet)
+}
 
+// fetchFrom is fetch with the unsigned endpoint given, so tests can point it at
+// a local server.
+func fetchFrom(endpoint string, s3url string, destPath string, quiet bool) error {
 	// Ensure destination directory exists
 	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
 		return fmt.Errorf("failed to create destination directory: %w", err)
@@ -122,7 +127,7 @@ func fetch(s3url string, destPath string, quiet bool) error {
 
 	// Try unsigned HTTP request first
 	progress("Attempting unsigned download...")
-	unsignedErr := fetchUnsigned(parsed.HTTPEndpoint(), destPath, progress)
+	unsignedErr := fetchUnsigned(endpoint, destPath, progress)
 	if unsignedErr == nil {
 		return nil
 	}
