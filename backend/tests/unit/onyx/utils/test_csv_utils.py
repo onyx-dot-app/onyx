@@ -1,6 +1,7 @@
 import pytest
 
 from onyx.utils.csv_utils import (
+    detect_csv_delimiter,
     sanitize_csv_cell,
     sanitize_csv_cell_or_none,
     sanitize_csv_row,
@@ -61,3 +62,36 @@ def test_sanitize_csv_row_keys_unchanged() -> None:
     # Keys come from our own model fields, not user input — only values are
     # sanitized.
     assert sanitize_csv_row(row) == {"=key": "value"}
+
+
+class TestDetectCsvDelimiter:
+    """`csv.reader` defaults to a comma; a .csv is not always comma-separated."""
+
+    ROWS = ["Name;Region;Units", "Widget;EU;12", "Gadget;US;7"]
+
+    @pytest.mark.parametrize("delimiter", [",", ";", "\t", "|"])
+    def test_detects_the_delimiter_the_file_was_written_with(
+        self, delimiter: str
+    ) -> None:
+        text = "\n".join(row.replace(";", delimiter) for row in self.ROWS) + "\n"
+
+        assert detect_csv_delimiter(text) == delimiter
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            # A separator inside a quoted field is not a separator.
+            'Name,Note\nWidget,"a; b"\nGadget,"c; d"\n',
+            # Rows that do not line up leave the default in place.
+            "Note\na; b\nc; d\n",
+            "name,value\nAlice,1\nBob,2,extra\n",
+            "",
+            "\n\n",
+        ],
+    )
+    def test_falls_back_to_a_comma(self, text: str) -> None:
+        assert detect_csv_delimiter(text) == ","
+
+    def test_a_single_column_header_is_not_split(self) -> None:
+        """csv.Sniffer splits `Note` on the `t` inside it; this must not."""
+        assert detect_csv_delimiter("Note\nalpha\nbeta\n") == ","
