@@ -568,6 +568,35 @@ _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION = (4, 7)
 # the litellm registry doesn't recognize the string.
 _ANTHROPIC_THINKING_MIN_VERSION = (3, 7)
 
+# Tiers that always think. They answer thinking.type=disabled with a 400, so
+# "off" is not a level they can be asked for.
+_ANTHROPIC_ALWAYS_THINKING_TIERS = ("fable", "mythos")
+
+
+def _normalize_anthropic_name(model_name: str) -> str | None:
+    """A Claude name cut down to the part that carries tier and version.
+    None when the name is not a Claude model at all."""
+    name = model_name.lower()
+    if "claude" not in name:
+        return None
+    # Drop any provider prefix (e.g. "anthropic/", "bedrock/anthropic.").
+    name = name[name.index("claude") :]
+    # Drop date/snapshot suffixes ("@20260101", "-20241022") so their digits
+    # can't be mistaken for a version.
+    return re.sub(r"\d{6,}", "", name.split("@")[0])
+
+
+def _anthropic_tier(model_name: str) -> str | None:
+    """The tier word that comes first in the name, so one carrying two
+    ("claude-opus-4-7-mythos") resolves to the one that leads it."""
+    name = _normalize_anthropic_name(model_name)
+    if name is None:
+        return None
+    found = [
+        (name.index(tier), tier) for tier in _ANTHROPIC_MODEL_TIERS if tier in name
+    ]
+    return min(found)[1] if found else None
+
 
 def parse_anthropic_model_version(model_name: str) -> tuple[int, int] | None:
     """Extract the (major, minor) version from a Claude model name.
@@ -579,17 +608,11 @@ def parse_anthropic_model_version(model_name: str) -> tuple[int, int] | None:
     provider-prefixed / date-snapshot forms. Returns None when the name is not a
     Claude model or carries no parseable version.
     """
-    name = model_name.lower()
-    if "claude" not in name:
+    name = _normalize_anthropic_name(model_name)
+    if name is None:
         return None
-    # Drop any provider prefix (e.g. "anthropic/", "bedrock/anthropic.").
-    name = name[name.index("claude") :]
-    # Drop date/snapshot suffixes ("@20260101", "-20241022") so their digits
-    # can't be mistaken for a version.
-    name = name.split("@")[0]
-    name = re.sub(r"\d{6,}", "", name)
 
-    tier = next((t for t in _ANTHROPIC_MODEL_TIERS if t in name), None)
+    tier = _anthropic_tier(model_name)
     if tier is not None:
         # The version can sit on either side of the tier depending on scheme.
         match = re.search(
@@ -621,6 +644,24 @@ def anthropic_uses_adaptive_thinking(model_name: str) -> bool:
 
 def anthropic_supports_thinking(model_name: str) -> bool:
     return _anthropic_meets_version(model_name, _ANTHROPIC_THINKING_MIN_VERSION)
+
+
+def anthropic_identity_is_always_thinking(model_names: Sequence[str]) -> bool:
+    """The deployment alias, listed last by model_identity_names, is what
+    reaches the provider, so it decides whenever it names a Claude version."""
+    claude_names = [
+        name for name in model_names if parse_anthropic_model_version(name) is not None
+    ]
+    return bool(claude_names) and anthropic_thinking_is_always_on(claude_names[-1])
+
+
+def anthropic_thinking_is_always_on(model_name: str) -> bool:
+    """True for the tiers that reason no matter what. Adaptive thinking is
+    checked first so a tier word elsewhere ("fable-writer-v2") can't match."""
+    return (
+        anthropic_uses_adaptive_thinking(model_name)
+        and _anthropic_tier(model_name) in _ANTHROPIC_ALWAYS_THINKING_TIERS
+    )
 
 
 def anthropic_omits_sampling_params(model_name: str) -> bool:
@@ -707,6 +748,10 @@ def supported_reasoning_efforts(
     Both this function and the chat request builder (`onyx.llm.multi_llm`)
     derive their answer from `resolve_reasoning_param_style`, so a greyed-out
     slider stop and a dropped request parameter should never disagree.
+
+    One stop still does: Claude behind an OpenAI-compatible gateway offers off
+    while the builder sends nothing for it, because the gateway owns the
+    translation back to Anthropic's params and has not been measured.
     """
     if any(
         openai_model_rejects_reasoning_effort(name)
@@ -716,12 +761,11 @@ def supported_reasoning_efforts(
         return []
 
     style = resolve_reasoning_param_style(model_provider, model_names, api_surface)
-    efforts = [
-        ReasoningEffort.OFF,
-        ReasoningEffort.LOW,
-        ReasoningEffort.MEDIUM,
-        ReasoningEffort.HIGH,
-    ]
+    # A model that always thinks honors no off on any route, gateway included,
+    # so offering the level would promise a saving that never arrives.
+    always_thinking = anthropic_identity_is_always_thinking(model_names)
+    efforts = [] if always_thinking else [ReasoningEffort.OFF]
+    efforts += [ReasoningEffort.LOW, ReasoningEffort.MEDIUM, ReasoningEffort.HIGH]
     if style in _XHIGH_REASONING_STYLES:
         efforts.append(ReasoningEffort.XHIGH)
     return efforts
