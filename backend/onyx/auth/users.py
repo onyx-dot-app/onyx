@@ -1120,9 +1120,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         ):
                             raise exceptions.UserAlreadyExists()
 
-                    # Rewrite rather than append: bearer pass-through reads
-                    # oauth_accounts[0], and a second link for this provider could
-                    # hand it the dead token.
+                    # Rewrite rather than append: an appended link would leave the
+                    # dead subject and its refresh token on the row.
                     if stale_link is None:
                         user = await self.user_db.add_oauth_account(
                             user, oauth_account_dict
@@ -2159,7 +2158,7 @@ async def _maybe_refresh_oauth_tokens(
     """Best-effort refresh of any near-expiry OAuth access tokens.
 
     PT_OAUTH MCP tools and any custom HTTP tool with bearer pass-through forward
-    `user.oauth_accounts[0].access_token` directly to the upstream service. The
+    `user.live_oauth_token` directly to the upstream service. The
     web client's /auth/refresh ticker (``useTokenRefresh`` in
     `web/src/lib/auth/hooks.ts`) only fires for visible tabs, so without this
     hook the stored access_token could rot at the IdP's lifetime (~1 h on
