@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -28,7 +29,9 @@ func TestRunDesktopScript_installsAtTheRootThenRunsNpm(t *testing.T) {
 			bunCalls := devtoolFakeTool(t, binDir, "bun", "")
 			npmCalls := devtoolFakeTool(t, binDir, "npm", "")
 
-			runDesktopScript(c.args)
+			if err := runDesktopScript(c.args); err != nil {
+				t.Fatalf("runDesktopScript failed: %v", err)
+			}
 
 			// desktop is a root workspace member, so dependencies install at the root.
 			if got, want := devtoolCalls(t, bunCalls), []string{root + "|install --frozen-lockfile"}; !slices.Equal(got, want) {
@@ -39,4 +42,33 @@ func TestRunDesktopScript_installsAtTheRootThenRunsNpm(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRunDesktopScript_failures(t *testing.T) {
+	t.Run("outside a repository", func(t *testing.T) {
+		devtoolBinDir(t)
+		gitrelChdirOutsideRepo(t)
+
+		err := runDesktopScript([]string{"dev"})
+
+		if err == nil || !strings.HasPrefix(err.Error(), "Failed to find desktop directory: ") {
+			t.Fatalf("expected a desktop directory error, got %v", err)
+		}
+	})
+
+	t.Run("bun install fails", func(t *testing.T) {
+		binDir := devtoolBinDir(t)
+		devtoolRepo(t)
+		devtoolFakeTool(t, binDir, "bun", "exit 3")
+		npmCalls := devtoolFakeTool(t, binDir, "npm", "")
+
+		err := runDesktopScript([]string{"dev"})
+
+		if err == nil || err.Error() != "Failed to run bun install: exit status 3" {
+			t.Fatalf("expected a bun install error, got %v", err)
+		}
+		if calls := devtoolCalls(t, npmCalls); calls != nil {
+			t.Fatalf("expected npm not to run, got %q", calls)
+		}
+	})
 }

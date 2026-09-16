@@ -19,9 +19,23 @@ type AuditIgnoreOptions struct {
 	IgnoreURL string
 }
 
+// editUI holds the interactive parts of the allowlist editor. Commands pass
+// terminalEditUI; tests pass fakes because the real editor needs a terminal.
+type editUI struct {
+	// edit opens the row editor and reports the edited rows and whether the
+	// user saved.
+	edit func(title string, cols []tui.Column, rows []map[string]string) ([]map[string]string, bool, error)
+	// confirm asks a yes/no question and reports the answer.
+	confirm func(prompt string) bool
+}
+
+func terminalEditUI() editUI {
+	return editUI{edit: tui.EditRows, confirm: prompt.Confirm}
+}
+
 // newAuditIgnoreCommand creates the `ods audit ignore` command group. Running it
 // bare opens the allowlist editor, the same as `ods audit ignore edit`.
-func newAuditIgnoreCommand() *cobra.Command {
+func newAuditIgnoreCommand(ui editUI) *cobra.Command {
 	opts := &AuditIgnoreOptions{}
 
 	cmd := &cobra.Command{
@@ -34,14 +48,14 @@ fetched from S3 by default; pass a local file path to --ignore-url to edit a fil
 on disk instead.`,
 		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			exitOnError(runAuditEdit(opts.IgnoreURL, cmd.OutOrStdout()))
+			exitOnError(runAuditEdit(opts.IgnoreURL, cmd.OutOrStdout(), ui))
 		},
 	}
 
 	// A persistent flag so both the bare command and its subcommands share it.
 	cmd.PersistentFlags().StringVar(&opts.IgnoreURL, "ignore-url", audit.DefaultIgnoreURL, "S3 URL or local path of the advisory allowlist")
 
-	cmd.AddCommand(newAuditIgnoreEditCommand(opts))
+	cmd.AddCommand(newAuditIgnoreEditCommand(opts, ui))
 	cmd.AddCommand(newAuditIgnoreAddCommand(opts))
 
 	return cmd
@@ -49,7 +63,7 @@ on disk instead.`,
 
 // newAuditIgnoreEditCommand creates the `ods audit ignore edit` subcommand. It
 // shares the parent's --ignore-url via the passed options.
-func newAuditIgnoreEditCommand(opts *AuditIgnoreOptions) *cobra.Command {
+func newAuditIgnoreEditCommand(opts *AuditIgnoreOptions, ui editUI) *cobra.Command {
 	return &cobra.Command{
 		Use:   "edit",
 		Short: "Edit the audit advisory allowlist in a TUI",
@@ -60,12 +74,15 @@ add, edit, and delete suppressions, then uploads the result back after a
 confirmation prompt.`,
 		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			exitOnError(runAuditEdit(opts.IgnoreURL, cmd.OutOrStdout()))
+			exitOnError(runAuditEdit(opts.IgnoreURL, cmd.OutOrStdout(), ui))
 		},
 	}
 }
 
-func runAuditEdit(url string, out io.Writer) error {
+// runAuditEdit fetches the allowlist at url, lets the user edit it in ui, and
+// saves the result after confirmation. Without a usable editor it prints the
+// allowlist instead.
+func runAuditEdit(url string, out io.Writer, ui editUI) error {
 	orig, err := audit.LoadIgnoresForEdit(url)
 	if err != nil {
 		return failf("Failed to fetch allowlist from %s: %v", url, err)
@@ -78,7 +95,7 @@ func runAuditEdit(url string, out io.Writer) error {
 
 	cols := ignoreColumns(gitUserEmail())
 
-	editedRows, saved, err := tui.EditRows("Audit allowlist — "+url, cols, rows)
+	editedRows, saved, err := ui.edit("Audit allowlist — "+url, cols, rows)
 	if err != nil {
 		// No usable terminal (e.g. piped input): show a read-only dump instead of
 		// crashing, and leave the allowlist untouched.
@@ -116,7 +133,7 @@ func runAuditEdit(url string, out io.Writer) error {
 
 	printDiff(out, added, removed, changed)
 
-	if !prompt.Confirm(fmt.Sprintf("Upload updated allowlist (%d entries) to %s? [Y/n] ", len(edited), url)) {
+	if !ui.confirm(fmt.Sprintf("Upload updated allowlist (%d entries) to %s? [Y/n] ", len(edited), url)) {
 		_, _ = fmt.Fprintln(out, "Aborted; nothing uploaded.")
 		return nil
 	}

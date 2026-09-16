@@ -72,8 +72,9 @@ func TestLoad_reportsInvalidJSON(t *testing.T) {
 		t.Fatalf("Failed to write the config file: %v", err)
 	}
 
-	if _, err := Load(); err == nil {
-		t.Fatal("expected an error for a malformed config file")
+	_, err := Load()
+	if err == nil || !strings.HasPrefix(err.Error(), "failed to parse config file "+path+": ") {
+		t.Fatalf("expected a parse error naming %s, got %v", path, err)
 	}
 }
 

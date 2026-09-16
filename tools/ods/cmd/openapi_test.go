@@ -100,7 +100,7 @@ func TestRunOpenAPI_errors(t *testing.T) {
 	for _, r := range runners {
 		t.Run(r.name+" outside a repository", func(t *testing.T) {
 			devtoolBinDir(t)
-			t.Chdir(t.TempDir())
+			gitrelChdirOutsideRepo(t)
 			if err := r.run(); err == nil || !strings.HasPrefix(err.Error(), r.resolve) {
 				t.Fatalf("expected an error starting with %q, got %v", r.resolve, err)
 			}

@@ -132,7 +132,10 @@ func runTrace(out io.Writer, args []string, opts *TraceOptions) {
 	}
 
 	for {
-		selected := selectTraces(traces, projects)
+		selected, err := selectTraces(traces, projects)
+		if err != nil {
+			log.Fatal(err)
+		}
 		if len(selected) == 0 {
 			return
 		}
@@ -414,7 +417,7 @@ func printTraceList(out io.Writer, traces []traceInfo, projects []string) {
 
 // selectTraces tries the TUI picker first, falling back to a plain-text
 // prompt when the terminal cannot be initialised (e.g. piped output).
-func selectTraces(traces []traceInfo, projects []string) []traceInfo {
+func selectTraces(traces []traceInfo, projects []string) ([]traceInfo, error) {
 	// Build picker groups in the same order as the sorted traces slice.
 	var groups []tui.PickerGroup
 	for _, proj := range projects {
@@ -435,30 +438,30 @@ func selectTraces(traces []traceInfo, projects []string) []traceInfo {
 		return promptTraceSelection(os.Stdin, traces, projects)
 	}
 	if indices == nil {
-		return nil // user cancelled
+		return nil, nil // user cancelled
 	}
 
 	selected := make([]traceInfo, len(indices))
 	for i, idx := range indices {
 		selected[i] = traces[idx]
 	}
-	return selected
+	return selected, nil
 }
 
 // promptTraceSelection asks the user which traces to open via plain text.
 // Accepts numbers (1,3,5), ranges (1-5), "all", or a project name.
-func promptTraceSelection(in io.Reader, traces []traceInfo, projects []string) []traceInfo {
+func promptTraceSelection(in io.Reader, traces []traceInfo, projects []string) ([]traceInfo, error) {
 	fmt.Printf("\nOpen which traces? (e.g. 1,3,5 | 1-5 | all | %s): ", strings.Join(projects, " | "))
 
 	reader := bufio.NewReader(in)
 	input, err := reader.ReadString('\n')
 	if err != nil {
-		log.Fatalf("Failed to read input: %v", err)
+		return nil, fatalErrorf("Failed to read input: %v", err)
 	}
 	input = strings.TrimSpace(input)
 
 	if input == "" || strings.EqualFold(input, "all") {
-		return traces
+		return traces, nil
 	}
 
 	// Check if input matches a project name
@@ -470,7 +473,7 @@ func promptTraceSelection(in io.Reader, traces []traceInfo, projects []string) [
 					selected = append(selected, t)
 				}
 			}
-			return selected
+			return selected, nil
 		}
 	}
 
@@ -478,14 +481,14 @@ func promptTraceSelection(in io.Reader, traces []traceInfo, projects []string) [
 	indices := parseTraceSelection(input, len(traces))
 	if len(indices) == 0 {
 		log.Warn("No valid selection; opening all traces")
-		return traces
+		return traces, nil
 	}
 
 	selected := make([]traceInfo, len(indices))
 	for i, idx := range indices {
 		selected[i] = traces[idx]
 	}
-	return selected
+	return selected, nil
 }
 
 // parseTraceSelection parses a comma-separated list of numbers and ranges into

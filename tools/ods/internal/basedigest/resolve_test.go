@@ -19,6 +19,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/registry"
 	"github.com/google/go-containerregistry/pkg/v1/random"
 	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/gittest"
 )
 
 // fakeRegistry serves an in-memory registry holding one random image per tag
@@ -178,8 +179,7 @@ func gitRepo(t *testing.T, files ...string) string {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX git setup")
 	}
-	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
-	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	gittest.IsolateConfig(t)
 	root := t.TempDir()
 	for _, name := range files {
 		full := filepath.Join(root, name)

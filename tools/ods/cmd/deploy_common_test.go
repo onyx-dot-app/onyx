@@ -189,7 +189,7 @@ func TestWaitForNewRun_failures(t *testing.T) {
 		reply   deployGHReply
 		wantErr string
 	}{
-		{"no new run before the timeout", deployRuns(t, workflowRun{DatabaseID: 5}), "no new run appeared within 50ms"},
+		{"no new run before the timeout", deployRuns(t, workflowRun{DatabaseID: 5}), "no new run appeared within 500ms"},
 		{"gh failure", deployGHFailure("rate limited"), "rate limited"},
 	}
 	for _, c := range cases {
@@ -308,7 +308,7 @@ func TestAnnounceDeploymentRun_printsTheTagsRunURL(t *testing.T) {
 	})
 	out := deployCaptureOutput(t)
 
-	announceDeploymentRun("v4.7.0-beta.1")
+	announceDeploymentRun(deployFastPolling(), "v4.7.0-beta.1")
 
 	if got := out.printed(t); got != "https://github.com/onyx-dot-app/onyx/actions/runs/77\n" {
 		t.Fatalf("expected the run URL on stdout, got %q", got)
@@ -323,7 +323,7 @@ func TestAnnounceDeploymentRun_onlyWarnsWhenTheLookupFails(t *testing.T) {
 	deployNewFakeGH(t, map[string][]deployGHReply{"run-list": {deployGHFailure("gh auth required")}})
 	out := deployCaptureOutput(t)
 
-	announceDeploymentRun("v4.7.0-beta.1")
+	announceDeploymentRun(deployFastPolling(), "v4.7.0-beta.1")
 
 	if got := out.printed(t); got != "" {
 		t.Fatalf("expected nothing on stdout, got %q", got)

@@ -27,7 +27,9 @@ func TestLookupAuditBinary(t *testing.T) {
 	t.Run("prefers the binary next to ods", func(t *testing.T) {
 		exeDir := t.TempDir()
 		want := writeAuditBinary(t, exeDir)
-		t.Setenv("PATH", t.TempDir())
+		pathDir := t.TempDir()
+		writeAuditBinary(t, pathDir)
+		t.Setenv("PATH", pathDir)
 
 		got, err := lookupAuditBinary(exeDir)
 		if err != nil {
@@ -85,6 +87,7 @@ func TestAuditForwardsArgs(t *testing.T) {
 			}
 			t.Setenv("PATH", dir)
 
+			restoreLogger(t)
 			root := NewRootCommand()
 			root.SetArgs(c.argv)
 			if err := root.Execute(); err != nil {

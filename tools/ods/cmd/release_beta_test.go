@@ -296,7 +296,7 @@ func TestReleaseBeta_commandAnnouncesDeploymentRun(t *testing.T) {
 
 	// Under test.
 	var err error
-	out := gitrelCaptureStdout(t, func() { err = cmd.Execute() })
+	out := composeCapture(t, &os.Stdout, func() { err = cmd.Execute() })
 
 	// Postcondition.
 	if err != nil {
@@ -324,7 +324,7 @@ func TestReleaseBeta_commandDryRunSkipsDeploymentLookup(t *testing.T) {
 
 	// Under test.
 	var err error
-	out := gitrelCaptureStdout(t, func() { err = cmd.Execute() })
+	out := composeCapture(t, &os.Stdout, func() { err = cmd.Execute() })
 
 	// Postcondition.
 	if err != nil {

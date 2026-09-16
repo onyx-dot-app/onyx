@@ -206,7 +206,6 @@ func TestScanActions_skipsTagLookupsWithoutAdvisories(t *testing.T) {
 }
 
 func TestScanActions_toleratesPartialQueryFailures(t *testing.T) {
-	fakeBinDir(t)
 	root := chdirNewRepo(t)
 	writeActionsRepo(t, root)
 	_, url := startFakeOSV(t, map[string][]osvVuln{

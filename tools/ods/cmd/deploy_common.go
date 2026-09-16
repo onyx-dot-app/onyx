@@ -103,9 +103,9 @@ func resolveDeployTarget(flagRepo, flagWorkflow string, workflowSelector func(*c
 // announceDeploymentRun looks up the deployment.yml run triggered by pushing
 // tag and prints its URL. The lookup is best-effort: the tag is already pushed
 // and the build runs regardless, so failures only warn.
-func announceDeploymentRun(tag string) {
+func announceDeploymentRun(polling runPolling, tag string) {
 	log.Info("Looking up the deployment run...")
-	run, err := waitForNewRun(defaultRunPolling(), onyxRepo, deploymentWorkflowFile, "push", tag, 0)
+	run, err := waitForNewRun(polling, onyxRepo, deploymentWorkflowFile, "push", tag, 0)
 	if err != nil {
 		log.Warnf("Could not find the deployment run for %s: %v", tag, err)
 		log.Warnf("Find it at https://github.com/%s/actions/workflows/%s", onyxRepo, deploymentWorkflowFile)

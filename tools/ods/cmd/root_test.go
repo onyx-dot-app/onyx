@@ -7,9 +7,21 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// restoreLogger puts the standard logger back the way it was when the test
+// ends. Root commands change its level and formatter.
+func restoreLogger(t *testing.T) {
+	t.Helper()
+	logger := log.StandardLogger()
+	out, formatter, level := logger.Out, logger.Formatter, logger.GetLevel()
+	t.Cleanup(func() {
+		logger.SetOutput(out)
+		logger.SetFormatter(formatter)
+		logger.SetLevel(level)
+	})
+}
+
 func TestNewRootCommand_debugSetsTheLogLevel(t *testing.T) {
-	previous := log.GetLevel()
-	t.Cleanup(func() { log.SetLevel(previous) })
+	restoreLogger(t)
 
 	for _, c := range []struct {
 		args []string

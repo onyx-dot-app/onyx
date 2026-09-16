@@ -13,6 +13,15 @@ import (
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/gittest"
 )
 
+// chdirOutsideRepo makes an empty directory the working directory and stops
+// git from finding a repository above it.
+func chdirOutsideRepo(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	t.Setenv("GIT_CEILING_DIRECTORIES", filepath.Dir(dir))
+	t.Chdir(dir)
+}
+
 // fakePath replaces PATH with a directory that holds only git.
 func fakePath(t *testing.T) string {
 	t.Helper()
@@ -97,7 +106,7 @@ func TestResolvePath(t *testing.T) {
 
 func TestResolvePath_defaultNeedsARepository(t *testing.T) {
 	fakePath(t)
-	t.Chdir(t.TempDir())
+	chdirOutsideRepo(t)
 	if _, err := ResolvePath("", "x.json"); err == nil || !strings.HasPrefix(err.Error(), "failed to find git root: ") {
 		t.Fatalf("expected a git root error, got %v", err)
 	}
@@ -127,7 +136,7 @@ func TestFindPythonBinary(t *testing.T) {
 	})
 	t.Run("falls back to python outside a repository", func(t *testing.T) {
 		bin := fakePath(t)
-		t.Chdir(t.TempDir())
+		chdirOutsideRepo(t)
 		writeExecutable(t, filepath.Join(bin, "python"), "")
 
 		if got, err := FindPythonBinary(); err != nil || got != filepath.Join(bin, "python") {
@@ -176,7 +185,7 @@ func TestRunScript_errors(t *testing.T) {
 	})
 	t.Run("outside a repository", func(t *testing.T) {
 		bin := fakePath(t)
-		t.Chdir(t.TempDir())
+		chdirOutsideRepo(t)
 		writeExecutable(t, filepath.Join(bin, "python3"), "")
 		if err := RunScript(nil); err == nil || !strings.HasPrefix(err.Error(), "failed to find backend directory: ") {
 			t.Fatalf("expected a backend directory error, got %v", err)

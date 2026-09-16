@@ -136,10 +136,10 @@ func deployGHFailure(stderr string) deployGHReply {
 func deployFastPolling() runPolling {
 	return runPolling{
 		discoveryInterval: time.Millisecond,
-		discoveryTimeout:  50 * time.Millisecond,
+		discoveryTimeout:  500 * time.Millisecond,
 		progressInterval:  time.Millisecond,
 		bumpPRInterval:    time.Millisecond,
-		bumpPRTimeout:     50 * time.Millisecond,
+		bumpPRTimeout:     500 * time.Millisecond,
 	}
 }
 

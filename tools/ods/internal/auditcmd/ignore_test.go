@@ -2,14 +2,17 @@ package auditcmd
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/audit"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/gittest"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/tui"
 )
 
 const existingAllowlist = `{"ignores":[{"id":"GHSA-zzzz","reason":"dev only"}]}`
@@ -150,7 +153,7 @@ func TestAuditIgnoreCommand_addUsesTheSharedIgnoreURL(t *testing.T) {
 	chdirNewRepo(t)
 	path := writeFixture(t, t.TempDir(), "ignores.json", existingAllowlist)
 
-	cmd := newAuditIgnoreCommand()
+	cmd := newAuditIgnoreCommand(noTerminalUI())
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetArgs([]string{"--ignore-url", path, "add", "GHSA-aaaa", "--reason", "accepted", "--added-by", "ci", "--yes"})
@@ -170,18 +173,41 @@ func TestAuditIgnoreCommand_addUsesTheSharedIgnoreURL(t *testing.T) {
 	}
 }
 
-// requireNoTerminal skips when /dev/tty opens, because the editor would then
-// take over the terminal instead of falling back.
-func requireNoTerminal(t *testing.T) {
-	t.Helper()
-	if tty, err := os.Open("/dev/tty"); err == nil {
-		_ = tty.Close()
-		t.Skip("an interactive terminal is available")
+// fakeEditUI is an editUI with canned replies. The editor records the rows it
+// was shown and the confirmation prompt records its question.
+type fakeEditUI struct {
+	rows   []map[string]string // what the editor hands back
+	saved  bool
+	err    error
+	answer bool // the confirmation reply
+
+	shown    []map[string]string
+	question string
+}
+
+func (f *fakeEditUI) ui() editUI {
+	return editUI{
+		edit: func(title string, cols []tui.Column, rows []map[string]string) ([]map[string]string, bool, error) {
+			f.shown = rows
+			if f.err != nil {
+				return nil, false, f.err
+			}
+			return f.rows, f.saved, nil
+		},
+		confirm: func(prompt string) bool {
+			f.question = prompt
+			return f.answer
+		},
 	}
 }
 
+// noTerminalUI is an editUI whose editor fails the way tcell does without a
+// terminal.
+func noTerminalUI() editUI {
+	return (&fakeEditUI{err: errors.New("no terminal")}).ui()
+}
+
 func TestRunAuditEdit_withoutTerminalPrintsTheAllowlist(t *testing.T) {
-	requireNoTerminal(t)
 	chdirNewRepo(t)
 
 	cases := []struct {
@@ -207,7 +233,7 @@ func TestRunAuditEdit_withoutTerminalPrintsTheAllowlist(t *testing.T) {
 			}
 
 			var out bytes.Buffer
-			if err := runAuditEdit(path, &out); err != nil {
+			if err := runAuditEdit(path, &out, noTerminalUI()); err != nil {
 				t.Fatalf("runAuditEdit: %v", err)
 			}
 			if out.String() != tc.want {
@@ -225,20 +251,145 @@ func TestRunAuditEdit_withoutTerminalPrintsTheAllowlist(t *testing.T) {
 	}
 }
 
-func TestAuditIgnoreCommand_bareAndEditOpenTheEditor(t *testing.T) {
-	requireNoTerminal(t)
+func TestRunAuditEdit_savedRows(t *testing.T) {
+	chdirNewRepo(t)
+	existing := entryToRow(audit.IgnoreEntry{ID: "GHSA-zzzz", Reason: "dev only"})
+	added := map[string]string{"id": "GHSA-aaaa", "reason": "accepted", "added_by": "dev@example.com"}
+	addedLine := "  + GHSA-aaaa  by=dev@example.com  reason=accepted\n"
+
+	cases := []struct {
+		name       string
+		missingDir bool // put the allowlist below a directory that does not exist
+		rows       []map[string]string
+		saved      bool
+		answer     bool
+		wantErr    string // command error prefix; empty means success
+		wantOut    string
+		wantAsked  bool
+		wantFile   []audit.IgnoreEntry // nil means unchanged
+	}{
+		{
+			name:    "closed without saving",
+			rows:    []map[string]string{added},
+			wantOut: "No changes made.\n",
+		},
+		{
+			name:    "entry without an id",
+			rows:    []map[string]string{existing, {"id": " ", "reason": "accepted"}},
+			saved:   true,
+			wantErr: `Invalid allowlist entry " ": id is required`,
+		},
+		{
+			name:    "duplicate entries",
+			rows:    []map[string]string{existing, existing},
+			saved:   true,
+			wantOut: "Nothing uploaded; remove the duplicates and try again.\n",
+		},
+		{
+			name:    "saved unchanged",
+			rows:    []map[string]string{existing},
+			saved:   true,
+			wantOut: "No changes to save.\n",
+		},
+		{
+			name:      "upload declined",
+			rows:      []map[string]string{existing, added},
+			saved:     true,
+			wantOut:   "Changes:\n" + addedLine + "Aborted; nothing uploaded.\n",
+			wantAsked: true,
+		},
+		{
+			name:      "upload confirmed",
+			rows:      []map[string]string{existing, added},
+			saved:     true,
+			answer:    true,
+			wantOut:   "Changes:\n" + addedLine + "Uploaded 2 entries to %s\n",
+			wantAsked: true,
+			wantFile: []audit.IgnoreEntry{
+				{ID: "GHSA-aaaa", Reason: "accepted", AddedBy: "dev@example.com"},
+				{ID: "GHSA-zzzz", Reason: "dev only"},
+			},
+		},
+		{
+			name:       "save failure",
+			missingDir: true,
+			rows:       []map[string]string{added},
+			saved:      true,
+			answer:     true,
+			wantErr:    "Failed to save allowlist: failed to write allowlist ",
+			wantOut:    "Changes:\n" + addedLine,
+			wantAsked:  true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var path string
+			if tc.missingDir {
+				path = filepath.Join(t.TempDir(), "missing", "ignores.json")
+			} else {
+				path = writeFixture(t, t.TempDir(), "ignores.json", existingAllowlist)
+			}
+			fake := &fakeEditUI{rows: tc.rows, saved: tc.saved, answer: tc.answer}
+
+			var out bytes.Buffer
+			err := runAuditEdit(path, &out, fake.ui())
+
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("runAuditEdit: %v", err)
+				}
+			} else {
+				requireCommandError(t, err, tc.wantErr)
+			}
+			if want := strings.ReplaceAll(tc.wantOut, "%s", path); out.String() != want {
+				t.Fatalf("expected output %q, got %q", want, out.String())
+			}
+			if !tc.missingDir && !reflect.DeepEqual(fake.shown, []map[string]string{existing}) {
+				t.Fatalf("expected the editor to show the existing entry, got %v", fake.shown)
+			}
+			wantQuestion := ""
+			if tc.wantAsked {
+				wantQuestion = "Upload updated allowlist (" + strconv.Itoa(len(tc.rows)) + " entries) to " + path + "? [Y/n] "
+			}
+			if fake.question != wantQuestion {
+				t.Fatalf("expected the question %q, got %q", wantQuestion, fake.question)
+			}
+
+			switch {
+			case tc.wantFile != nil:
+				if got := readAllowlist(t, path); !reflect.DeepEqual(got, tc.wantFile) {
+					t.Fatalf("expected the saved allowlist %+v, got %+v", tc.wantFile, got)
+				}
+			case tc.missingDir:
+				if _, err := os.Stat(path); !os.IsNotExist(err) {
+					t.Fatalf("expected no allowlist to be created, stat returned %v", err)
+				}
+			default:
+				if data, err := os.ReadFile(path); err != nil || string(data) != existingAllowlist {
+					t.Fatalf("expected the allowlist to be unchanged, got %q (%v)", data, err)
+				}
+			}
+		})
+	}
+}
+
+func TestAuditIgnoreCommand_bareAndEditPrintTheAllowlistWithoutATerminal(t *testing.T) {
 	chdirNewRepo(t)
 	path := writeFixture(t, t.TempDir(), "ignores.json", existingAllowlist)
 
-	for _, args := range [][]string{
-		{"--ignore-url", path},
-		{"edit", "--ignore-url", path},
-	} {
-		t.Run(strings.Join(args[:len(args)-1], " "), func(t *testing.T) {
-			cmd := newAuditIgnoreCommand()
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{"bare", []string{"--ignore-url", path}},
+		{"edit", []string{"edit", "--ignore-url", path}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd := newAuditIgnoreCommand(noTerminalUI())
 			var out bytes.Buffer
 			cmd.SetOut(&out)
-			cmd.SetArgs(args)
+			cmd.SetArgs(tc.args)
 			if err := cmd.Execute(); err != nil {
 				t.Fatalf("Execute: %v", err)
 			}
@@ -251,7 +402,7 @@ func TestAuditIgnoreCommand_bareAndEditOpenTheEditor(t *testing.T) {
 
 func TestRunAuditEdit_fetchFailure(t *testing.T) {
 	path := writeFixture(t, t.TempDir(), "ignores.json", "{broken")
-	err := runAuditEdit(path, &bytes.Buffer{})
+	err := runAuditEdit(path, &bytes.Buffer{}, noTerminalUI())
 	requireCommandError(t, err, "Failed to fetch allowlist from "+path+": failed to parse allowlist")
 }
 

@@ -170,8 +170,15 @@ func TestFetchToFile_rejectsAnInvalidURL(t *testing.T) {
 		"FetchToFileQuiet": FetchToFileQuiet,
 	} {
 		t.Run(name, func(t *testing.T) {
-			if err := download("https://bucket/key", filepath.Join(t.TempDir(), "out")); err == nil {
-				t.Fatal("expected an invalid URL error, got nil")
+			argv := fakeAWS(t, "exit 0\n")
+
+			err := download("https://bucket/key", filepath.Join(t.TempDir(), "out"))
+
+			if err == nil || err.Error() != "invalid S3 URL: must start with s3://" {
+				t.Fatalf("expected an invalid URL error, got %v", err)
+			}
+			if args := awsArgs(t, argv); args != nil {
+				t.Fatalf("expected aws not to run, got %q", args)
 			}
 		})
 	}

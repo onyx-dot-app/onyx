@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -36,7 +35,7 @@ func gitrelFakeGH(t *testing.T, caseArms string) func() [][]string {
 	if err := os.WriteFile(filepath.Join(dir, "gh"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+"/usr/bin"+string(os.PathListSeparator)+"/bin")
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	return func() [][]string {
 		t.Helper()
@@ -128,30 +127,4 @@ func gitrelChdirOutsideRepo(t *testing.T) string {
 	t.Setenv("GIT_CEILING_DIRECTORIES", filepath.Dir(dir))
 	t.Chdir(dir)
 	return dir
-}
-
-// gitrelCaptureStdout runs fn with os.Stdout redirected to a pipe and returns
-// what fn wrote.
-func gitrelCaptureStdout(t *testing.T, fn func()) string {
-	t.Helper()
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	original := os.Stdout
-	os.Stdout = w
-	t.Cleanup(func() { os.Stdout = original })
-
-	done := make(chan string)
-	go func() {
-		data, _ := io.ReadAll(r)
-		done <- string(data)
-	}()
-
-	fn()
-	os.Stdout = original
-	if err := w.Close(); err != nil {
-		t.Fatal(err)
-	}
-	return <-done
 }

@@ -75,7 +75,11 @@ func gitrelDebugToStdout(t *testing.T) func() string {
 		log.SetLevel(level)
 		log.SetOutput(originalOut)
 	}
-	t.Cleanup(restore)
+	t.Cleanup(func() {
+		restore()
+		_ = w.Close()
+		_ = r.Close()
+	})
 	return func() string {
 		restore()
 		_ = w.Close()

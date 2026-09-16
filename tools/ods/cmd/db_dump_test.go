@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -69,22 +70,32 @@ func TestRunDBDump_reportsFailures(t *testing.T) {
 		behaviour string
 		wantErr   string
 		wantExecs int
+		// wantCleanup says whether the dump left in the container is removed.
+		wantCleanup bool
 	}{
-		{"pg_dump fails", `if [ "$1" = exec ]; then exit 2; fi`, "Failed to run pg_dump: exit status 2", 1},
-		{"copy fails", `if [ "$1" = cp ]; then exit 4; fi`, "Failed to copy dump file: exit status 4", 2},
+		{"pg_dump fails", `if [ "$1" = exec ]; then exit 2; fi`, "Failed to run pg_dump: exit status 2", 1, false},
+		{"copy fails", `if [ "$1" = cp ]; then exit 4; fi`, "Failed to copy dump file: exit status 4", 3, true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			binDir := dbSetup(t)
-			_, calls := dbFakeDocker(t, binDir, c.behaviour)
+			container, calls := dbFakeDocker(t, binDir, c.behaviour)
 
 			err := runDBDump(&DBDumpOptions{Format: "custom", Output: filepath.Join(t.TempDir(), "x.dump")})
 
 			if err == nil || err.Error() != c.wantErr {
 				t.Fatalf("expected %q, got %v", c.wantErr, err)
 			}
-			if execs := dbDockerExecs(calls()); len(execs) != c.wantExecs {
+			execs := dbDockerExecs(calls())
+			if len(execs) != c.wantExecs {
 				t.Fatalf("expected %d docker calls, got:\n%s", c.wantExecs, dbFormatCalls(execs))
+			}
+			if !c.wantCleanup {
+				return
+			}
+			want := []string{"exec", "-i", container, "rm", "-f", "/tmp/onyx_dump_tmp"}
+			if last := execs[len(execs)-1]; !slices.Equal(last, want) {
+				t.Fatalf("expected the temporary dump to be removed, got %q", last)
 			}
 		})
 	}

@@ -51,7 +51,7 @@ func TestWatchCloudRelease(t *testing.T) {
 				"run-view": {deployRun(t, succeeded)},
 				"pr-list":  {noPR},
 			},
-			wantErr:    "no bump PR for v4.7.0-cloud.3 appeared within 50ms; check https://github.com/onyx-dot-app/onyx-infra/actions/workflows/bump-cloud-version.yml",
+			wantErr:    "no bump PR for v4.7.0-cloud.3 appeared within 500ms; check https://github.com/onyx-dot-app/onyx-infra/actions/workflows/bump-cloud-version.yml",
 			wantStdout: deployRunURL + "\n",
 		},
 		{

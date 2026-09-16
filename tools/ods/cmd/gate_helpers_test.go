@@ -30,8 +30,7 @@ func gateRepo(t *testing.T) string {
 }
 
 // gateFakeBin puts an executable shell script called name first on PATH, so
-// real tools such as git stay reachable. It also points TMPDIR at a test
-// directory, so temporary files can be checked for leftovers.
+// real tools such as git stay reachable.
 func gateFakeBin(t *testing.T, name, script string) {
 	t.Helper()
 	if runtime.GOOS == "windows" {

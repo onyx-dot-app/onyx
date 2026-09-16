@@ -64,8 +64,9 @@ func TestFindAvailable_skipsOccupiedPort(t *testing.T) {
 
 	fakeTools(t, map[string]string{"lsof": "echo 4242", "ps": "echo uvicorn"})
 	var logs bytes.Buffer
+	previous := log.StandardLogger().Out
 	log.SetOutput(&logs)
-	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	t.Cleanup(func() { log.SetOutput(previous) })
 
 	port, err := FindAvailable(base, 100, nil)
 	if err != nil {

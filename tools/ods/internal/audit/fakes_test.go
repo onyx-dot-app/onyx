@@ -62,6 +62,7 @@ func writeFixture(t *testing.T, dir, name, content string) string {
 // its root as git reports it.
 func chdirNewRepo(t *testing.T) string {
 	t.Helper()
+	gittest.IsolateConfig(t)
 	dir := t.TempDir()
 	gittest.Git(t, dir, "init", "-q", "-b", "main")
 	t.Chdir(dir)

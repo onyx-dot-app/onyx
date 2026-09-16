@@ -1,6 +1,7 @@
 package release
 
 import (
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -31,7 +32,7 @@ func TestReleaseEntryPoints_outsideARepositoryError(t *testing.T) {
 	t.Setenv("GIT_CEILING_DIRECTORIES", filepath.Dir(dir))
 	t.Chdir(dir)
 
-	want := map[string]string{
+	wants := map[string]string{
 		"ComputeBetaTag":       "is-shallow-repository failed",
 		"ComputeNewBetaBranch": "is-shallow-repository failed",
 		"ComputeCloudTag":      "is-shallow-repository failed",
@@ -46,8 +47,12 @@ func TestReleaseEntryPoints_outsideARepositoryError(t *testing.T) {
 	}
 	for _, c := range gitFailureCalls {
 		t.Run(c.name, func(t *testing.T) {
-			if err := c.call(); err == nil || !strings.Contains(err.Error(), want[c.name]) {
-				t.Fatalf("expected %q, got %v", want[c.name], err)
+			want, ok := wants[c.name]
+			if !ok {
+				t.Fatalf("no expected error for %s", c.name)
+			}
+			if err := c.call(); err == nil || !strings.Contains(err.Error(), want) {
+				t.Fatalf("expected %q, got %v", want, err)
 			}
 		})
 	}
@@ -61,8 +66,9 @@ func TestReleaseEntryPoints_gitMissingErrors(t *testing.T) {
 
 	for _, c := range gitFailureCalls {
 		t.Run(c.name, func(t *testing.T) {
-			if err := c.call(); err == nil || !strings.Contains(err.Error(), "git ") {
-				t.Fatalf("expected a git failure, got %v", err)
+			err := c.call()
+			if err == nil || !strings.Contains(err.Error(), "git ") || !strings.Contains(err.Error(), exec.ErrNotFound.Error()) {
+				t.Fatalf("expected a missing git error, got %v", err)
 			}
 		})
 	}

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"io"
+	"os"
 	"strings"
 	"testing"
 
@@ -16,7 +17,7 @@ func TestReleaseClassify_defaultsShaToHEAD(t *testing.T) {
 
 	// Under test.
 	var err error
-	out := gitrelCaptureStdout(t, func() { err = cmd.Execute() })
+	out := composeCapture(t, &os.Stdout, func() { err = cmd.Execute() })
 
 	// Postcondition.
 	if err != nil {
@@ -48,7 +49,7 @@ func TestReleaseClassify_failsOutsideARepository(t *testing.T) {
 
 			// Under test.
 			var err error
-			out := gitrelCaptureStdout(t, func() { err = cmd.Execute() })
+			out := composeCapture(t, &os.Stdout, func() { err = cmd.Execute() })
 
 			// Postcondition.
 			if err == nil || !strings.HasPrefix(err.Error(), c.wantErr) {

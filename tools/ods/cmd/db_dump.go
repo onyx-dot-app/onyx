@@ -92,14 +92,13 @@ func runDBDump(opts *DBDumpOptions) error {
 	if err := docker.ExecWithEnv(container, env, pgDumpArgs...); err != nil {
 		return fatalErrorf("Failed to run pg_dump: %w", err)
 	}
+	// Remove the dump from the container, also when the copy fails.
+	defer func() { _ = docker.Exec(container, "rm", "-f", containerTmpFile) }()
 
 	// Copy the dump file from container to host.
 	if err := docker.CopyFromContainer(container, containerTmpFile, outputPath); err != nil {
 		return fatalErrorf("Failed to copy dump file: %w", err)
 	}
-
-	// Clean up temporary file in container.
-	_ = docker.Exec(container, "rm", "-f", containerTmpFile)
 
 	// Get file size for info.
 	if info, err := os.Stat(outputPath); err == nil {

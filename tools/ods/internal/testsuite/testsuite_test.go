@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -283,9 +284,19 @@ func TestHasTarget(t *testing.T) {
 // All hands out a copy, so a caller cannot rewrite the routing table.
 func TestAll_returnsACopy(t *testing.T) {
 	all := All()
-	all[0].Dir = "elsewhere"
+	for i := range all {
+		all[i].Dir = "elsewhere"
+		for j := range all[i].Aliases {
+			all[i].Aliases[j] = "changed"
+		}
+		for j := range all[i].DefaultArgs {
+			all[i].DefaultArgs[j] = "changed"
+		}
+	}
 
-	if got := All()[0].Dir; got == "elsewhere" {
-		t.Fatalf("expected the routing table unchanged, got %q", got)
+	for _, s := range All() {
+		if s.Dir == "elsewhere" || slices.Contains(s.Aliases, "changed") || slices.Contains(s.DefaultArgs, "changed") {
+			t.Fatalf("expected the routing table unchanged, got %+v", s)
+		}
 	}
 }

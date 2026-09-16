@@ -106,13 +106,8 @@ func composeReadFile(t *testing.T, path string) string {
 // ends. Each entry has the form "level=<level> msg=<message>".
 func composeCaptureLog(t *testing.T) *bytes.Buffer {
 	t.Helper()
+	restoreLogger(t)
 	logger := log.StandardLogger()
-	out, formatter, level := logger.Out, logger.Formatter, logger.GetLevel()
-	t.Cleanup(func() {
-		logger.SetOutput(out)
-		logger.SetFormatter(formatter)
-		logger.SetLevel(level)
-	})
 	var buf bytes.Buffer
 	logger.SetOutput(&buf)
 	logger.SetFormatter(&log.TextFormatter{DisableTimestamp: true, DisableQuote: true})
@@ -121,7 +116,8 @@ func composeCaptureLog(t *testing.T) *bytes.Buffer {
 }
 
 // composeCapture replaces *stream (os.Stdout or os.Stderr) with a pipe while fn
-// runs and returns what fn wrote to it.
+// runs and returns what fn wrote to it. The stream is restored even when fn
+// fails the test.
 func composeCapture(t *testing.T, stream **os.File, fn func()) string {
 	t.Helper()
 	r, w, err := os.Pipe()
@@ -130,15 +126,20 @@ func composeCapture(t *testing.T, stream **os.File, fn func()) string {
 	}
 	original := *stream
 	*stream = w
-	defer func() { *stream = original }()
+	defer func() {
+		*stream = original
+		_ = w.Close()
+		_ = r.Close()
+	}()
 
-	done := make(chan string)
+	done := make(chan string, 1)
 	go func() {
 		data, _ := io.ReadAll(r)
 		done <- string(data)
 	}()
 
 	fn()
+	*stream = original
 	_ = w.Close()
 	return <-done
 }

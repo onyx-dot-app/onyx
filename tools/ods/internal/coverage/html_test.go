@@ -55,8 +55,9 @@ func TestWriteHTML_failures(t *testing.T) {
 	t.Run("html directory under a file", func(t *testing.T) {
 		dir := writeGoMod(t, "module example.com/m\n")
 
-		if err := WriteHTML(dir, filepath.Join(dir, "c.out"), filepath.Join(dir, "go.mod", "c.html")); err == nil {
-			t.Fatal("expected an error creating the html directory")
+		err := WriteHTML(dir, filepath.Join(dir, "c.out"), filepath.Join(dir, "go.mod", "c.html"))
+		if err == nil || !strings.HasPrefix(err.Error(), "create html directory: ") {
+			t.Fatalf("expected an html directory error, got %v", err)
 		}
 	})
 }

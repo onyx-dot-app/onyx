@@ -12,9 +12,9 @@ import (
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/gittest"
 )
 
-// deployInstallSkillEnv isolates HOME and makes a fresh git repo the working
+// skillEnv isolates HOME and makes a fresh git repo the working
 // directory. It returns the home and repo root paths.
-func deployInstallSkillEnv(t *testing.T) (home, repoRoot string) {
+func skillEnv(t *testing.T) (home, repoRoot string) {
 	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("symlink and shell fixtures are POSIX-only")
@@ -32,10 +32,10 @@ func deployInstallSkillEnv(t *testing.T) (home, repoRoot string) {
 	return home, resolved
 }
 
-// deployWriteSkillSource creates an onyx-llm-context checkout with one enforced
+// skillWriteSource creates an onyx-llm-context checkout with one enforced
 // skill, one enforced directory without a SKILL.md, and one manual skill with
 // a nested file.
-func deployWriteSkillSource(t *testing.T, source string) {
+func skillWriteSource(t *testing.T, source string) {
 	t.Helper()
 	deployWriteFile(t, filepath.Join(source, "enforced", "style", "SKILL.md"), "style")
 	deployWriteFile(t, filepath.Join(source, "enforced", "draft", "notes.md"), "no skill file")
@@ -45,7 +45,7 @@ func deployWriteSkillSource(t *testing.T, source string) {
 	deployWriteFile(t, filepath.Join(source, "skills", "README.md"), "not a skill")
 }
 
-func deployRunInstallSkill(t *testing.T, args ...string) (string, error) {
+func skillRun(t *testing.T, args ...string) (string, error) {
 	t.Helper()
 	cmd := NewInstallSkillCommand()
 	var out bytes.Buffer
@@ -56,7 +56,7 @@ func deployRunInstallSkill(t *testing.T, args ...string) (string, error) {
 	return out.String(), err
 }
 
-func deployReadFile(t *testing.T, path string) string {
+func skillReadFile(t *testing.T, path string) string {
 	t.Helper()
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -66,20 +66,20 @@ func deployReadFile(t *testing.T, path string) string {
 }
 
 func TestInstallSkill_linksManualSkillsAndImportsEnforcedOnes(t *testing.T) {
-	home, repoRoot := deployInstallSkillEnv(t)
+	home, repoRoot := skillEnv(t)
 	source := filepath.Join(t.TempDir(), "onyx-llm-context")
-	deployWriteSkillSource(t, source)
+	skillWriteSource(t, source)
 	// A stale copy from an earlier --copy install must be replaced by a link.
 	deployWriteFile(t, filepath.Join(home, ".claude", "skills", "review", "stale.md"), "stale")
 
-	out, err := deployRunInstallSkill(t, "--source", source)
+	out, err := skillRun(t, "--source", source)
 	if err != nil {
 		t.Fatalf("install-skill: %v", err)
 	}
 
 	claudeMD := filepath.Join(repoRoot, ".claude", "CLAUDE.md")
 	wantImports := "@" + filepath.Join(source, "enforced", "style", "SKILL.md") + "\n"
-	if got := deployReadFile(t, claudeMD); got != wantImports {
+	if got := skillReadFile(t, claudeMD); got != wantImports {
 		t.Fatalf("expected CLAUDE.md %q, got %q", wantImports, got)
 	}
 	link := filepath.Join(home, ".claude", "skills", "review")
@@ -90,7 +90,7 @@ func TestInstallSkill_linksManualSkillsAndImportsEnforcedOnes(t *testing.T) {
 	if filepath.IsAbs(target) {
 		t.Fatalf("expected a relative link target, got %q", target)
 	}
-	if got := deployReadFile(t, filepath.Join(link, "refs", "checklist.md")); got != "checklist" {
+	if got := skillReadFile(t, filepath.Join(link, "refs", "checklist.md")); got != "checklist" {
 		t.Fatalf("expected the link to reach the source skill, got %q", got)
 	}
 	if _, err := os.Lstat(filepath.Join(home, ".claude", "skills", "README.md")); !os.IsNotExist(err) {
@@ -103,7 +103,7 @@ func TestInstallSkill_linksManualSkillsAndImportsEnforcedOnes(t *testing.T) {
 	}
 
 	// A second run leaves CLAUDE.md alone and re-creates the link.
-	out, err = deployRunInstallSkill(t, "--source", source)
+	out, err = skillRun(t, "--source", source)
 	if err != nil {
 		t.Fatalf("second install-skill: %v", err)
 	}
@@ -116,11 +116,11 @@ func TestInstallSkill_linksManualSkillsAndImportsEnforcedOnes(t *testing.T) {
 }
 
 func TestInstallSkill_copyModeCopiesSkillTrees(t *testing.T) {
-	home, _ := deployInstallSkillEnv(t)
+	home, _ := skillEnv(t)
 	source := filepath.Join(t.TempDir(), "onyx-llm-context")
-	deployWriteSkillSource(t, source)
+	skillWriteSource(t, source)
 
-	out, err := deployRunInstallSkill(t, "--source", source, "--copy")
+	out, err := skillRun(t, "--source", source, "--copy")
 	if err != nil {
 		t.Fatalf("install-skill: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestInstallSkill_copyModeCopiesSkillTrees(t *testing.T) {
 		t.Fatalf("expected a real directory at %s, got mode %v", dst, info.Mode())
 	}
 	for rel, want := range map[string]string{"SKILL.md": "review", filepath.Join("refs", "checklist.md"): "checklist"} {
-		if got := deployReadFile(t, filepath.Join(dst, rel)); got != want {
+		if got := skillReadFile(t, filepath.Join(dst, rel)); got != want {
 			t.Fatalf("expected %s to contain %q, got %q", rel, want, got)
 		}
 	}
@@ -144,12 +144,12 @@ func TestInstallSkill_copyModeCopiesSkillTrees(t *testing.T) {
 }
 
 func TestInstallSkill_sourceWithoutSkillsInstallsNothing(t *testing.T) {
-	home, repoRoot := deployInstallSkillEnv(t)
+	home, repoRoot := skillEnv(t)
 	source := t.TempDir()
 	// An enforced directory without any SKILL.md must not create CLAUDE.md.
 	deployWriteFile(t, filepath.Join(source, "enforced", "draft", "notes.md"), "draft")
 
-	out, err := deployRunInstallSkill(t, "--source", source)
+	out, err := skillRun(t, "--source", source)
 	if err != nil {
 		t.Fatalf("install-skill: %v", err)
 	}
@@ -164,9 +164,9 @@ func TestInstallSkill_sourceWithoutSkillsInstallsNothing(t *testing.T) {
 }
 
 func TestInstallSkill_missingSourceRequiresClone(t *testing.T) {
-	home, _ := deployInstallSkillEnv(t)
+	home, _ := skillEnv(t)
 
-	_, err := deployRunInstallSkill(t)
+	_, err := skillRun(t)
 
 	wantSource := filepath.Join(home, ".claude", "skills", "onyx-llm-context")
 	if err == nil || !strings.Contains(err.Error(), "onyx-llm-context not found at "+wantSource) || !strings.Contains(err.Error(), "--clone") {
@@ -174,9 +174,9 @@ func TestInstallSkill_missingSourceRequiresClone(t *testing.T) {
 	}
 }
 
-// deployFakeSkillGit puts a git wrapper first on PATH that records clone calls and
+// skillFakeGit puts a git wrapper first on PATH that records clone calls and
 // runs script for them; every other git call goes to the real git.
-func deployFakeSkillGit(t *testing.T, cloneScript string) string {
+func skillFakeGit(t *testing.T, cloneScript string) string {
 	t.Helper()
 	realGit, err := exec.LookPath("git")
 	if err != nil {
@@ -199,20 +199,20 @@ func deployFakeSkillGit(t *testing.T, cloneScript string) string {
 }
 
 func TestInstallSkill_cloneFetchesTheDefaultSource(t *testing.T) {
-	home, _ := deployInstallSkillEnv(t)
-	record := deployFakeSkillGit(t, "  mkdir -p \"$3/skills/review\" && echo review > \"$3/skills/review/SKILL.md\"\n  exit 0\n")
+	home, _ := skillEnv(t)
+	record := skillFakeGit(t, "  mkdir -p \"$3/skills/review\" && echo review > \"$3/skills/review/SKILL.md\"\n  exit 0\n")
 
-	out, err := deployRunInstallSkill(t, "--clone")
+	out, err := skillRun(t, "--clone")
 	if err != nil {
 		t.Fatalf("install-skill: %v", err)
 	}
 
 	source := filepath.Join(home, ".claude", "skills", "onyx-llm-context")
 	wantArgs := "clone\n" + llmContextCloneURL + "\n" + source + "\n"
-	if got := deployReadFile(t, record); got != wantArgs {
+	if got := skillReadFile(t, record); got != wantArgs {
 		t.Fatalf("expected git args %q, got %q", wantArgs, got)
 	}
-	if got := deployReadFile(t, filepath.Join(home, ".claude", "skills", "review", "SKILL.md")); got != "review\n" {
+	if got := skillReadFile(t, filepath.Join(home, ".claude", "skills", "review", "SKILL.md")); got != "review\n" {
 		t.Fatalf("expected the cloned skill to be installed, got %q", got)
 	}
 	if !strings.Contains(out, "Cloning "+llmContextCloneURL+" → "+source) {
@@ -221,10 +221,10 @@ func TestInstallSkill_cloneFetchesTheDefaultSource(t *testing.T) {
 }
 
 func TestInstallSkill_cloneFailureStopsTheInstall(t *testing.T) {
-	home, _ := deployInstallSkillEnv(t)
-	deployFakeSkillGit(t, "  echo 'fatal: unable to access' >&2\n  exit 128\n")
+	home, _ := skillEnv(t)
+	skillFakeGit(t, "  echo 'fatal: unable to access' >&2\n  exit 128\n")
 
-	out, err := deployRunInstallSkill(t, "--clone")
+	out, err := skillRun(t, "--clone")
 
 	if err == nil || !strings.Contains(err.Error(), "git clone failed") {
 		t.Fatalf("expected clone failure, got %v", err)

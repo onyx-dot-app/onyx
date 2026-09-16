@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -103,8 +104,9 @@ func TestRun_failuresBeforeAndDuringTheTests(t *testing.T) {
 	t.Run("profile directory under a file", func(t *testing.T) {
 		dir := writeGoMod(t, "module example.com/m\n")
 
-		if _, err := Run(RunOptions{ModuleDir: dir, ProfilePath: filepath.Join(dir, "go.mod", "c.out")}); err == nil {
-			t.Fatal("expected an error creating the profile directory")
+		_, err := Run(RunOptions{ModuleDir: dir, ProfilePath: filepath.Join(dir, "go.mod", "c.out")})
+		if err == nil || !strings.HasPrefix(err.Error(), "create profile directory: ") {
+			t.Fatalf("expected a profile directory error, got %v", err)
 		}
 	})
 }

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -65,7 +66,9 @@ func TestWhois_tenantLookupListsAdmins(t *testing.T) {
 	})
 
 	var out bytes.Buffer
-	runWhois(&out, "tenant_ab-12", "data_plane")
+	if err := runWhois(&out, "tenant_ab-12", "data_plane"); err != nil {
+		t.Fatalf("runWhois failed: %v", err)
+	}
 
 	if want := "\nEMAIL\n-----\nadmin@x.com\nowner@x.com\n"; out.String() != want {
 		t.Fatalf("expected %q, got %q", want, out.String())
@@ -92,12 +95,38 @@ func TestWhois_reportsEmptyResults(t *testing.T) {
 			})
 
 			var out bytes.Buffer
-			runWhois(&out, c.query, "data_plane")
+			if err := runWhois(&out, c.query, "data_plane"); err != nil {
+				t.Fatalf("runWhois failed: %v", err)
+			}
 
 			if out.String() != c.want {
 				t.Fatalf("expected %q, got %q", c.want, out.String())
 			}
 		})
+	}
+}
+
+// The tenant ID is interpolated into a quoted schema name, so the guard must
+// stop the query before it reaches the pod.
+func TestWhois_rejectsAnUnsafeTenantID(t *testing.T) {
+	t.Setenv("KUBE_CTX_DATA_PLANE", "prod us-east-2 onyx")
+	calls := kubeFakeTools(t, map[string]string{
+		"kubectl": kubeKubectlScript(`admin@x.com\n`),
+	})
+
+	var out bytes.Buffer
+	err := runWhois(&out, "tenant_x y", "data_plane")
+
+	if want := `Invalid tenant ID: "tenant_x y" (must be alphanumeric, hyphens, underscores only)`; err == nil || err.Error() != want {
+		t.Fatalf("expected %q, got %v", want, err)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("expected no output, got %q", out.String())
+	}
+	for _, call := range kubeCallsTo(calls(), "kubectl") {
+		if slices.Contains(call, "exec") {
+			t.Fatalf("expected no query, got kubectl %q", call)
+		}
 	}
 }
 

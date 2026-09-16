@@ -520,7 +520,9 @@ func TestPerformCherryPick_keepsStagedResolution(t *testing.T) {
 	topicSHA := gitrelCommit(t, repo.Work, "a.txt", "topic\n", "feat: topic")
 	gittest.Git(t, repo.Work, "checkout", "--quiet", "main")
 	gitrelCommit(t, repo.Work, "a.txt", "main\n", "feat: main")
-	if err := exec.Command("git", "cherry-pick", topicSHA).Run(); err == nil {
+	conflict := exec.Command("git", "cherry-pick", topicSHA)
+	conflict.Dir = repo.Work
+	if err := conflict.Run(); err == nil {
 		t.Fatal("expected the setup cherry-pick to conflict")
 	}
 	if err := os.WriteFile(filepath.Join(repo.Work, "a.txt"), []byte("resolved\n"), 0o644); err != nil {

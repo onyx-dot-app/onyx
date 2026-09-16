@@ -119,3 +119,17 @@ func TestUnavailable(t *testing.T) {
 		})
 	}
 }
+
+func TestS3URL_HTTPEndpoint(t *testing.T) {
+	parsed, err := ParseS3URL("s3://my-bucket/coverage/tools-ods/abc.yaml")
+	if err != nil {
+		t.Fatalf("ParseS3URL failed: %v", err)
+	}
+
+	got := parsed.HTTPEndpoint()
+
+	want := "https://my-bucket.s3.amazonaws.com/coverage/tools-ods/abc.yaml"
+	if got != want {
+		t.Fatalf("expected %q, got %q", want, got)
+	}
+}

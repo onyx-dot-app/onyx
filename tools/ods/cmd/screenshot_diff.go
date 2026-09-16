@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -160,7 +161,7 @@ Examples:
     --current ./web/output/screenshots/ \
     --output ./web/output/screenshot-diff/admin/index.html`,
 		Run: func(cmd *cobra.Command, args []string) {
-			if err := runCompare(opts); err != nil {
+			if err := runCompare(opts, os.Stdout); err != nil {
 				log.Fatal(err)
 			}
 		},
@@ -309,7 +310,7 @@ func downloadS3Dir(s3URL string, prefix string) (string, error) {
 }
 
 // runCompare returns errors whose text is the message Run logs before exiting.
-func runCompare(opts *ScreenshotDiffCompareOptions) error {
+func runCompare(opts *ScreenshotDiffCompareOptions, out io.Writer) error {
 	// Validate cross-revision flags are used together
 	if (opts.FromRev != "") != (opts.ToRev != "") {
 		return errors.New("--from-rev and --to-rev must be used together")
@@ -406,7 +407,7 @@ func runCompare(opts *ScreenshotDiffCompareOptions) error {
 	}
 
 	// Print terminal summary
-	fmt.Print(summaryText(results))
+	_, _ = fmt.Fprint(out, summaryText(results))
 
 	// Build and write JSON summary (always)
 	summary := imgdiff.BuildSummary(project, results)

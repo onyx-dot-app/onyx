@@ -39,8 +39,9 @@ func TestFetchIgnores_invalidS3URLRemovesTheTempFile(t *testing.T) {
 	assertNoTempAllowlists(t, tmp)
 
 	// An S3 fetch failure is never treated as an empty allowlist to edit.
-	if _, err := LoadIgnoresForEdit("s3://onyx-internal-tools"); err == nil {
-		t.Fatal("expected LoadIgnoresForEdit to return the S3 error")
+	_, err = LoadIgnoresForEdit("s3://onyx-internal-tools")
+	if err == nil || err.Error() != "invalid S3 URL: must be s3://bucket/key" {
+		t.Fatalf("expected LoadIgnoresForEdit to return the S3 error, got %v", err)
 	}
 }
 
@@ -53,8 +54,9 @@ func TestFetchIgnores_malformedLocalFile(t *testing.T) {
 	}
 	// Only a missing file bootstraps an empty allowlist; a corrupt one must not
 	// be overwritten by the editor.
-	if _, err := LoadIgnoresForEdit(path); err == nil {
-		t.Fatal("expected LoadIgnoresForEdit to return the parse error")
+	_, err = LoadIgnoresForEdit(path)
+	if err == nil || !strings.HasPrefix(err.Error(), "failed to parse allowlist "+path+": ") {
+		t.Fatalf("expected LoadIgnoresForEdit to return the parse error, got %v", err)
 	}
 }
 

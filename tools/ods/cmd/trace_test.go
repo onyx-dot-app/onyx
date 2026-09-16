@@ -215,7 +215,10 @@ func TestPromptTraceSelection(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			selected := promptTraceSelection(strings.NewReader(c.input), traces, []string{"admin", "lite"})
+			selected, err := promptTraceSelection(strings.NewReader(c.input), traces, []string{"admin", "lite"})
+			if err != nil {
+				t.Fatalf("promptTraceSelection: %v", err)
+			}
 			var got []string
 			for _, s := range selected {
 				got = append(got, s.Path)
@@ -225,6 +228,13 @@ func TestPromptTraceSelection(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("closed input", func(t *testing.T) {
+		_, err := promptTraceSelection(strings.NewReader(""), traces, []string{"admin", "lite"})
+		if err == nil || err.Error() != "Failed to read input: EOF" {
+			t.Fatalf("expected an EOF error, got %v", err)
+		}
+	})
 }
 
 func TestResolveRunID(t *testing.T) {

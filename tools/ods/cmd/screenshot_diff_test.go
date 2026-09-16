@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"bytes"
 	"encoding/json"
 	"image/color"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -172,7 +174,7 @@ func TestRunCompare_rejectsIncompleteFlags(t *testing.T) {
 			callLog := shotFakeAWS(t, "exit 0\n")
 			opts := tt.opts
 
-			err := runCompare(&opts)
+			err := runCompare(&opts, io.Discard)
 
 			if err == nil || err.Error() != tt.want {
 				t.Fatalf("expected %q, got %v", tt.want, err)
@@ -194,7 +196,8 @@ func TestRunCompare_writesSummaryAndReportForDifferences(t *testing.T) {
 	shotWritePNG(t, filepath.Join(current, "same.png"), 4, 4, shotWhite)
 	output := filepath.Join(dir, "out", "index.html")
 
-	err := runCompare(&ScreenshotDiffCompareOptions{Baseline: baseline, Current: current, Output: output, Threshold: 0.2})
+	var out bytes.Buffer
+	err := runCompare(&ScreenshotDiffCompareOptions{Baseline: baseline, Current: current, Output: output, Threshold: 0.2}, &out)
 	if err != nil {
 		t.Fatalf("runCompare failed: %v", err)
 	}
@@ -202,6 +205,11 @@ func TestRunCompare_writesSummaryAndReportForDifferences(t *testing.T) {
 	want := imgdiff.Summary{Project: "default", Changed: 1, Unchanged: 1, Total: 2, HasDifferences: true}
 	if got := shotReadSummary(t, filepath.Join(dir, "out", "summary.json")); got != want {
 		t.Fatalf("expected summary %+v, got %+v", want, got)
+	}
+	for _, line := range []string{"Changed:   1", "Unchanged: 1", "Total:     2"} {
+		if !strings.Contains(out.String(), line) {
+			t.Fatalf("expected the summary to show %q, got %q", line, out.String())
+		}
 	}
 	report, err := os.ReadFile(output)
 	if err != nil {
@@ -220,7 +228,7 @@ func TestRunCompare_skipsTheReportWithoutDifferences(t *testing.T) {
 	shotWritePNG(t, filepath.Join(current, "page.png"), 4, 4, shotWhite)
 	output := filepath.Join(dir, "out", "index.html")
 
-	err := runCompare(&ScreenshotDiffCompareOptions{Project: "admin", Baseline: baseline, Current: current, Output: output, Threshold: 0.2})
+	err := runCompare(&ScreenshotDiffCompareOptions{Project: "admin", Baseline: baseline, Current: current, Output: output, Threshold: 0.2}, io.Discard)
 	if err != nil {
 		t.Fatalf("runCompare failed: %v", err)
 	}
@@ -240,7 +248,7 @@ func TestRunCompare_createsAMissingBaseline(t *testing.T) {
 	shotWritePNG(t, filepath.Join(current, "page.png"), 4, 4, shotWhite)
 	output := filepath.Join(dir, "index.html")
 
-	if err := runCompare(&ScreenshotDiffCompareOptions{Baseline: baseline, Current: current, Output: output}); err != nil {
+	if err := runCompare(&ScreenshotDiffCompareOptions{Baseline: baseline, Current: current, Output: output}, io.Discard); err != nil {
 		t.Fatalf("runCompare failed: %v", err)
 	}
 
@@ -264,7 +272,7 @@ func TestRunCompare_writesAnEmptySummaryWithoutScreenshots(t *testing.T) {
 	baseline := filepath.Join(t.TempDir(), "baseline")
 	shotWritePNG(t, filepath.Join(baseline, "page.png"), 4, 4, shotWhite)
 
-	err := runCompare(&ScreenshotDiffCompareOptions{Project: "admin", Baseline: baseline})
+	err := runCompare(&ScreenshotDiffCompareOptions{Project: "admin", Baseline: baseline}, io.Discard)
 	if err != nil {
 		t.Fatalf("runCompare failed: %v", err)
 	}
@@ -292,7 +300,7 @@ esac
 	t.Setenv("PLAYWRIGHT_S3_BUCKET", "shots")
 	output := filepath.Join(t.TempDir(), "index.html")
 
-	err := runCompare(&ScreenshotDiffCompareOptions{Project: "admin", FromRev: "v1", ToRev: "v2", Output: output, Threshold: 0.2})
+	err := runCompare(&ScreenshotDiffCompareOptions{Project: "admin", FromRev: "v1", ToRev: "v2", Output: output, Threshold: 0.2}, io.Discard)
 	if err != nil {
 		t.Fatalf("runCompare failed: %v", err)
 	}
@@ -338,7 +346,7 @@ func TestRunCompare_reportsFailedDownloads(t *testing.T) {
 			tmp := t.TempDir()
 			t.Setenv("TMPDIR", tmp)
 
-			err := runCompare(&ScreenshotDiffCompareOptions{Baseline: tt.baseline, Current: tt.current, Output: filepath.Join(t.TempDir(), "index.html")})
+			err := runCompare(&ScreenshotDiffCompareOptions{Baseline: tt.baseline, Current: tt.current, Output: filepath.Join(t.TempDir(), "index.html")}, io.Discard)
 
 			if err == nil || !strings.HasPrefix(err.Error(), tt.want) {
 				t.Fatalf("expected %q, got %v", tt.want, err)
@@ -396,7 +404,7 @@ func TestRunCompare_reportsFailures(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			opts := tt.opts
 
-			err := runCompare(&opts)
+			err := runCompare(&opts, io.Discard)
 
 			if err == nil || !strings.HasPrefix(err.Error(), tt.want) {
 				t.Fatalf("expected %q, got %v", tt.want, err)

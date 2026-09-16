@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -243,6 +244,17 @@ func TestRun_locallyFailures(t *testing.T) {
 }
 
 func TestRun_withoutPostgresHostRunsLocallyWhenThePortIsReachable(t *testing.T) {
+	// Without a running project container, one lookup tries every known
+	// container name and then docker ps.
+	search := []string{
+		"inspect -f {{.State.Running}} onyx-relational_db-1",
+		"inspect -f {{.State.Running}} onyx_postgres",
+		"inspect -f {{.State.Running}} onyx-relational_db-1",
+		"inspect -f {{.State.Running}} onyx-stack-relational_db-1",
+		"inspect -f {{.State.Running}} docker_compose-relational_db-1",
+		"inspect -f {{.State.Running}} relational_db",
+		"ps --format {{.Names}}\t{{.Image}}",
+	}
 	cases := []struct {
 		name   string
 		docker string
@@ -267,6 +279,8 @@ esac`,
 			docker: `case "$1" in
 inspect) echo false ;;
 esac`,
+			// shouldUseDockerExec and the host detection both search.
+			want: slices.Concat(search, search),
 		},
 	}
 	for _, c := range cases {
@@ -280,9 +294,7 @@ esac`,
 			}
 
 			assertLines(t, calls(t, alembic), []string{"current"})
-			if c.want != nil {
-				assertLines(t, calls(t, docker), c.want)
-			}
+			assertLines(t, calls(t, docker), c.want)
 			for _, call := range calls(t, docker) {
 				if strings.HasPrefix(call, "exec") {
 					t.Fatalf("expected alembic to run locally, got docker %q", call)

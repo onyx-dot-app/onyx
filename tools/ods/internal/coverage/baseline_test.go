@@ -173,7 +173,9 @@ func TestBaseline_saveFailsUnderAFile(t *testing.T) {
 	}
 	baseline := &Baseline{Total: 1, Packages: map[string]float64{}}
 
-	if err := baseline.Save(filepath.Join(blocker, BaselineFile), GoTests); err == nil {
-		t.Fatal("expected an error writing below a file")
+	path := filepath.Join(blocker, BaselineFile)
+	err := baseline.Save(path, GoTests)
+	if err == nil || !strings.HasPrefix(err.Error(), "write "+path+": ") {
+		t.Fatalf("expected a write error naming %s, got %v", path, err)
 	}
 }

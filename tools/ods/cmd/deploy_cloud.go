@@ -84,7 +84,7 @@ Example usage:
 				return err
 			}
 			if opts.NoWatch {
-				announceDeploymentRun(tag)
+				announceDeploymentRun(defaultRunPolling(), tag)
 				return nil
 			}
 			log.Infof("Watching the release; Ctrl-C is safe, re-attach with: ods deploy cloud --attach %s", tag)

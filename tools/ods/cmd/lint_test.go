@@ -83,7 +83,7 @@ func TestRunTerraformCommands_errors(t *testing.T) {
 	}
 	for _, r := range runners {
 		t.Run(r.name+" without a repository or paths", func(t *testing.T) {
-			t.Chdir(t.TempDir())
+			gitrelChdirOutsideRepo(t)
 			if _, err := r.run(nil); err == nil || !strings.HasPrefix(err.Error(), "Cannot locate the repository root") {
 				t.Fatalf("expected a repository root error, got %v", err)
 			}

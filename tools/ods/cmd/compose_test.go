@@ -140,6 +140,9 @@ func TestComposeCommand(t *testing.T) {
 			}
 
 			calls := composeCalls(t, bin, "docker")
+			if len(calls) == 0 {
+				t.Fatal("expected docker to run")
+			}
 			var portCalls int
 			for _, call := range calls[:len(calls)-1] {
 				if !strings.HasPrefix(call, "port ods-proj-") {
