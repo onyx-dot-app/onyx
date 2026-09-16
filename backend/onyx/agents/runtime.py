@@ -22,7 +22,6 @@ from onyx.agents.concurrency import (
     EventDelivery,
     ExecutionServices,
     ExecutionWork,
-    WorkTracker,
 )
 from onyx.agents.events import (
     AgentEndEvent,
@@ -434,7 +433,7 @@ class Agent:
             )
             if coordinator is not None:
                 executor.coordination = coordinator.bind(
-                    run, services, executor.publish_child, signal
+                    run, executor.work, executor.publish_child, signal
                 )
         except BaseException:
             with self._lock:
@@ -720,21 +719,9 @@ class _Execution:
         delivery = self.state.delivery
         if delivery is not None:
             await delivery.close()
-        pending = WorkTracker()
-        pending.started()
-        if delivery is not None:
-            pending.started()
-        if self.coordination is not None:
-            pending.started()
+            self.work.tracker.follow(delivery.tracker)
         if self.own_services:
-            pending.started()
-        self.work.tracker.on_idle(pending.finished)
-        if delivery is not None:
-            delivery.tracker.on_idle(pending.finished)
-        if self.coordination is not None:
-            self.coordination.add_idle_callback(pending.finished)
-        if self.own_services:
-            self.services.tracker.on_idle(pending.finished)
+            self.work.tracker.follow(self.services.tracker)
 
         def release() -> None:
             if delivery is not None:
@@ -747,7 +734,7 @@ class _Execution:
             self.release()
             self.state.idle.set_result(None)
 
-        pending.on_idle(release)
+        self.work.tracker.on_idle(release)
 
     async def _step(self, prepared: PreparedStep, step: AgentStep) -> StepResult:
         signal = self.state.signal

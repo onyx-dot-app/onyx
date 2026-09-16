@@ -71,6 +71,11 @@ class WorkTracker:
 
         return unsubscribe
 
+    def follow(self, other: "WorkTracker") -> None:
+        """Include existing work after its owner stops admitting new operations."""
+        self.started()
+        other.on_idle(self.finished)
+
     async def wait_idle(self, timeout: float) -> bool:
         if self.idle:
             return True
@@ -175,7 +180,20 @@ async def _wait_operation[T](
         cancelled.cancel()
 
 
+def _report_abandoned_worker[T](completion: asyncio.Future[T]) -> None:
+    if completion.cancelled():
+        return
+    error = completion.exception()
+    if error is not None and not isinstance(error, AgentCancelled):
+        logger.error(
+            "Agent worker failed after its caller stopped waiting",
+            exc_info=(type(error), error, error.__traceback__),
+        )
+
+
 class ExecutionServices:
+    """Share worker admission and concurrency limits across a root run and its children."""
+
     def __init__(self, capacity: int) -> None:
         self.loop = asyncio.get_running_loop()
         self.parallelism = capacity
@@ -241,25 +259,27 @@ class ExecutionServices:
             raise
         future.add_done_callback(finished)
         completion = asyncio.wrap_future(future)
-
-        def observe_completion(done: asyncio.Future[T]) -> None:
-            # The caller may stop waiting before the worker reports its failure.
-            if not done.cancelled():
-                done.exception()
-
-        completion.add_done_callback(observe_completion)
-        return await _wait_operation(
-            completion, signal, max(0, deadline - time.monotonic())
-        )
-
-    async def wait_idle(self, timeout: float) -> bool:
-        return await self.tracker.wait_idle(timeout)
+        try:
+            return await _wait_operation(
+                completion, signal, max(0, deadline - time.monotonic())
+            )
+        except BaseException as error:
+            if (
+                completion.done()
+                and not completion.cancelled()
+                and completion.exception() is error
+            ):
+                raise
+            completion.add_done_callback(_report_abandoned_worker)
+            raise
 
     def close(self) -> None:
         self._closed = True
 
 
 class ExecutionWork:
+    """Track one run's unfinished work and accept updates on its owning event loop."""
+
     def __init__(self, services: ExecutionServices) -> None:
         self.services = services
         self.tracker = WorkTracker()
@@ -316,6 +336,8 @@ class ExecutionWork:
 
 
 class EventDelivery:
+    """Deliver ordered, isolated events; listeners must finish their own I/O within a timeout."""
+
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._listeners: list[Callable[[AgentEvent], None]] = []
@@ -377,12 +399,17 @@ class EventDelivery:
             listeners = tuple(self._listeners)
             self._dispatch_thread_id = threading.get_ident()
         try:
-            for listener in listeners:
+            for index, listener in enumerate(listeners):
                 with self._lock:
                     if listener not in self._listeners:
                         continue
                 try:
-                    listener(event.model_copy(deep=True))
+                    # The queue owns this copy; its last listener can consume it directly.
+                    listener(
+                        event
+                        if index == len(listeners) - 1
+                        else event.model_copy(deep=True)
+                    )
                 except (AgentCancelled, asyncio.CancelledError):
                     self.failed.set()
                     logger.debug("Agent observer cancelled")

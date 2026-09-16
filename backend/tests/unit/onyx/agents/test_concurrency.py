@@ -59,8 +59,8 @@ async def test_shared_workers_bound_distinct_trees_and_preserve_context(
         release.set()
     assert await first == "first"
     assert await second == "second"
-    assert await first_services.wait_idle(1)
-    assert await second_services.wait_idle(1)
+    assert await first_services.tracker.wait_idle(1)
+    assert await second_services.tracker.wait_idle(1)
     pool._executor.shutdown(wait=True)
 
 
@@ -81,15 +81,18 @@ async def test_provider_completion_remains_tracked_after_worker_returns() -> Non
     assert registered.is_set()
     signal.cancel()
     run_work.on_idle(idle.set)
-    assert not await services.wait_idle(0.01)
+    assert not await services.tracker.wait_idle(0.01)
     assert not idle.is_set()
     provider_done.set_result(None)
-    assert await services.wait_idle(1)
+    assert await services.tracker.wait_idle(1)
     assert idle.is_set()
 
 
 @pytest.mark.asyncio
-async def test_cancelled_shared_worker_keeps_tracking_until_exit() -> None:
+@pytest.mark.parametrize("fails", [False, True])
+async def test_cancelled_shared_worker_keeps_tracking_until_exit(
+    fails: bool, caplog: pytest.LogCaptureFixture
+) -> None:
     services = ExecutionServices(1)
     signal = CancellationSignal()
     entered = Event()
@@ -99,6 +102,8 @@ async def test_cancelled_shared_worker_keeps_tracking_until_exit() -> None:
     def operation() -> None:
         entered.set()
         assert release.wait(3)
+        if fails:
+            raise ValueError("late worker failure")
 
     running = asyncio.create_task(services.blocking(operation, signal))
     try:
@@ -109,12 +114,24 @@ async def test_cancelled_shared_worker_keeps_tracking_until_exit() -> None:
         with pytest.raises(AgentCancelled):
             await running
         services.tracker.on_idle(idle.set)
-        assert not await services.wait_idle(0.01)
+        assert not await services.tracker.wait_idle(0.01)
         assert not idle.is_set()
     finally:
         release.set()
-    assert await services.wait_idle(1)
+    assert await services.tracker.wait_idle(1)
     assert idle.is_set()
+    # Completion reporting runs on the event loop after the worker releases its tracker.
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    failures = [
+        record
+        for record in caplog.records
+        if record.message == "Agent worker failed after its caller stopped waiting"
+    ]
+    assert len(failures) == int(fails)
+    if fails:
+        assert failures[0].exc_info is not None
+        assert isinstance(failures[0].exc_info[1], ValueError)
 
 
 @pytest.mark.asyncio
