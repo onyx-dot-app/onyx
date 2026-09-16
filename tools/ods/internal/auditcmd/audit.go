@@ -1,7 +1,9 @@
 package auditcmd
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"os"
 
 	log "github.com/sirupsen/logrus"
@@ -52,7 +54,7 @@ how it gates deploys.`,
 			})
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			runAudit(opts)
+			exitOnError(runAudit(opts, cmd.OutOrStdout(), cmd.ErrOrStderr()))
 		},
 		Version: fmt.Sprintf("%s\ncommit %s", version, commit),
 	}
@@ -67,15 +69,53 @@ how it gates deploys.`,
 	cmd.Flags().StringVar(&opts.IgnoreURL, "ignore-url", audit.DefaultIgnoreURL, "S3 URL of the advisory allowlist")
 
 	cmd.AddCommand(newAuditImageCommand())
-	cmd.AddCommand(newAuditIgnoreCommand())
+	cmd.AddCommand(newAuditIgnoreCommand(terminalEditUI()))
 
 	return cmd
 }
 
-func runAudit(opts *AuditOptions) {
+// blockingError reports unignored findings at or above the --fail-on threshold.
+// It exits 1 like any other failure, but logs at error rather than fatal level.
+type blockingError struct {
+	count  int
+	failOn audit.Severity
+}
+
+func (e *blockingError) Error() string {
+	return fmt.Sprintf("%d finding(s) at or above %s severity must be resolved or suppressed", e.count, e.failOn)
+}
+
+// commandError is a command failure whose text is the exact line logged on
+// exit, so it may start with a capital letter.
+type commandError struct {
+	msg string
+}
+
+func (e *commandError) Error() string {
+	return e.msg
+}
+
+func failf(format string, args ...any) error {
+	return &commandError{msg: fmt.Sprintf(format, args...)}
+}
+
+// exitOnError ends the process when a command body returns an error.
+func exitOnError(err error) {
+	if err == nil {
+		return
+	}
+	var blocking *blockingError
+	if errors.As(err, &blocking) {
+		log.Error(blocking.Error())
+		os.Exit(1)
+	}
+	log.Fatal(err)
+}
+
+func runAudit(opts *AuditOptions, stdout, stderr io.Writer) error {
 	failOn := audit.ParseSeverity(opts.FailOn)
 	if failOn == audit.SeverityUnknown {
-		log.Fatalf("Invalid --fail-on %q (want critical, high, moderate, or low)", opts.FailOn)
+		return failf("Invalid --fail-on %q (want critical, high, moderate, or low)", opts.FailOn)
 	}
 
 	result, err := audit.Run(audit.Options{
@@ -86,15 +126,15 @@ func runAudit(opts *AuditOptions) {
 		Format:     opts.Format,
 		FailOn:     failOn,
 		IgnoreURL:  opts.IgnoreURL,
-		Stdout:     os.Stdout,
-		Stderr:     os.Stderr,
+		Stdout:     stdout,
+		Stderr:     stderr,
 	})
 	if err != nil {
-		log.Fatalf("Audit failed: %v", err)
+		return failf("Audit failed: %v", err)
 	}
 
 	if len(result.Blocking) > 0 {
-		log.Errorf("%d finding(s) at or above %s severity must be resolved or suppressed", len(result.Blocking), failOn)
-		os.Exit(1)
+		return &blockingError{count: len(result.Blocking), failOn: failOn}
 	}
+	return nil
 }

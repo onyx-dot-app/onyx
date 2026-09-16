@@ -89,13 +89,17 @@ Example usage:
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
+			var err error
 			switch {
 			case opts.Continue:
-				runCherryPickContinue()
+				err = runCherryPickContinue()
 			case opts.Dispatch:
-				runCherryPickDispatch(args, opts)
+				err = runCherryPickDispatch(args, opts)
 			default:
-				runCherryPick(cmd, args, opts)
+				err = runCherryPick(cmd, args, opts)
+			}
+			if err != nil {
+				log.Fatal(err)
 			}
 		},
 	}
@@ -111,11 +115,14 @@ Example usage:
 	return cmd
 }
 
-func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
+func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) error {
 	git.CheckGitHubCLI()
 
 	// Resolve any PR numbers (e.g. "1234") to their merge commit SHAs
-	commitSHAs, labels := resolveArgs(args)
+	commitSHAs, labels, err := resolveArgs(args)
+	if err != nil {
+		return err
+	}
 	if len(commitSHAs) == 1 {
 		log.Debugf("Cherry-picking %s (%s)", labels[0], commitSHAs[0])
 	} else {
@@ -129,14 +136,14 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 	// Save the current branch to switch back later
 	originalBranch, err := git.GetCurrentBranch()
 	if err != nil {
-		log.Fatalf("Failed to get current branch: %v", err)
+		return fatalErrorf("Failed to get current branch: %w", err)
 	}
 	log.Debugf("Original branch: %s", originalBranch)
 
 	// Stash any uncommitted changes before switching branches
 	stashResult, err := git.StashChanges()
 	if err != nil {
-		log.Fatalf("Failed to stash changes: %v", err)
+		return fatalErrorf("Failed to stash changes: %w", err)
 	}
 
 	// Fetch commits from remote before cherry-picking
@@ -178,7 +185,7 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 		version, err := release.FindTargetVersion(commitSHAs[0])
 		if err != nil {
 			git.RestoreStash(stashResult)
-			log.Fatalf("Failed to auto-detect the target release (pass --release explicitly): %v", err)
+			return fatalErrorf("Failed to auto-detect the target release (pass --release explicitly): %w", err)
 		}
 
 		// Prompt user for confirmation
@@ -186,7 +193,7 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 			if !prompt.Confirm(fmt.Sprintf("Auto-detected release version: %s. Continue? (yes/no): ", version)) {
 				log.Info("If you want to cherry-pick to a different release, use the --release flag. Exiting...")
 				git.RestoreStash(stashResult)
-				return
+				return nil
 			}
 		} else {
 			log.Infof("Auto-detected release version: %s", version)
@@ -227,7 +234,7 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 	assignees, err := resolveAssignees(cmd, opts.Assignees)
 	if err != nil {
 		git.RestoreStash(stashResult)
-		log.Fatalf("Failed to parse assignees: %v", err)
+		return fatalErrorf("Failed to parse assignees: %w", err)
 	}
 
 	state := &git.CherryPickState{
@@ -246,12 +253,12 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 		log.Warnf("Failed to save cherry-pick state (--continue won't work): %v", err)
 	}
 
-	finishCherryPick(state, stashResult)
+	return finishCherryPick(state, stashResult)
 }
 
 // finishCherryPick processes each release (cherry-pick remaining commits, push, create PR),
 // then switches back to the original branch and cleans up.
-func finishCherryPick(state *git.CherryPickState, stashResult *git.StashResult) {
+func finishCherryPick(state *git.CherryPickState, stashResult *git.StashResult) error {
 	completed := make(map[string]bool, len(state.CompletedReleases))
 	for _, r := range state.CompletedReleases {
 		completed[r] = true
@@ -279,7 +286,7 @@ func finishCherryPick(state *git.CherryPickState, stashResult *git.StashResult) 
 				}
 				git.RestoreStash(stashResult)
 			}
-			log.Fatalf("Failed to cherry-pick to release %s: %v", release, err)
+			return fatalErrorf("Failed to cherry-pick to release %s: %w", release, err)
 		}
 
 		// Mark release as completed and persist so --continue skips it
@@ -304,49 +311,50 @@ func finishCherryPick(state *git.CherryPickState, stashResult *git.StashResult) 
 	for i, prURL := range prURLs {
 		log.Infof("PR %d: %s", i+1, prURL)
 	}
+	return nil
 }
 
 // runCherryPickContinue resumes a cherry-pick after manual conflict resolution.
 // It finishes any in-progress git cherry-pick, then falls into the normal
 // cherryPickToRelease path which handles skip-applied-commits, push, and PR creation.
-func runCherryPickContinue() {
+func runCherryPickContinue() error {
 	git.CheckGitHubCLI()
 
 	state, err := git.LoadCherryPickState()
 	if err != nil {
-		log.Fatalf("Cannot continue: %v", err)
+		return fatalErrorf("Cannot continue: %w", err)
 	}
 
 	log.Infof("Resuming cherry-pick (original branch: %s, releases: %v)", state.OriginalBranch, state.Releases)
 
 	// If a rebase is in progress (REBASE_HEAD exists), it must be resolved first
 	if git.IsRebaseInProgress() {
-		log.Fatal("A git rebase is in progress. Resolve it first:\n  To continue: git rebase --continue\n  To abort:    git rebase --abort\nThen re-run: ods cherry-pick --continue")
+		return fatalErrorf("A git rebase is in progress. Resolve it first:\n  To continue: git rebase --continue\n  To abort:    git rebase --abort\nThen re-run: ods cherry-pick --continue")
 	}
 
 	// If git cherry-pick is still in progress (CHERRY_PICK_HEAD exists), continue it
 	if git.IsCherryPickInProgress() {
 		log.Info("Continuing in-progress cherry-pick...")
 		if err := git.RunCherryPickContinue(); err != nil {
-			log.Fatalf("git cherry-pick --continue failed: %v", err)
+			return fmt.Errorf("git cherry-pick --continue failed: %w", err)
 		}
 	}
 
 	// Re-use the normal per-release flow: cherryPickToRelease already handles
 	// "branch exists → skip applied commits → push → create PR"
 	stashResult := &git.StashResult{Stashed: state.Stashed}
-	finishCherryPick(state, stashResult)
+	return finishCherryPick(state, stashResult)
 }
 
 // runCherryPickDispatch resolves the given commit(s)/PR(s) locally, then triggers
 // the post-merge-beta-cherry-pick GitHub workflow for each — instead of performing
 // the cherry-pick on the local machine. The workflow auto-detects the latest
 // release unless --release is supplied.
-func runCherryPickDispatch(args []string, opts *CherryPickOptions) {
+func runCherryPickDispatch(args []string, opts *CherryPickOptions) error {
 	git.CheckGitHubCLI()
 
 	if len(opts.Releases) > 1 {
-		log.Fatal("--dispatch supports at most one --release")
+		return fmt.Errorf("--dispatch supports at most one --release")
 	}
 	release := ""
 	if len(opts.Releases) == 1 {
@@ -358,7 +366,10 @@ func runCherryPickDispatch(args []string, opts *CherryPickOptions) {
 	}
 
 	// Resolve any PR numbers (e.g. "1234") to their merge commit SHAs
-	commitSHAs, labels := resolveArgs(args)
+	commitSHAs, labels, err := resolveArgs(args)
+	if err != nil {
+		return err
+	}
 
 	for i, sha := range commitSHAs {
 		// Prefer the PR number we already have from the argument; otherwise
@@ -374,13 +385,14 @@ func runCherryPickDispatch(args []string, opts *CherryPickOptions) {
 
 		log.Infof("Dispatching cherry-pick workflow for %s (%s)", labels[i], sha)
 		if err := git.DispatchCherryPickWorkflow(sha, prNumber, release, opts.DryRun); err != nil {
-			log.Fatalf("Failed to dispatch cherry-pick workflow for %s: %v", labels[i], err)
+			return fatalErrorf("Failed to dispatch cherry-pick workflow for %s: %w", labels[i], err)
 		}
 	}
 
 	if !opts.DryRun {
 		log.Infof("Dispatched %d cherry-pick workflow run(s). Track them with: gh run list --workflow post-merge-beta-cherry-pick.yml", len(commitSHAs))
 	}
+	return nil
 }
 
 // cherryPickToRelease cherry-picks one or more commits to a specific release branch
@@ -536,7 +548,7 @@ func isPRNumber(arg string) bool {
 // resolveArgs resolves arguments that may be PR numbers into commit SHAs.
 // Returns the resolved commit SHAs and a display-friendly label for logging
 // (e.g. "PR #1234" instead of raw SHA).
-func resolveArgs(args []string) (commitSHAs []string, labels []string) {
+func resolveArgs(args []string) (commitSHAs []string, labels []string, err error) {
 	commitSHAs = make([]string, len(args))
 	labels = make([]string, len(args))
 	for i, arg := range args {
@@ -544,7 +556,7 @@ func resolveArgs(args []string) (commitSHAs []string, labels []string) {
 			log.Infof("Resolving PR #%s to merge commit...", arg)
 			sha, err := git.ResolvePRToMergeCommit(arg)
 			if err != nil {
-				log.Fatalf("Failed to resolve PR #%s: %v", arg, err)
+				return nil, nil, fatalErrorf("Failed to resolve PR #%s: %w", arg, err)
 			}
 			log.Infof("PR #%s → %s", arg, sha)
 			commitSHAs[i] = sha
@@ -554,7 +566,7 @@ func resolveArgs(args []string) (commitSHAs []string, labels []string) {
 			labels[i] = arg
 		}
 	}
-	return commitSHAs, labels
+	return commitSHAs, labels, nil
 }
 
 // normalizeVersion ensures the version has a 'v' prefix

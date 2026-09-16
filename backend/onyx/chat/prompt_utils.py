@@ -96,7 +96,7 @@ def calculate_reserved_tokens(
         include_all_guidance=True,
     )
 
-    custom_agent_prompt = persona_system_prompt if persona_system_prompt else ""
+    custom_agent_prompt = persona_system_prompt or ""
 
     reserved_token_count = token_counter(
         # Annoying that the dict has no attributes now
@@ -141,7 +141,7 @@ def build_reminder_message(
     if include_file_reminder:
         reminder += "\n\n" + FILE_REMINDER
     reminder = reminder.strip()
-    return reminder if reminder else None
+    return reminder or None
 
 
 def process_prompt_template(

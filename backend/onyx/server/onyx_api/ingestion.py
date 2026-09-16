@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.configs.constants import DEFAULT_CC_PAIR_ID, PUBLIC_API_TAGS
-from onyx.connectors.models import Document, IndexAttemptMetadata
+from onyx.connectors.models import Document, IndexAttemptMetadata, TabularSection
 from onyx.db.connector_credential_pair import (
     get_cc_pair_ids_for_document,
     get_connector_credential_pair_from_id,
@@ -31,7 +31,7 @@ from onyx.db.search_settings import (
     get_current_search_settings,
     get_secondary_search_settings,
 )
-from onyx.db.user_file import get_user_file_by_id
+from onyx.db.user_file import get_owned_file_ids, get_user_file_by_id
 from onyx.document_index.factory import get_all_document_indices
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -107,6 +107,32 @@ def upsert_ingestion_doc(
     db_session: Session = Depends(get_session),
 ) -> IngestionResult:
     tenant_id = get_current_tenant_id()
+
+    if doc_info.document.file_id is not None:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "file_id may not be set on an ingested document",
+        )
+    for section in doc_info.document.sections:
+        if isinstance(section, TabularSection):
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "Sections referencing file store content are not supported",
+            )
+
+    image_file_ids = {
+        section.image_file_id
+        for section in doc_info.document.sections
+        if section.image_file_id is not None
+    }
+    if (
+        image_file_ids
+        and get_owned_file_ids(image_file_ids, user.id, db_session) != image_file_ids
+    ):
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Image references must identify files uploaded by the current user",
+        )
 
     doc_info.document.from_ingestion_api = True
 

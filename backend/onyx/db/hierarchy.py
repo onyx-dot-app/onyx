@@ -689,7 +689,7 @@ def get_document_parent_hierarchy_node_ids(
     )
     results = db_session.execute(stmt).all()
 
-    return {doc_id: parent_id for doc_id, parent_id in results}
+    return {doc_id: parent_id for doc_id, parent_id in results}  # noqa: C416  # unpacking types the SQLAlchemy Row
 
 
 def update_document_parent_hierarchy_nodes(

@@ -44,6 +44,7 @@ from onyx.llm.interfaces import (
 from onyx.llm.model_capabilities import (
     OPENAI_API_PROVIDERS,
     ReasoningParamStyle,
+    anthropic_identity_is_always_thinking,
     anthropic_omits_sampling_params,
     anthropic_supports_thinking,
     anthropic_uses_adaptive_thinking,
@@ -805,6 +806,21 @@ class LitellmLLM(LLM):
             required_kwarg_keys = frozenset({"reasoning_effort"})
             _log_chat_completions_tools_disable_reasoning(model, self._api_base)
 
+        reasoning_style = resolve_reasoning_param_style(
+            self.config.model_provider,
+            model_identity_names,
+            self._api_surface,
+        )
+
+        # Fable and Mythos never stop thinking, so off there means the least
+        # reasoning they take rather than the API's own default.
+        if (
+            reasoning_effort is ReasoningEffort.OFF
+            and reasoning_style is ReasoningParamStyle.ANTHROPIC_ADAPTIVE
+            and anthropic_identity_is_always_thinking(model_identity_names)
+        ):
+            reasoning_effort = ReasoningEffort.LOW
+
         # The tools block above already forced reasoning_effort "none".
         sends_explicit_reasoning_none = (
             reasoning_effort is ReasoningEffort.OFF
@@ -833,11 +849,6 @@ class LitellmLLM(LLM):
             }
             if not sends_explicit_reasoning_none:
                 openai_style_reasoning["summary"] = "auto"
-            reasoning_style = resolve_reasoning_param_style(
-                self.config.model_provider,
-                model_identity_names,
-                self._api_surface,
-            )
 
             if reasoning_style is ReasoningParamStyle.OPENAI:
                 if is_claude_model:
@@ -878,16 +889,13 @@ class LitellmLLM(LLM):
                 has_tool_call_history = _prompt_contains_tool_call_history(prompt)
 
                 if reasoning_style is ReasoningParamStyle.ANTHROPIC_ADAPTIVE:
-                    # Newer Anthropic models (Claude Opus 4.7+) reject
-                    # thinking.type.enabled — they require the adaptive
-                    # thinking config with output_config.effort.
+                    # No signed blocks to lose, and without it Claude 5 picks
+                    # its own effort rather than ours.
+                    optional_kwargs["output_config"] = {
+                        "effort": ANTHROPIC_ADAPTIVE_REASONING_EFFORT[reasoning_effort],
+                    }
                     if not has_tool_call_history:
                         optional_kwargs["thinking"] = {"type": "adaptive"}
-                        optional_kwargs["output_config"] = {
-                            "effort": ANTHROPIC_ADAPTIVE_REASONING_EFFORT[
-                                reasoning_effort
-                            ],
-                        }
                 else:
                     budget_tokens: int | None = ANTHROPIC_REASONING_EFFORT_BUDGET.get(
                         reasoning_effort
@@ -935,6 +943,16 @@ class LitellmLLM(LLM):
                     optional_kwargs["reasoning_effort"] = _OPENAI_REASONING_NONE
                 else:
                     optional_kwargs["reasoning_effort"] = ReasoningEffort.MEDIUM.value
+
+        # Claude 5 thinks unless told not to, and 4.7/4.8 take the same param.
+        # No effort with it, which Opus 5 caps, and no signed-block guard like
+        # the sibling branch: that one binds only while thinking is on.
+        if (
+            is_reasoning
+            and reasoning_effort is ReasoningEffort.OFF
+            and reasoning_style is ReasoningParamStyle.ANTHROPIC_ADAPTIVE
+        ):
+            optional_kwargs["thinking"] = {"type": "disabled"}
 
         if tools:
             # OpenAI will error if parallel_tool_calls is True and tools are not specified

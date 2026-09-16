@@ -77,7 +77,7 @@
     "./tailwind-preset": "./tailwind-preset.cjs"
   },
   "scripts": {
-    "build": "tsup && node scripts/bundle-css.mjs",
+    "build": "tsdown && node scripts/bundle-css.mjs",
     "prepare": "bun run build"
   },
   "dependencies": {
@@ -87,8 +87,8 @@
   },
   "devDependencies": {
     "@onyx-ai/shared": "file:../shared",
-    "tsup": "^8.3.0",
-    "typescript": "^5.0.0"
+    "tsdown": "^0.23.0",
+    "typescript": "7.1.0-dev.20260916.1"
   },
   "peerDependencies": {
     "@dnd-kit/core": "^6.0.0",

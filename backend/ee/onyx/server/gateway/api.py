@@ -344,9 +344,9 @@ def _stream_worker(
                 reasoning_effort=reasoning_effort,
             )
             for chunk in state.upstream:
+                state.observe(chunk)
                 if cancelled.is_set():
                     break
-                state.observe(chunk)
                 payload = ChatCompletionChunk.from_stream_chunk(
                     chunk, model, include_role=not sent_role
                 )
@@ -639,9 +639,9 @@ def _responses_stream_worker(
                 reasoning_effort=reasoning_effort,
             )
             for chunk in state.upstream:
+                state.observe(chunk)
                 if cancelled.is_set():
                     break
-                state.observe(chunk)
                 if not chunk.choice.delta.content:
                     continue
                 if not text_item_open:
@@ -1211,9 +1211,9 @@ def _anthropic_stream_worker(
             )
             finish_reason: str | None = None
             for chunk in state.upstream:
+                state.observe(chunk)
                 if cancelled.is_set():
                     break
-                state.observe(chunk)
                 if chunk.choice.finish_reason is not None:
                     finish_reason = chunk.choice.finish_reason
                 delta = chunk.choice.delta
