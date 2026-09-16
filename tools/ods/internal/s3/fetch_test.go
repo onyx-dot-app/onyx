@@ -133,3 +133,31 @@ func TestS3URL_HTTPEndpoint(t *testing.T) {
 		t.Fatalf("expected %q, got %q", want, got)
 	}
 }
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestNewHTTPClient(t *testing.T) {
+	t.Run("bounds the header wait on a copy of the transport", func(t *testing.T) {
+		base := &http.Transport{}
+		transport, ok := newHTTPClient(base).Transport.(*http.Transport)
+		if !ok || transport == base || transport.ResponseHeaderTimeout == 0 {
+			t.Fatalf("expected a copied transport with a header timeout, got %#v", transport)
+		}
+		if base.ResponseHeaderTimeout != 0 {
+			t.Fatal("expected the base transport to stay unchanged")
+		}
+	})
+
+	t.Run("keeps a custom round tripper", func(t *testing.T) {
+		called := false
+		base := roundTripperFunc(func(*http.Request) (*http.Response, error) {
+			called = true
+			return nil, errors.New("custom")
+		})
+		if _, err := newHTTPClient(base).Get("http://example.invalid"); err == nil || !called {
+			t.Fatalf("expected the custom round tripper to run, got %v", err)
+		}
+	})
+}

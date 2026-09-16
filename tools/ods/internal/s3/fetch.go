@@ -161,13 +161,20 @@ func fetchFrom(endpoint string, s3url string, destPath string, quiet bool) error
 	return fmt.Errorf("failed to download from S3: %w\n\nTo authenticate, run:\n  aws sso login\n\nOr configure AWS credentials with:\n  aws configure sso", cliErr)
 }
 
-// httpClient bounds the wait for a response. It sets no overall timeout,
-// because large objects can take long to download.
-var httpClient = func() *http.Client {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
+var httpClient = newHTTPClient(http.DefaultTransport)
+
+// newHTTPClient bounds the wait for a response. It sets no overall timeout,
+// because large objects can take long to download. It uses a base transport
+// that is not an *http.Transport as it is.
+func newHTTPClient(base http.RoundTripper) *http.Client {
+	transport, ok := base.(*http.Transport)
+	if !ok {
+		return &http.Client{Transport: base}
+	}
+	transport = transport.Clone()
 	transport.ResponseHeaderTimeout = 30 * time.Second
 	return &http.Client{Transport: transport}
-}()
+}
 
 // fetchUnsigned attempts to download the file using an unsigned HTTP request.
 // It takes the endpoint as a string so tests can point it at a local server.
