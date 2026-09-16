@@ -572,7 +572,11 @@ def test_openai_only_in_deployment_name_uses_responses_bridge() -> None:
 )
 @pytest.mark.parametrize(
     "reasoning_effort, expected_effort",
-    [(ReasoningEffort.AUTO, "medium"), (ReasoningEffort.HIGH, "high")],
+    [
+        (ReasoningEffort.AUTO, "medium"),
+        (ReasoningEffort.LOW, "low"),
+        (ReasoningEffort.HIGH, "high"),
+    ],
 )
 def test_claude_adaptive_thinking_uses_output_config(
     model_name: str, reasoning_effort: ReasoningEffort, expected_effort: str
@@ -607,13 +611,7 @@ def test_claude_adaptive_thinking_uses_output_config(
 
 
 def test_claude_adaptive_thinking_sends_output_config_after_tool_call() -> None:
-    # Regression test for #14013: on adaptive-thinking Claude models,
-    # `thinking` must be omitted once the prompt contains tool-call history
-    # (Anthropic requires a signed thinking block ahead of tool_use blocks,
-    # which Onyx does not preserve), but `output_config`/effort carries no
-    # such signed block and must still be sent — otherwise the configured
-    # reasoning_effort is silently dropped and the model reasons at the API's
-    # own default ("high") on every turn following a tool call.
+    # No signed blocks to replay costs us `thinking`, not the effort.
     llm = LitellmLLM(
         api_key="test_key",
         timeout=30,
@@ -625,65 +623,16 @@ def test_claude_adaptive_thinking_sends_output_config_after_tool_call() -> None:
         ),
     )
 
-    messages_with_tool_call_history: LanguageModelInput = [
-        UserMessage(content="What's the weather in SF?"),
-        AssistantMessage(
-            role="assistant",
-            content=None,
-            tool_calls=[
-                ToolCall(
-                    id="call_1",
-                    function=FunctionCall(name="get_weather", arguments="{}"),
-                )
-            ],
-        ),
-        ToolMessage(role="tool", tool_call_id="call_1", content="Sunny, 70F"),
-    ]
-
     with (
         patch("litellm.completion") as mock_completion,
         patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
     ):
         mock_completion.return_value = []
 
-        list(
-            llm.stream(
-                messages_with_tool_call_history,
-                reasoning_effort=ReasoningEffort.LOW,
-            )
-        )
+        list(llm.stream(_tool_cycle_prompt(), reasoning_effort=ReasoningEffort.LOW))
 
         kwargs = mock_completion.call_args.kwargs
         assert "thinking" not in kwargs
-        assert kwargs["output_config"] == {"effort": "low"}
-
-
-def test_claude_adaptive_thinking_sends_both_without_tool_call_history() -> None:
-    # Regression coverage for the pre-existing, correct behavior: with no
-    # tool-call history, both `thinking` and `output_config` must still be
-    # sent together as before.
-    llm = LitellmLLM(
-        api_key="test_key",
-        timeout=30,
-        model_provider=LlmProviderNames.LITELLM_PROXY,
-        model_name="claude-sonnet-5",
-        max_input_tokens=get_max_input_tokens(
-            model_provider=LlmProviderNames.LITELLM_PROXY,
-            model_name="claude-sonnet-5",
-        ),
-    )
-
-    with (
-        patch("litellm.completion") as mock_completion,
-        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
-    ):
-        mock_completion.return_value = []
-
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
-        list(llm.stream(messages, reasoning_effort=ReasoningEffort.LOW))
-
-        kwargs = mock_completion.call_args.kwargs
-        assert kwargs["thinking"] == {"type": "adaptive"}
         assert kwargs["output_config"] == {"effort": "low"}
 
 
