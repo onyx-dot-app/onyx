@@ -145,9 +145,9 @@ _MULTI_MONTH_LOOKBACK = timedelta(days=400)
 
 def _zoom_client(test_secrets: dict[TestSecret, str]) -> ZoomClient:
     return ZoomClient(
-        account_id=test_secrets[TestSecret.ZOOM_ACCOUNT_ID],
-        client_id=test_secrets[TestSecret.ZOOM_CLIENT_ID],
-        client_secret=test_secrets[TestSecret.ZOOM_CLIENT_SECRET],
+        account_id=_secret(test_secrets, TestSecret.ZOOM_ACCOUNT_ID),
+        client_id=_secret(test_secrets, TestSecret.ZOOM_CLIENT_ID),
+        client_secret=_secret(test_secrets, TestSecret.ZOOM_CLIENT_SECRET),
     )
 
 
@@ -173,7 +173,9 @@ def test_recording_listing_accepts_a_multi_month_range(
     for it at all. This test is what catches Zoom ever changing that.
     """
     client = _zoom_client(test_secrets)
-    user_id = _user_id_for(client, test_secrets[TestSecret.ZOOM_TEST_HOST_EMAIL])
+    user_id = _user_id_for(
+        client, _secret(test_secrets, TestSecret.ZOOM_TEST_HOST_EMAIL)
+    )
 
     to_date = date.today()
     page = client.list_user_recordings(
