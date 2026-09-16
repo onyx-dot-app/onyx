@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import and_, exists, func, select
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy import exists, select
+from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DEFAULT_PRUNING_FREQ
 from onyx.configs.constants import DocumentSource
@@ -11,9 +11,7 @@ from onyx.db.models import (
     Connector,
     ConnectorCredentialPair,
     FederatedConnector,
-    IndexAttempt,
 )
-from onyx.kg.models import KGConnectorData
 from onyx.server.documents.models import ConnectorBase, ObjectCreationIdResponse
 from onyx.server.models import StatusResponse
 from onyx.utils.logger import setup_logger
@@ -77,19 +75,6 @@ def connector_by_name_source_exists(
 
 def fetch_connector_by_id(connector_id: int, db_session: Session) -> Connector | None:
     stmt = select(Connector).where(Connector.id == connector_id)
-    result = db_session.execute(stmt)
-    connector = result.scalar_one_or_none()
-    return connector
-
-
-def fetch_ingestion_connector_by_name(
-    connector_name: str, db_session: Session
-) -> Connector | None:
-    stmt = (
-        select(Connector)
-        .where(Connector.name == connector_name)
-        .where(Connector.source == DocumentSource.INGESTION_API)
-    )
     result = db_session.execute(stmt)
     connector = result.scalar_one_or_none()
     return connector
@@ -180,64 +165,6 @@ def get_connector_credential_ids(
         raise ValueError(f"Connector by id {connector_id} does not exist")
 
     return [association.credential.id for association in connector.credentials]
-
-
-def fetch_latest_index_attempt_by_connector(
-    db_session: Session,
-    source: DocumentSource | None = None,
-) -> list[IndexAttempt]:
-    latest_index_attempts: list[IndexAttempt] = []
-
-    if source:
-        connectors = fetch_connectors(db_session, sources=[source])
-    else:
-        connectors = fetch_connectors(db_session)
-
-    if not connectors:
-        return []
-
-    for connector in connectors:
-        latest_index_attempt = (
-            db_session.query(IndexAttempt)
-            .join(ConnectorCredentialPair)
-            .filter(ConnectorCredentialPair.connector_id == connector.id)
-            .order_by(IndexAttempt.time_updated.desc())
-            .first()
-        )
-
-        if latest_index_attempt is not None:
-            latest_index_attempts.append(latest_index_attempt)
-
-    return latest_index_attempts
-
-
-def fetch_latest_index_attempts_by_status(
-    db_session: Session,
-) -> list[IndexAttempt]:
-    subquery = (
-        db_session.query(
-            IndexAttempt.connector_credential_pair_id,
-            IndexAttempt.status,
-            func.max(IndexAttempt.time_updated).label("time_updated"),
-        )
-        .group_by(IndexAttempt.connector_credential_pair_id)
-        .group_by(IndexAttempt.status)
-        .subquery()
-    )
-
-    alias = aliased(IndexAttempt, subquery)
-
-    query = db_session.query(IndexAttempt).join(
-        alias,
-        and_(
-            IndexAttempt.connector_credential_pair_id
-            == alias.connector_credential_pair_id,
-            IndexAttempt.status == alias.status,
-            IndexAttempt.time_updated == alias.time_updated,
-        ),
-    )
-
-    return query.all()
 
 
 _INTERNAL_ONLY_SOURCES = {
@@ -372,29 +299,3 @@ def mark_ccpair_with_indexing_trigger(
     except Exception:
         db_session.rollback()
         raise
-
-
-def get_kg_enabled_connectors(db_session: Session) -> list[KGConnectorData]:
-    """
-    Retrieves a list of connector IDs that have not been KG processed for a given tenant.
-    Args:
-        db_session (Session): The database session to use
-    Returns:
-        list[KGConnectorData]: List of connector IDs with KG extraction enabled but have unprocessed documents
-    """
-    try:
-        stmt = select(Connector.id, Connector.source, Connector.kg_coverage_days).where(
-            Connector.kg_processing_enabled
-        )
-        result = db_session.execute(stmt)
-
-        connector_results = [
-            KGConnectorData(id=row[0], source=row[1].lower(), kg_coverage_days=row[2])
-            for row in result.fetchall()
-        ]
-
-        return connector_results
-
-    except Exception as e:
-        logger.error("Error fetching unprocessed connector IDs: %s", str(e))
-        raise e

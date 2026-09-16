@@ -4,8 +4,6 @@ import logging
 import os
 import random
 import re
-import time
-import urllib.parse
 import zipfile
 from collections.abc import Generator, Iterable
 from datetime import datetime, timedelta
@@ -48,7 +46,6 @@ from onyx.document_index.interfaces_new import (
 from onyx.document_index.vespa.chunk_retrieval import (
     batch_search_api_retrieval,
     get_all_chunks_paginated,
-    get_chunks_via_visit_api,
     parallel_visit_api_retrieval,
     query_vespa,
 )
@@ -87,7 +84,6 @@ from onyx.document_index.vespa_constants import (
 )
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.key_value_store.factory import get_shared_kv_store
-from onyx.kg.utils.formatting_utils import split_relationship_id
 from onyx.tools.tool_implementations.search.constants import KEYWORD_QUERY_HYBRID_ALPHA
 from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
@@ -103,56 +99,6 @@ httpx_logger.setLevel(logging.WARNING)
 
 
 VESPA_SCHEMA_JINJA_FILENAME = "danswer_chunk.sd.jinja"
-
-
-class KGVespaChunkUpdateRequest(BaseModel):
-    document_id: str
-    chunk_id: int
-    url: str
-    update_request: dict[str, dict]
-
-
-class KGUChunkUpdateRequest(BaseModel):
-    """Update KG fields for a document."""
-
-    document_id: str
-    chunk_id: int
-    core_entity: str
-    entities: set[str] | None = None
-    relationships: set[str] | None = None
-    terms: set[str] | None = None
-
-
-class KGUDocumentUpdateRequest(BaseModel):
-    """Update KG fields for a document."""
-
-    document_id: str
-    entities: set[str]
-    relationships: set[str]
-    terms: set[str]
-
-
-def _generate_kg_update_request(
-    kg_update_request: KGUChunkUpdateRequest,
-) -> dict[str, dict]:
-    kg_update_dict: dict[str, dict] = {}
-
-    if kg_update_request.entities is not None:
-        kg_update_dict["kg_entities"] = {"assign": list(kg_update_request.entities)}
-
-    if kg_update_request.relationships is not None:
-        kg_update_dict["kg_relationships"] = {"assign": []}
-        for relationship in kg_update_request.relationships:
-            source, rel_type, target = split_relationship_id(relationship)
-            kg_update_dict["kg_relationships"]["assign"].append(
-                {
-                    "source": source,
-                    "rel_type": rel_type,
-                    "target": target,
-                }
-            )
-
-    return kg_update_dict
 
 
 def _in_memory_zip_from_file_bytes(file_contents: dict[str, bytes]) -> BinaryIO:
@@ -379,13 +325,6 @@ def register_multitenant_vespa_indices(
         raise RuntimeError(
             f"Failed to prepare Vespa Onyx Indexes. Response: {response.text}"
         )
-
-
-class _VespaDeleteRequest:
-    def __init__(self, document_id: str, index_name: str) -> None:
-        self.document_id = document_id
-        encoded_doc_id = urllib.parse.quote_plus(self.document_id)
-        self.url = f"{VESPA_APPLICATION_ENDPOINT}/document/v1/{index_name}/{index_name}/docid/{encoded_doc_id}"
 
 
 def _enrich_basic_chunk_info(
@@ -1020,32 +959,6 @@ class VespaDocumentIndex(DocumentIndex):
 
         return cleanup_content_for_chunks(query_vespa(params))
 
-    def get_raw_document_chunks(self, document_id: str) -> list[dict[str, Any]]:
-        """Gets all raw document chunks for a document as returned by Vespa.
-
-        Used in the Vespa migration task.
-
-        Args:
-            document_id: The ID of the document to get chunks for.
-
-        Returns:
-            List of raw document chunks.
-        """
-        # Vespa doc IDs are sanitized using replace_invalid_doc_id_characters.
-        sanitized_document_id = replace_invalid_doc_id_characters(document_id)
-        chunk_request = VespaChunkRequest(document_id=sanitized_document_id)
-        raw_chunks = get_chunks_via_visit_api(
-            chunk_request=chunk_request,
-            index_name=self._index_name,
-            filters=IndexFilters(access_control_list=None, tenant_id=self._tenant_id),
-            get_large_chunks=False,
-            short_tensor_format=True,
-        )
-        # Vespa returns other metadata around the actual document chunk. The raw
-        # chunk we're interested in is in the "fields" field.
-        raw_document_chunks = [chunk["fields"] for chunk in raw_chunks]
-        return raw_document_chunks
-
     def get_all_raw_document_chunks_paginated(
         self,
         continuation_token_map: dict[int, str | None],
@@ -1127,101 +1040,6 @@ class VespaDocumentIndex(DocumentIndex):
     @property
     def index_name(self) -> str:
         return self._index_name
-
-    @property
-    def httpx_client_context(self) -> BaseHTTPXClientContext:
-        return self._httpx_client_context
-
-    @classmethod
-    def _apply_kg_chunk_updates_batched(
-        cls,
-        updates: list[KGVespaChunkUpdateRequest],
-        httpx_client: httpx.Client,
-        batch_size: int = BATCH_SIZE,
-    ) -> None:
-        """Runs a batch of KG chunk updates in parallel via the
-        ThreadPoolExecutor."""
-
-        @retry_builder(tries=3, delay=1, backoff=2, jitter=(0.0, 1.0))
-        def _kg_update_chunk(
-            update: KGVespaChunkUpdateRequest, http_client: httpx.Client
-        ) -> httpx.Response:
-            return http_client.put(
-                update.url,
-                headers={"Content-Type": "application/json"},
-                json=update.update_request,
-            )
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=NUM_THREADS) as executor:
-            for update_batch in batch_generator(updates, batch_size):
-                future_to_document_id = {
-                    executor.submit(
-                        _kg_update_chunk,
-                        update,
-                        httpx_client,
-                    ): update.document_id
-                    for update in update_batch
-                }
-                for future in concurrent.futures.as_completed(future_to_document_id):
-                    res = future.result()
-                    try:
-                        res.raise_for_status()
-                    except httpx.HTTPStatusError:
-                        # http_client is httpx.Client, so raise_for_status raises
-                        # httpx.HTTPStatusError; logging here is the only way to
-                        # attach the doc id, since the canonical exception
-                        # propagates unchanged for callers.
-                        logger.error(
-                            "Failed to update document %s. Response: %s",
-                            future_to_document_id[future],
-                            res.text,
-                        )
-                        raise
-
-    def kg_chunk_updates(
-        self,
-        kg_update_requests: list[KGUChunkUpdateRequest],
-        tenant_id: str,
-    ) -> None:
-        """Applies a batch of knowledge-graph metadata updates to chunks in
-        this Vespa index."""
-
-        processed_updates_requests: list[KGVespaChunkUpdateRequest] = []
-        update_start = time.monotonic()
-
-        for kg_update_request in kg_update_requests:
-            kg_update_dict: dict[str, dict] = {
-                "fields": _generate_kg_update_request(kg_update_request)
-            }
-            if not kg_update_dict["fields"]:
-                logger.error("Update request received but nothing to update")
-                continue
-
-            doc_chunk_id = get_uuid_from_chunk_info(
-                document_id=kg_update_request.document_id,
-                chunk_id=kg_update_request.chunk_id,
-                tenant_id=tenant_id,
-                large_chunk_id=None,
-            )
-
-            processed_updates_requests.append(
-                KGVespaChunkUpdateRequest(
-                    document_id=kg_update_request.document_id,
-                    chunk_id=kg_update_request.chunk_id,
-                    url=f"{DOCUMENT_ID_ENDPOINT.format(index_name=self._index_name)}/{doc_chunk_id}",
-                    update_request=kg_update_dict,
-                )
-            )
-
-        with self._httpx_client_context as httpx_client:
-            self._apply_kg_chunk_updates_batched(
-                processed_updates_requests, httpx_client
-            )
-        logger.debug(
-            "Updated %d vespa documents in %.2f seconds",
-            len(processed_updates_requests),
-            time.monotonic() - update_start,
-        )
 
 
 class VespaIndexPair(DocumentIndex):

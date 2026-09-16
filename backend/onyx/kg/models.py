@@ -100,45 +100,10 @@ class KGChunkFormat(BaseModel):
     metadata: dict[str, str | list[str]] | None = None
 
 
-class KGPerson(BaseModel):
-    name: str
-    company: str
-    employee: bool
-
-
-class NormalizedEntities(BaseModel):
-    entities: list[str]
-    entities_w_attributes: list[str]
-    entity_normalization_map: dict[str, str]
-
-
-class NormalizedRelationships(BaseModel):
-    relationships: list[str]
-    relationship_normalization_map: dict[str, str]
-
-
-class KGMetadataContent(BaseModel):
-    document_id: str
-    source_type: str
-    source_metadata: dict[str, Any] | None = None
-
-
 class KGClassificationInstructions(BaseModel):
     classification_enabled: bool
     classification_options: str
     classification_class_definitions: dict[str, KGEntityTypeClassificationInfo]
-
-
-class KGExtractionInstructions(BaseModel):
-    deep_extraction: bool
-    active: bool
-
-
-class KGEntityTypeInstructions(BaseModel):
-    metadata_attribute_conversion: dict[str, KGAttributeProperty]
-    classification_instructions: KGClassificationInstructions
-    extraction_instructions: KGExtractionInstructions
-    entity_filter_attributes: dict[str, Any] | None = None
 
 
 class KGEnhancedDocumentMetadata(BaseModel):
@@ -149,12 +114,6 @@ class KGEnhancedDocumentMetadata(BaseModel):
     classification_enabled: bool
     classification_instructions: KGClassificationInstructions | None
     skip: bool
-
-
-class KGConnectorData(BaseModel):
-    id: int
-    source: str
-    kg_coverage_days: int | None
 
 
 class KGStage(str, Enum):
@@ -184,7 +143,3 @@ class KGDocumentDeepExtractionResults(BaseModel):
     classification_result: KGClassificationResult | None
     deep_extracted_entities: set[str]
     deep_extracted_relationships: set[str]
-
-
-class KGException(Exception):
-    pass

@@ -28,23 +28,6 @@ for i in range(0x20, 0x7F):
 ALLOWED_ASCII_CHARS[0x7F] = True  # del - discouraged, but allowed
 
 
-def is_text_character(codepoint: int) -> bool:
-    """Returns whether the given codepoint is a valid text character."""
-    if codepoint < 0x80:
-        return ALLOWED_ASCII_CHARS[codepoint]
-    if codepoint < 0xD800:
-        return True
-    if codepoint <= 0xDFFF:
-        return False
-    if codepoint < 0xFDD0:
-        return True
-    if codepoint <= 0xFDEF:
-        return False
-    if codepoint >= 0x10FFFE:
-        return False
-    return (codepoint & 0xFFFF) < 0xFFFE
-
-
 def replace_invalid_doc_id_characters(text: str) -> str:
     """Replaces invalid document ID characters in text.
     NOTE: this must be called at the start of every vespa-related operation or else we

@@ -1,5 +1,4 @@
 import json
-import re
 from collections.abc import Callable
 from typing import cast
 from uuid import UUID
@@ -23,7 +22,6 @@ from onyx.chat.models import (
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import (
     DEFAULT_PERSONA_ID,
-    TMP_DRALPHA_PERSONA_NAME,
     FileOrigin,
     MessageType,
 )
@@ -40,12 +38,7 @@ from onyx.db.enums import (
     record_mode_persists_content,
 )
 from onyx.db.file_record import FileRecordNotFoundError
-from onyx.db.kg_config import (
-    get_kg_config_settings,
-    is_kg_config_settings_enabled_valid,
-)
 from onyx.db.models import ChatMessage, ChatSession, Persona, User, UserFile
-from onyx.db.models import SearchDoc as DbSearchDoc
 from onyx.db.persona import user_can_access_persona
 from onyx.db.projects import check_project_ownership
 from onyx.db.user_file import get_user_file_by_id
@@ -55,17 +48,12 @@ from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType, FileDescriptor
 from onyx.file_store.utils import plaintext_file_name_for_id, store_plaintext
-from onyx.kg.models import KGException
-from onyx.kg.setup.kg_default_entity_definitions import (
-    populate_missing_default_entity_types__commit,
-)
 from onyx.prompts.chat_prompts import (
     ADDITIONAL_CONTEXT_PROMPT,
     TOOL_CALL_RESPONSE_CROSS_MESSAGE,
 )
 from onyx.prompts.tool_prompts import TOOL_CALL_FAILURE_PROMPT
 from onyx.server.query_and_chat.models import ChatSessionCreationRequest
-from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.tools.models import ChatFile, ToolCallKickoff
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
@@ -311,102 +299,6 @@ def create_chat_history_chain(
     return mainline_messages
 
 
-def reorganize_citations(
-    answer: str, citations: list[CitationInfo]
-) -> tuple[str, list[CitationInfo]]:
-    """For a complete, citation-aware response, we want to reorganize the citations so that
-    they are in the order of the documents that were used in the response. This just looks nicer / avoids
-    confusion ("Why is there [7] when only 2 documents are cited?")."""
-
-    # Regular expression to find all instances of [[x]](LINK)
-    pattern = r"\[\[(.*?)\]\]\((.*?)\)"
-
-    all_citation_matches = re.findall(pattern, answer)
-
-    new_citation_info: dict[int, CitationInfo] = {}
-    for citation_match in all_citation_matches:
-        try:
-            citation_num = int(citation_match[0])
-            if citation_num in new_citation_info:
-                continue
-
-            matching_citation = next(
-                iter([c for c in citations if c.citation_number == int(citation_num)]),
-                None,
-            )
-            if matching_citation is None:
-                continue
-
-            new_citation_info[citation_num] = CitationInfo(
-                citation_number=len(new_citation_info) + 1,
-                document_id=matching_citation.document_id,
-            )
-        except Exception:
-            pass
-
-    # Function to replace citations with their new number
-    def slack_link_format(match: re.Match) -> str:
-        link_text = match.group(1)
-        try:
-            citation_num = int(link_text)
-            if citation_num in new_citation_info:
-                link_text = new_citation_info[citation_num].citation_number
-        except Exception:
-            pass
-
-        link_url = match.group(2)
-        return f"[[{link_text}]]({link_url})"
-
-    # Substitute all matches in the input text
-    new_answer = re.sub(pattern, slack_link_format, answer)
-
-    # if any citations weren't parsable, just add them back to be safe
-    for citation in citations:
-        if citation.citation_number not in new_citation_info:
-            new_citation_info[citation.citation_number] = citation
-
-    return new_answer, list(new_citation_info.values())
-
-
-def build_citation_map_from_infos(
-    citations_list: list[CitationInfo], db_docs: list[DbSearchDoc]
-) -> dict[int, int]:
-    """Translate a list of streaming CitationInfo objects into a mapping of
-    citation number -> saved search doc DB id.
-
-    Always cites the first instance of a document_id and assumes db_docs are
-    ordered as shown to the user (display order).
-    """
-    doc_id_to_saved_doc_id_map: dict[str, int] = {}
-    for db_doc in db_docs:
-        if db_doc.document_id not in doc_id_to_saved_doc_id_map:
-            doc_id_to_saved_doc_id_map[db_doc.document_id] = db_doc.id
-
-    citation_to_saved_doc_id_map: dict[int, int] = {}
-    for citation in citations_list:
-        if citation.citation_number not in citation_to_saved_doc_id_map:
-            saved_id = doc_id_to_saved_doc_id_map.get(citation.document_id)
-            if saved_id is not None:
-                citation_to_saved_doc_id_map[citation.citation_number] = saved_id
-
-    return citation_to_saved_doc_id_map
-
-
-def build_citation_map_from_numbers(
-    cited_numbers: list[int] | set[int], db_docs: list[DbSearchDoc]
-) -> dict[int, int]:
-    """Translate parsed citation numbers (e.g., from [[n]]) into a mapping of
-    citation number -> saved search doc DB id by positional index.
-    """
-    citation_to_saved_doc_id_map: dict[int, int] = {}
-    for num in sorted(set(cited_numbers)):
-        idx = num - 1
-        if 0 <= idx < len(db_docs):
-            citation_to_saved_doc_id_map[num] = db_docs[idx].id
-
-    return citation_to_saved_doc_id_map
-
-
 def extract_headers(
     headers: dict[str, str] | Headers, pass_through_headers: list[str] | None
 ) -> dict[str, str]:
@@ -433,26 +325,6 @@ def extract_headers(
             if lowercase_key in headers:
                 extracted_headers[lowercase_key] = headers[lowercase_key]
     return extracted_headers
-
-
-def process_kg_commands(
-    message: str,
-    persona_name: str,
-    tenant_id: str,  # noqa: ARG001
-    db_session: Session,
-) -> None:
-    # Temporarily, until we have a draft UI for the KG Operations/Management
-    # TODO: move to api endpoint once we get frontend
-    if not persona_name.startswith(TMP_DRALPHA_PERSONA_NAME):
-        return
-
-    kg_config_settings = get_kg_config_settings()
-    if not is_kg_config_settings_enabled_valid(kg_config_settings):
-        return
-
-    if message == "kg_setup":
-        populate_missing_default_entity_types__commit(db_session=db_session)
-        raise KGException("KG setup done")
 
 
 def _get_or_extract_plaintext(

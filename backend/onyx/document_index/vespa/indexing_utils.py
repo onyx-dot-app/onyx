@@ -102,42 +102,6 @@ def _vespa_get_updated_at_attribute(t: datetime | None) -> int | None:
     return int(t.timestamp())
 
 
-def get_existing_documents_from_chunks(
-    chunks: list[DocMetadataAwareIndexChunk],
-    index_name: str,
-    http_client: httpx.Client,
-    executor: concurrent.futures.ThreadPoolExecutor | None = None,
-) -> set[str]:
-    external_executor = True
-
-    if not executor:
-        external_executor = False
-        executor = concurrent.futures.ThreadPoolExecutor(max_workers=NUM_THREADS)
-
-    document_ids: set[str] = set()
-    try:
-        chunk_existence_future = {
-            executor.submit(
-                _does_doc_chunk_exist,
-                get_uuid_from_chunk(chunk),
-                index_name,
-                http_client,
-            ): chunk
-            for chunk in chunks
-        }
-        for future in concurrent.futures.as_completed(chunk_existence_future):
-            chunk = chunk_existence_future[future]
-            chunk_already_existed = future.result()
-            if chunk_already_existed:
-                document_ids.add(chunk.source_document.id)
-
-    finally:
-        if not external_executor:
-            executor.shutdown(wait=True)
-
-    return document_ids
-
-
 def _index_vespa_chunk(
     chunk: DocMetadataAwareIndexChunk,
     index_name: str,
