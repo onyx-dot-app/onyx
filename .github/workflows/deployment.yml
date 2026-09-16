@@ -1235,7 +1235,9 @@ jobs:
       - runs-on
       - runner=2cpu-linux-x64
       - run-id=${{ github.run_id }}-model-server-amd64
-      - volume=40gb
+      # Spot can place this job on an instance with no local NVMe, which leaves docker on the
+      # root volume. The ~7gb amd64 venv, copied again by the final stage, needs the headroom.
+      - volume=60gb
       - extras=ecr-cache
     timeout-minutes: 90
     environment: release
