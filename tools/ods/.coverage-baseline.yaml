@@ -5,17 +5,17 @@
 # tests with `ods coverage <suite> --update`.
 #
 # Generated file: do not edit by hand.
-total: 39.1
+total: 40.7
 packages:
   .: 0
-  cmd: 23.3
+  cmd: 23.7
   internal/alembic: 0
   internal/audit: 52.1
   internal/auditcmd: 0
   internal/basedigest: 54
   internal/childproc: 0
   internal/composegen: 97.3
-  internal/config: 0
+  internal/config: 78.9
   internal/coverage: 92.3
   internal/deployfilessync: 79.1
   internal/docker: 23.4
@@ -25,16 +25,16 @@ packages:
   internal/kube: 0
   internal/lazyimports: 62.8
   internal/openapi: 0
-  internal/paths: 30.3
+  internal/paths: 71.2
   internal/portutil: 76.9
-  internal/postgres: 0
+  internal/postgres: 100
   internal/prompt: 0
   internal/pycheck: 74.7
   internal/release: 85.8
-  internal/s3: 21.1
+  internal/s3: 25
   internal/terraform: 82.3
   internal/testsuite: 88.3
-  internal/tui: 41.9
+  internal/tui: 54.5
   internal/typecoverage: 95.4
   internal/version: 100
   odsaudit: 0
