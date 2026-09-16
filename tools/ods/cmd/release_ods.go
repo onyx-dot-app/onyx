@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
@@ -41,7 +42,9 @@ Example usage:
     $ ods release ods --dry-run`,
 		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			odsRelease.run(opts)
+			if err := odsRelease.run(opts); err != nil {
+				log.Fatal(err)
+			}
 		},
 	}
 
