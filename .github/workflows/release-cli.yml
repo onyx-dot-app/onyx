@@ -14,6 +14,16 @@ jobs:
       contents: read # needed to checkout the repo on private repos (no-op on public)
       id-token: write
     timeout-minutes: 10
+    env:
+      # Build every wheel against the pinned, hash-verified build environment.
+      # The path must be absolute: this job's steps run from cli/, while
+      # release-devtools.yml builds from the repo root, and UV_BUILD_CONSTRAINT
+      # resolves against the process CWD rather than uv build's SRC argument.
+      UV_BUILD_CONSTRAINT: ${{ github.workspace }}/tools/requirements/build-constraints.txt
+      UV_REQUIRE_HASHES: "true"
+      # Without this, Go silently downloads a different toolchain when go.mod
+      # asks for a newer one than go-bin ships, defeating the pin.
+      GOTOOLCHAIN: local
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
@@ -65,7 +75,7 @@ jobs:
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # zizmor: ignore[cache-poisoning]
         with:
-          go-version: "1.26.5"
+          go-version: "1.27.1"
           cache: false
 
       # ldflags follow the contract of hatch_build.py: `main.version` carries
@@ -380,7 +390,7 @@ jobs:
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # zizmor: ignore[cache-poisoning]
         with:
-          go-version: "1.26.5"
+          go-version: "1.27.1"
           cache: false
 
       - name: Install govulncheck

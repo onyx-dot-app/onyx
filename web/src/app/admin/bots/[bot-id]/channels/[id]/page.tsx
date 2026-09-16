@@ -104,9 +104,9 @@ function EditSlackChannelConfigContent({ id }: { id: string }) {
                 ? {
                     paidEnterpriseFeaturesEnabled: true,
                     categories: standardAnswerCategories ?? [],
-                    ...(stdAnswerError
-                      ? { error: { message: String(stdAnswerError) } }
-                      : {}),
+                    error: stdAnswerError
+                      ? { message: String(stdAnswerError) }
+                      : undefined,
                   }
                 : { paidEnterpriseFeaturesEnabled: false }
             }

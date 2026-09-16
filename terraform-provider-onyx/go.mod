@@ -1,6 +1,6 @@
 module github.com/onyx-dot-app/onyx/terraform-provider-onyx
 
-go 1.26.4
+go 1.27.1
 
 require (
 	github.com/hashicorp/go-retryablehttp v0.7.8

@@ -15,6 +15,7 @@
 #                                  (default: generated, printed at the end)
 #   --skip-cluster-create          skip kind create (use an existing cluster)
 #   --skip-helm                    only create the cluster, don't install Onyx
+#
 
 set -euo pipefail
 
@@ -27,7 +28,7 @@ KIND_NODE_IMAGE="${KIND_NODE_IMAGE:-kindest/node:v1.33.1}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHART_DIR="$(cd "$SCRIPT_DIR/../charts/onyx" && pwd)"
-VALUES_OVERLAY="$CHART_DIR/values-localdev.yaml"
+VALUES_OVERLAY="$SCRIPT_DIR/values-localdev.yaml"
 
 require() {
   local bin="$1"

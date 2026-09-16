@@ -355,6 +355,8 @@ export function useBuildStreaming() {
         return parentToolCallId;
       };
 
+      // Raw SSE frame straight off the wire; parsePacket is the decoder.
+      // oxlint-disable-next-line anti-slop/no-unknown-parameters
       return (rawPacket: unknown) => {
         const parsed = parsePacket(rawPacket);
         if (options?.expectedTurnId && parsed.type !== "approval_requested") {
@@ -683,12 +685,11 @@ export function useBuildStreaming() {
               // content — drop them from the persisted message.
               const savedStreamItems = session.streamItems
                 .filter((item) => item.type !== "connect_app_request")
-                .map((item) => ({
-                  ...item,
-                  ...(item.type === "text" || item.type === "thinking"
-                    ? { isStreaming: false }
-                    : {}),
-                }));
+                .map((item) =>
+                  item.type === "text" || item.type === "thinking"
+                    ? { ...item, isStreaming: false }
+                    : item
+                );
               const textContent = session.streamItems
                 .filter((item) => item.type === "text")
                 .map((item) => item.content)

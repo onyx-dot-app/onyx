@@ -11,6 +11,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CredentialCapability,
 )
+from onyx.connectors.outlook.capability_checks import build_outlook_indexing_checks
 from onyx.connectors.slack.capability_checks import build_slack_indexing_checks
 from onyx.connectors.source_operations import get_source_operations_class
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
@@ -20,6 +21,7 @@ from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 # Per-connector work registers named checks here.
 _INDEXING_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck]] = {
     DocumentSource.SLACK: build_slack_indexing_checks(),
+    DocumentSource.OUTLOOK: build_outlook_indexing_checks(),
 }
 
 

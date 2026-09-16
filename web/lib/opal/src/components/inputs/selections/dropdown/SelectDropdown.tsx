@@ -133,7 +133,7 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
           style={{
             // Scroll independently of whatever sits behind the portal.
             overscrollBehavior: "contain",
-            ...(dropdownMaxHeight ? { maxHeight: dropdownMaxHeight } : {}),
+            maxHeight: dropdownMaxHeight || undefined,
           }}
         >
           <OptionsList

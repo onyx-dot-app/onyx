@@ -23,6 +23,7 @@ import { InputTextArea, InputTypeIn } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import ModelSelector from "@/sections/model-selector/ModelSelector";
 import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
+import { findProviderOwningModelConfig } from "@/lib/languageModels/utils";
 import {
   SvgAddLines,
   SvgActions,
@@ -699,12 +700,15 @@ export default function ChatPreferencesPage() {
   const handleChatNamingModelChange = useCallback(
     async ({
       modelName,
-      providerName,
+      modelConfigurationId,
     }: {
       modelName: string;
-      providerName: string | null;
+      modelConfigurationId: number | null | undefined;
     }) => {
-      const provider = llmProviders?.find((p) => p.name === providerName);
+      const provider = findProviderOwningModelConfig(
+        llmProviders,
+        modelConfigurationId
+      );
       if (!provider) {
         toast.error(t("toasts.providerResolveFailed"));
         return;
@@ -1073,7 +1077,7 @@ export default function ChatPreferencesPage() {
                     onChange={(opt) =>
                       void handleChatNamingModelChange({
                         modelName: opt.modelName,
-                        providerName: opt.name,
+                        modelConfigurationId: opt.modelConfigurationId,
                       })
                     }
                   />

@@ -845,7 +845,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     # object triggers a sync lazy-load which raises MissingGreenlet
                     # in this async context.
                     user_id = user.id
-                    self._upgrade_user_to_standard__sync(user_id, user_create, is_admin)
+                    self._upgrade_user_to_standard__sync(
+                        user_id, user_create, is_admin, safe=safe
+                    )
                     # Expire so the async session re-fetches the row updated by
                     # the sync session above.
                     self.user_db.session.expire(user)
@@ -875,7 +877,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     # object triggers a sync lazy-load which raises MissingGreenlet
                     # in this async context.
                     user_id = user.id
-                    self._upgrade_user_to_standard__sync(user_id, user_create, is_admin)
+                    self._upgrade_user_to_standard__sync(
+                        user_id, user_create, is_admin, safe=safe
+                    )
                     # Expire so the async session re-fetches the row updated by
                     # the sync session above.
                     self.user_db.session.expire(user)
@@ -896,12 +900,16 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         user_id: uuid.UUID,
         user_create: UserCreate,
         is_admin: bool,
+        safe: bool,
     ) -> None:
         """Upgrade a non-web user to STANDARD + assign groups in one tx.
 
         Enforces the seat limit inside the same transaction when the
         upgrade flips an uncounted user (EXT_PERM_USER, SERVICE_ACCOUNT)
         into a counted one.
+
+        ``safe`` marks the public register path, where the request body is
+        untrusted and cannot decide is_verified.
         """
         seat_added = False
         with get_session_with_current_tenant() as sync_db:
@@ -919,7 +927,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 sync_user.hashed_password = self.password_helper.hash(
                     user_create.password
                 )
-                sync_user.is_verified = user_create.is_verified or False
+                # A registrant must not self-verify an address they do not own.
+                sync_user.is_verified = (
+                    False if safe else (user_create.is_verified or False)
+                )
                 sync_user.account_type = AccountType.STANDARD
                 assign_user_to_default_groups__no_commit(
                     sync_db,

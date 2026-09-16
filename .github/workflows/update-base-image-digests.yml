@@ -144,7 +144,7 @@ jobs:
               cat "${RUNNER_TEMP}/summary-${family}.md"
               echo
               echo "Refreshes digests only. A base pinned to an immutable patch tag"
-              echo "(for example \`golang:1.26.5-alpine\`) needs a manual tag bump."
+              echo "(for example \`golang:1.27.1-alpine\`) needs a manual tag bump."
               echo
               echo "Some families touch adjacent lines of the same file, so this PR"
               echo "can conflict after another family PR merges. Re-run the workflow"

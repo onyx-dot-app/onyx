@@ -59,8 +59,12 @@ def _get_local_secrets(keys: Sequence[AnySecret]) -> dict[AnySecret, str]:
     found: dict[AnySecret, str] = {}
 
     for key in keys:
-        env_val = os.environ.get(key.value)
-        value = env_val if env_val is not None else dotenv.get(key.value)
+        value = (
+            os.environ.get(key.name)
+            or os.environ.get(key.value)
+            or dotenv.get(key.name)
+            or dotenv.get(key.value)
+        )
         if value:
             found[key] = value
 

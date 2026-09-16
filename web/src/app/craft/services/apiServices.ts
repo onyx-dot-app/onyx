@@ -340,6 +340,8 @@ function extractAttachmentsFromMetadata(
 ): BuildMessageAttachment[] {
   if (!Array.isArray(metadata?.attachments)) return [];
 
+  // Element of an unvalidated attachments array; the body below decodes it.
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters
   return metadata.attachments.flatMap((attachment: unknown) => {
     if (
       typeof attachment !== "object" ||
@@ -436,13 +438,9 @@ export async function createTurn(
           path: attachment.path,
           mime_type: attachment.mimeType,
         })),
-        ...(model
-          ? {
-              provider: CRAFT_GATEWAY_PROVIDER,
-              provider_id: model.providerId,
-              model: model.modelName,
-            }
-          : {}),
+        provider: model ? CRAFT_GATEWAY_PROVIDER : undefined,
+        provider_id: model?.providerId,
+        model: model?.modelName,
       }),
       signal,
     }

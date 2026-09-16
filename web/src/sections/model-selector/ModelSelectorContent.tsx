@@ -391,6 +391,8 @@ export interface ModelSelectorContentProps {
   scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
   /** When true, a "Global Default Model" entry is prepended to the list. */
   includeGlobalDefault?: boolean;
+  /** The global default label supplied by a host with explicit provider data. */
+  globalDefaultDisplayName?: string | null;
   /** When provided, model rows gain a drill-in settings pane. */
   modelDetail?: ModelDetailManagers;
   /** Opening a model's settings also selects it. Hosts pass their select
@@ -409,6 +411,7 @@ export default function ModelSelectorContent({
   isDisabled,
   scrollContainerRef: externalScrollRef,
   includeGlobalDefault = false,
+  globalDefaultDisplayName: globalDefaultDisplayNameProp,
   modelDetail,
   onDetailSelect,
 }: ModelSelectorContentProps) {
@@ -418,21 +421,11 @@ export default function ModelSelectorContent({
   const {
     llmProviders: currentAgentProviderOptions,
     isLoading: currentAgentProvidersLoading,
-    defaultText,
   } = useCurrentAgentLLMProviders();
   const llmProviders = providerOptions ?? currentAgentProviderOptions;
   const isLoading =
     isLoadingProp ||
     (providerOptions === undefined && currentAgentProvidersLoading);
-
-  const globalDefaultDisplayName = useMemo(() => {
-    if (!defaultText || !llmProviders) return null;
-    const provider = llmProviders.find((p) => p.id === defaultText.provider_id);
-    const mc = provider?.model_configurations.find(
-      (m) => m.name === defaultText.model_name
-    );
-    return mc?.effectiveDisplayName ?? null;
-  }, [defaultText, llmProviders]);
   const [searchQuery, setSearchQuery] = useState("");
   const internalScrollRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = externalScrollRef ?? internalScrollRef;
@@ -576,7 +569,7 @@ export default function ModelSelectorContent({
                   }
                   icon={selectionIcon(isSelected(GLOBAL_DEFAULT_LLM_OPTION))}
                   title={GLOBAL_DEFAULT_LLM_OPTION.displayName}
-                  description={globalDefaultDisplayName ?? undefined}
+                  description={globalDefaultDisplayNameProp ?? undefined}
                   onClick={() => onSelect(GLOBAL_DEFAULT_LLM_OPTION)}
                   sizePreset="main-ui"
                   rounding={2}

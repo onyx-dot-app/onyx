@@ -114,6 +114,7 @@ function MicrophoneButton({
 
   const {
     isRecording,
+    isStarting,
     isProcessing,
     isMuted,
     error,
@@ -316,12 +317,12 @@ function MicrophoneButton({
     }
   }, [error]);
 
-  // Icon: show loader when processing, otherwise mic
-  const icon = isProcessing ? SvgSimpleLoader : SvgMicrophone;
+  const icon = isStarting || isProcessing ? SvgSimpleLoader : SvgMicrophone;
 
   // Disable when processing or TTS is playing (don't want to pick up TTS audio)
   const isDisabled =
     disabled ||
+    isStarting ||
     isProcessing ||
     isTTSPlaying ||
     isTTSLoading ||
@@ -335,10 +336,13 @@ function MicrophoneButton({
       disabled={isDisabled}
       icon={icon}
       onClick={handleClick}
+      aria-busy={isStarting}
       aria-label={
-        isRecording
-          ? t("microphoneButton.stopRecording.ariaLabel")
-          : t("microphoneButton.startRecording.ariaLabel")
+        isStarting
+          ? t("microphoneButton.startingRecording.ariaLabel")
+          : isRecording
+            ? t("microphoneButton.stopRecording.ariaLabel")
+            : t("microphoneButton.startRecording.ariaLabel")
       }
       prominence={prominence}
     />

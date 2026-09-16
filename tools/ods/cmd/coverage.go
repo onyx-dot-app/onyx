@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/coverage"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/git"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/testsuite"
 )
@@ -23,6 +24,14 @@ type CoverageOptions struct {
 	HTML      string
 	Markdown  string
 	Tolerance float64
+	// FromProfile reports from a profile an earlier run kept, without running
+	// the tests. CI measures without credentials, then reports with them.
+	FromProfile string
+	// Base reports the run against the coverage snapshot of this commit-ish
+	// instead of the floors. The gate keeps using the floors.
+	Base           string
+	Publish        bool
+	SnapshotBucket string
 }
 
 // NewCoverageCommand creates a command that measures statement coverage for a
@@ -55,6 +64,14 @@ func NewCoverageCommand() *cobra.Command {
 	cmd.Flags().StringVar(&opts.Markdown, "markdown", "", "Write the changed packages as a markdown table at this path, for a PR comment")
 	cmd.Flags().Float64Var(&opts.Tolerance, "tolerance", coverage.DefaultTolerance,
 		"Percentage points a package may drop below its floor without failing")
+	cmd.Flags().StringVar(&opts.FromProfile, "from-profile", "",
+		"Report from this coverage profile instead of running the tests")
+	cmd.Flags().StringVar(&opts.Base, "base", "",
+		"Report against the coverage snapshot of this commit, or its nearest recorded ancestor, instead of the floors")
+	cmd.Flags().BoolVar(&opts.Publish, "publish", false,
+		"Record this run as the coverage snapshot of HEAD (needs AWS credentials)")
+	cmd.Flags().StringVar(&opts.SnapshotBucket, "snapshot-bucket", DefaultS3Bucket,
+		"S3 bucket that holds the coverage snapshots")
 
 	return cmd
 }
@@ -64,6 +81,15 @@ func NewCoverageCommand() *cobra.Command {
 func runCoverage(target string, opts *CoverageOptions) int {
 	if opts.Check && opts.Update {
 		log.Fatal("--check and --update do the opposite of each other; pass only one")
+	}
+	if opts.Base != "" && opts.Update {
+		log.Fatal("--base reports against a snapshot, --update rewrites the floors; pass only one")
+	}
+	if opts.Publish && opts.Update {
+		log.Fatal("--publish records this run as a snapshot, --update rewrites the floors; pass only one")
+	}
+	if opts.FromProfile != "" && opts.Profile != "" {
+		log.Fatal("--from-profile reads a profile, --profile keeps the one this run writes; pass only one")
 	}
 	if err := coverage.ValidateTolerance(opts.Tolerance); err != nil {
 		log.Fatalf("Invalid --tolerance: %v", err)
@@ -81,26 +107,19 @@ func runCoverage(target string, opts *CoverageOptions) int {
 	suite := coverageSuite(root, cwd, target)
 	moduleDir := filepath.Join(root, suite.Dir)
 
-	profilePath, cleanup := outputTarget(opts.Profile, "coverage.out")
-	defer cleanup()
-
-	log.Infof("Measuring %s coverage...", suite.Name)
-	profile, err := coverage.Run(coverage.RunOptions{
-		ModuleDir:   moduleDir,
-		ProfilePath: profilePath,
-		Args:        suite.DefaultArgs,
-		Stdout:      os.Stdout,
-		Stderr:      os.Stderr,
-	})
-	var exitErr *coverage.ExitError
-	if errors.As(err, &exitErr) {
-		// The tests failed, and their output is already on the terminal.
-		// Coverage from a failed run is not worth reporting.
-		return exitErr.Code
+	var profile *coverage.Profile
+	var profilePath string
+	var code int
+	if opts.FromProfile != "" {
+		profile, profilePath, code = loadProfile(moduleDir, opts.FromProfile)
+	} else {
+		var cleanup func()
+		profilePath, cleanup = outputTarget(opts.Profile, "coverage.out")
+		defer cleanup()
+		profile, code = measureCoverage(suite, moduleDir, profilePath)
 	}
-	if err != nil {
-		log.Errorf("Failed to measure coverage: %v", err)
-		return 1
+	if code != 0 {
+		return code
 	}
 
 	if opts.HTML != "" {
@@ -121,17 +140,129 @@ func runCoverage(target string, opts *CoverageOptions) int {
 		log.Infof("Browse it with: go tool cover -html=%s", profilePath)
 	}
 
-	return runCoverageGate(coverageGate{
-		Kind:         coverage.GoTests,
-		Profile:      profile,
-		BaselinePath: coverage.GoTests.BaselinePath(moduleDir),
-		Name:         suite.Dir,
-		Command:      "ods coverage " + suite.Name,
-		Check:        opts.Check,
-		Update:       opts.Update,
-		Markdown:     opts.Markdown,
-		Tolerance:    opts.Tolerance,
+	store := coverage.NewS3SnapshotStore(opts.SnapshotBucket, suite.Dir)
+	var baseReference *coverage.Reference
+	if opts.Base != "" {
+		var code int
+		if baseReference, code = locateBaseReference(opts.Base, store); code != 0 {
+			return code
+		}
+	}
+
+	if code := runCoverageGate(coverageGate{
+		Kind:            coverage.GoTests,
+		Profile:         profile,
+		BaselinePath:    coverage.GoTests.BaselinePath(moduleDir),
+		Name:            suite.Dir,
+		Command:         "ods coverage " + suite.Name,
+		Check:           opts.Check,
+		Update:          opts.Update,
+		Markdown:        opts.Markdown,
+		Tolerance:       opts.Tolerance,
+		ReportReference: baseReference,
+	}); code != 0 {
+		return code
+	}
+
+	// Publishing runs last: a snapshot describes a run whose tests and gate
+	// both passed.
+	if opts.Publish {
+		return publishSnapshot(store, profile, suite.Dir)
+	}
+	return 0
+}
+
+// measureCoverage runs the suite's tests with a profile at profilePath.
+func measureCoverage(suite *testsuite.Suite, moduleDir, profilePath string) (*coverage.Profile, int) {
+	log.Infof("Measuring %s coverage...", suite.Name)
+	profile, err := coverage.Run(coverage.RunOptions{
+		ModuleDir:   moduleDir,
+		ProfilePath: profilePath,
+		Args:        suite.DefaultArgs,
+		Stdout:      os.Stdout,
+		Stderr:      os.Stderr,
 	})
+	var exitErr *coverage.ExitError
+	if errors.As(err, &exitErr) {
+		// The tests failed, and their output is already on the terminal.
+		// Coverage from a failed run is not worth reporting.
+		return nil, exitErr.Code
+	}
+	if err != nil {
+		log.Errorf("Failed to measure coverage: %v", err)
+		return nil, 1
+	}
+	return profile, 0
+}
+
+// loadProfile reads a profile an earlier run kept with --profile and returns
+// it with its absolute path, which the html renderer needs.
+func loadProfile(moduleDir, path string) (*coverage.Profile, string, int) {
+	profilePath, err := filepath.Abs(path)
+	if err != nil {
+		log.Errorf("Failed to resolve the profile path %q: %v", path, err)
+		return nil, "", 1
+	}
+	modulePath, err := coverage.ModulePath(moduleDir)
+	if err != nil {
+		log.Errorf("Failed to read the module path: %v", err)
+		return nil, "", 1
+	}
+	profile, err := coverage.ParseProfileFile(profilePath, modulePath)
+	if err != nil {
+		log.Errorf("Failed to read the coverage profile: %v", err)
+		return nil, "", 1
+	}
+	log.Infof("Reporting from the coverage profile at %s", profilePath)
+	return profile, profilePath, 0
+}
+
+// locateBaseReference finds the snapshot to report against. A missing snapshot
+// is normal, for example on a fork pull request that holds no credentials, so
+// it warns and returns a nil reference to keep the floors.
+func locateBaseReference(rev string, store coverage.SnapshotStore) (*coverage.Reference, int) {
+	match, err := coverage.LocateBaseSnapshot(rev, coverage.GitCommitHistory{}, store, coverage.DefaultBaseWalkLimit)
+	if errors.Is(err, coverage.ErrBaseSnapshotUnavailable) {
+		log.Warnf("%v; reporting against the floors", err)
+		return nil, 0
+	}
+	if err != nil {
+		log.Errorf("Failed to look up the base coverage snapshot: %v", err)
+		return nil, 1
+	}
+
+	log.Infof("Reporting against the snapshot of %s", coverage.ShortCommit(match.Commit))
+	if match.Distance > 0 {
+		log.Infof("The base %s has no snapshot; the nearest recorded ancestor is %d commit(s) back",
+			coverage.ShortCommit(match.Base), match.Distance)
+	}
+	return match.Snapshot.Reference(), 0
+}
+
+// publishSnapshot records this run as the coverage snapshot of HEAD.
+func publishSnapshot(store *coverage.S3SnapshotStore, profile *coverage.Profile, module string) int {
+	// A snapshot is keyed by commit, so it must describe that commit alone.
+	changes, err := git.WorkingTreeChanges()
+	if err != nil {
+		log.Errorf("Failed to inspect the working tree: %v", err)
+		return 1
+	}
+	if len(changes) > 0 {
+		log.Errorf("Refusing to publish a snapshot: the working tree differs from HEAD:\n%s",
+			strings.Join(changes, "\n"))
+		return 1
+	}
+	commit, err := git.ResolveCommit("HEAD")
+	if err != nil {
+		log.Errorf("Failed to resolve HEAD: %v", err)
+		return 1
+	}
+	if err := store.Publish(coverage.NewSnapshot(profile, commit, module)); err != nil {
+		log.Errorf("Failed to publish the coverage snapshot: %v", err)
+		return 1
+	}
+	log.Infof("Published the coverage snapshot of %s to %s", coverage.ShortCommit(commit), store.ObjectURL(commit))
+	return 0
 }
 
 // coverageSuite resolves a suite from a suite name or a module directory,
@@ -162,11 +293,21 @@ CI keeps coverage from regressing. After adding tests, --update raises the floor
 Coverage is per package: a package's number counts only its own tests, so it is a
 number that package's owner can act on.
 
+--from-profile reports from a profile an earlier run kept with --profile,
+without running the tests again.
+
+--base reports against the coverage snapshot of a commit, or of its nearest
+recorded ancestor, instead of against the floors, which shows what a branch
+changed. A missing snapshot only warns: the report falls back to the floors.
+--publish records a successful run as the snapshot of HEAD. Neither flag
+changes what --check gates on.
+
 Examples:
   ods coverage ods                  # report where each package stands
   ods coverage ods --check          # fail on a regression (what CI runs)
   ods coverage ods --update         # record today's numbers as the new floors
   ods coverage ods --profile /tmp/cover.out
+  ods coverage ods --base origin/main   # report what this branch changed
 
 Suites:`)
 	for _, suite := range testsuite.All() {

@@ -1,4 +1,4 @@
-import type { UserGroupInfo } from "@/views/admin/UsersPage/interfaces";
+import type { UserGroupInfo } from "@/views/admin/UsersPage/types";
 
 export const DISCORD_SERVICE_API_KEY_NAME = "discord-bot-service";
 
