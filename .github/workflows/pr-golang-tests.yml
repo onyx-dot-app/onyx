@@ -8,6 +8,8 @@ on:
   pull_request:
   push:
     branches:
+      # A push to main saves the Go build cache that PRs restore.
+      - main
       - "release/**"
     tags:
       - "v*.*.*"
@@ -50,10 +52,26 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # zizmor: ignore[cache-poisoning]
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: "**/go.sum"
+          cache: false
+
+      # The build cache also holds test results, so `go test` skips packages
+      # whose code did not change. Each run restores the newest cache for its
+      # module, but only a push to main or a release branch saves one: a PR
+      # cannot write test results that later runs trust.
+      - name: Restore the Go cache
+        id: go-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ matrix.modules }}-${{ hashFiles('**/go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ matrix.modules }}-${{ hashFiles('**/go.sum') }}-
+            go-${{ runner.os }}-${{ matrix.modules }}-
 
       - run: go mod tidy
         working-directory: ${{ matrix.modules }}
@@ -93,7 +111,13 @@ jobs:
                 PUBLISH=true
               fi
               ;;
-            push | workflow_dispatch)
+            push)
+              # The merge_group run already published the snapshot for main.
+              if [ "${GH_REF#refs/heads/release/}" != "${GH_REF}" ]; then
+                PUBLISH=true
+              fi
+              ;;
+            workflow_dispatch)
               if [ "${GH_REF}" = "refs/heads/main" ] ||
                  [ "${GH_REF#refs/heads/release/}" != "${GH_REF}" ]; then
                 PUBLISH=true
@@ -131,6 +155,15 @@ jobs:
         run: |
           "${RUNNER_TEMP}/ods" coverage "${MODULE}" --check \
             --profile "${RUNNER_TEMP}/coverage/coverage.out"
+
+      - name: Save the Go cache
+        if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')) }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ steps.go-cache.outputs.cache-primary-key }}
 
       - name: Configure AWS credentials
         if: ${{ steps.coverage-flags.outputs.aws == 'true' }}
