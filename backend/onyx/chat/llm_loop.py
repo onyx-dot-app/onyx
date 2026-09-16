@@ -830,7 +830,7 @@ def run_llm_loop(
     include_citations: bool = True,
     all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
     inject_memories_in_prompt: bool = True,
-    # Experimental: append retrieval receipts to internal search responses.
+    # Append retrieval receipts to internal search responses (see onyx.chat.search_receipts).
     enable_search_receipts: bool = False,
 ) -> None:
     with trace(

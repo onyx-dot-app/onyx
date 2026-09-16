@@ -50,6 +50,21 @@ class FeatureFlagProvider(abc.ABC):
             },
         )
 
+    def feature_enabled_for_user_tenant_or_default(
+        self,
+        flag_key: str,  # noqa: ARG002
+        user: User | None,  # noqa: ARG002
+        tenant_id: str,  # noqa: ARG002
+        default: bool,
+    ) -> bool:
+        """
+        Like feature_enabled_for_user_tenant, but for flags with a non-False
+        default: returns `default` whenever the flag cannot be evaluated (no
+        provider, flag not defined in the vendor, or an evaluation error), so
+        the vendor can only override the default, never silently disable.
+        """
+        return default
+
     def feature_variant_for_tenant(
         self,
         flag_key: str,  # noqa: ARG002

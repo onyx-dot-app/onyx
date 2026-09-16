@@ -16,10 +16,18 @@ from onyx.context.search.models import (
     SearchReceiptScope,
     SearchRetrievalDiagnostics,
 )
+from onyx.db.models import User
+from onyx.feature_flags.factory import get_default_feature_flag_provider
 from onyx.tools.models import ToolResponse
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+# PostHog flag. Undefined flag or no PostHog means the default below applies, so
+# the flag can only turn receipts off (or on for a subset once defined).
+SEARCH_RECEIPTS_FLAG = "onyx-search-receipts"
+SEARCH_RECEIPTS_DEFAULT = True
 
 RECEIPT_PREFIX = "\n\nSEARCH RECEIPT (retrieval metadata, not source evidence):\n"
 
@@ -29,6 +37,18 @@ _INTERPRETATION = (
     "information is absent. Use observed queries and missing facts to choose a "
     "complementary follow-up when needed."
 )
+
+
+def search_receipts_enabled(user: User | None) -> bool:
+    """Evaluate the search receipts flag once per chat message."""
+    return (
+        get_default_feature_flag_provider().feature_enabled_for_user_tenant_or_default(
+            SEARCH_RECEIPTS_FLAG,
+            user,
+            get_current_tenant_id(),
+            default=SEARCH_RECEIPTS_DEFAULT,
+        )
+    )
 
 
 class ReceiptScope(TypedDict):

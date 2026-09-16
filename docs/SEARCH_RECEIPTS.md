@@ -3,15 +3,24 @@
 Search receipts append a small block of retrieval metadata to each internal search
 result before the chat model reads it. The model then sees which queries the search
 ran, how many distinct documents each query returned, how many were new versus already
-seen in the current turn, and the filters that applied. The feature is off by default.
+seen in the current turn, and the filters that applied. The feature is on by default and
+can be turned off per tenant or user with a PostHog flag.
 
 ## Enable
 
-Set `ENABLE_SEARCH_RECEIPTS=true` on the API server. The main chat loop
-(`onyx.chat.llm_loop.run_llm_loop`) reads this flag through its `enable_search_receipts`
-argument. Other loops and callers do not request receipts.
+Search receipts are on by default. They are controlled by the PostHog feature flag
+`onyx-search-receipts`, evaluated once per chat message for the requesting user and
+tenant through the standard `FeatureFlagProvider`.
 
-When the flag is off, the search tool collects no receipt diagnostics and the model
+- Flag not defined in PostHog, PostHog not configured (Community Edition), or an
+  evaluation error: receipts stay on. The flag can only override the default.
+- Flag defined and evaluating to false for the user: receipts are off for that message.
+- Partial rollouts work as usual: users outside the rollout get false.
+
+The main chat loop (`onyx.chat.llm_loop.run_llm_loop`) receives the result through its
+`enable_search_receipts` argument. Other loops and callers do not request receipts.
+
+When receipts are off, the search tool collects no receipt diagnostics and the model
 sees the original search result string unchanged.
 
 ## What the model sees

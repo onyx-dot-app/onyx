@@ -67,11 +67,12 @@ from onyx.chat.models import (
 )
 from onyx.chat.prompt_utils import calculate_reserved_tokens
 from onyx.chat.save_chat import save_chat_turn
+from onyx.chat.search_receipts import search_receipts_enabled
 from onyx.chat.stop_signal_checker import is_connected as check_stop_signal
 from onyx.chat.stop_signal_checker import reset_cancel_status
 from onyx.chat.stream_buffer import StreamBufferWriter
 from onyx.configs.app_configs import DISABLE_VECTOR_DB, INTEGRATION_TESTS_MODE
-from onyx.configs.chat_configs import CHAT_HEARTBEAT_INTERVAL_S, ENABLE_SEARCH_RECEIPTS
+from onyx.configs.chat_configs import CHAT_HEARTBEAT_INTERVAL_S
 from onyx.configs.constants import (
     DEFAULT_PERSONA_ID,
     DocumentSource,
@@ -1202,6 +1203,8 @@ def _run_models(
 
     # Workspace toggle: infer source/time filters from the query (default on).
     auto_detect_search_filters = load_settings().auto_detect_search_filters is not False
+    # Evaluated once per message so every model in the turn sees the same answer.
+    search_receipts = search_receipts_enabled(user)
 
     merged_queue: queue.Queue[tuple[int, Packet | Exception | object]] = queue.Queue()
 
@@ -1425,7 +1428,7 @@ def _run_models(
                     include_citations=setup.new_msg_req.include_citations,
                     all_injected_file_metadata=setup.all_injected_file_metadata,
                     inject_memories_in_prompt=user.use_memories,
-                    enable_search_receipts=ENABLE_SEARCH_RECEIPTS,
+                    enable_search_receipts=search_receipts,
                 )
 
             model_succeeded[model_idx] = True
