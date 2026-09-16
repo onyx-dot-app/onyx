@@ -1,101 +1,43 @@
 """Channel readership: who a Teams channel's documents are shared with."""
 
 from collections.abc import Sequence
-from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 import requests
 
 from onyx.connectors.models import ConnectorFailure, Document
-from onyx.connectors.teams.connector import _collect_documents_for_channel
 from onyx.connectors.teams.utils import (
+    GraphRetriesExhausted,
     channel_access,
     fetch_channel_members,
     fetch_channel_readers,
 )
-
-TEAM_ID = "team-1"
-CHANNEL_ID = "19:channel@thread.tacv2"
-SERVICE_ROOT = "https://graph.microsoft.com/v1.0"
-MEMBERS_URL = f"teams/{TEAM_ID}/channels/{CHANNEL_ID}/allMembers"
-
-
-def _response(status: int, payload: dict[str, Any]) -> MagicMock:
-    response = MagicMock(spec=requests.Response)
-    response.ok = status < 400
-    response.status_code = status
-    response.headers = {}
-    response.json.return_value = payload
-    if status >= 400:
-        response.raise_for_status.side_effect = requests.HTTPError(
-            f"{status}", response=response
-        )
-    return response
-
-
-def _graph_client(
-    routes: dict[str, dict[str, Any]], refused: dict[str, int] | None = None
-) -> MagicMock:
-    """A client whose direct requests answer from ``routes``, fail with the
-    status in ``refused``, and 404 elsewhere. The SDK raises on every non-2xx
-    status, so failures arrive as exceptions the way they do in production."""
-    client = MagicMock()
-    client.service_root_url.return_value = SERVICE_ROOT
-
-    def execute(url: str) -> MagicMock:
-        if url in routes:
-            return _response(200, routes[url])
-        status = (refused or {}).get(url, 404)
-        response = _response(status, {"error": {"code": str(status)}})
-        raise requests.HTTPError(str(status), response=response)
-
-    client.execute_request_direct.side_effect = execute
-    return client
-
-
-def _member(name: str | None, email: str | None, user_id: str) -> dict[str, Any]:
-    return {"displayName": name, "email": email, "userId": user_id}
-
-
-def _message(message_id: str, text: str, reply_to: str | None = None) -> dict[str, Any]:
-    return {
-        "id": message_id,
-        "replyToId": reply_to,
-        "subject": None if reply_to else f"Subject {message_id}",
-        "from": {"user": {"id": "u1", "displayName": "Ada"}},
-        "body": {"contentType": "html", "content": f"<p>{text}</p>"},
-        "createdDateTime": "2026-09-01T10:00:00Z",
-        "lastModifiedDateTime": "2026-09-01T10:00:00Z",
-        "lastEditedDateTime": None,
-        "deletedDateTime": None,
-        "webUrl": f"https://teams.example/{message_id}",
-    }
-
-
-def _standard_channel() -> MagicMock:
-    channel = MagicMock()
-    channel.id = CHANNEL_ID
-    channel.membership_type = "standard"
-    channel.properties = {"displayName": "General"}
-    return channel
-
-
-def _team() -> MagicMock:
-    team = MagicMock()
-    team.id = TEAM_ID
-    return team
+from tests.unit.onyx.connectors.teams.helpers import (
+    CHANNEL_ID,
+    DELTA_URL,
+    MEMBERS_URL,
+    SERVICE_ROOT,
+    TEAM_ID,
+    connector,
+    graph_client,
+    member,
+    message,
+    replies_url,
+    response,
+    walk_channel,
+)
 
 
 def test_members_are_read_from_every_page_of_the_all_members_call() -> None:
-    client = _graph_client(
+    client = graph_client(
         {
             MEMBERS_URL: {
-                "value": [_member("Ada", "ada@example.com", "u1")],
+                "value": [member("Ada", "ada@example.com", "u1")],
                 "@odata.nextLink": f"{SERVICE_ROOT}/{MEMBERS_URL}?$skiptoken=p2",
             },
             f"{MEMBERS_URL}?$skiptoken=p2": {
-                "value": [_member("Bob", "bob@partner.example", "u2")]
+                "value": [member("Bob", "bob@partner.example", "u2")]
             },
         }
     )
@@ -106,8 +48,8 @@ def test_members_are_read_from_every_page_of_the_all_members_call() -> None:
 
 
 def test_a_standard_channel_is_shared_with_its_members_not_everyone() -> None:
-    client = _graph_client(
-        {MEMBERS_URL: {"value": [_member("Ada", "Ada@Example.com", "u1")]}}
+    client = graph_client(
+        {MEMBERS_URL: {"value": [member("Ada", "Ada@Example.com", "u1")]}}
     )
 
     experts, access = fetch_channel_readers(client, TEAM_ID, CHANNEL_ID)
@@ -119,9 +61,9 @@ def test_a_standard_channel_is_shared_with_its_members_not_everyone() -> None:
 
 
 def test_a_member_without_an_email_is_resolved_by_user_id() -> None:
-    client = _graph_client(
+    client = graph_client(
         {
-            MEMBERS_URL: {"value": [_member("Raunak", None, "u-raunak")]},
+            MEMBERS_URL: {"value": [member("Raunak", None, "u-raunak")]},
             "users/u-raunak": {"userPrincipalName": "raunak@example.com"},
         }
     )
@@ -137,12 +79,12 @@ def test_a_member_from_another_tenant_keeps_the_email_on_the_row() -> None:
     """Cross-tenant members of a shared channel cannot be looked up here, and
     they do not need to be: the all-members row carries their email. One whose
     row has none is not in this directory and is dropped."""
-    client = _graph_client(
+    client = graph_client(
         {
             MEMBERS_URL: {
                 "value": [
-                    _member("Guest", "guest@other.example", "u-foreign"),
-                    _member("Ghost", None, "u-gone"),
+                    member("Guest", "guest@other.example", "u-foreign"),
+                    member("Ghost", None, "u-gone"),
                 ]
             }
         }
@@ -155,8 +97,8 @@ def test_a_member_from_another_tenant_keeps_the_email_on_the_row() -> None:
 
 
 def test_a_refused_user_lookup_is_not_a_missing_member() -> None:
-    client = _graph_client(
-        {MEMBERS_URL: {"value": [_member("Ada", None, "u1")]}},
+    client = graph_client(
+        {MEMBERS_URL: {"value": [member("Ada", None, "u1")]}},
         refused={"users/u1": 403},
     )
 
@@ -165,8 +107,8 @@ def test_a_refused_user_lookup_is_not_a_missing_member() -> None:
 
 
 def test_a_member_without_a_display_name_still_reads() -> None:
-    client = _graph_client(
-        {MEMBERS_URL: {"value": [_member(None, "x@example.com", "u1")]}}
+    client = graph_client(
+        {MEMBERS_URL: {"value": [member(None, "x@example.com", "u1")]}}
     )
 
     experts, access = fetch_channel_readers(client, TEAM_ID, CHANNEL_ID)
@@ -176,7 +118,7 @@ def test_a_member_without_a_display_name_still_reads() -> None:
 
 
 def test_a_channel_with_no_resolvable_members_is_shared_with_no_one() -> None:
-    client = _graph_client({MEMBERS_URL: {"value": [_member(None, None, "")]}})
+    client = graph_client({MEMBERS_URL: {"value": [member(None, None, "")]}})
 
     _, access = fetch_channel_readers(client, TEAM_ID, CHANNEL_ID)
 
@@ -195,8 +137,8 @@ def test_a_throttled_members_call_is_retried(monkeypatch: pytest.MonkeyPatch) ->
     client = MagicMock()
     client.service_root_url.return_value = SERVICE_ROOT
     client.execute_request_direct.side_effect = [
-        requests.HTTPError("429", response=_response(429, {})),
-        _response(200, {"value": [_member("Ada", "ada@example.com", "u1")]}),
+        requests.HTTPError("429", response=response(429, {})),
+        response(200, {"value": [member("Ada", "ada@example.com", "u1")]}),
     ]
 
     members = fetch_channel_members(client, TEAM_ID, CHANNEL_ID)
@@ -206,27 +148,17 @@ def test_a_throttled_members_call_is_retried(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_a_standard_channel_walk_shares_every_thread_with_the_members_once() -> None:
-    delta_url = (
-        f"teams/{TEAM_ID}/channels/{CHANNEL_ID}/messages/delta"
-        "?$filter=lastModifiedDateTime gt 1970-01-01T00:00:00Z"
-    )
-    client = _graph_client(
+    client = graph_client(
         {
-            MEMBERS_URL: {"value": [_member("Ada", "ada@example.com", "u1")]},
-            delta_url: {"value": [_message("m1", "first"), _message("m2", "second")]},
-            f"teams/{TEAM_ID}/channels/{CHANNEL_ID}/messages/m1/replies": {
-                "value": [_message("r1", "reply", reply_to="m1")]
-            },
-            f"teams/{TEAM_ID}/channels/{CHANNEL_ID}/messages/m2/replies": {"value": []},
+            MEMBERS_URL: {"value": [member("Ada", "ada@example.com", "u1")]},
+            DELTA_URL: {"value": [message("m1", "first"), message("m2", "second")]},
+            replies_url("m1"): {"value": [message("r1", "reply", reply_to="m1")]},
+            replies_url("m2"): {"value": []},
         }
     )
 
     documents = [
-        item
-        for item in _collect_documents_for_channel(
-            client, _team(), _standard_channel(), start=0
-        )
-        if isinstance(item, Document)
+        item for item in walk_channel(connector(client)) if isinstance(item, Document)
     ]
 
     assert len(documents) == 2
@@ -254,27 +186,22 @@ def _assert_one_channel_failure(
 
 
 def test_a_channel_whose_members_are_refused_is_one_failure_not_a_crash() -> None:
-    client = _graph_client({}, refused={MEMBERS_URL: 403})
+    client = graph_client({}, refused={MEMBERS_URL: 403})
 
-    items = list(
-        _collect_documents_for_channel(client, _team(), _standard_channel(), start=0)
-    )
-
-    _assert_one_channel_failure(items)
+    _assert_one_channel_failure(walk_channel(connector(client)))
 
 
-def test_a_channel_whose_members_stay_throttled_is_one_failure_not_a_crash(
+def test_a_channel_whose_members_stay_throttled_fails_the_attempt_not_the_channel(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Skipping the channel would drop its threads for good, so throttling that
+    outlasts the retries fails the attempt and the checkpoint is retried."""
     monkeypatch.setattr("onyx.connectors.teams.utils.time.sleep", lambda _: None)
     client = MagicMock()
     client.service_root_url.return_value = SERVICE_ROOT
     client.execute_request_direct.side_effect = requests.HTTPError(
-        "429", response=_response(429, {})
+        "429", response=response(429, {})
     )
 
-    items = list(
-        _collect_documents_for_channel(client, _team(), _standard_channel(), start=0)
-    )
-
-    _assert_one_channel_failure(items)
+    with pytest.raises(GraphRetriesExhausted):
+        walk_channel(connector(client))
