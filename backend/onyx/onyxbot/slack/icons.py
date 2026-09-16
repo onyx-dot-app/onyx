@@ -35,6 +35,7 @@ _SOURCE_IMAGE_FILENAMES: Mapping[DocumentSource, str] = {
     DocumentSource.LOOPIO: "Loopio.png",
     DocumentSource.DROPBOX: "Dropbox.png",
     DocumentSource.SHAREPOINT: "Sharepoint.png",
+    DocumentSource.ONEDRIVE: _DEFAULT_SOURCE_IMAGE_FILENAME,
     DocumentSource.BOX: _DEFAULT_SOURCE_IMAGE_FILENAME,
     DocumentSource.TEAMS: "Teams.png",
     DocumentSource.SALESFORCE: "Salesforce.png",

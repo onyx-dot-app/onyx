@@ -1,8 +1,8 @@
 """Typed Microsoft Graph drive delta pages and checkpoint-safe fetching."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import quote, urljoin, urlsplit
 
 import requests
 from pydantic import BaseModel, ConfigDict, Field
@@ -17,6 +17,7 @@ ODATA_NEXT_LINK_PROPERTY = "@odata.nextLink"
 ODATA_DELTA_LINK_PROPERTY = "@odata.deltaLink"
 ODATA_REMOVED_PROPERTY = "@removed"
 GRAPH_SHARED_CHANGED_PROPERTY = "@microsoft.graph.sharedChanged"
+_EPOCH = datetime.fromtimestamp(0, tz=timezone.utc)
 
 DRIVE_ITEM_ID_PROPERTY = "id"
 DRIVE_ITEM_NAME_PROPERTY = "name"
@@ -211,6 +212,22 @@ def build_drive_delta_full_resync_url(
         f"{graph_api_base}/drives/{drive_id}/root/delta?"
         f"$top={page_size}&$select={select_fields}"
     )
+
+
+def build_onedrive_delta_start_url(
+    graph_api_base: str,
+    drive_id: str,
+    *,
+    start: datetime | None = None,
+    page_size: int = 200,
+) -> str:
+    params = [
+        f"$top={page_size}",
+        f"$select={DRIVE_DELTA_SELECT_FIELDS}",
+    ]
+    if start is not None and start > _EPOCH:
+        params.append(f"token={quote(start.isoformat(timespec='seconds'))}")
+    return f"{graph_api_base}/drives/{drive_id}/root/delta?{'&'.join(params)}"
 
 
 def _same_delta_endpoint(candidate: str, expected: str) -> bool:

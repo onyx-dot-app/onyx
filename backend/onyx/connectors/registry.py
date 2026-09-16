@@ -128,6 +128,10 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.sharepoint.connector",
         class_name="SharepointConnector",
     ),
+    DocumentSource.ONEDRIVE: ConnectorMapping(
+        module_path="onyx.connectors.onedrive.connector",
+        class_name="OneDriveConnector",
+    ),
     DocumentSource.TEAMS: ConnectorMapping(
         module_path="onyx.connectors.teams.connector",
         class_name="TeamsConnector",
