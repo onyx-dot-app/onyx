@@ -1,7 +1,7 @@
 import os
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from typing import Any
 from unittest.mock import ANY, MagicMock, patch
@@ -634,6 +634,68 @@ def test_claude_adaptive_thinking_sends_output_config_after_tool_call() -> None:
         kwargs = mock_completion.call_args.kwargs
         assert "thinking" not in kwargs
         assert kwargs["output_config"] == {"effort": "low"}
+
+
+@pytest.mark.parametrize(
+    "model_name, expected_thinking",
+    [
+        ("claude-sonnet-5", {"type": "disabled"}),
+        ("claude-opus-5", {"type": "disabled"}),
+        ("claude-opus-4-7", {"type": "disabled"}),
+        # Pre-adaptive Claude only thinks when the param asks for it.
+        ("claude-3-7-sonnet", None),
+    ],
+)
+def test_reasoning_off_disables_adaptive_thinking(
+    model_name: str, expected_thinking: dict[str, str] | None
+) -> None:
+    # The Claude 5 line thinks unless told not to, so off has to be sent.
+    # Older adaptive models take the same param, pre-adaptive ones take none.
+    kwargs = _anthropic_completion_kwargs(model_name, ReasoningEffort.OFF)
+    assert kwargs.get("thinking") == expected_thinking
+    # Opus 5 rejects disabled thinking paired with an effort above high.
+    assert "output_config" not in kwargs
+
+
+@pytest.mark.parametrize("model_name", ["claude-fable-5", "claude-mythos-5-1"])
+def test_reasoning_off_floors_always_thinking_models_at_low(model_name: str) -> None:
+    # These reject disabled thinking, so off lands on the least they accept
+    # instead of silence, which the API would fill with its high default.
+    kwargs = _anthropic_completion_kwargs(model_name, ReasoningEffort.OFF)
+    assert kwargs["thinking"] == {"type": "adaptive"}
+    assert kwargs["output_config"] == {"effort": "low"}
+
+
+def test_reasoning_off_follows_deployment_alias_over_model_name() -> None:
+    # The alias is the model that answers, and Opus accepts disabled thinking.
+    kwargs = _anthropic_completion_kwargs(
+        "claude-fable-5", ReasoningEffort.OFF, deployment_name="claude-opus-5"
+    )
+    assert kwargs["thinking"] == {"type": "disabled"}
+    assert "output_config" not in kwargs
+
+
+def _anthropic_completion_kwargs(
+    model_name: str,
+    reasoning_effort: ReasoningEffort,
+    deployment_name: str | None = None,
+) -> Mapping[str, Any]:
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.ANTHROPIC,
+        model_name=model_name,
+        deployment_name=deployment_name,
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.ANTHROPIC,
+            model_name=model_name,
+        ),
+    )
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=reasoning_effort))
+        return mock_completion.call_args.kwargs
 
 
 def test_keeps_temperature_for_other_models(default_multi_llm: LitellmLLM) -> None:
