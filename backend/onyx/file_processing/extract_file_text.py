@@ -767,6 +767,10 @@ def _epub_spine_documents(epub: zipfile.ZipFile) -> list[str]:
         rootfile = container.find(f".//{{{_EPUB_CONTAINER_NS}}}rootfile")
         package_path = rootfile.get("full-path") if rootfile is not None else None
         if not package_path:
+            logger.warning(
+                "EPUB container.xml names no package document; "
+                "falling back to archive order"
+            )
             return []
         package = DefusedElementTree.fromstring(epub.read(package_path))
     except Exception:
