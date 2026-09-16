@@ -53,6 +53,7 @@ from onyx.document_index.opensearch.schema import (
     GLOBAL_BOOST_FIELD_NAME,
     HIDDEN_FIELD_NAME,
     PERSONAS_FIELD_NAME,
+    SOURCE_TYPE_FIELD_NAME,
     USER_PROJECTS_FIELD_NAME,
     DocumentChunk,
     DocumentChunkWithoutVectors,
@@ -169,6 +170,7 @@ def convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
         section_continuation=False,
         document_id=chunk.document_id,
         source_type=DocumentSource(chunk.source_type),
+        source_types=tuple(DocumentSource(source) for source in chunk.source_types),
         semantic_identifier=chunk.semantic_identifier,
         title=chunk.title,
         boost=chunk.global_boost,
@@ -217,6 +219,7 @@ def _convert_onyx_chunk_to_opensearch_document(
         if _metadata_list
         else None
     )
+    source_types = chunk.source_types or (chunk.source_document.source,)
     return DocumentChunk(
         document_id=chunk.source_document.id,
         chunk_index=chunk.chunk_id,
@@ -227,7 +230,8 @@ def _convert_onyx_chunk_to_opensearch_document(
         title_vector=chunk.title_embedding,
         content=filtered_content,
         content_vector=chunk.embeddings.full_embedding,
-        source_type=chunk.source_document.source.value,
+        source_type=source_types[0].value,
+        source_types=tuple(source.value for source in source_types),
         metadata_list=filtered_metadata_list,
         metadata_suffix=filtered_metadata_suffix,
         last_updated=chunk.source_document.doc_updated_at,
@@ -697,6 +701,17 @@ class OpenSearchDocumentIndex(DocumentIndex):
             if update_request.persona_ids is not None:
                 properties_to_update[PERSONAS_FIELD_NAME] = list(
                     update_request.persona_ids
+                )
+            if update_request.source_types:
+                source_values = [
+                    source.value
+                    for source in sorted(
+                        set(update_request.source_types),
+                        key=lambda source: source.value,
+                    )
+                ]
+                properties_to_update[SOURCE_TYPE_FIELD_NAME] = (
+                    source_values[0] if len(source_values) == 1 else source_values
                 )
             if update_request.created_at is not None:
                 # Stored as epoch seconds
