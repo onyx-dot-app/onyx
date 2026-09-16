@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 	"strings"
@@ -46,7 +47,7 @@ Each variable is a space-separated tuple: "cluster region namespace"
 Use -c to select which context (default: data_plane).`,
 		Args: cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			runWhois(args[0], ctx)
+			runWhois(cmd.OutOrStdout(), args[0], ctx)
 		},
 	}
 
@@ -87,7 +88,7 @@ func queryPod(c *kube.Cluster, pod, sql string) []string {
 	return lines
 }
 
-func runWhois(query string, ctx string) {
+func runWhois(out io.Writer, query string, ctx string) {
 	c := clusterFromEnv(ctx)
 
 	if err := c.EnsureContext(); err != nil {
@@ -102,13 +103,13 @@ func runWhois(query string, ctx string) {
 	log.Debugf("Using pod: %s", pod)
 
 	if strings.HasPrefix(query, "tenant_") {
-		findAdminsByTenant(c, pod, query)
+		findAdminsByTenant(out, c, pod, query)
 	} else {
-		findByEmail(c, pod, query)
+		findByEmail(out, c, pod, query)
 	}
 }
 
-func findByEmail(c *kube.Cluster, pod, fragment string) {
+func findByEmail(out io.Writer, c *kube.Cluster, pod, fragment string) {
 	fragment = strings.NewReplacer("'", "", `"`, "", `;`, "", `\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(fragment)
 
 	sql := fmt.Sprintf(
@@ -119,12 +120,12 @@ func findByEmail(c *kube.Cluster, pod, fragment string) {
 	log.Infof("Searching for emails matching '%%%s%%'...", fragment)
 	lines := queryPod(c, pod, sql)
 	if len(lines) == 0 {
-		fmt.Println("No results found.")
+		_, _ = fmt.Fprintln(out, "No results found.")
 		return
 	}
 
-	fmt.Println()
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	_, _ = fmt.Fprintln(out)
+	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	_, _ = fmt.Fprintln(w, "EMAIL\tTENANT ID\tACTIVE")
 	_, _ = fmt.Fprintln(w, "-----\t---------\t------")
 	for _, line := range lines {
@@ -133,7 +134,7 @@ func findByEmail(c *kube.Cluster, pod, fragment string) {
 	_ = w.Flush()
 }
 
-func findAdminsByTenant(c *kube.Cluster, pod, tenantID string) {
+func findAdminsByTenant(out io.Writer, c *kube.Cluster, pod, tenantID string) {
 	if !safeIdentifier.MatchString(tenantID) {
 		log.Fatalf("Invalid tenant ID: %q (must be alphanumeric, hyphens, underscores only)", tenantID)
 	}
@@ -146,14 +147,14 @@ func findAdminsByTenant(c *kube.Cluster, pod, tenantID string) {
 	log.Infof("Fetching admin emails for %s...", tenantID)
 	lines := queryPod(c, pod, sql)
 	if len(lines) == 0 {
-		fmt.Println("No admin users found for this tenant.")
+		_, _ = fmt.Fprintln(out, "No admin users found for this tenant.")
 		return
 	}
 
-	fmt.Println()
-	fmt.Println("EMAIL")
-	fmt.Println("-----")
+	_, _ = fmt.Fprintln(out)
+	_, _ = fmt.Fprintln(out, "EMAIL")
+	_, _ = fmt.Fprintln(out, "-----")
 	for _, line := range lines {
-		fmt.Println(line)
+		_, _ = fmt.Fprintln(out, line)
 	}
 }
