@@ -6,12 +6,14 @@ from functools import partial
 from typing import Any
 
 import msal
+import requests
 from office365.graph_client import GraphClient
 from office365.runtime.client_request_exception import ClientRequestException
 from office365.runtime.http.request_options import RequestOptions
 from office365.teams.channels.channel import Channel
 from office365.teams.team import Team
 
+from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -36,6 +38,7 @@ from onyx.connectors.microsoft_utils.graph_env import (
     resolve_microsoft_environment,
 )
 from onyx.connectors.models import (
+    BasicExpertInfo,
     ConnectorCheckpoint,
     ConnectorFailure,
     ConnectorMissingCredentialError,
@@ -45,13 +48,14 @@ from onyx.connectors.models import (
     SlimDocument,
     TextSection,
 )
-from onyx.connectors.teams.models import Message
+from onyx.connectors.teams.models import ChannelRef, Message
 from onyx.connectors.teams.utils import (
     execute_query_with_retry,
-    fetch_expert_infos,
-    fetch_external_access,
+    fetch_channel_readers,
+    fetch_message_page,
     fetch_messages,
     fetch_replies,
+    message_delta_url,
 )
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -64,7 +68,13 @@ _SLIM_DOC_BATCH_SIZE = 5000
 
 
 class TeamsCheckpoint(ConnectorCheckpoint):
+    # None until the teams are listed.
     todo_team_ids: list[str] | None = None
+    todo_channels: list[ChannelRef] = []
+    # A step walks one page of one channel, so a resumed attempt loses at most
+    # a page instead of a whole team. No page url means the channel's first page.
+    current_channel: ChannelRef | None = None
+    next_messages_url: str | None = None
 
 
 class TeamsConnector(
@@ -88,6 +98,12 @@ class TeamsConnector(
         self.msal_app: msal.ConfidentialClientApplication | None = None
         self.max_workers = max_workers
         self.requested_team_list: list[str] = teams
+        # Channels walked again from their first page in this attempt: a saved
+        # page url Graph rejects recovers once per attempt and can never loop.
+        self._restarted_channel_ids: set[str] = set()
+        # The current channel's readers, read once per channel per attempt. The
+        # cache dies with the process, so a resumed attempt re-reads them fresh.
+        self._channel_readers: dict[str, _ChannelReaders] = {}
 
         resolved_env = resolve_microsoft_environment(graph_api_host, authority_host)
         self._azure_environment = resolved_env.environment
@@ -216,61 +232,43 @@ class TeamsConnector(
 
         checkpoint = copy.deepcopy(checkpoint)
 
-        todos = checkpoint.todo_team_ids
-
-        if todos is None:
+        if checkpoint.todo_team_ids is None:
             teams = _collect_all_teams(
                 graph_client=self.graph_client,
                 requested=self.requested_team_list,
             )
-            todo_team_ids = [team.id for team in teams if team.id]
-            return TeamsCheckpoint(
-                todo_team_ids=todo_team_ids,
-                has_more=bool(todo_team_ids),
+            checkpoint.todo_team_ids = [team.id for team in teams if team.id]
+        elif checkpoint.current_channel is None and not checkpoint.todo_channels:
+            # A team is left, or has_more would have ended the walk.
+            team_id = checkpoint.todo_team_ids.pop()
+            team = _get_team_by_id(graph_client=self.graph_client, team_id=team_id)
+            checkpoint.todo_channels = [
+                _channel_ref(team_id, channel)
+                for channel in _collect_all_channels_from_team(team=team)
+            ]
+            logger.info(
+                "Listed %s channel(s) of team %s; %s team(s) left",
+                len(checkpoint.todo_channels),
+                team_id,
+                len(checkpoint.todo_team_ids),
+            )
+        else:
+            if checkpoint.current_channel is None:
+                checkpoint.current_channel = checkpoint.todo_channels.pop()
+            yield from _walk_channel_page(
+                self.graph_client,
+                checkpoint,
+                start,
+                self._restarted_channel_ids,
+                self._channel_readers,
             )
 
-        # `todos.pop()` should always return an element. This is because if
-        # `todos` was the empty list, then we would have set `has_more=False`
-        # during the previous invocation of `TeamsConnector.load_from_checkpoint`,
-        # meaning that this function wouldn't have been called in the first place.
-        todo_team_id = todos.pop()
-        team = _get_team_by_id(
-            graph_client=self.graph_client,
-            team_id=todo_team_id,
+        checkpoint.has_more = bool(
+            checkpoint.current_channel
+            or checkpoint.todo_channels
+            or checkpoint.todo_team_ids
         )
-        channels = _collect_all_channels_from_team(
-            team=team,
-        )
-
-        # An iterator of channels, in which each channel is an iterator of docs.
-        channels_docs = [
-            _collect_documents_for_channel(
-                graph_client=self.graph_client,
-                team=team,
-                channel=channel,
-                start=start,
-            )
-            for channel in channels
-        ]
-
-        # Was previously `for doc in parallel_yield(gens=docs, max_workers=self.max_workers): ...`.
-        # However, that lead to some weird exceptions (potentially due to non-thread-safe behaviour in the Teams library).
-        # Reverting back to the non-threaded case for now.
-        for channel_docs in channels_docs:
-            for channel_doc in channel_docs:
-                if channel_doc:
-                    yield channel_doc
-
-        logger.info(
-            "Processed team with id %s; %s team(s) left to process",
-            todo_team_id,
-            len(todos),
-        )
-
-        return TeamsCheckpoint(
-            todo_team_ids=todos,
-            has_more=bool(todos),
-        )
+        return checkpoint
 
     def load_from_checkpoint_with_perm_sync(
         self,
@@ -278,8 +276,8 @@ class TeamsConnector(
         end: SecondsSinceUnixEpoch,
         checkpoint: TeamsCheckpoint,
     ) -> CheckpointOutput[TeamsCheckpoint]:
-        # Teams already fetches external_access (permissions) for each document
-        # in _convert_thread_to_document, so we can just delegate to load_from_checkpoint
+        # Every document already carries its channel's access list, so the plain
+        # walk is the permission walk.
         return self.load_from_checkpoint(start, end, checkpoint)
 
     # impls for SlimConnectorWithPermSync
@@ -316,9 +314,12 @@ class TeamsConnector(
                     )
                     continue
 
-                external_access = fetch_external_access(
+                # A refused members call raises: a listing without its readers
+                # would let pruning and permission sync act on a partial picture.
+                _, external_access = fetch_channel_readers(
                     graph_client=self.graph_client,  # ty: ignore[invalid-argument-type]
-                    channel=channel,
+                    team_id=team.id,
+                    channel_id=channel.id,
                 )
 
                 messages = fetch_messages(
@@ -331,6 +332,10 @@ class TeamsConnector(
                 slim_doc_buffer: list[SlimDocument | HierarchyNode] = []
 
                 for message in messages:
+                    # The indexing walk skips these roots, so listing them here
+                    # would keep their stale documents out of pruning.
+                    if not message.is_indexable:
+                        continue
                     slim_doc_buffer.append(
                         SlimDocument(
                             id=message.id,
@@ -420,19 +425,18 @@ def _build_simple_odata_filter(safe_names: list[str]) -> str | None:
     return " or ".join(filter_parts)
 
 
-def _construct_semantic_identifier(channel: Channel, top_message: Message) -> str:
-    top_message_user_name: str
+def _sender_name(message: Message) -> str:
+    """Bots and apps post without a user, so the sender is not always known."""
+    if message.from_ and message.from_.user and message.from_.user.display_name:
+        return message.from_.user.display_name
+    return "Unknown User"
 
-    if top_message.from_ and top_message.from_.user:
-        user_display_name = top_message.from_.user.display_name
-        top_message_user_name = user_display_name or "Unknown User"
-    else:
-        logger.warning("Message top_message=%r has no `from.user` field", top_message)
-        top_message_user_name = "Unknown User"
 
+def _construct_semantic_identifier(channel: ChannelRef, top_message: Message) -> str:
+    top_message_user_name = _sender_name(top_message)
     top_message_content = top_message.body.content or ""
     top_message_subject = top_message.subject or "Unknown Subject"
-    channel_name = channel.properties.get("displayName", "Unknown")
+    channel_name = channel.display_name
 
     try:
         snippet = parse_html_page_basic(top_message_content.rstrip())
@@ -455,50 +459,56 @@ def _construct_semantic_identifier(channel: Channel, top_message: Message) -> st
     return semantic_identifier
 
 
-def _convert_thread_to_document(
-    graph_client: GraphClient,
-    channel: Channel,
-    thread: list[Message],
-) -> Document | None:
-    if len(thread) == 0:
-        return None
-
-    most_recent_message_datetime: datetime | None = None
-    top_message = thread[0]
-    thread_text = ""
-
-    sorted_thread = sorted(thread, key=lambda m: m.created_date_time, reverse=True)
-
-    if sorted_thread:
-        most_recent_message_datetime = sorted_thread[0].created_date_time
-
-    for message in thread:
-        # Add text and a newline
-        if message.body.content:
-            thread_text += parse_html_page_basic(message.body.content)
-
-        # If it has a subject, that means its the top level post message, so grab its id, url, and subject
-        if message.subject:
-            top_message = message
-
-    if not thread_text:
-        return None
-
-    semantic_string = _construct_semantic_identifier(channel, top_message)
-    expert_infos = fetch_expert_infos(graph_client=graph_client, channel=channel)
-    external_access = fetch_external_access(
-        graph_client=graph_client, channel=channel, expert_infos=expert_infos
+def _message_header(message: Message) -> str:
+    return (
+        f"From: {_sender_name(message)}\nDate: {message.created_date_time.isoformat()}"
     )
 
+
+def _message_section(message: Message) -> TextSection | None:
+    """One section per message, so a hit cites the message that said it."""
+    body = parse_html_page_basic(message.body.content) if message.body.content else ""
+    body = body.strip()
+    if not body:
+        return None
+    return TextSection(
+        link=message.web_url, text=f"{_message_header(message)}\n\n{body}"
+    )
+
+
+def _modified_at(message: Message) -> datetime:
+    return message.last_modified_date_time or message.created_date_time
+
+
+def _convert_thread_to_document(
+    channel: ChannelRef,
+    root: Message,
+    replies: list[Message],
+    expert_infos: list[BasicExpertInfo],
+    external_access: ExternalAccess,
+) -> Document:
+    """A thread (the root message and its replies) is one document, oldest first."""
+    messages = sorted([root, *replies], key=lambda m: m.created_date_time)
+    sections = [
+        section
+        for message in messages
+        if message.is_indexable and (section := _message_section(message))
+    ]
+    # The slim walk lists every indexable root, so a thread edited down to no
+    # text must still replace its document or the old text would outlive it.
+    if not sections:
+        sections = [TextSection(link=root.web_url, text=_message_header(root))]
+
     return Document(
-        id=top_message.id,
-        sections=[TextSection(link=top_message.web_url, text=thread_text)],
+        id=root.id,
+        sections=sections,
         source=DocumentSource.TEAMS,
-        semantic_identifier=semantic_string,
+        semantic_identifier=_construct_semantic_identifier(channel, root),
         title="",  # teams threads don't really have a "title"
-        # NOTE: doc_created_at population not yet verified against live data
-        doc_created_at=top_message.created_date_time,
-        doc_updated_at=most_recent_message_datetime,
+        doc_created_at=root.created_date_time,
+        # Indexing skips a document whose update time has not moved, and an
+        # edit or a deleted reply moves a message's modified time, not its creation.
+        doc_updated_at=max(_modified_at(message) for message in messages),
         primary_owners=expert_infos,
         metadata={},
         external_access=external_access,
@@ -771,78 +781,162 @@ def _collect_all_channels_from_team(
     if not team.id:
         raise RuntimeError(f"The {team=} has an empty `id` field")
 
-    channels: list[Channel] = []
-    next_url = None
-
-    while True:
-        query = team.channels.get_all(
-            # explicitly needed because of incorrect type definitions provided by the `office365` library
-            page_loaded=lambda _: None
-        )
-        if next_url:
-            url = next_url
-            query = query.before_execute(partial(_update_request_url, next_url=url))
-
-        channel_collection = execute_query_with_retry(
-            query, method_name="_collect_all_channels_from_team"
-        )
-        channels.extend(channel for channel in channel_collection if channel.id)
-
-        if not channel_collection.has_next:
-            break
-
-    return channels
+    # `get_all` follows the collection's pages itself.
+    query = team.channels.get_all(
+        # explicitly needed because of incorrect type definitions provided by the `office365` library
+        page_loaded=lambda _: None
+    )
+    channel_collection = execute_query_with_retry(
+        query, method_name="_collect_all_channels_from_team"
+    )
+    return [channel for channel in channel_collection if channel.id]
 
 
-def _collect_documents_for_channel(
+def _channel_ref(team_id: str, channel: Channel) -> ChannelRef:
+    return ChannelRef(
+        team_id=team_id,
+        id=channel.id,
+        display_name=channel.properties.get("displayName") or "Unknown",
+    )
+
+
+def _status(error: requests.HTTPError) -> int | None:
+    return error.response.status_code if error.response is not None else None
+
+
+def _is_permanent(error: requests.HTTPError) -> bool:
+    """A refusal or a missing resource stays that way, so it is recorded and the
+    walk moves on. Anything else (expired token, exhausted retries) fails the
+    attempt so the saved checkpoint is retried, not skipped for good."""
+    return _status(error) in (403, 404)
+
+
+def _rejects_saved_cursor(
+    error: requests.HTTPError,
+    checkpoint: TeamsCheckpoint,
+    restarted_channel_ids: set[str],
+) -> bool:
+    """Graph answers a page url it no longer honors with 400 or 410 (measured
+    for a tampered skip token). Retrying it would never progress, so the channel
+    is walked again from its first page, once per attempt."""
+    channel = checkpoint.current_channel
+    return (
+        channel is not None
+        and checkpoint.next_messages_url is not None
+        and channel.id not in restarted_channel_ids
+        and _status(error) in (400, 410)
+    )
+
+
+_ChannelReaders = tuple[list[BasicExpertInfo], ExternalAccess]
+
+
+def _leave_channel(
+    checkpoint: TeamsCheckpoint, readers_cache: dict[str, _ChannelReaders]
+) -> None:
+    if checkpoint.current_channel is not None:
+        readers_cache.pop(checkpoint.current_channel.id, None)
+    checkpoint.current_channel = None
+    checkpoint.next_messages_url = None
+
+
+def _channel_failure(channel: ChannelRef, error: Exception) -> ConnectorFailure:
+    return ConnectorFailure(
+        failed_entity=EntityFailure(entity_id=channel.id),
+        failure_message=f"Could not read channel {channel.id} of team {channel.team_id}",
+        exception=error,
+    )
+
+
+def _walk_channel_page(
     graph_client: GraphClient,
-    team: Team,
-    channel: Channel,
+    checkpoint: TeamsCheckpoint,
     start: SecondsSinceUnixEpoch,
-) -> Iterator[Document | None | ConnectorFailure]:
-    """
-    This function yields an iterator of `Document`s, where each `Document` corresponds to a "thread".
+    restarted_channel_ids: set[str],
+    readers_cache: dict[str, _ChannelReaders],
+) -> Iterator[Document | ConnectorFailure]:
+    """One page of the current channel's threads. Moves the checkpoint to the
+    next page, or off the channel when the page was its last or is refused."""
+    channel = checkpoint.current_channel
+    if channel is None:
+        raise RuntimeError("No channel is being walked")
 
-    A "thread" is the conjunction of the "root" message and all of its replies.
-    """
+    # Readers are never checkpointed, a saved list would be stale on resume.
+    # Without them the channel cannot be indexed safely, so a refusal is one
+    # recorded failure for the channel and the walk moves on.
+    try:
+        readers = readers_cache.get(channel.id)
+        if readers is None:
+            readers = fetch_channel_readers(
+                graph_client=graph_client,
+                team_id=channel.team_id,
+                channel_id=channel.id,
+            )
+            readers_cache[channel.id] = readers
+        expert_infos, external_access = readers
+    except requests.HTTPError as e:
+        if not _is_permanent(e):
+            raise
+        yield _channel_failure(channel, e)
+        _leave_channel(checkpoint, readers_cache)
+        return
 
-    for message in fetch_messages(
-        graph_client=graph_client,
-        team_id=team.id,
-        channel_id=channel.id,
-        start=start,
-    ):
+    try:
+        roots, next_url = fetch_message_page(
+            graph_client=graph_client,
+            request_url=checkpoint.next_messages_url
+            or message_delta_url(channel.team_id, channel.id, start),
+        )
+    except requests.HTTPError as e:
+        if _rejects_saved_cursor(e, checkpoint, restarted_channel_ids):
+            logger.warning(
+                "Graph rejected the saved page of channel %s; walking it again "
+                "from its first page",
+                channel.id,
+            )
+            checkpoint.next_messages_url = None
+            restarted_channel_ids.add(channel.id)
+            return
+        if not _is_permanent(e):
+            raise
+        yield _channel_failure(channel, e)
+        _leave_channel(checkpoint, readers_cache)
+        return
+
+    for root in roots:
+        # A thread is its root message. A deleted or system root drops the
+        # whole thread, which is what the slim walk lists for pruning too.
+        if not root.is_indexable:
+            continue
         try:
             replies = list(
                 fetch_replies(
                     graph_client=graph_client,
-                    team_id=team.id,
+                    team_id=channel.team_id,
                     channel_id=channel.id,
-                    root_message_id=message.id,
+                    root_message_id=root.id,
                 )
             )
-
-            thread = [message]
-            thread.extend(replies[::-1])
-
-            # Note:
-            # We convert an entire *thread* (including the root message and its replies) into one, singular `Document`.
-            # I.e., we don't convert each individual message and each individual reply into their own individual `Document`s.
-            if doc := _convert_thread_to_document(
-                graph_client=graph_client,
-                channel=channel,
-                thread=thread,
-            ):
-                yield doc
-
-        except Exception as e:
+        except requests.HTTPError as e:
+            if not _is_permanent(e):
+                raise
             yield ConnectorFailure(
-                failed_entity=EntityFailure(
-                    entity_id=message.id,
-                ),
-                failure_message=f"Retrieval of message and its replies failed; {channel.id=} {message.id}",
+                failed_entity=EntityFailure(entity_id=root.id),
+                failure_message=f"Could not read the replies of {root.id} in channel {channel.id}",
                 exception=e,
             )
+            continue
+        yield _convert_thread_to_document(
+            channel=channel,
+            root=root,
+            replies=replies,
+            expert_infos=expert_infos,
+            external_access=external_access,
+        )
+
+    checkpoint.next_messages_url = next_url
+    if next_url is None:
+        _leave_channel(checkpoint, readers_cache)
 
 
 if __name__ == "__main__":

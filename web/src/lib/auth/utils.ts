@@ -65,6 +65,15 @@ export function validateInternalRedirect(
 
   const trimmedUrl = url.trim();
 
+  // The URL parser strips interior tab/CR/LF, so "/\t/evil.example" would slip
+  // past the "//" check below and resolve to "//evil.example".
+  for (let i = 0; i < trimmedUrl.length; i++) {
+    const code = trimmedUrl.charCodeAt(i);
+    if (code <= 0x1f || code === 0x7f) {
+      return null;
+    }
+  }
+
   if (!trimmedUrl.startsWith("/")) {
     return null;
   }
