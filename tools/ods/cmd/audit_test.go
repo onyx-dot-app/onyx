@@ -81,7 +81,7 @@ func TestAuditForwardsArgs(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			dir := t.TempDir()
 			record := filepath.Join(dir, "args")
-			script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > " + record + "\n"
+			script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"${0%/*}/args\"\n"
 			if err := os.WriteFile(filepath.Join(dir, auditBinary), []byte(script), 0o755); err != nil {
 				t.Fatal(err)
 			}

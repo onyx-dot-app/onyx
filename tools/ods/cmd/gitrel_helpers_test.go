@@ -27,7 +27,7 @@ func gitrelFakeGH(t *testing.T, caseArms string) func() [][]string {
 	// \037 ends an argument and \036 ends a call, so arguments may hold
 	// newlines.
 	script := "#!/bin/sh\n" +
-		"{ for a in \"$@\"; do printf '%s\\037' \"$a\"; done; printf '\\036'; } >> '" + record + "'\n" +
+		"{ for a in \"$@\"; do printf '%s\\037' \"$a\"; done; printf '\\036'; } >> \"${0%/*}/calls\"\n" +
 		"case \"$*\" in\n" +
 		"--version) exit 0 ;;\n" +
 		caseArms + "\n" +

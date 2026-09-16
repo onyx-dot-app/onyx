@@ -184,12 +184,13 @@ func skillFakeGit(t *testing.T, cloneScript string) string {
 	}
 	dir := t.TempDir()
 	record := filepath.Join(dir, "clone-args")
+	t.Setenv("ODS_TEST_REAL_GIT", realGit)
 	script := "#!/bin/sh\n" +
 		"if [ \"$1\" = clone ]; then\n" +
-		"  printf '%s\\n' \"$@\" > '" + record + "'\n" +
+		"  printf '%s\\n' \"$@\" > \"${0%/*}/clone-args\"\n" +
 		cloneScript +
 		"fi\n" +
-		"exec '" + realGit + "' \"$@\"\n"
+		"exec \"$ODS_TEST_REAL_GIT\" \"$@\"\n"
 	deployWriteFile(t, filepath.Join(dir, "git"), script)
 	if err := os.Chmod(filepath.Join(dir, "git"), 0o755); err != nil {
 		t.Fatal(err)

@@ -47,10 +47,10 @@ func dbSetup(t *testing.T) string {
 // that reads the recorded invocations.
 func dbFakeBinary(t *testing.T, binDir, name, behaviour string) func() [][]string {
 	t.Helper()
-	record := filepath.Join(t.TempDir(), name+".calls")
+	record := filepath.Join(binDir, name+".calls")
 	script := "#!/bin/sh\n" +
-		"for arg in \"$@\"; do printf '%s\\n' \"$arg\" >> '" + record + "'; done\n" +
-		"printf '%s\\n' '" + dbCallSeparator + "' >> '" + record + "'\n" +
+		"for arg in \"$@\"; do printf '%s\\n' \"$arg\" >> \"$0.calls\"; done\n" +
+		"printf '%s\\n' '" + dbCallSeparator + "' >> \"$0.calls\"\n" +
 		behaviour + "\n"
 	if err := os.WriteFile(filepath.Join(binDir, name), []byte(script), 0o755); err != nil {
 		t.Fatalf("Failed to write fake %s: %v", name, err)

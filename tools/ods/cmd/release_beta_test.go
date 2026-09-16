@@ -40,7 +40,6 @@ package cmd
 import (
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -261,12 +260,9 @@ func TestReleaseBeta_newBranchPushFailureLeavesNoTag(t *testing.T) {
 func TestReleaseBeta_newBranchTagPushFailureKeepsBranch(t *testing.T) {
 	// Precondition: origin accepts branches but rejects tags.
 	repo := gittest.SetupReleaseBranchRepo(t)
-	hookDir := t.TempDir()
-	hook := "#!/bin/sh\nwhile read old new ref; do case $ref in refs/tags/*) exit 1 ;; esac; done\n"
-	if err := os.WriteFile(filepath.Join(hookDir, "pre-receive"), []byte(hook), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	gittest.Git(t, repo.Origin, "config", "core.hooksPath", hookDir)
+	gitrelHooks(t, repo.Origin, map[string]string{
+		"pre-receive": "#!/bin/sh\nwhile read old new ref; do case $ref in refs/tags/*) exit 1 ;; esac; done\n",
+	})
 
 	// Under test.
 	tag, err := releaseBeta(&ReleaseBetaOptions{NewBranch: true, Yes: true})

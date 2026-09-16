@@ -43,7 +43,7 @@ func TestParseTunnelPorts(t *testing.T) {
 func TestDevTunnel_forwardsThroughDockerExecOnLoopback(t *testing.T) {
 	root := t.TempDir()
 	calls := kubeFakeTools(t, map[string]string{
-		"git":    kubeGitScript(root, "main"),
+		"git":    kubeGitScript(t, root, "main"),
 		"docker": "printf 'abc123\\n'\n",
 		"socat":  "exit 0\n",
 	})

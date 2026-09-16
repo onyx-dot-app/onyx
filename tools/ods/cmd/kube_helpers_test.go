@@ -28,8 +28,8 @@ func kubeFakeTools(t *testing.T, scripts map[string]string) func() [][]string {
 	logPath := filepath.Join(dir, "calls.log")
 	for name, body := range scripts {
 		script := "#!/bin/sh\n" +
-			"printf '%s\\037' " + name + " \"$@\" >> '" + logPath + "'\n" +
-			"printf '\\n' >> '" + logPath + "'\n" +
+			"printf '%s\\037' " + name + " \"$@\" >> \"${0%/*}/calls.log\"\n" +
+			"printf '\\n' >> \"${0%/*}/calls.log\"\n" +
 			body
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(script), 0o755); err != nil {
 			t.Fatal(err)
@@ -54,11 +54,14 @@ func kubeFakeTools(t *testing.T, scripts map[string]string) func() [][]string {
 }
 
 // kubeGitScript is a fake git that reports root as the repository top level
-// and branch as the current branch.
-func kubeGitScript(root, branch string) string {
+// and branch as the current branch. The values reach the script through the
+// environment.
+func kubeGitScript(t *testing.T, root, branch string) string {
+	t.Setenv("ODS_TEST_GIT_ROOT", root)
+	t.Setenv("ODS_TEST_GIT_BRANCH", branch)
 	return `case "$1" in
-  rev-parse) printf '%s\n' '` + root + `' ;;
-  branch) printf '%s\n' '` + branch + `' ;;
+  rev-parse) printf '%s\n' "$ODS_TEST_GIT_ROOT" ;;
+  branch) printf '%s\n' "$ODS_TEST_GIT_BRANCH" ;;
 esac
 `
 }

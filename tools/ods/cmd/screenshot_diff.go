@@ -161,7 +161,7 @@ Examples:
     --current ./web/output/screenshots/ \
     --output ./web/output/screenshot-diff/admin/index.html`,
 		Run: func(cmd *cobra.Command, args []string) {
-			if err := runCompare(opts, os.Stdout); err != nil {
+			if err := runCompare(opts, cmd.OutOrStdout()); err != nil {
 				log.Fatal(err)
 			}
 		},

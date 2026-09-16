@@ -34,6 +34,10 @@ type CoverageOptions struct {
 	SnapshotBucket string
 }
 
+// newSnapshotStore builds the snapshot store. Tests replace it to stay off
+// the network.
+var newSnapshotStore = coverage.NewS3SnapshotStore
+
 // NewCoverageCommand creates a command that measures statement coverage for a
 // Go suite and compares it against the committed baseline.
 func NewCoverageCommand() *cobra.Command {
@@ -131,7 +135,7 @@ func runCoverage(target string, opts *CoverageOptions) int {
 		log.Infof("Browse it with: go tool cover -html=%s", profilePath)
 	}
 
-	store := coverage.NewS3SnapshotStore(opts.SnapshotBucket, suite.Dir)
+	store := newSnapshotStore(opts.SnapshotBucket, suite.Dir)
 	var baseReference *coverage.Reference
 	if opts.Base != "" {
 		var code int

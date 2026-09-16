@@ -289,9 +289,10 @@ func TestRunCompare_downloadsBothRevisionsAndCleansUp(t *testing.T) {
 	shotWritePNG(t, filepath.Join(fixtures, "v1", "page.png"), 4, 4, shotWhite)
 	shotWritePNG(t, filepath.Join(fixtures, "v2", "page.png"), 4, 4, shotRed)
 	shotWritePNG(t, filepath.Join(fixtures, "v2", "new.png"), 4, 4, shotRed)
+	t.Setenv("ODS_TEST_FIXTURES", fixtures)
 	callLog := shotFakeAWS(t, `case "$3" in
-  */v1/) cp '`+fixtures+`/v1/'* "$4" ;;
-  */v2/) cp '`+fixtures+`/v2/'* "$4" ;;
+  */v1/) cp "$ODS_TEST_FIXTURES"/v1/* "$4" ;;
+  */v2/) cp "$ODS_TEST_FIXTURES"/v2/* "$4" ;;
   *) exit 7 ;;
 esac
 `)

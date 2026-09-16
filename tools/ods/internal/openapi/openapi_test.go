@@ -65,8 +65,8 @@ func writeExecutable(t *testing.T, path, body string) {
 		t.Fatal(err)
 	}
 	script := "#!/bin/sh\n" +
-		"printf '%s|%s\\n' \"$(pwd -P)\" \"$*\" >> '" + path + ".calls'\n" +
-		"while IFS= read -r l || [ -n \"$l\" ]; do printf '%s\\n' \"$l\"; done > '" + path + ".stdin'\n" +
+		"printf '%s|%s\\n' \"$(pwd -P)\" \"$*\" >> \"$0.calls\"\n" +
+		"while IFS= read -r l || [ -n \"$l\" ]; do printf '%s\\n' \"$l\"; done > \"$0.stdin\"\n" +
 		body
 	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
 		t.Fatal(err)

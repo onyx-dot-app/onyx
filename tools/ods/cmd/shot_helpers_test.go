@@ -27,8 +27,8 @@ func shotFakeAWS(t *testing.T, script string) string {
 		t.Skip("the fake aws is a shell script")
 	}
 	binDir := t.TempDir()
-	callLog := filepath.Join(t.TempDir(), "calls")
-	body := "#!/bin/sh\necho \"$*\" >> '" + callLog + "'\n" + script
+	callLog := filepath.Join(binDir, "calls")
+	body := "#!/bin/sh\necho \"$*\" >> \"${0%/*}/calls\"\n" + script
 	if err := os.WriteFile(filepath.Join(binDir, "aws"), []byte(body), 0o755); err != nil {
 		t.Fatal(err)
 	}

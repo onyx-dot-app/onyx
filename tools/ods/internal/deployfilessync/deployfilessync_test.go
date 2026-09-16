@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // seedSources writes a fake deployment/ tree containing every synced file.
@@ -105,15 +106,11 @@ func TestWriteLeavesFreshCopiesAlone(t *testing.T) {
 	if _, err := Write(repoRoot); err != nil {
 		t.Fatalf("Write failed: %v", err)
 	}
-	// Swap one fresh copy for a symlink to its source. The content still
-	// matches, and a rewrite would replace the symlink with a regular file.
+	// Backdate one fresh copy. A rewrite would move its mtime to now.
 	fresh := filepath.Join(DestDir(repoRoot), "docker_compose", "README.md")
-	source := filepath.Join(SourceDir(repoRoot), "docker_compose", "README.md")
-	if err := os.Remove(fresh); err != nil {
+	old := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+	if err := os.Chtimes(fresh, old, old); err != nil {
 		t.Fatal(err)
-	}
-	if err := os.Symlink(source, fresh); err != nil {
-		t.Skipf("symlinks unavailable: %v", err)
 	}
 
 	results, err := Write(repoRoot)
@@ -125,12 +122,12 @@ func TestWriteLeavesFreshCopiesAlone(t *testing.T) {
 			t.Errorf("%s: expected fresh", r.RelPath)
 		}
 	}
-	info, err := os.Lstat(fresh)
+	info, err := os.Stat(fresh)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode()&os.ModeSymlink == 0 {
-		t.Fatal("expected the fresh copy left untouched")
+	if !info.ModTime().Equal(old) {
+		t.Fatalf("expected the fresh copy left untouched, got mtime %v", info.ModTime())
 	}
 }
 

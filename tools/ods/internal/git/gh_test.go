@@ -19,7 +19,7 @@ func gitrelFakeGH(t *testing.T, body string) func() []string {
 	}
 	dir := t.TempDir()
 	record := filepath.Join(dir, "args")
-	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" >> '" + record + "'\n" + body + "\n"
+	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" >> \"${0%/*}/args\"\n" + body + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "gh"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}

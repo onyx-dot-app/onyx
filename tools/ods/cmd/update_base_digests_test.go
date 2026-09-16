@@ -253,7 +253,8 @@ func TestRunUpdateBaseDigests_reportsListFailure(t *testing.T) {
 		t.Skip("the fake git is a shell script")
 	}
 	binDir := t.TempDir()
-	script := "#!/bin/sh\ncase \"$1\" in rev-parse) echo '" + t.TempDir() + "' ;; *) exit 5 ;; esac\n"
+	t.Setenv("ODS_TEST_GIT_ROOT", t.TempDir())
+	script := "#!/bin/sh\ncase \"$1\" in rev-parse) echo \"$ODS_TEST_GIT_ROOT\" ;; *) exit 5 ;; esac\n"
 	if err := os.WriteFile(filepath.Join(binDir, "git"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}

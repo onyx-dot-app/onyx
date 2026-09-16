@@ -55,7 +55,7 @@ func writeScript(t *testing.T, path, body string) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	script := "#!/bin/sh\necho \"$*\" >> '" + path + ".calls'\n" + body + "\n"
+	script := "#!/bin/sh\necho \"$*\" >> \"$0.calls\"\n" + body + "\n"
 	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +79,7 @@ func calls(t *testing.T, path string) []string {
 func (f fixture) venvAlembic(t *testing.T, body string) string {
 	t.Helper()
 	path := filepath.Join(f.root, ".venv", "bin", "alembic")
-	writeScript(t, path, `printf 'dir=%s\nhost=%s\nport=%s\nuser=%s\npassword=%s\ndb=%s\n' "$(pwd -P)" "$POSTGRES_HOST" "$POSTGRES_PORT" "$POSTGRES_USER" "$POSTGRES_PASSWORD" "$POSTGRES_DB" > '`+path+`.env'`+"\n"+body)
+	writeScript(t, path, `printf 'dir=%s\nhost=%s\nport=%s\nuser=%s\npassword=%s\ndb=%s\n' "$(pwd -P)" "$POSTGRES_HOST" "$POSTGRES_PORT" "$POSTGRES_USER" "$POSTGRES_PASSWORD" "$POSTGRES_DB" > "$0.env"`+"\n"+body)
 	return path
 }
 

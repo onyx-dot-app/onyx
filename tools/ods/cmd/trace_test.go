@@ -268,7 +268,7 @@ func TestResolveRunID(t *testing.T) {
 		name    string
 		args    []string
 		opts    TraceOptions
-		git     string
+		git     func(t *testing.T) string
 		gh      string
 		want    string
 		wantErr string
@@ -305,7 +305,7 @@ esac
 		},
 		{
 			name: "current branch",
-			git:  kubeGitScript("/repo", "my-branch"),
+			git:  func(t *testing.T) string { return kubeGitScript(t, "/repo", "my-branch") },
 			gh:   `printf '%s' '` + runs + `'`,
 			want: "555",
 			wantGH: [][]string{
@@ -314,12 +314,12 @@ esac
 		},
 		{
 			name:    "detached HEAD",
-			git:     kubeGitScript("/repo", ""),
+			git:     func(t *testing.T) string { return kubeGitScript(t, "/repo", "") },
 			wantErr: "detached HEAD; specify a --branch, --pr, or run ID",
 		},
 		{
 			name:    "git fails",
-			git:     "exit 128\n",
+			git:     func(*testing.T) string { return "exit 128\n" },
 			wantErr: "failed to get current branch: git branch failed: exit status 128",
 		},
 		{
@@ -355,7 +355,10 @@ esac
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			scripts := map[string]string{"git": c.git}
+			scripts := map[string]string{"git": ""}
+			if c.git != nil {
+				scripts["git"] = c.git(t)
+			}
 			if c.gh != "" {
 				scripts["gh"] = c.gh
 			}
@@ -527,10 +530,11 @@ func TestTrace_opensASingleTraceFromTheWebDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	pwdFile := filepath.Join(t.TempDir(), "pwd")
+	t.Setenv("ODS_TEST_PWD_FILE", pwdFile)
 	calls := kubeFakeTools(t, map[string]string{
-		"git":  kubeGitScript(root, "feat"),
+		"git":  kubeGitScript(t, root, "feat"),
 		"gh":   kubeGHDownloadScript(`[{"databaseId":42}]`, "playwright-test-results-admin-42/login"),
-		"bunx": `printf '%s' "$PWD" > '` + pwdFile + `'` + "\n",
+		"bunx": `printf '%s' "$PWD" > "$ODS_TEST_PWD_FILE"` + "\n",
 	})
 
 	out := kubeExecute(t, NewTraceCommand(), "--project", "admin")

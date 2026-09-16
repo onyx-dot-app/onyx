@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -160,10 +161,18 @@ func fetchFrom(endpoint string, s3url string, destPath string, quiet bool) error
 	return fmt.Errorf("failed to download from S3: %w\n\nTo authenticate, run:\n  aws sso login\n\nOr configure AWS credentials with:\n  aws configure sso", cliErr)
 }
 
+// httpClient bounds the wait for a response. It sets no overall timeout,
+// because large objects can take long to download.
+var httpClient = func() *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.ResponseHeaderTimeout = 30 * time.Second
+	return &http.Client{Transport: transport}
+}()
+
 // fetchUnsigned attempts to download the file using an unsigned HTTP request.
 // It takes the endpoint as a string so tests can point it at a local server.
 func fetchUnsigned(endpoint string, destPath string, progress logFunc) (err error) {
-	resp, err := http.Get(endpoint)
+	resp, err := httpClient.Get(endpoint)
 	if err != nil {
 		return fmt.Errorf("HTTP request failed: %w", err)
 	}

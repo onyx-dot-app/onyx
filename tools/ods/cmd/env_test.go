@@ -239,7 +239,7 @@ func TestEnvCommand_updatesVSCodeEnvInPlace(t *testing.T) {
 	bin := composeEnvDocker(t)
 	root := composeRepo(t)
 	envPath := filepath.Join(root, ".vscode", ".env")
-	writeFile(t, envPath, "SECRET=x\nPOSTGRES_PORT=1\n")
+	writeFile(t, envPath, "CUSTOM_SETTING=x\nPOSTGRES_PORT=1\n")
 
 	command := NewEnvCommand()
 	command.SetArgs([]string{})
@@ -248,11 +248,11 @@ func TestEnvCommand_updatesVSCodeEnvInPlace(t *testing.T) {
 	}
 
 	content := composeReadFile(t, envPath)
-	if !strings.HasPrefix(content, "SECRET=x\nPOSTGRES_PORT=15432\n") {
+	if !strings.HasPrefix(content, "CUSTOM_SETTING=x\nPOSTGRES_PORT=15432\n") {
 		t.Fatalf("expected existing lines to stay in place, got %q", content)
 	}
 	want := maps.Clone(composeAppEnv)
-	want["SECRET"] = "x"
+	want["CUSTOM_SETTING"] = "x"
 	if got := composeEnvFile(t, content); !maps.Equal(got, want) {
 		t.Fatalf("expected %v, got %v", want, got)
 	}

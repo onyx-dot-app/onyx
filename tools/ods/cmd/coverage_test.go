@@ -236,7 +236,15 @@ func TestRunCoverage_unavailableBaseFallsBackToTheFloors(t *testing.T) {
 func TestRunCoverage_unreadableBaseExitsOne(t *testing.T) {
 	root := gateRepo(t)
 	gateSaveFloors(t, root, 50)
-	gateFakeBin(t, "aws", "printf 'commit: [\\n' > \"$4\"\n")
+	realStore := newSnapshotStore
+	newSnapshotStore = func(bucket, module string) *coverage.S3SnapshotStore {
+		store := realStore(bucket, module)
+		store.FetchObject = func(_, destPath string) error {
+			return os.WriteFile(destPath, []byte("commit: [\n"), 0o644)
+		}
+		return store
+	}
+	t.Cleanup(func() { newSnapshotStore = realStore })
 	profilePath := filepath.Join(t.TempDir(), "cover.out")
 	gateWriteFile(t, profilePath, gateProfile)
 	markdown := filepath.Join(t.TempDir(), "report.md")
@@ -277,7 +285,9 @@ func TestRunCoverage_publish(t *testing.T) {
 			}
 			out := t.TempDir()
 			record, uploaded := filepath.Join(out, "aws-args"), filepath.Join(out, "snapshot.yaml")
-			gateFakeBin(t, "aws", fmt.Sprintf("echo \"$@\" > %q\ncp \"$3\" %q\nexit %d\n", record, uploaded, tc.awsExit))
+			t.Setenv("ODS_TEST_AWS_ARGS", record)
+			t.Setenv("ODS_TEST_UPLOADED", uploaded)
+			gateFakeBin(t, "aws", fmt.Sprintf("printf '%%s\\0' \"$@\" > \"$ODS_TEST_AWS_ARGS\"\ncp \"$3\" \"$ODS_TEST_UPLOADED\"\nexit %d\n", tc.awsExit))
 			profilePath := filepath.Join(out, "cover.out")
 			gateWriteFile(t, profilePath, gateProfile)
 
@@ -295,7 +305,7 @@ func TestRunCoverage_publish(t *testing.T) {
 			}
 
 			head := gittest.Git(t, root, "rev-parse", "HEAD")
-			args := strings.Fields(gateReadFile(t, record))
+			args := strings.Split(strings.TrimSuffix(gateReadFile(t, record), "\x00"), "\x00")
 			wantURL := "s3://test-bucket/" + coverage.SnapshotObjectKey("tools/ods", head)
 			if len(args) != 4 || args[0] != "s3" || args[1] != "cp" || args[3] != wantURL {
 				t.Fatalf("expected s3 cp <file> %q, got %q", wantURL, args)
@@ -320,7 +330,8 @@ func TestRunCoverage_publishWithoutACommitExitsOne(t *testing.T) {
 	gateWriteFile(t, filepath.Join(root, "tools", "ods", "go.mod"), "module example.com/m\n")
 	t.Chdir(root)
 	record := filepath.Join(t.TempDir(), "aws-args")
-	gateFakeBin(t, "aws", fmt.Sprintf("echo \"$@\" > %q\n", record))
+	t.Setenv("ODS_TEST_AWS_ARGS", record)
+	gateFakeBin(t, "aws", "echo \"$@\" > \"$ODS_TEST_AWS_ARGS\"\n")
 	profilePath := filepath.Join(t.TempDir(), "cover.out")
 	gateWriteFile(t, profilePath, gateProfile)
 

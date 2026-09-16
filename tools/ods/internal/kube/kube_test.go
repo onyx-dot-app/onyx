@@ -20,8 +20,8 @@ func fakeTools(t *testing.T, scripts map[string]string) func() [][]string {
 	logPath := filepath.Join(dir, "calls.log")
 	for name, body := range scripts {
 		script := "#!/bin/sh\n" +
-			"printf '%s\\037' " + name + " \"$@\" >> '" + logPath + "'\n" +
-			"printf '\\n' >> '" + logPath + "'\n" +
+			"printf '%s\\037' " + name + " \"$@\" >> \"${0%/*}/calls.log\"\n" +
+			"printf '\\n' >> \"${0%/*}/calls.log\"\n" +
 			body
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(script), 0o755); err != nil {
 			t.Fatal(err)

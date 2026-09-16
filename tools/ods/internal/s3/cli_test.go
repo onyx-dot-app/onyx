@@ -21,8 +21,8 @@ func fakeAWS(t *testing.T, script string) string {
 		t.Skip("the fake aws is a shell script")
 	}
 	binDir := t.TempDir()
-	argvFile := filepath.Join(t.TempDir(), "argv")
-	body := "#!/bin/sh\nprintf '%s\\n' \"$@\" > '" + argvFile + "'\n" + script
+	argvFile := filepath.Join(binDir, "argv")
+	body := "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"${0%/*}/argv\"\n" + script
 	if err := os.WriteFile(filepath.Join(binDir, "aws"), []byte(body), 0o755); err != nil {
 		t.Fatal(err)
 	}

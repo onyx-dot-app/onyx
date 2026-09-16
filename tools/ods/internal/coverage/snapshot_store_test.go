@@ -199,7 +199,9 @@ func TestNewS3SnapshotStore_publishesWithTheAWSCLI(t *testing.T) {
 	bin := t.TempDir()
 	record := filepath.Join(t.TempDir(), "args")
 	uploaded := filepath.Join(t.TempDir(), "snapshot.yaml")
-	script := fmt.Sprintf("#!/bin/sh\necho \"$@\" > %q\ncp \"$3\" %q\n", record, uploaded)
+	t.Setenv("ODS_TEST_AWS_ARGS", record)
+	t.Setenv("ODS_TEST_UPLOADED", uploaded)
+	script := "#!/bin/sh\nprintf '%s\\0' \"$@\" > \"$ODS_TEST_AWS_ARGS\"\ncp \"$3\" \"$ODS_TEST_UPLOADED\"\n"
 	if err := os.WriteFile(filepath.Join(bin, "aws"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -214,7 +216,7 @@ func TestNewS3SnapshotStore_publishesWithTheAWSCLI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fields := strings.Fields(string(args))
+	fields := strings.Split(strings.TrimSuffix(string(args), "\x00"), "\x00")
 	if len(fields) != 4 || fields[0] != "s3" || fields[1] != "cp" || fields[3] != store.ObjectURL(testCommit) {
 		t.Fatalf("expected s3 cp <file> %q, got %q", store.ObjectURL(testCommit), fields)
 	}
