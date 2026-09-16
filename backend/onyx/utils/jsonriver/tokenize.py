@@ -164,14 +164,6 @@ class _Input:
             return True
         return False
 
-    def try_to_take(self, length: int) -> str | None:
-        """Try to take length characters, or None if not enough available"""
-        if self.length < length:
-            return None
-        result = self._buffer[self._start_index : self._start_index + length]
-        self._start_index += length
-        return result
-
     def try_to_take_char_code(self) -> int | None:
         """Try to take a single character as char code, or None if buffer empty"""
         if self.length == 0:

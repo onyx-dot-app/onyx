@@ -334,8 +334,7 @@ def test_parallel_yield_empty_generators() -> None:
     """Test parallel_yield with empty generators."""
 
     def empty_gen() -> Iterator[int]:
-        if False:
-            yield 0  # Makes this a generator function
+        yield from ()
 
     gens = [empty_gen() for _ in range(3)]
     results = list(parallel_yield(gens))

@@ -36,14 +36,6 @@ class HttpxPool:
                 cls._clients[name] = cls._init_client(**kwargs)
 
     @classmethod
-    def close_client(cls, name: str) -> None:
-        """Allow the caller to close the client."""
-        with cls._lock:
-            client = cls._clients.pop(name, None)
-            if client:
-                client.close()
-
-    @classmethod
     def close_all(cls) -> None:
         """Close all registered clients."""
         with cls._lock:

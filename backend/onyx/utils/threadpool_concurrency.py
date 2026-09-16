@@ -452,27 +452,6 @@ def run_async_sync_no_cancel(coro: Coroutine[Any, Any, T]) -> T:
         return future.result()
 
 
-def run_multiple_in_background(
-    funcs: list[Callable[[], None]],
-    thread_name_prefix: str = "worker",
-) -> ThreadPoolExecutor:
-    """Submit multiple callables to a ``ThreadPoolExecutor`` with context propagation.
-
-    Copies the current ``contextvars`` context once and runs every callable
-    inside that copy, which is important for preserving tenant IDs and other
-    context-local state across threads.
-
-    Returns the executor so the caller can ``shutdown()`` when done.
-    """
-    ctx = contextvars.copy_context()
-    executor = ThreadPoolExecutor(
-        max_workers=len(funcs), thread_name_prefix=thread_name_prefix
-    )
-    for func in funcs:
-        executor.submit(ctx.run, func)
-    return executor
-
-
 def start_thread_with_context(
     target: Callable[..., Any],
     *,
@@ -606,24 +585,3 @@ def parallel_yield(gens: list[Iterator[R]], max_workers: int = 10) -> Iterator[R
                     )
                     next_ind += 1
                 del future_to_index[future]
-
-
-def parallel_yield_from_funcs(
-    funcs: list[Callable[..., R]],
-    max_workers: int = 10,
-) -> Iterator[R]:
-    """
-    Runs the list of functions with thread-level parallelism, yielding
-    results as available. The asynchronous nature of this yielding means
-    that stopping the returned iterator early DOES NOT GUARANTEE THAT NO
-    FURTHER ITEMS WERE PRODUCED by the input funcs. Only use this function
-    if you are consuming all elements from the functions OR it is acceptable
-    for some extra function code to run and not have the result(s) yielded.
-    """
-
-    def func_wrapper(func: Callable[[], R]) -> Iterator[R]:
-        yield func()
-
-    yield from parallel_yield(
-        [func_wrapper(func) for func in funcs], max_workers=max_workers
-    )

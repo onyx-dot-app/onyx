@@ -4,7 +4,6 @@ import logging
 import re
 import uuid
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timezone
 
 from fastapi import FastAPI, Request, Response
 from fastapi.routing import APIRoute
@@ -61,12 +60,6 @@ def make_randomized_onyx_request_id(prefix: str) -> str:
     """generates a randomized request id"""
 
     hash_input = str(uuid.uuid4())
-    return _make_onyx_request_id(prefix, hash_input)
-
-
-def make_structured_onyx_request_id(prefix: str, request_url: str) -> str:
-    """Not used yet, but could be in the future!"""
-    hash_input = f"{request_url}:{datetime.now(timezone.utc)}"
     return _make_onyx_request_id(prefix, hash_input)
 
 
