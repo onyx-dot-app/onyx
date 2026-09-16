@@ -676,6 +676,12 @@ def _create_file_tool_metadata_message(
     usage setting). Naming a tool the model was never given makes it invent
     workarounds — it searches the web for the document or guesses the contents.
 
+    Preference order is read_file, then internal search, then the python tool.
+    read_file pages through a file directly; search retrieves from the indexed
+    copy; the python tool receives the file itself (``chat_files_for_tools`` is
+    assembled from the whole chat chain, independent of this truncation) and
+    addresses it by filename.
+
     An unreported tool set names no tool. Steps that offer none are common (a
     deep-research final report runs with no tools), and under-promising is the
     safe direction to fail in.
@@ -699,6 +705,12 @@ def _create_file_tool_metadata_message(
             "These files are attached but too large to include in full. Their "
             "contents are indexed — use internal search to find the relevant "
             "passages. Do not guess them or search the web for them:"
+        ]
+    elif PythonTool.NAME in offered:
+        lines = [
+            "These files are attached but too large to include in full. The "
+            "python tool receives them as files — read them there by filename. "
+            "Do not guess their contents or search the web for them:"
         ]
     else:
         lines = [
