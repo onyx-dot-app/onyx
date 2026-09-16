@@ -386,3 +386,75 @@ def test_azure_should_fake_stream_inherits_registry_aware_patch() -> None:
             )
             is False
         )
+
+
+def _anthropic_body(thinking: dict[str, str], messages: list[Any]) -> dict[str, Any]:
+    apply_monkey_patches()
+    from litellm.llms.anthropic.chat.transformation import AnthropicConfig
+
+    with mock.patch("litellm.modify_params", True):
+        return AnthropicConfig().transform_request(
+            model="claude-sonnet-5",
+            messages=messages,
+            optional_params={"thinking": dict(thinking), "max_tokens": 1024},
+            litellm_params={},
+            headers={},
+        )
+
+
+_TOOL_HISTORY: list[Any] = [
+    {"role": "user", "content": "What's the weather in SF?"},
+    {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [
+            {
+                "id": "call_1",
+                "type": "function",
+                "function": {"name": "get_weather", "arguments": "{}"},
+            }
+        ],
+    },
+    {"role": "tool", "tool_call_id": "call_1", "content": "Sunny, 70F"},
+]
+
+
+def test_disabled_thinking_survives_tool_call_history() -> None:
+    """Upstream drops any thinking param once tool calls arrive without thinking
+    blocks. Disabled thinking cannot cause the error that guard exists for, and
+    dropping it hands the Claude 5 line back its default effort."""
+    body = _anthropic_body({"type": "disabled"}, list(_TOOL_HISTORY))
+    assert body["thinking"] == {"type": "disabled"}
+
+
+def test_enabled_thinking_still_dropped_after_tool_calls() -> None:
+    """The guard itself must stay: we keep no signed blocks to replay."""
+    body = _anthropic_body({"type": "adaptive"}, list(_TOOL_HISTORY))
+    assert "thinking" not in body
+
+
+def _converse_fields(thinking: dict[str, str], messages: list[Any]) -> Any:
+    apply_monkey_patches()
+    from litellm.llms.bedrock.chat.converse_transformation import AmazonConverseConfig
+
+    with mock.patch("litellm.modify_params", True):
+        data = AmazonConverseConfig()._transform_request_helper(
+            model="anthropic.claude-sonnet-5",
+            system_content_blocks=[],
+            optional_params={"thinking": dict(thinking), "maxTokens": 1024},
+            messages=messages,
+            headers={},
+        )
+    return data.get("additionalModelRequestFields")
+
+
+def test_converse_keeps_disabled_thinking_after_tool_calls() -> None:
+    """Converse carries its own copy of the upstream drop, and puts thinking
+    under additionalModelRequestFields rather than at the top level."""
+    fields = _converse_fields({"type": "disabled"}, list(_TOOL_HISTORY))
+    assert fields == {"thinking": {"type": "disabled"}}
+
+
+def test_converse_still_drops_enabled_thinking_after_tool_calls() -> None:
+    fields = _converse_fields({"type": "adaptive"}, list(_TOOL_HISTORY))
+    assert not (fields or {}).get("thinking")
