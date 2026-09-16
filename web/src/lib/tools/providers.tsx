@@ -139,8 +139,10 @@ function useToolsPopoverState({
   const setSearchToolEnabled = useCallback(
     (enabled: boolean) => {
       if (searchToolId === null) return;
-      toolConfiguration.setToolState(searchToolId, () =>
-        enabled ? null : "disabled"
+      // Enabling only lifts the disabled flag. Writing null here would erase
+      // a "forced" pin, since this runs again on every configuration change.
+      toolConfiguration.setToolState(searchToolId, (current) =>
+        enabled ? (current === "disabled" ? null : current) : "disabled"
       );
     },
     [searchToolId, toolConfiguration]
