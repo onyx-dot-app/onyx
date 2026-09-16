@@ -133,7 +133,7 @@ def _accumulate_stream_to_assistant_message(
 
     return AssistantMessage(
         role="assistant",
-        content=accumulated_content if accumulated_content else None,
+        content=accumulated_content or None,
         tool_calls=tool_calls,
     )
 

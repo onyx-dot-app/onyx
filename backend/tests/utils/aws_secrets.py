@@ -116,11 +116,7 @@ def _get_aws_secrets(
             secret_value = secret.get("SecretString")
 
             if secret_value:
-                key_name = (
-                    secret_id[len(prefix) :]
-                    if secret_id.startswith(prefix)
-                    else secret_id
-                )
+                key_name = secret_id.removeprefix(prefix)
                 try:
                     secrets[enum_type(key_name)] = secret_value
                 except ValueError:

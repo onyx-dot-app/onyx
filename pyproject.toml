@@ -300,9 +300,11 @@ ignore = [
 select = [
   "ARG",
   "B",
+  "C4",
   "C901",
   "E",
   "F",
+  "FURB",
   "G004",
   "I",
   "PERF",

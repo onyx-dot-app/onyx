@@ -512,8 +512,7 @@ def _convert_sitepage_to_document(
 
     web_url = site_page["webUrl"]
     semantic_identifier = cast(str, site_page.get("name", title))
-    if semantic_identifier.endswith(ASPX_EXTENSION):
-        semantic_identifier = semantic_identifier[: -len(ASPX_EXTENSION)]
+    semantic_identifier = semantic_identifier.removesuffix(ASPX_EXTENSION)
 
     if include_permissions:
         external_access = get_sharepoint_external_access(

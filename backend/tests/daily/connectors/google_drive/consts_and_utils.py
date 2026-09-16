@@ -585,21 +585,19 @@ def assert_expected_docs_in_retrieved_docs(
         for doc in retrieved_docs
         if doc.semantic_identifier.startswith(_VALID_PREFIX)
     ]
-    valid_retrieved_file_names = set(
-        [doc.semantic_identifier for doc in valid_retrieved_docs]
-    )
-    valid_retrieved_texts = set(
-        [
-            " - ".join(
-                [
-                    section.text
-                    for section in doc.sections
-                    if isinstance(section, TextSection) and section.text is not None
-                ]
-            )
-            for doc in valid_retrieved_docs
-        ]
-    )
+    valid_retrieved_file_names = {
+        doc.semantic_identifier for doc in valid_retrieved_docs
+    }
+    valid_retrieved_texts = {
+        " - ".join(
+            [
+                section.text
+                for section in doc.sections
+                if isinstance(section, TextSection) and section.text is not None
+            ]
+        )
+        for doc in valid_retrieved_docs
+    }
 
     # Check file names
     print_discrepancies(

@@ -330,7 +330,7 @@ def handle_regular_answer(
         filters = BaseFilters(
             source_type=None,
             document_set=document_set_names,
-            tags=channel_tags if channel_tags else None,
+            tags=channel_tags or None,
         )
 
         # Slack answers should be grounded in retrieval (pre-#7399 behavior):

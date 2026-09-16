@@ -255,7 +255,7 @@ def generate_usage_report_pdf(
     file_name = f"{report_id}_review_pack"
 
     # The queried bounds are half-open; only a given period gets the extra day.
-    display_start, display_end = period if period else _normalize_period(None)
+    display_start, display_end = period or _normalize_period(None)
 
     data = build_usage_report_data(
         db_session, rows, display_start, display_end, system_rows
