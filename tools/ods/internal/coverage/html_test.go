@@ -40,3 +40,23 @@ func TestWriteHTML_rendersTheProfile(t *testing.T) {
 		t.Fatalf("expected the source in the html, got %d bytes", len(html))
 	}
 }
+
+func TestWriteHTML_failures(t *testing.T) {
+	t.Run("tool output is kept in the error", func(t *testing.T) {
+		fakeGo(t, "echo 'cover: bad profile' >&2\nexit 1\n")
+		dir := t.TempDir()
+
+		err := WriteHTML(dir, filepath.Join(dir, "c.out"), filepath.Join(dir, "c.html"))
+		if err == nil || !strings.Contains(err.Error(), "cover: bad profile") {
+			t.Fatalf("expected the tool output in the error, got %v", err)
+		}
+	})
+
+	t.Run("html directory under a file", func(t *testing.T) {
+		dir := writeGoMod(t, "module example.com/m\n")
+
+		if err := WriteHTML(dir, filepath.Join(dir, "c.out"), filepath.Join(dir, "go.mod", "c.html")); err == nil {
+			t.Fatal("expected an error creating the html directory")
+		}
+	})
+}

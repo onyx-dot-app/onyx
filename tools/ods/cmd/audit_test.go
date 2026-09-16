@@ -102,6 +102,38 @@ func TestAuditForwardsArgs(t *testing.T) {
 	}
 }
 
+// TestRunAudit_exitCodes checks the exit code `ods audit` gates deploys on.
+func TestRunAudit_exitCodes(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake auditor is a shell script")
+	}
+	cases := []struct {
+		name   string
+		script string
+		args   []string
+		want   int
+	}{
+		{"findings pass through", "exit 3\n", []string{"--python"}, 3},
+		{"not installed exits one", "", nil, 1},
+		{"not installed with flags exits one", "", []string{"--python"}, 1},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if c.script != "" {
+				if err := os.WriteFile(filepath.Join(dir, auditBinary), []byte("#!/bin/sh\n"+c.script), 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			t.Setenv("PATH", dir)
+
+			if got := runAudit(NewAuditCommand(), c.args); got != c.want {
+				t.Fatalf("expected exit code %d, got %d", c.want, got)
+			}
+		})
+	}
+}
+
 func TestWantsHelp(t *testing.T) {
 	cases := []struct {
 		args []string

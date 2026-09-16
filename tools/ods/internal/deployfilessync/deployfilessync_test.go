@@ -3,6 +3,7 @@ package deployfilessync
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -94,5 +95,59 @@ func TestCheckFailsWhenSourceMissing(t *testing.T) {
 	repoRoot := t.TempDir()
 	if _, err := Check(repoRoot); err == nil {
 		t.Fatal("expected error for missing source files")
+	}
+}
+
+// Write only touches stale copies: a fresh copy keeps its file untouched.
+func TestWriteLeavesFreshCopiesAlone(t *testing.T) {
+	repoRoot := t.TempDir()
+	seedSources(t, repoRoot)
+	if _, err := Write(repoRoot); err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+	// Swap one fresh copy for a symlink to its source. The content still
+	// matches, and a rewrite would replace the symlink with a regular file.
+	fresh := filepath.Join(DestDir(repoRoot), "docker_compose", "README.md")
+	source := filepath.Join(SourceDir(repoRoot), "docker_compose", "README.md")
+	if err := os.Remove(fresh); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(source, fresh); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	results, err := Write(repoRoot)
+	if err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+	for _, r := range results {
+		if r.Stale {
+			t.Errorf("%s: expected fresh", r.RelPath)
+		}
+	}
+	info, err := os.Lstat(fresh)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Fatal("expected the fresh copy left untouched")
+	}
+}
+
+// An embedded copy that cannot be read stops the sync rather than being
+// reported as missing and overwritten.
+func TestWriteFailsWhenACopyIsUnreadable(t *testing.T) {
+	repoRoot := t.TempDir()
+	seedSources(t, repoRoot)
+	dir := filepath.Join(DestDir(repoRoot), "docker_compose", "README.md")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Write(repoRoot)
+
+	want := "failed to read embedded copy docker_compose/README.md"
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("expected %q, got %v", want, err)
 	}
 }
