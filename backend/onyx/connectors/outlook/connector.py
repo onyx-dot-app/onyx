@@ -8,6 +8,11 @@ Incremental runs come from the poll window rather than saved delta links: an
 index attempt starts from a fresh checkpoint, so each folder's delta round
 opens with ``receivedDateTime ge start`` and any conversation that gained a
 message in the window is rebuilt whole.
+
+Pruning walks the same mailboxes and folders but reads only conversation ids,
+so a conversation whose every message was deleted leaves the index without a
+full re-index. A conversation that lost one message keeps the stale text
+until it gains a message or a full re-index rebuilds it.
 """
 
 from collections import deque
@@ -18,12 +23,15 @@ from typing import Any
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import (
     CheckpointedConnector,
     CheckpointOutput,
     CredentialsConnector,
     CredentialsProviderInterface,
+    GenerateSlimDocumentOutput,
     SecondsSinceUnixEpoch,
+    SlimConnector,
 )
 from onyx.connectors.microsoft_utils.graph_env import (
     DEFAULT_AUTHORITY_HOST,
@@ -39,6 +47,7 @@ from onyx.connectors.models import (
     DocumentFailure,
     EntityFailure,
     HierarchyNode,
+    SlimDocument,
     TextSection,
 )
 from onyx.connectors.outlook.errors import (
@@ -66,9 +75,13 @@ from onyx.connectors.outlook.source_operations import (
     OutlookSourceOperations,
 )
 from onyx.db.enums import HierarchyNodeType
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+# Conversation ids per batch handed to pruning.
+SLIM_BATCH_SIZE = 500
 
 # Skipped by default. Resolved by well-known name per mailbox, because display
 # names are localized and an admin's exclusion list is not.
@@ -250,7 +263,9 @@ def build_conversation_document(
     )
 
 
-class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckpoint]):
+class OutlookConnector(
+    CredentialsConnector, CheckpointedConnector[OutlookCheckpoint], SlimConnector
+):
     def __init__(
         self,
         mailboxes: list[str] | None = None,
@@ -383,9 +398,11 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
             error.code,
         )
 
-    def _enumerate_mailboxes(
-        self, checkpoint: OutlookCheckpoint
-    ) -> Generator[ConnectorFailure, None, None]:
+    def _resolve_mailboxes(
+        self,
+    ) -> tuple[list[OutlookMailbox], list[ConnectorFailure]]:
+        """The mailboxes to walk, in configured order, plus a failure per
+        configured address that matches no user."""
         found: list[OutlookMailbox] = []
         failures: list[ConnectorFailure] = []
         if self.mailboxes:
@@ -423,11 +440,101 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
         # same mailbox. The dict keeps the first occurrence in order.
         unique = list({mailbox.id: mailbox for mailbox in found}.values())
         logger.info("Outlook: %s mailboxes to walk", len(unique))
+        return unique, failures
+
+    def _enumerate_mailboxes(
+        self, checkpoint: OutlookCheckpoint
+    ) -> Generator[ConnectorFailure, None, None]:
+        mailboxes, failures = self._resolve_mailboxes()
         # Popped from the end, so reverse to keep the configured order.
-        checkpoint.mailboxes = list(reversed(unique))
+        checkpoint.mailboxes = list(reversed(mailboxes))
         # Yielded once the checkpoint is complete, so a lookup that raises
         # part way does not repeat them on the retry.
         yield from failures
+
+    def retrieve_all_slim_docs(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        """Every conversation document id the walk would produce today, so
+        pruning drops the conversations that vanished.
+
+        Reads folder and delta metadata only, never a body. A mailbox whose
+        probe answers 404 is gone and contributes nothing, so its documents go
+        too. Any other Graph failure raises: an aborted prune deletes nothing,
+        while a silent skip would delete every document of that mailbox.
+        """
+        del start, end
+        mailboxes, failures = self._resolve_mailboxes()
+        # An address that matches no user is a configuration problem, not a
+        # verdict on the mailbox behind it, so the prune stops here rather than
+        # treat every conversation of that mailbox as gone.
+        if failures:
+            addresses = ", ".join(
+                failure.failed_entity.entity_id
+                for failure in failures
+                if failure.failed_entity is not None
+            )
+            raise ConnectorValidationError(
+                f"Cannot prune while these mailboxes match no user: {addresses}. "
+                "Fix or remove them from the mailbox list."
+            )
+        for mailbox in mailboxes:
+            try:
+                self.ops.probe_mailbox(mailbox_id=mailbox.id)
+            except OutlookGraphError as e:
+                if e.status == 404:
+                    logger.info("Outlook: %s is gone, pruning it", mailbox.address)
+                    continue
+                raise
+            # A 404 past the probe is a folder that vanished mid-walk, not the
+            # mailbox, so it aborts the prune like any other error.
+            excluded = self._excluded_well_known_folder_ids(mailbox)
+            tree = list(self._walk_folder_tree(mailbox, excluded))
+            yield list(self._hierarchy_nodes(mailbox, tree))
+            yield from self._slim_conversations(mailbox, tree, callback)
+
+    def _slim_conversations(
+        self,
+        mailbox: OutlookMailbox,
+        tree: list[tuple[OutlookFolder, str]],
+        callback: IndexingHeartbeatInterface | None,
+    ) -> GenerateSlimDocumentOutput:
+        """Conversation ids of every folder in the tree, batched across folders
+        and deduplicated per page. The parent is left unset so pruning keeps the
+        folder indexing chose. Any Graph error raises, since pruning must see
+        the whole mailbox or nothing."""
+        batch: list[SlimDocument | HierarchyNode] = []
+        for folder, _ in tree:
+            next_link: str | None = None
+            while True:
+                # A 410 mid-round is not restarted here: ids already yielded
+                # from the expired round cannot be retracted, so the prune
+                # aborts and runs again later.
+                page = self.ops.fetch_folder_delta_page(
+                    mailbox_id=mailbox.id, folder_id=folder.id, next_link=next_link
+                )
+                conversation_ids = dict.fromkeys(
+                    change.conversation_id
+                    for change in page.changes
+                    if not change.removed and change.conversation_id
+                )
+                batch.extend(
+                    SlimDocument(id=conversation_document_id(mailbox, conversation_id))
+                    for conversation_id in conversation_ids
+                )
+                while len(batch) >= SLIM_BATCH_SIZE:
+                    yield batch[:SLIM_BATCH_SIZE]
+                    batch = batch[SLIM_BATCH_SIZE:]
+                if callback is not None:
+                    callback.progress("outlook_slim_docs", len(conversation_ids))
+                next_link = page.next_link
+                if next_link is None:
+                    break
+        if batch:
+            yield batch
 
     def _open_mailbox(
         self, checkpoint: OutlookCheckpoint, mailbox: OutlookMailbox
@@ -447,6 +554,18 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
             yield from self._mailbox_unavailable(mailbox, e)
             return
 
+        yield from self._hierarchy_nodes(mailbox, tree)
+
+        checkpoint.current_mailbox = mailbox
+        checkpoint.folders = list(reversed([folder for folder, _ in tree]))
+        checkpoint.excluded_folder_ids = sorted(excluded)
+        checkpoint.current_folder = None
+        checkpoint.seen_conversation_ids = {}
+        self._reset_folder_cursor(checkpoint)
+
+    def _hierarchy_nodes(
+        self, mailbox: OutlookMailbox, tree: list[tuple[OutlookFolder, str]]
+    ) -> Generator[HierarchyNode, None, None]:
         yield HierarchyNode(
             raw_node_id=mailbox_node_id(mailbox),
             raw_parent_id=None,
@@ -461,13 +580,6 @@ class OutlookConnector(CredentialsConnector, CheckpointedConnector[OutlookCheckp
                 display_name=folder.display_name,
                 node_type=HierarchyNodeType.FOLDER,
             )
-
-        checkpoint.current_mailbox = mailbox
-        checkpoint.folders = list(reversed([folder for folder, _ in tree]))
-        checkpoint.excluded_folder_ids = sorted(excluded)
-        checkpoint.current_folder = None
-        checkpoint.seen_conversation_ids = {}
-        self._reset_folder_cursor(checkpoint)
 
     def _excluded_well_known_folder_ids(self, mailbox: OutlookMailbox) -> set[str]:
         excluded: set[str] = set()
