@@ -45,7 +45,9 @@ Example usage:
 	$ ods run-ci 7353`,
 		Args: cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			runCI(cmd, args, opts)
+			if err := runCI(args[0], opts); err != nil {
+				log.Fatal(err)
+			}
 		},
 	}
 
@@ -80,10 +82,9 @@ func (p *PRInfo) ForkRepo() string {
 	return fmt.Sprintf("%s/%s", p.HeadRepositoryOwner.Login, p.HeadRepository.Name)
 }
 
-func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
+func runCI(prNumber string, opts *RunCIOptions) error {
 	git.CheckGitHubCLI()
 
-	prNumber := args[0]
 	log.Debugf("Running CI for PR: %s", prNumber)
 
 	if opts.DryRun {
@@ -93,14 +94,14 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 	// Save the current branch to switch back later
 	originalBranch, err := git.GetCurrentBranch()
 	if err != nil {
-		log.Fatalf("Failed to get current branch: %v", err)
+		return fatalErrorf("Failed to get current branch: %w", err)
 	}
 	log.Debugf("Original branch: %s", originalBranch)
 
 	// Get PR info using GitHub CLI
 	prInfo, err := getPRInfo(prNumber)
 	if err != nil {
-		log.Fatalf("Failed to get PR info: %v", err)
+		return fatalErrorf("Failed to get PR info: %w", err)
 	}
 
 	forkRepo := prInfo.ForkRepo()
@@ -108,7 +109,7 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 	log.Infof("Fork: %s, Branch: %s", forkRepo, prInfo.HeadRefName)
 
 	if !prInfo.IsCrossRepository {
-		log.Fatalf("PR #%s is not from a fork - CI should already run automatically", prNumber)
+		return fatalErrorf("PR #%s is not from a fork - CI should already run automatically", prNumber)
 	}
 
 	// Create the CI branch
@@ -119,13 +120,13 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 	// Check if a CI PR already exists for this branch
 	existingPRURL, err := findExistingCIPR(ciBranch)
 	if err != nil {
-		log.Fatalf("Failed to check for existing CI PR: %v", err)
+		return fatalErrorf("Failed to check for existing CI PR: %w", err)
 	}
 
 	if existingPRURL != "" && !opts.Rerun {
 		log.Infof("A CI PR already exists for #%s: %s", prNumber, existingPRURL)
 		log.Info("Run with --rerun to update it with the latest fork changes and re-trigger CI.")
-		return
+		return nil
 	}
 
 	if opts.Rerun && existingPRURL == "" {
@@ -145,18 +146,18 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 		}
 		if !prompt.Confirm(fmt.Sprintf("%s for PR #%s? (yes/no): ", action, prNumber)) {
 			log.Info("Exiting...")
-			return
+			return nil
 		}
 	}
 
 	// Fetch the fork's branch
 	if forkRepo == "" {
-		log.Fatalf("Could not determine fork repository - headRepositoryOwner or headRepository.name is empty")
+		return fatalErrorf("Could not determine fork repository - headRepositoryOwner or headRepository.name is empty")
 	}
 	forkRemote := fmt.Sprintf("https://github.com/%s.git", forkRepo)
 	log.Infof("Fetching branch %s from %s", prInfo.HeadRefName, forkRepo)
 	if err := git.RunCommand("fetch", "--quiet", forkRemote, prInfo.HeadRefName); err != nil {
-		log.Fatalf("Failed to fetch fork branch: %v", err)
+		return fatalErrorf("Failed to fetch fork branch: %w", err)
 	}
 
 	// Create or update the CI branch from FETCH_HEAD
@@ -164,11 +165,11 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 		// Already on the CI branch - stash any uncommitted changes before resetting
 		stashResult, err := git.StashChanges()
 		if err != nil {
-			log.Fatalf("Failed to stash changes: %v", err)
+			return fatalErrorf("Failed to stash changes: %w", err)
 		}
 		log.Infof("Already on %s, resetting to fork's HEAD", ciBranch)
 		if err := git.RunCommand("reset", "--hard", "FETCH_HEAD"); err != nil {
-			log.Fatalf("Failed to reset branch to fork's HEAD: %v", err)
+			return fatalErrorf("Failed to reset branch to fork's HEAD: %w", err)
 		}
 		git.RestoreStash(stashResult)
 	} else {
@@ -176,12 +177,12 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 		if git.BranchExists(ciBranch) {
 			log.Infof("Deleting existing local branch: %s", ciBranch)
 			if err := git.RunCommand("branch", "-D", ciBranch); err != nil {
-				log.Fatalf("Failed to delete existing branch: %v", err)
+				return fatalErrorf("Failed to delete existing branch: %w", err)
 			}
 		}
 		log.Infof("Creating CI branch: %s", ciBranch)
 		if err := git.RunCommand("checkout", "--quiet", "-b", ciBranch, "FETCH_HEAD"); err != nil {
-			log.Fatalf("Failed to create CI branch: %v", err)
+			return fatalErrorf("Failed to create CI branch: %w", err)
 		}
 	}
 
@@ -196,7 +197,7 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 		if err := git.RunCommand("switch", "--quiet", originalBranch); err != nil {
 			log.Warnf("Failed to switch back to original branch: %v", err)
 		}
-		return
+		return nil
 	}
 
 	// Push the CI branch (force push in case it already exists)
@@ -211,7 +212,7 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 		if switchErr := git.RunCommand("switch", "--quiet", originalBranch); switchErr != nil {
 			log.Warnf("Failed to switch back to original branch: %v", switchErr)
 		}
-		log.Fatalf("Failed to push CI branch: %v", err)
+		return fatalErrorf("Failed to push CI branch: %w", err)
 	}
 
 	if existingPRURL != "" {
@@ -222,7 +223,7 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 		}
 		log.Infof("CI PR updated successfully: %s", existingPRURL)
 		log.Info("The force push will re-trigger CI. Remember to close (not merge) this PR after CI completes!")
-		return
+		return nil
 	}
 
 	// Create PR using GitHub CLI
@@ -233,7 +234,7 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 		if switchErr := git.RunCommand("switch", "--quiet", originalBranch); switchErr != nil {
 			log.Warnf("Failed to switch back to original branch: %v", switchErr)
 		}
-		log.Fatalf("Failed to create PR: %v", err)
+		return fatalErrorf("Failed to create PR: %w", err)
 	}
 
 	// Switch back to the original branch
@@ -244,6 +245,7 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 
 	log.Infof("PR created successfully: %s", prURL)
 	log.Info("Remember to close (not merge) this PR after CI completes!")
+	return nil
 }
 
 // getPRInfo fetches PR information using the GitHub CLI

@@ -20,7 +20,6 @@ const (
 	llmContextCloneURL = "https://github.com/onyx-dot-app/onyx-llm-context.git"
 )
 
-
 func NewInstallSkillCommand() *cobra.Command {
 	var (
 		source    string
