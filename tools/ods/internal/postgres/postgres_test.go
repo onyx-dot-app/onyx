@@ -74,7 +74,7 @@ func TestConnectionString_escapesTheCredentials(t *testing.T) {
 
 	got := config.ConnectionString()
 
-	want := "postgresql://us+er:p%40ss%3Aword%2F1@relational_db:5432/onyx"
+	want := "postgresql://us%20er:p%40ss%3Aword%2F1@relational_db:5432/onyx"
 	if got != want {
 		t.Fatalf("expected %q, got %q", want, got)
 	}
