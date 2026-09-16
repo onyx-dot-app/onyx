@@ -8,48 +8,25 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
 )
 from onyx.connectors.models import ConnectorFailure, Document
-from onyx.connectors.zoom.client import ZoomClient
 from onyx.connectors.zoom.recordings.models import OccurrenceWork, ZoomSessionType
 from onyx.connectors.zoom.recordings.processing import (
+    parse_zoom_document_id,
     process_occurrence,
     zoom_document_id,
+)
+from tests.unit.onyx.connectors.zoom.helpers import (
+    http_error,
+    occurrence_work,
+    with_transcript,
 )
 from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
     past_meeting_details,
     transcript,
 )
 
-_SAMPLE_VTT = """WEBVTT
-
-1
-00:00:00.000 --> 00:00:02.500
-Jane Doe: Hello everyone, welcome to the call.
-
-2
-00:00:02.600 --> 00:00:05.000
-John Smith: Thanks for having me.
-"""
-
-
-def _work(
-    topic: str | None = None,
-    start_time: str | None = "2026-01-15T10:00:00Z",
-) -> OccurrenceWork:
-    return OccurrenceWork(
-        session_type=ZoomSessionType.MEETING,
-        session_id="111",
-        occurrence_uuid="uuid-abc",
-        start_time=start_time,
-        topic=topic,
-    )
-
 
 def _client_with_transcript() -> MagicMock:
-    client = MagicMock(spec=ZoomClient)
-    client.get_meeting_transcript.return_value = transcript(
-        download_url="https://zoom.example/transcript.vtt", meeting_topic=""
-    )
-    client.download_transcript_vtt.return_value = _SAMPLE_VTT
+    client = with_transcript()
     client.get_past_meeting_details.return_value = past_meeting_details(
         topic="Weekly Sync"
     )
@@ -69,12 +46,6 @@ def _run(
     return [] if processed is None else [processed]
 
 
-def _http_error(status: int) -> requests.HTTPError:
-    response = requests.Response()
-    response.status_code = status
-    return requests.HTTPError(f"{status}", response=response)
-
-
 class TestZoomDocumentId:
     """A targeted reindex is handed document ids and nothing else, so the id
     has to say which session type it came from. Changing this scheme after
@@ -88,12 +59,43 @@ class TestZoomDocumentId:
         assert webinar == "ZOOM_WEBINAR_abc=="
         assert meeting != webinar
 
+    @pytest.mark.parametrize("session_type", list(ZoomSessionType))
+    @pytest.mark.parametrize(
+        "occurrence_uuid",
+        # Zoom uuids are base64, so an underscore, a slash and padding all
+        # turn up in real ones.
+        ["uuid-abc", "xy_z==", "4444AAAiAAAAAiAiAiiAii==", "a/b+c_d=="],
+    )
+    def test_an_id_round_trips(
+        self, session_type: ZoomSessionType, occurrence_uuid: str
+    ) -> None:
+        document_id = zoom_document_id(session_type, occurrence_uuid)
+
+        assert parse_zoom_document_id(document_id) == (session_type, occurrence_uuid)
+
+    @pytest.mark.parametrize(
+        "document_id",
+        [
+            "",
+            "ZOOM",
+            "ZOOM_MEETING",
+            "ZOOM_MEETING_",
+            "SLACK_MEETING_uuid-abc",
+            "ZOOM_BREAKOUT_uuid-abc",
+            "zoom_meeting_uuid-abc",
+        ],
+    )
+    def test_an_id_this_connector_never_wrote_is_rejected(
+        self, document_id: str
+    ) -> None:
+        assert parse_zoom_document_id(document_id) is None
+
 
 class TestProcessOccurrence:
     def test_recorded_occurrence_becomes_document(self) -> None:
         client = _client_with_transcript()
 
-        items = _run(client, _work())
+        items = _run(client, occurrence_work())
 
         assert len(items) == 1
         doc = items[0]
@@ -110,9 +112,9 @@ class TestProcessOccurrence:
     def test_never_recorded_is_skipped(self) -> None:
         # Zoom answers 404 for a session it never transcribed.
         client = _client_with_transcript()
-        client.get_meeting_transcript.side_effect = _http_error(404)
+        client.get_meeting_transcript.side_effect = http_error(404)
 
-        assert _run(client, _work()) == []
+        assert _run(client, occurrence_work()) == []
         client.download_transcript_vtt.assert_not_called()
 
     def test_not_ready_transcript_is_skipped(self) -> None:
@@ -121,7 +123,7 @@ class TestProcessOccurrence:
             download_url=None, download_restriction_reason="NOT_READY"
         )
 
-        assert _run(client, _work()) == []
+        assert _run(client, occurrence_work()) == []
         client.download_transcript_vtt.assert_not_called()
 
     def test_restricted_transcript_is_skipped_even_with_a_url(self) -> None:
@@ -133,7 +135,7 @@ class TestProcessOccurrence:
             download_restriction_reason="NO_TRANSCRIPT_DATA",
         )
 
-        assert _run(client, _work()) == []
+        assert _run(client, occurrence_work()) == []
         client.download_transcript_vtt.assert_not_called()
 
     def test_can_download_false_is_skipped_even_with_a_url(self) -> None:
@@ -142,21 +144,21 @@ class TestProcessOccurrence:
             download_url="https://zoom.example/t.vtt", can_download=False
         )
 
-        assert _run(client, _work()) == []
+        assert _run(client, occurrence_work()) == []
         client.download_transcript_vtt.assert_not_called()
 
     def test_missing_download_url_is_skipped(self) -> None:
         client = _client_with_transcript()
         client.get_meeting_transcript.return_value = transcript(download_url=None)
 
-        assert _run(client, _work()) == []
+        assert _run(client, occurrence_work()) == []
         client.download_transcript_vtt.assert_not_called()
 
     def test_transcript_fetch_failure_yields_document_failure(self) -> None:
         client = _client_with_transcript()
         client.get_meeting_transcript.side_effect = RuntimeError("boom")
 
-        items = _run(client, _work())
+        items = _run(client, occurrence_work())
 
         assert len(items) == 1
         failure = items[0]
@@ -170,7 +172,7 @@ class TestProcessOccurrence:
         client = _client_with_transcript()
         client.download_transcript_vtt.side_effect = RuntimeError("boom")
 
-        items = _run(client, _work())
+        items = _run(client, occurrence_work())
 
         assert len(items) == 1
         failure = items[0]
@@ -183,15 +185,15 @@ class TestProcessOccurrence:
         client = _client_with_transcript()
         client.download_transcript_vtt.return_value = "WEBVTT\n"
 
-        assert _run(client, _work()) == []
+        assert _run(client, occurrence_work()) == []
 
     def test_a_session_zoom_no_longer_has_falls_back_to_a_generic_title(self) -> None:
         # Zoom answers 404 once a meeting ages past the details endpoint's
         # one-year window.
         client = _client_with_transcript()
-        client.get_past_meeting_details.side_effect = _http_error(404)
+        client.get_past_meeting_details.side_effect = http_error(404)
 
-        items = _run(client, _work(start_time=None))
+        items = _run(client, occurrence_work(start_time=None))
 
         doc = items[0]
         assert isinstance(doc, Document)
@@ -202,7 +204,7 @@ class TestProcessOccurrence:
         client = _client_with_transcript()
         client.get_past_meeting_details.side_effect = RuntimeError("boom")
 
-        items = _run(client, _work())
+        items = _run(client, occurrence_work())
 
         assert len(items) == 1
         doc = items[0]
@@ -215,7 +217,7 @@ class TestProcessOccurrence:
             topic="Weekly Sync", start_time="2026-01-15T10:00:00Z"
         )
 
-        items = _run(client, _work(start_time=None))
+        items = _run(client, occurrence_work(start_time=None))
 
         doc = items[0]
         assert isinstance(doc, Document)
@@ -228,7 +230,7 @@ class TestProcessOccurrence:
             topic="Weekly Sync", start_time="2026-01-15T10:00:00Z"
         )
 
-        items = _run(client, _work(topic=""))
+        items = _run(client, occurrence_work(topic=""))
 
         doc = items[0]
         assert isinstance(doc, Document)
@@ -237,7 +239,7 @@ class TestProcessOccurrence:
     def test_prefetched_topic_skips_details_call(self) -> None:
         client = _client_with_transcript()
 
-        items = _run(client, _work(topic="Town Hall"))
+        items = _run(client, occurrence_work(topic="Town Hall"))
 
         doc = items[0]
         assert isinstance(doc, Document)
@@ -253,10 +255,10 @@ class TestSystemicFailuresStopTheRun:
     @pytest.mark.parametrize(
         "error",
         [
-            _http_error(408),
-            _http_error(429),
-            _http_error(500),
-            _http_error(503),
+            http_error(408),
+            http_error(429),
+            http_error(500),
+            http_error(503),
             requests.ConnectionError("reset"),
             requests.Timeout("timed out"),
             # None of these three is an HTTPError, so code that classifies on status
@@ -275,11 +277,11 @@ class TestSystemicFailuresStopTheRun:
         client.get_meeting_transcript.side_effect = error
 
         with pytest.raises(type(error)):
-            _run(client, _work())
+            _run(client, occurrence_work())
 
     @pytest.mark.parametrize(
         "error",
-        [_http_error(429), _http_error(502), CredentialExpiredError("expired")],
+        [http_error(429), http_error(502), CredentialExpiredError("expired")],
     )
     def test_download_failure_that_outlives_this_occurrence_propagates(
         self, error: Exception
@@ -288,21 +290,21 @@ class TestSystemicFailuresStopTheRun:
         client.download_transcript_vtt.side_effect = error
 
         with pytest.raises(type(error)):
-            _run(client, _work())
+            _run(client, occurrence_work())
 
     @pytest.mark.parametrize("status", [400, 403, 410])
     def test_client_errors_stay_scoped_to_the_one_document(self, status: int) -> None:
         client = _client_with_transcript()
-        client.get_meeting_transcript.side_effect = _http_error(status)
+        client.get_meeting_transcript.side_effect = http_error(status)
 
-        items = _run(client, _work())
+        items = _run(client, occurrence_work())
 
         assert len(items) == 1
         assert isinstance(items[0], ConnectorFailure)
 
     @pytest.mark.parametrize(
         "error",
-        [_http_error(429), CredentialExpiredError("expired")],
+        [http_error(429), CredentialExpiredError("expired")],
     )
     def test_a_systemic_details_failure_still_yields_the_document(
         self, error: Exception
@@ -313,7 +315,7 @@ class TestSystemicFailuresStopTheRun:
         client = _client_with_transcript()
         client.get_past_meeting_details.side_effect = error
 
-        items = _run(client, _work(topic="", start_time=None))
+        items = _run(client, occurrence_work(topic="", start_time=None))
 
         assert len(items) == 1
         doc = items[0]
@@ -326,7 +328,7 @@ class TestSystemicFailuresStopTheRun:
         client = _client_with_transcript()
         client.get_meeting_transcript.side_effect = requests.HTTPError("no response")
 
-        items = _run(client, _work())
+        items = _run(client, occurrence_work())
 
         assert len(items) == 1
         assert isinstance(items[0], ConnectorFailure)
@@ -343,7 +345,7 @@ class TestTopicComesFromTheTranscript:
             meeting_topic="Quarterly Review",
         )
 
-        docs = _run(client, _work())
+        docs = _run(client, occurrence_work())
 
         assert isinstance(docs[0], Document)
         assert docs[0].semantic_identifier == "Quarterly Review"
@@ -352,7 +354,7 @@ class TestTopicComesFromTheTranscript:
     def test_details_still_fill_in_when_the_transcript_has_no_topic(self) -> None:
         client = _client_with_transcript()
 
-        docs = _run(client, _work())
+        docs = _run(client, occurrence_work())
 
         assert isinstance(docs[0], Document)
         assert docs[0].semantic_identifier == "Weekly Sync"
@@ -365,7 +367,7 @@ class TestTopicComesFromTheTranscript:
             meeting_topic="Quarterly Review",
         )
 
-        docs = _run(client, _work(topic="From Discovery"))
+        docs = _run(client, occurrence_work(topic="From Discovery"))
 
         assert isinstance(docs[0], Document)
         assert docs[0].semantic_identifier == "From Discovery"
@@ -377,6 +379,6 @@ class TestTopicComesFromTheTranscript:
             meeting_topic="Quarterly Review",
         )
 
-        _run(client, _work(start_time=None))
+        _run(client, occurrence_work(start_time=None))
 
         client.get_past_meeting_details.assert_called_once_with("uuid-abc")
