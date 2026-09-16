@@ -10,7 +10,7 @@ import {
   useCreateModal,
 } from "@opal/components";
 // TODO(@raunakab): migrate to Opal LineItemButton once it supports danger variant
-import { cn, markdown } from "@opal/utils";
+import { cn, escapeMarkdown, markdown } from "@opal/utils";
 import {
   SvgMoreHorizontal,
   SvgEdit,
@@ -338,7 +338,9 @@ export default function AgentRowActions({
       {unlistOpen && (
         <ConfirmationModalLayout
           icon={SvgEyeOff}
-          title={markdown(t("unlistModal.header.title", { name: agent.name }))}
+          title={markdown(
+            t("unlistModal.header.title", { name: escapeMarkdown(agent.name) })
+          )}
           onClose={isSubmitting ? undefined : () => setUnlistOpen(false)}
           submit={
             <Button

@@ -76,7 +76,10 @@ from onyx.file_processing.unstructured import (
 )
 from onyx.natural_language_processing.search_nlp_models import clean_model_name
 from onyx.server.manage.embedding.models import SearchSettingsDeleteRequest
-from onyx.server.manage.models import FullModelVersionResponse
+from onyx.server.manage.models import (
+    FullModelVersionResponse,
+    UnstructuredApiKeyRequest,
+)
 from onyx.server.models import IdReturn
 from onyx.server.utils_vector_db import require_vector_db
 from onyx.utils.audit import (
@@ -712,10 +715,10 @@ def unstructured_api_key_set(
 
 @router.put("/upsert-unstructured-api-key")
 def upsert_unstructured_api_key(
-    unstructured_api_key: str,
+    request: UnstructuredApiKeyRequest,
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> None:
-    update_unstructured_api_key(unstructured_api_key)
+    update_unstructured_api_key(request.unstructured_api_key)
 
 
 @router.delete("/delete-unstructured-api-key")
