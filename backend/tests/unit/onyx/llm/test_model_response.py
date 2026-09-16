@@ -101,6 +101,26 @@ def _build_reasoning_payload() -> dict:
     }
 
 
+def _build_reasoning_field_payload() -> dict:
+    # Some OpenAI-compatible providers (e.g. recent vLLM versions) return
+    # reasoning under `reasoning` instead of `reasoning_content`.
+    return {
+        "id": "chatcmpl-c2a25682-5715-4ca2-84a9-061498f79627",
+        "created": 1762544538,
+        "model": "gpt-5",
+        "object": "chat.completion.chunk",
+        "choices": [
+            {
+                "finish_reason": None,
+                "index": 0,
+                "delta": {
+                    "reasoning": " variations",
+                },
+            }
+        ],
+    }
+
+
 def _build_finish_reason_payload() -> tuple[dict, dict]:
     base_chunk = {
         "id": "chatcmpl-2b136068-c6fb-4af1-97d5-d2c9d84cd52b",
@@ -207,6 +227,48 @@ def _build_non_streaming_response_payload() -> dict:
     }
 
 
+def _build_non_streaming_reasoning_content_payload() -> dict:
+    return {
+        "id": "chatcmpl-reasoning-content",
+        "created": 1234567891,
+        "model": "gpt-4",
+        "object": "chat.completion",
+        "choices": [
+            {
+                "finish_reason": "stop",
+                "index": 0,
+                "message": {
+                    "content": "Hello, world!",
+                    "role": "assistant",
+                    "reasoning_content": "thinking it through",
+                },
+            }
+        ],
+    }
+
+
+def _build_non_streaming_reasoning_field_payload() -> dict:
+    # Some OpenAI-compatible providers (e.g. recent vLLM versions) return
+    # reasoning under `reasoning` instead of `reasoning_content`.
+    return {
+        "id": "chatcmpl-reasoning-field",
+        "created": 1234567892,
+        "model": "gpt-4",
+        "object": "chat.completion",
+        "choices": [
+            {
+                "finish_reason": "stop",
+                "index": 0,
+                "message": {
+                    "content": "Hello, world!",
+                    "role": "assistant",
+                    "reasoning": "thinking it through",
+                },
+            }
+        ],
+    }
+
+
 def _build_non_streaming_tool_call_payload() -> dict:
     return {
         "id": "chatcmpl-xyz789",
@@ -258,6 +320,16 @@ def test_from_litellm_model_response_stream_parses_tool_calls() -> None:
 def test_from_litellm_model_response_stream_preserves_reasoning_content() -> None:
     response = from_litellm_model_response_stream(
         _make_stream_double(_build_reasoning_payload())
+    )
+
+    assert response.choice.delta.content is None
+    assert response.choice.delta.reasoning_content == " variations"
+    assert response.choice.finish_reason is None
+
+
+def test_from_litellm_model_response_stream_falls_back_to_reasoning_field() -> None:
+    response = from_litellm_model_response_stream(
+        _make_stream_double(_build_reasoning_field_payload())
     )
 
     assert response.choice.delta.content is None
@@ -342,6 +414,22 @@ def test_from_litellm_model_response_parses_basic_message() -> None:
     assert response.choice.message.content == "Hello, world!"
     assert response.choice.message.role == "assistant"
     assert response.choice.message.tool_calls is None
+
+
+def test_from_litellm_model_response_preserves_reasoning_content() -> None:
+    response = from_litellm_model_response(
+        _make_response_double(_build_non_streaming_reasoning_content_payload())
+    )
+
+    assert response.choice.message.reasoning_content == "thinking it through"
+
+
+def test_from_litellm_model_response_falls_back_to_reasoning_field() -> None:
+    response = from_litellm_model_response(
+        _make_response_double(_build_non_streaming_reasoning_field_payload())
+    )
+
+    assert response.choice.message.reasoning_content == "thinking it through"
 
 
 def test_from_litellm_model_response_parses_tool_calls() -> None:
