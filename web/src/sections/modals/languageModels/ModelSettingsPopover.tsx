@@ -16,6 +16,7 @@ import {
   REASONING_STOP_LABEL_KEYS,
   formatContextWindow,
   maxReasoningStop,
+  minReasoningStop,
   reasoningStopIndex,
 } from "@/sections/model-selector/setting-controls";
 
@@ -105,6 +106,8 @@ function SectionHeader({
 interface PolicySliderProps {
   label: string;
   value: number;
+  /** Lowest selectable stop. marks[0] labels this one, not zero. */
+  min?: number;
   max: number;
   step: number;
   marks: string[];
@@ -117,6 +120,7 @@ interface PolicySliderProps {
 function PolicySlider({
   label,
   value,
+  min = 0,
   max,
   step,
   marks,
@@ -140,7 +144,7 @@ function PolicySlider({
         <PaneSlider
           compact
           value={value}
-          min={0}
+          min={min}
           max={max}
           step={step}
           onValueChange={onChange}
@@ -151,7 +155,7 @@ function PolicySlider({
             <Text
               key={mark}
               font="figure-small-value"
-              color={index === activeMark ? "text-04" : "text-02"}
+              color={index + min === activeMark ? "text-04" : "text-02"}
               nowrap
             >
               {mark}
@@ -179,6 +183,9 @@ export function ModelSettingsPopover({
   }
 
   const supportedStop = maxReasoningStop(model.supported_reasoning_efforts);
+  // Models that always reason omit "off", so neither the cap nor the default
+  // may park below the floor.
+  const minStop = minReasoningStop(model.supported_reasoning_efforts);
   // No supported levels means the model takes no effort parameter at all.
   const showReasoning = model.supports_reasoning && supportedStop >= 0;
   // The backend pins reasoning models to 1, so the control renders disabled.
@@ -188,20 +195,25 @@ export function ModelSettingsPopover({
   const maxStop = reasoningStopIndex(model.reasoning_effort_max);
   const rawDefaultStop = reasoningStopIndex(model.reasoning_effort_default);
   // Capability bounds the stored cap too, in case it shrank after the save.
-  const effectiveMaxStop =
-    maxStop >= 0 ? Math.min(maxStop, supportedStop) : supportedStop;
+  const effectiveMaxStop = Math.max(
+    minStop,
+    maxStop >= 0 ? Math.min(maxStop, supportedStop) : supportedStop
+  );
   const defaultStop =
-    rawDefaultStop >= 0 ? Math.min(rawDefaultStop, effectiveMaxStop) : -1;
+    rawDefaultStop >= 0
+      ? Math.min(Math.max(rawDefaultStop, minStop), effectiveMaxStop)
+      : -1;
   // An unset default parks where the backend resolves AUTO: medium, bounded
-  // by the cap.
+  // by the cap and the floor.
   const defaultSliderStop =
     defaultStop >= 0
       ? defaultStop
-      : Math.min(UNSET_REASONING_STOP, effectiveMaxStop);
+      : Math.min(Math.max(UNSET_REASONING_STOP, minStop), effectiveMaxStop);
 
-  const reasoningMarks = ALL_REASONING_STOPS.slice(0, supportedStop + 1).map(
-    (stop) => tModelSelector(REASONING_STOP_LABEL_KEYS[stop])
-  );
+  const reasoningMarks = ALL_REASONING_STOPS.slice(
+    minStop,
+    supportedStop + 1
+  ).map((stop) => tModelSelector(REASONING_STOP_LABEL_KEYS[stop]));
   const temperatureMarks = [
     tModelSelector("temperature.deterministic.label"),
     tModelSelector("temperature.balanced.label"),
@@ -220,7 +232,7 @@ export function ModelSettingsPopover({
   ].filter((c): c is string => Boolean(c));
 
   function setMax(stop: number) {
-    const newMaxStop = Math.min(stop, supportedStop);
+    const newMaxStop = Math.min(Math.max(stop, minStop), supportedStop);
     const effort = ALL_REASONING_STOPS[newMaxStop];
     if (!effort) return;
     const patch: ModelSettingsPatch = { reasoning_effort_max: effort };
@@ -233,7 +245,8 @@ export function ModelSettingsPopover({
   }
 
   function setDefault(stop: number) {
-    const effort = ALL_REASONING_STOPS[Math.min(stop, effectiveMaxStop)];
+    const bounded = Math.min(Math.max(stop, minStop), effectiveMaxStop);
+    const effort = ALL_REASONING_STOPS[bounded];
     if (effort) onChange({ reasoning_effort_default: effort });
   }
 
@@ -301,6 +314,7 @@ export function ModelSettingsPopover({
               <PolicySlider
                 label={t("modelSettings.reasoningLevel.maxSlider.label")}
                 value={effectiveMaxStop}
+                min={minStop}
                 max={supportedStop}
                 step={1}
                 marks={reasoningMarks}
@@ -310,6 +324,7 @@ export function ModelSettingsPopover({
               <PolicySlider
                 label={t("modelSettings.reasoningLevel.defaultSlider.label")}
                 value={defaultSliderStop}
+                min={minStop}
                 max={supportedStop}
                 step={1}
                 marks={reasoningMarks}
