@@ -16,6 +16,7 @@ from ee.onyx.configs.app_configs import (
     GOOGLE_DRIVE_PERMISSION_GROUP_SYNC_FREQUENCY,
     JIRA_PERMISSION_DOC_SYNC_FREQUENCY,
     JIRA_PERMISSION_GROUP_SYNC_FREQUENCY,
+    OUTLOOK_PERMISSION_DOC_SYNC_FREQUENCY,
     SHAREPOINT_PERMISSION_DOC_SYNC_FREQUENCY,
     SHAREPOINT_PERMISSION_GROUP_SYNC_FREQUENCY,
     SLACK_PERMISSION_DOC_SYNC_FREQUENCY,
@@ -145,6 +146,12 @@ def _load_jira_group_sync() -> GroupSyncFuncType:
     from ee.onyx.external_permissions.jira.group_sync import jira_group_sync
 
     return jira_group_sync
+
+
+def _load_outlook_doc_sync() -> DocSyncFuncType:
+    from ee.onyx.external_permissions.outlook.doc_sync import outlook_doc_sync
+
+    return outlook_doc_sync
 
 
 def _load_censor_salesforce_chunks() -> CensoringFuncType:
@@ -333,6 +340,15 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
         doc_sync_config=DocSyncConfig(
             doc_sync_frequency=TEAMS_PERMISSION_DOC_SYNC_FREQUENCY,
             doc_sync_func=_lazy_doc_sync(_load_teams_doc_sync),
+            initial_index_should_sync=True,
+        ),
+    ),
+    # A mailbox is read by its owner, and an event by its attendees as well, so
+    # the access lists are user emails and there are no groups to sync.
+    DocumentSource.OUTLOOK: SyncConfig(
+        doc_sync_config=DocSyncConfig(
+            doc_sync_frequency=OUTLOOK_PERMISSION_DOC_SYNC_FREQUENCY,
+            doc_sync_func=_lazy_doc_sync(_load_outlook_doc_sync),
             initial_index_should_sync=True,
         ),
     ),
