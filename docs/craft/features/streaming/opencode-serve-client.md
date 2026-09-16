@@ -39,7 +39,6 @@ class OpencodeServeClient:
         base_url: str,  # "http://10.0.0.42:4096"
         password: str | None,  # None in dev; required in cluster
         *,
-        client_info: dict[str, Any] | None = None,
         timeouts: ClientTimeouts | None = None,
     ) -> None: ...
 
@@ -372,7 +371,7 @@ The unit tests are the load-bearing wire-contract lock. The external-dependency-
 # backend/onyx/server/features/build/sandbox/opencode/serve_client.py
 class OpencodeServeClient:
     def __init__(
-        self, base_url, password, *, event_bus, client_info=None, timeouts=None
+        self, base_url, password, *, event_bus, timeouts=None
     ):
         self._base_url = base_url.rstrip("/")
         self._auth = httpx.BasicAuth("onyx", password) if password else None

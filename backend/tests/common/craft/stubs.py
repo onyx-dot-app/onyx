@@ -28,7 +28,6 @@ payload snapshots so tests assert observable manager outcomes:
 
 - ``provision_count``, ``terminate_count``, ``setup_session_workspace_count``,
   ``cleanup_session_workspace_count``, ``restore_snapshot_count``,
-  ``send_message_count``, ``write_sandbox_file_count``,
   ``write_files_to_sandbox_count``.
 - ``last_provision_payload``, ``last_terminate_sandbox_id``,
   ``last_setup_session_workspace_payload``,
@@ -45,7 +44,6 @@ Usage
     stub = StubSandboxManager()
     stub.send_message_events = [AgentMessageChunk(...), PromptResponse(...)]
     list(stub.send_message(sandbox_id, session_id, "hi"))
-    assert stub.send_message_count == 1
     assert stub.last_send_message_payload["message"] == "hi"
 """
 
@@ -229,7 +227,6 @@ class StubSandboxManager(SandboxManager):
         self.last_send_message_payload: dict[str, Any] | None = None
         self.last_subscribe_to_opencode_session_payload: dict[str, Any] | None = None
         self.last_list_directory_payload: dict[str, Any] | None = None
-        self.last_outputs_manifest_payload: dict[str, Any] | None = None
         self.list_directory_payloads: list[dict[str, Any]] = []
         self.last_read_file_payload: dict[str, Any] | None = None
         self.last_upload_file_payload: dict[str, Any] | None = None
