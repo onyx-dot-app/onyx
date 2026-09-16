@@ -115,7 +115,9 @@ export default function SwitchList({
               <label
                 htmlFor={`${listId}-${item.id}`}
                 className={
-                  item.disabled ? "w-full p-1.5" : "w-full cursor-pointer p-1.5"
+                  item.disabled
+                    ? "block w-full p-1.5"
+                    : "block w-full cursor-pointer p-1.5"
                 }
                 // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- the stop exists so a keyboard can reach the tooltip that says why the row is disabled; its InputSwitch is a disabled button and cannot hold focus
                 tabIndex={item.disabled ? 0 : undefined}
