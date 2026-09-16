@@ -59,7 +59,11 @@ import {
   CurrentMessageFIFO,
   updateCurrentMessageFIFO,
 } from "@/app/app/services/currentMessageFIFO";
-import { buildFilters } from "@/lib/searchFilters/utils";
+import {
+  buildFilters,
+  effectiveAvailableSourcesFor,
+  selectedSourcesFrom,
+} from "@/lib/searchFilters/utils";
 import { toast } from "@opal/layouts";
 import {
   ReadonlyURLSearchParams,
@@ -83,7 +87,8 @@ import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { ProjectFile, useProjectsContext } from "@/lib/projects/providers";
 import { useIncognito } from "@/providers/IncognitoProvider";
 import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
-import { useSharedSearchFilters } from "@/lib/searchFilters/providers";
+import { useAvailableSources } from "@/lib/connectors/hooks";
+import { getConfiguredSources } from "@/lib/sources";
 
 const SYSTEM_MESSAGE_ID = -3;
 
@@ -148,7 +153,29 @@ export default function useChatController({
   selectedDocuments,
   resetInputBar,
 }: UseChatControllerProps) {
-  const searchFilters = useSharedSearchFilters();
+  // The chat's search filters ride the tool configuration, resolved against
+  // the sources the active agent can reach. Deselections are only resolved
+  // once the source fetch has settled successfully: resolving against a
+  // partial or failed list would narrow the send to an accidental `[]`,
+  // so an unresolvable selection sends no source filter instead.
+  const {
+    availableSources,
+    isLoading: sourcesLoading,
+    error: sourcesError,
+  } = useAvailableSources();
+  const sourcesSettled = !sourcesLoading && !sourcesError;
+  const selectedSearchSources = useMemo(
+    () =>
+      activeAgent && sourcesSettled
+        ? selectedSourcesFrom(
+            toolConfiguration.filters,
+            getConfiguredSources(
+              effectiveAvailableSourcesFor(activeAgent, availableSources)
+            )
+          )
+        : null,
+    [activeAgent, sourcesSettled, availableSources, toolConfiguration.filters]
+  );
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1066,10 +1093,12 @@ export default function useChatController({
           })(),
           chatSessionId: currChatSessionId,
           filters: buildFilters(
-            searchFilters.selectedSources,
-            searchFilters.selectedDocumentSets,
-            searchFilters.timeRange,
-            searchFilters.selectedTags
+            selectedSearchSources,
+            toolConfiguration.filters.documentSets,
+            toolConfiguration.filters.timeRange
+              ? { from: toolConfiguration.filters.timeRange.from }
+              : null,
+            toolConfiguration.filters.tags
           ),
           modelProvider: isMultiModel
             ? undefined
@@ -1485,10 +1514,7 @@ export default function useChatController({
     },
     [
       // Narrow to stable fields from managers to avoid re-creation
-      searchFilters.selectedSources,
-      searchFilters.selectedDocumentSets,
-      searchFilters.selectedTags,
-      searchFilters.timeRange,
+      selectedSearchSources,
       llmManager.currentLlm,
       llmManager.temperature,
       llmManager.hasTemperatureOverride,

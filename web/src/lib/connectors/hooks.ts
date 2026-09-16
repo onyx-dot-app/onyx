@@ -13,12 +13,9 @@ import { ValidSources } from "@/lib/types";
  * Reads `vectorDbEnabled` itself, so callers do not thread it. With the vector
  * DB off, `useCCPairs` skips its fetch and the list is federated-only.
  *
- * The array is deliberately neither deduplicated nor sorted. `useSourcePreferences`
- * keys off `availableSources.join(",")` to decide when the set has changed, so
- * reordering or collapsing entries would look like a different workspace and
- * reset the user's saved source selections. Callers that want one entry per
- * source type run the result through `getConfiguredSources`, which dedups on
- * the cleaned name.
+ * The array is deliberately neither deduplicated nor sorted. Callers that
+ * want one entry per source type run the result through
+ * `getConfiguredSources`, which dedups on the cleaned name.
  *
  * `error` is set when either request failed, so the list is short rather than
  * genuinely empty. A caller that hides controls on an empty list should check
