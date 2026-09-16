@@ -18,6 +18,12 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 MINTLIFY_UNWANTED = ["sticky", "hidden"]
+
+# A space is inserted where two elements meet, because `<span>a</span><span>b</span>`
+# is two words to a reader. These are the characters that say otherwise: they
+# attach to the text on one side, and a browser renders no gap there.
+_ATTACHES_TO_TEXT_BEFORE = frozenset(",.;:!?%)]}»”’…")
+_ATTACHES_TO_TEXT_AFTER = frozenset("([{«“‘")
 _ANCHOR_ELEMENT = "a"
 _HREF_ATTRIBUTE = "href"
 _TABLE_ELEMENT = "table"
@@ -131,9 +137,14 @@ def format_document_soup(
                     )
                 )
 
-                # Don't join separate elements without any spacing
-                if (text and not text[-1].isspace()) and (
-                    content_to_add and not content_to_add[0].isspace()
+                # Don't join separate elements without any spacing, unless the
+                # character on either side of the join is one that attaches --
+                # `<b>word</b>.` is a word and a full stop, not "word ."
+                if (
+                    (text and not text[-1].isspace())
+                    and (content_to_add and not content_to_add[0].isspace())
+                    and content_to_add[0] not in _ATTACHES_TO_TEXT_BEFORE
+                    and text[-1] not in _ATTACHES_TO_TEXT_AFTER
                 ):
                     text += " "
 

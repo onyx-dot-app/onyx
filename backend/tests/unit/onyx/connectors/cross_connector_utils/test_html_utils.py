@@ -47,3 +47,21 @@ def test_markdown_link_ends_at_anchor(
     assert parse_html_page_basic(html) == (
         "See [this link](https://example.com) now.\nNext paragraph."
     )
+
+
+def test_punctuation_after_an_inline_element_keeps_its_word() -> None:
+    """A browser renders no gap between `</b>` and the `!` that follows it."""
+    html = '<p>Hello <b>world</b>! See <a href="#">this</a>.</p>'
+
+    assert parse_html_page_basic(html) == "Hello world! See this."
+
+
+def test_punctuation_around_an_inline_element_keeps_its_word() -> None:
+    html = "<p>A <b>bold</b>, a <i>slant</i>; and (<b>x</b>) too.</p>"
+
+    assert parse_html_page_basic(html) == "A bold, a slant; and (x) too."
+
+
+def test_two_adjacent_elements_are_still_separated() -> None:
+    """The spacing rule is still what keeps two words apart."""
+    assert parse_html_page_basic("<span>a</span><span>b</span>") == "a b"
