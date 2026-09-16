@@ -177,6 +177,22 @@ cd web && bun run playwright <TEST_NAME>
 
 For shared fixtures, best practices, and detailed guidance, see `backend/tests/README.md`.
 
+## Dead Code
+
+`backend/scripts/check_dead_code.py` runs vulture over the backend and fails on
+unused functions, classes, methods, attributes, and module constants. It runs as
+a pre-commit hook and in CI. Run it directly with:
+
+```bash
+uv run python backend/scripts/check_dead_code.py
+```
+
+- Delete code that the check reports.
+- If a name is only reached dynamically (a string lookup such as
+  `fetch_versioned_implementation`, a library override, an ORM model), add it to
+  `backend/scripts/vulture_whitelist.py` under a comment that says how it is used.
+- The check ignores class-body fields and function arguments.
+
 ## Error Handling
 
 **Always raise `OnyxError` from `onyx.error_handling.exceptions` instead of `HTTPException`.

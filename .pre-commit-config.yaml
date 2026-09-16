@@ -162,6 +162,18 @@ repos:
         pass_filenames: true
         types_or: [python]
       - id: uv-run
+        alias: vulture
+        name: dead code (vulture)
+        # vulture needs the whole program to know what is used, so the hook
+        # scans every path in `[tool.vulture]` and ignores the staged file list.
+        # Delete dead code. Add a name that is only reached dynamically to
+        # backend/scripts/vulture_whitelist.py. Keep the pinned version in sync
+        # with `vulture` in the dev dependency group in pyproject.toml.
+        args:
+          ["--no-project", "--with=vulture==2.16", "python", "backend/scripts/check_dead_code.py"]
+        pass_filenames: false
+        files: ^(backend/.*\.py|pyproject\.toml)$
+      - id: uv-run
         alias: terraform-fmt
         name: terraform fmt
         # Applies hclwrite.Format, the routine `terraform fmt` itself uses, so
