@@ -7,10 +7,12 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import type {
   AgentEditorMCPServer,
+  ChatSearchFilters,
   MCPServersResponse,
   ToolSnapshot,
   ToolState,
 } from "@/lib/tools/types";
+export type { ChatSearchFilters } from "@/lib/tools/types";
 import type { Tag } from "@/lib/types";
 import { useAppPosition } from "@/lib/position/hooks";
 import { useActiveAgent } from "@/lib/agents/hooks";
@@ -175,24 +177,6 @@ export function useAvailableTools() {
 // it together cannot be worked around by building one somewhere else.
 
 type ToolConfiguration = Readonly<Record<number, ToolState>>;
-
-/**
- * The search-filter selection this chat sends with, in its stored form.
- *
- * Sources are a positive selection with an untouched sentinel: `null` means
- * the user never edited them, so every source is on. That is the default a
- * new chat starts from, and it keeps the storage invariant that a
- * configuration saying nothing is not stored. An array is an explicit
- * choice — including `[]`, which selects nothing.
- */
-export interface ChatSearchFilters {
-  /** `uniqueKey`s of the sources switched on; `null` means untouched (all on). */
-  selectedSources: readonly string[] | null;
-  documentSets: readonly string[];
-  tags: readonly Tag[];
-  /** ISO datetime strings, kept serializable rather than as `Date`s. */
-  timeRange: { from: string; to: string } | null;
-}
 
 /** Everything a chat's next message is configured with. */
 interface ChatConfiguration {
@@ -591,12 +575,16 @@ export function useToolConfiguration(
     ) => {
       if (key === null) return;
       setEntry((previous) => {
-        const current = previous.key === key ? previous.configuration : NEUTRAL;
+        // Between a key change and its storage read, a write would land on
+        // NEUTRAL and then be clobbered by the read. `ready` documents that
+        // writes are dropped in that window; this is the drop.
+        if (previous.key !== key) return previous;
+        const current = previous.configuration;
         const tools = withToolState(current.tools, toolId, change);
         // Asking for the state it already holds has to leave the same entry
         // behind. A new one every time is a change to everything reading it,
         // and a caller that writes what it reads would never settle.
-        if (previous.key === key && tools === current.tools) return previous;
+        if (tools === current.tools) return previous;
         return { key, configuration: { ...current, tools } };
       });
     },
@@ -607,11 +595,10 @@ export function useToolConfiguration(
     (change: (current: ChatSearchFilters) => ChatSearchFilters) => {
       if (key === null) return;
       setEntry((previous) => {
-        const current = previous.key === key ? previous.configuration : NEUTRAL;
+        if (previous.key !== key) return previous;
+        const current = previous.configuration;
         const filters = change(current.filters);
-        if (previous.key === key && filters === current.filters) {
-          return previous;
-        }
+        if (filters === current.filters) return previous;
         return { key, configuration: { ...current, filters } };
       });
     },

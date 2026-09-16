@@ -1,3 +1,4 @@
+import type { Tag } from "@/lib/types";
 import type React from "react";
 import type { IconProps } from "@opal/types";
 import type { EndpointPolicy } from "@/app/craft/v1/apps/registry";
@@ -234,3 +235,21 @@ export type SecondaryViewState =
  * to go and enrol it.
  */
 export type ToolState = "forced" | "disabled";
+
+/**
+ * The search-filter selection this chat sends with, in its stored form.
+ *
+ * Sources are a positive selection with an untouched sentinel: `null` means
+ * the user never edited them, so every source is on. That is the default a
+ * new chat starts from, and it keeps the storage invariant that a
+ * configuration saying nothing is not stored. An array is an explicit
+ * choice — including `[]`, which selects nothing.
+ */
+export interface ChatSearchFilters {
+  /** `uniqueKey`s of the sources switched on; `null` means untouched (all on). */
+  selectedSources: readonly string[] | null;
+  documentSets: readonly string[];
+  tags: readonly Tag[];
+  /** ISO datetime strings, kept serializable rather than as `Date`s. */
+  timeRange: { from: string; to: string } | null;
+}

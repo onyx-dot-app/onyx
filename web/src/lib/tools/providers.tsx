@@ -3,6 +3,7 @@
 import { useCallback, useMemo } from "react";
 import { createSharedHook } from "@opal/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
+import { isAssistant } from "@/lib/agents/utils";
 import { useAvailableSources } from "@/lib/connectors/hooks";
 import {
   effectiveAvailableSourcesFor,
@@ -10,6 +11,7 @@ import {
 } from "@/lib/searchFilters/utils";
 import { getConfiguredSources } from "@/lib/sources";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
+import { ValidSources } from "@/lib/types";
 
 /** A source the picker can show: {@link getConfiguredSources} guarantees a key. */
 type ConfiguredSource = ReturnType<typeof getConfiguredSources>[number];
@@ -78,10 +80,15 @@ function useToolsPopoverState({
   } = useAvailableSources();
   // Source edits materialise and normalize against the configured roster, so
   // they wait for it: an edit against a half-fetched list would freeze a
-  // partial selection into the chat.
-  const sourcesSettled = !sourcesLoading && !sourcesError;
+  // partial selection into the chat. An agent declaring its own
+  // knowledge_sources carries its complete roster and never waits on the
+  // workspace connector fetch.
+  const declaresOwnSources =
+    !isAssistant(agent) && (agent.knowledge_sources?.length ?? 0) > 0;
+  const sourcesSettled =
+    declaresOwnSources || (!sourcesLoading && !sourcesError);
 
-  const effectiveAvailableSources = useMemo(
+  const effectiveAvailableSources = useMemo<ValidSources[]>(
     () => effectiveAvailableSourcesFor(agent, availableSources),
     [agent, availableSources]
   );

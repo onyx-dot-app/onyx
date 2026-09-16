@@ -119,8 +119,10 @@ export function useSendChatMessageFromURL({
 
     // Names that match nothing available are dropped, so a stale or
     // hand-typed link narrows the search rather than failing it.
+    // URLSearchParams already percent-decoded the value; decoding again
+    // would corrupt names and throw on a legitimate literal like "100%".
     const namesIn = (param: string): string[] =>
-      params.get(param)?.split(",").map(decodeURIComponent) ?? [];
+      params.get(param)?.split(",") ?? [];
 
     const sourceNames = namesIn("sources");
     const docSetNames = namesIn("documentSets");

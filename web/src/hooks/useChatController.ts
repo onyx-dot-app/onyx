@@ -17,6 +17,7 @@ import {
 import { getMaxSelectedDocumentTokens } from "@/lib/projects/svc";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 import { StreamStopInfo } from "@/lib/search/interfaces";
+import type { SourceMetadata } from "@/lib/search/interfaces";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "next";
 import {
@@ -163,8 +164,12 @@ export default function useChatController({
     isLoading: sourcesLoading,
     error: sourcesError,
   } = useAvailableSources();
-  const sourcesSettled = !sourcesLoading && !sourcesError;
-  const selectedSearchSources = useMemo(
+  // A failed revalidation keeps the stale roster usable: dropping an explicit
+  // restriction and sending unfiltered would be worse than resolving against
+  // slightly old data. Only a fetch that never produced anything degrades.
+  const sourcesSettled =
+    !sourcesLoading && (!sourcesError || availableSources.length > 0);
+  const selectedSearchSources = useMemo<SourceMetadata[] | null>(
     () =>
       activeAgent && sourcesSettled
         ? selectedSourcesFrom(
