@@ -307,13 +307,18 @@ class TestPermissionParity:
         assert "plan does not cover" in failure.failure_message
 
     def test_an_unresolvable_session_still_indexes_without_permissions(self) -> None:
-        # Nothing reads the session id when no access list is built.
+        # Zoom answers 404 for a session it no longer has, and the transcript is
+        # already downloaded by then, so the document is still indexed without
+        # the title and timestamp that call would have supplied.
         client = _client()
-        client.get_past_meeting_details.return_value = None
+        client.get_past_meeting_details.side_effect = http_error(404)
 
         items = _reindex(client, [_target(_MEETING_DOC_ID)])
 
-        assert isinstance(items[0], Document)
+        doc = items[0]
+        assert isinstance(doc, Document)
+        assert doc.external_access is None
+        assert doc.doc_created_at is None
 
     @pytest.mark.parametrize(
         "error",
