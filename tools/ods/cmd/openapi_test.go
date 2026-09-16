@@ -11,7 +11,8 @@ import (
 )
 
 // devtoolOpenAPIRepo creates a repository with a fake venv python and returns
-// the root and the python call log.
+// the root and the python call log. The fake drains stdin like real python, so
+// writing the embedded script cannot fail with a broken pipe.
 func devtoolOpenAPIRepo(t *testing.T, body string) (string, string) {
 	t.Helper()
 	devtoolBinDir(t)
@@ -23,7 +24,7 @@ func devtoolOpenAPIRepo(t *testing.T, body string) (string, string) {
 	if err := os.MkdirAll(venvBin, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	return root, devtoolFakeTool(t, venvBin, "python", body)
+	return root, devtoolFakeTool(t, venvBin, "python", "while read -r _; do :; done\n"+body)
 }
 
 func TestOpenAPICommands_runTheScriptWithResolvedPaths(t *testing.T) {
