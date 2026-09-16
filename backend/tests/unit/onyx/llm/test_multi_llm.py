@@ -572,7 +572,11 @@ def test_openai_only_in_deployment_name_uses_responses_bridge() -> None:
 )
 @pytest.mark.parametrize(
     "reasoning_effort, expected_effort",
-    [(ReasoningEffort.AUTO, "medium"), (ReasoningEffort.HIGH, "high")],
+    [
+        (ReasoningEffort.AUTO, "medium"),
+        (ReasoningEffort.LOW, "low"),
+        (ReasoningEffort.HIGH, "high"),
+    ],
 )
 def test_claude_adaptive_thinking_uses_output_config(
     model_name: str, reasoning_effort: ReasoningEffort, expected_effort: str
@@ -604,6 +608,32 @@ def test_claude_adaptive_thinking_uses_output_config(
         assert kwargs["thinking"] == {"type": "adaptive"}
         assert kwargs["output_config"] == {"effort": expected_effort}
         assert "budget_tokens" not in kwargs["thinking"]
+
+
+def test_claude_adaptive_thinking_sends_output_config_after_tool_call() -> None:
+    # No signed blocks to replay costs us `thinking`, not the effort.
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.LITELLM_PROXY,
+        model_name="claude-sonnet-5",
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.LITELLM_PROXY,
+            model_name="claude-sonnet-5",
+        ),
+    )
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
+    ):
+        mock_completion.return_value = []
+
+        list(llm.stream(_tool_cycle_prompt(), reasoning_effort=ReasoningEffort.LOW))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert "thinking" not in kwargs
+        assert kwargs["output_config"] == {"effort": "low"}
 
 
 def test_keeps_temperature_for_other_models(default_multi_llm: LitellmLLM) -> None:
