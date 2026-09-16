@@ -295,7 +295,7 @@ def test_explicit_none_survives_the_retry_ladder() -> None:
     assert calls[1]["reasoning"] == {"effort": "none"}
 
 
-_HISTORY = [
+_HISTORY: list[ChatMinimalTextMessage] = [
     ChatMinimalTextMessage(message="what is onyx", message_type=MessageType.USER)
 ]
 
