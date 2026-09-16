@@ -159,7 +159,7 @@ def _fetch_repository_collaborator_emails(
 def form_collaborators_group_id(repository_id: int) -> str:
     """Generate group ID for repository collaborators."""
     if not repository_id:
-        logger.exception("Repository ID is required to generate collaborators group ID")
+        logger.error("Repository ID is required to generate collaborators group ID")
         raise ValueError("Repository ID must be set to generate group ID.")
     group_id = f"{repository_id}_collaborators"
     return group_id
@@ -168,9 +168,7 @@ def form_collaborators_group_id(repository_id: int) -> str:
 def form_organization_group_id(organization_id: int) -> str:
     """Generate group ID for organization using organization ID."""
     if not organization_id:
-        logger.exception(
-            "Organization ID is required to generate organization group ID"
-        )
+        logger.error("Organization ID is required to generate organization group ID")
         raise ValueError("Organization ID must be set to generate group ID.")
     group_id = f"{organization_id}_organization"
     return group_id
