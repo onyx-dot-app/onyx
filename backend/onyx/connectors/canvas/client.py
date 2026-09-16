@@ -4,7 +4,7 @@ import logging
 import re
 from collections.abc import Iterator
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rl_requests
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -62,8 +62,11 @@ class CanvasApiClient:
             + _CANVAS_API_VERSION
         )
         # Hostname is already validated above; reuse parsed_base instead
-        # of re-parsing.  Used by _parse_next_link to validate pagination URLs.
+        # of re-parsing.  Used by _validate_same_host to check pagination URLs.
         self._expected_host: str = parsed_base.hostname
+        self._expected_port: int = (
+            parsed_base.port if parsed_base.port is not None else 443
+        )
 
     def get(
         self,
@@ -77,22 +80,33 @@ class CanvasApiClient:
         next_url is parsed from the Link header and is None if there are no more pages.
         If full_url is provided, it is used directly (for following pagination links).
 
-        Security note: full_url must only be set to values returned by
-        ``_parse_next_link``, which validates the host against the configured
-        Canvas base URL.  Passing an arbitrary URL would leak the bearer token.
         """
         # full_url is used when following pagination (Canvas returns the
         # next-page URL in the Link header).  For the first request we build
         # the URL from the endpoint name instead.
+        if full_url:
+            self._validate_same_host(full_url)
         url = full_url or self._build_url(endpoint)
         headers = self._build_headers()
 
-        response = rl_requests.get(
-            url,
-            headers=headers,
-            params=params if not full_url else None,
-            timeout=_CANVAS_CALL_TIMEOUT,
-        )
+        request_params = params if not full_url else None
+        for redirect_count in range(6):
+            response = rl_requests.get(
+                url,
+                headers=headers,
+                params=request_params,
+                timeout=_CANVAS_CALL_TIMEOUT,
+                allow_redirects=False,
+            )
+            if response.status_code not in (301, 302, 303, 307, 308):
+                break
+            location = response.headers.get("Location")
+            response.close()
+            if not location or redirect_count == 5:
+                raise OnyxError(OnyxErrorCode.BAD_GATEWAY, "Invalid Canvas redirect")
+            url = urljoin(response.url, location)
+            self._validate_same_host(url)
+            request_params = None
 
         try:
             response_json = response.json()
@@ -145,32 +159,45 @@ class CanvasApiClient:
         next_url = self._parse_next_link(response.headers.get("Link", ""))
         return response_json, next_url
 
+    def _validate_same_host(self, url: str) -> None:
+        expected_host = self._expected_host
+        try:
+            parsed_url = urlparse(url)
+            port = parsed_url.port if parsed_url.port is not None else 443
+        except ValueError as exc:
+            raise OnyxError(
+                OnyxErrorCode.BAD_GATEWAY, "Invalid Canvas pagination URL"
+            ) from exc
+        if (
+            parsed_url.hostname != expected_host
+            or port != self._expected_port
+            or parsed_url.username is not None
+            or parsed_url.password is not None
+        ):
+            raise OnyxError(
+                OnyxErrorCode.BAD_GATEWAY,
+                detail=(
+                    "Canvas pagination returned an unexpected host "
+                    f"({parsed_url.hostname}); expected {expected_host}"
+                ),
+            )
+        if parsed_url.scheme != "https":
+            raise OnyxError(
+                OnyxErrorCode.BAD_GATEWAY,
+                detail=(
+                    f"Canvas pagination link must use https, got {parsed_url.scheme!r}"
+                ),
+            )
+
     def _parse_next_link(self, link_header: str) -> str | None:
         """Extract the 'next' URL from a Canvas Link header.
 
         Only returns URLs whose host matches the configured Canvas base URL
         to prevent leaking the bearer token to arbitrary hosts.
         """
-        expected_host = self._expected_host
         for match in _NEXT_LINK_PATTERN.finditer(link_header):
             url = match.group(1)
-            parsed_url = urlparse(url)
-            if parsed_url.hostname != expected_host:
-                raise OnyxError(
-                    OnyxErrorCode.BAD_GATEWAY,
-                    detail=(
-                        "Canvas pagination returned an unexpected host "
-                        f"({parsed_url.hostname}); expected {expected_host}"
-                    ),
-                )
-            if parsed_url.scheme != "https":
-                raise OnyxError(
-                    OnyxErrorCode.BAD_GATEWAY,
-                    detail=(
-                        "Canvas pagination link must use https, "
-                        f"got {parsed_url.scheme!r}"
-                    ),
-                )
+            self._validate_same_host(url)
             return url
         return None
 
