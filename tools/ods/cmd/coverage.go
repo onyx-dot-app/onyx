@@ -34,6 +34,10 @@ type CoverageOptions struct {
 	SnapshotBucket string
 }
 
+// newSnapshotStore builds the snapshot store. Tests replace it to stay off
+// the network.
+var newSnapshotStore = coverage.NewS3SnapshotStore
+
 // NewCoverageCommand creates a command that measures statement coverage for a
 // Go suite and compares it against the committed baseline.
 func NewCoverageCommand() *cobra.Command {
@@ -79,17 +83,8 @@ func NewCoverageCommand() *cobra.Command {
 // runCoverage returns the process exit code rather than exiting, so the
 // temporary profile directory is always removed on the way out.
 func runCoverage(target string, opts *CoverageOptions) int {
-	if opts.Check && opts.Update {
-		log.Fatal("--check and --update do the opposite of each other; pass only one")
-	}
-	if opts.Base != "" && opts.Update {
-		log.Fatal("--base reports against a snapshot, --update rewrites the floors; pass only one")
-	}
-	if opts.Publish && opts.Update {
-		log.Fatal("--publish records this run as a snapshot, --update rewrites the floors; pass only one")
-	}
-	if opts.FromProfile != "" && opts.Profile != "" {
-		log.Fatal("--from-profile reads a profile, --profile keeps the one this run writes; pass only one")
+	if err := coverageOptionConflict(opts); err != nil {
+		log.Fatal(err)
 	}
 	if err := coverage.ValidateTolerance(opts.Tolerance); err != nil {
 		log.Fatalf("Invalid --tolerance: %v", err)
@@ -140,7 +135,7 @@ func runCoverage(target string, opts *CoverageOptions) int {
 		log.Infof("Browse it with: go tool cover -html=%s", profilePath)
 	}
 
-	store := coverage.NewS3SnapshotStore(opts.SnapshotBucket, suite.Dir)
+	store := newSnapshotStore(opts.SnapshotBucket, suite.Dir)
 	var baseReference *coverage.Reference
 	if opts.Base != "" {
 		var code int
@@ -170,6 +165,21 @@ func runCoverage(target string, opts *CoverageOptions) int {
 		return publishSnapshot(store, profile, suite.Dir)
 	}
 	return 0
+}
+
+// coverageOptionConflict reports a pair of flags that cannot be combined.
+func coverageOptionConflict(opts *CoverageOptions) error {
+	switch {
+	case opts.Check && opts.Update:
+		return errors.New("--check and --update do the opposite of each other; pass only one")
+	case opts.Base != "" && opts.Update:
+		return errors.New("--base reports against a snapshot, --update rewrites the floors; pass only one")
+	case opts.Publish && opts.Update:
+		return errors.New("--publish records this run as a snapshot, --update rewrites the floors; pass only one")
+	case opts.FromProfile != "" && opts.Profile != "":
+		return errors.New("--from-profile reads a profile, --profile keeps the one this run writes; pass only one")
+	}
+	return nil
 }
 
 // measureCoverage runs the suite's tests with a profile at profilePath.

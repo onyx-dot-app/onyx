@@ -1,6 +1,12 @@
 "use client";
 
-import { redirect, useRouter, useSearchParams } from "next/navigation";
+import {
+  redirect,
+  usePathname,
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
+import { loginPath } from "@/lib/auth/paths";
 import { endIncognitoSession } from "@/app/app/services/lib";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
@@ -144,6 +150,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     },
   });
   const searchParams = useSearchParams();
+  const pathname = usePathname();
 
   // Use SWR hooks for data fetching
   const {
@@ -518,7 +525,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   ]);
 
   if (resolvedUser === null) {
-    redirect("/auth/login");
+    // Carries the current URL like the layout's redirect does, since both run
+    // on the same server render and either may reach the browser first.
+    const query = searchParams?.toString();
+    redirect(loginPath({ next: query ? `${pathname}?${query}` : pathname }));
   }
 
   const onChat = useCallback(

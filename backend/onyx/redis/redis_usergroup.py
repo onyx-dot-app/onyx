@@ -105,7 +105,7 @@ class RedisUserGroup(RedisObjectHelper):
 
             celery_app.send_task(
                 OnyxCeleryTask.DOCUMENT_INDEX_METADATA_SYNC_TASK,
-                kwargs=dict(document_id=doc_id, tenant_id=tenant_id),
+                kwargs={"document_id": doc_id, "tenant_id": tenant_id},
                 queue=OnyxCeleryQueues.VESPA_METADATA_SYNC,
                 task_id=custom_task_id,
                 priority=OnyxCeleryPriority.MEDIUM,

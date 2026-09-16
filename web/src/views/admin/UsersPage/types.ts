@@ -16,6 +16,8 @@ export interface FullUserSnapshot {
   personal_name: string | null;
   created_at: string;
   updated_at: string;
+  /** Most recent chat activity; null when the user has never chatted. */
+  last_active: string | null;
   groups: UserGroupInfo[];
   is_scim_synced: boolean;
   /** Per-user Craft override; null = follow the workspace default. */
@@ -36,6 +38,9 @@ export interface UserRow {
   personal_name: string | null;
   created_at: string | null;
   updated_at: string | null;
+  /** Most recent chat activity; null when the user has never chatted. Unlike
+   * `updated_at`, which only moves when the user row itself is written. */
+  last_active: string | null;
   groups: UserGroupInfo[];
 }
 

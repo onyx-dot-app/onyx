@@ -4,7 +4,7 @@
 import { renderHook } from "@testing-library/react";
 import useSWR from "swr";
 import { usePathname } from "next/navigation";
-import { isAuthPath } from "@/lib/auth/paths";
+import { isAuthPath, loginPath } from "@/lib/auth/paths";
 import { useSettings } from "@/lib/settings/hooks";
 import { useLLMProviders } from "@/lib/languageModels/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -43,6 +43,33 @@ describe("isAuthPath", () => {
     [null, false],
   ])("isAuthPath(%s) === %s", (path, expected) => {
     expect(isAuthPath(path as string | null | undefined)).toBe(expected);
+  });
+});
+
+describe("loginPath", () => {
+  test("is the bare login page with nothing to carry", () => {
+    expect(loginPath()).toBe("/auth/login");
+    expect(loginPath({ next: null })).toBe("/auth/login");
+  });
+
+  test("keeps the query of the page the user arrived on", () => {
+    expect(loginPath({ next: "/app?user-prompt=hello%20world" })).toBe(
+      "/auth/login?next=%2Fapp%3Fuser-prompt%3Dhello%2520world"
+    );
+  });
+
+  test("drops a next that would leave the site", () => {
+    expect(loginPath({ next: "https://evil.example.com/app" })).toBe(
+      "/auth/login"
+    );
+    expect(loginPath({ next: "//evil.example.com" })).toBe("/auth/login");
+  });
+
+  test("adds the SSO escape hatch only when asked to hold", () => {
+    expect(loginPath({ next: "/app", autoRedirectToSso: false })).toBe(
+      "/auth/login?next=%2Fapp&autoRedirectToSso=false"
+    );
+    expect(loginPath({ autoRedirectToSso: true })).toBe("/auth/login");
   });
 });
 

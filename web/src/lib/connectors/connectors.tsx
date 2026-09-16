@@ -161,15 +161,15 @@ export interface ConnectionConfiguration {
 // kwarg on the backend connector; see backend/onyx/connectors/README.md for
 // the convention, including how to pick the default.
 export function buildIncludeAttachmentsOption(
-  defaultValue: boolean
+  defaultValue: boolean,
+  description: string = "Enable processing of page attachments including images and documents"
 ): BooleanOption {
   return {
     type: "checkbox",
     query: "Include attachments?",
     label: "Include Attachments",
     name: "include_attachments",
-    description:
-      "Enable processing of page attachments including images and documents",
+    description,
     default: defaultValue,
   };
 }
@@ -1050,6 +1050,97 @@ export const connectorConfigs: Record<
       },
     ],
     advanced_values: [
+      {
+        type: "text",
+        query: "Microsoft Authority Host:",
+        label: "Authority Host",
+        name: "authority_host",
+        optional: true,
+        default: "https://login.microsoftonline.com",
+        description:
+          "The Microsoft identity authority host used for authentication. " +
+          "For most deployments, leave as default. " +
+          "For GCC High / DoD, use https://login.microsoftonline.us",
+      },
+      {
+        type: "text",
+        query: "Microsoft Graph API Host:",
+        label: "Graph API Host",
+        name: "graph_api_host",
+        optional: true,
+        default: "https://graph.microsoft.com",
+        description:
+          "The Microsoft Graph API host. " +
+          "For most deployments, leave as default. " +
+          "For GCC High / DoD, use https://graph.microsoft.us",
+      },
+    ],
+  },
+  outlook: {
+    description: "Configure Outlook connector",
+    values: [
+      {
+        type: "list",
+        query: "Enter mailboxes to index:",
+        label: "Mailboxes",
+        name: "mailboxes",
+        optional: true,
+        description:
+          "User principal names or primary email addresses of the mailboxes to index. " +
+          "Leave empty to index every mailbox the app registration may open. " +
+          "Shared mailboxes are never picked up automatically and must be listed here.",
+      },
+      buildIncludeAttachmentsOption(
+        false,
+        "Index the text of file attachments. Inline images, nested items and cloud links are skipped."
+      ),
+      {
+        type: "checkbox",
+        query: "Include calendar events?",
+        label: "Include Calendar",
+        name: "include_calendar",
+        description:
+          "Index the calendar of each mailbox as well as its mail. " +
+          "Needs the Calendars.Read application permission.",
+        default: false,
+      },
+    ],
+    advanced_values: [
+      {
+        type: "list",
+        query: "Enter folders to skip:",
+        label: "Excluded Folders",
+        name: "excluded_folders",
+        optional: true,
+        description:
+          "Folder names to skip in every mailbox, in addition to Junk Email, " +
+          "Deleted Items, Drafts and Outbox, which are always skipped.",
+      },
+      {
+        type: "number",
+        query: "Days of past calendar to index:",
+        label: "Calendar Past Days",
+        name: "calendar_past_days",
+        optional: true,
+        default: 365,
+        description:
+          "Used when Include Calendar is on. How far back the calendar window " +
+          "reaches. Events older than this leave the index at the next prune as " +
+          "the window moves forward. Widening it later needs a re-index, since " +
+          "unchanged events do not re-enter on their own.",
+      },
+      {
+        type: "number",
+        query: "Days of future calendar to index:",
+        label: "Calendar Future Days",
+        name: "calendar_future_days",
+        optional: true,
+        default: 180,
+        description:
+          "Used when Include Calendar is on. How far ahead the calendar window " +
+          "reaches. Widening it later needs a re-index, since unchanged events " +
+          "do not re-enter on their own.",
+      },
       {
         type: "text",
         query: "Microsoft Authority Host:",

@@ -144,11 +144,11 @@ class _Parser:
                             result[key] = new_items
                 elif cur_val != prev_val:
                     result[key] = cur_val
-            return result if result else None
+            return result or None
 
         if isinstance(current, str) and isinstance(prev, str):
             delta = current[len(prev) :]
-            return delta if delta else None
+            return delta or None
 
         if isinstance(current, list) and isinstance(prev, list):
             if current != prev:
@@ -159,7 +159,7 @@ class _Parser:
                     and current[len(prev) - 1] != prev[-1]
                 ):
                     return [current[len(prev) - 1]] + new_items
-                return new_items if new_items else None
+                return new_items or None
             return None
 
         if current != prev:

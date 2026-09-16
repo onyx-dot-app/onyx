@@ -3,7 +3,9 @@ package deployfilessync
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 )
 
 // seedSources writes a fake deployment/ tree containing every synced file.
@@ -94,5 +96,55 @@ func TestCheckFailsWhenSourceMissing(t *testing.T) {
 	repoRoot := t.TempDir()
 	if _, err := Check(repoRoot); err == nil {
 		t.Fatal("expected error for missing source files")
+	}
+}
+
+// Write only touches stale copies: a fresh copy keeps its file untouched.
+func TestWriteLeavesFreshCopiesAlone(t *testing.T) {
+	repoRoot := t.TempDir()
+	seedSources(t, repoRoot)
+	if _, err := Write(repoRoot); err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+	// Backdate one fresh copy. A rewrite would move its mtime to now.
+	fresh := filepath.Join(DestDir(repoRoot), "docker_compose", "README.md")
+	old := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+	if err := os.Chtimes(fresh, old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := Write(repoRoot)
+	if err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+	for _, r := range results {
+		if r.Stale {
+			t.Errorf("%s: expected fresh", r.RelPath)
+		}
+	}
+	info, err := os.Stat(fresh)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !info.ModTime().Equal(old) {
+		t.Fatalf("expected the fresh copy left untouched, got mtime %v", info.ModTime())
+	}
+}
+
+// An embedded copy that cannot be read stops the sync rather than being
+// reported as missing and overwritten.
+func TestWriteFailsWhenACopyIsUnreadable(t *testing.T) {
+	repoRoot := t.TempDir()
+	seedSources(t, repoRoot)
+	dir := filepath.Join(DestDir(repoRoot), "docker_compose", "README.md")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Write(repoRoot)
+
+	want := "failed to read embedded copy docker_compose/README.md"
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("expected %q, got %v", want, err)
 	}
 }

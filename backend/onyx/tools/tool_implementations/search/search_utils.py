@@ -450,7 +450,7 @@ def expand_section_with_context(
             chunks=all_chunks,
         )
 
-        return expanded_section if expanded_section else section
+        return expanded_section or section
 
     elif classification == ContextExpansionType.FULL_DOCUMENT:
         # Fetch 5 chunks above and below (optimal single retrieval)
@@ -488,7 +488,7 @@ def expand_section_with_context(
             chunks=all_chunks,
         )
 
-        return expanded_section if expanded_section else section
+        return expanded_section or section
 
     else:
         # Unknown classification - default to returning original section

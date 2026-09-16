@@ -437,12 +437,12 @@ def try_creating_prune_generator_task(
 
         result = celery_app.send_task(
             OnyxCeleryTask.CONNECTOR_PRUNING_GENERATOR_TASK,
-            kwargs=dict(
-                cc_pair_id=cc_pair.id,
-                connector_id=cc_pair.connector_id,
-                credential_id=cc_pair.credential_id,
-                tenant_id=tenant_id,
-            ),
+            kwargs={
+                "cc_pair_id": cc_pair.id,
+                "connector_id": cc_pair.connector_id,
+                "credential_id": cc_pair.credential_id,
+                "tenant_id": tenant_id,
+            },
             queue=OnyxCeleryQueues.CONNECTOR_PRUNING,
             task_id=custom_task_id,
             priority=OnyxCeleryPriority.LOW,

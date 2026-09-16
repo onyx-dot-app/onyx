@@ -18,7 +18,10 @@ class _PagedClient(GraphApiClient):
         self.calls: list[tuple[str, dict[str, str] | None]] = []
 
     def get_json(
-        self, url: str, params: dict[str, str] | None = None
+        self,
+        url: str,
+        params: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,  # noqa: ARG002
     ) -> dict[str, Any]:
         self.calls.append((url, params))
         return self._pages.pop(0)

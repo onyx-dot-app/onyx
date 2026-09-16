@@ -287,8 +287,7 @@ class InferenceChunkUncleaned(InferenceChunk):
         inference_chunk_data = {
             k: v
             for k, v in self.model_dump().items()
-            if k
-            not in ["metadata_suffix"]  # May be other fields to throw out in the future
+            if k != "metadata_suffix"  # May be other fields to throw out in the future
         }
         return InferenceChunk(**inference_chunk_data)
 

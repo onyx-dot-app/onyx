@@ -1,3 +1,5 @@
+import type { AuthTypeMetadata } from "@/lib/auth/types";
+
 // ---------------------------------------------------------------------------
 // Auth URL helpers
 // ---------------------------------------------------------------------------
@@ -82,4 +84,22 @@ export function validateInternalRedirect(
   }
 
   return trimmedUrl;
+}
+
+// ---------------------------------------------------------------------------
+// SSO auto-start
+// ---------------------------------------------------------------------------
+
+/** True when the login page should start SSO on load: single-tenant, password
+ * login off, exactly one provider, and the `autoRedirectToSso` flag not off. */
+export function shouldAutoStartSso(
+  authTypeMetadata: AuthTypeMetadata | null,
+  autoRedirectToSso: boolean
+): boolean {
+  if (!autoRedirectToSso || !authTypeMetadata) return false;
+  return (
+    !authTypeMetadata.multiTenant &&
+    !authTypeMetadata.passwordAuthEnabled &&
+    (authTypeMetadata.ssoProviders ?? []).length === 1
+  );
 }

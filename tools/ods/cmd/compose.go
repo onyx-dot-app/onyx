@@ -79,7 +79,9 @@ Examples:
 			if len(args) > 0 {
 				profile = args[0]
 			}
-			runCompose(profile, opts)
+			if err := runCompose(profile, opts); err != nil {
+				log.Fatal(err)
+			}
 		},
 	}
 
@@ -94,10 +96,11 @@ Examples:
 }
 
 // validateProfile checks that the given profile is valid.
-func validateProfile(profile string) {
+func validateProfile(profile string) error {
 	if profile != "" && profile != "dev" && profile != "multitenant" {
-		log.Fatalf("Invalid profile %q. Valid profiles: dev, multitenant", profile)
+		return fatalErrorf("Invalid profile %q. Valid profiles: dev, multitenant", profile)
 	}
+	return nil
 }
 
 // checkComposeOptions rejects flag combinations the compose files cannot
@@ -158,11 +161,15 @@ func profileLabel(profile string) string {
 
 // execDockerCompose runs a docker compose command in the correct directory with
 // optional extra environment variables.
-func execDockerCompose(args []string, extraEnv []string) {
+func execDockerCompose(args []string, extraEnv []string) error {
 	log.Debugf("Running: docker %v", args)
 
+	dir, err := composeDir()
+	if err != nil {
+		return err
+	}
 	dockerCmd := exec.Command("docker", args...)
-	dockerCmd.Dir = composeDir()
+	dockerCmd.Dir = dir
 	dockerCmd.Stdout = os.Stdout
 	dockerCmd.Stderr = os.Stderr
 	dockerCmd.Stdin = os.Stdin
@@ -171,8 +178,9 @@ func execDockerCompose(args []string, extraEnv []string) {
 	}
 
 	if err := dockerCmd.Run(); err != nil {
-		log.Fatalf("Docker compose failed: %v", err)
+		return fatalErrorf("Docker compose failed: %w", err)
 	}
+	return nil
 }
 
 // runningServiceNames returns the names of currently running services in the
@@ -211,23 +219,27 @@ func envForTag(tag string) []string {
 }
 
 // composeDir returns the path to the docker compose directory.
-func composeDir() string {
+func composeDir() (string, error) {
 	gitRoot, err := paths.GitRoot()
 	if err != nil {
-		log.Fatalf("Failed to find git root: %v", err)
+		return "", fatalErrorf("Failed to find git root: %w", err)
 	}
-	return filepath.Join(gitRoot, "deployment", "docker_compose")
+	return filepath.Join(gitRoot, "deployment", "docker_compose"), nil
 }
 
 // setEnvValue sets a key=value pair in the .env file within the compose
 // directory. If the key already exists its value is updated in place; otherwise
 // the entry is appended. The file is created if it does not exist.
-func setEnvValue(key, value string) {
-	envPath := filepath.Join(composeDir(), ".env")
+func setEnvValue(key, value string) error {
+	dir, err := composeDir()
+	if err != nil {
+		return err
+	}
+	envPath := filepath.Join(dir, ".env")
 
 	data, err := os.ReadFile(envPath)
 	if err != nil && !os.IsNotExist(err) {
-		log.Fatalf("Failed to read %s: %v", envPath, err)
+		return fatalErrorf("Failed to read %s: %w", envPath, err)
 	}
 
 	entry := fmt.Sprintf("%s=%s", key, value)
@@ -236,9 +248,9 @@ func setEnvValue(key, value string) {
 	if len(data) == 0 {
 		// File missing or empty – create with just this entry.
 		if err := os.WriteFile(envPath, []byte(entry+"\n"), 0644); err != nil {
-			log.Fatalf("Failed to write %s: %v", envPath, err)
+			return fatalErrorf("Failed to write %s: %w", envPath, err)
 		}
-		return
+		return nil
 	}
 
 	lines := strings.Split(string(data), "\n")
@@ -262,18 +274,21 @@ func setEnvValue(key, value string) {
 	}
 
 	if err := os.WriteFile(envPath, []byte(strings.Join(lines, "\n")), 0644); err != nil {
-		log.Fatalf("Failed to write %s: %v", envPath, err)
+		return fatalErrorf("Failed to write %s: %w", envPath, err)
 	}
+	return nil
 }
 
 // runCompose starts or stops Docker Compose containers for the current docker.
 // For profiles that expose host ports ("dev", "multitenant"), it scans for
 // available ports and writes them to the compose .env file before starting
 // containers. EE licensing env vars are also written on startup.
-func runCompose(profile string, opts *ComposeOptions) {
-	validateProfile(profile)
+func runCompose(profile string, opts *ComposeOptions) error {
+	if err := validateProfile(profile); err != nil {
+		return err
+	}
 	if err := checkComposeOptions(profile, opts); err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	if !opts.Down {
@@ -281,18 +296,24 @@ func runCompose(profile string, opts *ComposeOptions) {
 		if opts.NoEE {
 			eeValue = "false"
 		}
-		setEnvValue("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", eeValue)
+		if err := setEnvValue("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", eeValue); err != nil {
+			return err
+		}
 		if !opts.NoEE {
-			setEnvValue("LICENSE_ENFORCEMENT_ENABLED", "false")
+			if err := setEnvValue("LICENSE_ENFORCEMENT_ENABLED", "false"); err != nil {
+				return err
+			}
 		}
 
 		if profile == "dev" || profile == "multitenant" {
 			ports, err := docker.FindAvailablePorts()
 			if err != nil {
-				log.Fatalf("Failed to find available ports: %v", err)
+				return fatalErrorf("Failed to find available ports: %w", err)
 			}
 			for k, v := range ports.ComposeEnv() {
-				setEnvValue(k, v)
+				if err := setEnvValue(k, v); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -326,11 +347,14 @@ func runCompose(profile string, opts *ComposeOptions) {
 	if !opts.Down && !opts.NoEE {
 		log.Info("Enterprise Edition features enabled (use --no-ee to disable)")
 	}
-	execDockerCompose(args, envForTag(opts.Tag))
+	if err := execDockerCompose(args, envForTag(opts.Tag)); err != nil {
+		return err
+	}
 
 	if opts.Down {
 		log.Info("Containers stopped successfully")
 	} else {
 		log.Info("Containers started successfully")
 	}
+	return nil
 }

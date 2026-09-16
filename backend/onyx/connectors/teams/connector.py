@@ -425,9 +425,7 @@ def _construct_semantic_identifier(channel: Channel, top_message: Message) -> st
 
     if top_message.from_ and top_message.from_.user:
         user_display_name = top_message.from_.user.display_name
-        top_message_user_name = (
-            user_display_name if user_display_name else "Unknown User"
-        )
+        top_message_user_name = user_display_name or "Unknown User"
     else:
         logger.warning("Message top_message=%r has no `from.user` field", top_message)
         top_message_user_name = "Unknown User"

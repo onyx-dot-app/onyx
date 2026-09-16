@@ -86,8 +86,9 @@ function SummaryRow({
       className="border-border dark:hover:bg-neutral-800 dark:border-neutral-700 group hover:bg-background-settings-hover/20 bg-background-sidebar py-4 rounded-xs border! cursor-pointer"
     >
       <TableCell>
-        <div className="text-xl flex items-center truncate ellipsis gap-x-2 font-semibold">
-          <div className="cursor-pointer">
+        {/* raw-ok: 20px/600 falls between the heading-h3 and heading-h2 TextFont presets */}
+        <div className="text-xl flex items-center gap-x-2 font-semibold">
+          <div className="cursor-pointer shrink-0">
             {isOpen ? (
               <FiChevronDown size={20} />
             ) : (
@@ -95,7 +96,8 @@ function SummaryRow({
             )}
           </div>
           <SourceIcon iconSize={20} sourceType={source} />
-          {getSourceDisplayName(source)}
+          {/* Only the name truncates, so the icon keeps its width. */}
+          <span className="truncate">{getSourceDisplayName(source)}</span>
         </div>
       </TableCell>
 
