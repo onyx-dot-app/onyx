@@ -78,3 +78,12 @@ class ChannelRef(BaseModel):
     team_id: str
     id: str
     display_name: str
+
+
+class ChannelFilesFolder(BaseModel):
+    """The SharePoint folder a channel's files are posted into, and the site
+    and document library it belongs to."""
+
+    site_id: str
+    drive_id: str
+    id: str

@@ -15,7 +15,6 @@ import requests
 from office365.graph_client import GraphClient
 from office365.onedrive.sites.site import Site
 from office365.onedrive.sites.sites_with_root import SitesWithRoot
-from office365.runtime.auth.token_response import TokenResponse
 from office365.runtime.client_request import ClientRequestException
 from office365.sharepoint.client_context import ClientContext
 from pydantic import BaseModel, Field
@@ -55,6 +54,7 @@ from onyx.connectors.microsoft_utils.drive_items import (
 from onyx.connectors.microsoft_utils.graph_auth import (
     MicrosoftAuthMethod,
     acquire_graph_token,
+    acquire_token_for_rest,
     build_msal_app,
 )
 from onyx.connectors.microsoft_utils.graph_client import (
@@ -253,17 +253,6 @@ def _is_graph_invalid_request(response: requests.Response) -> bool:
         return False
     error = body.get("error", {})
     return error.get("code") == GRAPH_INVALID_REQUEST_CODE
-
-
-def acquire_token_for_rest(
-    msal_app: msal.ConfidentialClientApplication,
-    sp_tenant_domain: str,
-    sharepoint_domain_suffix: str,
-) -> TokenResponse:
-    token = msal_app.acquire_token_for_client(
-        scopes=[f"https://{sp_tenant_domain}.{sharepoint_domain_suffix}/.default"]
-    )
-    return TokenResponse.from_json(token)
 
 
 def _probe_site_role_assignments_authorized(

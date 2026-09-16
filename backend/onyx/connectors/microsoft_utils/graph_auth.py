@@ -19,6 +19,7 @@ from typing import Any, assert_never
 import msal
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
+from office365.runtime.auth.token_response import TokenResponse
 from pydantic import BaseModel
 
 from onyx.connectors.exceptions import ConnectorValidationError
@@ -167,3 +168,16 @@ def acquire_graph_token(
 ) -> dict[str, Any]:
     """Acquire an app-only Graph token. Returns MSAL's raw response."""
     return msal_app.acquire_token_for_client(scopes=[f"{graph_api_host}/.default"])
+
+
+def acquire_token_for_rest(
+    msal_app: msal.ConfidentialClientApplication,
+    sp_tenant_domain: str,
+    sharepoint_domain_suffix: str,
+) -> TokenResponse:
+    """An app-only token for the tenant's SharePoint REST surface. SharePoint
+    honors it only when the app signed in with a certificate."""
+    token = msal_app.acquire_token_for_client(
+        scopes=[f"https://{sp_tenant_domain}.{sharepoint_domain_suffix}/.default"]
+    )
+    return TokenResponse.from_json(token)

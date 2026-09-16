@@ -315,7 +315,7 @@ def test_members_are_read_once_per_channel_per_attempt() -> None:
     requested = [call.args[0] for call in client.execute_request_direct.call_args_list]
     assert requested.count(MEMBERS_URL) == 1
     assert requested.count(other_members) == 1
-    assert teams_connector._channel_readers == {}
+    assert teams_connector._channel_state == {}
 
     step(connector(client), channel_checkpoint())
     requested = [call.args[0] for call in client.execute_request_direct.call_args_list]

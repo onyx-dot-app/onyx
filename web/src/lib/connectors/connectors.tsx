@@ -1039,6 +1039,12 @@ export const connectorConfigs: Record<
         optional: true,
         description: `Specify 0 or more Teams to index. For example, specifying the Team 'Support' for the 'onyxai' Org will cause us to only index messages sent in channels belonging to the 'Support' Team. If no Teams are specified, all Teams in your organization will be indexed.`,
       },
+      buildIncludeAttachmentsOption(
+        false,
+        "Index the files in each channel's Files tab as their own documents, " +
+          "with the readers SharePoint grants them. Needs a certificate " +
+          "credential and the Sites.Read.All application permission."
+      ),
     ],
     advanced_values: [
       {
@@ -2301,6 +2307,7 @@ export interface SharepointConfig {
 
 export interface TeamsConfig {
   teams?: string[];
+  include_attachments?: boolean;
   authority_host?: string;
   graph_api_host?: string;
 }
