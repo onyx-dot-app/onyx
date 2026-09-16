@@ -666,14 +666,26 @@ def test_reasoning_off_floors_always_thinking_models_at_low(model_name: str) -> 
     assert kwargs["output_config"] == {"effort": "low"}
 
 
+def test_reasoning_off_follows_deployment_alias_over_model_name() -> None:
+    # The alias is the model that answers, and Opus accepts disabled thinking.
+    kwargs = _anthropic_completion_kwargs(
+        "claude-fable-5", ReasoningEffort.OFF, deployment_name="claude-opus-5"
+    )
+    assert kwargs["thinking"] == {"type": "disabled"}
+    assert "output_config" not in kwargs
+
+
 def _anthropic_completion_kwargs(
-    model_name: str, reasoning_effort: ReasoningEffort
+    model_name: str,
+    reasoning_effort: ReasoningEffort,
+    deployment_name: str | None = None,
 ) -> Mapping[str, Any]:
     llm = LitellmLLM(
         api_key="test_key",
         timeout=30,
         model_provider=LlmProviderNames.ANTHROPIC,
         model_name=model_name,
+        deployment_name=deployment_name,
         max_input_tokens=get_max_input_tokens(
             model_provider=LlmProviderNames.ANTHROPIC,
             model_name=model_name,

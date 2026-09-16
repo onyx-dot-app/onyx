@@ -4,6 +4,7 @@ from onyx.llm.api_surfaces import LlmApiSurface
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_capabilities import (
     ReasoningParamStyle,
+    anthropic_identity_is_always_thinking,
     anthropic_thinking_is_always_on,
     is_openai_registry_model_name,
     openai_chat_tools_require_reasoning_none,
@@ -285,6 +286,24 @@ def test_supported_reasoning_efforts(
 )
 def test_anthropic_thinking_is_always_on(model_name: str, always_on: bool) -> None:
     assert anthropic_thinking_is_always_on(model_name) is always_on
+
+
+@pytest.mark.parametrize(
+    "model_names, always_on",
+    [
+        (["claude-fable-5"], True),
+        # The deployment alias reaches the provider, so it decides.
+        (["claude-fable-5", "claude-opus-5"], False),
+        (["claude-opus-5", "claude-fable-5"], True),
+        (["my-deployment", "claude-mythos-5-1"], True),
+        # An alias that names no Claude version leaves the model name to decide.
+        (["claude-fable-5", "prod-claude-alias"], True),
+    ],
+)
+def test_anthropic_identity_is_always_thinking(
+    model_names: list[str], always_on: bool
+) -> None:
+    assert anthropic_identity_is_always_thinking(model_names) is always_on
 
 
 @pytest.mark.parametrize("model_name", ["claude-fable-5", "claude-mythos-5-1"])

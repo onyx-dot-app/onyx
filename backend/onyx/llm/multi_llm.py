@@ -44,9 +44,9 @@ from onyx.llm.interfaces import (
 from onyx.llm.model_capabilities import (
     OPENAI_API_PROVIDERS,
     ReasoningParamStyle,
+    anthropic_identity_is_always_thinking,
     anthropic_omits_sampling_params,
     anthropic_supports_thinking,
-    anthropic_thinking_is_always_on,
     anthropic_uses_adaptive_thinking,
     is_true_openai_model,
     model_is_reasoning_model,
@@ -816,9 +816,7 @@ class LitellmLLM(LLM):
         if (
             reasoning_effort is ReasoningEffort.OFF
             and reasoning_style is ReasoningParamStyle.ANTHROPIC_ADAPTIVE
-            and any(
-                anthropic_thinking_is_always_on(name) for name in model_identity_names
-            )
+            and anthropic_identity_is_always_thinking(model_identity_names)
         ):
             reasoning_effort = ReasoningEffort.LOW
 
@@ -929,9 +927,6 @@ class LitellmLLM(LLM):
             is_reasoning
             and reasoning_effort is ReasoningEffort.OFF
             and reasoning_style is ReasoningParamStyle.ANTHROPIC_ADAPTIVE
-            and not any(
-                anthropic_thinking_is_always_on(name) for name in model_identity_names
-            )
         ):
             optional_kwargs["thinking"] = {"type": "disabled"}
 

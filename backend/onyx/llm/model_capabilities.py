@@ -646,6 +646,15 @@ def anthropic_supports_thinking(model_name: str) -> bool:
     return _anthropic_meets_version(model_name, _ANTHROPIC_THINKING_MIN_VERSION)
 
 
+def anthropic_identity_is_always_thinking(model_names: Sequence[str]) -> bool:
+    """The deployment alias, listed last by model_identity_names, is what
+    reaches the provider, so it decides whenever it names a Claude version."""
+    claude_names = [
+        name for name in model_names if parse_anthropic_model_version(name) is not None
+    ]
+    return bool(claude_names) and anthropic_thinking_is_always_on(claude_names[-1])
+
+
 def anthropic_thinking_is_always_on(model_name: str) -> bool:
     """True for the tiers that reason no matter what. Adaptive thinking is
     checked first so a tier word elsewhere ("fable-writer-v2") can't match."""
@@ -754,7 +763,7 @@ def supported_reasoning_efforts(
     style = resolve_reasoning_param_style(model_provider, model_names, api_surface)
     # A model that always thinks honors no off on any route, gateway included,
     # so offering the level would promise a saving that never arrives.
-    always_thinking = any(anthropic_thinking_is_always_on(name) for name in model_names)
+    always_thinking = anthropic_identity_is_always_thinking(model_names)
     efforts = [] if always_thinking else [ReasoningEffort.OFF]
     efforts += [ReasoningEffort.LOW, ReasoningEffort.MEDIUM, ReasoningEffort.HIGH]
     if style in _XHIGH_REASONING_STYLES:
