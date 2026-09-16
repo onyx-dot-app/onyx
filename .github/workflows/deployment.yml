@@ -432,7 +432,7 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-web-server
     steps:
-      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+      - uses: runs-on/action@efac073ea2507ec18797de3a81704201ade11d9d
 
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
@@ -514,7 +514,7 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-web-server
     steps:
-      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+      - uses: runs-on/action@efac073ea2507ec18797de3a81704201ade11d9d
 
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
@@ -596,7 +596,7 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-web-server
     steps:
-      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+      - uses: runs-on/action@efac073ea2507ec18797de3a81704201ade11d9d
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
@@ -688,7 +688,7 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-web-server
     steps:
-      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+      - uses: runs-on/action@efac073ea2507ec18797de3a81704201ade11d9d
 
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
@@ -780,7 +780,7 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-web-server
     steps:
-      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+      - uses: runs-on/action@efac073ea2507ec18797de3a81704201ade11d9d
 
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
@@ -872,7 +872,7 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-web-server
     steps:
-      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+      - uses: runs-on/action@efac073ea2507ec18797de3a81704201ade11d9d
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
@@ -951,7 +951,7 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-backend
     steps:
-      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+      - uses: runs-on/action@efac073ea2507ec18797de3a81704201ade11d9d
 
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
@@ -1047,7 +1047,7 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-backend
     steps:
-      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+      - uses: runs-on/action@efac073ea2507ec18797de3a81704201ade11d9d
 
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
@@ -1142,7 +1142,7 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-backend
     steps:
-      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+      - uses: runs-on/action@efac073ea2507ec18797de3a81704201ade11d9d
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
@@ -1244,7 +1244,7 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-model-server
     steps:
-      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+      - uses: runs-on/action@efac073ea2507ec18797de3a81704201ade11d9d
 
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
@@ -1330,7 +1330,7 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-model-server
     steps:
-      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+      - uses: runs-on/action@efac073ea2507ec18797de3a81704201ade11d9d
 
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
@@ -1415,7 +1415,7 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-model-server
     steps:
-      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+      - uses: runs-on/action@efac073ea2507ec18797de3a81704201ade11d9d
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
@@ -1576,7 +1576,7 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/sandbox
     steps:
-      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+      - uses: runs-on/action@efac073ea2507ec18797de3a81704201ade11d9d
 
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
@@ -1649,7 +1649,7 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/sandbox
     steps:
-      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+      - uses: runs-on/action@efac073ea2507ec18797de3a81704201ade11d9d
 
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
@@ -1722,7 +1722,7 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/sandbox
     steps:
-      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+      - uses: runs-on/action@efac073ea2507ec18797de3a81704201ade11d9d
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
@@ -1943,7 +1943,7 @@ jobs:
           BUILD_BACKEND: ${{ needs.build-backend-amd64.result }}
           BUILD_MODEL_SERVER: ${{ needs.build-model-server-amd64.result }}
 
-      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+      - uses: runs-on/action@efac073ea2507ec18797de3a81704201ade11d9d
         if: steps.should-run.outputs.run == 'true'
 
       - name: Checkout
