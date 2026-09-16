@@ -21,12 +21,54 @@ from onyx.connectors.models import (
     ConnectorMissingCredentialError,
 )
 from onyx.connectors.zoom.client import ZoomClient
+from onyx.connectors.zoom.rate_limit import (
+    DEFAULT_RATE_LIMIT_SHARE,
+    MAX_RATE_LIMIT_PERCENT,
+    MIN_RATE_LIMIT_PERCENT,
+    ZoomPlanTier,
+    ZoomRateLimitSettings,
+)
 from onyx.connectors.zoom.recordings.discovery import build_discovery_sources
 from onyx.connectors.zoom.recordings.models import RecordingsState
 from onyx.connectors.zoom.recordings.processing import process_occurrence
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+# Nothing between the API and here checks the type of a stored config value,
+# and only a ValueError becomes a message the admin can read.
+
+
+def parse_plan_tier(value: Any) -> ZoomPlanTier:
+    """Blank means Pro, the lowest plan this connector supports, because
+    guessing high spends an allowance the account may not have."""
+    if value is None:
+        return ZoomPlanTier.PRO
+    if not isinstance(value, str):
+        raise ValueError(f"Zoom plan must be text, got {value!r}")
+    if not value.strip():
+        return ZoomPlanTier.PRO
+    try:
+        return ZoomPlanTier(value.strip().lower())
+    except ValueError as e:
+        known = ", ".join(plan.value for plan in ZoomPlanTier)
+        raise ValueError(f"Unknown Zoom plan {value!r}. Use one of: {known}") from e
+
+
+def parse_rate_limit_percent(value: Any) -> float:
+    if value is None:
+        return DEFAULT_RATE_LIMIT_SHARE
+    # bool is an int in Python, so True would otherwise pass as 1 percent and
+    # throttle the connector to a single call per second.
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"Zoom rate limit percent must be a number, got {value!r}")
+    if not MIN_RATE_LIMIT_PERCENT <= value <= MAX_RATE_LIMIT_PERCENT:
+        raise ValueError(
+            f"Zoom rate limit percent must be between {MIN_RATE_LIMIT_PERCENT} "
+            f"and {MAX_RATE_LIMIT_PERCENT}, got {value}"
+        )
+    return value / 100
 
 
 class ZoomConnectorCheckpoint(ConnectorCheckpoint):
@@ -40,10 +82,14 @@ class ZoomConnector(CheckpointedConnectorWithPermSync[ZoomConnectorCheckpoint]):
         webinar_ids: list[str] | None = None,
         host_emails: list[str] | None = None,
         group_id: str | None = None,
+        plan_tier: str | None = None,
+        rate_limit_percent: int | float | None = None,
     ) -> None:
         self._sources = build_discovery_sources(
             meeting_ids, webinar_ids, host_emails, group_id
         )
+        self.plan_tier = plan_tier
+        self.rate_limit_percent = rate_limit_percent
         self.client: ZoomClient | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
@@ -55,7 +101,13 @@ class ZoomConnector(CheckpointedConnectorWithPermSync[ZoomConnectorCheckpoint]):
             raise ConnectorMissingCredentialError("Zoom")
 
         self.client = ZoomClient(
-            account_id=account_id, client_id=client_id, client_secret=client_secret
+            account_id=account_id,
+            client_id=client_id,
+            client_secret=client_secret,
+            rate_limit_settings=ZoomRateLimitSettings(
+                plan_tier=parse_plan_tier(self.plan_tier),
+                share=parse_rate_limit_percent(self.rate_limit_percent),
+            ),
         )
         return None
 
@@ -66,6 +118,12 @@ class ZoomConnector(CheckpointedConnectorWithPermSync[ZoomConnectorCheckpoint]):
             raise ConnectorValidationError(
                 "At least one Zoom Discovery mechanism must be configured"
             )
+
+        try:
+            parse_plan_tier(self.plan_tier)
+            parse_rate_limit_percent(self.rate_limit_percent)
+        except ValueError as e:
+            raise ConnectorValidationError(str(e)) from e
 
     def build_dummy_checkpoint(self) -> ZoomConnectorCheckpoint:
         return ZoomConnectorCheckpoint(has_more=True)

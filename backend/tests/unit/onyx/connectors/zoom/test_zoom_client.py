@@ -8,21 +8,51 @@ import requests
 from pydantic import ValidationError
 from requests.adapters import HTTPAdapter
 
+from onyx.connectors.cross_connector_utils import rate_limit_wrapper
 from onyx.connectors.exceptions import (
     CredentialExpiredError,
     CredentialInvalidError,
     InsufficientPermissionsError,
 )
+from onyx.connectors.zoom import endpoints as zoom_endpoints
+from onyx.connectors.zoom import rate_limit as zoom_rate_limit
 from onyx.connectors.zoom.client import (
-    _API_BASE_URL,
     _MAX_PAGE_SIZE,
-    _OAUTH_TOKEN_URL,
+    MAX_LISTING_PAGES,
     ZoomClient,
     ZoomNotEntitledError,
-    _encode_meeting_identifier,
     _reject_non_zoom_download_url,
 )
+from onyx.connectors.zoom.connector import (
+    parse_plan_tier,
+    parse_rate_limit_percent,
+)
+from onyx.connectors.zoom.endpoints import (
+    API_BASE_URL as _API_BASE_URL,
+)
+from onyx.connectors.zoom.endpoints import (
+    OAUTH_TOKEN_URL as _OAUTH_TOKEN_URL,
+)
+from onyx.connectors.zoom.endpoints import (
+    encode_identifier as _encode_meeting_identifier,
+)
 from onyx.connectors.zoom.models import ZoomTranscript
+from onyx.connectors.zoom.rate_limit import (
+    _MAX_NO_ANSWER_SLEEPS,
+    _MAX_RATE_LIMIT_SLEEPS,
+    _MAX_RETRY_SLEEP_SECONDS,
+    _MAX_SERVER_ERROR_SLEEPS,
+    _RATE_LIMIT_PERIOD_SECONDS,
+    DEFAULT_RATE_LIMIT_SHARE,
+    MIN_RATE_LIMIT_PERCENT,
+    ZoomPlanTier,
+    ZoomRateLimitError,
+    ZoomRateLimitSettings,
+    ZoomRateLimitTier,
+    _pacing_window,
+    _tier_calls_per_second,
+)
+from onyx.connectors.zoom.recordings.models import fails_the_whole_run
 
 _ZOOM_DOWNLOAD_URL = "https://zoom.us/rec/download/abc.vtt"
 
@@ -139,6 +169,16 @@ _DOCUMENTED_PANELIST = {
 }
 
 
+# The pacing test asserts which tier ran the call, not what the client parsed,
+# so one body has to satisfy whichever model the endpoint builds. Pydantic drops
+# fields a model does not declare, so the documented examples merge cleanly.
+_ANY_SESSION_PAYLOAD = {
+    **_DOCUMENTED_TRANSCRIPT,
+    **_DOCUMENTED_PAST_MEETING,
+    **_DOCUMENTED_WEBINAR,
+}
+
+
 def _transcript(**overrides: Any) -> ZoomTranscript:
     """Most fields are required, so a readiness case has to start from a whole
     response rather than the two fields it exercises.
@@ -162,8 +202,13 @@ def _response(
     return response
 
 
-def _client() -> ZoomClient:
-    client = ZoomClient(account_id="acct", client_id="cid", client_secret="secret")
+def _client(settings: ZoomRateLimitSettings | None = None) -> ZoomClient:
+    client = ZoomClient(
+        account_id="acct",
+        client_id="cid",
+        client_secret="secret",
+        rate_limit_settings=settings,
+    )
     client._access_token = "tok"
     client._token_expires_at = float("inf")
     return client
@@ -268,7 +313,7 @@ class TestStaleTokenIsRetried:
         )
         client._session.request.side_effect = [_response(401), _response(200, {})]
 
-        response = client._request("GET", "/anything")
+        response = client._get(zoom_endpoints.MEETING_TRANSCRIPT, "1")
 
         assert response.status_code == 200
         assert client._session.request.call_count == 2
@@ -287,7 +332,7 @@ class TestStaleTokenIsRetried:
         client._session.request.return_value = _response(401)
 
         with pytest.raises(CredentialExpiredError):
-            client._request("GET", "/anything")
+            client._get(zoom_endpoints.MEETING_TRANSCRIPT, "1")
 
         assert client._session.request.call_count == 2
 
@@ -331,14 +376,16 @@ class TestRetryPolicy:
         [_API_BASE_URL, _OAUTH_TOKEN_URL, _ZOOM_DOWNLOAD_URL],
         ids=["api", "token", "download"],
     )
-    def test_every_zoom_host_retries(self, url: str) -> None:
-        # Mounting per URL left the download host on the no-retry default.
+    def test_no_zoom_host_re_sends_below_the_pacer(self, url: str) -> None:
         client = ZoomClient(account_id="a", client_id="c", client_secret="s")
 
         adapter = client._session.get_adapter(url)
         assert isinstance(adapter, HTTPAdapter)
-        assert adapter.max_retries.total == 5
-        assert 429 in adapter.max_retries.status_forcelist
+        retry = adapter.max_retries
+        assert retry.total == 0
+        for status in (429, 500, 502, 503, 504):
+            assert not retry.is_retry("GET", status, has_retry_after=True)
+            assert not retry.is_retry("GET", status, has_retry_after=False)
 
 
 class TestRequestErrorMapping:
@@ -348,17 +395,17 @@ class TestRequestErrorMapping:
         client._session.request.return_value = _response(403)
 
         with pytest.raises(InsufficientPermissionsError) as exc:
-            client._request("GET", "/meetings/1/transcript")
+            client._get(zoom_endpoints.MEETING_TRANSCRIPT, "1")
 
         # The message has to name the endpoint, since the fix is a scope change.
-        assert "/meetings/1/transcript" in str(exc.value)
+        assert zoom_endpoints.MEETING_TRANSCRIPT.operation in str(exc.value)
 
     def test_bearer_token_is_attached(self) -> None:
         client = _client()
         client._session = MagicMock()
         client._session.request.return_value = _response(200)
 
-        client._request("GET", "/anything")
+        client._get(zoom_endpoints.MEETING_TRANSCRIPT, "1")
 
         headers = client._session.request.call_args.kwargs["headers"]
         assert headers["Authorization"] == "Bearer tok"
@@ -1032,8 +1079,11 @@ class TestZoomErrorMessages:
         response.json.side_effect = ValueError("not json")
         client._session.request.return_value = response
 
-        with pytest.raises(requests.HTTPError):
-            client.list_past_meeting_occurrences("111")
+        # A 5xx is sent again before it reaches the caller, and this test is
+        # about the message, not the waiting.
+        with patch("onyx.connectors.zoom.rate_limit.time.sleep"):
+            with pytest.raises(requests.HTTPError):
+                client.list_past_meeting_occurrences("111")
 
 
 class TestDownloadRedirects:
@@ -1295,3 +1345,616 @@ class TestListWebinarPanelists:
             client.list_webinar_panelists("222")
 
         assert not isinstance(caught.value, ZoomNotEntitledError)
+
+
+def _rate_limited(retry_after: str | None = None) -> MagicMock:
+    response = _response(429)
+    response.headers = {"Retry-After": retry_after} if retry_after else {}
+    return response
+
+
+def _client_answering(
+    *responses: MagicMock | Exception,
+) -> tuple[ZoomClient, MagicMock]:
+    client = _client()
+    session = MagicMock()
+    session.request.side_effect = list(responses)
+    client._session = session
+    return client, session
+
+
+class _FakeClock:
+    """rate_limit_builder measures its window with time.monotonic and waits with
+    time.sleep, so moving both together tests pacing without any real waiting."""
+
+    def __init__(self) -> None:
+        self.now = 1_000.0
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.now += seconds
+
+
+class TestRateLimitTiers:
+    """Every expectation below is the Rate Limit Label on that endpoint's own
+    page in Zoom's API reference."""
+
+    @pytest.mark.parametrize(
+        "call, expected_tier",
+        [
+            (lambda c: c.get_meeting_transcript("1"), ZoomRateLimitTier.MEDIUM),
+            (lambda c: c.get_past_meeting_details("1"), ZoomRateLimitTier.LIGHT),
+            (lambda c: c.list_past_meeting_occurrences("1"), ZoomRateLimitTier.MEDIUM),
+            (lambda c: c.get_webinar_details("1"), ZoomRateLimitTier.LIGHT),
+            (lambda c: c.list_past_webinar_occurrences("1"), ZoomRateLimitTier.LIGHT),
+            (lambda c: c.list_group_members("g"), ZoomRateLimitTier.MEDIUM),
+            (lambda c: c.list_users(), ZoomRateLimitTier.MEDIUM),
+            (
+                lambda c: c.list_user_recordings(
+                    "u", date(2024, 1, 1), date(2024, 2, 1)
+                ),
+                ZoomRateLimitTier.MEDIUM,
+            ),
+            (
+                lambda c: c.list_past_meeting_participants("uuid"),
+                ZoomRateLimitTier.MEDIUM,
+            ),
+            (
+                lambda c: c.list_past_webinar_participants("uuid"),
+                ZoomRateLimitTier.MEDIUM,
+            ),
+            (lambda c: c.list_meeting_registrants("1"), ZoomRateLimitTier.MEDIUM),
+            (lambda c: c.list_webinar_registrants("1"), ZoomRateLimitTier.MEDIUM),
+            (lambda c: c.list_meeting_invitees("1"), ZoomRateLimitTier.LIGHT),
+            (lambda c: c.list_webinar_panelists("1"), ZoomRateLimitTier.MEDIUM),
+            (
+                lambda c: c.download_transcript_vtt(_ZOOM_DOWNLOAD_URL),
+                ZoomRateLimitTier.MEDIUM,
+            ),
+        ],
+    )
+    @patch("onyx.connectors.zoom.client.validate_outbound_http_url")
+    def test_each_endpoint_is_paced_at_its_documented_tier(
+        self,
+        ssrf: MagicMock,  # noqa: ARG002
+        call: Any,
+        expected_tier: ZoomRateLimitTier,
+    ) -> None:
+        # Without this the download case resolves zoom.us for real, which fails
+        # wherever there is no DNS.
+        client = _client()
+        client._session = MagicMock()
+        used: list[ZoomRateLimitTier] = []
+
+        def record(
+            _description: str, tier: ZoomRateLimitTier, _send: Any
+        ) -> requests.Response:
+            used.append(tier)
+            return _response(200, _ANY_SESSION_PAYLOAD)
+
+        client._rate_limiter = MagicMock()
+        client._rate_limiter.call.side_effect = record
+
+        call(client)
+
+        assert used == [expected_tier]
+
+    def test_the_token_request_is_paced_too(self) -> None:
+        # The one call that cannot go through _send_authorized, so it is the
+        # one that silently escapes pacing if nobody checks.
+        client = ZoomClient(account_id="a", client_id="c", client_secret="s")
+        client._session = MagicMock()
+        client._rate_limiter = MagicMock()
+        client._rate_limiter.call.return_value = _response(
+            200, {"access_token": "tok", "expires_in": 3600}
+        )
+
+        client._fetch_access_token()
+
+        assert client._rate_limiter.call.call_count == 1
+
+    def test_the_budget_never_reaches_zero(self) -> None:
+        calls, period = _pacing_window(
+            _tier_calls_per_second(ZoomPlanTier.PRO, ZoomRateLimitTier.MEDIUM, 0.001)
+        )
+        assert calls == 1
+        assert 0 < period < float("inf")
+
+    @pytest.mark.parametrize(
+        "calls_per_second, expected",
+        [(0.2, (1, 5.0)), (0.8, (1, 1.25)), (1.0, (1, 1.0)), (20.0, (20, 1.0))],
+    )
+    def test_a_share_below_one_call_a_second_widens_the_window(
+        self, calls_per_second: float, expected: tuple[int, float]
+    ) -> None:
+        assert _pacing_window(calls_per_second) == expected
+
+    def test_the_smallest_share_an_admin_can_pick_is_honoured(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        clock = _FakeClock()
+        monkeypatch.setattr(rate_limit_wrapper, "time", clock)
+
+        # Pro medium is 20 calls a second, so 1 percent is one call every 5.
+        client = _client(
+            ZoomRateLimitSettings(
+                plan_tier=ZoomPlanTier.PRO,
+                share=parse_rate_limit_percent(MIN_RATE_LIMIT_PERCENT),
+            )
+        )
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200)
+
+        client._get(zoom_endpoints.MEETING_TRANSCRIPT, "1")
+        started = clock.now
+        client._get(zoom_endpoints.MEETING_TRANSCRIPT, "2")
+
+        assert clock.now - started >= 5.0
+
+    def test_a_share_of_nothing_is_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            ZoomRateLimitSettings(share=0)
+
+
+class TestRateLimitBackoff:
+    @pytest.fixture(autouse=True)
+    def _instant_pacing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # These tests spend more than one second of budget. Pacing is not what
+        # they are checking, and a real wait would be the slowest thing in the
+        # unit suite.
+        monkeypatch.setattr(rate_limit_wrapper, "time", _FakeClock())
+
+    def test_a_429_waits_as_long_as_zoom_asks(self) -> None:
+        client, _ = _client_answering(_rate_limited("3"), _response(200, {"users": []}))
+
+        with patch("onyx.connectors.zoom.rate_limit.time.sleep") as sleep:
+            page = client.list_users()
+
+        assert [c.args[0] for c in sleep.call_args_list] == [3.0]
+        assert page.users == []
+
+    def test_a_429_without_a_retry_after_backs_off_exponentially(self) -> None:
+        client, _ = _client_answering(
+            _rate_limited(), _rate_limited(), _response(200, {"users": []})
+        )
+
+        with patch("onyx.connectors.zoom.rate_limit.time.sleep") as sleep:
+            client.list_users()
+
+        assert [c.args[0] for c in sleep.call_args_list] == [2.0, 4.0]
+
+    def test_an_absurd_retry_after_is_capped(self) -> None:
+        client, _ = _client_answering(
+            _rate_limited("86400"), _response(200, {"users": []})
+        )
+
+        with patch("onyx.connectors.zoom.rate_limit.time.sleep") as sleep:
+            client.list_users()
+
+        assert [c.args[0] for c in sleep.call_args_list] == [_MAX_RETRY_SLEEP_SECONDS]
+
+    def test_sustained_throttling_gives_up_and_fails_the_whole_run(self) -> None:
+        client, session = _client_answering(
+            *[_rate_limited() for _ in range(_MAX_RATE_LIMIT_SLEEPS + 1)]
+        )
+
+        with patch("onyx.connectors.zoom.rate_limit.time.sleep"):
+            with pytest.raises(ZoomRateLimitError) as exc:
+                client.list_users()
+
+        assert session.request.call_count == _MAX_RATE_LIMIT_SLEEPS + 1
+        assert fails_the_whole_run(exc.value)
+
+    @pytest.mark.parametrize(
+        "error",
+        [
+            requests.ReadTimeout("timed out"),
+            requests.ConnectionError("reset"),
+            requests.exceptions.RetryError("gave up"),
+        ],
+    )
+    def test_a_request_zoom_never_answered_fails_the_whole_run(
+        self, error: Exception
+    ) -> None:
+        assert fails_the_whole_run(error)
+
+    def test_a_timeout_is_sent_again(self) -> None:
+        client, session = _client_answering(
+            requests.ReadTimeout("timed out"), _response(200, {"users": []})
+        )
+
+        with patch("onyx.connectors.zoom.rate_limit.time.sleep") as sleep:
+            page = client.list_users()
+
+        assert [c.args[0] for c in sleep.call_args_list] == [2.0]
+        assert session.request.call_count == 2
+        assert page.users == []
+
+    def test_a_request_that_never_left_is_not_sent_again(self) -> None:
+        client, session = _client_answering(
+            requests.exceptions.InvalidURL("bad url"), _response(200, {"users": []})
+        )
+
+        with patch("onyx.connectors.zoom.rate_limit.time.sleep") as sleep:
+            with pytest.raises(requests.exceptions.InvalidURL):
+                client.list_users()
+
+        assert session.request.call_count == 1
+        sleep.assert_not_called()
+
+    def test_a_sustained_timeout_reaches_the_caller(self) -> None:
+        client, session = _client_answering(
+            *[
+                requests.ReadTimeout("timed out")
+                for _ in range(_MAX_NO_ANSWER_SLEEPS + 1)
+            ]
+        )
+
+        with patch("onyx.connectors.zoom.rate_limit.time.sleep"):
+            with pytest.raises(requests.ReadTimeout) as exc:
+                client.list_users()
+
+        assert session.request.call_count == _MAX_NO_ANSWER_SLEEPS + 1
+        assert fails_the_whole_run(exc.value)
+
+    def test_a_timeout_does_not_spend_the_throttling_patience(self) -> None:
+        client, session = _client_answering(
+            *[requests.ReadTimeout("timed out") for _ in range(_MAX_NO_ANSWER_SLEEPS)],
+            *[_rate_limited() for _ in range(_MAX_RATE_LIMIT_SLEEPS + 1)],
+        )
+
+        with patch("onyx.connectors.zoom.rate_limit.time.sleep"):
+            with pytest.raises(ZoomRateLimitError):
+                client.list_users()
+
+        assert session.request.call_count == (
+            _MAX_NO_ANSWER_SLEEPS + _MAX_RATE_LIMIT_SLEEPS + 1
+        )
+
+    def test_a_server_error_is_sent_again(self) -> None:
+        client, session = _client_answering(
+            _response(502), _response(200, {"users": []})
+        )
+
+        with patch("onyx.connectors.zoom.rate_limit.time.sleep") as sleep:
+            page = client.list_users()
+
+        assert [c.args[0] for c in sleep.call_args_list] == [2.0]
+        assert session.request.call_count == 2
+        assert page.users == []
+
+    def test_a_server_error_after_throttling_still_gets_its_own_tries(self) -> None:
+        client, session = _client_answering(
+            *[_rate_limited() for _ in range(4)],
+            _response(502),
+            _response(200, {"users": []}),
+        )
+
+        with patch("onyx.connectors.zoom.rate_limit.time.sleep") as sleep:
+            page = client.list_users()
+
+        # The 502 starts its own backoff rather than inheriting the 429's.
+        assert [c.args[0] for c in sleep.call_args_list] == [2.0, 4.0, 8.0, 16.0, 2.0]
+        assert session.request.call_count == 6
+        assert page.users == []
+
+    def test_server_errors_do_not_spend_the_throttling_patience(self) -> None:
+        client, session = _client_answering(
+            *[_response(502) for _ in range(_MAX_SERVER_ERROR_SLEEPS)],
+            *[_rate_limited() for _ in range(_MAX_RATE_LIMIT_SLEEPS + 1)],
+        )
+
+        with patch("onyx.connectors.zoom.rate_limit.time.sleep"):
+            with pytest.raises(ZoomRateLimitError):
+                client.list_users()
+
+        assert session.request.call_count == (
+            _MAX_SERVER_ERROR_SLEEPS + _MAX_RATE_LIMIT_SLEEPS + 1
+        )
+
+    def test_a_sustained_server_error_fails_the_whole_run(self) -> None:
+        client, session = _client_answering(
+            *[_response(502) for _ in range(_MAX_SERVER_ERROR_SLEEPS + 1)]
+        )
+
+        with patch("onyx.connectors.zoom.rate_limit.time.sleep"):
+            with pytest.raises(requests.HTTPError) as exc:
+                client.list_users()
+
+        assert session.request.call_count == _MAX_SERVER_ERROR_SLEEPS + 1
+        assert fails_the_whole_run(exc.value)
+
+
+class TestPacing:
+    def test_a_call_over_the_budget_waits_for_the_window_to_free(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        clock = _FakeClock()
+        monkeypatch.setattr(rate_limit_wrapper, "time", clock)
+        # One call per second makes the wait unmistakable.
+        monkeypatch.setattr(
+            zoom_rate_limit,
+            "_PLAN_CALLS_PER_SECOND",
+            {plan: {tier: 1 for tier in ZoomRateLimitTier} for plan in ZoomPlanTier},
+        )
+
+        client = _client(ZoomRateLimitSettings(share=1.0))
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200)
+
+        client._get(zoom_endpoints.MEETING_TRANSCRIPT, "1")
+        started = clock.now
+        client._get(zoom_endpoints.MEETING_TRANSCRIPT, "2")
+
+        assert clock.now - started >= _RATE_LIMIT_PERIOD_SECONDS
+
+    def test_a_send_again_waits_for_its_own_slot(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # urllib3's first retry has no backoff at all, so a re-send inside one
+        # paced call spent two requests on a single slot.
+        clock = _FakeClock()
+        monkeypatch.setattr(rate_limit_wrapper, "time", clock)
+        monkeypatch.setattr(
+            zoom_rate_limit,
+            "_PLAN_CALLS_PER_SECOND",
+            {plan: {tier: 1 for tier in ZoomRateLimitTier} for plan in ZoomPlanTier},
+        )
+
+        client = _client(ZoomRateLimitSettings(share=1.0))
+        session = MagicMock()
+        session.request.side_effect = [_response(502), _response(200, {"users": []})]
+        client._session = session
+
+        started = clock.now
+        with patch("onyx.connectors.zoom.rate_limit.time.sleep"):
+            client.list_users()
+
+        assert session.request.call_count == 2
+        assert clock.now - started >= _RATE_LIMIT_PERIOD_SECONDS
+
+    def test_a_timeout_sent_again_waits_for_its_own_slot(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        clock = _FakeClock()
+        monkeypatch.setattr(rate_limit_wrapper, "time", clock)
+        monkeypatch.setattr(
+            zoom_rate_limit,
+            "_PLAN_CALLS_PER_SECOND",
+            {plan: {tier: 1 for tier in ZoomRateLimitTier} for plan in ZoomPlanTier},
+        )
+
+        client = _client(ZoomRateLimitSettings(share=1.0))
+        session = MagicMock()
+        session.request.side_effect = [
+            requests.ReadTimeout("timed out"),
+            _response(200, {"users": []}),
+        ]
+        client._session = session
+
+        started = clock.now
+        with patch("onyx.connectors.zoom.rate_limit.time.sleep"):
+            client.list_users()
+
+        assert session.request.call_count == 2
+        assert clock.now - started >= _RATE_LIMIT_PERIOD_SECONDS
+
+    def test_the_tiers_are_paced_separately(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Zoom gives each label its own allowance, so a light call must not be
+        # held up by the medium calls a backfill is already making.
+        clock = _FakeClock()
+        monkeypatch.setattr(rate_limit_wrapper, "time", clock)
+        monkeypatch.setattr(
+            zoom_rate_limit,
+            "_PLAN_CALLS_PER_SECOND",
+            {plan: {tier: 1 for tier in ZoomRateLimitTier} for plan in ZoomPlanTier},
+        )
+
+        client = _client(ZoomRateLimitSettings(share=1.0))
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200)
+
+        client._get(zoom_endpoints.MEETING_TRANSCRIPT, "1")
+        started = clock.now
+        client._get(zoom_endpoints.PAST_MEETING_DETAILS, "1")
+
+        assert clock.now == started
+
+
+class TestPlanTier:
+    @pytest.mark.parametrize(
+        "configured, expected",
+        [
+            (None, ZoomPlanTier.PRO),
+            ("", ZoomPlanTier.PRO),
+            ("   ", ZoomPlanTier.PRO),
+            ("pro", ZoomPlanTier.PRO),
+            ("business_plus", ZoomPlanTier.BUSINESS_PLUS),
+            ("  Business_Plus  ", ZoomPlanTier.BUSINESS_PLUS),
+        ],
+    )
+    def test_a_plan_is_parsed_leniently_and_blank_means_pro(
+        self, configured: str | None, expected: ZoomPlanTier
+    ) -> None:
+        assert parse_plan_tier(configured) == expected
+
+    def test_an_unknown_plan_is_rejected_and_names_the_valid_ones(self) -> None:
+        with pytest.raises(ValueError) as exc:
+            parse_plan_tier("enterprise")
+
+        assert "business_plus" in str(exc.value)
+
+    @pytest.mark.parametrize(
+        "tier", [ZoomRateLimitTier.LIGHT, ZoomRateLimitTier.MEDIUM]
+    )
+    def test_business_plus_gets_a_bigger_budget_than_pro(
+        self, tier: ZoomRateLimitTier
+    ) -> None:
+        assert _tier_calls_per_second(
+            ZoomPlanTier.BUSINESS_PLUS, tier, 0.25
+        ) > _tier_calls_per_second(ZoomPlanTier.PRO, tier, 0.25)
+
+    @pytest.mark.parametrize(
+        "plan, expect_a_wait",
+        [(ZoomPlanTier.PRO, True), (ZoomPlanTier.BUSINESS_PLUS, False)],
+        ids=["pro waits", "business does not"],
+    )
+    def test_the_configured_plan_reaches_the_pacer(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        plan: ZoomPlanTier,
+        expect_a_wait: bool,
+    ) -> None:
+        clock = _FakeClock()
+        monkeypatch.setattr(rate_limit_wrapper, "time", clock)
+        monkeypatch.setattr(
+            zoom_rate_limit,
+            "_PLAN_CALLS_PER_SECOND",
+            {
+                ZoomPlanTier.PRO: {tier: 1 for tier in ZoomRateLimitTier},
+                ZoomPlanTier.BUSINESS_PLUS: {tier: 2 for tier in ZoomRateLimitTier},
+            },
+        )
+
+        client = _client(ZoomRateLimitSettings(plan_tier=plan, share=1.0))
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200)
+
+        client._get(zoom_endpoints.MEETING_TRANSCRIPT, "1")
+        started = clock.now
+        client._get(zoom_endpoints.MEETING_TRANSCRIPT, "2")
+
+        assert (clock.now > started) is expect_a_wait
+
+
+class TestRateLimitPercent:
+    @pytest.mark.parametrize(
+        "percent, expected_share",
+        [
+            (None, DEFAULT_RATE_LIMIT_SHARE),
+            (25, 0.25),
+            (1, 0.01),
+            (100, 1.0),
+        ],
+    )
+    def test_a_percent_becomes_a_share_and_blank_takes_the_default(
+        self, percent: int | None, expected_share: float
+    ) -> None:
+        assert parse_rate_limit_percent(percent) == expected_share
+
+    @pytest.mark.parametrize("percent", [0, -5, 101])
+    def test_a_percent_outside_the_range_is_rejected(self, percent: int) -> None:
+        with pytest.raises(ValueError):
+            parse_rate_limit_percent(percent)
+
+    @pytest.mark.parametrize("percent", ["50", "", [50], {"percent": 50}])
+    def test_a_percent_that_is_not_a_number_is_rejected(self, percent: Any) -> None:
+        with pytest.raises(ValueError):
+            parse_rate_limit_percent(percent)
+
+    @pytest.mark.parametrize("percent", [True, False])
+    def test_a_boolean_percent_is_rejected(self, percent: bool) -> None:
+        # bool is an int in Python, so True would pass the range check as 1.
+        with pytest.raises(ValueError):
+            parse_rate_limit_percent(percent)
+
+    def test_a_configured_share_overrides_the_default(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        clock = _FakeClock()
+        monkeypatch.setattr(rate_limit_wrapper, "time", clock)
+        monkeypatch.setattr(
+            zoom_rate_limit,
+            "_PLAN_CALLS_PER_SECOND",
+            {plan: {tier: 2 for tier in ZoomRateLimitTier} for plan in ZoomPlanTier},
+        )
+
+        # A full share would allow both calls; this connector's own share cuts
+        # the budget to one, so the second waits.
+        client = _client(ZoomRateLimitSettings(share=0.5))
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200)
+
+        client._get(zoom_endpoints.MEETING_TRANSCRIPT, "1")
+        started = clock.now
+        client._get(zoom_endpoints.MEETING_TRANSCRIPT, "2")
+
+        assert clock.now > started
+
+
+def _declared_endpoints() -> list[tuple[str, zoom_endpoints.ZoomEndpoint]]:
+    return [
+        (name, value)
+        for name, value in vars(zoom_endpoints).items()
+        if isinstance(value, zoom_endpoints.ZoomEndpoint)
+    ]
+
+
+class TestEndpointTable:
+    def test_every_webinar_endpoint_declares_the_add_on(self) -> None:
+        # A webinar endpoint that forgets this loses the add-on hint and the
+        # not-entitled handling, and still compiles and passes every test.
+        missing = [
+            name
+            for name, endpoint in _declared_endpoints()
+            if endpoint.path
+            and "webinar" in endpoint.path
+            and endpoint.requires is not zoom_endpoints.ZoomEntitlement.WEBINAR
+        ]
+
+        assert missing == []
+
+    def test_a_path_placeholder_is_matched_by_the_description(self) -> None:
+        # A row that names the identifier in one and not the other renders a
+        # literal "{identifier}" at runtime.
+        mismatched = [
+            name
+            for name, endpoint in _declared_endpoints()
+            if ("{identifier}" in (endpoint.path or ""))
+            != ("{identifier}" in endpoint.describes)
+        ]
+
+        assert mismatched == []
+
+
+class TestAccessListPagingGuards:
+    """An access list is drained in one call, so a cursor Zoom never ends would
+    spin the worker forever. Celery runs these in a thread pool, where its time
+    limits are silently disabled, so nothing outside would stop it."""
+
+    @pytest.fixture(autouse=True)
+    def _instant_pacing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(rate_limit_wrapper, "time", _FakeClock())
+
+    def test_a_repeated_cursor_stops_on_the_second_page(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            200, {"participants": [], "next_page_token": "stuck"}
+        )
+
+        with pytest.raises(ValueError) as caught:
+            client.list_past_meeting_participants("uuid-abc")
+
+        assert "stopped advancing" in str(caught.value)
+        # The point of the check is catching this before it spends the budget.
+        assert client._session.request.call_count == 2
+
+    def test_a_cursor_that_never_repeats_still_hits_the_page_cap(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        pages = iter(range(MAX_LISTING_PAGES + 10))
+        client._session.request.side_effect = [
+            _response(200, {"participants": [], "next_page_token": f"page-{n}"})
+            for n in pages
+        ]
+
+        with pytest.raises(ValueError) as caught:
+            client.list_past_meeting_participants("uuid-abc")
+
+        assert str(MAX_LISTING_PAGES) in str(caught.value)
+        assert client._session.request.call_count == MAX_LISTING_PAGES
