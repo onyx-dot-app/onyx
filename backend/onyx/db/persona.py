@@ -1,10 +1,9 @@
 from collections.abc import Sequence
 from datetime import datetime
-from enum import Enum
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import Select, func, not_, or_, select, update
+from sqlalchemy import Select, func, not_, select
 from sqlalchemy.orm import Session, aliased, selectinload
 
 from onyx.access.hierarchy_access import get_user_external_group_ids
@@ -78,12 +77,6 @@ def get_default_behavior_persona(
             selectinload(Persona.hierarchy_nodes),
         )
     return db_session.scalars(stmt).first()
-
-
-class PersonaLoadType(Enum):
-    NONE = "none"
-    MINIMAL = "minimal"
-    FULL = "full"
 
 
 def _add_user_filters(
@@ -1418,14 +1411,6 @@ def get_raw_personas_for_user(
     return db_session.scalars(stmt).all()
 
 
-def get_personas(db_session: Session) -> Sequence[Persona]:
-    """WARNING: Unsafe, can fetch personas from all users."""
-    stmt = select(Persona).distinct()
-    stmt = stmt.where(not_(Persona.name.startswith(SLACK_BOT_PERSONA_PREFIX)))
-    stmt = stmt.where(Persona.deleted.is_(False))
-    return db_session.execute(stmt).unique().scalars().all()
-
-
 def mark_persona_as_deleted(
     persona_id: int,
     user: User | None,
@@ -1453,19 +1438,6 @@ def mark_persona_as_not_deleted(
     affected_file_ids = [uf.id for uf in persona.user_files]
     if affected_file_ids:
         _mark_files_need_persona_sync(db_session, affected_file_ids)
-    db_session.commit()
-
-
-def mark_delete_persona_by_name(
-    persona_name: str, db_session: Session, is_default: bool = True
-) -> None:
-    stmt = (
-        update(Persona)
-        .where(Persona.name == persona_name, Persona.builtin_persona == is_default)
-        .values(deleted=True)
-    )
-
-    db_session.execute(stmt)
     db_session.commit()
 
 
@@ -1887,32 +1859,6 @@ def upsert_persona(
     return persona
 
 
-def delete_old_default_personas(
-    db_session: Session,
-) -> None:
-    """Note, this locks out the Summarize and Paraphrase personas for now
-    Need a more graceful fix later or those need to never have IDs.
-
-    This function is idempotent, so it can be run multiple times without issue.
-    """
-    OLD_SUFFIX = "_old"
-    stmt = (
-        update(Persona)
-        .where(
-            Persona.builtin_persona,
-            Persona.id > 0,
-            or_(
-                Persona.deleted.is_(False),
-                not_(Persona.name.endswith(OLD_SUFFIX)),
-            ),
-        )
-        .values(deleted=True, name=func.concat(Persona.name, OLD_SUFFIX))
-    )
-
-    db_session.execute(stmt)
-    db_session.commit()
-
-
 def update_persona_featured(
     persona_id: int,
     is_featured: bool,
@@ -2037,19 +1983,6 @@ def get_personas_by_ids(
     return db_session.scalars(stmt).all()
 
 
-def delete_persona_by_name(
-    persona_name: str, db_session: Session, is_default: bool = True
-) -> None:
-    stmt = (
-        update(Persona)
-        .where(Persona.name == persona_name, Persona.builtin_persona == is_default)
-        .values(deleted=True)
-    )
-
-    db_session.execute(stmt)
-    db_session.commit()
-
-
 def get_assistant_labels(db_session: Session) -> list[PersonaLabel]:
     return db_session.query(PersonaLabel).all()
 
@@ -2078,18 +2011,6 @@ def update_persona_label(
 def delete_persona_label(label_id: int, db_session: Session) -> None:
     db_session.query(PersonaLabel).filter(PersonaLabel.id == label_id).delete()
     db_session.commit()
-
-
-def persona_has_search_tool(persona_id: int, db_session: Session) -> bool:
-    persona = (
-        db_session.query(Persona)
-        .options(selectinload(Persona.tools))
-        .filter(Persona.id == persona_id)
-        .one_or_none()
-    )
-    if persona is None:
-        raise ValueError(f"Persona with ID {persona_id} does not exist")
-    return any(tool.in_code_tool_id == "run_search" for tool in persona.tools)
 
 
 def get_default_assistant(db_session: Session) -> Persona | None:

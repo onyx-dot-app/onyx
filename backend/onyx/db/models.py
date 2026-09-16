@@ -2709,13 +2709,6 @@ class IndexAttempt(Base):
     def is_finished(self) -> bool:
         return self.status.is_terminal()
 
-    def is_coordination_complete(self) -> bool:
-        """Check if all batches have been processed"""
-        return (
-            self.total_batches is not None
-            and self.completed_batches >= self.total_batches
-        )
-
 
 class PortAttempt(Base):
     """One attempt to port a cc_pair's chunks from PRESENT into the FUTURE index,
@@ -5547,12 +5540,6 @@ class UserProject(Base):
         "ChatSession", back_populates="project", lazy="selectin"
     )
     instructions: Mapped[str] = mapped_column(String)
-
-
-class UserDocument(str, Enum):
-    CHAT = "chat"
-    RECENT = "recent"
-    FILE = "file"
 
 
 class UserFile(Base):

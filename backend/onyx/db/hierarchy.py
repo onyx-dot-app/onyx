@@ -479,43 +479,6 @@ def link_hierarchy_nodes_to_documents(
     return len(nodes_to_update)
 
 
-def get_hierarchy_node_children(
-    db_session: Session,
-    parent_id: int,
-    limit: int = 100,
-    offset: int = 0,
-) -> list[HierarchyNode]:
-    """Get children of a hierarchy node, paginated."""
-    stmt = (
-        select(HierarchyNode)
-        .where(HierarchyNode.parent_id == parent_id)
-        .order_by(HierarchyNode.display_name)
-        .limit(limit)
-        .offset(offset)
-    )
-    return list(db_session.execute(stmt).scalars().all())
-
-
-def get_hierarchy_node_by_id(
-    db_session: Session,
-    node_id: int,
-) -> HierarchyNode | None:
-    """Get a hierarchy node by its database ID."""
-    return db_session.get(HierarchyNode, node_id)
-
-
-def get_root_hierarchy_nodes_for_source(
-    db_session: Session,
-    source: DocumentSource,
-) -> list[HierarchyNode]:
-    """Get all root-level hierarchy nodes for a source (children of SOURCE node)."""
-    source_node = get_source_hierarchy_node(db_session, source)
-    if not source_node:
-        return []
-
-    return get_hierarchy_node_children(db_session, source_node.id)
-
-
 def get_all_hierarchy_nodes_for_source(
     db_session: Session,
     source: DocumentSource,

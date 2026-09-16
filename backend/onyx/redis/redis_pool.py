@@ -162,13 +162,6 @@ class RedisPool:
         """
         return redis.Redis(connection_pool=self._pool, **_client_retry_kwargs())
 
-    def get_raw_replica_client(self) -> Redis:
-        """
-        Returns a Redis client with direct access to the replica connection pool,
-        without tenant prefixing.
-        """
-        return redis.Redis(connection_pool=self._replica_pool, **_client_retry_kwargs())
-
     @staticmethod
     def create_pool(
         host: str = REDIS_HOST,
@@ -349,19 +342,6 @@ def get_shared_redis_client() -> TenantRedisClient:
     return redis_pool.get_client(DEFAULT_REDIS_PREFIX)
 
 
-def get_shared_redis_replica_client() -> TenantRedisClient:
-    """
-    Returns a Redis replica client with a shared namespace prefix.
-
-    Similar to get_shared_redis_client(), but connects to a read replica when available.
-    Uses a common prefix for all keys, creating a shared namespace.
-
-    Use this for read-heavy operations on data that should be shared
-    across the application.
-    """
-    return redis_pool.get_replica_client(DEFAULT_REDIS_PREFIX)
-
-
 def get_raw_redis_client() -> Redis:
     """
     Returns a Redis client that doesn't apply tenant prefixing to keys.
@@ -373,19 +353,6 @@ def get_raw_redis_client() -> Redis:
     Warning: Be careful with this client as it bypasses tenant isolation.
     """
     return redis_pool.get_raw_client()
-
-
-def get_raw_redis_replica_client() -> Redis:
-    """
-    Returns a Redis replica client that doesn't apply tenant prefixing to keys.
-
-    Similar to get_raw_redis_client(), but connects to a read replica when available.
-    Use this for read-heavy operations that need direct Redis access without
-    tenant isolation or key prefixing.
-
-    Warning: Be careful with this client as it bypasses tenant isolation.
-    """
-    return redis_pool.get_raw_replica_client()
 
 
 # Async Redis connections are cached PER EVENT LOOP, not globally. redis-py binds

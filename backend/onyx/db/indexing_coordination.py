@@ -164,13 +164,12 @@ class IndexingCoordination:
         """
         Update batch completion and document counts atomically.
         Returns (completed_batches, total_batches).
-        This extends the existing update_docs_indexed pattern.
         """
         try:
             attempt = db_session.execute(
                 select(IndexAttempt)
                 .where(IndexAttempt.id == index_attempt_id)
-                .with_for_update()  # Same pattern as existing update_docs_indexed
+                .with_for_update()
             ).scalar_one()
 
             # Existing document count updates

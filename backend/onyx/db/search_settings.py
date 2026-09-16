@@ -258,23 +258,6 @@ def update_current_search_settings(
     logger.info("Current search settings updated successfully")
 
 
-def update_secondary_search_settings(
-    db_session: Session,
-    search_settings: SavedSearchSettings,
-    preserved_fields: list[str] = PRESERVED_SEARCH_FIELDS,
-) -> None:
-    secondary_settings = get_secondary_search_settings(db_session)
-    if not secondary_settings:
-        logger.warning("No secondary search settings found to update")
-        return
-
-    preserved_fields = PRESERVED_SEARCH_FIELDS
-    update_search_settings(secondary_settings, search_settings, preserved_fields)
-
-    db_session.commit()
-    logger.info("Secondary search settings updated successfully")
-
-
 def update_search_settings_status(
     search_settings: SearchSettings, new_status: IndexModelStatus, db_session: Session
 ) -> None:

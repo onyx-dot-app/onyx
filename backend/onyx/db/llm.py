@@ -8,7 +8,6 @@ from onyx.auth.permissions import Permission, has_global_permission
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.models import CloudEmbeddingProvider as CloudEmbeddingProviderModel
 from onyx.db.models import (
-    DocumentSet,
     ImageGenerationConfig,
     LLMModelFlow,
     LLMProvider__Persona,
@@ -21,7 +20,6 @@ from onyx.db.models import (
     UserGroup,
 )
 from onyx.db.models import LLMProvider as LLMProviderModel
-from onyx.db.models import Tool as ToolModel
 from onyx.db.persona import get_raw_personas_for_user
 from onyx.db.user_group import assert_not_shared_with_default_group
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -675,20 +673,6 @@ def fetch_existing_embedding_providers(
     db_session: Session,
 ) -> list[CloudEmbeddingProviderModel]:
     return list(db_session.scalars(select(CloudEmbeddingProviderModel)).all())
-
-
-def fetch_existing_doc_sets(
-    db_session: Session, doc_ids: list[int]
-) -> list[DocumentSet]:
-    return list(
-        db_session.scalars(select(DocumentSet).where(DocumentSet.id.in_(doc_ids))).all()
-    )
-
-
-def fetch_existing_tools(db_session: Session, tool_ids: list[int]) -> list[ToolModel]:
-    return list(
-        db_session.scalars(select(ToolModel).where(ToolModel.id.in_(tool_ids))).all()
-    )
 
 
 def fetch_existing_models(

@@ -638,21 +638,6 @@ def update_external_app(
     return app
 
 
-def set_external_app_organization_credentials(
-    db_session: Session,
-    app: ExternalApp,
-    organization_credentials: dict[str, str],
-) -> None:
-    """Replace an app's organization credentials (flush only — the caller
-    commits). Used by the Onyx-managed provisioning/rotation path — deliberately
-    touches nothing else (skill preferences, policies, gateway config are left
-    untouched)."""
-    # EncryptedJson column accepts a plain dict and encrypts on write (same
-    # assignment shape as update_external_app's masked-credential restore).
-    app.organization_credentials = organization_credentials  # ty: ignore[invalid-assignment]
-    db_session.flush()
-
-
 def _write_policies__no_commit(
     db_session: Session,
     app: ExternalApp,

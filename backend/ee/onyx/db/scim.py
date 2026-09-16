@@ -505,37 +505,6 @@ class ScimDAL(DAL):
             )
         )
 
-    def list_group_mappings(
-        self,
-        start_index: int = 1,
-        count: int = 100,
-    ) -> tuple[list[ScimGroupMapping], int]:
-        """List group mappings with SCIM-style pagination.
-
-        Args:
-            start_index: 1-based start index (SCIM convention).
-            count: Maximum number of results to return.
-
-        Returns:
-            A tuple of (mappings, total_count).
-        """
-        total = (
-            self._session.scalar(select(func.count()).select_from(ScimGroupMapping))
-            or 0
-        )
-
-        offset = max(start_index - 1, 0)
-        mappings = list(
-            self._session.scalars(
-                select(ScimGroupMapping)
-                .order_by(ScimGroupMapping.id)
-                .offset(offset)
-                .limit(count)
-            ).all()
-        )
-
-        return mappings, total
-
     def delete_group_mapping(self, mapping_id: int) -> None:
         """Delete a group mapping by ID. No-op if already deleted."""
         mapping = self._session.get(ScimGroupMapping, mapping_id)

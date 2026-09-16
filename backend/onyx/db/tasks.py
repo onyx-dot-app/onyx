@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import desc, func, select
+from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import delete
 
@@ -16,23 +16,6 @@ def get_latest_task(
     stmt = (
         select(TaskQueueState)
         .where(TaskQueueState.task_name == task_name)
-        .order_by(desc(TaskQueueState.id))
-        .limit(1)
-    )
-
-    result = db_session.execute(stmt)
-    latest_task = result.scalars().first()
-
-    return latest_task
-
-
-def get_latest_task_by_type(
-    task_name: str,
-    db_session: Session,
-) -> TaskQueueState | None:
-    stmt = (
-        select(TaskQueueState)
-        .where(TaskQueueState.task_name.like(f"%{task_name}%"))
         .order_by(desc(TaskQueueState.id))
         .limit(1)
     )
@@ -114,31 +97,6 @@ def mark_task_as_finished_with_id(
         raise RuntimeError(f"A task with the task-id {task_id=} does not exist")
 
     task.status = TaskStatus.SUCCESS if success else TaskStatus.FAILURE
-    db_session.commit()
-
-
-def mark_task_start(
-    task_name: str,
-    db_session: Session,
-) -> None:
-    task = get_latest_task(task_name, db_session)
-    if not task:
-        raise ValueError(f"No task found with name {task_name}")
-
-    task.start_time = func.now()
-    db_session.commit()
-
-
-def mark_task_finished(
-    task_name: str,
-    db_session: Session,
-    success: bool = True,
-) -> None:
-    latest_task = get_latest_task(task_name, db_session)
-    if latest_task is None:
-        raise ValueError(f"tasks for {task_name} do not exist")
-
-    latest_task.status = TaskStatus.SUCCESS if success else TaskStatus.FAILURE
     db_session.commit()
 
 
