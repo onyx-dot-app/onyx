@@ -805,9 +805,14 @@ class LitellmLLM(LLM):
             required_kwarg_keys = frozenset({"reasoning_effort"})
             _log_chat_completions_tools_disable_reasoning(model, self._api_base)
 
-        sends_explicit_reasoning_none = reasoning_effort is ReasoningEffort.OFF and any(
-            openai_model_supports_reasoning_none(self.config.model_provider, name)
-            for name in model_identity_names
+        # The tools block above already forced reasoning_effort "none".
+        sends_explicit_reasoning_none = (
+            reasoning_effort is ReasoningEffort.OFF
+            and "reasoning_effort" not in optional_kwargs
+            and any(
+                openai_model_supports_reasoning_none(name)
+                for name in model_identity_names
+            )
         )
 
         # Note, there is a reasoning_effort parameter in LiteLLM but it is completely jank and does not work for any
@@ -850,8 +855,13 @@ class LitellmLLM(LLM):
                     )
                 if send_reasoning:
                     optional_kwargs["reasoning"] = openai_style_reasoning
-                    if sends_explicit_reasoning_none:
+                    if (
+                        sends_explicit_reasoning_none
+                        and self.config.model_provider == LlmProviderNames.OPENAI
+                    ):
                         # A retry without "none" runs at the medium default.
+                        # Gateways may reject "none", so only OpenAI itself
+                        # pins it.
                         required_kwarg_keys = required_kwarg_keys | {"reasoning"}
 
             elif reasoning_style in (
@@ -921,6 +931,8 @@ class LitellmLLM(LLM):
                     # picker greys the level out for these models, so reaching
                     # here means a stored override outliving a model switch.
                     optional_kwargs["reasoning_effort"] = ReasoningEffort.HIGH.value
+                elif reasoning_effort is ReasoningEffort.OFF:
+                    optional_kwargs["reasoning_effort"] = _OPENAI_REASONING_NONE
                 else:
                     optional_kwargs["reasoning_effort"] = ReasoningEffort.MEDIUM.value
 

@@ -12,6 +12,7 @@ from onyx.llm.model_capabilities import openai_model_supports_reasoning_none
 from onyx.llm.models import ReasoningEffort, UserMessage
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.well_known_providers.constants import (
+    BIFROST_API_MODE_CHAT_COMPLETIONS,
     BIFROST_API_MODE_CONFIG_KEY,
     BIFROST_API_MODE_RESPONSES,
 )
@@ -23,6 +24,16 @@ from onyx.secondary_llm_flows.query_expansion import (
 from onyx.tools.models import ChatMinimalTextMessage
 
 _COMPLETION = "onyx.llm.litellm_singleton.litellm.completion"
+
+_TOOLS: list[dict[str, Any]] = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    }
+]
 
 
 def _llm(
@@ -39,11 +50,15 @@ def _llm(
     )
 
 
-def _sent_kwargs(llm: LitellmLLM, effort: ReasoningEffort) -> dict[str, Any]:
+def _sent_kwargs(
+    llm: LitellmLLM,
+    effort: ReasoningEffort,
+    tools: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     with patch(_COMPLETION) as completion:
         llm._completion(
             prompt=[UserMessage(content="hello")],
-            tools=None,
+            tools=tools,
             tool_choice=None,
             stream=False,
             parallel_tool_calls=False,
@@ -104,7 +119,7 @@ def test_off_keeps_temperature_unchanged() -> None:
     assert off["temperature"] == low["temperature"]
 
 
-@pytest.mark.parametrize("model_name", ["gpt-5.4", "o3", "gpt-5"])
+@pytest.mark.parametrize("model_name", ["gpt-5", "gpt-5-mini", "o3", "gpt-5.5-pro"])
 def test_off_still_omits_reasoning_for_other_native_openai_models(
     model_name: str,
 ) -> None:
@@ -113,35 +128,144 @@ def test_off_still_omits_reasoning_for_other_native_openai_models(
     assert "reasoning_effort" not in kwargs
 
 
-def test_off_still_omits_reasoning_for_sol_on_other_providers() -> None:
+def test_off_sends_explicit_none_on_azure() -> None:
     azure = _llm(
         "gpt-5.6-sol",
         model_provider=LlmProviderNames.AZURE,
         api_base="https://example.openai.azure.com",
         api_version="2025-04-01-preview",
     )
+    kwargs = _sent_kwargs(azure, ReasoningEffort.OFF)
+    assert kwargs["model"] == "azure/responses/gpt-5.6-sol"
+    assert kwargs["reasoning"] == {"effort": "none"}
+    assert "reasoning_effort" not in kwargs
+
+
+def test_off_sends_explicit_none_on_litellm_proxy() -> None:
+    proxy = _llm(
+        "gpt-5.6-sol",
+        model_provider=LlmProviderNames.LITELLM_PROXY,
+        api_base="https://proxy.example",
+    )
+    kwargs = _sent_kwargs(proxy, ReasoningEffort.OFF)
+    assert kwargs["model"] == "litellm_proxy/responses/gpt-5.6-sol"
+    assert kwargs["reasoning"] == {"effort": "none"}
+
+
+def test_off_sends_explicit_none_on_bifrost_chat_completions() -> None:
+    bifrost = _llm(
+        "openai/gpt-5.6-sol",
+        model_provider=LlmProviderNames.BIFROST,
+        api_base="https://bifrost.example/v1",
+        custom_config={BIFROST_API_MODE_CONFIG_KEY: BIFROST_API_MODE_CHAT_COMPLETIONS},
+    )
+    kwargs = _sent_kwargs(bifrost, ReasoningEffort.OFF)
+    assert kwargs["reasoning"] == {"effort": "none"}
+    assert "reasoning_effort" not in kwargs
+
+
+def test_off_sends_explicit_none_on_bifrost_responses() -> None:
     bifrost = _llm(
         "openai/gpt-5.6-sol",
         model_provider=LlmProviderNames.BIFROST,
         api_base="https://bifrost.example/v1",
         custom_config={BIFROST_API_MODE_CONFIG_KEY: BIFROST_API_MODE_RESPONSES},
     )
-    for llm in (azure, bifrost):
-        kwargs = _sent_kwargs(llm, ReasoningEffort.OFF)
-        assert "reasoning" not in kwargs
-        assert "reasoning_effort" not in kwargs
+    kwargs = _sent_kwargs(bifrost, ReasoningEffort.OFF)
+    assert kwargs["reasoning"] == {"effort": "none"}
 
 
-def test_capability_is_provider_and_model_gated() -> None:
-    assert openai_model_supports_reasoning_none(LlmProviderNames.OPENAI, "gpt-5.6")
-    assert openai_model_supports_reasoning_none(
-        LlmProviderNames.OPENAI, "openai/gpt-5.6-sol"
+def test_off_sends_explicit_none_on_openrouter() -> None:
+    openrouter = _llm(
+        "openai/gpt-5.6-sol",
+        model_provider=LlmProviderNames.OPENROUTER,
     )
-    assert not openai_model_supports_reasoning_none(
-        LlmProviderNames.OPENAI, "gpt-5.6-sol-01-ptu"
+    kwargs = _sent_kwargs(openrouter, ReasoningEffort.OFF)
+    assert kwargs["reasoning_effort"] == "none"
+    assert "reasoning" not in kwargs
+
+
+def test_off_sends_explicit_none_on_openai_compatible() -> None:
+    compatible = _llm(
+        "gpt-5.6-sol",
+        model_provider=LlmProviderNames.OPENAI_COMPATIBLE,
+        api_base="https://llm.example/v1",
     )
-    assert not openai_model_supports_reasoning_none(LlmProviderNames.OPENAI, "gpt-5.4")
-    assert not openai_model_supports_reasoning_none(LlmProviderNames.AZURE, "gpt-5.6")
+    kwargs = _sent_kwargs(compatible, ReasoningEffort.OFF)
+    assert kwargs["reasoning"] == {"effort": "none"}
+
+
+def test_bifrost_chat_tools_off_sends_only_reasoning_effort_none() -> None:
+    bifrost = _llm(
+        "openai/gpt-5.6-sol",
+        model_provider=LlmProviderNames.BIFROST,
+        api_base="https://bifrost.example/v1",
+        custom_config={BIFROST_API_MODE_CONFIG_KEY: BIFROST_API_MODE_CHAT_COMPLETIONS},
+    )
+    kwargs = _sent_kwargs(bifrost, ReasoningEffort.OFF, tools=_TOOLS)
+    assert kwargs["reasoning_effort"] == "none"
+    assert "reasoning" not in kwargs
+
+
+def test_gateway_none_is_strippable_on_rejection() -> None:
+    calls: list[dict[str, Any]] = []
+
+    def completion(**kwargs: Any) -> Any:
+        calls.append(kwargs)
+        if "reasoning" in kwargs:
+            raise BadRequestError(
+                message="Unsupported value for reasoning.effort",
+                model="m",
+                llm_provider="azure",
+            )
+        return None
+
+    azure = _llm(
+        "gpt-5.6-sol",
+        model_provider=LlmProviderNames.AZURE,
+        api_base="https://example.openai.azure.com",
+        api_version="2025-04-01-preview",
+    )
+    with patch(_COMPLETION, side_effect=completion):
+        azure._completion(
+            prompt=[UserMessage(content="hello")],
+            tools=None,
+            tool_choice=None,
+            stream=False,
+            parallel_tool_calls=False,
+            reasoning_effort=ReasoningEffort.OFF,
+        )
+
+    assert len(calls) == 2
+    assert calls[0]["reasoning"] == {"effort": "none"}
+    assert "reasoning" not in calls[1]
+
+
+def test_azure_alias_unknown_to_registry_still_omits() -> None:
+    azure = _llm(
+        "gpt-5.6-sol-01-ptu",
+        model_provider=LlmProviderNames.AZURE,
+        api_base="https://example.openai.azure.com",
+        api_version="2025-04-01-preview",
+    )
+    kwargs = _sent_kwargs(azure, ReasoningEffort.OFF)
+    assert "reasoning" not in kwargs
+    assert "reasoning_effort" not in kwargs
+
+
+def test_capability_is_registry_gated() -> None:
+    assert openai_model_supports_reasoning_none("gpt-5.6")
+    assert openai_model_supports_reasoning_none("openai/gpt-5.6-sol")
+    assert openai_model_supports_reasoning_none("gpt-5.5")
+    assert openai_model_supports_reasoning_none("gpt-5.4")
+    assert openai_model_supports_reasoning_none("gpt-5.1")
+    assert not openai_model_supports_reasoning_none("gpt-5")
+    assert not openai_model_supports_reasoning_none("gpt-5-mini")
+    assert not openai_model_supports_reasoning_none("gpt-5.5-pro")
+    assert not openai_model_supports_reasoning_none("gpt-5-chat-latest")
+    assert not openai_model_supports_reasoning_none("gpt-6-astra")
+    assert not openai_model_supports_reasoning_none("gpt-5.6-sol-01-ptu")
+    assert not openai_model_supports_reasoning_none("o3")
 
 
 def test_explicit_none_survives_the_retry_ladder() -> None:
