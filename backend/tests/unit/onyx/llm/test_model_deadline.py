@@ -2,6 +2,7 @@
 
 import asyncio
 import threading
+from concurrent.futures import Future
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -22,6 +23,7 @@ from onyx.llm.multi_llm import LitellmLLM, LitellmTransport
 def test_deadline_interrupts_pending_provider_call(streaming: bool) -> None:
     cleaned_up = threading.Event()
     parent = CancellationSignal()
+    operations: list[Future[None]] = []
     client = LitellmLLM(
         LitellmTransport(
             api_key="test-key",
@@ -38,13 +40,19 @@ def test_deadline_interrupts_pending_provider_call(streaming: bool) -> None:
             cleaned_up.set()
 
     context = GenerationContext(cancellation=parent, total_timeout=0.05)
-    with patch("onyx.llm.litellm_singleton.litellm.acompletion", pending_response):
+    with (
+        parent.on_operation(operations.append),
+        patch("onyx.llm.litellm_singleton.litellm.acompletion", pending_response),
+    ):
         with pytest.raises(LLMTimeoutError, match="total timeout"):
             if streaming:
                 list(client.stream(GenerationRequest(), context))
             else:
                 client.invoke(GenerationRequest(), context)
     assert cleaned_up.is_set()
+    assert operations
+    for operation in operations:
+        operation.result(timeout=1)
     assert not parent.cancelled
 
 
@@ -109,14 +117,9 @@ def test_network_wait_expires_and_cancels_stalled_operation() -> None:
         finally:
             cleaned.set()
 
-    try:
-        with pytest.raises(LLMTimeoutError, match="operation timeout"):
-            network.call(pending(), None, timeout=0.02)
-        assert cleaned.wait(timeout=1)
-    finally:
-        network.loop.call_soon_threadsafe(network.loop.stop)
-        network.thread.join(timeout=1)
-        assert not network.thread.is_alive()
+    with pytest.raises(LLMTimeoutError, match="operation timeout"):
+        network.call(pending(), None, timeout=0.02)
+    assert cleaned.wait(timeout=1)
 
 
 def test_cleanup_failure_preserves_provider_error() -> None:
@@ -172,3 +175,47 @@ def test_cleanup_failure_preserves_cancellation() -> None:
             worker.join(timeout=2)
         assert not worker.is_alive()
         assert not errors
+
+
+def test_timed_out_provider_remains_owned_until_cleanup_finishes() -> None:
+    network = _NetworkLoop()
+    signal = CancellationSignal()
+    cleanup_started = threading.Event()
+    release_cleanup = asyncio.Event()
+    operations: list[Future[None]] = []
+
+    async def pending() -> None:
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cleanup_started.set()
+            await release_cleanup.wait()
+
+    with signal.on_operation(operations.append):
+        with pytest.raises(LLMTimeoutError, match="operation timeout"):
+            network.call(pending(), signal, timeout=0.02)
+    try:
+        assert cleanup_started.wait(timeout=1)
+        assert len(operations) == 1
+        assert not operations[0].done()
+        assert not operations[0].cancel()
+    finally:
+        network.loop.call_soon_threadsafe(release_cleanup.set)
+        operations[0].result(timeout=1)
+
+
+def test_deadline_uses_shared_io_loop() -> None:
+    from onyx.llm.multi_llm import _generation_scope
+
+    signal = CancellationSignal()
+    context = GenerationContext(cancellation=signal, total_timeout=0.02)
+    expired = threading.Event()
+    with patch(
+        "threading.Timer", side_effect=AssertionError("Unexpected timer thread")
+    ):
+        with _generation_scope(context) as generation:
+            with generation.on_cancel(expired.set):
+                assert expired.wait(timeout=1)
+            with pytest.raises(LLMTimeoutError):
+                generation.check()
+    assert not signal.cancelled

@@ -4,6 +4,7 @@ import os
 import threading
 import time
 from collections.abc import Generator, Iterable, Iterator, Mapping
+from concurrent.futures import Future
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from functools import lru_cache
 from typing import TYPE_CHECKING, cast
@@ -35,6 +36,7 @@ from onyx.llm.cancellation import (
     AgentCancelled,
     CancellableStream,
     CancellationSignal,
+    cancellation_deadline,
     cancellation_scope,
     check_cancelled,
     current_cancellation,
@@ -277,6 +279,10 @@ class _GenerationSignal(CancellationSignal):
             raise LLMTimeoutError("Model generation exceeded its total timeout")
         super().check()
 
+    def track_operation(self, completion: Future[None]) -> None:
+        self.parent.track_operation(completion)
+        super().track_operation(completion)
+
     def expire(self) -> None:
         self.expired.set()
         self.cancel()
@@ -291,15 +297,13 @@ def _generation_scope(context: GenerationContext) -> Iterator[CancellationSignal
             yield parent
         return
     signal = _GenerationSignal(parent)
-    timer = threading.Timer(context.total_timeout, signal.expire)
-    timer.daemon = True
-    with parent.on_cancel(signal.cancel), cancellation_scope(signal):
+    with (
+        parent.on_cancel(signal.cancel),
+        cancellation_scope(signal),
+        cancellation_deadline(context.total_timeout, signal.expire),
+    ):
         parent.check()
-        timer.start()
-        try:
-            yield signal
-        finally:
-            timer.cancel()
+        yield signal
 
 
 @contextmanager
@@ -1624,6 +1628,7 @@ class LitellmLLM(LLM):
         ):
             started = time.monotonic()
             first_action = False
+            request_params_sent = False
             signal.check()
             yield GenerationStartEvent(
                 message=accumulator.message.model_copy(deep=True)
@@ -1654,15 +1659,29 @@ class LitellmLLM(LLM):
                         )
                         first_action = True
                     for event in events:
-                        yield _event_with_request_params(event, operation)
+                        if (
+                            not request_params_sent
+                            and operation.request_params is not None
+                        ):
+                            event = _event_with_request_params(event, operation)
+                            request_params_sent = True
+                        yield event
                 signal.check()
                 for event in accumulator.end():
-                    yield _event_with_request_params(event, operation)
+                    yield (
+                        _event_with_request_params(event, operation)
+                        if event.type == "done"
+                        else event
+                    )
             except (Exception, AgentCancelled) as error:
                 accumulator.message.stop_reason = (
                     "aborted" if isinstance(error, AgentCancelled) else "error"
                 )
-                accumulator.message.error_message = str(error) or "Cancelled"
+                accumulator.message.error_message = (
+                    "Generation cancelled"
+                    if isinstance(error, AgentCancelled)
+                    else "Generation failed"
+                )
                 yield _event_with_request_params(
                     GenerationErrorEvent(
                         message=accumulator.message.model_copy(deep=True)

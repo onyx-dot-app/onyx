@@ -3,6 +3,7 @@ import collections.abc
 import concurrent.futures
 import contextvars
 import copy
+import os
 import threading
 import time
 import uuid
@@ -45,6 +46,31 @@ class ContextThreadPoolExecutor(ThreadPoolExecutor):
     ) -> Future[T]:
         context = contextvars.copy_context()
         return super().submit(lambda: context.run(fn, *args, **kwargs))
+
+
+class _BackgroundEventLoop:
+    def __init__(self) -> None:
+        self.pid = os.getpid()
+        self.loop = asyncio.new_event_loop()
+        start_thread_with_context(
+            self.loop.run_forever,
+            name="agent-io",
+            daemon=True,
+            context=contextvars.Context(),
+        )
+
+
+_background_event_loop: _BackgroundEventLoop | None = None
+_background_event_loop_lock = threading.Lock()
+
+
+def get_background_event_loop() -> asyncio.AbstractEventLoop:
+    """Share cancellable I/O scheduling without retaining a caller's tenant context."""
+    global _background_event_loop
+    with _background_event_loop_lock:
+        if _background_event_loop is None or _background_event_loop.pid != os.getpid():
+            _background_event_loop = _BackgroundEventLoop()
+        return _background_event_loop.loop
 
 
 class ThreadSafeDict(MutableMapping[KT, VT]):

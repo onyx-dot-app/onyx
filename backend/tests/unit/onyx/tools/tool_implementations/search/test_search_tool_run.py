@@ -1,7 +1,7 @@
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-from onyx.agents.tools import ToolInvocation, ToolProgress
+from onyx.agents.tools import ToolExecutionMode, ToolInvocation, ToolProgress
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import BaseFilters
 from onyx.llm.cancellation import CancellationSignal
@@ -346,3 +346,38 @@ def test_auto_detect_disabled_keeps_user_selected_filters() -> None:
     for applied in filters:
         assert applied is not None
         assert applied.source_type == restriction
+
+
+def test_agent_search_state_does_not_inherit_another_conversation() -> None:
+    original = _make_tool()
+    original._cached_expansion = ("first question", ["first"])
+    original._scope_decision_settled = True
+    original._time_filter_computed = True
+
+    separate = original.for_agent()
+    assert separate.document_index is original.document_index
+    assert separate.llm is original.llm
+    assert separate._cached_expansion is None
+    assert not separate._scope_decision_settled
+    assert not separate._time_filter_computed
+    separate._cached_expansion = ("second question", ["second"])
+    assert original._cached_expansion == ("first question", ["first"])
+
+
+def test_agent_search_instances_keep_scope_decisions_separate() -> None:
+    source = _make_tool()
+    first = source.for_agent()
+    second = source.for_agent()
+    first_scope = MagicMock(return_value=[DocumentSource.SLACK])
+    second_scope = MagicMock(return_value=[DocumentSource.GITHUB])
+    sources = [DocumentSource.SLACK, DocumentSource.GITHUB]
+
+    _run(first, connected_sources=sources, decide_mock=first_scope)
+    _run(second, connected_sources=sources, decide_mock=second_scope)
+    _run(first, connected_sources=sources, decide_mock=first_scope)
+
+    assert first_scope.call_count == 2
+    assert second_scope.call_count == 1
+    assert second_scope.call_args.args[3] == []
+    assert len(first_scope.call_args.args[3]) == 1
+    assert first.execution_mode == ToolExecutionMode.SEQUENTIAL

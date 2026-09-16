@@ -3,8 +3,9 @@
 from enum import Enum
 from typing import Literal
 
-from pydantic import AliasChoices, BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, JsonValue, model_validator
 
+from onyx.llm.exceptions import LLMErrorInfo
 from onyx.llm.models import AssistantMessage, Message, ToolCall, ToolResultMessage
 from onyx.utils.logger import setup_logger
 
@@ -19,6 +20,19 @@ class RunStatus(str, Enum):
     ERROR = "error"
 
 
+class RunFailureKind(str, Enum):
+    LLM = "llm"
+    LLM_TIMEOUT = "llm_timeout"
+    LLM_RATE_LIMIT = "llm_rate_limit"
+    EXECUTION = "execution"
+
+
+class RunFailure(BaseModel):
+    kind: RunFailureKind
+    message: str
+    llm_error: LLMErrorInfo | None = None
+
+
 class CompactionCheckpoint(BaseModel):
     summary: str
     covered_count: int = Field(gt=0)
@@ -26,25 +40,36 @@ class CompactionCheckpoint(BaseModel):
 
 
 class OperationSnapshot(BaseModel):
-    step_index: int = Field(validation_alias=AliasChoices("step_index", "turn"))
+    step_index: int
     message_index: int
     tool_call_id: str | None = None
     status: RunStatus
+
+
+class AgentConfiguration(BaseModel):
+    feature: str
+    settings: dict[str, JsonValue] = Field(default_factory=dict)
 
 
 class AgentTranscript(BaseModel):
     """Storage-safe run record; operation indices address messages, excluding input."""
 
     input_messages: list[Message] = Field(default_factory=list)
-    version: Literal[1, 2] = 2
+    agent_id: str | None = None
+    agent_path: str = "/root"
+    agent_description: str = ""
+    restoration_config: AgentConfiguration | None = None
+    previous_run_id: str | None = None
+    version: Literal[2] = 2
     run_id: str | None = None
     parent_run_id: str | None = None
     parent_tool_call_id: str | None = None
     parent_message_id: str | None = None
     operations: list[OperationSnapshot] = Field(default_factory=list)
-    children: list["AgentTranscript"] = Field(default_factory=list)
+    child_runs: list["AgentTranscript"] = Field(default_factory=list)
     status: RunStatus
     messages: list[Message]
+    failure: RunFailure | None = None
     checkpoint: CompactionCheckpoint | None = None
 
     @model_validator(mode="after")

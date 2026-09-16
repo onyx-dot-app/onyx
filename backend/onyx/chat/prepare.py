@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
+from onyx.chat.agent import ChatAgent
 from onyx.chat.files import (
     _collect_available_file_ids,
     _convert_loaded_files_to_chat_files,
@@ -29,14 +30,22 @@ from onyx.chat.models import (
     ChatTurnSetup,
     CreateChatSessionID,
     PersonaPromptConfig,
-    PreparedResponse,
+    ReservedChatResponse,
 )
 from onyx.chat.prompt_utils import (
+    build_language_section,
     calculate_reserved_tokens,
     get_default_base_system_prompt,
 )
-from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType, MilestoneRecordType
+from onyx.configs.chat_configs import SKIP_DEEP_RESEARCH_CLARIFICATION
+from onyx.configs.constants import (
+    DEFAULT_PERSONA_ID,
+    DocumentSource,
+    MessageType,
+    MilestoneRecordType,
+)
 from onyx.context.messages import PromptMetadata
+from onyx.context.search.models import BaseFilters
 from onyx.db.chat import (
     create_chat_session_from_request,
     create_new_chat_message,
@@ -57,7 +66,10 @@ from onyx.db.memory import UserMemoryContext, get_memories
 from onyx.db.models import ChatMessage, ChatSession, Persona, User
 from onyx.db.tools import capture_persona_tool_configuration, get_tools
 from onyx.db.user_file import prepare_chat_file_inputs
-from onyx.deep_research.tool_definitions import RESEARCH_AGENT_IN_CODE_ID
+from onyx.deep_research.agent import MIN_RESEARCH_CONTEXT_TOKENS, DeepResearchAgent
+from onyx.deep_research.tool_definitions import (
+    RESEARCH_AGENT_IN_CODE_ID,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.models import (
@@ -72,6 +84,7 @@ from onyx.hooks.points.query_processing import (
     QueryProcessingPayload,
     QueryProcessingResponse,
 )
+from onyx.llm.cancellation import CancellationSignal, cancellation_scope
 from onyx.llm.factory import get_llm_for_persona, get_llm_token_counter
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.models import AssistantMessage, ReasoningEffort, TextContent, UserMessage
@@ -88,6 +101,12 @@ from onyx.server.query_and_chat.models import (
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.tools.constants import FILE_READER_TOOL_ID, SEARCH_TOOL_ID
 from onyx.tools.models import ChatFile, PersonaToolConfiguration, SearchToolUsage
+from onyx.tools.tool_constructor import (
+    CustomToolConfig,
+    FileReaderToolConfig,
+    SearchToolConfig,
+    construct_tools,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from shared_configs.contextvars import get_current_tenant_id
@@ -415,6 +434,7 @@ def _prepare_chat_data(
 
 
 class _PreparedHistory(BaseModel):
+    previous_run_id: str | None
     history: ChatHistoryResult
     files: list[ChatFile]
 
@@ -439,9 +459,19 @@ def _prepare_history(
         additional_context=additional_context,
         token_counter=token_counter,
     )
+    previous_run_id = next(
+        (
+            message.agent_run_id
+            for message in reversed(prepared.history)
+            if message.agent_run_id is not None
+        ),
+        None,
+    )
     messages = history.messages
     if not record_mode_persists_content(prepared.incognito_record_mode):
-        stored_messages = load_incognito_context(prepared.session_id).messages
+        stored = load_incognito_context(prepared.session_id)
+        stored_messages = stored.messages
+        previous_run_id = stored.previous_run_id
         if (
             prepared.accepted_text is not None
             and messages
@@ -467,6 +497,7 @@ def _prepare_history(
     if prepared.summary:
         messages.insert(0, prepared.summary)
     return _PreparedHistory(
+        previous_run_id=previous_run_id,
         history=ChatHistoryResult(
             messages=messages, all_injected_file_metadata=file_metadata
         ),
@@ -527,7 +558,7 @@ def prepare_chat_turn(
             model_display_names=[name for _, name in prepared.selected_models],
         )
     models = [
-        PreparedResponse(llm=llm, display_name=name, message_id=message_id)
+        ReservedChatResponse(llm=llm, display_name=name, message_id=message_id)
         for (llm, name), message_id in zip(
             prepared.selected_models, response_ids, strict=True
         )
@@ -586,6 +617,7 @@ def prepare_chat_turn(
         responses=models,
         messages=history.history.messages[:-1],
         input_messages=history.history.messages[-1:],
+        previous_run_id=history.previous_run_id,
         extracted_context_files=extracted_files,
         processing_key=prepared.user_message_id if is_multi else models[0].message_id,
         reserved_token_count=prepared.reserved_token_count,
@@ -618,3 +650,103 @@ def get_custom_agent_prompt(persona: Persona, chat_session: ChatSession) -> str 
         return chat_session.project.instructions
 
     return None
+
+
+def _should_enable_slack_search(persona_id: int, filters: BaseFilters | None) -> bool:
+    source_types = filters.source_type if filters else None
+    return (source_types is not None and DocumentSource.SLACK in source_types) or (
+        persona_id == DEFAULT_PERSONA_ID and source_types is None
+    )
+
+
+def create_chat_agent(
+    setup: ChatTurnSetup,
+    user: User,
+    response_index: int,
+    cancellation: CancellationSignal,
+    auto_detect_search_filters: bool,
+) -> ChatAgent | DeepResearchAgent:
+    llm = setup.responses[response_index].llm
+    with cancellation_scope(cancellation):
+        cancellation.check()
+        # Tools open DB sessions on demand, so model I/O cannot retain a connection.
+        tools_by_type = construct_tools(
+            configuration=setup.tool_configuration,
+            user=user,
+            llm=llm,
+            search_tool_config=SearchToolConfig(
+                user_selected_filters=setup.new_msg_req.internal_search_filters,
+                project_id_filter=setup.search_params.project_id_filter,
+                persona_id_filter=setup.search_params.persona_id_filter,
+                bypass_acl=setup.bypass_acl,
+                slack_context=setup.slack_context,
+                enable_slack_search=_should_enable_slack_search(
+                    setup.persona_id, setup.new_msg_req.internal_search_filters
+                ),
+                auto_detect_filters=auto_detect_search_filters,
+            ),
+            custom_tool_config=CustomToolConfig(
+                chat_session_id=setup.chat_session_id,
+                message_id=setup.user_message_id,
+                additional_headers=setup.custom_tool_additional_headers,
+                mcp_headers=setup.mcp_headers,
+            ),
+            file_reader_tool_config=FileReaderToolConfig(
+                user_file_ids=setup.available_files.user_file_ids,
+                chat_file_ids=setup.available_files.chat_file_ids,
+            ),
+            allowed_tool_ids=setup.new_msg_req.allowed_tool_ids,
+            search_usage_forcing_setting=setup.search_params.search_usage,
+        )
+        tools = [tool for tool_list in tools_by_type.values() for tool in tool_list]
+
+        if setup.forced_tool_id and setup.forced_tool_id not in {
+            tool.id for tool in tools
+        }:
+            raise ValueError(f"Forced tool {setup.forced_tool_id} not found in tools")
+
+        if len(setup.responses) == 1 and setup.new_msg_req.deep_research:
+            if setup.chat_session_project_id:
+                raise RuntimeError("Deep research is not supported for projects")
+            if setup.research_tool_id is None:
+                raise ValueError("Deep research tool configuration is missing")
+            if llm.info.max_input_tokens < MIN_RESEARCH_CONTEXT_TOKENS:
+                raise ValueError(
+                    "Deep research requires a model with at least 50,000 input tokens"
+                )
+            return DeepResearchAgent(
+                messages=list(setup.messages),
+                allowed_tools=tools,
+                llm=llm,
+                token_counter=get_llm_token_counter(llm),
+                user_identity=setup.user_identity,
+                language_section=build_language_section(
+                    setup.user_memory_context.user_info.language
+                ),
+                reasoning_effort=setup.reasoning_effort,
+                all_injected_file_metadata=setup.all_injected_file_metadata,
+                skip_clarification=SKIP_DEEP_RESEARCH_CLARIFICATION
+                or setup.skip_clarification,
+                checkpoint=setup.checkpoint,
+                previous_run_id=setup.previous_run_id,
+            )
+        return ChatAgent(
+            messages=list(setup.messages),
+            tools=tools,
+            custom_agent_prompt=setup.custom_agent_prompt,
+            context_files=setup.extracted_context_files,
+            persona=setup.persona,
+            base_system_prompt=setup.base_system_prompt,
+            checkpoint=setup.checkpoint,
+            previous_run_id=setup.previous_run_id,
+            user_memory_context=setup.user_memory_context,
+            llm=llm,
+            token_counter=get_llm_token_counter(llm),
+            forced_tool_id=setup.forced_tool_id,
+            user_identity=setup.user_identity,
+            chat_files=setup.chat_files_for_tools,
+            reasoning_effort=setup.reasoning_effort,
+            include_citations=setup.new_msg_req.include_citations,
+            all_injected_file_metadata=setup.all_injected_file_metadata,
+            inject_memories_in_prompt=user.use_memories,
+        )

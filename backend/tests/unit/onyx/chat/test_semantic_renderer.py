@@ -11,14 +11,17 @@ from onyx.agents.events import (
     ToolStartEvent,
     ToolUpdateEvent,
 )
-from onyx.agents.runtime import Agent, AgentContext, RunSnapshot
+from onyx.agents.models import RunSnapshot
+from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolInvocation, ToolProgress
 from onyx.agents.transcript import OperationSnapshot, RunStatus
 from onyx.chat.citation_processor import CitationMode, DynamicCitationProcessor
-from onyx.chat.emitter import Emitter, ModelStreamStatus
+from onyx.chat.emitter import Emitter
 from onyx.chat.models import ChatStepOutput
 from onyx.chat.presentation import ResponsePresenter, project_response
 from onyx.chat.renderer import PacketRenderer, RenderConfig, render_message
+from onyx.chat.tool_progress import tool_display_progress
+from onyx.deep_research.tool_definitions import THINK_TOOL_NAME
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.litellm_conversion import MessageAccumulator
 from onyx.llm.litellm_models import (
@@ -47,7 +50,8 @@ from onyx.server.query_and_chat.streaming_models import (
     PythonToolDelta,
 )
 from onyx.tools.progress import PythonOutput
-from tests.unit.onyx.agents.fakes import FakeModelClient
+from onyx.tools.tool_implementations.python.python_tool import PythonTool
+from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
 
 
 class _Execution(BaseModel):
@@ -86,16 +90,22 @@ def test_rendering_does_not_change_requests_transcript_or_execution() -> None:
         llm = FakeModelClient(reply)
         agent = Agent(
             llm,
-            context=AgentContext(
-                tools=[
-                    AgentTool(name="echo", description="", parameters={}, execute=echo),
-                ]
-            ),
+            tools=[
+                AgentTool(name="echo", description="", parameters={}, execute=echo),
+            ],
         )
+        listener = None
         if render:
-            presentation = ResponsePresenter(Emitter(Queue(), response_id=42))
-            agent.subscribe(presentation.consume)
-        agent.run(messages=[UserMessage(content="Question")], max_steps=2)
+            presentation = ResponsePresenter(
+                Emitter(Queue[Packet]().put_nowait, response_id=42)
+            )
+            listener = presentation.consume
+        run_agent(
+            agent,
+            messages=[UserMessage(content="Question")],
+            max_steps=2,
+            listener=listener,
+        )
         return _Execution(
             requests=requests, messages=agent.context.messages, executed=executed
         )
@@ -171,8 +181,8 @@ def test_snapshot_projects_partial_output_before_observers_receive_it() -> None:
 
 
 def test_child_progress_and_completion_keep_explicit_ancestry() -> None:
-    output: Queue[tuple[int, Packet | ModelStreamStatus]] = Queue()
-    view = ResponsePresenter(Emitter(output, response_id=42))
+    output: Queue[Packet] = Queue()
+    view = ResponsePresenter(Emitter(output.put_nowait, response_id=42))
     call = ToolCall(id="leaf", name="search", arguments={})
     view.consume(
         ToolStartEvent(
@@ -215,7 +225,7 @@ def test_child_progress_and_completion_keep_explicit_ancestry() -> None:
             outcome=RunStatus.COMPLETE,
         )
     )
-    packets = [entry[1] for entry in list(output.queue) if isinstance(entry[1], Packet)]
+    packets = list(output.queue)
     progress = [packet for packet in packets if isinstance(packet.obj, PythonToolDelta)]
     assert len(progress) == 1
     assert progress[0].identity == PacketIdentity(
@@ -246,3 +256,39 @@ def test_failed_generation_replay_preserves_buffered_citation_text() -> None:
     render_message(replay, message, complete=False)
     assert live.answer == "See [1"
     assert replay.answer == live.answer
+
+
+def test_tool_display_handles_incomplete_calls_without_fabricated_arguments() -> None:
+    call = ToolCall(id="partial", name=PythonTool.NAME, arguments={})
+    assert tool_display_progress(call, None) == []
+    call.arguments = {"code": "print(1)"}
+    updates = tool_display_progress(call, None)
+    assert len(updates) == 1
+    assert updates[0].details is not None
+    assert updates[0].details.model_dump() == {"code": "print(1)"}
+
+
+def test_framework_control_tool_finishes_without_a_custom_tool_card() -> None:
+    queue: Queue[Packet] = Queue()
+    presenter = ResponsePresenter(Emitter(queue.put_nowait, response_id=42))
+    call = ToolCall(id="think", name=THINK_TOOL_NAME, arguments={"thoughts": "plan"})
+    presenter.consume(ToolStartEvent(run_id="run", step_index=0, tool_call=call))
+    presenter.consume(
+        ToolEndEvent(
+            run_id="run",
+            step_index=0,
+            tool_call=call,
+            result=ToolResult(content="done"),
+        )
+    )
+    packets = list(queue.queue)
+    statuses = [
+        packet.obj
+        for packet in packets
+        if isinstance(packet, Packet) and isinstance(packet.obj, OperationStatus)
+    ]
+    assert statuses[-1].status == "complete"
+    assert all(
+        not isinstance(packet, Packet) or not packet.obj.type.startswith("custom_tool")
+        for packet in packets
+    )

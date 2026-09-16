@@ -5,16 +5,17 @@ from typing import TypedDict
 from uuid import UUID
 
 from pydantic import JsonValue
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.orm import Session, selectinload
 
 from onyx.agents.transcript import messages_for_model
 from onyx.chat.files import build_file_context
 from onyx.chat.models import ChatHistoryMessage, ChatHistoryResult
 from onyx.configs.constants import MessageType
 from onyx.context.messages import PromptMetadata, count_message_tokens
-from onyx.db.agent_transcript import read_agent_transcript
+from onyx.db.agent_transcript import read_root_transcript
 from onyx.db.chat import get_chat_messages_by_session, get_or_create_root_message
-from onyx.db.models import ChatMessage
+from onyx.db.models import AgentRun, ChatMessage
 from onyx.file_store.models import (
     ChatFileType,
     ChatLoadedFile,
@@ -257,10 +258,12 @@ def capture_chat_history(
     for message in messages:
         assistant_messages: list[Message] = []
         checkpoint = None
+        agent_run_id = None
         if message.message_type == MessageType.ASSISTANT:
-            if transcript := read_agent_transcript(message):
+            if transcript := read_root_transcript(message):
                 assistant_messages = messages_for_model(transcript.messages)
                 checkpoint = transcript.checkpoint
+                agent_run_id = transcript.run_id
             else:
                 assistant_messages = _legacy_tool_messages(
                     message, tool_names, token_counter
@@ -281,6 +284,7 @@ def capture_chat_history(
                 is_clarification=message.is_clarification,
                 assistant_messages=assistant_messages,
                 checkpoint=checkpoint,
+                agent_run_id=agent_run_id,
             )
         )
     return history
@@ -410,6 +414,16 @@ def load_message_branch(
 ) -> tuple[list[ChatMessage], ChatMessage]:
     """Select the requested branch before adding a user message."""
     history = create_chat_history_chain(chat_session_id, db_session)
+    if history:
+        db_session.scalars(
+            select(ChatMessage)
+            .where(ChatMessage.id.in_([message.id for message in history]))
+            .options(
+                selectinload(
+                    ChatMessage.agent_runs.and_(AgentRun.parent_run_id.is_(None))
+                )
+            )
+        ).all()
     root = get_or_create_root_message(chat_session_id, db_session)
     if parent_id == AUTO_PLACE_AFTER_LATEST_MESSAGE:
         return history, history[-1] if history else root

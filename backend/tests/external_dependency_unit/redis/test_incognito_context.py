@@ -13,11 +13,13 @@ from uuid import UUID, uuid4
 
 import pytest
 
+from onyx.agents.transcript import AgentTranscript, RunStatus
 from onyx.cache.interface import CacheBackendType
 from onyx.chat.incognito_context import (
     INCOGNITO_CONTEXT_TTL_SECONDS,
     IncognitoContext,
     _context_key,
+    _IncognitoWrite,
     incognito_context_available,
     load_incognito_context,
     save_incognito_context,
@@ -35,6 +37,7 @@ from onyx.llm.models import (
 )
 from onyx.llm.models import ToolCall as AgentToolCall
 from onyx.redis.redis_pool import get_raw_redis_client, get_redis_client
+from onyx.redis.tenant_redis_client import TenantRedisPipeline
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 
@@ -210,7 +213,7 @@ def test_message_count_cap_keeps_the_newest() -> None:
     assert loaded[-1].text == "m204"
 
 
-def test_byte_cap_drops_oldest_but_keeps_an_oversized_singleton() -> None:
+def test_byte_cap_drops_oldest_and_rejects_an_oversized_singleton() -> None:
     session_id = uuid4()
     big = "x" * 600_000
     oversized = "y" * 1_200_000
@@ -220,11 +223,10 @@ def test_byte_cap_drops_oldest_but_keeps_an_oversized_singleton() -> None:
     assert len(loaded) == 1
     assert loaded[0].text.endswith("newer")
 
-    # One message alone over the cap is stored anyway: an empty save would
-    # read as session-ended on the next turn.
     singleton_session = uuid4()
-    assert _save(singleton_session, [_message(oversized)])
-    assert len(load_incognito_context(singleton_session).messages) == 1
+    with pytest.raises(ValueError, match="storage limit"):
+        _save(singleton_session, [_message(oversized)])
+    assert load_incognito_context(singleton_session).messages == []
 
 
 def test_availability_follows_the_cache_backend() -> None:
@@ -276,3 +278,168 @@ def test_previous_context_shape_remains_readable() -> None:
     assert context.messages[1].tool_calls[0].arguments == {"query": "value"}
     assert save_incognito_context(session_id, context)
     assert load_incognito_context(session_id).messages == context.messages
+
+
+def _archive(key: str) -> dict[bytes, bytes]:
+    with get_redis_client().pipeline() as pipeline:
+        pipeline.watch(key)
+        return pipeline.hgetall_watched(key)
+
+
+def _terminal_record(
+    agent_id: str, text: str, previous_run_id: str | None = None
+) -> AgentTranscript:
+    return AgentTranscript(
+        agent_id=agent_id,
+        run_id=str(uuid4()),
+        status=RunStatus.COMPLETE,
+        previous_run_id=previous_run_id,
+        messages=[AssistantMessage(content=[TextContent(text=text)])],
+    )
+
+
+def test_response_retention_keeps_root_usable_and_reports_expired_child_history() -> (
+    None
+):
+    from onyx.chat.incognito_context import (
+        append_incognito_message,
+        get_or_create_incognito_root_id,
+        load_incognito_agent_history,
+        save_incognito_response,
+    )
+
+    session_id = uuid4()
+    root_id, child_id = str(uuid4()), str(uuid4())
+    append_incognito_message(session_id, UserMessage(content="question"))
+    get_or_create_incognito_root_id(session_id, root_id)
+    first_child = _terminal_record(child_id, "child result " + "x" * 250)
+    first_child.agent_path = "/root/research"
+    first = _terminal_record(root_id, "root result " + "a" * 250)
+    first.child_runs = [first_child]
+    second_child = _terminal_record(child_id, "continued result", first_child.run_id)
+    second_child.agent_path = first_child.agent_path
+    second = _terminal_record(root_id, "next answer", first.run_id)
+    second.child_runs = [second_child]
+    with patch("onyx.chat.incognito_context._MAX_CONTEXT_BYTES", 3000):
+        save_incognito_response(
+            session_id, first, {}, message_id=1, messages=first.messages
+        )
+        save_incognito_response(
+            session_id, second, {}, message_id=2, messages=second.messages
+        )
+        with pytest.raises(ValueError, match="expired"):
+            load_incognito_agent_history(session_id, [2, 1], child_id)
+        for message_id in range(3, 15):
+            reply = _terminal_record(root_id, f"answer {message_id}")
+            save_incognito_response(
+                session_id, reply, {}, message_id=message_id, messages=reply.messages
+            )
+        assert load_incognito_context(session_id).messages[-1].text == "answer 14"
+        client = get_redis_client()
+        context = client.get(_context_key(session_id))
+        archive = _archive(f"incognito_ctx:{session_id}:agents")
+        assert context is not None
+        assert (
+            len(context) + sum(len(key) + len(value) for key, value in archive.items())
+            <= 3000
+        )
+
+
+def test_terminal_write_rejects_oversize_without_changing_either_store() -> None:
+    from onyx.chat.incognito_context import (
+        append_incognito_message,
+        save_incognito_response,
+    )
+
+    session_id = uuid4()
+    append_incognito_message(session_id, UserMessage(content="question"))
+    client = get_redis_client()
+    before = client.get(_context_key(session_id))
+    archive_key = f"incognito_ctx:{session_id}:agents"
+    archive_before = _archive(archive_key)
+    reply = _terminal_record(str(uuid4()), "x" * 4000)
+    with patch("onyx.chat.incognito_context._MAX_CONTEXT_BYTES", 1000):
+        with pytest.raises(ValueError, match="storage limit"):
+            save_incognito_response(
+                session_id, reply, {}, message_id=1, messages=reply.messages
+            )
+    assert client.get(_context_key(session_id)) == before
+    assert _archive(archive_key) == archive_before
+
+
+def test_terminal_write_retries_conflicts_without_losing_root_or_child_records() -> (
+    None
+):
+    from threading import Barrier, Lock
+
+    from onyx.chat import incognito_context
+    from onyx.utils.threadpool_concurrency import ContextThreadPoolExecutor
+
+    session_id = uuid4()
+    root_id = str(uuid4())
+    incognito_context.append_incognito_message(
+        session_id, UserMessage(content="question")
+    )
+    barrier, lock = Barrier(2), Lock()
+    queued = 0
+    queue_write = incognito_context._queue_write
+
+    def synchronize(
+        pipeline: TenantRedisPipeline, session_id: UUID, state: _IncognitoWrite
+    ) -> None:
+        nonlocal queued
+        with lock:
+            queued += 1
+            should_wait = queued <= 2
+        if should_wait:
+            barrier.wait(timeout=5)
+        queue_write(pipeline, session_id, state)
+
+    replies = [_terminal_record(root_id, "first"), _terminal_record(root_id, "second")]
+    with patch.object(incognito_context, "_queue_write", synchronize):
+        with ContextThreadPoolExecutor(max_workers=2) as executor:
+            tasks = [
+                executor.submit(
+                    lambda index=index, reply=reply: (
+                        incognito_context.save_incognito_response(
+                            session_id,
+                            reply,
+                            {},
+                            message_id=index,
+                            messages=reply.messages,
+                        )
+                    )
+                )
+                for index, reply in enumerate(replies, 1)
+            ]
+            for task in tasks:
+                task.result(timeout=10)
+    assert {
+        message.text for message in load_incognito_context(session_id).messages
+    } == {"question", "first", "second"}
+    assert len(incognito_context._incognito_records(session_id, [2, 1])) == 2
+
+
+def test_teardown_during_terminal_commit_cannot_restore_replay_state() -> None:
+    from onyx.chat import incognito_context
+
+    session_id = uuid4()
+    incognito_context.append_incognito_message(
+        session_id, UserMessage(content="question")
+    )
+    reply = _terminal_record(str(uuid4()), "answer")
+    queue_write = incognito_context._queue_write
+
+    def end_session(
+        pipeline: TenantRedisPipeline, session_id: UUID, state: _IncognitoWrite
+    ) -> None:
+        teardown_incognito_session(session_id)
+        queue_write(pipeline, session_id, state)
+
+    with patch.object(incognito_context, "_queue_write", end_session):
+        with pytest.raises(RuntimeError, match="session ended"):
+            incognito_context.save_incognito_response(
+                session_id, reply, {}, message_id=1, messages=reply.messages
+            )
+    assert get_redis_client().get(_context_key(session_id)) == b"tombstone"
+    assert _archive(f"incognito_ctx:{session_id}:agents") == {}

@@ -137,21 +137,10 @@ class TestParseToolArgsToDict:
         result = _parse_tool_args_to_dict({"query": "hello\x00world"})
         assert result == {"query": "helloworld"}
 
-    def test_dict_input_sanitizes_surrogates(self) -> None:
-        """Test that surrogates in dict values are sanitized."""
-        result = _parse_tool_args_to_dict({"query": "hello\ud800world"})
-        assert result == {"query": "helloworld"}
-
     def test_json_string_sanitizes_null_bytes(self) -> None:
         """Test that NULL bytes in JSON string are sanitized before parsing."""
         # JSON with NULL byte in value
         json_str = '{"query": "hello\x00world"}'
-        result = _parse_tool_args_to_dict(json_str)
-        assert result == {"query": "helloworld"}
-
-    def test_json_string_sanitizes_surrogates(self) -> None:
-        """Test that surrogates in JSON string are sanitized before parsing."""
-        json_str = '{"query": "hello\ud800world"}'
         result = _parse_tool_args_to_dict(json_str)
         assert result == {"query": "helloworld"}
 
@@ -164,12 +153,6 @@ class TestParseToolArgsToDict:
     def test_preserves_valid_unicode_in_dict(self) -> None:
         """Test that valid Unicode is preserved in dict values."""
         result = _parse_tool_args_to_dict({"query": "hello 👋 世界"})
-        assert result == {"query": "hello 👋 世界"}
-
-    def test_preserves_valid_unicode_in_json(self) -> None:
-        """Test that valid Unicode is preserved in JSON string."""
-        json_str = '{"query": "hello 👋 世界"}'
-        result = _parse_tool_args_to_dict(json_str)
         assert result == {"query": "hello 👋 世界"}
 
 

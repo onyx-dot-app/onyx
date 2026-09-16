@@ -5,7 +5,12 @@ from typing import Any
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.agents.tools import ToolInvocation, ToolProgress, ToolUpdate
+from onyx.agents.tools import (
+    ToolExecutionMode,
+    ToolInvocation,
+    ToolProgress,
+    ToolUpdate,
+)
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT, NUM_RETURNED_HITS
 from onyx.configs.constants import DocumentSource, FederatedConnectorSource, MessageType
 from onyx.context.search.federated.slack_search import slack_retrieval
@@ -289,6 +294,28 @@ class SearchTool(Tool):
         self._time_filter_computed = False
 
         self._id = tool_id
+
+    @property
+    def execution_mode(self) -> ToolExecutionMode:
+        return ToolExecutionMode.SEQUENTIAL
+
+    def for_agent(self) -> "SearchTool":
+        """Share search dependencies while keeping conversation-derived state separate."""
+        return SearchTool(
+            tool_id=self.id,
+            user=self.user,
+            persona_search_info=self.persona_search_info,
+            llm=self.llm,
+            document_index=self.document_index,
+            user_selected_filters=self.user_selected_filters,
+            project_id_filter=self.project_id_filter,
+            persona_id_filter=self.persona_id_filter,
+            bypass_acl=self.bypass_acl,
+            slack_context=self.slack_context,
+            enable_slack_search=self.enable_slack_search,
+            auto_detect_filters=self.auto_detect_filters,
+            include_link=self.include_link,
+        )
 
     def _prefetch_slack_data(
         self, db_session: Session

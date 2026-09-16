@@ -1,5 +1,6 @@
 """Generation tracing at the public model client boundary."""
 
+from collections.abc import Iterator
 from unittest.mock import patch
 
 import pytest
@@ -13,7 +14,7 @@ from onyx.llm.litellm_models import (
     ModelResponseStream,
     StreamingChoice,
 )
-from onyx.llm.models import GenerationRequest, UserMessage
+from onyx.llm.models import GenerationEvent, GenerationRequest, UserMessage
 from onyx.llm.multi_llm import LitellmLLM, LitellmTransport
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import generation_span, trace
@@ -76,3 +77,44 @@ def test_model_information_excludes_credentials() -> None:
     assert "api_key" not in client.info.model_dump()
     assert "test-private-key" not in client.info.model_dump_json()
     assert "test-private-key" not in client.redact_error("failed with test-private-key")
+
+
+def test_stream_failure_keeps_private_exception_out_of_messages_and_trace() -> None:
+    client = LitellmLLM(
+        LitellmTransport(
+            model_provider="openai",
+            model_name="gpt-5-mini",
+            api_key=None,
+            max_input_tokens=1000,
+        )
+    )
+    failure = RuntimeError("synthetic-private-provider-detail")
+
+    def chunks() -> Iterator[ModelResponseStream]:
+        yield ModelResponseStream(
+            id="test",
+            created="1",
+            choice=StreamingChoice(delta=Delta(content="Partial")),
+        )
+        raise failure
+
+    events: list[GenerationEvent] = []
+    with (
+        patch.object(client.transport, "stream", return_value=chunks()),
+        patch("onyx.llm.multi_llm.record_llm_span_output") as record,
+        pytest.raises(RuntimeError) as caught,
+    ):
+        events.extend(
+            client.stream(
+                GenerationRequest(messages=[UserMessage(content="Question")]),
+                GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            )
+        )
+    assert caught.value is failure
+    assert events[-1].message.text == "Partial"
+    assert events[-1].message.error_message == "Generation failed"
+    assert all(
+        "synthetic-private-provider-detail" not in event.model_dump_json()
+        for event in events
+    )
+    assert "synthetic-private-provider-detail" not in str(record.call_args)

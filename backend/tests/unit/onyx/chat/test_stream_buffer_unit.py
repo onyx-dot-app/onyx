@@ -4,17 +4,25 @@ and missing-chunk gaps surfacing as non-replayable instead of broken replays."""
 
 import os
 import zlib
+from threading import Event
 from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import pytest
 
 from onyx.chat import stream_buffer
+from onyx.chat.models import StreamingError
 from onyx.chat.stream_buffer import (
+    ChatDelivery,
     StreamBufferMeta,
     StreamBufferWriter,
+    _StreamStatus,
     read_stream_chunks,
 )
+from onyx.server.query_and_chat.placement import Placement
+from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
+from onyx.server.utils import get_json_line
+from onyx.utils.threadpool_concurrency import ContextThreadPoolExecutor
 from tests.unit.fakes import FakeCache
 
 _RUN_ID = 42
@@ -240,3 +248,56 @@ def test_truncation_cache_failure_does_not_prevent_content_free_cleanup(
 
     assert not cache.store
     assert "truncation update failed" in caplog.text
+
+
+def test_concurrent_delivery_keeps_reader_and_cache_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache = FakeCache()
+    session_id = uuid4()
+    delivery = ChatDelivery(_make_writer(cache, session_id))
+    first_entered = Event()
+    release_first = Event()
+    second_started = Event()
+    publish = delivery.reader.publish
+    first = Packet(
+        placement=Placement(turn_index=0), obj=OverallStop(stop_reason="first")
+    )
+    second = Packet(
+        placement=Placement(turn_index=0), obj=OverallStop(stop_reason="second")
+    )
+
+    def hold_first(item: Packet | StreamingError | _StreamStatus) -> None:
+        publish(item)
+        if item is first:
+            first_entered.set()
+            assert release_first.wait(2)
+
+    def publish_second() -> None:
+        second_started.set()
+        delivery.publish(second)
+
+    monkeypatch.setattr(delivery.reader, "publish", hold_first)
+    delivery.start()
+    with ContextThreadPoolExecutor(max_workers=2) as executor:
+        first_write = executor.submit(lambda: delivery.publish(first))
+        try:
+            assert first_entered.wait(2)
+            second_write = executor.submit(publish_second)
+            assert second_started.wait(2)
+            with pytest.raises(TimeoutError):
+                second_write.result(timeout=0.05)
+        finally:
+            release_first.set()
+        first_write.result(timeout=2)
+        second_write.result(timeout=2)
+    delivery.finish()
+    delivery.publish(first)
+
+    assert list(delivery.reader) == [first, second]
+    saved = read_stream_chunks(cache, session_id, _RUN_ID, cursor=0)
+    assert saved is not None
+    assert saved.done
+    assert "".join(saved.blocks) == "".join(
+        get_json_line(packet.model_dump()) for packet in (first, second)
+    )

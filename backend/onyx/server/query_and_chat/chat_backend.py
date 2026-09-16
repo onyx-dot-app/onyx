@@ -2,7 +2,10 @@ import datetime
 import json
 import time
 from collections.abc import Generator
+from concurrent.futures import Future
 from datetime import timedelta
+from functools import partial
+from typing import cast
 from uuid import UUID
 
 from fastapi import (
@@ -17,6 +20,7 @@ from fastapi import (
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from onyx.access.access import user_can_access_chat_file
 from onyx.auth.api_key import get_hashed_api_key_from_request
@@ -30,13 +34,13 @@ from onyx.chat.chat_processing_checker import (
     get_processing_key,
     is_chat_session_processing,
 )
+from onyx.chat.execution import ActiveChatTurns
 from onyx.chat.incognito import (
     delete_incognito_generated_files,
     incognito_allowed_for_user,
 )
 from onyx.chat.incognito_context import teardown_incognito_session
-from onyx.chat.models import ChatFullResponse, CreateChatSessionID
-from onyx.chat.presentation import ResponseBinding
+from onyx.chat.models import ChatFullResponse, ChatResponseOutcome, CreateChatSessionID
 from onyx.chat.process_message import (
     gather_stream_full,
     handle_multi_model_stream,
@@ -798,7 +802,7 @@ def end_incognito_session(
         }
     },
 )
-def handle_send_chat_message(
+async def handle_send_chat_message(
     chat_message_req: SendMessageRequest,
     request: Request,
     user: User = Depends(
@@ -806,6 +810,25 @@ def handle_send_chat_message(
     ),
     _rate_limit_check: None = Depends(check_token_rate_limits),
     _api_key_usage_check: None = Depends(check_api_key_usage),
+) -> StreamingResponse | ChatFullResponse:
+    # Starlette's application state has no typed attribute interface.
+    active_chat_turns = cast(ActiveChatTurns, request.app.state.active_chat_turns)
+    return await run_in_threadpool(
+        partial(
+            _handle_send_chat_message,
+            chat_message_req,
+            request,
+            user,
+            active_chat_turns,
+        )
+    )
+
+
+def _handle_send_chat_message(
+    chat_message_req: SendMessageRequest,
+    request: Request,
+    user: User,
+    active_chat_turns: ActiveChatTurns,
 ) -> StreamingResponse | ChatFullResponse:
     """
     This endpoint is used to send a new chat message.
@@ -852,6 +875,7 @@ def handle_send_chat_message(
         def multi_model_stream_generator() -> Generator[str, None, None]:
             try:
                 for obj in handle_multi_model_stream(
+                    active_chat_turns=active_chat_turns,
                     new_msg_req=chat_message_req,
                     user=user,
                     llm_overrides=llm_overrides,
@@ -895,8 +919,9 @@ def handle_send_chat_message(
                 )
                 usage_db_session.commit()
 
-        response_binding = ResponseBinding()
+        response_future = Future[ChatResponseOutcome]()
         packets = handle_stream_message_objects(
+            active_chat_turns=active_chat_turns,
             new_msg_req=chat_message_req,
             user=user,
             litellm_additional_headers=get_relevant_headers(
@@ -907,9 +932,9 @@ def handle_send_chat_message(
             ),
             mcp_headers=chat_message_req.mcp_headers,
             additional_context=chat_message_req.additional_context,
-            response_binding=response_binding,
+            response_future=response_future,
         )
-        result = gather_stream_full(packets, response_binding)
+        result = gather_stream_full(packets, response_future)
         # CreateChatSessionID is only yielded for newly-created sessions, so for
         # follow-up messages on an existing session the aggregated response would
         # otherwise omit chat_session_id. Backfill it from the request so the
@@ -923,9 +948,10 @@ def handle_send_chat_message(
 
     # Streaming path, normal Onyx UI behavior
     def stream_generator() -> Generator[str, None, None]:
-        response_binding = ResponseBinding()
+        response_future = Future[ChatResponseOutcome]()
         try:
             for obj in handle_stream_message_objects(
+                active_chat_turns=active_chat_turns,
                 new_msg_req=chat_message_req,
                 user=user,
                 litellm_additional_headers=get_relevant_headers(
@@ -936,7 +962,7 @@ def handle_send_chat_message(
                 ),
                 mcp_headers=chat_message_req.mcp_headers,
                 additional_context=chat_message_req.additional_context,
-                response_binding=response_binding,
+                response_future=response_future,
             ):
                 yield get_json_line(obj.model_dump())
 

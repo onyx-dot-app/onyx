@@ -5,7 +5,11 @@ from uuid import UUID
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
-from onyx.agents.transcript import AgentTranscript, CompactionCheckpoint
+from onyx.agents.transcript import (
+    AgentConfiguration,
+    AgentTranscript,
+    CompactionCheckpoint,
+)
 from onyx.cache.interface import CacheBackend
 from onyx.chat.citation_processor import CitationMapping, CitationMode
 from onyx.configs.constants import MessageType
@@ -38,6 +42,18 @@ from onyx.tools.models import (
 from onyx.tools.progress import GeneratedImage
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
 
+MAX_DISCOVERED_AGENTS = 128
+
+
+class RestoredAgent(BaseModel):
+    parent_agent_id: str | None = None
+    agent_id: str
+    agent_path: str
+    description: str
+    configuration: AgentConfiguration | None
+    transcripts: list[AgentTranscript]
+    sources: CitationMapping = Field(default_factory=dict)
+
 
 class ChatStepOutput(BaseModel):
     sources: dict[int, SearchDoc] = Field(default_factory=dict)
@@ -61,6 +77,7 @@ class MessagePresentation(BaseModel):
     text_as_thinking: bool = False
     think_tool: str | None = None
     argument_tools: set[str] = Field(default_factory=set)
+    is_clarification: bool = False
     citation_mode: CitationMode | None = None
     citation_documents: dict[int, str] = Field(default_factory=dict)
     document_ids: list[str] = Field(default_factory=list)
@@ -88,6 +105,7 @@ class ChatHistoryMessage(BaseModel):
     files: list[FileDescriptor]
     is_clarification: bool
     assistant_messages: list[Message]
+    agent_run_id: str | None = None
     checkpoint: CompactionCheckpoint | None = None
 
 
@@ -274,7 +292,7 @@ class PersonaPromptConfig(BaseModel):
     replace_base_system_prompt: bool
 
 
-class PreparedResponse(BaseModel):
+class ReservedChatResponse(BaseModel):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     llm: LLM
@@ -301,9 +319,10 @@ class ChatTurnSetup(BaseModel):
     checkpoint: CompactionCheckpoint | None
     user_message_id: int
     user_identity: LLMUserIdentity
-    responses: list[PreparedResponse]
+    responses: list[ReservedChatResponse]
     messages: list[Message]
     input_messages: list[Message]
+    previous_run_id: str | None = None
     extracted_context_files: ExtractedContextFiles
     # Fences processing status and identifies the buffered stream.
     processing_key: int

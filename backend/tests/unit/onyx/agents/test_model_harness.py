@@ -3,8 +3,11 @@
 import json
 from collections.abc import Iterator
 
+import pytest
+
 from onyx.agents.events import AgentEvent
-from onyx.agents.runtime import Agent, AgentContext
+from onyx.agents.models import PreparedStep
+from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.litellm_conversion import normalized_stream, recover_tool_calls
@@ -39,7 +42,8 @@ def tool() -> AgentTool:
     )
 
 
-def test_model_and_agent_share_transcript_and_stream_events() -> None:
+@pytest.mark.asyncio
+async def test_model_and_agent_share_transcript_and_stream_events() -> None:
     llm = ScriptedLLM(
         [
             Delta(
@@ -56,18 +60,21 @@ def test_model_and_agent_share_transcript_and_stream_events() -> None:
     )
     agent = Agent(
         llm,
-        context=AgentContext(tools=[tool()]),
+        tools=[tool()],
     )
     events: list[AgentEvent] = []
-    agent.subscribe(events.append)
-    result = agent.run(messages=[UserMessage(content="Echo 3")], max_steps=2)
+    run = agent.start(messages=[UserMessage(content="Echo 3")], max_steps=2)
+    run.subscribe(events.append)
+    result = await run.wait()
+    assert await run.wait_for_idle(2)
     assert result.output.text == "done"
     assert isinstance(llm.requests[-1]["prompt"][-1], ToolMessage)
     assert llm.requests[-1]["prompt"][-1].content == "3"
     assert len([event for event in events if event.type == "message_update"]) >= 2
 
 
-def test_tool_recovery_happens_before_events() -> None:
+@pytest.mark.asyncio
+async def test_tool_recovery_happens_before_events() -> None:
     llm = ScriptedLLM(
         [
             Delta(content='{"name":"echo","arguments":{"value":"recovered"}}'),
@@ -76,14 +83,14 @@ def test_tool_recovery_happens_before_events() -> None:
     )
     agent = Agent(
         llm,
-        context=AgentContext(
-            tools=[tool()],
-            options=GenerationOptions(tool_choice=ToolChoiceOptions.REQUIRED),
-        ),
+        tools=[tool()],
+        options=GenerationOptions(tool_choice=ToolChoiceOptions.REQUIRED),
     )
     events: list[AgentEvent] = []
-    agent.subscribe(events.append)
-    agent.run(max_steps=2)
+    run = agent.start(max_steps=2)
+    run.subscribe(events.append)
+    await run.wait()
+    assert await run.wait_for_idle(2)
     response = agent.context.messages[1]
     assert isinstance(response, ToolResultMessage) and response.content == "recovered"
     first = next(
@@ -122,7 +129,7 @@ def test_native_calls_keep_precedence_and_missing_id_is_stable() -> None:
             )
 
     result = list(
-        normalized_stream(chunks(), AgentContext(tools=[tool()]).generation_request())
+        normalized_stream(chunks(), PreparedStep(tools=[tool()]).generation_request([]))
     )
     first, second = [chunk.choice.delta.tool_calls[0] for chunk in result]
     assert first.id and first.id == second.id
@@ -149,9 +156,9 @@ class TestToolRecovery:
     def context(
         self, choice: ToolChoiceOptions = ToolChoiceOptions.REQUIRED
     ) -> GenerationRequest:
-        return AgentContext(
+        return PreparedStep(
             tools=[tool()], options=GenerationOptions(tool_choice=choice)
-        ).generation_request()
+        ).generation_request([])
 
     def test_recovery_is_independent_across_generations(self) -> None:
         from onyx.llm.models import AssistantMessage, TextContent, ToolCall
