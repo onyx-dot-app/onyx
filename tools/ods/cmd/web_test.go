@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -206,11 +207,11 @@ func TestRunWebScript_forwardsScriptArgs(t *testing.T) {
 	cases := []struct {
 		name string
 		args []string
-		want string
+		want []string
 	}{
-		{"script only", []string{"dev"}, "run dev"},
-		{"flags get a separator", []string{"test", "--watch"}, "run test -- --watch"},
-		{"separator is not repeated", []string{"test", "--", "--watch"}, "run test -- --watch"},
+		{"script only", []string{"dev"}, []string{"run", "dev"}},
+		{"flags get a separator", []string{"test", "--watch"}, []string{"run", "test", "--", "--watch"}},
+		{"separator is not repeated", []string{"test", "--", "--watch"}, []string{"run", "test", "--", "--watch"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -218,8 +219,8 @@ func TestRunWebScript_forwardsScriptArgs(t *testing.T) {
 
 			runWebScript(c.args)
 
-			want := []string{webDir + "|" + c.want}
-			if got := devtoolCalls(t, bunCalls); !slices.Equal(got, want) {
+			want := []devtoolCall{{Dir: webDir, Args: c.want}}
+			if got := devtoolCalls(t, bunCalls); !reflect.DeepEqual(got, want) {
 				t.Fatalf("expected %q, got %q", want, got)
 			}
 		})
@@ -239,12 +240,12 @@ func TestPrepareWebDir_installsAndBuildsLibsInOrder(t *testing.T) {
 
 	prepareWebDir(webDir)
 
-	want := []string{
-		webDir + "|install --frozen-lockfile",
-		filepath.Join(webDir, "lib", "shared") + "|run build",
-		filepath.Join(webDir, "lib", "opal") + "|run build",
+	want := []devtoolCall{
+		{Dir: webDir, Args: []string{"install", "--frozen-lockfile"}},
+		{Dir: filepath.Join(webDir, "lib", "shared"), Args: []string{"run", "build"}},
+		{Dir: filepath.Join(webDir, "lib", "opal"), Args: []string{"run", "build"}},
 	}
-	if got := devtoolCalls(t, bunCalls); !slices.Equal(got, want) {
+	if got := devtoolCalls(t, bunCalls); !reflect.DeepEqual(got, want) {
 		t.Fatalf("expected %q, got %q", want, got)
 	}
 	sum := sha256.Sum256([]byte("lock-v1"))

@@ -24,11 +24,12 @@ func fakeBinDir(t *testing.T) string {
 
 // writeFakeCommand writes an executable shell script named name into dir. Each
 // call appends its arguments as one line to <dir>/<name>.args before running
-// body, and the returned function reads those lines back.
+// body, and the returned function reads those lines back. The script finds the
+// log through $0, so the temp dir path never goes into the script text.
 func writeFakeCommand(t *testing.T, dir, name, body string) func() []string {
 	t.Helper()
 	argsLog := filepath.Join(dir, name+".args")
-	script := "#!/bin/sh\necho \"$*\" >> '" + argsLog + "'\n" + body + "\n"
+	script := "#!/bin/sh\necho \"$*\" >> \"$0.args\"\n" + body + "\n"
 	if err := os.WriteFile(filepath.Join(dir, name), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -71,6 +72,6 @@ func chdirNewRepo(t *testing.T) string {
 // fakeDependabot installs a gh that prints alertsJSON.
 func fakeDependabot(t *testing.T, bin, alertsJSON string) {
 	t.Helper()
-	alerts := writeFixture(t, bin, "alerts.json", alertsJSON)
-	writeFakeCommand(t, bin, "gh", "cat '"+alerts+"'")
+	writeFixture(t, bin, "alerts.json", alertsJSON)
+	writeFakeCommand(t, bin, "gh", `cat "$(dirname "$0")/alerts.json"`)
 }

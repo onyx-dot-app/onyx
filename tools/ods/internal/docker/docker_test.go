@@ -19,7 +19,7 @@ func fakeDocker(t *testing.T, body string) string {
 	}
 	dir := t.TempDir()
 	calls := filepath.Join(dir, "calls")
-	script := "#!/bin/sh\necho \"$*\" >> " + calls + "\n" + body + "\n"
+	script := "#!/bin/sh\necho \"$*\" >> \"$(dirname \"$0\")/calls\"\n" + body + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "docker"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}

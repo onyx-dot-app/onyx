@@ -65,7 +65,8 @@ func TestSaveIgnores_uploadsSortedAllowlistToS3(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("TMPDIR", tmp)
 	uploaded := filepath.Join(t.TempDir(), "uploaded.json")
-	awsArgs := writeFakeCommand(t, bin, "aws", `cp "$3" '`+uploaded+`'`)
+	t.Setenv("FAKE_AWS_UPLOADED", uploaded)
+	awsArgs := writeFakeCommand(t, bin, "aws", `cp "$3" "$FAKE_AWS_UPLOADED"`)
 
 	const url = "s3://onyx-internal-tools/audit/ignores.json"
 	entries := []IgnoreEntry{
@@ -81,7 +82,7 @@ func TestSaveIgnores_uploadsSortedAllowlistToS3(t *testing.T) {
 	if len(args) != 1 {
 		t.Fatalf("expected one aws call, got %q", args)
 	}
-	fields := strings.Fields(args[0])
+	fields := args[0]
 	if len(fields) != 4 || fields[0] != "s3" || fields[1] != "cp" || fields[3] != url {
 		t.Fatalf("expected %q, got %q", "s3 cp <tmp> "+url, args[0])
 	}

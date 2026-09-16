@@ -34,8 +34,8 @@ type deployFakeGH struct {
 // in order, repeating the last one once the list runs out. `gh --version`
 // always succeeds so git.CheckGitHubCLI passes.
 const deployGHScript = `#!/bin/sh
-d='%s'
-printf '%%s\n' "$*" >> "$d/calls"
+d=$(dirname "$0")
+printf '%s\n' "$*" >> "$d/calls"
 case "$1 $2" in
   "run list") key=run-list ;;
   "run view") case "$*" in *"--json jobs"*) key=run-jobs ;; *) key=run-view ;; esac ;;
@@ -74,8 +74,7 @@ func deployNewFakeGH(t *testing.T, replies map[string][]deployGHReply) *deployFa
 		}
 		deployWriteFile(t, filepath.Join(dir, key+".max"), fmt.Sprintf("%d", len(list)))
 	}
-	script := fmt.Sprintf(deployGHScript, dir)
-	if err := os.WriteFile(filepath.Join(dir, "gh"), []byte(script), 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "gh"), []byte(deployGHScript), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))

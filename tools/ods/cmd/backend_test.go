@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -24,7 +25,7 @@ func devtoolBackendRepo(t *testing.T, template string) (root, uvCalls, uvEnv str
 	}
 	uvEnv = filepath.Join(binDir, "uv.env")
 	uvCalls = devtoolFakeTool(t, binDir, "uv", `printf 'FROM_FILE=%s\nSHELL_WINS=%s\nEE=%s\nLICENSE=%s\n' `+
-		`"$FROM_FILE" "$SHELL_WINS" "${ENABLE_PAID_ENTERPRISE_EDITION_FEATURES-unset}" "${LICENSE_ENFORCEMENT_ENABLED-unset}" > '`+uvEnv+"'\n")
+		`"$FROM_FILE" "$SHELL_WINS" "${ENABLE_PAID_ENTERPRISE_EDITION_FEATURES-unset}" "${LICENSE_ENFORCEMENT_ENABLED-unset}" > "$0.env"`+"\n")
 	devtoolUnsetenv(t, "ENABLE_PAID_ENTERPRISE_EDITION_FEATURES")
 	devtoolUnsetenv(t, "LICENSE_ENFORCEMENT_ENABLED")
 	devtoolUnsetenv(t, "FROM_FILE")
@@ -77,8 +78,8 @@ func TestBackendCommand_runsUvicornWithMergedEnv(t *testing.T) {
 				t.Fatalf("Execute: %v", err)
 			}
 
-			want := []string{filepath.Join(root, "backend") + "|run uvicorn " + c.module + " --reload --port " + port}
-			if got := devtoolCalls(t, uvCalls); !slices.Equal(got, want) {
+			want := []devtoolCall{{Dir: filepath.Join(root, "backend"), Args: []string{"run", "uvicorn", c.module, "--reload", "--port", port}}}
+			if got := devtoolCalls(t, uvCalls); !reflect.DeepEqual(got, want) {
 				t.Fatalf("expected %q, got %q", want, got)
 			}
 			if got := devtoolReadFile(t, filepath.Join(root, ".vscode", ".env")); got != template {
@@ -126,8 +127,8 @@ func TestRunBackendService_movesOffABusyPort(t *testing.T) {
 	if len(calls) != 1 {
 		t.Fatalf("expected one uv call, got %q", calls)
 	}
-	fields := strings.Fields(calls[0])
-	got, err := strconv.Atoi(fields[len(fields)-1])
+	args := calls[0].Args
+	got, err := strconv.Atoi(args[len(args)-1])
 	if err != nil || got <= busy {
 		t.Fatalf("expected a port above busy port %d, got %q", busy, calls[0])
 	}

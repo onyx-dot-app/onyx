@@ -3,7 +3,7 @@ package cmd
 import (
 	"os"
 	"path/filepath"
-	"slices"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -12,11 +12,11 @@ func TestRunDesktopScript_installsAtTheRootThenRunsNpm(t *testing.T) {
 	cases := []struct {
 		name string
 		args []string
-		want string
+		want []string
 	}{
-		{"script only", []string{"dev"}, "run dev"},
-		{"flags get a separator", []string{"build", "--debug"}, "run build -- --debug"},
-		{"separator is not repeated", []string{"build", "--", "--debug"}, "run build -- --debug"},
+		{"script only", []string{"dev"}, []string{"run", "dev"}},
+		{"flags get a separator", []string{"build", "--debug"}, []string{"run", "build", "--", "--debug"}},
+		{"separator is not repeated", []string{"build", "--", "--debug"}, []string{"run", "build", "--", "--debug"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -34,10 +34,10 @@ func TestRunDesktopScript_installsAtTheRootThenRunsNpm(t *testing.T) {
 			}
 
 			// desktop is a root workspace member, so dependencies install at the root.
-			if got, want := devtoolCalls(t, bunCalls), []string{root + "|install --frozen-lockfile"}; !slices.Equal(got, want) {
+			if got, want := devtoolCalls(t, bunCalls), []devtoolCall{{Dir: root, Args: []string{"install", "--frozen-lockfile"}}}; !reflect.DeepEqual(got, want) {
 				t.Fatalf("expected %q, got %q", want, got)
 			}
-			if got, want := devtoolCalls(t, npmCalls), []string{desktopDir + "|" + c.want}; !slices.Equal(got, want) {
+			if got, want := devtoolCalls(t, npmCalls), []devtoolCall{{Dir: desktopDir, Args: c.want}}; !reflect.DeepEqual(got, want) {
 				t.Fatalf("expected %q, got %q", want, got)
 			}
 		})

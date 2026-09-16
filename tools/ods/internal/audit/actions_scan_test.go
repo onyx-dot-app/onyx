@@ -151,8 +151,8 @@ func TestScanActions_matchesAdvisoriesAcrossWorkflowsAndCompositeActions(t *test
 	root := chdirNewRepo(t)
 	writeActionsRepo(t, root)
 
-	tags := writeFixture(t, bin, "tags.json", `[{"name":"v46.0.2","commit":{"sha":"`+changedFilesFixedSHA+`"}},{"name":"v46","commit":{"sha":"`+changedFilesFixedSHA+`"}}]`)
-	ghArgs := writeFakeCommand(t, bin, "gh", "cat '"+tags+"'")
+	writeFixture(t, bin, "tags.json", `[{"name":"v46.0.2","commit":{"sha":"`+changedFilesFixedSHA+`"}},{"name":"v46","commit":{"sha":"`+changedFilesFixedSHA+`"}}]`)
+	ghArgs := writeFakeCommand(t, bin, "gh", `cat "$(dirname "$0")/tags.json"`)
 
 	osv, url := startFakeOSV(t, map[string][]osvVuln{
 		"tj-actions/changed-files": {changedFilesAdvisory()},
@@ -180,7 +180,7 @@ func TestScanActions_matchesAdvisoriesAcrossWorkflowsAndCompositeActions(t *test
 	}
 
 	// Both SHA pins share a single tag lookup; tag pins need none.
-	wantGH := []string{"api repos/tj-actions/changed-files/tags?per_page=100 --paginate"}
+	wantGH := [][]string{{"api", "repos/tj-actions/changed-files/tags?per_page=100", "--paginate"}}
 	if got := ghArgs(); !reflect.DeepEqual(got, wantGH) {
 		t.Fatalf("expected gh calls %q, got %q", wantGH, got)
 	}

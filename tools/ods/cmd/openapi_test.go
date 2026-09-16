@@ -5,7 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -30,35 +30,39 @@ func TestOpenAPICommands_runTheScriptWithResolvedPaths(t *testing.T) {
 	cases := []struct {
 		name string
 		args []string
-		want func(root string) string
+		want func(root string) []string
 	}{
 		{
 			"schema uses the default output",
 			[]string{"schema"},
-			func(root string) string { return "- schema -o " + root + "/backend/generated/openapi.json" },
+			func(root string) []string {
+				return []string{"-", "schema", "-o", root + "/backend/generated/openapi.json"}
+			},
 		},
 		{
 			"schema resolves the output from the working directory",
 			[]string{"schema", "-o", "out/api.json"},
-			func(root string) string { return "- schema -o " + root + "/web/out/api.json" },
+			func(root string) []string { return []string{"-", "schema", "-o", root + "/web/out/api.json"} },
 		},
 		{
 			"client uses the default paths",
 			[]string{"client"},
-			func(root string) string {
-				return "- client -i " + root + "/backend/generated/openapi.json -o " + root + "/backend/generated/onyx_openapi_client"
+			func(root string) []string {
+				return []string{"-", "client", "-i", root + "/backend/generated/openapi.json", "-o", root + "/backend/generated/onyx_openapi_client"}
 			},
 		},
 		{
 			"client keeps an absolute input",
 			[]string{"client", "-i", "/abs/api.json", "-o", "gen"},
-			func(root string) string { return "- client -i /abs/api.json -o " + root + "/web/gen" },
+			func(root string) []string {
+				return []string{"-", "client", "-i", "/abs/api.json", "-o", root + "/web/gen"}
+			},
 		},
 		{
 			"all passes the client output",
 			[]string{"all", "--client-output", "gen"},
-			func(root string) string {
-				return "- all -o " + root + "/backend/generated/openapi.json --client-output " + root + "/web/gen"
+			func(root string) []string {
+				return []string{"-", "all", "-o", root + "/backend/generated/openapi.json", "--client-output", root + "/web/gen"}
 			},
 		},
 	}
@@ -76,8 +80,8 @@ func TestOpenAPICommands_runTheScriptWithResolvedPaths(t *testing.T) {
 				t.Fatalf("Execute: %v", err)
 			}
 
-			want := []string{filepath.Join(root, "backend") + "|" + c.want(root)}
-			if got := devtoolCalls(t, calls); !slices.Equal(got, want) {
+			want := []devtoolCall{{Dir: filepath.Join(root, "backend"), Args: c.want(root)}}
+			if got := devtoolCalls(t, calls); !reflect.DeepEqual(got, want) {
 				t.Fatalf("expected %q, got %q", want, got)
 			}
 		})

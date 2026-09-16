@@ -3,6 +3,7 @@ package audit
 import (
 	"bytes"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -18,7 +19,7 @@ const testImageRef = "registry.example.test/onyx/backend:v1.2.3"
 // fakeDockerWithImage installs a docker that reports ref as present locally and
 // "saves" an image holding no packages, so the scan needs no vulnerability
 // lookups. It returns the docker args log.
-func fakeDockerWithImage(t *testing.T, bin string) func() []string {
+func fakeDockerWithImage(t *testing.T, bin string) func() [][]string {
 	t.Helper()
 	layer, err := crane.Layer(map[string][]byte{"etc/motd": []byte("hello")})
 	if err != nil {
@@ -36,9 +37,10 @@ func fakeDockerWithImage(t *testing.T, bin string) func() []string {
 	if err := tarball.WriteToFile(archive, ref, img); err != nil {
 		t.Fatal(err)
 	}
+	t.Setenv("FAKE_DOCKER_ARCHIVE", archive)
 	return writeFakeCommand(t, bin, "docker", `case "$1" in
 images) echo sha256:abc ;;
-save) cp '`+archive+`' "$3" ;;
+save) cp "$FAKE_DOCKER_ARCHIVE" "$3" ;;
 *) exit 1 ;;
 esac`)
 }
@@ -73,10 +75,10 @@ func TestRunImage_imageWithoutPackagesIsClean(t *testing.T) {
 	}
 
 	args := dockerArgs()
-	if len(args) != 2 || args[0] != "images -q "+testImageRef {
+	if len(args) != 2 || !slices.Equal(args[0], []string{"images", "-q", testImageRef}) {
 		t.Fatalf("expected a local image lookup then a save, got %q", args)
 	}
-	saveArgs := strings.Fields(args[1])
+	saveArgs := args[1]
 	if len(saveArgs) != 4 || saveArgs[0] != "save" || saveArgs[1] != "-o" || saveArgs[3] != testImageRef {
 		t.Fatalf("expected %q, got %q", "save -o <archive> "+testImageRef, args[1])
 	}
@@ -98,7 +100,7 @@ exit 1`)
 			t.Fatalf("expected a pull failure, got %v", err)
 		}
 		args := dockerArgs()
-		if len(args) != 2 || args[1] != "pull -q "+testImageRef {
+		if len(args) != 2 || !slices.Equal(args[1], []string{"pull", "-q", testImageRef}) {
 			t.Fatalf("expected a pull of %s after the lookup, got %q", testImageRef, args)
 		}
 	})

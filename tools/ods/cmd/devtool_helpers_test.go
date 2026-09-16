@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -46,19 +47,26 @@ func devtoolBinDir(t *testing.T) string {
 }
 
 // devtoolFakeTool writes an executable script called name into binDir. Each
-// run appends "<working dir>|<args>" to the returned call log, then runs body.
+// run appends its working dir, argument count and arguments, each
+// NUL-terminated, to the returned call log, then runs body.
 func devtoolFakeTool(t *testing.T, binDir, name, body string) string {
 	t.Helper()
 	calls := filepath.Join(binDir, name+".calls")
-	script := "#!/bin/sh\nprintf '%s|%s\\n' \"$(pwd -P)\" \"$*\" >> '" + calls + "'\n" + body
+	script := "#!/bin/sh\nprintf '%s\\0' \"$(pwd -P)\" \"$#\" \"$@\" >> \"$0.calls\"\n" + body
 	if err := os.WriteFile(filepath.Join(binDir, name), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	return calls
 }
 
+// devtoolCall is one recorded run of a fake tool.
+type devtoolCall struct {
+	Dir  string
+	Args []string
+}
+
 // devtoolCalls returns the invocations recorded in a call log, in order.
-func devtoolCalls(t *testing.T, calls string) []string {
+func devtoolCalls(t *testing.T, calls string) []devtoolCall {
 	t.Helper()
 	data, err := os.ReadFile(calls)
 	if errors.Is(err, os.ErrNotExist) {
@@ -67,7 +75,20 @@ func devtoolCalls(t *testing.T, calls string) []string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
+	fields := strings.Split(strings.TrimSuffix(string(data), "\x00"), "\x00")
+	var got []devtoolCall
+	for len(fields) > 0 {
+		if len(fields) < 2 {
+			t.Fatalf("malformed call log %q", data)
+		}
+		n, err := strconv.Atoi(fields[1])
+		if err != nil || n > len(fields)-2 {
+			t.Fatalf("malformed call log %q", data)
+		}
+		got = append(got, devtoolCall{Dir: fields[0], Args: fields[2 : 2+n]})
+		fields = fields[2+n:]
+	}
+	return got
 }
 
 // devtoolUnsetenv removes key for the rest of the test and restores it after.

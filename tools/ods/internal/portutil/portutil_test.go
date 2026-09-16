@@ -34,7 +34,7 @@ func fakeTools(t *testing.T, scripts map[string]string) string {
 	}
 	dir := t.TempDir()
 	for name, body := range scripts {
-		script := "#!/bin/sh\necho \"$*\" >> " + filepath.Join(dir, name+".args") + "\n" + body + "\n"
+		script := "#!/bin/sh\necho \"$*\" >> \"$0.args\"\n" + body + "\n"
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(script), 0o755); err != nil {
 			t.Fatal(err)
 		}

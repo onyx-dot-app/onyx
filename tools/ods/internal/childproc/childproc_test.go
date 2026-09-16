@@ -45,7 +45,7 @@ func TestRun_returnsWhenChildSucceeds(t *testing.T) {
 		t.Skip("the wrapped command is a shell script")
 	}
 	marker := filepath.Join(t.TempDir(), "ran")
-	c := exec.Command("sh", "-c", "touch "+marker)
+	c := exec.Command("touch", marker)
 
 	Run(c, "touch")
 

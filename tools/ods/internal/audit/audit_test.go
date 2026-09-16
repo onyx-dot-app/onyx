@@ -10,10 +10,10 @@ import (
 )
 
 // fakeDependabot installs a gh that prints alertsJSON, and returns its args log.
-func fakeDependabot(t *testing.T, bin, alertsJSON string) func() []string {
+func fakeDependabot(t *testing.T, bin, alertsJSON string) func() [][]string {
 	t.Helper()
-	alerts := writeFixture(t, bin, "alerts.json", alertsJSON)
-	return writeFakeCommand(t, bin, "gh", "cat '"+alerts+"'")
+	writeFixture(t, bin, "alerts.json", alertsJSON)
+	return writeFakeCommand(t, bin, "gh", `cat "$(dirname "$0")/alerts.json"`)
 }
 
 func findingIDs(findings []Finding) []string {
@@ -69,7 +69,7 @@ func TestRun_combinesBackendsAndAppliesTheAllowlist(t *testing.T) {
 		t.Fatalf("expected nothing on stderr, got %q", stderr.String())
 	}
 
-	wantGH := []string{"api repos/{owner}/{repo}/dependabot/alerts --paginate -f state=open -f per_page=100"}
+	wantGH := [][]string{{"api", "repos/{owner}/{repo}/dependabot/alerts", "--paginate", "-f", "state=open", "-f", "per_page=100"}}
 	if got := ghArgs(); !reflect.DeepEqual(got, wantGH) {
 		t.Fatalf("expected gh calls %q, got %q", wantGH, got)
 	}

@@ -125,9 +125,10 @@ func fakeDockerWithEmptyImage(t *testing.T, bin, ref string) {
 	if err := tarball.WriteToFile(archive, tag, img); err != nil {
 		t.Fatal(err)
 	}
+	t.Setenv("FAKE_DOCKER_ARCHIVE", archive)
 	writeFakeCommand(t, bin, "docker", `case "$1" in
 images) echo sha256:abc ;;
-save) cp '`+archive+`' "$3" ;;
+save) cp "$FAKE_DOCKER_ARCHIVE" "$3" ;;
 *) exit 1 ;;
 esac`)
 }

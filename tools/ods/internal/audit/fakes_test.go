@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -23,16 +24,17 @@ func fakeBinDir(t *testing.T) string {
 }
 
 // writeFakeCommand writes an executable shell script named name into dir. Each
-// call appends its arguments as one line to <dir>/<name>.args before running
-// body, and the returned function reads those lines back.
-func writeFakeCommand(t *testing.T, dir, name, body string) func() []string {
+// call appends its argument count and arguments, each NUL-terminated, to
+// <dir>/<name>.args before running body. The returned function decodes the log
+// into one argv per call.
+func writeFakeCommand(t *testing.T, dir, name, body string) func() [][]string {
 	t.Helper()
 	argsLog := filepath.Join(dir, name+".args")
-	script := "#!/bin/sh\necho \"$*\" >> '" + argsLog + "'\n" + body + "\n"
+	script := "#!/bin/sh\nprintf '%s\\0' \"$#\" \"$@\" >> \"$0.args\"\n" + body + "\n"
 	if err := os.WriteFile(filepath.Join(dir, name), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	return func() []string {
+	return func() [][]string {
 		data, err := os.ReadFile(argsLog)
 		if os.IsNotExist(err) {
 			return nil
@@ -40,7 +42,17 @@ func writeFakeCommand(t *testing.T, dir, name, body string) func() []string {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return strings.Split(strings.TrimSpace(string(data)), "\n")
+		fields := strings.Split(strings.TrimSuffix(string(data), "\x00"), "\x00")
+		var calls [][]string
+		for len(fields) > 0 {
+			n, err := strconv.Atoi(fields[0])
+			if err != nil || n > len(fields)-1 {
+				t.Fatalf("malformed args log %q", data)
+			}
+			calls = append(calls, fields[1:1+n])
+			fields = fields[1+n:]
+		}
+		return calls
 	}
 }
 
