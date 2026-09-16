@@ -116,3 +116,17 @@ func TestBackendDir_sitsInTheRepositoryRoot(t *testing.T) {
 		t.Fatalf("expected %q, got %q", want, backendDir)
 	}
 }
+
+func TestBackendDir_failsOutsideAGitRepository(t *testing.T) {
+	dir := t.TempDir()
+	// Stop git from finding a repository that encloses the temp directory.
+	t.Setenv("GIT_CEILING_DIRECTORIES", filepath.Dir(dir))
+	t.Chdir(dir)
+
+	if root, err := GitRoot(); err == nil {
+		t.Fatalf("expected GitRoot to fail outside a repository, got %q", root)
+	}
+	if backendDir, err := BackendDir(); err == nil {
+		t.Fatalf("expected BackendDir to fail outside a repository, got %q", backendDir)
+	}
+}

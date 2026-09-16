@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
@@ -74,4 +75,49 @@ func TestLoad_reportsInvalidJSON(t *testing.T) {
 	if _, err := Load(); err == nil {
 		t.Fatal("expected an error for a malformed config file")
 	}
+}
+
+func TestLoad_reportsAnUnreadableFile(t *testing.T) {
+	path := useTempConfigHome(t)
+	// A directory in place of the file fails with an error other than "not
+	// exist", so Load must not treat it as a first run.
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatalf("Failed to create the directory: %v", err)
+	}
+
+	cfg, err := Load()
+
+	if err == nil || !strings.HasPrefix(err.Error(), "failed to read config file "+path) {
+		t.Fatalf("expected a read error, got config %+v and error %v", cfg, err)
+	}
+}
+
+func TestSave_reportsFailures(t *testing.T) {
+	t.Run("config directory cannot be created", func(t *testing.T) {
+		useTempConfigHome(t)
+		blocker := filepath.Join(t.TempDir(), "file")
+		if err := os.WriteFile(blocker, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("XDG_CONFIG_HOME", blocker)
+
+		err := Save(&Config{})
+
+		if err == nil || !strings.HasPrefix(err.Error(), "failed to create config directory: ") {
+			t.Fatalf("expected a directory error, got %v", err)
+		}
+	})
+
+	t.Run("config file cannot be written", func(t *testing.T) {
+		path := useTempConfigHome(t)
+		if err := os.MkdirAll(path, 0o755); err != nil {
+			t.Fatalf("Failed to create the directory: %v", err)
+		}
+
+		err := Save(&Config{})
+
+		if err == nil || !strings.HasPrefix(err.Error(), "failed to write config file "+path) {
+			t.Fatalf("expected a write error, got %v", err)
+		}
+	})
 }
