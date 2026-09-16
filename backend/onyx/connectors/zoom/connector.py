@@ -240,6 +240,10 @@ class ZoomConnector(
             document_id = failed_document.document_id
             parsed = parse_zoom_document_id(document_id)
             if parsed is None:
+                logger.error(
+                    "Zoom targeted reindex was handed an id it did not write: %s",
+                    document_id,
+                )
                 yield ConnectorFailure(
                     failed_document=DocumentFailure(document_id=document_id),
                     failure_message=(
