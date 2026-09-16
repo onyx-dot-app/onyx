@@ -431,6 +431,24 @@ def openai_model_rejects_reasoning_effort(model_name: str) -> bool:
     return base_model_name.startswith(_OPENAI_MODELS_REJECTING_REASONING_EFFORT)
 
 
+# Omitting the reasoning parameter runs these at their medium default, so OFF
+# must reach them as an explicit "none".
+def openai_model_supports_reasoning_none(model_name: str) -> bool:
+    """Name-only, like `openai_model_rejects_reasoning_effort`: the names are
+    OpenAI's wherever they're hosted. Reads LiteLLM's per-model flag, which
+    is false for gpt-5, gpt-5-mini, the pro and chat variants and GPT-6."""
+    base_model_name = model_name.lower().split("/")[-1].removeprefix("openai.")
+    try:
+        model_map = get_model_map()
+        entry = model_map.get(base_model_name) or model_map.get(
+            f"{LlmProviderNames.OPENAI}/{base_model_name}"
+        )
+        return bool(entry) and entry.get("supports_none_reasoning_effort") is True
+    except Exception:
+        logger.exception("Failed to check %s for reasoning-none support", model_name)
+        return False
+
+
 # Providers that reach OpenAI models over OpenAI's own API shapes: a registry
 # model takes the responses bridge there, anything else chat completions.
 OPENAI_API_PROVIDERS = frozenset(

@@ -53,6 +53,7 @@ from onyx.llm.model_capabilities import (
     openai_chat_tools_require_reasoning_none,
     openai_chat_variant_rejects_reasoning,
     openai_model_rejects_reasoning_effort,
+    openai_model_supports_reasoning_none,
     resolve_reasoning_param_style,
 )
 from onyx.llm.model_capabilities import (
@@ -820,21 +821,34 @@ class LitellmLLM(LLM):
         ):
             reasoning_effort = ReasoningEffort.LOW
 
+        # The tools block above already forced reasoning_effort "none".
+        sends_explicit_reasoning_none = (
+            reasoning_effort is ReasoningEffort.OFF
+            and "reasoning_effort" not in optional_kwargs
+            and any(
+                openai_model_supports_reasoning_none(name)
+                for name in model_identity_names
+            )
+        )
+
         # Note, there is a reasoning_effort parameter in LiteLLM but it is completely jank and does not work for any
         # of the major providers. Not setting it sets it to OFF.
         if (
             is_reasoning
             # The default of this parameter not set is surprisingly not the equivalent of an Auto but is actually Off
-            and reasoning_effort != ReasoningEffort.OFF
+            and (
+                reasoning_effort != ReasoningEffort.OFF or sends_explicit_reasoning_none
+            )
             and not any(
                 openai_model_rejects_reasoning_effort(name)
                 for name in model_identity_names
             )
         ):
-            openai_style_reasoning = {
+            openai_style_reasoning: dict[str, str] = {
                 "effort": OPENAI_REASONING_EFFORT[reasoning_effort],
-                "summary": "auto",
             }
+            if not sends_explicit_reasoning_none:
+                openai_style_reasoning["summary"] = "auto"
 
             if reasoning_style is ReasoningParamStyle.OPENAI:
                 if is_claude_model:
@@ -852,6 +866,14 @@ class LitellmLLM(LLM):
                     )
                 if send_reasoning:
                     optional_kwargs["reasoning"] = openai_style_reasoning
+                    if (
+                        sends_explicit_reasoning_none
+                        and self.config.model_provider == LlmProviderNames.OPENAI
+                    ):
+                        # A retry without "none" runs at the medium default.
+                        # Gateways may reject "none", so only OpenAI itself
+                        # pins it.
+                        required_kwarg_keys = required_kwarg_keys | {"reasoning"}
 
             elif reasoning_style in (
                 ReasoningParamStyle.ANTHROPIC_ADAPTIVE,
@@ -917,6 +939,8 @@ class LitellmLLM(LLM):
                     # picker greys the level out for these models, so reaching
                     # here means a stored override outliving a model switch.
                     optional_kwargs["reasoning_effort"] = ReasoningEffort.HIGH.value
+                elif reasoning_effort is ReasoningEffort.OFF:
+                    optional_kwargs["reasoning_effort"] = _OPENAI_REASONING_NONE
                 else:
                     optional_kwargs["reasoning_effort"] = ReasoningEffort.MEDIUM.value
 
