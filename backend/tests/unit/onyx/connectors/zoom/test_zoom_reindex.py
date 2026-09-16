@@ -12,7 +12,6 @@ from onyx.connectors.models import (
 )
 from onyx.connectors.zoom.client import ZoomNotEntitledError
 from onyx.connectors.zoom.connector import ZoomConnector
-from onyx.connectors.zoom.models import ZoomSessionDetails
 from onyx.connectors.zoom.recordings.models import OccurrenceWork, ZoomSessionType
 from onyx.connectors.zoom.recordings.processing import process_occurrence
 from tests.unit.onyx.connectors.zoom.helpers import (
@@ -271,24 +270,17 @@ class TestPermissionParity:
         assert reindexed.external_access == crawled.external_access
 
     @pytest.mark.parametrize(
-        "details",
-        # Zoom says "over a year old" with code 12702, answers 404 for a
-        # session it has dropped, and can answer without a session number.
-        [
-            http_error(400, 12702),
-            None,
-            ZoomSessionDetails(topic="Weekly Sync"),
-        ],
+        "details_error",
+        # Zoom reports a session over a year old with code 12702, and answers
+        # 404 for one it has dropped.
+        [http_error(400, 12702), http_error(404)],
     )
     def test_a_session_it_cannot_resolve_fails_that_target(
-        self, details: object
+        self, details_error: Exception
     ) -> None:
         client = _client()
         self._populate_access(client)
-        if isinstance(details, Exception):
-            client.get_past_meeting_details.side_effect = details
-        else:
-            client.get_past_meeting_details.return_value = details
+        client.get_past_meeting_details.side_effect = details_error
 
         items = _reindex(client, [_target(_MEETING_DOC_ID)], include_permissions=True)
 

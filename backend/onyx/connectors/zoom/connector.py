@@ -115,7 +115,7 @@ def _rebuilt_work(
         )
 
     handler = get_session_type_handler(session_type)
-    details: ZoomSessionDetails | None
+    details: ZoomSessionDetails
     try:
         details = handler.get_occurrence_details(client, occurrence_uuid)
     except Exception as e:
@@ -132,13 +132,6 @@ def _rebuilt_work(
             f"to could not be resolved, so its access list can't be rebuilt: "
             f"{reason}"
         ) from e
-
-    if details is None or details.session_id is None:
-        raise ZoomAccessListUnavailable(
-            f"Zoom {session_type.value} occurrence {occurrence_uuid} was not "
-            "reindexed because permission sync is on and Zoom no longer names "
-            "the session it belongs to, so its access list can't be rebuilt"
-        )
 
     return OccurrenceWork(
         session_type=session_type,

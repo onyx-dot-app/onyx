@@ -56,13 +56,13 @@ class ZoomSessionDetails(BaseModel):
 
     # Zoom sends the session number as an integer here and as a string
     # everywhere else, so callers read it through session_id.
-    id: int | None = None
+    id: int
     topic: str
     start_time: str | None = None
 
     @property
-    def session_id(self) -> str | None:
-        return str(self.id) if self.id is not None else None
+    def session_id(self) -> str:
+        return str(self.id)
 
 
 class ZoomPastMeetingDetails(ZoomSessionDetails):
@@ -74,7 +74,6 @@ class ZoomPastMeetingDetails(ZoomSessionDetails):
     """
 
     uuid: str
-    id: int
     # A past meeting has already ended, so it always carries both timestamps
     # where a scheduled one may not.
     start_time: str
@@ -107,7 +106,6 @@ class ZoomWebinarDetails(ZoomSessionDetails):
     transcript call needs the `uuid`.
     """
 
-    id: int
     uuid: str
     host_id: str
     type: int
