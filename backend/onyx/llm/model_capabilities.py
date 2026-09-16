@@ -434,7 +434,7 @@ def openai_model_rejects_reasoning_effort(model_name: str) -> bool:
 # Omitting the reasoning parameter runs these at their medium default, so OFF
 # must reach them as an explicit "none".
 _NATIVE_OPENAI_MODELS_SUPPORTING_REASONING_NONE = frozenset(
-    {"gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"}
+    {"gpt-5.5", "gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"}
 )
 
 

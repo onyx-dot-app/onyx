@@ -71,7 +71,8 @@ def _text_stream_chunks(text: str) -> list[litellm.ModelResponse]:
 
 
 @pytest.mark.parametrize(
-    "model_name", ["gpt-5.6-sol", "gpt-5.6", "gpt-5.6-terra", "gpt-5.6-luna"]
+    "model_name",
+    ["gpt-5.6-sol", "gpt-5.6", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5"],
 )
 def test_off_sends_explicit_none_to_native_openai_sol(model_name: str) -> None:
     kwargs = _sent_kwargs(_llm(model_name), ReasoningEffort.OFF)
