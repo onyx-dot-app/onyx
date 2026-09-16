@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useId, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useFocusOnMount } from "@opal/hooks";
 import {
@@ -50,6 +50,7 @@ export default function SwitchList({
   footer,
 }: SwitchListProps) {
   const t = useTranslations("actions");
+  const listId = useId();
   const [searchTerm, setSearchTerm] = useState("");
   const focusOnMount = useFocusOnMount<HTMLInputElement>();
   const filteredItems = useMemo(() => {
@@ -70,7 +71,7 @@ export default function SwitchList({
         <div className="flex items-center gap-1" key="search">
           <Button
             icon={SvgChevronLeft}
-            prominence="tertiary"
+            prominence="internal"
             size="sm"
             aria-label={t("switchList.back.ariaLabel")}
             onClick={() => {
@@ -102,8 +103,8 @@ export default function SwitchList({
             : item.description;
           return (
             <Tooltip key={item.id} tooltip={tooltip}>
-              {/* The row does nothing when pressed — the InputSwitch beside it is
-                  the control — so it is a label, not a button. Padding matches
+              {/* A real <label> for the InputSwitch, so pressing anywhere on
+                  the row — the text included — toggles it. Padding matches
                   LineItemButton so it lines up with the rows around it.
 
                   It takes a tab stop only while disabled. The InputSwitch is a
@@ -111,14 +112,18 @@ export default function SwitchList({
                   tooltip explaining why would be reachable by pointer alone.
                   Enabled, the InputSwitch carries the focus and the tooltip opens
                   from it, so a stop here would only be a second one. */}
-              <div
-                className="w-full p-1.5"
+              <label
+                htmlFor={`${listId}-${item.id}`}
+                className={
+                  item.disabled ? "w-full p-1.5" : "w-full cursor-pointer p-1.5"
+                }
                 // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- the stop exists so a keyboard can reach the tooltip that says why the row is disabled; its InputSwitch is a disabled button and cannot hold focus
                 tabIndex={item.disabled ? 0 : undefined}
               >
                 <ContentAction
                   sizePreset="main-ui"
                   padding={0.5}
+                  center
                   icon={
                     item.leading
                       ? ((() =>
@@ -127,6 +132,7 @@ export default function SwitchList({
                   }
                   rightChildren={
                     <InputSwitch
+                      id={`${listId}-${item.id}`}
                       checked={item.isEnabled}
                       onCheckedChange={item.onToggle}
                       aria-label={t("switchList.toggle.ariaLabel", {
@@ -137,7 +143,7 @@ export default function SwitchList({
                   }
                   title={item.label}
                 />
-              </div>
+              </label>
             </Tooltip>
           );
         }),

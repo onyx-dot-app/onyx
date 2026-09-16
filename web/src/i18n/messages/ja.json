@@ -81,6 +81,9 @@
       },
       "projectSearch": {
         "label": "プロジェクト検索"
+      },
+      "selectSearchSources": {
+        "label": "検索ソースを選択"
       }
     },
     "addMcpModal": {
