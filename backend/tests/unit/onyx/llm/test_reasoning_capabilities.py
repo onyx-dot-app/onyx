@@ -4,6 +4,8 @@ from onyx.llm.api_surfaces import LlmApiSurface
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_capabilities import (
     ReasoningParamStyle,
+    anthropic_identity_is_always_thinking,
+    anthropic_thinking_is_always_on,
     is_openai_registry_model_name,
     openai_chat_tools_require_reasoning_none,
     parse_anthropic_model_version,
@@ -263,6 +265,56 @@ def test_supported_reasoning_efforts(
         ReasoningEffort.HIGH,
     ]
     assert (ReasoningEffort.XHIGH in efforts) is xhigh_supported
+
+
+@pytest.mark.parametrize(
+    "model_name, always_on",
+    [
+        ("claude-fable-5", True),
+        ("claude-fable-5-1", True),
+        ("claude-5-mythos", True),
+        ("claude-opus-5", False),
+        ("claude-sonnet-5", False),
+        ("claude-opus-4-7", False),
+        # Pre-adaptive Claude only thinks when the param asks for it.
+        ("claude-3-7-sonnet", False),
+        # The leading tier word decides, whichever the tier list names first.
+        ("claude-opus-4-7-mythos", False),
+        ("claude-mythos-5-opus", True),
+        ("fable-writer-v2", False),
+    ],
+)
+def test_anthropic_thinking_is_always_on(model_name: str, always_on: bool) -> None:
+    assert anthropic_thinking_is_always_on(model_name) is always_on
+
+
+@pytest.mark.parametrize(
+    "model_names, always_on",
+    [
+        (["claude-fable-5"], True),
+        # The deployment alias reaches the provider, so it decides.
+        (["claude-fable-5", "claude-opus-5"], False),
+        (["claude-opus-5", "claude-fable-5"], True),
+        (["my-deployment", "claude-mythos-5-1"], True),
+        # An alias that names no Claude version leaves the model name to decide.
+        (["claude-fable-5", "prod-claude-alias"], True),
+    ],
+)
+def test_anthropic_identity_is_always_thinking(
+    model_names: list[str], always_on: bool
+) -> None:
+    assert anthropic_identity_is_always_thinking(model_names) is always_on
+
+
+@pytest.mark.parametrize("model_name", ["claude-fable-5", "claude-mythos-5-1"])
+def test_always_thinking_models_offer_no_off(model_name: str) -> None:
+    """Off would promise a saving these models never honor: they reject
+    thinking.type=disabled, so the request builder cannot turn reasoning off."""
+    efforts = supported_reasoning_efforts(
+        LlmProviderNames.ANTHROPIC, [model_name], None
+    )
+    assert ReasoningEffort.OFF not in efforts
+    assert efforts[0] is ReasoningEffort.LOW
 
 
 @pytest.mark.parametrize("model_name", ["o1-mini", "o1-preview", "o1-mini-2024-09-12"])
