@@ -646,9 +646,9 @@ class TestSystemicFailureDoesNotAdvanceWork:
     def test_a_document_specific_failure_still_advances(self) -> None:
         connector, mock_client = _make_connector(meeting_ids=["111"])
         response = requests.Response()
-        response.status_code = 404
+        response.status_code = 400
         mock_client.get_meeting_transcript.side_effect = requests.HTTPError(
-            "404", response=response
+            "400", response=response
         )
 
         generator = connector.load_from_checkpoint(
@@ -662,6 +662,30 @@ class TestSystemicFailureDoesNotAdvanceWork:
             returned = stop.value
 
         assert [isinstance(item, ConnectorFailure) for item in items] == [True]
+        assert returned.recordings.work_index == 1
+
+    def test_a_session_without_a_transcript_advances_without_a_failure(self) -> None:
+        # Reporting each untranscribed session would end every run
+        # COMPLETED_WITH_ERRORS and bury the real failures.
+        connector, mock_client = _make_connector(meeting_ids=["111"])
+        response = requests.Response()
+        response.status_code = 404
+        mock_client.get_meeting_transcript.side_effect = requests.HTTPError(
+            "404", response=response
+        )
+
+        generator = connector.load_from_checkpoint(
+            _POLL_START, _FULL_HISTORY_END, self._checkpoint()
+        )
+        emitted = 0
+        try:
+            while True:
+                next(generator)
+                emitted += 1
+        except StopIteration as stop:
+            returned = stop.value
+
+        assert emitted == 0
         assert returned.recordings.work_index == 1
 
 

@@ -108,8 +108,9 @@ class TestProcessOccurrence:
         client.get_past_meeting_details.assert_called_once_with("uuid-abc")
 
     def test_never_recorded_is_skipped(self) -> None:
+        # Zoom answers 404 for a session it never transcribed.
         client = _client_with_transcript()
-        client.get_meeting_transcript.return_value = None
+        client.get_meeting_transcript.side_effect = _http_error(404)
 
         assert _run(client, _work()) == []
         client.download_transcript_vtt.assert_not_called()
@@ -289,7 +290,7 @@ class TestSystemicFailuresStopTheRun:
         with pytest.raises(type(error)):
             _run(client, _work())
 
-    @pytest.mark.parametrize("status", [400, 403, 404, 410])
+    @pytest.mark.parametrize("status", [400, 403, 410])
     def test_client_errors_stay_scoped_to_the_one_document(self, status: int) -> None:
         client = _client_with_transcript()
         client.get_meeting_transcript.side_effect = _http_error(status)

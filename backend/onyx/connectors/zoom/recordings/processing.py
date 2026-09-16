@@ -17,6 +17,7 @@ from onyx.connectors.zoom.recordings.models import (
     OccurrenceWork,
     ZoomSessionType,
     fails_the_whole_run,
+    has_no_transcript,
 )
 from onyx.connectors.zoom.recordings.session_types import get_session_type_handler
 from onyx.connectors.zoom.recordings.vtt import parse_vtt_transcript
@@ -47,6 +48,13 @@ def process_occurrence(
     except Exception as e:
         if fails_the_whole_run(e):
             raise
+        if has_no_transcript(e):
+            logger.info(
+                "Zoom has no transcript for session %s occurrence %s; skipping",
+                work.session_id,
+                occurrence_uuid,
+            )
+            return None
         logger.exception(
             "Failed to fetch Zoom transcript for session %s occurrence %s",
             work.session_id,
@@ -59,14 +67,6 @@ def process_occurrence(
             failure_message=f"Failed to fetch transcript for Zoom session {work.session_id} occurrence {occurrence_uuid}: {e}",
             exception=e,
         )
-
-    if transcript is None:
-        logger.info(
-            "Zoom session %s occurrence %s was never cloud-recorded; skipping",
-            work.session_id,
-            occurrence_uuid,
-        )
-        return None
 
     download_url = transcript.download_url
     if not transcript.is_downloadable or not download_url:
