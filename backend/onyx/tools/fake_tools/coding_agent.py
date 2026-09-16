@@ -61,12 +61,10 @@ logger = setup_logger()
 
 # Allow up to an hour for the agent to investigate the repo
 CODING_AGENT_SESSION_TTL_SECONDS = 60 * 60
-# Per-bash-command timeout. Capped at the code-interpreter service's
-# max_exec_timeout_ms (60s by default; configurable via MAX_EXEC_TIMEOUT_MS).
-CODING_AGENT_BASH_TIMEOUT_MS = 60 * 1000
 # Hard wall-clock timeout for the whole agent run
 CODING_AGENT_FORCE_ANSWER_SECONDS = 25 * 60
-# Same cap applies to setup commands (tarball extract). If a repo extract
+# Timeout for setup commands (tarball extract). Capped at the code-interpreter
+# service's max_exec_timeout_ms (60s by default). If a repo extract
 # legitimately takes more than 60s, raise MAX_EXEC_TIMEOUT_MS on the
 # code-interpreter service rather than this constant.
 CODING_AGENT_SETUP_TIMEOUT_MS = 60 * 1000

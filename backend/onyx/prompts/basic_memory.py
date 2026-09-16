@@ -28,11 +28,3 @@ You MUST respond in a json which follows the following format and keys:
 ```
 """.strip()
 # ruff: noqa: E501, W605 end
-
-MEMORY_USER_BASIC_INFORMATION_PROMPT = """
-
-# User Basic Information
-User name: {user_name}
-User email: {user_email}
-User role: {user_role}
-"""

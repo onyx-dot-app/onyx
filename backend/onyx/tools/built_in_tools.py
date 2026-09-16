@@ -52,10 +52,6 @@ CITEABLE_TOOLS_NAMES: list[str] = [
 ]
 
 
-def get_built_in_tool_ids() -> list[str]:
-    return list(BUILT_IN_TOOL_MAP.keys())
-
-
 def get_built_in_tool_by_id(in_code_tool_id: str) -> Type[BUILT_IN_TOOL_TYPES]:
     return BUILT_IN_TOOL_MAP[in_code_tool_id]
 

@@ -5,9 +5,8 @@ from enum import Enum
 from typing import Any, Callable, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict
 
-from onyx.chat.emitter import Emitter
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT, NUM_RETURNED_HITS
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
@@ -114,37 +113,6 @@ class ParallelToolCallResponse(BaseModel):
     updated_citation_mapping: dict[int, str]
 
 
-class ToolRunnerResponse(BaseModel):
-    tool_run_kickoff: ToolCallKickoff | None = None
-    tool_response: ToolResponse | None = None
-    tool_message_content: str | list[str | dict[str, Any]] | None = None
-
-    @model_validator(mode="after")
-    def validate_tool_runner_response(self) -> "ToolRunnerResponse":
-        fields = ["tool_response", "tool_message_content", "tool_run_kickoff"]
-        provided = sum(
-            1
-            for field in fields
-            if getattr(self, field) is not None  # ods: ignore[getattr]
-        )
-
-        if provided != 1:
-            raise ValueError(
-                "Exactly one of 'tool_response', 'tool_message_content', or 'tool_run_kickoff' must be provided"
-            )
-
-        return self
-
-
-class ToolCallFinalResult(ToolCallKickoff):
-    tool_result: Any = (
-        None  # we would like to use JSON_ro, but can't due to its recursive nature
-    )
-    # agentic additions; only need to set during agentic tool calls
-    level: int | None = None
-    level_question_num: int | None = None
-
-
 class ChatMinimalTextMessage(BaseModel):
     message: str
     message_type: MessageType
@@ -237,24 +205,6 @@ class PythonToolOverrideKwargs(BaseModel):
     chat_files: list[ChatFile] = []
 
 
-class SearchToolRunContext(BaseModel):
-    emitter: Emitter
-
-    model_config = {"arbitrary_types_allowed": True}
-
-
-class ImageGenerationToolRunContext(BaseModel):
-    emitter: Emitter
-
-    model_config = {"arbitrary_types_allowed": True}
-
-
-class CustomToolRunContext(BaseModel):
-    emitter: Emitter
-
-    model_config = {"arbitrary_types_allowed": True}
-
-
 class MemoryToolResponseSnapshot(BaseModel):
     memory_text: str
     operation: Literal["add", "update"]
@@ -294,15 +244,6 @@ class BaseCiteableToolResult(BaseModel):
     document_citation_number: int
     unique_identifier_to_strip_away: str | None = None
     type: str
-
-
-class LlmInternalSearchResult(BaseCiteableToolResult):
-    """Result from an internal search query"""
-
-    type: Literal["internal_search"] = "internal_search"
-    title: str
-    excerpt: str
-    metadata: dict[str, Any]
 
 
 class LlmWebSearchResult(BaseCiteableToolResult):

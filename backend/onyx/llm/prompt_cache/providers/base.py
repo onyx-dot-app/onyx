@@ -41,29 +41,3 @@ class PromptCacheProvider(ABC):
             Combined and transformed messages ready for LLM API call
         """
         raise NotImplementedError
-
-    @abstractmethod
-    def extract_cache_metadata(
-        self,
-        response: dict,  # Provider-specific response object
-        cache_key: str,
-    ) -> CacheMetadata | None:
-        """Extract cache metadata from API response.
-
-        Args:
-            response: Provider-specific response dictionary
-            cache_key: Cache key used for this request
-
-        Returns:
-            CacheMetadata if extractable, None otherwise
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    def get_cache_ttl_seconds(self) -> int:
-        """Get cache TTL in seconds for this provider.
-
-        Returns:
-            TTL in seconds
-        """
-        raise NotImplementedError

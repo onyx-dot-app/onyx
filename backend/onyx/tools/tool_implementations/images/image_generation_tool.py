@@ -358,7 +358,6 @@ class ImageGenerationTool(Tool[None]):
         generation_thread.start()
 
         # Emit heartbeat packets while waiting for completion
-        heartbeat_count = 0
         while not completed.is_set():
             # Emit a heartbeat packet to prevent timeout
             self.emitter.emit(
@@ -367,7 +366,6 @@ class ImageGenerationTool(Tool[None]):
                     obj=ImageGenerationToolHeartbeat(),
                 )
             )
-            heartbeat_count += 1
 
             # Wait for a short time before next heartbeat
             if completed.wait(timeout=HEARTBEAT_INTERVAL):

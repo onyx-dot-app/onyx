@@ -1,10 +1,6 @@
 import json
 import os
 
-IMAGE_GENERATION_OUTPUT_FORMAT = os.environ.get(
-    "IMAGE_GENERATION_OUTPUT_FORMAT", "b64_json"
-)
-
 # if specified, will pass through request headers to the call to API calls made by custom tools
 CUSTOM_TOOL_PASS_THROUGH_HEADERS: list[str] | None = None
 _CUSTOM_TOOL_PASS_THROUGH_HEADERS_RAW = os.environ.get(

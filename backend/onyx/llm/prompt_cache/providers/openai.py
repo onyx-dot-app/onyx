@@ -41,29 +41,3 @@ class OpenAIPromptCacheProvider(PromptCacheProvider):
             continuation=continuation,
             transform_cacheable=None,
         )
-
-    def extract_cache_metadata(
-        self,
-        response: dict,  # noqa: ARG002
-        cache_key: str,  # noqa: ARG002
-    ) -> CacheMetadata | None:
-        """Extract cache metadata from OpenAI response.
-
-        OpenAI responses may include cached_tokens in the usage field.
-        For implicit caching, we don't need to store much metadata.
-
-        Args:
-            response: OpenAI API response dictionary
-            cache_key: Cache key used for this request
-
-        Returns:
-            CacheMetadata if extractable, None otherwise
-        """
-        # For implicit caching, OpenAI handles everything automatically
-        # We could extract cached_tokens from response.get("usage", {}).get("cached_tokens")
-        # but for now, we don't need to store metadata for implicit caching
-        return None
-
-    def get_cache_ttl_seconds(self) -> int:
-        """Get cache TTL for OpenAI (1 hour max)."""
-        return 3600

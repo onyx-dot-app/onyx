@@ -4,7 +4,6 @@ from fastapi.datastructures import Headers
 
 from onyx.configs.model_configs import (
     LITELLM_EXTRA_HEADERS,
-    LITELLM_PASS_THROUGH_HEADERS,
 )
 from onyx.configs.tool_configs import CUSTOM_TOOL_PASS_THROUGH_HEADERS
 from onyx.utils.logger import setup_logger
@@ -15,20 +14,6 @@ logger = setup_logger()
 class HeaderItemDict(TypedDict):
     key: str
     value: str
-
-
-def clean_header_list(headers_to_clean: list[HeaderItemDict]) -> dict[str, str]:
-    cleaned_headers: dict[str, str] = {}
-    for item in headers_to_clean:
-        key = item["key"]
-        value = item["value"]
-        if key in cleaned_headers:
-            logger.warning(
-                "Duplicate header %s found in custom headers, ignoring...", key
-            )
-            continue
-        cleaned_headers[key] = value
-    return cleaned_headers
 
 
 def header_dict_to_header_list(header_dict: dict[str, str]) -> list[HeaderItemDict]:
@@ -56,12 +41,6 @@ def get_relevant_headers(
                 pass_through_headers[lowercase_key] = headers[lowercase_key]
 
     return pass_through_headers
-
-
-def get_litellm_additional_request_headers(
-    headers: dict[str, str] | Headers,
-) -> dict[str, str]:
-    return get_relevant_headers(headers, LITELLM_PASS_THROUGH_HEADERS)
 
 
 def build_llm_extra_headers(

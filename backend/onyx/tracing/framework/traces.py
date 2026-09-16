@@ -211,9 +211,6 @@ class NoOpTrace(Trace):
         return None
 
 
-NO_OP_TRACE = NoOpTrace()
-
-
 class TraceImpl(Trace):
     """
     A trace that will be recorded by the tracing library.

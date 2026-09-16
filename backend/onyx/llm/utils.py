@@ -1,6 +1,6 @@
 import copy
 import re
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
@@ -40,7 +40,6 @@ logger = setup_logger()
 
 MAX_CONTEXT_TOKENS = 100
 ONE_MILLION = 1_000_000
-CHUNKS_PER_DOC_ESTIMATE = 5
 MAX_LITELLM_USER_ID_LENGTH = 64
 
 
@@ -324,21 +323,6 @@ def llm_response_to_string(message: ModelResponse) -> str:
         raise RuntimeError("LLM message not in expected format.")
 
     return message.choice.message.content
-
-
-def check_number_of_tokens(
-    text: str, encode_fn: Callable[[str], list] | None = None
-) -> int:
-    """Gets the number of tokens in the provided text, using the provided encoding
-    function. If none is provided, default to the tiktoken encoder used by GPT-3.5
-    and GPT-4.
-    """
-    import tiktoken
-
-    if encode_fn is None:
-        encode_fn = tiktoken.get_encoding("cl100k_base").encode
-
-    return len(encode_fn(text))
 
 
 # Substrings that mark a `custom_config` key as containing credential material.

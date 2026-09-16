@@ -159,7 +159,6 @@ from shared_configs.contextvars import (
 )
 
 logger = setup_logger()
-ERROR_TYPE_CANCELLED = "cancelled"
 APPROX_CHARS_PER_TOKEN = 4
 
 

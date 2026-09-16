@@ -56,10 +56,6 @@ class ModelResponseStream(BaseModel):
     usage: Usage | None = None
 
 
-if TYPE_CHECKING:
-    from litellm.types.utils import ModelResponseStream as LiteLLMModelResponseStream
-
-
 class Message(BaseModel):
     content: str | None = None
     role: str = "assistant"

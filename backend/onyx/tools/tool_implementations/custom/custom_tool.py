@@ -1,9 +1,8 @@
-import csv
 import json
 import queue
 import uuid
-from io import BytesIO, StringIO
-from typing import Any, Dict, List
+from io import BytesIO
+from typing import Any, List
 
 import requests
 from requests import JSONDecodeError
@@ -42,8 +41,6 @@ from onyx.utils.headers import HeaderItemDict, header_list_to_header_dict
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-CUSTOM_TOOL_RESPONSE_ID = "custom_tool_response"
 
 
 # override_kwargs is not supported for custom tools
@@ -130,11 +127,6 @@ class CustomTool(Tool[None]):
         )
 
         return [file_id]
-
-    def _parse_csv(self, csv_text: str) -> List[Dict[str, Any]]:
-        csv_file = StringIO(csv_text)
-        reader = csv.DictReader(csv_file)
-        return [row for row in reader]
 
     """Actual execution of the tool"""
 
