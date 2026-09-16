@@ -30,8 +30,6 @@ NUM_REPEAT_ERRORS_BEFORE_REPEATED_ERROR_STATE = 5
 
 
 class IndexingCallbackBase(IndexingHeartbeatInterface):
-    PARENT_CHECK_INTERVAL = 60
-
     def __init__(
         self,
         parent_pid: int,
@@ -79,22 +77,6 @@ class IndexingCallbackBase(IndexingHeartbeatInterface):
 
     def progress(self, tag: str, amount: int) -> None:  # noqa: ARG002
         """Amount isn't used yet."""
-
-        # rkuo: this shouldn't be necessary yet because we spawn the process this runs inside
-        # with daemon=True. It seems likely some indexing tasks will need to spawn other processes
-        # eventually, which daemon=True prevents, so leave this code in until we're ready to test it.
-
-        # if self.parent_pid:
-        #     # check if the parent pid is alive so we aren't running as a zombie
-        #     now = time.monotonic()
-        #     if now - self.last_parent_check > IndexingCallback.PARENT_CHECK_INTERVAL:
-        #         try:
-        #             # this is unintuitive, but it checks if the parent pid is still running
-        #             os.kill(self.parent_pid, 0)
-        #         except Exception:
-        #             logger.exception("IndexingCallback - parent pid check exceptioned")
-        #             raise
-        #         self.last_parent_check = now
 
         try:
             current_time = time.monotonic()

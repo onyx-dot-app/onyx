@@ -109,9 +109,6 @@ class ChatLoadedFile(InMemoryChatFile):
     # canonical plaintext (e.g. including image captions) doesn't exist yet.
     content_pending: bool = False
 
-    # Named distinctly from the base ``lazy_from_descriptor`` so the subclass
-    # can require ``content_text`` / ``token_count`` without violating LSP on
-    # the override (ty correctly flag the broader subclass signature).
     @classmethod
     def lazy_loaded(
         cls,
