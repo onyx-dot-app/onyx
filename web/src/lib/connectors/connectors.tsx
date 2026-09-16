@@ -4,6 +4,9 @@ import { AccessTypeGroupSelectorFormType } from "@/components/admin/connectors/A
 import { Credential } from "@/lib/connectors/credentials"; // Import Credential type
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
 
+const DEFAULT_MICROSOFT_AUTHORITY_HOST = "https://login.microsoftonline.com";
+const DEFAULT_MICROSOFT_GRAPH_API_HOST = "https://graph.microsoft.com";
+
 export function isLoadState(connector_name: string): boolean {
   // TODO: centralize connector metadata like this somewhere instead of hardcoding it here
   const loadStateConnectors = ["web", "xenforo", "file", "airtable"];
@@ -103,23 +106,28 @@ export interface StringTabOption extends Option {
   default?: string;
 }
 
+export type TabSelectionValue = string | number | boolean | null;
+
+export type ConnectorValueField =
+  | BooleanOption
+  | ListOption
+  | StringPairListOption
+  | TextOption
+  | NumberOption
+  | SelectOption
+  | MultiSelectOption
+  | FileOption
+  | StringTabOption;
+
 export interface TabOption extends Option {
   type: "tab";
   defaultTab?: string;
+  selectionField?: string;
   tabs: {
     label: string;
     value: string;
-    fields: (
-      | BooleanOption
-      | ListOption
-      | StringPairListOption
-      | TextOption
-      | NumberOption
-      | SelectOption
-      | MultiSelectOption
-      | FileOption
-      | StringTabOption
-    )[];
+    selectionValue?: TabSelectionValue;
+    fields: ConnectorValueField[];
   }[];
   default?: [];
 }
@@ -128,28 +136,8 @@ export interface ConnectionConfiguration {
   description: string;
   subtext?: string;
   initialConnectorName?: string; // a key in the credential to prepopulate the connector name field
-  values: (
-    | BooleanOption
-    | ListOption
-    | StringPairListOption
-    | TextOption
-    | NumberOption
-    | SelectOption
-    | MultiSelectOption
-    | FileOption
-    | TabOption
-  )[];
-  advanced_values: (
-    | BooleanOption
-    | ListOption
-    | StringPairListOption
-    | TextOption
-    | NumberOption
-    | SelectOption
-    | MultiSelectOption
-    | FileOption
-    | TabOption
-  )[];
+  values: (ConnectorValueField | TabOption)[];
+  advanced_values: (ConnectorValueField | TabOption)[];
   overrideDefaultFreq?: number;
   advancedValuesVisibleCondition?: (
     values: any,
@@ -634,6 +622,89 @@ export const connectorConfigs: Record<
         name: "exclude_domain_link_only",
         optional: true,
         default: false,
+      },
+    ],
+  },
+  onedrive: {
+    description: "Configure OneDrive connector",
+    values: [
+      {
+        type: "tab",
+        name: "indexing_scope",
+        label: "Whose OneDrive files should Onyx index?",
+        optional: true,
+        selectionField: "all_users",
+        tabs: [
+          {
+            value: "general",
+            label: "General",
+            selectionValue: true,
+            fields: [
+              {
+                type: "string_tab",
+                label: "General",
+                name: "all_users_description",
+                description:
+                  "Index all eligible users that the Microsoft application can access.",
+              },
+            ],
+          },
+          {
+            value: "specific",
+            label: "Specific",
+            selectionValue: false,
+            fields: [
+              {
+                type: "list",
+                label: "Users",
+                name: "users",
+                optional: true,
+                default: [],
+                description:
+                  "Add each user principal name or primary email address to index.",
+              },
+            ],
+          },
+        ],
+        defaultTab: "general",
+      },
+    ],
+    advanced_values: [
+      {
+        type: "list",
+        label: "Excluded Paths",
+        name: "excluded_paths",
+        optional: true,
+        default: [],
+        description:
+          "Glob patterns matched against each file path and filename, such as '*.tmp' or 'Archive/*'.",
+      },
+      {
+        type: "checkbox",
+        label: "Treat organization links as public",
+        name: "treat_organization_link_as_public",
+        optional: true,
+        default: false,
+        description:
+          "Treat files shared through an organization-wide link as visible to all Onyx users.",
+      },
+      {
+        type: "text",
+        label: "Authority Host",
+        name: "authority_host",
+        optional: true,
+        default: DEFAULT_MICROSOFT_AUTHORITY_HOST,
+        description:
+          "Microsoft identity authority host. Use https://login.microsoftonline.us for GCC High or DoD.",
+      },
+      {
+        type: "text",
+        label: "Graph API Host",
+        name: "graph_api_host",
+        optional: true,
+        default: DEFAULT_MICROSOFT_GRAPH_API_HOST,
+        description:
+          "Microsoft Graph host. Use https://graph.microsoft.us for GCC High or DoD.",
       },
     ],
   },
@@ -2095,10 +2166,64 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
 };
 type ConnectorField = ConnectionConfiguration["values"][number];
 
+export function getSelectedTabValue(
+  field: TabOption,
+  values: Record<string, unknown>
+): string {
+  if (field.selectionField) {
+    const selectedValue = values[field.selectionField];
+    const selectedTab = field.tabs.find((tab) =>
+      Object.is(tab.selectionValue, selectedValue)
+    );
+    if (selectedTab) {
+      return selectedTab.value;
+    }
+  }
+  return field.defaultTab ?? field.tabs[0]?.value ?? "";
+}
+
+export function getTabValueUpdates(
+  field: TabOption,
+  selectedTabValue: string,
+  values: Record<string, unknown>
+): Record<string, unknown> {
+  const updates: Record<string, unknown> = {};
+  const selectedTab = field.tabs.find((tab) => tab.value === selectedTabValue);
+
+  if (field.selectionField && selectedTab?.selectionValue !== undefined) {
+    updates[field.selectionField] = selectedTab.selectionValue;
+  }
+
+  field.tabs.forEach((tab) => {
+    if (tab.value === selectedTabValue) {
+      return;
+    }
+    tab.fields.forEach((tabField) => {
+      if (!Object.is(values[tabField.name], tabField.default)) {
+        updates[tabField.name] = tabField.default;
+      }
+    });
+  });
+  return updates;
+}
+
 const buildInitialValuesForFields = (
   fields: ConnectorField[]
-): Record<string, any> =>
-  fields.reduce<Record<string, any>>((acc, field) => {
+): Record<string, unknown> =>
+  fields.reduce<Record<string, unknown>>((acc, field) => {
+    if (field.type === "tab" && field.selectionField) {
+      const defaultTab =
+        field.tabs.find((tab) => tab.value === field.defaultTab) ??
+        field.tabs[0];
+      if (defaultTab?.selectionValue !== undefined) {
+        acc[field.selectionField] = defaultTab.selectionValue;
+      }
+      Object.assign(
+        acc,
+        buildInitialValuesForFields(field.tabs.flatMap((tab) => tab.fields))
+      );
+      return acc;
+    }
     if (field.type === "select") {
       acc[field.name] = null;
     } else if (field.type === "list") {
@@ -2267,6 +2392,15 @@ export interface GoogleDriveConfig {
   include_my_drives?: boolean;
   my_drive_emails?: string;
   shared_folder_urls?: string;
+}
+
+export interface OneDriveConfig {
+  users: string[];
+  all_users: boolean;
+  excluded_paths: string[];
+  treat_organization_link_as_public: boolean;
+  authority_host: string;
+  graph_api_host: string;
 }
 
 export interface GmailConfig {}
