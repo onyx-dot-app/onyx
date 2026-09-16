@@ -517,12 +517,20 @@ def _build_tool_metadata(user_file: UserFile) -> FileToolMetadata:
     Delegates to ``build_file_context`` so that the file ID exposed to the
     LLM is always consistent with what FileReaderTool expects.
     """
-    return build_file_context(
+    file_type = mime_type_to_chat_file_type(user_file.file_type)
+    metadata = build_file_context(
         tool_file_id=str(user_file.id),
         filename=user_file.name,
-        file_type=mime_type_to_chat_file_type(user_file.file_type),
+        file_type=file_type,
         approx_char_count=(user_file.token_count or 0) * APPROX_CHARS_PER_TOKEN,
     ).tool_metadata
+    # `_load_context_user_files_for_tools` only loads metadata-only files into
+    # `chat_files_for_tools`, so those are the only context files PythonTool
+    # ever receives. The rest are listed for the LLM but never staged — only
+    # read_file can fetch them.
+    return metadata.model_copy(
+        update={"staged_for_tools": file_type.use_metadata_only()}
+    )
 
 
 def determine_search_params(
@@ -842,6 +850,10 @@ def build_chat_turn(
                     # We don't know the exact size without loading the file,
                     # but 0 signals "unknown" to the LLM.
                     approx_char_count=0,
+                    # These messages are filtered out of chat_history just
+                    # below, so load_all_chat_files never sees them and the
+                    # bytes never reach chat_files_for_tools.
+                    staged_for_tools=False,
                 )
         # Filter chat_history to only messages after the cutoff
         chat_history = [m for m in chat_history if m.id > cutoff_id]

@@ -737,10 +737,16 @@ def _simple_token_counter(text: str) -> int:
 
 
 def _make_file_metadata(
-    file_id: str, filename: str, approx_chars: int = 50_000
+    file_id: str,
+    filename: str,
+    approx_chars: int = 50_000,
+    staged_for_tools: bool = True,
 ) -> FileToolMetadata:
     return FileToolMetadata(
-        file_id=file_id, filename=filename, approx_char_count=approx_chars
+        file_id=file_id,
+        filename=filename,
+        approx_char_count=approx_chars,
+        staged_for_tools=staged_for_tools,
     )
 
 
@@ -1183,9 +1189,12 @@ class TestForgottenFileMetadata:
 
 def _notice_for_dropped_file(
     available_tool_names: set[str] | None = None,
+    staged_for_tools: bool = True,
 ) -> ChatMessageSimple:
     """Truncate one oversized attachment out of context and return the notice."""
-    file_meta = _make_file_metadata("file-abc", "sustainability.pdf")
+    file_meta = _make_file_metadata(
+        "file-abc", "sustainability.pdf", staged_for_tools=staged_for_tools
+    )
     file_msg = create_message("x" * 2000, MessageType.USER, 500)
     file_msg.file_id = "file-abc"
 
@@ -1267,18 +1276,75 @@ class TestForgottenFilesNoticeFollowsConstructedTools:
         assert "internal search" in notice.message
         assert "read_file" not in notice.message
 
-    def test_names_no_tool_when_the_request_has_neither(self) -> None:
-        """The case the review caught: search is gone, so do not promise it."""
+    def test_names_python_when_it_is_the_only_reader(self) -> None:
+        """The python tool is handed the files themselves, so an evicted file is
+        still readable there. Calling it unreadable makes the model refuse work
+        it could actually do.
+        """
         notice = _notice_for_dropped_file({"run_python"})
+        assert "python tool" in notice.message
+        assert "no tool here can read them" not in notice.message
+        assert "sustainability.pdf" in notice.message
+
+    def test_python_tier_omits_the_file_id(self) -> None:
+        """The UUID is a read_file identifier; PythonTool never sees it."""
+        notice = _notice_for_dropped_file({"run_python"})
+        assert "file-abc" not in notice.message
+
+    def test_python_tier_does_not_promise_an_exact_path(self) -> None:
+        """PythonTool normalizes and de-duplicates names at staging time, so the
+        notice cannot know the sandbox path. It must not assert one.
+        """
+        notice = _notice_for_dropped_file({"run_python"})
+        assert "by filename" not in notice.message
+        assert "listing the working directory" in notice.message
+
+    def test_python_tier_skipped_for_summary_truncated_files(self) -> None:
+        """Summary truncation filters the message out of chat_history before
+        load_all_chat_files runs, so those bytes never reach the python tool.
+        Advertising python for them points the model at nothing.
+        """
+        notice = _notice_for_dropped_file({"run_python"}, staged_for_tools=False)
+        assert "python tool" not in notice.message
+        assert "no tool here can read them" in notice.message
+        assert "sustainability.pdf" in notice.message
+
+    def test_search_wins_over_python_when_both_are_offered(self) -> None:
+        """Indexed retrieval beats writing code to parse an oversized file."""
+        notice = _notice_for_dropped_file({"internal_search", "run_python"})
+        assert "internal search" in notice.message
+        assert "python tool" not in notice.message
+
+    def test_python_only_persona_reaches_the_python_tier(self) -> None:
+        """Regression for a real deployment: read_file is attached to the
+        persona but filtered out by availability, internal_search was never
+        attached, and run_python is live.
+        """
+        notice = _notice_for_dropped_file(
+            {"generate_image", "web_search", "run_python", "open_url"}
+        )
+        assert "python tool" in notice.message
         assert "read_file" not in notice.message
         assert "internal search" not in notice.message
+
+    def test_names_no_tool_when_the_request_has_no_reader(self) -> None:
+        """No read_file, no search, no python — do not promise anything."""
+        notice = _notice_for_dropped_file({"generate_image", "web_search"})
+        assert "read_file" not in notice.message
+        assert "internal search" not in notice.message
+        assert "python tool" not in notice.message
         assert "no tool here can read them" in notice.message
 
     def test_still_forbids_guessing_when_no_tool_is_offered(self) -> None:
-        notice = _notice_for_dropped_file({"run_python"})
+        notice = _notice_for_dropped_file({"generate_image", "web_search"})
         assert "Do not guess" in notice.message
         assert "search the web" in notice.message
         assert "sustainability.pdf" in notice.message
+
+    def test_python_tier_also_forbids_guessing_and_web_search(self) -> None:
+        notice = _notice_for_dropped_file({"run_python"})
+        assert "Do not guess" in notice.message
+        assert "search the web" in notice.message
 
 
 class TestFallbackToolExtraction:
