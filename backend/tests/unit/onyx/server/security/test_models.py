@@ -22,6 +22,7 @@ from onyx.server.security.models import (
 _VALID_EFFECTIVE_KWARGS: dict[str, Any] = {
     "user_directory_admin_only": False,
     "track_external_idp_expiry": False,
+    "allow_same_provider_subject_relink": False,
     "incognito_availability": IncognitoAvailability.OFF,
     "incognito_record_mode": IncognitoRecordMode.USAGE_ONLY,
     "ssrf_protection_level": SSRFProtectionLevel.VALIDATE_LLM,
@@ -35,6 +36,9 @@ _VALID_EFFECTIVE_KWARGS: dict[str, Any] = {
     "password_require_digit": True,
     "password_require_special_char": False,
     "password_auth_enabled": True,
+    "jwt_public_key_url": None,
+    "jwt_expected_audience": None,
+    "jwt_expected_issuer": None,
 }
 
 

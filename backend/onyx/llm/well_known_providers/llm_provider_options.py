@@ -230,7 +230,7 @@ def get_vertexai_model_names() -> list[str]:
     ]
     for attr in vertex_model_sets:
         if hasattr(litellm, attr):
-            vertex_models.update(getattr(litellm, attr))
+            vertex_models.update(getattr(litellm, attr))  # ods: ignore[getattr]
 
     # Also extract from model_cost for any models not in the sets
     for key in litellm.model_cost.keys():

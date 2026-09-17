@@ -149,8 +149,8 @@ const DEFAULT_ENTRY: ProviderEntry = {
   Modal: CustomModal,
 };
 
-// Providers that don't use custom_config themselves — if custom_config is
-// present it means the provider was originally created via CustomModal.
+// Providers that don't use custom_config themselves, so a non-empty
+// custom_config means the provider was originally created via CustomModal.
 const CUSTOM_CONFIG_OVERRIDES = new Set<string>([
   LLMProviderName.OPENAI,
   LLMProviderName.ANTHROPIC,
@@ -168,8 +168,12 @@ export function getProvider(
     companyName: providerName,
   };
 
+  // An empty custom_config carries no signal of origin. Only a non-empty map
+  // marks a provider created via the custom form.
+  const customConfig = existingProvider?.custom_config;
   if (
-    existingProvider?.custom_config != null &&
+    customConfig != null &&
+    Object.keys(customConfig).length > 0 &&
     CUSTOM_CONFIG_OVERRIDES.has(providerName)
   ) {
     return { ...entry, Modal: CustomModal };

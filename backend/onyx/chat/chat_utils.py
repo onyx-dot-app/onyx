@@ -20,6 +20,7 @@ from onyx.chat.models import (
     FileToolMetadata,
     ToolCallSimple,
 )
+from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import (
     DEFAULT_PERSONA_ID,
     TMP_DRALPHA_PERSONA_NAME,
@@ -110,10 +111,19 @@ def build_file_context(
     — the ID that FileReaderTool accepts (``UserFile.id`` for user files).
     """
     if file_type.use_metadata_only():
-        message_text = (
+        # Name read_file only where it is attached (FileReaderTool.is_available),
+        # and drop the id with it: read_file is that UUID's only consumer, since
+        # the python tool addresses files by filename. Tools are constructed
+        # after this runs, so the other branch cannot know what is available and
+        # names nothing rather than promising a tool the model may not have.
+        message_text: str = (
             f"File: {filename} (id={tool_file_id})\n"
-            "Use the file_reader or python tools to access "
-            "this file's contents."
+            "Use the read_file or python tools to access this file's contents."
+            if DISABLE_VECTOR_DB
+            else f"File: {filename}\n"
+            "This file's contents are not included here. Use your available "
+            "tools to read it. Do not guess the contents and do not search "
+            "the web for this file."
         )
         message = ChatMessageSimple(
             message=message_text,
@@ -188,7 +198,7 @@ def create_chat_session_from_request(
 
     persona_id = chat_session_request.persona_id
     if persona_id != DEFAULT_PERSONA_ID:
-        if not user.is_anonymous and not user_can_access_persona(
+        if not user_can_access_persona(
             db_session=db_session,
             persona_id=persona_id,
             user=user,
@@ -651,7 +661,7 @@ def convert_chat_history_basic(
             continue
 
         message = chat_message.message or ""
-        token_count = getattr(chat_message, "token_count", None)
+        token_count = getattr(chat_message, "token_count", None)  # ods: ignore[getattr]
         if token_count is None:
             token_count = token_counter(message)
 
@@ -819,7 +829,7 @@ def convert_chat_history(
                     message=chat_message.message,
                     token_count=chat_message.token_count + image_token_count,
                     message_type=MessageType.USER,
-                    image_files=image_files if image_files else None,
+                    image_files=image_files or None,
                     image_token_count=image_token_count,
                 )
             )

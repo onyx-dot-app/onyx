@@ -132,7 +132,12 @@ def test_me_service_account_skips_tenant_mapping_lookup() -> None:
         patch("onyx.server.manage.users._get_token_expires_at", return_value=None),
         patch("onyx.server.manage.users.UserInfo") as mock_user_info,
     ):
-        verify_user_logged_in(request=MagicMock(), user=user, db_session=MagicMock())
+        verify_user_logged_in(
+            request=MagicMock(),
+            response=MagicMock(),
+            user=user,
+            db_session=MagicMock(),
+        )
 
     kwargs = mock_user_info.from_model.call_args.kwargs
     assert kwargs["team_name"] == "tenant_current"

@@ -5,7 +5,7 @@ import {
   render,
   screen,
   waitFor,
-} from "@testing-library/react";
+} from "@tests/setup/test-utils";
 import { SWRConfig } from "swr";
 
 import FilesTab from "@/app/craft/components/output-panel/FilesTab";

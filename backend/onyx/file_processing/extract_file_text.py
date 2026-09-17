@@ -16,7 +16,6 @@ from zipfile import BadZipFile
 import chardet
 import openpyxl
 from openpyxl.worksheet._read_only import ReadOnlyWorksheet
-from PIL import Image
 
 from onyx.configs.app_configs import (
     MAX_EMBEDDED_IMAGES_PER_FILE,
@@ -32,6 +31,7 @@ from onyx.file_processing.file_types import (
     OnyxMimeTypes,
 )
 from onyx.file_processing.html_utils import parse_html_page_basic
+from onyx.file_processing.pdf_image_utils import iter_pdf_extracted_images
 from onyx.file_processing.unstructured import (
     get_unstructured_api_key,
     unstructured_to_text,
@@ -212,62 +212,14 @@ def read_text_file(
     return file_content_raw, metadata
 
 
-def count_pdf_embedded_images(file: IO[Any], cap: int) -> int:
-    """Return the number of embedded images in a PDF, short-circuiting at cap+1.
-
-    Used to reject PDFs whose image count would OOM the user-file-processing
-    worker during indexing. Returns a value > cap as a sentinel once the count
-    exceeds the cap, so callers do not iterate thousands of image objects just
-    to report a number. Returns 0 if the PDF cannot be parsed.
-
-    Owner-password-only PDFs (permission restrictions but no open password) are
-    counted normally — they decrypt with an empty string. Truly password-locked
-    PDFs are skipped (return 0) since we can't inspect them; the caller should
-    ensure the password-protected check runs first.
-
-    Always restores the file pointer to its original position before returning.
-    """
-    from pypdf import PdfReader
-
-    try:
-        start_pos = file.tell()
-    except Exception:
-        start_pos = None
-    try:
-        if start_pos is not None:
-            file.seek(0)
-        reader = PdfReader(file)
-        if reader.is_encrypted:
-            # Try empty password first (owner-password-only PDFs); give up if that fails.
-            try:
-                if reader.decrypt("") == 0:
-                    return 0
-            except Exception:
-                return 0
-        count = 0
-        for page in reader.pages:
-            for _ in page.images:
-                count += 1
-                if count > cap:
-                    return count
-        return count
-    except Exception:
-        logger.warning("Failed to count embedded images in PDF", exc_info=True)
-        return 0
-    finally:
-        if start_pos is not None:
-            try:
-                file.seek(start_pos)
-            except Exception:
-                pass
-
-
-def pdf_to_text(file: IO[Any], pdf_pass: str | None = None) -> str:
+def pdf_to_text(
+    file: IO[Any], pdf_pass: str | None = None, isolate_pdfium: bool = True
+) -> str:
     """
     Extract text from a PDF. For embedded images, a more complex approach is needed.
     This is a minimal approach returning text only.
     """
-    text, _, _ = read_pdf_file(file, pdf_pass)
+    text, _, _ = read_pdf_file(file, pdf_pass, isolate_pdfium=isolate_pdfium)
     return text
 
 
@@ -303,9 +255,14 @@ def read_pdf_file(
     pdf_pass: str | None = None,
     extract_images: bool = False,
     image_callback: Callable[[bytes, str], None] | None = None,
+    isolate_pdfium: bool = True,
 ) -> tuple[str, dict[str, Any], Sequence[tuple[bytes, str]]]:
     """
     Returns the text, basic PDF metadata, and optionally extracted images.
+
+    ``isolate_pdfium=False`` is for a caller that is itself a child process
+    under a deadline: a child of a child is orphaned when the outer one is
+    killed, so PDFium runs in the caller's process instead.
     """
     from pypdf import PdfReader
     from pypdf.errors import PdfStreamError
@@ -355,12 +312,15 @@ def read_pdf_file(
         # PDFium can hard-abort or hang on a malformed PDF (uncatchable in-process),
         # so run it isolated; a crash, timeout, or PdfiumError falls back to pypdf.
         try:
-            text = run_in_isolated_process(
-                _extract_pdf_text_pdfium,
-                file_bytes,
-                decrypt_password,
-                timeout=PDF_TEXT_EXTRACTION_TIMEOUT_SECONDS,
-            )
+            if isolate_pdfium:
+                text = run_in_isolated_process(
+                    _extract_pdf_text_pdfium,
+                    file_bytes,
+                    decrypt_password,
+                    timeout=PDF_TEXT_EXTRACTION_TIMEOUT_SECONDS,
+                )
+            else:
+                text = _extract_pdf_text_pdfium(file_bytes, decrypt_password)
         except (PdfiumError, IsolatedProcessError) as pdfium_err:
             logger.warning(
                 "PDFium text extraction failed (%s); falling back to pypdf",
@@ -371,40 +331,13 @@ def read_pdf_file(
             )
 
         if extract_images:
-            image_cap = MAX_EMBEDDED_IMAGES_PER_FILE
-            images_processed = 0
-            cap_reached = False
-            for page_num, page in enumerate(pdf_reader.pages):
-                if cap_reached:
-                    break
-                for image_file_object in page.images:
-                    if images_processed >= image_cap:
-                        # Defense-in-depth backstop. Upload-time validation
-                        # should have rejected files exceeding the cap, but
-                        # we also break here so a single oversized file can
-                        # never pin a worker.
-                        logger.warning(
-                            "PDF embedded image cap reached (%d). "
-                            "Skipping remaining images on page %d and beyond.",
-                            image_cap,
-                            page_num + 1,
-                        )
-                        cap_reached = True
-                        break
-
-                    image = Image.open(io.BytesIO(image_file_object.data))
-                    img_byte_arr = io.BytesIO()
-                    image.save(img_byte_arr, format=image.format)
-                    img_bytes = img_byte_arr.getvalue()
-
-                    image_format = image.format.lower() if image.format else "png"
-                    image_name = f"page_{page_num + 1}_image_{image_file_object.name}.{image_format}"
-                    if image_callback is not None:
-                        # Stream image out immediately
-                        image_callback(img_bytes, image_name)
-                    else:
-                        extracted_images.append((img_bytes, image_name))
-                    images_processed += 1
+            images = iter_pdf_extracted_images(pdf_reader, MAX_EMBEDDED_IMAGES_PER_FILE)
+            if image_callback is None:
+                extracted_images.extend(images)
+            else:
+                # Stream each image out immediately
+                for img_bytes, image_name in images:
+                    image_callback(img_bytes, image_name)
 
         return text, metadata, extracted_images
 
@@ -840,16 +773,6 @@ def extract_file_text(
     NOTE: Ignoring seems to be defined as returning an empty string for files it can't
     handle (such as images).
     """
-    extension_to_function: dict[str, Callable[[IO[Any]], str]] = {
-        ".pdf": pdf_to_text,
-        ".docx": lambda f: read_docx_file(f, file_name)[0],  # no images
-        ".pptx": lambda f: pptx_to_text(f, file_name),
-        ".xlsx": lambda f: xlsx_to_text(f, file_name),
-        ".eml": eml_to_text,
-        ".epub": epub_to_text,
-        ".html": parse_html_page_basic,
-    }
-
     try:
         if get_unstructured_api_key():
             try:
@@ -859,20 +782,7 @@ def extract_file_text(
                     "Failed to process with Unstructured: %s. Falling back to normal processing.",
                     str(unstructured_error),
                 )
-        if extension is None:
-            extension = get_file_ext(file_name)
-
-        if extension in OnyxFileExtensions.TEXT_AND_DOCUMENT_EXTENSIONS:
-            func = extension_to_function.get(extension, file_io_to_text)
-            file.seek(0)
-            return func(file)
-
-        # If unknown extension, maybe it's a text file
-        file.seek(0)
-        if is_text_file(file):
-            return file_io_to_text(file)
-
-        raise ValueError("Unknown file extension or not recognized as text data")
+        return extract_file_text_locally(file, file_name, extension)
 
     except Exception as e:
         if break_on_unprocessable:
@@ -881,6 +791,45 @@ def extract_file_text(
             ) from e
         logger.warning("Failed to process file %s: %s", file_name or "Unknown", str(e))
         return ""
+
+
+def extract_file_text_locally(
+    file: IO[Any],
+    file_name: str,
+    extension: str | None = None,
+    isolate_pdfium: bool = True,
+) -> str:
+    """Text by extension from the in-process parsers only.
+
+    Never reaches the database or Redis (the Unstructured key lives there), so
+    it can run in a child process that has neither. Raises on a file no parser
+    accepts. See ``read_pdf_file`` for ``isolate_pdfium``.
+    """
+    extension_to_function: dict[str, Callable[[IO[Any]], str]] = {
+        ".pdf": lambda f: pdf_to_text(f, isolate_pdfium=isolate_pdfium),
+        ".docx": lambda f: read_docx_file(f, file_name)[0],  # no images
+        ".pptx": lambda f: pptx_to_text(f, file_name),
+        ".xlsx": lambda f: xlsx_to_text(f, file_name),
+        # openpyxl reads macro-enabled workbooks like any other.
+        ".xlsm": lambda f: xlsx_to_text(f, file_name),
+        ".eml": eml_to_text,
+        ".epub": epub_to_text,
+        ".html": parse_html_page_basic,
+    }
+    if extension is None:
+        extension = get_file_ext(file_name)
+
+    if extension in OnyxFileExtensions.TEXT_AND_DOCUMENT_EXTENSIONS:
+        func = extension_to_function.get(extension, file_io_to_text)
+        file.seek(0)
+        return func(file)
+
+    # If unknown extension, maybe it's a text file
+    file.seek(0)
+    if is_text_file(file):
+        return file_io_to_text(file)
+
+    raise ValueError("Unknown file extension or not recognized as text data")
 
 
 class ExtractionResult(NamedTuple):
@@ -973,22 +922,26 @@ def _extract_text_and_images(
     # Default processing
     try:
         extension = get_file_ext(file_name)
-        # docx example for embedded images
+        # One setting read per file. With extraction off, no image is decoded
+        # for any format, which is what lets upload validation skip its caps.
+        extract_images = get_image_extraction_and_analysis_enabled()
+
         if extension == ".docx":
             text_content, images = read_docx_file(
-                file, file_name, extract_images=True, image_callback=image_callback
+                file,
+                file_name,
+                extract_images=extract_images,
+                image_callback=image_callback,
             )
             return ExtractionResult(
                 text_content=text_content, embedded_images=images, metadata={}
             )
 
-        # PDF example: we do not show complicated PDF image extraction here
-        # so we simply extract text for now and skip images.
         if extension == ".pdf":
             text_content, pdf_metadata, images = read_pdf_file(
                 file,
                 pdf_pass,
-                extract_images=get_image_extraction_and_analysis_enabled(),
+                extract_images=extract_images,
                 image_callback=image_callback,
             )
             return ExtractionResult(
@@ -997,7 +950,10 @@ def _extract_text_and_images(
 
         if extension == ".pptx":
             text_content, images = read_pptx_file(
-                file, file_name, extract_images=True, image_callback=image_callback
+                file,
+                file_name,
+                extract_images=extract_images,
+                image_callback=image_callback,
             )
             return ExtractionResult(
                 text_content=text_content, embedded_images=images, metadata={}

@@ -23,6 +23,7 @@ from onyx.db.models import (
     Connector,
     ConnectorCredentialPair,
     Credential,
+    Document__Tag,
     DocumentByConnectorCredentialPair,
     FileRecord,
     IndexAttempt,
@@ -190,6 +191,9 @@ def cleanup_cc_pair(db_session: Session, pair: ConnectorCredentialPair) -> None:
                 pass
 
         if orphan_doc_ids:
+            db_session.query(Document__Tag).filter(
+                Document__Tag.document_id.in_(orphan_doc_ids)
+            ).delete(synchronize_session="fetch")
             db_session.query(DBDocument).filter(
                 DBDocument.id.in_(orphan_doc_ids)
             ).delete(synchronize_session="fetch")
@@ -219,8 +223,13 @@ def make_future_search_settings(
     tests that must not collide with concurrent FUTUREs.
     """
     present = get_current_search_settings(db_session)
+    # create_search_settings only falls back to its kwarg when the model's value is
+    # None, so set the flag here too or the value cloned from PRESENT wins.
     saved = SavedSearchSettings.from_db_model(present).model_copy(
-        update={"index_name": f"test_future_{uuid4().hex[:8]}"}
+        update={
+            "index_name": f"test_future_{uuid4().hex[:8]}",
+            "use_port_flow": use_port_flow,
+        }
     )
     return create_search_settings(
         saved, db_session, status=status, use_port_flow=use_port_flow

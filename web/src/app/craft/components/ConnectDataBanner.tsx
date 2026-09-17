@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
 import { Text } from "@opal/components";
 import {
@@ -31,6 +32,7 @@ function IconWrapper({ children }: { children: React.ReactNode }) {
 export default function ConnectDataBanner({
   className,
 }: ConnectDataBannerProps) {
+  const t = useTranslations("craft.connectDataBanner");
   const { permissions } = useUser();
   const canManageConnectors = hasPermission(
     permissions,
@@ -70,12 +72,12 @@ export default function ConnectDataBanner({
               <SvgSlack size={16} />
             </IconWrapper>
           </div>
-          <div className="transition-transform duration-200 group-hover:translate-x-2">
+          <div className="transition-transform duration-200 group-hover:translate-x-2 rtl:group-hover:-translate-x-2">
             <IconWrapper>
               <SvgGoogleDrive size={16} />
             </IconWrapper>
           </div>
-          <div className="transition-transform duration-200 group-hover:translate-x-4">
+          <div className="transition-transform duration-200 group-hover:translate-x-4 rtl:group-hover:-translate-x-4">
             <IconWrapper>
               <SvgConfluence size={16} />
             </IconWrapper>
@@ -84,18 +86,18 @@ export default function ConnectDataBanner({
 
         <div className="flex items-center justify-center gap-1">
           <Text font="secondary-body" color="text-03">
-            Connect your data
+            {t("cta.label")}
           </Text>
           <SvgChevronRight className="h-4 w-4 text-text-03" />
         </div>
 
         <div className="flex items-center -space-x-2">
-          <div className="transition-transform duration-200 group-hover:-translate-x-4">
+          <div className="transition-transform duration-200 group-hover:-translate-x-4 rtl:group-hover:translate-x-4">
             <IconWrapper>
               <SvgGithub size={16} />
             </IconWrapper>
           </div>
-          <div className="transition-transform duration-200 group-hover:-translate-x-2">
+          <div className="transition-transform duration-200 group-hover:-translate-x-2 rtl:group-hover:translate-x-2">
             <IconWrapper>
               <SvgNotion size={16} />
             </IconWrapper>

@@ -27,6 +27,7 @@ from onyx.configs.app_configs import (
     POLL_CONNECTOR_OFFSET,
 )
 from onyx.configs.constants import (
+    DocumentSource,
     NotificationType,
     OnyxCeleryPriority,
     OnyxCeleryQueues,
@@ -65,10 +66,7 @@ from onyx.db.enums import (
     IndexingStatus,
     IndexModelStatus,
 )
-from onyx.db.hierarchy import (
-    upsert_hierarchy_node_cc_pair_entries,
-    upsert_hierarchy_nodes_batch,
-)
+from onyx.db.hierarchy import persist_hierarchy_nodes_for_cc_pair
 from onyx.db.index_attempt import (
     create_index_attempt_error,
     get_index_attempt,
@@ -529,10 +527,14 @@ def connector_document_extraction(
         should_fetch_permissions_during_indexing = (
             index_attempt.connector_credential_pair.access_type == AccessType.SYNC
             and source_should_fetch_permissions_during_indexing(db_connector.source)
-            and is_primary
-            # if we've already successfully indexed, let the doc_sync job
-            # take care of doc-level permissions
-            and (from_beginning or not has_successful_attempt)
+            # if we've already successfully indexed, let the doc_sync job take care
+            # of doc-level permissions. Zoom skips both halves: with no doc_sync to
+            # fall back on, anything indexing misses -- including a document the
+            # secondary crawl creates before the primary sees it -- is missed for good.
+            and (
+                db_connector.source == DocumentSource.ZOOM
+                or (is_primary and (from_beginning or not has_successful_attempt))
+            )
         )
 
         # Set up time windows for polling. A port-flow FUTURE's resume cursor comes from its
@@ -1023,20 +1025,13 @@ def cache_and_upsert_hierarchy_nodes(
         hierarchy_node_batch
     )
     with get_session_with_current_tenant() as db_session:
-        upserted_nodes = upsert_hierarchy_nodes_batch(
+        upserted_nodes = persist_hierarchy_nodes_for_cc_pair(
             db_session=db_session,
             nodes=hierarchy_node_batch_cleaned,
             source=db_connector.source,
-            commit=True,
-            is_connector_public=is_connector_public,
-        )
-
-        upsert_hierarchy_node_cc_pair_entries(
-            db_session=db_session,
-            hierarchy_node_ids=[n.id for n in upserted_nodes],
             connector_id=db_connector.id,
             credential_id=db_credential.id,
-            commit=True,
+            is_connector_public=is_connector_public,
         )
 
         # Cache in Redis for fast ancestor resolution during doc processing

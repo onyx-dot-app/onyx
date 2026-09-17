@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import require_permission
 from onyx.db.api_key import (
     ApiKeyDescriptor,
+    fetch_api_key,
     fetch_api_keys,
     insert_api_key,
     regenerate_api_key,
@@ -13,6 +14,8 @@ from onyx.db.api_key import (
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.api_key.models import APIKeyArgs
 from onyx.utils.audit import (
     AuditAction,
@@ -32,6 +35,20 @@ def list_api_keys(
     return fetch_api_keys(db_session)
 
 
+@router.get("/{api_key_id}")
+def get_api_key(
+    api_key_id: int,
+    _: User = Depends(require_permission(Permission.MANAGE_SERVICE_ACCOUNT_API_KEYS)),
+    db_session: Session = Depends(get_session),
+) -> ApiKeyDescriptor:
+    api_key = fetch_api_key(db_session, api_key_id)
+    if api_key is None:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND, f"API key with id {api_key_id} does not exist"
+        )
+    return api_key
+
+
 @router.post("")
 def create_api_key(
     api_key_args: APIKeyArgs,
@@ -49,6 +66,7 @@ def create_api_key(
         actor=actor_from_user(user),
         resource_type="api_key",
         resource_id=api_key.api_key_id,
+        extra={"name": api_key_args.name, "group_ids": list(api_key_args.group_ids)},
     )
     return api_key
 
@@ -76,10 +94,23 @@ def regenerate_existing_api_key(
 def update_existing_api_key(
     api_key_id: int,
     api_key_args: APIKeyArgs,
-    _: User = Depends(require_permission(Permission.MANAGE_SERVICE_ACCOUNT_API_KEYS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_SERVICE_ACCOUNT_API_KEYS)
+    ),
     db_session: Session = Depends(get_session),
 ) -> ApiKeyDescriptor:
-    return update_api_key(db_session, api_key_id, api_key_args)
+    # update_api_key replaces every group the service account belongs to, and
+    # those groups are what grant the key its permissions.
+    api_key = update_api_key(db_session, api_key_id, api_key_args)
+    emit_audit_event(
+        AuditAction.API_KEY_UPDATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="api_key",
+        resource_id=api_key_id,
+        extra={"name": api_key_args.name, "group_ids": list(api_key_args.group_ids)},
+    )
+    return api_key
 
 
 @router.delete("/{api_key_id}")

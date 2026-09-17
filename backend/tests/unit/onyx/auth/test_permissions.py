@@ -67,6 +67,14 @@ class TestResolveEffectivePermissions:
         result = resolve_effective_permissions({"read:search"})
         assert result == {"read:search"}
 
+    def test_basic_does_not_imply_connector_or_document_set_reads(self) -> None:
+        """The search filter listings are gated on read:search, never on
+        READ_CONNECTORS (the admin connector surface) or READ_DOCUMENT_SETS
+        (see every document set)."""
+        basic = resolve_effective_permissions({"basic"})
+        assert "read:connectors" not in basic
+        assert "read:document_sets" not in basic
+
     def test_basic_does_not_imply_read_admin(self) -> None:
         """read:admin is admin-only — basic principals must never gain it."""
         assert "read:admin" not in resolve_effective_permissions({"basic"})

@@ -26,7 +26,7 @@ class _JiraGroupNotFoundError(RuntimeError):
 
 
 def _get_jira_error_text(error: JIRAError) -> str:
-    raw_text = getattr(error, "text", "")
+    raw_text = getattr(error, "text", "")  # ods: ignore[getattr]
     if not isinstance(raw_text, str):
         return str(raw_text)
 

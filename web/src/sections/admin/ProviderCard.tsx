@@ -1,6 +1,7 @@
 "use client";
 
 import type { IconFunctionComponent } from "@opal/types";
+import { useTranslations } from "next-intl";
 import { Button, SelectCard } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
@@ -64,6 +65,7 @@ interface ProviderCardProps {
   disconnectModalOpen?: boolean;
   /** When true, keeps the edit button visible (as if hovered). */
   setupModalOpen?: boolean;
+  /** Defaults to the shared "Current Default" label. */
   selectedLabel?: string;
   "aria-label"?: string;
 }
@@ -86,9 +88,16 @@ export default function ProviderCard({
   onDisconnect,
   disconnectModalOpen,
   setupModalOpen,
-  selectedLabel = "Current Default",
+  selectedLabel,
   "aria-label": ariaLabel,
 }: ProviderCardProps) {
+  const t = useTranslations("admin.shared");
+  const resolvedSelectedLabel =
+    selectedLabel ?? t("providerCard.currentDefault.label");
+  // A name to select the card by — one that says which provider it is rather
+  // than what it looks like. Not an accessibility fix: the card is a roleless
+  // div with an onClick, so a label alone leaves it pointer-only.
+  const label = ariaLabel ?? title;
   const isDisconnected = status === "disconnected";
   const isConnected = status === "connected";
   const isSelected = status === "selected";
@@ -101,8 +110,8 @@ export default function ProviderCard({
       <SelectCard
         state={STATUS_TO_STATE[status]}
         padding={2}
-        rounding="lg"
-        aria-label={ariaLabel}
+        rounding={4}
+        aria-label={label}
         onClick={
           isDisconnected && onConnect
             ? onConnect
@@ -130,7 +139,7 @@ export default function ProviderCard({
                   onConnect();
                 }}
               >
-                Connect
+                {t("providerCard.connectButton.label")}
               </Button>
             ) : (
               <Section alignItems="end" justifyContent="start" gap={0}>
@@ -143,7 +152,7 @@ export default function ProviderCard({
                       onSelect();
                     }}
                   >
-                    Set as Default
+                    {t("providerCard.setDefaultButton.label")}
                   </Button>
                 ) : isSelected ? (
                   <Button
@@ -151,7 +160,7 @@ export default function ProviderCard({
                     prominence="tertiary"
                     rightIcon={SvgCheckSquare}
                   >
-                    {selectedLabel}
+                    {resolvedSelectedLabel}
                   </Button>
                 ) : undefined}
                 {(onDisconnect || onEdit) && (
@@ -164,8 +173,11 @@ export default function ProviderCard({
                         >
                           <Button
                             icon={SvgUnplug}
-                            tooltip="Disconnect"
-                            aria-label={`Disconnect ${title}`}
+                            tooltip={t("providerCard.disconnectButton.tooltip")}
+                            aria-label={t(
+                              "providerCard.disconnectButton.ariaLabel",
+                              { title }
+                            )}
                             prominence="tertiary"
                             onClick={(e) => {
                               e.stopPropagation();
@@ -182,8 +194,10 @@ export default function ProviderCard({
                         >
                           <Button
                             icon={SvgSettings}
-                            tooltip="Edit"
-                            aria-label={`Edit ${title}`}
+                            tooltip={t("providerCard.editButton.tooltip")}
+                            aria-label={t("providerCard.editButton.ariaLabel", {
+                              title,
+                            })}
                             prominence="tertiary"
                             onClick={(e) => {
                               e.stopPropagation();

@@ -1,6 +1,8 @@
+"use client";
+
 import React from "react";
 import Link from "next/link";
-import type { Route } from "next";
+import { useTranslations } from "next-intl";
 import { Button, Card } from "@opal/components";
 import { FINAL_SETUP_CONFIG } from "@/sections/onboarding/constants";
 import { FinalStepItemProps } from "@/interfaces/onboarding";
@@ -22,7 +24,7 @@ const FinalStepItem = React.memo(
       : {};
 
     return (
-      <Card background="none" border="solid" padding={1} rounding="lg">
+      <Card color="transparent" border="solid" padding={1} rounding={4}>
         <Section alignItems="start" height="fit">
           <ContentAction
             icon={Icon}
@@ -32,7 +34,7 @@ const FinalStepItem = React.memo(
             variant="section"
             padding={1}
             rightChildren={
-              <Link href={buttonHref as Route} {...linkProps}>
+              <Link href={buttonHref} {...linkProps}>
                 <Button prominence="tertiary" rightIcon={SvgExternalLink}>
                   {buttonText}
                 </Button>
@@ -47,10 +49,19 @@ const FinalStepItem = React.memo(
 FinalStepItem.displayName = "FinalStepItem";
 
 export default function FinalStep() {
+  const t = useTranslations("onboarding");
+
   return (
     <Section gap={2}>
       {FINAL_SETUP_CONFIG.map((item) => (
-        <FinalStepItem key={item.title} {...item} />
+        <FinalStepItem
+          key={item.titleKey}
+          icon={item.icon}
+          buttonHref={item.buttonHref}
+          title={t(item.titleKey)}
+          description={t(item.descriptionKey)}
+          buttonText={t(item.buttonTextKey)}
+        />
       ))}
     </Section>
   );

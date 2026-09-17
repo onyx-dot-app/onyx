@@ -469,7 +469,11 @@ services:
       - /data
 
   minio:
-    image: ${BASE_IMAGE_REGISTRY:-docker.io}/minio/minio:RELEASE.2025-07-23T15-54-02Z-cpuv1
+    # Docker Hub dropped minio/minio when MinIO archived its community edition,
+    # so this does not go through BASE_IMAGE_REGISTRY (a Docker Hub mirror).
+    # RELEASE.2025-09-07 is the last multi-arch build; -cpuv1 also runs on
+    # x86-64-v1 CPUs. Pinned by digest.
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z-cpuv1@sha256:13582eff79c6605a2d315bdd0e70164142ea7e98fc8411e9e10d089502a6d883
     restart: unless-stopped
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set a strong value in .env, not minioadmin}
@@ -485,12 +489,34 @@ services:
       retries: 3
 
   code-interpreter:
-    image: onyxdotapp/code-interpreter:${CODE_INTERPRETER_IMAGE_TAG:-latest}
+    # The sandbox ships on its own release line, so IMAGE_TAG does not cover it.
+    # Pinned so an upgrade cannot move it to an untested build. Bump with the
+    # release that has been tested against it.
+    image: onyxdotapp/code-interpreter:${CODE_INTERPRETER_IMAGE_TAG:-0.4.7}
     command: ["bash", "./entrypoint.sh", "code-interpreter-api"]
     restart: unless-stopped
     env_file:
       - path: .env
         required: false
+    healthcheck:
+      # /health probes the executor backend, not just the API process: it needs
+      # the Docker daemon reachable and the executor image present on the host.
+      # That image is pulled only during startup and `docker run --pull never`
+      # is used per request, so a host that loses it (e.g. `docker system prune
+      # --all`) stays broken until this container restarts. The service answers
+      # 200 with status != ok in that state, so the body has to be read.
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import json,urllib.request; r = json.load(urllib.request.urlopen('http://localhost:8000/health', timeout=5)); raise SystemExit(0 if r['status'] == 'ok' else 1)",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      # First run pulls the executor image and does not serve until it lands.
+      start_period: 120s
 
     # Below is needed for the `docker-out-of-docker` execution mode
     # For Linux rootless Docker, set DOCKER_SOCK_PATH=${XDG_RUNTIME_DIR}/docker.sock

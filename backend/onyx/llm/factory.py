@@ -21,6 +21,7 @@ from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import Persona, SearchSettings, User
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM, LlmRequestPolicy
+from onyx.llm.models import ReasoningEffort, UserChatDefaults
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.utils import (
@@ -31,7 +32,7 @@ from onyx.llm.well_known_providers.constants import (
     PROVIDERS_WITH_SPECIAL_API_KEY_HANDLING,
 )
 from onyx.natural_language_processing.utils import get_tokenizer
-from onyx.server.manage.llm.models import LLMProviderView
+from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 from onyx.utils.headers import build_llm_extra_headers
 from onyx.utils.logger import setup_logger
 
@@ -64,13 +65,13 @@ def _build_provider_extra_headers(
     return {}
 
 
-def _get_model_configured_max_input_tokens(
+def _get_model_configuration(
     llm_provider: LLMProviderView,
     model_name: str,
-) -> int | None:
+) -> ModelConfigurationView | None:
     for model_configuration in llm_provider.model_configurations:
         if model_configuration.name == model_name:
-            return model_configuration.max_input_tokens
+            return model_configuration
     return None
 
 
@@ -162,9 +163,14 @@ def get_llm_for_persona(
     2. Persona's model configuration override
     3. Default LLM
     """
+    user_defaults = UserChatDefaults(
+        temperature_default=user.temperature_default,
+        reasoning_effort_default=user.reasoning_effort_default,
+    )
+
     if persona is None:
         logger.warning("No persona provided, using default LLM")
-        return get_default_llm(policy_fn=policy_fn)
+        return get_default_llm(policy_fn=policy_fn, user_defaults=user_defaults)
 
     mc_id_override = llm_override.model_configuration_id if llm_override else None
     provider_name_override = llm_override.model_provider if llm_override else None
@@ -177,9 +183,10 @@ def get_llm_for_persona(
         and not persona.default_model_configuration_id
     ):
         return get_default_llm(
-            temperature=temperature_override or GEN_AI_TEMPERATURE,
+            temperature=temperature_override,
             additional_headers=additional_headers,
             policy_fn=policy_fn,
+            user_defaults=user_defaults,
         )
 
     with get_session_with_current_tenant() as db_session:
@@ -192,13 +199,10 @@ def get_llm_for_persona(
         )
         if resolved is None:
             return get_default_llm(
-                temperature=(
-                    temperature_override
-                    if temperature_override is not None
-                    else GEN_AI_TEMPERATURE
-                ),
+                temperature=temperature_override,
                 additional_headers=additional_headers,
                 policy_fn=policy_fn,
+                user_defaults=user_defaults,
             )
         provider_model, model = resolved
 
@@ -218,9 +222,10 @@ def get_llm_for_persona(
                 provider_model.name,
             )
             return get_default_llm(
-                temperature=temperature_override or GEN_AI_TEMPERATURE,
+                temperature=temperature_override,
                 additional_headers=additional_headers,
                 policy_fn=policy_fn,
+                user_defaults=user_defaults,
             )
 
         llm_provider = LLMProviderView.from_model(provider_model)
@@ -231,6 +236,7 @@ def get_llm_for_persona(
         temperature=temperature_override,
         additional_headers=additional_headers,
         policy_fn=policy_fn,
+        user_defaults=user_defaults,
     )
 
 
@@ -346,9 +352,13 @@ def llm_from_provider(
     temperature: float | None = None,
     additional_headers: dict[str, str] | None = None,
     policy_fn: Callable[[str], LlmRequestPolicy] | None = None,
+    user_defaults: UserChatDefaults | None = None,
 ) -> LLM:
-    configured_max_input_tokens = _get_model_configured_max_input_tokens(
+    model_configuration = _get_model_configuration(
         llm_provider=llm_provider, model_name=model_name
+    )
+    configured_max_input_tokens = (
+        model_configuration.max_input_tokens if model_configuration else None
     )
     model_kwargs = _build_model_kwargs(
         provider=llm_provider.provider,
@@ -356,11 +366,16 @@ def llm_from_provider(
     )
     max_input_tokens = (
         configured_max_input_tokens
-        if configured_max_input_tokens
-        else get_max_input_tokens_from_llm_provider(
+        or get_max_input_tokens_from_llm_provider(
             llm_provider=llm_provider, model_name=model_name
         )
     )
+    # Session override wins, else the admin's model default, else the user's
+    # own default, else GEN_AI_TEMPERATURE.
+    if temperature is None and model_configuration:
+        temperature = model_configuration.temperature_default
+    if temperature is None and user_defaults:
+        temperature = user_defaults.temperature_default
     # Resolved here, not at the call site: the caller hands policy as a
     # provider-keyed function because it cannot know which provider wins.
     policy = policy_fn(llm_provider.provider) if policy_fn else None
@@ -379,6 +394,17 @@ def llm_from_provider(
         model_kwargs=model_kwargs,
         policy_headers=policy.headers if policy else None,
         policy_model_kwargs=policy.model_kwargs if policy else None,
+        reasoning_effort_default=(
+            model_configuration.reasoning_effort_default
+            if model_configuration
+            else None
+        ),
+        reasoning_effort_user_default=(
+            user_defaults.reasoning_effort_default if user_defaults else None
+        ),
+        reasoning_effort_max=(
+            model_configuration.reasoning_effort_max if model_configuration else None
+        ),
     )
 
 
@@ -415,6 +441,7 @@ def get_default_llm(
     temperature: float | None = None,
     additional_headers: dict[str, str] | None = None,
     policy_fn: Callable[[str], LlmRequestPolicy] | None = None,
+    user_defaults: UserChatDefaults | None = None,
 ) -> LLM:
     with get_session_with_current_tenant() as db_session:
         model = fetch_default_llm_model(db_session)
@@ -429,6 +456,7 @@ def get_default_llm(
             temperature=temperature,
             additional_headers=additional_headers,
             policy_fn=policy_fn,
+            user_defaults=user_defaults,
         )
 
 
@@ -447,6 +475,9 @@ def get_llm(
     model_kwargs: dict[str, Any] | None = None,
     policy_headers: dict[str, str] | None = None,
     policy_model_kwargs: dict[str, Any] | None = None,
+    reasoning_effort_default: ReasoningEffort | None = None,
+    reasoning_effort_user_default: ReasoningEffort | None = None,
+    reasoning_effort_max: ReasoningEffort | None = None,
 ) -> LLM:
     if temperature is None:
         temperature = GEN_AI_TEMPERATURE
@@ -482,6 +513,9 @@ def get_llm(
         extra_headers=extra_headers,
         model_kwargs=merged_model_kwargs,
         max_input_tokens=max_input_tokens,
+        reasoning_effort_default=reasoning_effort_default,
+        reasoning_effort_user_default=reasoning_effort_user_default,
+        reasoning_effort_max=reasoning_effort_max,
     )
 
 

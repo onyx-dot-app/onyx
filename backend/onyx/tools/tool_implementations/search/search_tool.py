@@ -120,6 +120,7 @@ from onyx.tools.tool_implementations.search.constants import (
     LLM_SEMANTIC_QUERY_WEIGHT,
     MAX_CHUNKS_FOR_RELEVANCE,
     ORIGINAL_QUERY_WEIGHT,
+    SELECTION_TOKEN_BUDGET_MULTIPLIER,
 )
 from onyx.tools.tool_implementations.search.search_utils import (
     expand_section_with_context,
@@ -666,6 +667,41 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         override_kwargs: SearchToolOverrideKwargs,
         **llm_kwargs: Any,
     ) -> ToolResponse:
+        # Malformed calls fail loudly whatever the source selection says, so
+        # the argument check comes before any short-circuit.
+        if QUERIES_FIELD not in llm_kwargs:
+            raise ToolCallException(
+                message=f"Missing required '{QUERIES_FIELD}' parameter in internal_search tool call",
+                llm_facing_message=(
+                    f"The internal_search tool requires a '{QUERIES_FIELD}' parameter "
+                    f"containing an array of search queries. Please provide the queries "
+                    f'like: {{"queries": ["your search query here"]}}'
+                ),
+            )
+
+        # An explicitly empty source selection is a statement, not an absent
+        # filter: the tool still runs (it may be forced), and it honestly
+        # finds nothing. `None` keeps its meaning of "no source filter".
+        # Project mode ignores user filters entirely, so the guard must too.
+        if (
+            self.user_selected_filters is not None
+            and self.project_id_filter is None
+            and self.user_selected_filters.source_type is not None
+            and len(self.user_selected_filters.source_type) == 0
+        ):
+            empty_response, _ = convert_inference_sections_to_llm_string(
+                top_sections=[],
+                note=None,
+            )
+            return ToolResponse(
+                rich_response=SearchDocsResponse(
+                    search_docs=[],
+                    citation_mapping={},
+                    displayed_docs=None,
+                ),
+                llm_facing_response=empty_response,
+            )
+
         # Start overall timing
         overall_start_time = time.time()
 
@@ -761,22 +797,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 )
         # Session is closed here — all parallel work uses plain Python objects only
 
-        if QUERIES_FIELD not in llm_kwargs:
-            raise ToolCallException(
-                message=f"Missing required '{QUERIES_FIELD}' parameter in internal_search tool call",
-                llm_facing_message=(
-                    f"The internal_search tool requires a '{QUERIES_FIELD}' parameter "
-                    f"containing an array of search queries. Please provide the queries "
-                    f'like: {{"queries": ["your search query here"]}}'
-                ),
-            )
         llm_queries = cast(list[str], llm_kwargs[QUERIES_FIELD])
 
         # Run semantic and keyword query expansion in parallel (unless skipped)
         # Use message history, memories, and user info from override_kwargs
-        message_history = (
-            override_kwargs.message_history if override_kwargs.message_history else []
-        )
+        message_history = override_kwargs.message_history or []
         memories = (
             override_kwargs.user_memory_context.as_formatted_list()
             if override_kwargs.user_memory_context
@@ -1086,8 +1111,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # Only consider MAX_CHUNKS_FOR_RELEVANCE chunks per section to avoid flooding from
         # documents with many matching sections
         max_tokens_for_selection = (
-            override_kwargs.max_llm_chunks or MAX_CHUNKS_FED_TO_CHAT
-        ) * DOC_EMBEDDING_CONTEXT_SIZE
+            (override_kwargs.max_llm_chunks or MAX_CHUNKS_FED_TO_CHAT)
+            * DOC_EMBEDDING_CONTEXT_SIZE
+            * SELECTION_TOKEN_BUDGET_MULTIPLIER
+        )
 
         # This is approximate since it doesn't build the exact string of the call below
         # Some things are estimated and may be under (like the metadata tokens)

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { Text, Button } from "@opal/components";
@@ -36,6 +37,7 @@ export default function ArtifactsTab({
   artifacts,
   sessionId,
 }: ArtifactsTabProps) {
+  const t = useTranslations("craft.artifactsTab");
   const webappArtifacts = artifacts.filter(
     (a) => a.type === "nextjs_app" || a.type === "web_app"
   );
@@ -148,10 +150,10 @@ export default function ArtifactsTab({
       >
         <SvgFiles size={48} className="stroke-text-02" />
         <Text font="heading-h3" color="text-03">
-          No artifacts yet
+          {t("empty.title")}
         </Text>
         <Text font="secondary-body" color="text-02">
-          Output files and web apps will appear here
+          {t("empty.description")}
         </Text>
       </Section>
     );
@@ -171,7 +173,7 @@ export default function ArtifactsTab({
               style={{ paddingLeft: 12 }}
               role="button"
               tabIndex={0}
-              aria-label={`Open ${artifact.name}`}
+              aria-label={t("openItem.ariaLabel", { name: artifact.name })}
               onKeyDown={clickOnKeyDown(handleWebappOpen)}
               onClick={handleWebappOpen}
             >
@@ -184,7 +186,7 @@ export default function ArtifactsTab({
                   {artifact.name}
                 </Text>
                 <Text font="secondary-body" color="text-02">
-                  Next.js Application
+                  {t("nextjsApp.label")}
                 </Text>
               </div>
 
@@ -198,7 +200,7 @@ export default function ArtifactsTab({
                     handleWebappDownload();
                   }}
                 >
-                  Download
+                  {t("download.button")}
                 </Button>
               </div>
             </div>
@@ -236,6 +238,7 @@ function OutputEntryRow({
   onDownload,
   onFileOpen,
 }: OutputEntryRowProps) {
+  const t = useTranslations("craft.artifactsTab");
   const [expanded, setExpanded] = useState(false);
   const [children, setChildren] = useState<FileSystemEntry[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -270,7 +273,9 @@ function OutputEntryRow({
         role="button"
         tabIndex={0}
         aria-label={
-          entry.is_directory ? `Toggle ${entry.name}` : `Open ${entry.name}`
+          entry.is_directory
+            ? t("toggleItem.ariaLabel", { name: entry.name })
+            : t("openItem.ariaLabel", { name: entry.name })
         }
         onKeyDown={clickOnKeyDown(openEntry)}
         onClick={openEntry}
@@ -308,7 +313,7 @@ function OutputEntryRow({
               onDownload(entry.path, entry.is_directory);
             }}
           >
-            Download
+            {t("download.button")}
           </Button>
         </div>
       </div>

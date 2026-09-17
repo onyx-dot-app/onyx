@@ -4,6 +4,7 @@ import { Button, InputTypeIn, MessageCard } from "@opal/components";
 import { InputVertical, Section } from "@opal/layouts";
 import { Form, Formik, FormikHelpers } from "formik";
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 
 import { OAuthAdditionalKwargDescription } from "@/lib/connectors/credentials";
 import { getConnectorOauthRedirectUrl } from "@/lib/connectors/oauth";
@@ -11,8 +12,6 @@ import { ValidSources } from "@/lib/types";
 import { FormikField } from "@/refresh-components/form/FormikField";
 
 type OAuthFormValues = Record<string, string>;
-
-const OAUTH_REDIRECT_ERROR = "Unable to start OAuth";
 
 interface CreateStdOAuthCredentialProps {
   sourceType: ValidSources;
@@ -23,6 +22,7 @@ export function CreateStdOAuthCredential({
   sourceType,
   additionalFields,
 }: CreateStdOAuthCredentialProps) {
+  const t = useTranslations("admin");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   async function handleSubmit(
@@ -45,7 +45,9 @@ export function CreateStdOAuthCredential({
       window.location.href = redirectUrl;
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : OAUTH_REDIRECT_ERROR
+        error instanceof Error
+          ? error.message
+          : t("credentials.oauth.startError.message")
       );
       formikHelpers.setSubmitting(false);
     }
@@ -87,13 +89,13 @@ export function CreateStdOAuthCredential({
             {errorMessage && (
               <MessageCard
                 variant="error"
-                title="Could not connect"
+                title={t("credentials.oauth.connectError.title")}
                 description={errorMessage}
               />
             )}
             <Section flexDirection="row" justifyContent="start">
               <Button disabled={isSubmitting} type="submit">
-                Connect
+                {t("credentials.oauth.connectButton.label")}
               </Button>
             </Section>
           </Section>

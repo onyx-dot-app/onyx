@@ -271,6 +271,16 @@ func (c *Client) ListAgents(ctx context.Context) ([]models.AgentSummary, error) 
 	return result, nil
 }
 
+// ListLLMProviders returns LLM providers (with their models) accessible to
+// the current user, plus the workspace default model.
+func (c *Client) ListLLMProviders(ctx context.Context) (*models.LLMProviderResponse, error) {
+	var resp models.LLMProviderResponse
+	if err := c.doJSON(ctx, "GET", "/llm/provider", nil, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 // ListChatSessions returns recent chat sessions.
 func (c *Client) ListChatSessions(ctx context.Context) ([]models.ChatSessionDetails, error) {
 	var resp struct {
@@ -389,13 +399,14 @@ func (c *Client) StopChatSession(ctx context.Context, sessionID string) {
 type ClientAPI interface {
 	TestConnection(ctx context.Context) error
 	ListAgents(ctx context.Context) ([]models.AgentSummary, error)
+	ListLLMProviders(ctx context.Context) (*models.LLMProviderResponse, error)
 	ListChatSessions(ctx context.Context) ([]models.ChatSessionDetails, error)
 	GetChatSession(ctx context.Context, sessionID string) (*models.ChatSessionDetailResponse, error)
 	RenameChatSession(ctx context.Context, sessionID string, name *string) (string, error)
 	UploadFile(ctx context.Context, filePath string) (*models.FileDescriptorPayload, error)
 	GetBackendVersion(ctx context.Context) (string, error)
 	StopChatSession(ctx context.Context, sessionID string)
-	SendMessageStream(ctx context.Context, message string, chatSessionID *string, agentID int, parentMessageID *int, fileDescriptors []models.FileDescriptorPayload) <-chan models.StreamEvent
+	SendMessageStream(ctx context.Context, message string, chatSessionID *string, agentID int, parentMessageID *int, fileDescriptors []models.FileDescriptorPayload, llmOverride *models.LLMOverride) <-chan models.StreamEvent
 	Search(ctx context.Context, req models.SearchRequest) (*models.SearchResponse, error)
 	GenerateImage(ctx context.Context, req models.ImageGenerationRequest) (*models.ImageGenerationResponse, error)
 }

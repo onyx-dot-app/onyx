@@ -6,6 +6,26 @@ import type {
 } from "@/lib/languageModels/types";
 import { LlmDescriptor } from "@/lib/hooks";
 
+/**
+ * Find the provider that owns a given model configuration.
+ *
+ * `llm_provider.name` has no unique constraint, so two providers can share a
+ * display name. Matching a provider by name and then posting its id sends the
+ * wrong `provider_id` whenever the first name match is not the row that owns
+ * the model. `model_configuration.id` is a primary key, so it always is.
+ */
+export function findProviderOwningModelConfig<
+  T extends { id: number; model_configurations: ModelConfiguration[] },
+>(
+  llmProviders: T[] | undefined,
+  modelConfigurationId: number | null | undefined
+): T | undefined {
+  if (modelConfigurationId == null) return undefined;
+  return llmProviders?.find((provider) =>
+    provider.model_configurations.some((mc) => mc.id === modelConfigurationId)
+  );
+}
+
 export function hasVisibleLLMModel(
   llmProviders: LLMProviderDescriptor[] | undefined
 ): boolean {
@@ -59,14 +79,14 @@ export function getFinalLLM(
 }
 
 export function getProviderOverrideForAgent(
-  liveAgent: MinimalAgent,
+  activeAgent: MinimalAgent,
   llmProviders: LLMProviderDescriptor[]
 ): LlmDescriptor | null {
   // Canonical path: resolve from model configuration ID.
-  if (liveAgent.default_model_configuration_id != null) {
+  if (activeAgent.default_model_configuration_id != null) {
     for (const provider of llmProviders) {
       const mc = provider.model_configurations.find(
-        (m) => m.id === liveAgent.default_model_configuration_id
+        (m) => m.id === activeAgent.default_model_configuration_id
       );
       if (mc) {
         return {
@@ -162,6 +182,17 @@ export const modelSupportsImageInput = (
   );
   return modelConfiguration?.supports_image_input || false;
 };
+
+/** Display name for form-state model rows, which do not reliably carry
+ *  effectiveDisplayName. Everything else should read that field instead. */
+export function modelDisplayName(
+  model: Pick<
+    ModelConfiguration,
+    "name" | "display_name" | "custom_display_name"
+  >
+): string {
+  return model.custom_display_name || model.display_name || model.name;
+}
 
 export function getDisplayName(
   agent: MinimalAgent,

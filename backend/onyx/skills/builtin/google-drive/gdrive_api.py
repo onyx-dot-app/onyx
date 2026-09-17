@@ -266,15 +266,15 @@ def _escape(value: str) -> str:
 def _build_query(a: argparse.Namespace) -> str:
     """Assemble a Drive `q` from the search flags."""
     clauses: list[str] = []
-    if getattr(a, "text", None):
+    if getattr(a, "text", None):  # ods: ignore[getattr]
         clauses.append(f"fullText contains '{_escape(a.text)}'")
-    if getattr(a, "name", None):
+    if getattr(a, "name", None):  # ods: ignore[getattr]
         clauses.append(f"name contains '{_escape(a.name)}'")
-    if getattr(a, "mime", None):
+    if getattr(a, "mime", None):  # ods: ignore[getattr]
         clauses.append(f"mimeType = '{_escape(a.mime)}'")
-    if getattr(a, "parent", None):
+    if getattr(a, "parent", None):  # ods: ignore[getattr]
         clauses.append(f"'{_escape(a.parent)}' in parents")
-    if not getattr(a, "include_trashed", False):
+    if not getattr(a, "include_trashed", False):  # ods: ignore[getattr]
         clauses.append("trashed = false")
     return " and ".join(clauses)
 
@@ -285,7 +285,9 @@ def _list(query: str, a: argparse.Namespace) -> dict[str, Any]:
         "fields": f"nextPageToken, files({_FILE_FIELDS})",
         "orderBy": "modifiedTime desc",
         "spaces": "drive",
-        **_shared_drive_params(getattr(a, "shared_drives", False)),
+        **_shared_drive_params(
+            getattr(a, "shared_drives", False)  # ods: ignore[getattr]
+        ),
     }
     return _paginate("files", "files", params, a.limit)
 
@@ -572,13 +574,15 @@ def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
     # --- Google Docs API ---
     if a.cmd == "get-doc":
         doc = _get_doc(
-            a.document_id, fields=getattr(a, "fields", None), include_tabs=a.tabs
+            a.document_id,
+            fields=getattr(a, "fields", None),  # ods: ignore[getattr]
+            include_tabs=a.tabs,
         )
         return {"ok": True, "document": doc}
 
     if a.cmd == "batch-update":
         raw_requests = a.requests_json
-        if getattr(a, "requests_file", None):
+        if getattr(a, "requests_file", None):  # ods: ignore[getattr]
             with open(a.requests_file, encoding="utf-8") as fh:
                 raw_requests = fh.read()
         if not raw_requests:
@@ -638,7 +642,7 @@ def main(argv: list[str]) -> int:
         return 1
     except urllib.error.HTTPError as e:
         detail = e.read().decode("utf-8", errors="replace")
-        url = getattr(e, "url", None) or e.filename or ""
+        url = getattr(e, "url", None) or e.filename or ""  # ods: ignore[getattr]
         is_docs = url.startswith(_DOCS_BASE)
         api = "Google Docs" if is_docs else "Google Drive"
         print(f"HTTP {e.code} calling {api}: {detail}", file=sys.stderr)

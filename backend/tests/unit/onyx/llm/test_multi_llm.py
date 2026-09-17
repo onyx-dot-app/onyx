@@ -1,7 +1,7 @@
 import os
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from typing import Any
 from unittest.mock import ANY, MagicMock, patch
@@ -133,7 +133,7 @@ def _accumulate_stream_to_assistant_message(
 
     return AssistantMessage(
         role="assistant",
-        content=accumulated_content if accumulated_content else None,
+        content=accumulated_content or None,
         tool_calls=tool_calls,
     )
 
@@ -572,7 +572,11 @@ def test_openai_only_in_deployment_name_uses_responses_bridge() -> None:
 )
 @pytest.mark.parametrize(
     "reasoning_effort, expected_effort",
-    [(ReasoningEffort.AUTO, "medium"), (ReasoningEffort.HIGH, "high")],
+    [
+        (ReasoningEffort.AUTO, "medium"),
+        (ReasoningEffort.LOW, "low"),
+        (ReasoningEffort.HIGH, "high"),
+    ],
 )
 def test_claude_adaptive_thinking_uses_output_config(
     model_name: str, reasoning_effort: ReasoningEffort, expected_effort: str
@@ -604,6 +608,94 @@ def test_claude_adaptive_thinking_uses_output_config(
         assert kwargs["thinking"] == {"type": "adaptive"}
         assert kwargs["output_config"] == {"effort": expected_effort}
         assert "budget_tokens" not in kwargs["thinking"]
+
+
+def test_claude_adaptive_thinking_sends_output_config_after_tool_call() -> None:
+    # No signed blocks to replay costs us `thinking`, not the effort.
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.LITELLM_PROXY,
+        model_name="claude-sonnet-5",
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.LITELLM_PROXY,
+            model_name="claude-sonnet-5",
+        ),
+    )
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
+    ):
+        mock_completion.return_value = []
+
+        list(llm.stream(_tool_cycle_prompt(), reasoning_effort=ReasoningEffort.LOW))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert "thinking" not in kwargs
+        assert kwargs["output_config"] == {"effort": "low"}
+
+
+@pytest.mark.parametrize(
+    "model_name, expected_thinking",
+    [
+        ("claude-sonnet-5", {"type": "disabled"}),
+        ("claude-opus-5", {"type": "disabled"}),
+        ("claude-opus-4-7", {"type": "disabled"}),
+        # Pre-adaptive Claude only thinks when the param asks for it.
+        ("claude-3-7-sonnet", None),
+    ],
+)
+def test_reasoning_off_disables_adaptive_thinking(
+    model_name: str, expected_thinking: dict[str, str] | None
+) -> None:
+    # The Claude 5 line thinks unless told not to, so off has to be sent.
+    # Older adaptive models take the same param, pre-adaptive ones take none.
+    kwargs = _anthropic_completion_kwargs(model_name, ReasoningEffort.OFF)
+    assert kwargs.get("thinking") == expected_thinking
+    # Opus 5 rejects disabled thinking paired with an effort above high.
+    assert "output_config" not in kwargs
+
+
+@pytest.mark.parametrize("model_name", ["claude-fable-5", "claude-mythos-5-1"])
+def test_reasoning_off_floors_always_thinking_models_at_low(model_name: str) -> None:
+    # These reject disabled thinking, so off lands on the least they accept
+    # instead of silence, which the API would fill with its high default.
+    kwargs = _anthropic_completion_kwargs(model_name, ReasoningEffort.OFF)
+    assert kwargs["thinking"] == {"type": "adaptive"}
+    assert kwargs["output_config"] == {"effort": "low"}
+
+
+def test_reasoning_off_follows_deployment_alias_over_model_name() -> None:
+    # The alias is the model that answers, and Opus accepts disabled thinking.
+    kwargs = _anthropic_completion_kwargs(
+        "claude-fable-5", ReasoningEffort.OFF, deployment_name="claude-opus-5"
+    )
+    assert kwargs["thinking"] == {"type": "disabled"}
+    assert "output_config" not in kwargs
+
+
+def _anthropic_completion_kwargs(
+    model_name: str,
+    reasoning_effort: ReasoningEffort,
+    deployment_name: str | None = None,
+) -> Mapping[str, Any]:
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.ANTHROPIC,
+        model_name=model_name,
+        deployment_name=deployment_name,
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.ANTHROPIC,
+            model_name=model_name,
+        ),
+    )
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=reasoning_effort))
+        return mock_completion.call_args.kwargs
 
 
 def test_keeps_temperature_for_other_models(default_multi_llm: LitellmLLM) -> None:
@@ -825,6 +917,56 @@ def test_aliased_claude_model_still_reasons() -> None:
 
         kwargs = mock_completion.call_args.kwargs
         assert kwargs["thinking"] == {"type": "enabled", "budget_tokens": 4096}
+
+
+@pytest.mark.parametrize(
+    "max_tokens, expected_thinking",
+    [
+        (None, {"type": "enabled", "budget_tokens": 4096}),
+        (8000, {"type": "enabled", "budget_tokens": 4096}),
+        (5000, {"type": "enabled", "budget_tokens": 3976}),
+        (2048, {"type": "enabled", "budget_tokens": 1024}),
+        (2000, None),
+    ],
+)
+def test_legacy_claude_thinking_budget_fits_inside_max_tokens(
+    max_tokens: int | None,
+    expected_thinking: dict[str, int | str] | None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("onyx.llm.multi_llm.GEN_AI_NUM_RESERVED_OUTPUT_TOKENS", 1024)
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.VERTEX_AI,
+        model_name="claude-sonnet-4-5",
+        max_input_tokens=100000,
+    )
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=False),
+        patch("onyx.llm.multi_llm.logger.warning") as warning,
+    ):
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(
+            llm.stream(
+                messages, reasoning_effort=ReasoningEffort.HIGH, max_tokens=max_tokens
+            )
+        )
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["max_tokens"] == max_tokens
+        if expected_thinking is None:
+            assert "thinking" not in kwargs
+            warning.assert_called_once()
+            assert "Skipping Anthropic thinking" in warning.call_args.args[0]
+            assert warning.call_args.args[1] == max_tokens
+        else:
+            assert kwargs["thinking"] == expected_thinking
+            warning.assert_not_called()
 
 
 def test_openai_chat_omits_reasoning_params() -> None:
@@ -1315,12 +1457,19 @@ def test_anthropic_model_passes_isolated_client() -> None:
         assert isinstance(kwargs["client"], HTTPHandler)
 
 
-def test_bedrock_model_passes_no_client() -> None:
-    """Test that Bedrock models don't get a client passed."""
+@pytest.mark.parametrize(
+    "model_provider",
+    [LlmProviderNames.BEDROCK, LlmProviderNames.BEDROCK_CONVERSE],
+)
+def test_bedrock_model_passes_isolated_client(model_provider: str) -> None:
+    """Bedrock gets a per-call HTTPHandler so abandoned streams can't deadlock
+    litellm's shared module_level_client pool (see _uses_isolated_client)."""
+    from litellm import HTTPHandler
+
     llm = LitellmLLM(
         api_key=None,
         timeout=30,
-        model_provider=LlmProviderNames.BEDROCK,
+        model_provider=model_provider,
         model_name="anthropic.claude-3-sonnet-20240229-v1:0",
         max_input_tokens=200000,
     )
@@ -1346,7 +1495,7 @@ def test_bedrock_model_passes_no_client() -> None:
 
         mock_completion.assert_called_once()
         kwargs = mock_completion.call_args.kwargs
-        assert kwargs["client"] is None
+        assert isinstance(kwargs["client"], HTTPHandler)
 
 
 def test_azure_openai_model_uses_httphandler_client() -> None:
@@ -2527,13 +2676,14 @@ _TOOL_CHOICE_DOWNGRADE_TOOLS = [
     [
         (LlmProviderNames.OPENROUTER, "qwen/qwen3.7-plus"),
         (LlmProviderNames.ANTHROPIC, "claude-sonnet-5"),
+        (LlmProviderNames.OPENROUTER, "z-ai/glm-5.3"),
     ],
 )
 def test_required_tool_choice_downgraded_to_auto(
     model_provider: str, model_name: str
 ) -> None:
-    """Claude and Qwen thinking models reject/degrade required tool_choice, so
-    it must be sent to the provider as AUTO instead."""
+    """Claude, Qwen thinking, and GLM models reject/degrade required
+    tool_choice, so it must be sent to the provider as AUTO instead."""
     llm = LitellmLLM(
         api_key="test_key",
         timeout=30,

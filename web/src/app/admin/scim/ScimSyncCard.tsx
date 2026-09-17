@@ -1,3 +1,4 @@
+import { useLocale, useTranslations } from "next-intl";
 import { SvgCheckCircle, SvgClock, SvgKey, SvgRefreshCw } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
@@ -32,12 +33,15 @@ export default function ScimSyncCard({
   onGenerate,
   onRegenerate,
 }: ScimSyncCardProps) {
+  const t = useTranslations("admin.scim");
+  const locale = useLocale();
+
   return (
-    <Card border="solid" rounding="lg">
+    <Card border="solid" rounding={4}>
       <Section alignItems="start" height="fit" gap={3}>
         <ContentAction
-          title="SCIM Sync"
-          description="Connect your identity provider to import and sync users and groups."
+          title={t("card.title")}
+          description={t("card.description")}
           sizePreset="main-ui"
           variant="section"
           padding={0}
@@ -49,7 +53,7 @@ export default function ScimSyncCard({
                 onClick={onRegenerate}
                 icon={SvgRefreshCw}
               >
-                Regenerate Token
+                {t("card.regenerate.label")}
               </Button>
             ) : (
               <Button
@@ -57,7 +61,7 @@ export default function ScimSyncCard({
                 rightIcon={SvgKey}
                 onClick={onGenerate}
               >
-                Generate SCIM Token
+                {t("card.generate.label")}
               </Button>
             )
           }
@@ -83,7 +87,9 @@ export default function ScimSyncCard({
                   <SvgClock size={15} className="text-theme-amber-05" />
                 )}
                 <Text as="p" mainUiBody text04>
-                  {isConnected ? "Connected" : "Waiting for Connection"}
+                  {isConnected
+                    ? t("card.connected.label")
+                    : t("card.waiting.label")}
                 </Text>
               </Section>
 
@@ -96,7 +102,7 @@ export default function ScimSyncCard({
                       </Text>
                     )}
                     <Text as="p" secondaryBody text03>
-                      {timeAgo(lastUsedAt)}
+                      {timeAgo(lastUsedAt, locale)}
                     </Text>
                   </>
                 ) : (
@@ -104,10 +110,9 @@ export default function ScimSyncCard({
                     as="p"
                     secondaryBody
                     text03
-                    className="max-w-[240px] text-right"
+                    className="max-w-[240px] text-end"
                   >
-                    Provide the SCIM key to your identity provider to begin
-                    syncing users and groups.
+                    {t("card.waiting.description")}
                   </Text>
                 )}
               </Section>

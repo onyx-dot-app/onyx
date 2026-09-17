@@ -2,6 +2,7 @@
 
 import { markdown } from "@opal/utils";
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { SvgOnyxLogo } from "@opal/logos";
@@ -19,6 +20,7 @@ import { Button, Text } from "@opal/components";
 import { useModalClose } from "@opal/components";
 import type {
   VoiceProviderView,
+  VoiceProviderCustomConfig,
   VoiceFormValues,
   VoiceOption,
 } from "@/lib/voice/types";
@@ -28,6 +30,7 @@ import {
   fetchVoicesByType,
   deleteVoiceProvider,
 } from "@/lib/voice/svc";
+import type { ErrorResponseBody } from "@/lib/fetcher";
 import {
   getVoiceProviderDetail,
   resolveModelId,
@@ -40,6 +43,8 @@ import {
 } from "@/lib/voice/utils";
 
 export { type ProviderMode } from "@/lib/voice/utils";
+
+const AZURE_PORTAL_URL = "https://portal.azure.com/";
 
 // ---------------------------------------------------------------------------
 // VoiceProviderSetupModal
@@ -60,11 +65,32 @@ export function VoiceProviderSetupModal({
   defaultModelId,
   onSuccess,
 }: VoiceProviderSetupModalProps) {
+  const t = useTranslations("admin.voice");
   const onClose = useModalClose();
   const detail = getVoiceProviderDetail(providerType);
-  const initialTtsModel = defaultModelId
-    ? resolveModelId(defaultModelId)
-    : (existingProvider?.tts_model ?? "tts-1");
+  const initialSttModel =
+    mode === "stt" && defaultModelId
+      ? resolveModelId(defaultModelId)
+      : existingProvider
+        ? existingProvider.stt_model
+        : (detail.sttModels?.[0]?.id ?? "whisper-1");
+  const initialTtsModel =
+    mode === "tts" && defaultModelId
+      ? resolveModelId(defaultModelId)
+      : existingProvider
+        ? existingProvider.tts_model
+        : (detail.ttsModels?.[0]?.id ?? null);
+  const sttLanguageOptions = detail.sttLanguageOptions ?? [];
+  const defaultSttLanguage = sttLanguageOptions[0]?.id ?? "en-US";
+  const existingSttLanguage =
+    typeof existingProvider?.custom_config?.language === "string"
+      ? existingProvider.custom_config.language
+      : null;
+  const initialSttLanguage =
+    sttLanguageOptions.length > 0
+      ? (sttLanguageOptions.find((option) => option.id === existingSttLanguage)
+          ?.id ?? defaultSttLanguage)
+      : (existingSttLanguage ?? defaultSttLanguage);
 
   const isEditing = !!existingProvider;
 
@@ -75,8 +101,9 @@ export function VoiceProviderSetupModal({
     existingProvider?.default_voice ?? ""
   );
 
-  // Fetch voices on mount
   useEffect(() => {
+    if (mode !== "tts") return;
+
     setIsLoadingVoices(true);
     fetchVoicesByType(providerType)
       .then((res) => res.json())
@@ -96,22 +123,25 @@ export function VoiceProviderSetupModal({
       })
       .catch(() => setVoiceOptions([]))
       .finally(() => setIsLoadingVoices(false));
-  }, [providerType]);
+  }, [mode, providerType]);
 
   const validationSchema = Yup.object().shape({
-    api_key: Yup.string().required("API key is required"),
+    api_key: Yup.string().required(t("setupModal.apiKey.required")),
+    api_secret: detail.requiresApiSecret
+      ? Yup.string().required(t("setupModal.apiSecret.required"))
+      : Yup.string(),
     target_uri:
       providerType === "azure"
-        ? Yup.string().required("Target URI is required")
+        ? Yup.string().required(t("setupModal.targetUri.required"))
         : Yup.string(),
-    stt_model: Yup.string(),
-    tts_model: Yup.string(),
+    stt_model: Yup.string().nullable(),
+    tts_model: Yup.string().nullable(),
     default_voice: Yup.string(),
     stt_languages:
       mode === "stt" && detail.sttLanguages
         ? Yup.string().test(
             "locales",
-            "Enter comma-separated locales like en-US, fr-FR (one per language)",
+            t("setupModal.sttLanguages.invalid"),
             (value, context) => {
               if (!value) return true;
               const languages = parseSttLanguages(value);
@@ -131,25 +161,38 @@ export function VoiceProviderSetupModal({
                 return context.createError({
                   message:
                     cap === MAX_STT_LANGUAGES
-                      ? `Azure supports at most ${cap} spoken languages`
-                      : `Self-hosted endpoints support at most ${cap} spoken languages (at-start detection)`,
+                      ? t("setupModal.sttLanguages.azureCapExceeded", { cap })
+                      : t("setupModal.sttLanguages.selfHostedCapExceeded", {
+                          cap,
+                        }),
                 });
               }
               return true;
             }
           )
         : Yup.string(),
+    stt_language:
+      mode === "stt" && sttLanguageOptions.length > 0
+        ? Yup.string()
+            .oneOf(
+              sttLanguageOptions.map((option) => option.id),
+              t("setupModal.sttLanguage.invalid")
+            )
+            .required(t("setupModal.sttLanguage.required"))
+        : Yup.string(),
   });
 
   const initialValues: VoiceFormValues = {
     api_key: existingProvider?.api_key ?? "",
+    api_secret: existingProvider?.api_secret ?? "",
     target_uri: existingProvider?.target_uri ?? "",
-    stt_model: existingProvider?.stt_model ?? "whisper-1",
+    stt_model: initialSttModel,
     tts_model: initialTtsModel,
     default_voice: initialDefaultVoice,
     stt_languages: sttLanguagesToInput(
       existingProvider?.custom_config?.stt_languages
     ),
+    stt_language: initialSttLanguage,
   };
 
   async function handleSubmit(
@@ -157,31 +200,18 @@ export function VoiceProviderSetupModal({
     { setSubmitting }: { setSubmitting: (v: boolean) => void }
   ) {
     const apiKeyChanged = values.api_key !== (existingProvider?.api_key ?? "");
+    const apiSecretChanged =
+      !!detail.requiresApiSecret &&
+      values.api_secret !== (existingProvider?.api_secret ?? "");
     const shouldUseStoredKey = !apiKeyChanged && !!existingProvider?.api_key;
+    const shouldUseStoredSecret =
+      !!detail.requiresApiSecret &&
+      !apiSecretChanged &&
+      !!existingProvider?.api_secret;
 
     try {
-      if (!shouldUseStoredKey) {
-        const testResponse = await testVoiceProvider({
-          provider_type: providerType,
-          api_key: apiKeyChanged ? values.api_key : undefined,
-          target_uri: values.target_uri || undefined,
-          use_stored_key: shouldUseStoredKey,
-        });
-
-        if (!testResponse.ok) {
-          const data = await testResponse.json().catch(() => ({}));
-          toast.error(
-            typeof data?.detail === "string"
-              ? data.detail
-              : "Connection test failed"
-          );
-          setSubmitting(false);
-          return;
-        }
-      }
-
       // Preserve config keys the form doesn't own (e.g. speech_region).
-      const customConfig: Record<string, unknown> = {
+      const customConfig: VoiceProviderCustomConfig = {
         ...existingProvider?.custom_config,
       };
       if (mode === "stt" && detail.sttLanguages) {
@@ -192,13 +222,44 @@ export function VoiceProviderSetupModal({
           delete customConfig.stt_languages;
         }
       }
+      if (mode === "stt" && detail.sttLanguageOptions) {
+        customConfig.language = values.stt_language || "en-US";
+      }
+
+      const testResponse = await testVoiceProvider({
+        id: existingProvider?.id,
+        provider_type: providerType,
+        api_key: apiKeyChanged ? values.api_key : undefined,
+        api_secret: apiSecretChanged ? values.api_secret : undefined,
+        target_uri: values.target_uri || undefined,
+        use_stored_key: shouldUseStoredKey,
+        use_stored_secret: detail.requiresApiSecret
+          ? shouldUseStoredSecret
+          : undefined,
+        custom_config: customConfig,
+      });
+
+      if (!testResponse.ok) {
+        const data = await testResponse.json().catch(() => ({}));
+        toast.error(
+          typeof data?.detail === "string"
+            ? data.detail
+            : t("setupModal.connectionTestFailed.message")
+        );
+        setSubmitting(false);
+        return;
+      }
 
       const response = await upsertVoiceProvider({
         id: existingProvider?.id,
         name: detail.label,
         provider_type: providerType,
         api_key: apiKeyChanged ? values.api_key : undefined,
+        api_secret: apiSecretChanged ? values.api_secret : undefined,
         api_key_changed: apiKeyChanged,
+        api_secret_changed: detail.requiresApiSecret
+          ? apiSecretChanged
+          : undefined,
         target_uri: values.target_uri || undefined,
         custom_config: customConfig,
         stt_model: values.stt_model,
@@ -215,15 +276,15 @@ export function VoiceProviderSetupModal({
       if (response.ok) {
         onSuccess();
       } else {
-        const data = await response.json().catch(() => ({}));
+        const data: ErrorResponseBody = await response.json().catch(() => ({}));
         toast.error(
           typeof data?.detail === "string"
             ? data.detail
-            : "Failed to save provider"
+            : t("setupModal.saveError.message")
         );
       }
     } catch {
-      toast.error("Failed to save provider");
+      toast.error(t("setupModal.saveError.message"));
     } finally {
       setSubmitting(false);
     }
@@ -246,19 +307,27 @@ export function VoiceProviderSetupModal({
                 moreIcon2={SvgOnyxLogo}
                 title={
                   isEditing
-                    ? `Configure ${detail.label}`
-                    : `Set up ${detail.label}`
+                    ? t("setupModal.editHeader.title", {
+                        provider: detail.label,
+                      })
+                    : t("setupModal.createHeader.title", {
+                        provider: detail.label,
+                      })
                 }
-                description={`Connect to ${detail.label} and set up your voice models.`}
+                description={t("setupModal.header.description", {
+                  provider: detail.label,
+                })}
                 onClose={onClose}
               />
               <Modal.Body>
                 <Section gap={4} alignItems="stretch">
                   {providerType === "azure" && (
                     <InputVertical
-                      title="Target URI"
+                      title={t("setupModal.targetUri.label")}
                       subDescription={markdown(
-                        "Paste the endpoint shown in [Azure Portal (Keys and Endpoint)](https://portal.azure.com/). Onyx extracts the speech region from this URL. Examples: `https://westus.api.cognitive.microsoft.com/` or `https://westus.tts.speech.microsoft.com/`."
+                        t("setupModal.targetUri.description", {
+                          portalUrl: AZURE_PORTAL_URL,
+                        })
                       )}
                       withLabel="target_uri"
                     >
@@ -270,35 +339,90 @@ export function VoiceProviderSetupModal({
                   )}
 
                   <InputVertical
-                    title="API Key"
+                    title={t("setupModal.apiKey.label")}
                     subDescription={markdown(
-                      `Paste your [API key](${detail.apiKeyUrl}) from ${detail.label} to access your models.`
+                      t("setupModal.apiKey.description", {
+                        url: detail.apiKeyUrl ?? "",
+                        provider: detail.label,
+                      })
                     )}
                     withLabel="api_key"
                   >
                     <PasswordInputTypeInField
                       name="api_key"
-                      placeholder="API key"
+                      placeholder={t("setupModal.apiKey.placeholder")}
                     />
                   </InputVertical>
 
+                  {detail.requiresApiSecret && (
+                    <InputVertical
+                      title={t("setupModal.apiSecret.label")}
+                      subDescription={markdown(
+                        t("setupModal.apiSecret.description", {
+                          url: detail.apiKeyUrl ?? "",
+                          provider: detail.label,
+                        })
+                      )}
+                      withLabel="api_secret"
+                    >
+                      <PasswordInputTypeInField
+                        name="api_secret"
+                        placeholder={t("setupModal.apiSecret.placeholder")}
+                      />
+                    </InputVertical>
+                  )}
+
                   {mode === "stt" && detail.sttLanguages && (
                     <InputVertical
-                      title="Spoken Languages"
+                      title={t("setupModal.sttLanguages.label")}
                       subDescription={markdown(
-                        `Comma-separated locales users may speak, e.g. \`en-US, fr-FR\`. With more than one, live transcription auto-detects the spoken language (uploaded audio uses the first). See [supported locales](${detail.sttLanguages.docsUrl}).`
+                        t("setupModal.sttLanguages.description", {
+                          docsUrl: detail.sttLanguages.docsUrl,
+                        })
                       )}
                       withLabel="stt_languages"
                     >
                       <InputTypeInField
                         name="stt_languages"
+                        // oxlint-disable-next-line i18n/no-raw-jsx-text -- locale-code example, not copy
                         placeholder="en-US, fr-FR"
                       />
                     </InputVertical>
                   )}
 
+                  {mode === "stt" && detail.sttLanguageOptions && (
+                    <InputVertical
+                      title={t("setupModal.sttLanguage.label")}
+                      subDescription={markdown(
+                        t("setupModal.sttLanguage.description", {
+                          docsUrl: detail.docsUrl ?? "",
+                        })
+                      )}
+                      withLabel="stt_language"
+                    >
+                      <InputSelectField name="stt_language">
+                        <InputSelect.Trigger
+                          aria-label={t("setupModal.sttLanguage.label")}
+                        />
+                        <InputSelect.Content>
+                          {detail.sttLanguageOptions.map((language) => (
+                            <InputSelect.Item
+                              key={language.id}
+                              value={language.id}
+                            >
+                              {language.name}
+                            </InputSelect.Item>
+                          ))}
+                        </InputSelect.Content>
+                      </InputSelectField>
+                    </InputVertical>
+                  )}
+
                   {mode === "stt" && (detail.sttModels?.length ?? 0) > 1 && (
-                    <InputVertical title="STT Model" withLabel="stt_model">
+                    <InputVertical
+                      title={t("setupModal.sttModel.label")}
+                      withLabel="stt_model"
+                    >
                       <InputSelectField name="stt_model">
                         <InputSelect.Trigger />
                         <InputSelect.Content>
@@ -316,8 +440,8 @@ export function VoiceProviderSetupModal({
                     <>
                       {(detail.ttsModels?.length ?? 0) > 1 && (
                         <InputVertical
-                          title="Default Model"
-                          subDescription="This model will be used by Onyx by default for text-to-speech."
+                          title={t("setupModal.ttsModel.label")}
+                          subDescription={t("setupModal.ttsModel.description")}
                           withLabel="tts_model"
                         >
                           <InputSelectField name="tts_model">
@@ -334,11 +458,14 @@ export function VoiceProviderSetupModal({
                       )}
 
                       <InputVertical
-                        title="Voice"
+                        title={t("setupModal.voice.label")}
                         subDescription={markdown(
-                          `This voice will be used for spoken responses. See full list of supported languages and voices at [${
-                            detail.voiceDocsUrl?.label ?? detail.label
-                          }](${detail.voiceDocsUrl?.url ?? detail.docsUrl}).`
+                          t("setupModal.voice.description", {
+                            docsLabel:
+                              detail.voiceDocsUrl?.label ?? detail.label,
+                            docsUrl:
+                              detail.voiceDocsUrl?.url ?? detail.docsUrl ?? "",
+                          })
                         )}
                         withLabel="default_voice"
                       >
@@ -347,8 +474,8 @@ export function VoiceProviderSetupModal({
                           options={voiceOptions}
                           placeholder={
                             isLoadingVoices
-                              ? "Loading voices..."
-                              : "Select a voice or enter voice ID"
+                              ? t("setupModal.voice.loadingPlaceholder")
+                              : t("setupModal.voice.placeholder")
                           }
                           disabled={isLoadingVoices}
                           strict={false}
@@ -360,14 +487,16 @@ export function VoiceProviderSetupModal({
               </Modal.Body>
               <Modal.Footer>
                 <Button prominence="secondary" onClick={onClose}>
-                  Cancel
+                  {t("setupModal.cancelButton.label")}
                 </Button>
                 <Button
                   type="submit"
                   disabled={isSubmitting || !isValid || !dirty}
                   icon={isSubmitting ? SvgSimpleLoader : undefined}
                 >
-                  {isEditing ? "Update" : "Connect"}
+                  {isEditing
+                    ? t("setupModal.updateButton.label")
+                    : t("setupModal.connectButton.label")}
                 </Button>
               </Modal.Footer>
             </Form>
@@ -397,6 +526,7 @@ export function VoiceDisconnectModal({
   hasAlternatives,
   onSuccess,
 }: VoiceDisconnectModalProps) {
+  const t = useTranslations("admin.voice");
   const onClose = useModalClose();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -405,19 +535,23 @@ export function VoiceDisconnectModal({
     try {
       const res = await deleteVoiceProvider(disconnectTarget.providerId);
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
+        const body: ErrorResponseBody = await res.json().catch(() => ({}));
         throw new Error(
           typeof body?.detail === "string"
             ? body.detail
-            : "Failed to disconnect provider."
+            : t("disconnectModal.disconnectError.message")
         );
       }
-      toast.success(`${disconnectTarget.providerLabel} disconnected`);
+      toast.success(
+        t("disconnectModal.disconnectSuccess.message", {
+          label: disconnectTarget.providerLabel,
+        })
+      );
       onSuccess();
       onClose?.();
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Unexpected error occurred."
+        err instanceof Error ? err.message : t("unexpectedError.message")
       );
     } finally {
       setIsSubmitting(false);
@@ -427,27 +561,31 @@ export function VoiceDisconnectModal({
   return (
     <ConfirmationModalLayout
       icon={SvgUnplug}
-      title={`Disconnect ${disconnectTarget.providerLabel}`}
-      description="This will remove the stored credentials for this provider."
+      title={t("disconnectModal.header.title", {
+        label: disconnectTarget.providerLabel,
+      })}
+      description={t("disconnectModal.header.description")}
       submit={
         <Button
           variant="danger"
           onClick={() => void handleDisconnect()}
           disabled={isSubmitting}
         >
-          Disconnect
+          {t("disconnectModal.submitButton.label")}
         </Button>
       }
     >
       <Section alignItems="start" gap={2}>
         <Text color="text-03">
           {markdown(
-            `**${disconnectTarget.providerLabel}** models will no longer be used for speech-to-text or text-to-speech, and it will no longer be your default. Session history will be preserved.`
+            t("disconnectModal.body.description", {
+              label: disconnectTarget.providerLabel,
+            })
           )}
         </Text>
         {!hasAlternatives && (
           <Text color="text-03">
-            Connect another provider to continue using voice features.
+            {t("disconnectModal.connectAnother.description")}
           </Text>
         )}
       </Section>

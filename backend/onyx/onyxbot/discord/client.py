@@ -173,7 +173,7 @@ class OnyxDiscordClient(commands.Bot):
             logger.debug(
                 "Processing message: '%s' in #%s (%s), persona_id=%s",
                 message.content[:50],
-                getattr(message.channel, "name", "unknown"),
+                getattr(message.channel, "name", "unknown"),  # ods: ignore[getattr]
                 message.guild.name,
                 should_respond_context.persona_id,
             )

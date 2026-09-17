@@ -8,24 +8,25 @@ import {
   RateLimitDetails,
   RATE_LIMITED_ERROR_CODE,
 } from "@/app/app/interfaces";
+import { useTranslations } from "next-intl";
 
 const COUNTDOWN_TICK_MS = 1_000;
 
-function formatRateLimitReset(resetMs: number, nowMs: number): string {
-  const remainingMs = resetMs - nowMs;
-  if (remainingMs <= 0) return "You can try again now.";
+// The countdown as data, so the component owns the translated sentence.
+type RateLimitReset =
+  | { unit: "now" }
+  | { unit: "minutes" | "hours" | "days"; count: number; at: string };
 
-  const plural = (n: number, unit: string) =>
-    `${n} ${unit}${n === 1 ? "" : "s"}`;
+function describeRateLimitReset(
+  resetMs: number,
+  nowMs: number
+): RateLimitReset {
+  const remainingMs = resetMs - nowMs;
+  if (remainingMs <= 0) return { unit: "now" };
+
   const minutes = Math.ceil(remainingMs / 60_000);
   const hours = Math.ceil(remainingMs / 3_600_000);
   const days = Math.ceil(remainingMs / 86_400_000);
-  const relative =
-    minutes < 60
-      ? plural(minutes, "minute")
-      : hours < 48
-        ? plural(hours, "hour")
-        : plural(days, "day");
   const resetDate = new Date(resetMs);
   // For multi-day resets a date is clearer than just a clock time.
   const at =
@@ -38,7 +39,9 @@ function formatRateLimitReset(resetMs: number, nowMs: number): string {
           hour: "numeric",
           minute: "2-digit",
         });
-  return `Resets in ${relative} (${at}).`;
+  if (minutes < 60) return { unit: "minutes", count: minutes, at };
+  if (hours < 48) return { unit: "hours", count: hours, at };
+  return { unit: "days", count: days, at };
 }
 
 function resolveResetMs(
@@ -58,10 +61,17 @@ function resolveResetMs(
 interface RateLimitBannerProps {
   error: string;
   errorCode: string;
+  title: string;
   details: RateLimitDetails;
 }
 
-function RateLimitBanner({ error, errorCode, details }: RateLimitBannerProps) {
+function RateLimitBanner({
+  error,
+  errorCode,
+  title,
+  details,
+}: RateLimitBannerProps) {
+  const t = useTranslations("chat.messages");
   const [nowMs, setNowMs] = useState(Date.now());
   const resetMs = useMemo(
     () => resolveResetMs(details.reset_at, details.retry_after_seconds),
@@ -79,15 +89,39 @@ function RateLimitBanner({ error, errorCode, details }: RateLimitBannerProps) {
     return () => window.clearInterval(interval);
   }, [resetMs]);
 
+  function resetLineFor(reset: RateLimitReset): string {
+    switch (reset.unit) {
+      case "now":
+        return t("rateLimitBanner.tryAgainNow.text");
+      case "minutes":
+        return t("rateLimitBanner.resetsInMinutes.text", {
+          count: reset.count,
+          at: reset.at,
+        });
+      case "hours":
+        return t("rateLimitBanner.resetsInHours.text", {
+          count: reset.count,
+          at: reset.at,
+        });
+      case "days":
+        return t("rateLimitBanner.resetsInDays.text", {
+          count: reset.count,
+          at: reset.at,
+        });
+    }
+  }
+
   const resetLine =
-    resetMs === null ? null : formatRateLimitReset(resetMs, nowMs);
+    resetMs === null
+      ? null
+      : resetLineFor(describeRateLimitReset(resetMs, nowMs));
   return (
     <div className="text-red-700 mt-4 text-sm my-auto">
       <Alert variant="broken">
         {getErrorIcon(errorCode)}
-        <AlertTitle>{getErrorTitle(errorCode)}</AlertTitle>
+        <AlertTitle>{title}</AlertTitle>
         <AlertDescription className="flex flex-col gap-y-1">
-          <span>{error || "You've reached your usage limit."}</span>
+          <span>{error || t("rateLimitBanner.defaultError.text")}</span>
           {resetLine && (
             <span className="text-xs text-muted-foreground">{resetLine}</span>
           )}
@@ -102,12 +136,13 @@ interface ResubmitProps {
 }
 
 export const Resubmit: React.FC<ResubmitProps> = ({ resubmit }) => {
+  const t = useTranslations("chat.messages");
   return (
     <div className="flex flex-col items-center justify-center gap-y-2 mt-4">
       <p className="text-sm text-neutral-700 dark:text-neutral-300">
-        There was an error with the response.
+        {t("resubmit.responseError.text")}
       </p>
-      <Button onClick={resubmit}>Regenerate</Button>
+      <Button onClick={resubmit}>{t("resubmit.regenerateButton.label")}</Button>
     </div>
   );
 };
@@ -127,13 +162,35 @@ export const ErrorBanner = ({
   stackTrace?: string | null;
   resubmit?: () => void;
 }) => {
+  const t = useTranslations("chat.messages");
   const [isStackTraceExpanded, setIsStackTraceExpanded] = useState(false);
+
+  const title = getErrorTitle(errorCode, {
+    RATE_LIMIT: t("errorBanner.rateLimitExceeded.title"),
+    RATE_LIMITED: t("errorBanner.usageLimitReached.title"),
+    AUTH_ERROR: t("errorBanner.authError.title"),
+    PERMISSION_DENIED: t("errorBanner.permissionDenied.title"),
+    CONTEXT_TOO_LONG: t("errorBanner.messageTooLong.title"),
+    TOOL_CALL_FAILED: t("errorBanner.toolError.title"),
+    CONNECTION_ERROR: t("errorBanner.connectionError.title"),
+    SERVICE_UNAVAILABLE: t("errorBanner.serviceUnavailable.title"),
+    INIT_FAILED: t("errorBanner.initializationError.title"),
+    VALIDATION_ERROR: t("errorBanner.validationError.title"),
+    BUDGET_EXCEEDED: t("errorBanner.budgetExceeded.title"),
+    MODEL_REFUSAL: t("errorBanner.modelRefusal.title"),
+    CONTENT_POLICY: t("errorBanner.contentPolicy.title"),
+    BAD_REQUEST: t("errorBanner.badRequest.title"),
+    NOT_FOUND: t("errorBanner.resourceNotFound.title"),
+    API_ERROR: t("errorBanner.apiError.title"),
+    default: t("errorBanner.genericError.title"),
+  });
 
   if (errorCode === RATE_LIMITED_ERROR_CODE) {
     return (
       <RateLimitBanner
         error={error}
         errorCode={errorCode}
+        title={title}
         details={(details as RateLimitDetails) ?? {}}
       />
     );
@@ -143,18 +200,22 @@ export const ErrorBanner = ({
     <div className="text-red-700 mt-4 text-sm my-auto">
       <Alert variant="broken">
         {getErrorIcon(errorCode)}
-        <AlertTitle>{getErrorTitle(errorCode)}</AlertTitle>
+        <AlertTitle>{title}</AlertTitle>
         <AlertDescription className="flex flex-col gap-y-1">
           <span>{error}</span>
           {details?.model && (
             <span className="text-xs text-muted-foreground">
-              Model: {details.model}
-              {details.provider && ` (${details.provider})`}
+              {details.provider
+                ? t("errorBanner.modelWithProvider.label", {
+                    model: details.model,
+                    provider: details.provider,
+                  })
+                : t("errorBanner.model.label", { model: details.model })}
             </span>
           )}
           {details?.tool_name && (
             <span className="text-xs text-muted-foreground">
-              Tool: {details.tool_name}
+              {t("errorBanner.tool.label", { tool: details.tool_name })}
             </span>
           )}
           {stackTrace && (
@@ -165,7 +226,7 @@ export const ErrorBanner = ({
                   icon={isStackTraceExpanded ? SvgChevronDown : SvgChevronRight}
                   onClick={() => setIsStackTraceExpanded(!isStackTraceExpanded)}
                 >
-                  Stack trace
+                  {t("errorBanner.stackTraceButton.label")}
                 </Button>
                 <CopyButton
                   prominence="tertiary"

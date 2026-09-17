@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission, require_permission
 from onyx.chat.emitter import NullEmitter
-from onyx.configs.constants import MessageType
+from onyx.configs.constants import PUBLIC_API_TAGS, MessageType
 from onyx.context.search.models import BaseFilters, PersonaSearchInfo, TimeRange
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
@@ -53,12 +53,21 @@ from shared_configs.contextvars import get_current_tenant_id
 router = APIRouter(prefix="/search")
 
 
-@router.post("", dependencies=[Depends(require_vector_db)])
+@router.post("", dependencies=[Depends(require_vector_db)], tags=PUBLIC_API_TAGS)
 def search(
     request: SearchRequest,
     user: User = Depends(require_permission(Permission.READ_SEARCH)),
     db_session: Session = Depends(get_session),
 ) -> SearchResponse:
+    """
+    Search the Onyx index and get back ranked document sections.
+
+    Runs the same multi-stage retrieval as the Search action in chat — query
+    expansion, hybrid retrieval, reranking and section merging — and returns the
+    ranked sections without generating an answer. Results are ordered most
+    relevant first and are always filtered by the calling user's document
+    permissions.
+    """
     # 1. Load persona
     persona = None
     if request.persona_id is not None:

@@ -1,10 +1,12 @@
 from typing import Any
+from uuid import UUID
 
-from sqlalchemy import and_, delete, or_, select
+from sqlalchemy import Select, and_, delete, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, aliased
 
 from onyx.configs.constants import DocumentSource
+from onyx.db.document_access import apply_document_access_filter
 from onyx.db.models import Document, Document__Tag, Tag
 from onyx.utils.logger import setup_logger
 
@@ -166,17 +168,36 @@ def find_tags(
     sources: list[DocumentSource] | None,
     limit: int | None,
     db_session: Session,
+    user_email: str | None,
+    external_group_ids: list[str],
+    user_id: UUID | None = None,
     # if set, both tag_key_prefix and tag_value_prefix must be a match
     require_both_to_match: bool = False,
+    prior_emails: list[str] | None = None,
 ) -> list[Tag]:
-    query = select(Tag)
+    accessible_documents: Select[tuple[str]] = (
+        select(Document.id)
+        .join(Document__Tag, Document__Tag.document_id == Document.id)
+        .where(Document__Tag.tag_id == Tag.id)
+        .correlate(Tag)
+    )
+    accessible_documents = apply_document_access_filter(
+        accessible_documents,
+        user_email,
+        external_group_ids,
+        user_id=user_id,
+        prior_emails=prior_emails,
+    )
+    query = select(Tag).where(accessible_documents.exists())
 
     if tag_key_prefix or tag_value_prefix:
         conditions = []
         if tag_key_prefix:
-            conditions.append(Tag.tag_key.ilike(f"{tag_key_prefix}%"))
+            conditions.append(Tag.tag_key.istartswith(tag_key_prefix, autoescape=True))
         if tag_value_prefix:
-            conditions.append(Tag.tag_value.ilike(f"{tag_value_prefix}%"))
+            conditions.append(
+                Tag.tag_value.istartswith(tag_value_prefix, autoescape=True)
+            )
 
         final_prefix_condition = (
             and_(*conditions) if require_both_to_match else or_(*conditions)

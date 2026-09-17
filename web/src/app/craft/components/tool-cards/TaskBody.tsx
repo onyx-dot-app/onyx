@@ -51,7 +51,7 @@ export default function TaskBody({ toolCall }: ToolCardBodyProps) {
       onClick={open}
       aria-label={subagent ? `View subagent: ${label}` : label}
       className={cn(
-        "group/task flex w-full items-center gap-2 rounded-08 px-3 py-2 text-left",
+        "group/task flex w-full items-center gap-2 rounded-08 px-3 py-2 text-start",
         subagent
           ? "cursor-pointer transition-colors hover:bg-background-tint-02"
           : "cursor-default"
@@ -61,7 +61,11 @@ export default function TaskBody({ toolCall }: ToolCardBodyProps) {
           delegated subagent you can open, without washing the whole surface. */}
       <SvgCpu className="w-4 h-4 stroke-action-selection-05 shrink-0" />
       <span className="min-w-0 flex-1 truncate">
-        <Text font="main-ui-action" color="text-04" nowrap>
+        <Text
+          font="main-ui-action"
+          color="text-04"
+          wordWrap="whitespace-nowrap"
+        >
           {label}
         </Text>
       </span>

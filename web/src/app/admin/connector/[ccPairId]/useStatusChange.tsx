@@ -5,10 +5,12 @@ import { mutate } from "swr";
 import { buildCCPairInfoUrl } from "./lib";
 import { setCCPairStatus } from "@/lib/ccPair";
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 
 // Export the status change functionality separately
 export function useStatusChange(ccPair: CCPairFullInfo | null) {
+  const t = useTranslations("admin.connector");
   const [isUpdating, setIsUpdating] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
 
@@ -52,15 +54,15 @@ export function useStatusChange(ccPair: CCPairFullInfo | null) {
   const ConfirmModal =
     showConfirmModal && ccPair ? (
       <ConfirmEntityModal
-        entityType="Invalid Connector"
+        entityType={t("reEnableModal.entityType")}
         entityName={ccPair.name}
         onClose={() => setShowConfirmModal(false)}
         onSubmit={() => {
           setShowConfirmModal(false);
           updateStatus(ConnectorCredentialPairStatus.ACTIVE);
         }}
-        additionalDetails="This connector was previously marked as invalid. Please verify that your configuration is correct before re-enabling. Are you sure you want to proceed?"
-        actionButtonText="Re-Enable"
+        additionalDetails={t("reEnableModal.additionalDetails")}
+        actionButtonText={t("reEnableModal.actionButton.label")}
       />
     ) : null;
 

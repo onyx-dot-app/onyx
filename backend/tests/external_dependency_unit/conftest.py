@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Generator
 from uuid import uuid4
 
@@ -21,6 +22,20 @@ from tests.utils.pytest_secrets import (
 )
 from tests.utils.pytest_secrets import pytest_configure as pytest_configure
 from tests.utils.pytest_secrets import test_secrets as test_secrets
+
+
+@pytest.fixture
+def audit_stream(caplog: pytest.LogCaptureFixture) -> Generator[None, None, None]:
+    """``onyx.audit`` sets ``propagate=False``, so caplog's root handler never sees
+    its records; hang caplog's handler below that barrier instead. Not autouse — it
+    would feed audit records to tests that capture logs for other reasons.
+    """
+    audit_logger = logging.getLogger("onyx.audit")
+    audit_logger.addHandler(caplog.handler)
+    try:
+        yield
+    finally:
+        audit_logger.removeHandler(caplog.handler)
 
 
 @pytest.fixture(scope="function")

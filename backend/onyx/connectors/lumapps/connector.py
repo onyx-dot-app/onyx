@@ -83,7 +83,7 @@ def _parse_dt(value: Any) -> datetime | None:
     if not isinstance(value, str) or not value:
         return None
     try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(value)
     except ValueError:
         try:
             return _epoch_to_dt(float(value))

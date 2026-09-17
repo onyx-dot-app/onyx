@@ -68,6 +68,7 @@ from onyx.db.scoped_permissions import (
     scoped_group_ids_subquery,
     within_managed_scope_clause,
 )
+from onyx.db.user_group import assert_not_shared_with_default_group
 from onyx.db.utils import is_fk_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -585,6 +586,7 @@ def replace_skill_shares(
         _flush_shares(db_session, "One or more user share targets do not exist.")
 
     if group_shares is not None:
+        assert_not_shared_with_default_group(db_session, list(group_shares))
         db_session.execute(
             delete(Skill__UserGroup).where(Skill__UserGroup.skill_id == skill.id)
         )

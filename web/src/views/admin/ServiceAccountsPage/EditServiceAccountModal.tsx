@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useCallback, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
 import { SvgUsers, SvgLogOut, SvgCheck } from "@opal/icons";
 import { toast } from "@opal/layouts";
@@ -41,6 +42,7 @@ export default function EditServiceAccountModal({
   onClose,
   onMutate,
 }: EditServiceAccountModalProps) {
+  const t = useTranslations("admin.serviceAccounts");
   // Matches ApiKeyFormModal, or editing would silently drop a group it can't show.
   const {
     data: allGroups,
@@ -145,19 +147,21 @@ export default function EditServiceAccountModal({
 
       onMutate();
       refreshGroups();
-      toast.success("Service account updated");
+      toast.success(t("editModal.toasts.updated"));
       onClose();
     } catch (err) {
       // Partial writes may have landed — refresh both caches.
       onMutate();
       refreshGroups();
-      toast.error(err instanceof Error ? err.message : "An error occurred");
+      toast.error(
+        err instanceof Error ? err.message : t("editModal.toasts.error")
+      );
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const displayName = apiKey.api_key_name || "Unnamed";
+  const displayName = apiKey.api_key_name || t("table.name.unnamed");
   const [contentEl, setContentEl] = useState<HTMLDivElement | null>(null);
   const contentRef = useCallback((node: HTMLDivElement | null) => {
     setContentEl(node);
@@ -171,7 +175,7 @@ export default function EditServiceAccountModal({
       <Modal.Content width="sm" ref={contentRef}>
         <Modal.Header
           icon={SvgUsers}
-          title={`Edit ${displayName}'s Groups`}
+          title={t("editModal.title", { name: displayName })}
           description={apiKey.api_key_display}
           onClose={isSubmitting ? undefined : onClose}
         />
@@ -194,7 +198,7 @@ export default function EditServiceAccountModal({
                     <InputTypeIn
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      placeholder="Search groups to join..."
+                      placeholder={t("editModal.search.placeholder")}
                       searchIcon
                     />
                   </div>
@@ -205,15 +209,20 @@ export default function EditServiceAccountModal({
                   container={contentEl}
                 >
                   {groupsLoading ? (
-                    <LineItem skeleton description="Loading groups...">
-                      Loading...
+                    <LineItem
+                      skeleton
+                      description={t("editModal.groupList.loading.description")}
+                    >
+                      {t("editModal.groupList.loading.title")}
                     </LineItem>
                   ) : dropdownGroups.length === 0 ? (
                     <LineItem
                       skeleton
-                      description="Try a different search term."
+                      description={t(
+                        "editModal.groupList.noResults.description"
+                      )}
                     >
-                      No groups found
+                      {t("editModal.groupList.noResults.title")}
                     </LineItem>
                   ) : (
                     <ShadowDiv
@@ -226,9 +235,9 @@ export default function EditServiceAccountModal({
                           <LineItem
                             key={group.id}
                             icon={isMember ? SvgCheck : SvgUsers}
-                            description={`${group.users.length} ${
-                              group.users.length === 1 ? "user" : "users"
-                            }`}
+                            description={t("editModal.groupList.memberCount", {
+                              count: group.users.length,
+                            })}
                             selected={isMember}
                             emphasized={isMember}
                             onClick={() => toggleGroup(group.id)}
@@ -251,9 +260,11 @@ export default function EditServiceAccountModal({
                     icon={SvgUsers}
                     skeleton
                     interactive={false}
-                    description={`${displayName} is not in any groups.`}
+                    description={t("editModal.joinedGroups.empty.description", {
+                      name: displayName,
+                    })}
                   >
-                    No groups found
+                    {t("editModal.joinedGroups.empty.title")}
                   </LineItem>
                 ) : (
                   joinedGroups.map((group) => (
@@ -264,11 +275,14 @@ export default function EditServiceAccountModal({
                       <LineItem
                         key={group.id}
                         icon={SvgUsers}
-                        description={`${group.users.length} ${
-                          group.users.length === 1 ? "user" : "users"
-                        }`}
+                        description={t("editModal.groupList.memberCount", {
+                          count: group.users.length,
+                        })}
                         rightChildren={
-                          <Tooltip tooltip="Remove from group" side="left">
+                          <Tooltip
+                            tooltip={t("editModal.removeGroupButton.tooltip")}
+                            side="left"
+                          >
                             <SvgLogOut height={16} width={16} />
                           </Tooltip>
                         }
@@ -289,10 +303,10 @@ export default function EditServiceAccountModal({
             prominence="secondary"
             onClick={isSubmitting ? undefined : onClose}
           >
-            Cancel
+            {t("editModal.cancelButton.label")}
           </Button>
           <Button disabled={isSubmitting || !hasChanges} onClick={handleSave}>
-            Save Changes
+            {t("editModal.saveButton.label")}
           </Button>
         </Modal.Footer>
       </Modal.Content>

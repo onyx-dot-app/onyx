@@ -681,6 +681,9 @@ def _make_model_config(
     max_input_tokens: int | None = None,
     is_visible: bool = True,
     supports_image_input: bool | None = None,
+    reasoning_effort_max: ReasoningEffort | None = None,
+    reasoning_effort_default: ReasoningEffort | None = None,
+    temperature_default: float | None = None,
 ) -> MagicMock:
     """Build a minimal mock ModelConfiguration DB row."""
     mc = MagicMock()
@@ -690,6 +693,9 @@ def _make_model_config(
     mc.is_visible = is_visible
     mc.supports_image_input = supports_image_input
     mc.custom_display_name = None
+    mc.reasoning_effort_max = reasoning_effort_max
+    mc.reasoning_effort_default = reasoning_effort_default
+    mc.temperature_default = temperature_default
     mc.llm_model_flow_types = (
         flow_types if flow_types is not None else [LLMModelFlowType.CHAT]
     )

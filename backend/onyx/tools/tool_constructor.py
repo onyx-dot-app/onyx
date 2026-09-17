@@ -199,10 +199,7 @@ def _construct_tools_impl(
     )
 
     mcp_tool_cache: dict[int, dict[int, MCPTool]] = {}
-    # Get user's OAuth token if available
-    user_oauth_token = None
-    if user.oauth_accounts:
-        user_oauth_token = user.oauth_accounts[0].access_token
+    user_oauth_token: str | None = user.live_oauth_token
 
     search_settings = get_current_search_settings(db_session)
     # This flow is for search so we do not get all indices.
@@ -237,6 +234,13 @@ def _construct_tools_impl(
 
     added_search_tool = False
     for db_tool_model in persona.tools:
+        # Disabling an action leaves it attached to its personas, so an attached
+        # tool is not necessarily a usable one (see Persona__Tool). Only the tool
+        # listing endpoints filtered on this, which left a disabled tool callable
+        # by any request that sends no allowed_tool_ids whitelist.
+        if not db_tool_model.enabled:
+            continue
+
         # If allowed_tool_ids is specified, skip tools not in the allowed list
         if allowed_tool_ids is not None and db_tool_model.id not in allowed_tool_ids:
             continue

@@ -39,6 +39,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.models import UserInfo
 from tests.external_dependency_unit.conftest import create_test_user
 from tests.external_dependency_unit.indexing_helpers import make_cc_pair
+from tests.utils.audit import events_for
 
 
 def _make_group(db_session: Session) -> UserGroup:
@@ -558,3 +559,87 @@ def test_admin_capabilities_stay_global_only_without_a_manager_edge(
 
     assert not info.is_group_manager
     assert info.admin_capabilities == granted
+
+
+@pytest.mark.usefixtures("audit_stream")
+def test_each_gate_records_its_refusal(
+    db_session: Session, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A refused write is the escalation signal — the actor holds some authority
+    and reached the handler. ``extra.gate`` says which gate refused, so an alert
+    can tell an out-of-scope write from an admin-only one."""
+    manager = create_test_user(db_session, "denial-mgr")
+    manager.effective_permissions = []
+    managed = _make_group(db_session)
+    unmanaged = _make_group(db_session)
+    _manage(db_session, manager, managed)
+
+    with pytest.raises(OnyxError):
+        assert_manages_group(manager, db_session, group_id=unmanaged.id)
+    with pytest.raises(OnyxError):
+        assert_global(manager, permission=Permission.MANAGE_DOCUMENT_SETS)
+    with pytest.raises(OnyxError):
+        assert_within_scope(
+            manager,
+            db_session,
+            permission=Permission.MANAGE_DOCUMENT_SETS,
+            current_group_ids=[managed.id],
+            requested_group_ids=[unmanaged.id],
+            is_non_public=True,
+        )
+
+    events = events_for(caplog, "permission.denied")
+    assert [e["extra"]["gate"] for e in events] == [
+        "manages_group",
+        "global_only",
+        "within_scope",
+    ]
+    assert all(e["outcome"] == "denied" for e in events)
+    assert all(e["actor"]["email"] == manager.email for e in events)
+    # Only the per-group gate has a single resource to name.
+    assert events[0]["resource_id"] == str(unmanaged.id)
+    assert events[1]["resource_id"] is None
+
+    caplog.clear()
+    admin = create_test_user(db_session, "denial-admin", is_admin=True)
+    assert_manages_group(admin, db_session, group_id=unmanaged.id)
+    assert_global(admin, permission=Permission.MANAGE_DOCUMENT_SETS)
+    assert events_for(caplog, "permission.denied") == []
+
+
+@pytest.mark.usefixtures("audit_stream")
+def test_every_refusal_is_recorded(
+    db_session: Session, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A manager walking several resources produces one event each. These gates see
+    no resource identity, so nothing here may be suppressed as a duplicate — a bulk
+    update refusing two look-alike document sets is two separate attempts."""
+    manager = create_test_user(db_session, "denial-walk")
+    manager.effective_permissions = []
+    managed = _make_group(db_session)
+    first = _make_group(db_session)
+    second = _make_group(db_session)
+    _manage(db_session, manager, managed)
+
+    def refuse(target_group_id: int) -> None:
+        with pytest.raises(OnyxError):
+            assert_within_scope(
+                manager,
+                db_session,
+                permission=Permission.MANAGE_DOCUMENT_SETS,
+                current_group_ids=[managed.id],
+                requested_group_ids=[target_group_id],
+                is_non_public=True,
+            )
+
+    refuse(first.id)
+    refuse(second.id)
+    # Indistinguishable from the first at this gate, but a distinct attempt.
+    refuse(first.id)
+
+    events = events_for(caplog, "permission.denied")
+    assert [e["extra"]["requested_group_ids"] for e in events] == [
+        [first.id],
+        [second.id],
+        [first.id],
+    ]

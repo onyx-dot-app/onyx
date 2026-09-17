@@ -1,6 +1,7 @@
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import React, { useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { FormikProps } from "formik";
 import { useUserGroups } from "@/lib/hooks";
 import { BooleanFormField } from "@/components/Field";
@@ -17,7 +18,7 @@ export type IsPublicGroupSelectorFormType = {
 export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
   formikProps,
   objectName,
-  publicToWhom = "Users",
+  publicToWhom,
   removeIndent = false,
   enforceGroupSelection = true,
   smallLabels = false,
@@ -34,6 +35,8 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
   // caller supplies its own; falls back to admin when omitted.
   isGlobalHolder?: boolean;
 }) => {
+  const t = useTranslations("common.isPublicSelector");
+  const effectivePublicToWhom = publicToWhom ?? t("usersFallback.text");
   const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();
   const { isAdmin, user } = useUser();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
@@ -52,7 +55,7 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
   }, [user, userGroups, businessTier, canActGlobally]);
 
   if (userGroupsIsLoading) {
-    return <div>Loading...</div>;
+    return <div>{t("loading.text")}</div>;
   }
   if (!businessTier) {
     return null;
@@ -66,13 +69,14 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
             name="is_public"
             removeIndent={removeIndent}
             small={smallLabels}
-            label={`Make this ${objectName} Public?`}
+            label={t("makePublic.label", { objectName })}
             subtext={
               <span className="block mt-2 text-sm text-text-600 dark:text-neutral-400">
-                If set, then this {objectName} will be usable by{" "}
-                <b>All {publicToWhom}</b>. Otherwise, only <b>Admins</b> and{" "}
-                <b>{publicToWhom}</b> who have explicitly been given access to
-                this {objectName} (e.g. via a User Group) will have access.
+                {t.rich("makePublic.subtext", {
+                  objectName,
+                  publicToWhom: effectivePublicToWhom,
+                  b: (chunks) => <b>{chunks}</b>,
+                })}
               </span>
             }
           />
@@ -81,14 +85,14 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
 
       <GroupsMultiSelect
         formikProps={formikProps}
-        label={`Assign group access for this ${objectName}`}
+        label={t("assignGroups.label", { objectName })}
         subtext={
           canActGlobally || !enforceGroupSelection
-            ? `This ${objectName} will be visible/accessible by the groups selected below`
-            : `Select one or more of the groups you manage to give access to this ${objectName}`
+            ? t("assignGroups.visibleSubtext", { objectName })
+            : t("assignGroups.scopedSubtext", { objectName })
         }
         disabled={formikProps.values.is_public}
-        disabledMessage={`This ${objectName} is public and available to all users.`}
+        disabledMessage={t("publicDisabled.message", { objectName })}
       />
     </div>
   );

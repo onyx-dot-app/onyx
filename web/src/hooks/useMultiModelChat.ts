@@ -118,7 +118,9 @@ export default function useMultiModelChat(
         if (base.some((m) => llmOptionKey(m) === llmOptionKey(model))) {
           return base;
         }
-        return [...base, model];
+        // Prepend so pills grow right-to-left: the first model keeps the
+        // right-most pill and panel, and is the implicit-preferred default.
+        return [model, ...base];
       });
     },
     [currentLlmModel]

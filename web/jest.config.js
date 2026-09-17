@@ -15,6 +15,12 @@
 const esmPackages = [
   // Auth & Security
   "jose",
+  // i18n
+  "next-intl",
+  "use-intl",
+  "intl-messageformat",
+  "@formatjs",
+  "tslib",
   // UI Libraries
   "@radix-ui",
   "@floating-ui",
@@ -169,10 +175,12 @@ module.exports = {
         "**/src/app/**/hooks/*.test.ts", // Pure packet processor tests
         "**/src/app/**/__tests__/*.test.ts",
         "**/src/hooks/**/*.test.ts",
+        "**/src/i18n/**/*.test.ts",
         "**/src/refresh-components/**/*.test.ts",
         "**/src/refresh-pages/**/*.test.ts",
         "**/src/sections/**/*.test.ts",
         "**/src/components/**/*.test.ts",
+        "**/src/views/**/*.test.ts",
         "**/lib/opal/**/*.test.ts",
         // Add more patterns here as you add more unit tests
       ],
@@ -192,6 +200,8 @@ module.exports = {
         "**/src/hooks/**/*.test.tsx",
         "**/src/sections/**/*.test.tsx",
         "**/src/views/**/*.test.tsx",
+        "**/lib/opal/**/*.test.tsx",
+        "**/src/i18n/**/*.test.tsx",
         // Add more patterns here as you add more integration tests
       ],
     },

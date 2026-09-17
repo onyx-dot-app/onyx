@@ -6,11 +6,13 @@
  * Endpoints:
  * - /api/admin/llm/test/default - Test the default LLM provider connection
  * - /api/admin/llm/default - Set the default LLM model
+ * - /api/admin/llm/default-craft - Set or clear Craft's default model
  * - /api/admin/llm/provider/{id} - Delete an LLM provider
  * - /api/admin/llm/{provider}/available-models - Fetch available models for a provider
  */
 
 import { SWR_KEYS } from "@/lib/swr-keys";
+import type { ErrorResponseBody } from "@/lib/fetcher";
 import {
   LLMProviderName,
   type ModelConfiguration,
@@ -66,6 +68,45 @@ export async function setDefaultLlmModel(
       provider_id: providerId,
       model_name: modelName,
     }),
+  });
+
+  if (!response.ok) {
+    const errorMsg = (await response.json()).detail;
+    throw new Error(errorMsg);
+  }
+}
+
+/**
+ * Set Craft's default model, distinct from the workspace's default chat model.
+ * @throws Error with the detail message from the API on failure
+ */
+export async function setDefaultCraftModel(
+  providerId: number,
+  modelName: string
+): Promise<void> {
+  const response = await fetch("/api/admin/llm/default-craft", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      provider_id: providerId,
+      model_name: modelName,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorMsg = (await response.json()).detail;
+    throw new Error(errorMsg);
+  }
+}
+
+/**
+ * Clear Craft's default model. Craft then falls back to the workspace's
+ * default chat model.
+ * @throws Error with the detail message from the API on failure
+ */
+export async function deleteDefaultCraftModel(): Promise<void> {
+  const response = await fetch("/api/admin/llm/default-craft", {
+    method: "DELETE",
   });
 
   if (!response.ok) {
@@ -149,7 +190,7 @@ export const fetchBedrockModels = async (
     if (!response.ok) {
       let errorMessage = "Failed to fetch models";
       try {
-        const errorData = await response.json();
+        const errorData: ErrorResponseBody = await response.json();
         errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch {
         // ignore JSON parsing errors
@@ -204,7 +245,7 @@ export const fetchOllamaModels = async (
     if (!response.ok) {
       let errorMessage = "Failed to fetch models";
       try {
-        const errorData = await response.json();
+        const errorData: ErrorResponseBody = await response.json();
         errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch {
         // ignore JSON parsing errors
@@ -263,7 +304,7 @@ export const fetchOpenRouterModels = async (
     if (!response.ok) {
       let errorMessage = "Failed to fetch models";
       try {
-        const errorData = await response.json();
+        const errorData: ErrorResponseBody = await response.json();
         errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch (jsonError) {
         console.warn(
@@ -323,7 +364,7 @@ export const fetchLMStudioModels = async (
     if (!response.ok) {
       let errorMessage = "Failed to fetch models";
       try {
-        const errorData = await response.json();
+        const errorData: ErrorResponseBody = await response.json();
         errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch (jsonError) {
         console.warn(
@@ -382,7 +423,7 @@ export const fetchBifrostModels = async (
     if (!response.ok) {
       let errorMessage = "Failed to fetch models";
       try {
-        const errorData = await response.json();
+        const errorData: ErrorResponseBody = await response.json();
         errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch (jsonError) {
         console.warn(
@@ -444,7 +485,7 @@ export const fetchOpenAICompatibleModels = async (
     if (!response.ok) {
       let errorMessage = "Failed to fetch models";
       try {
-        const errorData = await response.json();
+        const errorData: ErrorResponseBody = await response.json();
         errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch {
         // ignore JSON parsing errors
@@ -504,7 +545,7 @@ export const fetchLiteLLMProxyModels = async (
     if (!response.ok) {
       let errorMessage = "Failed to fetch models";
       try {
-        const errorData = await response.json();
+        const errorData: ErrorResponseBody = await response.json();
         errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch {
         // ignore JSON parsing errors
@@ -651,7 +692,7 @@ export const fetchNebiusTokenfactoryModels = async (
     if (!response.ok) {
       let errorMessage = "Failed to fetch models";
       try {
-        const errorData = await response.json();
+        const errorData: ErrorResponseBody = await response.json();
         errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch (jsonError) {
         console.warn(
@@ -711,7 +752,7 @@ export const fetchPortkeyModels = async (
     if (!response.ok) {
       let errorMessage = "Failed to fetch models";
       try {
-        const errorData = await response.json();
+        const errorData: ErrorResponseBody = await response.json();
         errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch (jsonError) {
         console.warn(

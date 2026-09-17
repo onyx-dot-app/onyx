@@ -258,5 +258,7 @@ def get_session_ids_with_incognito_files(
         .where(FileRecord.file_metadata.has_key(INCOGNITO_SESSION_METADATA_KEY))
     )
     if limit is not None:
-        stmt = stmt.order_by(func.random()).limit(limit)
+        # Postgres rejects ORDER BY random() on a DISTINCT select, so the
+        # sample draws from a subquery.
+        stmt = select(stmt.subquery()).order_by(func.random()).limit(limit)
     return list(db_session.scalars(stmt))

@@ -1,7 +1,5 @@
 import ast
 import os
-import platform
-import shutil
 import subprocess
 from collections.abc import Callable, Generator
 from pathlib import Path
@@ -129,26 +127,6 @@ def _run_migrations() -> None:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _install_playwright(_run_migrations: None) -> None:  # noqa: ARG001
-    # web_search tests exercise OnyxWebCrawler's Playwright fallback. The
-    # devcontainer ships the apt deps; download the chromium binary here so
-    # the version tracks the lockfile's playwright-python. Playwright has no
-    # ubuntu26.04 build yet, so pin to the binary-compatible 24.04 build.
-    # Skipped in onyx-lite (no web_search) and where Playwright isn't on PATH.
-    if os.getenv("DISABLE_VECTOR_DB", "false").lower() == "true":
-        return
-
-    if shutil.which("playwright") is None:
-        return
-
-    machine = platform.machine().lower()
-    pw_arch = "x64" if machine in ("x86_64", "amd64") else "arm64"
-    env = os.environ.copy()
-    env["PLAYWRIGHT_HOST_PLATFORM_OVERRIDE"] = f"ubuntu24.04-{pw_arch}"
-    subprocess.run(["playwright", "install", "chromium"], env=env, check=True)
-
-
-@pytest.fixture(scope="session", autouse=True)
 def initialize_db(_run_migrations: None) -> None:  # noqa: ARG001
     # Make sure that the db engine is initialized before any tests are run
     SqlEngine.init_engine(
@@ -163,12 +141,12 @@ _CELERY_WORKER_PROGRAMS: list[tuple[str, str]] = [
     (
         "light",
         "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,"
-        "checkpoint_cleanup,index_attempt_cleanup,opensearch_migration",
+        "checkpoint_cleanup,index_attempt_cleanup,index_reclaim,opensearch_migration",
     ),
     (
         "heavy",
         "connector_pruning,connector_doc_permissions_sync,"
-        "connector_external_group_sync,csv_generation,sandbox",
+        "connector_external_group_sync,csv_generation,sandbox,capability_checks",
     ),
     ("docprocessing", "docprocessing,port"),
     (
@@ -317,7 +295,6 @@ def _start_celery_workers(
 def _test_client(
     initialize_db: None,  # noqa: ARG001
     _start_celery_workers: None,  # noqa: ARG001
-    _install_playwright: None,  # noqa: ARG001
 ) -> Generator[TestClient, None, None]:
     # In-process api_server. Use the versioned dispatcher so MT / EE
     # builds get ee.onyx.main.get_application — that's the one that
@@ -568,7 +545,7 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     checked: set[Path] = set()
 
     for item in items:
-        path = getattr(item, "path", None)
+        path = getattr(item, "path", None)  # ods: ignore[getattr]
         if path is None or path in checked:
             continue
         checked.add(path)

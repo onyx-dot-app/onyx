@@ -1,8 +1,9 @@
 import { SvgEdit } from "@opal/icons";
+import { Button } from "@opal/components";
+import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@opal/utils";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgCheck, SvgX } from "@opal/icons";
 interface EditableStringFieldDisplayProps {
   value: string;
@@ -19,6 +20,7 @@ export function EditableStringFieldDisplay({
   textClassName,
   scale = 1,
 }: EditableStringFieldDisplayProps) {
+  const t = useTranslations("common.editable");
   const [isEditing, setIsEditing] = useState(false);
   const [editableValue, setEditableValue] = useState(value);
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
@@ -112,19 +114,17 @@ export function EditableStringFieldDisplay({
         ))}
       {isEditing && isEditable ? (
         <>
-          <div className={cn("flex", "flex-row")}>
-            {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-            <IconButton
+          <div className={cn("flex", "flex-row", "gap-2", "ps-2")}>
+            <Button
               onClick={handleUpdate}
-              internal
-              className="ml-2"
+              prominence="internal"
+              size="sm"
               icon={SvgCheck}
             />
-            {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-            <IconButton
+            <Button
               onClick={resetEditing}
-              internal
-              className="ml-2"
+              prominence="internal"
+              size="sm"
               icon={SvgX}
             />
           </div>
@@ -134,11 +134,11 @@ export function EditableStringFieldDisplay({
           <button
             type="button"
             onClick={() => setIsEditing(true)}
-            aria-label="Rename"
+            aria-label={t("rename.ariaLabel")}
             className="group flex cursor-pointer"
             style={{ fontSize: `${scale}rem` }}
           >
-            <SvgEdit className="visible ml-2" size={12 * scale} />
+            <SvgEdit className="visible ms-2" size={12 * scale} />
           </button>
         )
       )}

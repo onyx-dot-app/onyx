@@ -1,3 +1,4 @@
+import type { TimelineTranslate } from "@/app/app/message/messageComponents/toolDisplayHelpers";
 import {
   PacketType,
   SearchToolPacket,
@@ -48,52 +49,73 @@ export interface SearchState {
 
 const MAX_HEADER_SOURCES = 3;
 
-// The bounds are day-granularity UTC dates; format in UTC so a midnight start
-// doesn't render as the previous day in western timezones. Locale is pinned to
-// match the surrounding hardcoded-English header copy.
-const formatFilterDate = (iso: string): string =>
-  new Date(iso).toLocaleDateString("en-US", {
+// The bounds are day-granularity UTC dates. Format in UTC so a midnight start
+// doesn't render as the previous day in western timezones.
+const formatFilterDate = (iso: string, locale: string): string =>
+  new Date(iso).toLocaleDateString(locale, {
     year: "numeric",
     month: "short",
     day: "numeric",
     timeZone: "UTC",
   });
 
-// Phrases a window as "since <date>", "before <date>", or "from <date> to <date>".
+// Phrases a window with the timeWindow catalog entries: since, before, or between.
 export const formatTimeWindow = (
-  timeFilter: TimeFilter | null
+  timeFilter: TimeFilter | null,
+  t: TimelineTranslate,
+  locale: string
 ): string | null => {
   if (!timeFilter) return null;
   const { start, end } = timeFilter;
   if (start && end) {
-    return `from ${formatFilterDate(start)} to ${formatFilterDate(end)}`;
+    return t("internalSearch.timeWindow.between", {
+      start: formatFilterDate(start, locale),
+      end: formatFilterDate(end, locale),
+    });
   }
-  if (start) return `since ${formatFilterDate(start)}`;
-  if (end) return `before ${formatFilterDate(end)}`;
+  if (start) {
+    return t("internalSearch.timeWindow.since", {
+      date: formatFilterDate(start, locale),
+    });
+  }
+  if (end) {
+    return t("internalSearch.timeWindow.before", {
+      date: formatFilterDate(end, locale),
+    });
+  }
   return null;
 };
 
 export const formatSearchHeader = (
   sourceFilters: string[],
-  timeFilter: TimeFilter | null = null
+  timeFilter: TimeFilter | null,
+  t: TimelineTranslate,
+  locale: string
 ): string => {
-  let base: string;
+  let header: string;
   if (sourceFilters.length === 0) {
-    base = "Searching internal documents";
+    header = t("internalSearch.header.default");
   } else {
     const names = sourceFilters.map((source) =>
       isValidSource(source)
         ? getSourceDisplayName(source as ValidSources)
         : source
     );
-    const shown = names.slice(0, MAX_HEADER_SOURCES);
-    const overflow = names.length - shown.length;
-    const label =
-      overflow > 0 ? `${shown.join(", ")} +${overflow} more` : shown.join(", ");
-    base = `Searching ${label}`;
+    const shown = names.slice(0, MAX_HEADER_SOURCES).join(", ");
+    const overflow = names.length - MAX_HEADER_SOURCES;
+    const sources =
+      overflow > 0
+        ? t("internalSearch.header.sourcesOverflow", {
+            sources: shown,
+            count: overflow,
+          })
+        : shown;
+    header = t("internalSearch.header.sources", { sources });
   }
-  const timeWindowText = formatTimeWindow(timeFilter);
-  return timeWindowText ? `${base} (${timeWindowText})` : base;
+  const timeWindow = formatTimeWindow(timeFilter, t, locale);
+  return timeWindow
+    ? t("internalSearch.header.withTimeWindow", { header, timeWindow })
+    : header;
 };
 
 /** Constructs the current search state from search tool packets. */

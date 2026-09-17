@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { AnimatePresence, motion } from "motion/react";
 import { cn } from "@opal/utils";
 import { Text } from "@opal/components";
@@ -17,6 +18,7 @@ interface SuggestedPromptsProps {
 export default function SuggestedPrompts({
   onPromptClick,
 }: SuggestedPromptsProps) {
+  const t = useTranslations("craft.suggestedPrompts");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -83,7 +85,7 @@ export default function SuggestedPrompts({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.15, ease: "easeOut" }}
-            className="absolute top-full left-0 right-0 z-20 mt-3 w-full p-2"
+            className="absolute top-full start-0 end-0 z-20 mt-3 w-full p-2"
           >
             <div className="flex items-center justify-between px-3 pt-2 pb-1">
               <div className="flex items-center gap-2">
@@ -95,7 +97,7 @@ export default function SuggestedPrompts({
               <button
                 type="button"
                 onClick={() => setExpandedId(null)}
-                aria-label="Close suggestions"
+                aria-label={t("close.ariaLabel")}
                 className="flex items-center justify-center cursor-pointer"
               >
                 <SvgX className="w-4 h-4 text-text-03" />
@@ -109,7 +111,7 @@ export default function SuggestedPrompts({
                   type="button"
                   onClick={() => handlePromptClick(prompt.fullText)}
                   className={cn(
-                    "w-full rounded-12 px-3 py-2.5 text-left",
+                    "w-full rounded-12 px-3 py-2.5 text-start",
                     "hover:bg-background-tint-02",
                     "transition-colors cursor-pointer",
                     "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-action-selection-01 focus-visible:ring-offset-2"

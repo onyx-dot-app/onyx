@@ -307,7 +307,7 @@ async def _build_reply_chain_context(
         logger.debug(
             "Built reply chain context: %s messages in #%s",
             len(messages),
-            getattr(message.channel, "name", "unknown"),
+            getattr(message.channel, "name", "unknown"),  # ods: ignore[getattr]
         )
 
         return _format_messages_as_context(messages, bot_user)

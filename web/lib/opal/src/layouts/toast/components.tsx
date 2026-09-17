@@ -3,6 +3,7 @@
 import { useCallback, useState, useSyncExternalStore } from "react";
 import { clickOnKeyDown, cn } from "@opal/utils";
 import { MessageCard, Text } from "@opal/components";
+import { useOpalStrings } from "@opal/strings";
 import {
   MAX_VISIBLE_TOASTS,
   toast,
@@ -80,13 +81,14 @@ function ToastContainer({ errorAppendix }: ToastContainerProps) {
       toast.setAutoDismiss(t.id, EXPANDED_DURATION_MS);
     }
   }, []);
+  const strings = useOpalStrings();
 
   if (visible.length === 0) return null;
 
   return (
     <div
       data-testid="toast-container"
-      className="fixed bottom-4 right-4 z-(--z-toast) flex w-full max-w-(--toast-width) flex-col items-end gap-2"
+      className="fixed bottom-4 end-4 z-(--z-toast) flex w-full max-w-(--toast-width) flex-col items-end gap-2"
     >
       {visible.map((t) => {
         const isTruncatable = t.message.length > MAX_TOAST_MESSAGE_LENGTH;
@@ -129,12 +131,12 @@ function ToastContainer({ errorAppendix }: ToastContainerProps) {
             className={className}
             role="button"
             tabIndex={0}
-            aria-label="Show the full message"
+            aria-label={strings.showFullMessage}
             onKeyDown={clickOnKeyDown(() => handleExpand(t))}
             onClick={(e) => {
               // Don't intercept clicks on the inner close button.
               if (
-                (e.target as HTMLElement).closest('button[aria-label="Close"]')
+                (e.target as HTMLElement).closest("[data-message-card-close]")
               ) {
                 return;
               }

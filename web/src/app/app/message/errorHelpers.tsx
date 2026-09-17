@@ -22,44 +22,42 @@ export const getErrorIcon = (errorCode?: string) => {
   }
 };
 
+// Error codes that have their own title. Any other code uses `default`.
+const ERROR_TITLE_CODES = [
+  "RATE_LIMIT",
+  "RATE_LIMITED",
+  "AUTH_ERROR",
+  "PERMISSION_DENIED",
+  "CONTEXT_TOO_LONG",
+  "TOOL_CALL_FAILED",
+  "CONNECTION_ERROR",
+  "SERVICE_UNAVAILABLE",
+  "INIT_FAILED",
+  "VALIDATION_ERROR",
+  "BUDGET_EXCEEDED",
+  "MODEL_REFUSAL",
+  "CONTENT_POLICY",
+  "BAD_REQUEST",
+  "NOT_FOUND",
+  "API_ERROR",
+] as const;
+
+export type ErrorTitleCode = (typeof ERROR_TITLE_CODES)[number];
+
+export type ErrorTitles = Record<ErrorTitleCode | "default", string>;
+
+function isErrorTitleCode(value: string): value is ErrorTitleCode {
+  // SAFETY: the cast only widens the argument for the readonly-array
+  // `includes` signature; membership is still checked at runtime.
+  return ERROR_TITLE_CODES.includes(value as ErrorTitleCode);
+}
+
 /**
- * Get a human-readable title for a given error code
+ * Get a human-readable title for a given error code. The caller supplies the
+ * titles because only a component can translate them.
  */
-export const getErrorTitle = (errorCode?: string) => {
-  switch (errorCode) {
-    case "RATE_LIMIT":
-      return "Rate Limit Exceeded";
-    case "RATE_LIMITED":
-      return "Usage limit reached";
-    case "AUTH_ERROR":
-      return "Authentication Error";
-    case "PERMISSION_DENIED":
-      return "Permission Denied";
-    case "CONTEXT_TOO_LONG":
-      return "Message Too Long";
-    case "TOOL_CALL_FAILED":
-      return "Tool Error";
-    case "CONNECTION_ERROR":
-      return "Connection Error";
-    case "SERVICE_UNAVAILABLE":
-      return "Service Unavailable";
-    case "INIT_FAILED":
-      return "Initialization Error";
-    case "VALIDATION_ERROR":
-      return "Validation Error";
-    case "BUDGET_EXCEEDED":
-      return "Budget Exceeded";
-    case "MODEL_REFUSAL":
-      return "Model Declined to Respond";
-    case "CONTENT_POLICY":
-      return "Content Policy Violation";
-    case "BAD_REQUEST":
-      return "Invalid Request";
-    case "NOT_FOUND":
-      return "Resource Not Found";
-    case "API_ERROR":
-      return "API Error";
-    default:
-      return "Error";
-  }
-};
+export const getErrorTitle = (
+  errorCode: string | undefined,
+  titles: ErrorTitles
+): string =>
+  errorCode && isErrorTitleCode(errorCode) ? titles[errorCode] : titles.default;

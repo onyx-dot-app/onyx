@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Text } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { IndexAttemptStageMetric } from "@/lib/types";
@@ -18,10 +19,12 @@ export default function PerBatchSection({
   sortMode,
   onSortModeChange,
 }: PerBatchSectionProps) {
+  const t = useTranslations("admin.connector");
+
   if (perBatchStages.length === 0) {
     return (
       <Text font="secondary-body" color="text-03">
-        No per-batch stage data recorded.
+        {t("stageMetrics.perBatch.empty")}
       </Text>
     );
   }

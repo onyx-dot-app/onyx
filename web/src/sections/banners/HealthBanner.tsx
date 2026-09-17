@@ -1,11 +1,13 @@
 "use client";
 
 import useSWR from "swr";
+import { useTranslations } from "next-intl";
 import { errorHandlingFetcher, RedirectError } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { MessageCard, Text } from "@opal/components";
 
 export default function HealthBanner() {
+  const t = useTranslations("chat.banners");
   const { error } = useSWR(SWR_KEYS.health, errorHandlingFetcher);
 
   if (!error || error instanceof RedirectError) {
@@ -19,8 +21,8 @@ export default function HealthBanner() {
       <div className="p-2">
         <MessageCard
           variant="error"
-          title="The backend is currently unavailable"
-          description="If this is your initial setup or you just updated your Onyx deployment, this is likely because the backend is still starting up. Give it a minute or two, and then refresh the page. If that does not work, make sure the backend is setup and/or contact an administrator."
+          title={t("healthBanner.backendUnavailable.title")}
+          description={t("healthBanner.backendUnavailable.description")}
           bottomChildren={
             <div className="px-2">
               <Text>{errorMessage}</Text>

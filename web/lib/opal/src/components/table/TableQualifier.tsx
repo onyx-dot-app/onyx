@@ -5,7 +5,7 @@ import { cn } from "@opal/utils";
 import { useTableSize } from "@opal/components/table/TableSizeContext";
 import type { IconFunctionComponent } from "@opal/types";
 import type { QualifierContentType } from "@opal/components/table/types";
-import { Checkbox } from "@opal/components";
+import { InputCheckbox } from "@opal/components";
 
 interface TableQualifierProps {
   /** Content type displayed in the qualifier */
@@ -118,7 +118,7 @@ function TableQualifier({
             content === "simple" ? "flex" : overlayStyles
           )}
         >
-          <Checkbox
+          <InputCheckbox
             checked={selected}
             onCheckedChange={onSelectChange}
             disabled={disabled}

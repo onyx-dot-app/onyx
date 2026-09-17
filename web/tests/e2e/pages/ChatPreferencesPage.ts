@@ -1,6 +1,6 @@
 /**
  * Page Object Model for the admin "Chat Preferences" page
- * (/admin/configuration/chat-preferences).
+ * (/admin/chat-preferences).
  *
  * Covers attaching an MCP server's tools to the default agent, toggling
  * individual tools (with persistence), editing the default system prompt, and
@@ -8,6 +8,7 @@
  */
 
 import { type Page, type Locator, expect } from "@playwright/test";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
 export class ChatPreferencesPage {
   readonly page: Page;
@@ -29,8 +30,8 @@ export class ChatPreferencesPage {
   // ---------------------------------------------------------------------------
 
   async goto(): Promise<void> {
-    await this.page.goto("/admin/configuration/chat-preferences");
-    await this.page.waitForURL("**/admin/configuration/chat-preferences**");
+    await this.page.goto(ADMIN_ROUTES.CHAT_PREFERENCES.path);
+    await this.page.waitForURL(`**${ADMIN_ROUTES.CHAT_PREFERENCES.path}**`);
     await expect(this.title).toBeVisible();
   }
 

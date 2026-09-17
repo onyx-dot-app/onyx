@@ -9,8 +9,8 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { Popover, Text } from "@opal/components";
-import LineItem from "@/refresh-components/buttons/LineItem";
+import { useTranslations } from "next-intl";
+import { LineItemButton, Popover, Text } from "@opal/components";
 import {
   filterPickerSections,
   flattenSections,
@@ -19,7 +19,6 @@ import {
   type PickerSections,
 } from "@/lib/skills/picker";
 import { pickerEntryIcon } from "@/lib/skills/pickerIcons";
-import { cn } from "@opal/utils";
 import type { IconFunctionComponent } from "@opal/types";
 
 interface EntryPickerPopoverProps {
@@ -39,6 +38,7 @@ function EntryPickerPopover({
   onSelect,
   onClose,
 }: EntryPickerPopoverProps) {
+  const t = useTranslations("chat.input");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -139,7 +139,7 @@ function EntryPickerPopover({
         width="xl"
         onOpenAutoFocus={(e) => e.preventDefault()}
         data-testid="skill-picker-popover"
-        aria-label="Skill picker"
+        aria-label={t("entryPickerPopover.content.ariaLabel")}
       >
         <Popover.Menu scrollContainerRef={scrollContainerRef}>
           {buildMenuChildren({
@@ -148,6 +148,12 @@ function EntryPickerPopover({
             selectedIndex,
             onSelect,
             onHover: setSelectedIndex,
+            emptyMessage: t("entryPickerPopover.empty.text"),
+            groupLabels: {
+              skills: t("entryPickerPopover.skillsGroup.label"),
+              apps: t("entryPickerPopover.appsGroup.label"),
+              mcpServers: t("entryPickerPopover.mcpServersGroup.label"),
+            },
           })}
         </Popover.Menu>
       </Popover.Content>
@@ -162,6 +168,9 @@ interface BuildMenuChildrenArgs {
   selectedIndex: number;
   onSelect: (entry: PickerEntry) => void;
   onHover: (idx: number) => void;
+  /** Translated copy: this helper is not a component, so it cannot call `t`. */
+  emptyMessage: string;
+  groupLabels: { skills: string; apps: string; mcpServers: string };
 }
 
 // `Popover.Menu` renders a literal `null` between children as a divider.
@@ -171,12 +180,14 @@ function buildMenuChildren({
   selectedIndex,
   onSelect,
   onHover,
+  emptyMessage,
+  groupLabels,
 }: BuildMenuChildrenArgs): ReactNode[] {
   if (flatEntries.length === 0) {
     return [
       <div key="empty" className="p-2">
         <Text font="secondary-body" color="text-03">
-          No matching skills
+          {emptyMessage}
         </Text>
       </div>,
     ];
@@ -184,10 +195,14 @@ function buildMenuChildren({
 
   // Groups must stay in `flattenSections` order — keyboard nav indexes into that
   // flat list, so a running index is what keeps the two aligned.
-  const groups: { label: string; entries: PickerEntry[] }[] = [
-    { label: "Skills", entries: filtered.skills },
-    { label: "Apps", entries: filtered.apps },
-    { label: "MCP servers", entries: filtered.mcpServers },
+  const groups: { key: string; label: string; entries: PickerEntry[] }[] = [
+    { key: "skills", label: groupLabels.skills, entries: filtered.skills },
+    { key: "apps", label: groupLabels.apps, entries: filtered.apps },
+    {
+      key: "mcpServers",
+      label: groupLabels.mcpServers,
+      entries: filtered.mcpServers,
+    },
   ];
 
   const children: ReactNode[] = [];
@@ -197,7 +212,7 @@ function buildMenuChildren({
     if (group.entries.length === 0) continue;
     if (children.length > 0) children.push(null);
     children.push(
-      <SectionHeader key={`${group.label}-header`} label={group.label} />
+      <SectionHeader key={`${group.key}-header`} label={group.label} />
     );
     for (const entry of group.entries) {
       const rowProps = {
@@ -264,11 +279,16 @@ function SkillRow({
 }: SkillRowProps) {
   return (
     <div className="cursor-pointer">
-      <LineItem
-        interactive={false}
-        selected={selected}
-        emphasized={selected}
+      <LineItemButton
+        presentational
+        sizePreset="main-ui"
+        variant="section"
+        title={`/${slug}`}
+        titleMaxLines={1}
+        state={selected ? "selected" : "empty"}
+        selectVariant="select-heavy"
         description={description}
+        descriptionMaxLines={1}
         onMouseEnter={onHover}
         onMouseDown={(e) => {
           e.preventDefault();
@@ -276,9 +296,7 @@ function SkillRow({
         }}
         data-row-index={rowIndex}
         data-testid={`skill-picker-row-${slug}`}
-      >
-        {`/${slug}`}
-      </LineItem>
+      />
     </div>
   );
 }
@@ -306,14 +324,29 @@ function ConnectableRow({
   onPick,
   rowIndex,
 }: ConnectableRowProps) {
+  const t = useTranslations("chat.input");
   const unauth = !authenticated;
   return (
     <div className="cursor-pointer">
-      <LineItem
-        interactive={false}
-        selected={selected}
-        emphasized={selected}
-        description={authenticated ? "Connected" : "Connection required"}
+      {/* The logo takes the icon slot rather than riding inside the label,
+          and the unauthenticated dimming becomes the muted colour mode
+          rather than opacity on a hand-rolled span. */}
+      <LineItemButton
+        presentational
+        sizePreset="main-ui"
+        variant="section"
+        icon={Logo}
+        title={name}
+        titleMaxLines={1}
+        color={unauth ? "muted" : undefined}
+        state={selected ? "selected" : "empty"}
+        selectVariant="select-heavy"
+        description={
+          authenticated
+            ? t("entryPickerPopover.connectedRow.description")
+            : t("entryPickerPopover.connectionRequiredRow.description")
+        }
+        descriptionMaxLines={1}
         onMouseEnter={onHover}
         onMouseDown={(e) => {
           e.preventDefault();
@@ -321,24 +354,18 @@ function ConnectableRow({
         }}
         rightChildren={
           unauth ? (
-            <Text font="secondary-action" color="text-03" nowrap>
-              Connect
+            <Text
+              font="secondary-action"
+              color="text-03"
+              wordWrap="whitespace-nowrap"
+            >
+              {t("entryPickerPopover.connectAction.label")}
             </Text>
           ) : undefined
         }
         data-row-index={rowIndex}
         data-testid={testId}
-      >
-        <span
-          className={cn(
-            "inline-flex items-center gap-2",
-            unauth && "opacity-50"
-          )}
-        >
-          <Logo className="h-4 w-4 shrink-0" />
-          <span>{name}</span>
-        </span>
-      </LineItem>
+      />
     </div>
   );
 }

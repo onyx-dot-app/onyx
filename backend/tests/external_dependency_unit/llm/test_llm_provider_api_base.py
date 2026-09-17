@@ -820,7 +820,9 @@ def test_vertex_workload_identity_provider_create(
             )
 
         assert len(captured_llms) == 1
-        model_kwargs = getattr(captured_llms[0], "_model_kwargs", {})
+        model_kwargs = getattr(  # ods: ignore[getattr]
+            captured_llms[0], "_model_kwargs", {}
+        )
         assert "vertex_credentials" not in model_kwargs
         assert model_kwargs.get("vertex_project") == "my-gcp-project"
         assert model_kwargs.get("vertex_location") == "us-central1"
@@ -918,7 +920,9 @@ def test_vertex_service_account_backwards_compat_routes_credentials(
             )
 
         assert len(captured_llms) == 1
-        model_kwargs = getattr(captured_llms[0], "_model_kwargs", {})
+        model_kwargs = getattr(  # ods: ignore[getattr]
+            captured_llms[0], "_model_kwargs", {}
+        )
         assert (
             model_kwargs.get("vertex_credentials")
             == original_custom_config["vertex_credentials"]

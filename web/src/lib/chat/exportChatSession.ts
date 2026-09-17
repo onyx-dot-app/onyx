@@ -64,7 +64,7 @@ export async function exportChatSession(
   if (!response.ok) {
     throw new Error(`Failed to fetch chat session: ${response.status}`);
   }
-  const session = (await response.json()) as BackendChatSession;
+  const session: BackendChatSession = await response.json();
 
   const title = chatName.trim() || UNNAMED_CHAT;
   const base = sanitizeFilename(chatName);

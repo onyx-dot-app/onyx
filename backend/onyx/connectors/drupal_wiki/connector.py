@@ -446,7 +446,7 @@ class DrupalWikiConnector(
             page += 1
 
         # Return a deterministic, sorted list of ids
-        space_id_list = list(sorted(all_space_ids))
+        space_id_list = sorted(all_space_ids)
         logger.debug("Total spaces fetched: %s", len(space_id_list))
         return space_id_list
 

@@ -1,9 +1,12 @@
+import datetime
+import hashlib
+import struct
 from collections.abc import Callable, Sequence
 from typing import Any
 from uuid import UUID
 
 from fastapi_users.password import PasswordHelper
-from sqlalchemy import Select, case, delete, func, literal, select, update
+from sqlalchemy import Select, case, delete, func, literal, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, lazyload, selectinload
@@ -20,11 +23,14 @@ from onyx.configs.constants import (
 )
 from onyx.db.enums import AccountType, Permission
 from onyx.db.models import (
+    ChatMessage,
+    ChatSession,
     DocumentSet,
     DocumentSet__User,
     MCPConnectionConfig,
     MCPServer,
     OAuthAccount,
+    PermissionGrant,
     Persona,
     Persona__User,
     SamlAccount,
@@ -34,11 +40,23 @@ from onyx.db.models import (
     UserGroup,
 )
 from onyx.db.permissions import recompute_user_permissions__no_commit
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.models import UserGroupInfo
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+DEFAULT_ADMIN_GROUP_NAME = "Admin"
+DEFAULT_BASIC_GROUP_NAME = "Basic"
+
+_MAX_LISTED_STRANDED_EMAILS = 3
+
+# tenant-hashed so tenants don't block each other and the id can't collide with
+# the other advisory locks in the codebase
+_MEMBERSHIP_LOCK_NAMESPACE = "onyx_membership_lock"
 
 
 def is_limited_user(user: User) -> bool:
@@ -89,6 +107,223 @@ def _active_admin_user_stmt() -> Select[tuple[User]]:
 
 def get_active_admin_users(db_session: Session) -> list[User]:
     return list(db_session.execute(_active_admin_user_stmt()).unique().scalars().all())
+
+
+def group_grants_full_admin(db_session: Session, group_id: int) -> bool:
+    return (
+        db_session.scalar(
+            select(PermissionGrant.id).where(
+                PermissionGrant.group_id == group_id,
+                PermissionGrant.permission == Permission.FULL_ADMIN_PANEL_ACCESS,
+                PermissionGrant.is_deleted.is_(False),
+            )
+        )
+        is not None
+    )
+
+
+def another_admin_survives(
+    db_session: Session, group_id: int, removed_user_ids: list[UUID]
+) -> bool:
+    """Reads grants, not ``effective_permissions``, which still reflects the removal.
+
+    Exclusions mirror ``_active_admin_user_stmt`` — keep the two in step."""
+    email_col: KeyedColumnElement[Any] = User.__table__.c.email
+    is_active_col: KeyedColumnElement[Any] = User.__table__.c.is_active
+    stmt = (
+        select(User__UserGroup.user_id)
+        .join(
+            PermissionGrant,
+            PermissionGrant.group_id == User__UserGroup.user_group_id,
+        )
+        .join(
+            User,
+            User.id == User__UserGroup.user_id,  # ty: ignore[invalid-argument-type]
+        )
+        .where(
+            PermissionGrant.permission == Permission.FULL_ADMIN_PANEL_ACCESS,
+            PermissionGrant.is_deleted.is_(False),
+            is_active_col.is_(True),
+            expression.not_(email_col.endswith(DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN)),
+            email_col != ANONYMOUS_USER_EMAIL,
+            email_col != NO_AUTH_PLACEHOLDER_USER_EMAIL,
+            or_(
+                User__UserGroup.user_group_id != group_id,
+                User__UserGroup.user_id.not_in(removed_user_ids),
+            ),
+        )
+        .limit(1)
+    )
+    return db_session.scalar(stmt) is not None
+
+
+def _membership_lock_id(tenant_id: str) -> int:
+    digest = hashlib.sha256(
+        f"{_MEMBERSHIP_LOCK_NAMESPACE}:{tenant_id}".encode()
+    ).digest()
+    # pg_advisory_xact_lock takes a signed 8-byte int.
+    return struct.unpack("q", digest[:8])[0]
+
+
+def lock_group_membership(db_session: Session) -> None:
+    """One lock for every membership write, admin access included, released on the
+    caller's commit. Take it before reading state the write depends on: a stale read
+    misses a concurrent add, and two removals each see the other survive. Splitting it
+    per class would only buy a lock order to get wrong."""
+    # Bounded wait: a wedged holder should fail fast, not hang the request.
+    db_session.execute(text("SET LOCAL lock_timeout = '10s'"))
+    db_session.execute(
+        text("SELECT pg_advisory_xact_lock(:lock_id)"),
+        {"lock_id": _membership_lock_id(get_current_tenant_id())},
+    )
+    db_session.execute(text("SET LOCAL lock_timeout = DEFAULT"))
+
+
+def assert_admin_access_survives_removal(
+    db_session: Session,
+    actor: User,
+    group_id: int,
+    removed_user_ids: list[UUID],
+) -> None:
+    """Guards against locking the workspace out of its own admin panel.
+
+    Shared by the CE admin-access endpoint and the EE group editor — same rows."""
+    if not removed_user_ids or not group_grants_full_admin(db_session, group_id):
+        return
+
+    if actor.id in removed_user_ids:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "You can't remove yourself from the admin group. Ask another admin to do it.",
+        )
+
+    lock_group_membership(db_session)
+
+    if not another_admin_survives(db_session, group_id, removed_user_ids):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "You can't remove the last admin. Grant another user admin access first.",
+        )
+
+
+def _stranded_by_removal(
+    db_session: Session, group_id: int, removed_user_ids: list[UUID]
+) -> list[str]:
+    """Emails of the standard users this removal would leave in no group."""
+    surviving_member_ids = set(
+        db_session.scalars(
+            select(User__UserGroup.user_id)
+            .join(UserGroup, UserGroup.id == User__UserGroup.user_group_id)
+            .where(
+                User__UserGroup.user_id.in_(removed_user_ids),
+                User__UserGroup.user_group_id != group_id,
+                UserGroup.is_up_for_deletion.is_(False),
+            )
+        ).all()
+    )
+    stranded_ids = [
+        user_id for user_id in removed_user_ids if user_id not in surviving_member_ids
+    ]
+    if not stranded_ids:
+        return []
+
+    email_col: KeyedColumnElement[Any] = User.__table__.c.email
+    return list(
+        db_session.scalars(
+            select(email_col)
+            .where(
+                User.id.in_(stranded_ids),  # ty: ignore[unresolved-attribute]
+                User.account_type == AccountType.STANDARD,
+            )
+            .order_by(email_col)
+        ).all()
+    )
+
+
+def assert_group_membership_survives_removal(
+    db_session: Session,
+    group_id: int,
+    removed_user_ids: list[UUID],
+) -> None:
+    """Blocks removals that leave a standard user in no group: permissions come only
+    from group grants, so they would keep a login that can do nothing."""
+    if not removed_user_ids:
+        return
+
+    lock_group_membership(db_session)
+
+    stranded_emails = _stranded_by_removal(db_session, group_id, removed_user_ids)
+    if not stranded_emails:
+        return
+
+    listed = ", ".join(stranded_emails[:_MAX_LISTED_STRANDED_EMAILS])
+    remainder = len(stranded_emails) - _MAX_LISTED_STRANDED_EMAILS
+    if remainder > 0:
+        listed = f"{listed} and {remainder} more"
+    raise OnyxError(
+        OnyxErrorCode.INVALID_INPUT,
+        f"{listed} would be left without a group. Add them to another group first.",
+    )
+
+
+def fetch_default_group(db_session: Session, name: str) -> UserGroup:
+    group = db_session.scalar(
+        select(UserGroup).where(UserGroup.name == name, UserGroup.is_default.is_(True))
+    )
+    if group is None:
+        raise RuntimeError(
+            f"Default group '{name}' not found. "
+            "Ensure the seed_default_groups migration has run."
+        )
+    return group
+
+
+def set_user_admin_access(
+    db_session: Session,
+    actor: User,
+    target: User,
+    is_admin: bool,
+) -> None:
+    """Toggles seeded Admin group membership — admin *is* that membership now.
+
+    Replaces the removed ``PATCH /manage/set-user-role``. Editing groups directly is
+    EE-only, which strands Community on whichever user registered first."""
+    if target.account_type in (
+        AccountType.BOT,
+        AccountType.EXT_PERM_USER,
+        AccountType.ANONYMOUS,
+        AccountType.SERVICE_ACCOUNT,
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Can't change admin access for a {target.account_type.value} account.",
+        )
+
+    admin_group = fetch_default_group(db_session, DEFAULT_ADMIN_GROUP_NAME)
+    membership_stmt = select(User__UserGroup).where(
+        User__UserGroup.user_id == target.id,
+        User__UserGroup.user_group_id == admin_group.id,
+    )
+    membership = db_session.scalar(membership_stmt)
+
+    if is_admin:
+        if membership is not None:
+            return
+        db_session.add(User__UserGroup(user_id=target.id, user_group_id=admin_group.id))
+    else:
+        if membership is None:
+            return
+        assert_admin_access_survives_removal(
+            db_session, actor, admin_group.id, [target.id]
+        )
+        assert_group_membership_survives_removal(
+            db_session, admin_group.id, [target.id]
+        )
+        db_session.delete(membership)
+
+    db_session.flush()
+    recompute_user_permissions__no_commit(target.id, db_session)
+    db_session.commit()
 
 
 def get_all_users(
@@ -438,6 +673,21 @@ def reconcile_user_email__no_commit(
     return old_email, prior_emails
 
 
+def fetch_users_by_ids(db_session: Session, user_ids: list[UUID]) -> list[User]:
+    """Missing ids are absent from the result; callers diff to name them."""
+    if not user_ids:
+        return []
+    return list(
+        db_session.scalars(
+            select(User).where(
+                User.id.in_(user_ids)  # ty: ignore[unresolved-attribute]
+            )
+        )
+        .unique()
+        .all()
+    )
+
+
 def fetch_user_by_id(
     db_session: Session, user_id: UUID, for_update: bool = False
 ) -> User | None:
@@ -602,7 +852,9 @@ def assign_user_to_default_groups__no_commit(
     ):
         return
 
-    target_group_name = "Admin" if is_admin else "Basic"
+    target_group_name = (
+        DEFAULT_ADMIN_GROUP_NAME if is_admin else DEFAULT_BASIC_GROUP_NAME
+    )
 
     default_group = (
         db_session.query(UserGroup)
@@ -655,6 +907,23 @@ def assign_user_to_default_groups__no_commit(
     logger.info(
         "Assigned user %s to default group '%s'", user.email, default_group.name
     )
+
+
+def promote_placeholder_to_web_login__no_commit(
+    db_session: Session, user: User, is_verified: bool
+) -> None:
+    """Turn a placeholder row (EXT_PERM_USER, BOT) into a real web login.
+
+    Does NOT commit. The caller holds the ``"user"`` row lock and commits this
+    with the rest of its transaction, so the seat check it ran stays valid.
+
+    A placeholder is deactivated until its owner shows up, so this reactivates
+    the row rather than turning the owner away.
+    """
+    user.is_verified = is_verified
+    user.account_type = AccountType.STANDARD
+    user.is_active = True
+    assign_user_to_default_groups__no_commit(db_session, user)
 
 
 def get_active_admin_count(db_session: Session) -> int:
@@ -760,6 +1029,47 @@ def batch_get_user_groups(
     for user_id, group_id, group_name in rows:
         result[user_id].append((group_id, group_name))
     return result
+
+
+def batch_get_last_active(
+    db_session: Session,
+    user_ids: list[UUID],
+) -> dict[UUID, datetime.datetime | None]:
+    """Fetch the most recent chat activity for a batch of users in a single query.
+
+    `User.updated_at` only moves when the user row itself is written — a profile or
+    role change — so it is not a measure of activity.
+
+    `ChatSession.time_updated` alone is not either. It has `onupdate=func.now()`, so
+    it advances when the session row is written — creation, and auto-naming on the
+    first turn — but sending a follow-up message only inserts a `ChatMessage`.
+    (`update_chat_session_updated_at_timestamp` exists for this and has no callers.)
+    Measured against production, that left 65% of users with a stale value, the worst
+    understated by 174 days.
+
+    Taking the greatest of the two per session covers both: message traffic, and a
+    session that has been created or renamed but carries no messages yet.
+
+    Returns user_id -> last activity, or None for a user who has never chatted.
+    """
+    if not user_ids:
+        return {}
+
+    rows = db_session.execute(
+        select(
+            ChatSession.user_id,
+            func.max(func.greatest(ChatSession.time_updated, ChatMessage.time_sent)),
+        )
+        .select_from(ChatSession)
+        .outerjoin(ChatMessage, ChatMessage.chat_session_id == ChatSession.id)
+        .where(ChatSession.user_id.in_(user_ids))
+        .group_by(ChatSession.user_id)
+    ).all()
+
+    # Every requested id gets a key, so a user who has never chatted reads as
+    # None rather than going missing from the mapping.
+    last_active_by_user = {user_id: last_active for user_id, last_active in rows}  # noqa: C416  # unpacking types the SQLAlchemy Row
+    return {uid: last_active_by_user.get(uid) for uid in user_ids}
 
 
 def get_user_groups(

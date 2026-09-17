@@ -799,7 +799,11 @@ export function useContentEditable({
       if (isDelete) {
         direction = event.key === "Backspace" ? "before" : "after";
       } else {
-        direction = event.key === "ArrowLeft" ? "before" : "after";
+        // Arrow keys are physical, so in RTL the left arrow moves toward
+        // the DOM-following tile.
+        const rtl = el ? getComputedStyle(el).direction === "rtl" : false;
+        const towardStart = (event.key === "ArrowLeft") !== rtl;
+        direction = towardStart ? "before" : "after";
       }
 
       let tile = getAdjacentRichTile(range, direction);

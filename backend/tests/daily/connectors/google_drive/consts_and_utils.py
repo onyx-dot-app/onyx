@@ -8,11 +8,11 @@ from onyx.connectors.models import Document, HierarchyNode, TextSection
 from onyx.db.enums import HierarchyNodeType
 from tests.daily.connectors.utils import ConnectorOutput, load_all_from_connector
 
-ALL_FILES = list(range(0, 60))
+ALL_FILES = list(range(60))
 SHARED_DRIVE_FILES = list(range(20, 25))
 
 
-ADMIN_FILE_IDS = list(range(0, 5))
+ADMIN_FILE_IDS = list(range(5))
 ADMIN_FOLDER_3_FILE_IDS = list(range(65, 70))  # This folder is shared with test_user_1
 TEST_USER_1_FILE_IDS = list(range(5, 10))
 TEST_USER_2_FILE_IDS = list(range(10, 15))
@@ -476,7 +476,7 @@ ACCESS_MAPPING: dict[str, list[int]] = {
         # This user has been given shared access to folder 3 in Admin's My Drive
         + ADMIN_FOLDER_3_FILE_IDS
         # This user has been given shared access to files 0 and 1 in Admin's My Drive
-        + list(range(0, 2))
+        + list(range(2))
     ),
     TEST_USER_2_EMAIL: (
         TEST_USER_2_FILE_IDS
@@ -585,21 +585,19 @@ def assert_expected_docs_in_retrieved_docs(
         for doc in retrieved_docs
         if doc.semantic_identifier.startswith(_VALID_PREFIX)
     ]
-    valid_retrieved_file_names = set(
-        [doc.semantic_identifier for doc in valid_retrieved_docs]
-    )
-    valid_retrieved_texts = set(
-        [
-            " - ".join(
-                [
-                    section.text
-                    for section in doc.sections
-                    if isinstance(section, TextSection) and section.text is not None
-                ]
-            )
-            for doc in valid_retrieved_docs
-        ]
-    )
+    valid_retrieved_file_names = {
+        doc.semantic_identifier for doc in valid_retrieved_docs
+    }
+    valid_retrieved_texts = {
+        " - ".join(
+            [
+                section.text
+                for section in doc.sections
+                if isinstance(section, TextSection) and section.text is not None
+            ]
+        )
+        for doc in valid_retrieved_docs
+    }
 
     # Check file names
     print_discrepancies(

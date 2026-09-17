@@ -24,6 +24,11 @@ from onyx.utils.variable_functionality import (
 T = TypeVar("T", bound=tuple[Any, ...])
 
 
+async def reload_user_oidc_expiry(db_session: AsyncSession, user: User) -> None:
+    """Re-reads only oidc_expiry, which a concurrent request may have rewritten."""
+    await db_session.refresh(user, attribute_names=["oidc_expiry"])
+
+
 def get_default_admin_user_emails() -> list[str]:
     """Returns a list of emails who should default to Admin role.
     Only used in the EE version. For MIT, just return empty list."""

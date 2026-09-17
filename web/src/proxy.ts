@@ -3,7 +3,8 @@ import type { NextRequest } from "next/server";
 import {
   SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
   SERVER_SIDE_ONLY__AUTH_COOKIE_NAME,
-} from "./lib/constants";
+} from "@/lib/constants";
+import { loginPath, ORIGINAL_PATH_HEADER } from "@/lib/auth/paths";
 
 // Route prefixes that never allow anonymous access, so we fast-fail at the edge
 // when no auth cookie is present. "/app" is intentionally excluded: it allows
@@ -122,6 +123,11 @@ function withSecurityHeaders(response: NextResponse): NextResponse {
 
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
+  const pathWithQuery = pathname + request.nextUrl.search;
+
+  // Set, not merged, so a client cannot supply its own.
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set(ORIGINAL_PATH_HEADER, pathWithQuery);
 
   // Auth Check: Fast-fail at edge if no cookie (defense in depth)
   // Note: Layouts still do full verification (token validity, roles, etc.)
@@ -138,10 +144,7 @@ export async function proxy(request: NextRequest) {
     // Require a real auth cookie; the anonymous-user cookie must not satisfy the
     // edge gate for these routes (the server-side role checks reject it anyway).
     if (!authCookie) {
-      const loginUrl = new URL("/auth/login", request.url);
-      // Preserve full URL including query params and hash for deep linking
-      const fullPath = pathname + request.nextUrl.search + request.nextUrl.hash;
-      loginUrl.searchParams.set("next", fullPath);
+      const loginUrl = new URL(loginPath({ next: pathWithQuery }), request.url);
       return withSecurityHeaders(NextResponse.redirect(loginUrl));
     }
   }
@@ -150,9 +153,13 @@ export async function proxy(request: NextRequest) {
   if (SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED) {
     if (EE_ROUTES.some((route) => pathname.startsWith(route))) {
       const newUrl = new URL(`/ee${pathname}`, request.url);
-      return withSecurityHeaders(NextResponse.rewrite(newUrl));
+      return withSecurityHeaders(
+        NextResponse.rewrite(newUrl, { request: { headers: requestHeaders } })
+      );
     }
   }
 
-  return withSecurityHeaders(NextResponse.next());
+  return withSecurityHeaders(
+    NextResponse.next({ request: { headers: requestHeaders } })
+  );
 }

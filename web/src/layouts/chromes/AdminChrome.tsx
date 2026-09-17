@@ -23,6 +23,7 @@ import {
   hasPermission,
 } from "@/lib/permissions";
 import LiteModeIndexingNotice from "@/sections/admin/LiteModeIndexingNotice";
+import { useTranslations } from "next-intl";
 
 export interface AdminChromeProps {
   children: React.ReactNode;
@@ -54,6 +55,7 @@ export default function AdminChrome({
   children,
   initialAdminCapabilities,
 }: AdminChromeProps) {
+  const t = useTranslations("common");
   const { setFolded } = useSidebarState();
   const { isMobile } = useScreenSize();
   const pathname = usePathname();
@@ -116,13 +118,11 @@ export default function AdminChrome({
         {application_status === ApplicationStatus.PAYMENT_REMINDER && (
           <div className="fixed top-2 left-1/2 -translate-x-1/2 bg-status-warning-01 p-4 rounded-lg shadow-lg z-50 max-w-md text-center">
             <Text font="main-ui-body" color="text-05">
-              {markdown(
-                "**Warning:** Your trial ends in less than 5 days and no payment method has been added."
-              )}
+              {markdown(t("adminChrome.paymentReminder.text"))}
             </Text>
             <div className="mt-2">
               <Button width="full" href="/admin/billing">
-                Update Billing Information
+                {t("adminChrome.paymentReminder.billingButton.label")}
               </Button>
             </div>
           </div>
@@ -145,7 +145,7 @@ export default function AdminChrome({
                 <Button
                   prominence="internal"
                   icon={SvgSidebar}
-                  aria-label="Open Sidebar"
+                  aria-label={t("adminChrome.openSidebar.ariaLabel")}
                   onClick={() => setFolded(false)}
                 />
               </div>

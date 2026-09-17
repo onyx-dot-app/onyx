@@ -1,4 +1,5 @@
 import { FiCircle, FiList, FiTool } from "react-icons/fi";
+import type { useTranslations } from "next-intl";
 import {
   Packet,
   PacketType,
@@ -87,40 +88,47 @@ export function parseToolKey(key: string): {
   };
 }
 
-export function getToolName(packets: Packet[]): string {
+export type TimelineTranslate = ReturnType<
+  typeof useTranslations<"chat.messages.timeline">
+>;
+
+export function getToolName(packets: Packet[], t: TimelineTranslate): string {
   const firstPacket = packets[0];
-  if (!firstPacket) return "Tool";
+  if (!firstPacket) return t("toolNames.tool");
 
   switch (firstPacket.obj.type) {
     case PacketType.SEARCH_TOOL_START: {
       const searchState = constructCurrentSearchState(
         packets as SearchToolPacket[]
       );
-      return searchState.isInternetSearch ? "Web Search" : "Internal Search";
+      return searchState.isInternetSearch
+        ? t("toolNames.webSearch")
+        : t("toolNames.internalSearch");
     }
     case PacketType.PYTHON_TOOL_START:
-      return "Code Interpreter";
+      return t("toolNames.codeInterpreter");
     case PacketType.FETCH_TOOL_START:
-      return "Open URLs";
+      return t("toolNames.openUrls");
     case PacketType.CUSTOM_TOOL_START:
       return (
-        (firstPacket.obj as { tool_name?: string }).tool_name || "Custom Tool"
+        (firstPacket.obj as { tool_name?: string }).tool_name ||
+        t("toolNames.customTool")
       );
     case PacketType.IMAGE_GENERATION_TOOL_START:
-      return "Generate Image";
+      return t("toolNames.generateImage");
     case PacketType.DEEP_RESEARCH_PLAN_START:
-      return "Generate plan";
+      return t("toolNames.generatePlan");
     case PacketType.RESEARCH_AGENT_START:
-      return "Research agent";
+      return t("toolNames.researchAgent");
     case PacketType.CODING_AGENT_START:
-      return "Coding agent";
+      return t("toolNames.codingAgent");
     case PacketType.REASONING_START:
-      return "Thinking";
+      return t("toolNames.thinking");
     case PacketType.MEMORY_TOOL_START:
     case PacketType.MEMORY_TOOL_NO_ACCESS:
-      return "Memory";
+      return t("toolNames.memory");
     default:
-      return "Tool";
+      return t("toolNames.tool");
   }
 }
 

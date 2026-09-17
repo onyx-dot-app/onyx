@@ -384,7 +384,10 @@ class AzureBlobBackedFileStore(FileStore):
                     # record so the file is still resolvable once fixed.
                     # (error_code is set at runtime but absent from the
                     # azure-core stubs, hence getattr.)
-                    if getattr(e, "error_code", None) != "BlobNotFound":
+                    if (
+                        getattr(e, "error_code", None)  # ods: ignore[getattr]
+                        != "BlobNotFound"
+                    ):
                         raise
                     logger.warning(
                         "delete_file: File %s not found in Azure Blob Storage "

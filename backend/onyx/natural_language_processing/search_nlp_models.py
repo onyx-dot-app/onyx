@@ -305,7 +305,9 @@ def _extract_cohere_embeddings(response_embeddings: Any) -> list[Embedding]:
     if isinstance(response_embeddings, list):
         return cast(list[Embedding], response_embeddings)
 
-    float_embeddings = getattr(response_embeddings, "float_", None)
+    float_embeddings = getattr(  # ods: ignore[getattr]
+        response_embeddings, "float_", None
+    )
     if isinstance(float_embeddings, list):
         return cast(list[Embedding], float_embeddings)
 

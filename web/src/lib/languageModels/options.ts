@@ -31,6 +31,10 @@ export interface LLMOption {
   supportsReasoning?: boolean;
   /** See ModelConfiguration.supported_reasoning_efforts. */
   supportedReasoningEfforts?: ReasoningEffortOverride[];
+  /** See ModelConfiguration.reasoning_effort_max. */
+  reasoningEffortMax?: ReasoningEffortOverride | null;
+  reasoningEffortDefault?: ReasoningEffortOverride | null;
+  temperatureDefault?: number | null;
   supportsImageInput?: boolean;
 }
 
@@ -122,6 +126,9 @@ export function buildLlmOptions(
           version: mc.version || null,
           supportsReasoning: mc.supports_reasoning || false,
           supportedReasoningEfforts: mc.supported_reasoning_efforts,
+          reasoningEffortMax: mc.reasoning_effort_max,
+          reasoningEffortDefault: mc.reasoning_effort_default,
+          temperatureDefault: mc.temperature_default,
           supportsImageInput: mc.supports_image_input || false,
         });
       });

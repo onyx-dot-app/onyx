@@ -1,14 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
 import { Text } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { SvgGlobe, SvgLoader } from "@opal/icons";
-import {
-  NO_WEBAPP_LABEL,
-  type WebappState,
-} from "@/app/craft/components/output-panel/interfaces";
+import { type WebappState } from "@/app/craft/components/output-panel/interfaces";
 
 interface PreviewTabProps {
   webappUrl: string | null;
@@ -25,6 +23,8 @@ export default function PreviewTab({
   webappState,
   refreshKey,
 }: PreviewTabProps) {
+  const t = useTranslations("craft.previewTab");
+  const tOutput = useTranslations("craft.outputPanel");
   const [iframeLoaded, setIframeLoaded] = useState(false);
 
   // Reset loaded state when URL or refreshKey changes
@@ -42,10 +42,10 @@ export default function PreviewTab({
       >
         <SvgGlobe size={48} className="stroke-text-02" aria-hidden />
         <Text font="heading-h3" color="text-03">
-          {NO_WEBAPP_LABEL}
+          {tOutput("noWebapp.label")}
         </Text>
         <Text font="secondary-body" color="text-02">
-          A live preview appears here once a web app is running.
+          {t("empty.description")}
         </Text>
       </Section>
     );
@@ -66,10 +66,10 @@ export default function PreviewTab({
           aria-hidden
         />
         <Text font="heading-h3" color="text-03">
-          Starting the dev server...
+          {t("starting.title")}
         </Text>
         <Text font="secondary-body" color="text-02">
-          Installing dependencies and booting.
+          {t("starting.description")}
         </Text>
       </Section>
     );
@@ -100,7 +100,7 @@ export default function PreviewTab({
               iframeLoaded ? "opacity-100" : "opacity-0"
             )}
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
-            title="Web App Preview"
+            title={t("frame.title")}
           />
         )}
       </div>

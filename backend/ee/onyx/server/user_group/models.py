@@ -121,7 +121,10 @@ class UserGroupCreate(BaseModel):
 
 class UserGroupUpdate(BaseModel):
     user_ids: list[UUID]
-    cc_pair_ids: list[int]
+    # None leaves the connector links alone. Without it, changing a roster meant
+    # reading every linked cc-pair back and resending it, so a link added in
+    # between was reverted. add_users_to_user_group already preserves them.
+    cc_pair_ids: list[int] | None = None
 
 
 class UserGroupIncognitoUpdate(BaseModel):

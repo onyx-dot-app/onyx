@@ -43,6 +43,7 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
+from onyx.llm.request_context import get_llm_request_params
 from onyx.llm.utils import model_needs_formatting_reenabled, model_supports_image_input
 from onyx.prompts.chat_prompts import (
     CODE_BLOCK_MARKDOWN,
@@ -1313,6 +1314,10 @@ def run_llm_step_pkt_generator(
             user_identity=user_identity,
             timeout_override=timeout_override,
         ):
+            # On the first chunk, not at stream end: a mid-step stop persists
+            # from another thread and needs this step's params already there.
+            if stream_chunk_count == 0 and state_container:
+                state_container.set_request_params(get_llm_request_params())
             stream_chunk_count += 1
             if packet.usage:
                 usage = packet.usage
@@ -1508,7 +1513,7 @@ def run_llm_step_pkt_generator(
 
             assistant_msg: AssistantMessage = AssistantMessage(
                 role="assistant",
-                content=accumulated_answer if accumulated_answer else None,
+                content=accumulated_answer or None,
                 tool_calls=tool_calls_list,
             )
             span_generation.span_data.output = [assistant_msg.model_dump()]
@@ -1557,10 +1562,10 @@ def run_llm_step_pkt_generator(
 
     return (
         LlmStepResult(
-            reasoning=accumulated_reasoning if accumulated_reasoning else None,
-            answer=accumulated_answer if accumulated_answer else None,
-            tool_calls=tool_calls if tool_calls else None,
-            raw_answer=accumulated_raw_answer if accumulated_raw_answer else None,
+            reasoning=accumulated_reasoning or None,
+            answer=accumulated_answer or None,
+            tool_calls=tool_calls or None,
+            raw_answer=accumulated_raw_answer or None,
             finish_reason=terminal_finish_reason,
         ),
         has_reasoned,

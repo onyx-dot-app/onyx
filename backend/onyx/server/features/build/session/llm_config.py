@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from onyx.llm.well_known_providers.llm_provider_options import (
@@ -81,26 +82,45 @@ def parse_agent_selection(
     return None
 
 
+def _matching_visible_model(
+    providers: list[LLMProviderView], selection: AgentSelection
+) -> tuple[int, str] | None:
+    for provider in providers:
+        matches_request = (
+            provider.id == selection.provider_id
+            if isinstance(selection, GatewaySelection)
+            else provider.provider == selection.provider_type
+        )
+        if matches_request and any(
+            model.is_visible and model.name == selection.model_name
+            for model in provider.model_configurations
+        ):
+            return provider.id, selection.model_name
+    return None
+
+
 def _select_gateway_default(
     providers: list[LLMProviderView],
     selection: AgentSelection | None,
+    configured_defaults: Sequence[GatewaySelection] = (),
 ) -> tuple[int, str] | None:
     if selection is not None:
-        for provider in providers:
-            matches_request = (
-                provider.id == selection.provider_id
-                if isinstance(selection, GatewaySelection)
-                else provider.provider == selection.provider_type
-            )
-            if matches_request and any(
-                model.is_visible and model.name == selection.model_name
-                for model in provider.model_configurations
-            ):
-                return provider.id, selection.model_name
+        resolved = _matching_visible_model(providers, selection)
+        if resolved is not None:
+            return resolved
         logger.warning(
             "Requested Craft gateway provider/model is not accessible or visible; "
             "falling back"
         )
+
+    # The admin's configured defaults (e.g. craft then chat) outrank the built-in
+    # recommendation, in the given priority order. A configured default that is
+    # not visible/accessible falls through to the next one rather than skipping
+    # straight to the recommendation.
+    for configured_default in configured_defaults:
+        resolved = _matching_visible_model(providers, configured_default)
+        if resolved is not None:
+            return resolved
 
     # Auto-pick a default: prefer each provider's recommended default model
     # (recommended-models.json, kept current by the update-recommended-models
@@ -123,12 +143,15 @@ def _select_gateway_default(
 def build_onyx_gateway_config(
     gateway_providers: list[LLMProviderView],
     selection: AgentSelection | None = None,
+    configured_defaults: Sequence[GatewaySelection] = (),
 ) -> CraftLLMProviderConfig | None:
     if not ONYX_SERVER_URL:
         return None
 
     models = build_gateway_model_catalog(gateway_providers)
-    default_selection = _select_gateway_default(gateway_providers, selection)
+    default_selection = _select_gateway_default(
+        gateway_providers, selection, configured_defaults
+    )
     if not models or default_selection is None:
         return None
 

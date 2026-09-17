@@ -58,6 +58,7 @@ const CUSTOM_APP: ExternalAppAdminResponse = {
   upstream_url_patterns: ["https://api.acme.test/*"],
   auth_template: {},
   organization_credentials: {},
+  credential_placeholder_keys: [],
   enabled: true,
   actions: [],
   associated_skills: [],

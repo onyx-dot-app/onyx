@@ -47,11 +47,12 @@ import {
   SvgNotion,
   SvgOracle,
   SvgOutline,
+  SvgOutlook,
   SvgProductboard,
   SvgSalesforce,
   SvgSharepoint,
-  SvgSlack,
   SvgSlab,
+  SvgSlack,
   SvgTeams,
   SvgTestrail,
   SvgWikipedia,
@@ -322,6 +323,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.Messaging,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/teams`,
   },
+  outlook: {
+    icon: SvgOutlook,
+    displayName: "Outlook",
+    category: SourceCategory.Messaging,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/outlook`,
+  },
   gmail: {
     icon: SvgGmail,
     displayName: "Gmail",
@@ -533,18 +540,28 @@ export function getSourceDisplayName(sourceType: ValidSources): string | null {
   return getSourceMetadata(sourceType).displayName;
 }
 
-export function getSourceMetadataForSources(sources: ValidSources[]) {
-  return sources.map((source) => getSourceMetadata(source));
-}
+/** The configured sources, one entry per source type. */
+export function getConfiguredSources(
+  availableSources: ValidSources[]
+): Array<SourceMetadata & { originalName: string; uniqueKey: string }> {
+  const seen = new Set<string>();
+  const result: Array<
+    SourceMetadata & { originalName: string; uniqueKey: string }
+  > = [];
 
-export function getSourcesForPersona(persona: Agent): ValidSources[] {
-  const personaSources: ValidSources[] = [];
-  persona.document_sets.forEach((documentSet) => {
-    documentSet.cc_pair_summaries.forEach((ccPair) => {
-      if (!personaSources.includes(ccPair.source)) {
-        personaSources.push(ccPair.source);
-      }
+  for (const sourceName of availableSources) {
+    const cleanName = sourceName.replace("federated_", "") as ValidSources;
+    if (seen.has(cleanName)) continue;
+    seen.add(cleanName);
+
+    const metadata = getSourceMetadata(cleanName);
+    if (metadata.internalName === ValidSources.NotApplicable) continue;
+
+    result.push({
+      ...metadata,
+      originalName: sourceName,
+      uniqueKey: cleanName,
     });
-  });
-  return personaSources;
+  }
+  return result;
 }

@@ -17,7 +17,7 @@ export async function getConnectorOauthRedirectUrl(
 ): Promise<string> {
   try {
     const queryParams = new URLSearchParams({
-      desired_return_url: window.location.href,
+      desired_return_url: `${window.location.pathname}${window.location.search}${window.location.hash}`,
       ...additional_kwargs,
     });
     const response = await fetch(
@@ -28,7 +28,7 @@ export async function getConnectorOauthRedirectUrl(
       throw new Error(await parseErrorDetail(response, OAUTH_REDIRECT_ERROR));
     }
 
-    const data = (await response.json()) as OAuthRedirectResponse;
+    const data: OAuthRedirectResponse = await response.json();
     return data.redirect_url;
   } catch (error) {
     console.error(`${OAUTH_REDIRECT_LOG_ERROR} for ${connector}:`, error);

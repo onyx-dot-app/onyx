@@ -9,6 +9,7 @@ import React, {
   useEffect,
   useRef,
 } from "react";
+import type { ReasoningEffortOverride } from "@/lib/languageModels/types";
 import {
   User,
   UserPersonalization,
@@ -27,6 +28,8 @@ import {
   setUserDefaultModel,
 } from "@/lib/users/svc";
 import { useTheme } from "next-themes";
+import { useRouter } from "next/navigation";
+import { isSupportedLocale, type Locale } from "@/i18n/config";
 
 const EMPTY_PERMISSIONS: string[] = [];
 
@@ -62,12 +65,17 @@ export interface UserContextType {
     isPinned: boolean
   ) => Promise<boolean>;
   updateUserTemperatureOverrideEnabled: (enabled: boolean) => Promise<void>;
+  updateUserTemperatureDefault: (value: number | null) => Promise<void>;
+  updateUserReasoningEffortDefault: (
+    value: ReasoningEffortOverride | null
+  ) => Promise<void>;
   updateUserPersonalization: (
     personalization: UserPersonalization
   ) => Promise<void>;
   updateUserThemePreference: (
     themePreference: ThemePreference
   ) => Promise<void>;
+  updateUserLanguage: (language: Locale) => Promise<void>;
   updateUserChatBackground: (chatBackground: string | null) => Promise<void>;
   updateUserDefaultModel: (defaultModel: string | null) => Promise<void>;
   updateUserDefaultAppMode: (mode: "CHAT" | "SEARCH") => Promise<void>;
@@ -224,6 +232,21 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     setTheme,
   ]);
 
+  // The backend owns the NEXT_LOCALE cookie (set on PATCH /user/language,
+  // reconciled on GET /me). This effect only closes the SSR gap: when the
+  // rendered locale lags the signed-in user's stored preference — e.g. right
+  // after login on a fresh browser, where the page was rendered before /me's
+  // Set-Cookie arrived — one refresh re-renders with the reconciled cookie.
+  const router = useRouter();
+
+  useEffect(() => {
+    const language = upToDateUser?.preferences?.language;
+    if (!isSupportedLocale(language)) return;
+    if (document.documentElement.lang !== language) {
+      router.refresh();
+    }
+  }, [upToDateUser?.id, upToDateUser?.preferences?.language, router]);
+
   const updateUserTemperatureOverrideEnabled = async (enabled: boolean) => {
     try {
       setUpToDateUser((prevUser) => {
@@ -255,6 +278,70 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error) {
       console.error("Error updating user temperature override setting:", error);
+      throw error;
+    }
+  };
+
+  const updateUserTemperatureDefault = async (value: number | null) => {
+    try {
+      setUpToDateUser((prevUser) => {
+        if (prevUser) {
+          return {
+            ...prevUser,
+            preferences: {
+              ...prevUser.preferences,
+              temperature_default: value,
+            },
+          };
+        }
+        return prevUser;
+      });
+
+      const response = await fetch(`/api/temperature-default`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ temperature_default: value }),
+      });
+
+      if (!response.ok) {
+        await refreshUser();
+        throw new Error("Failed to update user temperature default");
+      }
+    } catch (error) {
+      console.error("Error updating user temperature default:", error);
+      throw error;
+    }
+  };
+
+  const updateUserReasoningEffortDefault = async (
+    value: ReasoningEffortOverride | null
+  ) => {
+    try {
+      setUpToDateUser((prevUser) => {
+        if (prevUser) {
+          return {
+            ...prevUser,
+            preferences: {
+              ...prevUser.preferences,
+              reasoning_effort_default: value,
+            },
+          };
+        }
+        return prevUser;
+      });
+
+      const response = await fetch(`/api/reasoning-effort-default`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reasoning_effort_default: value }),
+      });
+
+      if (!response.ok) {
+        await refreshUser();
+        throw new Error("Failed to update user reasoning default");
+      }
+    } catch (error) {
+      console.error("Error updating user reasoning default:", error);
       throw error;
     }
   };
@@ -468,6 +555,53 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const updateUserLanguage = async (language: Locale) => {
+    try {
+      setUpToDateUser((prevUser) => {
+        if (prevUser) {
+          return {
+            ...prevUser,
+            preferences: {
+              ...prevUser.preferences,
+              language,
+            },
+          };
+        }
+        return prevUser;
+      });
+
+      const response = await fetch(`/api/user/language`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ language }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update language preference");
+      }
+
+      // The response's Set-Cookie carries the new locale; re-render the
+      // server layout with it.
+      router.refresh();
+    } catch (error) {
+      // Restore server truth on any failure path (bad status or network
+      // error); the stored preference is unchanged server-side.
+      try {
+        await refreshUser();
+      } catch (refreshError) {
+        // Best effort: the next successful /me resolves any drift.
+        console.error(
+          "Error restoring user state after failed language update:",
+          refreshError
+        );
+      }
+      console.error("Error updating language preference:", error);
+      throw error;
+    }
+  };
+
   const updateUserChatBackground = async (chatBackground: string | null) => {
     try {
       setUpToDateUser((prevUser) => {
@@ -620,8 +754,11 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         updateUserShortcuts,
         updateUserPasteAsTile,
         updateUserTemperatureOverrideEnabled,
+        updateUserTemperatureDefault,
+        updateUserReasoningEffortDefault,
         updateUserPersonalization,
         updateUserThemePreference,
+        updateUserLanguage,
         updateUserChatBackground,
         updateUserDefaultModel,
         updateUserDefaultAppMode,

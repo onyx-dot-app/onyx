@@ -10,7 +10,8 @@ import SvgXOctagon from "@opal/icons/x-octagon";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { cn } from "@opal/utils";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useImperativeHandle } from "react";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -39,6 +40,10 @@ interface ContentMdPresetConfig {
   descriptionIndent: string;
 }
 
+export interface ContentMdEditHandle {
+  startEditing: () => void;
+}
+
 interface ContentMdProps {
   /** Optional icon component. */
   icon?: IconFunctionComponent;
@@ -62,6 +67,10 @@ interface ContentMdProps {
   /** Enable inline editing of the title. */
   editable?: boolean;
 
+  /** Handle for starting a title edit from an external control. Setting it
+   *  hides the built-in pencil. */
+  editHandle?: React.Ref<ContentMdEditHandle>;
+
   /** Called when the user commits an edit. */
   onTitleChange?: (newTitle: string) => void;
 
@@ -79,6 +88,9 @@ interface ContentMdProps {
 
   /** Clamp the title to N lines with ellipsis. Omit to wrap freely. */
   titleMaxLines?: number;
+
+  /** Strike the title through, for a row whose option is switched off. */
+  strikethrough?: boolean;
 
   /** Size preset. Default: `"main-ui"`. */
   sizePreset?: ContentMdSizePreset;
@@ -150,11 +162,14 @@ function ContentMd({
   auxIcon,
   tag,
   titleMaxLines,
+  strikethrough,
   sizePreset = "main-ui",
   ref,
+  editHandle,
 }: ContentMdProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(toPlainString(title));
+  const strings = useOpalStrings();
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Move focus to the edit input as soon as editing starts.
@@ -167,6 +182,13 @@ function ContentMd({
   function startEditing() {
     setEditValue(toPlainString(title));
     setEditing(true);
+  }
+  useImperativeHandle(editHandle, () => ({ startEditing }), [title]);
+
+  // Starting an edit must not double as a click on the parent row.
+  function handleTitleClick(e: React.MouseEvent) {
+    e.stopPropagation();
+    startEditing();
   }
 
   function commit() {
@@ -243,17 +265,20 @@ function ContentMd({
               font={config.titleFont}
               color="inherit"
               maxLines={titleMaxLines}
+              strikethrough={strikethrough}
               title={toPlainString(title)}
-              onClick={editable ? startEditing : undefined}
+              onClick={editable ? handleTitleClick : undefined}
             >
               {title}
             </Text>
           )}
 
           {suffix && (
-            <Text font={config.optionalFont} color="text-03">
-              {suffix === "optional" ? "(Optional)" : suffix}
-            </Text>
+            <span className="opal-content-md-suffix">
+              <Text font={config.optionalFont} color="inherit">
+                {suffix === "optional" ? "(Optional)" : suffix}
+              </Text>
+            </span>
           )}
 
           {auxIcon &&
@@ -277,7 +302,7 @@ function ContentMd({
 
           {tag && <Tag {...tag} />}
 
-          {editable && !editing && (
+          {editable && !editing && editHandle == null && (
             <div
               className={cn(
                 "opal-content-md-edit-button",
@@ -288,7 +313,7 @@ function ContentMd({
                 icon={SvgEdit}
                 prominence="internal"
                 size={config.editButtonSize}
-                tooltip="Edit"
+                tooltip={strings.edit}
                 tooltipSide="right"
                 onClick={startEditing}
               />
@@ -312,7 +337,7 @@ function ContentMd({
         >
           <Text
             font="secondary-body"
-            color="text-03"
+            color="inherit"
             as="p"
             maxLines={descriptionMaxLines}
           >

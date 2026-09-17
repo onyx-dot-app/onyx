@@ -33,6 +33,22 @@ export async function deleteUser(email: string): Promise<void> {
   }
 }
 
+export async function setUserAdminAccess(
+  email: string,
+  isAdmin: boolean
+): Promise<void> {
+  const res = await fetch("/api/manage/admin/users/admin-access", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_email: email, is_admin: isAdmin }),
+  });
+  if (!res.ok) {
+    throw new Error(
+      await parseErrorDetail(res, "Failed to update admin access")
+    );
+  }
+}
+
 export async function addUserToGroup(
   groupId: number,
   userId: string

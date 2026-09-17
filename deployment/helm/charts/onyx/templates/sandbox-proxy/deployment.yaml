@@ -176,6 +176,9 @@ spec:
             {{- with include "onyx.postgresTls.volumeMount" . }}
             {{- . | nindent 12 }}
             {{- end }}
+            {{- with include "onyx.redisTls.volumeMount" . }}
+            {{- . | nindent 12 }}
+            {{- end }}
       volumes:
         - name: confdir
           emptyDir:
@@ -184,6 +187,9 @@ spec:
         {{- . | nindent 8 }}
         {{- end }}
         {{- with include "onyx.postgresTls.volume" . }}
+        {{- . | nindent 8 }}
+        {{- end }}
+        {{- with include "onyx.redisTls.volume" . }}
         {{- . | nindent 8 }}
         {{- end }}
       {{- with .Values.sandboxProxy.nodeSelector }}

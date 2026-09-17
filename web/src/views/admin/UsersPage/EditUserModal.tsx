@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
+import { useTranslations } from "next-intl";
 import { Button, Divider } from "@opal/components";
 import { SvgUsers, SvgUser, SvgLogOut, SvgCheck } from "@opal/icons";
 import { ContentAction, toast } from "@opal/layouts";
@@ -11,11 +12,9 @@ import LineItem from "@/refresh-components/buttons/LineItem";
 import { ShadowDiv } from "@opal/components";
 import { Tooltip } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
 import useGroups from "@/hooks/useGroups";
 import { addUserToGroup, removeUserFromGroup } from "./svc";
-import type { UserRow } from "./interfaces";
+import type { UserRow } from "./types";
 import { cn } from "@opal/utils";
 
 // ---------------------------------------------------------------------------
@@ -37,8 +36,9 @@ export default function EditUserModal({
   onClose,
   onMutate,
 }: EditUserModalProps) {
-  const businessTier = useTierAtLeast(Tier.BUSINESS);
-  const { data: allGroups, isLoading: groupsLoading } = useGroups();
+  const t = useTranslations("admin.users");
+  // defaults included; backend rejects the unsafe removals (last admin, self)
+  const { data: allGroups, isLoading: groupsLoading } = useGroups(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [popoverOpen, setPopoverOpen] = useState(false);
@@ -116,11 +116,13 @@ export default function EditUserModal({
       }
 
       onMutate();
-      toast.success("User updated");
+      toast.success(t("editModal.toasts.updated"));
       onClose();
     } catch (err) {
       onMutate(); // refresh to show partially-applied state
-      toast.error(err instanceof Error ? err.message : "An error occurred");
+      toast.error(
+        err instanceof Error ? err.message : t("editModal.toasts.error")
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -140,7 +142,7 @@ export default function EditUserModal({
       <Modal.Content width="sm" ref={contentRef}>
         <Modal.Header
           icon={SvgUsers}
-          title="Edit User's Groups"
+          title={t("editModal.title")}
           description={
             user.personal_name
               ? `${user.personal_name} (${user.email})`
@@ -167,7 +169,7 @@ export default function EditUserModal({
                     <InputTypeIn
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      placeholder="Search groups to join..."
+                      placeholder={t("editModal.search.placeholder")}
                       searchIcon
                     />
                   </div>
@@ -178,15 +180,20 @@ export default function EditUserModal({
                   container={contentEl}
                 >
                   {groupsLoading ? (
-                    <LineItem skeleton description="Loading groups...">
-                      Loading...
+                    <LineItem
+                      skeleton
+                      description={t("editModal.groupList.loading.description")}
+                    >
+                      {t("editModal.groupList.loading.title")}
                     </LineItem>
                   ) : dropdownGroups.length === 0 ? (
                     <LineItem
                       skeleton
-                      description="Try a different search term."
+                      description={t(
+                        "editModal.groupList.noResults.description"
+                      )}
                     >
-                      No groups found
+                      {t("editModal.groupList.noResults.title")}
                     </LineItem>
                   ) : (
                     <ShadowDiv
@@ -199,9 +206,9 @@ export default function EditUserModal({
                           <LineItem
                             key={group.id}
                             icon={isMember ? SvgCheck : SvgUsers}
-                            description={`${group.users.length} ${
-                              group.users.length === 1 ? "user" : "users"
-                            }`}
+                            description={t("editModal.groupList.memberCount", {
+                              count: group.users.length,
+                            })}
                             selected={isMember}
                             emphasized={isMember}
                             onClick={() => toggleGroup(group.id)}
@@ -224,9 +231,11 @@ export default function EditUserModal({
                     icon={SvgUsers}
                     skeleton
                     interactive={false}
-                    description={`${displayName} is not in any groups.`}
+                    description={t("editModal.joinedGroups.empty.description", {
+                      name: displayName,
+                    })}
                   >
-                    No groups found
+                    {t("editModal.joinedGroups.empty.title")}
                   </LineItem>
                 ) : (
                   joinedGroups.map((group) => (
@@ -237,11 +246,14 @@ export default function EditUserModal({
                       <LineItem
                         key={group.id}
                         icon={SvgUsers}
-                        description={`${group.users.length} ${
-                          group.users.length === 1 ? "user" : "users"
-                        }`}
+                        description={t("editModal.groupList.memberCount", {
+                          count: group.users.length,
+                        })}
                         rightChildren={
-                          <Tooltip tooltip="Remove from group" side="left">
+                          <Tooltip
+                            tooltip={t("editModal.removeGroupButton.tooltip")}
+                            side="left"
+                          >
                             <SvgLogOut height={16} width={16} />
                           </Tooltip>
                         }
@@ -262,10 +274,10 @@ export default function EditUserModal({
             prominence="secondary"
             onClick={isSubmitting ? undefined : onClose}
           >
-            Cancel
+            {t("editModal.cancelButton.label")}
           </Button>
           <Button disabled={isSubmitting || !hasChanges} onClick={handleSave}>
-            Save Changes
+            {t("editModal.saveButton.label")}
           </Button>
         </Modal.Footer>
       </Modal.Content>

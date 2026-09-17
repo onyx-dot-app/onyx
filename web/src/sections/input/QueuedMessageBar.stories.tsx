@@ -28,7 +28,6 @@ const meta: Meta<typeof QueuedMessageBar> = {
   args: {
     messages: SAMPLE_MESSAGES,
     highlightedIndex: null,
-    awaitingPreferredSelection: false,
     onDiscard: (index: number) => console.log("onDiscard", index),
     onHighlight: (index: number | null) => console.log("onHighlight", index),
   },
@@ -43,16 +42,6 @@ export const Default: Story = {};
 export const Highlighted: Story = {
   args: {
     highlightedIndex: 1,
-  },
-};
-
-/**
- * When the chat is waiting for the user to pick a response, the head of the
- * queue shows a "Select a response to continue" label instead.
- */
-export const AwaitingPreferredSelection: Story = {
-  args: {
-    awaitingPreferredSelection: true,
   },
 };
 
@@ -74,7 +63,6 @@ function InteractiveDemo() {
     <QueuedMessageBar
       messages={messages}
       highlightedIndex={highlightedIndex}
-      awaitingPreferredSelection={false}
       onHighlight={setHighlightedIndex}
       onDiscard={(index) => {
         setMessages((prev) => prev.filter((_, i) => i !== index));

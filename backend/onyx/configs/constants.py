@@ -37,6 +37,10 @@ FASTAPI_USERS_AUTH_COOKIE_NAME = (
     os.environ.get("AUTH_COOKIE_NAME") or "fastapiusersauth"
 )
 ANONYMOUS_USER_COOKIE_NAME = "onyx_anonymous_user"
+# Locale cookie the Next.js server layout reads to render the UI language.
+# The backend owns this cookie: PATCH /user/language and GET /me set it from
+# the user's stored preference. Name must match web/src/i18n/config.ts.
+NEXT_LOCALE_COOKIE_NAME = "NEXT_LOCALE"
 
 # ID used in UserInfo API responses for anonymous users (not a UUID, just a string identifier)
 ANONYMOUS_USER_INFO_ID = "__anonymous_user__"
@@ -98,6 +102,9 @@ SLACK_SERVICE_ACCOUNT_EMAIL = (
 
 # Key-Value store keys
 KV_PASSWORD_AUTH_ENABLED_KEY = "password_auth_enabled_override"
+KV_ALLOW_SAME_PROVIDER_SUBJECT_RELINK_KEY = (
+    "allow_same_provider_subject_relink_override"
+)
 KV_REINDEX_KEY = "needs_reindexing"
 KV_UNSTRUCTURED_API_KEY = "unstructured_api_key"
 KV_USER_STORE_KEY = "INVITED_USERS"
@@ -270,6 +277,7 @@ class DocumentSource(str, Enum):
     DROPBOX = "dropbox"
     SHAREPOINT = "sharepoint"
     TEAMS = "teams"
+    OUTLOOK = "outlook"
     SALESFORCE = "salesforce"
     DISCOURSE = "discourse"
     AXERO = "axero"
@@ -286,6 +294,7 @@ class DocumentSource(str, Enum):
     DISCORD = "discord"
     FRESHDESK = "freshdesk"
     FIREFLIES = "fireflies"
+    ZOOM = "zoom"
     EGNYTE = "egnyte"
     AIRTABLE = "airtable"
     HIGHSPOT = "highspot"
@@ -452,12 +461,18 @@ class OnyxCeleryQueues:
     LLM_MODEL_UPDATE = "llm_model_update"
     CHECKPOINT_CLEANUP = "checkpoint_cleanup"
     INDEX_ATTEMPT_CLEANUP = "index_attempt_cleanup"
+    # Post-reindex old-index deletion (bounded delete_by_query drains; kept off the
+    # shared cleanup lanes so a whale drain can't starve connector deletions)
+    INDEX_RECLAIM = "index_reclaim"
     # Heavy queue
     CONNECTOR_PRUNING = "connector_pruning"
     CONNECTOR_DOC_PERMISSIONS_SYNC = "connector_doc_permissions_sync"
     CONNECTOR_EXTERNAL_GROUP_SYNC = "connector_external_group_sync"
     CONNECTOR_HIERARCHY_FETCHING = "connector_hierarchy_fetching"
     CSV_GENERATION = "csv_generation"
+    # Manual credential capability check runs; probes may legitimately hang up
+    # to their per-check guard, so they live with the long-running work.
+    CAPABILITY_CHECKS = "capability_checks"
 
     # Chat retention (TTL) hard-deletion queue, consumed by the light worker.
     # Kept off the primary "celery" queue so cleanup never starves check_for_indexing.
@@ -648,6 +663,7 @@ class OnyxCeleryTask:
 
     # Old-index reclamation (post-reindex deletion of the now-PAST index)
     CHECK_FOR_OLD_INDEX_RECLAIM = "check_for_old_index_reclaim"
+    RUN_OLD_INDEX_RECLAIM = "run_old_index_reclaim"
 
     MONITOR_BACKGROUND_PROCESSES = "monitor_background_processes"
     MONITOR_CELERY_QUEUES = "monitor_celery_queues"
@@ -673,6 +689,10 @@ class OnyxCeleryTask:
     CONNECTOR_HIERARCHY_FETCHING_TASK = "connector_hierarchy_fetching_task"
     DOCUMENT_BY_CC_PAIR_CLEANUP_TASK = "document_by_cc_pair_cleanup_task"
     DOCUMENT_INDEX_METADATA_SYNC_TASK = "document_index_metadata_sync_task"
+
+    # Credential capability checks (granular runs of the registered checks)
+    RUN_CAPABILITY_CHECKS = "run_capability_checks"
+    CHECK_FOR_STALE_CAPABILITY_RUNS = "check_for_stale_capability_runs"
 
     # chat retention
     CHECK_TTL_MANAGEMENT_TASK = "check_ttl_management_task"
@@ -732,9 +752,9 @@ REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPCNT] = 3
 # platform where the attribute actually resolves, since ty analyzes one
 # platform at a time and can't model cross-platform conditional unused-ignores.
 if platform.system() == "Darwin":
-    REDIS_SOCKET_KEEPALIVE_OPTIONS[getattr(socket, "TCP_KEEPALIVE")] = 60  # noqa: B009
+    REDIS_SOCKET_KEEPALIVE_OPTIONS[getattr(socket, "TCP_KEEPALIVE")] = 60  # noqa: B009  # ods: ignore[getattr]
 else:
-    REDIS_SOCKET_KEEPALIVE_OPTIONS[getattr(socket, "TCP_KEEPIDLE")] = 60  # noqa: B009
+    REDIS_SOCKET_KEEPALIVE_OPTIONS[getattr(socket, "TCP_KEEPIDLE")] = 60  # noqa: B009  # ods: ignore[getattr]
 
 
 class OnyxCallTypes(str, Enum):
@@ -780,6 +800,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.DROPBOX: "Cloud-stored files and folders",
     DocumentSource.SHAREPOINT: "Documents and team sites",
     DocumentSource.TEAMS: "Chat messages and channels",
+    DocumentSource.OUTLOOK: "Email conversations and calendar events from Microsoft 365 mailboxes",
     DocumentSource.SALESFORCE: "Sales data, accounts, and opportunities",
     DocumentSource.DISCOURSE: "Community forums and discussions",
     DocumentSource.AXERO: "Employee engagement and intranet content",
@@ -795,6 +816,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.DISCORD: "Chat messages and server discussions",
     DocumentSource.FRESHDESK: "Support tickets and customer queries",
     DocumentSource.FIREFLIES: "Meeting transcripts and recordings",
+    DocumentSource.ZOOM: "Meeting and webinar transcripts and recordings",
     DocumentSource.EGNYTE: "Cloud-stored files and documents",
     DocumentSource.AIRTABLE: "Structured data and records",
     DocumentSource.HIGHSPOT: "Sales enablement content and pitches",

@@ -891,6 +891,9 @@ def _transfer_persona_ownership(
         # as soon as its sync worker runs.
         if group.is_up_for_deletion:
             raise ValueError("New owner group is being deleted")
+        # Basic/Admin ownership would make the whole org a co-owner; that's what public is
+        if group.is_default:
+            raise ValueError("A default system group can't own an agent")
         if group.id == prev_owner_group_id:
             raise ValueError("This group already owns the agent")
         persona.owner_group_id = group.id
@@ -2145,11 +2148,10 @@ def update_default_assistant_configuration(
             if not should_expose_tool_to_fe(tool):
                 raise ValueError(f"Tool with ID {tool_id} cannot be assigned")
 
-            if not tool.enabled:
-                raise ValueError(
-                    f"Enable tool {tool.display_name or tool.name} before assigning it"
-                )
-
+            # A disabled tool stays attached, because disabling one does not detach
+            # it. Callers resend the whole list, so rejecting a disabled id here
+            # failed every update rather than just the tool being toggled.
+            # construct_tools keeps a disabled tool out of chat.
             persona.tools.append(tool)
 
     db_session.commit()

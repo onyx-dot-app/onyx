@@ -539,6 +539,41 @@ export class OnyxApiClient {
     return responseData.id;
   }
 
+  async createAgentRestrictedProvider(
+    providerName: string,
+    agentIds: number[]
+  ): Promise<number> {
+    const response = await this.request.put(
+      `${this.baseUrl}/admin/llm/provider?is_creation=true`,
+      {
+        data: {
+          name: providerName,
+          provider: "openai",
+          api_key: E2E_LLM_PROVIDER_API_KEY,
+          is_public: false,
+          groups: [],
+          personas: agentIds,
+          model_configurations: [
+            {
+              name: "gpt-4o",
+              custom_display_name: providerName,
+              is_visible: true,
+            },
+          ],
+        },
+      }
+    );
+
+    const responseData = await this.handleResponse<{ id: number }>(
+      response,
+      "Failed to create agent-restricted provider"
+    );
+    this.log(
+      `Created agent-restricted LLM provider: ${providerName} (ID: ${responseData.id}, Agents: ${agentIds.join(", ")})`
+    );
+    return responseData.id;
+  }
+
   /**
    * Creates a public LLM provider and returns its ID.
    *
@@ -1885,6 +1920,27 @@ export class OnyxApiClient {
     );
     this.log(`Created project: ${name} (ID: ${data.id})`);
     return data.id;
+  }
+
+  /**
+   * Moves a chat session into a project.
+   *
+   * @param projectId - The project to move the chat into
+   * @param chatId - The chat session to move
+   */
+  async moveChatSessionToProject(
+    projectId: number,
+    chatId: string
+  ): Promise<void> {
+    const response = await this.post(
+      `/user/projects/${projectId}/move_chat_session`,
+      { chat_session_id: chatId }
+    );
+    await this.handleResponseSoft(
+      response,
+      `Failed to move chat ${chatId} into project ${projectId}`
+    );
+    this.log(`Moved chat ${chatId} into project ${projectId}`);
   }
 
   /**

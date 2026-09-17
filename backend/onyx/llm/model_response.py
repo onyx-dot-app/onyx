@@ -256,7 +256,7 @@ def from_litellm_model_response(
     message = Message(
         content=message_data.get("content"),
         role=message_data.get("role", "assistant"),
-        tool_calls=parsed_tool_calls if parsed_tool_calls else None,
+        tool_calls=parsed_tool_calls or None,
         reasoning_content=message_data.get("reasoning_content"),
         thinking_blocks=_parse_thinking_blocks(message_data.get("thinking_blocks")),
     )

@@ -123,8 +123,8 @@ export default function Divider({
       <div
         className={cn(
           "flex items-center py-1",
-          !dividerLine && (foldable ? "pl-1.5" : "px-2"),
-          dividerLine && !foldable && "pl-1.5"
+          !dividerLine && (foldable ? "ps-1.5" : "px-2"),
+          dividerLine && !foldable && "ps-1.5"
         )}
       >
         {/* Left divider line (only for foldable dividers) */}
@@ -235,7 +235,7 @@ export default function Divider({
 
       {/* Description line */}
       {showDescription && description && (
-        <div className="flex items-center py-1 pl-2">
+        <div className="flex items-center py-1 ps-2">
           <Truncated secondaryBody text03>
             {description}
           </Truncated>

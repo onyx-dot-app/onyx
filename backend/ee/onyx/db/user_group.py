@@ -1,6 +1,7 @@
 from collections import defaultdict
 from collections.abc import Sequence
 from operator import and_
+from typing import NamedTuple
 from uuid import UUID
 
 from sqlalchemy import Select, delete, func, select
@@ -14,6 +15,7 @@ from ee.onyx.server.user_group.models import (
 from onyx.auth.permissions import (
     NON_TOGGLEABLE_PERMISSIONS,
     get_effective_permissions,
+    has_global_permission,
     has_permission,
     resolve_effective_permissions,
 )
@@ -25,6 +27,7 @@ from onyx.db.connector_credential_pair import (
 )
 from onyx.db.enums import (
     AccessType,
+    AccountType,
     ConnectorCredentialPairStatus,
     GrantSource,
     Permission,
@@ -55,7 +58,12 @@ from onyx.db.permissions import (
     recompute_permissions_for_group__no_commit,
     recompute_user_permissions__no_commit,
 )
-from onyx.db.users import fetch_user_by_id
+from onyx.db.users import (
+    assert_admin_access_survives_removal,
+    assert_group_membership_survives_removal,
+    fetch_users_by_ids,
+    lock_group_membership,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.audit import (
@@ -67,6 +75,12 @@ from onyx.utils.audit import (
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+_NON_GROUP_ACCOUNT_TYPES = (
+    AccountType.BOT,
+    AccountType.EXT_PERM_USER,
+    AccountType.ANONYMOUS,
+)
 
 
 def _cleanup_user__user_group_relationships__no_commit(
@@ -249,6 +263,17 @@ def _add_user_group_snapshot_eager_loads(
             ),
         ),
     )
+
+
+def fetch_user_group_for_snapshot(
+    db_session: Session, user_group_id: int
+) -> UserGroup | None:
+    """Eager-loaded for UserGroup.from_model, so reading one group costs one
+    query set instead of the whole tenant listing."""
+    stmt = _add_user_group_snapshot_eager_loads(
+        select(UserGroup).where(UserGroup.id == user_group_id)
+    )
+    return db_session.scalar(stmt)
 
 
 def fetch_user_groups(
@@ -436,8 +461,12 @@ def fetch_user_groups_for_documents(
 
 def _check_user_group_is_modifiable(user_group: UserGroup) -> None:
     if not user_group.is_up_to_date:
-        raise ValueError(
-            "Specified user group is currently syncing. Wait until the current sync has finished before editing."
+        # OnyxError, not ValueError: the routes map ValueError to NOT_FOUND, so a
+        # syncing group used to be indistinguishable from a deleted one.
+        raise OnyxError(
+            OnyxErrorCode.RESOURCE_SYNCING,
+            "Specified user group is currently syncing. Wait until the current "
+            "sync has finished before editing.",
         )
 
 
@@ -569,19 +598,22 @@ def add_users_to_user_group(
     # group exists, even on the early-return path below.
     assert_manages_group(user, db_session, group_id=user_group_id)
 
+    lock_group_membership(db_session)
+
     db_user_group = fetch_user_group(db_session=db_session, user_group_id=user_group_id)
     if db_user_group is None:
         raise ValueError(f"UserGroup with id '{user_group_id}' not found")
 
-    missing_users = [
-        user_id for user_id in user_ids if fetch_user_by_id(db_session, user_id) is None
-    ]
+    found_ids = {user.id for user in fetch_users_by_ids(db_session, user_ids)}
+    missing_users = [user_id for user_id in user_ids if user_id not in found_ids]
     if missing_users:
         raise ValueError(
             f"User(s) not found: {', '.join(str(user_id) for user_id in missing_users)}"
         )
 
     _check_user_group_is_modifiable(db_user_group)
+    # gate here too: the no-op early return below skips update_user_group's copy
+    _assert_default_group_update_allowed(user, db_user_group, attaching_cc_pairs=False)
 
     current_user_ids = [user.id for user in db_user_group.users]
     current_user_ids_set = set(current_user_ids)
@@ -633,6 +665,46 @@ def _assert_no_privilege_amplification(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "You can't add members to a group that grants permissions you don't "
             "hold: " + ", ".join(sorted(permission.value for permission in excess)),
+        )
+
+
+def _assert_users_can_join_groups(added_users: list[User]) -> None:
+    """Only STANDARD and SERVICE_ACCOUNT enter the group system. The picker hides
+    the rest, but the route accepts any uuid."""
+    rejected = sorted(
+        f"{added_user.email} ({added_user.account_type.value})"
+        for added_user in added_users
+        if added_user.account_type in _NON_GROUP_ACCOUNT_TYPES
+    )
+    if rejected:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "These accounts can't join a group: " + ", ".join(rejected),
+        )
+
+
+def _assert_default_group_update_allowed(
+    user: User,
+    db_user_group: UserGroup,
+    *,
+    attaching_cc_pairs: bool,
+) -> None:
+    """Members are all a default group has, and only a full admin may change them. Lives
+    here because both write paths reach it, and because connectors ride in the same PATCH
+    payload as membership — there is no group-side connector route to guard, unlike agents
+    and document sets."""
+    if not db_user_group.is_default:
+        return
+
+    if not has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Only administrators can change the membership of a default system group.",
+        )
+    if attaching_cc_pairs:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "A default system group holds only members, so it can't take connectors.",
         )
 
 
@@ -727,6 +799,10 @@ def update_user_group(
     # cc_pair scope check below needs the group row and runs after.
     assert_manages_group(user, db_session, group_id=user_group_id)
 
+    # Locked before the reads below, adds included: an add that lands after a
+    # deletion's roster snapshot is wiped by its cleanup without being checked.
+    lock_group_membership(db_session)
+
     stmt = select(UserGroup).where(UserGroup.id == user_group_id)
     db_user_group = db_session.scalar(stmt)
     if db_user_group is None:
@@ -735,20 +811,38 @@ def update_user_group(
     _check_user_group_is_modifiable(db_user_group)
 
     current_cc_pair_ids = set(_current_cc_pair_ids(db_user_group))
-    requested_cc_pair_ids = set(user_group_update.cc_pair_ids)
+    leave_cc_pairs_alone = user_group_update.cc_pair_ids is None
+    requested_cc_pair_ids = (
+        current_cc_pair_ids
+        if leave_cc_pairs_alone
+        else set(user_group_update.cc_pair_ids or [])
+    )
+    added_cc_pair_ids = requested_cc_pair_ids - current_cc_pair_ids
+    _assert_default_group_update_allowed(
+        user,
+        db_user_group,
+        attaching_cc_pairs=bool(added_cc_pair_ids),
+    )
     _assert_group_update_within_scope(
         db_session,
         user,
         user_group_id,
-        added_cc_pair_ids=requested_cc_pair_ids - current_cc_pair_ids,
+        added_cc_pair_ids=added_cc_pair_ids,
     )
 
-    current_user_ids = set([user.id for user in db_user_group.users])
+    current_user_ids = {user.id for user in db_user_group.users}
     updated_user_ids = set(user_group_update.user_ids)
     added_user_ids = list(updated_user_ids - current_user_ids)
     removed_user_ids = list(current_user_ids - updated_user_ids)
 
     _assert_no_privilege_amplification(db_session, user, user_group_id, added_user_ids)
+    # Runs before the manager guard below so the admin-specific message wins.
+    assert_admin_access_survives_removal(
+        db_session, user, user_group_id, removed_user_ids
+    )
+    assert_group_membership_survives_removal(
+        db_session, user_group_id, removed_user_ids
+    )
 
     # Removing yourself drops the membership row carrying is_manager, and
     # effective_permissions is derived from group grants — so leaving can revoke the very
@@ -762,15 +856,16 @@ def update_user_group(
         )
 
     if added_user_ids:
+        added_users = fetch_users_by_ids(db_session, added_user_ids)
+        found_ids = {added_user.id for added_user in added_users}
         missing_users = [
-            user_id
-            for user_id in added_user_ids
-            if fetch_user_by_id(db_session, user_id) is None
+            user_id for user_id in added_user_ids if user_id not in found_ids
         ]
         if missing_users:
             raise ValueError(
                 f"User(s) not found: {', '.join(str(user_id) for user_id in missing_users)}"
             )
+        _assert_users_can_join_groups(added_users)
 
     if removed_user_ids:
         _cleanup_user__user_group_relationships__no_commit(
@@ -794,7 +889,7 @@ def update_user_group(
         _add_user_group__cc_pair_relationships__no_commit(
             db_session=db_session,
             user_group_id=db_user_group.id,
-            cc_pair_ids=user_group_update.cc_pair_ids,
+            cc_pair_ids=list(requested_cc_pair_ids),
         )
 
     if cc_pairs_updated and not DISABLE_VECTOR_DB:
@@ -809,6 +904,9 @@ def update_user_group(
 
     db_session.commit()
 
+    group_name = db_user_group.name
+    group_is_default = db_user_group.is_default
+
     # Core writes above leave the loaded ORM collections stale, and sessions run
     # expire_on_commit=False — without this the caller serializes pre-update membership.
     db_session.expire(db_user_group)
@@ -821,6 +919,8 @@ def update_user_group(
             resource_type="user_group",
             resource_id=user_group_id,
             extra={
+                "group_name": group_name,
+                "is_default": group_is_default,
                 "added_user_ids": [str(uid) for uid in added_user_ids],
                 "removed_user_ids": [str(uid) for uid in removed_user_ids],
             },
@@ -887,6 +987,27 @@ def rename_user_group(
 
     db_session.commit()
     return db_user_group
+
+
+def assert_group_membership_survives_deletion(
+    db_session: Session, user_group_id: int
+) -> None:
+    """Deletion drops every membership, so the strand rule covers the whole roster.
+    Guards the route, not prepare_user_group_for_deletion — the sync task re-runs
+    that one, and raising there would wedge a scheduled deletion."""
+    # Locked first: cleanup deletes every membership, including ones added after this read.
+    lock_group_membership(db_session)
+
+    member_ids: list[UUID] = [
+        user_id
+        for user_id in db_session.scalars(
+            select(User__UserGroup.user_id).where(
+                User__UserGroup.user_group_id == user_group_id
+            )
+        ).all()
+        if user_id is not None
+    ]
+    assert_group_membership_survives_removal(db_session, user_group_id, member_ids)
 
 
 def prepare_user_group_for_deletion(db_session: Session, user_group_id: int) -> None:
@@ -995,12 +1116,23 @@ def delete_user_group_cc_pair_relationship__no_commit(
     db_session.execute(delete_stmt)
 
 
+class PermissionChange(NamedTuple):
+    """The diff is computed here, not by the caller, because this is the only place
+    holding the row lock. A caller diffing before and after would race a concurrent
+    save and would read whatever the ORM had already cached.
+    """
+
+    enabled: list[Permission]
+    added: list[Permission]
+    removed: list[Permission]
+
+
 def set_group_permissions_bulk__no_commit(
     group_id: int,
     desired_permissions: set[Permission],
     granted_by: UUID,
     db_session: Session,
-) -> list[Permission]:
+) -> PermissionChange:
     """Set the full desired permission state for a group in one pass.
 
     Enables permissions in `desired_permissions`, disables any toggleable
@@ -1010,8 +1142,6 @@ def set_group_permissions_bulk__no_commit(
     Grants are soft-deleted: revoking flips `is_deleted`, re-granting flips it back and
     re-stamps `granted_by`/`granted_at`, so a row is INSERTed only once per group and the
     grant history survives. Readers must filter `is_deleted.is_(False)`.
-
-    Returns the resulting list of enabled permissions.
     """
 
     existing_grants = (
@@ -1032,6 +1162,9 @@ def set_group_permissions_bulk__no_commit(
     # not managed here — never enabled, never disabled.
     desired_permissions = desired_permissions - NON_TOGGLEABLE_PERMISSIONS
 
+    added: list[Permission] = []
+    removed: list[Permission] = []
+
     # Enable desired permissions
     for perm in desired_permissions:
         existing = grant_map.get(perm)
@@ -1040,6 +1173,7 @@ def set_group_permissions_bulk__no_commit(
                 existing.is_deleted = False
                 existing.granted_by = granted_by
                 existing.granted_at = func.now()
+                added.append(perm)
         else:
             db_session.add(
                 PermissionGrant(
@@ -1049,6 +1183,7 @@ def set_group_permissions_bulk__no_commit(
                     granted_by=granted_by,
                 )
             )
+            added.append(perm)
 
     # Disable toggleable permissions not in the desired set
     for perm, grant in grant_map.items():
@@ -1058,12 +1193,12 @@ def set_group_permissions_bulk__no_commit(
             and not grant.is_deleted
         ):
             grant.is_deleted = True
+            removed.append(perm)
 
     db_session.flush()
     recompute_permissions_for_group__no_commit(group_id, db_session)
 
-    # Return the resulting enabled set
-    return [
+    enabled = [
         g.permission
         for g in db_session.execute(
             select(PermissionGrant).where(
@@ -1074,3 +1209,8 @@ def set_group_permissions_bulk__no_commit(
         .scalars()
         .all()
     ]
+    return PermissionChange(
+        enabled=enabled,
+        added=sorted(added, key=lambda p: p.value),
+        removed=sorted(removed, key=lambda p: p.value),
+    )

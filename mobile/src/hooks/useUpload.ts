@@ -18,15 +18,17 @@ import {
 } from "@/state/userFileStore";
 
 export interface UseUpload {
-  // Returns optimistic clientIds synchronously; the transfer runs in the background, errors toast.
+  // Returns the optimistic clientIds right away; the transfer itself runs in the background and
+  // reports errors through a toast, not through the return value or a thrown error.
   upload: (assets: NormalizedAsset[], target: UploadTarget) => string[];
-  // Pick then upload; the one place picker-error-to-toast routing lives.
+  // Picks files and uploads them. This is the only place a picker error gets turned into a toast.
   pickAndUpload: (
     pick: () => Promise<NormalizedAsset[]>,
     target: UploadTarget,
   ) => Promise<string[]>;
   registerExisting: (file: ProjectFile) => string;
-  // `target` is the removing surface; the store only cancels/deletes an upload its target owns.
+  // `target` must be the surface that started the upload — the store refuses to cancel or delete
+  // an upload for any other target.
   remove: (clientId: string, target: UploadTarget) => void;
 }
 
@@ -65,9 +67,10 @@ export function useUpload(): UseUpload {
               setUploadCancel(tempId, handle.cancel);
               const result = await handle.result;
               if (result.user_files.length > 0) {
-                // Backend echoes temp_id only when its `size|name` file-key matches ours, but
-                // mobile picks routinely differ so it comes back null. Upload is 1:1, so the
-                // returned file is this record's — stamp our tempId when the server didn't echo one.
+                // The backend only echoes back our temp_id when its `size|name` file key matches
+                // ours, and mobile picks routinely don't match, so it often comes back null. Each
+                // upload call sends exactly one file, so the returned file is always this record's
+                // — stamp our own tempId onto it whenever the server didn't echo one.
                 store.reconcile(
                   result.user_files.map((file) => ({
                     ...file,
@@ -83,8 +86,9 @@ export function useUpload(): UseUpload {
                 );
               }
             } catch {
-              // Absent task = user already removed this attachment, aborting the transfer (rejects
-              // here). Intentional cancel, not a failure — don't toast.
+              // If the task is already gone, the user removed this attachment themselves, which
+              // aborts the transfer and rejects here. That's an intentional cancel, not a failure,
+              // so it shouldn't show an error toast.
               if (useUserFileStore.getState().tasksById[tempId] == null) return;
               store.removeFile(tempId, target);
               uploadRejections.push(`${asset.name} could not be uploaded`);
@@ -92,18 +96,26 @@ export function useUpload(): UseUpload {
           }),
         );
 
-        // Committed list renders from the store, hydrated by this refetch; the optimistic record
-        // stays (deduped against the committed list) — no hand-off.
-        if (target.kind === "project") {
-          try {
-            await queryClient.invalidateQueries({
-              queryKey: QUERY_KEYS.userProject(serverUrl, target.projectId),
-            });
-          } catch {
-            uploadRejections.push(
-              "Uploaded, but the file list didn't refresh.",
+        // The committed file list renders from the store once this refetch hydrates it; the
+        // optimistic record isn't cleared, it just gets deduped against the committed list. Every
+        // upload — draft or project — also lands in the user's library, so the recent-files picker
+        // needs the same refresh.
+        try {
+          const invalidations = [
+            queryClient.invalidateQueries({
+              queryKey: QUERY_KEYS.userRecentFiles(serverUrl),
+            }),
+          ];
+          if (target.kind === "project") {
+            invalidations.push(
+              queryClient.invalidateQueries({
+                queryKey: QUERY_KEYS.userProject(serverUrl, target.projectId),
+              }),
             );
           }
+          await Promise.all(invalidations);
+        } catch {
+          uploadRejections.push("Uploaded, but the file list didn't refresh.");
         }
 
         if (uploadRejections.length > 0)

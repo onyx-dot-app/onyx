@@ -11,6 +11,7 @@ import {
   logout,
 } from "@/lib/users/svc";
 import { useUser } from "@/providers/UserProvider";
+import { loginPath } from "@/lib/auth/paths";
 import { Popover, PopoverMenu } from "@opal/components";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { SidebarTab, LineItemButton } from "@opal/components";
@@ -26,7 +27,7 @@ import {
 } from "@opal/icons";
 import { Content, toast, useSidebarFolded } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
-import useAppFocus from "@/hooks/useAppFocus";
+import { useAppPosition } from "@/lib/position/hooks";
 import useScreenSize from "@/hooks/useScreenSize";
 import { useSettings } from "@/lib/settings/hooks";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
@@ -34,6 +35,7 @@ import SidebarTabSkeleton from "@/refresh-components/skeletons/SidebarTabSkeleto
 import { useNotificationSummary } from "@/hooks/useNotifications";
 import { SvgOnyxLogo } from "@opal/logos";
 import { markdown } from "@opal/utils";
+import { useTranslations } from "next-intl";
 
 interface SettingsPopoverProps {
   onUserSettingsClick: () => void;
@@ -46,6 +48,7 @@ function SettingsPopover({
   onOpenNotifications,
   undismissedCount,
 }: SettingsPopoverProps) {
+  const t = useTranslations("accountPopover");
   const { user, userResolution } = useUser();
   const settings = useSettings();
   const enterpriseSettings = settings.enterprise;
@@ -57,33 +60,30 @@ function SettingsPopover({
   const showLogout = user && !isAnonymousUser && !LOGOUT_DISABLED;
   const showLogin = isAnonymousUser;
 
+  const query = searchParams?.toString();
+  const currentUrl = query ? `${pathname}?${query}` : pathname;
+
   const handleLogin = () => {
-    const currentUrl = `${pathname}${
-      searchParams?.toString() ? `?${searchParams.toString()}` : ""
-    }`;
-    const encodedRedirect = encodeURIComponent(currentUrl);
-    router.push(`/auth/login?next=${encodedRedirect}`);
+    router.push(loginPath({ next: currentUrl }));
   };
+
+  const logoutFailedMessage = t("logoutFailed.message");
 
   const handleLogout = () => {
     logout()
       .then((response) => {
         if (!response?.ok) {
-          alert("Failed to logout");
+          alert(logoutFailedMessage);
           return;
         }
 
-        const currentUrl = `${pathname}${
-          searchParams?.toString() ? `?${searchParams.toString()}` : ""
-        }`;
-
-        const encodedRedirect = encodeURIComponent(currentUrl);
-
-        router.push(`/auth/login?next=${encodedRedirect}`);
+        // Held on the login button: with SSO as the only way in, an auto
+        // start would sign the user straight back in through the IdP session.
+        router.push(loginPath({ next: currentUrl, autoRedirectToSso: false }));
       })
 
       .catch(() => {
-        toast.error("Failed to logout");
+        toast.error(logoutFailedMessage);
       });
   };
 
@@ -95,7 +95,7 @@ function SettingsPopover({
             sizePreset="main-ui"
             title={
               userResolution === "unavailable"
-                ? "Profile unavailable"
+                ? t("profileUnavailable.title")
                 : getUserEmail(user)
             }
           />
@@ -105,9 +105,9 @@ function SettingsPopover({
           <LineItemButton
             sizePreset="main-ui"
             variant="section"
-            rounding="sm"
+            rounding={2}
             icon={SvgSliders}
-            title="Settings"
+            title={t("settings.label")}
             href="/app/settings"
             onClick={onUserSettingsClick}
           />
@@ -116,9 +116,9 @@ function SettingsPopover({
           key="notifications"
           sizePreset="main-ui"
           variant="section"
-          rounding="sm"
+          rounding={2}
           icon={SvgBell}
-          title="Notifications"
+          title={t("notifications.label")}
           onClick={onOpenNotifications}
           rightChildren={
             undismissedCount ? (
@@ -130,9 +130,9 @@ function SettingsPopover({
           key="help-faq"
           sizePreset="main-ui"
           variant="section"
-          rounding="sm"
+          rounding={2}
           icon={SvgHelpCircle}
-          title="Help & FAQ"
+          title={t("helpFaq.label")}
           href="https://docs.onyx.app"
           target="_blank"
         />,
@@ -141,7 +141,7 @@ function SettingsPopover({
             key="custom-help-link"
             sizePreset="main-ui"
             variant="section"
-            rounding="sm"
+            rounding={2}
             icon={SvgExternalLink}
             title={
               enterpriseSettings.custom_help_link_label ||
@@ -156,9 +156,9 @@ function SettingsPopover({
             key="log-in"
             sizePreset="main-ui"
             variant="section"
-            rounding="sm"
+            rounding={2}
             icon={SvgUser}
-            title="Log in"
+            title={t("logIn.label")}
             onClick={handleLogin}
           />
         ),
@@ -168,9 +168,9 @@ function SettingsPopover({
             sizePreset="main-ui"
             variant="section"
             color="danger"
-            rounding="sm"
+            rounding={2}
             icon={SvgLogOut}
-            title="Log Out"
+            title={t("signOut.label")}
             onClick={handleLogout}
           />
         ),
@@ -199,18 +199,21 @@ export interface SettingsProps {
 }
 
 export default function AccountPopover({ onShowBuildIntro }: SettingsProps) {
+  const t = useTranslations("accountPopover");
   const folded = useSidebarFolded();
   const [popupState, setPopupState] = useState<
     "Settings" | "Notifications" | undefined
   >(undefined);
   const { user, userResolution } = useUser();
-  const appFocus = useAppFocus();
+  const appPosition = useAppPosition();
   const { isMobile } = useScreenSize();
   const { vectorDbEnabled } = useSettings();
   const { undismissedCount, refresh: refreshNotificationSummary } =
     useNotificationSummary();
   const userDisplayName =
-    userResolution === "unavailable" ? "Account" : getUserDisplayName(user);
+    userResolution === "unavailable"
+      ? t("accountFallback.label")
+      : getUserDisplayName(user);
 
   const handlePopoverOpen = (state: boolean) => {
     if (state) {
@@ -249,7 +252,7 @@ export default function AccountPopover({ onShowBuildIntro }: SettingsProps) {
               ) : undefined
             }
             type="button"
-            selected={!!popupState || appFocus.isUserSettings()}
+            selected={!!popupState || appPosition.isUserSettings()}
           >
             {userDisplayName}
           </SidebarTab>

@@ -1,3 +1,5 @@
+import hashlib
+import json
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from datetime import datetime
@@ -137,6 +139,18 @@ class CredentialCapabilityReport(BaseModel):
     trigger: CapabilityCheckTrigger
     verdicts: dict[CredentialCapability, CapabilityVerdict]
     check_results: list[CapabilityCheckResult]
+
+
+def compute_connector_config_hash(config: dict[str, Any] | None) -> str | None:
+    """Returns the sha256 of the canonical config JSON a report ran with.
+
+    This is the staleness signal, shared by every report writer so stored hashes
+    stay comparable.
+    """
+    if config is None:
+        return None
+    canonical = json.dumps(config, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
 
 
 def aggregate_capability_verdict(

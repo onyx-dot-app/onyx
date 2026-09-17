@@ -9,6 +9,7 @@ import (
 // statusBar manages the footer status display.
 type statusBar struct {
 	agentName string
+	modelName string
 	serverURL string
 	sessionID string
 	streaming bool
@@ -22,6 +23,7 @@ func newStatusBar() statusBar {
 }
 
 func (s *statusBar) setAgent(name string) { s.agentName = name }
+func (s *statusBar) setModel(name string) { s.modelName = name }
 func (s *statusBar) setServer(url string) { s.serverURL = url }
 func (s *statusBar) setSession(id string) {
 	if len(id) > 8 {
@@ -42,6 +44,9 @@ func (s statusBar) view() string {
 		name = "Default"
 	}
 	leftParts = append(leftParts, name)
+	if s.modelName != "" {
+		leftParts = append(leftParts, s.modelName)
+	}
 	left := statusBarStyle.Render(strings.Join(leftParts, " · "))
 
 	right := "Ctrl+D to quit"

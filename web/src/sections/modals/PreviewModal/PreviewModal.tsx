@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { useTranslations } from "next-intl";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { Modal } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
@@ -27,6 +28,7 @@ export default function PreviewModal({
   presentingDocument,
   onClose,
 }: PreviewModalProps) {
+  const t = useTranslations("chat.modals.preview");
   const [fileContent, setFileContent] = useState("");
   const [fileUrl, setFileUrl] = useState("");
   const [fileName, setFileName] = useState("");
@@ -143,11 +145,11 @@ export default function PreviewModal({
       // Keep a usable download link for the CURRENT file even when the
       // preview itself failed (a stale previous-file URL must never win).
       updateFileUrl(rawFileUrl);
-      setLoadError("Failed to load document.");
+      setLoadError(t("loadError.message"));
     } finally {
       setIsLoading(false);
     }
-  }, [presentingDocument]);
+  }, [presentingDocument, t]);
 
   useEffect(() => {
     fetchFile();
@@ -179,6 +181,7 @@ export default function PreviewModal({
       zoom,
       onZoomIn: handleZoomIn,
       onZoomOut: handleZoomOut,
+      t,
     }),
     [
       fileContent,
@@ -190,6 +193,7 @@ export default function PreviewModal({
       zoom,
       handleZoomIn,
       handleZoomOut,
+      t,
     ]
   );
 
@@ -207,7 +211,7 @@ export default function PreviewModal({
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <Modal.Header
-          title={fileName || "Document"}
+          title={fileName || t("header.fallbackTitle")}
           description={variant.headerDescription(ctx)}
           onClose={onClose}
         />
@@ -227,7 +231,7 @@ export default function PreviewModal({
               </Text>
               {fileUrl && (
                 <a href={fileUrl} download={fileName}>
-                  <Button>Download File</Button>
+                  <Button>{t("downloadButton.label")}</Button>
                 </a>
               )}
             </Section>

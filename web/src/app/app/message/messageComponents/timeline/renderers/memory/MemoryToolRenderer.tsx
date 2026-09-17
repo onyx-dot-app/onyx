@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { MemoryToolPacket } from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,
@@ -29,6 +30,7 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
   renderType,
   children,
 }) => {
+  const t = useTranslations("chat.messages.timeline");
   const memoryState = constructCurrentMemoryState(packets);
   const {
     hasStarted,
@@ -46,7 +48,7 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
     return children([
       {
         icon: SvgEditBig,
-        status: "Memory",
+        status: t("memory.default.status"),
         content: <div />,
         supportsCollapsible: false,
         timelineLayout: "timeline",
@@ -59,7 +61,7 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
   if (noAccess) {
     const content = (
       <Text as="p" text03 className="text-sm">
-        Memory tool disabled
+        {t("memory.disabled.text")}
       </Text>
     );
 
@@ -73,7 +75,7 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
           content: (
             <div className="flex flex-col">
               <Text as="p" text02 className="text-sm mb-1">
-                Memory
+                {t("memory.default.status")}
               </Text>
               {content}
             </div>
@@ -85,7 +87,7 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
     return children([
       {
         icon: SvgEditBig,
-        status: "Memory",
+        status: t("memory.default.status"),
         supportsCollapsible: false,
         timelineLayout: "timeline",
         noPaddingRight: true,
@@ -95,7 +97,7 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
   }
 
   // Determine status text
-  let statusLabel = "Updating memory";
+  const statusLabel = t("memory.updating.status");
 
   const memoryContent = (
     <div className="flex flex-col">
@@ -119,7 +121,7 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
               prominence="tertiary"
               size="md"
               icon={SvgMaximize2}
-              tooltip="View Memories"
+              tooltip={t("memory.viewMemoriesButton.tooltip")}
               onClick={(e) => {
                 e.stopPropagation();
                 memoriesModal.toggle(true);

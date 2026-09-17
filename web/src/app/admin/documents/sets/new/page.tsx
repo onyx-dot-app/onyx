@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { DocumentSetCreationForm } from "../DocumentSetCreationForm";
@@ -14,6 +15,7 @@ import { useSettings } from "@/lib/settings/hooks";
 const route = ADMIN_ROUTES.DOCUMENT_SETS;
 
 function Main() {
+  const t = useTranslations("admin.documents");
   const router = useRouter();
   const { vectorDbEnabled } = useSettings();
 
@@ -34,7 +36,7 @@ function Main() {
   if (vectorDbEnabled && (ccPairsError || !ccPairs)) {
     return (
       <ErrorCallout
-        errorTitle="Failed to fetch Connectors"
+        errorTitle={t("sets.fetchConnectorsFailed.title")}
         errorMsg={ccPairsError}
       />
     );
@@ -56,11 +58,13 @@ function Main() {
 }
 
 export default function Page() {
+  const t = useTranslations("admin.documents");
+
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={route.icon}
-        title="New Document Set"
+        title={t("sets.new.header.title")}
         divider
         backButton
       />

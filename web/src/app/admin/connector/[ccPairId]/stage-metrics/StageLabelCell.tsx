@@ -1,11 +1,12 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Button, Text } from "@opal/components";
 import { SvgInfoSmall } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { IndexAttemptStage } from "@/lib/types";
 import { cn } from "@opal/utils";
-import { STAGE_DESCRIPTIONS, STAGE_LABELS } from "./constants";
+import { STAGE_DESCRIPTION_KEYS, STAGE_LABEL_KEYS } from "./constants";
 import { colorClassForStage } from "./utils";
 
 interface StageLabelCellProps {
@@ -13,6 +14,8 @@ interface StageLabelCellProps {
 }
 
 export default function StageLabelCell({ stage }: StageLabelCellProps) {
+  const t = useTranslations("admin.connector");
+
   return (
     <Section
       flexDirection="row"
@@ -31,14 +34,14 @@ export default function StageLabelCell({ stage }: StageLabelCellProps) {
           colorClassForStage(stage)
         )}
       />
-      <Text font="secondary-body" color="text-05" nowrap>
-        {STAGE_LABELS[stage]}
+      <Text font="secondary-body" color="text-05" wordWrap="whitespace-nowrap">
+        {t(STAGE_LABEL_KEYS[stage])}
       </Text>
       <Button
         icon={SvgInfoSmall}
         prominence="tertiary"
         size="sm"
-        tooltip={STAGE_DESCRIPTIONS[stage]}
+        tooltip={t(STAGE_DESCRIPTION_KEYS[stage])}
       />
     </Section>
   );

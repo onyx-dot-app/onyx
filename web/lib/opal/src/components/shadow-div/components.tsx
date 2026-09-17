@@ -139,7 +139,7 @@ function ShadowDiv({
       {!mask && !bottomOnly && (
         <div
           className={cn(
-            "absolute top-0 left-0 right-0 pointer-events-none transition-opacity duration-150",
+            "absolute top-0 start-0 end-0 pointer-events-none transition-opacity duration-150",
             showTopShadow ? "opacity-100" : "opacity-0"
           )}
           style={{
@@ -153,7 +153,7 @@ function ShadowDiv({
       {!mask && !topOnly && (
         <div
           className={cn(
-            "absolute bottom-0 left-0 right-0 pointer-events-none transition-opacity duration-150",
+            "absolute bottom-0 start-0 end-0 pointer-events-none transition-opacity duration-150",
             showBottomShadow ? "opacity-100" : "opacity-0"
           )}
           style={{

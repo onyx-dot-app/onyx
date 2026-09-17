@@ -1,5 +1,7 @@
 "use client";
 
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
+import { useTranslations } from "next-intl";
 import { PageLoader } from "@opal/layouts";
 import { PageSelector } from "@/components/PageSelector";
 import { SvgInfo, SvgPlusCircle } from "@opal/icons";
@@ -39,6 +41,7 @@ import { SourceIcon } from "@/components/SourceIcon";
 import Link from "next/link";
 
 const route = ADMIN_ROUTES.DOCUMENT_SETS;
+
 const numToDisplay = 50;
 
 // Component to display federated connectors with consistent styling
@@ -51,17 +54,18 @@ const FederatedConnectorTitle = ({
   showMetadata?: boolean;
   isLink?: boolean;
 }) => {
+  const t = useTranslations("admin.documents");
   const sourceType = federatedConnector.source.replace(/^federated_/, "");
 
   const mainSectionClassName = "text-blue-500 dark:text-blue-100 flex w-fit";
   const mainDisplay = (
     <>
       <SourceIcon sourceType={sourceType as any} iconSize={16} />
-      <div className="ml-1 my-auto text-xs font-medium truncate">
+      <div className="ms-1 my-auto text-xs font-medium truncate">
         {federatedConnector.name}
       </div>
-      <Badge variant="outline" className="text-xs ml-2">
-        Federated
+      <Badge variant="outline" className="text-xs ms-2">
+        {t("sets.federatedBadge.label")}
       </Badge>
     </>
   );
@@ -105,6 +109,7 @@ const EditRow = ({
   documentSet: DocumentSetSummary;
   isEditable: boolean;
 }) => {
+  const t = useTranslations("admin.documents");
   const router = useRouter();
 
   if (!isEditable) {
@@ -120,7 +125,7 @@ const EditRow = ({
       <Tooltip
         tooltip={
           !documentSet.is_up_to_date
-            ? "Cannot update while syncing! Wait for the sync to finish, then try again."
+            ? t("sets.editRow.syncing.tooltip")
             : undefined
         }
       >
@@ -139,7 +144,7 @@ const EditRow = ({
             router.push(`/admin/documents/sets/${documentSet.id}`);
           }}
         >
-          <FiEdit2 className="mr-2 shrink-0" />
+          <FiEdit2 className="me-2 shrink-0" />
           <span className="font-medium">{documentSet.name}</span>
         </button>
       </Tooltip>
@@ -156,6 +161,7 @@ const DocumentSetTable = ({
   documentSets,
   refresh,
 }: DocumentFeedbackTableProps) => {
+  const t = useTranslations("admin.documents");
   const [page, setPage] = useState(1);
 
   // editable rows first, then by name — editability now rides on each row's
@@ -167,15 +173,15 @@ const DocumentSetTable = ({
 
   return (
     <div>
-      <Title>Existing Document Sets</Title>
+      <Title>{t("sets.table.title")}</Title>
       <Table className="overflow-visible mt-2">
         <TableHeader>
           <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Connectors</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Public</TableHead>
-            <TableHead>Delete</TableHead>
+            <TableHead>{t("sets.table.name.header")}</TableHead>
+            <TableHead>{t("sets.table.connectors.header")}</TableHead>
+            <TableHead>{t("sets.table.status.header")}</TableHead>
+            <TableHead>{t("sets.table.public.header")}</TableHead>
+            <TableHead>{t("sets.table.delete.header")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -212,8 +218,9 @@ const DocumentSetTable = ({
                                   sourceType={ccPairSummary.source}
                                   iconSize={16}
                                 />
-                                <div className="ml-1 my-auto text-xs font-medium truncate">
-                                  {ccPairSummary.name || "Unnamed"}
+                                <div className="ms-1 my-auto text-xs font-medium truncate">
+                                  {ccPairSummary.name ||
+                                    t("sets.connector.unnamed.label")}
                                 </div>
                               </div>
                             </div>
@@ -258,18 +265,18 @@ const DocumentSetTable = ({
                   <TableCell>
                     {documentSet.is_up_to_date ? (
                       <Badge variant="success" icon={FiCheckCircle}>
-                        Up to Date
+                        {t("sets.status.upToDate.label")}
                       </Badge>
                     ) : documentSet.cc_pair_summaries.length > 0 ||
                       (documentSet.federated_connector_summaries &&
                         documentSet.federated_connector_summaries.length >
                           0) ? (
                       <Badge variant="in_progress" icon={FiClock}>
-                        Syncing
+                        {t("sets.status.syncing.label")}
                       </Badge>
                     ) : (
                       <Badge variant="destructive" icon={FiAlertTriangle}>
-                        Deleting
+                        {t("sets.status.deleting.label")}
                       </Badge>
                     )}
                   </TableCell>
@@ -279,14 +286,14 @@ const DocumentSetTable = ({
                         variant={isEditable ? "success" : "default"}
                         icon={FiUnlock}
                       >
-                        Public
+                        {t("sets.access.public.label")}
                       </Badge>
                     ) : (
                       <Badge
                         variant={isEditable ? "private" : "default"}
                         icon={FiLock}
                       >
-                        Private
+                        {t("sets.access.private.label")}
                       </Badge>
                     )}
                   </TableCell>
@@ -299,12 +306,14 @@ const DocumentSetTable = ({
                           );
                           if (response.ok) {
                             toast.success(
-                              `Document set "${documentSet.name}" scheduled for deletion`
+                              t("sets.deleteScheduled.toast", {
+                                name: documentSet.name,
+                              })
                             );
                           } else {
                             const errorMsg = (await response.json()).detail;
                             toast.error(
-                              `Failed to schedule document set for deletion - ${errorMsg}`
+                              t("sets.deleteFailed.toast", { detail: errorMsg })
                             );
                           }
                           refresh();
@@ -334,6 +343,7 @@ const DocumentSetTable = ({
 };
 
 function Main() {
+  const t = useTranslations("admin.documents");
   const {
     data: documentSets,
     isLoading: isDocumentSetsLoading,
@@ -350,16 +360,16 @@ function Main() {
   }
 
   if (documentSetsError || !documentSets) {
-    return <div>Error: {documentSetsError}</div>;
+    return (
+      <div>
+        {t("sets.loadError.message", { detail: String(documentSetsError) })}
+      </div>
+    );
   }
 
   return (
     <div className="mb-8">
-      <Text as="p">
-        {markdown(
-          "**Document Sets** allow you to group logically connected documents into a single bundle. These can then be used as a filter when performing searches to control the scope of information Onyx searches over."
-        )}
-      </Text>
+      <Text as="p">{markdown(t("sets.description"))}</Text>
       <Spacer rem={0.75} />
 
       <div className="mb-3"></div>
@@ -370,7 +380,7 @@ function Main() {
           prominence="secondary"
           href="/admin/documents/sets/new"
         >
-          New Document Set
+          {t("sets.newButton.label")}
         </Button>
       </div>
 
@@ -388,9 +398,14 @@ function Main() {
 }
 
 export default function Page() {
+  const adminRouteTitle = useAdminRouteTitle();
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header icon={route.icon} title={route.title} divider />
+      <SettingsLayouts.Header
+        icon={route.icon}
+        title={adminRouteTitle(route)}
+        divider
+      />
       <SettingsLayouts.Body>
         <Main />
       </SettingsLayouts.Body>

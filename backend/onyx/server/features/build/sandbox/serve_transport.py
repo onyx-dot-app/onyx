@@ -150,10 +150,10 @@ class _ServeMixin:
 
     def _init_serve_state(self) -> None:
         """Idempotent, thread-safe init for serve-transport state."""
-        if getattr(self, "_serve_state_initialized", False):
+        if getattr(self, "_serve_state_initialized", False):  # ods: ignore[getattr]
             return
         with _ServeMixin._serve_state_init_lock:
-            if getattr(self, "_serve_state_initialized", False):
+            if getattr(self, "_serve_state_initialized", False):  # ods: ignore[getattr]
                 return
             # opencode-serve scopes /event by ``?directory=``, so one bus per session dir.
             self._event_buses: dict[tuple[UUID, str], PodEventBus] = {}
@@ -878,7 +878,10 @@ class _ServeMixin:
                         isinstance(
                             sandbox_event, (AgentMessageChunk, AgentThoughtChunk)
                         )
-                        and getattr(sandbox_event.content, "type", None) == "text"
+                        and getattr(  # ods: ignore[getattr]
+                            sandbox_event.content, "type", None
+                        )
+                        == "text"
                     ):
                         pending_text_event = sandbox_event
                         pending_text_started_at = time.monotonic()
@@ -913,19 +916,21 @@ def _merge_text_chunk(
     pending_content = pending.content
     incoming_content = incoming.content
     if (
-        getattr(pending_content, "type", None) != "text"
-        or getattr(incoming_content, "type", None) != "text"
+        getattr(pending_content, "type", None) != "text"  # ods: ignore[getattr]
+        or getattr(incoming_content, "type", None) != "text"  # ods: ignore[getattr]
     ):
         return None
 
-    pending_text = getattr(pending_content, "text", None)
-    incoming_text = getattr(incoming_content, "text", None)
+    pending_text = getattr(pending_content, "text", None)  # ods: ignore[getattr]
+    incoming_text = getattr(incoming_content, "text", None)  # ods: ignore[getattr]
     if not isinstance(pending_text, str) or not isinstance(incoming_text, str):
         return None
 
-    if getattr(pending_content, "field_meta", None) != getattr(
+    if getattr(pending_content, "field_meta", None) != getattr(  # ods: ignore[getattr]
         incoming_content, "field_meta", None
-    ) or getattr(pending_content, "annotations", None) != getattr(
+    ) or getattr(  # ods: ignore[getattr]
+        pending_content, "annotations", None
+    ) != getattr(  # ods: ignore[getattr]
         incoming_content, "annotations", None
     ):
         return None

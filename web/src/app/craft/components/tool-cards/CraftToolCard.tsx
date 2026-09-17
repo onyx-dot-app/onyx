@@ -54,18 +54,22 @@ function primaryText(toolCall: ToolCallState): string {
 function verbWithCode(verb: string, code: string, suffix?: string): ReactNode {
   return (
     <>
-      <Text font="main-ui-muted" color="text-04" nowrap>
+      <Text font="main-ui-muted" color="text-04" wordWrap="whitespace-nowrap">
         {verb}
       </Text>
       {/* 12px mono (vs the 14px sans verb): DM Mono renders visually larger
           than the sans face, so the smaller step matches their apparent size. */}
       <span className="rounded-sm bg-background-tint-01 px-1">
-        <Text font="secondary-mono" color="text-04" nowrap>
+        <Text
+          font="secondary-mono"
+          color="text-04"
+          wordWrap="whitespace-nowrap"
+        >
           {code}
         </Text>
       </span>
       {suffix && (
-        <Text font="main-ui-muted" color="text-04" nowrap>
+        <Text font="main-ui-muted" color="text-04" wordWrap="whitespace-nowrap">
           {suffix}
         </Text>
       )}
@@ -82,7 +86,7 @@ function renderPrimary(toolCall: ToolCallState): ReactNode {
   if (toolCall.kind === "execute" && toolCall.command) {
     if (toolCall.skillName && toolCall.description) {
       return (
-        <Text font="main-ui-muted" color="text-04" nowrap>
+        <Text font="main-ui-muted" color="text-04" wordWrap="whitespace-nowrap">
           {toolCall.description}
         </Text>
       );
@@ -102,7 +106,7 @@ function renderPrimary(toolCall: ToolCallState): ReactNode {
     return verbWithCode(`${toolCall.title} `, toolCall.description);
   }
   return (
-    <Text font="main-ui-muted" color="text-04" nowrap>
+    <Text font="main-ui-muted" color="text-04" wordWrap="whitespace-nowrap">
       {primaryText(toolCall)}
     </Text>
   );
@@ -212,8 +216,8 @@ export default function CraftToolCard({
     <div className="flex items-center gap-2 min-w-0 w-full">
       {renderStatusIcon(toolCall)}
       <span className="truncate min-w-0">{renderPrimary(toolCall)}</span>
-      {/* Pinned right so the skill badge aligns across rows. */}
-      <span className="ml-auto flex items-center gap-2 shrink-0">
+      {/* Pinned at the inline end so the skill badge aligns across rows. */}
+      <span className="ms-auto flex items-center gap-2 shrink-0">
         {toolCall.skillName && toolCall.toolName !== "skill" && (
           <SkillBadge name={toolCall.skillName} />
         )}
@@ -231,7 +235,7 @@ export default function CraftToolCard({
   );
 
   const triggerClass = cn(
-    "w-full text-left rounded-md",
+    "w-full text-start rounded-md",
     dense ? "px-3 py-1" : "px-3 py-2",
     expandable && "transition-colors hover:bg-background-tint-02"
   );

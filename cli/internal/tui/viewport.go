@@ -35,12 +35,15 @@ type pickerKind int
 const (
 	pickerSession pickerKind = iota
 	pickerAgent
+	pickerModel
 )
 
-// pickerItem is a selectable item in the picker.
+// pickerItem is a selectable item in the picker. detail, when set, is
+// right-aligned on the row (like a tabwriter column).
 type pickerItem struct {
-	id    string
-	label string
+	id     string
+	label  string
+	detail string
 }
 
 // streamRenderInterval is the minimum time between markdown re-renders during streaming.
@@ -275,6 +278,8 @@ func (v *viewport) pickerTitle() string {
 		return "Select Agent"
 	case pickerSession:
 		return "Resume Session"
+	case pickerModel:
+		return "Select Model"
 	default:
 		return "Select"
 	}
@@ -318,14 +323,14 @@ func (v *viewport) renderPicker(width, height int) string {
 		}
 	}
 
+	// Computed over all items (not just the visible window) so the column
+	// stays put while scrolling.
+	detailCol := pickerDetailCol(v.pickerItems, innerWidth-4)
+
 	var itemLines []string
 	for i := startIdx; i < endIdx; i++ {
 		item := v.pickerItems[i]
-		label := item.label
-		labelRunes := []rune(label)
-		if len(labelRunes) > innerWidth-4 {
-			label = string(labelRunes[:innerWidth-7]) + "..."
-		}
+		label := formatPickerLabel(item, innerWidth-4, detailCol)
 		if i == v.pickerIndex {
 			line := lipgloss.NewStyle().Foreground(accentColor).Bold(true).Render("> " + label)
 			itemLines = append(itemLines, line)
@@ -350,18 +355,20 @@ func (v *viewport) renderPicker(width, height int) string {
 		Bold(true).
 		Render(" " + title + " ")
 
-	// Build top border manually to avoid ANSI-corrupted rune slicing.
-	// panelWidth+2 accounts for the left and right border characters.
+	// Build top border manually to avoid ANSI-corrupted rune slicing. Measure
+	// the rendered panel instead of assuming its width — lipgloss box sizing
+	// would put the replacement line off by one.
+	panelLines := strings.Split(panel, "\n")
+	panelTotalWidth := lipgloss.Width(panelLines[len(panelLines)-1])
 	borderColor := lipgloss.NewStyle().Foreground(accentColor)
 	titleWidth := lipgloss.Width(titleRendered)
-	rightDashes := panelWidth + 2 - 3 - titleWidth // total - "╭─" - "╮" - title
+	rightDashes := panelTotalWidth - 3 - titleWidth // total - "╭─" - "╮" - title
 	if rightDashes < 0 {
 		rightDashes = 0
 	}
 	topBorder := borderColor.Render("╭─") + titleRendered +
 		borderColor.Render(strings.Repeat("─", rightDashes)+"╮")
 
-	panelLines := strings.Split(panel, "\n")
 	if len(panelLines) > 0 {
 		panelLines[0] = topBorder
 	}
@@ -369,6 +376,57 @@ func (v *viewport) renderPicker(width, height int) string {
 
 	// Center the panel in the viewport
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, panel)
+}
+
+// pickerDetailCol returns the column where the detail column starts, so
+// details left-align across rows: two past the widest label, pulled back so
+// the widest detail still fits in avail. Zero when no item has a detail.
+func pickerDetailCol(items []pickerItem, avail int) int {
+	maxLabel, maxDetail := 0, 0
+	for _, it := range items {
+		if it.detail == "" {
+			continue
+		}
+		if w := len([]rune(it.label)); w > maxLabel {
+			maxLabel = w
+		}
+		if w := len([]rune(it.detail)); w > maxDetail {
+			maxDetail = w
+		}
+	}
+	if maxDetail == 0 {
+		return 0
+	}
+	col := maxLabel + 2
+	if col > avail-maxDetail {
+		col = avail - maxDetail
+	}
+	if col < 10 {
+		col = 10
+	}
+	return col
+}
+
+// formatPickerLabel fits an item into avail columns. When the item has a
+// detail, the label is truncated to end before detailCol and the detail is
+// left-aligned at detailCol.
+func formatPickerLabel(item pickerItem, avail int, detailCol int) string {
+	label := []rune(item.label)
+	if item.detail == "" || detailCol <= 0 {
+		if len(label) > avail {
+			return string(label[:avail-3]) + "..."
+		}
+		return string(label)
+	}
+
+	if len(label) > detailCol-2 {
+		label = []rune(string(label[:detailCol-5]) + "...")
+	}
+	out := []rune(string(label) + strings.Repeat(" ", detailCol-len(label)) + item.detail)
+	if len(out) > avail {
+		return string(out[:avail-3]) + "..."
+	}
+	return string(out)
 }
 
 // streamingContent returns the display content for the in-progress stream.

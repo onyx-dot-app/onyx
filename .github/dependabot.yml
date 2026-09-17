@@ -1,4 +1,11 @@
 version: 2
+
+# Base image digests are NOT managed here. Dependabot's Docker parser rejects any
+# `FROM` line that interpolates a variable, and every Dockerfile in this repo
+# prefixes its base with the `${BASE_IMAGE_REGISTRY}` build arg, so a `docker`
+# entry finds no dependencies and opens no pull requests. The
+# .github/workflows/update-base-image-digests.yml job covers them instead, by
+# running `ods update-base-digests`.
 updates:
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -58,37 +65,3 @@ updates:
     labels:
       - "dependabot:javascript"
       - "dependabot:sandbox"
-  - package-ecosystem: "docker"
-    directory: "/backend/onyx/server/features/build/sandbox/image"
-    schedule:
-      interval: "weekly"
-    cooldown:
-      default-days: 7
-    open-pull-requests-limit: 3
-    assignees:
-      - "wenxi-onyx"
-    labels:
-      - "dependabot:docker"
-      - "dependabot:sandbox"
-  - package-ecosystem: "docker"
-    directory: "/web"
-    schedule:
-      interval: "weekly"
-    cooldown:
-      default-days: 7
-    open-pull-requests-limit: 1
-    assignees:
-      - "jmelahman"
-    labels:
-      - "dependabot:docker"
-  - package-ecosystem: "docker"
-    directory: "/backend"
-    schedule:
-      interval: "weekly"
-    cooldown:
-      default-days: 7
-    open-pull-requests-limit: 1
-    assignees:
-      - "jmelahman"
-    labels:
-      - "dependabot:docker"
