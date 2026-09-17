@@ -190,6 +190,7 @@ def _make_url_dispatcher(
     discussions: list[dict[str, Any]] | None = None,
     syllabus_body: str | None = None,
     page_error: bool = False,
+    file_content: bytes = b"",
 ) -> Any:
     """Return a side_effect function that dispatches by URL path.
 
@@ -227,6 +228,12 @@ def _make_url_dispatcher(
             return _mock_response(
                 json_data={"syllabus_body": syllabus_body} if syllabus_body else {}
             )
+        # File downloads (see _mock_file's url) return raw bytes, not JSON.
+        if "/download" in url:
+            return _mock_response(content=file_content, url=url)
+        # /api/v1/files/:id/public_url hands back a self-authorizing URL.
+        if "/public_url" in url:
+            return _mock_response(json_data={"public_url": SIGNED_FILE_URL})
         if "/modules/" in url and "/items" in url:
             return _mock_response(json_data=module_items)
         elif "/modules" in url:
@@ -277,18 +284,51 @@ def _run_checkpoint(
     return items, new_cp
 
 
+@pytest.fixture(autouse=True)
+def _no_unstructured_api_key() -> Any:
+    """extract_file_text looks up the Unstructured API key in the KV store,
+    which needs a DB engine. Unit tests never have one, so always report
+    'no key' and use the built-in extractors."""
+    with patch(
+        "onyx.file_processing.extract_file_text.get_unstructured_api_key",
+        return_value=None,
+    ):
+        yield
+
+
+def _section_text(doc: Document) -> str:
+    """Return the first section's text, asserting it is present."""
+    text = doc.sections[0].text
+    assert text is not None
+    return text
+
+
+def _download_calls(mock_req: MagicMock) -> list[Any]:
+    """Return only the mocked GET calls that hit a file download URL."""
+    return [c for c in mock_req.get.call_args_list if "/download" in c.args[0]]
+
+
 def _mock_response(
     status_code: int = 200,
     json_data: Any = None,
     link_header: str = "",
+    content: bytes = b"",
+    url: str = f"{FAKE_BASE_URL}/api/v1/mock",
+    history: list[MagicMock] | None = None,
 ) -> MagicMock:
-    """Create a mock HTTP response with status, json, and Link header."""
+    """Create a mock HTTP response with status, json, Link header and body."""
     resp = MagicMock()
     resp.status_code = status_code
     resp.reason = "OK" if status_code < 300 else "Error"
     resp.json.return_value = json_data if json_data is not None else []
     resp.headers = {"Link": link_header}
+    resp.content = content
+    resp.url = url
+    resp.history = history or []
     return resp
+
+
+SIGNED_FILE_URL = f"{FAKE_BASE_URL}/files/40/download?download_frd=1&verifier=abc123"
 
 
 # ---------------------------------------------------------------------------
@@ -582,6 +622,104 @@ class TestGet:
         expected = "Internal Server Error"
 
         assert result == expected
+
+
+# ---------------------------------------------------------------------------
+# CanvasApiClient.download_file tests
+# ---------------------------------------------------------------------------
+
+
+class TestCanvasApiClientDownloadFile:
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_downloads_without_authorization_header(
+        self, mock_requests: MagicMock
+    ) -> None:
+        mock_requests.get.return_value = _mock_response(
+            content=b"file bytes", url=SIGNED_FILE_URL
+        )
+        client = CanvasApiClient(FAKE_TOKEN, FAKE_BASE_URL)
+
+        data = client.download_file(SIGNED_FILE_URL)
+
+        assert data == b"file bytes"
+        call = mock_requests.get.call_args
+        assert call.args[0] == SIGNED_FILE_URL
+        assert "headers" not in call.kwargs
+        assert call.kwargs["allow_redirects"] is True
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_follows_redirect_to_storage_host(self, mock_requests: MagicMock) -> None:
+        hop = _mock_response(status_code=302, url=SIGNED_FILE_URL)
+        mock_requests.get.return_value = _mock_response(
+            content=b"file bytes",
+            url="https://bucket.s3.amazonaws.com/40?X-Amz-Signature=x",
+            history=[hop],
+        )
+        client = CanvasApiClient(FAKE_TOKEN, FAKE_BASE_URL)
+
+        assert client.download_file(SIGNED_FILE_URL) == b"file bytes"
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_rejects_redirect_to_login_page(self, mock_requests: MagicMock) -> None:
+        # Unauthorized downloads bounce to /login and come back as a 200 HTML
+        # page. That must not be treated as file content.
+        hop = _mock_response(status_code=302, url=f"{FAKE_BASE_URL}/files/40/download")
+        mock_requests.get.return_value = _mock_response(
+            content=b"<!DOCTYPE html>login",
+            url=f"{FAKE_BASE_URL}/login/canvas",
+            history=[hop],
+        )
+        client = CanvasApiClient(FAKE_TOKEN, FAKE_BASE_URL)
+
+        with pytest.raises(OnyxError) as exc_info:
+            client.download_file(f"{FAKE_BASE_URL}/files/40/download")
+        assert "login" in str(exc_info.value.detail)
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_raises_on_error_status(self, mock_requests: MagicMock) -> None:
+        mock_requests.get.return_value = _mock_response(status_code=404)
+        client = CanvasApiClient(FAKE_TOKEN, FAKE_BASE_URL)
+
+        with pytest.raises(OnyxError):
+            client.download_file(SIGNED_FILE_URL)
+
+    def test_rejects_invalid_url(self) -> None:
+        client = CanvasApiClient(FAKE_TOKEN, FAKE_BASE_URL)
+
+        with pytest.raises(OnyxError):
+            client.download_file("ftp://files.instructure.com/40/download")
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_get_file_public_url(self, mock_requests: MagicMock) -> None:
+        mock_requests.get.return_value = _mock_response(
+            json_data={"public_url": SIGNED_FILE_URL}
+        )
+        client = CanvasApiClient(FAKE_TOKEN, FAKE_BASE_URL)
+
+        assert client.get_file_public_url(40) == SIGNED_FILE_URL
+        call = mock_requests.get.call_args
+        assert call.args[0] == f"{FAKE_BASE_URL}/api/v1/files/40/public_url"
+        assert call.kwargs["headers"] == {"Authorization": f"Bearer {FAKE_TOKEN}"}
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_get_file_public_url_missing(self, mock_requests: MagicMock) -> None:
+        mock_requests.get.return_value = _mock_response(json_data={})
+        client = CanvasApiClient(FAKE_TOKEN, FAKE_BASE_URL)
+
+        assert client.get_file_public_url(40) is None
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_get_file_public_url_insufficient_scopes(
+        self, mock_requests: MagicMock
+    ) -> None:
+        mock_requests.get.return_value = _mock_response(
+            status_code=401,
+            json_data={"errors": [{"message": "Insufficient scopes on access token."}]},
+        )
+        client = CanvasApiClient(FAKE_TOKEN, FAKE_BASE_URL)
+
+        with pytest.raises(OnyxError):
+            client.get_file_public_url(40)
 
 
 # ---------------------------------------------------------------------------
@@ -1878,28 +2016,199 @@ class TestEEGetCoursePermissions:
 class TestDocumentConversionNewTypes:
     """Test document conversion for files, quizzes, discussions, syllabus."""
 
-    def test_convert_file_to_document(self) -> None:
+    @staticmethod
+    def _make_file(
+        display_name: str = "slides_week1.pdf",
+        content_type: str | None = "application/pdf",
+        size: int | None = 1024,
+        url: str = "https://files.instructure.com/40/download",
+    ) -> Any:
         from onyx.connectors.canvas.connector import CanvasFile
 
-        connector = _build_connector()
-        file = CanvasFile(
+        return CanvasFile(
             id=40,
-            display_name="slides_week1.pdf",
-            filename="slides_week1.pdf",
-            url="https://files.instructure.com/40/download",
-            content_type="application/pdf",
-            size=1024,
+            display_name=display_name,
+            filename=display_name,
+            url=url,
+            content_type=content_type,
+            size=size,
             updated_at="2025-06-01T12:00:00Z",
             course_id=1,
         )
-        doc = connector._convert_file_to_document(file)
 
+    def test_convert_file_to_document_text_file(self) -> None:
+        connector = _build_connector()
+        file = self._make_file(display_name="notes.txt", content_type="text/plain")
+
+        with patch("onyx.connectors.canvas.client.rl_requests") as mock_req:
+            mock_req.get.side_effect = _make_url_dispatcher(
+                file_content=b"Hello from the course notes"
+            )
+            doc = connector._convert_file_to_document(file)
+
+        # No verifier on the file url -> ask /public_url, then download that.
+        public_url_calls = [
+            c for c in mock_req.get.call_args_list if "/public_url" in c.args[0]
+        ]
+        assert len(public_url_calls) == 1
+        assert (
+            public_url_calls[0].args[0] == f"{FAKE_BASE_URL}/api/v1/files/40/public_url"
+        )
+        downloads = _download_calls(mock_req)
+        assert len(downloads) == 1
+        assert downloads[0].args[0] == SIGNED_FILE_URL
+        assert "headers" not in downloads[0].kwargs
         assert doc.id == "canvas-file-1-40"
-        assert doc.semantic_identifier == "slides_week1.pdf"
+        assert doc.semantic_identifier == "notes.txt"
         assert doc.metadata["type"] == "file"
         assert doc.metadata["course_id"] == "1"
-        assert "slides_week1.pdf" in doc.sections[0].text
         assert doc.parent_hierarchy_raw_node_id == "canvas-type-course-1-file"
+        text = _section_text(doc)
+        assert "notes.txt" in text
+        assert "File type: text/plain" in text
+        assert "Hello from the course notes" in text
+
+    def test_convert_file_to_document_uses_verifier_url_directly(self) -> None:
+        connector = _build_connector()
+        file = self._make_file(
+            display_name="notes.txt", content_type="text/plain", url=SIGNED_FILE_URL
+        )
+
+        with patch("onyx.connectors.canvas.client.rl_requests") as mock_req:
+            mock_req.get.side_effect = _make_url_dispatcher(file_content=b"verified")
+            doc = connector._convert_file_to_document(file)
+
+        assert not any("/public_url" in c.args[0] for c in mock_req.get.call_args_list)
+        downloads = _download_calls(mock_req)
+        assert len(downloads) == 1
+        assert downloads[0].args[0] == SIGNED_FILE_URL
+        assert "verified" in _section_text(doc)
+
+    def test_convert_file_to_document_public_url_failure_falls_back_to_name(
+        self,
+    ) -> None:
+        connector = _build_connector()
+        file = self._make_file(display_name="notes.txt", content_type="text/plain")
+        dispatch = _make_url_dispatcher()
+
+        def _scope_error(url: str, **kwargs: Any) -> MagicMock:
+            if "/public_url" in url:
+                return _mock_response(
+                    status_code=401,
+                    json_data={
+                        "errors": [{"message": "Insufficient scopes on access token."}]
+                    },
+                )
+            return dispatch(url, **kwargs)
+
+        with patch("onyx.connectors.canvas.client.rl_requests") as mock_req:
+            mock_req.get.side_effect = _scope_error
+            doc = connector._convert_file_to_document(file)
+
+        assert _download_calls(mock_req) == []
+        assert _section_text(doc) == "notes.txt\n\nFile type: text/plain"
+
+    def test_convert_file_to_document_markdown_file(self) -> None:
+        connector = _build_connector()
+        file = self._make_file(
+            display_name="BRD Skill.md", content_type="text/markdown"
+        )
+
+        with patch("onyx.connectors.canvas.client.rl_requests") as mock_req:
+            mock_req.get.side_effect = _make_url_dispatcher(
+                file_content=b"# BRD Skill\n\nWrite the business requirements."
+            )
+            doc = connector._convert_file_to_document(file)
+
+        assert "Write the business requirements." in _section_text(doc)
+
+    def test_convert_file_to_document_uses_shared_extractor_for_pdf(self) -> None:
+        connector = _build_connector()
+        file = self._make_file()  # slides_week1.pdf
+
+        with (
+            patch("onyx.connectors.canvas.client.rl_requests") as mock_req,
+            patch(
+                "onyx.connectors.canvas.connector.extract_file_text",
+                return_value="Week 1: embeddings",
+            ) as mock_extract,
+        ):
+            mock_req.get.side_effect = _make_url_dispatcher(
+                file_content=b"%PDF-1.4 ..."
+            )
+            doc = connector._convert_file_to_document(file)
+
+        mock_extract.assert_called_once()
+        assert mock_extract.call_args.kwargs["file_name"] == "slides_week1.pdf"
+        assert mock_extract.call_args.kwargs["break_on_unprocessable"] is False
+        assert "Week 1: embeddings" in _section_text(doc)
+
+    def test_convert_file_to_document_skips_images(self) -> None:
+        connector = _build_connector()
+        file = self._make_file(display_name="diagram.png", content_type="image/png")
+
+        with patch("onyx.connectors.canvas.client.rl_requests") as mock_req:
+            mock_req.get.side_effect = _make_url_dispatcher()
+            doc = connector._convert_file_to_document(file)
+
+        assert _download_calls(mock_req) == []
+        assert _section_text(doc) == "diagram.png\n\nFile type: image/png"
+
+    def test_convert_file_to_document_skips_oversized_files(self) -> None:
+        connector = _build_connector()
+        file = self._make_file(
+            display_name="huge.txt", content_type="text/plain", size=101
+        )
+
+        with (
+            patch("onyx.connectors.canvas.client.rl_requests") as mock_req,
+            patch(
+                "onyx.connectors.canvas.connector.CANVAS_CONNECTOR_FILE_SIZE_THRESHOLD",
+                100,
+            ),
+        ):
+            mock_req.get.side_effect = _make_url_dispatcher()
+            doc = connector._convert_file_to_document(file)
+
+        assert _download_calls(mock_req) == []
+        assert _section_text(doc) == "huge.txt\n\nFile type: text/plain"
+
+    def test_convert_file_to_document_skips_content_over_char_threshold(
+        self,
+    ) -> None:
+        connector = _build_connector()
+        file = self._make_file(display_name="long.txt", content_type="text/plain")
+
+        with (
+            patch("onyx.connectors.canvas.client.rl_requests") as mock_req,
+            patch(
+                "onyx.connectors.canvas.connector.CANVAS_CONNECTOR_FILE_CHAR_COUNT_THRESHOLD",
+                5,
+            ),
+        ):
+            mock_req.get.side_effect = _make_url_dispatcher(file_content=b"0123456789")
+            doc = connector._convert_file_to_document(file)
+
+        assert _section_text(doc) == "long.txt\n\nFile type: text/plain"
+
+    def test_convert_file_to_document_download_failure_falls_back_to_name(
+        self,
+    ) -> None:
+        connector = _build_connector()
+        file = self._make_file(display_name="notes.txt", content_type="text/plain")
+        dispatch = _make_url_dispatcher()
+
+        def _failing_download(url: str, **kwargs: Any) -> MagicMock:
+            if "/download" in url:
+                return _mock_response(status_code=500)
+            return dispatch(url, **kwargs)
+
+        with patch("onyx.connectors.canvas.client.rl_requests") as mock_req:
+            mock_req.get.side_effect = _failing_download
+            doc = connector._convert_file_to_document(file)
+
+        assert doc.id == "canvas-file-1-40"
+        assert _section_text(doc) == "notes.txt\n\nFile type: text/plain"
 
     def test_convert_quiz_to_document(self) -> None:
         from onyx.connectors.canvas.connector import CanvasQuiz
@@ -1970,8 +2279,13 @@ class TestCheckpointNewStages:
 
     @patch("onyx.connectors.canvas.client.rl_requests")
     def test_files_stage_yields_file_documents(self, mock_requests: MagicMock) -> None:
-        file = _mock_file(40, updated_at="2025-06-15T12:00:00Z")
-        mock_requests.get.side_effect = _make_url_dispatcher(files=[file])
+        file = _mock_file(
+            40, display_name="notes.txt", updated_at="2025-06-15T12:00:00Z"
+        )
+        file["content-type"] = "text/plain"
+        mock_requests.get.side_effect = _make_url_dispatcher(
+            files=[file], file_content=b"Lecture notes for week one"
+        )
         connector = _build_connector()
         cp = CanvasConnectorCheckpoint(
             has_more=True, course_ids=[1], current_course_index=0, stage="files"
@@ -1984,6 +2298,7 @@ class TestCheckpointNewStages:
         assert len(items) == 1
         assert isinstance(items[0], Document)
         assert items[0].id == "canvas-file-1-40"
+        assert "Lecture notes for week one" in items[0].sections[0].text
         assert new_cp.stage == "modules"
 
     @patch("onyx.connectors.canvas.client.rl_requests")

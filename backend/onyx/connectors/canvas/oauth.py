@@ -62,6 +62,10 @@ CANVAS_OAUTH_REQUIRED_SCOPES: list[str] = [
     "url:GET|/api/v1/courses/:course_id/quizzes",
     "url:GET|/api/v1/courses/:course_id/discussion_topics",
     "url:GET|/api/v1/courses/:course_id/enrollments",
+    # Signed download URL for course files. Needed because Canvas omits
+    # verifiers from API file URLs and rejects bearer tokens on the non-API
+    # download route when scopes are enforced.
+    "url:GET|/api/v1/files/:id/public_url",
 ]
 
 # Canvas token-endpoint error codes that mean the refresh token is dead and

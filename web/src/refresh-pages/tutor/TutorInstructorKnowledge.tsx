@@ -37,6 +37,7 @@ import {
   CCPairFullInfo,
   ConnectorCredentialPairStatus,
 } from "@/app/admin/connector/[ccPairId]/types";
+import type { LtiCourseConnectorStatus } from "@/refresh-pages/tutor/CanvasCourseSetupView";
 import TutorTabHeader from "@/refresh-pages/tutor/TutorTabHeader";
 import TutorInstructorWebsites from "@/refresh-pages/tutor/TutorInstructorWebsites";
 import TutorInstructorGoogleDrive from "@/refresh-pages/tutor/TutorInstructorGoogleDrive";
@@ -170,13 +171,34 @@ export default function TutorInstructorKnowledge({
     { refreshInterval: 30_000 }
   );
 
+  // The indexing-status endpoint above returns every Canvas connector the
+  // user can edit, across all courses. Narrow it to the connector that is
+  // actually set up for this course so an admin/curator who owns several
+  // course connectors doesn't see all of them here.
+  const courseStatusKey = courseId
+    ? `/api/auth/lti/course/${encodeURIComponent(courseId)}/connector-status`
+    : null;
+  const {
+    data: courseConnectorStatus,
+    error: courseConnectorStatusError,
+    isLoading: isLoadingCourseConnectorStatus,
+  } = useSWR<LtiCourseConnectorStatus>(
+    vectorDbEnabled ? courseStatusKey : null,
+    errorHandlingFetcher,
+    { refreshInterval: 30_000 }
+  );
+
   const connectorStatuses = useMemo(() => {
+    const courseCcPairId = courseConnectorStatus?.cc_pair_id ?? null;
     return (connectorStatusResponses ?? [])
       .flatMap((response) => response.indexing_statuses)
       .filter(isCanvasConnectorStatus)
       .filter((status) => status.is_editable)
+      .filter(
+        (status) => courseId === null || status.cc_pair_id === courseCcPairId
+      )
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [connectorStatusResponses]);
+  }, [connectorStatusResponses, courseConnectorStatus, courseId]);
 
   useEffect(() => {
     if (connectorStatuses.length === 0) {
@@ -263,7 +285,7 @@ export default function TutorInstructorKnowledge({
     );
   }
 
-  if (isLoadingConnectorStatuses) {
+  if (isLoadingConnectorStatuses || isLoadingCourseConnectorStatus) {
     return (
       <div className="flex h-full min-h-0 w-full items-center justify-center bg-background-tint-01">
         <ThreeDotsLoader />
@@ -271,13 +293,15 @@ export default function TutorInstructorKnowledge({
     );
   }
 
-  if (connectorStatusError) {
+  const knowledgeSourcesError =
+    connectorStatusError ?? courseConnectorStatusError;
+  if (knowledgeSourcesError) {
     return (
       <div className="flex h-full min-h-0 w-full bg-background-tint-01 p-6">
         <div className="mx-auto w-full max-w-[800px]">
           <ErrorCallout
             errorTitle="Failed to fetch Canvas knowledge sources"
-            errorMsg={connectorStatusError.message}
+            errorMsg={knowledgeSourcesError.message}
           />
         </div>
       </div>

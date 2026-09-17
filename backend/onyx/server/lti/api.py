@@ -1233,7 +1233,13 @@ def _reconnect_lti_course_canvas_connector(
     db_session: Session,
 ) -> LtiCanvasConnectorSetupResponse:
     """Re-authorize an existing course connector with a (possibly different)
-    instructor's freshly authorized Canvas credential and resume indexing."""
+    instructor's freshly authorized Canvas credential and run a full re-index.
+
+    A full re-index (rather than an incremental poll) is deliberate: the new
+    token may carry different scopes or belong to an instructor with access
+    to different content, and content that hasn't changed in Canvas would
+    otherwise never be re-fetched. It also re-fetches course permissions
+    during indexing instead of waiting for the next permission sync."""
     _validate_canvas_client_and_resolve_course(canvas_client, launch_context)
 
     if cc_pair.credential_id != credential.id:
@@ -1254,7 +1260,7 @@ def _reconnect_lti_course_canvas_connector(
         )
     mark_ccpair_with_indexing_trigger(
         cc_pair_id=cc_pair.id,
-        indexing_mode=IndexingMode.UPDATE,
+        indexing_mode=IndexingMode.REINDEX,
         db_session=db_session,
     )
     db_session.commit()

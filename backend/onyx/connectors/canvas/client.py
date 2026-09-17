@@ -44,6 +44,12 @@ def _error_code_for_status(status_code: int) -> OnyxErrorCode:
     return OnyxErrorCode.BAD_GATEWAY
 
 
+def _is_canvas_login_url(url: str) -> bool:
+    """True for Canvas's login page (``/login`` or ``/login/<provider>``)."""
+    path = urlparse(url).path.rstrip("/")
+    return path == "/login" or path.startswith("/login/")
+
+
 # Called when Canvas answers 401. Returns a fresh bearer token to retry with,
 # or None if no refresh is possible (static token / refresh failed).
 TokenRefresher = Callable[[], str | None]
@@ -152,6 +158,69 @@ class CanvasApiClient:
 
         next_url = self._parse_next_link(response.headers.get("Link", ""))
         return response_json, next_url
+
+    def get_file_public_url(self, file_id: int) -> str | None:
+        """Ask Canvas for a self-authorizing download URL for a file.
+
+        ``GET /api/v1/files/:id/public_url`` returns a signed URL (S3 /
+        inst-fs) or, for local storage, a download URL carrying a
+        ``verifier``. Requires the ``url:GET|/api/v1/files/:id/public_url``
+        scope on developer keys that enforce scopes.
+        """
+        body, _ = self.get(f"files/{file_id}/public_url")
+        if not isinstance(body, dict):
+            return None
+        public_url = body.get("public_url")
+        return public_url if isinstance(public_url, str) and public_url else None
+
+    def download_file(self, url: str) -> bytes:
+        """Download a file's raw bytes from a self-authorizing Canvas URL.
+
+        ``url`` must carry its own authorization: a file ``url`` that includes
+        a ``verifier`` query parameter, or the signed URL returned by
+        ``get_file_public_url``. No Authorization header is sent: Canvas
+        rejects bearer tokens on the non-API ``/files/:id/download`` route
+        with 401 when the developer key enforces scopes, and omitting it also
+        keeps the token away from storage hosts the download redirects to.
+
+        When Canvas will not serve the file it redirects to its login page
+        with a 200, so that is detected and reported as a failure rather than
+        indexing the login page's HTML.
+        """
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            raise OnyxError(
+                OnyxErrorCode.BAD_GATEWAY,
+                detail=f"Invalid Canvas file download URL: {url!r}",
+            )
+
+        response = rl_requests.get(
+            url,
+            timeout=_CANVAS_CALL_TIMEOUT,
+            allow_redirects=True,
+        )
+
+        if response.status_code >= 400:
+            raise OnyxError(
+                _error_code_for_status(response.status_code),
+                detail=(
+                    f"Failed to download Canvas file: "
+                    f"{response.reason or f'HTTP {response.status_code}'}"
+                ),
+                status_code_override=response.status_code,
+            )
+
+        visited = [r.url for r in response.history] + [response.url]
+        if any(_is_canvas_login_url(visited_url) for visited_url in visited):
+            raise OnyxError(
+                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                detail=(
+                    "Canvas redirected the file download to its login page; "
+                    "the download URL is not authorized"
+                ),
+            )
+
+        return response.content
 
     def _parse_next_link(self, link_header: str) -> str | None:
         """Extract the 'next' URL from a Canvas Link header.

@@ -2,17 +2,22 @@ from collections.abc import Iterator
 from collections.abc import Sequence
 from datetime import datetime
 from datetime import timezone
+from io import BytesIO
 from typing import Any
 from typing import cast
 from typing import Literal
 from typing import NoReturn
 from typing import TypeAlias
+from urllib.parse import parse_qs
+from urllib.parse import urlparse
 
 from pydantic import BaseModel
 from retry import retry
 from typing_extensions import override
 
 from onyx.access.models import ExternalAccess
+from onyx.configs.app_configs import CANVAS_CONNECTOR_FILE_CHAR_COUNT_THRESHOLD
+from onyx.configs.app_configs import CANVAS_CONNECTOR_FILE_SIZE_THRESHOLD
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.configs.lti_configs import LTI_CANVAS_OAUTH_CLIENT_ID
@@ -47,6 +52,9 @@ from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.db.enums import HierarchyNodeType
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_processing.extract_file_text import extract_file_text
+from onyx.file_processing.extract_file_text import get_file_ext
+from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
@@ -1126,17 +1134,113 @@ class CanvasConnector(
         )
         return document
 
+    def _resolve_file_download_url(
+        self, file: CanvasFile, file_label: str
+    ) -> str | None:
+        """Pick a URL that can be downloaded without the bearer token.
+
+        A file ``url`` that carries a ``verifier`` query parameter is
+        self-authorizing and used as-is. Canvas omits the verifier when the
+        "Remove verifiers from API file URLs" feature is on (the default in
+        recent releases); in that case ask ``/files/:id/public_url`` for a
+        signed URL instead.
+        """
+        if file.url and "verifier" in parse_qs(urlparse(file.url).query):
+            return file.url
+
+        try:
+            public_url = self.canvas_client.get_file_public_url(file.id)
+        except Exception as e:
+            logger.warning(
+                f"Failed to get a download URL for Canvas file {file_label} ({e}). "
+                "If the Canvas developer key enforces scopes, make sure it "
+                "includes url:GET|/api/v1/files/:id/public_url"
+            )
+            return None
+        if not public_url:
+            logger.warning(f"Canvas returned no public_url for file {file_label}")
+            return None
+        return public_url
+
+    def _extract_file_content(self, file: CanvasFile) -> str | None:
+        """Download a Canvas file and extract its text.
+
+        Returns None (and logs why) when the file is skipped or cannot be
+        processed, so the caller can still index the file by name. Images
+        and files over the configured size / char thresholds are skipped.
+        """
+        file_name = file.filename or file.display_name
+        extension = get_file_ext(file_name)
+        file_label = f"{file_name} (course={file.course_id}, id={file.id})"
+
+        if extension in OnyxFileExtensions.IMAGE_EXTENSIONS or (
+            file.content_type or ""
+        ).startswith("image/"):
+            logger.debug(f"Skipping content extraction for image {file_label}")
+            return None
+
+        if file.size is not None and file.size > CANVAS_CONNECTOR_FILE_SIZE_THRESHOLD:
+            logger.warning(
+                f"Skipping content of Canvas file {file_label}: size={file.size} "
+                f"exceeds threshold={CANVAS_CONNECTOR_FILE_SIZE_THRESHOLD}"
+            )
+            return None
+
+        download_url = self._resolve_file_download_url(file, file_label)
+        if not download_url:
+            return None
+
+        try:
+            raw_bytes = self.canvas_client.download_file(download_url)
+        except Exception as e:
+            logger.warning(f"Failed to download Canvas file {file_label}: {e}")
+            return None
+
+        if not raw_bytes:
+            logger.warning(f"Canvas file {file_label} download returned no data")
+            return None
+        if len(raw_bytes) > CANVAS_CONNECTOR_FILE_SIZE_THRESHOLD:
+            logger.warning(
+                f"Skipping content of Canvas file {file_label}: downloaded "
+                f"{len(raw_bytes)} bytes exceeds threshold="
+                f"{CANVAS_CONNECTOR_FILE_SIZE_THRESHOLD}"
+            )
+            return None
+
+        # break_on_unprocessable=False: unsupported / corrupt files log a
+        # warning and yield "" rather than failing the whole run.
+        text = extract_file_text(
+            file=BytesIO(raw_bytes),
+            file_name=file_name,
+            break_on_unprocessable=False,
+        ).strip()
+        if not text:
+            return None
+        if len(text) > CANVAS_CONNECTOR_FILE_CHAR_COUNT_THRESHOLD:
+            logger.warning(
+                f"Skipping content of Canvas file {file_label}: extracted "
+                f"{len(text)} chars exceeds threshold="
+                f"{CANVAS_CONNECTOR_FILE_CHAR_COUNT_THRESHOLD}"
+            )
+            return None
+        return text
+
     def _convert_file_to_document(self, file: CanvasFile) -> Document:
         """Convert a Canvas file to a Document.
 
-        The file URL points to the direct download. The indexing pipeline
-        handles extraction of text from PDFs, DOCX, PPTX, etc.
+        Downloads the file via its direct download URL and extracts its text
+        (PDF, DOCX, PPTX, XLSX, plain text, markdown, ...). The file name and
+        MIME type are always included so the file is searchable by name even
+        when its contents can't be extracted.
         """
         link = f"{self.canvas_base_url}/courses/{file.course_id}/files/{file.id}"
 
         text_parts = [file.display_name]
         if file.content_type:
             text_parts.append(f"File type: {file.content_type}")
+        content = self._extract_file_content(file)
+        if content:
+            text_parts.append(content)
 
         doc_updated_at = (
             datetime.fromisoformat(file.updated_at.replace("Z", "+00:00")).astimezone(

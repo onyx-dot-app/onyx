@@ -88,7 +88,7 @@ export default function TutorInstructorCanvasConnection({
     try {
       const credentialId = await startCanvasOAuth(courseId);
       await attachCanvasCredentialToCourse(courseId, credentialId);
-      toast.success("Canvas reconnected. Syncing will resume shortly.");
+      toast.success("Canvas reconnected. A full sync will start shortly.");
       await notifyChanged();
     } catch (e) {
       if (e instanceof CanvasOAuthCancelledError) {
