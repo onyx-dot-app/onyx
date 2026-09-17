@@ -1,5 +1,6 @@
 from typing import Any
 from unittest.mock import MagicMock, patch
+
 import requests
 
 from onyx.connectors.clickup.connector import CLICKUP_API_BASE_URL, ClickupConnector
@@ -48,19 +49,27 @@ def test_task_comment_fetch_failure_does_not_abort_indexing() -> None:
         {"tasks": [_mock_task("task-1"), _mock_task("task-2")], "last_page": True}
     )
 
+    def _mock_comments(task_id: str) -> list[Any]:
+        if task_id == "task-1":
+            raise requests.exceptions.RequestException("boom")
+        from onyx.connectors.models import TextSection
+        return [TextSection(text="Valid Comment")]
+
     with patch("onyx.connectors.clickup.connector.requests.get") as mock_get, patch.object(
         ClickupConnector,
         "_get_task_comments",
-        side_effect=requests.exceptions.RequestException("boom"),
+        side_effect=_mock_comments,
     ):
         mock_get.return_value = tasks_response
         batches = list(connector._get_all_tasks_filtered())
 
     documents = [doc for batch in batches for doc in batch]
     assert [doc.id for doc in documents] == ["task-1", "task-2"]
-    assert all(len(doc.sections) == 1 for doc in documents)
-
-
+    
+    # task-1 fails comments, so it only has 1 description section
+    assert len(documents[0].sections) == 1
+    # task-2 succeeds, so it retains description + comment section (total 2)
+    assert len(documents[1].sections) == 2
 
 
 def test_get_task_comments_uses_relative_endpoint() -> None:
