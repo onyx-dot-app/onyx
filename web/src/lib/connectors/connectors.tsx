@@ -1066,7 +1066,7 @@ export const connectorConfigs: Record<
         name: "include_meeting_transcripts",
         description:
           "Index the transcripts of scheduled meetings as their own documents, " +
-          "readable by the organizer. Needs the " +
+          "readable by the organizer and the attendees. Needs the " +
           "OnlineMeetingTranscript.Read.All, OnlineMeetings.Read.All and " +
           "User.Read.All application permissions, the tenant setting that " +
           "allows Graph API access to transcripts, and an application access " +
