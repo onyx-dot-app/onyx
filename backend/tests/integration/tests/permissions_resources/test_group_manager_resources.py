@@ -42,6 +42,7 @@ from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.reset import reset_all
 from tests.integration.common_utils.test_models import (
+    DATestCCPair,
     DATestDocumentSet,
     DATestUser,
     DATestUserGroup,
@@ -57,6 +58,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 _DOC_SET_PATH = "/manage/admin/document-set"
+_CONNECTOR_PATH = "/manage/admin/connector"
 _INGESTION_PATH = "/onyx-api/ingestion"
 # GATE 1 has its own wording, so asserting on this pins the denial to the scope check
 _CC_PAIR_SCOPE_DETAIL = "Connection not found for current user's permissions"
@@ -1099,3 +1101,133 @@ def test_admin_ingests_over_any_pairs_document(env: _ScopedEnv) -> None:
     _ingest_ok(env.admin, document_id, admin_pair.id, "overwritten")
 
     assert _document_semantic_id(document_id) == "overwritten"
+
+
+def _file_connector_config(file_id: str, file_name: str) -> dict[str, Any]:
+    return {
+        "file_locations": [file_id],
+        "file_names": [file_name],
+        "zip_metadata_file_id": None,
+    }
+
+
+def _seed_file_cc_pair(
+    creator: DATestUser, name: str, access_type: AccessType, groups: list[int]
+) -> tuple[DATestCCPair, str]:
+    """A file connector carrying one real uploaded file, so the file routes have
+    something to list and remove."""
+    upload = FileManager.upload_connector_file(
+        f"{name}.txt", f"{name} contents".encode(), creator
+    )
+    file_id, file_name = upload.file_paths[0], upload.file_names[0]
+    cc_pair = CCPairManager.create_from_scratch(
+        user_performing_action=creator,
+        access_type=access_type,
+        groups=groups,
+        connector_specific_config=_file_connector_config(file_id, file_name),
+    )
+    return cc_pair, file_id
+
+
+def _expect_file_routes_denied(
+    env: _ScopedEnv, cc_pair: DATestCCPair, file_id: str
+) -> None:
+    path = f"{_CONNECTOR_PATH}/{cc_pair.connector_id}/files"
+    assert_response(
+        FileManager.list_connector_files(cc_pair.connector_id, env.manager),
+        "GET",
+        path,
+        "manager",
+        "denied_gate2",
+    )
+    assert_response(
+        FileManager.update_connector_files(
+            cc_pair.connector_id, env.manager, file_ids_to_remove=[file_id]
+        ),
+        "POST",
+        f"{path}/update",
+        "manager",
+        "denied_gate2",
+    )
+
+
+def test_manager_creates_file_connector_end_to_end(env: _ScopedEnv) -> None:
+    """The reported bug: the upload is step 1 of the file connector form, and a
+    GLOBAL-only gate on it blocked the whole flow before any scope check ran."""
+    cc_pair, file_id = _seed_file_cc_pair(
+        env.manager, "managed", AccessType.PRIVATE, [env.managed_group.id]
+    )
+
+    listed = FileManager.list_connector_files(cc_pair.connector_id, env.manager)
+    assert listed.status_code == 200, listed.text
+    assert [f["file_id"] for f in listed.json()["files"]] == [file_id]
+
+
+def test_manager_updates_files_on_managed_connector(env: _ScopedEnv) -> None:
+    cc_pair, file_id = _seed_file_cc_pair(
+        env.manager, "updatable", AccessType.PRIVATE, [env.managed_group.id]
+    )
+
+    updated = FileManager.update_connector_files(
+        cc_pair.connector_id,
+        env.manager,
+        file_ids_to_remove=[file_id],
+        files=[("added.txt", b"added by the manager")],
+    )
+    assert updated.status_code == 200, updated.text
+
+    listed = FileManager.list_connector_files(cc_pair.connector_id, env.manager)
+    assert listed.status_code == 200, listed.text
+    assert [f["file_name"] for f in listed.json()["files"]] == ["added.txt"]
+
+
+def test_manager_manages_files_on_own_groupless_connector(env: _ScopedEnv) -> None:
+    """The creator half of GATE 2 — a connector that lost its last group must not
+    strand the manager who made it."""
+    cc_pair, file_id = _seed_file_cc_pair(
+        env.manager, "groupless", AccessType.PRIVATE, [env.managed_group.id]
+    )
+    _detach_cc_pair_from_group(env.managed_group, env.admin)
+
+    listed = FileManager.list_connector_files(cc_pair.connector_id, env.manager)
+    assert listed.status_code == 200, listed.text
+
+    updated = FileManager.update_connector_files(
+        cc_pair.connector_id,
+        env.manager,
+        file_ids_to_remove=[file_id],
+        files=[("added.txt", b"added by the manager")],
+    )
+    assert updated.status_code == 200, updated.text
+
+
+def test_manager_cannot_manage_files_on_unmanaged_connector(env: _ScopedEnv) -> None:
+    """allow_scope must not widen the row filter. The list half is the case the old
+    read-side filter would have allowed once GATE 1 opened."""
+    cc_pair, file_id = _seed_file_cc_pair(
+        env.admin, "unmanaged", AccessType.PRIVATE, [env.other_group.id]
+    )
+    _expect_file_routes_denied(env, cc_pair, file_id)
+
+
+def test_manager_cannot_manage_files_on_public_connector(env: _ScopedEnv) -> None:
+    """The public-connector bypass reads global effective permissions, so a scoped
+    manager never gets it — they may only act on private resources."""
+    cc_pair, file_id = _seed_file_cc_pair(env.admin, "public", AccessType.PUBLIC, [])
+    _expect_file_routes_denied(env, cc_pair, file_id)
+
+
+def test_plain_member_cannot_upload_connector_files(env: _ScopedEnv) -> None:
+    """allow_scope admits managers, not everyone in the group."""
+    member = UserManager.create(name="file_plain_member")
+    UserGroupManager.add_users(
+        env.managed_group, [member.id], user_performing_action=env.admin
+    )
+
+    assert_response(
+        FileManager.upload_connector_files([("member.txt", b"member file")], member),
+        "POST",
+        f"{_CONNECTOR_PATH}/file/upload",
+        "member",
+        "denied_gate1",
+    )
