@@ -2,6 +2,7 @@ import copy
 import os
 import time
 from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import partial
@@ -447,9 +448,9 @@ class TeamsConnector(
             if not team.id:
                 continue
             for channel in _collect_all_channels_from_team(team=team):
-                site_url = self._channel_library(
-                    _channel_ref(team.id, channel)
-                ).site_url
+                ref = _channel_ref(team.id, channel)
+                with _channel_context(ref, "files folder"):
+                    site_url = self._channel_library(ref).site_url
                 if site_url not in seen:
                     seen.add(site_url)
                     yield site_url
@@ -616,13 +617,15 @@ class TeamsConnector(
                     )
                     continue
 
+                ref = _channel_ref(team.id, channel)
                 # A refused members call raises: a listing without its readers
                 # would let pruning and permission sync act on a partial picture.
-                _, external_access = fetch_channel_readers(
-                    graph_client=self.graph_client,  # ty: ignore[invalid-argument-type]
-                    team_id=team.id,
-                    channel_id=channel.id,
-                )
+                with _channel_context(ref, "members"):
+                    _, external_access = fetch_channel_readers(
+                        graph_client=self.graph_client,  # ty: ignore[invalid-argument-type]
+                        team_id=ref.team_id,
+                        channel_id=ref.id,
+                    )
 
                 messages = fetch_messages(
                     graph_client=self.graph_client,  # ty: ignore[invalid-argument-type]
@@ -671,13 +674,14 @@ class TeamsConnector(
         permission sync use the same ids and readers the indexing walk writes.
         A refused folder or site raises, as a refused members call does: a
         channel missing from this listing would have its documents pruned."""
-        library = self._channel_library(channel)
-        for item in self._channel_files(library, start=None):
-            yield SlimDocument(
-                id=file_document_id(item.id),
-                external_access=self._file_access(library, item),
-                doc_created_at=item.created_datetime,
-            )
+        with _channel_context(channel, "files"):
+            library = self._channel_library(channel)
+            for item in self._channel_files(library, start=None):
+                yield SlimDocument(
+                    id=file_document_id(item.id),
+                    external_access=self._file_access(library, item),
+                    doc_created_at=item.created_datetime,
+                )
 
 
 def _escape_odata_string(name: str) -> str:
@@ -1189,10 +1193,53 @@ def _leave_channel(
     checkpoint.next_messages_url = None
 
 
-def _channel_failure(channel: ChannelRef, error: Exception) -> ConnectorFailure:
+@contextmanager
+def _channel_context(channel: ChannelRef, call: str) -> Iterator[None]:
+    """A refusal in here stops a walk whose partial listing would delete
+    documents, so it becomes an error naming the channel, the call and the way
+    out. A transient refusal passes through and the attempt retries it."""
+    try:
+        yield
+    except (requests.HTTPError, ClientRequestException) as e:
+        if not _is_permanent(e):
+            raise
+        raise ConnectorValidationError(
+            f"{_channel_refusal(channel, call, e)} {_channel_remedy(call, e)}"
+        ) from e
+
+
+def _channel_refusal(
+    channel: ChannelRef, call: str, error: requests.RequestException
+) -> str:
+    """Names the channel and the call, since a channel id alone sends the admin
+    looking through Graph for the team and tab it belongs to."""
+    return (
+        f'The {call} of channel "{channel.display_name}" in team '
+        f"{channel.team_id} answered {_status(error)}."
+    )
+
+
+# The calls whose grant this connector already names to the admin.
+_GRANT_BY_CALL = {
+    "files folder": "Files.Read.All or Sites.Read.All",
+    "files": "Files.Read.All or Sites.Read.All",
+}
+
+
+def _channel_remedy(call: str, error: requests.RequestException) -> str:
+    """404 is a channel that is gone or invisible to the app, 403 is a grant."""
+    if _status(error) == 404:
+        return "Leave the team out of the connector if the channel is gone."
+    grant = _GRANT_BY_CALL.get(call, "the application permission that call needs")
+    return f"Grant {grant}, or leave the team out of the connector."
+
+
+def _channel_failure(
+    channel: ChannelRef, call: str, error: requests.RequestException
+) -> ConnectorFailure:
     return ConnectorFailure(
         failed_entity=EntityFailure(entity_id=channel.id),
-        failure_message=f"Could not read channel {channel.id} of team {channel.team_id}",
+        failure_message=_channel_refusal(channel, call, error),
         exception=error,
     )
 
@@ -1244,7 +1291,7 @@ def _walk_channel_page(
     except requests.HTTPError as e:
         if not _is_permanent(e):
             raise
-        yield _channel_failure(channel, e)
+        yield _channel_failure(channel, "members or files", e)
         _leave_channel(checkpoint, state_cache)
         return
 
@@ -1266,7 +1313,7 @@ def _walk_channel_page(
             return
         if not _is_permanent(e):
             raise
-        yield _channel_failure(channel, e)
+        yield _channel_failure(channel, "messages", e)
         _leave_channel(checkpoint, state_cache)
         return
 
@@ -1313,7 +1360,7 @@ def _walk_channel_page(
         except (requests.HTTPError, ClientRequestException) as e:
             if not _is_permanent(e):
                 raise
-            yield _channel_failure(channel, e)
+            yield _channel_failure(channel, "files", e)
     _leave_channel(checkpoint, state_cache)
 
 

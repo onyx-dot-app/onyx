@@ -387,7 +387,7 @@ def test_channel_site_urls_are_distinct_and_a_refused_channel_fails_the_sync(
     ]
 
     channels.append(refused)
-    with pytest.raises(requests.HTTPError):
+    with pytest.raises(ConnectorValidationError, match='"Refused"'):
         list(connector(client, include_attachments=True).channel_site_urls())
 
 
