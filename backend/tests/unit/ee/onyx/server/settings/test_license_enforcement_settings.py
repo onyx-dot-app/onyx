@@ -1,13 +1,11 @@
 """Tests for license enforcement in settings API."""
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from redis.exceptions import RedisError
 
-from onyx.server.settings.models import ApplicationStatus
-from onyx.server.settings.models import Settings
+from onyx.server.settings.models import ApplicationStatus, Settings
 
 # Fields we assert on across all tests
 _ASSERT_FIELDS = {

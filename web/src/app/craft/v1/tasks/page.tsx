@@ -2,8 +2,9 @@
 
 import { useCallback, useMemo, useState } from "react";
 import useSWR from "swr";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import { SettingsLayouts } from "@opal/layouts";
+import { SettingsLayouts, toast } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import {
   Button,
@@ -14,8 +15,7 @@ import {
 } from "@opal/components";
 import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
-import { toast } from "@/hooks/useToast";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { ConfirmationModalLayout } from "@opal/layouts";
 import {
   SvgClock,
   SvgPlus,
@@ -46,42 +46,45 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
 const tc = createTableColumns<ScheduledTaskListItem>();
+type TasksListTranslate = ReturnType<
+  typeof useTranslations<"craft.tasks.listPage">
+>;
 
 interface RowActionHandlers {
   busyTaskId: string | null;
   onDelete: (task: ScheduledTaskListItem) => void;
 }
 
-function buildColumns(handlers: RowActionHandlers) {
+function buildColumns(handlers: RowActionHandlers, t: TasksListTranslate) {
   return [
     tc.column("name", {
-      header: "Name",
+      header: t("columns.name"),
       weight: 25,
       enableSorting: false,
       cell: (value) => (
-        <Text font="main-ui-body" color="text-05" nowrap>
+        <Text font="main-ui-body" color="text-05" wordWrap="whitespace-nowrap">
           {value}
         </Text>
       ),
     }),
     tc.column("human_readable_schedule", {
-      header: "Schedule",
+      header: t("columns.schedule"),
       weight: 22,
       enableSorting: false,
       cell: (value) => (
-        <Text font="main-ui-body" color="text-03" nowrap>
+        <Text font="main-ui-body" color="text-03" wordWrap="whitespace-nowrap">
           {value}
         </Text>
       ),
     }),
     tc.column("status", {
-      header: "Status",
+      header: t("columns.status"),
       weight: 12,
       enableSorting: false,
       cell: (status) => <TaskStatusBadge status={status} />,
     }),
     tc.column("last_run", {
-      header: "Last run",
+      header: t("columns.lastRun"),
       weight: 18,
       enableSorting: false,
       cell: (lastRun) => {
@@ -103,7 +106,7 @@ function buildColumns(handlers: RowActionHandlers) {
       },
     }),
     tc.column("next_run_at", {
-      header: "Next run",
+      header: t("columns.nextRun"),
       weight: 13,
       enableSorting: false,
       cell: (nextRunAt) => {
@@ -116,7 +119,11 @@ function buildColumns(handlers: RowActionHandlers) {
         }
         return (
           <Tooltip tooltip={formatAbsolute(nextRunAt)} side="top">
-            <Text font="main-ui-body" color="text-03" nowrap>
+            <Text
+              font="main-ui-body"
+              color="text-03"
+              wordWrap="whitespace-nowrap"
+            >
               {formatRelativeShort(nextRunAt)}
             </Text>
           </Tooltip>
@@ -132,6 +139,7 @@ function buildColumns(handlers: RowActionHandlers) {
 }
 
 export default function ScheduledTasksListPage() {
+  const t = useTranslations("craft.tasks.listPage");
   const router = useRouter();
   const { data, error, isLoading, mutate } = useSWR<ScheduledTaskListResponse>(
     SWR_KEYS.scheduledTasks,
@@ -162,23 +170,28 @@ export default function ScheduledTasksListPage() {
     setBusyTaskId(pendingDelete.id);
     try {
       await deleteScheduledTask(pendingDelete.id);
-      toast.success(`Deleted "${pendingDelete.name}".`);
+      toast.success(t("toasts.deleted", { name: pendingDelete.name }));
       setPendingDelete(null);
       refresh();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to delete task");
+      toast.error(
+        err instanceof Error ? err.message : t("toasts.deleteFailed")
+      );
     } finally {
       setBusyTaskId(null);
     }
-  }, [pendingDelete, refresh]);
+  }, [pendingDelete, refresh, t]);
 
   const columns = useMemo(
     () =>
-      buildColumns({
-        busyTaskId,
-        onDelete: (task) => setPendingDelete(task),
-      }),
-    [busyTaskId]
+      buildColumns(
+        {
+          busyTaskId,
+          onDelete: (task) => setPendingDelete(task),
+        },
+        t
+      ),
+    [busyTaskId, t]
   );
 
   const headerActions = useMemo(
@@ -190,18 +203,18 @@ export default function ScheduledTasksListPage() {
         href={NEW_TASK_PATH}
         data-testid="new-task-button"
       >
-        New Scheduled Task
+        {t("newTaskButton")}
       </Button>
     ),
-    []
+    [t]
   );
 
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgClock}
-        title="Scheduled Tasks"
-        description="Run Craft prompts on a timer. Each fire creates a fresh session that runs in the background."
+        title={t("header.title")}
+        description={t("header.description")}
         rightChildren={headerActions}
       />
       <SettingsLayouts.Body>
@@ -210,9 +223,9 @@ export default function ScheduledTasksListPage() {
             <SvgSimpleLoader className="h-6 w-6" />
           </div>
         ) : error ? (
-          <Section gap={0.5}>
+          <Section gap={2}>
             <Text font="main-ui-body" color="text-03">
-              Failed to load scheduled tasks.
+              {t("errors.loadFailed")}
             </Text>
             <Button
               variant="default"
@@ -220,7 +233,7 @@ export default function ScheduledTasksListPage() {
               icon={SvgRefreshCw}
               onClick={refresh}
             >
-              Try again
+              {t("errors.tryAgainButton")}
             </Button>
           </Section>
         ) : (
@@ -236,8 +249,8 @@ export default function ScheduledTasksListPage() {
             emptyState={
               <IllustrationContent
                 illustration={SvgNoResult}
-                title="No scheduled tasks found"
-                description="No scheduled tasks have been created yet."
+                title={t("empty.title")}
+                description={t("empty.description")}
               />
             }
           />
@@ -247,8 +260,8 @@ export default function ScheduledTasksListPage() {
       {pendingDelete && (
         <ConfirmationModalLayout
           icon={SvgTrash}
-          title={`Delete "${pendingDelete.name}"?`}
-          description="This stops future runs and removes the task. Past run history (and the underlying sessions) will be preserved for audit."
+          title={t("confirmDelete.title", { name: pendingDelete.name })}
+          description={t("confirmDelete.description")}
           onClose={() => setPendingDelete(null)}
           submit={
             <Button
@@ -258,7 +271,9 @@ export default function ScheduledTasksListPage() {
               disabled={busyTaskId === pendingDelete.id}
               data-testid="confirm-delete-task"
             >
-              {busyTaskId === pendingDelete.id ? "Deleting..." : "Delete"}
+              {busyTaskId === pendingDelete.id
+                ? t("confirmDelete.deletingButton")
+                : t("confirmDelete.deleteButton")}
             </Button>
           }
         />
@@ -277,10 +292,11 @@ interface TaskRowActionsProps {
 }
 
 function TaskRowActions({ task, handlers }: TaskRowActionsProps) {
+  const t = useTranslations("craft.tasks.listPage");
   const disabled = handlers.busyTaskId === task.id;
   return (
     <div className="flex items-center gap-0.5">
-      <Tooltip tooltip="Delete" side="top">
+      <Tooltip tooltip={t("rowActions.deleteTooltip")} side="top">
         <Button
           icon={SvgTrash}
           variant="danger"

@@ -1,19 +1,24 @@
 "use client";
 
 import React, { RefObject, useState, useCallback, useMemo } from "react";
+import { useTranslations } from "next-intl";
 import { Packet, StreamingCitation } from "@/app/app/services/streamingModels";
 import { FeedbackType, Message } from "@/app/app/interfaces";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { TooltipGroup } from "@/components/tooltip/CustomTooltip";
 import {
   useChatSessionStore,
+  useCurrentMessageTree,
   useDocumentSidebarVisible,
   useSelectedNodeForDocDisplay,
 } from "@/app/app/stores/useChatSessionStore";
+import { messageModelName } from "@/app/app/message/multiModel";
+import { useDistinctModelsUsed } from "@/lib/multiModel/hooks";
 import { convertMarkdownTablesToTsv } from "@/app/app/message/copyingUtils";
 import { getTextContent } from "@/app/app/services/packetUtils";
 import { removeThinkingTokens } from "@/app/app/services/thinkingTokens";
 import MessageSwitcher from "@/app/app/message/MessageSwitcher";
+import { useIncognitoOptional } from "@/providers/IncognitoProvider";
 import SourceTag from "@/refresh-components/buttons/source-tag/SourceTag";
 import { citationsToSourceInfoArray } from "@/refresh-components/buttons/source-tag/sourceTagUtils";
 import { CopyButton, OpenButton, SelectButton } from "@opal/components";
@@ -22,7 +27,7 @@ import { SvgRefreshCw, SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
 import { LlmManager } from "@/lib/hooks";
 import { RegenerationFactory } from "@/app/app/message/messageComponents/AgentMessage";
 import useFeedbackController from "@/hooks/useFeedbackController";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { useCreateModal } from "@opal/components";
 import FeedbackModal, {
   FeedbackModalProps,
 } from "@/sections/modals/FeedbackModal";
@@ -30,6 +35,7 @@ import TTSButton from "@/app/app/message/messageComponents/TTSButton";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { useVoiceStatus } from "@/hooks/useVoiceStatus";
 import { findModelConfigId } from "@/lib/languageModels/options";
+import { getModelIcon } from "@/lib/languageModels";
 
 interface SouurcesTagWrapperProps {
   citations: StreamingCitation[];
@@ -51,6 +57,7 @@ const SourcesTagWrapper = React.memo(function SourcesTagWrapper({
   updateCurrentDocumentSidebarVisible,
   updateCurrentSelectedNodeForDocDisplay,
 }: SouurcesTagWrapperProps) {
+  const t = useTranslations("chat.messages");
   // Convert citations to SourceInfo array
   const sources = useMemo(
     () => citationsToSourceInfoArray(citations, documentMap),
@@ -79,7 +86,7 @@ const SourcesTagWrapper = React.memo(function SourcesTagWrapper({
   return (
     <SourceTag
       variant="button"
-      displayName="Sources"
+      displayName={t("toolbar.sourcesTag.label")}
       sources={sources}
       onSourceClick={handleSourceClick}
       toggleSource
@@ -112,6 +119,9 @@ export interface MessageToolbarProps {
   parentMessage?: Message | null;
   llmManager: LlmManager | null;
   currentModelName?: string;
+  /** Provider slug for `currentModelName`, used to resolve the model icon in
+   * the read-only footer chip shown when there's no `llmManager`. */
+  currentModelProvider?: string;
 
   // Citations
   citations: StreamingCitation[];
@@ -134,9 +144,29 @@ export default function MessageToolbar({
   parentMessage,
   llmManager,
   currentModelName,
+  currentModelProvider,
   citations,
   documentMap,
 }: MessageToolbarProps) {
+  const t = useTranslations("chat.messages");
+  // The message's own model. chatState carries the globally selected model,
+  // so per-response attribution must come from the message node itself.
+  const messageTree = useCurrentMessageTree();
+  const ownModelName = useMemo(() => {
+    const msg = messageTree?.get(nodeId);
+    return msg ? (messageModelName(msg) ?? undefined) : undefined;
+  }, [messageTree, nodeId]);
+  const distinctModelsUsed = useDistinctModelsUsed();
+
+  // Incognito responses take no feedback: votes would persist reviewable
+  // signal tied to a chat hidden from the owner's surfaces. The session's
+  // pinned flag keeps suppression on while exit clears the live toggle.
+  const sessionIncognito = useChatSessionStore(
+    (state) =>
+      state.sessions.get(state.currentSessionId || "")?.incognito ?? false
+  );
+  const incognitoEnabled =
+    (useIncognitoOptional()?.incognitoEnabled ?? false) || sessionIncognito;
   // Document sidebar state - managed internally to reduce prop drilling
   const documentSidebarVisible = useDocumentSidebarVisible();
   const selectedMessageForDocDisplay = useSelectedNodeForDocDisplay();
@@ -228,7 +258,7 @@ export default function MessageToolbar({
 
       <div
         data-testid="AgentMessage/toolbar"
-        className="flex md:flex-row justify-between items-center w-full transition-transform duration-300 ease-in-out transform opacity-100 pl-1"
+        className="flex justify-between items-center w-full transition-transform duration-300 ease-in-out transform opacity-100 ps-1"
       >
         <TooltipGroup>
           <div className="flex items-center">
@@ -262,28 +292,34 @@ export default function MessageToolbar({
               getHtmlContent={() => finalAnswerRef.current?.innerHTML || ""}
               data-testid="AgentMessage/copy-button"
             />
-            <SelectButton
-              icon={SvgThumbsUp}
-              onClick={() => handleFeedbackClick("like")}
-              variant="select-light"
-              state={isFeedbackTransient("like") ? "selected" : "empty"}
-              tooltip={
-                currentFeedback === "like" ? "Remove Like" : "Good Response"
-              }
-              data-testid="AgentMessage/like-button"
-            />
-            <SelectButton
-              icon={SvgThumbsDown}
-              onClick={() => handleFeedbackClick("dislike")}
-              variant="select-light"
-              state={isFeedbackTransient("dislike") ? "selected" : "empty"}
-              tooltip={
-                currentFeedback === "dislike"
-                  ? "Remove Dislike"
-                  : "Bad Response"
-              }
-              data-testid="AgentMessage/dislike-button"
-            />
+            {!incognitoEnabled && (
+              <>
+                <SelectButton
+                  icon={SvgThumbsUp}
+                  onClick={() => handleFeedbackClick("like")}
+                  variant="select-light"
+                  state={isFeedbackTransient("like") ? "selected" : "empty"}
+                  tooltip={
+                    currentFeedback === "like"
+                      ? t("toolbar.likeButton.removeTooltip")
+                      : t("toolbar.likeButton.tooltip")
+                  }
+                  data-testid="AgentMessage/like-button"
+                />
+                <SelectButton
+                  icon={SvgThumbsDown}
+                  onClick={() => handleFeedbackClick("dislike")}
+                  variant="select-light"
+                  state={isFeedbackTransient("dislike") ? "selected" : "empty"}
+                  tooltip={
+                    currentFeedback === "dislike"
+                      ? t("toolbar.dislikeButton.removeTooltip")
+                      : t("toolbar.dislikeButton.tooltip")
+                  }
+                  data-testid="AgentMessage/dislike-button"
+                />
+              </>
+            )}
             {ttsEnabled && (
               <TTSButton
                 text={
@@ -292,26 +328,64 @@ export default function MessageToolbar({
               />
             )}
 
+            {/* Read-only model label for the shared view: no llmManager to
+                power the interactive selector, so surface which model answered. */}
+            {!llmManager && currentModelName && (
+              <OpenButton
+                disabled
+                icon={getModelIcon(
+                  currentModelProvider ?? "",
+                  currentModelName
+                )}
+              >
+                {currentModelName}
+              </OpenButton>
+            )}
+
             {onRegenerate &&
               messageId !== undefined &&
               parentMessage &&
               llmManager && (
                 <div data-testid="AgentMessage/regenerate">
                   <ModelSelector
-                    value={findModelConfigId(
-                      llmManager.llmProviders,
-                      llmManager.currentLlm.provider,
-                      currentModelName ?? llmManager.currentLlm.modelName
-                    )}
+                    providerOptions={llmManager.llmProviders}
+                    value={
+                      // The response's model may live under a different
+                      // provider than the global selection, so resolve it
+                      // across all providers, by raw or display name.
+                      ownModelName
+                        ? (llmManager.llmProviders
+                            ?.flatMap((p) => p.model_configurations)
+                            .find(
+                              (m) =>
+                                m.name === ownModelName ||
+                                m.effectiveDisplayName === ownModelName
+                            )?.id ?? null)
+                        : findModelConfigId(
+                            llmManager.llmProviders,
+                            llmManager.currentLlm.provider,
+                            currentModelName ?? llmManager.currentLlm.modelName
+                          )
+                    }
                     renderTrigger={() => {
                       const rawName =
-                        currentModelName ?? llmManager!.currentLlm.modelName;
+                        ownModelName ??
+                        currentModelName ??
+                        llmManager!.currentLlm.modelName;
                       const mc = llmManager!.llmProviders
                         ?.flatMap((p) => p.model_configurations)
-                        .find((m) => m.name === rawName);
+                        .find(
+                          (m) =>
+                            m.name === rawName ||
+                            m.effectiveDisplayName === rawName
+                        );
                       const displayName = mc?.effectiveDisplayName ?? rawName;
                       return (
-                        <OpenButton icon={SvgRefreshCw} foldable>
+                        <OpenButton
+                          icon={SvgRefreshCw}
+                          tooltip={t("toolbar.regenerateButton.tooltip")}
+                          foldable={distinctModelsUsed <= 1}
+                        >
                           {displayName}
                         </OpenButton>
                       );
@@ -328,6 +402,7 @@ export default function MessageToolbar({
                       });
                     }}
                     temperatureManager={llmManager}
+                    reasoningManager={llmManager}
                   />
                 </div>
               )}

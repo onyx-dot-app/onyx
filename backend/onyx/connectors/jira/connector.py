@@ -1,13 +1,8 @@
 import copy
 import json
 import os
-from collections.abc import Callable
-from collections.abc import Generator
-from collections.abc import Iterable
-from collections.abc import Iterator
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from collections.abc import Callable, Generator, Iterable, Iterator
+from datetime import datetime, timedelta
 from typing import Any
 
 import requests
@@ -17,41 +12,51 @@ from jira.resources import Issue
 from more_itertools import chunked
 from typing_extensions import override
 
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.app_configs import JIRA_CONNECTOR_LABELS_TO_SKIP
-from onyx.configs.app_configs import JIRA_CONNECTOR_MAX_TICKET_SIZE
-from onyx.configs.app_configs import JIRA_SLIM_PAGE_SIZE
+from onyx.configs.app_configs import (
+    INDEX_BATCH_SIZE,
+    JIRA_CONNECTOR_LABELS_TO_SKIP,
+    JIRA_CONNECTOR_MAX_TICKET_SIZE,
+    JIRA_SLIM_PAGE_SIZE,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     is_atlassian_date_error,
+    time_str_to_utc,
 )
-from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
-from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnector
-from onyx.connectors.interfaces import SlimConnectorWithPermSync
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
+from onyx.connectors.interfaces import (
+    CheckpointedConnectorWithPermSync,
+    CheckpointOutput,
+    GenerateSlimDocumentOutput,
+    SecondsSinceUnixEpoch,
+    SlimConnector,
+    SlimConnectorWithPermSync,
+)
 from onyx.connectors.jira.access import get_project_permissions
-from onyx.connectors.jira.utils import best_effort_basic_expert_info
-from onyx.connectors.jira.utils import best_effort_get_field_from_issue
-from onyx.connectors.jira.utils import build_jira_client
-from onyx.connectors.jira.utils import build_jira_url
-from onyx.connectors.jira.utils import extract_text_from_adf
-from onyx.connectors.jira.utils import get_comment_strs
-from onyx.connectors.jira.utils import JIRA_CLOUD_API_VERSION
-from onyx.connectors.models import ConnectorCheckpoint
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import SlimDocument
-from onyx.connectors.models import TextSection
+from onyx.connectors.jira.utils import (
+    JIRA_CLOUD_API_VERSION,
+    best_effort_basic_expert_info,
+    best_effort_get_field_from_issue,
+    build_jira_client,
+    build_jira_url,
+    extract_text_from_adf,
+    get_comment_strs,
+)
+from onyx.connectors.models import (
+    ConnectorCheckpoint,
+    ConnectorFailure,
+    ConnectorMissingCredentialError,
+    Document,
+    DocumentFailure,
+    HierarchyNode,
+    SlimDocument,
+    TextSection,
+)
 from onyx.db.enums import HierarchyNodeType
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
@@ -175,7 +180,7 @@ def _handle_jira_search_error(e: Exception, jql: str) -> None:
     # Try to get status code and error text from JIRAError or requests response
     if hasattr(e, "status_code"):
         status_code = e.status_code
-        raw_text = getattr(e, "text", "")
+        raw_text = getattr(e, "text", "")  # ods: ignore[getattr]
         if isinstance(raw_text, str):
             try:
                 error_text = _format_error_text(json.loads(raw_text))
@@ -432,22 +437,18 @@ def process_jira_issue(
     if creator is not None and (
         basic_expert_info := best_effort_basic_expert_info(creator)
     ):
-        people.add(basic_expert_info)  # ty: ignore[possibly-unresolved-reference]
-        metadata_dict[_FIELD_REPORTER] = basic_expert_info.get_semantic_name()  # ty: ignore[possibly-unresolved-reference]
-        if (
-            email := basic_expert_info.get_email()  # ty: ignore[possibly-unresolved-reference]
-        ):
+        people.add(basic_expert_info)
+        metadata_dict[_FIELD_REPORTER] = basic_expert_info.get_semantic_name()
+        if email := basic_expert_info.get_email():
             metadata_dict[_FIELD_REPORTER_EMAIL] = email
 
     assignee = best_effort_get_field_from_issue(issue, _FIELD_ASSIGNEE)
     if assignee is not None and (
         basic_expert_info := best_effort_basic_expert_info(assignee)
     ):
-        people.add(basic_expert_info)  # ty: ignore[possibly-unresolved-reference]
-        metadata_dict[_FIELD_ASSIGNEE] = basic_expert_info.get_semantic_name()  # ty: ignore[possibly-unresolved-reference]
-        if (
-            email := basic_expert_info.get_email()  # ty: ignore[possibly-unresolved-reference]
-        ):
+        people.add(basic_expert_info)
+        metadata_dict[_FIELD_ASSIGNEE] = basic_expert_info.get_semantic_name()
+        if email := basic_expert_info.get_email():
             metadata_dict[_FIELD_ASSIGNEE_EMAIL] = email
 
     metadata_dict[_FIELD_KEY] = issue.key
@@ -490,6 +491,8 @@ def process_jira_issue(
         semantic_identifier=f"{issue.key}: {issue.fields.summary}",
         title=f"{issue.key} {issue.fields.summary}",
         doc_updated_at=time_str_to_utc(issue.fields.updated),
+        # NOTE: doc_created_at population not yet verified against live data
+        doc_created_at=time_str_to_utc(issue.fields.created),
         primary_owners=list(people) or None,
         metadata=metadata_dict,
         parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
@@ -597,7 +600,7 @@ class JiraConnector(
         than a full Issue, so we handle it separately.
         """
         parent_issuetype = (
-            getattr(parent.fields, "issuetype", None)
+            getattr(parent.fields, "issuetype", None)  # ods: ignore[getattr]
             if hasattr(parent, "fields")
             else None
         )
@@ -665,7 +668,7 @@ class JiraConnector(
 
         # Get summary if available
         parent_summary = (
-            getattr(parent.fields, "summary", None)
+            getattr(parent.fields, "summary", None)  # ods: ignore[getattr]
             if hasattr(parent, "fields")
             else None
         )
@@ -711,19 +714,13 @@ class JiraConnector(
     def _get_jql_query(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> str:
-        """Get the JQL query based on configuration and time range
+        """JQL for the configured project/query plus the poll window.
 
-        If a custom JQL query is provided, it will be used and combined with time constraints.
-        Otherwise, the query will be constructed based on project key (if provided).
+        Unquoted epoch-ms so Jira does not reinterpret naive datetimes in the
+        API user's profile timezone.
+        https://support.atlassian.com/jira-software-cloud/docs/jql-fields/#Updated
         """
-        start_date_str = datetime.fromtimestamp(start, tz=timezone.utc).strftime(
-            "%Y-%m-%d %H:%M"
-        )
-        end_date_str = datetime.fromtimestamp(end, tz=timezone.utc).strftime(
-            "%Y-%m-%d %H:%M"
-        )
-
-        time_jql = f"updated >= '{start_date_str}' AND updated <= '{end_date_str}'"
+        time_jql = f"updated >= {int(start * 1000)} AND updated <= {int(end * 1000)}"
 
         # If custom JQL query is provided, use it and combine with time constraints
         if self.jql_query:
@@ -952,29 +949,34 @@ class JiraConnector(
 
                 # Yield hierarchy nodes BEFORE the slim document (parent-before-child)
                 # 1. Yield project hierarchy node (if not already yielded)
-                for node in self._yield_project_hierarchy_node(
-                    project_key, project_name, seen_hierarchy_node_ids
-                ):
-                    slim_doc_batch.append(node)
+                slim_doc_batch.extend(
+                    self._yield_project_hierarchy_node(
+                        project_key, project_name, seen_hierarchy_node_ids
+                    )
+                )
 
                 # 2. If parent is an Epic, yield hierarchy node for it
                 parent = best_effort_get_field_from_issue(issue, _FIELD_PARENT)
                 if parent:
-                    for node in self._yield_parent_hierarchy_node_if_epic(
-                        parent, project_key, seen_hierarchy_node_ids
-                    ):
-                        slim_doc_batch.append(node)
+                    slim_doc_batch.extend(
+                        self._yield_parent_hierarchy_node_if_epic(
+                            parent, project_key, seen_hierarchy_node_ids
+                        )
+                    )
 
                 # 3. If this issue IS an Epic, yield it as hierarchy node
                 if self._is_epic(issue):
-                    for node in self._yield_epic_hierarchy_node(
-                        issue, project_key, seen_hierarchy_node_ids
-                    ):
-                        slim_doc_batch.append(node)
+                    slim_doc_batch.extend(
+                        self._yield_epic_hierarchy_node(
+                            issue, project_key, seen_hierarchy_node_ids
+                        )
+                    )
 
                 # Now add the slim document
                 issue_key = best_effort_get_field_from_issue(issue, _FIELD_KEY)
                 doc_id = build_jira_url(self.jira_base, issue_key)
+
+                created = best_effort_get_field_from_issue(issue, _FIELD_CREATED)
 
                 slim_doc_batch.append(
                     SlimDocument(
@@ -990,6 +992,8 @@ class JiraConnector(
                             if project_key
                             else None
                         ),
+                        # NOTE: doc_created_at population not yet verified against live data
+                        doc_created_at=time_str_to_utc(created) if created else None,
                     )
                 )
                 current_offset += 1
@@ -1057,7 +1061,7 @@ class JiraConnector(
             InsufficientPermissionsError: If the status code is 403
             ConnectorValidationError: For other HTTP errors with extracted error messages
         """
-        status_code = getattr(e, "status_code", None)
+        status_code = getattr(e, "status_code", None)  # ods: ignore[getattr]
         logger.error("Jira API error during validation: %s", e)
 
         # Handle specific status codes with appropriate exceptions
@@ -1075,7 +1079,7 @@ class JiraConnector(
             )
 
         # Try to extract original error message from the response
-        error_message = getattr(e, "text", None)
+        error_message = getattr(e, "text", None)  # ods: ignore[getattr]
         if error_message is None:
             raise UnexpectedValidationError(
                 f"Unexpected Jira error during validation: {e}"

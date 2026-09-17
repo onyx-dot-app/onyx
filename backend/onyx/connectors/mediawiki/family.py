@@ -6,11 +6,9 @@ import itertools
 import tempfile
 from typing import Any
 from unittest import mock
-from urllib.parse import urlparse
-from urllib.parse import urlunparse
+from urllib.parse import urlparse, urlunparse
 
-from pywikibot import family
-from pywikibot import pagegenerators
+from pywikibot import family, pagegenerators
 from pywikibot.scripts import generate_family_file
 from pywikibot.scripts.generate_user_files import pywikibot
 

@@ -1,10 +1,4 @@
-/**
- * Page Object Model for the agent editor (/app/agents/create).
- *
- * Encapsulates the MCP-related parts of agent creation: filling the basics and
- * enabling an MCP server + its tools. Most specs create agents via the API
- * client; this POM is for the tests that specifically exercise the editor UI.
- */
+/** Page Object Model for creating and editing agents. */
 
 import { type Page, type Locator, expect } from "@playwright/test";
 
@@ -14,6 +8,8 @@ export class AgentEditorPage {
   readonly instructionsInput: Locator;
   readonly descriptionInput: Locator;
   readonly createButton: Locator;
+  readonly defaultModelTrigger: Locator;
+  readonly defaultModelDialog: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -21,6 +17,8 @@ export class AgentEditorPage {
     this.instructionsInput = page.locator('textarea[name="instructions"]');
     this.descriptionInput = page.locator('textarea[name="description"]');
     this.createButton = page.getByRole("button", { name: "Create" });
+    this.defaultModelTrigger = page.getByTestId("llm-popover-trigger").first();
+    this.defaultModelDialog = page.getByRole("dialog").first();
   }
 
   // ---------------------------------------------------------------------------
@@ -30,6 +28,17 @@ export class AgentEditorPage {
   async goto(): Promise<void> {
     await this.page.goto("/app/agents/create");
     await this.page.waitForURL("**/app/agents/create**");
+    await expect(this.nameInput).toBeVisible();
+  }
+
+  async gotoEdit(agentId: number): Promise<void> {
+    const providerResponse = this.page.waitForResponse(
+      (response) =>
+        response.url().includes(`/api/llm/persona/${agentId}/providers`) &&
+        response.ok()
+    );
+    await this.page.goto(`/app/agents/edit/${agentId}`);
+    await providerResponse;
     await expect(this.nameInput).toBeVisible();
   }
 
@@ -58,6 +67,25 @@ export class AgentEditorPage {
     if (details.instructions) {
       await this.instructionsInput.fill(details.instructions);
     }
+  }
+
+  async expectDefaultModelOptions(expected: {
+    visible: Array<string | RegExp>;
+    hidden?: Array<string | RegExp>;
+  }): Promise<void> {
+    await this.page.getByText("Default Model").first().scrollIntoViewIfNeeded();
+    await this.defaultModelTrigger.click();
+    await expect(this.defaultModelDialog).toBeVisible();
+
+    for (const option of expected.visible) {
+      await expect(this.defaultModelDialog).toContainText(option);
+    }
+    for (const option of expected.hidden ?? []) {
+      await expect(this.defaultModelDialog).not.toContainText(option);
+    }
+
+    await this.page.keyboard.press("Escape");
+    await expect(this.defaultModelDialog).toBeHidden();
   }
 
   mcpServerSwitch(serverId: number): Locator {

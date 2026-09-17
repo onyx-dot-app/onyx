@@ -24,8 +24,7 @@ import pytest
 
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.litellm_singleton import litellm
-from onyx.llm.models import ChatCompletionMessage
-from onyx.llm.models import UserMessage
+from onyx.llm.models import ChatCompletionMessage, UserMessage
 from onyx.llm.multi_llm import LitellmLLM
 from tests.utils.secret_names import TestSecret
 

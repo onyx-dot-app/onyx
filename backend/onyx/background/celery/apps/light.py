@@ -1,26 +1,25 @@
 from typing import Any
 
-from celery import Celery
-from celery import signals
-from celery import Task
+from celery import Celery, Task, signals
 from celery.apps.worker import Worker
-from celery.signals import celeryd_init
-from celery.signals import worker_init
-from celery.signals import worker_ready
-from celery.signals import worker_shutdown
+from celery.signals import celeryd_init, worker_init, worker_ready, worker_shutdown
 
 import onyx.background.celery.apps.app_base as app_base
 from onyx.background.celery.celery_utils import httpx_init_vespa_pool
-from onyx.configs.app_configs import MANAGED_VESPA
-from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
-from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
+from onyx.configs.app_configs import (
+    MANAGED_VESPA,
+    VESPA_CLOUD_CERT_PATH,
+    VESPA_CLOUD_KEY_PATH,
+)
 from onyx.configs.constants import POSTGRES_CELERY_WORKER_LIGHT_APP_NAME
 from onyx.db.engine.sql_engine import SqlEngine
-from onyx.server.metrics.celery_task_metrics import on_celery_task_postrun
-from onyx.server.metrics.celery_task_metrics import on_celery_task_prerun
-from onyx.server.metrics.celery_task_metrics import on_celery_task_rejected
-from onyx.server.metrics.celery_task_metrics import on_celery_task_retry
-from onyx.server.metrics.celery_task_metrics import on_celery_task_revoked
+from onyx.server.metrics.celery_task_metrics import (
+    on_celery_task_postrun,
+    on_celery_task_prerun,
+    on_celery_task_rejected,
+    on_celery_task_retry,
+    on_celery_task_revoked,
+)
 from onyx.server.metrics.metrics_server import start_metrics_server
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -62,14 +61,19 @@ def on_task_postrun(
 
 @signals.task_retry.connect
 def on_task_retry(sender: Any | None = None, **kwargs: Any) -> None:  # noqa: ARG001
-    task_id = getattr(getattr(sender, "request", None), "id", None)
+    task_id = getattr(  # ods: ignore[getattr]
+        getattr(sender, "request", None),  # ods: ignore[getattr]
+        "id",
+        None,
+    )
     on_celery_task_retry(task_id, sender)
 
 
 @signals.task_revoked.connect
 def on_task_revoked(sender: Any | None = None, **kwargs: Any) -> None:
-    task_name = getattr(sender, "name", None) or str(sender)
+    task_name = getattr(sender, "name", None) or str(sender)  # ods: ignore[getattr]
     on_celery_task_revoked(kwargs.get("task_id"), task_name)
+    app_base.on_task_revoked(**kwargs)
 
 
 @signals.task_rejected.connect
@@ -77,7 +81,7 @@ def on_task_rejected(sender: Any | None = None, **kwargs: Any) -> None:  # noqa:
     message = kwargs.get("message")
     task_name: str | None = None
     if message is not None:
-        headers = getattr(message, "headers", None) or {}
+        headers = getattr(message, "headers", None) or {}  # ods: ignore[getattr]
         task_name = headers.get("task")
     if task_name is None:
         task_name = "unknown"
@@ -156,11 +160,10 @@ celery_app.autodiscover_tasks(
             "onyx.background.celery.tasks.shared",
             "onyx.background.celery.tasks.vespa",
             "onyx.background.celery.tasks.connector_deletion",
+            "onyx.background.celery.tasks.index_reclaim",
             "onyx.background.celery.tasks.doc_permission_syncing",
             "onyx.background.celery.tasks.docprocessing",
             "onyx.background.celery.tasks.opensearch_migration",
-            # Sandbox cleanup tasks (build feature)
-            "onyx.background.celery.tasks.build",
         ]
     )
 )

@@ -1,8 +1,9 @@
 "use client";
 
 import { useRef, type ReactNode } from "react";
+import { useTranslations } from "next-intl";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { cn } from "@opal/utils";
+import { cn, clickOnKeyDown } from "@opal/utils";
 import { Button, Text, Tooltip } from "@opal/components";
 import {
   SvgAlertCircle,
@@ -18,8 +19,8 @@ import {
   type BuildFile,
   UploadFileStatus,
 } from "@/app/craft/contexts/UploadFilesContext";
-import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
-import type { PickerEntry } from "@/lib/skills/picker";
+import { pickerEntryIcon } from "@/lib/skills/pickerIcons";
+import { pickerEntryKey, type PickerEntry } from "@/lib/skills/picker";
 
 interface InputChipProps {
   icon: ReactNode;
@@ -36,23 +37,24 @@ function InputChip({
   onRemove,
   onClick,
 }: InputChipProps) {
+  const t = useTranslations("chat.input");
   const chipRef = useRef<HTMLDivElement>(null);
 
-  return (
-    <div
-      ref={chipRef}
-      className={cn(
-        "flex items-center gap-1 px-1 py-px rounded-08 border",
-        colorClassName,
-        onClick && "cursor-pointer"
-      )}
-      onClick={() => {
-        if (chipRef.current) onClick?.(chipRef.current);
-      }}
-    >
+  const chipClassName = cn(
+    "flex items-center gap-1 px-1 py-px rounded-08 border",
+    colorClassName,
+    onClick && "cursor-pointer"
+  );
+
+  const chipBody = (
+    <>
       {icon}
       <span className="max-w-[120px] truncate">
-        <Text font="secondary-body" color="inherit" nowrap>
+        <Text
+          font="secondary-body"
+          color="inherit"
+          wordWrap="whitespace-nowrap"
+        >
           {label}
         </Text>
       </span>
@@ -65,8 +67,36 @@ function InputChip({
           e.stopPropagation();
           onRemove();
         }}
-        aria-label={`Remove ${label}`}
+        aria-label={t("inputChip.removeButton.ariaLabel", { label })}
       />
+    </>
+  );
+
+  if (!onClick) {
+    return (
+      <div ref={chipRef} className={chipClassName}>
+        {chipBody}
+      </div>
+    );
+  }
+
+  return (
+    // The chip holds its own remove button, so it stays a div with button
+    // semantics rather than a <button> wrapping a <button>.
+    <div
+      ref={chipRef}
+      className={chipClassName}
+      role="button"
+      tabIndex={0}
+      aria-label={label}
+      onKeyDown={clickOnKeyDown(() => {
+        if (chipRef.current) onClick(chipRef.current);
+      })}
+      onClick={() => {
+        if (chipRef.current) onClick(chipRef.current);
+      }}
+    >
+      {chipBody}
     </div>
   );
 }
@@ -78,6 +108,7 @@ function BuildFileCard({
   file: BuildFile;
   onRemove: (id: string) => void;
 }) {
+  const t = useTranslations("chat.input");
   const isImage = isImageFile(file.name);
   const isUploading = file.status === UploadFileStatus.UPLOADING;
   const isPending = file.status === UploadFileStatus.PENDING;
@@ -116,7 +147,7 @@ function BuildFileCard({
   }
   if (isPending) {
     return (
-      <Tooltip tooltip="Waiting for session to be ready..." side="top">
+      <Tooltip tooltip={t("buildFileCard.pending.tooltip")} side="top">
         {chip}
       </Tooltip>
     );
@@ -131,8 +162,7 @@ interface EntryChipProps {
 }
 
 function EntryChip({ entry, onRemove, onClick }: EntryChipProps) {
-  const Logo = entry.kind === "app" ? getAppTypeLogo(entry.appType) : null;
-  const Icon = Logo ?? SvgSparkle;
+  const Icon = pickerEntryIcon(entry);
 
   return (
     <InputChip
@@ -149,7 +179,7 @@ export interface InputChipStripProps {
   files: BuildFile[];
   entries: PickerEntry[];
   onRemoveFile: (id: string) => void;
-  onRemoveEntry: (slug: string) => void;
+  onRemoveEntry: (entryKey: string) => void;
   onClickEntry?: (entry: PickerEntry, chipEl: HTMLElement) => void;
 }
 
@@ -179,8 +209,11 @@ export function InputChipStrip({
       {hasContent && (
         <motion.div
           key="chip-strip"
+          // oxlint-disable-next-line react-doctor/no-layout-property-animation -- height 0/auto must reflow the input bar, transform cannot
           initial={{ height: 0, opacity: 0 }}
+          // oxlint-disable-next-line react-doctor/no-layout-property-animation -- height 0/auto must reflow the input bar, transform cannot
           animate={{ height: "auto", opacity: 1 }}
+          // oxlint-disable-next-line react-doctor/no-layout-property-animation -- height 0/auto must reflow the input bar, transform cannot
           exit={{ height: 0, opacity: 0 }}
           transition={stripTransition}
           style={{ overflow: "hidden" }}
@@ -189,7 +222,7 @@ export function InputChipStrip({
             <AnimatePresence initial={false} mode="popLayout">
               {entries.map((entry) => (
                 <motion.div
-                  key={`entry-${entry.slug}`}
+                  key={pickerEntryKey(entry)}
                   layout
                   initial={{ opacity: 0, scale: 0.85 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -198,7 +231,7 @@ export function InputChipStrip({
                 >
                   <EntryChip
                     entry={entry}
-                    onRemove={() => onRemoveEntry(entry.slug)}
+                    onRemove={() => onRemoveEntry(pickerEntryKey(entry))}
                     onClick={
                       onClickEntry ? (el) => onClickEntry(entry, el) : undefined
                     }

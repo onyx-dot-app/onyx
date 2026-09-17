@@ -1,6 +1,6 @@
 """Unit tests for `OnyxPatResolver`.
 
-Coverage: the host claim rule (incl. inert when `SANDBOX_API_SERVER_URL` is
+Coverage: the host claim rule (incl. inert when `ONYX_SERVER_URL` is
 unset), header rendering on both auth headers, and the fail-closed cases the
 dispatcher maps to a 403. The encrypt/store/read round-trip against a real DB
 is pinned in `tests/external_dependency_unit/sandbox_proxy/test_onyx_pat_resolver.py`.
@@ -15,14 +15,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from onyx.auth.constants import API_KEY_HEADER_ALTERNATIVE_NAME
-from onyx.auth.constants import API_KEY_HEADER_NAME
-from onyx.sandbox_proxy.credential_injection import CredentialUnavailableError
-from onyx.sandbox_proxy.credential_injection import InjectionContext
+from onyx.auth.constants import API_KEY_HEADER_ALTERNATIVE_NAME, API_KEY_HEADER_NAME
+from onyx.sandbox_proxy.credential_injection import (
+    CredentialUnavailableError,
+    InjectionContext,
+)
 from onyx.sandbox_proxy.resolvers import onyx_pat
 from onyx.sandbox_proxy.resolvers.onyx_pat import OnyxPatResolver
-from tests.unit.sandbox_proxy.conftest import make_flow
-from tests.unit.sandbox_proxy.conftest import make_resolved_sandbox
+from tests.unit.sandbox_proxy.conftest import make_flow, make_resolved_sandbox
 
 _API_URL = "https://api.onyx.example.com"
 _API_HOST = "api.onyx.example.com"
@@ -70,7 +70,7 @@ def _ctx() -> InjectionContext:
 @pytest.fixture
 def resolver(monkeypatch: pytest.MonkeyPatch) -> OnyxPatResolver:
     # __init__ captures the API host, so the patch must precede construction.
-    monkeypatch.setattr(onyx_pat, "SANDBOX_API_SERVER_URL", _API_URL)
+    monkeypatch.setattr(onyx_pat, "ONYX_SERVER_URL", _API_URL)
     return OnyxPatResolver()
 
 
@@ -91,7 +91,7 @@ def test_claims_requires_matching_host_and_port(resolver: OnyxPatResolver) -> No
 
 
 def test_claims_matches_explicit_port(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(onyx_pat, "SANDBOX_API_SERVER_URL", "http://internal:8080")
+    monkeypatch.setattr(onyx_pat, "ONYX_SERVER_URL", "http://internal:8080")
     resolver = OnyxPatResolver()
     assert (
         resolver.claims(make_flow(host="internal", port=8080).request, _ctx()) is True
@@ -102,7 +102,7 @@ def test_claims_matches_explicit_port(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_inert_when_api_url_unset(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(onyx_pat, "SANDBOX_API_SERVER_URL", "")
+    monkeypatch.setattr(onyx_pat, "ONYX_SERVER_URL", "")
     assert (
         OnyxPatResolver().claims(make_flow(host=_API_HOST, port=443).request, _ctx())
         is False

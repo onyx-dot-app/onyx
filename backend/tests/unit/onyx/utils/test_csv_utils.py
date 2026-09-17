@@ -1,8 +1,10 @@
 import pytest
 
-from onyx.utils.csv_utils import sanitize_csv_cell
-from onyx.utils.csv_utils import sanitize_csv_cell_or_none
-from onyx.utils.csv_utils import sanitize_csv_row
+from onyx.utils.csv_utils import (
+    sanitize_csv_cell,
+    sanitize_csv_cell_or_none,
+    sanitize_csv_row,
+)
 
 
 @pytest.mark.parametrize(

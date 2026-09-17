@@ -2,7 +2,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "onyx.fullname" . }}-celery-worker-docfetching
+  name: {{ include "onyx.resourceName" (list . "celery-worker-docfetching") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     {{- with .Values.celery_worker_docfetching.deploymentLabels }}
@@ -34,6 +34,8 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
+      # Grace for the watchdog to interrupt its in-flight attempt before SIGKILL.
+      terminationGracePeriodSeconds: {{ .Values.celery_worker_docfetching.terminationGracePeriodSeconds }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}

@@ -1,13 +1,12 @@
 import os
 from collections.abc import Generator
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
 import pytest
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.microsoft_utils.graph_auth import MicrosoftAuthMethod
 from onyx.connectors.models import InputType
-from onyx.connectors.sharepoint.connector import SharepointAuthMethod
 from onyx.db.enums import AccessType
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.connector import ConnectorManager
@@ -15,10 +14,12 @@ from tests.integration.common_utils.managers.credential import CredentialManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.reset import reset_all
-from tests.integration.common_utils.test_models import DATestCCPair
-from tests.integration.common_utils.test_models import DATestConnector
-from tests.integration.common_utils.test_models import DATestCredential
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import (
+    DATestCCPair,
+    DATestConnector,
+    DATestCredential,
+    DATestUser,
+)
 
 SharepointTestEnvSetupTuple = tuple[
     DATestUser,  # admin_user
@@ -51,7 +52,7 @@ def sharepoint_test_env_setup() -> Generator[SharepointTestEnvSetupTuple]:
 
     # Certificate-based credentials
     credentials = {
-        "authentication_method": SharepointAuthMethod.CERTIFICATE.value,
+        "authentication_method": MicrosoftAuthMethod.CERTIFICATE.value,
         "sp_client_id": sp_client_id,
         "sp_private_key": sp_private_key,
         "sp_certificate_password": sp_certificate_password,

@@ -16,7 +16,7 @@
  * - PasswordInputTypeInField
  */
 
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { Formik, Form } from "formik";
 import React from "react";
 
@@ -74,7 +74,7 @@ type Story = StoryObj;
 // CheckboxField (unlabeled)
 // ---------------------------------------------------------------------------
 
-export const Checkbox: Story = {
+export const InputCheckbox: Story = {
   name: "CheckboxField (unlabeled)",
   render: () => (
     <FormikWrapper initialValues={{ agree: false }}>

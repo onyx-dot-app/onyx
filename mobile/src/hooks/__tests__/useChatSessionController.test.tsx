@@ -31,6 +31,8 @@ jest.mock("@/api/chat/stream", () => ({
     "obj" in event && "placement" in event,
   isHeartbeat: (event: { obj?: { type?: string }; type?: string }) =>
     event?.obj?.type === "chat_heartbeat" || event?.type === "chat_heartbeat",
+  isStreamError: (event: { error?: unknown }) =>
+    "error" in event && typeof event.error === "string",
   StreamHttpError: class StreamHttpError extends Error {
     status: number;
     constructor(message: string, status: number) {
@@ -71,6 +73,9 @@ function endPacket(): StreamEvent {
     placement: { turn_index: 0 },
     obj: { type: PacketType.MESSAGE_END },
   } as StreamEvent;
+}
+function streamError(error: string, errorCode?: string): StreamEvent {
+  return { error, error_code: errorCode ?? null } as unknown as StreamEvent;
 }
 
 // A persisted session snapshot's `packets` are typed as Packet[][] (not StreamEvent).
@@ -178,7 +183,6 @@ describe("useChatSessionController", () => {
     renderHook(() => useChatSessionController("s1"), { wrapper });
 
     expect(resumeMock).toHaveBeenCalledWith("s1", 0, expect.anything());
-    // After the run ends we refetch and settle from the persisted snapshot.
     await waitFor(() => expect(getSessionMock).toHaveBeenCalledWith("s1"));
     await waitFor(() => expect(assistantText("s1", 2)).toBe("final answer"));
     await waitFor(() =>
@@ -263,6 +267,31 @@ describe("useChatSessionController", () => {
     await waitFor(() => expect(getSessionMock).toHaveBeenCalled());
   });
 
+  it("surfaces an errored resumed run even when the settle-refetch fails", async () => {
+    seedLiveSession(2);
+    resumeMock.mockReturnValue(
+      scripted([streamError("resume boom", "SERVICE_UNAVAILABLE")]),
+    );
+    // Settle fetch fails → the in-stream error patch must survive (no stuck "…" placeholder).
+    getSessionMock.mockRejectedValue(new Error("offline"));
+
+    renderHook(() => useChatSessionController("s1"), { wrapper });
+
+    await waitFor(() => {
+      const node = getMessageByMessageId(
+        useChatSessionStore.getState().sessions.get("s1")!.messageTree,
+        2,
+      );
+      expect(node?.type).toBe("error");
+    });
+    const node = getMessageByMessageId(
+      useChatSessionStore.getState().sessions.get("s1")!.messageTree,
+      2,
+    );
+    expect(node?.message).toBe("resume boom");
+    expect(node?.errorCode).toBe("SERVICE_UNAVAILABLE");
+  });
+
   it("stops writing to a session the user has navigated away from", async () => {
     seedLiveSession(2);
     let releaseTail: () => void = () => {};
@@ -333,7 +362,6 @@ describe("useChatSessionController", () => {
 
     renderHook(() => useChatSessionController("s1"), { wrapper });
 
-    // Resume streamed, then began the settle-refetch.
     await waitFor(() => expect(assistantText("s1", 2)).toBe("resumed"));
     await waitFor(() => expect(getSessionMock).toHaveBeenCalled());
 

@@ -1,6 +1,5 @@
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from onyx.chat.tool_call_args_streaming import maybe_emit_argument_delta
 from onyx.server.query_and_chat.placement import Placement
@@ -69,8 +68,7 @@ def _stream_fragments(
         for packet in maybe_emit_argument_delta(tc_map, delta, pl, parsers=parsers):
             obj = packet.obj
             assert isinstance(obj, ToolCallArgumentDelta)
-            for value in obj.argument_deltas.values():
-                emitted.append(value)
+            emitted.extend(obj.argument_deltas.values())
     return emitted
 
 
@@ -85,7 +83,7 @@ class TestMaybeEmitArgumentDeltaGuards:
         mock_get_tool.return_value = _mock_tool_class(emit=False)
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {"id": "tc_1", "name": "python", "arguments": '{"code": "x'}
+            0: {"id": "tc_1", "name": "run_python", "arguments": '{"code": "x'}
         }
         assert _collect(tc_map, _make_tool_call_delta(arguments="x")) == []
 
@@ -107,7 +105,7 @@ class TestMaybeEmitArgumentDeltaGuards:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {"id": "tc_1", "name": "python", "arguments": '{"code": "x'}
+            0: {"id": "tc_1", "name": "run_python", "arguments": '{"code": "x'}
         }
         assert _collect(tc_map, _make_tool_call_delta(arguments=None)) == []
 
@@ -119,7 +117,7 @@ class TestMaybeEmitArgumentDeltaGuards:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {"id": "tc_1", "name": "python", "arguments": '{"code":'}
+            0: {"id": "tc_1", "name": "run_python", "arguments": '{"code":'}
         }
         assert _collect(tc_map, _make_tool_call_delta(arguments=":")) == []
 
@@ -129,7 +127,7 @@ class TestMaybeEmitArgumentDeltaGuards:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {"id": "tc_1", "name": "python", "arguments": "{"}
+            0: {"id": "tc_1", "name": "run_python", "arguments": "{"}
         }
         assert _collect(tc_map, _make_tool_call_delta(arguments="{")) == []
 
@@ -142,7 +140,7 @@ class TestMaybeEmitArgumentDeltaBasic:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {"id": "tc_1", "name": "python", "arguments": ""}
+            0: {"id": "tc_1", "name": "run_python", "arguments": ""}
         }
         fragments = ['{"code": "', "print(1)", '"}']
 
@@ -160,7 +158,7 @@ class TestMaybeEmitArgumentDeltaBasic:
         # Verify packet structure
         obj = all_packets[0].obj
         assert isinstance(obj, ToolCallArgumentDelta)
-        assert obj.tool_type == "python"
+        assert obj.tool_type == "run_python"
         # All emitted content should reconstruct the value
         full_code = ""
         for p in all_packets:
@@ -177,7 +175,7 @@ class TestMaybeEmitArgumentDeltaBasic:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {"id": "tc_1", "name": "python", "arguments": ""}
+            0: {"id": "tc_1", "name": "run_python", "arguments": ""}
         }
         parsers: dict[int, Parser] = {}
         pl = _make_placement()
@@ -210,7 +208,7 @@ class TestMaybeEmitArgumentDeltaBasic:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {"id": "tc_1", "name": "python", "arguments": ""}
+            0: {"id": "tc_1", "name": "run_python", "arguments": ""}
         }
         fragments = [
             '{"code": "x',
@@ -229,7 +227,7 @@ class TestMaybeEmitArgumentDeltaBasic:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {"id": "tc_1", "name": "python", "arguments": ""}
+            0: {"id": "tc_1", "name": "run_python", "arguments": ""}
         }
         fragments = [
             '{"code": "x',
@@ -248,7 +246,7 @@ class TestMaybeEmitArgumentDeltaBasic:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {"id": "tc_1", "name": "python", "arguments": ""}
+            0: {"id": "tc_1", "name": "run_python", "arguments": ""}
         }
         # Opening quote just arrived, value is empty
         tc_map[0]["arguments"] = '{"code": "'
@@ -267,7 +265,7 @@ class TestMaybeEmitArgumentDeltaDecoding:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {"id": "tc_1", "name": "python", "arguments": ""}
+            0: {"id": "tc_1", "name": "run_python", "arguments": ""}
         }
         fragments = ['{"code": "line1\\nline2"}']
 
@@ -279,7 +277,7 @@ class TestMaybeEmitArgumentDeltaDecoding:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {"id": "tc_1", "name": "python", "arguments": ""}
+            0: {"id": "tc_1", "name": "run_python", "arguments": ""}
         }
         fragments = ['{"code": "\\tindented"}']
 
@@ -291,7 +289,7 @@ class TestMaybeEmitArgumentDeltaDecoding:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {"id": "tc_1", "name": "python", "arguments": ""}
+            0: {"id": "tc_1", "name": "run_python", "arguments": ""}
         }
         fragments = ['{"code": "say \\"hi\\""}']
 
@@ -303,7 +301,7 @@ class TestMaybeEmitArgumentDeltaDecoding:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {"id": "tc_1", "name": "python", "arguments": ""}
+            0: {"id": "tc_1", "name": "run_python", "arguments": ""}
         }
         fragments = ['{"code": "path\\\\dir"}']
 
@@ -315,7 +313,7 @@ class TestMaybeEmitArgumentDeltaDecoding:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {"id": "tc_1", "name": "python", "arguments": ""}
+            0: {"id": "tc_1", "name": "run_python", "arguments": ""}
         }
         fragments = ['{"code": "\\u0041"}']
 
@@ -330,7 +328,7 @@ class TestMaybeEmitArgumentDeltaDecoding:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {"id": "tc_1", "name": "python", "arguments": ""}
+            0: {"id": "tc_1", "name": "run_python", "arguments": ""}
         }
         fragments = ['{"code": "hello\\', 'n"}']
 
@@ -345,7 +343,7 @@ class TestMaybeEmitArgumentDeltaDecoding:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {"id": "tc_1", "name": "python", "arguments": ""}
+            0: {"id": "tc_1", "name": "run_python", "arguments": ""}
         }
         fragments = ['{"code": "hello\\u00', '41"}']
 
@@ -363,7 +361,7 @@ class TestArgumentDeltaStreamingE2E:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {"id": "tc_1", "name": "python", "arguments": ""}
+            0: {"id": "tc_1", "name": "run_python", "arguments": ""}
         }
         fragments = [
             '{"',
@@ -386,7 +384,7 @@ class TestArgumentDeltaStreamingE2E:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {"id": "tc_1", "name": "python", "arguments": ""}
+            0: {"id": "tc_1", "name": "run_python", "arguments": ""}
         }
         fragments = [
             '{"code": "',
@@ -407,7 +405,7 @@ class TestArgumentDeltaStreamingE2E:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {"id": "tc_1", "name": "python", "arguments": ""}
+            0: {"id": "tc_1", "name": "run_python", "arguments": ""}
         }
         fragments = [
             '{"code": "hello',
@@ -425,7 +423,7 @@ class TestArgumentDeltaStreamingE2E:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {"id": "tc_1", "name": "python", "arguments": ""}
+            0: {"id": "tc_1", "name": "run_python", "arguments": ""}
         }
         fragments = [
             '{"code": "',
@@ -448,7 +446,7 @@ class TestArgumentDeltaStreamingE2E:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {"id": "tc_1", "name": "python", "arguments": ""}
+            0: {"id": "tc_1", "name": "run_python", "arguments": ""}
         }
         fragments = [
             '{"code": "',
@@ -472,7 +470,7 @@ class TestArgumentDeltaStreamingE2E:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {"id": "tc_1", "name": "python", "arguments": ""}
+            0: {"id": "tc_1", "name": "run_python", "arguments": ""}
         }
         # The LLM sends: {"code": "x = {\"key\": \"val\"}"}
         # The inner quotes are escaped as \" in the JSON value.
@@ -495,7 +493,7 @@ class TestArgumentDeltaStreamingE2E:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {"id": "tc_1", "name": "python", "arguments": ""}
+            0: {"id": "tc_1", "name": "run_python", "arguments": ""}
         }
         fragments = [
             '{"code": "',
@@ -517,7 +515,7 @@ class TestMaybeEmitArgumentDeltaEdgeCases:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {"id": "tc_1", "name": "python", "arguments": '{"code": "x'}
+            0: {"id": "tc_1", "name": "run_python", "arguments": '{"code": "x'}
         }
         delta = _make_tool_call_delta(arguments=None, function_is_none=True)
         assert _collect(tc_map, delta) == []
@@ -528,8 +526,8 @@ class TestMaybeEmitArgumentDeltaEdgeCases:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {"id": "tc_1", "name": "python", "arguments": ""},
-            1: {"id": "tc_2", "name": "python", "arguments": ""},
+            0: {"id": "tc_1", "name": "run_python", "arguments": ""},
+            1: {"id": "tc_2", "name": "run_python", "arguments": ""},
         }
 
         parsers: dict[int, Parser] = {}
@@ -570,7 +568,7 @@ class TestMaybeEmitArgumentDeltaEdgeCases:
 
         full = '{"a": "one", "b": "two", "c": "three", "d": "four"}'
         tc_map: dict[int, dict[str, Any]] = {
-            0: {"id": "tc_1", "name": "python", "arguments": ""}
+            0: {"id": "tc_1", "name": "run_python", "arguments": ""}
         }
         tc_map[0]["arguments"] = full
         parsers: dict[int, Parser] = {}
@@ -600,7 +598,7 @@ class TestMaybeEmitArgumentDeltaEdgeCases:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {"id": "tc_1", "name": "python", "arguments": ""}
+            0: {"id": "tc_1", "name": "run_python", "arguments": ""}
         }
 
         fragments = [
@@ -621,7 +619,7 @@ class TestMaybeEmitArgumentDeltaEdgeCases:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {"id": "tc_1", "name": "python", "arguments": ""}
+            0: {"id": "tc_1", "name": "run_python", "arguments": ""}
         }
         fragments = ['{"timeout": 30, "code": "hello"}']
 

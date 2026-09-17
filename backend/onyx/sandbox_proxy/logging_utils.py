@@ -7,16 +7,15 @@ from mitmproxy import http
 from onyx.db.enums import EndpointPolicy
 from onyx.external_apps.matching.engine import AllMatchedActions
 from onyx.sandbox_proxy.credential_injection import InjectionOutcome
-from onyx.sandbox_proxy.identity import ResolvedSandbox
-from onyx.sandbox_proxy.identity import SessionContext
+from onyx.sandbox_proxy.identity import ResolvedSandbox, SessionContext
 
 _EGRESS_CONTEXT_FIELDS = "tenant=%s sandbox=%s"
 _EGRESS_SESSION_FIELDS = f"{_EGRESS_CONTEXT_FIELDS} session=%s"
 _EGRESS_APPROVAL_FIELDS = f"{_EGRESS_SESSION_FIELDS} approval=%s"
 _EGRESS_REQUEST_FIELDS = "host=%s method=%s"
-_EGRESS_ACTION_FIELDS = "app_name=%r external_app_id=%s action_type=%s policy=%s"
+_EGRESS_ACTION_FIELDS = "app_name=%r target=%s:%s action_type=%s policy=%s"
 APPROVAL_DECIDED_FIELDS = (
-    f"{_EGRESS_APPROVAL_FIELDS} app_name=%r external_app_id=%s action_type=%s "
+    f"{_EGRESS_APPROVAL_FIELDS} app_name=%r target=%s:%s action_type=%s "
     "decision=%s wake=%s source=%s session_id=%s approval_id=%s"
 )
 
@@ -81,7 +80,8 @@ def _egress_action_args(
 ) -> tuple[object, ...]:
     return (
         matched_actions.app_name,
-        matched_actions.external_app_id,
+        matched_actions.target.kind.value,
+        matched_actions.target.id,
         matched_actions.governing_action.action_type,
         _policy_label(policy),
     )
@@ -152,7 +152,8 @@ def approval_decided_args(
         short_log_id(ctx.session_id),
         short_log_id(approval_id),
         matched_actions.app_name,
-        matched_actions.external_app_id,
+        matched_actions.target.kind.value,
+        matched_actions.target.id,
         matched_actions.governing_action.action_type,
         decision,
         wake,

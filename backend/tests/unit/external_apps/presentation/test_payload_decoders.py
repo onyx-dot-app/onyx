@@ -6,8 +6,7 @@ from typing import Any
 
 from onyx.external_apps.presentation.decode import decode_payload
 from onyx.external_apps.presentation.payload_decoders import GmailRawMimeDecoder
-from onyx.external_apps.providers.gmail import GmailAction
-from onyx.external_apps.providers.gmail import GmailProvider
+from onyx.external_apps.providers.gmail import GmailAction, GmailProvider
 
 # The `messages.send` decoder; draft create/update wrap the MIME under `message`.
 _SEND_DECODER = GmailRawMimeDecoder()

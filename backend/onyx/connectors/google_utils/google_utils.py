@@ -2,10 +2,8 @@ import re
 import socket
 import ssl
 import time
-from collections.abc import Callable
-from collections.abc import Iterator
-from datetime import datetime
-from datetime import timezone
+from collections.abc import Callable, Iterator
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
@@ -28,7 +26,7 @@ def _is_rate_limit_error(error: HttpError) -> bool:
         return True
     if error.resp.status != 403:
         return False
-    error_details = getattr(error, "error_details", None) or []
+    error_details = getattr(error, "error_details", None) or []  # ods: ignore[getattr]
     for detail in error_details:
         if isinstance(detail, dict) and detail.get("reason") in _RATE_LIMIT_REASONS:
             return True

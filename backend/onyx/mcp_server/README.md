@@ -4,8 +4,8 @@
 
 The Onyx MCP server allows LLMs to connect to your Onyx instance and access its knowledge base and search capabilities through the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/).
 
-With the Onyx MCP Server, you can search your knowledgebase,
-give your LLMs web search, and upload and manage documents in Onyx.
+With the Onyx MCP Server, you can search your knowledgebase and
+give your LLMs web search.
 
 All access controls are managed within the main Onyx application.
 
@@ -13,6 +13,11 @@ All access controls are managed within the main Onyx application.
 
 Provide an Onyx Personal Access Token or API Key in the `Authorization` header as a Bearer token.
 The MCP server quickly validates and passes through the token on every request.
+
+A token scoped to `read:search` covers the document-search tool, including the listings of indexed
+sources and document sets that a search may be filtered by. Add
+`read:chat` or `write:chat` only if the client needs the chat surfaces. An unscoped token carries
+the user's full access, so prefer a scoped one.
 
 Depending on usage, the MCP Server may support OAuth and stdio in the future.
 
@@ -86,6 +91,12 @@ The server provides three tools for searching and retrieving information:
 1. `search_indexed_documents`
 Search the user's private knowledge base indexed in Onyx. Returns ranked documents with content snippets, scores, and metadata.
 
+Pass `agent` with an agent name to run the search as that Onyx agent. The search then applies the agent's knowledge scope (document sets, attached documents, start date) and its configured model. An unresolvable name returns an error listing the agents available to the user, so no lookup call is needed first.
+
+`agent` and `document_set_names` are mutually exclusive. Explicit document sets replace an agent's knowledge scope rather than narrowing it, so passing both is rejected instead of silently returning out-of-scope results.
+
+Filter values resolve on the search call, so clients do not need a lookup call first. `agent`, `source_types` and `document_set_names` are all validated: a value that does not resolve returns an error naming close matches, or the available values when there are few of them, rather than being dropped. A dropped filter would return a wider result set that looks correctly scoped, so these fail instead.
+
 2. `search_web`
 Search the public internet for current events and general knowledge. Returns web search results with titles, URLs, and snippets.
 
@@ -96,6 +107,12 @@ Retrieve the complete text content from specific web URLs. Useful for fetching f
 
 1. `indexed_sources`
 Lists all document sources currently indexed in the tenant (e.g., `"confluence"`, `"github"`). Use these values to filter results when calling `search_indexed_documents`.
+
+2. `document_sets`
+Lists the Document Sets accessible to the user. Use the returned `name` values with the `document_set_names` filter of `search_indexed_documents`.
+
+3. `agents`
+Lists the Onyx agents accessible to the user (`id`, `name`, `description`). Use a returned `name` with the `agent` filter of `search_indexed_documents`.
 
 ## Local Development
 

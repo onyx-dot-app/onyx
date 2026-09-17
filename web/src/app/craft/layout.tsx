@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import type { Route } from "next";
 import { unstable_noStore as noStore } from "next/cache";
-import { requireAuth } from "@/lib/auth/requireAuth";
+import { requireAuth } from "@/lib/auth/svcSS";
 import { fetchSettingsSS } from "@/lib/settings/svcSS";
 
 export interface LayoutProps {
@@ -28,7 +28,7 @@ export default async function Layout({ children }: LayoutProps) {
   // Only explicit true enables the feature; false or undefined = disabled
   const settings = await fetchSettingsSS();
   if (settings?.settings?.onyx_craft_enabled !== true) {
-    redirect("/app" as Route);
+    redirect("/app");
   }
 
   return <>{children}</>;

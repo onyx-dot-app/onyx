@@ -1,7 +1,5 @@
-from datetime import datetime
-from datetime import timezone
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from datetime import datetime, timezone
+from unittest.mock import MagicMock, patch
 
 import pytest
 

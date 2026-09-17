@@ -1,8 +1,8 @@
 "use client";
 
 import { PageSelector } from "@/components/PageSelector";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import type { Route } from "next";
 import { useEffect, useState } from "react";
 import {
   Table,
@@ -23,18 +23,18 @@ function ClickableTableRow({
   children,
   ...props
 }: {
-  url: string;
+  url: `/admin/bots/${number}`;
   children: React.ReactNode;
   [key: string]: any;
 }) {
   const router = useRouter();
 
   useEffect(() => {
-    router.prefetch(url as Route);
+    router.prefetch(url);
   }, [router, url]);
 
   const navigate = () => {
-    router.push(url as Route);
+    router.push(url);
   };
 
   return (
@@ -45,6 +45,7 @@ function ClickableTableRow({
 }
 
 export const SlackBotTable = ({ slackBots }: { slackBots: SlackBot[] }) => {
+  const t = useTranslations("admin.slackBots");
   const [page, setPage] = useState(1);
 
   // sort by id for consistent ordering
@@ -68,10 +69,10 @@ export const SlackBotTable = ({ slackBots }: { slackBots: SlackBot[] }) => {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Default Config</TableHead>
-            <TableHead>Channel Count</TableHead>
+            <TableHead>{t("table.name.header")}</TableHead>
+            <TableHead>{t("table.status.header")}</TableHead>
+            <TableHead>{t("table.defaultConfig.header")}</TableHead>
+            <TableHead>{t("table.channelCount.header")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -84,19 +85,23 @@ export const SlackBotTable = ({ slackBots }: { slackBots: SlackBot[] }) => {
               >
                 <TableCell>
                   <div className="flex items-center">
-                    <SvgEdit size={16} className="mr-4" />
+                    <SvgEdit size={16} className="me-4" />
                     {slackBot.name}
                   </div>
                 </TableCell>
                 <TableCell>
                   {slackBot.enabled ? (
-                    <Badge variant="success">Enabled</Badge>
+                    <Badge variant="success">{t("table.enabled.badge")}</Badge>
                   ) : (
-                    <Badge variant="destructive">Disabled</Badge>
+                    <Badge variant="destructive">
+                      {t("table.disabled.badge")}
+                    </Badge>
                   )}
                 </TableCell>
                 <TableCell>
-                  <Badge variant="secondary">Default Set</Badge>
+                  <Badge variant="secondary">
+                    {t("table.defaultSet.badge")}
+                  </Badge>
                 </TableCell>
                 <TableCell>{slackBot.configs_count}</TableCell>
                 <TableCell>
@@ -111,7 +116,7 @@ export const SlackBotTable = ({ slackBots }: { slackBots: SlackBot[] }) => {
                 colSpan={5}
                 className="text-center text-muted-foreground"
               >
-                Please add a New Slack Bot to begin chatting with Onyx!
+                {t("table.empty.message")}
               </TableCell>
             </TableRow>
           )}
@@ -123,14 +128,7 @@ export const SlackBotTable = ({ slackBots }: { slackBots: SlackBot[] }) => {
             <PageSelector
               totalPages={Math.ceil(slackBots.length / NUM_IN_PAGE)}
               currentPage={page}
-              onPageChange={(newPage) => {
-                setPage(newPage);
-                window.scrollTo({
-                  top: 0,
-                  left: 0,
-                  behavior: "smooth",
-                });
-              }}
+              onPageChange={setPage}
             />
           </div>
         </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { Text } from "@opal/components";
+import { useTranslations } from "next-intl";
 import { getLanguageFromPath } from "@/app/craft/utils/codeLanguage";
 import { useCodeHighlighter } from "@/app/craft/hooks/useCodeHighlighter";
 import { getLanguageHint } from "@/app/craft/components/tool-cards/helpers";
@@ -16,6 +17,7 @@ import type { ToolCardBodyProps } from "@/app/craft/components/tool-cards/interf
  * highlighting when a language can be derived.
  */
 export default function GenericBody({ toolCall }: ToolCardBodyProps) {
+  const t = useTranslations("craft.toolCards.generic");
   const content = toolCall.rawOutput;
   const hint = getLanguageHint(toolCall);
   const lang = hint?.includes(".") ? getLanguageFromPath(hint) : hint;
@@ -39,7 +41,7 @@ export default function GenericBody({ toolCall }: ToolCardBodyProps) {
           )
         ) : (
           <Text font="secondary-mono" color="text-02">
-            No output yet...
+            {t("noOutput.label")}
           </Text>
         )}
       </ToolCardSection>

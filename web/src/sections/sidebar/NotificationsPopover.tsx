@@ -1,15 +1,27 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useRouter } from "next/navigation";
-import { Route } from "next";
+import { useLocale, useTranslations } from "next-intl";
 import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import type { Notification as NotificationData } from "@/lib/notifications/interfaces";
 import { NotificationType } from "@/lib/notifications/interfaces";
-import { getNotificationIcon } from "@/lib/notifications";
+import {
+  getNotificationIcon,
+  isExternalLink,
+  openNotificationLink,
+} from "@/lib/notifications";
 import {
   dismissAllNotifications,
   dismissNotification,
+  invalidateNotificationCaches,
 } from "@/lib/notifications/api";
 import { timeAgo } from "@opal/time";
 import useNotifications from "@/hooks/useNotifications";
@@ -20,7 +32,13 @@ import {
   SvgChevronLeft,
   SvgSimpleLoader,
 } from "@opal/icons";
-import { Button, Divider, LineItemButton, Text } from "@opal/components";
+import {
+  Button,
+  Divider,
+  LineItemButton,
+  MessageCard,
+  Text,
+} from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { IllustrationContent } from "@opal/layouts";
 import { SvgEmpty } from "@opal/illustrations";
@@ -46,6 +64,9 @@ function NotificationItem({
   onClick,
   dismiss,
 }: NotificationItemProps) {
+  const t = useTranslations("sidebar");
+  const locale = useLocale();
+
   return (
     <Hoverable.Root group="notifications-popover/NotificationItem">
       <LineItemButton
@@ -53,14 +74,14 @@ function NotificationItem({
         title={notification.title}
         description={notification.description ?? undefined}
         sizePreset="main-ui"
-        rounding="sm"
+        rounding={2}
         color={state === "new" ? undefined : "muted"}
         onClick={onClick}
         rightChildren={
           <Section justifyContent="start">
-            <Section height="fit" gap={0.5} flexDirection="row">
+            <Section height="fit" gap={2} flexDirection="row">
               <Text font="secondary-body" color="text-02">
-                {timeAgo(notification.first_shown) ?? ""}
+                {timeAgo(notification.first_shown, locale) ?? ""}
               </Text>
               {state === "new" && (
                 <div className="w-4 flex flex-col items-center justify-center">
@@ -80,7 +101,7 @@ function NotificationItem({
                       size="xs"
                       prominence="tertiary"
                       onClick={noProp(dismiss)}
-                      tooltip="Mark as Read"
+                      tooltip={t("notifications.markAsReadButton.tooltip")}
                     />
                   </Hoverable.Item>
                 </div>
@@ -108,12 +129,12 @@ export default function NotificationsPopover({
   onNavigate,
   onShowBuildIntro,
 }: NotificationsPopoverProps) {
+  const t = useTranslations("sidebar");
   const router = useRouter();
   const {
     notifications,
     undismissedCount,
     isLoading,
-    refresh,
     hasMore,
     isLoadingMore,
     loadMore,
@@ -122,29 +143,32 @@ export default function NotificationsPopover({
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const loadMoreRef = useRef(loadMore);
   const lastLoadScrollTopRef = useRef<number | null>(null);
-  loadMoreRef.current = loadMore;
+
+  // Layout effect: an already-scheduled observer callback must not see the
+  // previous page's loadMore after commit.
+  useLayoutEffect(() => {
+    loadMoreRef.current = loadMore;
+  }, [loadMore]);
 
   // Track IDs dismissed during this session (before popover closes)
   const [sessionDismissedIds, setSessionDismissedIds] = useState<Set<number>>(
     new Set()
   );
 
-  const handleDismiss = useCallback(
-    async (notificationId: number) => {
-      try {
-        await dismissNotification(notificationId);
-        setSessionDismissedIds((prev) => {
-          const next = new Set(prev);
-          next.add(notificationId);
-          return next;
-        });
-        void refresh();
-      } catch (error) {
-        console.error("Error dismissing notification:", error);
-      }
-    },
-    [refresh]
-  );
+  const handleDismiss = useCallback(async (notificationId: number) => {
+    try {
+      await dismissNotification(notificationId);
+      setSessionDismissedIds((prev) => {
+        const next = new Set(prev);
+        next.add(notificationId);
+        return next;
+      });
+      // Shared invalidation so the banner queue and badge update too.
+      void invalidateNotificationCaches();
+    } catch (error) {
+      console.error("Error dismissing notification:", error);
+    }
+  }, []);
 
   const handleNotificationClick = useCallback(
     (notification: NotificationData) => {
@@ -167,19 +191,13 @@ export default function NotificationsPopover({
         });
       }
 
-      if (link.startsWith("http://") || link.startsWith("https://")) {
-        if (!notification.dismissed) {
-          handleDismiss(notification.id);
-        }
-        window.open(link, "_blank", "noopener,noreferrer");
-        return;
-      }
-
       if (!notification.dismissed) {
         handleDismiss(notification.id);
       }
-      onNavigate();
-      router.push(link as Route);
+      if (!isExternalLink(link)) {
+        onNavigate();
+      }
+      openNotificationLink(link, router);
     },
     [handleDismiss, onNavigate, onShowBuildIntro, router]
   );
@@ -193,13 +211,31 @@ export default function NotificationsPopover({
     [sessionDismissedIds]
   );
 
-  const newNotifications = useMemo(
-    () => notifications.filter((n) => getState(n) === "new"),
+  // Admin site-wide announcement pins above the New/Older sections while
+  // undismissed, instead of paging through with the rest of the feed.
+  const pinnedAnnouncement = useMemo(
+    () =>
+      notifications.find(
+        (n) =>
+          n.notif_type === NotificationType.SYSTEM_ANNOUNCEMENT &&
+          getState(n) === "new"
+      ) ?? null,
     [notifications, getState]
   );
+
+  const newNotifications = useMemo(
+    () =>
+      notifications.filter(
+        (n) => getState(n) === "new" && n.id !== pinnedAnnouncement?.id
+      ),
+    [notifications, getState, pinnedAnnouncement]
+  );
   const olderNotifications = useMemo(
-    () => notifications.filter((n) => getState(n) === "older"),
-    [notifications, getState]
+    () =>
+      notifications.filter(
+        (n) => getState(n) === "older" && n.id !== pinnedAnnouncement?.id
+      ),
+    [notifications, getState, pinnedAnnouncement]
   );
 
   const handleDismissAll = useCallback(async () => {
@@ -210,13 +246,18 @@ export default function NotificationsPopover({
         newNotifications.forEach((notification) => {
           next.add(notification.id);
         });
+        // The pinned announcement is excluded from newNotifications, but the
+        // server call dismissed it too, so unpin it client-side immediately.
+        if (pinnedAnnouncement) {
+          next.add(pinnedAnnouncement.id);
+        }
         return next;
       });
-      void refresh();
+      void invalidateNotificationCaches();
     } catch (error) {
       console.error("Error dismissing notifications:", error);
     }
-  }, [refresh, newNotifications]);
+  }, [newNotifications, pinnedAnnouncement]);
 
   useEffect(() => {
     if (!hasMore || isLoadingMore) return;
@@ -259,21 +300,23 @@ export default function NotificationsPopover({
 
   return (
     <Section gap={0} justifyContent="start" alignItems="stretch">
-      <Section flexDirection="row" padding={0.325}>
-        <Section flexDirection="row" gap={0.25} justifyContent="start">
+      <Section flexDirection="row" padding={1.5}>
+        <Section flexDirection="row" gap={1} justifyContent="start">
           <Button
             icon={SvgChevronLeft}
             size="sm"
             prominence="tertiary"
             onClick={onClose}
           />
-          <Text color="text-02">Notifications</Text>
+          <Text color="text-02">{t("notifications.header.title")}</Text>
         </Section>
 
-        <Section flexDirection="row" gap={0.25} justifyContent="end">
+        <Section flexDirection="row" gap={1} justifyContent="end">
           {undismissedCount !== 0 && (
-            <span className="text-action-link-05 font-secondary-body">
-              {`${undismissedCount} unread`}
+            <span className="text-action-selection-05 font-secondary-body">
+              {t("notifications.unreadCount.label", {
+                count: undismissedCount,
+              })}
             </span>
           )}
           <Button
@@ -281,11 +324,23 @@ export default function NotificationsPopover({
             size="sm"
             prominence="tertiary"
             onClick={handleDismissAll}
-            tooltip="Mark All as Read"
+            tooltip={t("notifications.markAllAsReadButton.tooltip")}
             disabled={undismissedCount === 0}
           />
         </Section>
       </Section>
+
+      {pinnedAnnouncement && (
+        <div className="px-1 pb-1">
+          <MessageCard
+            variant="info"
+            icon={getNotificationIcon(pinnedAnnouncement.notif_type)}
+            title={pinnedAnnouncement.title}
+            description={pinnedAnnouncement.description ?? undefined}
+            onClose={() => void handleDismiss(pinnedAnnouncement.id)}
+          />
+        </div>
+      )}
 
       {isLoading ? (
         <div className="h-(--notifications-popover)">
@@ -293,15 +348,19 @@ export default function NotificationsPopover({
             <SvgSimpleLoader />
           </Section>
         </div>
-      ) : !notifications || notifications.length === 0 ? (
-        <div className="h-(--notifications-popover)">
-          <Section>
-            <IllustrationContent
-              title="No notifications"
-              illustration={SvgEmpty}
-            />
-          </Section>
-        </div>
+      ) : newNotifications.length === 0 && olderNotifications.length === 0 ? (
+        // With a pinned announcement and nothing else, render nothing below it
+        // (an empty-state here would contradict the visible notification).
+        !pinnedAnnouncement && (
+          <div className="h-(--notifications-popover)">
+            <Section>
+              <IllustrationContent
+                title={t("notifications.empty.title")}
+                illustration={SvgEmpty}
+              />
+            </Section>
+          </div>
+        )
       ) : (
         <div
           ref={scrollContainerRef}
@@ -309,7 +368,7 @@ export default function NotificationsPopover({
         >
           {newNotifications.length > 0 && (
             <>
-              <Divider title="New" />
+              <Divider title={t("notifications.newSection.title")} />
               <div className="flex flex-col gap-1">
                 {newNotifications.map((notification) => (
                   <NotificationItem
@@ -326,7 +385,7 @@ export default function NotificationsPopover({
 
           {olderNotifications.length > 0 && (
             <>
-              <Divider title="Older" />
+              <Divider title={t("notifications.olderSection.title")} />
               <div className="flex flex-col gap-1">
                 {olderNotifications.map((notification) => (
                   <NotificationItem

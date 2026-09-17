@@ -7,13 +7,14 @@ emits a hierarchy node for that page even if its BlockReadOutput is empty
 upsert can be promoted.
 """
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from onyx.connectors.models import HierarchyNode
-from onyx.connectors.notion.connector import BlockReadOutput
-from onyx.connectors.notion.connector import NotionConnector
-from onyx.connectors.notion.connector import NotionPage
+from onyx.connectors.notion.connector import (
+    BlockReadOutput,
+    NotionConnector,
+    NotionPage,
+)
 from onyx.db.enums import HierarchyNodeType
 
 

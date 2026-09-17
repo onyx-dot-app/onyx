@@ -1,14 +1,14 @@
 import random
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from logging import getLogger
 from uuid import UUID
 
 from onyx.configs.constants import MessageType
-from onyx.db.chat import create_chat_session
-from onyx.db.chat import create_new_chat_message
-from onyx.db.chat import get_or_create_root_message
+from onyx.db.chat import (
+    create_chat_session,
+    create_new_chat_message,
+    get_or_create_root_message,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import ChatSession
 
@@ -33,13 +33,13 @@ def seed_chat_history(
     """
     with get_session_with_current_tenant() as db_session:
         logger.info("Seeding %s sessions.", num_sessions)
-        for y in range(0, num_sessions):
+        for y in range(num_sessions):
             create_chat_session(db_session, f"pytest_session_{y}", user_id, persona_id)
 
         # randomize all session times
         logger.info("Seeding %s messages per session.", num_messages)
         rows = db_session.query(ChatSession).all()
-        for x in range(0, len(rows)):
+        for x in range(len(rows)):
             if x % 1024 == 0:
                 logger.info("Seeded messages for %s sessions so far.", x)
 
@@ -55,7 +55,7 @@ def seed_chat_history(
 
             current_message_type = MessageType.USER
             parent_message = root_message
-            for x in range(0, num_messages):
+            for x in range(num_messages):
                 if current_message_type == MessageType.USER:
                     msg = f"pytest_message_user_{x}"
                 else:

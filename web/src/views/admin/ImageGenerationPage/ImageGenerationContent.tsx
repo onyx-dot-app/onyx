@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
-import { toast } from "@/hooks/useToast";
+import { useCreateModal } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import {
@@ -21,10 +21,10 @@ import {
   unsetDefaultImageGenerationConfig,
   deleteImageGenerationConfig,
 } from "@/views/admin/ImageGenerationPage/svc";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { ConfirmationModalLayout } from "@opal/layouts";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { Button, MessageCard, Text } from "@opal/components";
-import { Content } from "@opal/layouts";
+import { Content, toast } from "@opal/layouts";
 import { SvgSlash, SvgUnplug } from "@opal/icons";
 import { markdown } from "@opal/utils";
 import { getImageGenForm } from "@/views/admin/ImageGenerationPage/forms";
@@ -34,6 +34,7 @@ import { getModelIcon } from "@/lib/languageModels";
 const NO_DEFAULT_VALUE = "__none__";
 
 export default function ImageGenerationContent() {
+  const t = useTranslations("admin.imageGeneration");
   const {
     data: llmProviderResponse,
     error: llmError,
@@ -69,6 +70,17 @@ export default function ImageGenerationContent() {
     return new Set(configs.map((c) => c.image_provider_id));
   }, [configs]);
 
+  // Deprecated models stay visible only for admins who already connected them,
+  // so they can still disconnect or switch away.
+  const visibleGroups = useMemo(() => {
+    return IMAGE_PROVIDER_GROUPS.map((group) => ({
+      ...group,
+      providers: group.providers.filter(
+        (p) => !p.deprecated || connectedProviderIds.has(p.image_provider_id)
+      ),
+    })).filter((g) => g.providers.length > 0);
+  }, [connectedProviderIds]);
+
   const defaultConfig = useMemo(() => {
     return configs.find((c) => c.is_default);
   }, [configs]);
@@ -96,11 +108,13 @@ export default function ImageGenerationContent() {
     if (config) {
       try {
         await setDefaultImageGenerationConfig(config.image_provider_id);
-        toast.success(`${provider.title} set as default`);
+        toast.success(
+          t("setDefaultSuccess.message", { title: provider.title })
+        );
         refetchConfigs();
       } catch (error) {
         toast.error(
-          error instanceof Error ? error.message : "Failed to set default"
+          error instanceof Error ? error.message : t("setDefaultError.message")
         );
       }
     }
@@ -113,11 +127,11 @@ export default function ImageGenerationContent() {
     if (config) {
       try {
         await unsetDefaultImageGenerationConfig(config.image_provider_id);
-        toast.success(`${provider.title} deselected`);
+        toast.success(t("deselectSuccess.message", { title: provider.title }));
         refetchConfigs();
       } catch (error) {
         toast.error(
-          error instanceof Error ? error.message : "Failed to deselect"
+          error instanceof Error ? error.message : t("deselectError.message")
         );
       }
     }
@@ -141,13 +155,15 @@ export default function ImageGenerationContent() {
       }
 
       await deleteImageGenerationConfig(disconnectProvider.image_provider_id);
-      toast.success(`${disconnectProvider.title} disconnected`);
+      toast.success(
+        t("disconnectSuccess.message", { title: disconnectProvider.title })
+      );
       refetchConfigs();
       refetchProviders();
     } catch (error) {
       console.error("Failed to disconnect image generation provider:", error);
       toast.error(
-        error instanceof Error ? error.message : "Failed to disconnect"
+        error instanceof Error ? error.message : t("disconnectError.message")
       );
     } finally {
       setDisconnectProvider(null);
@@ -156,19 +172,11 @@ export default function ImageGenerationContent() {
   };
 
   const handleModalSuccess = () => {
-    toast.success("Provider configured successfully");
+    toast.success(t("configureSuccess.message"));
     setEditConfig(null);
     refetchConfigs();
     refetchProviders();
   };
-
-  if (llmError || configError) {
-    return (
-      <div className="text-error">
-        Failed to load configuration. Please refresh the page.
-      </div>
-    );
-  }
 
   // Compute replacement options when disconnecting an active provider
   const isDisconnectingDefault =
@@ -200,25 +208,26 @@ export default function ImageGenerationContent() {
     }
   }, [disconnectProvider]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  if (llmError || configError) {
+    return <div className="text-error">{t("loadError.message")}</div>;
+  }
+
   return (
     <>
       <div className="flex flex-col gap-4">
         <Content
-          title="Image Generation Model"
-          description="Select a model to generate images in chat."
+          title={t("model.title")}
+          description={t("model.description")}
           sizePreset="main-content"
           variant="section"
         />
 
         {connectedProviderIds.size === 0 && (
-          <MessageCard
-            variant="info"
-            title="Connect an image generation model to use in chat."
-          />
+          <MessageCard variant="info" title={t("emptyState.title")} />
         )}
 
         {/* Provider Groups */}
-        {IMAGE_PROVIDER_GROUPS.map((group) => (
+        {visibleGroups.map((group) => (
           <div key={group.name} className="flex flex-col gap-2">
             <Content title={group.name} sizePreset="secondary" variant="body" />
             {group.providers.map((provider) => {
@@ -232,7 +241,7 @@ export default function ImageGenerationContent() {
                   key={provider.image_provider_id}
                   icon={getModelIcon(provider.provider_name)}
                   title={provider.title}
-                  description={provider.description}
+                  description={t(provider.descriptionKey)}
                   status={status}
                   aria-label={`image-gen-provider-${provider.image_provider_id}`}
                   onConnect={() => handleConnect(provider)}
@@ -254,8 +263,12 @@ export default function ImageGenerationContent() {
       {disconnectProvider && (
         <ConfirmationModalLayout
           icon={SvgUnplug}
-          title={markdown(`Disconnect *${disconnectProvider.title}*`)}
-          description="This will remove the stored credentials for this provider."
+          title={markdown(
+            t("disconnectModal.header.title", {
+              title: disconnectProvider.title,
+            })
+          )}
+          description={t("disconnectModal.header.description")}
           onClose={() => {
             setDisconnectProvider(null);
             setReplacementProviderId(null);
@@ -268,7 +281,7 @@ export default function ImageGenerationContent() {
                 needsReplacement && hasReplacements && !replacementProviderId
               }
             >
-              Disconnect
+              {t("disconnectModal.submitButton.label")}
             </Button>
           }
         >
@@ -277,18 +290,22 @@ export default function ImageGenerationContent() {
               <Section alignItems="start">
                 <Text as="p" color="text-03">
                   {markdown(
-                    `**${disconnectProvider.title}** is currently the default image generation model. Session history will be preserved.`
+                    t("disconnectModal.defaultWithReplacement.description", {
+                      title: disconnectProvider.title,
+                    })
                   )}
                 </Text>
-                <Section alignItems="start" gap={0.25}>
+                <Section alignItems="start" gap={1}>
                   <Text as="p" color="text-04">
-                    Set New Default
+                    {t("disconnectModal.replacement.label")}
                   </Text>
                   <InputSelect
                     value={replacementProviderId ?? undefined}
                     onValueChange={(v) => setReplacementProviderId(v)}
                   >
-                    <InputSelect.Trigger placeholder="Select a replacement model" />
+                    <InputSelect.Trigger
+                      placeholder={t("disconnectModal.replacement.placeholder")}
+                    />
                     <InputSelect.Content>
                       {replacementGroups.map((group) => (
                         <InputSelect.Group key={group.name}>
@@ -310,10 +327,10 @@ export default function ImageGenerationContent() {
                         icon={SvgSlash}
                       >
                         <span>
-                          <b>No Default</b>
+                          <b>{t("disconnectModal.noDefaultOption.label")}</b>
                           <span className="text-text-03">
                             {" "}
-                            (Disable Image Generation)
+                            {t("disconnectModal.noDefaultOption.description")}
                           </span>
                         </span>
                       </InputSelect.Item>
@@ -325,11 +342,13 @@ export default function ImageGenerationContent() {
               <>
                 <Text as="p" color="text-03">
                   {markdown(
-                    `**${disconnectProvider.title}** is currently the default image generation model.`
+                    t("disconnectModal.defaultNoReplacement.description", {
+                      title: disconnectProvider.title,
+                    })
                   )}
                 </Text>
                 <Text as="p" color="text-03">
-                  Connect another provider to continue using image generation.
+                  {t("disconnectModal.connectAnother.description")}
                 </Text>
               </>
             )
@@ -337,11 +356,13 @@ export default function ImageGenerationContent() {
             <>
               <Text as="p" color="text-03">
                 {markdown(
-                  `**${disconnectProvider.title}** models will no longer be used to generate images.`
+                  t("disconnectModal.nonDefault.description", {
+                    title: disconnectProvider.title,
+                  })
                 )}
               </Text>
               <Text as="p" color="text-03">
-                Session history will be preserved.
+                {t("disconnectModal.sessionHistory.description")}
               </Text>
             </>
           )}

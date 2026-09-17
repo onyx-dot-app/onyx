@@ -1,7 +1,6 @@
 import io
 import zipfile
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from zipfile import BadZipFile
 
 import pytest

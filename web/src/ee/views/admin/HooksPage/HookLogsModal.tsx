@@ -1,20 +1,22 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Button, Text } from "@opal/components";
 import { SvgDownload, SvgTextLines, SvgSimpleLoader } from "@opal/icons";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import { CopyButton } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { useHookExecutionLogs } from "@/ee/hooks/useHookExecutionLogs";
 import { formatDateTimeLog } from "@/lib/dateUtils";
 import { downloadFile } from "@/lib/download";
 import { Section } from "@/layouts/general-layouts";
+import { hookPointName } from "@/ee/views/admin/HooksPage/hookPoints";
 import type {
   HookExecutionRecord,
   HookPointMeta,
   HookResponse,
 } from "@/ee/views/admin/HooksPage/interfaces";
-import { useModalClose } from "@/refresh-components/contexts/ModalContext";
+import { useModalClose } from "@opal/components";
 
 interface HookLogsModalProps {
   hook: HookResponse;
@@ -35,32 +37,37 @@ function SectionHeader({ label }: { label: string }) {
       <Text font="secondary-body" color="text-03">
         {label}
       </Text>
-      <div className="flex-1 ml-2 border-t border-border-02" />
+      <div className="flex-1 ms-2 border-t border-border-02" />
     </Section>
   );
 }
 
 function LogRow({ log, group }: { log: HookExecutionRecord; group: string }) {
+  const t = useTranslations("admin.hooks");
   return (
     <Hoverable.Root group={group}>
       <Section
         flexDirection="row"
         justifyContent="start"
         alignItems="start"
-        gap={0.5}
+        gap={2}
         height="fit"
         className="py-2"
       >
         {/* 1. Timestamp */}
         <span className="shrink-0 text-code-code">
-          <Text font="secondary-mono-label" color="inherit" nowrap>
+          <Text
+            font="secondary-mono-label"
+            color="inherit"
+            wordWrap="whitespace-nowrap"
+          >
             {formatDateTimeLog(log.created_at)}
           </Text>
         </span>
         {/* 2. Error message */}
         <span className="flex-1 min-w-0 break-all whitespace-pre-wrap text-code-code">
           <Text font="secondary-mono" color="inherit">
-            {log.error_message ?? "Unknown error"}
+            {log.error_message ?? t("logs.unknownError.label")}
           </Text>
         </span>
         {/* 3. Copy button */}
@@ -75,6 +82,7 @@ function LogRow({ log, group }: { log: HookExecutionRecord; group: string }) {
 }
 
 export default function HookLogsModal({ hook, spec }: HookLogsModalProps) {
+  const t = useTranslations("admin.hooks");
   const onClose = useModalClose();
 
   const { recentErrors, olderErrors, isLoading, error } = useHookExecutionLogs(
@@ -90,7 +98,7 @@ export default function HookLogsModal({ hook, spec }: HookLogsModalProps) {
       .map(
         (log) =>
           `${formatDateTimeLog(log.created_at)} ${
-            log.error_message ?? "Unknown error"
+            log.error_message ?? t("logs.unknownError.label")
           }`
       )
       .join("\n");
@@ -105,10 +113,11 @@ export default function HookLogsModal({ hook, spec }: HookLogsModalProps) {
       <Modal.Content width="md" height="fit">
         <Modal.Header
           icon={(props) => <SvgTextLines {...props} />}
-          title="Recent Errors"
-          description={`Hook: ${hook.name} • Hook Point: ${
-            spec?.display_name ?? hook.hook_point
-          }`}
+          title={t("logs.header.title")}
+          description={t("logs.header.description", {
+            name: hook.name,
+            point: spec ? hookPointName(spec, t) : hook.hook_point,
+          })}
           onClose={onClose}
         />
         <Modal.Body>
@@ -118,17 +127,17 @@ export default function HookLogsModal({ hook, spec }: HookLogsModalProps) {
             </Section>
           ) : error ? (
             <Text font="main-ui-body" color="text-03">
-              Failed to load logs.
+              {t("logs.loadFailed.message")}
             </Text>
           ) : totalLines === 0 ? (
             <Text font="main-ui-body" color="text-03">
-              No errors in the past 30 days.
+              {t("logs.empty.message")}
             </Text>
           ) : (
             <>
               {recentErrors.length > 0 && (
                 <>
-                  <SectionHeader label="Past Hour" />
+                  <SectionHeader label={t("logs.pastHour.label")} />
                   {recentErrors.map((log, idx) => (
                     <LogRow
                       key={log.created_at + String(idx)}
@@ -140,7 +149,7 @@ export default function HookLogsModal({ hook, spec }: HookLogsModalProps) {
               )}
               {olderErrors.length > 0 && (
                 <>
-                  <SectionHeader label="Older" />
+                  <SectionHeader label={t("logs.older.label")} />
                   {olderErrors.map((log, idx) => (
                     <LogRow
                       key={log.created_at + String(idx)}
@@ -157,26 +166,30 @@ export default function HookLogsModal({ hook, spec }: HookLogsModalProps) {
           flexDirection="row"
           justifyContent="between"
           alignItems="center"
-          padding={0.5}
+          padding={2}
           className="bg-background-tint-01"
         >
           <Text font="main-ui-body" color="text-03">
-            {`${totalLines} ${totalLines === 1 ? "line" : "lines"}`}
+            {t("logs.lineCount.label", { count: totalLines })}
           </Text>
           <Section
             flexDirection="row"
             alignItems="center"
             width="fit"
-            gap={0.25}
-            padding={0.25}
+            gap={1}
+            padding={1}
             className="rounded-xl bg-background-tint-00"
           >
-            <CopyButton size="sm" tooltip="Copy" getCopyText={getLogsText} />
+            <CopyButton
+              size="sm"
+              tooltip={t("logs.copy.tooltip")}
+              getCopyText={getLogsText}
+            />
             <Button
               prominence="tertiary"
               size="sm"
               icon={SvgDownload}
-              tooltip="Download"
+              tooltip={t("logs.download.tooltip")}
               onClick={handleDownload}
             />
           </Section>

@@ -31,17 +31,26 @@ Create chart name and version as used by the chart label.
 {{- end }}
 
 {{/*
-Build a child resource name as `<fullname>-<suffix>`, truncated to 63 chars to
+Build a child resource name as `<fullname>-<suffix>`, capped at 63 chars to
 satisfy the Kubernetes DNS-1123 label limit that applies to Services, Pods,
-Deployments, HPAs, etc. Use this in place of
+Deployments, HPAs, etc. Names that fit are used as-is. Longer names are
+truncated and get a short hash of the full name, so two suffixes that share a
+prefix (e.g. celery-worker-docfetching / celery-worker-docprocessing) cannot
+collapse onto the same truncated name. The result is deterministic, so every
+caller that passes the same suffix renders the same name and cross-references
+stay consistent. Always use this instead of
   {{ include "onyx.fullname" . }}-<suffix>
-whenever the suffix could push the rendered name over 63 chars for a long
-release name. Callers must pass `(list . "<suffix>")`.
+Callers must pass `(list . "<suffix>")`.
 */}}
 {{- define "onyx.resourceName" -}}
 {{- $ctx := index . 0 -}}
 {{- $suffix := index . 1 -}}
-{{- printf "%s-%s" (include "onyx.fullname" $ctx) $suffix | trunc 63 | trimSuffix "-" -}}
+{{- $name := printf "%s-%s" (include "onyx.fullname" $ctx) $suffix -}}
+{{- if gt (len $name) 63 -}}
+{{- printf "%s-%s" ($name | trunc 54 | trimSuffix "-") (sha256sum $name | trunc 8) -}}
+{{- else -}}
+{{- $name -}}
+{{- end -}}
 {{- end }}
 
 {{/*
@@ -87,7 +96,8 @@ Create env vars from secrets (global secrets only — skips entries with allPods
 */}}
 {{- define "onyx.envSecrets" -}}
     {{- range $secretSuffix, $secretContent := .Values.auth }}
-    {{- if and (ne (toString $secretContent.enabled) "false") ($secretContent.secretKeys) (ne (toString (index $secretContent "allPods" | default "true")) "false") }}
+    {{- $allPods := or (not (hasKey $secretContent "allPods")) (ne (toString $secretContent.allPods) "false") }}
+    {{- if and (ne $secretSuffix "metricsAuth") (ne (toString $secretContent.enabled) "false") ($secretContent.secretKeys) $allPods }}
     {{- range $name, $key := $secretContent.secretKeys }}
 - name: {{ $name | upper | replace "-" "_" | quote }}
   valueFrom:
@@ -104,7 +114,8 @@ Create env vars from secrets restricted to specific pods (entries with allPods: 
 */}}
 {{- define "onyx.envSecretsRestricted" -}}
     {{- range $secretSuffix, $secretContent := .Values.auth }}
-    {{- if and (ne (toString $secretContent.enabled) "false") ($secretContent.secretKeys) (eq (toString (index $secretContent "allPods" | default "true")) "false") }}
+    {{- $restricted := and (hasKey $secretContent "allPods") (eq (toString $secretContent.allPods) "false") }}
+    {{- if and (ne $secretSuffix "metricsAuth") (ne (toString $secretContent.enabled) "false") ($secretContent.secretKeys) $restricted }}
     {{- range $name, $key := $secretContent.secretKeys }}
 - name: {{ $name | upper | replace "-" "_" | quote }}
   valueFrom:
@@ -117,6 +128,20 @@ Create env vars from secrets restricted to specific pods (entries with allPods: 
 {{- end }}
 
 {{/*
+Inject metrics auth only into pods that expose the protected endpoint.
+*/}}
+{{- define "onyx.metricsAuthEnv" -}}
+    {{- $metricsAuth := .Values.auth.metricsAuth | default dict }}
+    {{- if dig "enabled" false $metricsAuth }}
+- name: METRICS_AUTH_TOKEN
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "onyx.secretName" $metricsAuth }}
+      key: {{ default "METRICS_AUTH_TOKEN" (dig "secretKeys" "METRICS_AUTH_TOKEN" "" $metricsAuth) }}
+    {{- end }}
+{{- end }}
+
+{{/*
 Helpers for mounting a psql convenience script into pods.
 */}}
 {{- define "onyx.pgInto.enabled" -}}
@@ -124,7 +149,7 @@ Helpers for mounting a psql convenience script into pods.
 {{- end }}
 
 {{- define "onyx.pgInto.configMapName" -}}
-{{- printf "%s-pginto" (include "onyx.fullname" .) -}}
+{{- include "onyx.resourceName" (list . "pginto") -}}
 {{- end }}
 
 {{- define "onyx.pgInto.checksumAnnotation" -}}
@@ -154,8 +179,10 @@ checksum/pginto: {{ include (print $.Template.BasePath "/tooling-pginto-configma
 {{- define "onyx.renderVolumeMounts" -}}
 {{- $pginto := include "onyx.pgInto.volumeMount" .ctx -}}
 {{- $ca := include "onyx.customCACerts.volumeMount" .ctx -}}
+{{- $postgresTls := include "onyx.postgresTls.volumeMount" .ctx -}}
+{{- $redisTls := include "onyx.redisTls.volumeMount" .ctx -}}
 {{- $existing := .volumeMounts -}}
-{{- if or $pginto $ca $existing -}}
+{{- if or $pginto $ca $postgresTls $redisTls $existing -}}
 volumeMounts:
 {{- if $pginto }}
 {{ $pginto | nindent 2 }}
@@ -166,14 +193,22 @@ volumeMounts:
 {{- if $ca }}
 {{ $ca | nindent 2 }}
 {{- end }}
+{{- if $postgresTls }}
+{{ $postgresTls | nindent 2 }}
+{{- end }}
+{{- if $redisTls }}
+{{ $redisTls | nindent 2 }}
+{{- end }}
 {{- end -}}
 {{- end }}
 
 {{- define "onyx.renderVolumes" -}}
 {{- $pginto := include "onyx.pgInto.volume" .ctx -}}
 {{- $ca := include "onyx.customCACerts.volume" .ctx -}}
+{{- $postgresTls := include "onyx.postgresTls.volume" .ctx -}}
+{{- $redisTls := include "onyx.redisTls.volume" .ctx -}}
 {{- $existing := .volumes -}}
-{{- if or $pginto $ca $existing -}}
+{{- if or $pginto $ca $postgresTls $redisTls $existing -}}
 volumes:
 {{- if $pginto }}
 {{ $pginto | nindent 2 }}
@@ -183,6 +218,12 @@ volumes:
 {{- end }}
 {{- if $ca }}
 {{ $ca | nindent 2 }}
+{{- end }}
+{{- if $postgresTls }}
+{{ $postgresTls | nindent 2 }}
+{{- end }}
+{{- if $redisTls }}
+{{ $redisTls | nindent 2 }}
 {{- end }}
 {{- end -}}
 {{- end }}
@@ -202,8 +243,22 @@ Return the configured autoscaling engine; defaults to HPA when unset.
 {{- if eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true" -}}true{{- end -}}
 {{- end }}
 
+{{/*
+Sandbox container image and pull policy. Shared by the sandbox-pod PodTemplate
+and the image-prepull DaemonSet: the prepull only pins layers the sandbox pods
+actually use if both resolve to the identical reference, and a drift here is
+invisible (the DaemonSet looks healthy while every sandbox still cold-pulls).
+*/}}
+{{- define "onyx.sandboxImage" -}}
+{{- (index .Values.configMap "SANDBOX_CONTAINER_IMAGE") | default (printf "onyxdotapp/sandbox:%s" (.Values.global.version | default .Chart.AppVersion)) -}}
+{{- end }}
+
+{{- define "onyx.sandboxImagePullPolicy" -}}
+{{- (index .Values.configMap "SANDBOX_IMAGE_PULL_POLICY") | default .Values.global.pullPolicy -}}
+{{- end }}
+
 {{- define "onyx.sandboxProxyHost" -}}
-{{- (index .Values.configMap "SANDBOX_PROXY_HOST") | default (printf "%s-sandbox-proxy.%s.svc.cluster.local" (include "onyx.fullname" .) .Release.Namespace) -}}
+{{- (index .Values.configMap "SANDBOX_PROXY_HOST") | default (printf "%s.%s.svc.cluster.local" (include "onyx.resourceName" (list . "sandbox-proxy")) .Release.Namespace) -}}
 {{- end }}
 
 {{- define "onyx.sandboxProxyPort" -}}
@@ -297,11 +352,153 @@ Emits a single line ending with a comma.
 {{- end }}
 
 {{/*
-Render a volumeMounts block combining pod-specific mounts with the custom CA
-mount. Usage: include "onyx.volumeMountsWithCA" (dict "ctx" . "volumeMounts" <list>)
+"true" when PostgreSQL TLS settings and a CA certificate source are configured.
 */}}
-{{- define "onyx.volumeMountsWithCA" -}}
-{{- $ca := include "onyx.customCACerts.volumeMount" .ctx -}}
+{{- define "onyx.postgresTls.enabled" -}}
+{{- if and .Values.postgresTls .Values.postgresTls.enabled }}true{{- end -}}
+{{- end }}
+
+{{/*
+Volume sourcing the PostgreSQL server CA. The backend validates the configured
+path at startup, so mount exactly the configured key at its expected filename.
+*/}}
+{{- define "onyx.postgresTls.volume" -}}
+{{- if include "onyx.postgresTls.enabled" . -}}
+{{- $tls := .Values.postgresTls -}}
+{{- if and $tls.caSecretName $tls.caConfigMapName -}}
+{{- fail "postgresTls.caSecretName and postgresTls.caConfigMapName are mutually exclusive; set exactly one" -}}
+{{- end -}}
+{{- $caPath := $tls.caMountPath | default "/etc/postgres-ca/ca.crt" -}}
+{{- $caKey := $tls.caKey | default "ca.crt" -}}
+- name: postgres-ca
+  {{- if $tls.caSecretName }}
+  secret:
+    secretName: {{ $tls.caSecretName }}
+    items:
+      - key: {{ $caKey }}
+        path: {{ base $caPath }}
+  {{- else if $tls.caConfigMapName }}
+  configMap:
+    name: {{ $tls.caConfigMapName }}
+    items:
+      - key: {{ $caKey }}
+        path: {{ base $caPath }}
+  {{- else -}}
+  {{- fail "postgresTls.enabled is true but neither postgresTls.caSecretName nor postgresTls.caConfigMapName is set" -}}
+  {{- end }}
+{{- end -}}
+{{- end }}
+
+{{/* Mount for the PostgreSQL server CA. */}}
+{{- define "onyx.postgresTls.volumeMount" -}}
+{{- if include "onyx.postgresTls.enabled" . -}}
+{{- $caPath := .Values.postgresTls.caMountPath | default "/etc/postgres-ca/ca.crt" -}}
+- name: postgres-ca
+  mountPath: {{ dir $caPath }}
+  readOnly: true
+{{- end -}}
+{{- end }}
+
+{{/*
+"true" when Redis TLS settings and a CA certificate source are configured.
+*/}}
+{{- define "onyx.redisTls.enabled" -}}
+{{- $tls := .Values.redisTls | default dict -}}
+{{- if hasKey $tls "enabled" -}}
+{{- if eq (toString (index $tls "enabled")) "true" }}true{{- end -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Redis hostname verification defaults to enabled. Only an explicit Boolean false
+disables it; missing, null, and invalid values keep the secure default.
+*/}}
+{{- define "onyx.redisTls.checkHostname" -}}
+{{- $tls := .Values.redisTls | default dict -}}
+{{- $checkHostname := index $tls "checkHostname" -}}
+{{- if kindIs "bool" $checkHostname -}}
+{{- $checkHostname -}}
+{{- else -}}
+true
+{{- end -}}
+{{- end }}
+
+{{/*
+Volume sourcing the Redis server CA. The backend uses the configured path for
+REDIS_SSL_CA_CERTS, so mount exactly the configured key at its expected name.
+*/}}
+{{- define "onyx.redisTls.volume" -}}
+{{- if include "onyx.redisTls.enabled" . -}}
+{{- $tls := .Values.redisTls | default dict -}}
+{{- if and $tls.caSecretName $tls.caConfigMapName -}}
+{{- fail "redisTls.caSecretName and redisTls.caConfigMapName are mutually exclusive; set exactly one" -}}
+{{- end -}}
+{{- $caPath := $tls.caMountPath | default "/etc/ssl/certs/redis-ca.crt" -}}
+{{- $caKey := $tls.caKey | default "ca.crt" -}}
+- name: redis-ca
+  {{- if $tls.caSecretName }}
+  secret:
+    secretName: {{ $tls.caSecretName }}
+    items:
+      - key: {{ $caKey }}
+        path: {{ base $caPath }}
+  {{- else if $tls.caConfigMapName }}
+  configMap:
+    name: {{ $tls.caConfigMapName }}
+    items:
+      - key: {{ $caKey }}
+        path: {{ base $caPath }}
+  {{- else -}}
+  {{- fail "redisTls.enabled is true but neither redisTls.caSecretName nor redisTls.caConfigMapName is set" -}}
+  {{- end }}
+{{- end -}}
+{{- end }}
+
+{{/* Mount for the Redis server CA. */}}
+{{- define "onyx.redisTls.volumeMount" -}}
+{{- if include "onyx.redisTls.enabled" . -}}
+{{- $tls := .Values.redisTls | default dict -}}
+{{- $caPath := $tls.caMountPath | default "/etc/ssl/certs/redis-ca.crt" -}}
+- name: redis-ca
+  mountPath: {{ $caPath }}
+  subPath: {{ base $caPath }}
+  readOnly: true
+{{- end -}}
+{{- end }}
+
+{{/*
+Model-server variant of the custom-CA env. The model servers run on a distroless
+image with no shell to run update-ca-certificates, so instead of pointing at the
+merged system store they hand the mount directory to the Python entrypoint, which
+concatenates the mounted roots with certifi's public roots at startup. Any key
+name(s) under the mount work, and the roots stay additive to the public roots.
+*/}}
+{{- define "onyx.customCACerts.modelServerEnv" -}}
+{{- if include "onyx.customCACerts.enabled" . -}}
+- name: ONYX_CUSTOM_CA_CERTS_DIR
+  value: /etc/onyx/certs
+{{- end -}}
+{{- end }}
+
+{{/*
+Model-server variant of the custom-CA mount: mounts the bundle directory the
+entrypoint reads (no update-ca-certificates step) at the path the env above names.
+*/}}
+{{- define "onyx.customCACerts.modelServerVolumeMount" -}}
+{{- if include "onyx.customCACerts.enabled" . -}}
+- name: custom-ca-certs
+  mountPath: /etc/onyx/certs
+  readOnly: true
+{{- end -}}
+{{- end }}
+
+{{/*
+Render a volumeMounts block for the model servers, combining pod-specific mounts
+with the model-server custom-CA mount.
+Usage: include "onyx.modelServer.volumeMountsWithCA" (dict "ctx" . "volumeMounts" <list>)
+*/}}
+{{- define "onyx.modelServer.volumeMountsWithCA" -}}
+{{- $ca := include "onyx.customCACerts.modelServerVolumeMount" .ctx -}}
 {{- $existing := .volumeMounts -}}
 {{- if or $ca $existing -}}
 volumeMounts:
@@ -315,10 +512,10 @@ volumeMounts:
 {{- end }}
 
 {{/*
-Render a volumes block combining pod-specific volumes with the custom CA
-volume. Usage: include "onyx.volumesWithCA" (dict "ctx" . "volumes" <list>)
+Render a volumes block combining pod-specific volumes with the model-server
+custom-CA volume. Usage: include "onyx.modelServer.volumesWithCA" (dict "ctx" . "volumes" <list>)
 */}}
-{{- define "onyx.volumesWithCA" -}}
+{{- define "onyx.modelServer.volumesWithCA" -}}
 {{- $ca := include "onyx.customCACerts.volume" .ctx -}}
 {{- $existing := .volumes -}}
 {{- if or $ca $existing -}}
@@ -328,6 +525,58 @@ volumes:
 {{- end }}
 {{- if $ca }}
 {{ $ca | nindent 2 }}
+{{- end }}
+{{- end -}}
+{{- end }}
+
+{{/*
+Render a volumeMounts block combining pod-specific mounts with the custom CA
+mount. Usage: include "onyx.volumeMountsWithCA" (dict "ctx" . "volumeMounts" <list>)
+*/}}
+{{- define "onyx.volumeMountsWithCA" -}}
+{{- $ca := include "onyx.customCACerts.volumeMount" .ctx -}}
+{{- $postgresTls := include "onyx.postgresTls.volumeMount" .ctx -}}
+{{- $redisTls := include "onyx.redisTls.volumeMount" .ctx -}}
+{{- $existing := .volumeMounts -}}
+{{- if or $ca $postgresTls $redisTls $existing -}}
+volumeMounts:
+{{- if $existing }}
+{{ toYaml $existing | nindent 2 }}
+{{- end }}
+{{- if $ca }}
+{{ $ca | nindent 2 }}
+{{- end }}
+{{- if $postgresTls }}
+{{ $postgresTls | nindent 2 }}
+{{- end }}
+{{- if $redisTls }}
+{{ $redisTls | nindent 2 }}
+{{- end }}
+{{- end -}}
+{{- end }}
+
+{{/*
+Render a volumes block combining pod-specific volumes with the custom CA
+volume. Usage: include "onyx.volumesWithCA" (dict "ctx" . "volumes" <list>)
+*/}}
+{{- define "onyx.volumesWithCA" -}}
+{{- $ca := include "onyx.customCACerts.volume" .ctx -}}
+{{- $postgresTls := include "onyx.postgresTls.volume" .ctx -}}
+{{- $redisTls := include "onyx.redisTls.volume" .ctx -}}
+{{- $existing := .volumes -}}
+{{- if or $ca $postgresTls $redisTls $existing -}}
+volumes:
+{{- if $existing }}
+{{ toYaml $existing | nindent 2 }}
+{{- end }}
+{{- if $ca }}
+{{ $ca | nindent 2 }}
+{{- end }}
+{{- if $postgresTls }}
+{{ $postgresTls | nindent 2 }}
+{{- end }}
+{{- if $redisTls }}
+{{ $redisTls | nindent 2 }}
 {{- end }}
 {{- end -}}
 {{- end }}

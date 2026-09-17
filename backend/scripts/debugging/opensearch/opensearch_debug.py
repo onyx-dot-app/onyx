@@ -26,8 +26,10 @@ import os
 import sys
 from typing import Any
 
-from onyx.document_index.opensearch.client import OpenSearchClient
-from onyx.document_index.opensearch.client import OpenSearchIndexClient
+from onyx.document_index.opensearch.client import (
+    OpenSearchClient,
+    OpenSearchIndexClient,
+)
 from onyx.document_index.opensearch.constants import OpenSearchAuthMethod
 from shared_configs.configs import MULTI_TENANT
 
@@ -359,16 +361,16 @@ def main() -> None:
 
     cluster_only_commands = {"list", "health", "reroute-retry-failed"}
 
-    common_kwargs: dict[str, Any] = dict(
-        host=host,
-        port=port,
-        auth=(username, password),
-        use_ssl=not args.no_ssl,
-        verify_certs=not args.no_verify_certs,
-        auth_method=auth_method,
-        aws_region=aws_region,
-        aws_service=aws_service,
-    )
+    common_kwargs: dict[str, Any] = {
+        "host": host,
+        "port": port,
+        "auth": (username, password),
+        "use_ssl": not args.no_ssl,
+        "verify_certs": not args.no_verify_certs,
+        "auth_method": auth_method,
+        "aws_region": aws_region,
+        "aws_service": aws_service,
+    }
     with (
         OpenSearchClient(**common_kwargs)
         if args.command in cluster_only_commands

@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-from typing import Any
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from sentry_sdk.scrubber import DEFAULT_DENYLIST
-from sentry_sdk.scrubber import EventScrubber
+from sentry_sdk.scrubber import DEFAULT_DENYLIST, EventScrubber
 from sentry_sdk.types import Event
 
 from onyx.utils.logger import setup_logger

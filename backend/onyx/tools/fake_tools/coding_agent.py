@@ -6,48 +6,54 @@ from typing import Callable
 from onyx.chat.emitter import Emitter
 from onyx.chat.llm_loop import construct_message_history
 from onyx.chat.llm_step import run_llm_step_pkt_generator
-from onyx.chat.models import ChatMessageSimple
-from onyx.chat.models import ToolCallSimple
-from onyx.coding_agent.mock_tools import BASH_TOOL_CMD_KEY
-from onyx.coding_agent.mock_tools import BASH_TOOL_NAME
-from onyx.coding_agent.mock_tools import CODING_AGENT_QUERY_KEY
-from onyx.coding_agent.mock_tools import CODING_AGENT_REPO_KEY
-from onyx.coding_agent.mock_tools import GENERATE_ANSWER_TOOL_NAME
-from onyx.coding_agent.mock_tools import get_coding_agent_tool_definitions
-from onyx.coding_agent.models import CodingAgentCallResult
-from onyx.coding_agent.models import CodingAgentSpecialToolCalls
+from onyx.chat.models import ChatMessageSimple, ToolCallSimple
+from onyx.coding_agent.mock_tools import (
+    BASH_TOOL_CMD_KEY,
+    BASH_TOOL_NAME,
+    CODING_AGENT_QUERY_KEY,
+    CODING_AGENT_REPO_KEY,
+    GENERATE_ANSWER_TOOL_NAME,
+    get_coding_agent_tool_definitions,
+)
+from onyx.coding_agent.models import CodingAgentCallResult, CodingAgentSpecialToolCalls
 from onyx.configs.constants import MessageType
-from onyx.deep_research.dr_mock_tools import THINK_TOOL_NAME
-from onyx.deep_research.dr_mock_tools import THINK_TOOL_RESPONSE_MESSAGE
-from onyx.deep_research.dr_mock_tools import THINK_TOOL_RESPONSE_TOKEN_COUNT
+from onyx.deep_research.dr_mock_tools import (
+    THINK_TOOL_NAME,
+    THINK_TOOL_RESPONSE_MESSAGE,
+    THINK_TOOL_RESPONSE_TOKEN_COUNT,
+)
 from onyx.deep_research.utils import create_think_tool_token_processor
-from onyx.llm.interfaces import LLM
-from onyx.llm.interfaces import LLMUserIdentity
-from onyx.llm.models import ReasoningEffort
-from onyx.llm.models import ToolChoiceOptions
-from onyx.llm.utils import model_is_reasoning_model
-from onyx.prompts.coding_agent.coding_agent import CODING_AGENT_FINAL_ANSWER_PROMPT
-from onyx.prompts.coding_agent.coding_agent import CODING_AGENT_PROMPT
-from onyx.prompts.coding_agent.coding_agent import CODING_AGENT_PROMPT_REASONING
-from onyx.prompts.coding_agent.coding_agent import MAX_CODING_AGENT_CYCLES
-from onyx.prompts.coding_agent.coding_agent import USER_FINAL_ANSWER_QUERY
+from onyx.llm.interfaces import LLM, LLMUserIdentity
+from onyx.llm.model_capabilities import model_is_reasoning_model
+from onyx.llm.models import ReasoningEffort, ToolChoiceOptions
+from onyx.prompts.coding_agent.coding_agent import (
+    CODING_AGENT_FINAL_ANSWER_PROMPT,
+    CODING_AGENT_PROMPT,
+    CODING_AGENT_PROMPT_REASONING,
+    MAX_CODING_AGENT_CYCLES,
+    USER_FINAL_ANSWER_QUERY,
+)
 from onyx.prompts.prompt_utils import get_current_llm_day_time
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
-from onyx.server.query_and_chat.streaming_models import AgentResponseStart
-from onyx.server.query_and_chat.streaming_models import CodingAgentFinal
-from onyx.server.query_and_chat.streaming_models import CodingAgentThinkingDelta
-from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import PacketException
-from onyx.server.query_and_chat.streaming_models import StreamingType
+from onyx.server.query_and_chat.streaming_models import (
+    AgentResponseDelta,
+    AgentResponseStart,
+    CodingAgentFinal,
+    CodingAgentThinkingDelta,
+    Packet,
+    PacketException,
+    StreamingType,
+)
 from onyx.tools.models import ToolCallKickoff
-from onyx.tools.tool_implementations.bash.bash_tool import BashTool
-from onyx.tools.tool_implementations.bash.bash_tool import BashToolOverrideKwargs
+from onyx.tools.tool_implementations.bash.bash_tool import (
+    BashTool,
+    BashToolOverrideKwargs,
+)
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterClient,
 )
 from onyx.tracing.framework.create import function_span
-from onyx.utils.github import download_github_repo
+from onyx.utils.github import download_github_archive, parse_github_source
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -70,6 +76,8 @@ REPO_TARBALL_PATH = "repo.tar.gz"
 # calls are not persisted to the DB through this loop, so the id is unused.
 BASH_TOOL_SENTINEL_ID = 0
 MAX_FINAL_ANSWER_TOKENS = 4000
+CODING_AGENT_GITHUB_MAX_REPO_BYTES = 500 * 1024 * 1024
+CODING_AGENT_GITHUB_DOWNLOAD_TIMEOUT = (30, 300)
 
 
 @contextmanager
@@ -83,7 +91,17 @@ def _setup_session(
     Creates its own :class:`CodeInterpreterClient` internally and tears it
     down on exit, so callers only deal with the ``session_id``.
     """
-    repo_bytes = download_github_repo(repo, github_token=github_token)
+    github_source = parse_github_source(
+        repo,
+        allow_ssh=True,
+    )
+    repo_bytes = download_github_archive(
+        github_source,
+        "HEAD",
+        f"Bearer {github_token}" if github_token else None,
+        max_size_bytes=CODING_AGENT_GITHUB_MAX_REPO_BYTES,
+        timeout=CODING_AGENT_GITHUB_DOWNLOAD_TIMEOUT,
+    )
 
     with CodeInterpreterClient() as client:
         ci_file_id = client.upload_file(repo_bytes, REPO_TARBALL_PATH)

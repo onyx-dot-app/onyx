@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { MessageCard, Tabs } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { SvgSimpleLoader } from "@opal/icons";
@@ -46,10 +47,6 @@ import useSyncAttemptsPaginatedFetch from "./useSyncAttemptsPaginatedFetch";
 
 const ITEMS_PER_PAGE = 8;
 const PAGES_PER_BATCH = 4;
-const NOT_APPLICABLE_DOC_PERMISSIONS_MESSAGE =
-  "This connector does not use a separate document-permission syncing job.";
-const NOT_APPLICABLE_GROUP_MEMBERSHIP_MESSAGE =
-  "This connector does not use a separate group-membership syncing job.";
 
 enum SyncAttemptsTab {
   INDEXING = "indexing",
@@ -77,6 +74,7 @@ export function SyncAttemptsTabs({
   indexTotalPages,
   onIndexPageChange,
 }: SyncAttemptsTabsProps) {
+  const t = useTranslations("admin.connector");
   const [tab, setTab] = useState<SyncAttemptsTab>(SyncAttemptsTab.INDEXING);
 
   return (
@@ -85,12 +83,14 @@ export function SyncAttemptsTabs({
       onValueChange={(value) => setTab(value as SyncAttemptsTab)}
     >
       <Tabs.List>
-        <Tabs.Trigger value={SyncAttemptsTab.INDEXING}>Indexing</Tabs.Trigger>
+        <Tabs.Trigger value={SyncAttemptsTab.INDEXING}>
+          {t("syncTabs.indexing.label")}
+        </Tabs.Trigger>
         <Tabs.Trigger value={SyncAttemptsTab.DOC_PERMISSIONS}>
-          Document Permission Sync
+          {t("syncTabs.docPermissions.label")}
         </Tabs.Trigger>
         <Tabs.Trigger value={SyncAttemptsTab.GROUP_MEMBERSHIP}>
-          Group Membership Sync
+          {t("syncTabs.groupMembership.label")}
         </Tabs.Trigger>
       </Tabs.List>
 
@@ -116,6 +116,7 @@ export function SyncAttemptsTabs({
 }
 
 function DocPermissionsTabBody({ ccPairId }: { ccPairId: number }) {
+  const t = useTranslations("admin.connector");
   const result =
     useSyncAttemptsPaginatedFetch<DocPermissionSyncAttemptSnapshot>({
       endpoint: SWR_KEYS.ccPairPermissionSyncAttempts(ccPairId),
@@ -124,7 +125,11 @@ function DocPermissionsTabBody({ ccPairId }: { ccPairId: number }) {
       pagesPerBatch: PAGES_PER_BATCH,
     });
 
-  const gate = renderTabGate(result, NOT_APPLICABLE_DOC_PERMISSIONS_MESSAGE);
+  const gate = renderTabGate(result, {
+    loadErrorTitle: t("syncTabs.loadError.title"),
+    notApplicableTitle: t("syncTabs.notApplicable.title"),
+    notApplicableMessage: t("syncTabs.docPermissions.notApplicableDescription"),
+  });
   if (gate !== null) return gate;
 
   return (
@@ -138,6 +143,7 @@ function DocPermissionsTabBody({ ccPairId }: { ccPairId: number }) {
 }
 
 function GroupMembershipTabBody({ ccPairId }: { ccPairId: number }) {
+  const t = useTranslations("admin.connector");
   const result =
     useSyncAttemptsPaginatedFetch<ExternalGroupSyncAttemptSnapshot>({
       endpoint: SWR_KEYS.ccPairExternalGroupSyncAttempts(ccPairId),
@@ -146,7 +152,13 @@ function GroupMembershipTabBody({ ccPairId }: { ccPairId: number }) {
       pagesPerBatch: PAGES_PER_BATCH,
     });
 
-  const gate = renderTabGate(result, NOT_APPLICABLE_GROUP_MEMBERSHIP_MESSAGE);
+  const gate = renderTabGate(result, {
+    loadErrorTitle: t("syncTabs.loadError.title"),
+    notApplicableTitle: t("syncTabs.notApplicable.title"),
+    notApplicableMessage: t(
+      "syncTabs.groupMembership.notApplicableDescription"
+    ),
+  });
   if (gate !== null) return gate;
 
   return (
@@ -168,6 +180,13 @@ interface TabGateInputs {
   currentPageData: unknown[] | null;
 }
 
+/** Translated copy threaded in from the calling component. */
+interface TabGateLabels {
+  loadErrorTitle: string;
+  notApplicableTitle: string;
+  notApplicableMessage: string;
+}
+
 /**
  * Compresses the loading / error / not-applicable / first-page-loading
  * branches both permission-sync tabs share into one place. Returns
@@ -175,7 +194,7 @@ interface TabGateInputs {
  */
 function renderTabGate(
   inputs: TabGateInputs,
-  notApplicableMessage: string
+  labels: TabGateLabels
 ): React.ReactElement | null {
   const {
     applicable,
@@ -190,7 +209,7 @@ function renderTabGate(
     return (
       <MessageCard
         variant="error"
-        title="Failed to load sync attempts"
+        title={labels.loadErrorTitle}
         description={applicableError.message}
       />
     );
@@ -202,8 +221,8 @@ function renderTabGate(
     return (
       <MessageCard
         variant="info"
-        title="Not applicable"
-        description={notApplicableMessage}
+        title={labels.notApplicableTitle}
+        description={labels.notApplicableMessage}
       />
     );
   }
@@ -214,7 +233,7 @@ function renderTabGate(
     return (
       <MessageCard
         variant="error"
-        title="Failed to load sync attempts"
+        title={labels.loadErrorTitle}
         description={error.message}
       />
     );

@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { ShadowDiv } from "@opal/components";
 
 const meta: Meta<typeof ShadowDiv> = {

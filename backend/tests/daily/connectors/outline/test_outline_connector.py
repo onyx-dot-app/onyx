@@ -5,11 +5,12 @@ from typing import Any
 import pytest
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
+from onyx.connectors.exceptions import ConnectorValidationError, CredentialExpiredError
+from onyx.connectors.models import (
+    ConnectorMissingCredentialError,
+    Document,
+    HierarchyNode,
+)
 from onyx.connectors.outline.connector import OutlineConnector
 
 

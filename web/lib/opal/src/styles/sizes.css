@@ -25,6 +25,10 @@
 
   --chrome-header-height: 3.25rem;
 
+  --auth-container-width: 24rem;
+}
+
+:root {
   /* BLOCK — WIDTH */
   --block-width-tooltip-max: 15rem;
 

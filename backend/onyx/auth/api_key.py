@@ -7,12 +7,14 @@ from fastapi import Request
 from passlib.hash import sha256_crypt
 from pydantic import BaseModel
 
-from onyx.auth.constants import API_KEY_LENGTH
-from onyx.auth.constants import API_KEY_PREFIX
-from onyx.auth.constants import DEPRECATED_API_KEY_PREFIX
-from onyx.auth.schemas import UserRole
+from onyx.auth.constants import (
+    API_KEY_LENGTH,
+    API_KEY_PREFIX,
+    DEPRECATED_API_KEY_PREFIX,
+)
 from onyx.auth.utils import get_hashed_bearer_token_from_request
 from onyx.configs.app_configs import API_KEY_HASH_ROUNDS
+from onyx.server.models import UserGroupInfo
 from shared_configs.configs import MULTI_TENANT
 
 
@@ -21,7 +23,7 @@ class ApiKeyDescriptor(BaseModel):
     api_key_display: str
     api_key: str | None = None  # only present on initial creation
     api_key_name: str | None = None
-    api_key_role: UserRole
+    groups: list[UserGroupInfo]
 
     user_id: uuid.UUID
 
@@ -51,8 +53,7 @@ def hash_api_key(api_key: str) -> str:
 
 
 def build_displayable_api_key(api_key: str) -> str:
-    if api_key.startswith(API_KEY_PREFIX):
-        api_key = api_key[len(API_KEY_PREFIX) :]
+    api_key = api_key.removeprefix(API_KEY_PREFIX)
 
     return API_KEY_PREFIX + api_key[:4] + "********" + api_key[-4:]
 

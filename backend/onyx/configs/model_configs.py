@@ -1,6 +1,8 @@
 import json
 import os
 
+from shared_configs.configs import DEFAULT_DOCUMENT_ENCODER_MODEL
+
 #####
 # Embedding/Reranking Model Configs
 #####
@@ -12,7 +14,6 @@ import os
 # The useable models configured as below must be SentenceTransformer compatible
 # NOTE: DO NOT CHANGE SET THESE UNLESS YOU KNOW WHAT YOU ARE DOING
 # IDEALLY, YOU SHOULD CHANGE EMBEDDING MODELS VIA THE UI
-DEFAULT_DOCUMENT_ENCODER_MODEL = "nomic-ai/nomic-embed-text-v1"
 DOCUMENT_ENCODER_MODEL = (
     os.environ.get("DOCUMENT_ENCODER_MODEL") or DEFAULT_DOCUMENT_ENCODER_MODEL
 )
@@ -42,9 +43,6 @@ EMBEDDING_BATCH_SIZE = int(os.environ.get("EMBEDDING_BATCH_SIZE") or 0) or None
 BATCH_SIZE_ENCODE_CHUNKS = EMBEDDING_BATCH_SIZE or 8
 # don't send over too many chunks at once, as sending too many could cause timeouts
 BATCH_SIZE_ENCODE_CHUNKS_FOR_API_EMBEDDING_SERVICES = EMBEDDING_BATCH_SIZE or 512
-# For score display purposes, only way is to know the expected ranges
-CROSS_ENCODER_RANGE_MAX = 1
-CROSS_ENCODER_RANGE_MIN = 0
 
 
 #####
@@ -83,12 +81,6 @@ if not 0.0 <= GEN_AI_INPUT_TOKEN_SAFETY_MARGIN < 1.0:
         f"{GEN_AI_INPUT_TOKEN_SAFETY_MARGIN}"
     )
 
-# This is used when computing how much context space is available for documents
-# ahead of time in order to let the user know if they can "select" more documents
-# It represents a maximum "expected" number of input tokens from the latest user
-# message. At query time, we don't actually enforce this - we will only throw an
-# error if the total # of tokens exceeds the max input tokens.
-GEN_AI_SINGLE_USER_MESSAGE_EXPECTED_MAX_TOKENS = 512
 GEN_AI_TEMPERATURE = float(os.environ.get("GEN_AI_TEMPERATURE") or 0)
 
 # should be used if you are using a custom LLM inference provider that doesn't support

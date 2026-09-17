@@ -1,9 +1,6 @@
 import csv
 import io
-from collections.abc import Generator
-from collections.abc import Iterable
-from collections.abc import Iterator
-from collections.abc import Mapping
+from collections.abc import Generator, Iterable, Iterator, Mapping
 
 from pydantic import BaseModel
 

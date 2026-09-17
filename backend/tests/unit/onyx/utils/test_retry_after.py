@@ -1,6 +1,4 @@
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from email.utils import format_datetime
 
 import pytest

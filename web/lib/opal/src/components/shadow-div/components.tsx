@@ -30,6 +30,17 @@ interface ShadowDivProps extends React.HTMLAttributes<HTMLDivElement> {
    * Show only top shadow
    */
   topOnly?: boolean;
+
+  /**
+   * Fade the content itself via mask-image instead of painting gradient
+   * overlays. Use over non-flat backgrounds the gradients can't match.
+   */
+  mask?: boolean;
+
+  /**
+   * Class for the outer wrapper (e.g. flex sizing within a parent column).
+   */
+  containerClassName?: string;
 }
 
 /**
@@ -59,8 +70,11 @@ function ShadowDiv({
   scrollContainerRef,
   bottomOnly = false,
   topOnly = false,
+  mask = false,
+  containerClassName,
   className,
   children,
+  style,
   ...props
 }: ShadowDivProps) {
   const [showTopShadow, setShowTopShadow] = useState(false);
@@ -104,21 +118,28 @@ function ShadowDiv({
     };
   }, [containerRef, checkScroll]);
 
+  const topFade = !bottomOnly && showTopShadow ? shadowHeight : "0px";
+  const bottomFade = !topOnly && showBottomShadow ? shadowHeight : "0px";
+  const maskImage = `linear-gradient(to bottom, transparent 0, black ${topFade}, black calc(100% - ${bottomFade}), transparent 100%)`;
+
   return (
-    <div className="relative min-h-0 flex flex-col">
+    <div className={cn("relative min-h-0 flex flex-col", containerClassName)}>
       <div
         ref={containerRef}
         className={cn("overflow-y-auto", className)}
+        style={
+          mask ? { ...style, maskImage, WebkitMaskImage: maskImage } : style
+        }
         {...props}
       >
         {children}
       </div>
 
       {/* Top scroll shadow indicator */}
-      {!bottomOnly && (
+      {!mask && !bottomOnly && (
         <div
           className={cn(
-            "absolute top-0 left-0 right-0 pointer-events-none transition-opacity duration-150",
+            "absolute top-0 start-0 end-0 pointer-events-none transition-opacity duration-150",
             showTopShadow ? "opacity-100" : "opacity-0"
           )}
           style={{
@@ -129,10 +150,10 @@ function ShadowDiv({
       )}
 
       {/* Bottom scroll shadow indicator */}
-      {!topOnly && (
+      {!mask && !topOnly && (
         <div
           className={cn(
-            "absolute bottom-0 left-0 right-0 pointer-events-none transition-opacity duration-150",
+            "absolute bottom-0 start-0 end-0 pointer-events-none transition-opacity duration-150",
             showBottomShadow ? "opacity-100" : "opacity-0"
           )}
           style={{

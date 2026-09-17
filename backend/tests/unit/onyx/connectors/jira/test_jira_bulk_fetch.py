@@ -6,8 +6,7 @@ import requests
 from jira import JIRA
 from jira.resources import Issue
 
-from onyx.connectors.jira.connector import _JIRA_BULK_FETCH_LIMIT
-from onyx.connectors.jira.connector import bulk_fetch_issues
+from onyx.connectors.jira.connector import _JIRA_BULK_FETCH_LIMIT, bulk_fetch_issues
 
 
 def _make_raw_issue(issue_id: str) -> dict[str, Any]:
@@ -105,7 +104,7 @@ def test_bulk_fetch_non_json_error_propagates() -> None:
 
     try:
         bulk_fetch_issues(client, ["1"])
-        assert False, "Expected ValueError to propagate"
+        raise AssertionError("Expected ValueError to propagate")
     except ValueError:
         pass
 

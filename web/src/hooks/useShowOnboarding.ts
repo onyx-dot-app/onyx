@@ -19,7 +19,7 @@ function getOnboardingCompletedKey(userId: string): string {
   return `onyx:onboardingCompleted:${userId}`;
 }
 
-function useOnboardingState(liveAgent?: MinimalAgent): {
+function useOnboardingState(activeAgent?: MinimalAgent): {
   state: OnboardingState;
   actions: OnboardingActions;
   isLoading: boolean;
@@ -37,7 +37,7 @@ function useOnboardingState(liveAgent?: MinimalAgent): {
   } = useProviderStatus();
 
   // Only fetch persona-specific providers (different endpoint)
-  const { refetch: refreshPersonaProviders } = useLLMProviders(liveAgent?.id);
+  const { refetch: refreshPersonaProviders } = useLLMProviders(activeAgent?.id);
 
   const userName = user?.personalization?.name;
 
@@ -127,12 +127,12 @@ function useOnboardingState(liveAgent?: MinimalAgent): {
 
     if (state.currentStep === OnboardingStep.LlmSetup) {
       refreshProviderInfo();
-      if (liveAgent) {
+      if (activeAgent) {
         refreshPersonaProviders();
       }
     }
     dispatch({ type: OnboardingActionType.NEXT_STEP });
-  }, [state, refreshProviderInfo, refreshPersonaProviders, liveAgent]);
+  }, [state, refreshProviderInfo, refreshPersonaProviders, activeAgent]);
 
   const prevStep = useCallback(() => {
     dispatch({ type: OnboardingActionType.PREV_STEP });
@@ -248,14 +248,14 @@ function useOnboardingState(liveAgent?: MinimalAgent): {
 }
 
 interface UseShowOnboardingParams {
-  liveAgent: MinimalAgent | undefined;
+  activeAgent: MinimalAgent | undefined;
   isLoadingChatSessions: boolean;
   chatSessionsCount: number;
   userId: string | undefined;
 }
 
 export function useShowOnboarding({
-  liveAgent,
+  activeAgent,
   isLoadingChatSessions,
   chatSessionsCount,
   userId,
@@ -277,7 +277,7 @@ export function useShowOnboarding({
     actions: onboardingActions,
     isLoading: isLoadingOnboarding,
     hasProviders: hasAnyProvider,
-  } = useOnboardingState(liveAgent);
+  } = useOnboardingState(activeAgent);
 
   const isLoadingProviders = isLoadingOnboarding;
 

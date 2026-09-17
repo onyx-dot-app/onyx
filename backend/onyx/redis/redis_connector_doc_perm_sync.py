@@ -1,18 +1,17 @@
 import time
 from datetime import datetime
 from logging import Logger
-from typing import Any
-from typing import cast
-from typing import NamedTuple
+from typing import Any, NamedTuple, cast
 
 from pydantic import BaseModel
 from redis.lock import Lock as RedisLock
 
-from onyx.access.models import DocExternalAccess
-from onyx.access.models import ElementExternalAccess
-from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
-from onyx.configs.constants import CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT
-from onyx.configs.constants import OnyxRedisConstants
+from onyx.access.models import DocExternalAccess, ElementExternalAccess
+from onyx.configs.constants import (
+    CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+    CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT,
+    OnyxRedisConstants,
+)
 from onyx.redis.redis_pool import SCAN_ITER_COUNT_DEFAULT
 from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.server.metrics.perm_sync_metrics import (
@@ -204,6 +203,7 @@ class RedisConnectorPermissionSync:
                 permissions.external_access.num_entries
                 > permissions.external_access.MAX_NUM_ENTRIES
             ):
+                num_errors += 1
                 if task_logger:
                     num_users = len(permissions.external_access.external_user_emails)
                     num_groups = len(

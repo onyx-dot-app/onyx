@@ -5,11 +5,12 @@ tested without a DB. Covers the residual math, the in-span component set, the
 clamp, and the absent-BATCH_TOTAL case.
 """
 
-from onyx.db.index_attempt_metrics_models import IndexAttemptStage
-from onyx.db.index_attempt_metrics_models import STAGE_SCOPE
-from onyx.server.documents.models import _BATCH_TOTAL_COMPONENT_STAGES
-from onyx.server.documents.models import IndexAttemptStageMetricSnapshot
-from onyx.server.documents.models import synthesize_unaccounted
+from onyx.db.index_attempt_metrics_models import STAGE_SCOPE, IndexAttemptStage
+from onyx.server.documents.models import (
+    _BATCH_TOTAL_COMPONENT_STAGES,
+    IndexAttemptStageMetricSnapshot,
+    synthesize_unaccounted,
+)
 
 
 def _snap(
@@ -117,7 +118,7 @@ def test_residual_uses_component_totals_not_averages() -> None:
     assert residual.avg_duration_ms == 500 / 4
 
 
-def test_warn_log_fires_when_components_exceed_total(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_warn_log_fires_when_components_exceed_total(monkeypatch) -> None:
     import onyx.server.documents.models as models_module
 
     calls: list[tuple] = []

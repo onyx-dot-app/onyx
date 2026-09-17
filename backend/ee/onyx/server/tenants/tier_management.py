@@ -6,12 +6,10 @@ Value at TENANT_TIER_KEY is a JSON blob:
 
 import json
 from datetime import datetime
-from typing import cast
-from typing import NamedTuple
+from typing import NamedTuple, cast
 
 from ee.onyx.server.license.models import CustomerTier
-from onyx.redis.redis_pool import get_redis_client
-from onyx.redis.redis_pool import get_redis_replica_client
+from onyx.redis.redis_pool import get_redis_client, get_redis_replica_client
 from onyx.utils.logger import setup_logger
 
 # Per-tenant cached CustomerTier; TTL bounds upgrade-visible delay if push is missed.
@@ -38,10 +36,6 @@ def _parse_trial_end(raw: object, tenant_id: str) -> datetime | None:
             raw,
         )
         return None
-    # `datetime.fromisoformat` preserves whatever tzinfo the source string
-    # carried (or None). A naive datetime would `TypeError` against the
-    # tz-aware `datetime.now(timezone.utc)` comparison in `_effective_tier`,
-    # so reject it here rather than poison the cache.
     if parsed.tzinfo is None or parsed.tzinfo.utcoffset(parsed) is None:
         logger.warning(
             "Naive trial_end in cache for tenant %s: %r",

@@ -2,7 +2,11 @@
 
 Applied via bun's `patchedDependencies` (see `package.json`); bun re-applies them on every `bun install`.
 
-## `metro@0.84.4.patch` — Bundle Mode `.worklets` SHA-1 fix
+Both keys name an **exact** version. If the package drifts off that version, bun applies **nothing and
+prints no warning**, so `package.json` `overrides` pins each patched package to the version its patch was
+cut for. Bump the override, the `patchedDependencies` key, and the patch filename together.
+
+## `metro@0.84.5.patch` — Bundle Mode `.worklets` SHA-1 fix
 
 This is **Software Mansion's official react-native-worklets Bundle Mode patch**, copied verbatim for our
 metro version (only the diff paths are rewritten from patch-package's `node_modules/metro/...` to bun's
@@ -19,7 +23,11 @@ The patch short-circuits `getOrComputeSha1` for `.worklets` paths and returns a 
 throwing. SWM calls this "a temporary workaround until necessary changes are merged into Metro" — no metro
 release through 0.85.0 fixes it.
 
+Metro reaches us through `@expo/metro`, which is a re-export shim (`module.exports = require("metro/...")`),
+so patching the bare `metro` package is what takes effect. `@expo/metro` itself contains no metro source.
+
 **On a metro version bump** (e.g. an Expo SDK upgrade): grab the matching `metro+<version>.patch` from the
 SWM link above, re-cut it for the new version (`bun patch metro` → apply the change → `bun patch --commit`),
 and re-check [metro#330](https://github.com/facebook/metro/issues/330) — if it's fixed in the metro your SDK
-pulls, drop this patch entirely.
+pulls, drop this patch entirely. `src/node-haste/DependencyGraph.js` was byte-identical from 0.84.4 to
+0.84.5, so that re-cut needed no content change.

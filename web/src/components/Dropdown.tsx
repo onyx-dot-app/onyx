@@ -1,9 +1,11 @@
 "use client";
 
 import { forwardRef, useEffect, useRef, useState, JSX } from "react";
+import { useTranslations } from "next-intl";
 import { FiCheck, FiChevronDown, FiInfo } from "react-icons/fi";
 import { Popover } from "@opal/components";
 import { Tooltip } from "@opal/components";
+import { clickOnKeyDown } from "@opal/utils";
 export interface Option<T> {
   name: string;
   value: T;
@@ -45,11 +47,15 @@ export const CustomDropdown = ({
   }, []);
 
   return (
-    <div className="relative inline-block text-left w-full" ref={dropdownRef}>
-      <div onClick={() => setIsOpen(!isOpen)}>{children}</div>
+    <div className="relative inline-block text-start w-full" ref={dropdownRef}>
+      {/* Pointer convenience only — the trigger inside stays keyboard-reachable. */}
+      <div role="presentation" onClick={() => setIsOpen(!isOpen)}>
+        {children}
+      </div>
 
       {isOpen && (
         <div
+          role="presentation"
           onClick={() => setIsOpen(!isOpen)}
           className={`absolute ${
             direction === "up" ? "bottom-full pb-2" : "pt-2"
@@ -97,6 +103,10 @@ export function DefaultDropdownElement({
         text-text-dark
         ${disabled ? "" : "hover:bg-accent-background-hovered"}
       `}
+      role="button"
+      tabIndex={disabled ? -1 : 0}
+      aria-disabled={disabled || undefined}
+      onKeyDown={disabled || !onSelect ? undefined : clickOnKeyDown(onSelect)}
       onClick={disabled ? undefined : onSelect}
     >
       <div>
@@ -104,16 +114,16 @@ export function DefaultDropdownElement({
           {includeCheckbox && (
             <input
               type="checkbox"
-              className="mr-2"
+              className="me-2"
               checked={isSelected}
               onChange={() => null}
             />
           )}
-          {icon && icon({ size: 16, className: "mr-2 h-4 w-4 my-auto" })}
+          {icon && icon({ size: 16, className: "me-2 h-4 w-4 my-auto" })}
           {name}
           {disabled && disabledReason && (
             <Tooltip tooltip={disabledReason}>
-              <span className="ml-2 my-auto p-1 rounded-sm hover:bg-background-100 text-warning transition-colors cursor-default">
+              <span className="ms-2 my-auto p-1 rounded-sm hover:bg-background-100 text-warning transition-colors cursor-default">
                 <FiInfo size={14} className="text-warning" />
               </span>
             </Tooltip>
@@ -122,7 +132,7 @@ export function DefaultDropdownElement({
         {description && <div className="text-xs">{description}</div>}
       </div>
       {isSelected && (
-        <div className="ml-auto mr-1 my-auto">
+        <div className="ms-auto me-1 my-auto">
           <FiCheck />
         </div>
       )}
@@ -153,6 +163,7 @@ export const DefaultDropdown = forwardRef<HTMLDivElement, DefaultDropdownProps>(
     },
     ref
   ) => {
+    const t = useTranslations("common.dropdown");
     const selectedOption = options.find((option) => option.value === selected);
     const [isOpen, setIsOpen] = useState(false);
 
@@ -180,10 +191,10 @@ export const DefaultDropdown = forwardRef<HTMLDivElement, DefaultDropdownProps>(
             <p className="line-clamp-1">
               {selectedOption?.name ||
                 (includeDefault
-                  ? defaultValue || "Default"
-                  : "Select an option...")}
+                  ? defaultValue || t("default.label")
+                  : t("selectOption.placeholder"))}
             </p>
-            <FiChevronDown className="my-auto ml-auto" />
+            <FiChevronDown className="my-auto ms-auto" />
           </div>
         </Popover.Trigger>
         <Popover.Content
@@ -206,7 +217,7 @@ export const DefaultDropdown = forwardRef<HTMLDivElement, DefaultDropdownProps>(
             {includeDefault && (
               <DefaultDropdownElement
                 key={-1}
-                name="Default"
+                name={t("default.label")}
                 onSelect={() => handleSelect(null)}
                 isSelected={selected === null}
               />

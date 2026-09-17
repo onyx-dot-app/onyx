@@ -1,24 +1,22 @@
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Any
 
-from celery import shared_task
-from celery import Task
+from celery import Task, shared_task
 
-from onyx.configs.app_configs import BRAINTRUST_API_KEY
-from onyx.configs.app_configs import JOB_TIMEOUT
-from onyx.configs.app_configs import SCHEDULED_EVAL_DATASET_NAMES
-from onyx.configs.app_configs import SCHEDULED_EVAL_PERMISSIONS_EMAIL
-from onyx.configs.app_configs import SCHEDULED_EVAL_PROJECT
+from onyx.configs.app_configs import (
+    BRAINTRUST_API_KEY,
+    JOB_TIMEOUT,
+    SCHEDULED_EVAL_DATASET_NAMES,
+    SCHEDULED_EVAL_PERMISSIONS_EMAIL,
+    SCHEDULED_EVAL_PROJECT,
+)
 from onyx.configs.constants import OnyxCeleryTask
-from onyx.evals.eval import run_eval
-from onyx.evals.models import EvalConfigurationOptions
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.EVAL_RUN_TASK,
     ignore_result=True,
     soft_time_limit=JOB_TIMEOUT,
@@ -31,6 +29,11 @@ def eval_run_task(
     configuration_dict: dict[str, Any],
 ) -> None:
     """Background task to run an evaluation with the given configuration"""
+    # Imported here: the eval stack pulls in braintrust, every tool and the chat
+    # pipeline (~90 MB), which the primary worker should not hold at boot.
+    from onyx.evals.eval import run_eval
+    from onyx.evals.models import EvalConfigurationOptions
+
     try:
         configuration = EvalConfigurationOptions.model_validate(configuration_dict)
         run_eval(configuration, remote_dataset_name=configuration.dataset_name)
@@ -41,7 +44,7 @@ def eval_run_task(
         raise
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.SCHEDULED_EVAL_TASK,
     ignore_result=True,
     soft_time_limit=JOB_TIMEOUT * 5,  # Allow more time for multiple datasets
@@ -89,6 +92,9 @@ def scheduled_eval_task(self: Task, **kwargs: Any) -> None:  # noqa: ARG001
         len(dataset_names),
         dataset_names,
     )
+
+    from onyx.evals.eval import run_eval
+    from onyx.evals.models import EvalConfigurationOptions
 
     pipeline_start = datetime.now(timezone.utc)
     results: list[dict[str, Any]] = []

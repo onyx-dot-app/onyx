@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 import {
   LLMProviderFormProps,
@@ -18,9 +19,8 @@ import {
   ModelAccessField,
   ModalWrapper,
 } from "@/sections/modals/languageModels/shared";
-import { InputDivider } from "@opal/layouts";
+import { InputDivider, toast } from "@opal/layouts";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
-import { toast } from "@/hooks/useToast";
 
 export default function AnthropicModal({
   variant = "llm-configuration",
@@ -28,7 +28,9 @@ export default function AnthropicModal({
   shouldMarkAsDefault,
   onOpenChange,
   onSuccess,
+  analyticsSource,
 }: LLMProviderFormProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
 
@@ -40,7 +42,7 @@ export default function AnthropicModal({
     existingLlmProvider
   );
 
-  const validationSchema = buildValidationSchema(isOnboarding, {
+  const validationSchema = buildValidationSchema(t, isOnboarding, {
     apiKey: true,
   });
 
@@ -53,9 +55,12 @@ export default function AnthropicModal({
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting, setStatus }) => {
         await submitProvider({
-          analyticsSource: isOnboarding
-            ? LLMProviderConfiguredSource.CHAT_ONBOARDING
-            : LLMProviderConfiguredSource.ADMIN_PAGE,
+          t,
+          analyticsSource:
+            analyticsSource ??
+            (isOnboarding
+              ? LLMProviderConfiguredSource.CHAT_ONBOARDING
+              : LLMProviderConfiguredSource.ADMIN_PAGE),
           providerName: LLMProviderName.ANTHROPIC,
           values,
           initialValues,
@@ -71,8 +76,8 @@ export default function AnthropicModal({
               await refreshLlmProviderCaches(mutate);
               toast.success(
                 existingLlmProvider
-                  ? "Provider updated successfully!"
-                  : "Provider enabled successfully!"
+                  ? t("toasts.providerUpdated")
+                  : t("toasts.providerEnabled")
               );
             }
           },

@@ -1,12 +1,13 @@
 import { getBaseUrl } from "@/api/config";
+import { getValidToken } from "@/api/auth/refreshState";
 import { getToken } from "@/api/auth/tokenStore";
 import { ApiError } from "@/api/errors";
 
 export interface ApiFetchInit extends Omit<RequestInit, "body"> {
   // Plain objects are JSON-serialized; pass a string/FormData to send as-is.
   body?: unknown;
-  // Set false for public endpoints.
-  auth?: boolean;
+  // "stored" skips the wait on an in-flight refresh, so `refreshToken` doesn't await its own promise.
+  auth?: boolean | "stored";
 }
 
 function isBodyInit(body: unknown): body is BodyInit {
@@ -16,9 +17,10 @@ function isBodyInit(body: unknown): body is BodyInit {
     body instanceof URLSearchParams ||
     body instanceof Blob ||
     body instanceof ArrayBuffer ||
-    // Typed arrays/DataView: without this they'd be JSON.stringified into
-    // `{"0":1,...}`, corrupting binary uploads. ReadableStream omitted — RN
-    // fetch can't stream request bodies.
+    /*
+     * Typed arrays would otherwise be JSON.stringified into `{"0":1,...}`, corrupting binary
+     * uploads. ReadableStream is left out: RN fetch can't stream request bodies.
+     */
     ArrayBuffer.isView(body)
   );
 }
@@ -33,7 +35,8 @@ async function buildHeaders(
     headers.set("Content-Type", "application/json");
   }
   if (init?.auth !== false) {
-    const token = await getToken();
+    const token =
+      init?.auth === "stored" ? await getToken() : await getValidToken();
     if (token && !headers.has("Authorization")) {
       headers.set("Authorization", `Bearer ${token}`);
     }
@@ -41,8 +44,6 @@ async function buildHeaders(
   return headers;
 }
 
-// Backend error JSON shape varies by handler; normalize all into ApiError.
-// `error_code` only comes from OnyxError; message lives in `detail`/`message`.
 function extractErrorCode(record: Record<string, unknown>): string | undefined {
   return typeof record.error_code === "string" ? record.error_code : undefined;
 }
@@ -107,7 +108,6 @@ export async function apiFetch<T>(
     throw await toApiError(res);
   }
 
-  // 204 / empty body resolves as undefined for `Promise<void>` callers.
   if (res.status === 204) {
     return undefined as T;
   }
@@ -115,8 +115,7 @@ export async function apiFetch<T>(
   if (text.trim().length === 0) {
     return undefined as T;
   }
-  // A 2xx with non-JSON body would throw a raw SyntaxError that escapes ApiError
-  // normalization and gets retried.
+  // Without this, a non-JSON 2xx body throws a raw SyntaxError that escapes ApiError and gets retried.
   try {
     return JSON.parse(text) as T;
   } catch (parseError) {
@@ -125,7 +124,6 @@ export async function apiFetch<T>(
       detail: `Expected a JSON response but received ${
         res.headers.get("content-type") ?? "an unknown content type"
       }.`,
-      // Preserve the parser error + raw text for observability.
       body: {
         responseText: text,
         parseError:

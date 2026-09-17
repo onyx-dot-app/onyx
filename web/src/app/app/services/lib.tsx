@@ -1,9 +1,7 @@
-import {
-  Filters,
-  DocumentInfoPacket,
-  StreamStopInfo,
-} from "@/lib/search/interfaces";
+import { DocumentInfoPacket, StreamStopInfo } from "@/lib/search/interfaces";
+import type { SearchFiltersRequest } from "@/lib/searchFilters/types";
 import { handleSSEStream } from "@/lib/search/streamingUtils";
+import { ReasoningEffortOverride } from "@/lib/languageModels/types";
 import { FeedbackType } from "@/app/app/interfaces";
 import {
   BackendMessage,
@@ -13,18 +11,18 @@ import {
   Message,
   MessageResponseIDInfo,
   MultiModelMessageResponseIDInfo,
+  RateLimitDetails,
+  RATE_LIMITED_ERROR_CODE,
   ResearchType,
   RetrievalType,
   StreamingError,
   ToolCallMetadata,
   UserKnowledgeFilePacket,
 } from "../interfaces";
-import { MinimalAgent } from "@/lib/agents/types";
 import { ReadonlyURLSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "./searchParams";
-import { WEB_SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
-import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
 import { Packet } from "./streamingModels";
+import type { ErrorResponseBody } from "@/lib/fetcher";
 
 export async function updateLlmOverrideForChatSession(
   chatSessionId: string,
@@ -60,10 +58,35 @@ export async function updateTemperatureOverrideForChatSession(
   return response;
 }
 
+export async function updateReasoningEffortForChatSession(
+  chatSessionId: string,
+  newReasoningEffort: ReasoningEffortOverride | null
+) {
+  const response = await fetch("/api/chat/update-chat-session-reasoning", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      chat_session_id: chatSessionId,
+      reasoning_effort_override: newReasoningEffort,
+    }),
+  });
+  return response;
+}
+
+// Mirrors backend `CreateChatSessionID`. Older servers omit `incognito`.
+interface CreateChatSessionResponse {
+  chat_session_id: string;
+  incognito?: boolean;
+}
+
 export async function createChatSession(
   personaId: number,
   description: string | null,
-  projectId: number | null
+  projectId: number | null,
+  incognito: boolean = false,
+  incognitoSessionId: string | null = null
 ): Promise<string> {
   const createChatSessionResponse = await fetch(
     "/api/chat/create-chat-session",
@@ -76,6 +99,8 @@ export async function createChatSession(
         persona_id: personaId,
         description,
         project_id: projectId,
+        incognito,
+        incognito_session_id: incognitoSessionId,
       }),
     }
   );
@@ -85,8 +110,25 @@ export async function createChatSession(
     );
     throw Error("Failed to create chat session");
   }
-  const chatSessionResponseJson = await createChatSessionResponse.json();
+  const chatSessionResponseJson: CreateChatSessionResponse =
+    await createChatSessionResponse.json();
+  // A server that omits the echo (e.g. an old pod mid-deploy) did not pin the
+  // mode, so proceeding would silently persist a believed-incognito chat.
+  if (incognito && chatSessionResponseJson.incognito !== true) {
+    throw Error("Server did not honor the incognito request");
+  }
   return chatSessionResponseJson.chat_session_id;
+}
+
+export async function endIncognitoSession(sessionId: string): Promise<boolean> {
+  // The server finds the session's uploads itself, so nothing to send.
+  const response = await fetch(`/api/chat/end-incognito-session/${sessionId}`, {
+    method: "POST",
+  });
+  if (!response.ok) {
+    console.error(`Failed to end incognito session - ${response.status}`);
+  }
+  return response.ok;
 }
 
 export type PacketType =
@@ -116,6 +158,7 @@ export interface LLMOverride {
   model_version: string;
   temperature?: number;
   display_name?: string;
+  model_configuration_id?: number | null;
 }
 
 export interface SendMessageParams {
@@ -123,7 +166,7 @@ export interface SendMessageParams {
   fileDescriptors?: FileDescriptor[];
   parentMessageId: number | null;
   chatSessionId: string;
-  filters: Filters | null;
+  filters: SearchFiltersRequest | null;
   signal?: AbortSignal;
   deepResearch?: boolean;
   enabledToolIds?: number[];
@@ -132,6 +175,7 @@ export interface SendMessageParams {
   // LLM override parameters
   modelProvider?: string;
   modelVersion?: string;
+  modelConfigurationId?: number | null;
   temperature?: number;
   // Multi-model: send multiple LLM overrides for parallel generation
   llmOverrides?: LLMOverride[];
@@ -154,6 +198,7 @@ export async function* sendMessage({
   forcedToolId,
   modelProvider,
   modelVersion,
+  modelConfigurationId,
   temperature,
   llmOverrides,
   origin,
@@ -170,11 +215,12 @@ export async function* sendMessage({
     allowed_tool_ids: enabledToolIds,
     forced_tool_id: forcedToolId ?? null,
     llm_override:
-      temperature || modelVersion
+      temperature || modelVersion || modelConfigurationId != null
         ? {
             temperature,
             model_provider: modelProvider,
             model_version: modelVersion,
+            model_configuration_id: modelConfigurationId ?? null,
           }
         : null,
     // Multi-model: list of LLM overrides for parallel generation
@@ -196,7 +242,34 @@ export async function* sendMessage({
   });
 
   if (!response.ok) {
-    const data = await response.json().catch(() => ({}));
+    const data: ErrorResponseBody & RateLimitDetails = await response
+      .json()
+      .catch(() => ({}));
+
+    // Surface the usage rate-limit (429) as a structured StreamingError packet
+    // so the chat UI can render the dedicated usage-limit banner. Throwing a
+    // bare Error here would flatten error_code/reset_at into an opaque string.
+    if (
+      response.status === 429 &&
+      data.error_code === RATE_LIMITED_ERROR_CODE
+    ) {
+      const rateLimitDetails: RateLimitDetails = {
+        scope: data.scope,
+        reset_at: data.reset_at,
+        retry_after_seconds: data.retry_after_seconds,
+      };
+      const streamingError: StreamingError = {
+        error: data.detail ?? "You've reached your usage limit.",
+        stack_trace: "",
+        error_code: RATE_LIMITED_ERROR_CODE,
+        // Regenerate would just re-trip the limit, so this is not retryable.
+        is_retryable: false,
+        details: rateLimitDetails,
+      };
+      yield streamingError;
+      return;
+    }
+
     throw new Error(data.detail ?? `HTTP error! status: ${response.status}`);
   }
 
@@ -230,7 +303,7 @@ export async function* resumeStream(
   );
 
   if (!response.ok) {
-    const data = await response.json().catch(() => ({}));
+    const data: ErrorResponseBody = await response.json().catch(() => ({}));
     throw new Error(data.detail ?? `HTTP error! status: ${response.status}`);
   }
 
@@ -350,15 +423,20 @@ export async function deleteAllChatSessions() {
 }
 
 export async function getAvailableContextTokens(
-  chatSessionId: string
+  chatSessionId: string,
+  modelConfigurationId?: number | null
 ): Promise<number | null> {
+  const params =
+    modelConfigurationId != null
+      ? `?model_configuration_id=${modelConfigurationId}`
+      : "";
   const response = await fetch(
-    `/api/chat/available-context-tokens/${chatSessionId}`
+    `/api/chat/available-context-tokens/${chatSessionId}${params}`
   );
   if (!response.ok) {
     return null;
   }
-  const data = (await response.json()) as { available_tokens: number };
+  const data: { available_tokens: number } = await response.json();
   return data?.available_tokens ?? null;
 }
 
@@ -403,18 +481,6 @@ export function processRawChatHistory(
         messageInfo.alternate_assistant_id !== null
           ? Number(messageInfo.alternate_assistant_id)
           : null,
-      // only include these fields if this is an agent message so that
-      // this is identical to what is computed at streaming time
-      ...(messageInfo.message_type === "assistant"
-        ? {
-            retrievalType: retrievalType,
-            researchType: messageInfo.research_type as ResearchType | undefined,
-            query: messageInfo.rephrased_query,
-            documents: messageInfo?.context_docs || [],
-            citations: messageInfo?.citations || {},
-            processingDurationSeconds: messageInfo.processing_duration_seconds,
-          }
-        : {}),
       toolCall: messageInfo.tool_call,
       parentNodeId: messageInfo.parent_message,
       childrenNodeIds: [],
@@ -426,6 +492,20 @@ export function processRawChatHistory(
       preferredResponseId: messageInfo.preferred_response_id ?? null,
       modelDisplayName: messageInfo.model_display_name ?? null,
     };
+
+    // Only agent messages carry these fields, so that a reloaded message is
+    // identical to what is computed at streaming time.
+    if (messageInfo.message_type === "assistant") {
+      message.retrievalType = retrievalType;
+      message.researchType = messageInfo.research_type as
+        | ResearchType
+        | undefined;
+      message.query = messageInfo.rephrased_query;
+      message.documents = messageInfo?.context_docs || [];
+      message.citations = messageInfo?.citations || {};
+      message.processingDurationSeconds =
+        messageInfo.processing_duration_seconds;
+    }
 
     messages.set(messageInfo.message_id, message);
 
@@ -451,21 +531,13 @@ export function processRawChatHistory(
   return messages;
 }
 
-export function personaIncludesRetrieval(selectedPersona: MinimalAgent) {
-  return selectedPersona.tools.some(
-    (tool) =>
-      tool.in_code_tool_id &&
-      [SEARCH_TOOL_ID, WEB_SEARCH_TOOL_ID].includes(tool.in_code_tool_id)
-  );
-}
-
 const PARAMS_TO_SKIP = [
   SEARCH_PARAM_NAMES.SUBMIT_ON_LOAD,
   SEARCH_PARAM_NAMES.USER_PROMPT,
   SEARCH_PARAM_NAMES.TITLE,
   // only use these if explicitly passed in
   SEARCH_PARAM_NAMES.CHAT_ID,
-  SEARCH_PARAM_NAMES.PERSONA_ID,
+  SEARCH_PARAM_NAMES.AGENT_ID,
   SEARCH_PARAM_NAMES.PROJECT_ID,
   // do not persist project context in the URL after navigation
   "projectid",
@@ -487,7 +559,7 @@ export function buildChatUrl(
     );
   }
   if (personaId !== null) {
-    finalSearchParams.push(`${SEARCH_PARAM_NAMES.PERSONA_ID}=${personaId}`);
+    finalSearchParams.push(`${SEARCH_PARAM_NAMES.AGENT_ID}=${personaId}`);
   }
 
   existingSearchParams?.forEach((value, key) => {
@@ -503,28 +575,8 @@ export function buildChatUrl(
   const finalSearchParamsString = finalSearchParams.join("&");
 
   if (finalSearchParamsString) {
-    return `/${search ? "search" : "chat"}?${finalSearchParamsString}`;
+    return `/${search ? "search" : "app"}?${finalSearchParamsString}`;
   }
 
-  return `/${search ? "search" : "chat"}`;
-}
-
-export async function uploadFilesForChat(
-  files: File[]
-): Promise<[FileDescriptor[], string | null]> {
-  const formData = new FormData();
-  files.forEach((file) => {
-    formData.append("files", file);
-  });
-
-  const response = await fetch("/api/chat/file", {
-    method: "POST",
-    body: formData,
-  });
-  if (!response.ok) {
-    return [[], `Failed to upload files - ${(await response.json()).detail}`];
-  }
-  const responseJson = await response.json();
-
-  return [responseJson.files as FileDescriptor[], null];
+  return `/${search ? "search" : "app"}`;
 }

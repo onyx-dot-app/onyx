@@ -2,14 +2,12 @@
 after includes, support exact-name and full-match regex modes, and never fail
 on names absent from the workspace."""
 
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 import pytest
 
 from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.slack.connector import _validate_channel_regexes
-from onyx.connectors.slack.connector import filter_channels
+from onyx.connectors.slack.connector import _validate_channel_regexes, filter_channels
 from onyx.connectors.slack.models import ChannelType
 
 

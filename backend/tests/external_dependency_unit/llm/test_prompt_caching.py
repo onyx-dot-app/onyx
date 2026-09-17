@@ -16,10 +16,12 @@ from litellm import completion_cost
 from sqlalchemy.orm import Session
 
 from onyx.llm.model_response import Usage
-from onyx.llm.models import AssistantMessage
-from onyx.llm.models import ChatCompletionMessage
-from onyx.llm.models import SystemMessage
-from onyx.llm.models import UserMessage
+from onyx.llm.models import (
+    AssistantMessage,
+    ChatCompletionMessage,
+    SystemMessage,
+    UserMessage,
+)
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 
@@ -64,7 +66,7 @@ def _get_usage_value(usage: Any, key: str) -> int:
     if isinstance(usage, dict):
         value = usage.get(key)
     else:
-        value = getattr(usage, key, None)
+        value = getattr(usage, key, None)  # ods: ignore[getattr]
     return int(value or 0)
 
 

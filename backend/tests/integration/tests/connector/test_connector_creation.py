@@ -1,6 +1,5 @@
 import os
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
 from onyx.connectors.models import InputType
 from onyx.server.documents.models import DocumentSource

@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useMemo } from "react";
+import { usePathname } from "next/navigation";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { useCurrentAgent } from "@/lib/agents/hooks";
+import { isAuthPath } from "@/lib/auth/paths";
+import { useActiveAgent } from "@/lib/agents/hooks";
 import {
   LLMProviderDescriptor,
   LLMProviderName,
@@ -97,14 +99,19 @@ function enrichViews(providers: RawLLMProviderView[]): LLMProviderView[] {
  *    while loading.
  * - `defaultText` — The global (or agent-overridden) default text model.
  * - `defaultVision` — The global (or agent-overridden) default vision model.
+ * - `defaultCraft`: the admin-configured default Craft model, or `null` if
+ *    unset. Craft then falls back to `defaultText`.
  * - `isLoading` — `true` until the first successful response or error.
  * - `error` — The SWR error object, if any.
  * - `refetch` — SWR `mutate` function to trigger a revalidation.
  */
 export function useLLMProviders(agentId?: number) {
-  const url =
-    agentId !== undefined
-      ? SWR_KEYS.llmProvidersForPersona(agentId)
+  // No chat on /auth/* routes, where an unauthenticated caller would 403.
+  const onAuthPath = isAuthPath(usePathname());
+  const url = onAuthPath
+    ? null
+    : agentId !== undefined
+      ? SWR_KEYS.llmProvidersForAgent(agentId)
       : SWR_KEYS.llmProviders;
 
   // `revalidateIfStale` is intentionally left at its default (true), unlike
@@ -134,23 +141,30 @@ export function useLLMProviders(agentId?: number) {
     llmProviders: data?.providers,
     defaultText: data?.default_text ?? null,
     defaultVision: data?.default_vision ?? null,
+    defaultChatNaming: data?.default_chat_naming ?? null,
+    defaultCraft: data?.default_craft ?? null,
     isLoading: !error && !data,
     error,
-    refetch: mutate as unknown as () => Promise<
-      LLMProviderResponse<LLMProviderDescriptor> | undefined
-    >,
+    // `mutate` resolves to the raw (unenriched) response, so callers must not
+    // read its result. Wrapping it keeps the revalidation without the lie.
+    refetch: async (): Promise<void> => {
+      await mutate();
+    },
   };
 }
 
 /**
- * Resolves the active agent via `useCurrentAgent` and fetches that agent's
+ * Resolves the active agent via `useActiveAgent` and fetches that agent's
  * LLM providers via `useLLMProviders`. User-facing model UIs (chat model
  * selectors, popovers) consistently need exactly this pairing, so this hook
  * keeps the resolution in one place instead of repeating it at each call site.
  */
 export function useCurrentAgentLLMProviders() {
-  const currentAgent = useCurrentAgent();
-  return useLLMProviders(currentAgent?.id);
+  const activeAgent = useActiveAgent();
+  // Scoped to the Assistant too. The endpoint answers "which providers may this
+  // user use with this agent", and the Assistant can carry restrictions like
+  // any other, so the unscoped list would over-report them.
+  return useLLMProviders(activeAgent?.id);
 }
 
 /**
@@ -170,6 +184,8 @@ export function useCurrentAgentLLMProviders() {
  *    while loading.
  * - `defaultText` — The global default text model.
  * - `defaultVision` — The global default vision model.
+ * - `defaultCraft`: the admin-configured default Craft model, or `null` if
+ *    unset. Craft then falls back to `defaultText`.
  * - `isLoading` — `true` until the first successful response or error.
  * - `error` — The SWR error object, if any.
  * - `refetch` — SWR `mutate` function to trigger a revalidation.
@@ -198,6 +214,8 @@ export function useAdminLLMProviders() {
     llmProviders: data?.providers,
     defaultText: data?.default_text ?? null,
     defaultVision: data?.default_vision ?? null,
+    defaultChatNaming: data?.default_chat_naming ?? null,
+    defaultCraft: data?.default_craft ?? null,
     isLoading: !error && !data,
     error,
     refetch: mutate,
@@ -282,7 +300,12 @@ export function useCustomProviderNames() {
 }
 
 export interface DefaultLlmReference {
-  providerName: string;
+  /**
+   * The provider row this default belongs to. `llm_provider.name` carries no
+   * unique constraint and is nullable, so it can neither identify a provider
+   * nor be relied on to exist. Always key off this.
+   */
+  providerId: number;
   modelName: string;
 }
 
@@ -294,19 +317,15 @@ export interface LlmDefaults {
   /** True iff any provider exposes a visible model with `supports_image_input`. */
   hasAnyVisionLlm: boolean;
   /**
-   * The admin-configured default text model, resolved to the form-friendly
-   * `{ providerName, modelName }` shape. The backend stores
-   * `default_text` as `{ provider_id, model_name }`; this hook joins
-   * `provider_id` against the providers list to recover the human-facing
-   * provider `name`, which is what `validate_contextual_rag_model` looks
-   * up via `fetch_existing_llm_provider(name=...)`.
+   * The admin-configured default text model as `{ providerId, modelName }`.
+   * The backend stores `default_text` as `{ provider_id, model_name }`; this
+   * hook only confirms the provider is still in the list.
    */
   defaultLlm: DefaultLlmReference | null;
   /**
-   * The admin-configured default *vision* model, resolved to the same
-   * `{ providerName, modelName }` shape as `defaultLlm`. Mirrors the
-   * resolution path of `defaultLlm` but for `default_vision`. Used by
-   * indexing-time captioning and any other vision-only feature.
+   * The admin-configured default *vision* model, in the same shape as
+   * `defaultLlm`. Used by indexing-time captioning and any other vision-only
+   * feature.
    */
   defaultVision: DefaultLlmReference | null;
   isLoading: boolean;
@@ -345,8 +364,13 @@ export function useLlmDefaults(): LlmDefaults {
       if (!llmProviders || !raw) return null;
       const provider = llmProviders.find((p) => p.id === raw.provider_id);
       if (!provider) return null;
-      if (!provider.name) return null;
-      return { providerName: provider.name, modelName: raw.model_name };
+      // No name check: well-known providers are routinely saved with a null
+      // name, and dropping those defaults left the admin pickers showing
+      // nothing for a model that was in fact configured.
+      return {
+        providerId: provider.id,
+        modelName: raw.model_name,
+      };
     },
     [llmProviders]
   );

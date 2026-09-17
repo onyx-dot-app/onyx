@@ -2,10 +2,10 @@
 from providers/orchestrator) so callers can use it without an import cycle.
 """
 
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta
 from typing import Any
+
+from onyx.utils.datetime import datetime_to_utc
 
 # Refresh slightly early so no in-flight request reaches upstream with a just-
 # expired token.
@@ -56,9 +56,7 @@ def needs_refresh(
     if "expires_at" not in credentials:
         return False
     try:
-        expires_at = datetime.fromisoformat(credentials["expires_at"])
+        expires_at = datetime_to_utc(datetime.fromisoformat(credentials["expires_at"]))
     except (TypeError, ValueError):
         return True
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
     return (expires_at - now).total_seconds() <= skew_s

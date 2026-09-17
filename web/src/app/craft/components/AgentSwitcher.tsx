@@ -1,10 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Popover, PopoverMenu, Text, LineItemButton } from "@opal/components";
 import {
   SvgChevronDown,
   SvgCpu,
+  SvgSparkle,
   SvgCheckCircle,
   SvgAlertTriangle,
 } from "@opal/icons";
@@ -24,7 +26,7 @@ function SubagentStatus({ subagent }: { subagent: SubagentState }) {
       {subagent.status === "running" && (
         <span
           aria-hidden
-          className="w-2 h-2 rounded-full bg-action-link-04 animate-pulse shrink-0"
+          className="w-2 h-2 rounded-full bg-action-selection-04 animate-pulse shrink-0"
         />
       )}
       {subagent.status === "done" && (
@@ -45,6 +47,7 @@ function SubagentStatus({ subagent }: { subagent: SubagentState }) {
  * the main agent — there is no separate back button.
  */
 export default function AgentSwitcher() {
+  const t = useTranslations("craft.agentSwitcher");
   const title = useCurrentSessionTitle();
   const subagents = useSubagents();
   const viewedSubagentSessionId = useViewedSubagentSessionId();
@@ -85,7 +88,9 @@ export default function AgentSwitcher() {
   // is being viewed, otherwise the session title (the main agent).
   const triggerLabel =
     isViewingSubagent && viewedSubagent
-      ? viewedSubagent.name || viewedSubagent.subagentType || "subagent"
+      ? viewedSubagent.name ||
+        viewedSubagent.subagentType ||
+        t("subagentFallback.label")
       : titleLabel;
 
   // Nothing to show (untitled session, not viewing a subagent) — render nothing.
@@ -96,7 +101,7 @@ export default function AgentSwitcher() {
       {isViewingSubagent && (
         <SvgCpu className="w-4 h-4 stroke-text-03 shrink-0" />
       )}
-      <Text font="main-ui-action" color="text-04" nowrap>
+      <Text font="main-ui-action" color="text-04" wordWrap="whitespace-nowrap">
         {triggerLabel}
       </Text>
       {isViewingSubagent && viewedSubagent && (
@@ -114,7 +119,7 @@ export default function AgentSwitcher() {
       <Popover.Trigger asChild>
         <button
           type="button"
-          aria-label="Switch agent"
+          aria-label={t("switch.ariaLabel")}
           className={cn(
             "flex items-center gap-1 min-w-0 px-1.5 py-1 rounded-08",
             "transition-colors hover:bg-background-tint-01",
@@ -132,9 +137,10 @@ export default function AgentSwitcher() {
               key="main"
               sizePreset="main-ui"
               variant="section"
+              icon={SvgSparkle}
               state={!isViewingSubagent ? "selected" : "empty"}
               onClick={selectMainAgent}
-              title={titleLabel ?? "Main agent"}
+              title={titleLabel ?? t("mainAgent.label")}
             />,
             ...sorted.map((s) => (
               <LineItemButton
@@ -147,7 +153,7 @@ export default function AgentSwitcher() {
                 }
                 onClick={() => selectSubagent(s.sessionId)}
                 rightChildren={<SubagentStatus subagent={s} />}
-                title={s.name || s.subagentType || "subagent"}
+                title={s.name || s.subagentType || t("subagentFallback.label")}
               />
             )),
           ]}

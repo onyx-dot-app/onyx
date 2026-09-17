@@ -1,7 +1,5 @@
 from onyx.configs.app_configs import CONNECTOR_MAX_EXTRACTED_TEXT_CHARS
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import TabularSection
-from onyx.connectors.models import TextSection
+from onyx.connectors.models import ImageSection, TabularSection, TextSection
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

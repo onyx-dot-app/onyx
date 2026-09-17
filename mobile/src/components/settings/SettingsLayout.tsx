@@ -1,10 +1,9 @@
 import type { ReactNode } from "react";
-import { ScrollView, View } from "react-native";
+import { ScrollView, View, type ScrollViewProps } from "react-native";
 
 import { cn } from "@/lib/utils";
-import { Icon } from "@/components/ui/icon";
+import { Content } from "@/components/ui/content";
 import { Separator } from "@/components/ui/separator";
-import { Text } from "@/components/ui/text";
 import type { IconFunctionComponent } from "@/icons/types";
 
 // RN port of Opal `SettingsLayouts`. Sticky + scroll-shadow (web: only when Header has
@@ -14,13 +13,20 @@ import type { IconFunctionComponent } from "@/icons/types";
 interface SettingsRootProps {
   children: ReactNode;
   className?: string;
+  // Forwarded so a search field's keyboard doesn't swallow taps on the list below.
+  keyboardShouldPersistTaps?: ScrollViewProps["keyboardShouldPersistTaps"];
 }
 
-function SettingsRoot({ children, className }: SettingsRootProps) {
+function SettingsRoot({
+  children,
+  className,
+  keyboardShouldPersistTaps,
+}: SettingsRootProps) {
   return (
     <ScrollView
       className={cn("flex-1", className)}
       showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps={keyboardShouldPersistTaps}
     >
       {children}
     </ScrollView>
@@ -50,19 +56,12 @@ function SettingsHeader({
 
       <View className="gap-24 px-16">
         <View className="w-full flex-row items-start justify-between">
-          <View className="flex-1 flex-col items-start">
-            <View className="items-center justify-center p-2">
-              <Icon as={icon} size={32} className="text-text-05" />
-            </View>
-            <Text font="heading-h2" color="text-05">
-              {title}
-            </Text>
-            {description ? (
-              <Text font="secondary-body" color="text-03" className="pt-2">
-                {description}
-              </Text>
-            ) : null}
-          </View>
+          <Content
+            icon={icon}
+            title={title}
+            description={description}
+            className="flex-1"
+          />
           {rightChildren ? <View>{rightChildren}</View> : null}
         </View>
 

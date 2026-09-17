@@ -1,21 +1,19 @@
-import React from "react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { CircleAlert, Info } from "lucide-react";
+import { useLocale } from "next-intl";
+import { MessageCard, Text } from "@opal/components";
 import { BillingInformation, BillingStatus } from "@/lib/billing/interfaces";
-import { useIsTrialingEnterprise } from "@/hooks/useIsTrialingEnterprise";
 
 export function BillingAlerts({
   billingInformation,
 }: {
   billingInformation: BillingInformation;
 }) {
+  const locale = useLocale();
   const isTrialing = billingInformation.status === BillingStatus.TRIALING;
   const isCancelled = billingInformation.cancel_at_period_end;
   const isExpired = billingInformation.current_period_end
     ? new Date(billingInformation.current_period_end) < new Date()
     : false;
   const noPaymentMethod = !billingInformation.payment_method_enabled;
-  const isTrialingEnterprise = useIsTrialingEnterprise();
 
   const messages: string[] = [];
 
@@ -28,17 +26,17 @@ export function BillingAlerts({
     messages.push(
       `Your subscription will cancel on ${new Date(
         billingInformation.current_period_end
-      ).toLocaleDateString()}. You can resubscribe before this date to remain uninterrupted.`
+      ).toLocaleDateString(
+        locale
+      )}. You can resubscribe before this date to remain uninterrupted.`
     );
   }
   if (isTrialing) {
     const trialEndStr = billingInformation.trial_end
-      ? new Date(billingInformation.trial_end).toLocaleDateString()
+      ? new Date(billingInformation.trial_end).toLocaleDateString(locale)
       : "N/A";
     messages.push(
-      isTrialingEnterprise
-        ? `You're trialing Enterprise features. Your trial ends on ${trialEndStr}. After that, your workspace will revert to the Business plan.`
-        : `You're currently on a trial. Your trial ends on ${trialEndStr}.`
+      `You're currently on a trial. Your trial ends on ${trialEndStr}.`
     );
   }
   if (noPaymentMethod) {
@@ -47,31 +45,25 @@ export function BillingAlerts({
     );
   }
 
-  const variant = isExpired || noPaymentMethod ? "destructive" : "default";
-
   if (messages.length === 0) return null;
 
+  const isDestructive = isExpired || noPaymentMethod;
+
   return (
-    <Alert variant={variant}>
-      <AlertTitle className="flex items-center space-x-2">
-        {variant === "destructive" ? (
-          <CircleAlert className="h-4 w-4" />
-        ) : (
-          <Info className="h-4 w-4" />
-        )}
-        <span>
-          {variant === "destructive"
-            ? "Important Subscription Notice"
-            : "Subscription Notice"}
-        </span>
-      </AlertTitle>
-      <AlertDescription>
-        <ul className="list-disc list-inside space-y-1 mt-2">
+    <MessageCard
+      variant={isDestructive ? "error" : "info"}
+      title={
+        isDestructive ? "Important Subscription Notice" : "Subscription Notice"
+      }
+      bottomChildren={
+        <ul className="list-disc list-inside space-y-1 px-2 pb-2">
           {messages.map((msg, idx) => (
-            <li key={idx}>{msg}</li>
+            <Text key={idx} as="li" font="main-ui-body" color="text-03">
+              {msg}
+            </Text>
           ))}
         </ul>
-      </AlertDescription>
-    </Alert>
+      }
+    />
   );
 }

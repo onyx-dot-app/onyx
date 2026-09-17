@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import ApprovalCard from "@/app/craft/components/approvals/ApprovalCard";
 import type { ApprovalAction, ApprovalView } from "@/app/craft/types/approvals";
 

@@ -2,15 +2,12 @@
 
 import hashlib
 import secrets
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 
 from fastapi import Request
 
-from onyx.auth.constants import PAT_LENGTH
-from onyx.auth.constants import PAT_PREFIX
+from onyx.auth.constants import PAT_LENGTH, PAT_PREFIX
 from onyx.auth.utils import get_hashed_bearer_token_from_request
 from shared_configs.configs import MULTI_TENANT
 

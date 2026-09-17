@@ -1,36 +1,37 @@
 from collections.abc import Sequence
-from datetime import datetime
-from datetime import timezone
-from datetime import UTC
+from datetime import UTC, datetime, timezone
 from enum import Enum
-from typing import Any
-from typing import Generic
-from typing import TypeVar
+from typing import Any, Generic, TypeVar
 from uuid import UUID
 
-from pydantic import BaseModel
-from pydantic import ConfigDict
-from pydantic import Field
+from pydantic import BaseModel, ConfigDict, Field
 
+from onyx.auth.permission_projection import cc_pair_permissions
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import PermissionSyncStatus
-from onyx.db.enums import ProcessingMode
-from onyx.db.index_attempt_metrics_models import IndexAttemptStage
-from onyx.db.index_attempt_metrics_models import STAGE_SCOPE
-from onyx.db.index_attempt_metrics_models import StageScope
-from onyx.db.models import Connector
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Credential
-from onyx.db.models import DocPermissionSyncAttempt
+from onyx.db.enums import (
+    AccessType,
+    ConnectorCredentialPairStatus,
+    PermissionSyncStatus,
+    ProcessingMode,
+)
+from onyx.db.index_attempt_metrics_models import (
+    STAGE_SCOPE,
+    IndexAttemptStage,
+    StageScope,
+)
+from onyx.db.models import (
+    Connector,
+    ConnectorCredentialPair,
+    Credential,
+    DocPermissionSyncAttempt,
+    ExternalGroupPermissionSyncAttempt,
+    IndexAttempt,
+    IndexAttemptStageMetric,
+    IndexingStatus,
+    TaskStatus,
+)
 from onyx.db.models import Document as DbDocument
-from onyx.db.models import ExternalGroupPermissionSyncAttempt
-from onyx.db.models import IndexAttempt
-from onyx.db.models import IndexAttemptStageMetric
-from onyx.db.models import IndexingStatus
-from onyx.db.models import TaskStatus
 from onyx.server.federated.models import FederatedConnectorStatus
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
@@ -449,6 +450,9 @@ class CCPairFullInfo(BaseModel):
     latest_deletion_attempt: DeletionAttemptSnapshot | None
     access_type: AccessType
     is_editable_for_current_user: bool
+    # per-action affordance map for the requesting user, from the same editable-scope
+    # decision the write guard enforces
+    permissions: dict[str, bool]
     deletion_failure_message: str | None
     indexing: bool
     creator: UUID | None
@@ -471,6 +475,12 @@ class CCPairFullInfo(BaseModel):
     # True if this connector's class implements `Resolver.reindex`. The FE
     # uses this to route Resolve-All to targeted reindex vs full reindex.
     supports_targeted_reindex: bool
+
+    # Written at create time on the association route but not returned until now,
+    # so a client could never refresh or import them.
+    groups: list[int]
+    auto_sync_options: dict[str, Any] | None
+    processing_mode: ProcessingMode
 
     @classmethod
     def _get_last_full_permission_sync(
@@ -522,6 +532,9 @@ class CCPairFullInfo(BaseModel):
         indexing: bool,
         *,
         mask_credential_prefix: bool,
+        is_connectors_admin: bool = False,
+        owns_groupless: bool = False,
+        groups: list[int] | None = None,
         last_successful_index_time: datetime | None = None,
         last_permission_sync_attempt_status: PermissionSyncStatus | None = None,
         permission_syncing: bool = False,
@@ -571,6 +584,11 @@ class CCPairFullInfo(BaseModel):
             latest_deletion_attempt=latest_deletion_attempt,
             access_type=cc_pair_model.access_type,
             is_editable_for_current_user=is_editable_for_current_user,
+            permissions=cc_pair_permissions(
+                is_editable=is_editable_for_current_user,
+                is_connectors_admin=is_connectors_admin,
+                owns_groupless=owns_groupless,
+            ),
             deletion_failure_message=cc_pair_model.deletion_failure_message,
             indexing=indexing,
             creator=cc_pair_model.creator_id,
@@ -587,6 +605,9 @@ class CCPairFullInfo(BaseModel):
             last_permission_sync_attempt_finished=last_permission_sync_attempt_finished,
             last_permission_sync_attempt_error_message=last_permission_sync_attempt_error_message,
             supports_targeted_reindex=supports_targeted_reindex,
+            groups=groups or [],
+            auto_sync_options=cc_pair_model.auto_sync_options,
+            processing_mode=cc_pair_model.processing_mode,
         )
 
 
@@ -657,6 +678,9 @@ class ConnectorIndexingStatusLite(BaseModel):
     last_status: IndexingStatus | None
     last_success: datetime | None
     is_editable: bool
+    # per-action affordance map for the requesting user, from the same editable-scope
+    # decision the write guard enforces
+    permissions: dict[str, bool]
     docs_indexed: int
     latest_index_attempt_docs_indexed: int | None
 
@@ -770,6 +794,7 @@ class GoogleServiceAccountKey(BaseModel):
 
 class GoogleServiceAccountCredentialRequest(BaseModel):
     google_primary_admin: str | None = None  # email of user to impersonate
+    service_account_key: GoogleServiceAccountKey
 
 
 class FileUploadResponse(BaseModel):

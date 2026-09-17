@@ -1,28 +1,36 @@
 import json
 from typing import Any
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.concurrency import run_in_threadpool
 from pydantic import ValidationError
 
 from onyx.auth.permissions import require_permission
+from onyx.auth.sso_url_guard import UnsafeSSOUrl, validate_idp_url
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.security.models import OPERATOR_LOCKED_FIELDS
-from onyx.server.security.models import SecuritySettings
-from onyx.server.security.models import SecuritySettingsOverrides
-from onyx.server.security.store import apply_patch
-from onyx.server.security.store import get_security_settings
+from onyx.server.security.models import (
+    OPERATOR_LOCKED_FIELDS,
+    SecuritySettings,
+    SecuritySettingsOverrides,
+)
+from onyx.server.security.store import (
+    apply_patch,
+    env_pinned_active_fields,
+    get_security_settings,
+)
+from onyx.utils.audit import AuditActor
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
 admin_router = APIRouter(prefix="/admin/security")
+
+# Single-tenant only, reject in multi-tenant where it would never enforce.
+_PASSWORD_LOCKDOWN_FIELDS = frozenset({"password_auth_enabled"})
 
 
 def _parse_put_body(raw: bytes) -> tuple[SecuritySettingsOverrides, set[str]]:
@@ -56,13 +64,45 @@ def get_security_settings_endpoint(
     return get_security_settings()
 
 
+@admin_router.get("/pinned-fields")
+def get_pinned_fields_endpoint(
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+) -> list[str]:
+    """Fields currently pinned by env vars, so the UI can lock their inputs."""
+    return sorted(env_pinned_active_fields())
+
+
 @admin_router.put("")
 async def put_security_settings_endpoint(
     request: Request,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> SecuritySettings:
     raw = await request.body()
     overrides, present_keys = _parse_put_body(raw)
+
+    if "jwt_public_key_url" in present_keys and overrides.jwt_public_key_url:
+        try:
+            validate_idp_url(overrides.jwt_public_key_url, field="jwt_public_key_url")
+        except UnsafeSSOUrl as e:
+            raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
+
+    # A clear refusal instead of silently storing an override the env pin
+    # would render inert.
+    pinned_in_payload = present_keys & env_pinned_active_fields()
+    if pinned_in_payload:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "These fields are pinned by environment variables on this deployment: "
+            + ", ".join(sorted(pinned_in_payload)),
+        )
+
+    lockdown_in_payload = present_keys & _PASSWORD_LOCKDOWN_FIELDS
+    if lockdown_in_payload and MULTI_TENANT:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Password login controls apply only to password-based deployments: "
+            + ", ".join(sorted(lockdown_in_payload)),
+        )
 
     # Primary boundary for operator-locked fields. The storage layer also
     # strips them; this gives admins a clear 403 instead of a silent no-op.
@@ -75,5 +115,9 @@ async def put_security_settings_endpoint(
                 + ", ".join(sorted(locked_in_payload)),
             )
 
+    # The auth dependency always yields a user, test seams may not.
+    actor = (
+        AuditActor(user_id=str(user.id), email=user.email) if user is not None else None
+    )
     # Sync DB + Redis IO — offload so the event loop isn't blocked.
-    return await run_in_threadpool(apply_patch, overrides, present_keys)
+    return await run_in_threadpool(apply_patch, overrides, present_keys, actor)

@@ -33,18 +33,21 @@ export function useTypewriter(
 ): UseTypewriterResult {
   // Ref so the rAF loop reads latest length without restarting.
   const targetRef = useRef(target);
-  targetRef.current = target;
 
   // Mirror `enabled` so the restart effect can short-circuit when the
   // caller has turned animation off (e.g. voice-mode, where display is
   // driven by audio position — the typewriter must stay idle and not
   // animate a jump after audio ends).
   const enabledRef = useRef(enabled);
-  enabledRef.current = enabled;
 
   // Read inside the rAF loop without restarting it.
   const streamFinishedRef = useRef(streamFinished);
-  streamFinishedRef.current = streamFinished;
+
+  useEffect(() => {
+    targetRef.current = target;
+    enabledRef.current = enabled;
+    streamFinishedRef.current = streamFinished;
+  }, [target, enabled, streamFinished]);
 
   // Captured once when post-finish drain begins, so the per-frame step
   // size stays constant instead of decaying with the shrinking backlog.

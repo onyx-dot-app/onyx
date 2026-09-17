@@ -1,3 +1,4 @@
+import type { TimelineTranslate } from "@/app/app/message/messageComponents/toolDisplayHelpers";
 import {
   PacketType,
   SearchToolPacket,
@@ -29,34 +30,92 @@ export const QUERIES_PER_EXPANSION = 5;
 export const INITIAL_RESULTS_TO_SHOW = 3;
 export const RESULTS_PER_EXPANSION = 10;
 
+// Applied time window; null == no time filter, either bound may be open-ended.
+export interface TimeFilter {
+  start: string | null;
+  end: string | null;
+}
+
 export interface SearchState {
   queries: string[];
   results: OnyxDocument[];
   sourceFilters: string[];
+  timeFilter: TimeFilter | null;
   isSearching: boolean;
   hasResults: boolean;
   isComplete: boolean;
   isInternetSearch: boolean;
 }
 
-/**
- * Header text for an internal search step. When a source filter was applied,
- * overrides the default "Searching internal documents" with the connector(s).
- */
 const MAX_HEADER_SOURCES = 3;
 
-export const formatSearchHeader = (sourceFilters: string[]): string => {
-  if (sourceFilters.length === 0) return "Searching internal documents";
-  const names = sourceFilters.map((source) =>
-    isValidSource(source)
-      ? getSourceDisplayName(source as ValidSources)
-      : source
-  );
-  const shown = names.slice(0, MAX_HEADER_SOURCES);
-  const overflow = names.length - shown.length;
-  const label =
-    overflow > 0 ? `${shown.join(", ")} +${overflow} more` : shown.join(", ");
-  return `Searching ${label}`;
+// The bounds are day-granularity UTC dates. Format in UTC so a midnight start
+// doesn't render as the previous day in western timezones.
+const formatFilterDate = (iso: string, locale: string): string =>
+  new Date(iso).toLocaleDateString(locale, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+
+// Phrases a window with the timeWindow catalog entries: since, before, or between.
+export const formatTimeWindow = (
+  timeFilter: TimeFilter | null,
+  t: TimelineTranslate,
+  locale: string
+): string | null => {
+  if (!timeFilter) return null;
+  const { start, end } = timeFilter;
+  if (start && end) {
+    return t("internalSearch.timeWindow.between", {
+      start: formatFilterDate(start, locale),
+      end: formatFilterDate(end, locale),
+    });
+  }
+  if (start) {
+    return t("internalSearch.timeWindow.since", {
+      date: formatFilterDate(start, locale),
+    });
+  }
+  if (end) {
+    return t("internalSearch.timeWindow.before", {
+      date: formatFilterDate(end, locale),
+    });
+  }
+  return null;
+};
+
+export const formatSearchHeader = (
+  sourceFilters: string[],
+  timeFilter: TimeFilter | null,
+  t: TimelineTranslate,
+  locale: string
+): string => {
+  let header: string;
+  if (sourceFilters.length === 0) {
+    header = t("internalSearch.header.default");
+  } else {
+    const names = sourceFilters.map((source) =>
+      isValidSource(source)
+        ? getSourceDisplayName(source as ValidSources)
+        : source
+    );
+    const shown = names.slice(0, MAX_HEADER_SOURCES).join(", ");
+    const overflow = names.length - MAX_HEADER_SOURCES;
+    const sources =
+      overflow > 0
+        ? t("internalSearch.header.sourcesOverflow", {
+            sources: shown,
+            count: overflow,
+          })
+        : shown;
+    header = t("internalSearch.header.sources", { sources });
+  }
+  const timeWindow = formatTimeWindow(timeFilter, t, locale);
+  return timeWindow
+    ? t("internalSearch.header.withTimeWindow", { header, timeWindow })
+    : header;
 };
 
 /** Constructs the current search state from search tool packets. */
@@ -76,6 +135,20 @@ export const constructCurrentSearchState = (
   const filterDeltas = packets
     .filter((packet) => packet.obj.type === PacketType.SEARCH_TOOL_FILTER_DELTA)
     .map((packet) => packet.obj as SearchToolFilterDelta);
+
+  // Time rides on the same filter delta; take the latest one carrying a bound.
+  const timeDelta = filterDeltas
+    .filter(
+      (delta) =>
+        delta.time_filter_start != null || delta.time_filter_end != null
+    )
+    .at(-1);
+  const timeFilter: TimeFilter | null = timeDelta
+    ? {
+        start: timeDelta.time_filter_start ?? null,
+        end: timeDelta.time_filter_end ?? null,
+      }
+    : null;
 
   const documentDeltas = packets
     .filter(
@@ -128,6 +201,7 @@ export const constructCurrentSearchState = (
     queries,
     results,
     sourceFilters,
+    timeFilter,
     isSearching,
     hasResults,
     isComplete,

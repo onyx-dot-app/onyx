@@ -64,6 +64,18 @@ export interface ListOption extends Option {
   transform?: (values: string[]) => string[];
 }
 
+export interface StringPairListOption extends Option {
+  type: "string_pair_list";
+  // Object keys each row serializes to, e.g. { leftKey: "source", rightKey: "target" }.
+  leftKey: string;
+  rightKey: string;
+  default?: Record<string, string>[];
+  leftLabel: string;
+  rightLabel: string;
+  leftPlaceholder?: string;
+  rightPlaceholder?: string;
+}
+
 export interface TextOption extends Option {
   type: "text";
   default?: string;
@@ -100,6 +112,7 @@ export interface TabOption extends Option {
     fields: (
       | BooleanOption
       | ListOption
+      | StringPairListOption
       | TextOption
       | NumberOption
       | SelectOption
@@ -118,6 +131,7 @@ export interface ConnectionConfiguration {
   values: (
     | BooleanOption
     | ListOption
+    | StringPairListOption
     | TextOption
     | NumberOption
     | SelectOption
@@ -128,6 +142,7 @@ export interface ConnectionConfiguration {
   advanced_values: (
     | BooleanOption
     | ListOption
+    | StringPairListOption
     | TextOption
     | NumberOption
     | SelectOption
@@ -140,6 +155,23 @@ export interface ConnectionConfiguration {
     values: any,
     currentCredential: Credential<any> | null
   ) => boolean;
+}
+
+// Shared "Include Attachments" checkbox. Pair with an `include_attachments`
+// kwarg on the backend connector; see backend/onyx/connectors/README.md for
+// the convention, including how to pick the default.
+export function buildIncludeAttachmentsOption(
+  defaultValue: boolean,
+  description: string = "Enable processing of page attachments including images and documents"
+): BooleanOption {
+  return {
+    type: "checkbox",
+    query: "Include attachments?",
+    label: "Include Attachments",
+    name: "include_attachments",
+    description,
+    default: defaultValue,
+  };
 }
 
 export const connectorConfigs: Record<
@@ -178,8 +210,73 @@ export const connectorConfigs: Record<
         name: "scroll_before_scraping",
         optional: true,
       },
+      {
+        type: "string_pair_list",
+        query: "Enter URL rewrite rules:",
+        label: "URL Rewrites",
+        name: "url_rewrites",
+        leftKey: "source",
+        rightKey: "target",
+        optional: true,
+        description:
+          "Rewrite document URLs before storing. Useful when crawling through an internal " +
+          "mirror while storing the canonical public links, for example " +
+          "https://internal-mirror.example.com \u2192 https://docs.example.com",
+        leftLabel: "Source URL prefix",
+        rightLabel: "Replacement prefix",
+        leftPlaceholder: "https://internal-mirror.example.com",
+        rightPlaceholder: "https://docs.example.com",
+        default: [],
+      },
     ],
     overrideDefaultFreq: 60 * 60 * 24,
+  },
+  lumapps: {
+    description: "Configure LumApps connector",
+    values: [
+      {
+        type: "text",
+        label: "API Base URL (cell host)",
+        name: "base_url",
+        optional: false,
+        description:
+          "Your LumApps cell/API host, e.g. https://go-cell-005.api.lumapps.com (not the docs site api.lumapps.com).",
+      },
+      {
+        type: "text",
+        label: "Organization ID",
+        name: "organization_id",
+        optional: false,
+        description: "Your LumApps organization id (numeric).",
+      },
+    ],
+    advanced_values: [
+      {
+        type: "list",
+        label: "Instance (site) IDs",
+        name: "instance_ids",
+        optional: true,
+        description:
+          "Restrict indexing to specific instance/site IDs. Leave empty to index all content visible to the service user.",
+      },
+      {
+        type: "list",
+        label: "Custom Content Type IDs",
+        name: "custom_content_types",
+        optional: true,
+        description:
+          "Restrict to specific custom content type IDs. Leave empty to index all content types.",
+      },
+      {
+        type: "text",
+        label: "Language",
+        name: "lang",
+        optional: true,
+        default: "en",
+        description:
+          "Language used for content title/body and metadata labels (ISO 639-1, e.g. en, fr).",
+      },
+    ],
   },
   github: {
     description: "Configure GitHub connector",
@@ -249,11 +346,21 @@ export const connectorConfigs: Record<
         label: "Include Documents?",
         name: "include_files",
         description:
-          "Index text-based documents (markdown, text, etc.) from the default branch of repositories",
+          "Index text-based documents (markdown, text, etc.) from repositories",
         optional: true,
       },
     ],
-    advanced_values: [],
+    advanced_values: [
+      {
+        type: "text",
+        query: "Enter the branch to index documents from:",
+        label: "Branch",
+        name: "branch",
+        optional: true,
+        description:
+          "Branch to index documents from (e.g. gh-pages). Leave blank to use each repository's default branch. Only applies when 'Include Documents?' is enabled. After changing this on an existing connector, trigger a re-index to pick up the new branch immediately.",
+      },
+    ],
   },
   testrail: {
     description: "Configure TestRail connector",
@@ -675,6 +782,7 @@ export const connectorConfigs: Record<
         ],
         defaultTab: "space",
       },
+      buildIncludeAttachmentsOption(true),
     ],
     advanced_values: [],
   },
@@ -968,6 +1076,97 @@ export const connectorConfigs: Record<
       },
     ],
   },
+  outlook: {
+    description: "Configure Outlook connector",
+    values: [
+      {
+        type: "list",
+        query: "Enter mailboxes to index:",
+        label: "Mailboxes",
+        name: "mailboxes",
+        optional: true,
+        description:
+          "User principal names or primary email addresses of the mailboxes to index. " +
+          "Leave empty to index every mailbox the app registration may open. " +
+          "Shared mailboxes are never picked up automatically and must be listed here.",
+      },
+      buildIncludeAttachmentsOption(
+        false,
+        "Index the text of file attachments. Inline images, nested items and cloud links are skipped."
+      ),
+      {
+        type: "checkbox",
+        query: "Include calendar events?",
+        label: "Include Calendar",
+        name: "include_calendar",
+        description:
+          "Index the calendar of each mailbox as well as its mail. " +
+          "Needs the Calendars.Read application permission.",
+        default: false,
+      },
+    ],
+    advanced_values: [
+      {
+        type: "list",
+        query: "Enter folders to skip:",
+        label: "Excluded Folders",
+        name: "excluded_folders",
+        optional: true,
+        description:
+          "Folder names to skip in every mailbox, in addition to Junk Email, " +
+          "Deleted Items, Drafts and Outbox, which are always skipped.",
+      },
+      {
+        type: "number",
+        query: "Days of past calendar to index:",
+        label: "Calendar Past Days",
+        name: "calendar_past_days",
+        optional: true,
+        default: 365,
+        description:
+          "Used when Include Calendar is on. How far back the calendar window " +
+          "reaches. Events older than this leave the index at the next prune as " +
+          "the window moves forward. Widening it later needs a re-index, since " +
+          "unchanged events do not re-enter on their own.",
+      },
+      {
+        type: "number",
+        query: "Days of future calendar to index:",
+        label: "Calendar Future Days",
+        name: "calendar_future_days",
+        optional: true,
+        default: 180,
+        description:
+          "Used when Include Calendar is on. How far ahead the calendar window " +
+          "reaches. Widening it later needs a re-index, since unchanged events " +
+          "do not re-enter on their own.",
+      },
+      {
+        type: "text",
+        query: "Microsoft Authority Host:",
+        label: "Authority Host",
+        name: "authority_host",
+        optional: true,
+        default: "https://login.microsoftonline.com",
+        description:
+          "The Microsoft identity authority host used for authentication. " +
+          "For most deployments, leave as default. " +
+          "For GCC High / DoD, use https://login.microsoftonline.us",
+      },
+      {
+        type: "text",
+        query: "Microsoft Graph API Host:",
+        label: "Graph API Host",
+        name: "graph_api_host",
+        optional: true,
+        default: "https://graph.microsoft.com",
+        description:
+          "The Microsoft Graph API host. " +
+          "For most deployments, leave as default. " +
+          "For GCC High / DoD, use https://graph.microsoft.us",
+      },
+    ],
+  },
   discourse: {
     description: "Configure Discourse connector",
     values: [
@@ -1049,15 +1248,7 @@ export const connectorConfigs: Record<
           },
         ],
       },
-      {
-        type: "checkbox",
-        query: "Include attachments?",
-        label: "Include Attachments",
-        name: "include_attachments",
-        description:
-          "Enable processing of page attachments including images and documents",
-        default: false,
-      },
+      buildIncludeAttachmentsOption(false),
     ],
     advanced_values: [],
   },
@@ -1371,6 +1562,32 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
     description: "Configure Linear connector",
     values: [],
     advanced_values: [],
+  },
+  box: {
+    description: "Configure Box connector",
+    values: [
+      {
+        type: "list",
+        query: "Enter folder IDs or URLs to index:",
+        label: "Folders",
+        name: "folder_ids",
+        description:
+          "Box folder IDs or folder URLs (e.g. https://app.box.com/folder/123456789) to index. " +
+          "Leave empty to index everything visible to the authenticated user.",
+        optional: true,
+      },
+    ],
+    advanced_values: [
+      {
+        type: "checkbox",
+        query: "Include web links:",
+        label: "Include Web Links",
+        name: "include_web_links",
+        description:
+          "Also index Box web links (bookmarks) as lightweight documents.",
+        optional: true,
+      },
+    ],
   },
   dropbox: {
     description: "Configure Dropbox connector",
@@ -1715,6 +1932,20 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
       },
     ],
   },
+  canvas: {
+    description: "Configure Canvas connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the Canvas base URL:",
+        label: "Canvas Base URL",
+        name: "canvas_base_url",
+        optional: false,
+        description: "e.g. https://school.instructure.com",
+      },
+    ],
+    advanced_values: [],
+  },
   egnyte: {
     description: "Configure Egnyte connector",
     values: [
@@ -1869,23 +2100,20 @@ type ConnectorField = ConnectionConfiguration["values"][number];
 const buildInitialValuesForFields = (
   fields: ConnectorField[]
 ): Record<string, any> =>
-  fields.reduce(
-    (acc, field) => {
-      if (field.type === "select") {
-        acc[field.name] = null;
-      } else if (field.type === "list") {
-        acc[field.name] = field.default || [];
-      } else if (field.type === "multiselect") {
-        acc[field.name] = field.default || [];
-      } else if (field.type === "checkbox") {
-        acc[field.name] = field.default ?? false;
-      } else if (field.default !== undefined) {
-        acc[field.name] = field.default;
-      }
-      return acc;
-    },
-    {} as Record<string, any>
-  );
+  fields.reduce<Record<string, any>>((acc, field) => {
+    if (field.type === "select") {
+      acc[field.name] = null;
+    } else if (field.type === "list") {
+      acc[field.name] = field.default || [];
+    } else if (field.type === "multiselect") {
+      acc[field.name] = field.default || [];
+    } else if (field.type === "checkbox") {
+      acc[field.name] = field.default ?? false;
+    } else if (field.default !== undefined) {
+      acc[field.name] = field.default;
+    }
+    return acc;
+  }, {});
 
 export function createConnectorInitialValues(
   connector: ConfigurableSources
@@ -1902,37 +2130,46 @@ export function createConnectorInitialValues(
 }
 
 export function createConnectorValidationSchema(
-  connector: ConfigurableSources
+  connector: ConfigurableSources,
+  requireGroups: boolean = false
 ): Yup.ObjectSchema<Record<string, any>> {
   const configuration = connectorConfigs[connector];
 
   const object = Yup.object().shape({
     access_type: Yup.string().required("Access Type is required"),
     name: Yup.string().required("Connector Name is required"),
-    ...[...configuration.values, ...configuration.advanced_values].reduce(
-      (acc, field) => {
-        let schema: any =
-          field.type === "select"
-            ? Yup.string()
-            : field.type === "list"
+    groups: Yup.array()
+      .of(Yup.number())
+      .when("access_type", ([accessType], schema) =>
+        requireGroups && accessType !== "sync"
+          ? schema.min(1, "Select at least one group you manage")
+          : schema
+      ),
+    ...[...configuration.values, ...configuration.advanced_values].reduce<
+      Record<string, any>
+    >((acc, field) => {
+      let schema: any =
+        field.type === "select"
+          ? Yup.string()
+          : field.type === "list"
+            ? Yup.array().of(Yup.string())
+            : field.type === "multiselect"
               ? Yup.array().of(Yup.string())
-              : field.type === "multiselect"
-                ? Yup.array().of(Yup.string())
+              : field.type === "string_pair_list"
+                ? Yup.array().of(Yup.object())
                 : field.type === "checkbox"
                   ? Yup.boolean()
                   : field.type === "file"
                     ? Yup.mixed()
                     : Yup.string();
 
-        if (!field.optional) {
-          schema = schema.required(`${field.label} is required`);
-        }
+      if (!field.optional) {
+        schema = schema.required(`${field.label} is required`);
+      }
 
-        acc[field.name] = schema;
-        return acc;
-      },
-      {} as Record<string, any>
-    ),
+      acc[field.name] = schema;
+      return acc;
+    }, {}),
     // These are advanced settings
     indexingStart: Yup.string().nullable(),
     pruneFreq: Yup.number().min(
@@ -1985,9 +2222,15 @@ export interface ConnectorSnapshot {
   from_beginning?: boolean;
 }
 
+export interface UrlRewriteRule {
+  source: string;
+  target: string;
+}
+
 export interface WebConfig {
   base_url: string;
   web_connector_type?: "recursive" | "single" | "sitemap";
+  url_rewrites?: UrlRewriteRule[];
 }
 
 export interface GithubConfig {
@@ -1996,6 +2239,7 @@ export interface GithubConfig {
   include_prs: boolean;
   include_issues: boolean;
   include_files: boolean;
+  branch?: string;
 }
 
 export interface GitlabConfig {
@@ -2004,6 +2248,14 @@ export interface GitlabConfig {
   branch?: string;
   include_mrs: boolean;
   include_issues: boolean;
+}
+
+export interface LumAppsConfig {
+  base_url: string;
+  organization_id: string;
+  instance_ids?: string[];
+  custom_content_types?: string[];
+  lang?: string;
 }
 
 export interface BitbucketConfig {
@@ -2033,6 +2285,7 @@ export interface ConfluenceConfig {
   is_cloud?: boolean;
   index_recursively?: boolean;
   cql_query?: string;
+  include_attachments?: boolean;
 }
 
 export interface JiraConfig {
@@ -2069,6 +2322,10 @@ export interface DiscourseConfig {
 
 export interface AxeroConfig {
   spaces?: string[];
+}
+
+export interface CanvasConfig {
+  canvas_base_url: string;
 }
 
 export interface DrupalWikiConfig {

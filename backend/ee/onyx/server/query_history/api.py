@@ -1,56 +1,54 @@
 import uuid
 from collections.abc import Generator
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from http import HTTPStatus
 from uuid import UUID
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from ee.onyx.background.task_name_builders import query_history_task_name
-from ee.onyx.db.query_history import get_all_query_history_export_tasks
-from ee.onyx.db.query_history import get_page_of_chat_sessions
-from ee.onyx.db.query_history import get_total_filtered_chat_sessions_count
-from ee.onyx.server.query_history.models import ChatSessionMinimal
-from ee.onyx.server.query_history.models import ChatSessionSnapshot
-from ee.onyx.server.query_history.models import MessageSnapshot
-from ee.onyx.server.query_history.models import QueryHistoryExport
+from ee.onyx.db.query_history import (
+    fetch_persisting_chat_session_by_id,
+    get_all_query_history_export_tasks,
+    get_page_of_chat_sessions,
+    get_total_filtered_chat_sessions_count,
+)
+from ee.onyx.server.query_history.models import (
+    ChatSessionMinimal,
+    ChatSessionSnapshot,
+    MessageSnapshot,
+    QueryHistoryExport,
+)
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import get_display_email
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.task_utils import construct_query_history_report_name
 from onyx.chat.chat_utils import create_chat_history_chain
-from onyx.configs.constants import FileOrigin
-from onyx.configs.constants import FileType
-from onyx.configs.constants import MessageType
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import PUBLIC_API_TAGS
-from onyx.configs.constants import QAFeedbackType
-from onyx.configs.constants import QueryHistoryType
-from onyx.configs.constants import SessionType
-from onyx.db.chat import get_chat_session_by_id
+from onyx.configs.constants import (
+    PUBLIC_API_TAGS,
+    FileOrigin,
+    FileType,
+    MessageType,
+    OnyxCeleryPriority,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+    QAFeedbackType,
+    QueryHistoryType,
+    SessionType,
+)
 from onyx.db.chat import get_chat_sessions_by_user
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import Permission
-from onyx.db.enums import TaskStatus
+from onyx.db.enums import Permission, TaskStatus
 from onyx.db.file_record import get_query_history_export_files
-from onyx.db.models import ChatSession
-from onyx.db.models import User
-from onyx.db.tasks import get_task_with_id
-from onyx.db.tasks import register_task
+from onyx.db.models import ChatSession, User
+from onyx.db.tasks import get_task_with_id, register_task
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.documents.models import PaginatedReturn
-from onyx.server.query_and_chat.models import ChatSessionDetails
-from onyx.server.query_and_chat.models import ChatSessionsResponse
+from onyx.server.query_and_chat.models import ChatSessionDetails, ChatSessionsResponse
 from onyx.server.settings.store import load_settings
 from onyx.utils.threadpool_concurrency import parallel_yield
 from shared_configs.contextvars import get_current_tenant_id
@@ -101,7 +99,7 @@ def fetch_and_process_chat_session_history(
             break
 
         paged_snapshots = parallel_yield(
-            [  # ty: ignore[invalid-argument-type]
+            [
                 yield_snapshot_from_chat_session(
                     db_session=db_session,
                     chat_session=chat_session,
@@ -160,7 +158,7 @@ def snapshot_from_chat_session(
 @router.get("/admin/chat-sessions")
 def admin_get_chat_sessions(
     user_id: UUID,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.READ_QUERY_HISTORY)),
     db_session: Session = Depends(get_session),
 ) -> ChatSessionsResponse:
     # we specifically don't allow this endpoint if "anonymized" since
@@ -173,8 +171,14 @@ def admin_get_chat_sessions(
     )
 
     try:
+        # Full History incognito is recorded for the workspace and hidden only
+        # from its own owner, so query history must still return it.
         chat_sessions = get_chat_sessions_by_user(
-            user_id=user_id, deleted=False, db_session=db_session, limit=0
+            user_id=user_id,
+            deleted=False,
+            db_session=db_session,
+            limit=0,
+            exclude_content_free=True,
         )
 
     except ValueError:
@@ -203,7 +207,7 @@ def get_chat_session_history(
     feedback_type: QAFeedbackType | None = None,
     start_time: datetime | None = None,
     end_time: datetime | None = None,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.READ_QUERY_HISTORY)),
     db_session: Session = Depends(get_session),
 ) -> PaginatedReturn[ChatSessionMinimal]:
     query_history_type = ensure_query_history_is_enabled(
@@ -243,7 +247,7 @@ def get_chat_session_history(
 @router.get("/admin/chat-session-history/{chat_session_id}")
 def get_chat_session_admin(
     chat_session_id: UUID,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.READ_QUERY_HISTORY)),
     db_session: Session = Depends(get_session),
 ) -> ChatSessionSnapshot:
     query_history_type = ensure_query_history_is_enabled(
@@ -251,11 +255,9 @@ def get_chat_session_admin(
     )
 
     try:
-        chat_session = get_chat_session_by_id(
+        chat_session = fetch_persisting_chat_session_by_id(
             chat_session_id=chat_session_id,
-            user_id=None,  # view chat regardless of user
             db_session=db_session,
-            include_deleted=True,
         )
     except ValueError:
         raise HTTPException(
@@ -280,7 +282,7 @@ def get_chat_session_admin(
 
 @router.get("/admin/query-history/list")
 def list_all_query_history_exports(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.READ_QUERY_HISTORY)),
     db_session: Session = Depends(get_session),
 ) -> list[QueryHistoryExport]:
     ensure_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
@@ -308,7 +310,7 @@ def list_all_query_history_exports(
 
 @router.post("/admin/query-history/start-export", tags=PUBLIC_API_TAGS)
 def start_query_history_export(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.READ_QUERY_HISTORY)),
     db_session: Session = Depends(get_session),
     start: datetime | None = None,
     end: datetime | None = None,
@@ -355,7 +357,7 @@ def start_query_history_export(
 @router.get("/admin/query-history/export-status", tags=PUBLIC_API_TAGS)
 def get_query_history_export_status(
     request_id: str,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.READ_QUERY_HISTORY)),
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
     ensure_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
@@ -389,7 +391,7 @@ def get_query_history_export_status(
 @router.get("/admin/query-history/download", tags=PUBLIC_API_TAGS)
 def download_query_history_csv(
     request_id: str,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.READ_QUERY_HISTORY)),
     db_session: Session = Depends(get_session),
 ) -> StreamingResponse:
     ensure_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])

@@ -5,12 +5,14 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import PersonaSharePermission
-from onyx.db.models import Persona
-from onyx.db.models import Persona__User
-from onyx.db.models import Persona__UserGroup
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserGroup
+from onyx.db.models import (
+    Persona,
+    Persona__User,
+    Persona__UserGroup,
+    User,
+    User__UserGroup,
+    UserGroup,
+)
 
 
 def create_test_persona(

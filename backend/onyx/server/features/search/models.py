@@ -1,8 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
-from pydantic import Field
-from pydantic import model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import Tag

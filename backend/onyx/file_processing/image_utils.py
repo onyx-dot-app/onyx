@@ -3,9 +3,7 @@ from io import BytesIO
 from typing import Tuple
 
 from onyx.configs.constants import FileOrigin
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import TabularSection
-from onyx.connectors.models import TextSection
+from onyx.connectors.models import ImageSection, TabularSection, TextSection
 from onyx.file_processing.file_types import OnyxMimeTypes
 from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.b64 import get_image_type_from_bytes

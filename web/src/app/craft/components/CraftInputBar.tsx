@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import BaseInputBar, {
   type BaseInputBarHandle,
@@ -30,9 +31,12 @@ import {
 } from "@/app/craft/contexts/UploadFilesContext";
 import useUserSkills from "@/hooks/useUserSkills";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
+import { useCraftMcpServers } from "@/lib/tools/hooks";
 import {
+  pickerEntryConnectionPath,
+  pickerEntryKey,
+  pickerEntryPromptPrefix,
   toPickerSections,
-  flattenSections,
   type PickerEntry,
 } from "@/lib/skills/picker";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -53,7 +57,7 @@ export interface CraftInputBarProps {
   sandboxInitializing?: boolean;
   noBottomRounding?: boolean;
   queuedMessages?: readonly QueuedMessage[];
-  onQueueMessage?: (text: string) => void;
+  onQueueMessage?: (text: string, files: BuildFile[]) => void;
   onRemoveQueuedMessage?: (index: number) => void;
   onInterrupt?: () => void;
   isInterrupting?: boolean;
@@ -63,6 +67,11 @@ export interface CraftInputBarProps {
   } | null;
   /** Seed the active entry chips. For stories/tests; production callers leave unset. */
   initialEntries?: PickerEntry[];
+}
+
+function withEntryPrefixes(message: string, entries: PickerEntry[]): string {
+  const prefixes = entries.map(pickerEntryPromptPrefix).join(" ");
+  return prefixes ? `${prefixes} ${message}` : message;
 }
 
 const CraftInputBar = memo(
@@ -85,8 +94,11 @@ const CraftInputBar = memo(
       },
       ref
     ) => {
+      const t = useTranslations("craft.inputBar");
+      const entryMenuT = useTranslations("craft.entryMenu");
       const baseRef = useRef<BaseInputBarHandle>(null);
       const fileInputRef = useRef<HTMLInputElement>(null);
+      const router = useRouter();
 
       const {
         currentMessageFiles,
@@ -98,9 +110,10 @@ const CraftInputBar = memo(
 
       const { data: skillsData } = useUserSkills();
       const { data: appsData } = useUserExternalApps();
+      const { data: craftMcpData } = useCraftMcpServers();
       const pickerSections = useMemo(
-        () => toPickerSections(skillsData, appsData),
-        [skillsData, appsData]
+        () => toPickerSections(skillsData, appsData, craftMcpData?.mcp_servers),
+        [skillsData, appsData, craftMcpData]
       );
 
       const { data: libraryTree, mutate: mutateLibrary } = useSWR(
@@ -125,14 +138,28 @@ const CraftInputBar = memo(
       } | null>(null);
       const dismissEntryInfo = useCallback(() => setEntryInfo(null), []);
 
-      const addEntry = useCallback((entry: PickerEntry) => {
-        setActiveEntries((prev) =>
-          prev.some((e) => e.slug === entry.slug) ? prev : [...prev, entry]
-        );
-      }, []);
+      const addEntry = useCallback(
+        (entry: PickerEntry) => {
+          const connectionPath = pickerEntryConnectionPath(entry);
+          if (connectionPath) {
+            router.push(connectionPath);
+            return;
+          }
+          setActiveEntries((prev) =>
+            prev.some(
+              (candidate) => pickerEntryKey(candidate) === pickerEntryKey(entry)
+            )
+              ? prev
+              : [...prev, entry]
+          );
+        },
+        [router]
+      );
 
-      const removeEntry = useCallback((slug: string) => {
-        setActiveEntries((prev) => prev.filter((e) => e.slug !== slug));
+      const removeEntry = useCallback((entryKey: string) => {
+        setActiveEntries((prev) =>
+          prev.filter((entry) => pickerEntryKey(entry) !== entryKey)
+        );
       }, []);
 
       const slashPicker = useSlashPicker({
@@ -166,7 +193,7 @@ const CraftInputBar = memo(
         (text: string): boolean => {
           const slug = text.trim().match(/^\/(\S+)$/)?.[1];
           const entry = slug
-            ? (flattenSections(pickerSections).find((e) => e.slug === slug) ??
+            ? (pickerSections.skills.find((entry) => entry.slug === slug) ??
               null)
             : null;
           if (entry) {
@@ -180,17 +207,27 @@ const CraftInputBar = memo(
 
       const handleSubmit = useCallback(
         (message: string) => {
-          const skillPrefixes = activeEntries
-            .map((e) => `/${e.slug}`)
-            .join(" ");
-          const fullMessage = skillPrefixes
-            ? `${skillPrefixes} ${message}`
-            : message;
-          onSubmit(fullMessage, currentMessageFiles);
+          onSubmit(
+            withEntryPrefixes(message, activeEntries),
+            currentMessageFiles
+          );
           setActiveEntries([]);
           clearFiles({ suppressRefetch: true });
         },
         [activeEntries, currentMessageFiles, onSubmit, clearFiles]
+      );
+
+      const handleQueueMessage = useCallback(
+        (message: string) => {
+          if (!onQueueMessage) return;
+          onQueueMessage(
+            withEntryPrefixes(message, activeEntries),
+            currentMessageFiles
+          );
+          setActiveEntries([]);
+          clearFiles({ suppressRefetch: true });
+        },
+        [activeEntries, currentMessageFiles, onQueueMessage, clearFiles]
       );
 
       // Always rendered so the strip can animate its own collapse/expand.
@@ -204,20 +241,23 @@ const CraftInputBar = memo(
         />
       );
 
-      const router = useRouter();
       const plusMenuItems = useMemo(
         () =>
-          buildEntryMenuItems(pickerSections, {
-            onAttachFiles: () => fileInputRef.current?.click(),
-            onSelectEntry: addEntry,
-            onBrowseSkills: () => router.push("/craft/v1/skills"),
-            onBrowseApps: () => router.push("/craft/v1/apps"),
-            libraryFiles,
-            // Defer the modal until the + popover finishes closing, else it paints over it.
-            onManageLibrary: () =>
-              window.setTimeout(() => setLibraryModalOpen(true), 200),
-          }),
-        [pickerSections, addEntry, libraryFiles, router]
+          buildEntryMenuItems(
+            pickerSections,
+            {
+              onAttachFiles: () => fileInputRef.current?.click(),
+              onSelectEntry: addEntry,
+              onBrowseSkills: () => router.push("/craft/v1/skills"),
+              onBrowseApps: () => router.push("/craft/v1/apps"),
+              libraryFiles,
+              // Defer the modal until the + popover finishes closing, else it paints over it.
+              onManageLibrary: () =>
+                window.setTimeout(() => setLibraryModalOpen(true), 200),
+            },
+            entryMenuT
+          ),
+        [pickerSections, addEntry, libraryFiles, router, entryMenuT]
       );
 
       const bottomLeftSlot = (
@@ -225,7 +265,7 @@ const CraftInputBar = memo(
           <PlusMenuButton
             items={plusMenuItems}
             disabled={disabled}
-            tooltip="Add files or skills"
+            tooltip={t("plusMenu.tooltip")}
           />
           {interruptible && <InterruptHint interrupting={isInterrupting} />}
         </>
@@ -262,7 +302,7 @@ const CraftInputBar = memo(
             sandboxInitializing={sandboxInitializing}
             submitBlocked={hasUploadingFiles}
             queuedMessages={queuedMessages}
-            onQueueMessage={onQueueMessage}
+            onQueueMessage={onQueueMessage ? handleQueueMessage : undefined}
             onRemoveQueuedMessage={onRemoveQueuedMessage}
             onInterrupt={onInterrupt}
             isInterrupting={isInterrupting}
@@ -285,7 +325,13 @@ const CraftInputBar = memo(
           {entryInfo && (
             <EntryInfoPopover
               name={entryInfo.entry.name}
-              description={entryInfo.entry.description}
+              description={
+                entryInfo.entry.kind === "skill"
+                  ? entryInfo.entry.description
+                  : entryInfo.entry.authenticated
+                    ? t("entryInfo.connected")
+                    : t("entryInfo.connectionRequired")
+              }
               tileElement={entryInfo.chipEl}
               onDismiss={dismissEntryInfo}
             />

@@ -18,9 +18,11 @@ from datetime import datetime
 
 import pytest
 
-from onyx.chat.citation_processor import CitationMapping
-from onyx.chat.citation_processor import CitationMode
-from onyx.chat.citation_processor import DynamicCitationProcessor
+from onyx.chat.citation_processor import (
+    CitationMapping,
+    CitationMode,
+    DynamicCitationProcessor,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc
 from onyx.server.query_and_chat.streaming_models import CitationInfo
@@ -356,8 +358,7 @@ def test_formatted_citation_yielded_separately(
 
     results = []
     for token in ["Text [", "1", "] here."]:
-        for result in processor.process_token(token):
-            results.append(result)
+        results.extend(processor.process_token(token))
 
     # Should have text chunks and formatted citation
     text_results = [r for r in results if isinstance(r, str)]
@@ -804,6 +805,25 @@ def test_code_block_plaintext_added(
     assert "```plaintext" in output
 
 
+def test_bare_fence_labeling_does_not_corrupt_other_fences(
+    mock_search_docs: CitationMapping,  # noqa: ARG001
+) -> None:
+    """Labeling a bare fence must leave the segment's other fences untouched
+    (the first token buffers three fences at labeling time)."""
+    processor = DynamicCitationProcessor()
+
+    tokens: list[str | None] = [
+        "A:\n```\nx\n```\nB:\n```bash",
+        "\necho hi\n```\nDone.\n",
+    ]
+    output, _ = process_tokens(processor, tokens)
+
+    assert output.count("```plaintext") == 1
+    assert "x\n```\nB:" in output
+    assert "```plaintextbash" not in output
+    assert "```bash" in output
+
+
 def test_citation_outside_code_block_processed(
     mock_search_docs: CitationMapping,
 ) -> None:
@@ -866,12 +886,10 @@ def test_stop_token_detection_stops_processing() -> None:
 
     results = []
     for token in ["Text ", "ST", "OP"]:
-        for result in processor.process_token(token):
-            results.append(result)
+        results.extend(processor.process_token(token))
 
     # Try to add more text after stop token
-    for result in processor.process_token(" more text"):
-        results.append(result)
+    results.extend(processor.process_token(" more text"))
 
     # Processing should stop at STOP token - no results after STOP
     output = "".join(r for r in results if isinstance(r, str))
@@ -886,8 +904,7 @@ def test_partial_stop_token_held_back() -> None:
 
     results = []
     for token in ["Text ", "ST"]:
-        for result in processor.process_token(token):
-            results.append(result)
+        results.extend(processor.process_token(token))
 
     # Partial stop token should be held back
     output = "".join(r for r in results if isinstance(r, str))
@@ -903,8 +920,7 @@ def test_stop_token_at_different_positions() -> None:
     processor1 = DynamicCitationProcessor(stop_stream=stop_stream)
     results1 = []
     for token in ["END"]:
-        for result in processor1.process_token(token):
-            results1.append(result)
+        results1.extend(processor1.process_token(token))
     # Stop token detection returns early, so no results
     output1 = "".join(r for r in results1 if isinstance(r, str))
     assert output1 == ""  # Stop token detected, no output
@@ -913,8 +929,7 @@ def test_stop_token_at_different_positions() -> None:
     processor2 = DynamicCitationProcessor(stop_stream=stop_stream)
     results2 = []
     for token in ["Start ", "EN", "D"]:
-        for result in processor2.process_token(token):
-            results2.append(result)
+        results2.extend(processor2.process_token(token))
     output2 = "".join(r for r in results2 if isinstance(r, str))
     # "Start " should be processed before stop token is detected
     assert "Start " in output2
@@ -946,12 +961,10 @@ def test_none_token_flushes_remaining_segment(
 
     results = []
     for token in ["Remaining ", "text"]:
-        for result in processor.process_token(token):
-            results.append(result)
+        results.extend(processor.process_token(token))
 
     # Flush with None
-    for result in processor.process_token(None):
-        results.append(result)
+    results.extend(processor.process_token(None))
 
     output = "".join(r for r in results if isinstance(r, str))
     assert "Remaining text" in output

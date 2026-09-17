@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client

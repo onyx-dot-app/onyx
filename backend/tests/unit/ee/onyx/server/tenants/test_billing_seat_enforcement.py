@@ -7,16 +7,17 @@ surfacing as ``OnyxError(SEAT_LIMIT_EXCEEDED)``).
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 import stripe
 
-from ee.onyx.server.tenants.billing import _seat_billing_idempotency_key
-from ee.onyx.server.tenants.billing import attempt_seat_billing_increase
-from ee.onyx.server.tenants.billing import enforce_cloud_seat_limit
-from ee.onyx.server.tenants.billing import SeatBillingDeclineReason
+from ee.onyx.server.tenants.billing import (
+    SeatBillingDeclineReason,
+    _seat_billing_idempotency_key,
+    attempt_seat_billing_increase,
+    enforce_cloud_seat_limit,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
@@ -162,7 +163,7 @@ class TestEnforceCloudSeatLimit:
             enforce_cloud_seat_limit(seats_needed=1)
 
     @patch(f"{_BILLING}.acquire_seat_lock")
-    @patch("ee.onyx.server.tenants.user_mapping.get_tenant_count")
+    @patch("ee.onyx.db.user_tenant_mapping.get_tenant_count")
     @patch(f"{_BILLING}.attempt_seat_billing_increase")
     @patch(f"{_BILLING}.is_tenant_on_trial_fn")
     @patch(f"{_BILLING}.get_current_tenant_id")
@@ -193,7 +194,7 @@ class TestEnforceCloudSeatLimit:
         ],
     )
     @patch(f"{_BILLING}.acquire_seat_lock")
-    @patch("ee.onyx.server.tenants.user_mapping.get_tenant_count")
+    @patch("ee.onyx.db.user_tenant_mapping.get_tenant_count")
     @patch(f"{_BILLING}.attempt_seat_billing_increase")
     @patch(f"{_BILLING}.is_tenant_on_trial_fn")
     @patch(f"{_BILLING}.get_current_tenant_id")
@@ -220,7 +221,7 @@ class TestEnforceCloudSeatLimit:
         assert expected_in_message in exc.value.detail
 
     @patch(f"{_BILLING}.acquire_seat_lock")
-    @patch("ee.onyx.server.tenants.user_mapping.get_tenant_count")
+    @patch("ee.onyx.db.user_tenant_mapping.get_tenant_count")
     @patch(f"{_BILLING}.attempt_seat_billing_increase")
     @patch(f"{_BILLING}.is_tenant_on_trial_fn")
     @patch(f"{_BILLING}.get_current_tenant_id", return_value="ctx_var_tenant")

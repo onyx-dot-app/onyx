@@ -1,3 +1,4 @@
+import { useLocale, useTranslations } from "next-intl";
 import { SvgSearch, SvgSearchMenu } from "@opal/icons";
 import { SearchToolPacket } from "@/app/app/services/streamingModels";
 import {
@@ -61,8 +62,11 @@ export const InternalSearchToolRenderer: MessageRenderer<
   renderType,
   children,
 }) => {
+  const t = useTranslations("chat.messages.timeline");
+  const locale = useLocale();
   const searchState = constructCurrentSearchState(packets);
-  const { queries, results, sourceFilters, isComplete } = searchState;
+  const { queries, results, sourceFilters, timeFilter, isComplete } =
+    searchState;
 
   const isCompact = renderType === RenderType.COMPACT;
   const isHighlight = renderType === RenderType.HIGHLIGHT;
@@ -70,8 +74,12 @@ export const InternalSearchToolRenderer: MessageRenderer<
 
   const hasResults = results.length > 0;
 
-  // A source filter overrides the header with the connector(s) it scoped to.
-  const queriesHeader = formatSearchHeader(sourceFilters);
+  const queriesHeader = formatSearchHeader(
+    sourceFilters,
+    timeFilter,
+    t,
+    locale
+  );
 
   if (queries.length === 0) {
     return children([
@@ -116,7 +124,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
                   <BlinkingBar />
                 ) : (
                   <Text as="p" text04 mainUiMuted>
-                    No results found
+                    {t("internalSearch.noResults.text")}
                   </Text>
                 )
               }
@@ -157,7 +165,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
     return children([
       {
         icon: null,
-        status: "Reading",
+        status: t("internalSearch.reading.status"),
         supportsCollapsible: true,
         timelineLayout: "content",
         content: (
@@ -179,7 +187,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
                 <BlinkingBar />
               ) : (
                 <Text as="p" text04 mainUiMuted>
-                  No results found
+                  {t("internalSearch.noResults.text")}
                 </Text>
               )
             }
@@ -215,7 +223,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
             <>
               {!isCompact && (
                 <Text as="p" mainUiMuted text04>
-                  Reading
+                  {t("internalSearch.reading.status")}
                 </Text>
               )}
               <SearchChipList
@@ -236,7 +244,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
                     <BlinkingBar />
                   ) : (
                     <Text as="p" text03 mainUiMuted>
-                      No results found
+                      {t("internalSearch.noResults.text")}
                     </Text>
                   )
                 }

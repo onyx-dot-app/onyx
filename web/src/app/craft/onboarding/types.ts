@@ -1,36 +1,21 @@
-import type {
-  LLMProviderDescriptor,
-  LLMProviderResponse,
-} from "@/lib/languageModels/types";
-
-// New mode-based modal types
-export type OnboardingModalMode =
-  | { type: "initial-onboarding" } // Full flow: page1 → llm-setup?
-  | { type: "add-llm"; provider?: string } // Just llm-setup step
-  | { type: "closed" }; // Modal not visible
-
-export type OnboardingStep = "llm-setup" | "page1" | "page2";
+import type { LLMProviderDescriptor } from "@/lib/languageModels/types";
 
 export interface OnboardingModalController {
-  mode: OnboardingModalMode;
-  isOpen: boolean;
+  // Intro tour
+  introOpen: boolean;
+  /** Explicit finish (final CTA): marks seen, tracks completion, closes. */
+  completeOnboarding: () => void;
+  /** Bail-out (Escape / X): marks seen and closes without tracking. */
+  dismissOnboarding: () => void;
 
-  // Actions
-  openLlmSetup: (provider?: string) => void;
-  close: () => void;
+  // Shared provider-setup modal (any well-known provider type)
+  activeProviderKey: string | null;
+  openProviderModal: (providerKey: string) => void;
+  closeProviderModal: () => void;
 
-  // Data needed for modal
+  // Data needed for gating
   llmProviders: LLMProviderDescriptor[] | undefined;
-
-  // State
   isAdmin: boolean;
   hasAnyProvider: boolean; // A configured provider exposes a supported model
   isLoading: boolean; // True while LLM providers are loading
-
-  // Callbacks
-  completeOnboarding: () => Promise<void>;
-  completeLlmSetup: () => Promise<void>;
-  refetchLlmProviders: () => Promise<
-    LLMProviderResponse<LLMProviderDescriptor> | undefined
-  >;
 }

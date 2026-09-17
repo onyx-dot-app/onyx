@@ -4,19 +4,16 @@ registry. Adding a new rule kind is "write a ``RuleMatcher`` + register it" —
 the dispatch in ``rule_matches`` never changes (open/closed).
 """
 
-from abc import ABC
-from abc import abstractmethod
-from typing import Any
-from typing import ClassVar
-from typing import Generic
-from typing import get_args
-from typing import TypeVar
+from abc import ABC, abstractmethod
+from typing import Any, ClassVar, Generic, TypeVar, get_args
 
 from onyx.external_apps.matching.request import MatchContext
-from onyx.external_apps.providers.actions import GraphQLOp
-from onyx.external_apps.providers.actions import MatchRule
-from onyx.external_apps.providers.actions import path_matches
-from onyx.external_apps.providers.actions import RestRoute
+from onyx.external_apps.providers.actions import (
+    GraphQLOp,
+    MatchRule,
+    RestRoute,
+    path_matches,
+)
 
 RuleT = TypeVar("RuleT")
 

@@ -17,6 +17,7 @@ import {
   SvgQwen,
   SvgGoogle,
   SvgNebius,
+  SvgPortkey,
 } from "@opal/logos";
 import { ZAIIcon } from "@/components/icons/icons";
 import {
@@ -37,6 +38,7 @@ import LiteLLMProxyModal from "@/sections/modals/languageModels/LiteLLMProxyModa
 import BifrostModal from "@/sections/modals/languageModels/BifrostModal";
 import OpenAICompatibleModal from "@/sections/modals/languageModels/OpenAICompatibleModal";
 import NebiusTokenfactoryModal from "@/sections/modals/languageModels/NebiusTokenfactoryModal";
+import PortkeyModal from "@/sections/modals/languageModels/PortkeyModal";
 
 // ─── Text (LLM) providers ────────────────────────────────────────────────────
 
@@ -126,6 +128,12 @@ const PROVIDERS: Record<string, ProviderEntry> = {
     companyName: "Nebius",
     Modal: NebiusTokenfactoryModal,
   },
+  [LLMProviderName.PORTKEY]: {
+    icon: SvgPortkey,
+    productName: "Portkey",
+    companyName: "Portkey",
+    Modal: PortkeyModal,
+  },
   [LLMProviderName.CUSTOM]: {
     icon: SvgServer,
     productName: "Custom Models",
@@ -141,8 +149,8 @@ const DEFAULT_ENTRY: ProviderEntry = {
   Modal: CustomModal,
 };
 
-// Providers that don't use custom_config themselves — if custom_config is
-// present it means the provider was originally created via CustomModal.
+// Providers that don't use custom_config themselves, so a non-empty
+// custom_config means the provider was originally created via CustomModal.
 const CUSTOM_CONFIG_OVERRIDES = new Set<string>([
   LLMProviderName.OPENAI,
   LLMProviderName.ANTHROPIC,
@@ -160,8 +168,12 @@ export function getProvider(
     companyName: providerName,
   };
 
+  // An empty custom_config carries no signal of origin. Only a non-empty map
+  // marks a provider created via the custom form.
+  const customConfig = existingProvider?.custom_config;
   if (
-    existingProvider?.custom_config != null &&
+    customConfig != null &&
+    Object.keys(customConfig).length > 0 &&
     CUSTOM_CONFIG_OVERRIDES.has(providerName)
   ) {
     return { ...entry, Modal: CustomModal };
@@ -184,6 +196,7 @@ export const AGGREGATOR_PROVIDERS = new Set([
   LLMProviderName.BIFROST,
   LLMProviderName.OPENAI_COMPATIBLE,
   LLMProviderName.NEBIUS_TOKENFACTORY,
+  LLMProviderName.PORTKEY,
   LLMProviderName.VERTEX_AI,
 ]);
 
@@ -201,8 +214,10 @@ const MODEL_ICON_MAP: Record<string, IconFunctionComponent> = {
   [LLMProviderName.BIFROST]: SvgBifrost,
   [LLMProviderName.OPENAI_COMPATIBLE]: SvgPlug,
   [LLMProviderName.NEBIUS_TOKENFACTORY]: SvgNebius,
+  [LLMProviderName.PORTKEY]: SvgPortkey,
 
   amazon: SvgAws,
+  gpt: SvgOpenai,
   phi: SvgMicrosoft,
   mistral: SvgMistral,
   ministral: SvgMistral,

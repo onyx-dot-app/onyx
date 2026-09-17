@@ -17,21 +17,17 @@ from __future__ import annotations
 
 import functools
 import inspect
-from collections.abc import Callable
-from collections.abc import Iterator
-from typing import Any
-from typing import TYPE_CHECKING
+from collections.abc import Callable, Iterator
+from typing import TYPE_CHECKING, Any
 
-from onyx.llm.model_response import ChatCompletionDeltaToolCall
+from onyx.llm.model_response import ChatCompletionDeltaToolCall, Usage
 from onyx.llm.model_response import FunctionCall as DeltaFunctionCall
-from onyx.llm.model_response import Usage
 from onyx.tracing.framework.create import get_current_span
 from onyx.tracing.framework.span_data import GenerationSpanData
 
 if TYPE_CHECKING:
     from onyx.llm.interfaces import LLM
-    from onyx.llm.model_response import ModelResponse
-    from onyx.llm.model_response import ModelResponseStream
+    from onyx.llm.model_response import ModelResponse, ModelResponseStream
     from onyx.llm.models import ToolCall
 
 
@@ -92,7 +88,7 @@ def _validate_prompt_param(fn: Callable[..., Any]) -> inspect.Signature:
         p.kind is inspect.Parameter.VAR_POSITIONAL for p in params
     )
     if not (has_prompt or accepts_var_keyword or accepts_var_positional):
-        name = getattr(fn, "__qualname__", repr(fn))
+        name = getattr(fn, "__qualname__", repr(fn))  # ods: ignore[getattr]
         raise TypeError(
             f"Cannot auto-trace {name}: signature cannot accept a "
             f"'{_PROMPT_PARAM_NAME}' argument. LLM.invoke / LLM.stream "
@@ -130,7 +126,7 @@ def wrap_invoke(
     invoke_fn: Callable[..., "ModelResponse"],
 ) -> Callable[..., "ModelResponse"]:
     """Wrap a concrete ``LLM.invoke`` implementation with a fallback generation_span."""
-    if getattr(invoke_fn, _ALREADY_WRAPPED_ATTR, False):
+    if getattr(invoke_fn, _ALREADY_WRAPPED_ATTR, False):  # ods: ignore[getattr]
         return invoke_fn
 
     sig = _validate_prompt_param(invoke_fn)
@@ -141,8 +137,7 @@ def wrap_invoke(
             return invoke_fn(self, *args, **kwargs)
 
         from onyx.tracing.flows import LLMFlow
-        from onyx.tracing.llm_utils import llm_generation_span
-        from onyx.tracing.llm_utils import record_llm_response
+        from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 
         prompt, tools = _extract_prompt_and_tools(sig, self, args, kwargs)
         with llm_generation_span(
@@ -184,7 +179,7 @@ def wrap_stream(
     Braintrust shows one complete tool-call entry per invocation rather than
     fragmented duplicates.
     """
-    if getattr(stream_fn, _ALREADY_WRAPPED_ATTR, False):
+    if getattr(stream_fn, _ALREADY_WRAPPED_ATTR, False):  # ods: ignore[getattr]
         return stream_fn
 
     sig = _validate_prompt_param(stream_fn)
@@ -198,8 +193,7 @@ def wrap_stream(
             return
 
         from onyx.tracing.flows import LLMFlow
-        from onyx.tracing.llm_utils import llm_generation_span
-        from onyx.tracing.llm_utils import record_llm_span_output
+        from onyx.tracing.llm_utils import llm_generation_span, record_llm_span_output
 
         prompt, tools = _extract_prompt_and_tools(sig, self, args, kwargs)
         with llm_generation_span(

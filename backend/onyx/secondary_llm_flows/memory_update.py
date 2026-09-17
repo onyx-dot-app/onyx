@@ -1,12 +1,10 @@
 from onyx.configs.constants import MessageType
 from onyx.llm.interfaces import LLM
-from onyx.llm.models import ReasoningEffort
-from onyx.llm.models import UserMessage
+from onyx.llm.models import ReasoningEffort, UserMessage
 from onyx.prompts.basic_memory import FULL_MEMORY_UPDATE_PROMPT
 from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.llm_utils import llm_generation_span
-from onyx.tracing.llm_utils import record_llm_response
+from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import parse_llm_json_response
 
@@ -29,7 +27,7 @@ def _format_chat_history(chat_history: list[ChatMinimalTextMessage]) -> str:
     recent_user_messages = user_messages[-MAX_USER_MESSAGES:]
 
     formatted_parts = []
-    for i, msg in enumerate(recent_user_messages, start=1):
+    for _i, msg in enumerate(recent_user_messages, start=1):
         if len(msg.message) > MAX_CHARS_PER_MESSAGE:
             truncated_message = msg.message[:MAX_CHARS_PER_MESSAGE] + "[...truncated]"
         else:

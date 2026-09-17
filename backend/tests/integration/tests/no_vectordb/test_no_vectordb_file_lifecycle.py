@@ -14,8 +14,7 @@ from onyx.db.enums import UserFileStatus
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.project import ProjectManager
-from tests.integration.common_utils.test_models import DATestLLMProvider
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import DATestLLMProvider, DATestUser
 
 POLL_INTERVAL_SECONDS = 1
 POLL_TIMEOUT_SECONDS = 30

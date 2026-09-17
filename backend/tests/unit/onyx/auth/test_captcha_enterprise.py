@@ -1,18 +1,17 @@
 """Unit tests for the reCAPTCHA Enterprise Assessment rejection ladder."""
 
 from collections.abc import Iterator
-from datetime import datetime
-from datetime import timezone
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from onyx.auth import captcha as captcha_module
-from onyx.auth.captcha import CaptchaAction
-from onyx.auth.captcha import CaptchaVerificationError
-from onyx.auth.captcha import verify_captcha_token
+from onyx.auth.captcha import (
+    CaptchaAction,
+    CaptchaVerificationError,
+    verify_captcha_token,
+)
 
 
 def _fake_client(payload: dict) -> MagicMock:

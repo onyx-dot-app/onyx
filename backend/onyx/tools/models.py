@@ -2,27 +2,25 @@ from __future__ import annotations
 
 import json
 from enum import Enum
-from typing import Any
-from typing import Callable
-from typing import Literal
+from typing import Any, Callable, Literal
 from uuid import UUID
 
-from pydantic import BaseModel
-from pydantic import ConfigDict
-from pydantic import model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from onyx.chat.emitter import Emitter
-from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
-from onyx.configs.chat_configs import NUM_RETURNED_HITS
+from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT, NUM_RETURNED_HITS
 from onyx.configs.constants import MessageType
-from onyx.context.search.models import SearchDoc
-from onyx.context.search.models import SearchDocsResponse
+from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.db.memory import UserMemoryContext
-from onyx.file_store.models import install_lazy_content_loader
-from onyx.file_store.models import maybe_materialize_lazy_content
+from onyx.file_store.models import (
+    install_lazy_content_loader,
+    maybe_materialize_lazy_content,
+)
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import CustomToolErrorInfo
-from onyx.server.query_and_chat.streaming_models import GeneratedImage
+from onyx.server.query_and_chat.streaming_models import (
+    CustomToolErrorInfo,
+    GeneratedImage,
+)
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
 
@@ -124,7 +122,11 @@ class ToolRunnerResponse(BaseModel):
     @model_validator(mode="after")
     def validate_tool_runner_response(self) -> "ToolRunnerResponse":
         fields = ["tool_response", "tool_message_content", "tool_run_kickoff"]
-        provided = sum(1 for field in fields if getattr(self, field) is not None)
+        provided = sum(
+            1
+            for field in fields
+            if getattr(self, field) is not None  # ods: ignore[getattr]
+        )
 
         if provided != 1:
             raise ValueError(
@@ -217,7 +219,7 @@ class ChatFile(BaseModel):
         install_lazy_content_loader(inst, loader)
         return inst
 
-    def __getattribute__(self, name: str):  # type: ignore[no-untyped-def]
+    def __getattribute__(self, name: str):
         if name == "content":
             maybe_materialize_lazy_content(self)
         return object.__getattribute__(self, name)
@@ -276,6 +278,8 @@ class ToolCallInfo(BaseModel):
     search_docs: list[SearchDoc] | None = None
     generated_images: list[GeneratedImage] | None = None
     generated_files: list[PythonExecutionFile] | None = None
+    # File-store ids of blobs custom tools saved during the call.
+    generated_file_ids: list[str] | None = None
 
 
 CHAT_SESSION_ID_PLACEHOLDER = "CHAT_SESSION_ID"

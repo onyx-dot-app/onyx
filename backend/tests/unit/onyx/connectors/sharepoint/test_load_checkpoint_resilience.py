@@ -1,7 +1,7 @@
 """Tests for resilience wrappers added to SharepointConnector._load_from_checkpoint.
 
 Covers three failure modes that previously aborted the whole attempt:
-- G1: BFS-mode generator (`_iter_drive_items_paged`) raising mid-iteration.
+- G1: BFS-mode generator (`iter_drive_items_paged`) raising mid-iteration.
 - G2: `_fetch_site_pages` raising a non-Graph 4xx in Phase 5.
 - G3: A single site page failing to convert in Phase 5.
 
@@ -13,22 +13,26 @@ from __future__ import annotations
 
 from collections import deque
 from collections.abc import Generator
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Any
 
 import pytest
 
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import DocumentSource
-from onyx.connectors.models import EntityFailure
-from onyx.connectors.models import TextSection
-from onyx.connectors.sharepoint.connector import DriveItemData
-from onyx.connectors.sharepoint.connector import SharepointConnector
-from onyx.connectors.sharepoint.connector import SharepointConnectorCheckpoint
-from onyx.connectors.sharepoint.connector import SiteDescriptor
+from onyx.connectors.models import (
+    ConnectorFailure,
+    Document,
+    DocumentFailure,
+    DocumentSource,
+    EntityFailure,
+    TextSection,
+)
+from onyx.connectors.sharepoint import connector as sp_connector
+from onyx.connectors.sharepoint.connector import (
+    DriveItemData,
+    SharepointConnector,
+    SharepointConnectorCheckpoint,
+    SiteDescriptor,
+)
 
 SITE_URL = "https://example.sharepoint.com/sites/sample"
 DRIVE_WEB_URL = f"{SITE_URL}/Shared Documents"
@@ -119,6 +123,7 @@ def _mock_convert(monkeypatch: pytest.MonkeyPatch) -> None:
         access_token: str | None = None,  # noqa: ARG001
         treat_sharing_link_as_public: bool = False,  # noqa: ARG001
         raw_file_callback: Any = None,  # noqa: ARG001
+        permission_cache: Any = None,  # noqa: ARG001
     ) -> Document:
         return _make_document(driveitem)
 
@@ -160,7 +165,7 @@ def _build_phase5_checkpoint() -> SharepointConnectorCheckpoint:
 
 
 class TestBfsIterationFailure:
-    """When `_iter_drive_items_paged` (BFS path) raises after yielding some
+    """When `iter_drive_items_paged` (BFS path) raises after yielding some
     items, items emitted before the raise are kept, an EntityFailure is
     yielded for the drive, the drive checkpoint state is cleared, and the
     generator returns cleanly instead of aborting the attempt."""
@@ -174,7 +179,7 @@ class TestBfsIterationFailure:
         good_items = [_make_item("a"), _make_item("b")]
 
         def fake_iter_paged(
-            self: SharepointConnector,  # noqa: ARG001
+            client: Any,  # noqa: ARG001
             drive_id: str,  # noqa: ARG001
             folder_path: str | None = None,  # noqa: ARG001
             start: datetime | None = None,  # noqa: ARG001
@@ -184,9 +189,7 @@ class TestBfsIterationFailure:
             yield from good_items
             raise RuntimeError("graph 500 mid-page")
 
-        monkeypatch.setattr(
-            SharepointConnector, "_iter_drive_items_paged", fake_iter_paged
-        )
+        monkeypatch.setattr(sp_connector, "iter_drive_items_paged", fake_iter_paged)
 
         # folder_path forces BFS mode
         checkpoint = _build_phase3_checkpoint(folder_path="Engineering/Docs")
@@ -221,7 +224,7 @@ class TestBfsIterationFailure:
         _mock_convert(monkeypatch)
 
         def fake_iter_paged(
-            self: SharepointConnector,  # noqa: ARG001
+            client: Any,  # noqa: ARG001
             drive_id: str,  # noqa: ARG001
             folder_path: str | None = None,  # noqa: ARG001
             start: datetime | None = None,  # noqa: ARG001
@@ -231,9 +234,7 @@ class TestBfsIterationFailure:
             raise RuntimeError("connection reset")
             yield  # pragma: no cover  # make this a generator
 
-        monkeypatch.setattr(
-            SharepointConnector, "_iter_drive_items_paged", fake_iter_paged
-        )
+        monkeypatch.setattr(sp_connector, "iter_drive_items_paged", fake_iter_paged)
 
         checkpoint = _build_phase3_checkpoint(folder_path="Engineering/Docs")
         gen = connector._load_from_checkpoint(
@@ -345,6 +346,7 @@ class TestSitePagesPerPageFailure:
             include_permissions: bool = False,  # noqa: ARG001
             parent_hierarchy_raw_node_id: str | None = None,  # noqa: ARG001
             treat_sharing_link_as_public: bool = False,  # noqa: ARG001
+            permission_cache: Any = None,  # noqa: ARG001
         ) -> Document:
             if page["id"] == "bad-1":
                 raise ValueError("malformed canvasLayout")
@@ -404,6 +406,7 @@ class TestSitePagesPerPageFailure:
             include_permissions: bool = False,  # noqa: ARG001
             parent_hierarchy_raw_node_id: str | None = None,  # noqa: ARG001
             treat_sharing_link_as_public: bool = False,  # noqa: ARG001
+            permission_cache: Any = None,  # noqa: ARG001
         ) -> Document:
             raise KeyError("id")
 

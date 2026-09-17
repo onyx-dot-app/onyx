@@ -8,12 +8,14 @@ the rule-matching layer.
 
 import json
 
-from graphql import FieldNode
-from graphql import FragmentDefinitionNode
-from graphql import FragmentSpreadNode
-from graphql import GraphQLSyntaxError
-from graphql import InlineFragmentNode
-from graphql import OperationDefinitionNode
+from graphql import (
+    FieldNode,
+    FragmentDefinitionNode,
+    FragmentSpreadNode,
+    GraphQLSyntaxError,
+    InlineFragmentNode,
+    OperationDefinitionNode,
+)
 from graphql import parse as parse_graphql
 from graphql.language import SelectionSetNode
 
@@ -65,8 +67,10 @@ def _operation_invocations(query: str) -> list[tuple[str, str]]:
         if not isinstance(definition, OperationDefinitionNode):
             continue
         operation_type = definition.operation.value  # "query" | "mutation" | ...
-        for field in _root_field_names(definition.selection_set, fragments, set()):
-            invocations.append((operation_type, field))
+        invocations.extend(
+            (operation_type, field)
+            for field in _root_field_names(definition.selection_set, fragments, set())
+        )
     return invocations
 
 

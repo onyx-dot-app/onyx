@@ -1,32 +1,35 @@
 from collections.abc import Iterator
 from contextlib import contextmanager
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from onyx.configs.chat_configs import SECONDARY_LLM_FLOW_TIMEOUT_S
 from onyx.configs.constants import DocumentSource
-from onyx.context.search.models import ContextExpansionType
-from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import InferenceSection
+from onyx.context.search.models import (
+    ContextExpansionType,
+    InferenceChunk,
+    InferenceSection,
+)
 from onyx.llm.interfaces import LLM
 from onyx.llm.multi_llm import LLMTimeoutError
-from onyx.secondary_llm_flows.document_filter import classify_section_relevance
-from onyx.secondary_llm_flows.document_filter import select_sections_for_expansion
+from onyx.secondary_llm_flows.document_filter import (
+    classify_section_relevance,
+    select_sections_for_expansion,
+)
 
 
 @contextmanager
-def _noop_span() -> Iterator[MagicMock]:
+def _noop_span(*_args: object, **_kwargs: object) -> Iterator[MagicMock]:
     yield MagicMock()
 
 
-def _make_section() -> InferenceSection:
+def _make_section(index: int = 1) -> InferenceSection:
     chunk = InferenceChunk(
-        document_id="doc-1",
+        document_id=f"doc-{index}",
         chunk_id=0,
-        content="section content",
+        content=f"section {index}",
         source_type=DocumentSource.MOCK_CONNECTOR,
-        semantic_identifier="sem-doc-1",
-        title="doc-1",
+        semantic_identifier=f"sem-doc-{index}",
+        title=f"doc-{index}",
         boost=1,
         score=0.5,
         hidden=False,

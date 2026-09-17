@@ -1,21 +1,21 @@
 import json
 import mimetypes
+from typing import Any
 
 from sqlalchemy.orm import Session
 
-from onyx.chat.chat_state import ChatStateContainer
-from onyx.chat.chat_state import SearchDocKey
+from onyx.chat.chat_state import ChatStateContainer, SearchDocKey
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc
-from onyx.db.chat import add_search_docs_to_chat_message
-from onyx.db.chat import add_search_docs_to_tool_call
-from onyx.db.chat import create_db_search_doc
-from onyx.db.models import ChatMessage
-from onyx.db.models import ToolCall
+from onyx.db.chat import (
+    add_search_docs_to_chat_message,
+    add_search_docs_to_tool_call,
+    create_db_search_doc,
+)
+from onyx.db.models import ChatMessage, ToolCall
 from onyx.db.tools import create_tool_call_no_commit
 from onyx.file_store.models import FileDescriptor
-from onyx.natural_language_processing.utils import BaseTokenizer
-from onyx.natural_language_processing.utils import get_tokenizer
+from onyx.natural_language_processing.utils import BaseTokenizer, get_tokenizer
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.tools.models import ToolCallInfo
 from onyx.utils.logger import setup_logger
@@ -177,6 +177,8 @@ def save_chat_turn(
     is_clarification: bool = False,
     emitted_citations: set[int] | None = None,
     pre_answer_processing_time: float | None = None,
+    persist_content: bool = True,
+    request_params: dict[str, Any] | None = None,
 ) -> None:
     """
     Save a chat turn by populating the assistant_message and creating related entities.
@@ -207,11 +209,23 @@ def save_chat_turn(
     sanitized_message_text = (
         sanitize_string(message_text) if message_text else message_text
     )
-    assistant_message.message = sanitized_message_text
-    assistant_message.reasoning_tokens = (
-        sanitize_string(reasoning_tokens) if reasoning_tokens else reasoning_tokens
-    )
+    # A content-free turn keeps the row and its token count, which comes from
+    # the real answer, but none of the conversation-derived parts.
+    if persist_content:
+        assistant_message.message = sanitized_message_text
+        assistant_message.reasoning_tokens = (
+            sanitize_string(reasoning_tokens) if reasoning_tokens else reasoning_tokens
+        )
+    else:
+        assistant_message.message = ""
+        assistant_message.reasoning_tokens = None
+        tool_calls = []
+        citation_to_doc = {}
+        all_search_docs = {}
+        emitted_citations = set()
     assistant_message.is_clarification = is_clarification
+    # Attribution, not content, so incognito keeps it.
+    assistant_message.request_params = request_params
 
     # Use pre-answer processing time (captured when MESSAGE_START was emitted)
     if pre_answer_processing_time is not None:
@@ -333,9 +347,7 @@ def save_chat_turn(
     )
 
     # 7. Build citations mapping - use the mapping we already built in step 4
-    assistant_message.citations = (
-        citation_number_to_search_doc_id if citation_number_to_search_doc_id else None
-    )
+    assistant_message.citations = citation_number_to_search_doc_id or None
 
     # 8. Attach code interpreter generated files that the assistant actually
     # referenced in its response, so they are available via load_all_chat_files

@@ -10,7 +10,7 @@ from onyx.redis.tenant_redis_client import TenantRedisClient
 
 
 def assert_lock_serializes_two_threads(
-    redis_client: Redis | TenantRedisClient,  # type: ignore[type-arg]
+    redis_client: Redis | TenantRedisClient,
     lock_key: str,
 ) -> None:
     """Verify two concurrent acquirers contend on ``lock_key`` — one waits.

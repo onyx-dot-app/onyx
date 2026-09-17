@@ -6,8 +6,7 @@ import mimetypes
 from pathlib import Path
 from uuid import UUID
 
-from sandbox_daemon.contract import FilesystemListResponse
-from sandbox_daemon.contract import SidecarFilesystemEntry
+from sandbox_daemon.contract import FilesystemListResponse, SidecarFilesystemEntry
 from sandbox_daemon.snapshot import SESSIONS_ROOT
 
 _USER_LIBRARY_LINK_TARGET = Path("/workspace/managed/user_library")

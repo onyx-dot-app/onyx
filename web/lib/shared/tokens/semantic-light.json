@@ -448,31 +448,31 @@
       "value": "{red-50}",
       "type": "color"
     },
-    "action-link-06": {
+    "action-selection-06": {
       "value": "{blue-60}",
       "type": "color"
     },
-    "action-link-05": {
+    "action-selection-05": {
       "value": "{blue-50}",
       "type": "color"
     },
-    "action-link-04": {
+    "action-selection-04": {
       "value": "{blue-40}",
       "type": "color"
     },
-    "action-link-03": {
+    "action-selection-03": {
       "value": "{blue-20}",
       "type": "color"
     },
-    "action-link-02": {
+    "action-selection-02": {
       "value": "{blue-10}",
       "type": "color"
     },
-    "action-link-01": {
+    "action-selection-01": {
       "value": "{blue-05}",
       "type": "color"
     },
-    "action-link-00": {
+    "action-selection-00": {
       "value": "{blue-01}",
       "type": "color"
     },

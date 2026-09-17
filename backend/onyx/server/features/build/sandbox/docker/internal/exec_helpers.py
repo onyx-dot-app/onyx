@@ -16,13 +16,11 @@ from __future__ import annotations
 
 import socket
 import struct
-from collections.abc import Generator
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 
-from docker.errors import APIError
-from docker.errors import NotFound
+from docker.errors import APIError, NotFound
 from docker.models.containers import Container
 
 from onyx.utils.logger import setup_logger
@@ -273,7 +271,7 @@ def stream_stdout_from_container(
 
 def _unwrap_socket(sock: object) -> socket.socket:
     """Get the raw socket underneath docker SDK's SocketIO wrapper."""
-    raw = getattr(sock, "_sock", None)
+    raw = getattr(sock, "_sock", None)  # ods: ignore[getattr]
     if isinstance(raw, socket.socket):
         return raw
     if isinstance(sock, socket.socket):

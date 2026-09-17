@@ -1,17 +1,16 @@
 import datetime
 from typing import Any
 
-from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE, INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.asana import asana_api
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import TextSection
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    LoadConnector,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import Document, HierarchyNode, TextSection
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -93,6 +92,8 @@ class AsanaConnector(LoadConnector, PollConnector):
             id=task.id,
             sections=[TextSection(link=task.link, text=task.text)],
             doc_updated_at=task.last_modified,
+            # NOTE: doc_created_at population not yet verified against live data
+            doc_created_at=task.created_at,
             source=DocumentSource.ASANA,
             semantic_identifier=task.title,
             metadata={

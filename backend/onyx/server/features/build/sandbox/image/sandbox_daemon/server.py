@@ -13,39 +13,41 @@ from uuid import UUID
 import uvicorn
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-from fastapi import FastAPI
-from fastapi import Header
-from fastapi import HTTPException
-from fastapi import Query
-from fastapi import Request
-from fastapi import Response
+from fastapi import FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
-from sandbox_daemon.contract import FilesystemListRequest
-from sandbox_daemon.contract import PUSH_DAEMON_PORT
-from sandbox_daemon.contract import SIDECAR_FILESYSTEM_LIST_PATH
-from sandbox_daemon.contract import SIDECAR_HEALTH_PATH
-from sandbox_daemon.contract import SIDECAR_OPENCODE_HISTORY_CREATE_PATH
-from sandbox_daemon.contract import SIDECAR_OPENCODE_HISTORY_MARK_RESTORED_PATH
-from sandbox_daemon.contract import SIDECAR_OPENCODE_HISTORY_RESTORE_PATH
-from sandbox_daemon.contract import SIDECAR_PUSH_PATH
-from sandbox_daemon.contract import SIDECAR_PUSH_PUBLIC_KEY_ENV_VAR
-from sandbox_daemon.contract import SIDECAR_READY_PATH
-from sandbox_daemon.contract import SIDECAR_SNAPSHOT_CREATE_PATH
-from sandbox_daemon.contract import sidecar_snapshot_restore_path
-from sandbox_daemon.contract import SIDECAR_SNAPSHOT_RESTORE_ROUTE
-from sandbox_daemon.contract import SnapshotCreateRequest
-from sandbox_daemon.extract import MAX_BUNDLE_BYTES
-from sandbox_daemon.extract import safe_extract_then_atomic_swap
-from sandbox_daemon.filesystem import FilesystemPathError
-from sandbox_daemon.filesystem import list_session_directory
-from sandbox_daemon.opencode_history import create_opencode_history_archive_file
-from sandbox_daemon.opencode_history import mark_opencode_history_restored
-from sandbox_daemon.opencode_history import opencode_history_restored
-from sandbox_daemon.opencode_history import restore_opencode_history_archive
-from sandbox_daemon.snapshot import has_snapshot_content
-from sandbox_daemon.snapshot import iter_snapshot_archive
-from sandbox_daemon.snapshot import restore_snapshot
-from sandbox_daemon.snapshot import SnapshotError
+from sandbox_daemon.contract import (
+    PUSH_DAEMON_PORT,
+    SIDECAR_FILESYSTEM_LIST_PATH,
+    SIDECAR_HEALTH_PATH,
+    SIDECAR_OPENCODE_HISTORY_CREATE_PATH,
+    SIDECAR_OPENCODE_HISTORY_MARK_RESTORED_PATH,
+    SIDECAR_OPENCODE_HISTORY_RESTORE_PATH,
+    SIDECAR_OUTPUTS_MANIFEST_PATH,
+    SIDECAR_PUSH_PATH,
+    SIDECAR_PUSH_PUBLIC_KEY_ENV_VAR,
+    SIDECAR_READY_PATH,
+    SIDECAR_SNAPSHOT_CREATE_PATH,
+    SIDECAR_SNAPSHOT_RESTORE_ROUTE,
+    FilesystemListRequest,
+    OutputsManifestRequest,
+    SnapshotCreateRequest,
+    sidecar_snapshot_restore_path,
+)
+from sandbox_daemon.extract import MAX_BUNDLE_BYTES, safe_extract_then_atomic_swap
+from sandbox_daemon.filesystem import FilesystemPathError, list_session_directory
+from sandbox_daemon.manifest import build_outputs_manifest
+from sandbox_daemon.opencode_history import (
+    create_opencode_history_archive_file,
+    mark_opencode_history_restored,
+    opencode_history_restored,
+    restore_opencode_history_archive,
+)
+from sandbox_daemon.snapshot import (
+    SnapshotError,
+    has_snapshot_content,
+    iter_snapshot_archive,
+    restore_snapshot,
+)
 
 app = FastAPI(title="sandbox-sidecar", docs_url=None, redoc_url=None)
 
@@ -182,6 +184,33 @@ async def filesystem_list(
         raise HTTPException(status_code=500, detail=f"filesystem list OS error: {e}")
 
     return listing.model_dump()
+
+
+@app.post(SIDECAR_OUTPUTS_MANIFEST_PATH)
+async def outputs_manifest(
+    request: Request,
+    x_push_signature: str = Header(..., alias="X-Push-Signature"),
+    x_push_timestamp: str = Header(..., alias="X-Push-Timestamp"),
+) -> dict[str, object]:
+    body = await request.body()
+    _verify_signature(
+        SIDECAR_OUTPUTS_MANIFEST_PATH,
+        hashlib.sha256(body).hexdigest(),
+        x_push_signature,
+        x_push_timestamp,
+    )
+
+    try:
+        payload = OutputsManifestRequest.model_validate_json(body)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid request body: {e}")
+
+    try:
+        manifest = await asyncio.to_thread(build_outputs_manifest, payload.session_id)
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"outputs manifest OS error: {e}")
+
+    return manifest.model_dump()
 
 
 @app.post(SIDECAR_PUSH_PATH)

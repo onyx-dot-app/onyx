@@ -1,3 +1,5 @@
+import { getAdminNavId } from "@/lib/admin-sidebar-utils";
+import { getTranslations } from "next-intl/server";
 import { SettingsLayouts } from "@opal/layouts";
 import { CUSTOM_ANALYTICS_ENABLED } from "@/lib/constants";
 import { Callout } from "@/components/ui/callout";
@@ -8,15 +10,17 @@ import CustomAnalyticsUpdateForm from "./CustomAnalyticsUpdateForm";
 
 const route = ADMIN_ROUTES.CUSTOM_ANALYTICS;
 
-function Main() {
+async function Main() {
+  const t = await getTranslations("admin.customAnalytics");
+
   if (!CUSTOM_ANALYTICS_ENABLED) {
     return (
       <div>
         <div className="mt-4">
-          <Callout type="danger" title="Custom Analytics is not enabled.">
-            To set up custom analytics scripts, please work with the team who
-            setup Onyx in your team to set the{" "}
-            <i>CUSTOM_ANALYTICS_SECRET_KEY</i> environment variable.
+          <Callout type="danger" title={t("notEnabled.title")}>
+            {t.rich("notEnabled.description", {
+              i: (chunks) => <i>{chunks}</i>,
+            })}
           </Callout>
         </div>
       </div>
@@ -25,11 +29,7 @@ function Main() {
 
   return (
     <div>
-      <Text as="p">
-        {
-          "This allows you to bring your own analytics tool to Onyx! Copy the Web snippet from your analytics provider into the box below, and we'll start sending usage events."
-        }
-      </Text>
+      <Text as="p">{t("intro.description")}</Text>
       <Spacer rem={2} />
 
       <CustomAnalyticsUpdateForm />
@@ -37,10 +37,17 @@ function Main() {
   );
 }
 
-export default function Page() {
+export default async function Page() {
+  const tSidebar = await getTranslations("sidebar");
+  const navId = getAdminNavId(route);
+  const routeTitle = navId
+    ? tSidebar(
+        `adminNav.items.${navId}.label` as Parameters<typeof tSidebar>[0]
+      )
+    : route.title;
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header icon={route.icon} title={route.title} divider />
+      <SettingsLayouts.Header icon={route.icon} title={routeTitle} divider />
       <SettingsLayouts.Body>
         <Main />
       </SettingsLayouts.Body>

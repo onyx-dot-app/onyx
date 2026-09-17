@@ -8,8 +8,7 @@ to a single default Assistant (ID 0) and the associated tool seeding.
 from sqlalchemy import text
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from tests.integration.common_utils.reset import downgrade_postgres
-from tests.integration.common_utils.reset import upgrade_postgres
+from tests.integration.common_utils.reset import downgrade_postgres, upgrade_postgres
 
 
 def test_cold_startup_default_assistant() -> None:
@@ -68,7 +67,7 @@ def test_cold_startup_default_assistant() -> None:
         assert "read_file" in tool_names, (
             "Default assistant should have FileReaderTool attached"
         )
-        assert "python" in tool_names, (
+        assert "run_python" in tool_names, (
             "Default assistant should have PythonTool attached"
         )
 

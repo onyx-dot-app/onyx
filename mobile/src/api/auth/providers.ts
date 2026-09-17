@@ -1,4 +1,4 @@
-import type { AuthType, AuthTypeMetadata } from "@/api/types";
+import type { AuthTypeMetadata } from "@/api/types";
 
 export type ProviderId = "password" | "google" | "oidc" | "saml" | "apple";
 export type ProviderKind = "password" | "browser";
@@ -24,17 +24,6 @@ export const PROVIDER_REGISTRY: Partial<
   },
 };
 
-// `cloud` accepts password too (Google + basic).
-const PASSWORD_AUTH_TYPES: ReadonlySet<AuthType> = new Set<AuthType>([
-  "basic",
-  "cloud",
-]);
-
-const GOOGLE_AUTH_TYPES: ReadonlySet<AuthType> = new Set<AuthType>([
-  "google_oauth",
-  "cloud",
-]);
-
 // Returns [] until the backend config loads.
 export function visibleProviders(
   config: AuthTypeMetadata | undefined,
@@ -43,15 +32,13 @@ export function visibleProviders(
 
   const providers: ProviderDescriptor[] = [];
   const password = PROVIDER_REGISTRY.password;
-  if (password && PASSWORD_AUTH_TYPES.has(config.auth_type)) {
+  // Every deployment mode serves password login.
+  if (password) {
     providers.push(password);
   }
   const google = PROVIDER_REGISTRY.google;
-  if (
-    google &&
-    config.oauth_enabled &&
-    GOOGLE_AUTH_TYPES.has(config.auth_type)
-  ) {
+  // The mobile Google OAuth router mounts whenever env credentials exist.
+  if (google && config.oauth_enabled) {
     providers.push(google);
   }
   return providers;

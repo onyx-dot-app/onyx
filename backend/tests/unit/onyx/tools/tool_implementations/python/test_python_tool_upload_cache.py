@@ -6,19 +6,18 @@ on every agent loop iteration.
 """
 
 import json
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from onyx.tools.models import ChatFile
-from onyx.tools.models import PythonToolOverrideKwargs
-from onyx.tools.models import ToolResponse
+from onyx.tools.models import ChatFile, PythonToolOverrideKwargs, ToolResponse
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     StreamResultEvent,
 )
-from onyx.tools.tool_implementations.python.python_tool import _build_staging_notice
-from onyx.tools.tool_implementations.python.python_tool import _code_references_file
-from onyx.tools.tool_implementations.python.python_tool import _select_files_for_staging
-from onyx.tools.tool_implementations.python.python_tool import PythonTool
+from onyx.tools.tool_implementations.python.python_tool import (
+    PythonTool,
+    _build_staging_notice,
+    _code_references_file,
+    _select_files_for_staging,
+)
 
 TOOL_MODULE = "onyx.tools.tool_implementations.python.python_tool"
 
@@ -297,7 +296,7 @@ def test_count_overflow_files_are_not_downloaded() -> None:
 
     download_counts = {f"f{i}.csv": 0 for i in range(5)}
 
-    def _make_loader(name: str):  # type: ignore[no-untyped-def]
+    def _make_loader(name: str):
         def _load() -> bytes:
             download_counts[name] += 1
             return b"data"
@@ -424,7 +423,7 @@ def test_referenced_old_file_read_unreferenced_recent_not() -> None:
 
     download_counts = {"old.csv": 0, "new.csv": 0}
 
-    def _make_loader(name: str):  # type: ignore[no-untyped-def]
+    def _make_loader(name: str):
         def _load() -> bytes:
             download_counts[name] += 1
             return b"data"

@@ -1,9 +1,13 @@
-from onyx.db.document import get_document_kg_entities_and_relationships
-from onyx.db.document import get_num_chunks_for_document
+from onyx.db.document import (
+    get_document_kg_entities_and_relationships,
+    get_num_chunks_for_document,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.document_index.interfaces_new import TenantState
-from onyx.document_index.vespa.vespa_document_index import KGUChunkUpdateRequest
-from onyx.document_index.vespa.vespa_document_index import VespaDocumentIndex
+from onyx.document_index.vespa.vespa_document_index import (
+    KGUChunkUpdateRequest,
+    VespaDocumentIndex,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 

@@ -10,9 +10,11 @@ import struct
 
 import pytest
 
-from onyx.voice.providers.openai import OPENAI_REALTIME_STT_MODEL
-from onyx.voice.providers.openai import OpenAIStreamingTranscriber
-from onyx.voice.providers.openai import OpenAIVoiceProvider
+from onyx.voice.providers.openai import (
+    OPENAI_REALTIME_STT_MODEL,
+    OpenAIStreamingTranscriber,
+    OpenAIVoiceProvider,
+)
 from tests.utils.secret_names import TestSecret
 
 # 24kHz mono PCM16 — matches the browser's voice WS format.

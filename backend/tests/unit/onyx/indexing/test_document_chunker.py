@@ -3,12 +3,13 @@ import io
 import pytest
 from chonkie import SentenceChunker
 
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import SECTION_SEPARATOR
-from onyx.connectors.models import IndexingDocument
-from onyx.connectors.models import Section
-from onyx.connectors.models import SectionType
-from onyx.connectors.models import TabularSection
+from onyx.configs.constants import SECTION_SEPARATOR, DocumentSource
+from onyx.connectors.models import (
+    IndexingDocument,
+    Section,
+    SectionType,
+    TabularSection,
+)
 from onyx.indexing.chunking import DocumentChunker
 from onyx.indexing.chunking import text_section_chunker as text_chunker_module
 from onyx.natural_language_processing.utils import BaseTokenizer
@@ -672,6 +673,22 @@ def test_first_empty_section_with_title_is_processed_not_skipped() -> None:
 
 
 # --- clean_text is applied to section text -----------------------------------
+
+
+def test_chunking_preserves_numeric_ranges() -> None:
+    dc = _make_document_chunker()
+    text = "Collect for 1–2 weeks at 1–5%; use 3–6 clusters."
+    doc = _make_doc(sections=[Section(type=SectionType.TEXT, text=text, link="l1")])
+    chunks = dc.chunk(
+        document=doc,
+        sections=doc.processed_sections,
+        title_prefix="",
+        metadata_suffix_semantic="",
+        metadata_suffix_keyword="",
+        content_token_limit=CHUNK_LIMIT,
+    )
+    assert len(chunks) == 1
+    assert chunks[0].content == text
 
 
 def test_clean_text_strips_control_chars_from_section_content() -> None:

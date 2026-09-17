@@ -38,17 +38,17 @@
   },
   "scripts": {
     "build:tokens": "node style-dictionary.config.mjs",
-    "build:ts": "tsc -p tsconfig.build.json",
+    "build:ts": "node ./node_modules/typescript/bin/tsc -p tsconfig.build.json",
     "build": "bun run build:tokens && bun run build:ts",
     "verify:tokens": "node scripts/verify-opal-parity.mjs",
     "dev": "node scripts/watch.mjs",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "node ./node_modules/typescript/bin/tsc -p tsconfig.json --noEmit",
     "clean": "rm -rf dist",
     "prepare": "bun run build"
   },
   "dependencies": {},
   "devDependencies": {
     "style-dictionary": "^5.5.0",
-    "typescript": "^5.9.3"
+    "typescript": "^7.0.2"
   }
 }

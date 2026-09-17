@@ -6,8 +6,10 @@ from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.file import FileManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
-from tests.integration.common_utils.test_file_utils import create_test_image
-from tests.integration.common_utils.test_file_utils import create_test_text_file
+from tests.integration.common_utils.test_file_utils import (
+    create_test_image,
+    create_test_text_file,
+)
 from tests.integration.common_utils.test_models import DATestUser
 
 
@@ -88,7 +90,7 @@ def test_send_message_with_text_file_attachment(admin_user: DATestUser) -> None:
 
 def _set_token_threshold(admin_user: DATestUser, threshold_k: int) -> None:
     """Set the file token count threshold via admin settings API."""
-    response = client.put(
+    response = client.patch(
         f"{API_SERVER_URL}/admin/settings",
         json={"file_token_count_threshold_k": threshold_k},
         headers=admin_user.headers,

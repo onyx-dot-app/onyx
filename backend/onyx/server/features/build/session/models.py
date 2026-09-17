@@ -1,20 +1,21 @@
 from datetime import datetime
-from typing import Any
-from typing import TYPE_CHECKING
-from typing import Union
+from pathlib import PurePosixPath
+from typing import TYPE_CHECKING, Any, Union
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from onyx.configs.constants import MessageType
-from onyx.db.enums import ArtifactType
-from onyx.db.enums import BuildSessionStatus
-from onyx.db.enums import SandboxStatus
-from onyx.db.enums import SessionOrigin
-from onyx.db.enums import SharingScope
+from onyx.db.enums import (
+    ArtifactType,
+    BuildSessionStatus,
+    SandboxStatus,
+    SessionOrigin,
+    SharingScope,
+)
+from onyx.server.features.build.db.build_session import session_runtime_stale
 
 if TYPE_CHECKING:
-    from onyx.db.models import BuildSession
-    from onyx.db.models import Sandbox
+    from onyx.db.models import BuildSession, Sandbox
 
 
 # ===== Session Models =====
@@ -22,9 +23,6 @@ class SessionCreateRequest(BaseModel):
     """Request to create a new build session."""
 
     name: str | None = None  # Optional session name
-    # LLM selection from user's cookie
-    llm_provider_type: str | None = None  # Provider type (e.g., "anthropic", "openai")
-    llm_model_name: str | None = None  # Model name (e.g., "claude-opus-4-5")
     # Skip Next.js dev server startup. Used by integration tests that don't
     # exercise the webapp proxy and don't want to pay the ~20s startup wait.
     headless: bool = False
@@ -66,6 +64,12 @@ class SandboxResponse(BaseModel):
         )
 
 
+class SandboxStatusResponse(BaseModel):
+    """Lightweight sandbox status for the frontend sleep poll."""
+
+    status: SandboxStatus | None
+
+
 class ArtifactResponse(BaseModel):
     """Artifact metadata in session response."""
 
@@ -87,7 +91,7 @@ class ArtifactResponse(BaseModel):
             type=artifact.type,
             name=artifact.name,
             path=artifact.path,
-            preview_url=getattr(artifact, "preview_url", None),
+            preview_url=getattr(artifact, "preview_url", None),  # ods: ignore[getattr]
             created_at=artifact.created_at,
             updated_at=artifact.updated_at,
         )
@@ -109,6 +113,7 @@ class SessionResponse(BaseModel):
     origin: SessionOrigin
     agent_provider: str | None
     agent_model: str | None
+    skills_stale: bool
 
     @classmethod
     def from_model(
@@ -135,7 +140,12 @@ class SessionResponse(BaseModel):
             origin=session.origin,
             agent_provider=session.agent_provider,
             agent_model=session.agent_model,
+            skills_stale=session_runtime_stale(session, sandbox),
         )
+
+
+class SessionSkillsStateResponse(BaseModel):
+    skills_stale: bool
 
 
 class DetailedSessionResponse(SessionResponse):
@@ -179,14 +189,45 @@ class SetSessionSharingResponse(BaseModel):
 
 
 # ===== Message Models =====
+class MessageAttachment(BaseModel):
+    """A sandbox file attached to a user message."""
+
+    name: str
+    path: str
+    mime_type: str
+
+    @field_validator("path")
+    @classmethod
+    def validate_attachment_path(cls, value: str) -> str:
+        path = PurePosixPath(value)
+        if (
+            path.is_absolute()
+            or len(path.parts) < 2
+            or path.parts[0] != "attachments"
+            or ".." in path.parts
+        ):
+            raise ValueError("Attachment path must be inside the attachments directory")
+        return value
+
+
 class MessageRequest(BaseModel):
     """Request to send a message to the CLI agent."""
 
     content: str
     client_request_id: str | None = None
+    attachments: list[MessageAttachment] = Field(default_factory=list)
     # Per-message model override from the composer; both set together.
     provider: str | None = None
+    provider_id: int | None = None
     model: str | None = None
+
+
+class SubagentMessageRequest(BaseModel):
+    """A subagent follow-up does not support native file prompt parts."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    content: str
 
 
 class MessageInterruptResponse(BaseModel):
@@ -238,7 +279,8 @@ class MessageListResponse(BaseModel):
 
 
 class WebappInfo(BaseModel):
-    has_webapp: bool  # Whether a webapp exists in outputs/web
+    # None means the sandbox is unavailable, so existence cannot be inspected.
+    has_webapp: bool | None
     webapp_url: str | None  # URL to access the webapp (e.g., http://localhost:3015)
     status: str  # Sandbox status (running, terminated, etc.)
     ready: bool  # Whether the NextJS dev server is actually responding

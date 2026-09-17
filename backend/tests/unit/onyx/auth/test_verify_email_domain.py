@@ -2,7 +2,6 @@ import pytest
 
 import onyx.auth.users as users
 from onyx.auth.users import verify_email_domain
-from onyx.configs.constants import AuthType
 from onyx.error_handling.exceptions import OnyxError
 
 
@@ -28,7 +27,7 @@ def test_verify_email_domain_invalid_email_format() -> None:
 def test_verify_email_domain_rejects_plus_addressing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(users, "AUTH_TYPE", AuthType.CLOUD, raising=False)
+    monkeypatch.setattr(users, "MULTI_TENANT", True, raising=False)
 
     with pytest.raises(OnyxError) as exc:
         verify_email_domain("user+tag@gmail.com", valid_email_domains=[])
@@ -39,7 +38,7 @@ def test_verify_email_domain_rejects_plus_addressing(
 def test_verify_email_domain_allows_plus_for_onyx_app(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(users, "AUTH_TYPE", AuthType.CLOUD, raising=False)
+    monkeypatch.setattr(users, "MULTI_TENANT", True, raising=False)
 
     # Should not raise for onyx.app domain
     verify_email_domain("user+tag@onyx.app", valid_email_domains=[])
@@ -48,7 +47,7 @@ def test_verify_email_domain_allows_plus_for_onyx_app(
 def test_verify_email_domain_rejects_dotted_gmail_on_registration(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(users, "AUTH_TYPE", AuthType.CLOUD, raising=False)
+    monkeypatch.setattr(users, "MULTI_TENANT", True, raising=False)
 
     with pytest.raises(OnyxError) as exc:
         verify_email_domain(
@@ -63,7 +62,7 @@ def test_verify_email_domain_rejects_dotted_gmail_on_registration(
 def test_verify_email_domain_dotted_gmail_allowed_when_not_registration(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(users, "AUTH_TYPE", AuthType.CLOUD, raising=False)
+    monkeypatch.setattr(users, "MULTI_TENANT", True, raising=False)
 
     # Existing user signing in — should not be blocked
     verify_email_domain(
@@ -74,7 +73,7 @@ def test_verify_email_domain_dotted_gmail_allowed_when_not_registration(
 def test_verify_email_domain_allows_dotted_non_gmail_on_registration(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(users, "AUTH_TYPE", AuthType.CLOUD, raising=False)
+    monkeypatch.setattr(users, "MULTI_TENANT", True, raising=False)
 
     verify_email_domain(
         "first.last@example.com",
@@ -86,7 +85,7 @@ def test_verify_email_domain_allows_dotted_non_gmail_on_registration(
 def test_verify_email_domain_dotted_gmail_allowed_when_not_cloud(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(users, "AUTH_TYPE", AuthType.BASIC, raising=False)
+    monkeypatch.setattr(users, "MULTI_TENANT", False, raising=False)
 
     verify_email_domain(
         "first.last@gmail.com",
@@ -98,7 +97,7 @@ def test_verify_email_domain_dotted_gmail_allowed_when_not_cloud(
 def test_verify_email_domain_rejects_googlemail(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(users, "AUTH_TYPE", AuthType.CLOUD, raising=False)
+    monkeypatch.setattr(users, "MULTI_TENANT", True, raising=False)
 
     with pytest.raises(OnyxError) as exc:
         verify_email_domain("user@googlemail.com", valid_email_domains=[])

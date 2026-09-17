@@ -32,11 +32,12 @@ type Client struct {
 	httpClient          *http.Client
 	searchHTTPClient    *http.Client
 	streamingHTTPClient *http.Client
+	imageHTTPClient     *http.Client
 }
 
 // NewClient creates a new API client from config.
-// ServerURL is the server origin (e.g. "https://cloud.onyx.app").
-// APIURL appends the /api prefix to form the API base URL.
+// ServerURL may be a server origin or an API base that already includes the
+// configured API prefix.
 func NewClient(cfg config.OnyxCliConfig) *Client {
 	var transport *http.Transport
 	if t, ok := http.DefaultTransport.(*http.Transport); ok {
@@ -57,6 +58,12 @@ func NewClient(cfg config.OnyxCliConfig) *Client {
 		},
 		streamingHTTPClient: &http.Client{
 			Timeout:   5 * time.Minute,
+			Transport: transport,
+		},
+		// Must exceed the server's 5-minute image-generation stream ceiling,
+		// or the client gives up before the server's timeout envelope arrives.
+		imageHTTPClient: &http.Client{
+			Timeout:   6 * time.Minute,
 			Transport: transport,
 		},
 	}
@@ -153,14 +160,38 @@ func (c *Client) Search(ctx context.Context, req models.SearchRequest) (*models.
 }
 
 // GenerateImage calls POST /image-generation/generate, which generates
-// image(s) using the workspace's default image-gen provider. Uses the 5min
-// client since high-res generation can be slow.
+// image(s) using the workspace's default image-gen provider.
+//
+// The server streams keepalive whitespace before the JSON body (which
+// json.Decoder skips) and reports errors in-band on a 200, since the status
+// line is already committed when a slow generation fails.
 func (c *Client) GenerateImage(ctx context.Context, req models.ImageGenerationRequest) (*models.ImageGenerationResponse, error) {
-	var resp models.ImageGenerationResponse
-	if err := c.doJSONWith(ctx, c.streamingHTTPClient, "POST", "/image-generation/generate", req, &resp); err != nil {
+	var resp struct {
+		models.ImageGenerationResponse
+		ErrorCode string `json:"error_code"`
+		Detail    string `json:"detail"`
+	}
+	if err := c.doJSONWith(ctx, c.imageHTTPClient, "POST", "/image-generation/generate", req, &resp); err != nil {
 		return nil, err
 	}
-	return &resp, nil
+	if resp.ErrorCode != "" {
+		var statusCode int
+		switch resp.ErrorCode {
+		case "NOT_FOUND":
+			statusCode = 404
+		case "INVALID_INPUT":
+			statusCode = 400
+		case "GATEWAY_TIMEOUT":
+			statusCode = 504
+		default:
+			statusCode = 502
+		}
+		return nil, &OnyxAPIError{StatusCode: statusCode, Detail: resp.Detail}
+	}
+	if len(resp.Images) == 0 {
+		return nil, &OnyxAPIError{StatusCode: 502, Detail: "server returned no images"}
+	}
+	return &resp.ImageGenerationResponse, nil
 }
 
 // TestConnection checks if the server is reachable and credentials are valid.
@@ -238,6 +269,16 @@ func (c *Client) ListAgents(ctx context.Context) ([]models.AgentSummary, error) 
 		}
 	}
 	return result, nil
+}
+
+// ListLLMProviders returns LLM providers (with their models) accessible to
+// the current user, plus the workspace default model.
+func (c *Client) ListLLMProviders(ctx context.Context) (*models.LLMProviderResponse, error) {
+	var resp models.LLMProviderResponse
+	if err := c.doJSON(ctx, "GET", "/llm/provider", nil, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
 }
 
 // ListChatSessions returns recent chat sessions.
@@ -358,13 +399,14 @@ func (c *Client) StopChatSession(ctx context.Context, sessionID string) {
 type ClientAPI interface {
 	TestConnection(ctx context.Context) error
 	ListAgents(ctx context.Context) ([]models.AgentSummary, error)
+	ListLLMProviders(ctx context.Context) (*models.LLMProviderResponse, error)
 	ListChatSessions(ctx context.Context) ([]models.ChatSessionDetails, error)
 	GetChatSession(ctx context.Context, sessionID string) (*models.ChatSessionDetailResponse, error)
 	RenameChatSession(ctx context.Context, sessionID string, name *string) (string, error)
 	UploadFile(ctx context.Context, filePath string) (*models.FileDescriptorPayload, error)
 	GetBackendVersion(ctx context.Context) (string, error)
 	StopChatSession(ctx context.Context, sessionID string)
-	SendMessageStream(ctx context.Context, message string, chatSessionID *string, agentID int, parentMessageID *int, fileDescriptors []models.FileDescriptorPayload) <-chan models.StreamEvent
+	SendMessageStream(ctx context.Context, message string, chatSessionID *string, agentID int, parentMessageID *int, fileDescriptors []models.FileDescriptorPayload, llmOverride *models.LLMOverride) <-chan models.StreamEvent
 	Search(ctx context.Context, req models.SearchRequest) (*models.SearchResponse, error)
 	GenerateImage(ctx context.Context, req models.ImageGenerationRequest) (*models.ImageGenerationResponse, error)
 }

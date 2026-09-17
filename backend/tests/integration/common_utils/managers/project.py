@@ -1,8 +1,10 @@
 from typing import List
 
-from onyx.server.features.projects.models import CategorizedFilesSnapshot
-from onyx.server.features.projects.models import UserFileSnapshot
-from onyx.server.features.projects.models import UserProjectSnapshot
+from onyx.server.features.projects.models import (
+    CategorizedFilesSnapshot,
+    UserFileSnapshot,
+    UserProjectSnapshot,
+)
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
@@ -94,7 +96,9 @@ class ProjectManager:
             return False
         try:
             project = UserProjectSnapshot.model_validate(response.json())
-            chat_sessions = getattr(project, "chat_sessions", [])
+            chat_sessions = getattr(  # ods: ignore[getattr]
+                project, "chat_sessions", []
+            )
             return len(chat_sessions or []) == 0
         except Exception:
             # If response doesn't include chat_sessions, assume unlinked

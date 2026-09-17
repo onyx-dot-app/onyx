@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import {
   ConfigurableSources,
   FederatedConnectorDetail,
@@ -16,6 +17,7 @@ interface UseFederatedConnectorResult {
 export function useFederatedConnector(
   connectorId: string
 ): UseFederatedConnectorResult {
+  const t = useTranslations("admin.federated");
   const [sourceType, setSourceType] = useState<ConfigurableSources | null>(
     null
   );
@@ -73,7 +75,7 @@ export function useFederatedConnector(
         setCredentialSchema(schemaData);
       } catch (error) {
         console.error("Error fetching federated connector data:", error);
-        setError(`Failed to load connector: ${error}`);
+        setError(t("error.loadFailed", { details: String(error) }));
       } finally {
         setIsLoading(false);
       }
@@ -82,7 +84,7 @@ export function useFederatedConnector(
     if (connectorId) {
       fetchData();
     }
-  }, [connectorId]);
+  }, [connectorId, t]);
 
   return {
     sourceType,

@@ -1,9 +1,9 @@
 """CRUD operations for HierarchyNode."""
 
 from collections import defaultdict
+from uuid import UUID
 
-from sqlalchemy import delete
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
@@ -12,9 +12,11 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import HierarchyNode as PydanticHierarchyNode
 from onyx.db.enums import HierarchyNodeType
-from onyx.db.models import Document
-from onyx.db.models import HierarchyNode
-from onyx.db.models import HierarchyNodeByConnectorCredentialPair
+from onyx.db.models import (
+    Document,
+    HierarchyNode,
+    HierarchyNodeByConnectorCredentialPair,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 
@@ -94,6 +96,14 @@ def ensure_source_node_exists(
     # Try to get existing SOURCE node first
     existing_node = get_source_hierarchy_node(db_session, source)
     if existing_node:
+        if (
+            not existing_node.is_public
+        ):  # fix for earlier bug where SOURCE nodes were not public
+            existing_node.is_public = True
+            if commit:
+                db_session.commit()
+            else:
+                db_session.flush()
         return existing_node
 
     # Create the SOURCE node
@@ -107,6 +117,7 @@ def ensure_source_node_exists(
         node_type=HierarchyNodeType.SOURCE,
         document_id=None,
         parent_id=None,  # SOURCE nodes have no parent
+        is_public=True,
     )
 
     db_session.add(source_node)
@@ -315,10 +326,10 @@ def upsert_hierarchy_node(
         existing_node.link = node.link
         existing_node.node_type = node.node_type
         existing_node.parent_id = parent_id
-        # Update permission fields
-        existing_node.is_public = is_public
-        existing_node.external_user_emails = external_user_emails
-        existing_node.external_user_group_ids = external_user_group_ids
+        if is_connector_public or node.external_access is not None:
+            existing_node.is_public = is_public
+            existing_node.external_user_emails = external_user_emails
+            existing_node.external_user_group_ids = external_user_group_ids
         hierarchy_node = existing_node
     else:
         # Create new node
@@ -531,23 +542,9 @@ def _get_accessible_hierarchy_nodes_for_source(
     source: DocumentSource,
     user_email: str,  # noqa: ARG001
     external_group_ids: list[str],  # noqa: ARG001
+    user_id: UUID | None = None,  # noqa: ARG001
 ) -> list[HierarchyNode]:
-    """
-    MIT version: Returns all hierarchy nodes for the source without permission filtering.
-
-    In the MIT version, permission checks are not performed on hierarchy nodes.
-    The EE version overrides this to apply permission filtering based on user
-    email and external group IDs.
-
-    Args:
-        db_session: SQLAlchemy session
-        source: Document source type
-        user_email: User's email (unused in MIT version)
-        external_group_ids: User's external group IDs (unused in MIT version)
-
-    Returns:
-        List of all HierarchyNode objects for the source
-    """
+    """MIT version: return all non-stub nodes for the source."""
     stmt = select(HierarchyNode).where(
         HierarchyNode.source == source,
         HierarchyNode.node_type != HierarchyNodeType.STUB,
@@ -561,18 +558,18 @@ def get_accessible_hierarchy_nodes_for_source(
     source: DocumentSource,
     user_email: str,
     external_group_ids: list[str],
+    user_id: UUID | None = None,
 ) -> list[HierarchyNode]:
-    """
-    Get hierarchy nodes for a source that are accessible to the user.
+    """Get source nodes allowed by the edition-specific access policy.
 
-    Uses fetch_versioned_implementation to get the appropriate version:
-    - MIT version: Returns all nodes (no permission filtering)
-    - EE version: Filters based on user email and external group IDs
+    EE combines node ACLs with associated connector permissions; MIT returns all.
     """
     versioned_fn = fetch_versioned_implementation(
         "onyx.db.hierarchy", "_get_accessible_hierarchy_nodes_for_source"
     )
-    return versioned_fn(db_session, source, user_email, external_group_ids)
+    return versioned_fn(
+        db_session, source, user_email, external_group_ids, user_id=user_id
+    )
 
 
 HIERARCHY_NODE_SEARCH_LIMIT = 30
@@ -590,6 +587,7 @@ def _search_accessible_hierarchy_nodes(
     user_email: str,  # noqa: ARG001
     external_group_ids: list[str],  # noqa: ARG001
     limit: int = HIERARCHY_NODE_SEARCH_LIMIT,
+    user_id: UUID | None = None,  # noqa: ARG001
 ) -> list[HierarchyNode]:
     """MIT version: case-insensitive display_name search without ACL filtering."""
     pattern = f"%{escape_like_pattern(query)}%"
@@ -616,6 +614,7 @@ def search_accessible_hierarchy_nodes(
     user_email: str,
     external_group_ids: list[str],
     limit: int = HIERARCHY_NODE_SEARCH_LIMIT,
+    user_id: UUID | None = None,
 ) -> list[HierarchyNode]:
     """Search hierarchy nodes by display_name substring, ACL-gated.
 
@@ -626,7 +625,13 @@ def search_accessible_hierarchy_nodes(
         "onyx.db.hierarchy", "_search_accessible_hierarchy_nodes"
     )
     return versioned_fn(
-        db_session, query, sources, user_email, external_group_ids, limit
+        db_session,
+        query,
+        sources,
+        user_email,
+        external_group_ids,
+        limit,
+        user_id=user_id,
     )
 
 
@@ -635,6 +640,7 @@ def _filter_accessible_hierarchy_node_ids(
     node_ids: list[int],
     user_email: str,  # noqa: ARG001
     external_group_ids: list[str],  # noqa: ARG001
+    user_id: UUID | None = None,  # noqa: ARG001
 ) -> set[int]:
     """MIT version: hierarchy nodes carry no permission filtering — all
     requested ids pass. The EE version applies the access filter."""
@@ -646,6 +652,7 @@ def filter_accessible_hierarchy_node_ids(
     node_ids: list[int],
     user_email: str,
     external_group_ids: list[str],
+    user_id: UUID | None = None,
 ) -> set[int]:
     """Return the subset of ``node_ids`` the user can access (EE filters,
     MIT passes everything through)."""
@@ -654,7 +661,9 @@ def filter_accessible_hierarchy_node_ids(
     versioned_fn = fetch_versioned_implementation(
         "onyx.db.hierarchy", "_filter_accessible_hierarchy_node_ids"
     )
-    return versioned_fn(db_session, node_ids, user_email, external_group_ids)
+    return versioned_fn(
+        db_session, node_ids, user_email, external_group_ids, user_id=user_id
+    )
 
 
 def get_document_parent_hierarchy_node_ids(
@@ -680,7 +689,7 @@ def get_document_parent_hierarchy_node_ids(
     )
     results = db_session.execute(stmt).all()
 
-    return {doc_id: parent_id for doc_id, parent_id in results}
+    return {doc_id: parent_id for doc_id, parent_id in results}  # noqa: C416  # unpacking types the SQLAlchemy Row
 
 
 def update_document_parent_hierarchy_nodes(
@@ -814,6 +823,43 @@ def upsert_hierarchy_node_cc_pair_entries(
         db_session.flush()
 
 
+def persist_hierarchy_nodes_for_cc_pair(
+    db_session: Session,
+    nodes: list[PydanticHierarchyNode],
+    source: DocumentSource,
+    connector_id: int,
+    credential_id: int,
+    is_connector_public: bool = False,
+    commit: bool = True,
+) -> list[HierarchyNode]:
+    """Upsert nodes and their cc_pair ownership links in one transaction.
+
+    Orphan cleanup deletes nodes with no join-table row. The node insert and
+    ownership insert must commit together so a concurrent cleanup cannot
+    remove a node before its link exists.
+    """
+    if not nodes:
+        return []
+
+    upserted = upsert_hierarchy_nodes_batch(
+        db_session=db_session,
+        nodes=nodes,
+        source=source,
+        commit=False,
+        is_connector_public=is_connector_public,
+    )
+    upsert_hierarchy_node_cc_pair_entries(
+        db_session=db_session,
+        hierarchy_node_ids=[n.id for n in upserted],
+        connector_id=connector_id,
+        credential_id=credential_id,
+        commit=False,
+    )
+    if commit:
+        db_session.commit()
+    return upserted
+
+
 def remove_stale_hierarchy_node_cc_pair_entries(
     db_session: Session,
     connector_id: int,
@@ -900,8 +946,8 @@ def reparent_orphaned_hierarchy_nodes(
 ) -> list[HierarchyNode]:
     """Re-parent hierarchy nodes whose parent_id is NULL to the SOURCE node.
 
-    After pruning deletes stale nodes, their former children get parent_id=NULL
-    via the SET NULL cascade. This function points them back to the SOURCE root.
+    After parent nodes are deleted, former children get parent_id=NULL via
+    SET NULL. This points them back to the SOURCE root.
 
     Returns the reparented HierarchyNode objects (with updated parent_id)
     so callers can refresh downstream caches.
@@ -928,3 +974,24 @@ def reparent_orphaned_hierarchy_nodes(
         db_session.flush()
 
     return orphans
+
+
+def cleanup_unowned_hierarchy_nodes(
+    db_session: Session,
+    source: DocumentSource,
+    commit: bool = True,
+) -> tuple[list[str], list[HierarchyNode]]:
+    """Delete nodes with no remaining cc_pair links; reparent leftover children.
+
+    SOURCE roots are kept. Call after join-table rows for a cc_pair are gone
+    (cc_pair delete CASCADE, or prune's stale-entry removal).
+
+    Returns (deleted raw_node_ids, reparented nodes) for cache updates.
+    """
+    deleted_raw_ids = delete_orphaned_hierarchy_nodes(db_session, source, commit=False)
+    reparented_nodes = reparent_orphaned_hierarchy_nodes(
+        db_session, source, commit=False
+    )
+    if commit:
+        db_session.commit()
+    return deleted_raw_ids, reparented_nodes

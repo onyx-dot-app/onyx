@@ -77,6 +77,7 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
           invite_only_enabled: false,
           deep_research_enabled: true,
           temperature_override_enabled: true,
+          reasoning_override_enabled: true,
           query_history_type: QueryHistoryType.NORMAL,
         };
       } else {

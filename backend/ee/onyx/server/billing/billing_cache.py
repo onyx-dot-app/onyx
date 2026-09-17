@@ -24,8 +24,7 @@ from pydantic import ValidationError
 from redis.exceptions import RedisError
 
 from ee.onyx.server.tenants.billing import fetch_billing_information
-from ee.onyx.server.tenants.models import BillingInformation
-from ee.onyx.server.tenants.models import SubscriptionStatusResponse
+from ee.onyx.server.tenants.models import BillingInformation, SubscriptionStatusResponse
 from onyx.configs.app_configs import BILLING_CACHE_TTL_SECONDS
 from onyx.redis.redis_pool import get_shared_redis_client
 from onyx.utils.logger import setup_logger
@@ -150,17 +149,19 @@ def cached_is_tenant_on_trial(tenant_id: str) -> bool:
     return info.status in _TRIAL_STATUSES
 
 
-def invalidate_billing_cache(tenant_id: str) -> None:
-    """Drop the cached entry for one tenant. Safe to call even when no entry
-    exists. Used by call sites that just mutated the tenant's subscription
-    (e.g. admin panel → control plane) and want the next read to refresh.
+def invalidate_billing_cache(tenant_id: str) -> bool:
+    """Drop one tenant's cached entry so the next read refetches from the CP.
+    Safe when no entry exists. Returns False when the delete failed and the
+    stale entry may survive until its TTL, True otherwise (no-op included).
     """
     if not MULTI_TENANT:
-        return
+        return True
 
     try:
         get_shared_redis_client().delete(_cache_key(tenant_id))
+        return True
     except RedisError as e:
         logger.warning(
             "billing cache invalidate failed for tenant %s: %s", tenant_id, e
         )
+        return False

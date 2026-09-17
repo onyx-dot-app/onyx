@@ -1,13 +1,13 @@
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ee.onyx.onyxbot.slack.handlers.handle_standard_answers import (
     oneoff_standard_answers,
 )
-from ee.onyx.server.query_and_chat.models import StandardAnswerRequest
-from ee.onyx.server.query_and_chat.models import StandardAnswerResponse
+from ee.onyx.server.query_and_chat.models import (
+    StandardAnswerRequest,
+    StandardAnswerResponse,
+)
 from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission

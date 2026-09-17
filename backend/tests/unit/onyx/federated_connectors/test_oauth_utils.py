@@ -9,12 +9,13 @@ from unittest.mock import patch
 
 import pytest
 
-from onyx.cache.interface import CacheBackend
-from onyx.cache.interface import CacheLock
-from onyx.federated_connectors.oauth_utils import generate_oauth_state
-from onyx.federated_connectors.oauth_utils import OAUTH_STATE_TTL
-from onyx.federated_connectors.oauth_utils import OAuthSession
-from onyx.federated_connectors.oauth_utils import verify_oauth_state
+from onyx.cache.interface import CacheBackend, CacheLock
+from onyx.federated_connectors.oauth_utils import (
+    OAUTH_STATE_TTL,
+    OAuthSession,
+    generate_oauth_state,
+    verify_oauth_state,
+)
 
 
 class _MemoryCacheBackend(CacheBackend):
@@ -27,6 +28,9 @@ class _MemoryCacheBackend(CacheBackend):
     def get(self, key: str) -> bytes | None:
         return self._store.get(key)
 
+    def getdel(self, key: str) -> bytes | None:
+        return self._store.pop(key, None)
+
     def set(
         self,
         key: str,
@@ -38,6 +42,17 @@ class _MemoryCacheBackend(CacheBackend):
             self._store[key] = value
         else:
             self._store[key] = str(value).encode()
+
+    def set_if_absent(
+        self,
+        key: str,
+        value: str | bytes | int | float,
+        ex: int | None = None,
+    ) -> bool:
+        if key in self._store:
+            return False
+        self.set(key, value, ex=ex)
+        return True
 
     def delete(self, key: str) -> None:
         self._store.pop(key, None)

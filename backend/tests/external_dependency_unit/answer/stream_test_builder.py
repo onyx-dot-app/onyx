@@ -4,23 +4,22 @@ from collections.abc import Iterator
 
 from onyx.chat.models import AnswerStreamPart
 from onyx.context.search.models import SearchDoc
-from onyx.server.query_and_chat.streaming_models import AgentResponseStart
-from onyx.server.query_and_chat.streaming_models import OverallStop
-from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import ReasoningDone
-from onyx.server.query_and_chat.streaming_models import ReasoningStart
+from onyx.server.query_and_chat.streaming_models import (
+    AgentResponseStart,
+    OverallStop,
+    Packet,
+    ReasoningDone,
+    ReasoningStart,
+)
 from tests.external_dependency_unit.answer.stream_test_assertions import (
     assert_answer_stream_part_correct,
 )
 from tests.external_dependency_unit.answer.stream_test_utils import (
     create_packet_with_agent_response_delta,
-)
-from tests.external_dependency_unit.answer.stream_test_utils import (
     create_packet_with_reasoning_delta,
+    create_placement,
 )
-from tests.external_dependency_unit.answer.stream_test_utils import create_placement
-from tests.external_dependency_unit.mock_llm import LLMResponse
-from tests.external_dependency_unit.mock_llm import MockLLMController
+from tests.external_dependency_unit.mock_llm import LLMResponse, MockLLMController
 
 
 class StreamTestBuilder:

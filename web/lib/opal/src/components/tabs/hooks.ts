@@ -46,6 +46,9 @@ export function usePillIndicator(
   const [isScrolling, setIsScrolling] = useState(false);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // The scroll-debounce timer is ref-held and cleared in this effect's
+  // cleanup. The rule cannot trace handler-created timers.
+  // oxlint-disable-next-line react-doctor/effect-needs-cleanup
   useEffect(() => {
     if (!enabled) return;
 
@@ -143,10 +146,16 @@ export function useHorizontalScroll(
     const container = containerRef.current;
     if (!container) return;
     const { scrollLeft, scrollWidth, clientWidth } = container;
-    setCanScrollLeft(scrollLeft > 0);
-    setCanScrollRight(
-      scrollLeft + clientWidth < scrollWidth - SCROLL_TOLERANCE_PX
-    );
+    // RTL scrollers run scrollLeft from 0 down to negative values, so
+    // normalize to distance from the physical left edge. The arrows and
+    // scrollBy already speak physical directions.
+    const maxScroll = scrollWidth - clientWidth;
+    const fromLeft =
+      getComputedStyle(container).direction === "rtl"
+        ? maxScroll + scrollLeft
+        : scrollLeft;
+    setCanScrollLeft(fromLeft > 0);
+    setCanScrollRight(fromLeft < maxScroll - SCROLL_TOLERANCE_PX);
   }, [containerRef]);
 
   useEffect(() => {

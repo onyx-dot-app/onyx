@@ -33,6 +33,9 @@ export interface FullChatState {
   // Regenerate functionality
   regenerate?: (modelOverRide: LlmDescriptor) => Promise<void>;
   overriddenModel?: string;
+  /** Provider slug for `overriddenModel`, used to resolve its icon in the
+   * read-only (shared) footer where there's no `llmManager` to look it up. */
+  overriddenModelProvider?: string;
   researchType?: string | null;
 }
 

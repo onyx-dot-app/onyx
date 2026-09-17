@@ -29,6 +29,10 @@
   @apply border-status-warning-02;
 }
 
+[data-opal-status-border="pending"] {
+  @apply border-theme-amber-02;
+}
+
 [data-opal-status-border="error"] {
   @apply border-status-error-02;
 }

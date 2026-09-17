@@ -1,7 +1,6 @@
 from .processor_interface import TracingProcessor
 from .provider import DefaultTraceProvider
-from .setup import get_trace_provider
-from .setup import set_trace_provider
+from .setup import get_trace_provider, set_trace_provider
 
 
 def add_trace_processor(span_processor: TracingProcessor) -> None:

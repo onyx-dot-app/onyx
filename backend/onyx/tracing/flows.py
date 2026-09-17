@@ -22,6 +22,7 @@ class LLMFlow(StrEnum):
     SEMANTIC_QUERY_REPHRASE = "semantic_query_rephrase"
     KEYWORD_QUERY_EXPANSION = "keyword_query_expansion"
     SOURCE_FILTER_EXTRACTION = "source_filter_extraction"
+    TIME_FILTER_EXTRACTION = "time_filter_extraction"
     CLASSIFY_SECTION_RELEVANCE = "classify_section_relevance"
     SELECT_SECTIONS_FOR_EXPANSION = "select_sections_for_expansion"
     CHAT_SESSION_NAMING = "chat_session_naming"
@@ -29,6 +30,10 @@ class LLMFlow(StrEnum):
 
     # Build session (assistants)
     BUILD_SESSION_NAMING = "build_session_naming"
+    CRAFT_LLM_GENERATION = "craft_llm_generation"
+
+    # LLM gateway (external clients via use:llm_gateway PATs)
+    LLM_GATEWAY = "llm_gateway"
 
     # Federated search helpers
     SLACK_DATE_EXTRACTION = "slack_date_extraction"
@@ -62,3 +67,18 @@ class LLMFlow(StrEnum):
     # ``llm_generation_span`` at the call site with the right tag.
     UNTAGGED_INVOKE = "untagged_invoke"
     UNTAGGED_STREAM = "untagged_stream"
+
+
+IMAGE_FLOWS: frozenset[LLMFlow] = frozenset(
+    {LLMFlow.IMAGE_GENERATION, LLMFlow.IMAGE_EDIT}
+)
+
+SYSTEM_TEXT_GENERATION_FLOWS: frozenset[LLMFlow] = frozenset(
+    {
+        LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY,
+        LLMFlow.CONTEXTUAL_RAG_CHUNK_CONTEXT,
+        LLMFlow.IMAGE_SUMMARIZATION,
+        LLMFlow.KG_DOCUMENT_CLASSIFICATION,
+        LLMFlow.KG_DEEP_EXTRACTION,
+    }
+)

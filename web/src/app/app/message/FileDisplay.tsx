@@ -5,7 +5,7 @@ import { cn } from "@opal/utils";
 import { ChatFileType, FileDescriptor } from "@/app/app/interfaces";
 import Attachment from "@/refresh-components/Attachment";
 import { InMessageImage } from "@/app/app/components/files/images/InMessageImage";
-import CsvContent from "@/components/tools/CSVContent";
+import SpreadsheetContent from "@/components/tools/SpreadsheetContent";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import ExpandableContentWrapper from "@/components/tools/ExpandableContentWrapper";
@@ -42,9 +42,6 @@ export default function FileDisplay({ files }: FileDisplayProps) {
       file.type === ChatFileType.DOCUMENT
   );
   const imageFiles = files.filter((file) => file.type === ChatFileType.IMAGE);
-  // TODO(danelegend): XLSX files are binary (OOXML) and will fail to parse in CsvContent.
-  // The backend should convert XLSX to CSV text before serving via /api/chat/file,
-  // or XLSX should be split into a separate ChatFileType and rendered as an Attachment.
   const tabularFiles = files.filter(
     (file) => file.type === ChatFileType.TABULAR
   );
@@ -91,7 +88,12 @@ export default function FileDisplay({ files }: FileDisplayProps) {
                 key={file.id}
                 fileDescriptor={file}
                 close={() => setClose(false)}
-                ContentComponent={CsvContent}
+                // All TABULAR files render via the parsed preview, which
+                // dispatches on the response content type: spreadsheet JSON
+                // (xlsx is a binary OOXML zip the browser can't decode as
+                // text) or raw CSV passthrough. Display names are never
+                // trusted — a renamed xlsx/csv still renders correctly.
+                ContentComponent={SpreadsheetContent}
               />
             ) : (
               <Attachment

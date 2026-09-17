@@ -5,11 +5,15 @@ import os
 # module-level imports below pull in EE versioned implementations.
 os.environ["LICENSE_ENFORCEMENT_ENABLED"] = "false"
 
-from collections.abc import AsyncGenerator  # noqa: E402
-from collections.abc import Generator  # noqa: E402
+from collections.abc import (
+    AsyncGenerator,  # noqa: E402
+    Generator,  # noqa: E402
+)
 from contextlib import asynccontextmanager  # noqa: E402
-from unittest.mock import MagicMock  # noqa: E402
-from unittest.mock import patch  # noqa: E402
+from unittest.mock import (
+    MagicMock,  # noqa: E402
+    patch,  # noqa: E402
+)
 
 import pytest  # noqa: E402
 from dotenv import load_dotenv  # noqa: E402
@@ -19,7 +23,6 @@ from fastapi.testclient import TestClient  # noqa: E402
 from onyx.auth.users import current_user  # noqa: E402
 from onyx.db.engine.sql_engine import get_session  # noqa: E402
 from onyx.db.enums import Permission  # noqa: E402
-from onyx.db.models import UserRole  # noqa: E402
 from onyx.main import get_application  # noqa: E402
 from onyx.utils.logger import setup_logger  # noqa: E402
 
@@ -53,7 +56,6 @@ def mock_get_session() -> Generator[MagicMock, None, None]:
 def mock_current_user() -> MagicMock:
     """Mock admin user for endpoints protected by require_permission."""
     mock_admin = MagicMock()
-    mock_admin.role = UserRole.ADMIN
     mock_admin.effective_permissions = [Permission.FULL_ADMIN_PANEL_ACCESS.value]
     return mock_admin
 

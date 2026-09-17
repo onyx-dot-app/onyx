@@ -1,13 +1,19 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import { Button, Divider, InputTypeIn, Text } from "@opal/components";
-import InputTextArea from "@/refresh-components/inputs/InputTextArea";
+import { useSWRConfig } from "swr";
+import {
+  Button,
+  Divider,
+  InputTextArea,
+  InputTypeIn,
+  Text,
+} from "@opal/components";
 import { Disabled } from "@opal/core";
-import { SettingsLayouts, InputVertical } from "@opal/layouts";
+import { SettingsLayouts, InputVertical, toast } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import { toast } from "@/hooks/useToast";
 import { SvgClock } from "@opal/icons";
 import ScheduleEditor from "@/app/craft/v1/tasks/components/ScheduleEditor";
 import PreApprovalPicker from "@/app/craft/v1/tasks/components/PreApprovalPicker";
@@ -18,8 +24,11 @@ import {
 import EntryPickerPopover from "@/sections/input/EntryPickerPopover";
 import useUserSkills from "@/hooks/useUserSkills";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
+import { useCraftMcpServers } from "@/lib/tools/hooks";
 import {
   detectSlashTrigger,
+  pickerEntryConnectionPath,
+  pickerEntryPromptPrefix,
   toPickerSections,
   type PickerEntry,
 } from "@/lib/skills/picker";
@@ -35,6 +44,7 @@ import {
   updateScheduledTask,
 } from "@/app/craft/v1/tasks/api";
 import { TASKS_PATH, taskDetailPath } from "@/app/craft/v1/tasks/constants";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 export interface ScheduleTaskFormInitial {
   /** ``null`` for create. */
@@ -44,6 +54,7 @@ export interface ScheduleTaskFormInitial {
   mode: EditorMode;
   payload: EditorPayload;
   preApprovedAppIds: number[];
+  preApprovedMcpServerIds: number[];
 }
 
 interface ScheduleTaskFormProps {
@@ -65,7 +76,9 @@ export default function ScheduleTaskForm({
   description,
   onBack,
 }: ScheduleTaskFormProps) {
+  const t = useTranslations("craft.tasks.form");
   const router = useRouter();
+  const { mutate } = useSWRConfig();
   const [name, setName] = useState(initial.name);
   const [prompt, setPrompt] = useState(initial.prompt);
   const [mode, setMode] = useState<EditorMode>(initial.mode);
@@ -73,6 +86,9 @@ export default function ScheduleTaskForm({
   const [preApprovedAppIds, setPreApprovedAppIds] = useState<number[]>(
     initial.preApprovedAppIds
   );
+  const [preApprovedMcpServerIds, setPreApprovedMcpServerIds] = useState<
+    number[]
+  >(initial.preApprovedMcpServerIds);
   const [saving, setSaving] = useState(false);
   const [nameTouched, setNameTouched] = useState(false);
   const [promptTouched, setPromptTouched] = useState(false);
@@ -80,9 +96,11 @@ export default function ScheduleTaskForm({
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const { data: skillsData } = useUserSkills();
   const { data: externalAppsData } = useUserExternalApps();
+  const { data: craftMcpData } = useCraftMcpServers();
   const pickerSections = useMemo(
-    () => toPickerSections(skillsData, externalAppsData),
-    [skillsData, externalAppsData]
+    () =>
+      toPickerSections(skillsData, externalAppsData, craftMcpData?.mcp_servers),
+    [skillsData, externalAppsData, craftMcpData]
   );
   const [skillPicker, setSkillPicker] = useState<{
     open: boolean;
@@ -131,32 +149,33 @@ export default function ScheduleTaskForm({
 
   const handleSkillPickerSelect = useCallback(
     (entry: PickerEntry) => {
-      if (entry.kind === "app" && !entry.authenticated) {
+      const connectionPath = pickerEntryConnectionPath(entry);
+      if (connectionPath) {
         setSkillPicker((s) => ({ ...s, open: false }));
-        router.push(`/craft/v1/apps?connect=${entry.slug}`);
+        router.push(connectionPath);
         return;
       }
-      setSkillPicker((prev) => {
-        if (!prev.open) return prev;
-        const replacement = `/${entry.slug} `;
-        const newPrompt =
-          prompt.slice(0, prev.slashIndex) +
-          replacement +
-          prompt.slice(prev.slashIndex + 1 + prev.query.length);
-        setPrompt(newPrompt);
+      if (!skillPicker.open) return;
 
-        const cursorPos = prev.slashIndex + replacement.length;
-        const textarea = promptTextareaRef.current;
-        if (textarea) {
-          requestAnimationFrame(() => {
-            textarea.focus();
-            textarea.setSelectionRange(cursorPos, cursorPos);
-          });
-        }
-        return { ...prev, open: false };
-      });
+      const replacement = `${pickerEntryPromptPrefix(entry)} `;
+      const newPrompt =
+        prompt.slice(0, skillPicker.slashIndex) +
+        replacement +
+        prompt.slice(skillPicker.slashIndex + 1 + skillPicker.query.length);
+      setPrompt(newPrompt);
+
+      const cursorPos = skillPicker.slashIndex + replacement.length;
+      const textarea = promptTextareaRef.current;
+      if (textarea) {
+        requestAnimationFrame(() => {
+          textarea.focus();
+          textarea.setSelectionRange(cursorPos, cursorPos);
+        });
+      }
+
+      setSkillPicker((prev) => (prev.open ? { ...prev, open: false } : prev));
     },
-    [prompt, router]
+    [prompt, router, skillPicker]
   );
 
   const compiled = compileLocalPayloadToUtcCron(mode, payload);
@@ -167,8 +186,9 @@ export default function ScheduleTaskForm({
   // Validation states. These gate submission regardless of interaction, but
   // are only surfaced inline once the user has touched (blurred) the field so
   // a pristine form doesn't render red on load.
-  const nameError = trimmedName.length === 0 ? "Name is required." : null;
-  const promptError = trimmedPrompt.length === 0 ? "Prompt is required." : null;
+  const nameError = trimmedName.length === 0 ? t("errors.nameRequired") : null;
+  const promptError =
+    trimmedPrompt.length === 0 ? t("errors.promptRequired") : null;
   const scheduleError = !compiled.ok ? compiled.error : null;
 
   const shownNameError = nameTouched ? nameError : null;
@@ -180,7 +200,7 @@ export default function ScheduleTaskForm({
   // tooltip. A natively-disabled <button> is inert and never fires hover
   // events, so the tooltip must live on the (interactive) wrapper instead.
   const disabledReason = saving
-    ? "Saving..."
+    ? t("savingLabel")
     : (nameError ?? promptError ?? scheduleError ?? undefined);
 
   const submit = useCallback(
@@ -196,12 +216,17 @@ export default function ScheduleTaskForm({
             editor_mode: mode,
             editor_payload: storagePayload,
             pre_approved_app_ids: preApprovedAppIds,
+            pre_approved_mcp_server_ids: preApprovedMcpServerIds,
           };
           const updated: ScheduledTaskDetail = await updateScheduledTask(
             initial.taskId,
             body
           );
-          toast.success("Scheduled task updated.");
+          await mutate(SWR_KEYS.scheduledTask(updated.id), updated, {
+            revalidate: false,
+          });
+          await mutate(SWR_KEYS.scheduledTasks);
+          toast.success(t("toasts.updated"));
           router.push(taskDetailPath(updated.id));
         } else {
           const body: ScheduledTaskCreateBody = {
@@ -211,18 +236,18 @@ export default function ScheduleTaskForm({
             editor_payload: storagePayload,
             run_immediately: runImmediately,
             pre_approved_app_ids: preApprovedAppIds,
+            pre_approved_mcp_server_ids: preApprovedMcpServerIds,
           };
           await createScheduledTask(body);
+          await mutate(SWR_KEYS.scheduledTasks);
           toast.success(
-            runImmediately
-              ? "Scheduled task created and queued."
-              : "Scheduled task created."
+            runImmediately ? t("toasts.createdAndQueued") : t("toasts.created")
           );
           router.push(TASKS_PATH);
         }
       } catch (err) {
         toast.error(
-          err instanceof Error ? err.message : "Failed to save scheduled task"
+          err instanceof Error ? err.message : t("toasts.saveFailed")
         );
       } finally {
         setSaving(false);
@@ -233,11 +258,14 @@ export default function ScheduleTaskForm({
       isEdit,
       initial.taskId,
       mode,
+      mutate,
       payload,
       preApprovedAppIds,
+      preApprovedMcpServerIds,
       router,
       trimmedName,
       trimmedPrompt,
+      t,
     ]
   );
 
@@ -258,7 +286,7 @@ export default function ScheduleTaskForm({
               onClick={() => router.push(TASKS_PATH)}
               disabled={saving}
             >
-              Cancel
+              {t("cancelButton")}
             </Button>
             {!isEdit && (
               <Disabled
@@ -274,7 +302,7 @@ export default function ScheduleTaskForm({
                   onClick={() => void submit(true)}
                   data-testid="save-and-run-now"
                 >
-                  Save and run now
+                  {t("saveAndRunNowButton")}
                 </Button>
               </Disabled>
             )}
@@ -291,7 +319,7 @@ export default function ScheduleTaskForm({
                 onClick={() => void submit(false)}
                 data-testid="save-task"
               >
-                {isEdit ? "Save changes" : "Save"}
+                {isEdit ? t("saveChangesButton") : t("saveButton")}
               </Button>
             </Disabled>
           </div>
@@ -300,12 +328,12 @@ export default function ScheduleTaskForm({
 
       <SettingsLayouts.Body>
         <GeneralLayouts.Section>
-          <InputVertical withLabel title="Name">
+          <InputVertical withLabel title={t("fields.name.label")}>
             <InputTypeIn
               value={name}
               onChange={(e) => setName(e.target.value)}
               onBlur={() => setNameTouched(true)}
-              placeholder="e.g. Weekly customer escalations digest"
+              placeholder={t("fields.name.placeholder")}
               data-testid="task-name-input"
               variant={shownNameError ? "error" : undefined}
             />
@@ -318,8 +346,8 @@ export default function ScheduleTaskForm({
 
           <InputVertical
             withLabel
-            title="Prompt"
-            description="This message is sent to Craft each time the task fires."
+            title={t("fields.prompt.label")}
+            description={t("fields.prompt.description")}
           >
             <InputTextArea
               ref={promptTextareaRef}
@@ -328,7 +356,7 @@ export default function ScheduleTaskForm({
               onKeyUp={handlePromptCursorChange}
               onClick={handlePromptCursorChange}
               onBlur={() => setPromptTouched(true)}
-              placeholder="Describe what Craft should do on each run..."
+              placeholder={t("fields.prompt.placeholder")}
               rows={6}
               autoResize
               maxRows={12}
@@ -351,10 +379,10 @@ export default function ScheduleTaskForm({
           </InputVertical>
         </GeneralLayouts.Section>
 
-        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+        <Divider paddingParallel={0} paddingPerpendicular={0} />
 
         <GeneralLayouts.Section>
-          <InputVertical title="Schedule">
+          <InputVertical title={t("fields.schedule.label")}>
             <ScheduleEditor
               mode={mode}
               onModeChange={setMode}
@@ -365,16 +393,18 @@ export default function ScheduleTaskForm({
           </InputVertical>
         </GeneralLayouts.Section>
 
-        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+        <Divider paddingParallel={0} paddingPerpendicular={0} />
 
         <GeneralLayouts.Section>
           <InputVertical
-            title="Pre-approved apps"
-            description="Selected apps can act without pausing for approval while this task runs on its own. Note: an app you don't pre-approve will pause mid-run to ask for your approval. The run may stall or fail if you do not approve an action request."
+            title={t("fields.preApproval.label")}
+            description={t("fields.preApproval.description")}
           >
             <PreApprovalPicker
-              selectedIds={preApprovedAppIds}
-              onChange={setPreApprovedAppIds}
+              selectedAppIds={preApprovedAppIds}
+              selectedMcpServerIds={preApprovedMcpServerIds}
+              onAppChange={setPreApprovedAppIds}
+              onMcpServerChange={setPreApprovedMcpServerIds}
             />
           </InputVertical>
         </GeneralLayouts.Section>
@@ -391,5 +421,6 @@ export function defaultFormInitial(): ScheduleTaskFormInitial {
     mode: "interval",
     payload: { unit: "hours", every: 1 },
     preApprovedAppIds: [],
+    preApprovedMcpServerIds: [],
   };
 }

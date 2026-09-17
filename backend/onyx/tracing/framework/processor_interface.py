@@ -1,6 +1,5 @@
 import abc
-from typing import Any
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .spans import Span
@@ -69,7 +68,7 @@ class TracingProcessor(abc.ABC):
         """Called when a trace completes execution.
 
         Args:
-            trace: The completed trace containing all spans and results.
+            trace: The completed workflow correlation root.
 
         Notes:
             - Called synchronously when trace finishes

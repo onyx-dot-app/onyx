@@ -6,7 +6,7 @@ import { useSWRConfig } from "swr";
 import {
   Artifact,
   ArtifactType,
-  SessionErrorCode,
+  BuildMessageAttachment,
 } from "@/app/craft/types/streamingTypes";
 
 import {
@@ -17,8 +17,9 @@ import {
   processSSEStream,
   fetchSession,
   fetchScheduledRunEventStream,
-  RateLimitError,
+  RateLimitedError,
 } from "@/app/craft/services/apiServices";
+import type { BuildLlmSelection } from "@/app/craft/onboarding/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 import {
@@ -239,34 +240,19 @@ export function useBuildStreaming() {
     (state) => state.appendSubagentThinkingChunk
   );
 
-  // ── Output file detector registry ──────────────────────────────────────
-  // Ordered by priority — first match wins.
-  // To add a new output type, add an entry here + a store action.
-  const OUTPUT_FILE_DETECTORS = useMemo(
-    () => [
-      {
-        match: (fp: string, k: string) =>
-          (k === "edit" || k === "write") &&
-          (fp.includes("/web/") || fp.startsWith("web/")),
-        onDetect: (sid: string) => triggerWebappRefresh(sid),
-      },
-      {
-        match: (fp: string, k: string) =>
-          (k === "edit" || k === "write") &&
-          fp.endsWith(".md") &&
-          (fp.includes("/outputs/") || fp.startsWith("outputs/")),
-        onDetect: (sid: string, fp: string) => {
-          openMarkdownPreview(sid, fp);
-          triggerFilesRefresh(sid);
-        },
-      },
-      {
-        match: (fp: string, k: string) =>
-          (k === "edit" || k === "write") &&
-          (fp.includes("/outputs/") || fp.startsWith("outputs/")),
-        onDetect: (sid: string) => triggerFilesRefresh(sid),
-      },
-    ],
+  const handleCompletedFileChange = useCallback(
+    (sid: string, filePath: string) => {
+      const isWebFile =
+        filePath.includes("/web/") || filePath.startsWith("web/");
+      const isOutputFile =
+        filePath.includes("/outputs/") || filePath.startsWith("outputs/");
+
+      if (isWebFile) triggerWebappRefresh(sid);
+      if (isOutputFile) {
+        if (filePath.endsWith(".md")) openMarkdownPreview(sid, filePath);
+        triggerFilesRefresh(sid);
+      }
+    },
     [triggerWebappRefresh, triggerFilesRefresh, openMarkdownPreview]
   );
 
@@ -281,6 +267,12 @@ export function useBuildStreaming() {
       const currentItems =
         useBuildSessionStore.getState().sessions.get(sessionId)?.streamItems ??
         [];
+      let needsTurnCompletionFileRefresh = currentItems.some(
+        (item) =>
+          item.type === "tool_call" &&
+          item.toolCall.kind === "execute" &&
+          item.toolCall.status === "completed"
+      );
       const lastCurrentItem = currentItems[currentItems.length - 1];
       if (lastCurrentItem?.type === "text") {
         accumulatedText = lastCurrentItem.content;
@@ -363,6 +355,8 @@ export function useBuildStreaming() {
         return parentToolCallId;
       };
 
+      // Raw SSE frame straight off the wire; parsePacket is the decoder.
+      // oxlint-disable-next-line anti-slop/no-unknown-parameters
       return (rawPacket: unknown) => {
         const parsed = parsePacket(rawPacket);
         if (options?.expectedTurnId && parsed.type !== "approval_requested") {
@@ -516,6 +510,17 @@ export function useBuildStreaming() {
           }
 
           case "tool_call_progress": {
+            if (parsed.status === "completed" && parsed.kind === "execute") {
+              needsTurnCompletionFileRefresh = true;
+            }
+            if (
+              parsed.status === "completed" &&
+              parsed.kind === "edit" &&
+              parsed.filePath
+            ) {
+              handleCompletedFileChange(sessionId, parsed.filePath);
+            }
+
             const subagentClass = classifySubagentEvent(parsed);
 
             // Child (subagent-internal) event: route to the subagent's own
@@ -532,14 +537,6 @@ export function useBuildStreaming() {
                 null,
                 ""
               );
-              if (parsed.filePath && parsed.kind) {
-                for (const detector of OUTPUT_FILE_DETECTORS) {
-                  if (detector.match(parsed.filePath, parsed.kind)) {
-                    detector.onDetect(sessionId, parsed.filePath);
-                    break;
-                  }
-                }
-              }
               break;
             }
 
@@ -631,14 +628,6 @@ export function useBuildStreaming() {
               }),
             });
 
-            if (parsed.filePath && parsed.kind) {
-              for (const detector of OUTPUT_FILE_DETECTORS) {
-                if (detector.match(parsed.filePath, parsed.kind)) {
-                  detector.onDetect(sessionId, parsed.filePath);
-                  break;
-                }
-              }
-            }
             break;
           }
 
@@ -661,8 +650,8 @@ export function useBuildStreaming() {
             if (isWebapp) {
               fetchSession(sessionId)
                 .then((sessionData) => {
-                  if (sessionData.sandbox?.nextjs_port) {
-                    const webappUrl = `http://localhost:${sessionData.sandbox.nextjs_port}`;
+                  if (sessionData.nextjs_port) {
+                    const webappUrl = `http://localhost:${sessionData.nextjs_port}`;
                     updateSessionData(sessionId, { webappUrl });
                   }
                 })
@@ -674,6 +663,11 @@ export function useBuildStreaming() {
           }
 
           case "prompt_response": {
+            if (needsTurnCompletionFileRefresh) {
+              // Shell commands and scripts can mutate the workspace without
+              // emitting structured file paths. Reconcile once when the turn ends.
+              triggerFilesRefresh(sessionId);
+            }
             finalizeStreaming();
             const isInterrupting = useBuildSessionStore
               .getState()
@@ -691,12 +685,11 @@ export function useBuildStreaming() {
               // content — drop them from the persisted message.
               const savedStreamItems = session.streamItems
                 .filter((item) => item.type !== "connect_app_request")
-                .map((item) => ({
-                  ...item,
-                  ...(item.type === "text" || item.type === "thinking"
-                    ? { isStreaming: false }
-                    : {}),
-                }));
+                .map((item) =>
+                  item.type === "text" || item.type === "thinking"
+                    ? { ...item, isStreaming: false }
+                    : item
+                );
               const textContent = session.streamItems
                 .filter((item) => item.type === "text")
                 .map((item) => item.content)
@@ -745,7 +738,7 @@ export function useBuildStreaming() {
               type: "connect_app_request",
               id: parsed.requestId,
               requestId: parsed.requestId,
-              appSlug: parsed.appSlug,
+              externalAppId: parsed.externalAppId,
               reason: parsed.reason,
             });
             break;
@@ -805,7 +798,8 @@ export function useBuildStreaming() {
       upsertTodoListStreamItem,
       addArtifactToSession,
       appendMessageToSession,
-      OUTPUT_FILE_DETECTORS,
+      handleCompletedFileChange,
+      triggerFilesRefresh,
       globalMutate,
       recordSubagentToolCall,
       seedSubagentMeta,
@@ -959,10 +953,12 @@ export function useBuildStreaming() {
     async (
       sessionId: string,
       content: string,
-      model?: { provider: string; modelName: string } | null
+      model?: BuildLlmSelection | null,
+      attachments: BuildMessageAttachment[] = []
     ): Promise<void> => {
       const currentState = useBuildSessionStore.getState();
       const existingSession = currentState.sessions.get(sessionId);
+      const skillsStaleRevision = existingSession?.skillsStaleRevision;
 
       if (existingSession?.abortController) {
         existingSession.abortController.abort();
@@ -973,6 +969,7 @@ export function useBuildStreaming() {
 
       updateSessionData(sessionId, {
         status: "running",
+        error: null,
         isInterrupting: false,
         wasInterrupted: false,
         turnGeneration: (existingSession?.turnGeneration ?? 0) + 1,
@@ -988,23 +985,38 @@ export function useBuildStreaming() {
           content,
           crypto.randomUUID(),
           controller.signal,
-          model
+          model,
+          attachments
         );
+        const currentSession = useBuildSessionStore
+          .getState()
+          .sessions.get(sessionId);
         updateSessionData(sessionId, {
           activeTurnId: turn.turn_id,
           activeTurnIndex: turn.turn_index,
           activeTurnLocalOwner: true,
+          ...(currentSession?.skillsStaleRevision === skillsStaleRevision && {
+            skillsStale: false,
+          }),
         });
 
         await streamTurnEvents(sessionId, turn.turn_id, controller.signal);
       } catch (err) {
         if ((err as Error).name === "AbortError") {
           updateSessionData(sessionId, { isInterrupting: false });
-        } else if (err instanceof RateLimitError) {
-          console.warn("[Streaming] Rate limit exceeded");
+        } else if (err instanceof RateLimitedError) {
+          // Usage-budget 429: recoverable once the budget resets, so keep the
+          // session active and surface the same rate-limit banner as chat.
+          // `error` stays set so queued messages don't auto-send into the limit.
+          appendStreamItem(sessionId, {
+            type: "error",
+            id: genId("error"),
+            content: err.message,
+            rateLimit: err.details,
+          });
           updateSessionData(sessionId, {
             status: "active",
-            error: SessionErrorCode.RATE_LIMIT_EXCEEDED,
+            error: err.message,
             isInterrupting: false,
             activeTurnId: null,
             activeTurnIndex: null,
@@ -1031,7 +1043,13 @@ export function useBuildStreaming() {
         }
       }
     },
-    [setAbortController, updateSessionData, clearStreamItems, streamTurnEvents]
+    [
+      setAbortController,
+      updateSessionData,
+      appendStreamItem,
+      clearStreamItems,
+      streamTurnEvents,
+    ]
   );
 
   /**

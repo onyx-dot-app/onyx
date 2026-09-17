@@ -128,7 +128,7 @@ function SettingsHeader({
       <Spacer rem={3.25} />
 
       <div className="flex flex-col gap-6 px-4">
-        <div className="flex w-full justify-between">
+        <div className="flex w-full items-center justify-between">
           <div aria-label="admin-page-title">
             <Content
               icon={Icon}
@@ -147,7 +147,7 @@ function SettingsHeader({
       {divider ? (
         <>
           <Spacer rem={1.5} />
-          <Divider paddingParallel="md" paddingPerpendicular="fit" />
+          <Divider paddingParallel={4} paddingPerpendicular={0} />
         </>
       ) : (
         <Spacer rem={0.5} />
@@ -156,7 +156,7 @@ function SettingsHeader({
       {isSticky && (
         <div
           className={cn(
-            "absolute left-0 right-0 h-2 pointer-events-none transition-opacity duration-300 rounded-b-08 opacity-0",
+            "absolute start-0 end-0 h-2 pointer-events-none transition-opacity duration-300 rounded-b-08 opacity-0",
             showShadow && "opacity-100"
           )}
           style={{

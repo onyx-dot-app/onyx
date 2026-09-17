@@ -5,18 +5,15 @@ from __future__ import annotations
 import json
 import subprocess
 from typing import NamedTuple
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from httpx import Response
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import ApprovalDecision
-from onyx.db.enums import ExternalAppType
+from onyx.db.enums import ApprovalDecision, ExternalAppType
 from onyx.db.external_app import get_built_in_external_app
-from onyx.server.features.build.configs import SANDBOX_BACKEND
-from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.build_approvals import (
@@ -24,9 +21,11 @@ from tests.integration.common_utils.managers.build_approvals import (
 )
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.tests.craft.docker_e2e.conftest import DockerExec
-from tests.integration.tests.craft.docker_e2e.conftest import DockerSandbox
-from tests.integration.tests.craft.docker_e2e.conftest import ProvisionSandbox
+from tests.integration.tests.craft.docker_e2e.conftest import (
+    DockerExec,
+    DockerSandbox,
+    ProvisionSandbox,
+)
 
 pytestmark = pytest.mark.skipif(
     SANDBOX_BACKEND != SandboxBackend.DOCKER,

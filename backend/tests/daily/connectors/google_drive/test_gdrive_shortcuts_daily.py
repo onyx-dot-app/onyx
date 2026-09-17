@@ -1,25 +1,17 @@
 from collections.abc import Callable
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
-from onyx.connectors.models import Document
-from onyx.connectors.models import TextSection
-from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_EMAIL
+from onyx.connectors.models import Document, TextSection
 from tests.daily.connectors.google_drive.consts_and_utils import (
-    assert_resource_key_shortcut_target_in_retrieved_docs,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import load_connector_outputs
-from tests.daily.connectors.google_drive.consts_and_utils import (
+    ADMIN_EMAIL,
     RESOURCE_KEY_SHORTCUT_TARGET_DOC_ID,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import (
     RESOURCE_KEY_SHORTCUT_TARGET_NAME,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import (
     SHORTCUTS_GALORE_FOLDER_ID,
+    assert_resource_key_shortcut_target_in_retrieved_docs,
+    load_connector_outputs,
 )
 from tests.utils.secret_names import TestSecret
 

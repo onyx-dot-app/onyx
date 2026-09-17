@@ -18,6 +18,23 @@ describe("UrlBar", () => {
     (copyText as jest.Mock).mockResolvedValue(undefined);
   });
 
+  test("shows and disables a spinner while refreshing", () => {
+    const onRefresh = jest.fn();
+    render(
+      <UrlBar
+        displayUrl="sandbox://"
+        showNavigation
+        onRefresh={onRefresh}
+        isRefreshing
+      />
+    );
+
+    const refreshButton = screen.getByRole("button", { name: "Refresh" });
+    expect(refreshButton).toBeDisabled();
+    expect(refreshButton).toHaveAttribute("aria-busy", "true");
+    expect(refreshButton.querySelector("svg")).toHaveClass("animate-spin");
+  });
+
   test("contains long preview URLs inside the URL bar and copies them", async () => {
     const user = setupUser();
     const longPreviewUrl =

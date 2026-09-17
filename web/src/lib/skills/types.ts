@@ -1,54 +1,75 @@
 /**
- * Skills API response shapes — mirrors
+ * Skills API response shapes; mirrors
  * `backend/onyx/server/features/skill/models.py`.
- *
- * V1 visibility model (admin-set only):
- * - `is_public = true`                              → org-wide
- * - `is_public = false` + non-empty `granted_group_ids` → group-scoped
- * - `is_public = false` + empty `granted_group_ids`     → private
- *
- * Direct user grants ("share with user X") are out of scope for V1; there is
- * no `skill__user` junction in the schema.
  */
 
 export type SkillSource = "builtin" | "custom";
+export type SkillAccessLevel = "OWNER" | "EDITOR" | "VIEWER";
+export type SkillSharePermission = "EDITOR" | "VIEWER";
 
-/**
- * UI-facing visibility tri-state. Mapped to/from `(is_public, granted_group_ids)`
- * by `visibilityFromSkill` / `visibilityToPatch` in `helpers.tsx`.
- */
-export type SkillVisibility = "private" | "groups" | "org_wide";
-
-export interface BuiltinSkill {
-  source: "builtin";
-  id: string;
-  slug: string;
-  name: string;
-  description: string;
-  is_available: boolean;
-  unavailable_reason: string | null;
+export interface SkillUserShare {
+  user: {
+    id: string;
+    email: string;
+  };
+  permission: SkillSharePermission;
 }
 
-export interface CustomSkill {
-  source: "custom";
+export interface SkillGroupShare {
+  group_id: number;
+  group_name: string;
+  permission: SkillSharePermission;
+}
+
+export interface SkillExternalAppDependency {
+  external_app_id: number;
+  name: string;
+  enabled: boolean;
+  ready: boolean;
+}
+
+export interface Skill {
+  source: SkillSource;
   id: string;
-  slug: string;
   name: string;
   description: string;
-  is_public: boolean;
-  /** True for private personal skills: not public, no grants, custom. */
+
+  is_available: boolean | null;
+  unavailable_reason: string | null;
+  is_valid: boolean | null;
+
+  /** True for private personal skills: not public, no direct/group shares. */
   is_personal: boolean;
   enabled: boolean;
+  can_toggle: boolean;
   author_user_id: string | null;
   author_email: string | null;
+  owner: {
+    id: string;
+    email: string;
+  } | null;
+  ownership_vacant: boolean;
   created_at: string | null;
   updated_at: string | null;
-  granted_group_ids: number[];
+  user_shares: SkillUserShare[];
+  group_shares: SkillGroupShare[];
+  public_permission: SkillSharePermission | null;
+  user_permission: SkillAccessLevel | null;
+  external_app: SkillExternalAppDependency | null;
 }
 
+export type BuiltinSkill = Skill & {
+  source: "builtin";
+  is_available: boolean;
+};
+
+export type CustomSkill = Skill & {
+  source: "custom";
+};
+
 export interface SkillsList {
-  builtins: BuiltinSkill[];
-  customs: CustomSkill[];
+  builtins: Skill[];
+  customs: Skill[];
 }
 
 export interface SkillPreview {
@@ -58,4 +79,52 @@ export interface SkillPreview {
   description: string;
   author_email: string | null;
   instructions_markdown: string;
+  external_app: SkillExternalAppDependency | null;
+}
+
+export type SkillEditableDetail = CustomSkill & {
+  instructions_markdown: string;
+  files: SkillBundleFile[];
+};
+
+export interface SkillBundleFile {
+  path: string;
+  size: number;
+}
+
+export interface SkillBundleContents {
+  name: string;
+  description: string;
+  instructions_markdown: string;
+  files: SkillBundleFile[];
+}
+
+export interface GitHubSkillPreview {
+  path: string;
+  name: string;
+  description: string | null;
+  unavailable_reason: string | null;
+}
+
+export interface GitHubSkillsPreview {
+  repository: string;
+  revision: string;
+  subpath: string | null;
+  skills: GitHubSkillPreview[];
+}
+
+export interface GitHubImportedSkill {
+  skill: CustomSkill;
+  disabled_reason: string | null;
+}
+
+export interface GitHubSkillNotImported {
+  path: string;
+  name: string;
+  reason: string;
+}
+
+export interface GitHubSkillsImportResult {
+  imported: GitHubImportedSkill[];
+  not_imported: GitHubSkillNotImported[];
 }

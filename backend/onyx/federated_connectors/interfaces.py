@@ -1,13 +1,8 @@
-from abc import ABC
-from abc import abstractmethod
-from typing import Any
-from typing import Dict
+from abc import ABC, abstractmethod
+from typing import Any, Dict
 
-from onyx.context.search.models import ChunkIndexRequest
-from onyx.context.search.models import InferenceChunk
-from onyx.federated_connectors.models import CredentialField
-from onyx.federated_connectors.models import EntityField
-from onyx.federated_connectors.models import OAuthResult
+from onyx.context.search.models import ChunkIndexRequest, InferenceChunk
+from onyx.federated_connectors.models import CredentialField, EntityField, OAuthResult
 from onyx.onyxbot.slack.models import SlackContext
 
 

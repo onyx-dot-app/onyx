@@ -4,25 +4,22 @@ This module contains all CRUD operations for both DocPermissionSyncAttempt
 and ExternalGroupPermissionSyncAttempt models, along with shared utilities.
 """
 
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
-from sqlalchemy import delete
-from sqlalchemy import func
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.engine.cursor import CursorResult
-from sqlalchemy.orm import joinedload
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.enums import PermissionSyncStatus
-from onyx.db.models import Connector
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import DocPermissionSyncAttempt
-from onyx.db.models import ExternalGroupPermissionSyncAttempt
+from onyx.db.models import (
+    Connector,
+    ConnectorCredentialPair,
+    DocPermissionSyncAttempt,
+    ExternalGroupPermissionSyncAttempt,
+)
 from onyx.utils.logger import setup_logger
-from onyx.utils.telemetry import optional_telemetry
-from onyx.utils.telemetry import RecordType
+from onyx.utils.telemetry import RecordType, optional_telemetry
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 logger = setup_logger()
@@ -151,6 +148,8 @@ def mark_doc_permission_sync_attempt_failed(
     db_session: Session,
     error_message: str,
     full_exception_trace: str | None = None,
+    total_docs_synced: int = 0,
+    docs_with_permission_errors: int = 0,
 ) -> None:
     """Mark a doc permission sync attempt as failed.
 
@@ -160,6 +159,11 @@ def mark_doc_permission_sync_attempt_failed(
     originates from an ``except`` block, callers should pass
     ``traceback.format_exc()`` so the full stack is persisted alongside
     the short ``error_message``.
+
+    A sync that fails partway through keeps the work it already committed, so
+    callers pass the counts they reached. These assign rather than accumulate:
+    a failure raised after ``complete_doc_permission_sync_attempt`` has already
+    committed would otherwise count the same documents twice.
     """
     try:
         attempt = db_session.execute(
@@ -174,6 +178,8 @@ def mark_doc_permission_sync_attempt_failed(
         attempt.time_finished = func.now()
         attempt.error_message = error_message
         attempt.full_exception_trace = full_exception_trace
+        attempt.total_docs_synced = total_docs_synced
+        attempt.docs_with_permission_errors = docs_with_permission_errors
         db_session.commit()
 
         # Add telemetry for permission sync attempt status change

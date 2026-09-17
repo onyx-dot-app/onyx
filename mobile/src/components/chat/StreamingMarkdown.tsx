@@ -1,36 +1,45 @@
-// streamdown wraps enriched-markdown (worklet parsing), which needs concrete style values, not NativeWind
-// classes — so resolve Onyx tokens from the shared vars/presets here. Swapping the markdown lib touches
-// only this file.
+// enriched-markdown needs concrete style values, not NativeWind classes — resolve Onyx tokens here.
 import { useMemo } from "react";
 import { useColorScheme } from "react-native";
 import { StreamdownText } from "react-native-streamdown";
 import type { MarkdownStyle } from "react-native-enriched-markdown";
 import { textPresets, varsDark, varsLight } from "@onyx-ai/shared/native";
 
+// "muted": reasoning/secondary body — text-03 with a tighter paragraph rhythm.
+type StreamingMarkdownVariant = "default" | "muted";
+
 interface StreamingMarkdownProps {
   content: string;
   isStreaming: boolean;
+  // Tap on any markdown link (incl. `[[n]](url)` citation markers) → the link's URL.
+  onLinkPress?: (url: string) => void;
+  variant?: StreamingMarkdownVariant;
 }
 
-const BODY = textPresets["main-content-body"];
+// 14px body: deliberate reduction from web's 16px, which reads oversized on a phone.
+const BODY = textPresets["main-ui-body"];
 const MONO = textPresets["main-content-mono"];
 
-// Markdown element styles as concrete values (enriched-markdown takes literals, not NativeWind
-// classes): Onyx tokens on a 16px body base; heading/code sizes are fixed pixels.
-function buildMarkdownStyle(scheme: "light" | "dark"): MarkdownStyle {
+function buildMarkdownStyle(
+  scheme: "light" | "dark",
+  variant: StreamingMarkdownVariant,
+): MarkdownStyle {
   const vars = scheme === "dark" ? varsDark : varsLight;
   const color = (token: string): string => vars[token] ?? "#000000";
-  // Fenced code has no Onyx token; use the Atom One base color (one flat color — no per-token highlighting).
+  // Fenced code has no Onyx token; use Atom One's flat base color (no per-token highlighting).
   const codeBaseColor = scheme === "dark" ? "#e2e6eb" : "#383a42";
+  const muted = variant === "muted";
+  const bodyColor = color(muted ? "--text-03" : "--text-05");
+  const paragraphMarginBottom = muted ? 4 : 8;
   return {
     paragraph: {
-      color: color("--text-05"),
+      color: bodyColor,
       fontFamily: BODY.fontFamily,
       fontSize: BODY.fontSize,
       lineHeight: BODY.lineHeight,
-      // marginTop 0: RN doesn't collapse margins, so 0 top + 8 bottom gives an even 8px rhythm.
+      // RN doesn't collapse margins: 0 top + a bottom gap gives an even rhythm.
       marginTop: 0,
-      marginBottom: 8,
+      marginBottom: paragraphMarginBottom,
     },
     h1: {
       color: color("--text-05"),
@@ -60,11 +69,11 @@ function buildMarkdownStyle(scheme: "light" | "dark"): MarkdownStyle {
       marginBottom: 10,
     },
     strong: { color: color("--text-05"), fontWeight: "bold" },
-    // No color: italics inherit their block color (paragraph/list text-05, blockquote text-04).
+    // No color: italics inherit block color (paragraph/list text-05, blockquote text-04).
     em: { fontStyle: "italic" },
-    link: { color: color("--action-link-05"), underline: true },
+    link: { color: color("--action-selection-05"), underline: true },
     list: {
-      color: color("--text-05"),
+      color: bodyColor,
       markerColor: color("--text-03"),
       fontFamily: BODY.fontFamily,
       fontSize: BODY.fontSize,
@@ -114,9 +123,14 @@ function buildMarkdownStyle(scheme: "light" | "dark"): MarkdownStyle {
 export function StreamingMarkdown({
   content,
   isStreaming,
+  onLinkPress,
+  variant = "default",
 }: StreamingMarkdownProps) {
   const scheme = useColorScheme() === "dark" ? "dark" : "light";
-  const markdownStyle = useMemo(() => buildMarkdownStyle(scheme), [scheme]);
+  const markdownStyle = useMemo(
+    () => buildMarkdownStyle(scheme, variant),
+    [scheme, variant],
+  );
   return (
     <StreamdownText
       markdown={content}
@@ -124,6 +138,7 @@ export function StreamingMarkdown({
       flavor="github"
       // no selection mid-stream — growing content fights an active selection
       selectable={!isStreaming}
+      onLinkPress={onLinkPress ? (event) => onLinkPress(event.url) : undefined}
     />
   );
 }

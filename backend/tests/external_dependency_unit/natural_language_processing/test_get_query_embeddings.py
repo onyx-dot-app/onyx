@@ -1,7 +1,6 @@
 """Tests that the cache is wired correctly into ``get_query_embeddings``."""
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 from sqlalchemy.orm import Session

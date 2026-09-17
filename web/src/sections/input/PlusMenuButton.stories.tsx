@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { Text } from "@opal/components";
 import { SvgPaperclip, SvgSparkle, SvgPlug } from "@opal/icons";
 import { SvgSlack, SvgGmail } from "@opal/logos";

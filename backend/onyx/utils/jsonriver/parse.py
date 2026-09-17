@@ -10,13 +10,9 @@ from __future__ import annotations
 
 import copy
 from enum import IntEnum
-from typing import cast
-from typing import Union
+from typing import Union, cast
 
-from .tokenize import _Input
-from .tokenize import json_token_type_to_string
-from .tokenize import JsonTokenType
-from .tokenize import Tokenizer
+from .tokenize import JsonTokenType, Tokenizer, _Input, json_token_type_to_string
 
 # Type definitions for JSON values
 JsonValue = Union[None, bool, float, str, list["JsonValue"], dict[str, "JsonValue"]]
@@ -148,11 +144,11 @@ class _Parser:
                             result[key] = new_items
                 elif cur_val != prev_val:
                     result[key] = cur_val
-            return result if result else None
+            return result or None
 
         if isinstance(current, str) and isinstance(prev, str):
             delta = current[len(prev) :]
-            return delta if delta else None
+            return delta or None
 
         if isinstance(current, list) and isinstance(prev, list):
             if current != prev:
@@ -163,7 +159,7 @@ class _Parser:
                     and current[len(prev) - 1] != prev[-1]
                 ):
                     return [current[len(prev) - 1]] + new_items
-                return new_items if new_items else None
+                return new_items or None
             return None
 
         if current != prev:

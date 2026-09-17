@@ -6,8 +6,10 @@ from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.models import ChatCompletionMessage
 from onyx.llm.prompt_cache.models import CacheMetadata
 from onyx.llm.prompt_cache.providers.base import PromptCacheProvider
-from onyx.llm.prompt_cache.utils import prepare_messages_with_cacheable_transform
-from onyx.llm.prompt_cache.utils import revalidate_message_from_original
+from onyx.llm.prompt_cache.utils import (
+    prepare_messages_with_cacheable_transform,
+    revalidate_message_from_original,
+)
 
 
 def _add_anthropic_cache_control(

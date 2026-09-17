@@ -1,12 +1,7 @@
-from sqlalchemy import and_
-from sqlalchemy import desc
-from sqlalchemy import func
-from sqlalchemy import select
-from sqlalchemy import update
+from sqlalchemy import and_, desc, func, select, update
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import SyncStatus
-from onyx.db.enums import SyncType
+from onyx.db.enums import SyncStatus, SyncType
 from onyx.db.models import SyncRecord
 from onyx.utils.logger import setup_logger
 

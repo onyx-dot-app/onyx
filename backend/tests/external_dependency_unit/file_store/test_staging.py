@@ -16,11 +16,9 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
 from onyx.connectors.interfaces import BaseConnector
-from onyx.db.file_record import delete_filerecord_by_file_id
-from onyx.db.file_record import get_filerecord_by_file_id
+from onyx.db.file_record import delete_filerecord_by_file_id, get_filerecord_by_file_id
 from onyx.file_store.file_store import get_default_file_store
-from onyx.file_store.staging import build_raw_file_callback
-from onyx.file_store.staging import stage_raw_file
+from onyx.file_store.staging import build_raw_file_callback, stage_raw_file
 
 
 @pytest.fixture(scope="function")

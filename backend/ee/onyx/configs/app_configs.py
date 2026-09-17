@@ -47,6 +47,33 @@ JIRA_PERMISSION_GROUP_SYNC_FREQUENCY = int(
 
 
 #####
+# Canvas
+#####
+# In seconds, default is 30 minutes
+CANVAS_PERMISSION_DOC_SYNC_FREQUENCY = int(
+    os.environ.get("CANVAS_PERMISSION_DOC_SYNC_FREQUENCY") or 30 * 60
+)
+# In seconds, default is 30 minutes
+CANVAS_PERMISSION_GROUP_SYNC_FREQUENCY = int(
+    os.environ.get("CANVAS_PERMISSION_GROUP_SYNC_FREQUENCY") or 30 * 60
+)
+
+
+#####
+# Box
+#####
+# Aligned with SharePoint (the closest analog: enterprise file storage with
+# folder hierarchy + collaborations): doc sync every 30 minutes, group sync
+# every 5 minutes.
+BOX_PERMISSION_DOC_SYNC_FREQUENCY = int(
+    os.environ.get("BOX_PERMISSION_DOC_SYNC_FREQUENCY") or 30 * 60
+)
+BOX_PERMISSION_GROUP_SYNC_FREQUENCY = int(
+    os.environ.get("BOX_PERMISSION_GROUP_SYNC_FREQUENCY") or 5 * 60
+)
+
+
+#####
 # Google Drive
 #####
 GOOGLE_DRIVE_PERMISSION_GROUP_SYNC_FREQUENCY = int(
@@ -83,6 +110,13 @@ NUM_PERMISSION_WORKERS = int(os.environ.get("NUM_PERMISSION_WORKERS") or 2)
 # In seconds, default is 5 minutes
 TEAMS_PERMISSION_DOC_SYNC_FREQUENCY = int(
     os.environ.get("TEAMS_PERMISSION_DOC_SYNC_FREQUENCY") or 5 * 60
+)
+
+#####
+# Outlook
+#####
+OUTLOOK_PERMISSION_DOC_SYNC_FREQUENCY = int(
+    os.environ.get("OUTLOOK_PERMISSION_DOC_SYNC_FREQUENCY") or 5 * 60
 )
 
 #####

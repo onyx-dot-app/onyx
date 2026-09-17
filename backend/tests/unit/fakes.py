@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from onyx.cache.interface import CacheBackend
-from onyx.cache.interface import CacheLock
+from onyx.cache.interface import CacheBackend, CacheLock
 
 
 class FakeLock(CacheLock):
@@ -23,6 +22,9 @@ class FakeLock(CacheLock):
     def release(self) -> None:
         self._owned = False
 
+    def extend(self, ttl_seconds: float) -> None:
+        pass
+
     def owned(self) -> bool:
         return self._owned
 
@@ -36,6 +38,10 @@ class FakeCache(CacheBackend):
     def get(self, key: str) -> bytes | None:
         return self.store.get(key)
 
+    def getdel(self, key: str) -> bytes | None:
+        self.expiries.pop(key, None)
+        return self.store.pop(key, None)
+
     def set(
         self,
         key: str,
@@ -45,6 +51,17 @@ class FakeCache(CacheBackend):
         self.store[key] = value if isinstance(value, bytes) else str(value).encode()
         if ex is not None:
             self.expiries[key] = ex
+
+    def set_if_absent(
+        self,
+        key: str,
+        value: str | bytes | int | float,
+        ex: int | None = None,
+    ) -> bool:
+        if key in self.store:
+            return False
+        self.set(key, value, ex=ex)
+        return True
 
     def delete(self, key: str) -> None:
         self.store.pop(key, None)

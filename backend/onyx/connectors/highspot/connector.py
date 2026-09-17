@@ -1,36 +1,48 @@
 import os
 from datetime import datetime
 from io import BytesIO
-from typing import Any
-from typing import Dict
-from typing import List
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.highspot.client import HighspotClient
-from onyx.connectors.highspot.client import HighspotClientError
+from onyx.connectors.highspot.client import HighspotClient, HighspotClientError
 from onyx.connectors.highspot.utils import scrape_url_content
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnectorWithPermSync
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import SlimDocument
-from onyx.connectors.models import TextSection
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    GenerateSlimDocumentOutput,
+    LoadConnector,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+    SlimConnectorWithPermSync,
+)
+from onyx.connectors.models import (
+    ConnectorMissingCredentialError,
+    Document,
+    HierarchyNode,
+    SlimDocument,
+    TextSection,
+)
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 _SLIM_BATCH_SIZE = 1000
+
+
+def _parse_highspot_timestamp(value: Any) -> datetime | None:
+    """Parse a Highspot ISO timestamp into a tz-aware UTC datetime, or None."""
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except (ValueError, TypeError):
+        return None
+    return datetime_to_utc(parsed)
 
 
 class HighspotSpot(BaseModel):
@@ -187,7 +199,7 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync)
                                         # Convert to datetime for comparison
                                         try:
                                             updated_time = datetime.fromisoformat(
-                                                updated_at.replace("Z", "+00:00")
+                                                updated_at
                                             )
                                             if (
                                                 start
@@ -239,7 +251,13 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync)
                                                 item_details.get("can_download", False)
                                             ),
                                         },
-                                        doc_updated_at=item_details.get("date_updated"),
+                                        doc_updated_at=_parse_highspot_timestamp(
+                                            item_details.get("date_updated")
+                                        ),
+                                        # NOTE: doc_created_at population not yet verified against live data
+                                        doc_created_at=_parse_highspot_timestamp(
+                                            item_details.get("date_added")
+                                        ),
                                     )
                                 )
 
@@ -319,7 +337,7 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync)
                 if not url:
                     return default_content
                 content = scrape_url_content(url, True)
-                return content if content else default_content
+                return content or default_content
 
             elif (
                 is_valid_format
@@ -332,7 +350,7 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync)
                     text_content = extract_file_text(
                         BytesIO(content_response), content_name, False
                     )
-                    return text_content if text_content else default_content
+                    return text_content or default_content
                 return default_content
 
             else:
@@ -423,8 +441,32 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync)
                                 logger.warning("Item without ID found, skipping")
                                 continue
 
+                            # Prefer the list payload; fall back to a per-item
+                            # detail fetch when the list omits the creation time.
+                            date_added = item.get("date_added")
+                            if date_added is None:
+                                try:
+                                    item_details = self.client.get_item(item_id)
+                                    date_added = (
+                                        item_details.get("date_added")
+                                        if item_details
+                                        else None
+                                    )
+                                except HighspotClientError as e:
+                                    logger.warning(
+                                        "Could not fetch created_at for item %s: %s",
+                                        item_id,
+                                        str(e),
+                                    )
+
                             slim_doc_batch.append(
-                                SlimDocument(id=f"HIGHSPOT_{item_id}")
+                                SlimDocument(
+                                    id=f"HIGHSPOT_{item_id}",
+                                    # NOTE: doc_created_at population not yet verified against live data
+                                    doc_created_at=_parse_highspot_timestamp(
+                                        date_added
+                                    ),
+                                )
                             )
 
                             if len(slim_doc_batch) >= _SLIM_BATCH_SIZE:

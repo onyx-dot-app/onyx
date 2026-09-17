@@ -1,18 +1,33 @@
 ---
 name: gmail
 description: Read, search, send, and draft email from the connected user's Gmail via a light Gmail API wrapper.
+cloud-description: Send email and create drafts from the connected user's Gmail via a light Gmail API wrapper.
 ---
 
 # Gmail
 
 Call the Gmail API as the connected user via the bundled helper.
 
+{{#IF_CLOUD_SCOPE}}
+This deployment's Gmail grant covers sending (`gmail.send`) and creating
+drafts (`gmail.drafts.create`) — nothing else. The helper's other commands
+fail even though `gmail_api.py -h` lists them. Do not offer the unavailable
+actions to the user.
+
+{{/IF_CLOUD_SCOPE}}
 {{ACTION_AVAILABILITY_SECTION}}
 
 ## Usage
 
     python .opencode/skills/gmail/gmail_api.py <command> [args]
 
+{{#IF_CLOUD_SCOPE}}
+Only `send` and `draft-create` are available. Prefer `draft-create` when an
+email needs the user's review. Use `--raw` to skip empty-field pruning;
+`python gmail_api.py <command> -h` shows a command's flags.
+
+{{/IF_CLOUD_SCOPE}}
+{{^IF_CLOUD_SCOPE}}
 Read commands auto-paginate and prune empty fields. The writes are `send`,
 `modify`, `trash`, `draft-create`, `draft-update`, `draft-delete`, and
 `draft-send`; there is no permanent message delete. `me` is always the
@@ -47,6 +62,7 @@ A whole conversation, each message with its decoded plain-text body.
 python gmail_api.py thread <thread_id>
 ```
 
+{{/IF_CLOUD_SCOPE}}
 ### Send a message (write)
 
 ```
@@ -54,6 +70,17 @@ python gmail_api.py send to@x.com "Subject" "Body text" \
     [--cc a@x.com,b@x.com] [--bcc c@x.com]
 ```
 
+### Create a draft (write, not sent)
+
+Saves an email without sending it — the user can review and send it from
+Gmail.
+
+```
+python gmail_api.py draft-create to@x.com "Subject" "Body text" \
+    [--cc a@x.com,b@x.com] [--bcc c@x.com]
+```
+
+{{^IF_CLOUD_SCOPE}}
 ### List labels
 
 ```
@@ -90,14 +117,11 @@ python gmail_api.py drafts [--limit N]
 python gmail_api.py draft <draft_id>
 ```
 
-### Create / update a draft (write, not sent)
+### Update a draft (write, not sent)
 
-Saves an email without sending it — the user can review and send it from Gmail.
 `draft-update` replaces the whole draft.
 
 ```
-python gmail_api.py draft-create to@x.com "Subject" "Body text" \
-    [--cc a@x.com,b@x.com] [--bcc c@x.com]
 python gmail_api.py draft-update <draft_id> to@x.com "Subject" "Body text" \
     [--cc a@x.com,b@x.com] [--bcc c@x.com]
 ```
@@ -122,12 +146,17 @@ message's payload parts (fetch the message first).
 python gmail_api.py attachment <message_id> <attachment_id> --out path/to/file
 ```
 
+{{/IF_CLOUD_SCOPE}}
 ## Output
 
-JSON on stdout. List commands return `{"ok": true, "items": [...], "count": N,
+JSON on stdout.
+{{^IF_CLOUD_SCOPE}}
+List commands return `{"ok": true, "items": [...], "count": N,
 "truncated": bool}` (`truncated` means more results existed past `--limit`).
+{{/IF_CLOUD_SCOPE}}
 Transport errors print to stderr and exit non-zero; Google's error JSON (with
 `code` and `message`) is included.
+{{^IF_CLOUD_SCOPE}}
 
 ## Notes
 
@@ -135,3 +164,4 @@ Transport errors print to stderr and exit non-zero; Google's error JSON (with
   first `text/plain` part is used.
 - Common system label IDs: `INBOX`, `UNREAD`, `STARRED`, `SENT`, `TRASH`,
   `SPAM`, `IMPORTANT`.
+{{/IF_CLOUD_SCOPE}}

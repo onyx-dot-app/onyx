@@ -1,7 +1,6 @@
 from pydantic import BaseModel
 
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import ExternalAppType
+from onyx.db.enums import EndpointPolicy, ExternalAppType
 
 
 class ActionPolicyView(BaseModel):
@@ -43,7 +42,6 @@ class BuiltInExternalAppDescriptor(BaseModel):
 
     app_type: ExternalAppType
     name: str
-    description: str
     upstream_url_patterns: list[str]
     auth_template: dict[str, str]
     required_org_credential_fields: list[OrgCredentialFieldDescriptor]

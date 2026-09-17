@@ -15,15 +15,24 @@ export const GET = async (request: NextRequest) => {
     redirect: "manual",
     headers: cookieHeader ? { cookie: cookieHeader } : undefined,
   });
-  const setCookieHeader = response.headers.get("set-cookie");
-
   if (response.status === 401) {
     return NextResponse.redirect(
       new URL("/auth/create-account", getDomain(request))
     );
   }
 
-  if (!setCookieHeader) {
+  // A completed login arrives as a 302, so 4xx/5xx is the failure signal here.
+  // Error responses carry the PKCE cleanup cookie, so forward it too.
+  if (response.status >= 400) {
+    const errorRedirect = await authErrorRedirect(request, response);
+    for (const cookie of response.headers.getSetCookie()) {
+      errorRedirect.headers.append("set-cookie", cookie);
+    }
+    return errorRedirect;
+  }
+
+  const setCookieHeaders = response.headers.getSetCookie();
+  if (setCookieHeaders.length === 0) {
     return authErrorRedirect(request, response);
   }
 
@@ -34,6 +43,10 @@ export const GET = async (request: NextRequest) => {
     new URL(redirectUrl, getDomain(request))
   );
 
-  redirectResponse.headers.set("set-cookie", setCookieHeader);
+  // Re-emit each Set-Cookie separately. Comma-joining would let one cookie's
+  // attributes (e.g. the PKCE deletion's Max-Age=0) bleed into the session's.
+  for (const cookie of setCookieHeaders) {
+    redirectResponse.headers.append("set-cookie", cookie);
+  }
   return redirectResponse;
 };

@@ -14,15 +14,9 @@ We haven't explored all of the cloud APIs' pagination strategies. @raunakab take
 
 import json
 import time
-from collections.abc import Callable
-from collections.abc import Generator
-from collections.abc import Iterator
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
-from typing import Any
-from typing import cast
-from typing import TypeVar
+from collections.abc import Callable, Generator, Iterator
+from datetime import datetime, timedelta, timezone
+from typing import Any, TypeVar, cast
 from urllib.parse import quote
 
 import bs4
@@ -30,20 +24,26 @@ import requests
 from atlassian import Confluence
 from requests import HTTPError
 
-from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE
-from onyx.configs.app_configs import OAUTH_CONFLUENCE_CLOUD_CLIENT_ID
-from onyx.configs.app_configs import OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET
+from onyx.configs.app_configs import (
+    CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE,
+    OAUTH_CONFLUENCE_CLOUD_CLIENT_ID,
+    OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET,
+)
 from onyx.connectors.confluence.models import ConfluenceUser
 from onyx.connectors.confluence.user_profile_override import (
     process_confluence_user_profiles_override,
 )
-from onyx.connectors.confluence.utils import _handle_http_error
-from onyx.connectors.confluence.utils import confluence_refresh_tokens
-from onyx.connectors.confluence.utils import get_start_param_from_url
-from onyx.connectors.confluence.utils import update_param_in_path
+from onyx.connectors.confluence.utils import (
+    _handle_http_error,
+    confluence_refresh_tokens,
+    get_start_param_from_url,
+    update_param_in_path,
+)
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import scoped_url
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import InsufficientPermissionsError
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    InsufficientPermissionsError,
+)
 from onyx.connectors.interfaces import CredentialsProviderInterface
 from onyx.file_processing.html_utils import format_document_soup
 from onyx.redis.redis_pool import get_redis_client
@@ -534,7 +534,9 @@ class OnyxConfluence:
                                 self._confluence = self._initialize_connection_helper(
                                     credentials, **self._kwargs
                                 )
-                            attr = getattr(self._confluence, name, None)
+                            attr = getattr(  # ods: ignore[getattr]
+                                self._confluence, name, None
+                            )
                             if attr is None:
                                 # The underlying Confluence client doesn't have this attribute
                                 raise AttributeError(
@@ -543,7 +545,9 @@ class OnyxConfluence:
 
                             return attr(*args, **kwargs)
                     else:
-                        attr = getattr(self._confluence, name, None)
+                        attr = getattr(  # ods: ignore[getattr]
+                            self._confluence, name, None
+                        )
                         if attr is None:
                             # The underlying Confluence client doesn't have this attribute
                             raise AttributeError(
@@ -576,7 +580,7 @@ class OnyxConfluence:
 
     def __getattr__(self, name: str) -> Any:
         """Dynamically intercept attribute/method access."""
-        attr = getattr(self._confluence, name, None)
+        attr = getattr(self._confluence, name, None)  # ods: ignore[getattr]
         if attr is None:
             # The underlying Confluence client doesn't have this attribute
             raise AttributeError(

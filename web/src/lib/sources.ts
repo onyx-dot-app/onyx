@@ -3,6 +3,7 @@ import {
   S3Icon,
   GoogleStorageIcon,
   BraintrustIcon,
+  BoxIcon,
 } from "@/components/icons/icons";
 import { ValidSources } from "@/lib/types";
 import { SourceCategory, SourceMetadata } from "@/lib/search/interfaces";
@@ -16,6 +17,7 @@ import {
   SvgAxero,
   SvgBitbucket,
   SvgBookstack,
+  SvgCanvas,
   SvgClickup,
   SvgCoda,
   SvgConfluence,
@@ -40,15 +42,17 @@ import {
   SvgJira,
   SvgLinear,
   SvgLoopio,
+  SvgLumapps,
   SvgMediawiki,
   SvgNotion,
   SvgOracle,
   SvgOutline,
+  SvgOutlook,
   SvgProductboard,
   SvgSalesforce,
   SvgSharepoint,
-  SvgSlack,
   SvgSlab,
+  SvgSlack,
   SvgTeams,
   SvgTestrail,
   SvgWikipedia,
@@ -103,6 +107,11 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     docs: `${DOCS_ADMINS_PATH}/connectors/official/confluence`,
     oauthSupported: true,
     isPopular: true,
+  },
+  lumapps: {
+    icon: SvgLumapps,
+    displayName: "LumApps",
+    category: SourceCategory.Wiki,
   },
   sharepoint: {
     icon: SvgSharepoint,
@@ -189,6 +198,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.Wiki,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/wikipedia`,
   },
+  canvas: {
+    icon: SvgCanvas,
+    displayName: "Canvas",
+    category: SourceCategory.Wiki,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/canvas`,
+  },
 
   // Cloud Storage
   google_drive: {
@@ -198,6 +213,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     docs: `${DOCS_ADMINS_PATH}/connectors/official/google_drive/overview`,
     oauthSupported: true,
     isPopular: true,
+  },
+  box: {
+    icon: BoxIcon,
+    displayName: "Box",
+    category: SourceCategory.Storage,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/box`,
   },
   dropbox: {
     icon: SvgDropbox,
@@ -301,6 +322,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Teams",
     category: SourceCategory.Messaging,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/teams`,
+  },
+  outlook: {
+    icon: SvgOutlook,
+    displayName: "Outlook",
+    category: SourceCategory.Messaging,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/outlook`,
   },
   gmail: {
     icon: SvgGmail,
@@ -513,18 +540,28 @@ export function getSourceDisplayName(sourceType: ValidSources): string | null {
   return getSourceMetadata(sourceType).displayName;
 }
 
-export function getSourceMetadataForSources(sources: ValidSources[]) {
-  return sources.map((source) => getSourceMetadata(source));
-}
+/** The configured sources, one entry per source type. */
+export function getConfiguredSources(
+  availableSources: ValidSources[]
+): Array<SourceMetadata & { originalName: string; uniqueKey: string }> {
+  const seen = new Set<string>();
+  const result: Array<
+    SourceMetadata & { originalName: string; uniqueKey: string }
+  > = [];
 
-export function getSourcesForPersona(persona: Agent): ValidSources[] {
-  const personaSources: ValidSources[] = [];
-  persona.document_sets.forEach((documentSet) => {
-    documentSet.cc_pair_summaries.forEach((ccPair) => {
-      if (!personaSources.includes(ccPair.source)) {
-        personaSources.push(ccPair.source);
-      }
+  for (const sourceName of availableSources) {
+    const cleanName = sourceName.replace("federated_", "") as ValidSources;
+    if (seen.has(cleanName)) continue;
+    seen.add(cleanName);
+
+    const metadata = getSourceMetadata(cleanName);
+    if (metadata.internalName === ValidSources.NotApplicable) continue;
+
+    result.push({
+      ...metadata,
+      originalName: sourceName,
+      uniqueKey: cleanName,
     });
-  });
-  return personaSources;
+  }
+  return result;
 }

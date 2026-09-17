@@ -18,38 +18,44 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi_users.password import PasswordHelper
-from sqlalchemy import delete
-from sqlalchemy import update
+from sqlalchemy import delete, update
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
-from onyx.db.enums import AccessType
-from onyx.db.enums import AccountType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import ExternalAppType
-from onyx.db.enums import SandboxStatus
-from onyx.db.enums import SkillSharePermission
-from onyx.db.models import ActionApproval
-from onyx.db.models import Connector
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Credential
-from onyx.db.models import ExternalApp
-from onyx.db.models import ExternalAppPolicy
-from onyx.db.models import ExternalAppUserCredential
-from onyx.db.models import Sandbox
-from onyx.db.models import Skill
-from onyx.db.models import Skill__User
-from onyx.db.models import Skill__UserGroup
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserGroup
-from onyx.db.models import UserGroup__ConnectorCredentialPair
-from onyx.db.models import UserRole
+from onyx.db.enums import (
+    AccessType,
+    AccountType,
+    ConnectorCredentialPairStatus,
+    EndpointPolicy,
+    ExternalAppType,
+    GatedAppKind,
+    SandboxStatus,
+    SkillSharePermission,
+)
+from onyx.db.gated_app import get_or_create_gated_app_id
+from onyx.db.models import (
+    ActionApproval,
+    ActionReceipt,
+    Connector,
+    ConnectorCredentialPair,
+    Credential,
+    ExternalApp,
+    ExternalAppUserCredential,
+    GatedActionPolicy,
+    Sandbox,
+    Skill,
+    Skill__User,
+    Skill__UserGroup,
+    User,
+    User__UserGroup,
+    UserGroup,
+    UserGroup__ConnectorCredentialPair,
+)
+from onyx.db.permissions import recompute_user_permissions__no_commit
+from onyx.db.users import assign_user_to_default_groups__no_commit
 
 
 def force_approval_created_at(
@@ -66,19 +72,37 @@ def force_approval_created_at(
     db_session.commit()
 
 
+def force_receipt_created_at(
+    db_session: Session,
+    receipt_id: UUID,
+    when: datetime,
+) -> None:
+    """Force an ``ActionReceipt`` row's ``created_at`` timestamp."""
+    db_session.execute(
+        update(ActionReceipt)
+        .where(ActionReceipt.id == receipt_id)
+        .values(created_at=when)
+    )
+    db_session.commit()
+
+
 def make_user(
     db_session: Session,
     *,
-    role: UserRole = UserRole.EXT_PERM_USER,
+    standard_account: bool = False,
+    is_admin: bool = False,
+    is_group_manager: bool = False,
     email_prefix: str = "craft_helper",
 ) -> User:
-    """Create a single ``User`` row with random email + UUID."""
+    """Create a ``User`` row whose authority is derived the way production derives it.
+
+    Permissions come from the seeded default groups rather than a list written
+    here, because a list written here drifts the first time a group's grants
+    change. The no-flag default is a group-less placeholder, matching the users
+    that external permission sync creates.
+    """
     helper = PasswordHelper()
-    account_type = (
-        AccountType.EXT_PERM_USER
-        if role == UserRole.EXT_PERM_USER
-        else AccountType.STANDARD
-    )
+    joins_a_group = standard_account or is_admin or is_group_manager
     user = User(
         id=uuid4(),
         email=f"{email_prefix}_{uuid4().hex[:8]}@example.com",
@@ -86,12 +110,37 @@ def make_user(
         is_active=True,
         is_superuser=False,
         is_verified=True,
-        role=role,
-        account_type=account_type,
+        account_type=(
+            AccountType.STANDARD if joins_a_group else AccountType.EXT_PERM_USER
+        ),
     )
     db_session.add(user)
     db_session.flush()
+
+    if joins_a_group:
+        assign_user_to_default_groups__no_commit(db_session, user, is_admin=is_admin)
+    if is_group_manager:
+        _grant_manager_edge(db_session, user)
+
+    # The recompute updates the row in SQL, so re-read it or the caller gets stale permissions.
+    db_session.refresh(user)
     return user
+
+
+def _grant_manager_edge(db_session: Session, user: User) -> None:
+    """Give *user* a real manager edge so ``is_group_manager`` is derived, not asserted.
+
+    The group they manage is deliberately not the group a test shares resources
+    with. The route gate only reads the cached flag, while scope checks look for
+    a manager edge on that specific group, so tests that care about scope add
+    that edge themselves.
+    """
+    group = make_group(db_session, name=f"craft-managed-{uuid4().hex[:8]}")
+    db_session.add(
+        User__UserGroup(user_id=user.id, user_group_id=group.id, is_manager=True)
+    )
+    db_session.flush()
+    recompute_user_permissions__no_commit(user.id, db_session)
 
 
 def make_group(db_session: Session, name: str | None = None) -> UserGroup:
@@ -127,10 +176,9 @@ def make_sandbox(
 def make_skill(
     db_session: Session,
     *,
-    slug: str | None = None,
+    name: str | None = None,
     is_public: bool = False,
     public_permission: SkillSharePermission = SkillSharePermission.VIEWER,
-    enabled: bool = True,
     author_user_id: UUID | None = None,
 ) -> Skill:
     """Create a single custom ``Skill`` row.
@@ -141,13 +189,11 @@ def make_skill(
     """
     skill = Skill(
         id=uuid4(),
-        slug=slug or f"helper-skill-{uuid4().hex[:8]}",
-        name=slug or "helper-skill",
+        name=name or f"helper-skill-{uuid4().hex[:8]}",
         description="d",
         bundle_file_id=f"bundle-{uuid4().hex[:8]}",
         bundle_sha256="0" * 64,
         public_permission=public_permission if is_public else None,
-        enabled=enabled,
         author_user_id=author_user_id,
     )
     db_session.add(skill)
@@ -159,27 +205,23 @@ def make_built_in_skill_row(
     db_session: Session,
     *,
     built_in_skill_id: str,
-    slug: str | None = None,
     name: str | None = None,
     description: str = "test built-in",
     is_public: bool = True,
-    enabled: bool = True,
 ) -> Skill:
     """Insert a built-in-style ``Skill`` row pointing at a
-    ``built_in_skill_id``. Slug defaults to ``built_in_skill_id`` (the
+    ``built_in_skill_id``. Name defaults to ``built_in_skill_id`` (the
     default seeder convention), but can be overridden to test the
     multi-row case where several skills share the same built-in id.
     Bundle fields stay NULL (required by the XOR check constraint)."""
     skill = Skill(
         id=uuid4(),
-        slug=slug or built_in_skill_id,
         name=name or built_in_skill_id,
         description=description,
         built_in_skill_id=built_in_skill_id,
         bundle_file_id=None,
         bundle_sha256=None,
         public_permission=SkillSharePermission.VIEWER if is_public else None,
-        enabled=enabled,
     )
     db_session.add(skill)
     db_session.flush()
@@ -190,29 +232,25 @@ def reset_built_in_skill_row(
     db_session: Session,
     *,
     built_in_skill_id: str,
-    slug: str | None = None,
     name: str | None = None,
     description: str = "test built-in",
     is_public: bool = True,
-    enabled: bool = True,
 ) -> Skill:
     """Idempotently (re)create a built-in row for ``built_in_skill_id``.
 
-    Deletes any existing row with the same slug first, so tests stay
+    Deletes any existing row with the same name first, so tests stay
     robust whether or not the migration-seeded canonical row is present
     (it always is on a migrated DB, but another test's teardown may have
     removed it). Returns the freshly inserted row.
     """
-    target_slug = slug or built_in_skill_id
-    db_session.execute(delete(Skill).where(Skill.slug == target_slug))
+    target_name = name or built_in_skill_id
+    db_session.execute(delete(Skill).where(Skill.name == target_name))
     return make_built_in_skill_row(
         db_session,
         built_in_skill_id=built_in_skill_id,
-        slug=slug,
         name=name,
         description=description,
         is_public=is_public,
-        enabled=enabled,
     )
 
 
@@ -225,27 +263,34 @@ def make_external_app(
     app_type: ExternalAppType = ExternalAppType.CUSTOM,
     upstream_url_patterns: list[str] | None = None,
     action_policies: dict[str, EndpointPolicy] | None = None,
+    enabled: bool = True,
 ) -> ExternalApp:
     """Insert an ``ExternalApp`` row backing ``skill``, plus any per-action
     policy overrides in ``action_policies`` (``{action_id: policy}``)."""
     app = ExternalApp(
-        skill_id=skill.id,
+        name=skill.name,
         app_type=app_type,
+        enabled=enabled,
         upstream_url_patterns=upstream_url_patterns or [],
         auth_template=auth_template,
         organization_credentials=organization_credentials or {},
+        associated_skills=[skill],
     )
     db_session.add(app)
     db_session.flush()
-    for action_id, policy in (action_policies or {}).items():
-        db_session.add(
-            ExternalAppPolicy(
-                external_app_id=app.id,
-                action_id=action_id,
-                policy=policy,
-            )
+    if action_policies:
+        gated_app_id = get_or_create_gated_app_id(
+            db_session, GatedAppKind.EXTERNAL_APP, app.id
         )
-    db_session.flush()
+        for action_id, policy in action_policies.items():
+            db_session.add(
+                GatedActionPolicy(
+                    gated_app_id=gated_app_id,
+                    action_id=action_id,
+                    policy=policy,
+                )
+            )
+        db_session.flush()
     return app
 
 
@@ -299,16 +344,6 @@ def share_skill_with_group(
     db_session.add(share)
     db_session.flush()
     return share
-
-
-def grant_skill_to_group(
-    db_session: Session,
-    skill: Skill,
-    group: UserGroup,
-    permission: SkillSharePermission = SkillSharePermission.VIEWER,
-) -> Skill__UserGroup:
-    """Backward-compatible alias for group skill shares."""
-    return share_skill_with_group(db_session, skill, group, permission)
 
 
 def make_cc_pair(

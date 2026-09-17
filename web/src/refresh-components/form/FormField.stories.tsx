@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { FormField } from "./FormField";
 import { InputTypeIn } from "@opal/components";
 

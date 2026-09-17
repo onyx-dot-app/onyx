@@ -1,0 +1,56 @@
+name: "Docker Hardened Image bases"
+description: >-
+  Logs in to dhi.io and exports the build args that point web/Dockerfile and
+  backend/Dockerfile.model_server at the pinned Docker Hardened Images (DHI).
+  Both Dockerfiles default to public Docker Hub images, so without DHI credentials
+  (fork pull requests) this action exports nothing and the defaults apply.
+inputs:
+  docker-username:
+    description: "Docker Hub username (the account must have DHI catalog access)"
+    required: false
+    default: ""
+  docker-token:
+    description: "Docker Hub token"
+    required: false
+    default: ""
+runs:
+  using: "composite"
+  steps:
+    - name: Check for DHI credentials
+      id: creds
+      shell: bash
+      env:
+        DOCKER_USERNAME: ${{ inputs.docker-username }}
+        DOCKER_TOKEN: ${{ inputs.docker-token }}
+      run: |
+        if [ -n "${DOCKER_USERNAME}" ] && [ -n "${DOCKER_TOKEN}" ]; then
+          echo "available=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "available=false" >> "$GITHUB_OUTPUT"
+          echo "No DHI credentials; the images build on their public base defaults."
+        fi
+
+    - name: Login to Docker Hardened Images (dhi.io)
+      if: steps.creds.outputs.available == 'true'
+      uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
+      with:
+        registry: dhi.io
+        username: ${{ inputs.docker-username }}
+        password: ${{ inputs.docker-token }}
+
+    # Single source of truth for the DHI digests. Refresh one with:
+    # docker buildx imagetools inspect <image reference>
+    - name: Export DHI build args
+      if: steps.creds.outputs.available == 'true'
+      shell: bash
+      run: |
+        {
+          echo "DHI_NODE_BUILD_ARGS<<EOF"
+          echo "NODE_BUILDER_IMAGE=dhi.io/node:24-debian13-dev@sha256:f0e1923112d1d0e9346cf0ec78cfd3cd280c1b5796661f86b9c39797bd219563"
+          echo "NODE_RUNTIME_IMAGE=dhi.io/node:24-debian13@sha256:499a967b45c046a93519d2fcbd7e0e165f92ccf25cdee9893cb51980957e2d7c"
+          echo "EOF"
+          echo "DHI_PYTHON_BUILD_ARGS<<EOF"
+          echo "PYTHON_BUILDER_IMAGE=dhi.io/python:3.13-debian13-dev@sha256:901a66c250f72f33997f97ac7d2ebfdf5303b1e003896d4cdfcf1effea87b888"
+          echo "PYTHON_RUNTIME_IMAGE=dhi.io/python:3.13-debian13@sha256:a74d45422d8a9a84920f95ea9650f2b7e7372f3e89c51b0b6f9a3fa697a2d112"
+          echo "EOF"
+        } >> "$GITHUB_ENV"

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import {
   BaseFilters,
   MinimalOnyxDocument,
@@ -9,12 +10,12 @@ import {
 import SearchCard from "@/ee/sections/SearchCard";
 import { Divider, Pagination } from "@opal/components";
 import { EmptyMessageCard } from "@opal/components";
-import { IllustrationContent } from "@opal/layouts";
+import { IllustrationContent, toast } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { getSourceMetadata } from "@/lib/sources";
 import { Tag, ValidSources } from "@/lib/types";
 import { getTimeFilterDate, TimeFilter } from "@opal/time";
-import useTags from "@/hooks/useTags";
+import { useTags } from "@/lib/searchFilters/hooks";
 import { SourceIcon } from "@/components/SourceIcon";
 import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
@@ -26,7 +27,6 @@ import useFilter from "@/hooks/useFilter";
 import { LineItemButton } from "@opal/components";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { cn } from "@opal/utils";
-import { toast } from "@/hooks/useToast";
 
 // ============================================================================
 // Types
@@ -43,14 +43,16 @@ export interface SearchResultsProps {
 
 const RESULTS_PER_PAGE = 20;
 
-const TIME_FILTER_OPTIONS: { value: TimeFilter; label: string }[] = [
-  { value: "day", label: "Past 24 hours" },
-  { value: "week", label: "Past week" },
-  { value: "month", label: "Past month" },
-  { value: "year", label: "Past year" },
-];
-
 export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
+  const t = useTranslations("admin.search");
+
+  const timeFilterOptions: { value: TimeFilter; label: string }[] = [
+    { value: "day", label: t("timeFilter.day.label") },
+    { value: "week", label: t("timeFilter.week.label") },
+    { value: "month", label: t("timeFilter.month.label") },
+    { value: "year", label: t("timeFilter.year.label") },
+  ];
+
   // Available tags from backend
   const { tags: availableTags } = useTags();
   const {
@@ -99,7 +101,9 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
     const tags = overrides.tags !== undefined ? overrides.tags : selectedTags;
     const cutoff = time ? getTimeFilterDate(time) : null;
     return {
-      time_cutoff: cutoff?.toISOString() ?? null,
+      updated_at_range: cutoff
+        ? { start: cutoff.toISOString(), end: null }
+        : null,
       tags:
         tags.length > 0
           ? tags.map((t) => ({ tag_key: t.tag_key, tag_value: t.tag_value }))
@@ -114,7 +118,10 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
   }, [results]);
 
   // Create a set for fast lookup of LLM-selected docs
-  const llmSelectedSet = new Set(llmSelectedDocIds ?? []);
+  const llmSelectedSet = useMemo(
+    () => new Set(llmSelectedDocIds ?? []),
+    [llmSelectedDocIds]
+  );
 
   // Filter and sort results
   const filteredAndSortedResults = useMemo(() => {
@@ -222,13 +229,13 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
                     onRefineSearch(buildFilters({ time: null }));
                   }}
                 >
-                  {TIME_FILTER_OPTIONS.find((o) => o.value === timeFilter)
-                    ?.label ?? "All Time"}
+                  {timeFilterOptions.find((o) => o.value === timeFilter)
+                    ?.label ?? t("timeFilter.all.label")}
                 </FilterButton>
               </Popover.Trigger>
               <Popover.Content align="start" width="md">
                 <PopoverMenu>
-                  {TIME_FILTER_OPTIONS.map((opt) => (
+                  {timeFilterOptions.map((opt) => (
                     <LineItemButton
                       key={opt.value}
                       onClick={() => {
@@ -259,17 +266,17 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
                   }}
                 >
                   {selectedTags.length > 0
-                    ? `${selectedTags.length} Tag${
-                        selectedTags.length > 1 ? "s" : ""
-                      }`
-                    : "Tags"}
+                    ? t("tagFilter.count.label", {
+                        count: selectedTags.length,
+                      })
+                    : t("tagFilter.empty.label")}
                 </FilterButton>
               </Popover.Trigger>
               <Popover.Content align="start" width="lg">
                 <PopoverMenu>
                   <InputTypeIn
                     searchIcon
-                    placeholder="Filter tags..."
+                    placeholder={t("tagFilter.search.placeholder")}
                     value={tagQuery}
                     onChange={(e) => setTagQuery(e.target.value)}
                     clearButton
@@ -308,18 +315,18 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
             </Popover>
           </div>
 
-          <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+          <Divider paddingParallel={0} paddingPerpendicular={0} />
         </div>
 
         {!showEmpty && (
           <div className="flex-1 flex flex-col justify-end gap-3">
             <Section alignItems="start">
               <Text text03 mainUiMuted>
-                {results.length} Results
+                {t("results.count.label", { count: results.length })}
               </Text>
             </Section>
 
-            <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+            <Divider paddingParallel={0} paddingPerpendicular={0} />
           </div>
         )}
       </div>
@@ -335,7 +342,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
           {error ? (
             <EmptyMessageCard
               sizePreset="main-ui"
-              title="Search failed"
+              title={t("results.failed.title")}
               description={error}
             />
           ) : paginatedResults.length > 0 ? (
@@ -356,15 +363,15 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
           ) : (
             <IllustrationContent
               illustration={SvgNoResult}
-              title="No results found"
-              description="Check your connectors/filters or try a different search term."
+              title={t("results.empty.title")}
+              description={t("results.empty.description")}
             />
           )}
         </div>
 
         {!showEmpty && (
           <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-4 px-1">
-            <Section gap={0.25} height="fit">
+            <Section gap={1} height="fit">
               {sourcesWithMeta.map(({ source, meta, count }) => (
                 <LineItemButton
                   key={source}

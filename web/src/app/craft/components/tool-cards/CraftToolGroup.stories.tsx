@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import CraftToolGroup from "@/app/craft/components/tool-cards/CraftToolGroup";
 import type { ToolCallState } from "@/app/craft/types/displayTypes";
 

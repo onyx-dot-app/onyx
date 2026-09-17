@@ -197,53 +197,61 @@ slide.addImage({ path: "image.png", x: centerX, y: 1.2, w: calcWidth, h: maxHeig
 
 ## Icons
 
-Use react-icons to generate SVG icons, then rasterize to PNG for universal compatibility.
+Render icons with the bundled script — all dependencies (lucide-static, @tabler/icons, sharp) are pre-installed in the sandbox image.
 
-### Setup
+### Render an Icon PNG
 
-```javascript
-const React = require("react");
-const ReactDOMServer = require("react-dom/server");
-const sharp = require("sharp");
-const { FaCheckCircle, FaChartLine } = require("react-icons/fa");
-
-function renderIconSvg(IconComponent, color = "#000000", size = 256) {
-  return ReactDOMServer.renderToStaticMarkup(
-    React.createElement(IconComponent, { color, size: String(size) })
-  );
-}
-
-async function iconToBase64Png(IconComponent, color, size = 256) {
-  const svg = renderIconSvg(IconComponent, color, size);
-  const pngBuffer = await sharp(Buffer.from(svg)).png().toBuffer();
-  return "image/png;base64," + pngBuffer.toString("base64");
-}
+```bash
+node .opencode/skills/pptx/scripts/icon.js circle-check --color FFFFFF --size 512 -o outputs/icons/check.png
 ```
 
-### Add Icon to Slide
+- `<icon-name>`: kebab-case icon file name (e.g. `circle-check`, `trending-up`, `shield-check`)
+- `--color`: hex color, `#` optional (default black). pptxgenjs option colors must still omit `#`.
+- `--size`: rasterization resolution in px (default 512 — crisp at any slide size; display size is set by `w`/`h` in inches)
+- `-o`: output path (default `outputs/icons/<icon-name>.png`)
+- `--set lucide|tabler`: restrict to one icon set
 
-```javascript
-const iconData = await iconToBase64Png(FaCheckCircle, "#4472C4", 256);
+Render each distinct (icon, color) pair **once** into `outputs/icons/`, then reuse the PNG across slides.
 
-slide.addImage({
-  data: iconData,
-  x: 1, y: 1, w: 0.5, h: 0.5  // Size in inches
-});
+**Stick to ONE set per deck** (lucide is the default lookup) — mixing sets breaks visual consistency because stroke weights and corner styles differ.
+
+### Find Icon Names
+
+Don't guess identifiers — a wrong name is the main failure mode. If unsure, search first:
+
+```bash
+node .opencode/skills/pptx/scripts/icon.js --list "shield"               # search both sets
+node .opencode/skills/pptx/scripts/icon.js --list "chart" --set lucide   # scope to one set
 ```
 
-**Note**: Use size 256 or higher for crisp icons. The size parameter controls the rasterization resolution, not the display size on the slide (which is set by `w` and `h` in inches).
+Two sets are available: **lucide** (~2,000 icons, clean stroke style — use as the default) and **tabler** (~6,000 icons, outline + filled — use when lucide lacks a concept).
 
-### Icon Libraries
+### Common Icons (lucide)
 
-Install: `npm install -g react-icons react react-dom sharp`
+| Concept | Icon | Concept | Icon |
+|---------|------|---------|------|
+| Check / success | `circle-check` | Goal / target | `target` |
+| Growth / increase | `trending-up` | Risk / warning | `triangle-alert` |
+| Decline / decrease | `trending-down` | Global / market | `globe` |
+| Team / people | `users` | Metrics / bar chart | `chart-column` |
+| Person / customer | `user` | Data / storage | `database` |
+| Settings / process | `settings` | Document / report | `file-text` |
+| Security / protection | `shield` | Email / contact | `mail` |
+| Time / speed | `clock` | Idea / insight | `lightbulb` |
+| Schedule / date | `calendar` | Launch / startup | `rocket` |
+| Cost / revenue | `dollar-sign` | Energy / performance | `zap` |
+| Award / quality | `award` | Search / discovery | `search` |
 
-Popular icon sets in react-icons:
-- `react-icons/fa` - Font Awesome
-- `react-icons/md` - Material Design
-- `react-icons/hi` - Heroicons
-- `react-icons/bi` - Bootstrap Icons
+### Place on Slide
+
+```javascript
+// Icon in a colored circle (render the icon in a color that contrasts with the circle)
+slide.addShape(pres.shapes.OVAL, { x: 0.5, y: 1.0, w: 0.6, h: 0.6, fill: { color: "1E2761" } });
+slide.addImage({ path: "outputs/icons/check.png", x: 0.62, y: 1.12, w: 0.36, h: 0.36 });
+```
 
 ---
+
 
 ## Slide Backgrounds
 

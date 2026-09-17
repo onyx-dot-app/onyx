@@ -3,11 +3,12 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.connector_credential_pair import get_connector_credential_pair
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.models import Connector
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import UserGroup__ConnectorCredentialPair
+from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
+from onyx.db.models import (
+    Connector,
+    ConnectorCredentialPair,
+    UserGroup__ConnectorCredentialPair,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

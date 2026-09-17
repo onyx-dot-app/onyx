@@ -9,27 +9,25 @@ from __future__ import annotations
 import datetime as dt
 from collections.abc import Callable
 from typing import Any
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import ApprovalDecision
-from onyx.db.enums import EndpointPolicy
-from onyx.db.models import ActionApproval
-from onyx.db.models import BuildSession
-from onyx.server.features.build.db.action_approval import get_action_approval
-from onyx.server.features.build.db.action_approval import get_action_approval_for_user
-from onyx.server.features.build.db.action_approval import insert_action_approval
+from onyx.db.enums import ApprovalDecision, EndpointPolicy
+from onyx.db.models import ActionApproval, BuildSession
 from onyx.server.features.build.db.action_approval import (
+    get_action_approval,
+    get_action_approval_for_user,
+    insert_action_approval,
     list_session_pending_action_approvals,
+    try_record_decision,
 )
-from onyx.server.features.build.db.action_approval import try_record_decision
-from tests.common.craft.payloads import action_entry
-from tests.common.craft.payloads import default_action_entries
-from tests.external_dependency_unit.craft.db_helpers import force_approval_created_at
-from tests.external_dependency_unit.craft.db_helpers import make_user
+from tests.common.craft.payloads import action_entry, default_action_entries
+from tests.external_dependency_unit.craft.db_helpers import (
+    force_approval_created_at,
+    make_user,
+)
 
 
 def _seed_pending(

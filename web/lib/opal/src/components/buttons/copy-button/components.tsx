@@ -7,6 +7,7 @@ import {
 } from "@opal/components/buttons/button/components";
 import { copyText } from "@opal/utils";
 import { SvgAlertTriangle, SvgCheck, SvgCopy } from "@opal/icons";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -42,7 +43,8 @@ export type CopyButtonProps = DistributiveOmit<
  * `SvgAlertTriangle` (error) — callers cannot override it.
  *
  * When `children` is provided, the button renders with a text label.
- * When omitted, it renders as an icon-only button.
+ * When omitted, it renders as an icon-only button with a default "Copy"
+ * tooltip (labeled buttons get no tooltip unless one is passed explicitly).
  */
 export function CopyButton({
   getCopyText,
@@ -54,6 +56,7 @@ export function CopyButton({
 }: CopyButtonProps) {
   const [copyState, setCopyState] = useState<CopyState>("idle");
   const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const strings = useOpalStrings();
 
   async function handleCopy() {
     const text = getCopyText();
@@ -109,7 +112,9 @@ export function CopyButton({
     children,
     icon: getIcon(),
     onClick: handleCopy,
-    tooltip: tooltip ?? "Copy",
+    // A labeled button already says what it does, so only icon-only buttons
+    // get the default tooltip.
+    tooltip: tooltip ?? (children === undefined ? strings.copy : undefined),
   } as ButtonProps;
 
   return <Button {...resolvedProps} />;

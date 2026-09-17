@@ -34,6 +34,7 @@ def _put_security(payload: dict, user: DATestUser) -> dict:
 _ALL_OVERRIDE_KEYS_NULL: dict[str, None] = {
     "user_directory_admin_only": None,
     "track_external_idp_expiry": None,
+    "allow_same_provider_subject_relink": None,
     "mask_credential_prefix": None,
     "valid_email_domains": None,
     "password_min_length": None,

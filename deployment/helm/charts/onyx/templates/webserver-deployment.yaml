@@ -2,7 +2,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "onyx.fullname" . }}-web-server
+  name: {{ include "onyx.resourceName" (list . "web-server") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     {{- with .Values.webserver.deploymentLabels }}

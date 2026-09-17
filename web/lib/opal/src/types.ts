@@ -1,4 +1,4 @@
-import type { SVGProps } from "react";
+import type { ReactNode, SVGProps } from "react";
 
 // ---------------------------------------------------------------------------
 // Size Variants
@@ -46,37 +46,27 @@ export type SizeVariants =
 export type ContainerSizeVariants = Exclude<SizeVariants, "full" | "xl">;
 
 /**
- * Padding size variants.
+ * A corner radius, on the same scale as {@link Spacing}: `N` is `N / 4` rem, so
+ * `rounding={2}` is the same distance as `padding={2}`.
  *
- * | Variant | Class   |
- * |---------|---------|
- * | `lg`    | `p-6`   |
- * | `md`    | `p-4`   |
- * | `sm`    | `p-2`   |
- * | `xs`    | `p-1`   |
- * | `2xs`   | `p-0.5` |
- * | `fit`   | `p-0`   |
- */
-export type PaddingVariants = Extract<
-  SizeVariants,
-  "fit" | "lg" | "md" | "sm" | "xs" | "2xs"
->;
-
-/**
- * Rounding size variants.
+ * | Step     | rem     | px  |
+ * |----------|---------|-----|
+ * | `0.5`    | `0.125` | 2   |
+ * | `1`      | `0.25`  | 4   |
+ * | `2`      | `0.5`   | 8   |
+ * | `3`      | `0.75`  | 12  |
+ * | `4`      | `1`     | 16  |
+ * | `5`      | `1.25`  | 20  |
+ * | `"full"` | —       | pill (`--radius-round`) |
  *
- * | Variant | Class        |
- * |---------|--------------|
- * | `xl`    | `rounded-20` |
- * | `lg`    | `rounded-16` |
- * | `md`    | `rounded-12` |
- * | `sm`    | `rounded-08` |
- * | `xs`    | `rounded-04` |
+ * Closed, where `Spacing` is an open number: the radius tokens are a fixed
+ * design set, and an arbitrary radius is never what a caller wants. `"full"` is
+ * a string rather than `Infinity` because TypeScript has no literal type for
+ * `Infinity` — including it would widen the whole union back to `number`.
+ *
+ * Converted with {@link roundingToRem}, not looked up as a class.
  */
-export type RoundingVariants = Extract<
-  SizeVariants,
-  "xl" | "lg" | "md" | "sm" | "xs"
->;
+export type Rounding = 0.5 | 1 | 2 | 3 | 4 | 5 | "full";
 
 /**
  * Extreme size variants ("fit" and "full" only).
@@ -84,6 +74,24 @@ export type RoundingVariants = Extract<
  * Used for width and height properties that only support extremal values.
  */
 export type ExtremaSizeVariants = Extract<SizeVariants, "fit" | "full">;
+
+// ---------------------------------------------------------------------------
+// Spacing Scale
+// ---------------------------------------------------------------------------
+
+/**
+ * A spacing step. `N` is `N / 4` rem, so `4` is `1rem` and `2` is `0.5rem`.
+ *
+ * This borrows Tailwind's scale as an interface, not as an implementation — a
+ * step reads the same here as in a class name, so a `padding` of `2` is the same
+ * distance as `p-2`. The value is converted with {@link spacingToRem} rather
+ * than looked up as a class, which keeps the scale open: any step works,
+ * including ones Tailwind does not ship.
+ *
+ * Replaces the named scales. `PaddingVariants` meant one distance on a card and
+ * a different one on a container; a number cannot be ambiguous that way.
+ */
+export type Spacing = number;
 
 /**
  * Shadow depth variants.
@@ -126,13 +134,18 @@ export type OrientationVariants = "horizontal" | "vertical";
 export type BorderVariants = "none" | "dashed" | "solid";
 
 /**
- * Background fill variants shared across card-like surfaces.
- *
- * - `"none"`: transparent background.
- * - `"light"`: lightly tinted background.
- * - `"heavy"`: heavily tinted background.
+ * Card surface colors, named for the token they paint — no intensity
+ * adjectives. `"transparent"` is the sentinel for no fill.
  */
-export type BackgroundVariants = "none" | "light" | "heavy";
+export type CardColor =
+  | "transparent"
+  | "background-tint-00"
+  | "background-tint-01"
+  | "status-info-00"
+  | "status-success-00"
+  | "status-warning-00"
+  | "status-error-00"
+  | "theme-amber-01";
 
 // ---------------------------------------------------------------------------
 // Color Types
@@ -145,13 +158,18 @@ export type BackgroundVariants = "none" | "light" | "heavy";
  * - `"default"` — standard text/border color (`text-04` / `border-01`)
  * - `"muted"` — de-emphasized color (`text-03`)
  * - `"danger"` — destructive / error state
+ * - `"muted-success"` / `"muted-warning"`: status glyph against muted body text,
+ *   for messages where the icon carries the state and the text stays secondary
  * - `"interactive"` — follows the interactive coloring system (`currentColor` / `--interactive-foreground`)
  */
 export type ColorTypes =
   | "default"
   | "muted"
+  | "success"
   | "danger"
   | "warning"
+  | "muted-success"
+  | "muted-warning"
   | "interactive";
 
 // ---------------------------------------------------------------------------
@@ -168,6 +186,7 @@ export type StatusVariants =
   | "info"
   | "success"
   | "warning"
+  | "pending"
   | "error";
 
 // ---------------------------------------------------------------------------
@@ -222,6 +241,25 @@ export type WithoutStyles<T> = Omit<T, "className" | "style">;
 export interface RichStr {
   readonly __brand: "RichStr";
   readonly raw: string;
+}
+
+/**
+ * A branded wrapper marking React nodes as deliberate `Text` children.
+ *
+ * Created via the `richNodes()` function. `Text` renders the inner nodes
+ * verbatim; the brand exists so arbitrary JSX is still rejected at the type
+ * level and the opt-in stays visible at the call site, like `markdown()`.
+ *
+ * The main producer is i18n rich-text output (next-intl `t.rich(...)`), where
+ * translated sentences embed inline components mid-sentence.
+ *
+ * Unlike `RichStr`, a `RichNodes` value cannot be reduced to a plain string,
+ * so it is only accepted by `Text` children — never by `string | RichStr`
+ * props, which must stay derivable for tooltips and aria labels.
+ */
+export interface RichNodes {
+  readonly __brand: "RichNodes";
+  readonly nodes: ReactNode;
 }
 
 // ---------------------------------------------------------------------------

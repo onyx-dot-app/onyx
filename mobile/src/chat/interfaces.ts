@@ -1,11 +1,7 @@
-// Minimal core chat types. Rich fields (documents/citations/multi-model) are
-// added in their own phases.
-
 import { Packet } from "./streamingModels";
 
 export type MessageType = "user" | "assistant" | "system" | "error";
 
-// web also has "toolBuilding"; omitted until tools land.
 export type ChatState = "input" | "loading" | "streaming" | "uploading";
 
 export enum ChatFileType {
@@ -35,9 +31,16 @@ export interface Message {
   message: string;
   files: FileDescriptor[];
   packets: Packet[];
+  // Backend StreamingError.error_code on an errored turn; titles the error box.
+  errorCode?: string | null;
+  // Epoch ms the stream started, for the timeline's elapsed timer. Only set while streaming; a
+  // hydrated turn has none and falls back to `processingDurationSeconds`.
+  streamingStartedAt?: number;
+  // Backend `processing_duration_seconds`; becomes the header's "Thought for Xs".
+  processingDurationSeconds?: number | null;
 }
 
-// One row of a loaded session snapshot (GET get-chat-session); minimal subset.
+// Subset of a loaded session-snapshot row (GET get-chat-session).
 export interface BackendMessage {
   message_id: number;
   message_type: string;
@@ -47,9 +50,10 @@ export interface BackendMessage {
   files: FileDescriptor[];
   time_sent: string;
   error: string | null;
+  processing_duration_seconds?: number | null;
 }
 
-// Session snapshot for hydration; `packets` is indexed by assistant-message ordinal.
+// `packets` is indexed by assistant-message ordinal.
 export interface BackendChatSession {
   chat_session_id: string;
   description: string;

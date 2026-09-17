@@ -14,7 +14,46 @@ license: Proprietary. LICENSE.txt has complete terms
 |------|-------|
 | Read/analyze content | `python -m markitdown presentation.pptx` |
 | Edit or create from template | Read [editing.md](editing.md) |
-| Create from scratch | Read [pptxgenjs.md](pptxgenjs.md) |
+| Create from scratch | Read [components.md](components.md) — tested layout library (default); [pptxgenjs.md](pptxgenjs.md) for raw layouts it doesn't cover |
+| Charts from real data | Read [charts.md](charts.md) — deck-styled matplotlib PNGs via `scripts/chart.py` |
+| Icons | `node .opencode/skills/pptx/scripts/icon.js <name> --color <hex>` — see [pptxgenjs.md](pptxgenjs.md#icons) |
+| Lint layout (QA step 0) | `python .opencode/skills/pptx/scripts/lint.py outputs/output.pptx` |
+
+---
+
+## Build Order (required)
+
+**A complete, text-viable deck must exist in `outputs/` before any asset
+enhancement.** The worst outcome is a turn that ends with no deck at all.
+
+1. **Draft**: full deck — all slides, titles, text content, layout structure —
+   written and saved to `outputs/<name>.pptx`. On the template-editing path
+   this means an EARLY first clean+pack (see [editing.md](editing.md)): edits
+   stranded in `outputs/unpacked/` deliver nothing.
+2. **Enhance in passes** (charts, icons), re-saving the deck after each pass.
+3. **Lint + QA** last (see QA below).
+
+If time or context is running short at any point, stop enhancing and ship the
+current saved deck. Never spend the start of a turn generating or inspecting
+assets for a deck that doesn't exist yet.
+
+## Reading Source Materials (context discipline)
+
+Read attached/source documents as **text** (`python -m markitdown file.pdf`).
+**Never `view_image` source pages or figure crops** — image reads exhaust the
+model context in a handful of pages and the turn dies before the deck is
+built. To reuse figures from a source PDF, extract the embedded images
+directly — no rendering, no cropping, no visual inspection:
+
+```bash
+mkdir -p outputs/figs/
+pdfimages -png -p source.pdf outputs/figs/fig   # fig-<page>-<n>.png per image
+python -c "from PIL import Image; import glob; [print(p, Image.open(p).size) for p in sorted(glob.glob('outputs/figs/*.png'))]"
+```
+
+Pick figures by page number and pixel size (real figures are large; icons and
+logos are small), place them directly, and verify them in the rendered-slide
+QA pass at the end — never by viewing each extraction.
 
 ---
 
@@ -32,7 +71,7 @@ ls /workspace/templates/pptx/*.pptx 2>/dev/null
 - **If any templates are found**: present them to the user as two clearly labeled groups — **"Your uploaded templates"** (from `user_library/` and `attachments/`) and **"Built-in templates"** (from `/workspace/templates/pptx/`) — listing the user's own templates first. Briefly describe each (use `thumbnail.py` to preview if helpful), then **ask which one to use** — or whether to build from scratch — and wait for their answer before building. Never silently pick one: a user's own brand deck and a generic built-in are not interchangeable, and only the user knows which they want. This is one of the few cases where you should pause and ask rather than act autonomously.
 - **If none are found**: build from scratch, and let the user know they can upload a brand/template `.pptx` for a more polished, on-brand result next time.
 
-Once a template is chosen, follow [editing.md](editing.md). Use the from-scratch path ([pptxgenjs.md](pptxgenjs.md)) only when the user has no template or explicitly opts for it.
+Once a template is chosen, follow [editing.md](editing.md). Use the from-scratch path only when the user has no template or explicitly opts for it — default to the tested layout library ([components.md](components.md)), and fall back to raw [pptxgenjs.md](pptxgenjs.md) for layouts it doesn't cover.
 
 ---
 
@@ -100,7 +139,7 @@ Choose colors that match your topic — don't default to generic blue. Use these
 
 ### For Each Slide
 
-**Every slide needs a visual element** — image, chart, icon, or shape. Text-only slides are forgettable.
+**Every slide needs a visual element** — image, chart, icon, or shape. Text-only slides are forgettable. Render deck-styled charts from real data with [charts.md](charts.md); render icons zero-setup with `scripts/icon.js` (see [pptxgenjs.md](pptxgenjs.md#icons)).
 
 **Layout options:**
 - Two-column (text left, illustration on right)
@@ -170,6 +209,20 @@ Use **Fira Code** for code samples or dense numeric/stat blocks.
 
 Your first render is almost never correct. Approach QA as a bug hunt, not a confirmation step. If you found zero issues on first inspection, you weren't looking hard enough.
 
+### Layout Lint (run first)
+
+Before any render or vision pass, run the deterministic layout linter — it catches the mechanical defects (off-slide shapes, sub-margin text, text overflow, overlapping text frames, low-contrast explicit colors, unknown fonts) with exact slide/shape references:
+
+```bash
+python .opencode/skills/pptx/scripts/lint.py outputs/output.pptx
+```
+
+- Exit 0 with `LINT_CLEAN` means no findings; nonzero means ERRORs exist.
+- **Fix every ERROR** before moving on. Review each WARN and fix it unless the layout is genuinely intentional (e.g., a deliberate design overlap).
+- Re-run after each fix batch — it's instant, so lint until clean before spending time on rendering.
+- The linter checks contrast only for explicit solid colors; text over images/gradients is skipped and noted — verify those visually.
+- **Content-dense decks** (analytical / consulting-style slides with intentionally tight margins) generate many advisory MARGIN warnings under the default profile. For those, lint with `--profile dense` (relaxes the margin warning from 0.5" to 0.25"); error-level checks are unchanged. Tight margins on a dense analytical slide are a deliberate style, not a defect — don't strip density to silence standard-profile MARGIN warnings.
+
 ### Content QA
 
 ```bash
@@ -196,17 +249,15 @@ Convert slides to images (see [Converting to Images](#converting-to-images)), th
 Visually inspect these slides. Assume there are issues — find them.
 
 Look for:
-- Overlapping elements (text through shapes, lines through words, stacked elements)
-- Text overflow or cut off at edges/box boundaries
 - Decorative lines positioned for single-line text but title wrapped to two lines
 - Source citations or footers colliding with content above
 - Elements too close (< 0.3" gaps) or cards/sections nearly touching
 - Uneven gaps (large empty area in one place, cramped in another)
-- Insufficient margin from slide edges (< 0.5")
 - Columns or similar elements not aligned consistently
-- Low-contrast text (e.g., light gray text on cream-colored background)
+- Low-contrast text over images or gradients (the linter can't check these)
 - Low-contrast icons (e.g., dark icons on dark backgrounds without a contrasting circle)
 - Text boxes too narrow causing excessive wrapping
+- Inconsistent styling across slides (fonts, colors, motifs drifting)
 - Leftover placeholder content
 
 For each slide, list issues or areas of concern, even if minor.
@@ -220,11 +271,12 @@ Report ALL issues found, including minor ones.
 
 ### Verification Loop
 
-1. Generate slides → Convert to images → Inspect
-2. **List issues found** (if none found, look again more critically)
-3. Fix issues
-4. **Re-verify affected slides** — one fix often creates another problem
-5. Repeat until a full pass reveals no new issues
+1. Generate slides → **Run `lint.py`** → fix every ERROR (and unjustified WARNs)
+2. Re-run lint after each fix batch — it's instant — until clean
+3. Convert to images → Inspect (subagent vision pass for the final aesthetic check)
+4. **List issues found** (if none found, look again more critically)
+5. Fix issues → **re-run lint** (one fix often creates another problem), then re-verify affected slides
+6. Repeat until lint is clean and a full visual pass reveals no new issues
 
 **Do not declare success until you've completed at least one fix-and-verify cycle.**
 

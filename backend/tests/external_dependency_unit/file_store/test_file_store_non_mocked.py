@@ -2,15 +2,9 @@ import os
 import time
 import uuid
 from collections.abc import Generator
-from concurrent.futures import as_completed
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from io import BytesIO
-from typing import Any
-from typing import cast
-from typing import Dict
-from typing import List
-from typing import Tuple
-from typing import TypedDict
+from typing import TYPE_CHECKING, Any, Dict, List, Tuple, TypedDict, cast
 from unittest.mock import patch
 
 import pytest
@@ -23,6 +17,9 @@ from onyx.file_store.file_store import S3BackedFileStore
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+
+if TYPE_CHECKING:
+    from mypy_boto3_s3.type_defs import ObjectIdentifierTypeDef
 
 logger = setup_logger()
 
@@ -57,8 +54,7 @@ class WorkerResult(TypedDict):
 
 def _get_all_backend_configs() -> List[BackendConfig]:
     """Get configurations for all available backends"""
-    from onyx.configs.app_configs import AWS_REGION_NAME
-    from onyx.configs.app_configs import S3_ENDPOINT_URL
+    from onyx.configs.app_configs import AWS_REGION_NAME, S3_ENDPOINT_URL
 
     s3_aws_access_key_id = os.environ.get("S3_AWS_ACCESS_KEY_ID_FOR_TEST")
     s3_aws_secret_access_key = os.environ.get("S3_AWS_SECRET_ACCESS_KEY_FOR_TEST")
@@ -147,7 +143,9 @@ def file_store(
         )
 
         if "Contents" in response:
-            objects_to_delete = [{"Key": obj["Key"]} for obj in response["Contents"]]
+            objects_to_delete: list["ObjectIdentifierTypeDef"] = [
+                {"Key": obj["Key"]} for obj in response["Contents"]
+            ]
             s3_client.delete_objects(
                 Bucket=actual_bucket_name,
                 Delete={"Objects": objects_to_delete},

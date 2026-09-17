@@ -1,16 +1,20 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { BuildFile } from "@/app/craft/contexts/UploadFilesContext";
 import { useVideoBackgroundToggleClick } from "@/app/craft/components/video-background/useVideoBackgroundToggleClick";
 import Text from "@/refresh-components/texts/Text";
-import Logo from "@/refresh-components/Logo";
+import { Logo } from "@/lib/app/components";
 import CraftInputBar, {
   CraftInputBarHandle,
 } from "@/app/craft/components/CraftInputBar";
 import ModelPickerButton from "@/app/craft/components/ModelPickerButton";
 import SuggestedPrompts from "@/app/craft/components/SuggestedPrompts";
 import ConnectDataBanner from "@/app/craft/components/ConnectDataBanner";
+import CraftLlmSetup from "@/app/craft/onboarding/components/CraftLlmSetup";
+import CraftLlmLockedState from "@/app/craft/onboarding/components/CraftLlmLockedState";
+import { useOnboarding } from "@/app/craft/onboarding/BuildOnboardingProvider";
 import { BuildLlmSelection } from "@/app/craft/onboarding/constants";
 
 interface BuildWelcomeProps {
@@ -34,11 +38,18 @@ export default function BuildWelcome({
   isRunning,
   sandboxInitializing = false,
 }: BuildWelcomeProps) {
+  const t = useTranslations("craft.welcome");
   const inputBarRef = useRef<CraftInputBarHandle>(null);
   const [selectedModel, setSelectedModel] = useState<BuildLlmSelection | null>(
     null
   );
   const handleWordmarkClick = useVideoBackgroundToggleClick();
+  const { isAdmin, hasAnyProvider, isLoading } = useOnboarding();
+
+  // Craft can't build without a supported provider: inputs stay gated until
+  // one exists (undefined while loading counts as none), and once provider
+  // state loads, setup (admins) or the locked notice replaces the prompts.
+  const setupPending = !isLoading && !hasAnyProvider;
 
   const handlePromptClick = (promptText: string) => {
     inputBarRef.current?.setMessage(promptText);
@@ -57,7 +68,8 @@ export default function BuildWelcome({
           <div className="flex flex-row items-center justify-between gap-4 pb-6">
             {/* The wordmark's baseline sits ~79% down its box, so nudge it
                 down (~0.21 × size) to share craft's baseline. */}
-            <div
+            <button
+              type="button"
               className="flex flex-row items-baseline gap-2 select-none"
               onClick={handleWordmarkClick}
             >
@@ -76,10 +88,11 @@ export default function BuildWelcome({
               >
                 craft
               </Text>
-            </div>
+            </button>
             <ModelPickerButton
               selection={selectedModel}
               onChange={setSelectedModel}
+              disabled={!hasAnyProvider}
             />
           </div>
         </div>
@@ -93,16 +106,25 @@ export default function BuildWelcome({
               onSubmit(message, files, selectedModel)
             }
             isRunning={isRunning}
-            placeholder="Analyze my data and create a dashboard..."
+            placeholder={t("input.placeholder")}
             sandboxInitializing={sandboxInitializing}
+            disabled={!hasAnyProvider}
           />
         </div>
       </div>
 
       <div className="row-start-3 min-h-0 w-full flex flex-col items-center">
         <div className="w-full max-w-(--app-page-main-content-width)">
-          <ConnectDataBanner />
-          <SuggestedPrompts onPromptClick={handlePromptClick} />
+          {setupPending ? (
+            <div className="pt-4">
+              {isAdmin ? <CraftLlmSetup /> : <CraftLlmLockedState />}
+            </div>
+          ) : (
+            <>
+              <ConnectDataBanner />
+              <SuggestedPrompts onPromptClick={handlePromptClick} />
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -1,4 +1,4 @@
-import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
+import { InputDateRangePickerValue } from "@opal/components";
 import { Tag, ValidSources } from "../types";
 import { Agent } from "@/lib/agents/types";
 
@@ -154,18 +154,12 @@ export interface SearchDefaultOverrides {
   offset: number;
 }
 
-export interface Filters {
-  source_type: string[] | null;
-  document_set: string[] | null;
-  time_cutoff: Date | null;
-}
-
 export interface SearchRequestArgs {
   query: string;
   agentic?: boolean;
   sources: SourceMetadata[];
   documentSets: string[];
-  timeRange: DateRangePickerValue | null;
+  timeRange: InputDateRangePickerValue | null;
   tags: Tag[];
   persona: Agent;
   updateDocumentRelevance: (relevance: any) => void;
@@ -227,7 +221,8 @@ export interface SearchFlowClassificationResponse {
 export interface BaseFilters {
   source_type?: ValidSources[] | null;
   document_set?: string[] | null;
-  time_cutoff?: string | null; // ISO date string
+  // Bounds are ISO date strings.
+  updated_at_range?: { start: string | null; end: string | null } | null;
   tags?: Array<{ tag_key: string; tag_value: string }> | null;
 }
 

@@ -4,32 +4,29 @@ from typing import cast
 
 import numpy as np
 from rapidfuzz.distance.DamerauLevenshtein import normalized_similarity
-from sqlalchemy import desc
-from sqlalchemy import Float
-from sqlalchemy import func
-from sqlalchemy import MetaData
-from sqlalchemy import select
-from sqlalchemy import String
-from sqlalchemy import Table
+from sqlalchemy import Float, MetaData, String, Table, desc, func, select
 from sqlalchemy.dialects.postgresql import ARRAY
 
-from onyx.configs.kg_configs import KG_NORMALIZATION_RERANK_LEVENSHTEIN_WEIGHT
-from onyx.configs.kg_configs import KG_NORMALIZATION_RERANK_NGRAM_WEIGHTS
-from onyx.configs.kg_configs import KG_NORMALIZATION_RERANK_THRESHOLD
-from onyx.configs.kg_configs import KG_NORMALIZATION_RETRIEVE_ENTITIES_LIMIT
+from onyx.configs.kg_configs import (
+    KG_NORMALIZATION_RERANK_LEVENSHTEIN_WEIGHT,
+    KG_NORMALIZATION_RERANK_NGRAM_WEIGHTS,
+    KG_NORMALIZATION_RERANK_THRESHOLD,
+    KG_NORMALIZATION_RETRIEVE_ENTITIES_LIMIT,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import KGEntity
 from onyx.db.relationships import get_relationships_for_entity_type_pairs
-from onyx.kg.models import NormalizedEntities
-from onyx.kg.models import NormalizedRelationships
+from onyx.kg.models import NormalizedEntities, NormalizedRelationships
 from onyx.kg.utils.embeddings import encode_string_batch
-from onyx.kg.utils.formatting_utils import format_entity_id_for_models
-from onyx.kg.utils.formatting_utils import get_attributes
-from onyx.kg.utils.formatting_utils import get_entity_type
-from onyx.kg.utils.formatting_utils import make_entity_w_attributes
-from onyx.kg.utils.formatting_utils import make_relationship_id
-from onyx.kg.utils.formatting_utils import split_entity_id
-from onyx.kg.utils.formatting_utils import split_relationship_id
+from onyx.kg.utils.formatting_utils import (
+    format_entity_id_for_models,
+    get_attributes,
+    get_entity_type,
+    make_entity_w_attributes,
+    make_relationship_id,
+    split_entity_id,
+    split_relationship_id,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
@@ -98,7 +95,7 @@ def _normalize_one_entity(
 
         # generate trigrams of the queried entity Q
         query_trigrams = db_session.query(
-            getattr(func, POSTGRES_DEFAULT_SCHEMA)
+            getattr(func, POSTGRES_DEFAULT_SCHEMA)  # ods: ignore[getattr]
             .show_trgm(cleaned_entity)
             .cast(ARRAY(String(3)))
             .label("trigrams")
@@ -181,12 +178,10 @@ def _normalize_one_entity(
         # combine scores
         score = (1.0 - W_leven) * ngram_score + W_leven * leven_score
         candidates[i] = (candidate_id_name, candidate_name, score)
-    candidates = list(
-        sorted(
-            filter(lambda x: x[2] > KG_NORMALIZATION_RERANK_THRESHOLD, candidates),
-            key=lambda x: x[2],
-            reverse=True,
-        )
+    candidates = sorted(
+        filter(lambda x: x[2] > KG_NORMALIZATION_RERANK_THRESHOLD, candidates),
+        key=lambda x: x[2],
+        reverse=True,
     )
     if not candidates:
         return None
@@ -254,11 +249,11 @@ def normalize_entities(
     mapping: list[str | None] = run_functions_tuples_in_parallel(
         [
             (_normalize_one_entity, (entity, attributes, allowed_docs_temp_view_name))
-            for entity, attributes in zip(raw_entities, entity_attributes)
+            for entity, attributes in zip(raw_entities, entity_attributes, strict=True)
         ]
     )
     for entity, attributes, normalized_entity in zip(
-        raw_entities, entity_attributes, mapping
+        raw_entities, entity_attributes, mapping, strict=True
     ):
         if normalized_entity is not None:
             normalized_entities.append(normalized_entity)

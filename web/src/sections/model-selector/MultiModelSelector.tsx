@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useRef } from "react";
+import { useTranslations } from "next-intl";
 import { getModelIcon } from "@/lib/languageModels";
 import {
   Button,
@@ -12,9 +13,17 @@ import {
 import { SvgPlusCircle, SvgX } from "@opal/icons";
 import { cn } from "@opal/utils";
 import { useSettings } from "@/lib/settings/hooks";
-import { LLMOption, buildLlmOptions } from "@/lib/languageModels/options";
+import {
+  LLMOption,
+  buildLlmOptions,
+  llmOptionKey,
+} from "@/lib/languageModels/options";
 import { useCurrentAgentLLMProviders } from "@/lib/languageModels/hooks";
-import ModelSelectorContent from "@/sections/model-selector/ModelSelectorContent";
+import ModelSelectorContent, {
+  ReasoningManager,
+  TemperatureManager,
+  useModelDetailManagers,
+} from "@/sections/model-selector/ModelSelectorContent";
 
 export const MAX_MODELS = 3;
 
@@ -22,6 +31,8 @@ export interface SelectedModel {
   name: string;
   provider: string;
   modelName: string;
+  /** Unique id of the model configuration; disambiguates same-named models across providers. */
+  modelConfigurationId: number | null;
   displayName: string;
 }
 
@@ -30,10 +41,9 @@ export interface MultiModelSelectorProps {
   onAdd: (model: SelectedModel) => void;
   onRemove: (index: number) => void;
   onReplace: (index: number, model: SelectedModel) => void;
-}
-
-function modelKey(provider: string, modelName: string): string {
-  return `${provider}:${modelName}`;
+  /** See ModelSelectorProps. Powers the per-model detail pane. */
+  temperatureManager?: TemperatureManager;
+  reasoningManager?: ReasoningManager;
 }
 
 export default function MultiModelSelector({
@@ -41,13 +51,21 @@ export default function MultiModelSelector({
   onAdd,
   onRemove,
   onReplace,
+  temperatureManager,
+  reasoningManager,
 }: MultiModelSelectorProps) {
+  const t = useTranslations("chat.modelSelector");
   const [open, setOpen] = useState(false);
   const [replacingIndex, setReplacingIndex] = useState<number | null>(null);
   const anchorRef = useRef<HTMLElement | null>(null);
 
   const settings = useSettings();
   const multiModelAllowed = settings.multi_model_chat_enabled ?? true;
+
+  const modelDetail = useModelDetailManagers(
+    temperatureManager,
+    reasoningManager
+  );
 
   // Mirror the data source used by `ModelSelectorContent` so the selector is
   // disabled precisely when the popover would render "No models found".
@@ -60,26 +78,21 @@ export default function MultiModelSelector({
   const isMultiModel = selectedModels.length > 1;
   const atMax = selectedModels.length >= MAX_MODELS || !multiModelAllowed;
 
-  // Single tooltip for the whole selector. The disabled reason takes
-  // precedence; otherwise it labels the add affordance. When at max there is
-  // no add action, so the tooltip is omitted.
+  // Container-level tooltip carries only the disabled reason. The add button
+  // labels itself, so an enabled row shows no tooltip outside the button.
   const selectorTooltip = noModelsToSelect
-    ? "No models currently configured"
-    : atMax
-      ? undefined
-      : "Add Model";
+    ? t("multiModel.noModels.tooltip")
+    : undefined;
 
   const selectedKeys = useMemo(
-    () => new Set(selectedModels.map((m) => modelKey(m.provider, m.modelName))),
+    () => new Set(selectedModels.map(llmOptionKey)),
     [selectedModels]
   );
 
   const otherSelectedKeys = useMemo(() => {
     if (replacingIndex === null) return new Set<string>();
     return new Set(
-      selectedModels
-        .filter((_, i) => i !== replacingIndex)
-        .map((m) => modelKey(m.provider, m.modelName))
+      selectedModels.filter((_, i) => i !== replacingIndex).map(llmOptionKey)
     );
   }, [selectedModels, replacingIndex]);
 
@@ -87,29 +100,32 @@ export default function MultiModelSelector({
     replacingIndex !== null
       ? (() => {
           const m = selectedModels[replacingIndex];
-          return m ? modelKey(m.provider, m.modelName) : null;
+          return m ? llmOptionKey(m) : null;
         })()
       : null;
 
   const isSelected = (option: LLMOption) => {
-    const key = modelKey(option.provider, option.modelName);
+    const key = llmOptionKey(option);
     if (replacingIndex !== null) return key === replacingKey;
     return selectedKeys.has(key);
   };
 
   const isDisabled = (option: LLMOption) => {
-    const key = modelKey(option.provider, option.modelName);
+    const key = llmOptionKey(option);
     if (replacingIndex !== null) return otherSelectedKeys.has(key);
     return !selectedKeys.has(key) && atMax;
   };
 
+  const toSelectedModel = (option: LLMOption): SelectedModel => ({
+    name: option.name,
+    provider: option.provider,
+    modelName: option.modelName,
+    modelConfigurationId: option.modelConfigurationId ?? null,
+    displayName: option.displayName,
+  });
+
   const handleSelect = (option: LLMOption) => {
-    const model: SelectedModel = {
-      name: option.name,
-      provider: option.provider,
-      modelName: option.modelName,
-      displayName: option.displayName,
-    };
+    const model = toSelectedModel(option);
 
     if (replacingIndex !== null) {
       onReplace(replacingIndex, model);
@@ -118,9 +134,9 @@ export default function MultiModelSelector({
       return;
     }
 
-    const key = modelKey(option.provider, option.modelName);
+    const key = llmOptionKey(option);
     const existingIndex = selectedModels.findIndex(
-      (m) => modelKey(m.provider, m.modelName) === key
+      (m) => llmOptionKey(m) === key
     );
     if (existingIndex >= 0) {
       onRemove(existingIndex);
@@ -129,6 +145,20 @@ export default function MultiModelSelector({
       if (selectedModels.length + 1 >= MAX_MODELS) {
         setOpen(false);
       }
+    }
+  };
+
+  // The settings button selects its model but keeps the popover open for the
+  // pane, and it never deselects: opening settings must not remove a model.
+  const handleDetailSelect = (option: LLMOption) => {
+    if (replacingIndex !== null) {
+      onReplace(replacingIndex, toSelectedModel(option));
+      setReplacingIndex(null);
+      return;
+    }
+    const key = llmOptionKey(option);
+    if (!selectedModels.some((m) => llmOptionKey(m) === key) && !atMax) {
+      onAdd(toSelectedModel(option));
     }
   };
 
@@ -148,11 +178,8 @@ export default function MultiModelSelector({
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
-      {/*
-        When disabled, pointer events are blocked on the children (so the add
-        button / pills are inert) while the container itself stays hoverable, so
-        the Tooltip can still surface its message even in the disabled state.
-      */}
+      {/* Disabled state blocks pointer events on children only, so the
+          container stays hoverable and this Tooltip can surface the reason. */}
       <Tooltip tooltip={selectorTooltip} side="top">
         <div
           data-testid="model-selector"
@@ -168,6 +195,8 @@ export default function MultiModelSelector({
               prominence="tertiary"
               icon={SvgPlusCircle}
               size="sm"
+              tooltip={t("multiModel.addModelButton.label")}
+              aria-label={t("multiModel.addModelButton.label")}
               onClick={(e: React.MouseEvent) => {
                 if (noModelsToSelect) return;
                 anchorRef.current = e.currentTarget as HTMLElement;
@@ -185,8 +214,8 @@ export default function MultiModelSelector({
               {!atMax && (
                 <Divider
                   orientation="vertical"
-                  paddingParallel="sm"
-                  paddingPerpendicular="sm"
+                  paddingParallel={2}
+                  paddingPerpendicular={2}
                 />
               )}
               <div className="flex items-center shrink-0">
@@ -199,17 +228,15 @@ export default function MultiModelSelector({
                   return (
                     <div
                       key={
-                        isMultiModel
-                          ? modelKey(model.provider, model.modelName)
-                          : "single-model-pill"
+                        isMultiModel ? llmOptionKey(model) : "single-model-pill"
                       }
                       className="flex items-center"
                     >
                       {index > 0 && (
                         <Divider
                           orientation="vertical"
-                          paddingParallel="sm"
-                          paddingPerpendicular="sm"
+                          paddingParallel={2}
+                          paddingPerpendicular={2}
                         />
                       )}
                       <SelectButton
@@ -248,15 +275,19 @@ export default function MultiModelSelector({
         </div>
       </Tooltip>
 
-      {!(atMax && replacingIndex === null) && (
-        <Popover.Content side="top" align="end" width="xl">
-          <ModelSelectorContent
-            onSelect={handleSelect}
-            isSelected={isSelected}
-            isDisabled={isDisabled}
-          />
-        </Popover.Content>
-      )}
+      {/* Always mounted while open: a settings click that adds the third
+          model (or completes a replacement at max) must not unmount the pane
+          it just opened. Opening at max is still blocked at the entry points:
+          the add button hides and pill clicks set replacingIndex. */}
+      <Popover.Content side="top" align="end" width="xl">
+        <ModelSelectorContent
+          onSelect={handleSelect}
+          isSelected={isSelected}
+          isDisabled={isDisabled}
+          modelDetail={modelDetail}
+          onDetailSelect={handleDetailSelect}
+        />
+      </Popover.Content>
     </Popover>
   );
 }

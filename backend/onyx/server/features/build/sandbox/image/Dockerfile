@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1-labs
 # Sandbox Container Image
 #
 # User-shared sandbox: one pod per user, sessions created via kubectl exec.
@@ -16,7 +17,7 @@ FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb
 
 # Node.js source. The final image is Python-based, but the sandbox still needs
 # Node/npm/npx for MCP commands and skill-runtime packages.
-FROM ${BASE_IMAGE_REGISTRY}/library/node:24-trixie-slim@sha256:45fbb3ca3b6c7e6646cd2889d0ac7bf314bb180036da792221fc2f48fe4d43fb AS node_source
+FROM ${BASE_IMAGE_REGISTRY}/library/node:24-trixie-slim@sha256:50c3b2f6988dfc307b86e5301d69611af31f4789bdf232863b07d3b02fe55ae0 AS node_source
 ARG NPM_VERSION=11.17.0
 RUN npm install -g "npm@${NPM_VERSION}" && \
     npm cache clean --force && \
@@ -40,7 +41,7 @@ RUN set -eux; \
     tar -xzf "${tarball}"; \
     install -m 0755 "gh_${GH_CLI_VERSION}_linux_${arch}/bin/gh" /usr/local/bin/gh
 
-FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:f82c96458eedc847b233e582eb31336f4954b39cae020b6dcf5b3ed0e5cbcd74
+FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285
 
 # Set ENABLE_SKILLS=false in dev/CI to skip skill-runtime deps (LibreOffice,
 # poppler, fonts, pptxgenjs) and shave ~700 MB. Skills themselves are pushed by
@@ -48,7 +49,7 @@ FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:f82c96458eedc847b233
 # the image.
 ARG ENABLE_SKILLS=true
 ARG ENABLE_BROWSER=true
-ARG OPENCODE_VERSION=1.15.7
+ARG OPENCODE_VERSION=1.18.19
 ARG AGENT_BROWSER_VERSION=0.31.1
 
 # firewall-init.sh needs: iptables (egress lockdown), ca-certificates (trust
@@ -146,8 +147,15 @@ RUN python3 -m venv /workspace/.venv && \
 ENV PATH="/workspace/.venv/bin:${PATH}"
 ENV PYTHONPATH="/workspace"
 
+# pptxgenjs: from-scratch deck generation. lucide-static/@tabler/icons: plain
+# .svg icon files + sharp as rasterizer, for the pptx skill's scripts/icon.js.
+# sharp pulls its per-arch prebuilt libvips binary via optionalDependencies
+# (@img/sharp-linux-x64 / @img/sharp-linux-arm64, no install scripts); the
+# smoke test fails the build if the native binary didn't resolve for the
+# target arch, and verifies one known SVG exists from each icon package.
 RUN if [ "$ENABLE_SKILLS" = "true" ]; then \
-    npm install -g pptxgenjs && \
+    npm install -g pptxgenjs@4.0.1 lucide-static@1.24.0 @tabler/icons@3.44.0 sharp@0.35.3 && \
+    NODE_PATH=/usr/local/lib/node_modules node -e "require('pptxgenjs'); require('sharp'); const fs = require('fs'); fs.accessSync('/usr/local/lib/node_modules/lucide-static/icons/circle-check.svg'); fs.accessSync('/usr/local/lib/node_modules/@tabler/icons/icons/outline/shield-check.svg')" && \
     npm cache clean --force && \
     rm -rf /root/.npm; \
     fi
@@ -174,8 +182,20 @@ RUN cd /workspace/templates/outputs/web && \
 USER root
 
 ENV PATH="/home/sandbox/.opencode/bin:${PATH}"
+# Onyx provides an explicit gateway provider and model catalog, so OpenCode
+# does not need to refresh the generic models.dev catalog at runtime.
+ENV OPENCODE_DISABLE_MODELS_FETCH=1
 
 COPY --exclude=__pycache__ sandbox_daemon/ /workspace/sandbox_daemon/
+# Root-owned copy for exec-based backends: the manifest must run code the
+# sandbox user cannot replace. /workspace stays sandbox-owned below. The
+# contract model needs pydantic, so the root-owned system interpreter gets its
+# own copy (version pinned to match initial-requirements.txt): the exec path
+# must share nothing with the sandbox-owned venv.
+COPY --exclude=__pycache__ sandbox_daemon/ /opt/sandbox_daemon/
+RUN /usr/local/bin/python3 -m pip install --no-cache-dir --only-binary=:all: \
+    pydantic==2.13.4 && \
+    rm -rf /root/.cache/pip
 COPY entrypoint.sh /workspace/entrypoint.sh
 COPY sidecar-entrypoint.sh /workspace/sidecar-entrypoint.sh
 
