@@ -10,7 +10,7 @@ import {
   FileTypeCategory,
   getFileTypeDefinitionForField,
 } from "@/lib/connectors/fileTypes";
-import { getSourceMetadata } from "@/lib/sources";
+import { getSourceDocLink, getSourceMetadata } from "@/lib/sources";
 import { ValidSources, validAutoSyncSources } from "@/lib/types";
 
 function oneDriveScopeField(): TabOption {
@@ -99,9 +99,23 @@ describe("OneDrive connector metadata", () => {
     expect(getSourceMetadata(ValidSources.OneDrive).displayName).toBe(
       "OneDrive"
     );
+    expect(getSourceDocLink(ValidSources.OneDrive)).toBe(
+      "https://docs.onyx.app/admins/connectors/official/onedrive"
+    );
     expect(getFileTypeDefinitionForField("onedrive_private_key")).toBe(
       FileTypeCategory.ONEDRIVE_PFX_FILE
     );
     expect(validAutoSyncSources).toContain(ValidSources.OneDrive);
+  });
+
+  it("links SharePoint personal-site guidance to OneDrive docs", () => {
+    const sitesField = connectorConfigs[ValidSources.Sharepoint].values[0];
+    if (!sitesField) {
+      throw new Error("SharePoint sites field is required");
+    }
+
+    expect(sitesField.description).toContain(
+      "[OneDrive connector](https://docs.onyx.app/admins/connectors/official/onedrive)"
+    );
   });
 });
