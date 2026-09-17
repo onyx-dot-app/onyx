@@ -67,6 +67,7 @@ from onyx.chat.models import (
 )
 from onyx.chat.prompt_utils import calculate_reserved_tokens
 from onyx.chat.save_chat import save_chat_turn
+from onyx.chat.search_receipts import search_receipts_enabled
 from onyx.chat.stop_signal_checker import is_connected as check_stop_signal
 from onyx.chat.stop_signal_checker import reset_cancel_status
 from onyx.chat.stream_buffer import StreamBufferWriter
@@ -1202,6 +1203,10 @@ def _run_models(
 
     # Workspace toggle: infer source/time filters from the query (default on).
     auto_detect_search_filters = load_settings().auto_detect_search_filters is not False
+    deep_research = n_models == 1 and setup.new_msg_req.deep_research
+    # Evaluated once per message so every model in the turn sees the same answer.
+    # The deep research loop does not take receipts, so skip the flag lookup there.
+    search_receipts = False if deep_research else search_receipts_enabled(user)
 
     merged_queue: queue.Queue[tuple[int, Packet | Exception | object]] = queue.Queue()
 
@@ -1387,7 +1392,7 @@ def _run_models(
                 )
 
             # Per-thread copy: run_llm_loop mutates simple_chat_history in-place.
-            if n_models == 1 and setup.new_msg_req.deep_research:
+            if deep_research:
                 if setup.chat_session_project_id:
                     raise RuntimeError("Deep research is not supported for projects")
                 run_deep_research_llm_loop(
@@ -1425,6 +1430,7 @@ def _run_models(
                     include_citations=setup.new_msg_req.include_citations,
                     all_injected_file_metadata=setup.all_injected_file_metadata,
                     inject_memories_in_prompt=user.use_memories,
+                    enable_search_receipts=search_receipts,
                 )
 
             model_succeeded[model_idx] = True
