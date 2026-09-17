@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import asyncio
 import secrets
+from collections.abc import Callable, Coroutine
 from datetime import datetime, timedelta, timezone
-from typing import cast
+from typing import Any, cast
 from uuid import UUID
 
 import pytest
@@ -98,6 +99,16 @@ def _simulate_multi_tenant(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(shared_contextvars, "MULTI_TENANT", True)
 
 
+def _run_with_unset_tenant(run: Callable[[], Coroutine[Any, Any, None]]) -> None:
+    """Run in a fresh loop with no tenant contextvar set — the state a
+    websocket task starts in."""
+    reset_token = CURRENT_TENANT_ID_CONTEXTVAR.set(None)
+    try:
+        asyncio.run(run())
+    finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(reset_token)
+
+
 def test_hmr_route_uses_shared_cookie_websocket_auth() -> None:
     route = next(
         r
@@ -140,11 +151,9 @@ def test_cookie_websocket_auth_sets_tenant_from_session_token(
         finally:
             await _dispose_async_clients()
 
-    reset_token = CURRENT_TENANT_ID_CONTEXTVAR.set(None)
     try:
-        asyncio.run(_run())
+        _run_with_unset_tenant(_run)
     finally:
-        CURRENT_TENANT_ID_CONTEXTVAR.reset(reset_token)
         # Commit the cleanup: the craft conftest teardown rolls the session
         # back, which would undo an uncommitted delete.
         delete_test_user(db_session, user)
@@ -171,17 +180,16 @@ def test_cookie_websocket_auth_rejects_expired_session(
             websocket=websocket, strategy=get_redis_strategy()
         )
         try:
-            with pytest.raises(WebSocketException):
+            with pytest.raises(WebSocketException) as exc_info:
                 await anext(dependency)
+            assert exc_info.value.code == 1008
             assert CURRENT_TENANT_ID_CONTEXTVAR.get() is None
         finally:
             await _dispose_async_clients()
 
-    reset_token = CURRENT_TENANT_ID_CONTEXTVAR.set(None)
     try:
-        asyncio.run(_run())
+        _run_with_unset_tenant(_run)
     finally:
-        CURRENT_TENANT_ID_CONTEXTVAR.reset(reset_token)
         # Commit the cleanup: the craft conftest teardown rolls the session
         # back, which would undo an uncommitted delete.
         delete_test_user(db_session, user)
@@ -198,11 +206,8 @@ def test_cookie_websocket_auth_rejects_missing_cookie(
             websocket=_fake_websocket(origin=WEB_DOMAIN, cookie=None),
             strategy=get_redis_strategy(),
         )
-        with pytest.raises(WebSocketException):
+        with pytest.raises(WebSocketException) as exc_info:
             await anext(dependency)
+        assert exc_info.value.code == 1008
 
-    reset_token = CURRENT_TENANT_ID_CONTEXTVAR.set(None)
-    try:
-        asyncio.run(_run())
-    finally:
-        CURRENT_TENANT_ID_CONTEXTVAR.reset(reset_token)
+    _run_with_unset_tenant(_run)

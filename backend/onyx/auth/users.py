@@ -2432,19 +2432,25 @@ def is_same_origin(actual: str, expected: str) -> bool:
     operator, so port differences carry no security significance — the
     CSWSH threat is remote origins, not local ones.
     """
-    a = urlparse(actual.rstrip("/"))
-    e = urlparse(expected.rstrip("/"))
+    # The actual origin is attacker-controlled. Accessing hostname/port raises
+    # ValueError on malformed input (bad port, invalid IPv6); read that as a
+    # mismatch rather than letting the handshake 500.
+    try:
+        a = urlparse(actual.rstrip("/"))
+        e = urlparse(expected.rstrip("/"))
 
-    if a.scheme != e.scheme or a.hostname != e.hostname:
+        if a.scheme != e.scheme or a.hostname != e.hostname:
+            return False
+
+        if a.hostname in _LOOPBACK_HOSTNAMES:
+            return True
+
+        actual_port = a.port or (443 if a.scheme == "https" else 80)
+        expected_port = e.port or (443 if e.scheme == "https" else 80)
+
+        return actual_port == expected_port
+    except ValueError:
         return False
-
-    if a.hostname in _LOOPBACK_HOSTNAMES:
-        return True
-
-    actual_port = a.port or (443 if a.scheme == "https" else 80)
-    expected_port = e.port or (443 if e.scheme == "https" else 80)
-
-    return actual_port == expected_port
 
 
 def _check_websocket_origin(websocket: WebSocket) -> None:
