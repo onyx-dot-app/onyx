@@ -162,19 +162,19 @@ function ConnectorRow({
 
   const connectorUrl: `/admin/connector/${number}` = `/admin/connector/${ccPairsIndexingStatus.cc_pair_id}`;
 
-  const handleRowClick = (e: React.MouseEvent) => {
-    navigateWithModifier(e, connectorUrl, router);
-  };
+  const handleRowClick = isEditable
+    ? (e: React.MouseEvent) => navigateWithModifier(e, connectorUrl, router)
+    : undefined;
 
   return (
     <TableRow
       className={`
   border border-border dark:border-neutral-700
-          hover:bg-accent-background ${
+          ${isEditable ? "hover:bg-accent-background cursor-pointer" : ""} ${
             invisible
               ? "invisible h-0! -mb-10! border-none!"
               : "border! border-border dark:border-neutral-700"
-          }  w-full cursor-pointer relative `}
+          }  w-full relative `}
       onClick={handleRowClick}
     >
       <TableCell className="">
