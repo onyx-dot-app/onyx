@@ -23,6 +23,7 @@ The LLM receives older messages, a cutoff marker, then recent messages. It summa
 Resolve each selected model's budget through `resolve_chat_token_budget`:
 
 ```text
+model_output_reserve = min(model_output_max, 32768)
 raw_input = min(configured_input_cap, model_input_max,
                 model_context_capacity - model_output_reserve)
 safe_input = floor(raw_input * (1 - tokenizer_safety_margin))
@@ -30,7 +31,9 @@ history_capacity = max(0, safe_input - other_replayed_input)
 trigger = floor(history_capacity * COMPRESSION_TRIGGER_RATIO)
 ```
 
-The output reserve uses the model's explicit output maximum and includes reasoning.
+The output reserve is capped at 32,768 tokens and includes reasoning.
+The same cap applies to the request's output limit, bounded by remaining context.
+Models with smaller output limits retain their full supported output budget.
 The configured input cap is independent of the model's total context capacity.
 Use explicit context metadata when available. Otherwise, use the model metadata's
 input maximum as a conservative context bound. Never infer context capacity from
@@ -39,6 +42,7 @@ the ambiguous legacy `max_tokens` field.
 If usable model specifications are missing, preserve the existing configured/default
 input allowance and provider-default output behavior. The default input lookup
 already holds back `GEN_AI_NUM_RESERVED_OUTPUT_TOKENS`, so do not subtract it again.
+This fallback also applies when the output reserve would leave no input capacity.
 
 The tokenizer safety margin defaults to 5%. It protects against estimation errors.
 The compression buffer is separate and leaves space for continued work.

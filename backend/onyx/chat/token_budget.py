@@ -55,6 +55,7 @@ def resolve_chat_token_budget(llm: LLM) -> ChatTokenBudget:
         model_input = _positive_int(model_obj.get("max_input_tokens"))
         model_output = _positive_int(model_obj.get("max_output_tokens"))
         if model_input is not None and model_output is not None:
+            model_output = min(model_output, 32_768)
             context_tokens = (
                 _positive_int(model_obj.get("max_context_tokens")) or model_input
             )
