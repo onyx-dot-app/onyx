@@ -9,17 +9,30 @@ import {
   SvgCheckCircle,
   SvgExternalLink,
   SvgKey,
+  SvgLink,
 } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import Text from "@/refresh-components/texts/Text";
+import {
+  attachCanvasCredentialToCourse,
+  CanvasOAuthCancelledError,
+  CanvasOAuthPopupBlockedError,
+  getErrorDetail,
+  startCanvasOAuth,
+} from "@/refresh-pages/tutor/canvasOAuth";
+
+export type LtiCanvasConnectionState = "connected" | "expired" | "static_token";
 
 interface LtiCourseConnectorSetup {
   can_setup: boolean;
+  oauth_available: boolean;
   canvas_token_url: string | null;
   course_label: string | null;
   course_title: string | null;
+  connection_state: LtiCanvasConnectionState | null;
+  connected_canvas_user: string | null;
 }
 
 export interface LtiCourseConnectorStatus {
@@ -43,19 +56,7 @@ interface CanvasCourseSetupViewProps {
   onReady: () => void;
 }
 
-type SetupStep = "welcome" | "token" | "confirm";
-
-function getErrorDetail(payload: unknown): string {
-  if (
-    payload &&
-    typeof payload === "object" &&
-    "detail" in payload &&
-    typeof payload.detail === "string"
-  ) {
-    return payload.detail;
-  }
-  return "Canvas could not be connected. Check the token and try again.";
-}
+type SetupStep = "welcome" | "connect" | "token" | "confirm";
 
 async function fetchConnectorStatus(
   courseId: string
@@ -98,9 +99,11 @@ export default function CanvasCourseSetupView({
   status,
   onReady,
 }: CanvasCourseSetupViewProps) {
+  const oauthAvailable = status.setup?.oauth_available ?? false;
   const [step, setStep] = useState<SetupStep>("welcome");
   const [token, setToken] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const courseName = useMemo(() => {
@@ -129,6 +132,31 @@ export default function CanvasCourseSetupView({
     return () => window.clearInterval(interval);
   }, [pollForReady, step]);
 
+  const connectWithCanvas = useCallback(async () => {
+    setIsSubmitting(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const credentialId = await startCanvasOAuth(courseId);
+      await attachCanvasCredentialToCourse(courseId, credentialId);
+      setStep("confirm");
+    } catch (e) {
+      if (e instanceof CanvasOAuthCancelledError) {
+        setNotice(e.message);
+      } else if (e instanceof CanvasOAuthPopupBlockedError) {
+        setError(e.message);
+      } else {
+        setError(
+          e instanceof Error
+            ? e.message
+            : "Canvas could not be connected. Try again."
+        );
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [courseId]);
+
   const submitToken = useCallback(async () => {
     const trimmedToken = token.trim();
     if (!trimmedToken) {
@@ -149,11 +177,20 @@ export default function CanvasCourseSetupView({
       );
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
-        throw new Error(getErrorDetail(payload));
+        throw new Error(
+          getErrorDetail(
+            payload,
+            "Canvas could not be connected. Check the token and try again."
+          )
+        );
       }
       setStep("confirm");
     } catch (e) {
-      setError(e instanceof Error ? e.message : getErrorDetail(null));
+      setError(
+        e instanceof Error
+          ? e.message
+          : "Canvas could not be connected. Check the token and try again."
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -177,16 +214,81 @@ export default function CanvasCourseSetupView({
                     Connect Canvas content for {courseName}. Onyx will index
                     pages, assignments, files, announcements, modules, quizzes,
                     discussions, and the syllabus for this course only.
+                    {oauthAvailable &&
+                      " You will approve access in Canvas; no tokens to copy."}
                   </Text>
                 </div>
               </div>
               <Button
                 icon={SvgArrowRight}
-                onClick={() => setStep("token")}
+                onClick={() => setStep(oauthAvailable ? "connect" : "token")}
                 width="full"
               >
                 Continue
               </Button>
+            </div>
+          )}
+
+          {step === "connect" && (
+            <div className="flex flex-col gap-5">
+              <div className="flex flex-col gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-08 bg-background-neutral-03">
+                  <SvgLink size={20} />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Text as="p" mainUiAction text05>
+                    Connect Canvas
+                  </Text>
+                  <Text as="p" secondaryBody text03>
+                    A Canvas window will open asking you to authorize Onyx. Once
+                    you approve, indexing starts automatically. Onyx only reads
+                    course content you can already see.
+                  </Text>
+                </div>
+              </div>
+
+              {notice && (
+                <Text as="p" secondaryBody text03>
+                  {notice}
+                </Text>
+              )}
+              {error && (
+                <div className="flex flex-col gap-1">
+                  <Text as="p" secondaryBody text03 className="text-error">
+                    {error}
+                  </Text>
+                  {status.setup?.canvas_token_url && (
+                    <Button
+                      prominence="tertiary"
+                      size="sm"
+                      icon={SvgKey}
+                      onClick={() => {
+                        setError(null);
+                        setStep("token");
+                      }}
+                    >
+                      Use an access token instead
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
+                <Button
+                  prominence="tertiary"
+                  onClick={() => setStep("welcome")}
+                  disabled={isSubmitting}
+                >
+                  Back
+                </Button>
+                <Button
+                  icon={SvgExternalLink}
+                  disabled={isSubmitting}
+                  onClick={() => void connectWithCanvas()}
+                >
+                  {isSubmitting ? "Waiting for Canvas" : "Connect Canvas"}
+                </Button>
+              </div>
             </div>
           )}
 
@@ -249,7 +351,10 @@ export default function CanvasCourseSetupView({
                 <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
                   <Button
                     prominence="tertiary"
-                    onClick={() => setStep("welcome")}
+                    onClick={() => {
+                      setError(null);
+                      setStep(oauthAvailable ? "connect" : "welcome");
+                    }}
                     disabled={isSubmitting}
                   >
                     Back

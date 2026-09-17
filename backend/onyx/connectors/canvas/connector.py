@@ -15,14 +15,24 @@ from typing_extensions import override
 from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
+from onyx.configs.lti_configs import LTI_CANVAS_OAUTH_CLIENT_ID
+from onyx.configs.lti_configs import LTI_CANVAS_OAUTH_CLIENT_SECRET
 from onyx.connectors.canvas.access import get_course_permissions
 from onyx.connectors.canvas.client import CanvasApiClient
+from onyx.connectors.canvas.oauth import CANVAS_ACCESS_TOKEN_KEY
+from onyx.connectors.canvas.oauth import canvas_credential_is_oauth
+from onyx.connectors.canvas.oauth import canvas_token_needs_refresh
+from onyx.connectors.canvas.oauth import CanvasOAuthError
+from onyx.connectors.canvas.oauth import mark_canvas_credential_invalid
+from onyx.connectors.canvas.oauth import refresh_canvas_credential_json_if_needed
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
+from onyx.connectors.interfaces import CredentialsConnector
+from onyx.connectors.interfaces import CredentialsProviderInterface
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
@@ -482,7 +492,19 @@ class CanvasConnectorCheckpoint(ConnectorCheckpoint):
 class CanvasConnector(
     CheckpointedConnectorWithPermSync[CanvasConnectorCheckpoint],
     SlimConnectorWithPermSync,
+    CredentialsConnector,
 ):
+    """Indexes Canvas course content with an instructor's API token.
+
+    Two credential shapes are supported (see ``onyx.connectors.canvas.oauth``):
+
+    * a pasted personal access token (``canvas_access_token`` only), which is
+      static and used as-is;
+    * an OAuth2 credential (``canvas_refresh_token`` present), whose hourly
+      access token is refreshed through the ``CredentialsProviderInterface``
+      so the refreshed token is written back to the DB for other workers.
+    """
+
     def __init__(
         self,
         canvas_base_url: str,
@@ -495,6 +517,10 @@ class CanvasConnector(
         self.lti_context_id = lti_context_id
         self.batch_size = batch_size
         self._canvas_client: CanvasApiClient | None = None
+        self._credentials_provider: CredentialsProviderInterface | None = None
+        # Credentials handed to `load_credentials` directly (no provider); only
+        # used to refresh in-memory when there is nowhere to persist to.
+        self._static_credential_json: dict[str, Any] | None = None
         self._respect_release_dates = True
         self._release_check_time: datetime | None = None
         self._course_permissions_cache: dict[int, ExternalAccess | None] = {}
@@ -1213,20 +1239,50 @@ class CanvasConnector(
             parent_hierarchy_raw_node_id=_course_type_folder_id(course_id, "syllabus"),
         )
 
-    @override
-    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        """Load and validate Canvas credentials."""
-        access_token = credentials.get("canvas_access_token")
+    # ------------------------------------------------------------------
+    # Credentials
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _refresh_if_needed(
+        credential_json: dict[str, Any],
+        *,
+        canvas_base_url: str,
+        force: bool,
+    ) -> tuple[dict[str, Any], bool]:
+        """Refresh an OAuth credential, mapping token-endpoint failures to the
+        connector exception hierarchy. Static credentials pass through."""
+        try:
+            return refresh_canvas_credential_json_if_needed(
+                credential_json,
+                client_id=LTI_CANVAS_OAUTH_CLIENT_ID,
+                client_secret=LTI_CANVAS_OAUTH_CLIENT_SECRET,
+                canvas_base_url=canvas_base_url,
+                force=force,
+            )
+        except CanvasOAuthError as e:
+            if e.permanent:
+                raise CredentialExpiredError(
+                    "Canvas connection was revoked or expired; the instructor "
+                    f"needs to reconnect Canvas ({e})."
+                ) from e
+            raise UnexpectedValidationError(
+                f"Could not refresh the Canvas access token: {e}"
+            ) from e
+
+    def _initialize_client(self, credential_json: dict[str, Any]) -> None:
+        access_token = credential_json.get(CANVAS_ACCESS_TOKEN_KEY)
         if not access_token:
             raise ConnectorMissingCredentialError("Canvas")
         self._respect_release_dates = _parse_respect_release_dates(
-            credentials.get("respect_release_dates", True)
+            credential_json.get("respect_release_dates", True)
         )
 
         try:
             client = CanvasApiClient(
                 bearer_token=access_token,
                 canvas_base_url=self.canvas_base_url,
+                token_refresher=self._refresh_access_token,
             )
             if self.course_ids is None or len(self.course_ids) == 0:
                 client.get("courses", params={"per_page": "1"})
@@ -1243,7 +1299,99 @@ class CanvasConnector(
             _handle_canvas_api_error(e)
 
         self._canvas_client = client
-        return None
+
+    @override
+    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
+        """Load and validate Canvas credentials without a credentials provider.
+
+        Used by tests and ad-hoc callers. Refreshed OAuth tokens are returned
+        so the caller can persist them; the indexing pipeline instead goes
+        through `set_credentials_provider`.
+        """
+        self._credentials_provider = None
+        credential_json, refreshed = self._refresh_if_needed(
+            dict(credentials), canvas_base_url=self.canvas_base_url, force=False
+        )
+        self._static_credential_json = credential_json
+        self._initialize_client(credential_json)
+        return credential_json if refreshed else None
+
+    @override
+    def set_credentials_provider(
+        self, credentials_provider: CredentialsProviderInterface
+    ) -> None:
+        self._credentials_provider = credentials_provider
+        self._static_credential_json = None
+        with credentials_provider:
+            credential_json = self._refresh_via_provider_locked(
+                credentials_provider,
+                dict(credentials_provider.get_credentials()),
+                force=False,
+            )
+        self._initialize_client(credential_json)
+
+    def _refresh_via_provider_locked(
+        self,
+        credentials_provider: CredentialsProviderInterface,
+        credential_json: dict[str, Any],
+        *,
+        force: bool,
+    ) -> dict[str, Any]:
+        """Refresh and persist through the provider. Caller holds the lock."""
+        try:
+            refreshed_json, refreshed = self._refresh_if_needed(
+                credential_json, canvas_base_url=self.canvas_base_url, force=force
+            )
+        except CredentialExpiredError:
+            # Record the permanent failure so status endpoints can show
+            # "reconnect Canvas" without another round trip to Canvas.
+            credentials_provider.set_credentials(
+                mark_canvas_credential_invalid(credential_json)
+            )
+            raise
+        if refreshed:
+            credentials_provider.set_credentials(refreshed_json)
+        return refreshed_json
+
+    def _refresh_access_token(self) -> str | None:
+        """`TokenRefresher` hook for `CanvasApiClient`, invoked on HTTP 401.
+
+        Returns a fresh access token, or None for static credentials. Raises
+        `CredentialExpiredError` when Canvas rejects the refresh token.
+        """
+        current_token = (
+            self._canvas_client.bearer_token if self._canvas_client else None
+        )
+
+        if self._credentials_provider is None:
+            credential_json = self._static_credential_json
+            if not credential_json or not canvas_credential_is_oauth(credential_json):
+                return None
+            refreshed_json, _ = self._refresh_if_needed(
+                credential_json, canvas_base_url=self.canvas_base_url, force=True
+            )
+            self._static_credential_json = refreshed_json
+            return refreshed_json.get(CANVAS_ACCESS_TOKEN_KEY)
+
+        with self._credentials_provider:
+            credential_json = dict(self._credentials_provider.get_credentials())
+            if not canvas_credential_is_oauth(credential_json):
+                return None
+
+            # Another worker may already have refreshed; reuse its token.
+            latest_token = credential_json.get(CANVAS_ACCESS_TOKEN_KEY)
+            if (
+                isinstance(latest_token, str)
+                and latest_token
+                and latest_token != current_token
+                and not canvas_token_needs_refresh(credential_json)
+            ):
+                return latest_token
+
+            refreshed_json = self._refresh_via_provider_locked(
+                self._credentials_provider, credential_json, force=True
+            )
+            return refreshed_json.get(CANVAS_ACCESS_TOKEN_KEY)
 
     def _load_from_checkpoint(
         self,

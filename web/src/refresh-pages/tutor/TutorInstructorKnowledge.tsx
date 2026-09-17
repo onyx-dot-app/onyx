@@ -40,6 +40,7 @@ import {
 import TutorTabHeader from "@/refresh-pages/tutor/TutorTabHeader";
 import TutorInstructorWebsites from "@/refresh-pages/tutor/TutorInstructorWebsites";
 import TutorInstructorGoogleDrive from "@/refresh-pages/tutor/TutorInstructorGoogleDrive";
+import TutorInstructorCanvasConnection from "@/refresh-pages/tutor/TutorInstructorCanvasConnection";
 
 const CANVAS_STATUS_KEY = "tutor-instructor-canvas-knowledge";
 
@@ -391,6 +392,12 @@ export default function TutorInstructorKnowledge({
             />
           </div>
 
+          {courseId && (
+            <TutorInstructorCanvasConnection
+              courseId={courseId}
+              onConnectionChanged={refreshCurrent}
+            />
+          )}
           {courseId && <TutorInstructorWebsites courseId={courseId} />}
           {courseId && <TutorInstructorGoogleDrive courseId={courseId} />}
         </div>

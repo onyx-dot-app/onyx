@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Callable
 from collections.abc import Iterator
 from typing import Any
 from urllib.parse import urlparse
@@ -43,11 +44,17 @@ def _error_code_for_status(status_code: int) -> OnyxErrorCode:
     return OnyxErrorCode.BAD_GATEWAY
 
 
+# Called when Canvas answers 401. Returns a fresh bearer token to retry with,
+# or None if no refresh is possible (static token / refresh failed).
+TokenRefresher = Callable[[], str | None]
+
+
 class CanvasApiClient:
     def __init__(
         self,
         bearer_token: str,
         canvas_base_url: str,
+        token_refresher: TokenRefresher | None = None,
     ) -> None:
         parsed_base = urlparse(canvas_base_url)
         if not parsed_base.hostname:
@@ -56,6 +63,7 @@ class CanvasApiClient:
         #     raise ValueError("canvas_base_url must use https")
 
         self._bearer_token = bearer_token
+        self._token_refresher = token_refresher
         self.base_url = (
             canvas_base_url.rstrip("/").removesuffix(_CANVAS_API_VERSION)
             + _CANVAS_API_VERSION
@@ -84,14 +92,15 @@ class CanvasApiClient:
         # next-page URL in the Link header).  For the first request we build
         # the URL from the endpoint name instead.
         url = full_url if full_url else self._build_url(endpoint)
-        headers = self._build_headers()
+        response = self._request(url, params if not full_url else None)
 
-        response = rl_requests.get(
-            url,
-            headers=headers,
-            params=params if not full_url else None,
-            timeout=_CANVAS_CALL_TIMEOUT,
-        )
+        # OAuth access tokens expire hourly. On a 401, ask the refresher for a
+        # new token and retry exactly once; static tokens have no refresher.
+        if response.status_code == 401 and self._token_refresher is not None:
+            refreshed_token = self._token_refresher()
+            if refreshed_token and refreshed_token != self._bearer_token:
+                self._bearer_token = refreshed_token
+                response = self._request(url, params if not full_url else None)
 
         try:
             response_json = response.json()
@@ -172,6 +181,18 @@ class CanvasApiClient:
             #     )
             return url
         return None
+
+    def _request(self, url: str, params: dict[str, Any] | None) -> Any:
+        return rl_requests.get(
+            url,
+            headers=self._build_headers(),
+            params=params,
+            timeout=_CANVAS_CALL_TIMEOUT,
+        )
+
+    @property
+    def bearer_token(self) -> str:
+        return self._bearer_token
 
     def _build_headers(self) -> dict[str, str]:
         """Return the Authorization header with the bearer token."""

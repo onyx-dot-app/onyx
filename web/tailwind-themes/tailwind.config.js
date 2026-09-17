@@ -4,7 +4,14 @@ const plugin = require("tailwindcss/plugin");
 
 module.exports = {
   darkMode: "class",
-  content: ["./src/**/*.{js,jsx,ts,tsx}", "./lib/opal/**/*.{js,jsx,ts,tsx}"],
+  content: [
+    "./src/**/*.{js,jsx,ts,tsx}",
+    "./lib/opal/**/*.{js,jsx,ts,tsx}",
+    // bun/npm workspace installs create lib/opal/node_modules (symlinks into the root
+    // node_modules). Scanning it makes Tailwind take minutes and times out Turbopack's
+    // PostCSS worker.
+    "!./lib/opal/node_modules/**",
+  ],
   theme: {
     container: {
       center: true,
