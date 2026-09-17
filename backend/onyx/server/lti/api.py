@@ -110,7 +110,9 @@ from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingMode
 from onyx.db.index_attempt import cancel_indexing_attempts_for_ccpair
 from onyx.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
+from onyx.db.lti import fetch_canvas_cc_pairs_for_credential
 from onyx.db.lti import fetch_canvas_course_node_id_for_cc_pair
+from onyx.db.lti import pause_cc_pairs_for_revoked_credential
 from onyx.db.lti import swap_lti_canvas_cc_pair_credential
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
@@ -880,7 +882,15 @@ def _require_connected_canvas_oauth_credential(
     db_session: Session,
     user: User,
     credential_id: int,
+    canvas_base_url: str,
 ) -> Credential:
+    """Load the instructor's own, connected Canvas OAuth credential.
+
+    The credential must have been issued by the Canvas host of the current
+    launch: the client built from it sends the credential's bearer token to
+    ``canvas_base_url``, so a credential from another Canvas instance would
+    leak that token to the wrong host.
+    """
     credential = fetch_credential_by_id(credential_id, db_session)
     if (
         credential is None
@@ -891,7 +901,13 @@ def _require_connected_canvas_oauth_credential(
             OnyxErrorCode.CREDENTIAL_NOT_FOUND,
             "Canvas connection not found for this instructor",
         )
-    if not _canvas_credential_is_connected(_canvas_credential_json(credential)):
+    credential_json = _canvas_credential_json(credential)
+    if not _canvas_credential_matches_base_url(credential_json, canvas_base_url):
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_INVALID,
+            "This Canvas connection belongs to a different Canvas instance",
+        )
+    if not _canvas_credential_is_connected(credential_json):
         raise OnyxError(
             OnyxErrorCode.CREDENTIAL_INVALID,
             "Finish authorizing Canvas before starting indexing",
@@ -1125,6 +1141,7 @@ def setup_lti_course_canvas_connector(
             db_session=db_session,
             user=user,
             credential_id=setup_request.credential_id,
+            canvas_base_url=canvas_base_url,
         )
         canvas_client = _canvas_client_for_credential(
             oauth_credential, canvas_base_url, db_session
@@ -1443,7 +1460,13 @@ def disconnect_lti_course_canvas_oauth(
     user: User = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    """Revoke the instructor's Canvas token and pause the course connector."""
+    """Revoke the instructor's Canvas token and pause every connector using it.
+
+    The OAuth credential is shared across all of the instructor's LTI courses
+    on this Canvas host, so revoking it necessarily disconnects each of them.
+    Every cc-pair authenticating with the credential is paused (not just the
+    launching course's) so none is left ACTIVE with no access token.
+    """
     launch_context = _get_launch_context_for_course_or_raise(user, course_id)
     if not lti_roles_include_instructor(launch_context.roles):
         raise OnyxError(
@@ -1494,15 +1517,13 @@ def disconnect_lti_course_canvas_oauth(
         credential, mark_canvas_credential_invalid(cleared_json), db_session
     )
 
-    cancel_indexing_attempts_for_ccpair(
-        cc_pair_id=cc_pair.id,
-        db_session=db_session,
-        include_secondary_index=True,
+    affected_cc_pairs = fetch_canvas_cc_pairs_for_credential(
+        db_session=db_session, credential_id=credential.id
     )
-    update_connector_credential_pair_from_id(
-        db_session=db_session,
-        cc_pair_id=cc_pair.id,
-        status=ConnectorCredentialPairStatus.PAUSED,
+    if all(affected.id != cc_pair.id for affected in affected_cc_pairs):
+        affected_cc_pairs.append(cc_pair)
+    pause_cc_pairs_for_revoked_credential(
+        db_session=db_session, cc_pairs=affected_cc_pairs
     )
     db_session.commit()
 

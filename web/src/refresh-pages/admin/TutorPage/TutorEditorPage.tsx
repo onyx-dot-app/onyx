@@ -6,6 +6,7 @@ import type { Route } from "next";
 import useSWR from "swr";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import type { LtiCourseConnectorStatus } from "@/refresh-pages/tutor/CanvasCourseSetupView";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
@@ -179,9 +180,7 @@ export default function TutorEditorPage({
   // than every Canvas course. We keep polling until it resolves. The
   // launch-time URL param only bridges the first request.
   const courseConnectorStatusKey = ltiContextId
-    ? `/api/auth/lti/course/${encodeURIComponent(
-        ltiContextId
-      )}/connector-status`
+    ? SWR_KEYS.ltiCourseConnectorStatus(ltiContextId)
     : null;
   const { data: courseConnectorStatus } = useSWR<LtiCourseConnectorStatus>(
     courseConnectorStatusKey,

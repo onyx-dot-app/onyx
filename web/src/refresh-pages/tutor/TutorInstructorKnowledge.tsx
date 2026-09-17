@@ -22,6 +22,7 @@ import {
 import { toast } from "@/hooks/useToast";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { fetchConnectorIndexingStatus } from "@/lib/hooks";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 import {
   ConnectorIndexingStatusLite,
@@ -176,7 +177,7 @@ export default function TutorInstructorKnowledge({
   // actually set up for this course so an admin/curator who owns several
   // course connectors doesn't see all of them here.
   const courseStatusKey = courseId
-    ? `/api/auth/lti/course/${encodeURIComponent(courseId)}/connector-status`
+    ? SWR_KEYS.ltiCourseConnectorStatus(courseId)
     : null;
   const {
     data: courseConnectorStatus,

@@ -22,6 +22,7 @@ from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
+from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
 # ---------------------------------------------------------------------------
@@ -315,6 +316,7 @@ def _mock_response(
     content: bytes = b"",
     url: str = f"{FAKE_BASE_URL}/api/v1/mock",
     history: list[MagicMock] | None = None,
+    content_length: int | None = None,
 ) -> MagicMock:
     """Create a mock HTTP response with status, json, Link header and body."""
     resp = MagicMock()
@@ -322,7 +324,14 @@ def _mock_response(
     resp.reason = "OK" if status_code < 300 else "Error"
     resp.json.return_value = json_data if json_data is not None else []
     resp.headers = {"Link": link_header}
+    if content_length is not None:
+        resp.headers["Content-Length"] = str(content_length)
     resp.content = content
+    # download_file streams the body; hand it back in fixed-size chunks so
+    # size-cap tests can observe the download being abandoned part-way.
+    resp.iter_content.side_effect = lambda chunk_size=1024, **_kwargs: iter(
+        [content[i : i + chunk_size] for i in range(0, len(content), chunk_size)]
+    )
     resp.url = url
     resp.history = history or []
     return resp
@@ -646,6 +655,59 @@ class TestCanvasApiClientDownloadFile:
         assert call.args[0] == SIGNED_FILE_URL
         assert "headers" not in call.kwargs
         assert call.kwargs["allow_redirects"] is True
+        assert call.kwargs["stream"] is True
+        mock_requests.get.return_value.close.assert_called_once()
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_stops_reading_once_over_max_bytes(self, mock_requests: MagicMock) -> None:
+        # No Content-Length: the cap has to be enforced while streaming, and
+        # the download must stop before the whole body is buffered.
+        body = b"x" * (10 * 1024)
+        response = _mock_response(content=body, url=SIGNED_FILE_URL)
+        chunks_read: list[int] = []
+
+        def _iter_content(chunk_size: int = 1024, **_kwargs: Any) -> Any:
+            for i in range(0, len(body), chunk_size):
+                chunks_read.append(i)
+                yield body[i : i + chunk_size]
+
+        response.iter_content.side_effect = _iter_content
+        mock_requests.get.return_value = response
+        client = CanvasApiClient(FAKE_TOKEN, FAKE_BASE_URL)
+
+        with pytest.raises(OnyxError) as exc_info:
+            client.download_file(SIGNED_FILE_URL, max_bytes=2 * 1024)
+
+        assert exc_info.value.error_code == OnyxErrorCode.PAYLOAD_TOO_LARGE
+        # 64 KiB chunks: a single chunk already exceeds the cap, so only one
+        # chunk is ever pulled off the wire.
+        assert len(chunks_read) == 1
+        response.close.assert_called_once()
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_rejects_oversized_content_length_before_reading(
+        self, mock_requests: MagicMock
+    ) -> None:
+        response = _mock_response(
+            content=b"x" * 100, url=SIGNED_FILE_URL, content_length=5000
+        )
+        mock_requests.get.return_value = response
+        client = CanvasApiClient(FAKE_TOKEN, FAKE_BASE_URL)
+
+        with pytest.raises(OnyxError) as exc_info:
+            client.download_file(SIGNED_FILE_URL, max_bytes=1000)
+
+        assert exc_info.value.error_code == OnyxErrorCode.PAYLOAD_TOO_LARGE
+        response.iter_content.assert_not_called()
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_accepts_file_within_max_bytes(self, mock_requests: MagicMock) -> None:
+        mock_requests.get.return_value = _mock_response(
+            content=b"small", url=SIGNED_FILE_URL, content_length=5
+        )
+        client = CanvasApiClient(FAKE_TOKEN, FAKE_BASE_URL)
+
+        assert client.download_file(SIGNED_FILE_URL, max_bytes=5) == b"small"
 
     @patch("onyx.connectors.canvas.client.rl_requests")
     def test_follows_redirect_to_storage_host(self, mock_requests: MagicMock) -> None:
@@ -2171,6 +2233,29 @@ class TestDocumentConversionNewTypes:
             doc = connector._convert_file_to_document(file)
 
         assert _download_calls(mock_req) == []
+        assert _section_text(doc) == "huge.txt\n\nFile type: text/plain"
+
+    def test_convert_file_to_document_skips_oversized_download_without_size(
+        self,
+    ) -> None:
+        # Canvas omitted `size`, so the pre-download check cannot skip the
+        # file; the streamed download must still be capped.
+        connector = _build_connector()
+        file = self._make_file(
+            display_name="huge.txt", content_type="text/plain", size=None
+        )
+
+        with (
+            patch("onyx.connectors.canvas.client.rl_requests") as mock_req,
+            patch(
+                "onyx.connectors.canvas.connector.CANVAS_CONNECTOR_FILE_SIZE_THRESHOLD",
+                100,
+            ),
+        ):
+            mock_req.get.side_effect = _make_url_dispatcher(file_content=b"x" * 101)
+            doc = connector._convert_file_to_document(file)
+
+        assert len(_download_calls(mock_req)) == 1
         assert _section_text(doc) == "huge.txt\n\nFile type: text/plain"
 
     def test_convert_file_to_document_skips_content_over_char_threshold(

@@ -329,6 +329,103 @@ def _oauth_json(**overrides: Any) -> dict[str, Any]:
     return credential_json
 
 
+def test_swap_cc_pair_credential_moves_hierarchy_rows_around_key_change() -> None:
+    """The hierarchy mapping has a composite FK to the cc-pair key, so the
+    mappings must be dropped before the key changes and recreated after."""
+    from onyx.db import lti as db_lti
+
+    cc_pair = _fake_cc_pair(id=7, connector_id=3, credential_id=30)
+    events: list[str] = []
+    db_session = MagicMock()
+    db_session.scalars.return_value.all.return_value = [101, 102]
+
+    def _execute(statement: Any, *_args: Any) -> MagicMock:
+        events.append(type(statement).__name__)
+        return MagicMock()
+
+    db_session.execute.side_effect = _execute
+    db_session.flush.side_effect = lambda: events.append(
+        f"flush(credential_id={cc_pair.credential_id})"
+    )
+
+    db_lti.swap_lti_canvas_cc_pair_credential(
+        db_session=db_session, cc_pair=cc_pair, new_credential_id=31
+    )
+
+    assert cc_pair.credential_id == 31
+    assert events == [
+        "Delete",  # hierarchy mappings under the old key
+        "Update",  # document_by_connector_credential_pair (no composite FK)
+        "flush(credential_id=31)",  # cc-pair re-keyed before the re-insert
+        "Insert",  # hierarchy mappings under the new key
+        "flush(credential_id=31)",
+    ]
+    insert_call = db_session.execute.call_args_list[2]
+    assert insert_call.args[1] == [
+        {"hierarchy_node_id": 101, "connector_id": 3, "credential_id": 31},
+        {"hierarchy_node_id": 102, "connector_id": 3, "credential_id": 31},
+    ]
+
+
+def test_swap_cc_pair_credential_skips_insert_without_hierarchy_rows() -> None:
+    from onyx.db import lti as db_lti
+
+    cc_pair = _fake_cc_pair(id=7, connector_id=3, credential_id=30)
+    db_session = MagicMock()
+    db_session.scalars.return_value.all.return_value = []
+
+    db_lti.swap_lti_canvas_cc_pair_credential(
+        db_session=db_session, cc_pair=cc_pair, new_credential_id=31
+    )
+
+    executed = [type(c.args[0]).__name__ for c in db_session.execute.call_args_list]
+    assert executed == ["Delete", "Update"]
+    assert cc_pair.credential_id == 31
+
+
+def test_swap_cc_pair_credential_noop_for_same_credential() -> None:
+    from onyx.db import lti as db_lti
+
+    cc_pair = _fake_cc_pair(id=7, connector_id=3, credential_id=30)
+    db_session = MagicMock()
+
+    db_lti.swap_lti_canvas_cc_pair_credential(
+        db_session=db_session, cc_pair=cc_pair, new_credential_id=30
+    )
+
+    db_session.execute.assert_not_called()
+
+
+def test_pause_cc_pairs_for_revoked_credential_pauses_every_pair() -> None:
+    from onyx.db import lti as db_lti
+
+    cc_pairs = [
+        _fake_cc_pair(id=7, status=ConnectorCredentialPairStatus.ACTIVE),
+        _fake_cc_pair(id=8, status=ConnectorCredentialPairStatus.ACTIVE),
+    ]
+    db_session = MagicMock()
+
+    db_lti.pause_cc_pairs_for_revoked_credential(
+        db_session=db_session, cc_pairs=cc_pairs
+    )
+
+    assert all(
+        cc_pair.status == ConnectorCredentialPairStatus.PAUSED for cc_pair in cc_pairs
+    )
+    # One bulk cancel of queued index attempts covering both cc-pairs.
+    assert db_session.execute.call_count == 1
+    cancel_stmt = db_session.execute.call_args.args[0]
+    assert "connector_credential_pair_id IN" in str(cancel_stmt)
+
+
+def test_pause_cc_pairs_for_revoked_credential_noop_when_empty() -> None:
+    from onyx.db import lti as db_lti
+
+    db_session = MagicMock()
+    db_lti.pause_cc_pairs_for_revoked_credential(db_session=db_session, cc_pairs=[])
+    db_session.execute.assert_not_called()
+
+
 def test_setup_request_requires_token_or_credential() -> None:
     with pytest.raises(ValueError):
         api.LtiCanvasConnectorSetupRequest()
@@ -463,7 +560,10 @@ def test_require_connected_credential_rejects_other_users_credential(
 
     with pytest.raises(OnyxError) as exc_info:
         api._require_connected_canvas_oauth_credential(
-            db_session=MagicMock(), user=user, credential_id=30
+            db_session=MagicMock(),
+            user=user,
+            credential_id=30,
+            canvas_base_url="https://school.instructure.com",
         )
 
     assert exc_info.value.error_code == OnyxErrorCode.CREDENTIAL_NOT_FOUND
@@ -483,7 +583,10 @@ def test_require_connected_credential_rejects_unauthorized_credential(
 
     with pytest.raises(OnyxError) as exc_info:
         api._require_connected_canvas_oauth_credential(
-            db_session=MagicMock(), user=user, credential_id=30
+            db_session=MagicMock(),
+            user=user,
+            credential_id=30,
+            canvas_base_url="https://school.instructure.com",
         )
 
     assert exc_info.value.error_code == OnyxErrorCode.CREDENTIAL_INVALID
@@ -499,7 +602,54 @@ def test_require_connected_credential_accepts_owner(
 
     assert (
         api._require_connected_canvas_oauth_credential(
-            db_session=MagicMock(), user=user, credential_id=30
+            db_session=MagicMock(),
+            user=user,
+            credential_id=30,
+            canvas_base_url="https://school.instructure.com",
+        )
+        is credential
+    )
+
+
+@patch("onyx.server.lti.api.fetch_credential_by_id")
+def test_require_connected_credential_rejects_other_canvas_host(
+    mock_fetch_credential: MagicMock,
+) -> None:
+    # A live credential issued by Canvas host A must not be attached to a
+    # launch from host B: the resulting client would send A's bearer token
+    # to B.
+    user = _fake_user()
+    mock_fetch_credential.return_value = _fake_credential(
+        _oauth_json(**{oauth.CANVAS_BASE_URL_KEY: "https://other.instructure.com"}),
+        user_id=user.id,
+    )
+
+    with pytest.raises(OnyxError) as exc_info:
+        api._require_connected_canvas_oauth_credential(
+            db_session=MagicMock(),
+            user=user,
+            credential_id=30,
+            canvas_base_url="https://school.instructure.com",
+        )
+
+    assert exc_info.value.error_code == OnyxErrorCode.CREDENTIAL_INVALID
+    assert "different Canvas instance" in str(exc_info.value.detail)
+
+
+@patch("onyx.server.lti.api.fetch_credential_by_id")
+def test_require_connected_credential_ignores_trailing_slash_on_host(
+    mock_fetch_credential: MagicMock,
+) -> None:
+    user = _fake_user()
+    credential = _fake_credential(_oauth_json(), user_id=user.id)
+    mock_fetch_credential.return_value = credential
+
+    assert (
+        api._require_connected_canvas_oauth_credential(
+            db_session=MagicMock(),
+            user=user,
+            credential_id=30,
+            canvas_base_url="https://school.instructure.com/",
         )
         is credential
     )

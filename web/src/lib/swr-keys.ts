@@ -184,4 +184,12 @@ export const SWR_KEYS = {
 
   // ── Connectors ────────────────────────────────────────────────────────────
   connector: "/api/manage/connector",
+
+  // ── LTI / Virtual Tutor ───────────────────────────────────────────────────
+  ltiCourseConnectorStatus: (courseId: string) =>
+    `/api/auth/lti/course/${encodeURIComponent(courseId)}/connector-status`,
+  ltiTutorsForCourse: (contextId: string) =>
+    `/api/auth/lti/tutors-for-course?context_id=${encodeURIComponent(
+      contextId
+    )}`,
 } as const;

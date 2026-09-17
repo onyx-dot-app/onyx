@@ -1190,21 +1190,19 @@ class CanvasConnector(
         if not download_url:
             return None
 
+        # The client enforces the size cap while streaming, so a file whose
+        # reported `size` is missing or wrong is abandoned part-way through
+        # rather than fully buffered and then discarded.
         try:
-            raw_bytes = self.canvas_client.download_file(download_url)
+            raw_bytes = self.canvas_client.download_file(
+                download_url, max_bytes=CANVAS_CONNECTOR_FILE_SIZE_THRESHOLD
+            )
         except Exception as e:
             logger.warning(f"Failed to download Canvas file {file_label}: {e}")
             return None
 
         if not raw_bytes:
             logger.warning(f"Canvas file {file_label} download returned no data")
-            return None
-        if len(raw_bytes) > CANVAS_CONNECTOR_FILE_SIZE_THRESHOLD:
-            logger.warning(
-                f"Skipping content of Canvas file {file_label}: downloaded "
-                f"{len(raw_bytes)} bytes exceeds threshold="
-                f"{CANVAS_CONNECTOR_FILE_SIZE_THRESHOLD}"
-            )
             return None
 
         # break_on_unprocessable=False: unsupported / corrupt files log a

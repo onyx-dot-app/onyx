@@ -13,6 +13,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import type { ChatSession } from "@/app/app/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import type { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import { useAgents } from "@/hooks/useAgents";
 import useChatSessions, {
@@ -114,17 +115,13 @@ export default function TutorChatPage() {
   // The set of tutors that belong to the current Canvas course. Used to scope
   // the History modal to only conversations with this course's tutors.
   const courseTutorsSwrKey = ltiContextId
-    ? `/api/auth/lti/tutors-for-course?context_id=${encodeURIComponent(
-        ltiContextId
-      )}`
+    ? SWR_KEYS.ltiTutorsForCourse(ltiContextId)
     : null;
   const { data: courseTutors, isLoading: isLoadingCourseTutors } = useSWR<
     MinimalPersonaSnapshot[]
   >(courseTutorsSwrKey, errorHandlingFetcher);
   const courseConnectorStatusSwrKey = ltiContextId
-    ? `/api/auth/lti/course/${encodeURIComponent(
-        ltiContextId
-      )}/connector-status`
+    ? SWR_KEYS.ltiCourseConnectorStatus(ltiContextId)
     : null;
   const {
     data: courseConnectorStatus,

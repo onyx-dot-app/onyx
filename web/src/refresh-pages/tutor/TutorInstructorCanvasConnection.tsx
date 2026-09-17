@@ -10,6 +10,7 @@ import Title from "@/components/ui/title";
 import Text from "@/refresh-components/texts/Text";
 import { toast } from "@/hooks/useToast";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import type { LtiCourseConnectorStatus } from "@/refresh-pages/tutor/CanvasCourseSetupView";
 import {
   attachCanvasCredentialToCourse,
@@ -67,11 +68,8 @@ export default function TutorInstructorCanvasConnection({
   courseId,
   onConnectionChanged,
 }: TutorInstructorCanvasConnectionProps) {
-  const statusKey = `/api/auth/lti/course/${encodeURIComponent(
-    courseId
-  )}/connector-status`;
   const { data: status, mutate } = useSWR<LtiCourseConnectorStatus>(
-    statusKey,
+    SWR_KEYS.ltiCourseConnectorStatus(courseId),
     errorHandlingFetcher,
     { refreshInterval: 30_000 }
   );
@@ -106,7 +104,7 @@ export default function TutorInstructorCanvasConnection({
   const handleDisconnect = useCallback(async () => {
     if (
       !window.confirm(
-        "Disconnect Canvas? Syncing pauses until an instructor reconnects. Already indexed content stays available."
+        "Disconnect Canvas? This revokes your Canvas authorization, so syncing pauses for every course you connected with it until an instructor reconnects. Already indexed content stays available."
       )
     ) {
       return;

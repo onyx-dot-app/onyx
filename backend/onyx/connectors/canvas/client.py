@@ -17,6 +17,9 @@ logger = logging.getLogger(__name__)
 
 # Requests timeout in seconds.
 _CANVAS_CALL_TIMEOUT: int = 30
+# Files are streamed in chunks of this size so an oversized download can be
+# abandoned before it is fully buffered.
+_DOWNLOAD_CHUNK_SIZE: int = 64 * 1024
 _CANVAS_API_VERSION: str = "/api/v1"
 # Matches the "next" URL in a Canvas Link header, e.g.:
 #   <https://canvas.example.com/api/v1/courses?page=2>; rel="next"
@@ -173,7 +176,7 @@ class CanvasApiClient:
         public_url = body.get("public_url")
         return public_url if isinstance(public_url, str) and public_url else None
 
-    def download_file(self, url: str) -> bytes:
+    def download_file(self, url: str, max_bytes: int | None = None) -> bytes:
         """Download a file's raw bytes from a self-authorizing Canvas URL.
 
         ``url`` must carry its own authorization: a file ``url`` that includes
@@ -186,6 +189,11 @@ class CanvasApiClient:
         When Canvas will not serve the file it redirects to its login page
         with a 200, so that is detected and reported as a failure rather than
         indexing the login page's HTML.
+
+        The body is streamed. When ``max_bytes`` is given, the download is
+        abandoned as soon as it is known to exceed that size (from
+        ``Content-Length`` or while reading), so a file whose advertised
+        ``size`` is missing or wrong cannot buffer unbounded data in memory.
         """
         parsed = urlparse(url)
         if parsed.scheme not in ("http", "https") or not parsed.hostname:
@@ -198,29 +206,60 @@ class CanvasApiClient:
             url,
             timeout=_CANVAS_CALL_TIMEOUT,
             allow_redirects=True,
+            stream=True,
         )
+        try:
+            if response.status_code >= 400:
+                raise OnyxError(
+                    _error_code_for_status(response.status_code),
+                    detail=(
+                        f"Failed to download Canvas file: "
+                        f"{response.reason or f'HTTP {response.status_code}'}"
+                    ),
+                    status_code_override=response.status_code,
+                )
 
-        if response.status_code >= 400:
-            raise OnyxError(
-                _error_code_for_status(response.status_code),
-                detail=(
-                    f"Failed to download Canvas file: "
-                    f"{response.reason or f'HTTP {response.status_code}'}"
-                ),
-                status_code_override=response.status_code,
-            )
+            visited = [r.url for r in response.history] + [response.url]
+            if any(_is_canvas_login_url(visited_url) for visited_url in visited):
+                raise OnyxError(
+                    OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                    detail=(
+                        "Canvas redirected the file download to its login page; "
+                        "the download URL is not authorized"
+                    ),
+                )
 
-        visited = [r.url for r in response.history] + [response.url]
-        if any(_is_canvas_login_url(visited_url) for visited_url in visited):
-            raise OnyxError(
-                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-                detail=(
-                    "Canvas redirected the file download to its login page; "
-                    "the download URL is not authorized"
-                ),
-            )
+            if max_bytes is not None:
+                content_length = response.headers.get("Content-Length")
+                if (
+                    isinstance(content_length, str)
+                    and content_length.isdigit()
+                    and int(content_length) > max_bytes
+                ):
+                    raise OnyxError(
+                        OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                        detail=(
+                            f"Canvas file is {content_length} bytes, over the "
+                            f"{max_bytes} byte limit"
+                        ),
+                    )
 
-        return response.content
+            buffer = bytearray()
+            for chunk in response.iter_content(chunk_size=_DOWNLOAD_CHUNK_SIZE):
+                if not chunk:
+                    continue
+                buffer.extend(chunk)
+                if max_bytes is not None and len(buffer) > max_bytes:
+                    raise OnyxError(
+                        OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                        detail=(
+                            f"Canvas file download exceeded the {max_bytes} "
+                            "byte limit"
+                        ),
+                    )
+            return bytes(buffer)
+        finally:
+            response.close()
 
     def _parse_next_link(self, link_header: str) -> str | None:
         """Extract the 'next' URL from a Canvas Link header.

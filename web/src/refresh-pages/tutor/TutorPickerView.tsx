@@ -12,6 +12,7 @@ import Text from "@/refresh-components/texts/Text";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { useUser } from "@/providers/UserProvider";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import type { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
@@ -37,11 +38,8 @@ export default function TutorPickerView({
   const isEmbedded = useEmbeddedMode();
   const canManageCourseTutors = canManageTutors || isAdmin || isCurator;
 
-  const swrKey = `/api/auth/lti/tutors-for-course?context_id=${encodeURIComponent(
-    ltiContextId
-  )}`;
   const { data, error, isLoading } = useSWR<MinimalPersonaSnapshot[]>(
-    swrKey,
+    SWR_KEYS.ltiTutorsForCourse(ltiContextId),
     errorHandlingFetcher
   );
 
