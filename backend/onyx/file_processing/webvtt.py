@@ -29,6 +29,11 @@ _VOICE_TAG_RE = re.compile(r"<v(?:\.[^ \t>]*)?[ \t]+([^>]+)>")
 _VOICE_BOUNDARY_RE = re.compile(rf"{_VOICE_TAG_RE.pattern}|</v>")
 
 
+def is_timing_line(line: str) -> bool:
+    """A cue's timing line, "00:00:01.000 --> 00:00:02.000" plus settings."""
+    return _TIMING_LINE_RE.match(line) is not None
+
+
 def _clean_cue_line(line: str) -> str:
     """WebVTT forbids a literal "&", so "R&D" arrives as "R&amp;D". Strip markup
     before decoding, or an escaped "&lt;v Jane&gt;" becomes a tag and gets

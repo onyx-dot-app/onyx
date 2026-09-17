@@ -77,6 +77,21 @@ from onyx.connectors.sharepoint.connector_utils import (
     get_sharepoint_external_access,
 )
 from onyx.connectors.teams.models import ChannelRef, Message
+from onyx.connectors.teams.transcripts import (
+    MeetingRecord,
+    Organizer,
+    Transcript,
+    access_policy_missing,
+    fetch_meeting,
+    fetch_organizers,
+    fetch_transcript_text,
+    fetch_transcripts,
+    organizer_expert,
+    transcript_access,
+    transcript_document_id,
+    transcript_text,
+    transcripts_disabled,
+)
 from onyx.connectors.teams.utils import (
     ChannelFilesUnavailable,
     GraphRetriesExhausted,
@@ -134,6 +149,9 @@ class TeamsCheckpoint(ConnectorCheckpoint):
     # a page instead of a whole team. No page url means the channel's first page.
     current_channel: ChannelRef | None = None
     next_messages_url: str | None = None
+    # Meeting transcripts follow the channels. None until the organizers are
+    # listed, then one organizer per step.
+    todo_organizers: list[Organizer] | None = None
 
 
 class TeamsConnector(
@@ -156,6 +174,10 @@ class TeamsConnector(
         include_attachments: bool = False,
         # Off by default: every pasted image is a download and a vision call.
         include_inline_images: bool = False,
+        # Off by default: transcripts need three more grants, a tenant setting
+        # and an application access policy. Empty organizers means every user.
+        include_meeting_transcripts: bool = False,
+        transcript_organizers: list[str] | None = None,
     ) -> None:
         if teams is None:
             teams = []
@@ -167,6 +189,8 @@ class TeamsConnector(
         self.requested_team_list: list[str] = teams
         self.include_attachments = include_attachments
         self.include_inline_images = include_inline_images
+        self.include_meeting_transcripts = include_meeting_transcripts
+        self.transcript_organizers: list[str] = transcript_organizers or []
         # Granted by the factory from the image analysis setting.
         self.allow_images = False
         # Channels walked again from their first page in this attempt: a saved
@@ -315,6 +339,8 @@ class TeamsConnector(
                     "refuses app-only tokens from a client secret."
                 )
             self._validate_attachment_access(list(validation_query))
+        if self.include_meeting_transcripts:
+            self._validate_transcript_access()
 
     def _validate_attachment_access(self, tenant_teams: list[Team]) -> None:
         """Channel files need a sites grant the Teams permissions do not cover,
@@ -404,7 +430,7 @@ class TeamsConnector(
     def load_from_checkpoint(
         self,
         start: SecondsSinceUnixEpoch,
-        end: SecondsSinceUnixEpoch,  # noqa: ARG002
+        end: SecondsSinceUnixEpoch,
         checkpoint: TeamsCheckpoint,
     ) -> CheckpointOutput[TeamsCheckpoint]:
         if self.graph_client is None:
@@ -418,21 +444,7 @@ class TeamsConnector(
                 requested=self.requested_team_list,
             )
             checkpoint.todo_team_ids = [team.id for team in teams if team.id]
-        elif checkpoint.current_channel is None and not checkpoint.todo_channels:
-            # A team is left, or has_more would have ended the walk.
-            team_id = checkpoint.todo_team_ids.pop()
-            team = _get_team_by_id(graph_client=self.graph_client, team_id=team_id)
-            checkpoint.todo_channels = [
-                _channel_ref(team_id, channel)
-                for channel in _collect_all_channels_from_team(team=team)
-            ]
-            logger.info(
-                "Listed %s channel(s) of team %s; %s team(s) left",
-                len(checkpoint.todo_channels),
-                team_id,
-                len(checkpoint.todo_team_ids),
-            )
-        else:
+        elif checkpoint.current_channel is not None or checkpoint.todo_channels:
             if checkpoint.current_channel is None:
                 checkpoint.current_channel = checkpoint.todo_channels.pop()
             yield from _walk_channel_page(
@@ -445,13 +457,193 @@ class TeamsConnector(
                 self._index_channel_files if self.include_attachments else None,
                 self._message_images if self.include_inline_images else None,
             )
+        elif checkpoint.todo_team_ids:
+            team_id = checkpoint.todo_team_ids.pop()
+            team = _get_team_by_id(graph_client=self.graph_client, team_id=team_id)
+            checkpoint.todo_channels = [
+                _channel_ref(team_id, channel)
+                for channel in _collect_all_channels_from_team(team=team)
+            ]
+            logger.info(
+                "Listed %s channel(s) of team %s; %s team(s) left",
+                len(checkpoint.todo_channels),
+                team_id,
+                len(checkpoint.todo_team_ids),
+            )
+        elif self.include_meeting_transcripts and checkpoint.todo_organizers is None:
+            checkpoint.todo_organizers = fetch_organizers(
+                self.graph_client, self.transcript_organizers
+            )
+            logger.info(
+                "Listed %s meeting organizer(s)", len(checkpoint.todo_organizers)
+            )
+        elif self.include_meeting_transcripts and checkpoint.todo_organizers:
+            yield from self._index_transcripts(
+                checkpoint.todo_organizers.pop(), start, end
+            )
 
         checkpoint.has_more = bool(
             checkpoint.current_channel
             or checkpoint.todo_channels
             or checkpoint.todo_team_ids
+            or (
+                self.include_meeting_transcripts
+                and (checkpoint.todo_organizers is None or checkpoint.todo_organizers)
+            )
         )
         return checkpoint
+
+    def _index_transcripts(
+        self,
+        organizer: Organizer,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+    ) -> Iterator[Document | ConnectorFailure]:
+        """The transcripts one organizer's meetings produced inside the window.
+        A refused listing is one recorded failure for the organizer, since the
+        access policy is granted per user, except the tenant-wide setting that
+        turns transcript export off, which no other organizer escapes."""
+        assert self.graph_client is not None
+        # Documents flow page by page. The document reads absorb their own
+        # refusals, so only the listing's refusals reach this handler.
+        try:
+            for transcript in fetch_transcripts(
+                self.graph_client, organizer.id, start, end
+            ):
+                yield self._transcript_document(organizer, transcript)
+        except requests.HTTPError as e:
+            if transcripts_disabled(e):
+                raise ConnectorValidationError(_TRANSCRIPTS_DISABLED) from e
+            if not _is_permanent(e):
+                raise
+            yield ConnectorFailure(
+                failed_entity=EntityFailure(entity_id=organizer.id),
+                failure_message=(
+                    f"Could not list the meeting transcripts of {organizer.email}: "
+                    f"{_transcript_refusal(e)}"
+                ),
+                exception=e,
+            )
+
+    def _meeting_record(
+        self, organizer: Organizer, transcript: Transcript
+    ) -> MeetingRecord | None:
+        """The meeting's name and people. A refused record leaves the transcript
+        readable by its organizer alone, anything else fails the attempt."""
+        assert self.graph_client is not None
+        try:
+            return fetch_meeting(self.graph_client, organizer.id, transcript.meeting_id)
+        except requests.HTTPError as e:
+            if not _is_permanent(e):
+                raise
+            logger.warning(
+                "Meeting %s of %s is not readable, its transcript is shared with "
+                "the organizer alone: %s",
+                transcript.meeting_id,
+                organizer.email,
+                _transcript_refusal(e),
+            )
+            return None
+
+    def _transcript_document(
+        self, organizer: Organizer, transcript: Transcript
+    ) -> Document | ConnectorFailure:
+        assert self.graph_client is not None
+        meeting = self._meeting_record(organizer, transcript)
+        link = meeting.join_web_url if meeting else None
+        try:
+            content, attributed = fetch_transcript_text(
+                self.graph_client, transcript.content_url
+            )
+        except requests.HTTPError as e:
+            if not _is_permanent(e):
+                raise
+            return ConnectorFailure(
+                failed_document=DocumentFailure(
+                    document_id=transcript_document_id(transcript.id),
+                    document_link=link,
+                ),
+                failure_message=(
+                    f"Transcript of meeting {transcript.meeting_id} organized by "
+                    f"{organizer.email}: {_transcript_refusal(e)}"
+                ),
+                exception=e,
+            )
+        when = (
+            meeting.start if meeting and meeting.start else transcript.created
+        ).date()
+        title = (meeting.subject if meeting else None) or f"Teams meeting on {when}"
+        # The slim walk lists every transcript, so an empty one still needs a
+        # document or its old text would outlive it.
+        text = transcript_text(content) or title
+        return Document(
+            id=transcript_document_id(transcript.id),
+            sections=[TextSection(link=link, text=text)],
+            source=DocumentSource.TEAMS,
+            semantic_identifier=f"{title} ({when})",
+            title=title,
+            doc_created_at=transcript.created,
+            doc_updated_at=transcript.created,
+            primary_owners=organizer_expert(organizer),
+            metadata={
+                "organizer": organizer.email or "",
+                "meeting_start": (
+                    meeting.start.isoformat() if meeting and meeting.start else ""
+                ),
+                "speakers": "attributed" if attributed else "unattributed",
+            },
+            external_access=transcript_access(organizer, meeting),
+        )
+
+    def _validate_transcript_access(self) -> None:
+        """Lists one organizer's transcripts and, when there is one, reads its
+        meeting and its content: the three grants, the tenant setting and the
+        access policy all answer on these calls. An empty listing proves the
+        listing grant alone, which is enough to run."""
+        assert self.graph_client is not None
+        try:
+            # Every configured name is resolved on purpose: a misspelled one is a
+            # misconfiguration the admin should see now, not at index time.
+            organizers = (
+                fetch_organizers(self.graph_client, self.transcript_organizers)
+                if self.transcript_organizers
+                else fetch_organizers(self.graph_client, [], limit=1)
+            )
+        except requests.HTTPError as e:
+            if _status(e) == 404 and self.transcript_organizers:
+                raise ConnectorValidationError(
+                    f"No user matches a configured organizer: {_transcript_refusal(e)}"
+                )
+            if _status(e) in (401, 403):
+                raise InsufficientPermissionsError(
+                    "Include Meeting Transcripts needs the User.Read.All "
+                    f"application permission to list organizers ({_status(e)})."
+                )
+            raise UnexpectedValidationError(f"Could not list organizers: {e}")
+        except (GraphRetriesExhausted, requests.RequestException) as e:
+            raise UnexpectedValidationError(f"Could not list organizers: {e}")
+        if not organizers:
+            raise UnexpectedValidationError(
+                "No enabled user to probe transcripts on. Configure an organizer."
+            )
+        organizer = organizers[0]
+        try:
+            transcript = next(
+                iter(fetch_transcripts(self.graph_client, organizer.id, None, None, 1)),
+                None,
+            )
+            if transcript is None:
+                return
+            fetch_meeting(self.graph_client, organizer.id, transcript.meeting_id)
+            fetch_transcript_text(self.graph_client, transcript.content_url)
+        except requests.HTTPError as e:
+            if transcripts_disabled(e) or access_policy_missing(e):
+                raise ConnectorValidationError(_transcript_refusal(e))
+            if _status(e) in (401, 403):
+                raise InsufficientPermissionsError(_transcript_refusal(e))
+            raise UnexpectedValidationError(f"Could not read a transcript: {e}")
+        except (GraphRetriesExhausted, requests.RequestException) as e:
+            raise UnexpectedValidationError(f"Could not read a transcript: {e}")
 
     def _message_images(self, message: Message, limit: int) -> "_ImageHarvest":
         """Up to ``limit`` images pasted into one message, stored for the vision
@@ -773,6 +965,55 @@ class TeamsConnector(
                 # Flush any remaining slim documents collected for this channel
                 if slim_doc_buffer:
                     yield slim_doc_buffer
+
+        if self.include_meeting_transcripts:
+            yield from _batched(
+                self._slim_transcripts(callback), _SLIM_DOC_BATCH_SIZE, callback
+            )
+
+    def _slim_transcripts(
+        self, callback: IndexingHeartbeatInterface | None
+    ) -> Iterator[SlimDocument]:
+        """Every transcript of every organizer with the readers the indexing walk
+        gives it. An organizer whose listing is refused is skipped: those
+        transcripts cannot be indexed any more either, so pruning them is right."""
+        assert self.graph_client is not None
+        stop_check = lambda: _raise_if_stopped(callback)  # noqa: E731
+        for organizer in fetch_organizers(
+            self.graph_client, self.transcript_organizers, before_page=stop_check
+        ):
+            # An organizer can hold pages of transcripts, each with a meeting
+            # record to read, so a stop is honored before every read and
+            # progress is reported per organizer, not only per full batch.
+            _raise_if_stopped(callback)
+            if callback:
+                callback.progress("retrieve_all_slim_docs_perm_sync", 1)
+            listed = False
+            try:
+                for transcript in fetch_transcripts(
+                    self.graph_client, organizer.id, None, None, before_page=stop_check
+                ):
+                    listed = True
+                    _raise_if_stopped(callback)
+                    yield SlimDocument(
+                        id=transcript_document_id(transcript.id),
+                        external_access=transcript_access(
+                            organizer, self._meeting_record(organizer, transcript)
+                        ),
+                        doc_created_at=transcript.created,
+                    )
+            except requests.HTTPError as e:
+                if transcripts_disabled(e):
+                    raise ConnectorValidationError(_TRANSCRIPTS_DISABLED) from e
+                # Pruning deletes what the walk leaves out, so a partly listed
+                # organizer fails the walk instead of being skipped.
+                if listed or not _is_permanent(e):
+                    raise
+                logger.warning(
+                    "Skipping the transcripts of %s: %s",
+                    organizer.email,
+                    _transcript_refusal(e),
+                )
 
     def _slim_channel_files(
         self, channel: ChannelRef, with_readers: bool
@@ -1291,6 +1532,54 @@ def _indexable_file(item: DriveItemData) -> bool:
     if not item.mime_type or item.mime_type in OnyxMimeTypes.EXCLUDED_IMAGE_TYPES:
         return False
     return item.size is None or item.size <= TEAMS_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD
+
+
+def _raise_if_stopped(callback: IndexingHeartbeatInterface | None) -> None:
+    if callback and callback.should_stop():
+        raise RuntimeError("retrieve_all_slim_docs_perm_sync: Stop signal detected")
+
+
+def _batched(
+    items: Iterator[SlimDocument],
+    size: int,
+    callback: IndexingHeartbeatInterface | None,
+) -> Iterator[list[SlimDocument | HierarchyNode]]:
+    """Batches for the slim walk, with the stop and progress signals the
+    channel loop gives the runner before every full batch."""
+    batch: list[SlimDocument | HierarchyNode] = []
+    for item in items:
+        batch.append(item)
+        if len(batch) >= size:
+            _raise_if_stopped(callback)
+            if callback:
+                callback.progress("retrieve_all_slim_docs_perm_sync", 1)
+            yield batch
+            batch = []
+    if batch:
+        yield batch
+
+
+_TRANSCRIPTS_DISABLED = (
+    "Include Meeting Transcripts needs the tenant setting that allows Graph API "
+    "access to transcripts, which a Teams administrator has turned off."
+)
+
+
+def _transcript_refusal(error: requests.HTTPError) -> str:
+    """What a refused transcript call asks the admin to do, by Graph's code."""
+    if transcripts_disabled(error):
+        return _TRANSCRIPTS_DISABLED
+    if access_policy_missing(error):
+        return (
+            "An application access policy naming this app must be granted to the "
+            "organizer (or the whole tenant) for meeting transcripts."
+        )
+    if _status(error) == 403:
+        return (
+            "Include Meeting Transcripts needs the OnlineMeetingTranscript.Read.All "
+            "and OnlineMeetings.Read.All application permissions."
+        )
+    return f"Graph answered {_status(error)}."
 
 
 def _status(error: requests.RequestException) -> int | None:
