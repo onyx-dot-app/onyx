@@ -378,7 +378,7 @@ def save_chat_response(*, message_id: int, response: ChatResponseSnapshot) -> No
         )
 
 
-def _child_responses(db_session: Session, response_id: int) -> list[ChatMessage]:
+def _child_responses(db_session: Session, response_ids: list[int]) -> list[ChatMessage]:
     question = aliased(ChatMessage)
     return list(
         db_session.scalars(
@@ -388,7 +388,7 @@ def _child_responses(db_session: Session, response_id: int) -> list[ChatMessage]
             .join(ChatResponseItem, ChatResponseItem.tool_call_id == ToolCall.id)
             .where(
                 ChatResponseItem.kind == ResponseItemKind.TOOL_CALL,
-                ToolCall.parent_chat_message_id == response_id,
+                ToolCall.parent_chat_message_id.in_(response_ids),
                 ChatMessage.response_status.is_not(None),
             )
             .options(
@@ -408,6 +408,37 @@ def _child_responses(db_session: Session, response_id: int) -> list[ChatMessage]
     )
 
 
+def _load_child_responses(
+    db_session: Session, response_id: int
+) -> dict[int, list[ChatMessage]]:
+    """Load each hierarchy level together before assembling the response tree."""
+    children: dict[int, list[ChatMessage]] = {}
+    parents = [response_id]
+    visited = {response_id}
+    for depth in range(MAX_AGENT_DEPTH + 1):
+        rows = _child_responses(db_session, parents)
+        if not rows:
+            return children
+        parents = []
+        for row in rows:
+            if (
+                depth == MAX_AGENT_DEPTH
+                or len(visited) >= MAX_AGENT_HISTORY_RUNS
+                or row.id in visited
+            ):
+                raise ValueError(
+                    "Response hierarchy exceeds its limit or contains a cycle"
+                )
+            question = row.parent_message
+            invocation = question.invoking_tool_call if question else None
+            if invocation is None or invocation.parent_chat_message_id is None:
+                raise ValueError("Child response has no parent invocation")
+            children.setdefault(invocation.parent_chat_message_id, []).append(row)
+            visited.add(row.id)
+            parents.append(row.id)
+    return children
+
+
 def read_chat_execution(message: ChatMessage) -> ChatExecutionRecord | None:
     if message.response_status is None or not record_mode_persists_content(
         message.chat_session.incognito_record_mode
@@ -418,21 +449,13 @@ def read_chat_execution(message: ChatMessage) -> ChatExecutionRecord | None:
         raise ValueError("Response content must be loaded inside its database session")
     presentation: dict[str, MessageRendering] = {}
     tool_records: list[ToolRecordReference] = []
-    visited: set[int] = set()
+    children = _load_child_responses(db_session, message.id)
 
     def read(
         response: ChatMessage,
-        depth: int,
         agent_path: str,
         invoking_generation_id: str | None = None,
     ) -> ResponseRecord:
-        if (
-            depth > MAX_AGENT_DEPTH
-            or len(visited) >= MAX_AGENT_HISTORY_RUNS
-            or response.id in visited
-        ):
-            raise ValueError("Response hierarchy exceeds its limit or contains a cycle")
-        visited.add(response.id)
         record = read_response_record(
             response, agent_path, invoking_generation_id=invoking_generation_id
         )
@@ -454,7 +477,7 @@ def read_chat_execution(message: ChatMessage) -> ChatExecutionRecord | None:
                         record_id=item.tool_call.id,
                     )
                 )
-        for child in _child_responses(db_session, response.id):
+        for child in children.get(response.id, []):
             question = child.parent_message
             name = child.chat_session.agent_name
             if (
@@ -466,14 +489,13 @@ def read_chat_execution(message: ChatMessage) -> ChatExecutionRecord | None:
             record.child_runs.append(
                 read(
                     child,
-                    depth + 1,
                     f"{agent_path}/{name}",
                     generation_by_tool[question.invoking_tool_call_id],
                 )
             )
         return record
 
-    root = read(message, 0, agent_session_path(db_session, message.chat_session))
+    root = read(message, agent_session_path(db_session, message.chat_session))
     return ChatExecutionRecord(
         response=root, presentation=presentation, tool_records=tool_records
     )

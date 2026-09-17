@@ -48,7 +48,13 @@ from onyx.llm.custom_config_mapping import (
     UI_ONLY_CONFIG_KEYS,
     map_custom_config_to_model_kwargs,
 )
-from onyx.llm.exceptions import LLMContextLimitError, LLMRateLimitError, LLMTimeoutError
+from onyx.llm.exceptions import (
+    ClassifiedLLMError,
+    LLMContextLimitError,
+    LLMRateLimitError,
+    LLMTimeoutError,
+    litellm_exception_to_safe_error,
+)
 from onyx.llm.interfaces import (
     LLM,
     GenerationContext,
@@ -307,8 +313,11 @@ def _generation_scope(context: GenerationContext) -> Iterator[CancellationSignal
 
 
 @contextmanager
-def _provider_scope(context: GenerationContext) -> Iterator[CancellationSignal]:
+def _provider_scope(
+    context: GenerationContext, llm: LLM
+) -> Iterator[CancellationSignal]:
     from litellm.exceptions import ContextWindowExceededError, RateLimitError, Timeout
+    from openai import APIError
 
     try:
         with _generation_scope(context) as signal:
@@ -319,6 +328,14 @@ def _provider_scope(context: GenerationContext) -> Iterator[CancellationSignal]:
         raise LLMTimeoutError(str(error)) from error
     except RateLimitError as error:
         raise LLMRateLimitError(str(error)) from error
+    except APIError as error:
+        # LiteLLM provider exceptions share the OpenAI SDK base class.
+        info = litellm_exception_to_safe_error(error, llm)
+        raise ClassifiedLLMError(
+            client_error_msg=info.message,
+            error_code=info.error_code,
+            is_retryable=info.is_retryable,
+        ) from error
 
 
 def _consume_stream_with_timeout[T](
@@ -865,8 +882,8 @@ class LitellmTransport:
         # Downgrade tool_choice=required to AUTO for models that mishandle it:
         # Claude skips reasoning when it's set, Qwen thinking models reject it
         # with a 400, and Z.AI rejects any GLM tool_choice other than auto
-        # ("Tool choice must be auto"). The chat loop's fallback tool-call
-        # extraction still enforces the forced tool. Matched by model name
+        # ("Tool choice must be auto"). Shared response decoding attempts
+        # to recover tool calls from text. Matched by model name
         # rather than `is_reasoning` because the litellm/local registry lags
         # behind new Qwen/GLM releases (e.g. qwen3.7-plus, glm-5.3).
         # A NamedToolChoice is deliberately NOT downgraded: legacy Claude
@@ -1229,8 +1246,6 @@ class LitellmTransport:
                             kwargs,
                             signal,
                             timeout=timeout_override or self._timeout,
-                            isolated_client=self._uses_isolated_client()
-                            or self._api_surface is LlmApiSurface.OPENAI_RESPONSES,
                         )
                     # LiteLLM's overloads do not express the stream flag's return type.
                     return cast(
@@ -1368,7 +1383,7 @@ class LitellmTransport:
         from onyx.llm.litellm_conversion import from_litellm_model_response
 
         # Synchronous gateway calls isolate clients for providers that accept HTTPHandler.
-        # Shared SDK calls use cancellable async I/O with request-owned clients.
+        # Shared SDK calls interrupt request-owned synchronous connections on cancellation.
         # Cap the per-read timeout at the total budget. The deadline is only
         # checked between chunks, so without this a single blocking read could
         # overshoot a total shorter than the socket read timeout. No-op when the
@@ -1550,7 +1565,7 @@ class LitellmLLM(LLM):
         messages = serialize_request(request, self.transport.config)
         definitions = serialize_tools(request.tools)
         with (
-            _provider_scope(context) as signal,
+            _provider_scope(context, self) as signal,
             llm_generation_span(
                 self.info,
                 context.flow or LLMFlow.UNTAGGED_INVOKE,
@@ -1572,7 +1587,7 @@ class LitellmLLM(LLM):
             )
             signal.check()
             source = response.choice.message
-            accumulator = MessageAccumulator()
+            accumulator = MessageAccumulator(request.tools)
             accumulator.add(
                 ModelResponseStream(
                     id=response.id,
@@ -1613,11 +1628,11 @@ class LitellmLLM(LLM):
     ) -> Generator[GenerationEvent, None, None]:
         context = context or GenerationContext()
         operation = ProviderOperation()
-        accumulator = MessageAccumulator()
+        accumulator = MessageAccumulator(request.tools)
         messages = serialize_request(request, self.transport.config)
         definitions = serialize_tools(request.tools)
         with (
-            _provider_scope(context) as signal,
+            _provider_scope(context, self) as signal,
             llm_generation_span(
                 self.info,
                 context.flow or LLMFlow.UNTAGGED_STREAM,

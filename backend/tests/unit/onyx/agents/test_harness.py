@@ -1,6 +1,5 @@
 """Exercise the runtime without Onyx rendering, storage, or a provider."""
 
-import asyncio
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -119,14 +118,13 @@ def test_cancelled_turn_retains_completed_tools_for_resume() -> None:
 
 
 @pytest.mark.parametrize("sequential", [False, True])
-def test_all_calls_execute_in_order_with_bounded_concurrency(sequential: bool) -> None:
+def test_all_calls_record_in_order_for_each_execution_mode(sequential: bool) -> None:
     runs: list[Run] = []
     context = AgentContext()
     agent = Agent(
         scripted(calls(9), answer()),
         context=context,
         tools=[echo(sequential=sequential)],
-        max_parallel_operations=2,
     )
     events: list[AgentEvent] = []
     result = run_agent(
@@ -180,17 +178,18 @@ def test_cancellation_stops_before_next_operation(
 
     def emit(self: _Execution, event: AgentEvent) -> None:
         original_emit(self, event)
-        events.append(event)
         if event.type == event_type:
             signal.cancel()
 
     monkeypatch.setattr(_Execution, "_emit", emit)
     with pytest.raises(AgentCancelled):
-        run_agent(agent, runs=runs, max_steps=3, cancellation=signal)
+        run_agent(
+            agent, runs=runs, max_steps=3, cancellation=signal, listener=events.append
+        )
     last_event = events[-1]
     assert last_event.type == "agent_end"
     assert last_event.outcome == "cancelled"
-    assert asyncio.run(runs[-1].wait_for_idle(timeout=0))
+    assert runs[-1].wait_for_idle(timeout=0)
     if event_type in {"message_start", "message_end", "tool_start"}:
         assert executed == []
 
@@ -260,7 +259,9 @@ def test_tool_hooks_can_block_transform_and_report_progress() -> None:
         for item in agent.context.messages
         if isinstance(item, ToolResultMessage)
     ] == ["raw!", "blocked!"]
-    assert len([event for event in events if event.type == "tool_update"]) == 1
+    assert sorted(
+        event.progress.content for event in events if event.type == "tool_update"
+    ) == ["blocked", "raw", "working"]
 
 
 def test_abort_reaches_nested_agent_and_waits_for_idle() -> None:
@@ -278,50 +279,45 @@ def test_abort_reaches_nested_agent_and_waits_for_idle() -> None:
             signal.check()
         raise AssertionError("child must cancel")
 
-    async def execute(invocation: ToolInvocation) -> ToolResult:
+    def execute(invocation: ToolInvocation) -> ToolResult:
         signals.append(invocation.cancellation)
-        submission = await invocation.agents.spawn_agent(
+        submission = invocation.agents.spawn_agent(
             Agent(FakeModelClient(child_model)),
             name="child",
             description="Run the child task",
             max_steps=1,
             messages=[UserMessage(content="Child task")],
         )
-        await invocation.agents.wait_run(submission.run_id)
+        invocation.agents.wait_run(submission.run_id)
         raise AssertionError("parent must cancel")
 
     agent = Agent(
         scripted(calls()),
-        max_parallel_operations=1,
-        tools=[
-            AgentTool(name="echo", description="", parameters={}, execute_async=execute)
-        ],
+        tools=[AgentTool(name="echo", description="", parameters={}, execute=execute)],
     )
 
-    async def exercise() -> None:
+    def exercise() -> None:
         coordinator = AgentCoordinator()
         run = agent.start(max_steps=2, coordinator=coordinator)
         try:
-            async with asyncio.timeout(3):
-                while not started.is_set():
-                    await asyncio.sleep(0.01)
-            assert not await run.wait_for_idle(timeout=0)
+            assert started.wait(3)
+            assert not run.wait_for_idle(timeout=0)
             with pytest.raises(RuntimeError, match="already running"):
                 agent.start(max_steps=1)
             run.cancel()
             with pytest.raises(AgentCancelled):
-                await run.wait(timeout=3)
-            assert await run.wait_for_idle(timeout=3)
+                run.result(timeout=3)
+            assert run.wait_for_idle(timeout=3)
         finally:
             run.cancel()
-            await coordinator.close(timeout=3)
+            coordinator.close(timeout=3)
         assert len(signals) == 2
         assert all(signal.cancelled for signal in signals)
         snapshot = run.snapshot()
         assert snapshot.child_runs[0].input_messages[0].text == "Child task"
         assert snapshot.child_runs[0].status == "cancelled"
 
-    asyncio.run(exercise())
+    exercise()
 
 
 def test_limits_and_exception_lifecycle() -> None:
@@ -347,48 +343,7 @@ def test_limits_and_exception_lifecycle() -> None:
     last_event = events[-1]
     assert last_event.type == "agent_end"
     assert last_event.outcome == "error"
-    assert asyncio.run(runs[-1].wait_for_idle(timeout=0))
-
-
-def test_network_cancellation_waits_for_cleanup() -> None:
-    import asyncio
-
-    from onyx.llm.cancellation import _network_loop
-
-    entered = threading.Event()
-    cleanup_started = threading.Event()
-    allow_cleanup = threading.Event()
-    returned = threading.Event()
-    signal = CancellationSignal()
-
-    async def operation() -> None:
-        try:
-            entered.set()
-            await asyncio.Event().wait()
-        finally:
-            cleanup_started.set()
-            while not allow_cleanup.is_set():
-                await asyncio.sleep(0.01)
-
-    def run() -> None:
-        try:
-            _network_loop().call(operation(), signal, timeout=5)
-        except AgentCancelled:
-            returned.set()
-
-    worker = threading.Thread(target=run)
-    worker.start()
-    try:
-        assert entered.wait(3)
-        signal.cancel()
-        assert cleanup_started.wait(3)
-        assert not returned.is_set()
-        allow_cleanup.set()
-        assert returned.wait(3)
-    finally:
-        signal.cancel()
-        allow_cleanup.set()
-        worker.join(3)
+    assert runs[-1].wait_for_idle(timeout=0)
 
 
 def test_incomplete_model_stream_cannot_complete_an_agent_turn() -> None:

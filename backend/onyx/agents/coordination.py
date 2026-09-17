@@ -1,6 +1,5 @@
 """Optional, caller-owned agent discovery and execution coordination."""
 
-import asyncio
 import threading
 import time
 from collections.abc import Callable, Sequence
@@ -13,6 +12,7 @@ from onyx.agents.concurrency import (
     CLEANUP_SECONDS,
     OPERATION_TIMEOUT_SECONDS,
     ExecutionWork,
+    wait_operation,
 )
 from onyx.agents.events import AgentEvent
 from onyx.agents.models import RunResult, RunSnapshot
@@ -70,6 +70,7 @@ class AgentCoordinator:
 
     def register(self, info: AgentInfo) -> None:
         with self._lock:
+            self.check_open()
             existing = self._registrations.get(info.id)
             if existing is not None and existing.parent_id != info.parent_id:
                 raise ValueError("Agent registration changes its parent")
@@ -85,34 +86,36 @@ class AgentCoordinator:
             return [info.model_copy(deep=True) for info in self._registrations.values()]
 
     def discovery(self, parent_id: str) -> list[AgentInfo]:
+        # Never acquire a run lock under the coordinator lock. Starts use the reverse order.
         with self._lock:
-            result: list[AgentInfo] = []
             active_runs = {
                 binding.run.agent_id: binding.run for binding in self._bindings.values()
             }
-            for info in self._registrations.values():
-                if info.parent_id != parent_id:
-                    continue
-                active = active_runs.get(info.id)
-                latest = self._latest.get(info.id)
-                if active is not None:
-                    result.append(
-                        info.model_copy(
-                            update={"latest_run_id": active.id, "status": active.status}
-                        )
+            registrations = [
+                info.model_copy(deep=True)
+                for info in self._registrations.values()
+                if info.parent_id == parent_id
+            ]
+            latest = dict(self._latest)
+        result: list[AgentInfo] = []
+        for info in registrations:
+            active = active_runs.get(info.id)
+            saved = latest.get(info.id)
+            if active is not None:
+                result.append(
+                    info.model_copy(
+                        update={"latest_run_id": active.id, "status": active.status}
                     )
-                elif latest is not None:
-                    result.append(
-                        info.model_copy(
-                            update={
-                                "latest_run_id": latest.run_id,
-                                "status": latest.status,
-                            }
-                        )
+                )
+            elif saved is not None:
+                result.append(
+                    info.model_copy(
+                        update={"latest_run_id": saved.run_id, "status": saved.status}
                     )
-                else:
-                    result.append(info.model_copy(deep=True))
-            return result
+                )
+            else:
+                result.append(info)
+        return result
 
     def bind(
         self,
@@ -138,7 +141,7 @@ class AgentCoordinator:
             self._bindings[run.id] = binding
             return binding
 
-    async def close(self, timeout: float = DEFAULT_AGENT_WAIT_SECONDS) -> bool:
+    def close(self, timeout: float = DEFAULT_AGENT_WAIT_SECONDS) -> bool:
         if not 0 <= timeout <= OPERATION_TIMEOUT_SECONDS:
             raise ValueError("Close timeout is outside its allowed bounds")
         with self._lock:
@@ -148,7 +151,7 @@ class AgentCoordinator:
             binding.run.cancel()
         deadline = time.monotonic() + timeout
         for binding in bindings:
-            if not await binding.run.wait_for_idle(
+            if not binding.run.wait_for_idle(
                 timeout=max(0, deadline - time.monotonic())
             ):
                 return False
@@ -238,9 +241,13 @@ class AgentCoordinator:
             return binding.run
 
     def release(self, run: Run) -> None:
+        snapshot = run.snapshot()
         with self._lock:
-            if self._registrations[run.agent_id].parent_id is not None:
-                self._latest[run.agent_id] = run.snapshot()
+            if (
+                self._registrations[run.agent_id].parent_id is not None
+                and snapshot.status != RunStatus.RUNNING
+            ):
+                self._latest[run.agent_id] = snapshot
             self._bindings.pop(run.id, None)
 
     def _lookup(self, agent_id: str, parent_id: str) -> AgentInfo | None:
@@ -270,6 +277,7 @@ class AgentCoordinator:
         if restored.id != agent_id:
             raise ValueError("Restoration returned a different agent")
         with self._lock:
+            self.check_open()
             if existing := self._agents.get(agent_id):
                 return existing
             if len(self._agents) >= MAX_LOADED_AGENTS:
@@ -333,6 +341,7 @@ class RunCoordination:
         self.children: dict[str, _ChildExecution] = {}
         self._links = ExitStack()
         self._finished = False
+        self._lock = run._state.lock
 
     def for_tool(
         self, call_id: str, parent_message_id: str, active: threading.Event
@@ -352,7 +361,6 @@ class RunCoordination:
             messages=messages,
             max_steps=max_steps,
             coordinator=self.coordinator,
-            execution_services=self.work.services,
             cancellation=CancellationSignal(),
             parent_run_id=self.run.id,
             parent_tool_call_id=call_id,
@@ -365,9 +373,10 @@ class RunCoordination:
         self._links.enter_context(self.cancellation.on_cancel(run.cancel))
         return run
 
-    async def finish(self, cancel: bool) -> list[RunSnapshot]:
-        self._finished = True
-        children = list(self.children.values())
+    def finish(self, cancel: bool) -> list[RunSnapshot]:
+        with self._lock:
+            self._finished = True
+            children = list(self.children.values())
         if cancel:
             for child in children:
                 child.run.cancel()
@@ -378,11 +387,19 @@ class RunCoordination:
         try:
             for child in children:
                 try:
-                    await child.run.wait(timeout=max(0, deadline - time.monotonic()))
+                    if not cancel:
+                        wait_operation(
+                            child.run._state.completed,
+                            self.cancellation,
+                            max(0, deadline - time.monotonic()),
+                        )
+                    child.run.result(timeout=max(0, deadline - time.monotonic()))
                 except RunFailed as error:
                     if not child.observed and not cancel and failure is None:
                         failure = error
                 except AgentCancelled:
+                    if not cancel:
+                        self.cancellation.check()
                     logger.debug("Child execution was cancelled: %s", child.run.id)
                 except TimeoutError as error:
                     child.run.cancel()
@@ -400,7 +417,8 @@ class RunCoordination:
 
     def release(self) -> None:
         self.coordinator.release(self.run)
-        self.children.clear()
+        with self._lock:
+            self.children.clear()
 
 
 class _ToolControl(AgentControl):
@@ -418,9 +436,11 @@ class _ToolControl(AgentControl):
 
     def _check(self) -> None:
         self.owner.cancellation.check()
-        if asyncio.get_running_loop() is not self.owner.work.loop:
-            raise RuntimeError("Coordination requires its owning event loop")
-        if not self.active.is_set() or self.owner._finished:
+        if (
+            not self.active.is_set()
+            or self.owner._finished
+            or not self.owner.run._state.accepting
+        ):
             raise RuntimeError("Coordination requires an active tool invocation")
         self.owner.coordinator.check_open()
 
@@ -428,7 +448,7 @@ class _ToolControl(AgentControl):
         self._check()
         return self.owner.coordinator.discovery(self.owner.run.agent_id)
 
-    async def spawn_agent(
+    def spawn_agent(
         self,
         agent: Agent,
         *,
@@ -438,67 +458,67 @@ class _ToolControl(AgentControl):
         messages: Sequence[Message],
         restoration_config: AgentRestorationConfig | None = None,
     ) -> SpawnResult:
-        self._check()
-        coordinator = self.owner.coordinator
-        info = coordinator.register_child(
-            agent,
-            parent_id=self.owner.run.agent_id,
-            name=name,
-            description=description,
-            restoration_config=restoration_config,
-        )
-        try:
-            run = self.owner.start_child(
+        with self.owner._lock:
+            self._check()
+            coordinator = self.owner.coordinator
+            info = coordinator.register_child(
                 agent,
-                messages,
-                max_steps,
-                call_id=self.call_id,
-                message_id=self.message_id,
+                parent_id=self.owner.run.agent_id,
+                name=name,
+                description=description,
+                restoration_config=restoration_config,
             )
-        except BaseException:
-            coordinator.unregister_child(agent.id)
-            raise
-        return SpawnResult(agent_id=agent.id, agent_path=info.path, run_id=run.id)
+            try:
+                run = self.owner.start_child(
+                    agent,
+                    messages,
+                    max_steps,
+                    call_id=self.call_id,
+                    message_id=self.message_id,
+                )
+            except BaseException:
+                coordinator.unregister_child(agent.id)
+                raise
+            return SpawnResult(agent_id=agent.id, agent_path=info.path, run_id=run.id)
 
-    async def start_run(
+    def start_run(
         self, agent_id: str, *, max_steps: int, messages: Sequence[Message]
     ) -> str:
         self._check()
         coordinator = self.owner.coordinator
         agent = coordinator.loaded_child(agent_id, self.owner.run.agent_id)
         if agent is None:
-            agent = await self.owner.work.blocking(
+            agent = self.owner.work.blocking(
                 lambda: coordinator.resolve_child(agent_id, self.owner.run.agent_id),
                 self.owner.cancellation,
             )
         self._check()
         previous = coordinator.active_run(agent_id)
         if previous is not None and previous.status != RunStatus.RUNNING:
-            waiting = asyncio.create_task(
-                previous.wait_for_idle(timeout=OPERATION_TIMEOUT_SECONDS)
+            idle = self.owner.work.blocking(
+                lambda: previous.wait_for_idle(timeout=OPERATION_TIMEOUT_SECONDS),
+                self.owner.cancellation,
             )
-            with self.owner.cancellation.on_cancel(
-                lambda: self.owner.work.loop.call_soon_threadsafe(waiting.cancel)
-            ):
-                try:
-                    idle = await waiting
-                except asyncio.CancelledError:
-                    self._check()
-                    raise
             if not idle:
                 raise TimeoutError("Previous agent execution is still draining")
-        self._check()
-        return self.owner.start_child(
-            agent, messages, max_steps, call_id=self.call_id, message_id=self.message_id
-        ).id
+        with self.owner._lock:
+            self._check()
+            return self.owner.start_child(
+                agent,
+                messages,
+                max_steps,
+                call_id=self.call_id,
+                message_id=self.message_id,
+            ).id
 
-    async def wait_run(
+    def wait_run(
         self, run_id: str, *, timeout: float = DEFAULT_AGENT_WAIT_SECONDS
     ) -> RunResult | None:
         self._check()
         if not 0 <= timeout <= OPERATION_TIMEOUT_SECONDS:
             raise ValueError("Wait timeout is outside its allowed bounds")
-        child = self.owner.children.get(run_id)
+        with self.owner._lock:
+            child = self.owner.children.get(run_id)
         run = (
             child.run
             if child
@@ -506,15 +526,20 @@ class _ToolControl(AgentControl):
         )
         if run is not None:
             try:
-                result = await run.wait(timeout=timeout)
+                result = wait_operation(
+                    run._state.completed, self.owner.cancellation, timeout
+                )
+                result = run.result(timeout=0)
             except TimeoutError:
                 return None
             except (RunFailed, AgentCancelled):
                 if child is not None:
-                    child.observed = True
+                    with self.owner._lock:
+                        child.observed = True
                 raise
             if child is not None:
-                child.observed = True
+                with self.owner._lock:
+                    child.observed = True
             return result
         coordinator = self.owner.coordinator
         latest = coordinator.saved_run(
@@ -524,22 +549,20 @@ class _ToolControl(AgentControl):
             return result_from_snapshot(latest)
         if timeout == 0:
             return None
-        deadline = asyncio.timeout(timeout)
         try:
-            async with deadline:
-                record = await self.owner.work.blocking(
-                    lambda: coordinator.saved_run(run_id, self.owner.run.agent_id),
-                    self.owner.cancellation,
-                )
+            record = self.owner.work.blocking(
+                lambda: coordinator.saved_run(run_id, self.owner.run.agent_id),
+                self.owner.cancellation,
+                timeout=timeout,
+            )
         except TimeoutError:
-            if deadline.expired():
-                return None
-            raise
+            return None
         return result_from_snapshot(record)
 
-    async def cancel_run(self, run_id: str) -> None:
+    def cancel_run(self, run_id: str) -> None:
         self._check()
-        child = self.owner.children.get(run_id)
+        with self.owner._lock:
+            child = self.owner.children.get(run_id)
         run = (
             child.run
             if child
@@ -548,7 +571,38 @@ class _ToolControl(AgentControl):
         if run is not None:
             run.cancel()
             return
-        await self.owner.work.blocking(
+        self.owner.work.blocking(
             lambda: self.owner.coordinator.saved_run(run_id, self.owner.run.agent_id),
             self.owner.cancellation,
         )
+
+    def wait_for_idle(
+        self, run_id: str, *, timeout: float = OPERATION_TIMEOUT_SECONDS
+    ) -> bool:
+        """Wait for owned child cleanup even after the invocation is cancelled."""
+        with self.owner._lock:
+            child = self.owner.children.get(run_id)
+        run = (
+            child.run
+            if child
+            else self.owner.coordinator.child_run(run_id, self.owner.run.agent_id)
+        )
+        if run is not None:
+            return run.wait_for_idle(timeout)
+        self.owner.coordinator.saved_run(run_id, self.owner.run.agent_id)
+        return True
+
+    def add_idle_callback(self, run_id: str, callback: Callable[[], None]) -> None:
+        """Retain cleanup until an owned child is idle, including after cancellation."""
+        with self.owner._lock:
+            child = self.owner.children.get(run_id)
+        run = (
+            child.run
+            if child
+            else self.owner.coordinator.child_run(run_id, self.owner.run.agent_id)
+        )
+        if run is not None:
+            run.add_idle_callback(callback)
+            return
+        self.owner.coordinator.saved_run(run_id, self.owner.run.agent_id)
+        callback()

@@ -1,8 +1,13 @@
+import json
+from unittest.mock import patch
+
 import pytest
+from litellm.exceptions import APIConnectionError, InternalServerError
 from litellm.types.utils import ModelResponse as LiteLLMModelResponse
 from litellm.types.utils import ModelResponseStream as LiteLLMModelResponseStream
-from pydantic import JsonValue
+from pydantic import BaseModel, JsonValue
 
+from onyx.llm.exceptions import ClassifiedLLMError
 from onyx.llm.litellm_conversion import (
     MessageAccumulator,
     from_litellm_model_response,
@@ -10,13 +15,27 @@ from onyx.llm.litellm_conversion import (
 )
 from onyx.llm.litellm_models import (
     ChatCompletionDeltaToolCall,
+    Choice,
     Delta,
     FunctionCall,
     ModelResponse,
     ModelResponseStream,
     StreamingChoice,
 )
-from onyx.llm.models import ThinkingBlock, ToolCallEndEvent
+from onyx.llm.litellm_models import ChatCompletionMessageToolCall as WireToolCall
+from onyx.llm.litellm_models import Message as ResponseMessage
+from onyx.llm.models import (
+    GenerationDoneEvent,
+    GenerationOptions,
+    GenerationRequest,
+    ThinkingBlock,
+    ToolCallEndEvent,
+    ToolChoiceOptions,
+    ToolDefinition,
+    UserMessage,
+)
+from onyx.llm.multi_llm import LitellmLLM
+from tests.unit.onyx.agents.fakes import ScriptedTransport
 
 
 def _build_tool_call_payload() -> dict[str, JsonValue]:
@@ -391,3 +410,123 @@ def test_provider_stream_accepts_null_optional_tool_calls() -> None:
     )
     assert response.choice.delta.content == "hello"
     assert response.choice.delta.tool_calls == []
+
+
+class StructuredToolArguments(BaseModel):
+    queries: list[str]
+    filters: dict[str, str]
+    literal: str
+
+
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("text_fallback", [False, True])
+def test_shared_client_normalizes_schema_directed_tool_arguments(
+    streaming: bool, text_fallback: bool
+) -> None:
+    arguments = {
+        "queries": '["first", "second"]',
+        "filters": '{"source": "docs"}',
+        "literal": '["keep this as text"]',
+    }
+    encoded = json.dumps(json.dumps(arguments))
+    payload = json.dumps({"name": "search", "arguments": arguments})
+    delta = (
+        Delta(content=payload)
+        if text_fallback
+        else Delta(
+            tool_calls=[
+                ChatCompletionDeltaToolCall(
+                    index=0,
+                    id="search-call",
+                    function=FunctionCall(name="search", arguments=encoded),
+                )
+            ]
+        )
+    )
+    transport = ScriptedTransport([delta])
+    client = LitellmLLM(transport)
+    request = GenerationRequest(
+        messages=[UserMessage(content="Search")],
+        tools=[
+            ToolDefinition(
+                name="search",
+                description="Search sources",
+                parameters=StructuredToolArguments.model_json_schema(),
+            )
+        ],
+        options=GenerationOptions(tool_choice=ToolChoiceOptions.REQUIRED),
+    )
+    response = ModelResponse(
+        id="test",
+        created="1",
+        choice=Choice(
+            message=ResponseMessage(
+                content=delta.content,
+                tool_calls=[
+                    WireToolCall(
+                        id="search-call",
+                        function=FunctionCall(name="search", arguments=encoded),
+                    )
+                ]
+                if not text_fallback
+                else None,
+            )
+        ),
+    )
+    with patch.object(transport, "invoke", return_value=response):
+        if streaming:
+            events = list(client.stream(request))
+            terminal = events[-1]
+            assert isinstance(terminal, GenerationDoneEvent)
+            message = terminal.message
+            ends = [event for event in events if isinstance(event, ToolCallEndEvent)]
+            assert len(ends) == 1
+            assert ends[0].tool_call == message.tool_calls[0]
+        else:
+            message = client.invoke(request)
+    call = message.tool_calls[0]
+    assert call.arguments_complete
+    assert call.argument_error is None
+    parsed = StructuredToolArguments.model_validate(call.arguments)
+    assert parsed.queries == ["first", "second"]
+    assert parsed.filters == {"source": "docs"}
+    assert parsed.literal == arguments["literal"]
+
+
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize(
+    "error, expected_type",
+    [
+        (
+            APIConnectionError(
+                message="connection failed", model="test", llm_provider="openai"
+            ),
+            ClassifiedLLMError,
+        ),
+        (
+            InternalServerError(
+                message="server failed", model="test", llm_provider="openai"
+            ),
+            ClassifiedLLMError,
+        ),
+        (TypeError("bad local implementation"), TypeError),
+    ],
+)
+def test_shared_client_classifies_only_provider_failures(
+    streaming: bool, error: Exception, expected_type: type[Exception]
+) -> None:
+    transport = ScriptedTransport([])
+    client = LitellmLLM(transport)
+    request = GenerationRequest(messages=[UserMessage(content="Hello")])
+    with (
+        patch.object(transport, "stream" if streaming else "invoke", side_effect=error),
+        pytest.raises(expected_type) as caught,
+    ):
+        if streaming:
+            list(client.stream(request))
+        else:
+            client.invoke(request)
+    if expected_type is ClassifiedLLMError:
+        assert caught.value.__cause__ is error
+    else:
+        assert caught.value is error

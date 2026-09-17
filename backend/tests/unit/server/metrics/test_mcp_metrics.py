@@ -63,10 +63,11 @@ def test_client_records_success_once() -> None:
             "record_mcp_client_tool_outcome"
         ) as record,
     ):
-        tool.run(_invocation(), ToolContext())
+        response = tool.run(_invocation(), ToolContext())
 
     record.assert_called_once()
     assert record.call_args.kwargs["status"] == MCPToolCallStatus.SUCCESS
+    assert not response.is_error
 
 
 def test_client_records_missing_credentials_as_auth_error() -> None:
@@ -74,10 +75,11 @@ def test_client_records_missing_credentials_as_auth_error() -> None:
     with patch(
         "onyx.tools.tool_implementations.mcp.mcp_tool.record_mcp_client_tool_outcome"
     ) as record:
-        tool.run(_invocation(), ToolContext())
+        response = tool.run(_invocation(), ToolContext())
 
     record.assert_called_once()
     assert record.call_args.kwargs["status"] == MCPToolCallStatus.AUTH_ERROR
+    assert response.is_error
 
 
 def test_client_records_reauthentication_required_as_auth_error() -> None:
@@ -97,26 +99,27 @@ def test_client_records_reauthentication_required_as_auth_error() -> None:
     assert "Please use the MCP dropdown" in response.text
     record.assert_called_once()
     assert record.call_args.kwargs["status"] == MCPToolCallStatus.AUTH_ERROR
+    assert response.is_error
 
 
-def test_client_records_post_call_failure_once() -> None:
+def test_client_records_execution_failure_once() -> None:
     tool = _mcp_tool()
-    progress = MagicMock(side_effect=[None, RuntimeError("progress failed"), None])
     with (
         patch(
             "onyx.tools.tool_implementations.mcp.mcp_tool.call_mcp_tool",
-            return_value={"ok": True},
+            side_effect=RuntimeError("tool execution failed"),
         ),
         patch(
             "onyx.tools.tool_implementations.mcp.mcp_tool."
             "record_mcp_client_tool_outcome"
         ) as record,
     ):
-        response = tool.run(_invocation(progress), ToolContext())
+        response = tool.run(_invocation(), ToolContext())
 
-    assert "progress failed" in response.text
+    assert "tool execution failed" in response.text
     record.assert_called_once()
     assert record.call_args.kwargs["status"] == MCPToolCallStatus.ERROR
+    assert response.is_error
 
 
 def test_client_metric_failure_does_not_raise() -> None:

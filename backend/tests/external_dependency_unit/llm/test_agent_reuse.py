@@ -1,7 +1,5 @@
 """A real provider receives new run input with shared agent conversation history."""
 
-import asyncio
-
 import pytest
 from sqlalchemy.orm import Session
 
@@ -48,8 +46,8 @@ def test_child_reuse_preserves_context_with_a_fresh_budget(db_session: Session) 
         execution=GenerationContext(flow=LLMFlow.DEEP_RESEARCH),
     )
 
-    async def coordinate(invocation: ToolInvocation) -> ToolResult:
-        first = await invocation.agents.spawn_agent(
+    def coordinate(invocation: ToolInvocation) -> ToolResult:
+        first = invocation.agents.spawn_agent(
             child,
             name="research",
             description="Remember and recall a project code",
@@ -60,9 +58,9 @@ def test_child_reuse_preserves_context_with_a_fresh_budget(db_session: Session) 
                 )
             ],
         )
-        first_result = await invocation.agents.wait_run(first.run_id, timeout=90)
+        first_result = invocation.agents.wait_run(first.run_id, timeout=90)
         assert first_result is not None
-        following = await invocation.agents.start_run(
+        following = invocation.agents.start_run(
             first.agent_id,
             messages=[
                 UserMessage(
@@ -71,7 +69,7 @@ def test_child_reuse_preserves_context_with_a_fresh_budget(db_session: Session) 
             ],
             max_steps=1,
         )
-        next_result = await invocation.agents.wait_run(following, timeout=90)
+        next_result = invocation.agents.wait_run(following, timeout=90)
         assert first_result is not None and next_result is not None
         assert first_result.steps == next_result.steps == 1
         assert first_result.run_id != next_result.run_id
@@ -95,19 +93,19 @@ def test_child_reuse_preserves_context_with_a_fresh_budget(db_session: Session) 
                 name="delegate",
                 description="",
                 parameters={},
-                execute_async=coordinate,
+                execute=coordinate,
             )
         ],
     )
     coordinator = AgentCoordinator()
 
-    async def run_parent() -> RunSnapshot:
+    def run_parent() -> RunSnapshot:
         run = parent.start(max_steps=2, coordinator=coordinator)
-        await run.wait()
-        assert await run.wait_for_idle(timeout=90)
+        run.result()
+        assert run.wait_for_idle(timeout=90)
         return run.snapshot()
 
-    snapshot = asyncio.run(run_parent())
+    snapshot = run_parent()
     first, following = snapshot.child_runs
     assert first.agent_id == following.agent_id == child.id
     assert coordinator.discovery(parent.id)[0].path == "/root/research"

@@ -29,6 +29,7 @@ export interface ProcessedMessageState {
   toolProcessingDuration: number | undefined;
   toolGroups: GroupedItem[];
   potentialDisplayGroups: GroupedItem[];
+  narrationGroups: GroupedItem[];
 }
 export function createInitialState(nodeId: number): ProcessedMessageState {
   return {
@@ -48,6 +49,7 @@ export function createInitialState(nodeId: number): ProcessedMessageState {
     toolProcessingDuration: undefined,
     toolGroups: [],
     potentialDisplayGroups: [],
+    narrationGroups: [],
   };
 }
 export function processPackets(
@@ -132,6 +134,7 @@ export function processPackets(
   }
   state.toolGroups = [];
   state.potentialDisplayGroups = [];
+  state.narrationGroups = [];
   for (const items of state.groupedItemsMap.values()) {
     const first = items[0];
     if (!first) continue;
@@ -147,6 +150,12 @@ export function processPackets(
         (content.kind === "tool" && content.name === "generate_image"))
     )
       state.potentialDisplayGroups.push(group);
+    else if (
+      !first.identity.parent_run_id &&
+      content.kind === "text" &&
+      content.purpose === "commentary"
+    )
+      state.narrationGroups.push(group);
     else state.toolGroups.push(group);
   }
   return state;

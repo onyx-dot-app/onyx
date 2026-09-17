@@ -13,7 +13,7 @@ type itemKey struct {
 }
 type responseEntry struct {
 	Identity ItemIdentity
-	Item     ResponseItem
+	Item     ChatItem
 }
 
 // ResponseState applies complete items and deltas to one response stream.
@@ -23,13 +23,13 @@ type ResponseState struct {
 }
 type ItemChange struct {
 	Identity ItemIdentity
-	Before   *ResponseItem
-	After    ResponseItem
+	Before   *ChatItem
+	After    ChatItem
 }
 
 func (s *ResponseState) Apply(event StreamEvent) (*ItemChange, error) {
 	var identity *ItemIdentity
-	var item ResponseItem
+	var item ChatItem
 	var delta *ItemDelta
 	switch e := event.(type) {
 	case ItemUpdateEvent:
@@ -49,7 +49,7 @@ func (s *ResponseState) Apply(event StreamEvent) (*ItemChange, error) {
 		s.indices = make(map[itemKey]int)
 	}
 	index, found := s.indices[key]
-	var before *ResponseItem
+	var before *ChatItem
 	if found {
 		previous := s.entries[index].Item
 		before = &previous
@@ -114,7 +114,7 @@ func (s *ResponseState) Apply(event StreamEvent) (*ItemChange, error) {
 	}
 	return &ItemChange{Identity: *identity, Before: before, After: item}, nil
 }
-func visibleText(identity ItemIdentity, item ResponseItem) bool {
+func visibleText(identity ItemIdentity, item ChatItem) bool {
 	return item.Kind == ItemText && (identity.ParentRunID == "" || item.Purpose == PurposeReport)
 }
 func (s *ResponseState) Text() string {

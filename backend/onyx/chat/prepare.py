@@ -632,7 +632,6 @@ def prepare_chat_turn(
         previous_run_id=history.previous_run_id,
         extracted_context_files=extracted_files,
         processing_key=prepared.user_message_id if is_multi else models[0].message_id,
-        reserved_token_count=prepared.reserved_token_count,
         reasoning_effort=prepared.reasoning_effort,
         search_params=search_params,
         all_injected_file_metadata=history.history.all_injected_file_metadata,

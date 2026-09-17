@@ -29,50 +29,23 @@ from onyx.chat.stream_buffer import ChatDelivery, ChatStream, StreamBufferWriter
 from onyx.chat.subagents import create_chat_agent_coordinator
 from onyx.configs.chat_configs import (
     CHAT_RESPONSE_WAIT_TIMEOUT_S,
-    MAX_ACTIVE_CHAT_RESPONSES,
 )
 from onyx.db.chat_response import save_chat_response
 from onyx.db.enums import record_mode_persists_content
 from onyx.db.models import User
 from onyx.deep_research.agent import DeepResearchAgent
 from onyx.deep_research.tool_definitions import RESEARCH_AGENT_TOOL_NAME
-from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
 from onyx.server.settings.store import load_settings
 from onyx.tracing.framework.create import ChatTraceMetadata, trace
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import ContextThreadPoolExecutor
+from onyx.utils.threadpool_concurrency import start_thread_future
 
 logger = setup_logger()
 _CANCEL_POLL_INTERVAL_S = 0.25
 _PERSISTENCE_WAIT_SECONDS = 30.0
-
-if MAX_ACTIVE_CHAT_RESPONSES < 1:
-    raise ValueError("MAX_ACTIVE_CHAT_RESPONSES must be positive")
-_RESPONSE_CAPACITY = threading.BoundedSemaphore(MAX_ACTIVE_CHAT_RESPONSES)
-
-
-def reserve_chat_responses(count: int) -> None:
-    reserved = 0
-    try:
-        for _ in range(count):
-            if not _RESPONSE_CAPACITY.acquire(blocking=False):
-                raise OnyxError(
-                    OnyxErrorCode.SERVICE_UNAVAILABLE,
-                    "Chat capacity is full. Please retry shortly.",
-                )
-            reserved += 1
-    except BaseException:
-        for _ in range(reserved):
-            _RESPONSE_CAPACITY.release()
-        raise
-
-
-def release_chat_responses(count: int) -> None:
-    for _ in range(count):
-        _RESPONSE_CAPACITY.release()
 
 
 def _log_late_save(future: Future[None]) -> None:
@@ -84,20 +57,8 @@ def _log_late_save(future: Future[None]) -> None:
         logger.debug("Response save completed after its wait bound")
 
 
-# Separate storage capacity prevents slow saves from blocking Stop processing.
-_RESPONSE_WORKERS = ContextThreadPoolExecutor(
-    max_workers=MAX_ACTIVE_CHAT_RESPONSES, thread_name_prefix="chat-response"
-)
-_CONTROL_WORKERS = ContextThreadPoolExecutor(
-    max_workers=MAX_ACTIVE_CHAT_RESPONSES, thread_name_prefix="chat-control"
-)
-_STORAGE_WORKERS = ContextThreadPoolExecutor(
-    max_workers=MAX_ACTIVE_CHAT_RESPONSES, thread_name_prefix="chat-storage"
-)
-
-
 class ActiveChatTurns:
-    """Retain admitted turns until execution, storage, and delivery finish."""
+    """Retain active turns until execution, storage, and delivery finish."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
@@ -117,7 +78,9 @@ class ActiveChatTurns:
             raise error
         turn.finished.add_done_callback(self._finished)
         try:
-            _CONTROL_WORKERS.submit(lambda: turn.run(startup_error=startup_error))
+            start_thread_future(
+                lambda: turn.run(startup_error=startup_error), name="chat-control"
+            )
         except Exception as error:
             turn.reject(error)
             raise
@@ -127,7 +90,7 @@ class ActiveChatTurns:
             del self._pending[future]
 
     def close(self) -> bool:
-        """Stop admission and report whether all admitted work drained before the deadline."""
+        """Reject new turns and wait for active work to finish."""
         with self._lock:
             self._closing = True
             pending = dict(self._pending)
@@ -176,7 +139,6 @@ class ChatTurnExecution:
         self.delivery = ChatDelivery(stream_buffer)
         self.cancellation = CancellationSignal()
         self.finished: Future[None] = Future()
-        self._capacity = _RESPONSE_CAPACITY
         self._response_futures = [
             response_future
             if index == 0 and response_future is not None
@@ -185,7 +147,7 @@ class ChatTurnExecution:
         ]
         self._lock = threading.Lock()
         self._unfinished = set(range(len(setup.responses)))
-        self._resources_drained: set[int] = set()
+        self._execution_drained: set[int] = set()
         self._delivery_finished = False
         self._changed = threading.Event()
         self._auto_filters = False
@@ -210,7 +172,7 @@ class ChatTurnExecution:
     def reject(self, error: Exception) -> None:
         for index, response_future in enumerate(self._response_futures):
             response_future.set_exception(error)
-            self._release_response(index)
+            self._finish_response(index)
         self._close_delivery()
 
     def _publish(self, packet: Packet) -> None:
@@ -238,7 +200,7 @@ class ChatTurnExecution:
                 self._publish, self.setup.responses[index].message_id, index
             )
             try:
-                _RESPONSE_WORKERS.submit(
+                start_thread_future(
                     lambda index=index, response_future=response_future, emitter=emitter: (
                         self._run_response(
                             index,
@@ -247,7 +209,8 @@ class ChatTurnExecution:
                             self._auto_filters,
                             startup_error=startup_error,
                         )
-                    )
+                    ),
+                    name="chat-response",
                 )
             except Exception as error:
                 self._run_response(
@@ -266,7 +229,7 @@ class ChatTurnExecution:
             while time.monotonic() < deadline:
                 self._poll_control()
                 with self._lock:
-                    drained = len(self._resources_drained) == len(
+                    drained = len(self._execution_drained) == len(
                         self._response_futures
                     )
                 if all(future.done() for future in self._response_futures) and (
@@ -295,17 +258,19 @@ class ChatTurnExecution:
             self._close_delivery()
 
     def _close_delivery(self) -> None:
-        try:
-            self._finish_delivery()
-        finally:
+        def drained(_future: Future[None]) -> None:
             with self._lock:
                 self._delivery_finished = True
                 finished = not self._unfinished
             if finished:
                 self.finished.set_result(None)
 
-    def _release_response(self, index: int) -> None:
-        self._capacity.release()
+        try:
+            self._finish_delivery()
+        finally:
+            self.delivery.finished.add_done_callback(drained)
+
+    def _finish_response(self, index: int) -> None:
         with self._lock:
             self._unfinished.remove(index)
             finished = not self._unfinished and self._delivery_finished
@@ -319,12 +284,12 @@ class ChatTurnExecution:
             if run is not None and run.delivery_failed:
                 self.delivery.report_gap()
             with self._lock:
-                self._resources_drained.add(index)
+                self._execution_drained.add(index)
             self._changed.set()
             if save is None:
-                self._release_response(index)
+                self._finish_response(index)
             else:
-                save.add_done_callback(lambda _: self._release_response(index))
+                save.add_done_callback(lambda _: self._finish_response(index))
 
         if run is None:
             drained()
@@ -422,11 +387,12 @@ class ChatTurnExecution:
                     packet = chat_error(failure, self.setup.responses[index].llm, index)
                     self.delivery.publish(packet)
                     snapshot = snapshot.model_copy(update={"error": packet.error})
-                save = _STORAGE_WORKERS.submit(
+                save = start_thread_future(
                     lambda: save_chat_response(
                         message_id=self.setup.responses[index].message_id,
                         response=snapshot,
-                    )
+                    ),
+                    name="chat-storage",
                 )
                 self._save_response(index, response_future, snapshot, save)
             except Exception as failure:

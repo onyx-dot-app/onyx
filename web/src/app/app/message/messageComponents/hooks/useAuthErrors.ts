@@ -1,25 +1,23 @@
 import { useMemo } from "react";
-import { Packet } from "@/app/app/services/streamingModels";
-import { responseItems } from "@/app/app/services/packetUtils";
+import { ResponseItem } from "@/app/app/services/streamingModels";
+import { GroupedItem } from "@/app/app/message/messageComponents/timeline/hooks/packetProcessor";
 
 interface AuthError {
   toolName: string;
   toolId: number | null;
 }
 
-export function useAuthErrors(rawPackets: Packet[]): AuthError[] {
-  // Keyed on the packet array so re-renders between packet batches reuse
-  // the same result identity instead of rescanning.
+export function useAuthErrors(toolGroups: readonly GroupedItem[]): AuthError[] {
   return useMemo(
-    () => computeAuthErrors(rawPackets),
-    [rawPackets, rawPackets.length]
+    () => computeAuthErrors(toolGroups.flatMap((group) => group.items)),
+    [toolGroups]
   );
 }
 
-function computeAuthErrors(rawPackets: Packet[]): AuthError[] {
+function computeAuthErrors(items: readonly ResponseItem[]): AuthError[] {
   const errors: AuthError[] = [];
 
-  for (const item of responseItems(rawPackets)) {
+  for (const item of items) {
     const tool = item.content;
     if (
       tool.kind !== "tool" ||

@@ -324,6 +324,7 @@ export default function useChatSessionController({
             if (!Object.hasOwn(rawPacket, "obj")) {
               continue;
             }
+            // SAFETY: The resume endpoint sends validated response packets; root controls have no obj.
             const packet = rawPacket as Packet;
             // Heartbeats are liveness ticks for the stillCurrent check above,
             // not run state — never render them.
@@ -354,10 +355,9 @@ export default function useChatSessionController({
             clearTimeout(trailingFlush);
           }
           resumingRuns.delete(runId);
-          if (stillCurrent() && !isRunning) {
-            showInterruptedResponse();
-          } else if (stillCurrent()) {
-            flush();
+          if (stillCurrent()) {
+            if (isRunning) flush();
+            let refreshed = false;
             // Settle final state (message text, citations, documents) from
             // the persisted session.
             try {
@@ -368,9 +368,8 @@ export default function useChatSessionController({
                 const settled: BackendChatSession =
                   await settledResponse.json();
                 const interrupted =
-                  !isRunning ||
-                  (settled.current_run?.run_id === runId &&
-                    !settled.current_run.is_running);
+                  settled.current_run?.run_id === runId &&
+                  !settled.current_run.is_running;
                 if (interrupted) {
                   showInterruptedResponse();
                 } else {
@@ -379,9 +378,13 @@ export default function useChatSessionController({
                     processRawChatHistory(settled.messages, settled.packets)
                   );
                 }
+                refreshed = true;
               }
             } catch (error) {
               console.error("Post-resume session refresh failed", { error });
+            }
+            if (!refreshed && !isRunning && stillCurrent()) {
+              showInterruptedResponse();
             }
           }
         }

@@ -18,8 +18,8 @@ from onyx.llm.litellm_models import (
     ChatCompletionDeltaToolCall,
     ModelResponseStream,
     ToolCall,
+    ToolFunctionCall,
 )
-from onyx.llm.litellm_models import ToolFunctionCall as ToolFunctionCall
 from onyx.llm.models import Usage
 from onyx.tracing.framework.span_data import GenerationSpanData
 from onyx.tracing.framework.spans import Span

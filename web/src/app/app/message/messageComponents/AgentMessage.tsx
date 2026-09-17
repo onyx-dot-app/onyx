@@ -196,7 +196,7 @@ const AgentMessage = React.memo(function AgentMessage({
     ]
   );
 
-  const authErrors = useAuthErrors(rawPackets);
+  const authErrors = useAuthErrors(toolGroups);
 
   // Message switching logic
   const {

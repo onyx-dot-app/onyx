@@ -1,5 +1,4 @@
 import abc
-from collections.abc import Awaitable, Callable
 from typing import Literal, NotRequired, TypedDict
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError
@@ -116,11 +115,6 @@ class Tool(abc.ABC):
     def tool_definition(self) -> FunctionToolDefinition:
         raise NotImplementedError
 
-    def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        raise RuntimeError(f"Tool {self.name} requires asynchronous execution")
-
-    @property
-    def execute_async(
-        self,
-    ) -> Callable[[ToolInvocation, ToolContext], Awaitable[ToolResult]] | None:
-        return None
+    @abc.abstractmethod
+    def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
+        raise NotImplementedError

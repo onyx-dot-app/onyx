@@ -42,8 +42,7 @@ def tool() -> AgentTool:
     )
 
 
-@pytest.mark.asyncio
-async def test_model_and_agent_share_transcript_and_stream_events() -> None:
+def test_model_and_agent_share_transcript_and_stream_events() -> None:
     llm = ScriptedLLM(
         [
             Delta(
@@ -63,18 +62,18 @@ async def test_model_and_agent_share_transcript_and_stream_events() -> None:
         tools=[tool()],
     )
     events: list[AgentEvent] = []
-    run = agent.start(messages=[UserMessage(content="Echo 3")], max_steps=2)
-    run.subscribe(events.append)
-    result = await run.wait()
-    assert await run.wait_for_idle(2)
+    run = agent.start(
+        messages=[UserMessage(content="Echo 3")], max_steps=2, on_event=events.append
+    )
+    result = run.result()
+    assert run.wait_for_idle(2)
     assert result.output.text == "done"
     assert isinstance(llm.requests[-1]["prompt"][-1], ToolMessage)
     assert llm.requests[-1]["prompt"][-1].content == "3"
     assert len([event for event in events if event.type == "message_update"]) >= 2
 
 
-@pytest.mark.asyncio
-async def test_tool_recovery_happens_before_events() -> None:
+def test_tool_recovery_happens_before_events() -> None:
     llm = ScriptedLLM(
         [
             Delta(content='{"name":"echo","arguments":{"value":"recovered"}}'),
@@ -87,10 +86,9 @@ async def test_tool_recovery_happens_before_events() -> None:
         options=GenerationOptions(tool_choice=ToolChoiceOptions.REQUIRED),
     )
     events: list[AgentEvent] = []
-    run = agent.start(max_steps=2)
-    run.subscribe(events.append)
-    await run.wait()
-    assert await run.wait_for_idle(2)
+    run = agent.start(max_steps=2, on_event=events.append)
+    run.result()
+    assert run.wait_for_idle(2)
     response = agent.context.messages[1]
     assert isinstance(response, ToolResultMessage) and response.content == "recovered"
     first = next(
@@ -143,7 +141,6 @@ def test_model_honors_cancelled_signal() -> None:
     signal = CancellationSignal()
     signal.cancel()
     llm = ScriptedLLM([])
-    import pytest
 
     from onyx.llm.cancellation import AgentCancelled
 

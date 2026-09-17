@@ -354,7 +354,6 @@ class ChatTurnSetup(BaseModel):
     extracted_context_files: ExtractedContextFiles
     # Fences processing status and identifies the buffered stream.
     processing_key: int
-    reserved_token_count: int
     reasoning_effort: ReasoningEffort
     search_params: SearchParams
     all_injected_file_metadata: dict[str, FileToolMetadata]

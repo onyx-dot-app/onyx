@@ -1,6 +1,5 @@
 """Accepted artifacts survive cancellation of their parent or sibling operation."""
 
-import asyncio
 from queue import Queue
 from threading import Event
 
@@ -68,15 +67,15 @@ def test_stop_preserves_accepted_file_and_unfinished_parent(
 
     if child_run:
 
-        async def research(invocation: ToolInvocation) -> ToolResult:
-            submission = await invocation.agents.spawn_agent(
+        def research(invocation: ToolInvocation) -> ToolResult:
+            submission = invocation.agents.spawn_agent(
                 worker,
                 name="research",
                 description="Research",
                 max_steps=1,
                 messages=[],
             )
-            result = await invocation.agents.wait_run(submission.run_id)
+            result = invocation.agents.wait_run(submission.run_id)
             assert result is not None
             return ToolResult(content=result.output.text)
 
@@ -91,7 +90,7 @@ def test_stop_preserves_accepted_file_and_unfinished_parent(
                     name="research",
                     description="",
                     parameters={},
-                    execute_async=research,
+                    execute=research,
                 )
             ],
         )
@@ -101,31 +100,33 @@ def test_stop_preserves_accepted_file_and_unfinished_parent(
 
     coordinator = AgentCoordinator() if child_run else None
 
-    async def exercise() -> Run:
-        run = agent.start(max_steps=2, cancellation=signal, coordinator=coordinator)
-        run.subscribe(on_event)
-        if render:
-            run.subscribe(
-                ResponsePresenter(
-                    Emitter(Queue[Packet]().put_nowait, response_id=42)
-                ).consume
-            )
+    def exercise() -> Run:
+        presenter = ResponsePresenter(
+            Emitter(Queue[Packet]().put_nowait, response_id=42)
+        )
+
+        def observe(event: AgentEvent) -> None:
+            on_event(event)
+            if render:
+                presenter.consume(event)
+
+        run = agent.start(
+            max_steps=2, cancellation=signal, coordinator=coordinator, on_event=observe
+        )
         try:
-            async with asyncio.timeout(5):
-                while not accepted.is_set():
-                    await asyncio.sleep(0.01)
+            assert accepted.wait(5)
             signal.cancel()
             with pytest.raises(AgentCancelled):
-                await run.wait(timeout=2)
-            assert not await run.wait_for_idle(timeout=0)
+                run.result(timeout=2)
+            assert not run.wait_for_idle(timeout=0)
         finally:
             release.set()
-            assert await run.wait_for_idle(timeout=3)
+            assert run.wait_for_idle(timeout=3)
             if coordinator is not None:
-                assert await coordinator.close(timeout=3)
+                assert coordinator.close(timeout=3)
         return run
 
-    run = asyncio.run(exercise())
+    run = exercise()
     for _ in range(2):
         snapshot = project_response(
             run.snapshot(),

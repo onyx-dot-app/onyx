@@ -1,36 +1,39 @@
 """Cancellation signals, execution scopes, and interruptible provider streaming."""
 
-import asyncio
-import os
+import socket
 import threading
-from collections.abc import Callable, Coroutine, Generator, Iterator
-from concurrent.futures import CancelledError, Future
-from concurrent.futures import TimeoutError as FutureTimeoutError
-from contextlib import contextmanager, suppress
+from collections.abc import Callable, Generator, Iterator
+from concurrent.futures import Future
+from contextlib import ExitStack, contextmanager
 from contextvars import ContextVar, copy_context
 from functools import wraps
-from typing import TYPE_CHECKING, ParamSpec, TypeVar
+from typing import TYPE_CHECKING, ParamSpec, TypeVar, cast
 
+import httpx
+from httpcore import NetworkStream
 from pydantic import JsonValue
+from typing_extensions import TypedDict
 
-from onyx.llm.exceptions import LLMTimeoutError
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import get_background_event_loop
+from onyx.utils.threadpool_concurrency import start_thread_with_context
 
 logger = setup_logger()
 
-_PROVIDER_CLEANUP_TIMEOUT_SECONDS = 5.0
+_CONNECTION_ESTABLISHED = {
+    "connection.connect_tcp.complete",
+    "connection.connect_unix_socket.complete",
+}
 
 
 class AgentCancelled(BaseException):
-    """Control flow, not a model/tool failure. Like asyncio.CancelledError."""
+    """Cancellation control flow bypasses ordinary model/tool error recovery."""
 
 
 class CancellationSignal:
     def __init__(self) -> None:
         self._cancelled = threading.Event()
         self._lock = threading.Lock()
-        self._callbacks: set[Callable[[], object]] = set()
+        self._callbacks: set[Callable[[], None]] = set()
         self._operation_listeners: set[Callable[[Future[None]], None]] = set()
 
     @property
@@ -55,18 +58,21 @@ class CancellationSignal:
                 logger.exception("Agent cancellation callback failed")
 
     @contextmanager
-    def on_cancel(self, callback: Callable[[], object]) -> Iterator[None]:
+    def on_cancel(self, callback: Callable[[], None]) -> Iterator[None]:
+        def notify() -> None:
+            return callback()
+
         with self._lock:
             cancelled = self.cancelled
             if not cancelled:
-                self._callbacks.add(callback)
+                self._callbacks.add(notify)
         try:
             if cancelled:
                 callback()
             yield
         finally:
             with self._lock:
-                self._callbacks.discard(callback)
+                self._callbacks.discard(notify)
 
     def track_operation(self, completion: Future[None]) -> None:
         with self._lock:
@@ -77,13 +83,17 @@ class CancellationSignal:
     @contextmanager
     def on_operation(self, listener: Callable[[Future[None]], None]) -> Iterator[None]:
         """Observe provider work until actual cleanup finishes, including after timeout."""
+
+        def notify(completion: Future[None]) -> None:
+            listener(completion)
+
         with self._lock:
-            self._operation_listeners.add(listener)
+            self._operation_listeners.add(notify)
         try:
             yield
         finally:
             with self._lock:
-                self._operation_listeners.discard(listener)
+                self._operation_listeners.discard(notify)
 
 
 _current_signal: ContextVar[CancellationSignal | None] = ContextVar(
@@ -111,242 +121,192 @@ def cancellation_scope(signal: CancellationSignal) -> Iterator[None]:
 
 
 if TYPE_CHECKING:
-    from litellm import CustomStreamWrapper
-    from litellm.llms.custom_httpx.http_handler import AsyncHTTPHandler
     from litellm.types.utils import ModelResponseStream
-
-
-class _NetworkLoop:
-    def __init__(self) -> None:
-        self.pid = os.getpid()
-        self.loop = get_background_event_loop()
-        self._tasks: set[asyncio.Task[None]] = set()
-
-    def call[T](
-        self,
-        coroutine: Coroutine[None, None, T],
-        signal: CancellationSignal | None,
-        *,
-        timeout: float,
-        ownership_signal: CancellationSignal | None = None,
-    ) -> T:
-        result: Future[T] = Future()
-        completion: Future[None] = Future()
-        result.set_running_or_notify_cancel()
-        completion.set_running_or_notify_cancel()
-        cancelled = False
-        entered = False
-        task: asyncio.Task[None] | None = None
-
-        async def run() -> None:
-            nonlocal entered
-            entered = True
-            try:
-                result.set_result(await coroutine)
-            except asyncio.CancelledError:
-                result.set_exception(CancelledError())
-            except BaseException as error:
-                result.set_exception(error)
-
-        def cancel_task() -> None:
-            nonlocal cancelled
-            cancelled = True
-            if task is not None:
-                task.cancel()
-
-        def cancel() -> None:
-            self.loop.call_soon_threadsafe(cancel_task)
-
-        def finish(done: asyncio.Task[None]) -> None:
-            self._tasks.discard(done)
-            if not entered:
-                coroutine.close()
-                result.set_exception(CancelledError())
-            completion.set_result(None)
-
-        def start() -> None:
-            nonlocal task
-            task = self.loop.create_task(run())
-            self._tasks.add(task)
-            task.add_done_callback(finish)
-            if cancelled:
-                task.cancel()
-
-        owner = ownership_signal or signal
-        try:
-            if signal is not None:
-                signal.check()
-            if owner is not None:
-                owner.track_operation(completion)
-            self.loop.call_soon_threadsafe(start)
-        except BaseException:
-            coroutine.close()
-            completion.set_result(None)
-            raise
-        try:
-            if signal is None:
-                return result.result(timeout=timeout)
-            with signal.on_cancel(cancel):
-                return result.result(timeout=timeout)
-        except FutureTimeoutError as error:
-            if result.done():
-                raise
-            cancel()
-            if signal is not None:
-                signal.check()
-            raise LLMTimeoutError(
-                "Provider I/O did not complete within its operation timeout"
-            ) from error
-        except CancelledError:
-            if signal is not None:
-                signal.check()
-            raise
-
-
-_network: _NetworkLoop | None = None
-
-_network_lock = threading.Lock()
-
-
-def _network_loop() -> _NetworkLoop:
-    global _network
-    with _network_lock:
-        if _network is None or _network.pid != os.getpid():
-            _network = _NetworkLoop()
-        return _network
+    from openai import AzureOpenAI, OpenAI
 
 
 @contextmanager
 def cancellation_deadline(
     seconds: float, callback: Callable[[], None]
 ) -> Iterator[None]:
-    loop = get_background_event_loop()
-    handle: asyncio.TimerHandle | None = None
-    expires_at = loop.time() + seconds
+    stopped = threading.Event()
 
-    def start() -> None:
-        nonlocal handle
-        handle = loop.call_at(expires_at, callback)
+    def expire() -> None:
+        if not stopped.wait(seconds):
+            callback()
 
-    def stop() -> None:
-        if handle is not None:
-            handle.cancel()
-
-    loop.call_soon_threadsafe(start)
+    watcher = start_thread_with_context(expire, name="llm-deadline", daemon=True)
     try:
         yield
     finally:
-        loop.call_soon_threadsafe(stop)
+        stopped.set()
+        watcher.join(timeout=1)
+
+
+class _ConnectionTrace(TypedDict):
+    return_value: NetworkStream
 
 
 class CancellableStream(Iterator["ModelResponseStream"]):
+    """Own a synchronous provider connection and interrupt its reads on cancellation."""
+
     def __init__(
         self,
         kwargs: dict[str, JsonValue],
         signal: CancellationSignal,
         *,
-        isolated_client: bool,
         timeout: float,
     ) -> None:
-        self._network = _network_loop()
-        self._signal = signal
-        self._timeout = timeout
-        self._response: CustomStreamWrapper | None = None
-        self._client: AsyncHTTPHandler | None = None
-        self._closed = False
-        try:
-            signal.check()
-            self._network.call(
-                self._open(kwargs, isolated_client),
-                signal,
-                timeout=timeout + _PROVIDER_CLEANUP_TIMEOUT_SECONDS,
-            )
-        except BaseException:
-            with suppress(Exception):
-                self.close()
-            raise
-
-    async def _open(self, kwargs: dict[str, JsonValue], isolated: bool) -> None:
-        from litellm import CustomStreamWrapper
-        from litellm.llms.custom_httpx.http_handler import AsyncHTTPHandler
+        from litellm import CustomStreamWrapper, HTTPHandler
+        from openai import OpenAI
 
         from onyx.llm.litellm_singleton import litellm
 
-        if isolated:
-            self._client = AsyncHTTPHandler(timeout=self._timeout)
+        self._signal = signal
+        self._lock = threading.Lock()
+        self._sockets: list[socket.socket] = []
+        self._closed = False
+        self._response: CustomStreamWrapper | None = None
+        self._completion: Future[None] = Future()
+        self._completion.set_running_or_notify_cancel()
+        self._resources = ExitStack()
         try:
-            response = await litellm.acompletion(**(kwargs | {"client": self._client}))
+            signal.track_operation(self._completion)
+            signal.check()
+            self._resources.enter_context(signal.on_cancel(self._abort))
+            handler = HTTPHandler(timeout=timeout)
+            self._resources.callback(handler.close)
+            handler.client.event_hooks["request"].append(self._prepare_request)
+            model = cast(str, kwargs["model"])
+            provider = kwargs.get("custom_llm_provider") or model.partition("/")[0]
+            if provider == "openai" and "responses/" not in model:
+                # LiteLLM's OpenAI chat adapter accepts the SDK client, not HTTPHandler.
+                client = OpenAI(
+                    api_key=cast(str | None, kwargs.get("api_key")),
+                    base_url=cast(str | None, kwargs.get("base_url")),
+                    http_client=handler.client,
+                    max_retries=0,
+                )
+            elif provider == "azure" and "responses/" not in model:
+                client = _azure_client(kwargs, handler.client, timeout)
+            else:
+                client = handler
+            response = litellm.completion(**kwargs, client=client)
             if not isinstance(response, CustomStreamWrapper):
                 raise TypeError("Expected a streaming model response")
             self._response = response
-            self._signal.check()
+            signal.check()
         except BaseException:
-            with suppress(Exception):
-                await self._close()
+            self.close()
+            signal.check()
             raise
 
-    async def _next(self) -> "ModelResponseStream":
+    def _prepare_request(self, request: httpx.Request) -> None:
         self._signal.check()
-        if self._response is None:
-            raise StopAsyncIteration
-        try:
-            return await anext(self._response)
-        except BaseException:
-            with suppress(Exception):
-                await self._close()
-            raise
+        request.extensions["trace"] = self._trace_connection
 
-    async def _close(self) -> None:
-        # Detach resources before awaiting so cancellation and iterator cleanup
-        # cannot both close the same provider stream.
-        response, self._response = self._response, None
-        client, self._client = self._client, None
+    def _trace_connection(self, name: str, info: _ConnectionTrace) -> None:
+        if name not in _CONNECTION_ESTABLISHED:
+            return
+        # HTTPX's trace extension exposes the raw socket before TLS takes ownership.
+        # https://www.python-httpx.org/advanced/extensions/#trace
+        connection = cast(socket.socket, info["return_value"].get_extra_info("socket"))
+        duplicate = connection.dup()
+        with self._lock:
+            self._sockets.append(duplicate)
+            if self._signal.cancelled:
+                self._shutdown(duplicate)
+        self._signal.check()
+
+    @staticmethod
+    def _shutdown(connection: socket.socket) -> None:
         try:
-            try:
-                if response is not None:
-                    await asyncio.wait_for(
-                        response.aclose(), _PROVIDER_CLEANUP_TIMEOUT_SECONDS
-                    )
-            finally:
-                if client is not None:
-                    await asyncio.wait_for(
-                        client.close(), _PROVIDER_CLEANUP_TIMEOUT_SECONDS
-                    )
-        except Exception:
-            logger.exception("Provider stream cleanup failed")
-            raise
+            connection.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            logger.debug("Provider connection already closed during cancellation")
+
+    def _abort(self) -> None:
+        with self._lock:
+            for connection in self._sockets:
+                self._shutdown(connection)
 
     def __next__(self) -> "ModelResponseStream":
-        if self._closed:
+        if self._closed or self._response is None:
             raise StopIteration
         try:
             self._signal.check()
-            return self._network.call(
-                self._next(),
-                self._signal,
-                timeout=self._timeout + _PROVIDER_CLEANUP_TIMEOUT_SECONDS,
-            )
-        except StopAsyncIteration:
-            self.close()
-            raise StopIteration from None
+            chunk = next(self._response)
+            self._signal.check()
+            return chunk
         except BaseException:
-            with suppress(Exception):
-                self.close()
+            self.close()
+            self._signal.check()
             raise
 
     def close(self) -> None:
-        if not self._closed:
-            self._closed = True
-            try:
-                self._network.call(
-                    self._close(),
-                    None,
-                    timeout=2 * _PROVIDER_CLEANUP_TIMEOUT_SECONDS,
-                    ownership_signal=self._signal,
-                )
-            except LLMTimeoutError:
-                logger.exception("Provider stream cleanup exceeded its wait bound")
-                raise
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            self._resources.close()
+        except Exception:
+            logger.exception("Provider stream cleanup failed")
+        finally:
+            with self._lock:
+                for connection in self._sockets:
+                    connection.close()
+                self._sockets.clear()
+            self._completion.set_result(None)
+
+
+def _azure_client(
+    kwargs: dict[str, JsonValue], http_client: httpx.Client, timeout: float
+) -> "OpenAI | AzureOpenAI":
+    from litellm.llms.azure.common_utils import BaseAzureLLM
+    from litellm.secret_managers.main import get_secret_str
+    from openai import AzureOpenAI, OpenAI
+
+    from onyx.llm.litellm_singleton import litellm
+
+    api_base = cast(str | None, kwargs.get("base_url") or kwargs.get("api_base"))
+    api_base = api_base or litellm.api_base or get_secret_str("AZURE_API_BASE")
+    api_version = cast(str | None, kwargs.get("api_version"))
+    api_version = (
+        api_version or litellm.api_version or get_secret_str("AZURE_API_VERSION")
+    )
+    api_key = cast(str | None, kwargs.get("api_key"))
+    api_key = (
+        api_key
+        or litellm.api_key
+        or litellm.azure_key
+        or get_secret_str("AZURE_OPENAI_API_KEY")
+        or get_secret_str("AZURE_API_KEY")
+    )
+    params = dict(kwargs)
+    params["azure_ad_token"] = params.get("azure_ad_token") or get_secret_str(
+        "AZURE_AD_TOKEN"
+    )
+    params.update(max_retries=0, timeout=timeout)
+    configuration = BaseAzureLLM().initialize_azure_sdk_client(
+        litellm_params=params,
+        api_key=api_key,
+        api_base=api_base,
+        model_name=cast(str, kwargs["model"]),
+        api_version=api_version,
+        is_async=False,
+    )
+    configuration["http_client"] = http_client
+    if BaseAzureLLM._is_azure_v1_api_version(api_version):
+        return OpenAI(
+            api_key=configuration.get("api_key")
+            or configuration.get("azure_ad_token_provider")
+            or configuration.get("azure_ad_token"),
+            base_url=f"{api_base}/openai/v1/",
+            http_client=http_client,
+            max_retries=0,
+            timeout=timeout,
+        )
+    return AzureOpenAI(**configuration)
 
 
 _P = ParamSpec("_P")

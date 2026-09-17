@@ -1,13 +1,14 @@
 """Execution cleanup, restoration, and concurrent result acceptance remain independent."""
 
-import asyncio
+import threading
+import time
 from threading import Event
 from unittest.mock import patch
 
 import pytest
 
 from onyx.agents.coordination import AgentCoordinator, AgentInfo
-from onyx.agents.events import AgentEvent, ToolEndEvent
+from onyx.agents.events import AgentEvent
 from onyx.agents.models import PreparedStep, RunSnapshot, StepInput, StepResult
 from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import AgentTool, ToolInvocation
@@ -21,6 +22,7 @@ from onyx.llm.models import (
     ToolResult,
     ToolResultMessage,
 )
+from onyx.utils.threadpool_concurrency import start_thread_future
 from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
 from tests.unit.onyx.agents.test_child_coordination import parent_agent
 
@@ -72,18 +74,16 @@ def test_archive_lookup_does_not_restore_an_agent(in_discovery: bool) -> None:
             previous_run_id=archived.run_id,
         )
 
-    async def inspect(invocation: ToolInvocation) -> ToolResult:
+    def inspect(invocation: ToolInvocation) -> ToolResult:
         discovered = invocation.agents.discovery()
         assert [info.latest_run_id for info in discovered] == (
             ["saved"] if in_discovery else []
         )
-        saved = await invocation.agents.wait_run("saved", timeout=2)
+        saved = invocation.agents.wait_run("saved", timeout=2)
         assert saved is not None and saved.output.text == "Saved"
         assert resolutions == []
-        next_id = await invocation.agents.start_run(
-            "research", messages=[], max_steps=1
-        )
-        result = await invocation.agents.wait_run(next_id, timeout=2)
+        next_id = invocation.agents.start_run("research", messages=[], max_steps=1)
+        result = invocation.agents.wait_run(next_id, timeout=2)
         assert result is not None and result.output.text == "New"
         assert resolutions == ["research"]
         return ToolResult(content="Done")
@@ -118,11 +118,20 @@ def test_cancelled_work_keeps_agent_and_coordinator_reserved(kind: str) -> None:
     entered, release = Event(), Event()
 
     def generate(
-        _request: GenerationRequest, _signal: CancellationSignal
+        _request: GenerationRequest, signal: CancellationSignal
     ) -> AssistantMessage:
-        entered.set()
-        assert release.wait(5)
-        return AssistantMessage(content=[TextContent(text="Late")])
+        def cleanup() -> None:
+            assert release.wait(5)
+
+        signal.track_operation(
+            start_thread_future(cleanup, name="test-provider-cleanup")
+        )
+        cancelled = Event()
+        with signal.on_cancel(cancelled.set):
+            entered.set()
+            assert cancelled.wait(3)
+        signal.check()
+        raise AssertionError("Cancelled provider returned")
 
     def tool(_invocation: ToolInvocation) -> ToolResult:
         entered.set()
@@ -146,27 +155,25 @@ def test_cancelled_work_keeps_agent_and_coordinator_reserved(kind: str) -> None:
         )
     )
 
-    async def exercise() -> None:
+    def exercise() -> None:
         coordinator = AgentCoordinator()
         run = agent.start(max_steps=1, coordinator=coordinator)
         try:
-            async with asyncio.timeout(2):
-                while not entered.is_set():
-                    await asyncio.sleep(0.01)
+            assert entered.wait(2)
             run.cancel()
             with pytest.raises(AgentCancelled):
-                await run.wait(timeout=3)
-            assert not await run.wait_for_idle(timeout=0.01)
-            assert not await coordinator.close(timeout=0.01)
+                run.result(timeout=3)
+            assert not run.wait_for_idle(timeout=0.01)
+            assert not coordinator.close(timeout=0.01)
             with pytest.raises(RuntimeError, match="draining"):
                 agent.start(max_steps=1)
         finally:
             release.set()
-        assert await run.wait_for_idle(timeout=3)
-        assert await coordinator.close(timeout=3)
+        assert run.wait_for_idle(timeout=3)
+        assert coordinator.close(timeout=3)
         assert "Late" not in [message.text for message in run.snapshot().messages]
 
-    asyncio.run(exercise())
+    exercise()
 
 
 def test_archive_timeout_does_not_cancel_parent_or_release_its_work_early() -> None:
@@ -180,11 +187,11 @@ def test_archive_timeout_does_not_cancel_parent_or_release_its_work_early() -> N
         finally:
             finished.set()
 
-    async def inspect(invocation: ToolInvocation) -> ToolResult:
+    def inspect(invocation: ToolInvocation) -> ToolResult:
         try:
-            assert await invocation.agents.wait_run("saved", timeout=0) is None
+            assert invocation.agents.wait_run("saved", timeout=0) is None
             assert not entered.is_set()
-            assert await invocation.agents.wait_run("saved", timeout=0.05) is None
+            assert invocation.agents.wait_run("saved", timeout=0.05) is None
             assert entered.is_set() and not finished.is_set()
             assert not invocation.cancellation.cancelled
         finally:
@@ -192,14 +199,14 @@ def test_archive_timeout_does_not_cancel_parent_or_release_its_work_early() -> N
         return ToolResult(content="timed out")
 
     parent = parent_agent(inspect)
-    parent.max_parallel_operations = 1
+
     run_agent(parent, max_steps=2, coordinator=AgentCoordinator(read_run=read))
     assert finished.is_set()
 
 
 def test_loaded_agent_bound_is_shared_across_parent_runs() -> None:
-    async def spawn(invocation: ToolInvocation) -> ToolResult:
-        await invocation.agents.spawn_agent(
+    def spawn(invocation: ToolInvocation) -> ToolResult:
+        invocation.agents.spawn_agent(
             Agent(
                 FakeModelClient(
                     lambda *_: AssistantMessage(content=[TextContent(text="Done")])
@@ -212,21 +219,21 @@ def test_loaded_agent_bound_is_shared_across_parent_runs() -> None:
         )
         return ToolResult(content="Done")
 
-    async def exercise() -> None:
+    def exercise() -> None:
         parent = parent_agent(spawn)
         coordinator = AgentCoordinator()
         first = parent.start(max_steps=2, coordinator=coordinator)
-        await first.wait()
-        assert await first.wait_for_idle(timeout=3)
+        first.result()
+        assert first.wait_for_idle(timeout=3)
         second = parent.start(max_steps=2, coordinator=coordinator)
         with pytest.raises(RunFailed):
-            await second.wait()
-        assert await second.wait_for_idle(timeout=3)
+            second.result()
+        assert second.wait_for_idle(timeout=3)
         assert len(coordinator.discovery(parent.id)) == 1
-        assert await coordinator.close(timeout=3)
+        assert coordinator.close(timeout=3)
 
     with patch("onyx.agents.coordination.MAX_LOADED_AGENTS", 1):
-        asyncio.run(exercise())
+        exercise()
 
 
 @pytest.mark.parametrize("cancelled", [False, True])
@@ -242,7 +249,7 @@ def test_parallel_result_survives_another_tool_failure(cancelled: bool) -> None:
         return ToolResult(content="Completed side effect")
 
     def observe(event: AgentEvent) -> None:
-        if isinstance(event, ToolEndEvent) and event.tool_call.id == "second":
+        if event.type == "tool_update" and event.tool_call.id == "second":
             accepted.set()
 
     agent = Agent(
@@ -292,17 +299,17 @@ def test_timed_out_wait_does_not_observe_a_later_child_failure(
         assert release.wait(3)
         raise ValueError("Child failed")
 
-    async def delegate(invocation: ToolInvocation) -> ToolResult:
-        submission = await invocation.agents.spawn_agent(
+    def delegate(invocation: ToolInvocation) -> ToolResult:
+        submission = invocation.agents.spawn_agent(
             Agent(FakeModelClient(fail)),
             name="child",
             description="Task",
             messages=[],
             max_steps=1,
         )
-        assert await invocation.agents.wait_run(submission.run_id, timeout=0) is None
+        assert invocation.agents.wait_run(submission.run_id, timeout=0) is None
         if cancel_child:
-            await invocation.agents.cancel_run(submission.run_id)
+            invocation.agents.cancel_run(submission.run_id)
         release.set()
         return ToolResult(content="parent continues")
 
@@ -325,12 +332,15 @@ def test_timed_out_wait_does_not_observe_a_later_child_failure(
         release.set()
 
 
-def test_async_tool_timeout_cancels_the_tool_and_saves_failure() -> None:
+def test_tool_timeout_cancels_the_tool_and_saves_failure() -> None:
     cleaned_up = Event()
 
-    async def blocked(_invocation: ToolInvocation) -> ToolResult:
+    def blocked(invocation: ToolInvocation) -> ToolResult:
         try:
-            await asyncio.Event().wait()
+            cancelled = threading.Event()
+            with invocation.cancellation.on_cancel(cancelled.set):
+                assert cancelled.wait(3)
+                invocation.cancellation.check()
             return ToolResult(content="Unreachable")
         finally:
             cleaned_up.set()
@@ -347,14 +357,16 @@ def test_child_cancel_does_not_need_a_free_blocking_worker() -> None:
     entered, release = Event(), Event()
 
     def blocked(
-        _request: GenerationRequest, _signal: CancellationSignal
+        _request: GenerationRequest, signal: CancellationSignal
     ) -> AssistantMessage:
         entered.set()
-        assert release.wait(5)
+        with signal.on_cancel(release.set):
+            assert release.wait(5)
+        signal.check()
         return AssistantMessage(content=[TextContent(text="Late")])
 
-    async def delegate(invocation: ToolInvocation) -> ToolResult:
-        submitted = await invocation.agents.spawn_agent(
+    def delegate(invocation: ToolInvocation) -> ToolResult:
+        submitted = invocation.agents.spawn_agent(
             Agent(FakeModelClient(blocked)),
             name="blocked",
             description="Task",
@@ -362,22 +374,17 @@ def test_child_cancel_does_not_need_a_free_blocking_worker() -> None:
             max_steps=1,
         )
         try:
-            async with asyncio.timeout(2):
-                while not entered.is_set():
-                    await asyncio.sleep(0.01)
-                assert (
-                    await invocation.agents.wait_run(submitted.run_id, timeout=0)
-                    is None
-                )
-                await invocation.agents.cancel_run(submitted.run_id)
-                with pytest.raises(AgentCancelled):
-                    await invocation.agents.wait_run(submitted.run_id, timeout=1)
+            assert entered.wait(2)
+            assert invocation.agents.wait_run(submitted.run_id, timeout=0) is None
+            invocation.agents.cancel_run(submitted.run_id)
+            with pytest.raises(AgentCancelled):
+                invocation.agents.wait_run(submitted.run_id, timeout=1)
         finally:
             release.set()
         return ToolResult(content="Done")
 
     parent = parent_agent(delegate)
-    parent.max_parallel_operations = 1
+
     assert (
         run_agent(parent, max_steps=2, coordinator=AgentCoordinator()).output.text
         == "first finished"
@@ -393,29 +400,32 @@ def test_child_restart_waits_for_its_timed_out_archive_read() -> None:
         assert release.wait(5)
         return None
 
-    async def inspect(invocation: ToolInvocation) -> ToolResult:
+    def inspect(invocation: ToolInvocation) -> ToolResult:
         nonlocal calls
         calls += 1
         if calls == 1:
-            assert await invocation.agents.wait_run("archived", timeout=0.05) is None
+            assert invocation.agents.wait_run("archived", timeout=0.05) is None
         return ToolResult(content="Done")
 
     child = parent_agent(inspect)
 
-    async def delegate(invocation: ToolInvocation) -> ToolResult:
-        submitted = await invocation.agents.spawn_agent(
+    def delegate(invocation: ToolInvocation) -> ToolResult:
+        submitted = invocation.agents.spawn_agent(
             child, name="research", description="Task", messages=[], max_steps=2
         )
-        assert await invocation.agents.wait_run(submitted.run_id, timeout=2) is not None
+        assert invocation.agents.wait_run(submitted.run_id, timeout=2) is not None
         assert entered.is_set()
-        restarting = asyncio.create_task(
-            invocation.agents.start_run(child.id, messages=[], max_steps=2)
+        restarting = start_thread_future(
+            name="test-restart",
+            operation=lambda: invocation.agents.start_run(
+                child.id, messages=[], max_steps=2
+            ),
         )
-        await asyncio.sleep(0.03)
+        time.sleep(0.03)
         assert not restarting.done()
         release.set()
-        run_id = await restarting
-        assert await invocation.agents.wait_run(run_id, timeout=2) is not None
+        run_id = restarting.result(2)
+        assert invocation.agents.wait_run(run_id, timeout=2) is not None
         return ToolResult(content="Done")
 
     try:
@@ -429,9 +439,8 @@ def test_child_restart_waits_for_its_timed_out_archive_read() -> None:
     assert calls == 2
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize("should_continue", [False, True])
-async def test_completed_step_decides_completion_before_budget_limit(
+def test_completed_step_decides_completion_before_budget_limit(
     should_continue: bool,
 ) -> None:
     prepared: list[int] = []
@@ -453,8 +462,8 @@ async def test_completed_step_decides_completion_before_budget_limit(
         after_step=after_step,
     )
     run = agent.start(max_steps=1)
-    result = await run.wait()
-    assert await run.wait_for_idle(2)
+    result = run.result()
+    assert run.wait_for_idle(2)
     assert prepared == [0]
     assert completed == [0]
     assert result.stop_reason == (
@@ -462,8 +471,7 @@ async def test_completed_step_decides_completion_before_budget_limit(
     )
 
 
-@pytest.mark.asyncio
-async def test_final_validation_failure_preserves_completed_output() -> None:
+def test_final_validation_failure_preserves_completed_output() -> None:
     def validate(_result: StepResult) -> bool:
         raise ValueError("Missing required section")
 
@@ -474,7 +482,7 @@ async def test_final_validation_failure_preserves_completed_output() -> None:
         after_step=validate,
     ).start(max_steps=1)
     with pytest.raises(RunFailed):
-        await run.wait()
-    assert await run.wait_for_idle(2)
+        run.result()
+    assert run.wait_for_idle(2)
     assert run.snapshot().status == RunStatus.ERROR
     assert run.snapshot().messages[-1].text == "Partial answer"

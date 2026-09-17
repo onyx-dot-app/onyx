@@ -3,9 +3,7 @@ import collections.abc
 import concurrent.futures
 import contextvars
 import copy
-import os
 import threading
-import time
 import uuid
 from collections.abc import Callable, Coroutine, Iterator, MutableMapping, Sequence
 from concurrent.futures import (
@@ -15,16 +13,13 @@ from concurrent.futures import (
     as_completed,
     wait,
 )
-from typing import TYPE_CHECKING, Any, Generic, Protocol, TypeVar, cast, overload
+from typing import Any, Generic, Protocol, TypeVar, cast, overload
 
 from pydantic import GetCoreSchemaHandler
 from pydantic.types import T
 from pydantic_core import core_schema
 
 from onyx.utils.logger import setup_logger
-
-if TYPE_CHECKING:
-    from onyx.llm.cancellation import CancellationSignal
 
 logger = setup_logger()
 
@@ -46,31 +41,6 @@ class ContextThreadPoolExecutor(ThreadPoolExecutor):
     ) -> Future[T]:
         context = contextvars.copy_context()
         return super().submit(lambda: context.run(fn, *args, **kwargs))
-
-
-class _BackgroundEventLoop:
-    def __init__(self) -> None:
-        self.pid = os.getpid()
-        self.loop = asyncio.new_event_loop()
-        start_thread_with_context(
-            self.loop.run_forever,
-            name="agent-io",
-            daemon=True,
-            context=contextvars.Context(),
-        )
-
-
-_background_event_loop: _BackgroundEventLoop | None = None
-_background_event_loop_lock = threading.Lock()
-
-
-def get_background_event_loop() -> asyncio.AbstractEventLoop:
-    """Share cancellable I/O scheduling without retaining a caller's tenant context."""
-    global _background_event_loop
-    with _background_event_loop_lock:
-        if _background_event_loop is None or _background_event_loop.pid != os.getpid():
-            _background_event_loop = _BackgroundEventLoop()
-        return _background_event_loop.loop
 
 
 class ThreadSafeDict(MutableMapping[KT, VT]):
@@ -326,7 +296,6 @@ def run_functions_tuples_in_parallel(
     timeout_callback: (
         Callable[[int, CallableProtocol, tuple[Any, ...]], Any] | None
     ) = None,
-    cancellation: "CancellationSignal | None" = None,
 ) -> list[Any]:
     """
     Executes multiple functions in parallel and returns a list of the results for each function.
@@ -360,14 +329,6 @@ def run_functions_tuples_in_parallel(
     if workers <= 0:
         return []
 
-    if cancellation is not None:
-        cancellation.check()
-
-    def invoke(func: CallableProtocol, args: tuple[Any, ...]) -> Any:
-        if cancellation is not None:
-            cancellation.check()
-        return func(*args)
-
     results: list[tuple[int, Any]] = []
     executor = ThreadPoolExecutor(max_workers=workers)
 
@@ -376,27 +337,13 @@ def run_functions_tuples_in_parallel(
         # that respects tenant id. Context.run is expected to be low-overhead, but if we later
         # find that it is increasing latency we can make using it optional.
         future_to_index = {
-            executor.submit(contextvars.copy_context().run, invoke, func, args): i
+            executor.submit(contextvars.copy_context().run, func, *args): i
             for i, (func, args) in enumerate(functions_with_args)
         }
 
-        if timeout is not None or cancellation is not None:
-            if cancellation is None:
-                done, not_done = wait(future_to_index.keys(), timeout=timeout)
-            else:
-                deadline = time.monotonic() + timeout if timeout is not None else None
-                done = set()
-                not_done = set(future_to_index)
-                while not_done:
-                    cancellation.check()
-                    remaining = (
-                        deadline - time.monotonic() if deadline is not None else 0.05
-                    )
-                    if remaining <= 0:
-                        break
-                    finished, not_done = wait(not_done, timeout=min(0.05, remaining))
-                    done.update(finished)
-                cancellation.check()
+        if timeout is not None:
+            # Wait for completion or timeout
+            done, not_done = wait(future_to_index.keys(), timeout=timeout)
 
             # Process completed futures
             for future in done:
@@ -444,10 +391,7 @@ def run_functions_tuples_in_parallel(
         # When timeout is used, don't wait for timed-out threads to complete
         # (they will continue running in the background)
         # When no timeout, wait for all threads to complete (original behavior)
-        cancelled = cancellation is not None and cancellation.cancelled
-        executor.shutdown(
-            wait=timeout is None and not cancelled, cancel_futures=cancelled
-        )
+        executor.shutdown(wait=(timeout is None))
 
     results.sort(key=lambda x: x[0])
     return [result for index, result in results]
@@ -552,6 +496,23 @@ def start_thread_with_context(
     )
     thread.start()
     return thread
+
+
+def start_thread_future[T](operation: Callable[[], T], *, name: str) -> Future[T]:
+    """Start independent work with the caller's context and an observable result."""
+    result: Future[T] = Future()
+    result.set_running_or_notify_cancel()
+
+    def run() -> None:
+        try:
+            value = operation()
+        except BaseException as error:
+            result.set_exception(error)
+        else:
+            result.set_result(value)
+
+    start_thread_with_context(run, name=name, daemon=True)
+    return result
 
 
 class TimeoutThread(threading.Thread, Generic[R]):

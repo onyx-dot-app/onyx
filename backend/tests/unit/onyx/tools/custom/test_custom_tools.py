@@ -4,6 +4,7 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
+import requests
 
 from onyx.agents.tools import ToolInvocation
 from onyx.llm.cancellation import CancellationSignal
@@ -517,3 +518,45 @@ class TestSanitizeToolName(unittest.TestCase):
 
 if __name__ == "__main__":
     pytest.main([__file__])
+
+
+@pytest.mark.parametrize("status_code", [200, 401, 403, 500])
+def test_custom_tool_http_outcome_sets_shared_error_flag(status_code: int) -> None:
+    tools = build_custom_tools_from_openapi_schema_and_headers(
+        tool_id=1,
+        openapi_schema={
+            "openapi": "3.0.0",
+            "info": {"title": "Status", "version": "1.0.0"},
+            "servers": [{"url": "https://example.com"}],
+            "paths": {
+                "/status": {
+                    "get": {
+                        "operationId": "status",
+                        "summary": "Get status",
+                        "responses": {},
+                    }
+                }
+            },
+        },
+    )
+    response = requests.Response()
+    response.status_code = status_code
+    response.headers["Content-Type"] = "application/json"
+    with (
+        patch(
+            "onyx.tools.tool_implementations.custom.custom_tool.requests.request",
+            return_value=response,
+        ),
+        patch.object(response, "json", return_value={"message": "upstream response"}),
+    ):
+        result = tools[0].run(
+            ToolInvocation(
+                call_id="status",
+                arguments={},
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            ToolContext(),
+        )
+    assert result.is_error is (status_code >= 400)
+    assert "upstream response" in result.text

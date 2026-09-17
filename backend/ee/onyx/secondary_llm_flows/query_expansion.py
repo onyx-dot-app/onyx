@@ -57,6 +57,7 @@ def expand_keywords(
         response = llm.invoke(
             GenerationRequest(
                 messages=messages,
+                # Keyword expansion should return only a few short queries.
                 options=GenerationOptions(
                     reasoning_effort=ReasoningEffort.OFF, max_tokens=150
                 ),

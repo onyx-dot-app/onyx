@@ -78,7 +78,7 @@ with closing(client.stream(request, GenerationContext(flow=flow, cancellation=si
 
 The example uses an existing client, request, and registered flow.
 Call `signal.cancel()` from the request's Stop handler to interrupt generation.
-Cancellation raises `AgentCancelled` and waits for owned transport cleanup.
+Cancellation raises `AgentCancelled`. The operation remains tracked until transport cleanup finishes.
 Each generation owns its stream accumulator, parsing state, and deadline.
 
 ## Agent with tools
@@ -87,7 +87,7 @@ An agent adds history, tool execution, and iteration to the same client.
 Tool definitions reach the model. Executable callbacks belong to the agent.
 
 ```python
-from onyx.agents.runtime import Agent, AgentContext
+from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool
 from onyx.llm.models import ToolResult
 
@@ -101,42 +101,43 @@ def make_agent(client: LLM, flow: LLMFlow) -> Agent:
             "properties": {"text": {"type": "string"}},
             "required": ["text"],
         },
-        execute=lambda _id, arguments, _signal, _update: ToolResult(
-            content=str(arguments["text"])
+        execute=lambda invocation: ToolResult(
+            content=str(invocation.arguments["text"])
         ),
     )
     return Agent(
         client,
-        context=AgentContext(tools=[echo], execution=GenerationContext(flow=flow)),
+        tools=[echo],
+        execution=GenerationContext(flow=flow),
     )
 ```
 
 Call `agent.run(messages=[UserMessage(content="Echo hello")], max_steps=2)` to generate, execute tools, and continue.
-Call `agent.abort()` to cancel its active execution.
+Use `agent.start(...)` to receive a `Run` handle; call `run.cancel()` to cancel that execution.
 Tools receive the same cancellation signal and must cooperate with interruption.
 See [Agent execution](../agents/README.md) for snapshots, child execution, and lifecycle behavior.
 
 ## Context hooks
 
-A context hook prepares messages and generation settings for the next step.
-It receives an isolated copy of agent context.
+A step hook prepares messages and generation settings for the next model call.
+It receives an isolated `StepInput` and returns a `PreparedStep`.
 
 ```python
-from onyx.agents.runtime import AgentHooks, AgentStep
+from onyx.agents.models import PreparedStep, StepInput
+from onyx.llm.models import GenerationOptions
 
 
-def prepare_step(context: AgentContext, step: AgentStep) -> AgentContext:
-    if step.is_last:
-        context.tools = []
-        context.system_prompt = "Answer using the information already collected."
-    context.options.max_tokens = 1000
-    return context
+def prepare_step(state: StepInput) -> PreparedStep:
+    return PreparedStep(
+        tools=[] if state.step.is_last else [echo],
+        options=GenerationOptions(max_tokens=1000),
+    )
 
 
-hooks = AgentHooks(prepare_step=prepare_step)
+agent = Agent(client, prepare_step=prepare_step)
 ```
 
-Pass these hooks when constructing an agent.
+The example uses an existing client and executable `echo` tool.
 Onyx feature hooks use `context/messages.py` for attachments, reminders, and cache hints.
 `context/prompt.py` assembles instructions and file context. Agent owns compaction and the input budget.
 Chat citation mapping stays in `chat/citation_utils.py`.
@@ -164,7 +165,8 @@ Signed thinking blocks survive replay. Message copies preserve shared lazy file 
 
 ## Provider credentials and timeouts
 
-Provider calls pass supported settings directly to LiteLLM. Requests never change the process environment.
+Provider calls pass supported settings directly to LiteLLM.
+Environment-only custom settings retain the configured environment injection behavior.
 
 | Provider | Request-scoped settings |
 | --- | --- |
@@ -173,10 +175,20 @@ Provider calls pass supported settings directly to LiteLLM. Requests never chang
 | Vertex AI | Service-account credentials, workload identity mode, project, and location. |
 | Other providers | Provider-prefixed API key and API base settings. |
 
-Unsupported custom settings fail during client construction. Configure environment-only settings in the deployment.
+When environment injection is enabled, calls temporarily apply environment-only settings under an exclusive lock.
+Calls without injected settings share a read lock. Original environment values are restored afterward.
+When injection is disabled, the adapter drops environment-only keys and logs a warning.
 UI routing selections remain configuration metadata and do not become provider arguments.
 
-Socket timeouts bound connection setup and idle reads. The network coordinator also bounds waits and resource cleanup.
-These limits do not cap an agent's total execution time. A caller can supply a generation timeout when its operation requires one.
+Each generation owns a synchronous HTTP client. HTTPX connection tracing captures a duplicate socket before TLS setup.
+Cancellation shuts down that socket to interrupt blocked reads. The generation thread closes the client and tracks cleanup completion.
+Controlled stalled-response tests cover OpenAI chat, OpenAI Responses, Azure chat, Anthropic, and the Responses gateway.
+They verify cancellation before response headers and between streamed chunks, plus isolation between simultaneous requests.
+Azure client construction uses LiteLLM's authentication helper and retains API-key, AD-token, and token-refresh settings.
+
+DNS lookup and TCP connection setup occur before socket capture. They remain subject to native connection timeouts.
+Other provider paths require their own transport verification; these tests do not establish universal provider interruption.
+Socket timeouts bound connection setup and idle reads. A generation deadline cancels that generation without cancelling its parent run.
+These limits do not cap an agent's total execution time.
 
 Each streamed generation owns its provider diagnostics. Retry attempts update that operation's diagnostics before emitting generation events.
