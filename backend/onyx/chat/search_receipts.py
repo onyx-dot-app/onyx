@@ -24,10 +24,9 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
-# PostHog flag. Undefined flag or no PostHog means the default below applies, so
-# the flag can only turn receipts off (or on for a subset once defined).
+# PostHog flag. Receipts default to on: an undefined flag or no PostHog keeps
+# them on, so the flag can only turn receipts off (or on for a subset once defined).
 SEARCH_RECEIPTS_FLAG = "onyx-search-receipts"
-SEARCH_RECEIPTS_DEFAULT = True
 
 RECEIPT_PREFIX = "\n\nSEARCH RECEIPT (retrieval metadata, not source evidence):\n"
 
@@ -46,7 +45,7 @@ def search_receipts_enabled(user: User | None) -> bool:
             SEARCH_RECEIPTS_FLAG,
             user,
             get_current_tenant_id(),
-            default=SEARCH_RECEIPTS_DEFAULT,
+            default=True,
         )
     )
 
