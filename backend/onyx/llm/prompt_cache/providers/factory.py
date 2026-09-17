@@ -21,7 +21,7 @@ OPENROUTER_GOOGLE_PREFIX = "google/"
 OPENROUTER_OPENAI_PREFIX = "openai/"
 
 
-def get_provider_adapter(llm_info: LLMInfo) -> PromptCacheProvider:
+def get_provider_adapter(llm_config: LLMInfo) -> PromptCacheProvider:
     """Get the appropriate prompt cache provider adapter for a given provider.
 
     Args:
@@ -30,17 +30,17 @@ def get_provider_adapter(llm_info: LLMInfo) -> PromptCacheProvider:
     Returns:
         PromptCacheProvider instance for the given provider
     """
-    if llm_info.model_provider == LlmProviderNames.OPENAI:
+    if llm_config.model_provider == LlmProviderNames.OPENAI:
         return OpenAIPromptCacheProvider()
-    elif llm_info.model_provider == LlmProviderNames.ANTHROPIC or (
-        llm_info.model_provider == LlmProviderNames.BEDROCK
-        and ANTHROPIC_BEDROCK_TAG in llm_info.model_name
+    elif llm_config.model_provider == LlmProviderNames.ANTHROPIC or (
+        llm_config.model_provider == LlmProviderNames.BEDROCK
+        and ANTHROPIC_BEDROCK_TAG in llm_config.model_name
     ):
         return AnthropicPromptCacheProvider()
-    elif llm_info.model_provider == LlmProviderNames.VERTEX_AI:
+    elif llm_config.model_provider == LlmProviderNames.VERTEX_AI:
         return VertexAIPromptCacheProvider()
-    elif llm_info.model_provider == LlmProviderNames.OPENROUTER:
-        model_name = llm_info.model_name or ""
+    elif llm_config.model_provider == LlmProviderNames.OPENROUTER:
+        model_name = llm_config.model_name or ""
         if model_name.startswith(OPENROUTER_ANTHROPIC_PREFIX):
             logger.debug(
                 "Prompt caching enabled for OpenRouter Anthropic model: %s", model_name

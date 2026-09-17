@@ -15,7 +15,10 @@ export const MessageTextRenderer: MessageRenderer<
   FullChatState
 > = ({ items, onComplete, animate, stopPacketSeen, children }) => {
   // Stable across packet flushes so the typewriter target grows only when content does.
-  const content = useMemo(() => textContent(items), [items]);
+  const content = useMemo(
+    () => textContent(items) + textContent(items, "commentary"),
+    [items],
+  );
 
   const messageEndSeen = useMemo(() => isComplete(items), [items]);
   const isStreamFinished = stopPacketSeen || messageEndSeen;

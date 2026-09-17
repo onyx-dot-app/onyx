@@ -16,7 +16,7 @@ import {
   GroupedItem,
 } from "@/app/app/message/messageComponents/timeline/hooks/packetProcessor";
 import {
-  transformPacketGroups,
+  transformItemGroups,
   groupStepsByTurn,
   TurnGroup,
 } from "@/app/app/message/messageComponents/timeline/transformers";
@@ -110,7 +110,7 @@ export function usePacketProcessor(
 
   // Transform toolGroups to timeline format
   const toolTurnGroups = useMemo(() => {
-    const allSteps = transformPacketGroups(state.toolGroups);
+    const allSteps = transformItemGroups(state.toolGroups);
     return groupStepsByTurn(allSteps);
   }, [state.toolGroups]);
 

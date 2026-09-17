@@ -45,9 +45,8 @@ def _run(
             signal: CancellationSignal,
             *,
             timeout: float,
-            isolated_client: bool,
         ) -> None:
-            del signal, timeout, isolated_client
+            del signal, timeout
             if completion is not None:
                 completion(kwargs)
             self.sent = False

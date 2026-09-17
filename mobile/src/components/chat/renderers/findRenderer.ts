@@ -5,7 +5,10 @@ import { DispatchRenderer } from "@/components/chat/renderers/timelineContract";
 
 export function findRenderer(items: ResponseItem[]): DispatchRenderer | null {
   const first = items[0]?.content;
-  if (first?.kind === "text" && first.purpose === "answer")
+  if (
+    first?.kind === "text" &&
+    (first.purpose === "answer" || first.purpose === "commentary")
+  )
     return MessageTextRenderer;
   if (first?.kind === "reasoning") return ReasoningRenderer;
   return null;

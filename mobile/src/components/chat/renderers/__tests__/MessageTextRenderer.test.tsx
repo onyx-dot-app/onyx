@@ -43,6 +43,38 @@ describe("MessageTextRenderer", () => {
     mockMarkdownProps = null;
   });
 
+  it("keeps text visible when its item changes from answer to commentary", () => {
+    const props = {
+      state: { agent: null },
+      onComplete: () => {},
+      renderType: RenderType.FULL,
+      animate: false,
+      stopPacketSeen: false,
+    };
+    const item = textItem("Checking sources", "complete");
+    const { rerender } = render(
+      <MessageTextRenderer {...props} items={[item]}>
+        {renderResults}
+      </MessageTextRenderer>,
+    );
+    expect(mockMarkdownProps?.content).toBe("Checking sources");
+    const commentary = makeItem({
+      kind: "text",
+      purpose: "commentary",
+      text: "Checking sources",
+      status: "complete",
+      documents: [],
+      citations: [],
+    });
+    rerender(
+      <MessageTextRenderer {...props} items={[commentary]}>
+        {renderResults}
+      </MessageTextRenderer>,
+    );
+    expect(mockMarkdownProps?.content).toBe("Checking sources");
+    expect(mockMarkdownProps?.isStreaming).toBe(false);
+  });
+
   it("shows complete historical content", () => {
     render(
       <MessageTextRenderer

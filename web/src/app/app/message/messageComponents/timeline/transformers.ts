@@ -10,7 +10,7 @@ export interface TransformedStep {
   turnIndex: number;
   /** Tab index for parallel tools */
   tabIndex: number;
-  /** Raw items for content rendering */
+  /** Current items for content rendering */
   items: GroupedItem["items"];
 }
 
@@ -27,7 +27,7 @@ export interface TurnGroup {
 /**
  * Transform a single GroupedItem into step data
  */
-export function transformPacketGroup(group: GroupedItem): TransformedStep {
+export function transformItemGroup(group: GroupedItem): TransformedStep {
   return {
     key: `${group.turn_index}-${group.tab_index}`,
     turnIndex: group.turn_index,
@@ -37,12 +37,10 @@ export function transformPacketGroup(group: GroupedItem): TransformedStep {
 }
 
 /**
- * Transform all packet groups into step data
+ * Transform all item groups into step data
  */
-export function transformPacketGroups(
-  groups: GroupedItem[]
-): TransformedStep[] {
-  return groups.map(transformPacketGroup);
+export function transformItemGroups(groups: GroupedItem[]): TransformedStep[] {
+  return groups.map(transformItemGroup);
 }
 
 /** Group concurrent tool items for the parallel timeline view. */

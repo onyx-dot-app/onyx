@@ -180,6 +180,7 @@ class MCPTool(Tool):
                         tool_result=error_result,
                     ),
                     content=content,
+                    is_error=True,
                 )
 
             # For OAuth servers, construct OAuthClientProvider so the MCP SDK
@@ -266,6 +267,7 @@ class MCPTool(Tool):
                     tool_result=error_result,
                 ),
                 content=content,
+                is_error=True,
             )
         finally:
             record_mcp_client_tool_outcome(

@@ -1,13 +1,21 @@
 """Exercise real LiteLLM HTTP connections without external provider credentials."""
 
+import datetime as dt
+import ipaddress
 import json
 import select
+import ssl
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 
 import pytest
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.x509.oid import NameOID
 
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import GenerationContext
@@ -22,6 +30,8 @@ class ProviderState:
         self.disconnected = threading.Event()
         self.release = threading.Event()
         self.requests = 0
+        self.path = ""
+        self.headers: dict[str, str] = {}
 
 
 def _first_events(provider: str) -> bytes:
@@ -117,7 +127,10 @@ def _first_events(provider: str) -> bytes:
 
 @contextmanager
 def provider_server(
-    provider: str, send_chunk: bool, complete: bool = False
+    provider: str,
+    send_chunk: bool,
+    complete: bool = False,
+    tls: ssl.SSLContext | None = None,
 ) -> Iterator[tuple[str, ProviderState]]:
     state = ProviderState()
 
@@ -130,7 +143,8 @@ def provider_server(
         def do_POST(self) -> None:
             self.rfile.read(int(self.headers.get("Content-Length", "0")))
             state.requests += 1
-            state.started.set()
+            state.path = self.path
+            state.headers = dict(self.headers)
             if send_chunk:
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream")
@@ -144,6 +158,7 @@ def provider_server(
                 if complete:
                     self.close_connection = True
                     return
+            state.started.set()
             # Observe EOF on the actual provider socket, not only a local task flag.
             while not state.release.is_set():
                 readable, _, _ = select.select([self.connection], [], [], 0.05)
@@ -157,10 +172,13 @@ def provider_server(
                         return
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    if tls is not None:
+        server.socket = tls.wrap_socket(server.socket, server_side=True)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        yield f"http://127.0.0.1:{server.server_port}", state
+        scheme = "https" if tls is not None else "http"
+        yield f"{scheme}://127.0.0.1:{server.server_port}", state
     finally:
         state.release.set()
         server.shutdown()
@@ -168,16 +186,59 @@ def provider_server(
         thread.join(timeout=2)
 
 
+@pytest.fixture(params=[False, True], ids=["http", "https"])
+def provider_tls(
+    request: pytest.FixtureRequest, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> ssl.SSLContext | None:
+    if not request.param:
+        return None
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "localhost")])
+    now = dt.datetime.now(dt.timezone.utc)
+    certificate = (
+        x509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(name)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - dt.timedelta(minutes=1))
+        .not_valid_after(now + dt.timedelta(days=1))
+        .add_extension(
+            x509.SubjectAlternativeName(
+                [x509.IPAddress(ipaddress.ip_address("127.0.0.1"))]
+            ),
+            critical=False,
+        )
+        .sign(key, hashes.SHA256())
+    )
+    cert_path = tmp_path / "provider.crt"
+    key_path = tmp_path / "provider.key"
+    cert_path.write_bytes(certificate.public_bytes(serialization.Encoding.PEM))
+    key_path.write_bytes(
+        key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        )
+    )
+    monkeypatch.setenv("SSL_CERT_FILE", str(cert_path))
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(cert_path, key_path)
+    return context
+
+
 @pytest.mark.parametrize(
-    "provider", ["openai", "anthropic", "responses", "gateway_responses"]
+    "provider", ["openai", "anthropic", "responses", "gateway_responses", "azure"]
 )
 @pytest.mark.parametrize("send_chunk", [False, True])
 @pytest.mark.parametrize("invoke", [False, True])
 def test_cancel_closes_provider_connection(
-    provider: str, send_chunk: bool, invoke: bool
+    provider: str, send_chunk: bool, invoke: bool, provider_tls: ssl.SSLContext | None
 ) -> None:
     with provider_server(
-        "responses" if provider == "gateway_responses" else provider, send_chunk
+        "responses" if provider == "gateway_responses" else provider,
+        send_chunk,
+        tls=provider_tls,
     ) as (url, state):
         signal = CancellationSignal()
         stopped = threading.Event()
@@ -317,3 +378,44 @@ def test_cancel_does_not_interrupt_another_run() -> None:
             signal.cancel()
             blocked.release.set()
             worker.join(timeout=3)
+
+
+@pytest.mark.parametrize("api_version", ["2024-02-01", "v1"])
+@pytest.mark.parametrize("ad_token", [False, True])
+def test_azure_preserves_authentication_and_endpoint(
+    api_version: str, ad_token: bool
+) -> None:
+    with provider_server("azure", send_chunk=True, complete=True) as (url, state):
+        client = LitellmLLM(
+            LitellmTransport(
+                api_key=None if ad_token else "azure-test-key",
+                model_provider="azure",
+                model_name="harness-model",
+                api_base=url,
+                api_version=api_version,
+                custom_config={"AZURE_AD_TOKEN": "azure-test-token"}
+                if ad_token
+                else None,
+                max_input_tokens=4096,
+                timeout=5,
+            )
+        )
+        result = client.invoke(
+            GenerationRequest(messages=[UserMessage(content="test")]),
+            GenerationContext(flow=LLMFlow.MODEL_VALIDATION),
+        )
+    assert result.text == "hello"
+    if api_version == "v1":
+        assert state.path == "/openai/v1/chat/completions"
+        assert state.headers["Authorization"] == (
+            "Bearer azure-test-token" if ad_token else "Bearer azure-test-key"
+        )
+    else:
+        assert (
+            state.path
+            == "/openai/deployments/harness-model/chat/completions?api-version=2024-02-01"
+        )
+        if ad_token:
+            assert state.headers["Authorization"] == "Bearer azure-test-token"
+        else:
+            assert state.headers["api-key"] == "azure-test-key"

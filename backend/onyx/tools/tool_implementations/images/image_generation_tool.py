@@ -1,5 +1,5 @@
 import json
-from concurrent.futures import wait
+from concurrent.futures import Future, wait
 from typing import Any
 from uuid import UUID
 
@@ -27,6 +27,7 @@ from onyx.image_gen.interfaces import (
     ImageShape,
     ReferenceImage,
 )
+from onyx.llm.cancellation import AgentCancelled
 from onyx.llm.models import ToolResult
 from onyx.tools.interface import (
     FunctionToolDefinition,
@@ -45,7 +46,7 @@ from onyx.utils.threadpool_concurrency import ContextThreadPoolExecutor
 
 logger = setup_logger()
 
-# Heartbeat interval in seconds to prevent timeouts
+# Check cancellation while provider requests are in progress.
 CANCELLATION_POLL_INTERVAL = 5.0
 
 PROMPT_FIELD = "prompt"
@@ -316,22 +317,34 @@ class ImageGenerationTool(Tool):
         reference_images = self._load_reference_images(reference_image_file_ids)
 
         executor = ContextThreadPoolExecutor(max_workers=self.num_imgs)
+        futures: list[Future[ImageGenerationResponse]] = []
         try:
-            futures = [
+            futures.extend(
                 executor.submit(
                     lambda: self._generate_image(
                         prompt, shape, reference_images or None
                     )
                 )
                 for _ in range(self.num_imgs)
-            ]
+            )
             pending = set(futures)
             while pending:
                 invocation.cancellation.check()
                 _, pending = wait(pending, timeout=CANCELLATION_POLL_INTERVAL)
             image_generation_responses = [future.result() for future in futures]
         finally:
-            executor.shutdown(wait=False, cancel_futures=True)
+            # The runtime retains this tool worker until its provider jobs finish.
+            executor.shutdown(wait=True, cancel_futures=True)
+            if invocation.cancellation.cancelled:
+                for future in futures:
+                    if future.cancelled():
+                        continue
+                    error = future.exception()
+                    if error is not None and not isinstance(error, AgentCancelled):
+                        logger.error(
+                            "Image provider failed after cancellation",
+                            exc_info=(type(error), error, error.__traceback__),
+                        )
 
         invocation.cancellation.check()
         # Save files and create GeneratedImage objects

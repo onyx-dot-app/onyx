@@ -302,25 +302,23 @@ export const CodingAgentRenderer: MessageRenderer<ResponseItem, {}> = ({
 }) => {
   const t = useTranslations("chat.messages.timeline");
   const tool = firstTool(items);
-  const startPacket = tool
+  const taskArguments = tool
     ? {
         query: stringArgument(tool, "query"),
         repo: stringArgument(tool, "repo"),
       }
     : undefined;
-  const finalPacket = toolMetadata(items, "coding_result").at(-1);
-  const hasFinal = finalPacket !== undefined;
-  const errored = items.some((item) => item.content.status === "error");
+  const codingResult = toolMetadata(items, "coding_result").at(-1);
   const steps = useMemo(() => buildAgentSteps(items), [items]);
   const isComplete = itemsComplete(items);
 
-  const taskText = startPacket
-    ? startPacket.repo
+  const taskText = taskArguments
+    ? taskArguments.repo
       ? t("codingAgent.taskWithRepo.text", {
-          query: startPacket.query,
-          repo: startPacket.repo,
+          query: taskArguments.query,
+          repo: taskArguments.repo,
         })
-      : startPacket.query
+      : taskArguments.query
     : "";
 
   const wrap = (content: JSX.Element) =>
@@ -342,11 +340,11 @@ export const CodingAgentRenderer: MessageRenderer<ResponseItem, {}> = ({
     let header: string | null = null;
     let body: JSX.Element | null = null;
 
-    if (finalPacket) {
+    if (codingResult) {
       header = t("codingAgent.response.header");
       body = (
         <Text as="p" font="main-ui-muted" color="text-02">
-          {finalPacket.answer}
+          {codingResult.answer}
         </Text>
       );
     } else if (latestStep?.kind === "bash") {
@@ -380,10 +378,10 @@ export const CodingAgentRenderer: MessageRenderer<ResponseItem, {}> = ({
   }
 
   if (renderType === RenderType.COMPACT) {
-    if (finalPacket) {
+    if (codingResult) {
       return wrap(
         <ResponseStep
-          answer={finalPacket.answer}
+          answer={codingResult.answer}
           isLastStep={true}
           isHover={isHover}
         />
@@ -394,7 +392,7 @@ export const CodingAgentRenderer: MessageRenderer<ResponseItem, {}> = ({
         renderAgentStep(latestStep, "latest", lastStepIsActive, isHover)
       );
     }
-    if (startPacket) {
+    if (taskArguments) {
       return wrap(
         <CodingTaskStep
           taskText={taskText}
@@ -408,10 +406,10 @@ export const CodingAgentRenderer: MessageRenderer<ResponseItem, {}> = ({
 
   return wrap(
     <div className="flex flex-col">
-      {startPacket && (
+      {taskArguments && (
         <CodingTaskStep
           taskText={taskText}
-          isLastStep={lastStepIsActive && steps.length === 0 && !finalPacket}
+          isLastStep={lastStepIsActive && steps.length === 0 && !codingResult}
           isHover={isHover}
         />
       )}
@@ -419,13 +417,13 @@ export const CodingAgentRenderer: MessageRenderer<ResponseItem, {}> = ({
         renderAgentStep(
           step,
           idx,
-          lastStepIsActive && idx === steps.length - 1 && !finalPacket,
+          lastStepIsActive && idx === steps.length - 1 && !codingResult,
           isHover
         )
       )}
-      {finalPacket && (
+      {codingResult && (
         <ResponseStep
-          answer={finalPacket.answer}
+          answer={codingResult.answer}
           isLastStep={true}
           isHover={isHover}
         />

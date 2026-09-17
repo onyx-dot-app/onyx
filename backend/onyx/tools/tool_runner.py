@@ -32,33 +32,11 @@ def bind_tool(
     tool: Tool, context: ToolContext, *, sequential: bool = False
 ) -> AgentTool:
     definition = tool.tool_definition()["function"]
-    async_execute = tool.execute_async
     mode = ToolExecutionMode.SEQUENTIAL if sequential else tool.execution_mode
-    if async_execute is None:
-        return AgentTool(
-            name=definition["name"],
-            description=definition["description"],
-            parameters=definition["parameters"],
-            execute=lambda invocation: run_tool(tool, invocation, context),
-            execution_mode=mode,
-        )
-
-    async def execute(invocation: ToolInvocation) -> ToolResult:
-        invocation.cancellation.check()
-        with function_span(tool.name) as span:
-            span.span_data.input = str(invocation.arguments)
-            try:
-                result = await async_execute(invocation, context)
-            except ToolCallException as error:
-                result = _tool_failure(tool.name, error)
-            span.span_data.output = result.text
-        invocation.cancellation.check()
-        return result
-
     return AgentTool(
         name=definition["name"],
         description=definition["description"],
         parameters=definition["parameters"],
-        execute_async=execute,
+        execute=lambda invocation: run_tool(tool, invocation, context),
         execution_mode=mode,
     )

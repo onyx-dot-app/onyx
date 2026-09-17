@@ -1,9 +1,10 @@
-from collections.abc import Awaitable, Callable
+from concurrent.futures import Future
 
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
+from onyx.agents.concurrency import CLEANUP_SECONDS
 from onyx.agents.tools import ToolInvocation
 from onyx.agents.transcript import AgentRestorationConfig
 from onyx.coding_agent.agent import BASH_TOOL_SENTINEL_ID, CodingAgent, _setup_session
@@ -13,6 +14,7 @@ from onyx.coding_agent.tool_definitions import (
     CODING_AGENT_REPO_KEY,
     CODING_AGENT_TOOL_NAME,
 )
+from onyx.llm.cancellation import CancellationSignal, cancellation_scope
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import ToolResult, UserMessage
@@ -25,6 +27,7 @@ from onyx.tools.interface import (
 )
 from onyx.tools.tool_implementations.bash.bash_tool import BashTool
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import start_thread_with_context
 
 logger = setup_logger()
 
@@ -109,21 +112,15 @@ class CodingAgentTool(Tool):
             },
         }
 
-    @property
-    def execute_async(
-        self,
-    ) -> Callable[[ToolInvocation, ToolContext], Awaitable[ToolResult]]:
-        return self._execute
-
-    async def _execute(
-        self, invocation: ToolInvocation, _context: ToolContext
-    ) -> ToolResult:
+    @override
+    def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
         arguments = parse_tool_arguments(CodingAgentArguments, invocation.arguments)
         sandbox = _setup_session(
             repo=arguments.github_repo, github_token=self._github_token
         )
-        session_id = await invocation.run_blocking(sandbox.__enter__)
+        session_id = sandbox.__enter__()
         feature: CodingAgent | None = None
+        child_run_id: str | None = None
         try:
             feature = CodingAgent(
                 repo=arguments.github_repo,
@@ -134,7 +131,7 @@ class CodingAgentTool(Tool):
                     tool_id=BASH_TOOL_SENTINEL_ID, session_id=session_id
                 ),
             )
-            submission = await invocation.agents.spawn_agent(
+            submission = invocation.agents.spawn_agent(
                 feature.agent,
                 name="coding-"
                 + "".join(
@@ -148,9 +145,8 @@ class CodingAgentTool(Tool):
                     feature="coding", settings={"repo": arguments.github_repo}
                 ),
             )
-            while (
-                completed := await invocation.agents.wait_run(submission.run_id)
-            ) is None:
+            child_run_id = submission.run_id
+            while (completed := invocation.agents.wait_run(submission.run_id)) is None:
                 invocation.cancellation.check()
             answer = completed.output.text
             if not answer:
@@ -161,9 +157,40 @@ class CodingAgentTool(Tool):
         finally:
             if feature is not None:
                 feature.is_sandbox_available = False
-            try:
-                await invocation.run_blocking(
-                    lambda: sandbox.__exit__(None, None, None), cleanup=True
-                )
-            except Exception:
-                logger.exception("Coding sandbox cleanup failed")
+
+            def cleanup() -> None:
+                try:
+                    with cancellation_scope(CancellationSignal()):
+                        sandbox.__exit__(None, None, None)
+                except Exception:
+                    logger.exception("Coding sandbox cleanup failed")
+
+            if child_run_id is None or invocation.agents.wait_for_idle(
+                child_run_id, timeout=CLEANUP_SECONDS
+            ):
+                cleanup()
+            else:
+                # Retain the sandbox and cleanup ownership until child work drains.
+                logger.warning("Deferring coding sandbox cleanup: %s", child_run_id)
+                completion: Future[None] = Future()
+                completion.set_running_or_notify_cancel()
+                invocation.cancellation.track_operation(completion)
+
+                def finish_cleanup() -> None:
+                    try:
+                        cleanup()
+                    finally:
+                        completion.set_result(None)
+
+                def start_cleanup() -> None:
+                    try:
+                        start_thread_with_context(
+                            finish_cleanup, name="coding-sandbox-cleanup", daemon=True
+                        )
+                    except RuntimeError:
+                        logger.exception(
+                            "Could not start coding sandbox cleanup thread"
+                        )
+                        finish_cleanup()
+
+                invocation.agents.add_idle_callback(child_run_id, start_cleanup)

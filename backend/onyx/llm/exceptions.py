@@ -167,7 +167,7 @@ def litellm_exception_to_error_msg(  # noqa: C901 - Provider errors have distinc
         error_msg = "Unprocessable entity: The server couldn't process your request due to semantic errors."
         error_code = "UNPROCESSABLE_ENTITY"
         is_retryable = True
-    elif isinstance(core_exception, RateLimitError):
+    elif isinstance(core_exception, (RateLimitError, LLMRateLimitError)):
         provider_name = (
             llm.info.model_provider
             if llm is not None and llm.info.model_provider
@@ -243,7 +243,7 @@ def litellm_exception_to_error_msg(  # noqa: C901 - Provider errors have distinc
         )
         error_code = "BUDGET_EXCEEDED"
         is_retryable = False
-    elif isinstance(core_exception, Timeout):
+    elif isinstance(core_exception, (Timeout, LLMTimeoutError)):
         error_msg = "Request timed out: The operation took too long to complete. Please try again."
         error_code = "CONNECTION_ERROR"
         is_retryable = True

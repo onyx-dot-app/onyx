@@ -4,7 +4,6 @@ import time
 from collections.abc import Generator
 from concurrent.futures import Future
 from datetime import timedelta
-from functools import partial
 from typing import cast
 from uuid import UUID
 
@@ -20,7 +19,6 @@ from fastapi import (
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from starlette.concurrency import run_in_threadpool
 
 from onyx.access.access import user_can_access_chat_file
 from onyx.agents.transcript import RunStatus
@@ -812,7 +810,7 @@ def end_incognito_session(
         }
     },
 )
-async def handle_send_chat_message(
+def handle_send_chat_message(
     chat_message_req: SendMessageRequest,
     request: Request,
     user: User = Depends(
@@ -820,25 +818,6 @@ async def handle_send_chat_message(
     ),
     _rate_limit_check: None = Depends(check_token_rate_limits),
     _api_key_usage_check: None = Depends(check_api_key_usage),
-) -> StreamingResponse | ChatFullResponse:
-    # Starlette's application state has no typed attribute interface.
-    active_chat_turns = cast(ActiveChatTurns, request.app.state.active_chat_turns)
-    return await run_in_threadpool(
-        partial(
-            _handle_send_chat_message,
-            chat_message_req,
-            request,
-            user,
-            active_chat_turns,
-        )
-    )
-
-
-def _handle_send_chat_message(
-    chat_message_req: SendMessageRequest,
-    request: Request,
-    user: User,
-    active_chat_turns: ActiveChatTurns,
 ) -> StreamingResponse | ChatFullResponse:
     """
     This endpoint is used to send a new chat message.
@@ -854,6 +833,8 @@ def _handle_send_chat_message(
     Returns:
         StreamingResponse | ChatFullResponse: Either streams or returns complete response.
     """
+    # Starlette's application state has no typed attribute interface.
+    active_chat_turns = cast(ActiveChatTurns, request.app.state.active_chat_turns)
     # Session id only: the session's incognito mode isn't loaded yet, and a
     # verbatim prompt in the debug log would be exactly the durable message
     # log incognito must never leave behind.

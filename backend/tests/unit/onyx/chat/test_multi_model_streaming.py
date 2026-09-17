@@ -26,7 +26,6 @@ from onyx.chat.errors import EmptyLLMResponseError
 from onyx.chat.execution import (
     ActiveChatTurns,
     ChatTurnExecution,
-    reserve_chat_responses,
     start_chat_turn,
 )
 from onyx.chat.models import (
@@ -47,8 +46,6 @@ from onyx.chat.stream_buffer import ChatStream, StreamBufferWriter
 from onyx.configs.constants import MessageType
 from onyx.db.chat import set_preferred_response
 from onyx.db.models import ChatMessage, ChatSession, User
-from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.models import ExtractedContextFiles
 from onyx.llm.cancellation import (
     CancellationSignal,
@@ -74,7 +71,6 @@ from onyx.server.query_and_chat.streaming_models import (
 )
 from onyx.utils.threadpool_concurrency import (
     ContextThreadPoolExecutor,
-    get_background_event_loop,
 )
 from onyx.utils.variable_functionality import global_version
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -334,7 +330,6 @@ def _make_setup(n_models: int = 1) -> MagicMock:
         )
     setup.incognito_record_mode = None
     setup.cache.exists.return_value = False
-    setup.reserved_token_count = 100
     # Fields consumed by SearchToolConfig / CustomToolConfig / FileReaderToolConfig
     # constructors during model preparation — must be typed correctly for Pydantic.
     setup.new_msg_req.deep_research = False
@@ -398,7 +393,6 @@ def _start_chat_turn(
     response_future: Future[ChatResponseOutcome] | None = None,
     stream_buffer: StreamBufferWriter | None = None,
 ) -> ChatStream:
-    reserve_chat_responses(len(setup.responses))
     return start_chat_turn(
         setup,
         user,
@@ -1294,18 +1288,27 @@ def test_persistence_failure_reaches_live_and_resumed_readers() -> None:
 
 
 @pytest.mark.parametrize("failure_stage", ["startup", "worker", "launch"])
-def test_startup_failure_releases_every_reserved_response(failure_stage: str) -> None:
+def test_startup_failure_finishes_every_response(failure_stage: str) -> None:
     setup = _make_setup(2)
     buffer = MagicMock(truncated=False)
-    capacity = threading.BoundedSemaphore(2)
-    target = {
-        "startup": "onyx.chat.execution.ChatTurnExecution.begin",
-        "worker": "onyx.chat.execution._RESPONSE_WORKERS.submit",
-        "launch": "onyx.chat.execution._CONTROL_WORKERS.submit",
-    }[failure_stage]
+    from onyx.utils.threadpool_concurrency import start_thread_future
+
+    def start_job(operation: Callable[[], None], **kwargs: Any) -> Future[None]:
+        name = kwargs.get("name")
+        if (failure_stage == "worker" and name == "chat-response") or (
+            failure_stage == "launch" and name == "chat-control"
+        ):
+            raise RuntimeError("Startup failed")
+        return start_thread_future(operation, **kwargs)
+
     with (
-        patch("onyx.chat.execution._RESPONSE_CAPACITY", capacity),
-        patch(target, side_effect=RuntimeError("Startup failed")),
+        patch("onyx.chat.execution.start_thread_future", side_effect=start_job),
+        patch(
+            "onyx.chat.execution.ChatTurnExecution.begin",
+            side_effect=RuntimeError("Startup failed"),
+        )
+        if failure_stage == "startup"
+        else nullcontext(),
         patch("onyx.chat.execution.create_chat_agent") as prepare,
         patch("onyx.chat.execution.save_chat_response") as save,
     ):
@@ -1323,11 +1326,6 @@ def test_startup_failure_releases_every_reserved_response(failure_stage: str) ->
             assert all(call.kwargs["response"].error for call in save.call_args_list)
             assert any(isinstance(packet, StreamingError) for packet in packets)
         prepare.assert_not_called()
-        assert capacity.acquire(timeout=2)
-        assert capacity.acquire(timeout=2)
-        assert not capacity.acquire(blocking=False)
-        capacity.release()
-        capacity.release()
     buffer.mark_done.assert_called_once()
 
 
@@ -1467,6 +1465,7 @@ def test_overflowed_stream_storage_finishes_retention_cleanup() -> None:
     release = threading.Event()
     closed = threading.Event()
     buffer = MagicMock(truncated=False)
+    turns = ActiveChatTurns()
 
     def append(_line: str) -> None:
         writing.set()
@@ -1497,12 +1496,21 @@ def test_overflowed_stream_storage_finishes_retention_cleanup() -> None:
         patch("onyx.chat.execution.save_chat_response") as save,
     ):
         try:
-            list(_start_chat_turn(_make_setup(1), MagicMock(), stream_buffer=buffer))
+            reader = start_chat_turn(
+                _make_setup(1),
+                MagicMock(),
+                stream_buffer=buffer,
+                active_chat_turns=turns,
+            )
+            list(reader)
+            with patch("onyx.chat.execution._PERSISTENCE_WAIT_SECONDS", 0.01):
+                assert not turns.close()
             assert save.call_count == 1
             assert buffer.append_line.call_count == 1
         finally:
             release.set()
         assert closed.wait(2)
+        assert turns.close()
     buffer.mark_truncated.assert_called_once()
     buffer.mark_done.assert_called_once()
 
@@ -1751,15 +1759,13 @@ def test_full_response_reports_save_outcome_after_delivery_ends(
             list(reader)
 
 
-def test_root_admission_counts_each_model_and_rejects_overload() -> None:
-    capacity = threading.BoundedSemaphore(2)
-    started = threading.Event()
+def test_blocked_responses_do_not_prevent_new_chat_turns() -> None:
     release = threading.Event()
-    start_lock = threading.Lock()
-    starts = 0
+    started = [threading.Event() for _ in range(35)]
+    readers: list[ChatStream] = []
 
     def execute(
-        _setup: ChatTurnSetup,
+        setup: ChatTurnSetup,
         _user: User,
         _index: int,
         _state: Future[ChatResponseOutcome],
@@ -1767,48 +1773,30 @@ def test_root_admission_counts_each_model_and_rejects_overload() -> None:
         _signal: CancellationSignal,
         _filters: bool,
     ) -> None:
-        nonlocal starts
-        with start_lock:
-            starts += 1
-            if starts == 2:
-                started.set()
-        assert release.wait(5)
+        started[setup.responses[0].message_id - 1000].set()
+        assert release.wait(10)
 
     with (
-        patch("onyx.chat.execution._RESPONSE_CAPACITY", capacity),
         mock_model_execution(side_effect=execute),
         patch("onyx.chat.execution.save_chat_response"),
     ):
-        reader = _start_chat_turn(_make_setup(2), MagicMock())
         try:
-            assert started.wait(2)
-            with patch("onyx.chat.execution._CONTROL_WORKERS.submit") as executor:
-                with pytest.raises(OnyxError) as caught:
-                    _start_chat_turn(_make_setup(), MagicMock())
-            executor.assert_not_called()
-            assert caught.value.error_code == OnyxErrorCode.SERVICE_UNAVAILABLE
-            assert starts == 2
-            assert not capacity.acquire(blocking=False)
+            for index in range(len(started)):
+                setup = _make_setup()
+                setup.responses[0] = setup.responses[0].model_copy(
+                    update={"message_id": 1000 + index}
+                )
+                readers.append(_start_chat_turn(setup, MagicMock()))
+            assert all(event.wait(5) for event in started)
         finally:
             release.set()
-            list(reader)
-        assert capacity.acquire(blocking=False)
-        assert capacity.acquire(blocking=False)
-        assert not capacity.acquire(blocking=False)
-        capacity.release()
-        capacity.release()
+            for reader in readers:
+                list(reader)
 
 
-@pytest.mark.parametrize("overloaded", [False, True])
-def test_admission_precedes_preparation_and_releases_on_preparation_failure(
-    overloaded: bool,
-) -> None:
-    capacity = threading.BoundedSemaphore(1)
-    if overloaded:
-        assert capacity.acquire(blocking=False)
+def test_preparation_failure_reports_error_before_delivery() -> None:
     request = SendMessageRequest(message="Question", chat_session_id=uuid4())
     with (
-        patch("onyx.chat.execution._RESPONSE_CAPACITY", capacity),
         patch(
             "onyx.chat.process_message.prepare_chat_turn",
             side_effect=ValueError("Preparation failed"),
@@ -1816,36 +1804,27 @@ def test_admission_precedes_preparation_and_releases_on_preparation_failure(
         patch("onyx.chat.process_message.StreamBufferWriter") as delivery,
     ):
         packets = list(_stream_chat_turn(request, MagicMock(spec=User)))
+    prepare.assert_called_once()
     delivery.assert_not_called()
     assert any(isinstance(packet, StreamingError) for packet in packets)
-    if overloaded:
-        prepare.assert_not_called()
-        assert not capacity.acquire(blocking=False)
-        capacity.release()
-    else:
-        prepare.assert_called_once()
-        assert capacity.acquire(blocking=False)
-        capacity.release()
 
 
-def test_api_execution_uses_sdk_loop_and_preserves_tenant_after_reader_closes() -> None:
+def test_api_execution_uses_threads_and_preserves_tenant_after_reader_closes() -> None:
     from onyx.agents.tools import AgentTool, ToolInvocation
     from onyx.llm.models import ToolCall, ToolResult
 
     async def exercise() -> None:
-        api_loop = asyncio.get_running_loop()
+        api_thread = threading.get_ident()
         tool_entered = threading.Event()
-        release_tool = asyncio.Event()
+        release_tool = threading.Event()
         saved = threading.Event()
-        capacity = threading.BoundedSemaphore(1)
         tenant = "stream-lifecycle-tenant"
 
-        async def tool(_invocation: ToolInvocation) -> ToolResult:
-            assert asyncio.get_running_loop() is get_background_event_loop()
-            assert asyncio.get_running_loop() is not api_loop
+        def tool(_invocation: ToolInvocation) -> ToolResult:
+            assert threading.get_ident() != api_thread
             assert CURRENT_TENANT_ID_CONTEXTVAR.get() == tenant
             tool_entered.set()
-            await asyncio.wait_for(release_tool.wait(), timeout=5)
+            assert release_tool.wait(timeout=5)
             return ToolResult(content="Finished")
 
         replies = iter(
@@ -1858,11 +1837,7 @@ def test_api_execution_uses_sdk_loop_and_preserves_tenant_after_reader_closes() 
         )
         agent = Agent(
             FakeModelClient(lambda *_: next(replies)),
-            tools=[
-                AgentTool(
-                    name="work", description="", parameters={}, execute_async=tool
-                )
-            ],
+            tools=[AgentTool(name="work", description="", parameters={}, execute=tool)],
         )
         prepared = _chat_agent(agent, max_steps=2)
         tasks = ActiveChatTurns()
@@ -1872,14 +1847,12 @@ def test_api_execution_uses_sdk_loop_and_preserves_tenant_after_reader_closes() 
         try:
             with (
                 patch("onyx.chat.execution.create_chat_agent", return_value=prepared),
-                patch("onyx.chat.execution._RESPONSE_CAPACITY", capacity),
                 patch(
                     "onyx.chat.execution.save_chat_response",
                     side_effect=lambda **_: saved.set(),
                 ),
                 ContextThreadPoolExecutor(max_workers=1) as worker,
             ):
-                reserve_chat_responses(1)
                 reader = await asyncio.wrap_future(
                     worker.submit(
                         lambda: start_chat_turn(
@@ -1892,26 +1865,22 @@ def test_api_execution_uses_sdk_loop_and_preserves_tenant_after_reader_closes() 
                         worker.submit(lambda: tool_entered.wait(5))
                     )
                     reader.close()
-                    assert not capacity.acquire(blocking=False)
                 finally:
-                    get_background_event_loop().call_soon_threadsafe(release_tool.set)
+                    release_tool.set()
                 outcome = await asyncio.wrap_future(
                     worker.submit(lambda: response_future.result(timeout=5))
                 )
                 assert outcome.response.answer == "Answer"
                 assert saved.is_set()
                 assert await asyncio.wrap_future(worker.submit(tasks.close))
-                assert capacity.acquire(blocking=False)
-                capacity.release()
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
     asyncio.run(exercise())
 
 
-def test_stop_keeps_capacity_while_preparation_drains() -> None:
+def test_stop_retains_turn_while_preparation_drains() -> None:
     entered, release, saved = threading.Event(), threading.Event(), threading.Event()
-    capacity = threading.BoundedSemaphore(1)
     agent = Agent(
         FakeModelClient(
             lambda *_: pytest.fail("Cancelled preparation must not run the model")
@@ -1934,20 +1903,18 @@ def test_stop_keeps_capacity_while_preparation_drains() -> None:
     response_future = Future[ChatResponseOutcome]()
     with (
         patch("onyx.chat.execution.create_chat_agent", side_effect=prepare),
-        patch("onyx.chat.execution._RESPONSE_CAPACITY", capacity),
         patch(
             "onyx.chat.execution.save_chat_response",
             side_effect=lambda **_: saved.set(),
         ),
     ):
-        reserve_chat_responses(1)
         turn = ChatTurnExecution(_make_setup(), MagicMock(), response_future)
         turn.begin()
         tasks.start(turn)
         try:
             assert entered.wait(timeout=3)
             turn.cancellation.cancel()
-            assert not capacity.acquire(blocking=False)
+            assert not turn.finished.done()
             assert not saved.is_set()
         finally:
             release.set()
@@ -1955,8 +1922,6 @@ def test_stop_keeps_capacity_while_preparation_drains() -> None:
         assert tasks.close()
         assert response_future.result(timeout=1).response.cancelled
         assert saved.is_set()
-        assert capacity.acquire(blocking=False)
-        capacity.release()
 
 
 def test_model_failure_does_not_cancel_comparison_response() -> None:
@@ -2004,7 +1969,6 @@ def test_model_failure_does_not_cancel_comparison_response() -> None:
 
 
 def test_renderer_attachment_failure_cancels_run_before_saving() -> None:
-    capacity = threading.BoundedSemaphore(1)
     agent = Agent(
         FakeModelClient(lambda *_: pytest.fail("Unbound response must not generate"))
     )
@@ -2012,7 +1976,6 @@ def test_renderer_attachment_failure_cancels_run_before_saving() -> None:
     setup = _make_setup()
     setup.responses[0] = setup.responses[0].model_copy(update={"llm": agent.llm})
     with (
-        patch("onyx.chat.execution._RESPONSE_CAPACITY", capacity),
         patch("onyx.chat.execution.create_chat_agent", return_value=prepared),
         patch(
             "onyx.chat.execution.ResponsePresenter",
@@ -2024,69 +1987,36 @@ def test_renderer_attachment_failure_cancels_run_before_saving() -> None:
         save.assert_called_once()
         assert save.call_args.kwargs["response"].error
         assert any(isinstance(packet, StreamingError) for packet in packets)
-        assert capacity.acquire(timeout=2)
-        capacity.release()
     assert not agent.context.messages
 
 
-def test_queued_response_cancelled_before_entry_is_saved_and_releases_capacity() -> (
-    None
-):
-    capacity = threading.BoundedSemaphore(1)
+def test_response_cancelled_before_entry_is_saved() -> None:
     response_future: Future[ChatResponseOutcome] = Future()
-    release = threading.Event()
-    submitted = threading.Event()
     tasks = ActiveChatTurns()
-    with ContextThreadPoolExecutor(max_workers=1) as worker:
-        blocker = worker.submit(lambda: release.wait(timeout=5))
-        submit = worker.submit
-
-        def submit_response(operation: Callable[[], None]) -> Future[None]:
-            future = submit(operation)
-            submitted.set()
-            return future
-
-        with (
-            patch("onyx.chat.execution._RESPONSE_CAPACITY", capacity),
-            patch("onyx.chat.execution._RESPONSE_WORKERS", worker),
-            patch.object(worker, "submit", side_effect=submit_response),
-            patch("onyx.chat.execution.create_chat_agent") as create_agent,
-            patch("onyx.chat.execution.save_chat_response") as save,
-        ):
-            reserve_chat_responses(1)
-            turn = ChatTurnExecution(_make_setup(), MagicMock(), response_future)
-            turn.begin()
-            tasks.start(turn)
-            try:
-                assert submitted.wait(timeout=3)
-                turn.cancellation.cancel()
-                assert not capacity.acquire(blocking=False)
-                create_agent.assert_not_called()
-                save.assert_not_called()
-            finally:
-                release.set()
-                assert blocker.result(timeout=1)
-            assert tasks.close()
-            create_agent.assert_not_called()
-            save.assert_called_once()
-            assert save.call_args.kwargs["response"].cancelled
-            assert response_future.result(timeout=1).response.cancelled
-            assert capacity.acquire(blocking=False)
-            assert not capacity.acquire(blocking=False)
-            capacity.release()
+    with (
+        patch("onyx.chat.execution.create_chat_agent") as create_agent,
+        patch("onyx.chat.execution.save_chat_response") as save,
+    ):
+        turn = ChatTurnExecution(_make_setup(), MagicMock(), response_future)
+        turn.begin()
+        turn.cancellation.cancel()
+        tasks.start(turn)
+        assert tasks.close()
+        create_agent.assert_not_called()
+        save.assert_called_once()
+        assert save.call_args.kwargs["response"].cancelled
+        assert response_future.result(timeout=1).response.cancelled
+        assert turn.finished.done()
 
 
 def test_closed_chat_supervisor_rejects_without_starting_storage() -> None:
     active_chat_turns = ActiveChatTurns()
     assert active_chat_turns.close()
-    capacity = threading.BoundedSemaphore(1)
     response_future: Future[ChatResponseOutcome] = Future()
     with (
-        patch("onyx.chat.execution._RESPONSE_CAPACITY", capacity),
         patch("onyx.chat.execution.create_chat_agent") as create_agent,
         patch("onyx.chat.execution.save_chat_response") as save,
     ):
-        reserve_chat_responses(1)
         with pytest.raises(RuntimeError, match="shutting down"):
             start_chat_turn(
                 _make_setup(),
@@ -2098,6 +2028,3 @@ def test_closed_chat_supervisor_rejects_without_starting_storage() -> None:
             response_future.result(timeout=1)
         create_agent.assert_not_called()
         save.assert_not_called()
-        assert capacity.acquire(blocking=False)
-        assert not capacity.acquire(blocking=False)
-        capacity.release()

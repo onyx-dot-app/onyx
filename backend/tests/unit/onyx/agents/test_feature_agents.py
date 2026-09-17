@@ -2,6 +2,7 @@
 
 import queue
 from collections.abc import Generator
+from contextlib import contextmanager
 from functools import partial
 from threading import Event
 from unittest.mock import MagicMock
@@ -12,9 +13,11 @@ from onyx.agents.coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent, ToolEndEvent
 from onyx.agents.items import messages_from_items
 from onyx.agents.models import AgentStep, PreparedStep, RunResult, StepInput
-from onyx.agents.runtime import Run, RunFailed
+from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import ToolInvocation
 from onyx.agents.transcript import RunFailureKind
+from onyx.chat.citation_processor import CitationMapping
+from onyx.chat.citation_utils import collapse_citations
 from onyx.chat.emitter import Emitter
 from onyx.chat.presentation import ResponsePresenter, project_response
 from onyx.coding_agent.agent import CodingAgent
@@ -54,8 +57,12 @@ from onyx.llm.models import (
 from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
 from onyx.tools.interface import ToolContext
 from onyx.tools.tool_implementations.bash.bash_tool import BashTool
+from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
+    CodingAgentTool,
+)
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
+from onyx.tools.tool_runner import bind_tool
 from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import (
     EchoTool,
@@ -497,11 +504,25 @@ def test_research_preserves_citation_identity_across_completion_and_call_order(
         report = original_report(child, completed)
         report.citation_mapping = {9: documents[completed.output.text.split()[0]]}
         completion_order.append(completed.output.text.split()[0])
-        if completed.output.text.startswith("second "):
-            second_finished.set()
         return report
 
     monkeypatch.setattr(ResearchAgent, "report", child_report)
+
+    def allocate_citations(
+        answer_text: str,
+        existing_citation_mapping: CitationMapping,
+        new_citation_mapping: CitationMapping,
+    ) -> tuple[str, CitationMapping]:
+        result = collapse_citations(
+            answer_text, existing_citation_mapping, new_citation_mapping
+        )
+        if answer_text.startswith("second "):
+            second_finished.set()
+        return result
+
+    monkeypatch.setattr(
+        "onyx.deep_research.agent.collapse_citations", allocate_citations
+    )
 
     def reply(
         request: GenerationRequest, _signal: CancellationSignal
@@ -596,7 +617,7 @@ def test_research_preserves_citation_identity_across_completion_and_call_order(
     ]
     assert completion_order == ["second", "first"]
     assert [message.text for message in accepted] == ["first [2]", "second [1]"]
-    assert [event.result.text for event in final_events] == ["second [1]", "first [2]"]
+    assert [event.result.text for event in final_events] == ["first [2]", "second [1]"]
     for index, message in zip([2, 1], accepted, strict=True):
         assert isinstance(message.details, ResearchAgentCallResult)
         assert message.details.intermediate_report == message.text
@@ -911,3 +932,67 @@ def test_citation_conversion_failure_preserves_child_without_parent_result(
     assert not any(
         isinstance(message, ToolResultMessage) for message in snapshot.messages
     )
+
+
+@pytest.mark.parametrize("deferred", [False, True])
+def test_coding_cancellation_keeps_sandbox_until_child_work_finishes(
+    monkeypatch: pytest.MonkeyPatch,
+    deferred: bool,
+) -> None:
+    entered = Event()
+    release = Event()
+    deleted = Event()
+    cleanup_started = Event()
+    release_cleanup = Event()
+
+    @contextmanager
+    def sandbox(repo: str, github_token: str | None) -> Generator[str, None, None]:
+        assert repo == "org/repo"
+        assert github_token is None
+        yield "test-sandbox"
+        cleanup_started.set()
+        assert release_cleanup.wait(5)
+        deleted.set()
+
+    def bash(
+        _self: BashTool, _invocation: ToolInvocation, _context: ToolContext
+    ) -> ToolResult:
+        entered.set()
+        assert release.wait(5)
+        assert not deleted.is_set()
+        return ToolResult(content="done")
+
+    module = "onyx.tools.tool_implementations.coding_agent.coding_agent_tool"
+    if deferred:
+        monkeypatch.setattr(f"{module}.CLEANUP_SECONDS", 0.01)
+    monkeypatch.setattr(f"{module}._setup_session", sandbox)
+    monkeypatch.setattr(f"{module}.get_llm_token_counter", lambda _llm: len)
+    monkeypatch.setattr(BashTool, "run", bash)
+    child_llm = ScriptedLLM([tool_delta(BASH_TOOL_NAME, '{"cmd":"pwd"}')], 128000)
+    coding = CodingAgentTool(tool_id=1, llm=child_llm)
+    parent_llm = ScriptedLLM(
+        [
+            tool_delta(
+                coding.name, '{"query":"Read repository","github_repo":"org/repo"}'
+            )
+        ],
+        128000,
+    )
+    coordinator = AgentCoordinator()
+    parent = Agent(parent_llm, tools=[bind_tool(coding, ToolContext())])
+    run = parent.start(max_steps=2, coordinator=coordinator)
+    try:
+        assert entered.wait(5)
+        run.cancel()
+        with pytest.raises(AgentCancelled):
+            run.result(timeout=5)
+        assert not run.wait_for_idle(timeout=0.05)
+        assert not deleted.is_set()
+        release.set()
+        assert cleanup_started.wait(5)
+        assert not run.wait_for_idle(timeout=0.05)
+    finally:
+        release.set()
+        release_cleanup.set()
+        assert run.wait_for_idle(timeout=5)
+    assert deleted.is_set()

@@ -1,6 +1,7 @@
 import time
 from collections.abc import Callable
 from functools import partial
+from threading import Lock
 
 from pydantic import BaseModel
 
@@ -126,6 +127,7 @@ class DeepResearchAgent:
             tool.name == SearchTool.NAME for tool in self.tools
         )
         self.citation_mapping: CitationMapping = {}
+        self._citation_lock = Lock()
         self.agent = Agent(
             llm,
             previous_run_id=previous_run_id,
@@ -147,7 +149,8 @@ class DeepResearchAgent:
                 if isinstance(message, ToolResultMessage) and isinstance(
                     message.details, ResearchAgentCallResult
                 ):
-                    self.citation_mapping.update(message.details.citation_mapping)
+                    with self._citation_lock:
+                        self.citation_mapping.update(message.details.citation_mapping)
         phase = self._next_phase(state)
         plan = ""
         research_steps = 0
@@ -212,7 +215,7 @@ class DeepResearchAgent:
                         name=function["name"],
                         description=function["description"],
                         parameters=function["parameters"],
-                        execute_async=self._research,
+                        execute=self._research,
                     )
                     if function["name"] == RESEARCH_AGENT_TOOL_NAME
                     else self._control_tool(
@@ -228,10 +231,12 @@ class DeepResearchAgent:
                 FINAL_REPORT_PROMPT.format(current_datetime=now), self.language_section
             )
             reminder = USER_FINAL_REPORT_QUERY.format(research_plan=plan)
+        with self._citation_lock:
+            sources = dict(self.citation_mapping)
         output_metadata = ResearchMessageMetadata(
             phase=phase,
             is_reasoning_model=self.is_reasoning_model,
-            sources=dict(self.citation_mapping),
+            sources=sources,
             elapsed_seconds=time.monotonic() - self.started,
         )
         return PreparedStep(
@@ -304,7 +309,7 @@ class DeepResearchAgent:
             execute=lambda _invocation: ToolResult(content=result),
         )
 
-    async def _research(self, invocation: ToolInvocation) -> ToolResult:
+    def _research(self, invocation: ToolInvocation) -> ToolResult:
         task = parse_tool_arguments(ResearchTask, invocation.arguments)
         child = ResearchAgent(
             tools=self.tools,
@@ -317,7 +322,7 @@ class DeepResearchAgent:
             else ReasoningEffort.LOW,
         )
         try:
-            submission = await invocation.agents.spawn_agent(
+            submission = invocation.agents.spawn_agent(
                 child.agent,
                 name="research-"
                 + "".join(
@@ -337,9 +342,7 @@ class DeepResearchAgent:
                     ).model_dump(mode="json"),
                 ),
             )
-            while (
-                completed := await invocation.agents.wait_run(submission.run_id)
-            ) is None:
+            while (completed := invocation.agents.wait_run(submission.run_id)) is None:
                 invocation.cancellation.check()
 
         except RunFailed as error:
@@ -355,20 +358,21 @@ class DeepResearchAgent:
                 is_error=True,
             )
         result = child.report(completed)
-        # No await between allocation and publication: sibling reports share this map.
-        report, self.citation_mapping = collapse_citations(
-            answer_text=result.intermediate_report,
-            existing_citation_mapping=self.citation_mapping,
-            new_citation_mapping=result.citation_mapping,
-        )
+        with self._citation_lock:
+            report, self.citation_mapping = collapse_citations(
+                answer_text=result.intermediate_report,
+                existing_citation_mapping=self.citation_mapping,
+                new_citation_mapping=result.citation_mapping,
+            )
+            citations = {
+                number: self.citation_mapping[number]
+                for number in extract_citation_order_from_text(report)
+                if number in self.citation_mapping
+            }
         return ToolResult(
             content=report,
             details=ResearchAgentCallResult(
                 intermediate_report=report,
-                citation_mapping={
-                    number: self.citation_mapping[number]
-                    for number in extract_citation_order_from_text(report)
-                    if number in self.citation_mapping
-                },
+                citation_mapping=citations,
             ),
         )

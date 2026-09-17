@@ -7,25 +7,28 @@ jest.mock("@/components/chat/StreamingMarkdown", () => ({
   StreamingMarkdown: () => null,
 }));
 describe("renderer dispatch", () => {
-  it("selects text and reasoning by item kind", () => {
-    expect(
-      findRenderer([
-        makeItem({
-          kind: "text",
-          text: "answer",
-          purpose: "answer",
-          status: "complete",
-          documents: [],
-          citations: [],
-        }),
-      ]),
-    ).toBe(MessageTextRenderer);
-    expect(
-      findRenderer([
-        makeItem({ kind: "reasoning", text: "thinking", status: "running" }),
-      ]),
-    ).toBe(ReasoningRenderer);
-  });
+  it.each(["answer", "commentary"] as const)(
+    "selects %s text and reasoning by item kind",
+    (purpose) => {
+      expect(
+        findRenderer([
+          makeItem({
+            kind: "text",
+            text: "answer",
+            purpose,
+            status: "complete",
+            documents: [],
+            citations: [],
+          }),
+        ]),
+      ).toBe(MessageTextRenderer);
+      expect(
+        findRenderer([
+          makeItem({ kind: "reasoning", text: "thinking", status: "running" }),
+        ]),
+      ).toBe(ReasoningRenderer);
+    },
+  );
   it("does not render tool output as reasoning", () => {
     expect(
       findRenderer([

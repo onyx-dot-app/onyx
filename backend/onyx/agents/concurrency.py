@@ -1,28 +1,25 @@
-"""Bounded work and delivery for one execution tree."""
+"""Thread ownership and finite event delivery for an execution tree."""
 
-import asyncio
 import os
 import threading
-import time
 from collections.abc import Callable
 from concurrent.futures import Future
 from contextvars import copy_context
-from queue import Empty, Queue
+from queue import Queue
 
 from pydantic_core import to_json
 
 from onyx.agents.events import AgentEvent
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import ContextThreadPoolExecutor
+from onyx.utils.threadpool_concurrency import (
+    start_thread_future,
+    start_thread_with_context,
+)
 
 logger = setup_logger()
 OPERATION_TIMEOUT_SECONDS = 1800.0
 CLEANUP_SECONDS = 2.0
-AGENT_WORKER_THREADS = int(os.environ.get("AGENT_WORKER_THREADS", "32"))
-AGENT_WORKER_PENDING = int(os.environ.get("AGENT_WORKER_PENDING", "256"))
-AGENT_OBSERVER_THREADS = int(os.environ.get("AGENT_OBSERVER_THREADS", "8"))
-AGENT_OBSERVER_PENDING = int(os.environ.get("AGENT_OBSERVER_PENDING", "256"))
 EVENT_QUEUE_CAPACITY = 1024
 AGENT_EVENT_BUFFER_MAX_BYTES = int(
     os.environ.get("AGENT_EVENT_BUFFER_MAX_BYTES", 4 * 1024 * 1024)
@@ -76,114 +73,34 @@ class WorkTracker:
         self.started()
         other.on_idle(self.finished)
 
-    async def wait_idle(self, timeout: float) -> bool:
-        if self.idle:
-            return True
-        loop = asyncio.get_running_loop()
-        finished: asyncio.Future[None] = loop.create_future()
-
-        def resolve() -> None:
-            if not finished.done():
-                finished.set_result(None)
-
-        def notify() -> None:
-            if not loop.is_closed():
-                loop.call_soon_threadsafe(resolve)
-
-        unsubscribe = self.on_idle(notify)
+    def wait_idle(self, timeout: float) -> bool:
+        finished = threading.Event()
+        unsubscribe = self.on_idle(finished.set)
         try:
-            done, _ = await asyncio.wait({finished}, timeout=timeout)
-            return bool(done)
+            return finished.wait(timeout)
         finally:
             unsubscribe()
-            finished.cancel()
 
 
-class _SharedExecutor:
-    """Bound running and queued jobs before submitting to the shared worker pool."""
-
-    def __init__(self, workers: int, pending: int, name: str) -> None:
-        self._slots = threading.BoundedSemaphore(pending)
-        self._executor = ContextThreadPoolExecutor(workers, name)
-
-    def submit[T](self, operation: Callable[[], T]) -> Future[T]:
-        if not self._slots.acquire(blocking=False):
-            raise RuntimeError("Agent worker backlog exceeded its bound")
-        try:
-            future = self._executor.submit(operation)
-        except BaseException:
-            self._slots.release()
-            raise
-        future.add_done_callback(lambda _future: self._slots.release())
-        return future
-
-
-_OPERATION_WORKERS = _SharedExecutor(
-    AGENT_WORKER_THREADS, AGENT_WORKER_PENDING, "agent-operation"
-)
-_OBSERVER_WORKERS = _SharedExecutor(
-    AGENT_OBSERVER_THREADS, AGENT_OBSERVER_PENDING, "agent-events"
-)
-
-
-class _UpdateAdmission:
-    def __init__(self, capacity: int) -> None:
-        self._available = capacity
-        self._condition = threading.Condition()
-
-    def acquire(self, signal: CancellationSignal, timeout: float) -> None:
-        def wake() -> None:
-            with self._condition:
-                self._condition.notify_all()
-
-        with signal.on_cancel(wake), self._condition:
-            ready = self._condition.wait_for(
-                lambda: self._available > 0 or signal.cancelled, timeout=timeout
-            )
-            signal.check()
-            if not ready:
-                raise TimeoutError("Agent update admission exceeded its bound")
-            self._available -= 1
-
-    def release(self) -> None:
-        with self._condition:
-            self._available += 1
-            self._condition.notify()
-
-
-async def _wait_operation[T](
-    future: asyncio.Future[T], signal: CancellationSignal, timeout: float
+def wait_operation[T](
+    future: Future[T],
+    signal: CancellationSignal,
+    timeout: float = OPERATION_TIMEOUT_SECONDS,
 ) -> T:
-    loop = asyncio.get_running_loop()
-    cancelled: asyncio.Future[None] = loop.create_future()
-
-    def resolve_cancel() -> None:
-        if not cancelled.done():
-            cancelled.set_result(None)
-
-    def notify_cancel() -> None:
-        loop.call_soon_threadsafe(resolve_cancel)
-
-    try:
-        with signal.on_cancel(notify_cancel):
-            signal.check()
-            done, _ = await asyncio.wait(
-                {future, cancelled},
-                timeout=timeout,
-                return_when=asyncio.FIRST_COMPLETED,
-            )
-            signal.check()
-            if not done:
-                raise TimeoutError("Agent operation exceeded its bound")
-            return future.result()
-    finally:
-        cancelled.cancel()
+    finished = threading.Event()
+    future.add_done_callback(lambda _future: finished.set())
+    with signal.on_cancel(finished.set):
+        signal.check()
+        if not finished.wait(timeout):
+            raise TimeoutError("Agent operation exceeded its bound")
+        signal.check()
+        return future.result()
 
 
-def _report_abandoned_worker[T](completion: asyncio.Future[T]) -> None:
-    if completion.cancelled():
+def _report_abandoned_worker[T](future: Future[T]) -> None:
+    if future.cancelled():
         return
-    error = completion.exception()
+    error = future.exception()
     if error is not None and not isinstance(error, AgentCancelled):
         logger.error(
             "Agent worker failed after its caller stopped waiting",
@@ -191,148 +108,60 @@ def _report_abandoned_worker[T](completion: asyncio.Future[T]) -> None:
         )
 
 
-class ExecutionServices:
-    """Share worker admission and concurrency limits across a root run and its children."""
+class ExecutionWork:
+    """Track a run's jobs independently of its terminal result."""
 
-    def __init__(self, capacity: int) -> None:
-        self.loop = asyncio.get_running_loop()
-        self.parallelism = capacity
-        self.capacity = asyncio.Semaphore(capacity)
-        self.update_capacity = _UpdateAdmission(capacity)
+    def __init__(self) -> None:
         self.tracker = WorkTracker()
-        self._closed = False
 
-    async def blocking[T](
+    def start[T](self, operation: Callable[[], T]) -> Future[T]:
+        self.tracker.started()
+        try:
+            future = start_thread_future(operation, name="agent-operation")
+        except BaseException:
+            self.tracker.finished()
+            raise
+        future.add_done_callback(lambda _future: self.tracker.finished())
+        return future
+
+    def blocking[T](
         self,
         operation: Callable[[], T],
         signal: CancellationSignal,
         *,
-        tracker: WorkTracker | None = None,
+        timeout: float = OPERATION_TIMEOUT_SECONDS,
     ) -> T:
-        if self._closed:
-            raise RuntimeError("Agent execution services are closed")
-        deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
-        admission = asyncio.create_task(self.capacity.acquire())
-        try:
-            await _wait_operation(admission, signal, OPERATION_TIMEOUT_SECONDS)
-        except BaseException:
-            admission.cancel()
-            if admission.done() and not admission.cancelled() and admission.result():
-                self.capacity.release()
-            raise
-        self.tracker.started()
-        if tracker is not None:
-            tracker.started()
-
-        def finished(_future: Future[T]) -> None:
-            self.tracker.finished()
-            if tracker is not None:
-                tracker.finished()
-            if not self.loop.is_closed():
-                self.loop.call_soon_threadsafe(self.capacity.release)
-
-        def track_provider(completion: Future[None]) -> None:
-            self.tracker.started()
-            if tracker is not None:
-                tracker.started()
-
-            def provider_finished(_future: Future[None]) -> None:
-                self.tracker.finished()
-                if tracker is not None:
-                    tracker.finished()
-
-            completion.add_done_callback(provider_finished)
+        signal.check()
 
         def execute() -> T:
             signal.check()
-            with signal.on_operation(track_provider):
+            with signal.on_operation(self.track_operation):
                 return operation()
 
+        future = self.start(execute)
         try:
-            signal.check()
-            future = _OPERATION_WORKERS.submit(execute)
-        except BaseException:
-            self.capacity.release()
-            self.tracker.finished()
-            if tracker is not None:
-                tracker.finished()
-            raise
-        future.add_done_callback(finished)
-        completion = asyncio.wrap_future(future)
-        try:
-            return await _wait_operation(
-                completion, signal, max(0, deadline - time.monotonic())
-            )
+            return wait_operation(future, signal, timeout)
         except BaseException as error:
-            if (
-                completion.done()
-                and not completion.cancelled()
-                and completion.exception() is error
-            ):
+            if future.done() and not future.cancelled() and future.exception() is error:
                 raise
-            completion.add_done_callback(_report_abandoned_worker)
-            raise
+            self.tracker.started()
 
-    def close(self) -> None:
-        self._closed = True
-
-
-class ExecutionWork:
-    """Track one run's unfinished work and accept updates on its owning event loop."""
-
-    def __init__(self, services: ExecutionServices) -> None:
-        self.services = services
-        self.tracker = WorkTracker()
-        self.loop = services.loop
-        self.loop_thread = threading.get_ident()
-
-    async def blocking[T](
-        self, operation: Callable[[], T], signal: CancellationSignal
-    ) -> T:
-        return await self.services.blocking(operation, signal, tracker=self.tracker)
-
-    def track_task[T](self, task: asyncio.Task[T]) -> None:
-        self.tracker.started()
-        task.add_done_callback(lambda _task: self.tracker.finished())
-
-    def accept[T](self, operation: Callable[[], T], signal: CancellationSignal) -> T:
-        if threading.get_ident() == self.loop_thread:
-            return operation()
-        deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
-        self.services.update_capacity.acquire(signal, OPERATION_TIMEOUT_SECONDS)
-        self.tracker.started()
-        accepted: Future[T] = Future()
-        completed = threading.Event()
-        accepted.add_done_callback(lambda _future: completed.set())
-
-        def apply() -> None:
-            try:
-                if not accepted.set_running_or_notify_cancel():
-                    return
+            def report(completed: Future[T]) -> None:
                 try:
-                    accepted.set_result(operation())
-                except BaseException as error:
-                    accepted.set_exception(error)
-            finally:
-                self.services.update_capacity.release()
-                self.tracker.finished()
+                    _report_abandoned_worker(completed)
+                finally:
+                    self.tracker.finished()
 
-        try:
-            signal.check()
-            self.loop.call_soon_threadsafe(apply)
-        except BaseException:
-            self.services.update_capacity.release()
+            future.add_done_callback(report)
+            raise
+
+    def track_operation(self, future: Future[None]) -> None:
+        self.tracker.started()
+
+        def finished(_future: Future[None]) -> None:
             self.tracker.finished()
-            raise
-        try:
-            with signal.on_cancel(completed.set):
-                if not completed.wait(timeout=max(0, deadline - time.monotonic())):
-                    raise TimeoutError("Agent update acceptance exceeded its bound")
-                signal.check()
-                return accepted.result()
-        except BaseException:
-            accepted.cancel()
-            raise
+
+        future.add_done_callback(finished)
 
 
 class EventDelivery:
@@ -340,6 +169,7 @@ class EventDelivery:
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
+        self._condition = threading.Condition(self._lock)
         self._listeners: list[Callable[[AgentEvent], None]] = []
         self._queue: Queue[tuple[AgentEvent, int]] = Queue(EVENT_QUEUE_CAPACITY)
         self._bytes = 0
@@ -373,13 +203,16 @@ class EventDelivery:
                 return
             self._bytes += size
             self._queue.put_nowait((event.model_copy(deep=True), size))
+            self._condition.notify()
             if self._scheduled:
                 return
             self._scheduled = True
             self.tracker.started()
             try:
                 context = self._context.copy()
-                drain = _OBSERVER_WORKERS.submit(lambda: context.run(self._deliver))
+                start_thread_with_context(
+                    self._deliver, name="agent-events", daemon=True, context=context
+                )
             except Exception:
                 self._scheduled = False
                 self.tracker.finished()
@@ -387,7 +220,6 @@ class EventDelivery:
                 self._discard_pending()
                 logger.exception("Agent observer delivery could not start")
                 return
-            drain.add_done_callback(lambda _future: self.tracker.finished())
 
     @property
     def is_dispatch_thread(self) -> bool:
@@ -410,7 +242,7 @@ class EventDelivery:
                         if index == len(listeners) - 1
                         else event.model_copy(deep=True)
                     )
-                except (AgentCancelled, asyncio.CancelledError):
+                except AgentCancelled:
                     self.failed.set()
                     logger.debug("Agent observer cancelled")
                 except Exception:
@@ -421,28 +253,34 @@ class EventDelivery:
                 self._dispatch_thread_id = None
 
     def _deliver(self) -> None:
-        while True:
-            with self._lock:
-                try:
+        try:
+            while True:
+                with self._condition:
+                    self._condition.wait_for(
+                        lambda: self._closing or not self._queue.empty()
+                    )
+                    if self._queue.empty():
+                        self._scheduled = False
+                        return
                     event, size = self._queue.get_nowait()
-                except Empty:
-                    self._scheduled = False
-                    return
-            try:
-                self._send(event)
-            finally:
-                with self._lock:
-                    self._bytes -= size
+                try:
+                    self._send(event)
+                finally:
+                    with self._lock:
+                        self._bytes -= size
+        finally:
+            self.tracker.finished()
 
     def _discard_pending(self) -> None:
         while not self._queue.empty():
             _, size = self._queue.get_nowait()
             self._bytes -= size
 
-    async def close(self) -> None:
+    def close(self) -> None:
         with self._lock:
             self._closing = True
-        if not await self.tracker.wait_idle(CLEANUP_SECONDS):
+            self._condition.notify_all()
+        if not self.tracker.wait_idle(CLEANUP_SECONDS):
             self.failed.set()
             logger.warning("Agent event delivery exceeded its cleanup bound")
         with self._lock:

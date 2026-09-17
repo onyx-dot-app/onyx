@@ -7,6 +7,7 @@ import queue
 import threading
 import zlib
 from collections.abc import Callable, Iterator
+from concurrent.futures import Future
 from enum import Enum
 from uuid import UUID
 
@@ -344,6 +345,7 @@ class ChatDelivery:
 
     def __init__(self, buffer: StreamBufferWriter | None) -> None:
         self.reader = ChatStream()
+        self.finished: Future[None] = Future()
         self._buffer = buffer
         self._lines: queue.Queue[str] = queue.Queue(_BUFFER_WORK_CAPACITY)
         self._finished = threading.Event()
@@ -397,6 +399,8 @@ class ChatDelivery:
                 logger.warning("Chat cache delivery cleanup exceeded its wait bound")
                 self.report_gap()
         self.reader.publish(_StreamStatus.DONE)
+        if self._buffer is None:
+            self.finished.set_result(None)
 
     def _store(self) -> None:
         buffer = self._buffer
@@ -427,3 +431,5 @@ class ChatDelivery:
             except Exception:
                 logger.exception("Chat cache delivery could not finalize")
                 self.report_gap()
+            finally:
+                self.finished.set_result(None)

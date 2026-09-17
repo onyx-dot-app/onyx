@@ -3343,17 +3343,17 @@ def test_cancellable_provider_setup_restores_environment_on_failure(
         custom_config={_ENV_LOCK_TEST_KEY: "request-value"},
     )
 
-    async def fail_provider_setup(**_kwargs: JsonValue) -> None:
+    def fail_provider_setup(**_kwargs: JsonValue) -> None:
         assert os.environ[_ENV_LOCK_TEST_KEY] == "request-value"
         raise ValueError("Provider setup failed")
 
     with (
         patch("onyx.llm.multi_llm._env_injection_enabled", return_value=True),
-        patch("litellm.acompletion", side_effect=fail_provider_setup) as completion,
+        patch("litellm.completion", side_effect=fail_provider_setup) as completion,
         cancellation_scope(CancellationSignal()),
         pytest.raises(ValueError, match="Provider setup failed"),
     ):
         transport.invoke([UserMessage(content="Hi")])
 
-    completion.assert_awaited_once()
+    completion.assert_called_once()
     assert os.environ[_ENV_LOCK_TEST_KEY] == "deployment-value"

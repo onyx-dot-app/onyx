@@ -5,9 +5,6 @@ CHAT_RESPONSE_WAIT_TIMEOUT_S = int(
     os.environ.get("CHAT_RESPONSE_WAIT_TIMEOUT_S") or "3600"
 )
 
-# Each API process rejects new root responses when this capacity is occupied.
-MAX_ACTIVE_CHAT_RESPONSES = int(os.environ.get("MAX_ACTIVE_CHAT_RESPONSES") or "32")
-
 NUM_RETURNED_HITS = 50
 
 # May be less depending on model

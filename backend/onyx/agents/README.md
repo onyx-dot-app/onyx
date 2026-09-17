@@ -9,7 +9,7 @@ streaming events, cancellation, and record-keeping.
 | --- | --- |
 | `runtime.py` | `Agent`, the `Run` control handle, and the shared execution loop. |
 | `models.py` | Conversation context, step decisions, and run records. |
-| `concurrency.py` | Bounded workers, update acceptance, and event delivery. |
+| `concurrency.py` | Tracked threads, update acceptance, and event delivery. |
 | `coordination.py` | Optional child discovery, execution control, and archive access. |
 | `tools.py` | `AgentTool`, `ToolInvocation`, and the `AgentControl` interface. |
 | `events.py` | Typed execution events. |
@@ -68,8 +68,8 @@ result = agent.run(messages=[UserMessage(content="Weather in Oslo?")], max_steps
 print(result.output.text)
 ```
 
-`run()` blocks for the result and uses the shared background scheduler in synchronous callers.
-`start()` returns a handle in both synchronous and async code. Register event delivery when starting:
+`run()` starts a run thread and blocks for its result.
+`start()` starts a run thread and returns its handle. Register event delivery when starting:
 
 ```python
 run = agent.start(
@@ -81,7 +81,7 @@ result = run.result(timeout=60)
 ```
 
 `on_event` receives events from the first step. A later `subscribe()` receives subsequent events.
-Async callers use `await run.wait(timeout=60)`. Both wait methods return `RunResult`,
+`run.result(timeout=60)` returns `RunResult`,
 containing the final assistant message, step count, and stop reason.
 `agent.context` returns an isolated view of conversation history and its compaction checkpoint.
 An Agent accepts another run only after its previous run becomes idle.
@@ -98,7 +98,7 @@ unless all results request termination. It stops after a final answer.
 A continuation request at the step limit produces `LIMIT`; it does not prepare or execute another step.
 Raise from `after_step` when output validation fails. The run retains the completed output and records the failure.
 
-Both callbacks run on tracked workers. Compaction does not repeat either callback.
+Both callbacks run on tracked threads. Compaction does not repeat either callback.
 `PreparedStep.assemble_messages` must be pure and repeatable: compaction can call it again with shorter history.
 
 `Agent.execution` supplies tracing identity, content policy, and execution timeouts for every step.
@@ -117,10 +117,9 @@ For example, deep research normalizes a child report's citations before returnin
 
 ## Tools
 
-An `AgentTool` is a name, a description, a JSON-schema `parameters` dict, and exactly one
-implementation: a sync `execute`, which runs on a worker thread, or an async
-`execute_async`, which runs on the event loop. During a call, the `ToolInvocation` argument
-provides everything the tool needs:
+An `AgentTool` is a name, a description, a JSON-schema `parameters` dict, and a synchronous
+`execute` function. Each tool call runs on its own tracked thread.
+The `ToolInvocation` argument provides everything the tool needs:
 
 - `arguments` — the parsed JSON arguments.
 - `call_id`, `call_index`, `messages` — the call's identity and logical working history.
@@ -128,12 +127,11 @@ provides everything the tool needs:
 - `update(ToolProgress(...))` — the current partial output and typed result details.
   Each update replaces the previous partial value. Return the complete value in `ToolResult`.
 - `agents` — the subagent coordinator (next section).
-- `run_blocking(fn)` — runs sync work on the shared worker pool. Async tools use this
-  instead of blocking the event loop.
 
 When a step makes several tool calls, they run in parallel, unless any called tool is marked
 `SEQUENTIAL` — then the whole batch runs one call at a time. Results are accepted in
 whatever order tools finish, but the model history keeps the original call order.
+Result enrichment and final tool events follow model-call order.
 
 Application tools use `Tool.for_agent()` when binding to a conversation. Stateful tools must
 return an isolated instance. SearchTool does this and declares sequential execution; its
@@ -151,14 +149,14 @@ Pass a caller-owned `AgentCoordinator` to `Agent.start` when tools need delegati
 A standalone Agent does not create coordination. A tool then controls children through `invocation.agents`:
 
 ```python
-submission = await invocation.agents.spawn_agent(
+submission = invocation.agents.spawn_agent(
     child_agent,
     name="research-abc",          # lowercase letters, digits, hyphens
     description="Investigate sources",
     max_steps=10,
     messages=task_messages,
 )
-while (result := await invocation.agents.wait_run(submission.run_id)) is None:
+while (result := invocation.agents.wait_run(submission.run_id)) is None:
     invocation.cancellation.check()
 ```
 
@@ -170,15 +168,18 @@ for further calls; each execution gets a separate `run_id`.
 `cancel_run` signals a run and its descendants to stop.
 Live and restored failures both raise `RunFailed` with the same safe classification.
 Cancelled runs raise `AgentCancelled`. A wait timeout returns `None` without cancelling the run.
+`wait_for_idle(run_id)` waits for owned child cleanup, including after invocation cancellation.
+Use it before deleting resources that child operations can still access.
+`add_idle_callback(run_id, callback)` schedules cleanup after a child drains; the callback must not block.
 
 Spawning returns before the child finishes, so a child can outlive the tool that created it.
 The parent run stays responsible either way: on success it waits for its active children, and
-on failure or cancellation it cancels them. A parent that is only waiting consumes no worker
-capacity.
+on failure or cancellation it cancels them.
+A waiting parent retains its thread. Each child starts an independent thread.
 
 Reuse the same coordinator to reuse children across root runs.
 The application can supply `lookup_agent`, `resolve_agent`, and `read_run` callbacks for saved conversation branches.
-Archive reads run on bounded workers; discovery can list saved metadata without constructing Agents.
+Archive reads run on tracked threads; discovery can list saved metadata without constructing Agents.
 Chat's binding lives in `onyx/chat/subagents.py`; the research tool lives in `onyx/deep_research/agent.py`.
 
 Coordination retains current child runs and the latest completed run per loaded child.
@@ -192,18 +193,16 @@ Active tasks stay on one API pod; the SDK does not provide remote cancellation o
 ## Watching a run
 
 Pass `on_event=listener` to `Agent.start()` to receive events from the start.
-Async callers can also call `run.subscribe(listener)` before yielding to the event loop.
 Later subscriptions receive future events. Each subscription returns an idempotent unsubscribe function.
 Events describe run boundaries, steps, model output, and tool activity.
 Execution and parent IDs connect child events to the root stream; readable labels belong to coordination metadata.
 
 Unsubscription excludes future dispatches. A callback already selected for dispatch may still run.
 Subscriptions end when delivery drains or is discarded.
-Observers must not wait for their own run to become idle, directly or through an event-loop bridge.
+Observers must not wait for their own run to become idle.
 
-Delivery is best-effort by design. Listeners get deep copies, in order, through a shared
-observer pool. A slow listener does not block execution. If a listener throws, or events
-back up past the queue bound, the runtime rejects new observer events and sets the run's
+Delivery is best-effort by design. Listeners get deep copies, in order, through a run-owned delivery thread.
+A slow listener does not block execution. If a listener throws, or events back up past the queue bound, the runtime rejects new observer events and sets the run's
 `delivery_failed` flag; the recorded state stays correct, and the consumer rebuilds its view
 from the snapshot. Already queued callbacks may still drain.
 
@@ -257,7 +256,7 @@ Agent restoration receives conversation messages, a compaction checkpoint, and t
 run identity. Archived child inspection reconstructs a `RunSnapshot` at the SDK boundary.
 
 If child cancellation cannot settle within its bound, the parent records an execution failure
-and retains captured partial child content. Worker cleanup continues under the existing idle boundary.
+and retains captured partial child content. Thread cleanup continues under the existing idle boundary.
 
 Chat stores root and child conversations in `chat_session`. A child has its own history
 and references the parent response that created it. The root controls access, sharing, and retention.
@@ -296,32 +295,67 @@ If a provider still rejects a request for size,
 the runtime compacts and retries the generation once, provided no partial output has
 streamed. Instructions that cannot fit after compaction fail the run. Public waits raise `RunFailed` with safe failure data.
 
+## Future requirement: human input and tool approval
+
+Human input and approval require extending `RunSnapshot` with waiting requests, the step limit, and saved inputs for the unfinished step.
+These features are not implemented yet. Current tool calls must return a result within execution timeouts.
+Use the existing snapshot and response storage mapping; no separate run continuation model is needed.
+
+The proposed first delivery supports root-agent interaction only. Children that need new approval return a tool error before execution.
+Independent child suspension is a later extension, not a prerequisite for root questions and approvals.
+
+If child interaction is enabled, a parent that starts agents A and B in parallel must support this sequence:
+
+1. A requests approval before executing a tool. A pauses and exposes the approval request to the user.
+2. B continues. The parent can process B's result while A waits.
+3. The user approves A's pending tool call. A resumes without restarting B or repeating completed work.
+4. If the parent needs both results, it continues past that dependency after both become available.
+
+The SDK must own one pause-and-resume mechanism for tools that ask questions and hooks that request approval.
+Feature authors should return a typed input request, without implementing persistence, polling, or worker coordination themselves.
+
+The complete design, including the optional child extension, must satisfy these requirements:
+
+- Save the waiting snapshot before reporting that an agent is waiting.
+  Reuse its tool calls, accepted results, and operation indices. Preserve the original step limit across resume.
+- Release execution resources held solely for waiting, including worker capacity and database connections.
+  Human waiting has no execution timeout and consumes no step budget. Explicit cancellation still applies.
+- Keep independent agents and tool calls running. Pause the parent only where it requires an unavailable result.
+  A waiting child must not trigger tree cleanup, sibling cancellation, or a successful parent completion.
+- Resume the affected execution after a response, including after reload or on another API pod.
+  Restore data and rebuild executable tools; do not rely on a surviving Python stack or callback closure.
+- Turn an answer into the pending question tool's result. Approval permits the exact pending tool call to execute.
+  Rejection produces a denial result without executing that call. Resume must preserve already accepted tool results.
+- Let the application own storage, authorization, and atomic acceptance of human responses.
+  Bind each response to its pending request and conversation branch. Duplicate submissions must not start duplicate continuations.
+- Emit explicit waiting and resumed states, scoped to the affected agent and tool call.
+  The frontend must show the pending request while continuing to render active siblings.
+
+The required extension belongs at tool outcomes, run continuation, and dependency coordination.
+It must not require each harness to implement a separate approval loop. No speculative approval API is required before this feature is built.
+
 ## Cancellation
 
 `run.cancel()` signals providers, tools, callbacks, and owned child executions.
 Cancellation preserves accepted partial output and rejects updates after the record becomes terminal.
 It cannot stop arbitrary Python threads or reverse remote writes.
 
-Terminal output and idle are separate states. `run.result()` and `run.wait()` can finish while admitted work still drains.
-`await run.wait_for_idle(timeout=...)` returns whether terminal output and all admitted work have finished.
-That includes workers, async tools, descendants, and dispatched observers.
-Cancelling a waiter does not cancel execution. Use `run.cancel()` explicitly.
+Terminal output and idle are separate states. `run.result()` can finish while owned work still drains.
+`run.wait_for_idle(timeout=...)` returns whether execution and cleanup have finished.
+That includes tool threads, descendants, and dispatched observers.
+A wait timeout does not cancel execution. Use `run.cancel()` explicitly.
 
-The Agent stays reserved until idle. API admission stays reserved until idle and terminal storage both finish.
-Synchronous starts use a shared background loop for SDK scheduling and provider I/O.
-Chat uses bounded synchronous workers and retains ownership across browser disconnects.
-`run.add_idle_callback()` reports actual cleanup completion without occupying a waiting worker.
-A timeout does not release capacity held by an operation that is still running.
+The Agent stays unavailable for reuse until idle.
+Chat retains execution and storage ownership across browser disconnects.
+`run.add_idle_callback()` reports actual cleanup completion without occupying a waiting thread.
+A timeout ends waiting; it does not stop or release an operation that is still running.
+Coding tools wait briefly for child cleanup before deleting the child's sandbox.
+If that wait expires, a child idle callback starts tracked sandbox cleanup. Parent idle still waits for that cleanup.
 
 ## Limits
 
 | Bound | Value |
 | --- | --- |
-| Parallel blocking operations per root tree and active tools per step | 8 (`max_parallel_operations`) |
-| Shared operation workers per process | 32 (`AGENT_WORKER_THREADS`) |
-| Running and queued operation jobs per process | 256 (`AGENT_WORKER_PENDING`) |
-| Shared observer workers per process | 8 (`AGENT_OBSERVER_THREADS`) |
-| Running and queued observer jobs per process | 256 (`AGENT_OBSERVER_PENDING`) |
 | Tool calls per step | 64 |
 | Subagent nesting depth | 8 |
 | Loaded child Agents per coordinator | 64 |
@@ -331,6 +365,6 @@ A timeout does not release capacity held by an operation that is still running.
 
 The byte bound includes queued events and the active callback payload; it does not bound total process memory.
 
-The operation timeout covers one unit of blocking work — a generation, a decision, a tool call,
-or the wait for child runs — from the moment the work is requested, including any wait for a
-free worker. Past a bound, the runtime rejects the work rather than queueing it.
+The operation timeout bounds waiting for one operation, such as a hook, tool call, or child run.
+Thread count follows concurrent requests and tool or child fan-out. There is no fixed SDK worker pool.
+The remaining product limits and delivery buffers still apply.

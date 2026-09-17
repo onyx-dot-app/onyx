@@ -1,6 +1,5 @@
 """Stateful agents with one execution path and independent run records."""
 
-import asyncio
 import threading
 from collections.abc import Callable, Sequence
 from concurrent.futures import Future
@@ -20,7 +19,6 @@ from onyx.agents.concurrency import (
     CLEANUP_SECONDS,
     OPERATION_TIMEOUT_SECONDS,
     EventDelivery,
-    ExecutionServices,
     ExecutionWork,
 )
 from onyx.agents.events import (
@@ -46,7 +44,6 @@ from onyx.agents.models import (
 )
 from onyx.agents.tools import (
     AgentTool,
-    BlockingRunner,
     ToolExecutionMode,
     ToolInvocation,
     ToolProgress,
@@ -84,21 +81,13 @@ from onyx.llm.models import (
     ToolResultMessage,
 )
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import get_background_event_loop
+from onyx.utils.threadpool_concurrency import start_thread_with_context
 
 if TYPE_CHECKING:
     from onyx.agents.coordination import AgentCoordinator, RunCoordination
 
 logger = setup_logger()
-DEFAULT_MAX_PARALLEL_OPERATIONS = 8
 MAX_TOOL_CALLS_PER_STEP = 64
-
-
-def _cancel_tasks[T](tasks: Sequence[asyncio.Task[T]]) -> None:
-    for task in tasks:
-        # A second cancellation would interrupt the task's cleanup handler.
-        if not task.cancelling():
-            task.cancel()
 
 
 class _Ancestry(TypedDict):
@@ -125,18 +114,16 @@ def _failure(error: Exception, llm: LLM) -> RunFailure:
             is_retryable=error.is_retryable,
         )
         return RunFailure(kind=RunFailureKind.LLM, message=info.message, llm_error=info)
-    if isinstance(error, LLMTimeoutError):
-        return RunFailure(
-            kind=RunFailureKind.LLM_TIMEOUT, message="Model generation timed out"
-        )
-    if isinstance(error, LLMRateLimitError):
-        return RunFailure(
-            kind=RunFailureKind.LLM_RATE_LIMIT, message="Model rate limit reached"
-        )
     info = litellm_exception_to_safe_error(error, llm, fallback_to_error_msg=False)
-    return RunFailure(
-        kind=RunFailureKind.EXECUTION, message=info.message, llm_error=info
-    )
+    if isinstance(error, LLMTimeoutError):
+        kind = RunFailureKind.LLM_TIMEOUT
+    elif isinstance(error, LLMRateLimitError):
+        kind = RunFailureKind.LLM_RATE_LIMIT
+    elif isinstance(error, LLMContextLimitError):
+        kind = RunFailureKind.LLM
+    else:
+        kind = RunFailureKind.EXECUTION
+    return RunFailure(kind=kind, message=info.message, llm_error=info)
 
 
 def result_from_snapshot(record: RunSnapshot) -> RunResult:
@@ -171,7 +158,7 @@ class _RunState:
         self.lock = threading.RLock()
         self.record = record
         self.signal = signal
-        self.loop = asyncio.get_running_loop()
+        self.accepting = True
         self.completed: Future[None] = Future()
         self.idle: Future[None] = Future()
         self.delivery: EventDelivery | None = EventDelivery()
@@ -214,26 +201,14 @@ class Run:
 
     def result(self, timeout: float = OPERATION_TIMEOUT_SECONDS) -> RunResult:
         """Wait for terminal output; cleanup can still be in progress."""
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            loop = None
-        if loop is self._state.loop:
-            raise RuntimeError("Use await run.wait() on the agent's event loop")
         self._state.completed.result(timeout=timeout)
         return result_from_snapshot(self.snapshot())
 
     def add_idle_callback(self, callback: Callable[[], None]) -> None:
-        """Call once admitted work finishes; callbacks must not block."""
+        """Call once owned work finishes; callbacks must not block."""
         self._state.idle.add_done_callback(lambda _future: callback())
 
-    async def wait(self, timeout: float = OPERATION_TIMEOUT_SECONDS) -> RunResult:
-        await asyncio.wait_for(
-            asyncio.shield(asyncio.wrap_future(self._state.completed)), timeout
-        )
-        return result_from_snapshot(self.snapshot())
-
-    async def wait_for_idle(self, timeout: float = OPERATION_TIMEOUT_SECONDS) -> bool:
+    def wait_for_idle(self, timeout: float = OPERATION_TIMEOUT_SECONDS) -> bool:
         delivery = self._state.delivery
         if delivery is not None and delivery.is_dispatch_thread:
             raise RuntimeError("An observer cannot wait for its own run to become idle")
@@ -242,9 +217,7 @@ class Run:
         if self._state.idle.done():
             return True
         try:
-            await asyncio.wait_for(
-                asyncio.shield(asyncio.wrap_future(self._state.idle)), timeout
-            )
+            self._state.idle.result(timeout=timeout)
         except TimeoutError:
             return False
         return True
@@ -287,12 +260,9 @@ class Agent:
         before_tool_call: Callable[[ToolCallContext], ToolResult | None] | None = None,
         after_tool_call: Callable[[ToolCallContext, ToolResult], ToolResult]
         | None = None,
-        max_parallel_operations: int = DEFAULT_MAX_PARALLEL_OPERATIONS,
         agent_id: str | None = None,
         previous_run_id: str | None = None,
     ) -> None:
-        if max_parallel_operations < 1:
-            raise ValueError("Parallel operation capacity must be positive")
         self.id = agent_id or str(uuid4())
         self.llm = llm
         self.tools = list(tools)
@@ -303,7 +273,6 @@ class Agent:
         self.after_step = after_step
         self.before_tool_call = before_tool_call
         self.after_tool_call = after_tool_call
-        self.max_parallel_operations = max_parallel_operations
         self._context = (context or AgentContext()).snapshot()
         self._previous_run_id = previous_run_id
         self._lock = threading.RLock()
@@ -338,7 +307,6 @@ class Agent:
         messages: Sequence[Message] = (),
         cancellation: CancellationSignal | None = None,
         coordinator: "AgentCoordinator | None" = None,
-        execution_services: ExecutionServices | None = None,
         parent_run_id: str | None = None,
         parent_tool_call_id: str | None = None,
         parent_message_id: str | None = None,
@@ -346,28 +314,6 @@ class Agent:
         on_event: Callable[[AgentEvent], None] | None = None,
     ) -> Run:
         AgentStep(index=0, limit=max_steps)
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-
-            async def start() -> Run:
-                return self.start(
-                    max_steps=max_steps,
-                    messages=messages,
-                    cancellation=cancellation,
-                    coordinator=coordinator,
-                    execution_services=execution_services,
-                    parent_run_id=parent_run_id,
-                    parent_tool_call_id=parent_tool_call_id,
-                    parent_message_id=parent_message_id,
-                    inherited_event_sink=inherited_event_sink,
-                    on_event=on_event,
-                )
-
-            submitted = asyncio.run_coroutine_threadsafe(
-                start(), get_background_event_loop()
-            )
-            return submitted.result(timeout=OPERATION_TIMEOUT_SECONDS)
         with self._lock:
             if self._reserved:
                 raise RuntimeError("Agent is already running or draining")
@@ -400,11 +346,7 @@ class Agent:
         run = Run(state)
         if on_event is not None:
             run.subscribe(on_event)
-        services = execution_services
         try:
-            services = execution_services or ExecutionServices(
-                self.max_parallel_operations
-            )
             executor = _Execution(
                 state=state,
                 history=history.messages,
@@ -425,8 +367,6 @@ class Agent:
                 after_step=self.after_step,
                 before_tool_call=self.before_tool_call,
                 after_tool_call=self.after_tool_call,
-                services=services,
-                own_services=execution_services is None,
                 commit=self._commit,
                 release=self._release,
                 inherited_event_sink=inherited_event_sink,
@@ -439,12 +379,22 @@ class Agent:
             with self._lock:
                 self._active = None
                 self._reserved = False
-            if execution_services is None and services is not None:
-                services.close()
             if state.delivery:
-                loop.create_task(state.delivery.close())
+                state.delivery.close()
             raise
-        loop.call_soon(lambda: asyncio.create_task(executor.execute(max_steps)))
+        try:
+            start_thread_with_context(
+                lambda: executor.execute(max_steps), name="agent-run", daemon=True
+            )
+        except BaseException:
+            if executor.coordination is not None:
+                executor.coordination.release()
+            with self._lock:
+                self._active = None
+                self._reserved = False
+            if state.delivery:
+                state.delivery.close()
+            raise
         return run
 
     def _commit(self, record: RunSnapshot) -> None:
@@ -502,8 +452,6 @@ class _Execution:
         after_step: Callable[[StepResult], bool] | None,
         before_tool_call: Callable[[ToolCallContext], ToolResult | None] | None,
         after_tool_call: Callable[[ToolCallContext, ToolResult], ToolResult] | None,
-        services: ExecutionServices,
-        own_services: bool,
         commit: Callable[[RunSnapshot], None],
         release: Callable[[], None],
         inherited_event_sink: Callable[[AgentEvent], None] | None,
@@ -517,9 +465,7 @@ class _Execution:
         self.after_step = after_step
         self.before_tool_call = before_tool_call
         self.after_tool_call = after_tool_call
-        self.services = services
-        self.own_services = own_services
-        self.work = ExecutionWork(services)
+        self.work = ExecutionWork()
         self.commit = commit
         self.release = release
         self.inherited_event_sink = inherited_event_sink
@@ -542,16 +488,26 @@ class _Execution:
         return [*self.history, *self.state.record.input_messages, *self.messages]
 
     def publish_child(self, event: AgentEvent) -> None:
-        if self.state.completed.done():
+        with self.state.lock:
+            if not self.state.accepting:
+                return
+            if self.state.delivery:
+                self.state.delivery.publish(event)
+        self._publish_inherited(event)
+
+    def _publish_inherited(self, event: AgentEvent) -> None:
+        if self.inherited_event_sink is None:
             return
-        if self.state.delivery:
-            self.state.delivery.publish(event)
-        if self.inherited_event_sink:
+        try:
             self.inherited_event_sink(event)
+        except Exception:
+            if self.state.delivery:
+                self.state.delivery.failed.set()
+            logger.exception("Inherited agent event delivery failed")
 
     def _emit(self, event: AgentEvent) -> None:
         with self.state.lock:
-            if self.state.completed.done():
+            if not self.state.accepting:
                 return
             record = self.state.record
             if isinstance(event, MessageStartEvent):
@@ -592,14 +548,19 @@ class _Execution:
                 for operation in record.operations:
                     if operation.status == RunStatus.RUNNING:
                         operation.status = event.outcome
-            self.publish_child(event)
+            if self.state.delivery:
+                self.state.delivery.publish(event)
+        self._publish_inherited(event)
 
-    async def execute(self, max_steps: int) -> None:
+    def execute(self, max_steps: int) -> None:
         signal = self.state.signal
         previous: StepResult | None = None
         outcome = RunStatus.ERROR
         try:
-            with cancellation_scope(signal):
+            with (
+                cancellation_scope(signal),
+                signal.on_operation(self.work.track_operation),
+            ):
                 signal.check()
                 self._emit(AgentStartEvent(**self.ancestry))
                 for index in range(max_steps):
@@ -616,7 +577,7 @@ class _Execution:
                     )
                     prepare = self.prepare_step
                     prepared = (
-                        await self.work.blocking(
+                        self.work.blocking(
                             lambda prepare=prepare, decision=decision: prepare(
                                 decision
                             ),
@@ -625,11 +586,11 @@ class _Execution:
                         if prepare
                         else self.defaults
                     )
-                    previous = await self._step(prepared, decision.step)
+                    previous = self._step(prepared, decision.step)
                     after_step = self.after_step
                     completed = previous.model_copy(deep=True)
                     should_continue = (
-                        await self.work.blocking(
+                        self.work.blocking(
                             lambda after_step=after_step, completed=completed: (
                                 after_step(completed)
                             ),
@@ -653,14 +614,14 @@ class _Execution:
                     if decision.step.is_last:
                         outcome = RunStatus.LIMIT
                 if self.coordination:
-                    children = await self.coordination.finish(cancel=False)
+                    children = self.coordination.finish(cancel=False)
                     with self.state.lock:
                         self.state.record.child_runs = children
                 if previous is None:
                     raise RuntimeError("Execution ended without output")
                 if outcome not in (RunStatus.COMPLETE, RunStatus.LIMIT):
                     raise RuntimeError("Execution ended without a terminal outcome")
-        except (AgentCancelled, asyncio.CancelledError):
+        except AgentCancelled:
             outcome = RunStatus.CANCELLED
             signal.cancel()
         except Exception as error:
@@ -670,9 +631,9 @@ class _Execution:
             outcome = RunStatus.ERROR
             signal.cancel()
         finally:
-            await self._finish(outcome)
+            self._finish(outcome)
 
-    async def _finish(
+    def _finish(
         self,
         outcome: Literal[
             RunStatus.COMPLETE, RunStatus.LIMIT, RunStatus.CANCELLED, RunStatus.ERROR
@@ -680,7 +641,7 @@ class _Execution:
     ) -> None:
         if self.coordination and outcome in (RunStatus.ERROR, RunStatus.CANCELLED):
             try:
-                children = await self.coordination.finish(cancel=True)
+                children = self.coordination.finish(cancel=True)
             except Exception as error:
                 logger.exception("Child executions did not reach terminal output")
                 outcome = RunStatus.ERROR
@@ -706,22 +667,25 @@ class _Execution:
                 if not isinstance(answer, AssistantMessage):
                     raise RuntimeError("Selected answer is not an assistant message")
                 answer_message_id = answer.id
-            self._emit(
-                AgentEndEvent(
-                    **self.ancestry,
-                    outcome=outcome,
-                    answer_message_id=answer_message_id,
-                )
+            terminal = AgentEndEvent(
+                **self.ancestry,
+                outcome=outcome,
+                answer_message_id=answer_message_id,
             )
+            for operation in self.state.record.operations:
+                if operation.status == RunStatus.RUNNING:
+                    operation.status = outcome
+            if self.state.delivery:
+                self.state.delivery.publish(terminal)
+            self.state.accepting = False
             record = self.state.record.model_copy(deep=True)
+        self._publish_inherited(terminal)
         self.commit(record)
         self.state.completed.set_result(None)
         delivery = self.state.delivery
         if delivery is not None:
-            await delivery.close()
+            delivery.close()
             self.work.tracker.follow(delivery.tracker)
-        if self.own_services:
-            self.work.tracker.follow(self.services.tracker)
 
         def release() -> None:
             if delivery is not None:
@@ -729,14 +693,12 @@ class _Execution:
                 self.state.delivery = None
             if self.coordination is not None:
                 self.coordination.release()
-            if self.own_services:
-                self.services.close()
             self.release()
             self.state.idle.set_result(None)
 
         self.work.tracker.on_idle(release)
 
-    async def _step(self, prepared: PreparedStep, step: AgentStep) -> StepResult:
+    def _step(self, prepared: PreparedStep, step: AgentStep) -> StepResult:
         signal = self.state.signal
         if len({tool.name for tool in prepared.tools}) != len(prepared.tools):
             raise ValueError("Tool names must be unique")
@@ -755,7 +717,7 @@ class _Execution:
                 "timeout": prepared.timeout or self.execution.timeout,
             }
         )
-        request = await self._fit_context(prepared, execution)
+        request = self._fit_context(prepared, execution)
         with self.state.lock:
             self.step_start = len(self.messages)
             start = self.step_start
@@ -766,17 +728,17 @@ class _Execution:
                     metadata=prepared.output_metadata,
                 )
             )
-            self._emit(
-                MessageStartEvent(
-                    **self.ancestry,
-                    step_index=step.index,
-                    metadata=prepared.output_metadata,
-                )
+        self._emit(
+            MessageStartEvent(
+                **self.ancestry,
+                step_index=step.index,
+                metadata=prepared.output_metadata,
             )
+        )
 
         def accept(event: GenerationEvent) -> None:
             with self.state.lock:
-                if self.state.completed.done():
+                if not self.state.accepting:
                     raise AgentCancelled()
                 if event.request_params:
                     self.state.record.request_params = event.request_params.model_copy(
@@ -789,18 +751,18 @@ class _Execution:
                     else None
                 )
                 self.messages[start] = event.message.model_copy(deep=True)
-                self._emit(
-                    MessageUpdateEvent(
-                        **self.ancestry, step_index=step.index, generation_event=event
-                    )
+            self._emit(
+                MessageUpdateEvent(
+                    **self.ancestry, step_index=step.index, generation_event=event
                 )
+            )
 
         def generate() -> AssistantMessage:
             final: AssistantMessage | None = None
             with closing(self.llm.stream(request, execution)) as events:
                 for event in events:
                     signal.check()
-                    self.work.accept(lambda event=event: accept(event), signal)
+                    accept(event)
                     if event.type == "done":
                         final = event.message.model_copy(deep=True)
             if final is None:
@@ -808,28 +770,28 @@ class _Execution:
             return final
 
         try:
-            message = await self.work.blocking(generate, signal)
+            message = generate()
         except LLMContextLimitError:
             partial = self.messages[start]
             if partial.text or (
                 isinstance(partial, AssistantMessage) and partial.tool_calls
             ):
                 raise
-            request = await self._fit_context(prepared, execution, force=True)
-            message = await self.work.blocking(generate, signal)
+            request = self._fit_context(prepared, execution, force=True)
+            message = generate()
         with self.state.lock:
             signal.check()
             message.id = f"{self.state.record.run_id}:{step.index}"
             self.messages[start] = message
             self.generating = False
-            self._emit(
-                MessageEndEvent(**self.ancestry, step_index=step.index, message=message)
-            )
+        self._emit(
+            MessageEndEvent(**self.ancestry, step_index=step.index, message=message)
+        )
         tool_messages = working_messages(
             [*self.history, *self.state.record.input_messages, *self.messages[:start]],
             self.state.record.checkpoint,
         )
-        results = await self._tools(
+        results = self._tools(
             self.work,
             signal,
             prepared,
@@ -846,7 +808,7 @@ class _Execution:
             request=request,
         )
 
-    async def _fit_context(
+    def _fit_context(
         self,
         prepared: PreparedStep,
         execution: GenerationContext,
@@ -867,7 +829,7 @@ class _Execution:
             previous = None
             with self.state.lock:
                 self.state.record.checkpoint = None
-        request = await self.work.blocking(
+        request = self.work.blocking(
             lambda: prepared.generation_request(working_messages(source, previous)),
             signal,
         )
@@ -876,7 +838,7 @@ class _Execution:
         if not force and size <= budget.trigger:
             return request
         try:
-            checkpoint = await self.work.blocking(
+            checkpoint = self.work.blocking(
                 lambda: compact_history(self.llm, source, previous, execution),
                 signal,
             )
@@ -888,7 +850,7 @@ class _Execution:
                 )
                 return request
             raise
-        request = await self.work.blocking(
+        request = self.work.blocking(
             lambda: prepared.generation_request(working_messages(source, checkpoint)),
             signal,
         )
@@ -901,7 +863,7 @@ class _Execution:
             self.state.record.checkpoint = checkpoint
         return request
 
-    async def _tools(
+    def _tools(
         self,
         scope: ExecutionWork,
         signal: CancellationSignal,
@@ -921,130 +883,134 @@ class _Execution:
                 f"A step requires unique tool call IDs and at most {MAX_TOOL_CALLS_PER_STEP} calls"
             )
         tools = {tool.name: tool for tool in prepared.tools}
-        tasks: list[asyncio.Task[ToolResultMessage]] = []
-
         sequential = any(
             tool.execution_mode == ToolExecutionMode.SEQUENTIAL
             for call in calls
             if (tool := tools.get(call.name)) is not None
         )
-        failure: asyncio.Future[BaseException] = scope.loop.create_future()
-        cancelled: asyncio.Future[None] = scope.loop.create_future()
-
-        def completed(task: asyncio.Task[ToolResultMessage]) -> None:
-            error = AgentCancelled() if task.cancelled() else task.exception()
-            if error is not None and not failure.done():
-                failure.set_result(error)
-
         result_start = len(self.messages)
         call_indices = {call.id: index for index, call in enumerate(calls)}
-        finalize_lock = asyncio.Lock()
-        tool_capacity = asyncio.Semaphore(self.services.parallelism)
+        condition = threading.Condition()
+        futures: list[Future[ToolResultMessage]] = []
+        finalized = 0
 
-        async def execute(call: ToolCall, index: int) -> ToolResultMessage:
-            async with tool_capacity:
-                result = await self._execute_tool(
-                    scope=scope,
-                    signal=signal,
-                    context=ToolCallContext(
-                        step=step,
-                        call=call,
-                        request=request.model_copy(deep=True),
-                        messages=[
-                            message.model_copy(deep=True) for message in messages
-                        ],
-                    ),
-                    tool=tools.get(call.name),
-                    index=index,
-                    ancestry=ancestry,
-                    is_truncated=message.stop_reason == "length",
-                )
+        def context(call: ToolCall) -> ToolCallContext:
+            return ToolCallContext(
+                step=step,
+                call=call,
+                request=request.model_copy(deep=True),
+                messages=[item.model_copy(deep=True) for item in messages],
+            )
+
+        def execute(call: ToolCall, index: int) -> ToolResultMessage:
+            nonlocal finalized
+            result = self._execute_tool(
+                signal=signal,
+                context=context(call),
+                tool=tools.get(call.name),
+                index=index,
+                ancestry=ancestry,
+                is_truncated=message.stop_reason == "length",
+            )
             item = self._record_tool_result(
                 result, call, result_start, call_indices, index
             )
+            self._emit(
+                ToolUpdateEvent(
+                    **ancestry,
+                    step_index=step.index,
+                    tool_call=call,
+                    progress=ToolProgress(content=result.text, details=result.details),
+                )
+            )
             try:
-                async with finalize_lock:
-                    after_tool_call = self.after_tool_call
-                    if after_tool_call:
-                        context = ToolCallContext(
-                            step=step,
-                            call=call,
-                            request=request.model_copy(deep=True),
-                            messages=[
-                                message.model_copy(deep=True) for message in messages
-                            ],
-                        )
-                        enriched = await scope.blocking(
-                            lambda: after_tool_call(
-                                context, result.model_copy(deep=True)
-                            ),
-                            signal,
-                        )
-                        item = ToolResultMessage(
-                            content=enriched.content,
-                            details=enriched.details,
-                            is_error=enriched.is_error,
-                            terminate=enriched.terminate,
-                            tool_call_id=call.id,
-                            tool_name=call.name,
-                        )
-                        self._replace_tool_result(item, result_start)
-                        result = enriched
+                with condition:
+                    ready = condition.wait_for(
+                        lambda: finalized == index or signal.cancelled,
+                        OPERATION_TIMEOUT_SECONDS,
+                    )
+                signal.check()
+                if not ready:
+                    raise TimeoutError("Tool result finalization exceeded its bound")
+                if self.after_tool_call:
+                    result = self.after_tool_call(
+                        context(call), result.model_copy(deep=True)
+                    )
+                    item = ToolResultMessage(
+                        content=result.content,
+                        details=result.details,
+                        is_error=result.is_error,
+                        terminate=result.terminate,
+                        tool_call_id=call.id,
+                        tool_name=call.name,
+                    )
+                    self._replace_tool_result(item, result_start)
                 return item
             finally:
-                self._emit(
-                    ToolEndEvent(
-                        **ancestry, step_index=step.index, tool_call=call, result=result
+                try:
+                    self._emit(
+                        ToolEndEvent(
+                            **ancestry,
+                            step_index=step.index,
+                            tool_call=call,
+                            result=result,
+                        )
                     )
-                )
+                finally:
+                    with condition:
+                        if finalized == index:
+                            finalized += 1
+                        condition.notify_all()
 
-        def start(call: ToolCall, index: int) -> asyncio.Task[ToolResultMessage]:
-            task = asyncio.create_task(execute(call, index))
-            scope.track_task(task)
-            task.add_done_callback(completed)
-            tasks.append(task)
-            return task
+        def wake(_future: Future[ToolResultMessage] | None = None) -> None:
+            with condition:
+                condition.notify_all()
 
-        def interrupt() -> None:
-            _cancel_tasks(tasks)
-            cancelled.set_result(None)
+        def start(call: ToolCall, index: int) -> None:
+            def operation() -> ToolResultMessage:
+                with signal.on_operation(scope.track_operation):
+                    return execute(call, index)
+
+            future = scope.start(operation)
+            futures.append(future)
+            future.add_done_callback(wake)
 
         results: list[ToolResultMessage] = []
         try:
             if not sequential:
                 for index, call in enumerate(calls):
+                    signal.check()
                     start(call, index)
-            with signal.on_cancel(lambda: scope.loop.call_soon_threadsafe(interrupt)):
+            with signal.on_cancel(wake):
                 for index, call in enumerate(calls):
                     signal.check()
-                    task = start(call, index) if sequential else tasks[index]
-                    done, _ = await asyncio.wait(
-                        {task, failure, cancelled},
-                        return_when=asyncio.FIRST_COMPLETED,
-                        timeout=OPERATION_TIMEOUT_SECONDS,
-                    )
-                    if not done:
-                        raise TimeoutError("Agent tool exceeded its execution bound")
+                    if sequential:
+                        start(call, index)
+                    future = futures[index]
+                    with condition:
+                        ready = condition.wait_for(
+                            lambda future=future: (
+                                signal.cancelled
+                                or future.done()
+                                or any(
+                                    item.done() and item.exception() is not None
+                                    for item in futures
+                                )
+                            ),
+                            OPERATION_TIMEOUT_SECONDS,
+                        )
                     signal.check()
-                    if failure.done():
-                        raise failure.result()
-                    results.append(await task)
+                    if not ready:
+                        raise TimeoutError("Agent tool exceeded its execution bound")
+                    for item in futures:
+                        if item.done() and (error := item.exception()) is not None:
+                            raise error
+                    results.append(future.result())
             return results
-        except asyncio.CancelledError as error:
-            signal.cancel()
-            raise AgentCancelled() from error
         except BaseException:
             signal.cancel()
+            wake()
             raise
-        finally:
-            _cancel_tasks(tasks)
-            if tasks:
-                _, pending = await asyncio.wait(tasks, timeout=CLEANUP_SECONDS)
-                if pending:
-                    logger.warning(
-                        "Tool cleanup exceeded its bound: %s operations", len(pending)
-                    )
-                    _cancel_tasks(list(pending))
 
     def _replace_tool_result(self, item: ToolResultMessage, result_start: int) -> None:
         with self.state.lock:
@@ -1077,7 +1043,7 @@ class _Execution:
             tool_name=call.name,
         )
         with self.state.lock:
-            if self.state.completed.done():
+            if not self.state.accepting:
                 logger.warning("Tool completed after its run closed: %s", call.id)
                 raise AgentCancelled()
             # Accept outcomes on completion; keep model history in call order.
@@ -1087,12 +1053,20 @@ class _Execution:
                 if isinstance(previous, ToolResultMessage)
             )
             self.messages.insert(result_start + offset, item.model_copy(deep=True))
+            for operation in reversed(self.state.record.operations):
+                if (
+                    operation.message_index == self.step_start
+                    and operation.tool_call_id == call.id
+                ):
+                    operation.status = (
+                        RunStatus.ERROR if result.is_error else RunStatus.COMPLETE
+                    )
+                    break
         return item
 
-    async def _execute_tool(
+    def _execute_tool(
         self,
         *,
-        scope: ExecutionWork,
         signal: CancellationSignal,
         context: ToolCallContext,
         tool: AgentTool | None,
@@ -1123,7 +1097,7 @@ class _Execution:
             )
         before_tool_call = self.before_tool_call
         if before_tool_call:
-            result = await scope.blocking(lambda: before_tool_call(context), signal)
+            result = before_tool_call(context)
             if result is not None:
                 return result
         active = threading.Event()
@@ -1131,14 +1105,16 @@ class _Execution:
 
         def update(progress: ToolProgress) -> None:
             with self.state.lock:
-                if not active.is_set():
+                if not active.is_set() or not self.state.accepting:
                     logger.debug("Ignoring late tool progress: %s", call.id)
                     return
                 signal.check()
                 event = ToolUpdateEvent(
                     **ancestry, step_index=step.index, tool_call=call, progress=progress
                 )
-            scope.accept(lambda: self._emit(event), signal)
+                if self.state.delivery:
+                    self.state.delivery.publish(event)
+            self._publish_inherited(event)
 
         invocation = ToolInvocation(
             call_id=call.id,
@@ -1152,40 +1128,9 @@ class _Execution:
             )
             if self.coordination
             else None,
-            run_blocking=_InvocationRunner(scope, signal),
         )
         try:
-            if tool.execute_async is not None:
-                result = await tool.execute_async(invocation)
-            else:
-                execute_sync = tool.execute
-                if execute_sync is None:
-                    raise RuntimeError("Tool has no execution implementation")
-                result = await scope.blocking(lambda: execute_sync(invocation), signal)
-            return result
+            return tool.execute(invocation)
         finally:
-            active.clear()
-
-
-class _InvocationRunner(BlockingRunner):
-    def __init__(self, scope: ExecutionWork, signal: CancellationSignal) -> None:
-        self.scope = scope
-        self.signal = signal
-
-    async def __call__[T](
-        self, operation: Callable[[], T], *, cleanup: bool = False
-    ) -> T:
-        if not cleanup:
-            return await self.scope.blocking(operation, self.signal)
-        signal = CancellationSignal()
-
-        def clean_up() -> T:
-            with cancellation_scope(signal):
-                return operation()
-
-        try:
-            return await asyncio.wait_for(
-                self.scope.blocking(clean_up, signal), CLEANUP_SECONDS
-            )
-        finally:
-            signal.cancel()
+            with self.state.lock:
+                active.clear()

@@ -1,6 +1,5 @@
 """Exercise ChatAgent through model streaming, tools, and packet rendering."""
 
-import asyncio
 import queue
 import threading
 from datetime import datetime, timezone
@@ -287,28 +286,26 @@ def test_source_file_staging_does_not_block_cancelled_snapshot(
     )
     signal = CancellationSignal()
 
-    async def exercise() -> None:
+    def exercise() -> None:
         run = agent.agent.start(
             messages=[UserMessage(content="Find documents")],
             max_steps=2,
             cancellation=signal,
         )
         try:
-            async with asyncio.timeout(2):
-                while not entered.is_set():
-                    await asyncio.sleep(0.01)
+            assert entered.wait(2)
             signal.cancel()
             with pytest.raises(AgentCancelled):
-                await run.wait(timeout=0.5)
+                run.result(timeout=0.5)
             snapshot = project(run.snapshot())
             assert snapshot.response is not None
             assert snapshot.response.status == "cancelled"
-            assert not await run.wait_for_idle(timeout=0)
+            assert not run.wait_for_idle(timeout=0)
         finally:
             release.set()
-            assert await run.wait_for_idle(timeout=2)
+            assert run.wait_for_idle(timeout=2)
 
-    asyncio.run(exercise())
+    exercise()
     assert stage_calls == 1
 
 

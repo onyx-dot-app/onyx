@@ -1,7 +1,7 @@
 """Runtime ownership across hooks, observation, snapshots, and lazy resources."""
 
-import asyncio
 import base64
+import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 
@@ -173,9 +173,8 @@ def test_stream_consumer_cannot_mutate_later_events() -> None:
     assert terminal is not None and terminal.text == "answer"
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize("replace", [False, True])
-async def test_tool_finalization_has_one_commit_point(replace: bool) -> None:
+def test_tool_finalization_has_one_commit_point(replace: bool) -> None:
     requests: list[list[Message]] = []
 
     def model(
@@ -192,8 +191,8 @@ async def test_tool_finalization_has_one_commit_point(replace: bool) -> None:
 
     agent = Agent(FakeModelClient(model), tools=[_tool()], after_tool_call=finalize)
     run = agent.start(max_steps=2)
-    result = await run.wait()
-    assert await run.wait_for_idle(2)
+    result = run.result()
+    assert run.wait_for_idle(2)
     snapshot = run.snapshot()
     assert result.output.text == "accepted"
     assert (
@@ -207,8 +206,7 @@ async def test_tool_finalization_has_one_commit_point(replace: bool) -> None:
     )
 
 
-@pytest.mark.asyncio
-async def test_subscribers_cannot_edit_history_or_each_others_events() -> None:
+def test_subscribers_cannot_edit_history_or_each_others_events() -> None:
     def corrupt(event: AgentEvent) -> None:
         if event.type == "message_end":
             event.message.content.clear()
@@ -216,13 +214,21 @@ async def test_subscribers_cannot_edit_history_or_each_others_events() -> None:
             event.result.content = "corrupted"
             event.tool_call.arguments["bad"] = True
 
-    agent = Agent(FakeModelClient(_model), tools=[_tool()])
+    ready = threading.Event()
+
+    def generate(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        assert ready.wait(2)
+        return _model(request)
+
+    agent = Agent(FakeModelClient(generate), tools=[_tool()])
     observed: list[AgentEvent] = []
-    run = agent.start(max_steps=2)
-    run.subscribe(corrupt)
+    run = agent.start(max_steps=2, on_event=corrupt)
     run.subscribe(observed.append)
-    result = await run.wait()
-    assert await run.wait_for_idle(2)
+    ready.set()
+    result = run.result()
+    assert run.wait_for_idle(2)
     assert result.output.text == "original"
     assert agent.context.messages[-1].text == "original"
     assert (
@@ -235,8 +241,7 @@ async def test_subscribers_cannot_edit_history_or_each_others_events() -> None:
     assert run.snapshot().messages[-1].text == "original"
 
 
-@pytest.mark.asyncio
-async def test_after_step_cannot_rewrite_accepted_output() -> None:
+def test_after_step_cannot_rewrite_accepted_output() -> None:
     def complete(step: StepResult) -> bool:
         step.message.content.clear()
         step.tool_results.clear()
@@ -245,15 +250,14 @@ async def test_after_step_cannot_rewrite_accepted_output() -> None:
     run = Agent(FakeModelClient(_model), tools=[_tool()], after_step=complete).start(
         max_steps=1
     )
-    await run.wait()
-    assert await run.wait_for_idle(2)
+    run.result()
+    assert run.wait_for_idle(2)
     assert run.snapshot().messages[0].text == "Searching"
     assert run.snapshot().messages[-1].text == "original"
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize("cancel_observer", [False, True])
-async def test_observer_failure_does_not_change_execution(
+def test_observer_failure_does_not_change_execution(
     cancel_observer: bool,
 ) -> None:
     def observe(_event: AgentEvent) -> None:
@@ -265,24 +269,22 @@ async def test_observer_failure_does_not_change_execution(
         FakeModelClient(
             lambda *_: AssistantMessage(content=[TextContent(text="answer")])
         )
-    ).start(max_steps=1)
-    run.subscribe(observe)
-    assert (await run.wait()).output.text == "answer"
-    assert await run.wait_for_idle(2)
+    ).start(max_steps=1, on_event=observe)
+    assert (run.result()).output.text == "answer"
+    assert run.wait_for_idle(2)
     assert run.snapshot().status == "complete"
     assert run.delivery_failed
 
 
-@pytest.mark.asyncio
-async def test_completed_tools_survive_sibling_cancellation() -> None:
-    blocked = asyncio.Event()
-    release = asyncio.Event()
+def test_completed_tools_survive_sibling_cancellation() -> None:
+    blocked = threading.Event()
+    release = threading.Event()
 
-    async def execute(invocation: ToolInvocation) -> ToolResult:
+    def execute(invocation: ToolInvocation) -> ToolResult:
         if invocation.call_id == "first":
             return ToolResult(content="completed result")
         blocked.set()
-        await release.wait()
+        release.wait()
         return ToolResult(content="second")
 
     agent = Agent(
@@ -295,17 +297,17 @@ async def test_completed_tools_survive_sibling_cancellation() -> None:
             )
         ),
         tools=[
-            AgentTool(
-                name="lookup", description="", parameters={}, execute_async=execute
-            )
+            AgentTool(name="lookup", description="", parameters={}, execute=execute)
         ],
     )
     run = agent.start(max_steps=1)
-    await asyncio.wait_for(blocked.wait(), 2)
+    assert blocked.wait(2)
     run.cancel()
     with pytest.raises(AgentCancelled):
-        await run.wait(2)
-    assert await run.wait_for_idle(2)
+        run.result(2)
+    assert not run.wait_for_idle(0)
+    release.set()
+    assert run.wait_for_idle(2)
     snapshot = run.snapshot()
     assert snapshot.messages[-1].text == "completed result"
     assert [
@@ -314,8 +316,7 @@ async def test_completed_tools_survive_sibling_cancellation() -> None:
     assert snapshot.messages == agent.context.messages
 
 
-@pytest.mark.asyncio
-async def test_request_assembly_keeps_logical_tool_context_and_metadata() -> None:
+def test_request_assembly_keeps_logical_tool_context_and_metadata() -> None:
     tool_histories: list[list[str]] = []
     model_histories: list[list[str]] = []
     metadata = ExtraData(value="application phase")
@@ -342,11 +343,10 @@ async def test_request_assembly_keeps_logical_tool_context_and_metadata() -> Non
         context=AgentContext(messages=[UserMessage(content="original task")]),
         prepare_step=prepare,
     )
-    run = agent.start(max_steps=1)
     events: list[AgentEvent] = []
-    run.subscribe(events.append)
-    result = await run.wait()
-    assert await run.wait_for_idle(2)
+    run = agent.start(max_steps=1, on_event=events.append)
+    result = run.result()
+    assert run.wait_for_idle(2)
     assert model_histories == [["provider prompt"]]
     assert tool_histories == [["original task"]]
     assert result.output.metadata == metadata

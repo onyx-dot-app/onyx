@@ -9,8 +9,6 @@ from uuid import UUID
 from onyx.chat.errors import chat_error
 from onyx.chat.execution import (
     ActiveChatTurns,
-    release_chat_responses,
-    reserve_chat_responses,
     start_chat_turn,
 )
 from onyx.chat.incognito_context import incognito_session_ended
@@ -78,11 +76,7 @@ def _stream_chat_turn(
     mock_token: Token[str | None] | None = None
     scope_started = False
     stream: ChatStream | None = None
-    reserved = 0
     try:
-        response_count = len(llm_overrides) if llm_overrides else 1
-        reserve_chat_responses(response_count)
-        reserved = response_count
         setup = prepare_chat_turn(
             new_msg_req=new_msg_req,
             user=user,
@@ -116,7 +110,6 @@ def _stream_chat_turn(
         )
         for packet in setup.initial_packets:
             stream_buffer.append_line(get_json_line(packet.model_dump()))
-        reserved = 0
         stream = start_chat_turn(
             setup,
             user,
@@ -134,7 +127,6 @@ def _stream_chat_turn(
             logger.exception("Chat request failed")
         yield chat_error(error, setup.responses[0].llm if setup else None)
     finally:
-        release_chat_responses(reserved)
         if stream is not None:
             stream.close()
         if mock_token is not None:

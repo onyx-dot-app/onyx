@@ -195,18 +195,18 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
 
     saved_run_id: str
 
-    async def reuse(invocation: ToolInvocation) -> ToolResult:
-        historical = await invocation.agents.wait_run(saved_run_id, timeout=2)
+    def reuse(invocation: ToolInvocation) -> ToolResult:
+        historical = invocation.agents.wait_run(saved_run_id, timeout=2)
         assert (
             historical is not None and historical.output.text == "Cedar evidence [1]."
         )
-        run_id = await invocation.agents.start_run(
+        run_id = invocation.agents.start_run(
             agent_id,
             messages=[UserMessage(content="Check the evidence again")],
             max_steps=1,
         )
         assert run_id != saved_run_id
-        result = await invocation.agents.wait_run(run_id, timeout=5)
+        result = invocation.agents.wait_run(run_id, timeout=5)
         assert (
             result is not None
             and result.output.text == "Additional cedar evidence [1]."
@@ -220,7 +220,7 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
                 name="reuse",
                 description="Read saved research",
                 parameters={},
-                execute_async=reuse,
+                execute=reuse,
             )
         ],
     )

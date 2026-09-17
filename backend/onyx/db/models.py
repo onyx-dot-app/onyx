@@ -325,6 +325,11 @@ class NullFilteredString(TypeDecorator):
         return value
 
 
+"""
+Auth/Authz (users, permissions, access) Tables
+"""
+
+
 class OAuthAccount(SQLAlchemyBaseOAuthAccountTableUUID, Base):
     # even an almost empty token from keycloak will not fit the default 1024 bytes
     access_token: Mapped[str] = mapped_column(Text, nullable=False)

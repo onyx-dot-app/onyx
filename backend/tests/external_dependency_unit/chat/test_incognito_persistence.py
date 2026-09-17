@@ -476,15 +476,15 @@ def test_incognito_response_restores_agents_without_database_content(
     identity = LLMUserIdentity(user_id=str(owner.id), session_id=str(session.id))
     child = Agent(llm)
 
-    async def delegate(invocation: ToolInvocation) -> ToolResult:
-        spawned = await invocation.agents.spawn_agent(
+    def delegate(invocation: ToolInvocation) -> ToolResult:
+        spawned = invocation.agents.spawn_agent(
             child,
             name="research",
             description="private child task",
             messages=[UserMessage(content="private child question")],
             max_steps=1,
         )
-        result = await invocation.agents.wait_run(spawned.run_id, timeout=3)
+        result = invocation.agents.wait_run(spawned.run_id, timeout=3)
         assert result is not None
         return ToolResult(content=result.output.text)
 
@@ -495,7 +495,7 @@ def test_incognito_response_restores_agents_without_database_content(
                 name="delegate",
                 description="",
                 parameters={},
-                execute_async=delegate,
+                execute=delegate,
             )
         ],
     )
