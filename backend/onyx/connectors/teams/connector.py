@@ -639,6 +639,14 @@ class TeamsConnector(
         access policy all answer on these calls. An empty listing proves the
         listing grant alone, which is enough to run."""
         assert self.graph_client is not None
+        if not self.transcript_organizers:
+            # The check only probes one user, so a policy that covers a group
+            # rather than the tenant passes here and refuses users at index time.
+            logger.warning(
+                "Include Meeting Transcripts has no organizers configured, so it "
+                "reads every enabled user. The application access policy has to "
+                "cover them all, or list the organizers it covers."
+            )
         try:
             # Every configured name is resolved on purpose: a misspelled one is a
             # misconfiguration the admin should see now, not at index time.

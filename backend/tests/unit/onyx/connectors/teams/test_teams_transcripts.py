@@ -1,6 +1,7 @@
 """Meeting transcripts as documents of their own: who is read, who may read
 them, and what each Graph refusal means for the walk and for validation."""
 
+import logging
 from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock
@@ -624,6 +625,34 @@ class TestValidation:
         }
 
         self._connector(routes)._validate_transcript_access()
+
+    def test_no_configured_organizers_warns_about_the_policy(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        routes = {
+            ALL_USERS_URL: {"value": [ADA]},
+            _transcripts_url("user-1", None, 1): {"value": []},
+        }
+
+        with caplog.at_level(logging.WARNING):
+            self._connector(routes)._validate_transcript_access()
+
+        assert "every enabled user" in caplog.text
+
+    def test_configured_organizers_pass_without_that_warning(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        routes = {
+            f"users('ada@example.com')?{SELECT_USERS}": ADA,
+            _transcripts_url("user-1", None, 1): {"value": []},
+        }
+
+        with caplog.at_level(logging.WARNING):
+            self._connector(
+                routes, organizers=["ada@example.com"]
+            )._validate_transcript_access()
+
+        assert "every enabled user" not in caplog.text
 
     def test_a_transcript_is_read_end_to_end(self) -> None:
         routes = {
