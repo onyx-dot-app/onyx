@@ -13,7 +13,7 @@ import {
 } from "@/api/chat/sessions";
 import { streamChatMessage, type StreamEvent } from "@/api/chat/stream";
 import { ChatFileType, type FileDescriptor } from "@/chat/interfaces";
-import { PacketType, StopReason } from "@/chat/streamingModels";
+import { Packet, StopReason } from "@/chat/streamingModels";
 import { useChatController } from "@/hooks/useChatController";
 import { useChatSessionStore } from "@/state/chatSessionStore";
 
@@ -28,8 +28,7 @@ jest.mock("@/state/session", () => ({
 // Re-implement the trivial discriminators inline so we don't pull in expo/fetch.
 jest.mock("@/api/chat/stream", () => ({
   streamChatMessage: jest.fn(),
-  isPacket: (event: { obj?: unknown; placement?: unknown }) =>
-    "obj" in event && "placement" in event,
+  isPacket: (event: { obj?: unknown }) => "obj" in event,
   isMessageIdInfo: (event: { user_message_id?: unknown }) =>
     "user_message_id" in event,
   isStreamError: (event: { error?: unknown }) =>
@@ -60,21 +59,49 @@ const renameSessionMock = renameChatSession as unknown as Mock<
 
 function startPacket(content: string): StreamEvent {
   return {
-    placement: { turn_index: 0 },
-    obj: { type: PacketType.MESSAGE_START, id: "m", content },
-  } as StreamEvent;
+    identity: {
+      response_id: 2,
+      run_id: "root",
+      message_id: "m",
+      part_id: "text",
+    },
+    obj: {
+      type: "item_update",
+      item: {
+        kind: "text",
+        text: content,
+        purpose: "answer",
+        status: "running",
+        documents: [],
+        citations: [],
+      },
+    },
+  };
 }
 function deltaPacket(content: string): StreamEvent {
   return {
-    placement: { turn_index: 0 },
-    obj: { type: PacketType.MESSAGE_DELTA, content },
-  } as StreamEvent;
+    identity: {
+      response_id: 2,
+      run_id: "root",
+      message_id: "m",
+      part_id: "text",
+    },
+    obj: {
+      type: "item_delta",
+      delta: { kind: "text", text: content, citations: [] },
+    },
+  };
 }
 function endPacket(): StreamEvent {
   return {
-    placement: { turn_index: 0 },
-    obj: { type: PacketType.MESSAGE_END },
-  } as StreamEvent;
+    identity: {
+      response_id: 2,
+      run_id: "root",
+      message_id: "m",
+      part_id: "run",
+    },
+    obj: { type: "run_update", status: "complete" },
+  };
 }
 const idInfo = {
   user_message_id: 10,
@@ -95,14 +122,15 @@ function wrapper({ children }: { children: React.ReactNode }) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
-function accumulated(packets: { obj: { type: string; content?: string } }[]) {
+function accumulated(packets: Packet[]) {
   return packets
-    .filter(
-      (p) =>
-        p.obj.type === PacketType.MESSAGE_START ||
-        p.obj.type === PacketType.MESSAGE_DELTA,
+    .map((p) =>
+      p.obj.type === "item_update" && p.obj.item.kind === "text"
+        ? p.obj.item.text
+        : p.obj.type === "item_delta" && p.obj.delta.kind === "text"
+          ? p.obj.delta.text
+          : "",
     )
-    .map((p) => p.obj.content ?? "")
     .join("");
 }
 
@@ -194,7 +222,7 @@ describe("useChatController", () => {
     // Without this the turn keeps looking like it is streaming until the session reloads.
     const agentNode = result.current.messages[1]!;
     const stopPacket = agentNode.packets.at(-1)!;
-    expect(stopPacket.obj.type).toBe(PacketType.STOP);
+    expect(stopPacket.obj.type).toBe("stop");
     expect((stopPacket.obj as { stop_reason?: string }).stop_reason).toBe(
       StopReason.USER_CANCELLED,
     );
@@ -211,9 +239,7 @@ describe("useChatController", () => {
     await waitFor(() => expect(result.current.chatState).toBe("input"));
 
     expect(
-      result.current.messages[1]!.packets.some(
-        (p) => p.obj.type === PacketType.STOP,
-      ),
+      result.current.messages[1]!.packets.some((p) => p.obj.type === "stop"),
     ).toBe(false);
   });
 

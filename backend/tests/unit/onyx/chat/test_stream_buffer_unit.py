@@ -11,6 +11,13 @@ from uuid import UUID, uuid4
 import pytest
 
 from onyx.chat import stream_buffer
+from onyx.chat.chat_processing_checker import (
+    FENCE_TTL,
+    PROCESSING_STALE_AFTER_S,
+    get_processing_key,
+    is_chat_session_processing,
+    set_processing_status,
+)
 from onyx.chat.models import StreamingError
 from onyx.chat.stream_buffer import (
     ChatDelivery,
@@ -19,7 +26,6 @@ from onyx.chat.stream_buffer import (
     _StreamStatus,
     read_stream_chunks,
 )
-from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
 from onyx.server.utils import get_json_line
 from onyx.utils.threadpool_concurrency import ContextThreadPoolExecutor
@@ -260,12 +266,8 @@ def test_concurrent_delivery_keeps_reader_and_cache_order(
     release_first = Event()
     second_started = Event()
     publish = delivery.reader.publish
-    first = Packet(
-        placement=Placement(turn_index=0), obj=OverallStop(stop_reason="first")
-    )
-    second = Packet(
-        placement=Placement(turn_index=0), obj=OverallStop(stop_reason="second")
-    )
+    first = Packet(obj=OverallStop(stop_reason="first"))
+    second = Packet(obj=OverallStop(stop_reason="second"))
 
     def hold_first(item: Packet | StreamingError | _StreamStatus) -> None:
         publish(item)
@@ -301,3 +303,20 @@ def test_concurrent_delivery_keeps_reader_and_cache_order(
     assert "".join(saved.blocks) == "".join(
         get_json_line(packet.model_dump()) for packet in (first, second)
     )
+
+
+def test_stale_worker_retains_buffer_identity_without_reporting_live() -> None:
+    class ProcessingCache(FakeCache):
+        def ttl(self, key: str) -> int:
+            return self.expiries.get(key, -2)
+
+    cache = ProcessingCache()
+    session_id = uuid4()
+    set_processing_status(session_id, cache, True, processing_key=_RUN_ID)
+    assert is_chat_session_processing(session_id, cache)
+    for key in cache.expiries:
+        cache.expiries[key] = int(FENCE_TTL - PROCESSING_STALE_AFTER_S)
+    assert not is_chat_session_processing(session_id, cache)
+    assert get_processing_key(session_id, cache) == _RUN_ID
+    set_processing_status(session_id, cache, True, processing_key=_RUN_ID)
+    assert is_chat_session_processing(session_id, cache)

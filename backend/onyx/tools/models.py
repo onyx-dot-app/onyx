@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Any, Callable, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, JsonValue
+from pydantic import BaseModel, ConfigDict, JsonValue, SerializeAsAny
 
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import PersonaSearchInfo, SearchDoc
@@ -12,8 +12,44 @@ from onyx.file_store.models import (
     install_lazy_content_loader,
     maybe_materialize_lazy_content,
 )
-from onyx.tools.progress import CustomToolErrorInfo, GeneratedImage
 from onyx.utils.headers import HeaderItemDict
+
+
+class CustomToolErrorInfo(BaseModel):
+    is_auth_error: bool = False
+    status_code: int
+    message: str
+
+
+class GeneratedImage(BaseModel):
+    file_id: str
+    url: str
+    revised_prompt: str
+    shape: str | None = None
+
+
+class FileReadResult(BaseModel):
+    type: Literal["file_read_result"] = "file_read_result"
+    file_name: str
+    file_id: str
+    start_char: int
+    end_char: int
+    total_chars: int
+    preview_start: str = ""
+    preview_end: str = ""
+
+
+class MemoryOperation(str, Enum):
+    ADD = "add"
+    UPDATE = "update"
+
+
+class MemoryUpdated(BaseModel):
+    type: Literal["memory_result"] = "memory_result"
+    memory_text: str
+    operation: MemoryOperation
+    memory_id: int | None = None
+    index: int | None = None
 
 
 class ToolConfiguration(BaseModel):
@@ -73,9 +109,10 @@ class CustomToolUserFileSnapshot(BaseModel):
 
 
 class CustomToolCallSummary(BaseModel):
+    type: Literal["custom_tool_result"] = "custom_tool_result"
     tool_name: str
     response_type: str  # e.g., 'json', 'image', 'csv', 'graph'
-    tool_result: Any  # The response data
+    tool_result: CustomToolUserFileSnapshot | JsonValue
     error: CustomToolErrorInfo | None = None
 
 
@@ -122,12 +159,6 @@ class ChatFile(BaseModel):
         return object.__getattribute__(self, name)
 
 
-class PythonToolRichResponse(BaseModel):
-    """Rich response from the Python tool carrying generated files."""
-
-    generated_files: list[PythonExecutionFile] = []
-
-
 class ToolCallInfo(BaseModel):
     message_id: str
     parent_message_id: str | None = None
@@ -143,6 +174,7 @@ class ToolCallInfo(BaseModel):
     reasoning_tokens: str | None
     tool_call_arguments: dict[str, Any]
     tool_call_response: str
+    result_metadata: SerializeAsAny[BaseModel] | None = None
     search_docs: list[SearchDoc] | None = None
     generated_images: list[GeneratedImage] | None = None
     generated_files: list[PythonExecutionFile] | None = None
@@ -221,3 +253,12 @@ class LlmPythonExecutionResult(BaseModel):
     error: str | None = None
     # Set when some session files are absent
     staging_notice: str | None = None
+
+
+class LlmBashExecutionResult(BaseModel):
+    type: Literal["bash_execution"] = "bash_execution"
+    stdout: str
+    stderr: str
+    exit_code: int | None
+    timed_out: bool
+    error: str | None = None

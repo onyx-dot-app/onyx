@@ -9,7 +9,7 @@ import {
 import { act, render, screen } from "@testing-library/react-native";
 import { Fragment } from "react";
 
-import { makePacket } from "@/chat/__tests__/fixtures";
+import { makeItem } from "@/chat/__tests__/fixtures";
 import { StepContainer } from "@/components/chat/timeline/StepContainer";
 import SvgCircle from "@/icons/circle";
 
@@ -28,10 +28,8 @@ jest.mock("@/components/chat/StreamingMarkdown", () => ({
 // The StepContainer smoke test renders a Button, which navigates via expo-router's `router`.
 jest.mock("expo-router", () => ({ router: { navigate: jest.fn() } }));
 
-const reasoningStart = makePacket({ type: "reasoning_start" });
-const sectionEnd = makePacket({ type: "section_end" });
-const delta = (reasoning: string) =>
-  makePacket({ type: "reasoning_delta", reasoning });
+const reasoning = (text: string, status: "running" | "complete" = "running") =>
+  makeItem({ kind: "reasoning", text, status });
 
 function renderResults(results: RendererOutput) {
   return (
@@ -44,21 +42,21 @@ function renderResults(results: RendererOutput) {
 }
 
 interface RenderOptions {
-  packets?: ReturnType<typeof makePacket>[];
+  items?: ReturnType<typeof makeItem>[];
   animate?: boolean;
   onComplete?: () => void;
   children?: (results: RendererOutput) => React.ReactElement;
 }
 
 function renderReasoning({
-  packets = [reasoningStart, delta("thinking")],
+  items = [reasoning("thinking")],
   animate = true,
   onComplete = () => {},
   children = renderResults,
 }: RenderOptions = {}) {
   return render(
     <ReasoningRenderer
-      packets={packets}
+      items={items}
       state={{ agent: null }}
       onComplete={onComplete}
       renderType={RenderType.FULL}
@@ -71,10 +69,10 @@ function renderReasoning({
 }
 
 // Captures the emitted results *and* mounts their content, so `mockMarkdownProps` reflects the body.
-function captureResults(packets: ReturnType<typeof makePacket>[]) {
+function captureResults(items: ReturnType<typeof makeItem>[]) {
   let captured: RendererOutput | null = null;
   renderReasoning({
-    packets,
+    items,
     children: (results) => {
       captured = results;
       return renderResults(results);
@@ -98,9 +96,9 @@ describe("ReasoningRenderer", () => {
     expect(mockMarkdownProps).toBeNull();
   });
 
-  it("streams accumulated deltas under the default status", () => {
+  it("shows current reasoning under the default status", () => {
     renderReasoning({
-      packets: [reasoningStart, delta("Let me "), delta("go")],
+      items: [reasoning("Let me go")],
     });
     expect(mockMarkdownProps?.content).toBe("Let me go");
     expect(mockMarkdownProps?.isStreaming).toBe(true);
@@ -108,55 +106,52 @@ describe("ReasoningRenderer", () => {
 
   it("promotes a leading markdown heading to the status and lifts it out of the body", () => {
     const results = captureResults([
-      reasoningStart,
-      delta("## Reading the docs\n\n"),
-      delta("body text"),
+      reasoning("## Reading the docs\n\nbody text"),
     ]);
     expect(results[0]!.status).toBe("Reading the docs");
     expect(mockMarkdownProps?.content).toBe("body text");
   });
 
   it("keeps plain prose in the body and falls back to the default status", () => {
-    const results = captureResults([reasoningStart, delta("Reading the docs")]);
+    const results = captureResults([reasoning("Reading the docs")]);
     expect(results[0]!.status).toBe("Thinking");
     expect(mockMarkdownProps?.content).toBe("Reading the docs");
   });
 
   it("falls back to the default status when the heading extracts to an empty title", () => {
     // "# " is a syntactically valid heading whose text is empty; the status must not go blank.
-    const results = captureResults([reasoningStart, delta("# \n\nbody text")]);
+    const results = captureResults([reasoning("# \n\nbody text")]);
     expect(results[0]!.status).toBe("Thinking");
   });
 
   it("stops streaming once the step is closed", () => {
     renderReasoning({
-      packets: [reasoningStart, delta("done thinking"), sectionEnd],
+      items: [reasoning("done thinking", "complete")],
     });
     expect(mockMarkdownProps?.isStreaming).toBe(false);
   });
 
   it("does not expose a per-step collapse control (web parity)", () => {
-    const results = captureResults([reasoningStart, delta("thinking")]);
+    const results = captureResults([reasoning("thinking")]);
     expect(results[0]!.supportsCollapsible).toBeUndefined();
   });
 
   it("drops the right gutter on both the empty and populated branches", () => {
     expect(captureResults([])[0]!.noPaddingRight).toBe(true);
-    expect(
-      captureResults([reasoningStart, delta("thinking")])[0]!.noPaddingRight,
-    ).toBe(true);
+    expect(captureResults([reasoning("thinking")])[0]!.noPaddingRight).toBe(
+      true,
+    );
   });
 
-  // A hydrated group can arrive with no reasoning_start, so the renderer keys off content/end.
-  describe("start-less groups (hydrated history)", () => {
-    it("renders accumulated deltas with no reasoning_start packet", () => {
-      renderReasoning({ packets: [delta("recalled thinking"), sectionEnd] });
+  describe("saved reasoning", () => {
+    it("renders a complete saved item", () => {
+      renderReasoning({ items: [reasoning("recalled thinking", "complete")] });
       expect(mockMarkdownProps?.content).toBe("recalled thinking");
       expect(mockMarkdownProps?.isStreaming).toBe(false);
     });
 
-    it("takes the closed-but-empty branch for a section_end-only group", () => {
-      const results = captureResults([sectionEnd]);
+    it("renders a complete empty item", () => {
+      const results = captureResults([reasoning("", "complete")]);
       expect(results[0]!.status).toBe("Thinking");
       // hasEnd is true, so this is NOT the empty branch: an (empty) window still mounts.
       expect(mockMarkdownProps?.content).toBe("");
@@ -175,7 +170,7 @@ describe("ReasoningRenderer", () => {
     it("withholds completion for 500ms when reasoning ends immediately", () => {
       let calls = 0;
       renderReasoning({
-        packets: [reasoningStart, delta("fast"), sectionEnd],
+        items: [reasoning("fast", "complete")],
         onComplete: () => {
           calls += 1;
         },
@@ -198,7 +193,7 @@ describe("ReasoningRenderer", () => {
         stopPacketSeen: false,
       } as const;
       const { rerender } = render(
-        <ReasoningRenderer {...props} packets={[reasoningStart, delta("slow")]}>
+        <ReasoningRenderer {...props} items={[reasoning("slow")]}>
           {renderResults}
         </ReasoningRenderer>,
       );
@@ -206,21 +201,17 @@ describe("ReasoningRenderer", () => {
       expect(calls).toBe(0);
 
       rerender(
-        <ReasoningRenderer
-          {...props}
-          packets={[reasoningStart, delta("slow"), sectionEnd]}
-        >
+        <ReasoningRenderer {...props} items={[reasoning("slow", "complete")]}>
           {renderResults}
         </ReasoningRenderer>,
       );
       expect(calls).toBe(1);
     });
 
-    it("stamps the start time from the end packet alone when no start ever arrived", () => {
-      // Without the `|| hasEnd` half of the stamp, startTimeRef stays null and onComplete never fires.
+    it("completes a saved item when animation is enabled", () => {
       let calls = 0;
       renderReasoning({
-        packets: [delta("recalled"), sectionEnd],
+        items: [reasoning("recalled", "complete")],
         onComplete: () => {
           calls += 1;
         },
@@ -242,16 +233,13 @@ describe("ReasoningRenderer", () => {
         stopPacketSeen: false,
       } as const;
       const { rerender } = render(
-        <ReasoningRenderer {...props} packets={[reasoningStart, delta("mid")]}>
+        <ReasoningRenderer {...props} items={[reasoning("mid")]}>
           {renderResults}
         </ReasoningRenderer>,
       );
       act(() => jest.advanceTimersByTime(300));
       rerender(
-        <ReasoningRenderer
-          {...props}
-          packets={[reasoningStart, delta("mid"), sectionEnd]}
-        >
+        <ReasoningRenderer {...props} items={[reasoning("mid", "complete")]}>
           {renderResults}
         </ReasoningRenderer>,
       );
@@ -264,7 +252,7 @@ describe("ReasoningRenderer", () => {
     it("skips the floor entirely for historical messages (animate=false)", () => {
       let calls = 0;
       renderReasoning({
-        packets: [reasoningStart, delta("replayed"), sectionEnd],
+        items: [reasoning("replayed", "complete")],
         animate: false,
         onComplete: () => {
           calls += 1;
@@ -275,9 +263,9 @@ describe("ReasoningRenderer", () => {
 
     it("completes once even as onComplete's identity churns across re-renders", () => {
       let calls = 0;
-      const packets = [reasoningStart, delta("fast"), sectionEnd];
+      const items = [reasoning("fast", "complete")];
       const props = {
-        packets,
+        items,
         state: { agent: null },
         renderType: RenderType.FULL,
         animate: false,
@@ -307,7 +295,7 @@ describe("ReasoningRenderer", () => {
     it("does not complete after unmount", () => {
       let calls = 0;
       const { unmount } = renderReasoning({
-        packets: [reasoningStart, delta("fast"), sectionEnd],
+        items: [reasoning("fast", "complete")],
         onComplete: () => {
           calls += 1;
         },
@@ -320,7 +308,7 @@ describe("ReasoningRenderer", () => {
 
   it("composes into a StepContainer with a header and no collapse control", () => {
     renderReasoning({
-      packets: [reasoningStart, delta("## Planning\n\nthe body")],
+      items: [reasoning("## Planning\n\nthe body")],
       children: (results) => (
         <StepContainer
           stepIcon={results[0]!.icon ?? undefined}

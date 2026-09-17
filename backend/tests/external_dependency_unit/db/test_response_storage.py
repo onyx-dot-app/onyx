@@ -32,6 +32,7 @@ from onyx.agents.transcript import (
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import MessageRendering, ResponseRecord
 from onyx.chat.presentation import ResponsePresenter, project_response
+from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.configs.constants import MessageType
 from onyx.db.chat import (
     delete_chat_session,
@@ -80,12 +81,11 @@ from onyx.server.query_and_chat.session_loading import (
     translate_assistant_message_to_packets,
 )
 from onyx.server.query_and_chat.streaming_models import (
-    CodingAgentFinal,
+    ItemUpdate,
     Packet,
-    PythonToolDelta,
+    ToolItem,
 )
 from onyx.tools.models import LlmPythonExecutionResult
-from onyx.tools.progress import CodingCompleted, PythonOutput
 from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
     CodingAgentTool,
 )
@@ -772,8 +772,10 @@ def test_completed_tool_display_matches_reload_without_duplicate_streamed_output
             timed_out=False,
             generated_files=[],
         )
-        result = ToolResult(content=output.model_dump_json())
-        progress = ToolProgress(details=PythonOutput(stdout="hello "))
+        result = ToolResult(content=output.model_dump_json(), details=output)
+        progress = ToolProgress(
+            details=output.model_copy(update={"stdout": "hello ", "stderr": ""})
+        )
         implementation = PythonTool.__name__
     else:
         call = ToolCall(
@@ -781,8 +783,11 @@ def test_completed_tool_display_matches_reload_without_duplicate_streamed_output
             name=CodingAgentTool.NAME,
             arguments={"query": "task", "github_repo": "repo"},
         )
-        result = ToolResult(content="coding answer")
-        progress = ToolProgress(details=CodingCompleted(answer=result.text))
+        result = ToolResult(
+            content="coding answer",
+            details=CodingAgentCallResult(answer="coding answer"),
+        )
+        progress = ToolProgress(details=CodingAgentCallResult(answer="partial answer"))
         implementation = CodingAgentTool.__name__
     session = conversation
     tool = tool_record
@@ -800,7 +805,10 @@ def test_completed_tool_display_matches_reload_without_duplicate_streamed_output
         messages=[
             AssistantMessage(id="stable-generation", content=[call]),
             ToolResultMessage(
-                tool_call_id=call.id, tool_name=call.name, content=result.content
+                tool_call_id=call.id,
+                tool_name=call.name,
+                content=result.content,
+                details=result.details,
             ),
             AssistantMessage(content=[TextContent(text="done")]),
         ],
@@ -844,28 +852,18 @@ def test_completed_tool_display_matches_reload_without_duplicate_streamed_output
         == 1
     )
     saved = translate_assistant_message_to_packets(row, db_session)
-    if tool_kind == "python":
-        live_output = [
-            packet.obj for packet in live if isinstance(packet.obj, PythonToolDelta)
-        ]
-        saved_output = [
-            packet.obj for packet in saved if isinstance(packet.obj, PythonToolDelta)
-        ]
-        assert "".join(part.stdout for part in live_output) == "hello world"
-        assert "".join(part.stderr for part in live_output) == "warning"
-        assert "".join(part.stdout for part in saved_output) == "hello world"
-        assert "".join(part.stderr for part in saved_output) == "warning"
-    else:
-        assert [
-            packet.obj.answer
-            for packet in live
-            if isinstance(packet.obj, CodingAgentFinal)
-        ] == ["coding answer"]
-        assert [
-            packet.obj.answer
-            for packet in saved
-            if isinstance(packet.obj, CodingAgentFinal)
-        ] == ["coding answer"]
+    live_items = [
+        packet.obj.item
+        for packet in live
+        if isinstance(packet.obj, ItemUpdate) and isinstance(packet.obj.item, ToolItem)
+    ]
+    saved_items = [
+        packet.obj.item
+        for packet in saved
+        if isinstance(packet.obj, ItemUpdate) and isinstance(packet.obj.item, ToolItem)
+    ]
+    assert live_items[-1].metadata == saved_items[-1].metadata == result.details
+    assert live_items[-1].output == saved_items[-1].output
 
 
 def test_exact_summary_keeps_legacy_baseline_selectable(

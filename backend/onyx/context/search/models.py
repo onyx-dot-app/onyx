@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -399,6 +399,11 @@ class SearchDoc(BaseModel):
 
 
 class SearchDocsResponse(BaseModel):
+    type: Literal["search_result"] = "search_result"
+    queries: list[str] = Field(default_factory=list)
+    sources: list[str] = Field(default_factory=list)
+    time_filter_start: datetime | None = None
+    time_filter_end: datetime | None = None
     search_docs: list[SearchDoc]
     # Maps the citation number to the document id
     # Since these are no longer just links on the frontend but instead document cards, mapping it to the

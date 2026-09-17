@@ -34,7 +34,6 @@ from onyx.llm.well_known_providers.constants import (
 )
 from onyx.prompts.chat_prompts import IMAGE_DROP_REMINDER
 from onyx.prompts.constants import SYSTEM_REMINDER_TAG_CLOSE, SYSTEM_REMINDER_TAG_OPEN
-from onyx.server.query_and_chat.placement import Placement
 from onyx.utils.postgres_sanitization import sanitize_string
 
 
@@ -176,9 +175,6 @@ class TestExtractToolCallsFromResponseText:
                 },
             }
         ]
-
-    def _placement(self) -> Placement:
-        return Placement(turn_index=0, tab_index=0, sub_turn_index=None)
 
     def test_collapses_nested_arguments_duplicate(self) -> None:
         response_text = '{"name":"internal_search","arguments":{"queries":["alpha"]}}'

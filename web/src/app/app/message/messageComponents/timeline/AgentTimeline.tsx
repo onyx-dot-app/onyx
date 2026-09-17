@@ -2,8 +2,11 @@
 
 import React, { useMemo, useCallback } from "react";
 import { StopReason } from "@/app/app/services/streamingModels";
-import { FullChatState, RenderType } from "../interfaces";
-import { TurnGroup } from "./transformers";
+import {
+  FullChatState,
+  RenderType,
+} from "@/app/app/message/messageComponents/interfaces";
+import { TurnGroup } from "@/app/app/message/messageComponents/timeline/transformers";
 import { cn } from "@opal/utils";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import ShimmerText from "@/refresh-components/texts/ShimmerText";
@@ -14,22 +17,21 @@ import {
   useTimelineUIState,
   TimelineUIState,
 } from "@/app/app/message/messageComponents/timeline/hooks/useTimelineUIState";
-import {
-  isResearchAgentPackets,
-  isSearchToolPackets,
-  stepSupportsCollapsedStreaming,
-  stepHasCollapsedStreamingContent,
-} from "@/app/app/message/messageComponents/timeline/packetHelpers";
 import { useTimelineStepState } from "@/app/app/message/messageComponents/timeline/hooks/useTimelineStepState";
 import { StreamingHeader } from "@/app/app/message/messageComponents/timeline/headers/StreamingHeader";
 import { CompletedHeader } from "@/app/app/message/messageComponents/timeline/headers/CompletedHeader";
 import { StoppedHeader } from "@/app/app/message/messageComponents/timeline/headers/StoppedHeader";
 import { ParallelStreamingHeader } from "@/app/app/message/messageComponents/timeline/headers/ParallelStreamingHeader";
 import { useStreamingStartTime } from "@/app/app/stores/useChatSessionStore";
-import { ExpandedTimelineContent } from "./ExpandedTimelineContent";
-import { CollapsedStreamingContent } from "./CollapsedStreamingContent";
+import { ExpandedTimelineContent } from "@/app/app/message/messageComponents/timeline/ExpandedTimelineContent";
+import { CollapsedStreamingContent } from "@/app/app/message/messageComponents/timeline/CollapsedStreamingContent";
 import { TimelineRoot } from "@/app/app/message/messageComponents/timeline/primitives/TimelineRoot";
 import { TimelineHeaderRow } from "@/app/app/message/messageComponents/timeline/primitives/TimelineHeaderRow";
+import {
+  isSearchToolItems,
+  stepHasCollapsedStreamingContent,
+  stepSupportsCollapsedStreaming,
+} from "@/app/app/message/messageComponents/timeline/itemHelpers";
 
 // =============================================================================
 // Private Wrapper Components
@@ -87,7 +89,7 @@ export interface AgentTimelineProps {
   isGeneratingImage?: boolean;
   /** Number of images generated */
   generatedImageCount?: number;
-  /** Tool processing duration from backend (via MESSAGE_START packet) */
+  /** Tool processing duration from backend (from the answer item) */
   toolProcessingDuration?: number;
 }
 
@@ -154,7 +156,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
 
   // Check if last step is a search tool for INLINE render type
   const lastStepIsSearchTool = useMemo(
-    () => lastStep && isSearchToolPackets(lastStep.packets),
+    () => lastStep && isSearchToolItems(lastStep.items),
     [lastStep]
   );
 
@@ -175,17 +177,17 @@ export const AgentTimeline = React.memo(function AgentTimeline({
 
   const parallelActiveStepSupportsCollapsedStreaming = useMemo(() => {
     if (!parallelActiveStep) return false;
-    return stepSupportsCollapsedStreaming(parallelActiveStep.packets);
+    return stepSupportsCollapsedStreaming(parallelActiveStep.items);
   }, [parallelActiveStep]);
 
   const lastStepHasCollapsedContent = useMemo(() => {
     if (!lastStep) return false;
-    return stepHasCollapsedStreamingContent(lastStep.packets);
+    return stepHasCollapsedStreamingContent(lastStep.items);
   }, [lastStep]);
 
   const parallelActiveStepHasCollapsedContent = useMemo(() => {
     if (!parallelActiveStep) return false;
-    return stepHasCollapsedStreamingContent(parallelActiveStep.packets);
+    return stepHasCollapsedStreamingContent(parallelActiveStep.items);
   }, [parallelActiveStep]);
 
   const stoppedStepsCount = useMemo(() => {
@@ -196,7 +198,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     let count = 0;
     for (const turnGroup of turnGroups) {
       for (const step of turnGroup.steps) {
-        if (stepHasCollapsedStreamingContent(step.packets)) {
+        if (stepHasCollapsedStreamingContent(step.items)) {
           count += 1;
         }
       }
@@ -341,7 +343,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     toolProcessingDuration,
   ]);
 
-  // Empty state: no packets, still streaming, and not stopped
+  // Empty state: no items, still streaming, and not stopped
   if (uiState === TimelineUIState.EMPTY) {
     return (
       <TimelineContainer

@@ -11,9 +11,9 @@ import { CitationMap } from "@/app/app/interfaces";
 import { OnyxDocument } from "@/lib/search/types";
 import {
   ProcessorState,
-  GroupedPacket,
   createInitialState,
   processPackets,
+  GroupedItem,
 } from "@/app/app/message/messageComponents/timeline/hooks/packetProcessor";
 import {
   transformPacketGroups,
@@ -23,8 +23,9 @@ import {
 
 export interface UsePacketProcessorResult {
   // Data
-  toolGroups: GroupedPacket[];
-  displayGroups: GroupedPacket[];
+  toolGroups: GroupedItem[];
+  narrationGroups: GroupedItem[];
+  displayGroups: GroupedItem[];
   toolTurnGroups: TurnGroup[];
   citations: StreamingCitation[];
   citationMap: CitationMap;
@@ -34,12 +35,12 @@ export interface UsePacketProcessorResult {
   stopPacketSeen: boolean;
   stopReason: StopReason | undefined;
   hasSteps: boolean;
-  expectedBranchesPerTurn: Map<number, number>;
+
   isGeneratingImage: boolean;
   generatedImageCount: number;
-  // Whether final answer is coming (MESSAGE_START seen)
+  // Whether final answer is coming (an answer item exists)
   finalAnswerComing: boolean;
-  // Tool processing duration from backend (via MESSAGE_START packet)
+  // Tool processing duration from backend (from the answer item)
   toolProcessingDuration: number | undefined;
 
   // Completion: stopPacketSeen && renderComplete
@@ -50,51 +51,40 @@ export interface UsePacketProcessorResult {
   markAllToolsDisplayed: () => void;
 }
 
-/**
- * Hook for processing streaming packets in AgentMessage.
- *
- * Architecture:
- * - Processor state in ref: incremental processing, synchronous, no double render
- * - Only true UI state: renderComplete (set by callback), forceShowAnswer (override)
- * - Everything else derived from packets
- *
- * Key insight: finalAnswerComing and stopPacketSeen are DERIVED from packets,
- * not independent state. Only renderComplete needs useState.
- */
+/** Keep stream state separate from animation and answer-visibility state. */
 export function usePacketProcessor(
   rawPackets: Packet[],
   nodeId: number
 ): UsePacketProcessorResult {
   // Processor in ref: incremental, synchronous, no double render
   const stateRef = useRef<ProcessorState>(createInitialState(nodeId));
+  const lastProcessedPacketRef = useRef<Packet | undefined>(undefined);
 
-  // Only TRUE UI state: "has renderer finished?"
   const [renderComplete, setRenderComplete] = useState(false);
 
   // Optional override to force showing answer
   const [forceShowAnswer, setForceShowAnswer] = useState(false);
 
-  // Reset on nodeId change
-  if (stateRef.current.nodeId !== nodeId) {
+  // Resume replaces saved history; its packet offsets belong to a different sequence.
+  const nextPacketIndex = stateRef.current.nextPacketIndex;
+  if (
+    stateRef.current.nodeId !== nodeId ||
+    (nextPacketIndex > 0 &&
+      rawPackets[nextPacketIndex - 1] !== lastProcessedPacketRef.current)
+  ) {
     stateRef.current = createInitialState(nodeId);
+    lastProcessedPacketRef.current = undefined;
     setRenderComplete(false);
     setForceShowAnswer(false);
   }
 
   // Track for transition detection
-  const prevNextPacketIndex = stateRef.current.nextPacketIndex;
   const prevFinalAnswerComing = stateRef.current.finalAnswerComing;
-
-  // Detect stream reset (packets shrunk)
-  if (prevNextPacketIndex > rawPackets.length) {
-    stateRef.current = createInitialState(nodeId);
-    setRenderComplete(false);
-    setForceShowAnswer(false);
-  }
 
   // Process packets synchronously (incremental) - only if new packets arrived
   if (rawPackets.length > stateRef.current.nextPacketIndex) {
     stateRef.current = processPackets(stateRef.current, rawPackets);
+    lastProcessedPacketRef.current = rawPackets[rawPackets.length - 1];
   }
 
   // Reset renderComplete on tool-after-message transition
@@ -138,6 +128,7 @@ export function usePacketProcessor(
   return {
     // Data
     toolGroups: state.toolGroups,
+    narrationGroups: state.narrationGroups,
     displayGroups,
     toolTurnGroups,
     citations: state.citations,
@@ -148,7 +139,6 @@ export function usePacketProcessor(
     stopPacketSeen: state.stopPacketSeen,
     stopReason: state.stopReason,
     hasSteps: toolTurnGroups.length > 0,
-    expectedBranchesPerTurn: state.expectedBranches,
     isGeneratingImage: state.isGeneratingImage,
     generatedImageCount: state.generatedImageCount,
     finalAnswerComing: state.finalAnswerComing,

@@ -3,9 +3,9 @@
 import { memo, useCallback, useMemo } from "react";
 
 import {
-  isPythonToolPackets,
-  isSearchToolPackets,
-} from "@/chat/timeline/packetHelpers";
+  isPythonToolItems,
+  isSearchToolItems,
+} from "@/chat/timeline/itemHelpers";
 import type { TransformedStep } from "@/chat/timeline/transformers";
 import type {
   FullChatState,
@@ -39,12 +39,12 @@ export const TimelineStep = memo(function TimelineStep({
   isStreaming = false,
 }: TimelineStepProps) {
   const isSearchTool = useMemo(
-    () => isSearchToolPackets(step.packets),
-    [step.packets],
+    () => isSearchToolItems(step.items),
+    [step.items],
   );
   const isPythonTool = useMemo(
-    () => isPythonToolPackets(step.packets),
-    [step.packets],
+    () => isPythonToolItems(step.items),
+    [step.items],
   );
 
   // Collapsed, a search step keeps its own glyph instead of the generic expand chevron.
@@ -70,7 +70,7 @@ export const TimelineStep = memo(function TimelineStep({
 
   return (
     <TimelineRendererComponent
-      packets={step.packets}
+      items={step.items}
       chatState={chatState}
       animate={!stopPacketSeen}
       stopPacketSeen={stopPacketSeen}

@@ -8,7 +8,6 @@ from pydantic import BaseModel
 
 from onyx.agents.events import (
     AgentEndEvent,
-    MessageUpdateEvent,
     ToolEndEvent,
     ToolStartEvent,
     ToolUpdateEvent,
@@ -18,14 +17,11 @@ from onyx.agents.models import RunSnapshot
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolInvocation, ToolProgress
 from onyx.agents.transcript import OperationSnapshot, RunStatus
-from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import ChatMessageMetadata, CitationMode, MessageRendering
 from onyx.chat.presentation import ResponsePresenter, project_response
-from onyx.chat.renderer import PacketRenderer, RenderConfig
-from onyx.chat.tool_progress import tool_display_progress
+from onyx.chat.renderer import MessageRenderer
 from onyx.context.search.models import SearchDoc
-from onyx.deep_research.tool_definitions import THINK_TOOL_NAME
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.litellm_conversion import MessageAccumulator
 from onyx.llm.litellm_models import (
@@ -40,22 +36,23 @@ from onyx.llm.models import (
     Message,
     ReasoningEffort,
     TextContent,
-    ThinkingContent,
+    TextDeltaEvent,
     ToolCall,
     ToolResult,
     UserMessage,
 )
 from onyx.server.query_and_chat.streaming_models import (
-    OperationStatus,
+    ItemDelta,
+    ItemUpdate,
     OverallStop,
     Packet,
     PacketIdentity,
-    PythonToolDelta,
-    ReasoningDone,
-    ReasoningStart,
+    RunUpdate,
+    TextItem,
+    TextPurpose,
+    ToolOutputUpdate,
 )
-from onyx.tools.progress import PythonOutput
-from onyx.tools.tool_implementations.python.python_tool import PythonTool
+from onyx.tools.models import LlmPythonExecutionResult
 from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
 
 
@@ -141,10 +138,9 @@ def test_citation_display_keeps_raw_transcript(
     fragments: list[str], expected: str
 ) -> None:
     accumulator = MessageAccumulator()
-    renderer = PacketRenderer(
-        RenderConfig(
-            citations=DynamicCitationProcessor(citation_mode=CitationMode.REMOVE)
-        ),
+    renderer = MessageRenderer(
+        MessageRendering(citation_mode=CitationMode.REMOVE),
+        {},
         PacketIdentity(response_id=1, run_id="run", message_id="run:0"),
     )
     for fragment in fragments:
@@ -155,15 +151,10 @@ def test_citation_display_keeps_raw_transcript(
                 choice=StreamingChoice(delta=Delta(content=fragment)),
             )
         ):
-            renderer.consume_items(
-                MessageUpdateEvent(
-                    run_id="run", step_index=0, generation_event=event
-                ).items
-            )
+            renderer.consume(event)
     for event in accumulator.end():
-        renderer.consume_items(
-            MessageUpdateEvent(run_id="run", step_index=0, generation_event=event).items
-        )
+        renderer.consume(event)
+    renderer.complete(accumulator.message)
     assert renderer.answer == expected
     assert accumulator.message.text == "".join(fragments)
 
@@ -223,7 +214,15 @@ def test_child_progress_and_completion_keep_explicit_ancestry() -> None:
             parent_tool_call_id="research",
             step_index=1,
             tool_call=call,
-            progress=ToolProgress(details=PythonOutput(stdout="progress")),
+            progress=ToolProgress(
+                details=LlmPythonExecutionResult(
+                    stdout="progress",
+                    stderr="",
+                    exit_code=None,
+                    timed_out=False,
+                    generated_files=[],
+                )
+            ),
         )
     )
     view.consume(
@@ -247,7 +246,12 @@ def test_child_progress_and_completion_keep_explicit_ancestry() -> None:
         )
     )
     packets = list(output.queue)
-    progress = [packet for packet in packets if isinstance(packet.obj, PythonToolDelta)]
+    progress = [
+        packet
+        for packet in packets
+        if isinstance(packet.obj, ItemDelta)
+        and isinstance(packet.obj.delta, ToolOutputUpdate)
+    ]
     assert len(progress) == 1
     assert progress[0].identity == PacketIdentity(
         response_id=42,
@@ -260,52 +264,18 @@ def test_child_progress_and_completion_keep_explicit_ancestry() -> None:
         part_id="tool",
     )
     assert not any(isinstance(packet.obj, OverallStop) for packet in packets)
-    assert isinstance(packets[-1].obj, OperationStatus)
+    assert isinstance(packets[-1].obj, RunUpdate)
     assert packets[-1].obj.status == "complete"
-
-
-def test_tool_display_handles_incomplete_calls_without_fabricated_arguments() -> None:
-    call = ToolCall(id="partial", name=PythonTool.NAME, arguments={})
-    assert tool_display_progress(call, None) == []
-    call.arguments = {"code": "print(1)"}
-    updates = tool_display_progress(call, None)
-    assert len(updates) == 1
-    assert updates[0].details is not None
-    assert updates[0].details.model_dump() == {"code": "print(1)"}
-
-
-def test_framework_control_tool_finishes_without_a_custom_tool_card() -> None:
-    queue: Queue[Packet] = Queue()
-    presenter = ResponsePresenter(Emitter(queue.put_nowait, response_id=42))
-    call = ToolCall(id="think", name=THINK_TOOL_NAME, arguments={"thoughts": "plan"})
-    presenter.consume(ToolStartEvent(run_id="run", step_index=0, tool_call=call))
-    presenter.consume(
-        ToolEndEvent(
-            run_id="run",
-            step_index=0,
-            tool_call=call,
-            result=ToolResult(content="done"),
-        )
-    )
-    packets = list(queue.queue)
-    statuses = [
-        packet.obj
-        for packet in packets
-        if isinstance(packet, Packet) and isinstance(packet.obj, OperationStatus)
-    ]
-    assert statuses[-1].status == "complete"
-    assert all(
-        not isinstance(packet, Packet) or not packet.obj.type.startswith("custom_tool")
-        for packet in packets
-    )
 
 
 def test_formatting_failure_keeps_accepted_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def fail_formatting(
-        _presentation: MessageRendering, _documents: Mapping[str, SearchDoc]
-    ) -> RenderConfig:
+        _presentation: MessageRendering,
+        _documents: Mapping[str, SearchDoc],
+        _identity: PacketIdentity,
+    ) -> MessageRenderer:
         raise ValueError("Invalid display metadata")
 
     agent = Agent(
@@ -317,7 +287,7 @@ def test_formatting_failure_keeps_accepted_response(
     )
     run = agent.start(messages=[UserMessage(content="Question")], max_steps=1)
     run.result(timeout=10)
-    monkeypatch.setattr("onyx.chat.presentation.render_config", fail_formatting)
+    monkeypatch.setattr("onyx.chat.presentation.MessageRenderer", fail_formatting)
     response = project_response(run.snapshot(), response_id=42, tool_ids={})
     assert response.response is not None
     assert messages_from_items(response.response.items)[-1].text == "Accepted answer"
@@ -328,48 +298,79 @@ def test_formatting_failure_keeps_accepted_response(
     )
 
 
-def test_repeated_tool_snapshot_does_not_split_later_reasoning() -> None:
-    renderer = PacketRenderer(
-        RenderConfig(), PacketIdentity(response_id=42, run_id="run", message_id="run:0")
-    )
-    message = AssistantMessage(
-        content=[
-            ToolCall(id="call", name="search", arguments={}),
-            ThinkingContent(text="First"),
-        ]
-    )
-    operation = OperationSnapshot(
-        step_index=0, message_index=0, status=RunStatus.RUNNING
-    )
-    packets = renderer.consume_items(
-        build_response_items("run", [message], [operation])
-    )
-    message.content[1] = ThinkingContent(text="First, then second")
-    packets.extend(
-        renderer.consume_items(build_response_items("run", [message], [operation]))
-    )
-    assert renderer.reasoning == "First, then second"
-    assert sum(isinstance(packet.obj, ReasoningStart) for packet in packets) == 1
-    assert not any(isinstance(packet.obj, ReasoningDone) for packet in packets)
-    packets.extend(renderer.finish(RunStatus.CANCELLED))
-    assert sum(isinstance(packet.obj, ReasoningDone) for packet in packets) == 1
-
-
 @pytest.mark.parametrize("status", [RunStatus.CANCELLED, RunStatus.ERROR])
 def test_interrupted_item_stream_flushes_buffered_citation_like_reload(
     status: RunStatus,
 ) -> None:
     message = AssistantMessage(content=[TextContent(text="See [1")])
-    operation = OperationSnapshot(
-        step_index=0, message_index=0, status=RunStatus.RUNNING
-    )
-    config = RenderConfig(citations=DynamicCitationProcessor())
     identity = PacketIdentity(response_id=42, run_id="run", message_id="run:0")
-    live = PacketRenderer(config.model_copy(deep=True), identity)
-    live.consume_items(build_response_items("run", [message], [operation]))
-    live.finish(status)
-    operation.status = status
-    saved = PacketRenderer(config.model_copy(deep=True), identity)
-    saved.consume_items(build_response_items("run", [message], [operation]))
+    live = MessageRenderer(
+        MessageRendering(citation_mode=CitationMode.HYPERLINK), {}, identity
+    )
+    live.consume(TextDeltaEvent(message=message, content_index=0, text="See [1"))
+    live_packets = live.finish(status)
+    saved = MessageRenderer(
+        MessageRendering(citation_mode=CitationMode.HYPERLINK), {}, identity
+    )
+    saved_packets = saved.saved(
+        build_response_items(
+            "run",
+            [message],
+            [OperationSnapshot(step_index=0, message_index=0, status=status)],
+        )
+    )
     assert live.answer == saved.answer == "See [1"
+    assert [
+        p
+        for p in live_packets
+        if isinstance(p.obj, ItemUpdate) and p.obj.item.status == status
+    ] == saved_packets
     assert live.finish(status) == []
+
+
+def test_complete_only_model_stream_publishes_answer_and_demotes_earlier_text() -> None:
+    responses = iter(
+        [
+            AssistantMessage(content=[TextContent(text="Checking")]),
+            AssistantMessage(content=[TextContent(text="The answer")]),
+        ]
+    )
+    output: Queue[Packet] = Queue()
+    presenter = ResponsePresenter(Emitter(output.put_nowait, response_id=42))
+    agent = Agent(
+        FakeModelClient(lambda _request, _signal: next(responses)),
+        after_step=lambda step: step.message.text != "The answer",
+    )
+    run_agent(agent, max_steps=2, listener=presenter.consume)
+    items: dict[str, TextItem] = {}
+    for packet in output.queue:
+        if (
+            packet.identity
+            and isinstance(packet.obj, ItemUpdate)
+            and isinstance(packet.obj.item, TextItem)
+        ):
+            items[packet.identity.message_id] = packet.obj.item
+    assert [(item.text, item.purpose, item.status) for item in items.values()] == [
+        ("Checking", TextPurpose.COMMENTARY, RunStatus.COMPLETE),
+        ("The answer", TextPurpose.ANSWER, RunStatus.COMPLETE),
+    ]
+
+
+def test_accepted_message_clears_superseded_streamed_text() -> None:
+    identity = PacketIdentity(response_id=42, run_id="run", message_id="run:0")
+    renderer = MessageRenderer(MessageRendering(), {}, identity)
+    renderer.consume(
+        TextDeltaEvent(message=AssistantMessage(), content_index=0, text="preview")
+    )
+    final = renderer.complete(
+        AssistantMessage(content=[ToolCall(id="call", name="echo", arguments={})])
+    )
+    text = [
+        packet.obj.item
+        for packet in final
+        if isinstance(packet.obj, ItemUpdate) and isinstance(packet.obj.item, TextItem)
+    ]
+    assert len(text) == 1
+    assert text[0].text == ""
+    assert text[0].status == RunStatus.COMPLETE
+    assert text[0].purpose == TextPurpose.COMMENTARY

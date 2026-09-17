@@ -4,11 +4,8 @@
 // Web falls back to react-icons for two slots, against its own icon rule; mobile substitutes the
 // Onyx glyph `chat/tools.ts` already assigns — `FiTool` → `cpu` (its custom-tool fallback),
 // `FiList` → `text-lines-small`.
-import {
-  PacketType,
-  type Packet,
-  type SearchToolStart,
-} from "@/chat/streamingModels";
+import { ResponseItem } from "@/chat/streamingModels";
+import { firstTool } from "@/chat/responseItems";
 import SvgBookOpen from "@/icons/book-open";
 import SvgCircle from "@/icons/circle";
 import SvgCode from "@/icons/code";
@@ -23,37 +20,30 @@ import SvgTextLinesSmall from "@/icons/text-lines-small";
 import SvgUser from "@/icons/user";
 import type { IconFunctionComponent } from "@/icons/types";
 
-export function getToolIcon(packets: Packet[]): IconFunctionComponent {
-  const firstPacket = packets[0];
-  if (!firstPacket) return SvgCircle;
-
-  switch (firstPacket.obj.type) {
-    case PacketType.SEARCH_TOOL_START:
-      // No search-state reducer yet (it lands with the search phase); the start packet already
-      // carries the only field this branch reads.
-      return (firstPacket.obj as SearchToolStart).is_internet_search
-        ? SvgGlobe
-        : SvgSearch;
-    case PacketType.PYTHON_TOOL_START:
+export function getToolIcon(items: ResponseItem[]): IconFunctionComponent {
+  const content = items[0]?.content;
+  if (content?.kind === "reasoning") return SvgSlowTime;
+  if (content?.kind === "text" && content.purpose === "plan")
+    return SvgTextLinesSmall;
+  switch (firstTool(items)?.name) {
+    case "internal_search":
+      return SvgSearch;
+    case "web_search":
+      return SvgGlobe;
+    case "python":
+    case "run_python":
       return SvgTerminalSmall;
-    case PacketType.FETCH_TOOL_START:
+    case "open_url":
       return SvgLink;
-    case PacketType.CUSTOM_TOOL_START:
-      return SvgCpu;
-    case PacketType.IMAGE_GENERATION_TOOL_START:
+    case "generate_image":
       return SvgImage;
-    case PacketType.DEEP_RESEARCH_PLAN_START:
-      return SvgTextLinesSmall;
-    case PacketType.RESEARCH_AGENT_START:
+    case "research_agent":
       return SvgUser;
-    case PacketType.CODING_AGENT_START:
+    case "coding_agent":
       return SvgCode;
-    case PacketType.REASONING_START:
-      return SvgSlowTime;
-    case PacketType.MEMORY_TOOL_START:
-    case PacketType.MEMORY_TOOL_NO_ACCESS:
+    case "add_memory":
       return SvgBookOpen;
     default:
-      return SvgCircle;
+      return firstTool(items) ? SvgCpu : SvgCircle;
   }
 }

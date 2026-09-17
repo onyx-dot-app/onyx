@@ -1,23 +1,22 @@
 import { describe, expect, it } from "@jest/globals";
 import { renderHook } from "@testing-library/react-native";
 
-import { PacketType } from "@/chat/streamingModels";
 import { TurnGroup } from "@/chat/timeline/transformers";
 import { useTimelineMetrics } from "@/hooks/timeline/useTimelineMetrics";
 
-import { makePacket, makeStep, makeTurn } from "./testHelpers";
+import { makeItem, makeStep, makeTurn } from "./testHelpers";
 
 function run(turnGroups: TurnGroup[], userStopped = false) {
   return renderHook(() => useTimelineMetrics(turnGroups, userStopped)).result
     .current;
 }
 
-const reasoning = makeStep(0, 0, [makePacket(PacketType.REASONING_START)]);
+const reasoning = makeStep(0, 0, [makeItem("reasoning")]);
 const researchAgent = makeStep(1, 0, [
-  makePacket(PacketType.RESEARCH_AGENT_START, { turn_index: 1 }),
+  makeItem("research_agent", { turn_index: 1 }),
 ]);
 const codingAgent = makeStep(1, 0, [
-  makePacket(PacketType.CODING_AGENT_START, { turn_index: 1 }),
+  makeItem("coding_agent", { turn_index: 1 }),
 ]);
 
 describe("useTimelineMetrics", () => {
@@ -64,8 +63,8 @@ describe("useTimelineMetrics", () => {
 
   it("counts every step of a parallel turn", () => {
     const parallel = makeTurn(0, [
-      makeStep(0, 0, [makePacket(PacketType.SEARCH_TOOL_START)]),
-      makeStep(0, 1, [makePacket(PacketType.PYTHON_TOOL_START)]),
+      makeStep(0, 0, [makeItem("internal_search")]),
+      makeStep(0, 1, [makeItem("run_python")]),
     ]);
     expect(run([parallel]).totalSteps).toBe(2);
   });

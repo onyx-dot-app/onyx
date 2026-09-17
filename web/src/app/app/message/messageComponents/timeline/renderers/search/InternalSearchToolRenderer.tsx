@@ -1,6 +1,6 @@
 import { useLocale, useTranslations } from "next-intl";
 import { SvgSearch, SvgSearchMenu } from "@opal/icons";
-import { SearchToolPacket } from "@/app/app/services/streamingModels";
+import { ResponseItem } from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,
   RenderType,
@@ -8,7 +8,10 @@ import {
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { OnyxDocument } from "@/lib/search/types";
 import { ValidSources } from "@/lib/types";
-import { SearchChipList, SourceInfo } from "./SearchChipList";
+import {
+  SearchChipList,
+  SourceInfo,
+} from "@/app/app/message/messageComponents/timeline/renderers/search/SearchChipList";
 import {
   formatSearchHeader,
   constructCurrentSearchState,
@@ -17,7 +20,7 @@ import {
   INITIAL_RESULTS_TO_SHOW,
   RESULTS_PER_EXPANSION,
   getMetadataTags,
-} from "./searchStateUtils";
+} from "@/app/app/message/messageComponents/timeline/renderers/search/searchStateUtils";
 import Text from "@/refresh-components/texts/Text";
 
 const queryToSourceInfo = (query: string, index: number): SourceInfo => ({
@@ -51,11 +54,8 @@ const resultToSourceInfo = (doc: OnyxDocument): SourceInfo => ({
  *              No StepContainer wrapper. Used for parallel streaming preview.
  * - INLINE: Phase-based (queries -> results) for collapsed streaming view.
  */
-export const InternalSearchToolRenderer: MessageRenderer<
-  SearchToolPacket,
-  {}
-> = ({
-  packets,
+export const InternalSearchToolRenderer: MessageRenderer<ResponseItem, {}> = ({
+  items,
   onComplete,
   animate,
   stopPacketSeen,
@@ -64,7 +64,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
 }) => {
   const t = useTranslations("chat.messages.timeline");
   const locale = useLocale();
-  const searchState = constructCurrentSearchState(packets);
+  const searchState = constructCurrentSearchState(items);
   const { queries, results, sourceFilters, timeFilter, isComplete } =
     searchState;
 
@@ -81,7 +81,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
     locale
   );
 
-  if (queries.length === 0) {
+  if (queries.length === 0 && !hasResults && !isComplete) {
     return children([
       {
         icon: SvgSearchMenu,
@@ -94,7 +94,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
   }
 
   // HIGHLIGHT mode: header embedded in content, no StepContainer
-  if (isHighlight) {
+  if (isHighlight && hasResults) {
     return children([
       {
         icon: null,
@@ -136,7 +136,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
   }
 
   // INLINE mode: dynamic phase-based content for collapsed streaming view
-  if (isInline) {
+  if (isInline || isHighlight) {
     // Querying phase: show queries
     if (!hasResults) {
       return children([
@@ -219,7 +219,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
             />
           )}
 
-          {(results.length > 0 || queries.length > 0) && (
+          {(results.length > 0 || queries.length > 0 || isComplete) && (
             <>
               {!isCompact && (
                 <Text as="p" mainUiMuted text04>

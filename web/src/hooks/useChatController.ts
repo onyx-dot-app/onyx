@@ -6,6 +6,7 @@ import {
   nameChatSession,
   setPreferredResponse,
   updateLlmOverrideForChatSession,
+  createChatSession,
 } from "@/app/app/services/lib";
 import {
   applyPreferredResponse,
@@ -16,7 +17,11 @@ import {
 } from "@/app/app/message/multiModel";
 import { getMaxSelectedDocumentTokens } from "@/lib/projects/svc";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
-import { StreamStopInfo } from "@/lib/search/types";
+import {
+  StreamStopInfo,
+  OnyxDocument,
+  StreamStopReason,
+} from "@/lib/search/types";
 import type { SourceMetadata } from "@/lib/search/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "next";
@@ -32,7 +37,6 @@ import {
 import { MinimalAgent } from "@/lib/agents/types";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
-import { OnyxDocument } from "@/lib/search/types";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import {
   BackendMessage,
@@ -49,7 +53,6 @@ import {
   ToolCallMetadata,
   UserKnowledgeFilePacket,
 } from "@/app/app/interfaces";
-import { StreamStopReason } from "@/lib/search/types";
 import { createChatSession } from "@/app/app/services/lib";
 import {
   getFinalLLM,
@@ -83,7 +86,7 @@ import {
   useCurrentChatState,
   useCurrentMessageHistory,
 } from "@/app/app/stores/useChatSessionStore";
-import { Packet, MessageStart } from "@/app/app/services/streamingModels";
+import { Packet } from "@/app/app/services/streamingModels";
 import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { ProjectFile, useProjectsContext } from "@/lib/projects/providers";
@@ -1289,6 +1292,12 @@ export default function useChatController({
               continue;
             }
 
+            if ("reserved_assistant_message_id" in packet) {
+              singleModelDirty = true;
+              pendingFlush = true;
+              continue;
+            }
+
             if (Object.hasOwn(packet, "user_files")) {
               const userFiles = (packet as UserKnowledgeFilePacket).user_files;
               // Ensure files are unique by id
@@ -1393,14 +1402,13 @@ export default function useChatController({
               const packetObj = typedPacket.obj;
 
               if (isMultiModel) {
-                // Multi-model: route packet by placement.model_index.
+                // Multi-model: route packet by model_index.
                 // OverallStop (type "stop") has model_index=null — it's a
                 // global terminal packet that must be delivered to ALL
                 // models so each panel's AgentMessage sees the stop and
                 // exits "Thinking..." state.
                 const isGlobalStop =
-                  packetObj.type === "stop" &&
-                  typedPacket.placement?.model_index == null;
+                  packetObj.type === "stop" && typedPacket.model_index == null;
 
                 if (isGlobalStop) {
                   for (let mi = 0; mi < packetsPerModel.length; mi++) {
@@ -1412,7 +1420,7 @@ export default function useChatController({
                   }
                 }
 
-                const modelIndex = typedPacket.placement?.model_index ?? 0;
+                const modelIndex = typedPacket.model_index ?? 0;
                 if (
                   !isGlobalStop &&
                   modelIndex >= 0 &&
@@ -1423,21 +1431,22 @@ export default function useChatController({
                     dirtyModelIndices.add(modelIndex);
                   }
 
-                  if (packetObj.type === "citation_info") {
-                    const citationInfo = packetObj as {
-                      type: "citation_info";
-                      citation_number: number;
-                      document_id: string;
-                    };
+                  if (
+                    packetObj.type === "item_update" &&
+                    packetObj.item.kind === "text"
+                  ) {
+                    const item = packetObj.item;
                     citationsPerModel[modelIndex] = {
                       ...citationsPerModel[modelIndex],
-                      [citationInfo.citation_number]: citationInfo.document_id,
+                      ...Object.fromEntries(
+                        item.citations.map((citation) => [
+                          citation.citation_number,
+                          citation.document_id,
+                        ])
+                      ),
                     };
-                  } else if (packetObj.type === "message_start") {
-                    const messageStart = packetObj as MessageStart;
-                    if (messageStart.final_documents) {
-                      documentsPerModel[modelIndex] =
-                        messageStart.final_documents;
+                    if (item.documents.length) {
+                      documentsPerModel[modelIndex] = item.documents;
                       if (modelIndex === 0 && initialAssistantNodes[0]) {
                         updateSelectedNodeForDocDisplay(
                           frozenSessionId,
@@ -1453,20 +1462,22 @@ export default function useChatController({
                 packetsVersion++;
                 singleModelDirty = true;
 
-                if (packetObj.type === "citation_info") {
-                  const citationInfo = packetObj as {
-                    type: "citation_info";
-                    citation_number: number;
-                    document_id: string;
-                  };
+                if (
+                  packetObj.type === "item_update" &&
+                  packetObj.item.kind === "text"
+                ) {
+                  const item = packetObj.item;
                   citations = {
                     ...citations,
-                    [citationInfo.citation_number]: citationInfo.document_id,
+                    ...Object.fromEntries(
+                      item.citations.map((citation) => [
+                        citation.citation_number,
+                        citation.document_id,
+                      ])
+                    ),
                   };
-                } else if (packetObj.type === "message_start") {
-                  const messageStart = packetObj as MessageStart;
-                  if (messageStart.final_documents) {
-                    documents = messageStart.final_documents;
+                  if (item.documents.length) {
+                    documents = item.documents;
                     updateSelectedNodeForDocDisplay(
                       frozenSessionId,
                       initialAgentNode.nodeId

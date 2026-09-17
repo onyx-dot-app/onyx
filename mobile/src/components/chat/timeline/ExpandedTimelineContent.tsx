@@ -1,7 +1,7 @@
 import { memo } from "react";
 import { View } from "react-native";
 
-import { isCodingAgentPackets } from "@/chat/timeline/packetHelpers";
+import { isCodingAgentItems } from "@/chat/timeline/itemHelpers";
 import type { TurnGroup } from "@/chat/timeline/transformers";
 import type { StopReason } from "@/chat/streamingModels";
 import type { FullChatState } from "@/components/chat/renderers/timelineContract";
@@ -41,7 +41,7 @@ export const ExpandedTimelineContent = memo(function ExpandedTimelineContent({
         // Coding agents always take the tab chrome, so one looks the same as several side by side.
         const renderAsParallelTabs =
           turnGroup.isParallel ||
-          turnGroup.steps.some((step) => isCodingAgentPackets(step.packets));
+          turnGroup.steps.some((step) => isCodingAgentItems(step.items));
 
         if (renderAsParallelTabs) {
           return (

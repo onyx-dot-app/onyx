@@ -80,12 +80,6 @@ from onyx.tools.models import (
     ChatMinimalTextMessage,
     ToolCallException,
 )
-from onyx.tools.progress import (
-    SearchDocuments,
-    SearchFilters,
-    SearchQueries,
-    SearchStarted,
-)
 from onyx.tools.tool_implementations.search.constants import (
     KEYWORD_QUERY_HYBRID_ALPHA,
     LLM_KEYWORD_QUERY_WEIGHT,
@@ -698,8 +692,9 @@ class SearchTool(Tool):
         memory = context.user_memory_context
         if memory is not None and not context.inject_memories_in_prompt:
             memory = memory.without_memories()
-        if update is not None:
-            update(ToolProgress(details=SearchStarted()))
+        search_output = SearchDocsResponse(
+            search_docs=[], citation_mapping={}, queries=list(llm_queries)
+        )
         overall_start_time = time.time()
 
         # Initialize timing variables (in case of early exceptions)
@@ -871,19 +866,11 @@ class SearchTool(Tool):
             else []
         )
         time_filter = expansion.time_filter
-        if emitted_sources or time_filter is not None:
-            if update is not None:
-                update(
-                    ToolProgress(
-                        details=SearchFilters(
-                            sources=emitted_sources,
-                            time_filter_start=time_filter.start
-                            if time_filter
-                            else None,
-                            time_filter_end=time_filter.end if time_filter else None,
-                        )
-                    )
-                )
+        search_output.sources = emitted_sources
+        search_output.time_filter_start = time_filter.start if time_filter else None
+        search_output.time_filter_end = time_filter.end if time_filter else None
+        if update is not None:
+            update(ToolProgress(details=search_output.model_copy(deep=True)))
 
         queries_run = list(
             dict.fromkeys(
@@ -968,14 +955,9 @@ class SearchTool(Tool):
             [q for q, _ in deduplicated_keyword_queries],
         )
 
+        search_output.queries = all_queries
         if update is not None:
-            update(
-                ToolProgress(
-                    details=SearchQueries(
-                        queries=all_queries,
-                    )
-                )
-            )
+            update(ToolProgress(details=search_output.model_copy(deep=True)))
 
         # Run all searches in parallel with appropriate hybrid_alpha values
         # Keyword queries use hybrid_alpha=0.2 (favor keyword search)
@@ -1064,6 +1046,10 @@ class SearchTool(Tool):
             )
             return ToolResult(
                 details=SearchDocsResponse(
+                    queries=search_output.queries,
+                    sources=search_output.sources,
+                    time_filter_start=search_output.time_filter_start,
+                    time_filter_end=search_output.time_filter_end,
                     search_docs=[],
                     citation_mapping={},
                     displayed_docs=None,
@@ -1132,15 +1118,10 @@ class SearchTool(Tool):
         final_ui_docs = convert_inference_sections_to_search_docs(
             selected_sections, is_internet=False
         )
-
+        search_output.search_docs = search_docs
+        search_output.displayed_docs = final_ui_docs
         if update is not None:
-            update(
-                ToolProgress(
-                    details=SearchDocuments(
-                        documents=final_ui_docs,
-                    )
-                )
-            )
+            update(ToolProgress(details=search_output.model_copy(deep=True)))
 
         # Create wrapper function to handle errors gracefully
         def expand_section_safe(
@@ -1225,6 +1206,10 @@ class SearchTool(Tool):
         return ToolResult(
             # Displayed documents can exceed the subset sent to the model.
             details=SearchDocsResponse(
+                queries=search_output.queries,
+                sources=search_output.sources,
+                time_filter_start=search_output.time_filter_start,
+                time_filter_end=search_output.time_filter_end,
                 search_docs=search_docs,
                 citation_mapping=citation_mapping,
                 displayed_docs=final_ui_docs,

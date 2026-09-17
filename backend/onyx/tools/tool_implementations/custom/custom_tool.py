@@ -5,10 +5,10 @@ from io import BytesIO, StringIO
 from typing import Any, Dict, List
 
 import requests
-from pydantic import TypeAdapter
+from pydantic import JsonValue, TypeAdapter
 from requests import JSONDecodeError
 
-from onyx.agents.tools import ToolInvocation, ToolProgress
+from onyx.agents.tools import ToolInvocation
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.models import ToolResult
@@ -19,15 +19,10 @@ from onyx.tools.models import (
     USER_EMAIL_PLACEHOLDER,
     USER_ID_PLACEHOLDER,
     CustomToolCallSummary,
+    CustomToolErrorInfo,
     CustomToolUserFileSnapshot,
     DynamicSchemaInfo,
     ToolCallException,
-)
-from onyx.tools.progress import (
-    CustomToolArguments,
-    CustomToolErrorInfo,
-    CustomToolOutput,
-    CustomToolStarted,
 )
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     REQUEST_BODY,
@@ -133,11 +128,6 @@ class CustomTool(Tool):
         return list(reader)
 
     def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        invocation.update(
-            ToolProgress(
-                details=CustomToolStarted(tool_name=self._name, tool_id=self._id)
-            )
-        )
         path_params = {}
         for path_param_schema in self._method_spec.get_path_param_schemas():
             param_name = path_param_schema["name"]
@@ -158,17 +148,6 @@ class CustomTool(Tool):
                 query_params[query_param_schema["name"]] = invocation.arguments[
                     query_param_schema["name"]
                 ]
-
-        tool_args = {**path_params, **query_params}
-        if tool_args:
-            invocation.update(
-                ToolProgress(
-                    details=CustomToolArguments(
-                        tool_name=self._name,
-                        tool_args=tool_args,
-                    )
-                )
-            )
 
         request_body = invocation.arguments.get(REQUEST_BODY)
         url = self._method_spec.build_url(self._base_url, path_params, query_params)
@@ -193,10 +172,8 @@ class CustomTool(Tool):
                 response.status_code,
             )
 
-        tool_result: Any
+        tool_result: CustomToolUserFileSnapshot | JsonValue
         response_type: str
-        file_ids: List[str] | None = None
-        data: dict | list | str | int | float | bool | None = None
 
         if "text/csv" in content_type:
             file_ids = self._save_and_get_file_references(
@@ -214,35 +191,24 @@ class CustomTool(Tool):
 
         else:
             try:
-                tool_result = response.json()
+                tool_result = TypeAdapter(JsonValue).validate_python(response.json())
                 response_type = "json"
-                data = tool_result
             except JSONDecodeError:
                 logger.exception(
                     "Failed to parse response as JSON for tool '%s'", self._name
                 )
                 tool_result = response.text
                 response_type = "text"
-                data = tool_result
 
         logger.info(
             "Returning tool response for %s with type %s", self._name, response_type
         )
 
-        invocation.update(
-            ToolProgress(
-                details=CustomToolOutput(
-                    tool_name=self._name,
-                    tool_id=self._id,
-                    response_type=response_type,
-                    data=data,
-                    file_ids=file_ids,
-                    error=error_info,
-                )
-            )
+        content = (
+            TypeAdapter(CustomToolUserFileSnapshot | JsonValue)
+            .dump_json(tool_result)
+            .decode()
         )
-
-        content = json.dumps(tool_result)
 
         return ToolResult(
             details=CustomToolCallSummary(

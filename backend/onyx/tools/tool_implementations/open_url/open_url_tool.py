@@ -32,7 +32,6 @@ from onyx.tools.interface import (
     ToolContext,
 )
 from onyx.tools.models import ToolCallException
-from onyx.tools.progress import OpenUrlStarted, OpenUrlTargets, UrlDocuments
 from onyx.tools.tool_implementations.open_url.models import (
     FailedFetch,
     WebContentProvider,
@@ -522,7 +521,6 @@ class OpenURLTool(Tool):
         }
 
     def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
-        invocation.update(ToolProgress(details=OpenUrlStarted()))
         urls = _normalize_string_list(invocation.arguments.get(URLS_FIELD))
 
         if len(urls) > MAX_URLS_PER_CALL:
@@ -542,8 +540,6 @@ class OpenURLTool(Tool):
                     f'like: {{"urls": ["https://example.com"]}}'
                 ),
             )
-
-        invocation.update(ToolProgress(details=OpenUrlTargets(urls=urls)))
 
         with get_session_with_current_tenant() as db_session:
             url_to_doc_id: dict[str, str] = {}
@@ -698,8 +694,11 @@ class OpenURLTool(Tool):
         search_docs = convert_inference_sections_to_search_docs(
             inference_sections, is_internet=False
         )
-
-        invocation.update(ToolProgress(details=UrlDocuments(documents=search_docs)))
+        invocation.update(
+            ToolProgress(
+                details=SearchDocsResponse(search_docs=search_docs, citation_mapping={})
+            )
+        )
 
         # Note that with this call, some contents may be truncated or dropped so what the LLM sees may not be the entire set
         # That said, it is still the best experience to show all the docs that were fetched, even if the LLM on rare

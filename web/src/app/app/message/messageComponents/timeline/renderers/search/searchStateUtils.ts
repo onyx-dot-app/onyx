@@ -1,16 +1,13 @@
 import type { TimelineTranslate } from "@/app/app/message/messageComponents/toolDisplayHelpers";
-import {
-  PacketType,
-  SearchToolPacket,
-  SearchToolStart,
-  SearchToolQueriesDelta,
-  SearchToolFilterDelta,
-  SearchToolDocumentsDelta,
-  SectionEnd,
-} from "@/app/app/services/streamingModels";
+import { ResponseItem } from "@/app/app/services/streamingModels";
 import { OnyxDocument } from "@/lib/search/types";
 import { getSourceDisplayName, isValidSource } from "@/lib/sources";
 import { ValidSources } from "@/lib/types";
+import {
+  firstTool,
+  isComplete as itemsComplete,
+  toolMetadata,
+} from "@/app/app/services/responseItems";
 
 export const MAX_TITLE_LENGTH = 25;
 
@@ -118,93 +115,31 @@ export const formatSearchHeader = (
     : header;
 };
 
-/** Constructs the current search state from search tool packets. */
-export const constructCurrentSearchState = (
-  packets: SearchToolPacket[]
-): SearchState => {
-  const searchStart = packets.find(
-    (packet) => packet.obj.type === PacketType.SEARCH_TOOL_START
-  )?.obj as SearchToolStart | null;
-
-  const queryDeltas = packets
-    .filter(
-      (packet) => packet.obj.type === PacketType.SEARCH_TOOL_QUERIES_DELTA
-    )
-    .map((packet) => packet.obj as SearchToolQueriesDelta);
-
-  const filterDeltas = packets
-    .filter((packet) => packet.obj.type === PacketType.SEARCH_TOOL_FILTER_DELTA)
-    .map((packet) => packet.obj as SearchToolFilterDelta);
-
-  // Time rides on the same filter delta; take the latest one carrying a bound.
-  const timeDelta = filterDeltas
-    .filter(
-      (delta) =>
-        delta.time_filter_start != null || delta.time_filter_end != null
-    )
-    .at(-1);
-  const timeFilter: TimeFilter | null = timeDelta
-    ? {
-        start: timeDelta.time_filter_start ?? null,
-        end: timeDelta.time_filter_end ?? null,
-      }
-    : null;
-
-  const documentDeltas = packets
-    .filter(
-      (packet) => packet.obj.type === PacketType.SEARCH_TOOL_DOCUMENTS_DELTA
-    )
-    .map((packet) => packet.obj as SearchToolDocumentsDelta);
-
-  const searchEnd = packets.find(
-    (packet) =>
-      packet.obj.type === PacketType.SECTION_END ||
-      packet.obj.type === PacketType.ERROR
-  )?.obj as SectionEnd | null;
-
-  // Deduplicate queries using Set for O(n) instead of indexOf which is O(n²)
-  const seenQueries = new Set<string>();
-  const queries = queryDeltas
-    .flatMap((delta) => delta?.queries || [])
-    .filter((query) => {
-      if (seenQueries.has(query)) return false;
-      seenQueries.add(query);
-      return true;
-    });
-
-  // Deduped union of every connector a filter was applied to this search block.
-  const seenSources = new Set<string>();
-  const sourceFilters = filterDeltas
-    .flatMap((delta) => delta?.sources || [])
-    .filter((source) => {
-      if (seenSources.has(source)) return false;
-      seenSources.add(source);
-      return true;
-    });
-
-  const seenDocIds = new Set<string>();
-  const results = documentDeltas
-    .flatMap((delta) => delta?.documents || [])
-    .filter((doc) => {
-      if (!doc || !doc.document_id) return false;
-      if (seenDocIds.has(doc.document_id)) return false;
-      seenDocIds.add(doc.document_id);
-      return true;
-    });
-
-  const isSearching = Boolean(searchStart && !searchEnd);
-  const hasResults = results.length > 0;
-  const isComplete = Boolean(searchStart && searchEnd);
-  const isInternetSearch = searchStart?.is_internet_search || false;
-
+export function constructCurrentSearchState(
+  items: ResponseItem[]
+): SearchState {
+  const tool = firstTool(items);
+  const result = toolMetadata(items, "search_result").at(-1);
+  const argumentQueries = tool?.arguments.queries;
+  const queries = result?.queries.length
+    ? result.queries
+    : Array.isArray(argumentQueries)
+      ? argumentQueries.filter(
+          (query): query is string => typeof query === "string"
+        )
+      : [];
+  const results = result?.displayed_docs ?? result?.search_docs ?? [];
   return {
-    queries,
+    queries: [...new Set(queries)],
     results,
-    sourceFilters,
-    timeFilter,
-    isSearching,
-    hasResults,
-    isComplete,
-    isInternetSearch,
+    sourceFilters: result?.sources ?? [],
+    timeFilter:
+      result && (result.time_filter_start || result.time_filter_end)
+        ? { start: result.time_filter_start, end: result.time_filter_end }
+        : null,
+    isSearching: !!tool && !itemsComplete(items),
+    hasResults: results.length > 0,
+    isComplete: itemsComplete(items),
+    isInternetSearch: tool?.name === "web_search",
   };
-};
+}

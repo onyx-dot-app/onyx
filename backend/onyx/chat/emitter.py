@@ -1,6 +1,5 @@
 from collections.abc import Callable
 
-from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import Packet
 
 
@@ -18,11 +17,4 @@ class Emitter:
         self._publish = publish
 
     def emit(self, packet: Packet) -> None:
-        base = packet.placement or Placement(turn_index=0)
-        self._publish(
-            Packet(
-                placement=base.model_copy(update={"model_index": self._model_idx}),
-                obj=packet.obj,
-                identity=packet.identity,
-            )
-        )
+        self._publish(packet.model_copy(update={"model_index": self._model_idx}))

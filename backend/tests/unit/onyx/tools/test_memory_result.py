@@ -14,7 +14,7 @@ from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import AssistantMessage, Message, ToolCall, ToolResultMessage
 from onyx.tools.interface import ToolContext
-from onyx.tools.progress import MemoryUpdated
+from onyx.tools.models import MemoryUpdated
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 
 
@@ -94,4 +94,5 @@ def test_memory_outcome_is_final_before_serialization(
     )
     projected = project_tool_artifacts(snapshot, {"memory": 1})
     assert projected.tool_calls[0].tool_call_response == result.text
+    assert projected.tool_calls[0].result_metadata == result.details
     assert write.call_count == (0 if outcome in {"incognito", "missing_user"} else 1)

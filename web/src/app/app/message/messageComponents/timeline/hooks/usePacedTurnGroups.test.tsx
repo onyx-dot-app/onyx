@@ -5,66 +5,39 @@
  * Uses @testing-library/react's renderHook with fake timers.
  */
 import { renderHook, act } from "@testing-library/react";
-import { PacketType, Packet } from "@/app/app/services/streamingModels";
-import { TurnGroup, TransformedStep } from "../transformers";
-import { GroupedPacket } from "./packetProcessor";
-import { usePacedTurnGroups } from "./usePacedTurnGroups";
+import {
+  TurnGroup,
+  TransformedStep,
+} from "@/app/app/message/messageComponents/timeline/transformers";
+import { GroupedItem } from "@/app/app/message/messageComponents/timeline/hooks/packetProcessor";
+import { usePacedTurnGroups } from "@/app/app/message/messageComponents/timeline/hooks/usePacedTurnGroups";
+import {
+  toolItem,
+  answerItem,
+} from "@/app/app/message/messageComponents/timeline/hooks/__tests__/testHelpers";
 
-// ============================================================================
-// Test Helpers
-// ============================================================================
-
-/**
- * Create a mock TransformedStep with a TOOL_START packet
- */
 function createStep(
   turnIndex: number,
   tabIndex: number,
-  packetType: PacketType = PacketType.SEARCH_TOOL_START
+  name = "internal_search"
 ): TransformedStep {
   return {
     key: `${turnIndex}-${tabIndex}`,
     turnIndex,
     tabIndex,
-    packets: [
-      {
-        placement: { turn_index: turnIndex, tab_index: tabIndex },
-        obj: { type: packetType },
-      } as Packet,
-    ],
+    items: [toolItem(turnIndex, tabIndex, name)],
   };
 }
-
-/**
- * Create a TurnGroup from steps
- */
 function createTurnGroup(steps: TransformedStep[]): TurnGroup {
-  if (steps.length === 0) throw new Error("TurnGroup needs at least one step");
-  return {
-    turnIndex: steps[0]!.turnIndex,
-    steps,
-    isParallel: steps.length > 1,
-  };
+  const first = steps[0];
+  if (!first) throw new Error("TurnGroup needs at least one step");
+  return { turnIndex: first.turnIndex, steps, isParallel: steps.length > 1 };
 }
-
-/**
- * Create a mock display group (MESSAGE_START)
- */
-function createDisplayGroup(turnIndex: number): GroupedPacket {
+function createDisplayGroup(turnIndex: number): GroupedItem {
   return {
     turn_index: turnIndex,
     tab_index: 0,
-    packets: [
-      {
-        placement: { turn_index: turnIndex, tab_index: 0 },
-        obj: {
-          type: PacketType.MESSAGE_START,
-          id: "msg-1",
-          content: "",
-          final_documents: null,
-        },
-      } as Packet,
-    ],
+    items: [answerItem(turnIndex)],
   };
 }
 
@@ -73,6 +46,25 @@ function createDisplayGroup(turnIndex: number): GroupedPacket {
 // ============================================================================
 
 describe("usePacedTurnGroups", () => {
+  it("shows resumed tool steps immediately while the response is still running", () => {
+    const groups = [
+      createTurnGroup([createStep(0, 0)]),
+      createTurnGroup([createStep(1, 0, "open_url")]),
+    ];
+    const { result, rerender } = renderHook(
+      ({ groups }) => usePacedTurnGroups(groups, [], false, 1, false, true),
+      { initialProps: { groups } }
+    );
+    expect(result.current.pacedTurnGroups).toEqual(groups);
+
+    const updatedGroups = [
+      ...groups,
+      createTurnGroup([createStep(2, 0, "web_search")]),
+    ];
+    rerender({ groups: updatedGroups });
+    expect(result.current.pacedTurnGroups).toEqual(updatedGroups);
+  });
+
   beforeEach(() => {
     jest.useFakeTimers();
   });
@@ -263,7 +255,7 @@ describe("usePacedTurnGroups", () => {
     });
 
     test("same-type steps are paced with delay (NOT batched)", () => {
-      const step1 = createStep(0, 0, PacketType.SEARCH_TOOL_START);
+      const step1 = createStep(0, 0, "internal_search");
 
       const { result, rerender } = renderHook(
         ({ turnGroups }) => usePacedTurnGroups(turnGroups, [], false, 1, false),
@@ -274,8 +266,8 @@ describe("usePacedTurnGroups", () => {
       expect(result.current.pacedTurnGroups.length).toBe(1);
 
       // Add two more SEARCH_TOOL steps (same type as first)
-      const step2 = createStep(1, 0, PacketType.SEARCH_TOOL_START);
-      const step3 = createStep(2, 0, PacketType.SEARCH_TOOL_START);
+      const step2 = createStep(1, 0, "internal_search");
+      const step3 = createStep(2, 0, "internal_search");
       rerender({
         turnGroups: [
           createTurnGroup([step1]),
@@ -301,7 +293,7 @@ describe("usePacedTurnGroups", () => {
     });
 
     test("different-type steps are paced with delay", () => {
-      const step1 = createStep(0, 0, PacketType.SEARCH_TOOL_START);
+      const step1 = createStep(0, 0, "internal_search");
 
       const { result, rerender } = renderHook(
         ({ turnGroups }) => usePacedTurnGroups(turnGroups, [], false, 1, false),
@@ -312,7 +304,7 @@ describe("usePacedTurnGroups", () => {
       expect(result.current.pacedTurnGroups.length).toBe(1);
 
       // Add step of different type
-      const step2 = createStep(1, 0, PacketType.PYTHON_TOOL_START);
+      const step2 = createStep(1, 0, "run_python");
       rerender({
         turnGroups: [createTurnGroup([step1]), createTurnGroup([step2])],
       });
@@ -537,16 +529,10 @@ describe("usePacedTurnGroups", () => {
 
       const firstGroupRef = result.current.pacedTurnGroups[0];
 
-      // Simulate streaming: step2 gets more packets (new object with longer packets array)
+      // Simulate streaming: step2 gets another item
       const step2Updated: TransformedStep = {
         ...step2,
-        packets: [
-          ...step2.packets,
-          {
-            placement: { turn_index: 1, tab_index: 0 },
-            obj: { type: PacketType.SEARCH_TOOL_START },
-          } as Packet,
-        ],
+        items: [...step2.items, toolItem(1, 1)],
       };
       rerender({
         turnGroups: [createTurnGroup([step1]), createTurnGroup([step2Updated])],
@@ -555,7 +541,7 @@ describe("usePacedTurnGroups", () => {
 
       // First group (completed) should keep the same object reference
       expect(result.current.pacedTurnGroups[0]).toBe(firstGroupRef);
-      // Second group changed (packets.length differs) — new reference
+      // Second group changed (items.length differs) — new reference
       expect(result.current.pacedTurnGroups.length).toBe(2);
     });
 
@@ -647,4 +633,28 @@ describe("usePacedTurnGroups", () => {
       expect(result.current.pacedTurnGroups.length).toBe(1);
     });
   });
+});
+
+test("propagates a terminal item replacement without adding a timeline item", () => {
+  const original = toolItem();
+  const step: TransformedStep = {
+    key: "0-0",
+    turnIndex: 0,
+    tabIndex: 0,
+    items: [original],
+  };
+  const { result, rerender } = renderHook(
+    ({ step }) =>
+      usePacedTurnGroups([createTurnGroup([step])], [], false, 1, false),
+    { initialProps: { step } }
+  );
+  expect(
+    result.current.pacedTurnGroups[0]?.steps[0]?.items[0]?.content.status
+  ).toBe("running");
+  const completed = {
+    ...original,
+    content: { ...original.content, status: "complete" as const },
+  };
+  rerender({ step: { ...step, items: [completed] } });
+  expect(result.current.pacedTurnGroups[0]?.steps[0]?.items[0]).toBe(completed);
 });

@@ -181,10 +181,6 @@ def use_mock_search_pipeline(
             return_value=[],
         ),
         patch(
-            "onyx.tools.tool_runner.run_functions_tuples_in_parallel",
-            new=run_functions_tuples_sequential,
-        ),
-        patch(
             "onyx.db.connector.check_connectors_exist",
             new=mock_check_connectors_exist,
         ),

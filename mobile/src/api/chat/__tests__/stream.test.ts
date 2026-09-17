@@ -7,14 +7,16 @@ import { isMessageIdInfo, isPacket, type StreamEvent } from "@/api/chat/stream";
 jest.mock("expo/fetch", () => ({ fetch: jest.fn() }));
 jest.mock("@/state/session", () => ({ getStoredServerUrl: () => null }));
 
-const wrappedPacket = {
-  placement: { turn_index: 0 },
-  obj: { type: "message_delta", content: "x" },
-} as unknown as StreamEvent;
-const rootIdInfo = {
+const wrappedPacket: StreamEvent = {
+  obj: {
+    type: "item_delta",
+    delta: { kind: "text", text: "x", citations: [] },
+  },
+};
+const rootIdInfo: StreamEvent = {
   user_message_id: 1,
   reserved_assistant_message_id: 2,
-} as unknown as StreamEvent;
+};
 
 describe("stream discriminators", () => {
   it("isPacket matches wrapped packets, not root control objects", () => {

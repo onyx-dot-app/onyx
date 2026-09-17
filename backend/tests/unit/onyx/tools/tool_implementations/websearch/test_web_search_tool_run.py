@@ -7,7 +7,6 @@ import pytest
 
 from onyx.agents.tools import ToolInvocation
 from onyx.llm.cancellation import CancellationSignal
-from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.interface import ToolContext
 from onyx.tools.models import ToolCallException
 from onyx.tools.tool_implementations.web_search.models import WebSearchResult
@@ -53,7 +52,6 @@ def _make_tool(mock_provider: Any) -> WebSearchTool:
 
 def _run(tool: WebSearchTool, queries: Any) -> list[str]:
     """Call tool.run() and return the list of query strings passed to provider.search."""
-    Placement(turn_index=0, tab_index=0)
     tool_context = ToolContext(next_citation_num=1)
     tool.run(
         invocation=ToolInvocation(
@@ -158,7 +156,6 @@ class TestWebSearchToolRunQueryCoercion:
         mock_provider = MagicMock()
         mock_provider.supports_site_filter = False
         tool = _make_tool(mock_provider)
-        Placement(turn_index=0, tab_index=0)
         tool_context = ToolContext(next_citation_num=1)
 
         with pytest.raises(ToolCallException) as exc_info:

@@ -283,6 +283,7 @@ const ChatUI = React.memo(
                     fullWidthChat={fullWidthChat}
                     rawPackets={message.packets}
                     packetCount={message.packetCount}
+                    skipReplayAnimation={message.skipReplayAnimation}
                     chatState={chatStateData}
                     nodeId={message.nodeId}
                     messageId={message.messageId}

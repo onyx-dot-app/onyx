@@ -4,7 +4,6 @@ from typing import Any
 from unittest.mock import patch
 from uuid import uuid4
 
-import pytest
 from fastapi_users.password import PasswordHelper
 from sqlalchemy.orm import Session
 
@@ -18,6 +17,7 @@ from onyx.db.llm import (
 from onyx.db.models import User
 from onyx.db.users import assign_user_to_default_groups__no_commit
 from onyx.llm.constants import LlmProviderNames
+from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.override_models import LLMOverride
 from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
@@ -26,15 +26,10 @@ from onyx.server.manage.llm.models import (
 from onyx.server.query_and_chat.chat_backend import create_new_chat_session
 from onyx.server.query_and_chat.models import (
     ChatSessionCreationRequest,
-    MessageResponseIDInfo,
 )
-from tests.external_dependency_unit.answer.stream_test_assertions import (
-    assert_answer_stream_part_correct,
-)
-from tests.external_dependency_unit.answer.stream_test_builder import StreamTestBuilder
 from tests.external_dependency_unit.answer.stream_test_utils import (
+    final_answer,
     submit_query,
-    tokenise,
 )
 from tests.external_dependency_unit.mock_llm import LLMAnswerResponse, MockLLM
 
@@ -100,14 +95,14 @@ def use_mock_llm() -> Generator[
         "provider": None,
     }
 
-    def mock_get_default_llm(*_args: Any, **_kwargs: Any) -> MockLLM:
+    def mock_get_default_llm(*_args: Any, **_kwargs: Any) -> LitellmLLM:
         call_tracker["get_default_llm_called"] = True
-        return mock_llm
+        return LitellmLLM(mock_llm)
 
-    def mock_get_llm(provider: str, *_args: Any, **_kwargs: Any) -> MockLLM:
+    def mock_get_llm(provider: str, *_args: Any, **_kwargs: Any) -> LitellmLLM:
         call_tracker["get_llm_called"] = True
         call_tracker["provider"] = provider
-        return mock_llm
+        return LitellmLLM(mock_llm)
 
     with (
         patch(
@@ -176,72 +171,24 @@ def test_user_sends_message_to_private_provider(
         )
 
         chat_session_id = chat_session.chat_session_id
-        answer_tokens_1 = tokenise("Hello, how are you?")
-        answer_tokens_2 = tokenise("I'm good, thank you!")
-
         with use_mock_llm() as (mock_llm, call_tracker):
-            handler = StreamTestBuilder(llm_controller=mock_llm)
-
-            # First message
-            handler.add_response(LLMAnswerResponse(answer_tokens=answer_tokens_1))
-            answer_stream = submit_query(
-                query="Hello, how are you?",
-                chat_session_id=chat_session_id,
-                user=admin_user,
-                llm_override=LLMOverride(
-                    model_provider="private-provider",
-                    model_version="claude-3-5-sonnet-20240620",
-                ),
-            )
-
-            assert_answer_stream_part_correct(
-                received=next(answer_stream),
-                expected=MessageResponseIDInfo(
-                    user_message_id=1,
-                    reserved_assistant_message_id=1,
-                ),
-            )
-
-            handler.expect_agent_response(
-                answer_tokens=answer_tokens_1,
-                turn_index=0,
-            ).run_and_validate(stream=answer_stream)
-
-            with pytest.raises(StopIteration):
-                next(answer_stream)
-
-            _assert_llm_calls(call_tracker, "google")
-            _reset_call_tracker(call_tracker)
-
-            # Second message
-            handler.add_response(LLMAnswerResponse(answer_tokens=answer_tokens_2))
-            answer_stream = submit_query(
-                query="I'm good, thank you!",
-                chat_session_id=chat_session_id,
-                user=admin_user,
-                llm_override=LLMOverride(
-                    model_provider="private-provider",
-                    model_version="claude-3-5-sonnet-20240620",
-                ),
-            )
-
-            assert_answer_stream_part_correct(
-                received=next(answer_stream),
-                expected=MessageResponseIDInfo(
-                    user_message_id=2,
-                    reserved_assistant_message_id=2,
-                ),
-            )
-
-            handler.expect_agent_response(
-                answer_tokens=answer_tokens_2,
-                turn_index=0,
-            ).run_and_validate(stream=answer_stream)
-
-            with pytest.raises(StopIteration):
-                next(answer_stream)
-
-            _assert_llm_calls(call_tracker, "google")
+            for answer in ["Hello, how are you?", "I am good, thank you!"]:
+                mock_llm.add_response(LLMAnswerResponse(answer_tokens=[answer]))
+                mock_llm.forward_till_end()
+                parts = list(
+                    submit_query(
+                        query=answer,
+                        chat_session_id=chat_session_id,
+                        user=admin_user,
+                        llm_override=LLMOverride(
+                            model_provider="private-provider",
+                            model_version="claude-3-5-sonnet-20240620",
+                        ),
+                    )
+                )
+                assert final_answer(parts) == answer
+                _assert_llm_calls(call_tracker, "google")
+                _reset_call_tracker(call_tracker)
 
     finally:
         _cleanup_provider(db_session, "public-provider")

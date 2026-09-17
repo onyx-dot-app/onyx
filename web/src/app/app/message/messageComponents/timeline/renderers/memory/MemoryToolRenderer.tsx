@@ -1,37 +1,28 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { MemoryToolPacket } from "@/app/app/services/streamingModels";
+import { ResponseItem } from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,
   RenderType,
 } from "@/app/app/message/messageComponents/interfaces";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
-import { constructCurrentMemoryState } from "./memoryStateUtils";
+import { constructCurrentMemoryState } from "@/app/app/message/messageComponents/timeline/renderers/memory/memoryStateUtils";
 import Text from "@/refresh-components/texts/Text";
 import { SvgEditBig, SvgMaximize2 } from "@opal/icons";
 import { cn } from "@opal/utils";
-import { Button } from "@opal/components";
+import { Button, useCreateModal } from "@opal/components";
 import MemoriesModal from "@/refresh-components/modals/MemoriesModal";
-import { useCreateModal } from "@opal/components";
 
-/**
- * MemoryToolRenderer - Renders memory tool execution steps
- *
- * States:
- * - Loading (start, no delta): "Saving memory..." with BlinkingBar
- * - Delta received: operation label + memory text
- * - Complete (SectionEnd): "Memory saved" / "Memory updated" + memory text
- * - No Access: "Memory tool disabled"
- */
-export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
-  packets,
+/** Show the saved memory and its operation from the tool result. */
+export const MemoryToolRenderer: MessageRenderer<ResponseItem, {}> = ({
+  items,
   stopPacketSeen,
   renderType,
   children,
 }) => {
   const t = useTranslations("chat.messages.timeline");
-  const memoryState = constructCurrentMemoryState(packets);
+  const memoryState = constructCurrentMemoryState(items);
   const {
     hasStarted,
     noAccess,

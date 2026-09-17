@@ -36,10 +36,8 @@ from onyx.tools.models import (
     ChatFile,
     LlmPythonExecutionResult,
     PythonExecutionFile,
-    PythonToolRichResponse,
     ToolCallException,
 )
-from onyx.tools.progress import PythonOutput, PythonStarted
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterClient,
     FileInput,
@@ -360,9 +358,6 @@ class PythonTool(Tool):
         code = parse_tool_arguments(PythonArguments, invocation.arguments).code
         chat_files = context.chat_files
 
-        # Emit start event with the code
-        invocation.update(ToolProgress(details=PythonStarted(code=code)))
-
         # Create Code Interpreter client — context manager ensures
         # session.close() is called on every exit path.
         with CodeInterpreterClient() as client:
@@ -407,13 +402,12 @@ class PythonTool(Tool):
                             stderr_parts.append(event.data)
                         invocation.update(
                             ToolProgress(
-                                details=PythonOutput(
-                                    stdout=(
-                                        event.data if event.stream == "stdout" else ""
-                                    ),
-                                    stderr=(
-                                        event.data if event.stream == "stderr" else ""
-                                    ),
+                                details=LlmPythonExecutionResult(
+                                    stdout="".join(stdout_parts),
+                                    stderr="".join(stderr_parts),
+                                    exit_code=None,
+                                    timed_out=False,
+                                    generated_files=[],
                                 )
                             )
                         )
@@ -440,7 +434,6 @@ class PythonTool(Tool):
 
                 # Handle generated files
                 generated_files: list[PythonExecutionFile] = []
-                generated_file_ids: list[str] = []
                 file_ids_to_cleanup: list[str] = []
                 file_store = get_default_file_store()
 
@@ -475,7 +468,6 @@ class PythonTool(Tool):
                                 file_link=build_full_frontend_file_url(onyx_file_id),
                             )
                         )
-                        generated_file_ids.append(onyx_file_id)
 
                         # Mark for cleanup
                         file_ids_to_cleanup.append(workspace_file.file_id)
@@ -503,12 +495,6 @@ class PythonTool(Tool):
                 # orphaned when the session ends, but the code interpreter cleans up
                 # stale files on its own TTL.
 
-                # Emit file_ids once files are processed
-                if generated_file_ids:
-                    invocation.update(
-                        ToolProgress(details=PythonOutput(file_ids=generated_file_ids))
-                    )
-
                 # Build result
                 result = LlmPythonExecutionResult(
                     stdout=truncated_stdout,
@@ -525,26 +511,14 @@ class PythonTool(Tool):
                 llm_response = adapter.dump_json(result).decode()
 
                 return ToolResult(
-                    details=PythonToolRichResponse(
-                        generated_files=generated_files,
-                    ),
+                    details=result,
                     content=llm_response,
+                    is_error=result.exit_code != 0,
                 )
 
             except Exception as e:
                 logger.error("Python execution failed: %s", e)
                 error_msg = str(e)
-
-                # Emit error delta
-                invocation.update(
-                    ToolProgress(
-                        details=PythonOutput(
-                            stdout="",
-                            stderr=error_msg,
-                            file_ids=[],
-                        )
-                    )
-                )
 
                 # Return error result
                 result = LlmPythonExecutionResult(
@@ -560,6 +534,4 @@ class PythonTool(Tool):
                 adapter = TypeAdapter(LlmPythonExecutionResult)
                 llm_response = adapter.dump_json(result).decode()
 
-                return ToolResult(
-                    content=llm_response,
-                )
+                return ToolResult(content=llm_response, details=result, is_error=True)

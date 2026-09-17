@@ -1,245 +1,40 @@
 import { OnyxDocument } from "@/lib/search/types";
 
-// Base interface for all streaming objects
-interface BaseObj {
-  type: string;
-}
-
-export enum PacketType {
-  OPERATION_STATUS = "operation_status",
-  MESSAGE_START = "message_start",
-  MESSAGE_DELTA = "message_delta",
-  MESSAGE_END = "message_end",
-
-  STOP = "stop",
-  SECTION_END = "section_end",
-  TOP_LEVEL_BRANCHING = "top_level_branching",
-  ERROR = "error",
-
-  // Specific tool packets
-  SEARCH_TOOL_START = "search_tool_start",
-  SEARCH_TOOL_QUERIES_DELTA = "search_tool_queries_delta",
-  SEARCH_TOOL_FILTER_DELTA = "search_tool_filter_delta",
-  SEARCH_TOOL_DOCUMENTS_DELTA = "search_tool_documents_delta",
-  IMAGE_GENERATION_TOOL_START = "image_generation_start",
-  IMAGE_GENERATION_TOOL_DELTA = "image_generation_final",
-  PYTHON_TOOL_START = "python_tool_start",
-  PYTHON_TOOL_DELTA = "python_tool_delta",
-  FETCH_TOOL_START = "open_url_start",
-  FETCH_TOOL_URLS = "open_url_urls",
-  FETCH_TOOL_DOCUMENTS = "open_url_documents",
-
-  // Tool call argument delta (streams tool args before tool executes)
-  TOOL_CALL_ARGUMENT_DELTA = "tool_call_argument_delta",
-
-  // Custom tool packets
-  CUSTOM_TOOL_START = "custom_tool_start",
-  CUSTOM_TOOL_ARGS = "custom_tool_args",
-  CUSTOM_TOOL_DELTA = "custom_tool_delta",
-
-  // File reader tool packets
-  FILE_READER_START = "file_reader_start",
-  FILE_READER_RESULT = "file_reader_result",
-  // Memory tool packets
-  MEMORY_TOOL_START = "memory_tool_start",
-  MEMORY_TOOL_DELTA = "memory_tool_delta",
-  MEMORY_TOOL_NO_ACCESS = "memory_tool_no_access",
-
-  // Reasoning packets
-  REASONING_START = "reasoning_start",
-  REASONING_DELTA = "reasoning_delta",
-  REASONING_DONE = "reasoning_done",
-
-  // Citation packets
-  CITATION_START = "citation_start",
-  CITATION_END = "citation_end",
-  // Backend sends individual citation_info packets during streaming
-  CITATION_INFO = "citation_info",
-
-  // Deep Research packets
-  DEEP_RESEARCH_PLAN_START = "deep_research_plan_start",
-  DEEP_RESEARCH_PLAN_DELTA = "deep_research_plan_delta",
-  RESEARCH_AGENT_START = "research_agent_start",
-  INTERMEDIATE_REPORT_START = "intermediate_report_start",
-  INTERMEDIATE_REPORT_DELTA = "intermediate_report_delta",
-  INTERMEDIATE_REPORT_CITED_DOCS = "intermediate_report_cited_docs",
-
-  // Coding Agent packets
-  CODING_AGENT_START = "coding_agent_start",
-  CODING_AGENT_THINKING_DELTA = "coding_agent_thinking_delta",
-  CODING_AGENT_FINAL = "coding_agent_final",
-
-  // Bash Tool packets
-  BASH_TOOL_START = "bash_tool_start",
-  BASH_TOOL_DELTA = "bash_tool_delta",
-}
-
-export const CODE_INTERPRETER_TOOL_TYPES = {
-  // Legacy LLM-facing name; still present in sessions persisted before the
-  // rename (OpenAI reserves the function name "python" and rejects it).
-  PYTHON: "python",
-  RUN_PYTHON: "run_python",
-} as const;
-
-export const isCodeInterpreterToolType = (toolType: string): boolean =>
-  (Object.values(CODE_INTERPRETER_TOOL_TYPES) as string[]).includes(toolType);
-
-// Basic Message Packets
-export interface MessageStart extends BaseObj {
-  id: string;
-  type: "message_start";
-  content: string;
-
-  final_documents: OnyxDocument[] | null;
-  pre_answer_processing_seconds?: number;
-}
-
-export interface MessageDelta extends BaseObj {
-  content: string;
-  type: "message_delta";
-}
-
-export interface MessageEnd extends BaseObj {
-  type: "message_end";
-}
-
-// Control Packets
-export enum StopReason {
-  FINISHED = "finished",
-  USER_CANCELLED = "user_cancelled",
-}
-
-export interface Stop extends BaseObj {
-  type: "stop";
-  stop_reason?: StopReason;
-}
-
-export interface SectionEnd extends BaseObj {
-  type: "section_end";
-}
-
-export interface TopLevelBranching extends BaseObj {
-  type: "top_level_branching";
-  num_parallel_branches: number;
-}
-
-export interface PacketError extends BaseObj {
-  type: "error";
-  message?: string;
-}
-
-// Specific tool packets
-export interface SearchToolStart extends BaseObj {
-  type: "search_tool_start";
-  is_internet_search?: boolean;
-}
-
-export interface SearchToolQueriesDelta extends BaseObj {
-  type: "search_tool_queries_delta";
-  queries: string[];
-}
-
-export interface SearchToolFilterDelta extends BaseObj {
-  type: "search_tool_filter_delta";
-  // Connector/source values this search is scoped to (empty == all)
-  sources: string[];
-  // Applied time window as ISO datetime strings; either bound may be open-ended
-  time_filter_start?: string | null;
-  time_filter_end?: string | null;
-}
-
-export interface SearchToolDocumentsDelta extends BaseObj {
-  type: "search_tool_documents_delta";
-  documents: OnyxDocument[];
-}
-
 export type ImageShape = "square" | "landscape" | "portrait";
 
-interface GeneratedImage {
-  file_id: string;
-  url: string;
-  revised_prompt: string;
-  shape?: ImageShape;
-}
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue };
 
-export interface ImageGenerationToolStart extends BaseObj {
-  type: "image_generation_start";
-}
-
-export interface ImageGenerationToolDelta extends BaseObj {
-  type: "image_generation_final";
-  images: GeneratedImage[];
-}
-
-export interface PythonToolStart extends BaseObj {
-  type: "python_tool_start";
-  code: string;
-}
-
-export interface PythonToolDelta extends BaseObj {
-  type: "python_tool_delta";
-  stdout: string;
-  stderr: string;
-  file_ids: string[];
-}
-
-export interface ToolCallArgumentDelta extends BaseObj {
-  type: "tool_call_argument_delta";
-  tool_type: string;
-  tool_id: string;
-  argument_deltas: Record<string, unknown>;
-}
-
-export interface FetchToolStart extends BaseObj {
-  type: "open_url_start";
-}
-
-export interface FetchToolUrls extends BaseObj {
-  type: "open_url_urls";
-  urls: string[];
-}
-
-export interface FetchToolDocuments extends BaseObj {
-  type: "open_url_documents";
-  documents: OnyxDocument[];
-}
-
-// Custom Tool Packets
 export interface CustomToolErrorInfo {
   is_auth_error: boolean;
   status_code: number;
   message: string;
 }
 
-export interface CustomToolStart extends BaseObj {
-  type: "custom_tool_start";
-  tool_name: string;
-  tool_id?: number | null;
+export interface GeneratedImage {
+  file_id: string;
+  url: string;
+  revised_prompt: string;
+  shape?: ImageShape;
 }
 
-export interface CustomToolArgs extends BaseObj {
-  type: "custom_tool_args";
-  tool_name: string;
-  tool_args: Record<string, any>;
+export interface SearchResult {
+  type: "search_result";
+  queries: string[];
+  sources: string[];
+  time_filter_start: string | null;
+  time_filter_end: string | null;
+  search_docs: OnyxDocument[];
+  displayed_docs: OnyxDocument[] | null;
+  citation_mapping: Record<number, string>;
 }
-
-export interface CustomToolDelta extends BaseObj {
-  type: "custom_tool_delta";
-  tool_name: string;
-  tool_id?: number | null;
-  response_type: string;
-  data?: any;
-  file_ids?: string[] | null;
-  error?: CustomToolErrorInfo | null;
-}
-
-// File Reader Packets
-export interface FileReaderStart extends BaseObj {
-  type: "file_reader_start";
-}
-
-export interface FileReaderResult extends BaseObj {
-  type: "file_reader_result";
+export interface FileReadResult {
+  type: "file_read_result";
   file_name: string;
   file_id: string;
   start_char: number;
@@ -248,234 +43,53 @@ export interface FileReaderResult extends BaseObj {
   preview_start: string;
   preview_end: string;
 }
-// Memory Tool Packets
-export interface MemoryToolStart extends BaseObj {
-  type: "memory_tool_start";
-}
-
-export interface MemoryToolDelta extends BaseObj {
-  type: "memory_tool_delta";
+export interface MemoryResult {
+  type: "memory_result";
   memory_text: string;
   operation: "add" | "update";
   memory_id: number | null;
   index: number | null;
 }
-
-export interface MemoryToolNoAccess extends BaseObj {
-  type: "memory_tool_no_access";
-}
-
-// Reasoning Packets
-export interface ReasoningStart extends BaseObj {
-  type: "reasoning_start";
-}
-
-export interface ReasoningDelta extends BaseObj {
-  type: "reasoning_delta";
-  reasoning: string;
-}
-
-export interface ReasoningDone extends BaseObj {
-  type: "reasoning_done";
-}
-
-// Citation Packets
-export interface StreamingCitation {
-  citation_num: number;
-  document_id: string;
-}
-
-export interface CitationStart extends BaseObj {
-  type: "citation_start";
-}
-
-// Individual citation info packet (sent during streaming from backend)
-export interface CitationInfo extends BaseObj {
-  type: "citation_info";
-  citation_number: number;
-  document_id: string;
-}
-
-// Deep Research Plan Packets
-export interface DeepResearchPlanStart extends BaseObj {
-  type: "deep_research_plan_start";
-}
-
-export interface DeepResearchPlanDelta extends BaseObj {
-  type: "deep_research_plan_delta";
-  content: string;
-}
-
-export interface ResearchAgentStart extends BaseObj {
-  type: "research_agent_start";
-  research_task: string;
-}
-
-export interface IntermediateReportStart extends BaseObj {
-  type: "intermediate_report_start";
-}
-
-export interface IntermediateReportDelta extends BaseObj {
-  type: "intermediate_report_delta";
-  content: string;
-}
-
-export interface IntermediateReportCitedDocs extends BaseObj {
-  type: "intermediate_report_cited_docs";
-  cited_docs: OnyxDocument[] | null;
-}
-
-// Coding Agent Packets
-export interface CodingAgentStart extends BaseObj {
-  type: "coding_agent_start";
-  query: string;
-  repo: string | null;
-}
-
-export interface CodingAgentThinkingDelta extends BaseObj {
-  type: "coding_agent_thinking_delta";
-  content: string;
-}
-
-export interface CodingAgentFinal extends BaseObj {
-  type: "coding_agent_final";
-  answer: string;
-}
-
-// Bash Tool Packets
-export interface BashToolStart extends BaseObj {
-  type: "bash_tool_start";
-  cmd: string;
-}
-
-export interface BashToolDelta extends BaseObj {
-  type: "bash_tool_delta";
+export interface PythonExecutionResult {
+  type: "python_execution";
   stdout: string;
   stderr: string;
   exit_code: number | null;
   timed_out: boolean;
+  generated_files: { filename: string; file_link: string }[];
+  error: string | null;
+  staging_notice: string | null;
 }
-
-export type ChatObj = MessageStart | MessageDelta | MessageEnd;
-
-export type StopObj = Stop;
-
-// Connection keepalive emitted during silent stretches; carries no run state
-export interface ChatHeartbeat extends BaseObj {
-  type: "chat_heartbeat";
+export interface BashExecutionResult {
+  type: "bash_execution";
+  stdout: string;
+  stderr: string;
+  exit_code: number | null;
+  timed_out: boolean;
+  error: string | null;
 }
+export interface CustomToolResult {
+  type: "custom_tool_result";
+  tool_name: string;
+  response_type: string;
+  tool_result: JsonValue;
+  error: CustomToolErrorInfo | null;
+}
+export type ToolMetadata =
+  | SearchResult
+  | FileReadResult
+  | MemoryResult
+  | PythonExecutionResult
+  | BashExecutionResult
+  | CustomToolResult
+  | { type: "image_generation_result"; generated_images: GeneratedImage[] }
+  | { type: "coding_result"; answer: string }
+  | {
+      type: "research_result";
+      intermediate_report: string;
+      citation_mapping: Record<number, OnyxDocument>;
+    };
 
-export type ChatHeartbeatObj = ChatHeartbeat;
-
-export type SectionEndObj = SectionEnd;
-
-export type TopLevelBranchingObj = TopLevelBranching;
-
-export type PacketErrorObj = PacketError;
-
-// Specific tool objects
-export type SearchToolObj =
-  | SearchToolStart
-  | SearchToolQueriesDelta
-  | SearchToolFilterDelta
-  | SearchToolDocumentsDelta
-  | SectionEnd
-  | PacketError;
-export type ImageGenerationToolObj =
-  | ImageGenerationToolStart
-  | ImageGenerationToolDelta
-  | SectionEnd
-  | PacketError;
-export type PythonToolObj =
-  | PythonToolStart
-  | PythonToolDelta
-  | ToolCallArgumentDelta
-  | SectionEnd
-  | PacketError;
-export type FetchToolObj =
-  | FetchToolStart
-  | FetchToolUrls
-  | FetchToolDocuments
-  | SectionEnd
-  | PacketError;
-export type CustomToolObj =
-  | CustomToolStart
-  | CustomToolArgs
-  | CustomToolDelta
-  | SectionEnd
-  | PacketError;
-export type FileReaderToolObj =
-  | FileReaderStart
-  | FileReaderResult
-  | SectionEnd
-  | PacketError;
-export type MemoryToolObj =
-  | MemoryToolStart
-  | MemoryToolDelta
-  | MemoryToolNoAccess
-  | SectionEnd
-  | PacketError;
-export type NewToolObj =
-  | SearchToolObj
-  | ImageGenerationToolObj
-  | PythonToolObj
-  | FetchToolObj
-  | CustomToolObj
-  | FileReaderToolObj
-  | MemoryToolObj;
-
-export type ReasoningObj =
-  | ReasoningStart
-  | ReasoningDelta
-  | ReasoningDone
-  | SectionEnd
-  | PacketError;
-
-export type CitationObj =
-  | CitationStart
-  | CitationInfo
-  | SectionEnd
-  | PacketError;
-
-export type DeepResearchPlanObj =
-  | DeepResearchPlanStart
-  | DeepResearchPlanDelta
-  | SectionEnd;
-
-export type ResearchAgentObj =
-  | ResearchAgentStart
-  | IntermediateReportStart
-  | IntermediateReportDelta
-  | IntermediateReportCitedDocs
-  | SectionEnd;
-
-export type CodingAgentObj =
-  | CodingAgentStart
-  | CodingAgentThinkingDelta
-  | CodingAgentFinal
-  | BashToolStart
-  | BashToolDelta
-  | SectionEnd
-  | PacketError;
-
-// Union type for all possible streaming objects
-export type ObjTypes =
-  | OperationStatus
-  | ChatObj
-  | NewToolObj
-  | ReasoningObj
-  | StopObj
-  | ChatHeartbeatObj
-  | SectionEndObj
-  | TopLevelBranchingObj
-  | CitationObj
-  | DeepResearchPlanObj
-  | ResearchAgentObj
-  | CodingAgentObj
-  | PacketErrorObj
-  | CitationObj;
-
-// Placement interface for packet positioning
 export interface Placement {
   turn_index: number;
   tab_index?: number; // For parallel tool calls - tools with same turn_index but different tab_index run in parallel
@@ -496,94 +110,107 @@ export interface PacketIdentity {
   part_id: string;
 }
 
-export interface OperationStatus extends BaseObj {
-  type: "operation_status";
-  status: "running" | "complete" | "limit" | "cancelled" | "error";
-  tool_name?: string | null;
+export interface StreamingCitation {
+  citation_num: number;
+  document_id: string;
 }
+
+export type RunStatus =
+  | "running"
+  | "complete"
+  | "limit"
+  | "cancelled"
+  | "error";
+export type TextPurpose = "answer" | "plan" | "report" | "commentary";
+
+export interface CitationInfo {
+  citation_number: number;
+  document_id: string;
+}
+
+export interface TextItem {
+  kind: "text";
+  text: string;
+  status: RunStatus;
+  purpose: TextPurpose;
+  documents: OnyxDocument[];
+  citations: CitationInfo[];
+  pre_answer_seconds?: number | null;
+}
+
+export interface ReasoningItem {
+  kind: "reasoning";
+  text: string;
+  status: RunStatus;
+}
+
+export interface ToolItem {
+  kind: "tool";
+  name: string;
+  arguments: Record<string, JsonValue>;
+  status: RunStatus | "pending";
+  tool_id?: number | null;
+  output: string;
+  metadata: ToolMetadata | null;
+}
+
+export type ChatItem = TextItem | ReasoningItem | ToolItem;
+
+export interface ItemUpdate {
+  type: "item_update";
+  item: ChatItem;
+}
+
+export interface ItemDelta {
+  type: "item_delta";
+  delta:
+    | { kind: "text"; text: string; citations: CitationInfo[] }
+    | {
+        kind: "tool_arguments";
+        name: string;
+        arguments: Record<string, string>;
+      }
+    | {
+        kind: "tool_output";
+        output?: string | null;
+        metadata?: ToolMetadata | null;
+      };
+}
+
+export enum StopReason {
+  FINISHED = "finished",
+  USER_CANCELLED = "user_cancelled",
+  INTERRUPTED = "interrupted",
+}
+
+export type PacketObj =
+  | ItemUpdate
+  | ItemDelta
+  | { type: "run_update"; status: RunStatus }
+  | { type: "stop"; stop_reason?: StopReason | null }
+  | { type: "chat_heartbeat" };
 
 export interface Packet {
   identity?: PacketIdentity | null;
-  placement: Placement;
-  obj: ObjTypes;
+  model_index?: number | null;
+  obj: PacketObj;
 }
 
-export interface ChatPacket {
+/** Current public content, after applying stream updates. */
+export interface ResponseItem {
+  identity: PacketIdentity;
   placement: Placement;
-  obj: ChatObj;
+  content: ChatItem;
 }
 
-export interface StopPacket {
-  placement: Placement;
-  obj: StopObj;
-}
+export const CODE_INTERPRETER_TOOL_TYPES = {
+  PYTHON: "python",
+  RUN_PYTHON: "run_python",
+} as const;
 
-export interface CitationPacket {
-  placement: Placement;
-  obj: CitationObj;
-}
-
-// New specific tool packet types
-export interface SearchToolPacket {
-  placement: Placement;
-  obj: SearchToolObj;
-}
-
-export interface ImageGenerationToolPacket {
-  placement: Placement;
-  obj: ImageGenerationToolObj;
-}
-
-export interface PythonToolPacket {
-  placement: Placement;
-  obj: PythonToolObj;
-}
-
-export interface FetchToolPacket {
-  placement: Placement;
-  obj: FetchToolObj;
-}
-
-export interface CustomToolPacket {
-  placement: Placement;
-  obj: CustomToolObj;
-}
-
-export interface FileReaderToolPacket {
-  placement: Placement;
-  obj: FileReaderToolObj;
-}
-export interface MemoryToolPacket {
-  placement: Placement;
-  obj: MemoryToolObj;
-}
-
-export interface ReasoningPacket {
-  placement: Placement;
-  obj: ReasoningObj;
-}
-
-export interface SectionEndPacket {
-  placement: Placement;
-  obj: SectionEndObj;
-}
-
-export interface TopLevelBranchingPacket {
-  placement: Placement;
-  obj: TopLevelBranchingObj;
-}
-
-export interface DeepResearchPlanPacket {
-  placement: Placement;
-  obj: DeepResearchPlanObj;
-}
-
-export interface ResearchAgentPacket {
-  placement: Placement;
-  obj: ResearchAgentObj;
-}
-
-export interface CodingAgentPacket {
-  placement: Placement;
-  obj: CodingAgentObj;
+export function isCodeInterpreterToolType(name: string): boolean {
+  return (
+    name === CODE_INTERPRETER_TOOL_TYPES.PYTHON ||
+    name === CODE_INTERPRETER_TOOL_TYPES.RUN_PYTHON
+  );
 }

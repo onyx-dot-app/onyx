@@ -14,7 +14,7 @@ import {
 import { processRawChatHistory } from "@/chat/chatHistory";
 import { BackendChatSession, BackendMessage } from "@/chat/interfaces";
 import { getMessageByMessageId } from "@/chat/messageTree";
-import { Packet, PacketType } from "@/chat/streamingModels";
+import { Packet } from "@/chat/streamingModels";
 import { useChatSessionController } from "@/hooks/useChatSessionController";
 import { useChatSessionStore } from "@/state/chatSessionStore";
 
@@ -27,8 +27,7 @@ jest.mock("@/state/session", () => ({
 }));
 jest.mock("@/api/chat/stream", () => ({
   resumeChatMessage: jest.fn(),
-  isPacket: (event: { obj?: unknown; placement?: unknown }) =>
-    "obj" in event && "placement" in event,
+  isPacket: (event: { obj?: unknown }) => "obj" in event,
   isHeartbeat: (event: { obj?: { type?: string }; type?: string }) =>
     event?.obj?.type === "chat_heartbeat" || event?.type === "chat_heartbeat",
   isStreamError: (event: { error?: unknown }) =>
@@ -58,21 +57,49 @@ const getSessionMock = getChatSession as unknown as Mock<
 
 function startPacket(content: string): StreamEvent {
   return {
-    placement: { turn_index: 0 },
-    obj: { type: PacketType.MESSAGE_START, id: "m", content },
-  } as StreamEvent;
+    identity: {
+      response_id: 2,
+      run_id: "root",
+      message_id: "m",
+      part_id: "text",
+    },
+    obj: {
+      type: "item_update",
+      item: {
+        kind: "text",
+        text: content,
+        purpose: "answer",
+        status: "running",
+        documents: [],
+        citations: [],
+      },
+    },
+  };
 }
 function deltaPacket(content: string): StreamEvent {
   return {
-    placement: { turn_index: 0 },
-    obj: { type: PacketType.MESSAGE_DELTA, content },
-  } as StreamEvent;
+    identity: {
+      response_id: 2,
+      run_id: "root",
+      message_id: "m",
+      part_id: "text",
+    },
+    obj: {
+      type: "item_delta",
+      delta: { kind: "text", text: content, citations: [] },
+    },
+  };
 }
 function endPacket(): StreamEvent {
   return {
-    placement: { turn_index: 0 },
-    obj: { type: PacketType.MESSAGE_END },
-  } as StreamEvent;
+    identity: {
+      response_id: 2,
+      run_id: "root",
+      message_id: "m",
+      part_id: "run",
+    },
+    obj: { type: "run_update", status: "complete" },
+  };
 }
 function streamError(error: string, errorCode?: string): StreamEvent {
   return { error, error_code: errorCode ?? null } as unknown as StreamEvent;
@@ -81,9 +108,24 @@ function streamError(error: string, errorCode?: string): StreamEvent {
 // A persisted session snapshot's `packets` are typed as Packet[][] (not StreamEvent).
 function historyPacket(content: string): Packet {
   return {
-    placement: { turn_index: 0 },
-    obj: { type: PacketType.MESSAGE_START, id: "m", content },
-  } as unknown as Packet;
+    identity: {
+      response_id: 2,
+      run_id: "root",
+      message_id: "m",
+      part_id: "text",
+    },
+    obj: {
+      type: "item_update",
+      item: {
+        kind: "text",
+        text: content,
+        purpose: "answer",
+        status: "running",
+        documents: [],
+        citations: [],
+      },
+    },
+  };
 }
 
 function backendMessages(assistantText: string): BackendMessage[] {
@@ -135,12 +177,13 @@ function assistantText(sessionId: string, messageId: number): string {
     .sessions.get(sessionId)?.messageTree;
   const node = tree ? getMessageByMessageId(tree, messageId) : undefined;
   return (node?.packets ?? [])
-    .filter(
-      (p) =>
-        p.obj.type === PacketType.MESSAGE_START ||
-        p.obj.type === PacketType.MESSAGE_DELTA,
+    .map((p) =>
+      p.obj.type === "item_update" && p.obj.item.kind === "text"
+        ? p.obj.item.text
+        : p.obj.type === "item_delta" && p.obj.delta.kind === "text"
+          ? p.obj.delta.text
+          : "",
     )
-    .map((p) => (p.obj as { content?: string }).content ?? "")
     .join("");
 }
 
@@ -449,7 +492,6 @@ describe("useChatSessionController", () => {
       releaseTail = resolve;
     });
     const heartbeat = {
-      placement: { turn_index: 0 },
       obj: { type: "chat_heartbeat" },
     } as unknown as StreamEvent;
     getSessionMock.mockResolvedValue({

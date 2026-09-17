@@ -1,8 +1,4 @@
-import {
-  Packet,
-  PacketIdentity,
-  Placement,
-} from "@/app/app/services/streamingModels";
+import { PacketIdentity, Placement } from "@/app/app/services/streamingModels";
 
 interface ResponseLayout {
   nextTurn: number;
@@ -19,15 +15,7 @@ function callKey(messageId: string, callId: string): string {
 /** Derive timeline positions from execution identity for live and saved packets. */
 export class PacketLayout {
   private readonly responses = new Map<number, ResponseLayout>();
-  private readonly modelIndices = new Map<number, number>();
-
-  setResponses(responseIds: number[]): void {
-    responseIds.forEach((id, index) => this.modelIndices.set(id, index));
-  }
-
-  project(packet: Packet): Packet {
-    const identity = packet.identity;
-    if (!identity) return packet;
+  place(identity: PacketIdentity, modelIndex = 0): Placement {
     let response = this.responses.get(identity.response_id);
     if (!response) {
       response = {
@@ -39,14 +27,6 @@ export class PacketLayout {
       };
       this.responses.set(identity.response_id, response);
     }
-    const modelIndex = this.modelIndices.get(identity.response_id) ?? 0;
-    if (identity.part_id === "run") {
-      return {
-        ...packet,
-        placement: { turn_index: 0, model_index: modelIndex },
-      };
-    }
-
     const parentKey =
       identity.parent_message_id && identity.parent_tool_call_id
         ? callKey(identity.parent_message_id, identity.parent_tool_call_id)
@@ -83,7 +63,7 @@ export class PacketLayout {
         placement
       );
     }
-    return { ...packet, placement };
+    return placement;
   }
 
   private rootPlacement(
@@ -93,7 +73,7 @@ export class PacketLayout {
   ): Placement {
     const groupKey = JSON.stringify([
       identity.message_id,
-      identity.part_id === "reasoning" ? "reasoning" : "activity",
+      identity.tool_call_id ? "tools" : identity.part_id,
     ]);
     let turn = response.groups.get(groupKey);
     if (turn === undefined) {

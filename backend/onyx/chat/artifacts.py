@@ -1,5 +1,7 @@
 from collections.abc import Mapping
 
+from pydantic import BaseModel
+
 from onyx.agents.models import RunSnapshot
 from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
 from onyx.chat.citation_utils import (
@@ -16,10 +18,9 @@ from onyx.tools.models import (
     ChatFile,
     CustomToolCallSummary,
     CustomToolUserFileSnapshot,
-    PythonToolRichResponse,
+    LlmPythonExecutionResult,
     ToolCallInfo,
 )
-from onyx.tools.progress import FileReadResult, MemoryUpdated
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 
@@ -83,11 +84,19 @@ class ChatArtifacts:
         )
 
 
-def _saved_tool_response(result: ToolResultMessage) -> str:
+def _saved_tool_metadata(result: ToolResultMessage) -> BaseModel | None:
     data = result.details
-    if isinstance(data, (MemoryUpdated, CustomToolCallSummary, FileReadResult)):
-        return data.model_dump_json()
-    return result.text
+    if isinstance(data, SearchDocsResponse):
+        # Documents are stored through the tool call's search-document relation.
+        return SearchDocsResponse(
+            queries=data.queries,
+            sources=data.sources,
+            time_filter_start=data.time_filter_start,
+            time_filter_end=data.time_filter_end,
+            search_docs=[],
+            citation_mapping=data.citation_mapping,
+        )
+    return data
 
 
 def project_tool_artifacts(
@@ -170,7 +179,7 @@ def _tool_record(
         generated_images = data.generated_images
 
     generated_files = None
-    if isinstance(data, PythonToolRichResponse):
+    if isinstance(data, LlmPythonExecutionResult):
         generated_files = data.generated_files or None
 
     # Custom tools save image/CSV blobs and return their ids.
@@ -180,7 +189,7 @@ def _tool_record(
     ):
         generated_file_ids = data.tool_result.file_ids or None
 
-    saved_response = _saved_tool_response(tool_response) if tool_response else ""
+    saved_metadata = _saved_tool_metadata(tool_response) if tool_response else None
 
     return ToolCallInfo(
         message_id=output.id or f"{snapshot.run_id}:{turn}",
@@ -193,7 +202,8 @@ def _tool_record(
         tool_id=tool_id,
         reasoning_tokens=output.thinking,  # Calls from one assistant message share its thinking.
         tool_call_arguments=tool_call.arguments,
-        tool_call_response=saved_response,
+        tool_call_response=tool_response.text if tool_response else "",
+        result_metadata=saved_metadata,
         search_docs=displayed_docs or search_docs,
         generated_images=generated_images,
         generated_files=generated_files,

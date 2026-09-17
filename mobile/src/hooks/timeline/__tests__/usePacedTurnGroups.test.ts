@@ -8,26 +8,21 @@ import {
   jest,
 } from "@jest/globals";
 
-import { GroupedPacket } from "@/chat/messageProcessor";
-import { PacketType, type Packet } from "@/chat/streamingModels";
+import { GroupedItem } from "@/chat/messageProcessor";
+import { makeItem } from "@/hooks/timeline/__tests__/testHelpers";
 import { TransformedStep, TurnGroup } from "@/chat/timeline/transformers";
 import { usePacedTurnGroups } from "@/hooks/timeline/usePacedTurnGroups";
 
 function createStep(
   turnIndex: number,
   tabIndex: number,
-  type: PacketType = PacketType.SEARCH_TOOL_START,
+  name = "internal_search",
 ): TransformedStep {
   return {
     key: `${turnIndex}-${tabIndex}`,
     turnIndex,
     tabIndex,
-    packets: [
-      {
-        placement: { turn_index: turnIndex, tab_index: tabIndex },
-        obj: { type },
-      } as Packet,
-    ],
+    items: [makeItem(name, { turn_index: turnIndex, tab_index: tabIndex })],
   };
 }
 
@@ -39,21 +34,11 @@ function createTurnGroup(steps: TransformedStep[]): TurnGroup {
   };
 }
 
-function createDisplayGroup(turnIndex: number): GroupedPacket {
+function createDisplayGroup(turnIndex: number): GroupedItem {
   return {
     turn_index: turnIndex,
     tab_index: 0,
-    packets: [
-      {
-        placement: { turn_index: turnIndex, tab_index: 0 },
-        obj: {
-          type: PacketType.MESSAGE_START,
-          id: "m",
-          content: "",
-          final_documents: null,
-        },
-      } as Packet,
-    ],
+    items: [makeItem("text", { turn_index: turnIndex })],
   };
 }
 
@@ -145,15 +130,15 @@ describe("usePacedTurnGroups", () => {
         {
           initialProps: {
             turnGroups: [
-              createTurnGroup([createStep(0, 0, PacketType.SEARCH_TOOL_START)]),
+              createTurnGroup([createStep(0, 0, "internal_search")]),
             ],
           },
         },
       );
       rerender({
         turnGroups: [
-          createTurnGroup([createStep(0, 0, PacketType.SEARCH_TOOL_START)]),
-          createTurnGroup([createStep(1, 0, PacketType.SEARCH_TOOL_START)]),
+          createTurnGroup([createStep(0, 0, "internal_search")]),
+          createTurnGroup([createStep(1, 0, "internal_search")]),
         ],
       });
       expect(result.current.pacedTurnGroups.length).toBe(1);

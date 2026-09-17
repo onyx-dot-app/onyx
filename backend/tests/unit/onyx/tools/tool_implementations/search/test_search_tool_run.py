@@ -3,11 +3,17 @@ from unittest.mock import MagicMock, patch
 
 from onyx.agents.tools import ToolExecutionMode, ToolInvocation, ToolProgress
 from onyx.configs.constants import DocumentSource
-from onyx.context.search.models import BaseFilters
+from onyx.context.search.models import (
+    BaseFilters,
+    InferenceChunk,
+    InferenceSection,
+    SearchDocsResponse,
+)
+from onyx.document_index.interfaces_new import DocumentIndex
 from onyx.llm.cancellation import CancellationSignal
+from onyx.llm.interfaces import LLM
 from onyx.llm.models import UserMessage
 from onyx.tools.interface import ToolContext
-from onyx.tools.progress import SearchFilters
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 
 MODULE = "onyx.tools.tool_implementations.search.search_tool"
@@ -42,13 +48,9 @@ def _run(
     decide_mock: MagicMock | None = None,
     skip_query_expansion: bool = False,
     progress: list[ToolProgress] | None = None,
+    sections: list[InferenceSection] | None = None,
 ) -> MagicMock:
-    """Run tool.run() with all DB/LLM deps mocked; returns the search_pipeline mock.
-
-    decide_search_scope is replaced by `decide_mock` when given (so its call args
-    can be inspected), otherwise by a stub returning `decision`. search_pipeline
-    returns no chunks, so run() takes the empty-results early return.
-    """
+    """Mock retrieval and scope selection; supplied sections exercise context expansion."""
     mock_search_pipeline = MagicMock(return_value=[])
     decide = (
         decide_mock if decide_mock is not None else MagicMock(return_value=decision)
@@ -67,7 +69,7 @@ def _run(
         patch(f"{MODULE}.decide_search_scope", decide),
         patch(f"{MODULE}.decide_time_filter", MagicMock(return_value=None)),
         patch(f"{MODULE}.weighted_reciprocal_rank_fusion", return_value=[]),
-        patch(f"{MODULE}.merge_individual_chunks", return_value=[]),
+        patch(f"{MODULE}.merge_individual_chunks", return_value=sections or []),
         patch(f"{MODULE}.search_pipeline", mock_search_pipeline),
     ):
         mock_session_ctx.return_value.__enter__ = MagicMock(return_value=MagicMock())
@@ -105,7 +107,7 @@ def _emitted_filter_sources(progress: list[ToolProgress]) -> list[list[str]]:
     return [
         item.details.sources
         for item in progress
-        if isinstance(item.details, SearchFilters)
+        if isinstance(item.details, SearchDocsResponse) and item.details.sources
     ]
 
 
@@ -139,7 +141,7 @@ def test_filter_delta_emitted_for_a_subset_scope() -> None:
         decision=[DocumentSource.CONFLUENCE],
         connected_sources=[DocumentSource.CONFLUENCE, DocumentSource.GITHUB],
     )
-    assert _emitted_filter_sources(updates) == [["confluence"]]
+    assert _emitted_filter_sources(updates) == [["confluence"], ["confluence"]]
 
 
 def test_no_filter_delta_when_scope_covers_all_sources() -> None:
@@ -381,3 +383,72 @@ def test_agent_search_instances_keep_scope_decisions_separate() -> None:
     assert second_scope.call_args.args[3] == []
     assert len(first_scope.call_args.args[3]) == 1
     assert first.execution_mode == ToolExecutionMode.SEQUENTIAL
+
+
+def test_selected_documents_are_published_before_context_expansion() -> None:
+    chunk = InferenceChunk(
+        document_id="ticket",
+        source_type=DocumentSource.CONFLUENCE,
+        semantic_identifier="Support ticket",
+        title="Support ticket",
+        chunk_id=0,
+        blurb="Evidence",
+        content="Evidence",
+        source_links={0: "https://example.com/ticket"},
+        image_file_id=None,
+        section_continuation=False,
+        boost=0,
+        score=1,
+        hidden=False,
+        metadata={},
+        match_highlights=[],
+        doc_summary="",
+        chunk_context="",
+        updated_at=None,
+    )
+    section = InferenceSection(
+        center_chunk=chunk, chunks=[chunk], combined_content="Evidence"
+    )
+    updates: list[ToolProgress] = []
+
+    def expand(
+        section: InferenceSection,
+        user_query: str,  # noqa: ARG001
+        llm: LLM,  # noqa: ARG001
+        document_index: DocumentIndex,  # noqa: ARG001
+        expand_override: bool,  # noqa: ARG001
+    ) -> InferenceSection:
+        details = updates[-1].details
+        assert isinstance(details, SearchDocsResponse)
+        assert details.displayed_docs is not None
+        assert [doc.document_id for doc in details.displayed_docs] == ["ticket"]
+        assert "ticket" in details.queries
+        assert details.sources == ["confluence"]
+        return section
+
+    with (
+        patch(f"{MODULE}.populate_file_ids_on_sections"),
+        patch(f"{MODULE}.get_llm_token_counter"),
+        patch(f"{MODULE}._trim_sections_by_tokens", return_value=[section]),
+        patch(
+            f"{MODULE}.select_sections_for_expansion",
+            return_value=([section], ["ticket"]),
+        ),
+        patch(f"{MODULE}.expand_section_with_context", side_effect=expand) as expansion,
+        patch(
+            f"{MODULE}.convert_inference_sections_to_llm_string",
+            return_value=("Evidence", {1: "ticket"}),
+        ),
+    ):
+        _run(
+            _make_tool(),
+            connected_sources=[DocumentSource.CONFLUENCE, DocumentSource.SLACK],
+            decision=[DocumentSource.CONFLUENCE],
+            progress=updates,
+            sections=[section],
+        )
+    expansion.assert_called_once()
+    first = updates[0].details
+    assert isinstance(first, SearchDocsResponse)
+    assert first.displayed_docs is None
+    assert first.search_docs == []

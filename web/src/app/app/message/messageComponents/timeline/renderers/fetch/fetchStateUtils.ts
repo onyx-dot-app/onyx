@@ -1,10 +1,10 @@
-import {
-  PacketType,
-  FetchToolPacket,
-  FetchToolUrls,
-  FetchToolDocuments,
-} from "@/app/app/services/streamingModels";
+import { ResponseItem } from "@/app/app/services/streamingModels";
 import { OnyxDocument } from "@/lib/search/types";
+import {
+  firstTool,
+  isComplete as itemsComplete,
+  toolMetadata,
+} from "@/app/app/services/responseItems";
 
 export const INITIAL_URLS_TO_SHOW = 3;
 export const URLS_PER_EXPANSION = 5;
@@ -19,30 +19,18 @@ export interface FetchState {
   isComplete: boolean;
 }
 
-/** Constructs the current fetch state from fetch tool packets. */
-export const constructCurrentFetchState = (
-  packets: FetchToolPacket[]
-): FetchState => {
-  const startPacket = packets.find(
-    (packet) => packet.obj.type === PacketType.FETCH_TOOL_START
-  );
-  const urlsPacket = packets.find(
-    (packet) => packet.obj.type === PacketType.FETCH_TOOL_URLS
-  )?.obj as FetchToolUrls | undefined;
-  const documentsPacket = packets.find(
-    (packet) => packet.obj.type === PacketType.FETCH_TOOL_DOCUMENTS
-  )?.obj as FetchToolDocuments | undefined;
-  const sectionEnd = packets.find(
-    (packet) =>
-      packet.obj.type === PacketType.SECTION_END ||
-      packet.obj.type === PacketType.ERROR
-  );
-
-  const urls = urlsPacket?.urls || [];
-  const documents = documentsPacket?.documents || [];
-  const hasStarted = Boolean(startPacket);
-  const isLoading = hasStarted && !documentsPacket;
-  const isComplete = Boolean(startPacket && sectionEnd);
-
-  return { urls, documents, hasStarted, isLoading, isComplete };
-};
+export function constructCurrentFetchState(items: ResponseItem[]): FetchState {
+  const tool = firstTool(items);
+  const result = toolMetadata(items, "search_result").at(-1);
+  const documents = result?.displayed_docs ?? result?.search_docs ?? [];
+  const urls = tool?.arguments.urls;
+  return {
+    urls: Array.isArray(urls)
+      ? urls.filter((url): url is string => typeof url === "string")
+      : [],
+    documents,
+    hasStarted: !!tool,
+    isLoading: !!tool && !itemsComplete(items),
+    isComplete: itemsComplete(items),
+  };
+}

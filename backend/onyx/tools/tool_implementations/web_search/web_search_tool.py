@@ -17,7 +17,6 @@ from onyx.tools.interface import (
     ToolContext,
 )
 from onyx.tools.models import ToolCallException
-from onyx.tools.progress import SearchDocuments, SearchQueries, SearchStarted
 from onyx.tools.tool_implementations.utils import (
     convert_inference_sections_to_llm_string,
 )
@@ -185,7 +184,6 @@ class WebSearchTool(Tool):
             return (None, error_msg)
 
     def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
-        invocation.update(ToolProgress(details=SearchStarted(is_internet_search=True)))
         if QUERIES_FIELD not in invocation.arguments:
             raise ToolCallException(
                 message=f"Missing required '{QUERIES_FIELD}' parameter in web_search tool call",
@@ -207,8 +205,13 @@ class WebSearchTool(Tool):
                 ),
             )
 
-        # Emit queries
-        invocation.update(ToolProgress(details=SearchQueries(queries=queries)))
+        invocation.update(
+            ToolProgress(
+                details=SearchDocsResponse(
+                    search_docs=[], citation_mapping={}, queries=queries
+                )
+            )
+        )
 
         # Perform searches in parallel with error capture
         functions_with_args = [
@@ -300,9 +303,15 @@ class WebSearchTool(Tool):
         search_docs = convert_inference_sections_to_search_docs(
             inference_sections, is_internet=True
         )
-
-        # Emit documents
-        invocation.update(ToolProgress(details=SearchDocuments(documents=search_docs)))
+        invocation.update(
+            ToolProgress(
+                details=SearchDocsResponse(
+                    search_docs=search_docs,
+                    citation_mapping={},
+                    queries=queries,
+                )
+            )
+        )
 
         # Format for LLM
         if not all_search_results:
@@ -325,7 +334,9 @@ class WebSearchTool(Tool):
 
         return ToolResult(
             details=SearchDocsResponse(
-                search_docs=search_docs, citation_mapping=citation_mapping
+                search_docs=search_docs,
+                citation_mapping=citation_mapping,
+                queries=queries,
             ),
             content=docs_str,
         )

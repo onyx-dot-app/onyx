@@ -8,6 +8,7 @@ import {
   patchMessageToBeLatest,
   resumeStream,
 } from "@/app/app/services/lib";
+import { interruptResponse } from "@/app/app/services/responseItems";
 import { Packet } from "@/app/app/services/streamingModels";
 import {
   getLatestMessageChain,
@@ -268,14 +269,14 @@ export default function useChatSessionController({
 
       setIsFetchingChatMessages(chatSession.chat_session_id, false);
 
-      // Re-attach to an in-flight run: replay its buffered stream and tail it
-      // live instead of leaving a stale placeholder. Single-model only — a
+      // Recover buffered output and tail it if the worker is live. Single-model only — a
       // multi-model run_id is the user message, not an assistant node, so it
       // fails the node-type check and keeps the refresh-after-completion
       // behavior.
       async function resumeInFlightRun(
         sessionId: string,
         runId: number,
+        isRunning: boolean,
         messageMap: Map<number, Message>
       ) {
         const node = messageMap.get(runId);
@@ -288,7 +289,8 @@ export default function useChatSessionController({
         // The reserved row's placeholder text would render above the live
         // timeline.
         node.message = "";
-        const accumulated: Packet[] = [];
+        node.skipReplayAnimation = true;
+        let accumulated: Packet[] = [];
         let lastFlush = 0;
         let trailingFlush: ReturnType<typeof setTimeout> | null = null;
         // updateSessionAndMessageTree re-points currentSessionId at this
@@ -304,6 +306,13 @@ export default function useChatSessionController({
           // AgentMessage's memo compares packetCount, not the packets array.
           node.packetCount = accumulated.length;
           updateSessionAndMessageTree(sessionId, new Map(messageMap));
+        };
+        const showInterruptedResponse = () => {
+          accumulated = interruptResponse(accumulated);
+          flush();
+          useChatSessionStore
+            .getState()
+            .updateSessionData(sessionId, { processingKey: undefined });
         };
         // handleSSEStream only releases the connection via this signal —
         // bailing out of the loop alone leaves the SSE response open.
@@ -327,6 +336,7 @@ export default function useChatSessionController({
               continue;
             }
             accumulated.push(packet);
+            if (!isRunning) continue;
             const now = Date.now();
             if (now - lastFlush >= 100) {
               lastFlush = now;
@@ -349,7 +359,9 @@ export default function useChatSessionController({
             clearTimeout(trailingFlush);
           }
           resumingRuns.delete(runId);
-          if (stillCurrent()) {
+          if (stillCurrent() && !isRunning) {
+            showInterruptedResponse();
+          } else if (stillCurrent()) {
             flush();
             // Settle final state (message text, citations, documents) from
             // the persisted session.
@@ -360,10 +372,18 @@ export default function useChatSessionController({
               if (settledResponse.ok && stillCurrent()) {
                 const settled: BackendChatSession =
                   await settledResponse.json();
-                updateSessionAndMessageTree(
-                  sessionId,
-                  processRawChatHistory(settled.messages, settled.packets)
-                );
+                const interrupted =
+                  !isRunning ||
+                  (settled.current_run?.run_id === runId &&
+                    !settled.current_run.is_running);
+                if (interrupted) {
+                  showInterruptedResponse();
+                } else {
+                  updateSessionAndMessageTree(
+                    sessionId,
+                    processRawChatHistory(settled.messages, settled.packets)
+                  );
+                }
               }
             } catch (error) {
               console.error("Post-resume session refresh failed", { error });
@@ -376,7 +396,7 @@ export default function useChatSessionController({
       useChatSessionStore
         .getState()
         .updateSessionData(chatSession.chat_session_id, {
-          processingKey: currentRun?.run_id,
+          processingKey: currentRun?.is_running ? currentRun.run_id : undefined,
         });
       if (
         currentRun &&
@@ -385,6 +405,7 @@ export default function useChatSessionController({
         void resumeInFlightRun(
           chatSession.chat_session_id,
           currentRun.run_id,
+          currentRun.is_running,
           newMessageMap
         );
       }

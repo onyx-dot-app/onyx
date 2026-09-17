@@ -1,13 +1,8 @@
-"""Adapt agent output to chat responses and the frontend packet contract.
-
-ResponsePresenter routes live events across messages and child agents. project_response
-builds the saved response from a run snapshot. Both use renderer for message content;
-tool_progress supplies tool packets. Feature metadata selects answer, plan, or report output.
-"""
+"""Attach chat metadata to agent output and build saved response summaries."""
 
 from collections.abc import Mapping, Sequence
 
-from pydantic import BaseModel
+from pydantic import BaseModel, TypeAdapter
 
 from onyx.agents.coordination import AgentCoordinator, AgentInfo
 from onyx.agents.events import (
@@ -34,33 +29,31 @@ from onyx.chat.models import (
     MessageRendering,
     PresentationMode,
 )
-from onyx.chat.renderer import PacketRenderer, render_config
+from onyx.chat.renderer import MessageRenderer
 from onyx.chat.response import response_record
-from onyx.chat.tool_progress import (
-    ToolProgressTracker,
-    project_tool_progress,
-    tool_display_progress,
-)
 from onyx.coding_agent.tool_definitions import CODING_AGENT_TOOL_NAME
 from onyx.context.search.models import SearchDoc
 from onyx.deep_research.models import ResearchMessageMetadata, ResearchPhase
 from onyx.deep_research.tool_definitions import THINK_TOOL_NAME
 from onyx.llm.models import AssistantMessage
 from onyx.server.query_and_chat.streaming_models import (
-    CitationInfo,
-    OperationStatus,
+    ItemDelta,
+    ItemUpdate,
     OverallStop,
     Packet,
     PacketIdentity,
-    SectionEnd,
+    RunUpdate,
+    ToolItem,
+    ToolMetadata,
+    ToolOutputUpdate,
+    ToolStatus,
 )
-from onyx.tools.tool_implementations.bash.bash_tool import BashTool
-from onyx.tools.tool_implementations.python.python_tool import PythonTool
+from onyx.server.query_and_chat.streaming_models import (
+    TextPurpose as DisplayTextPurpose,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-_ARGUMENT_TOOLS = frozenset({BashTool.NAME, PythonTool.NAME})
 
 
 def message_presentation(
@@ -70,7 +63,6 @@ def message_presentation(
 ) -> MessageRendering:
     """Resolve feature metadata into display settings retained for history replay."""
     presentation = MessageRendering(
-        argument_tools=set(_ARGUMENT_TOOLS),
         mode=PresentationMode.CODING_THINKING
         if parent_tool_name == CODING_AGENT_TOOL_NAME
         else PresentationMode.ANSWER,
@@ -205,11 +197,11 @@ def _project_response_display(
                 parent_tool_name=parent_tool_name,
             )
             presentation[message_id] = setting
-            config = render_config(setting, message_documents(message.metadata))
-            if node is not snapshot or config.mode != PresentationMode.ANSWER:
+            if node is not snapshot or setting.mode != PresentationMode.ANSWER:
                 continue
-            renderer = PacketRenderer(
-                config,
+            renderer = MessageRenderer(
+                setting,
+                message_documents(message.metadata),
                 PacketIdentity(
                     response_id=response_id,
                     run_id=node.run_id,
@@ -217,7 +209,7 @@ def _project_response_display(
                 ),
             )
             generation_items = items_by_step[operation.step_index]
-            packets = renderer.consume_items(generation_items)
+            renderer.saved(generation_items)
             is_answer = any(
                 isinstance(item.content, ResponseText)
                 and item.content.purpose == TextPurpose.ANSWER
@@ -229,16 +221,9 @@ def _project_response_display(
                 update={
                     "answer": renderer.answer,
                     "reasoning": renderer.reasoning,
-                    "citation_info": response.citation_info
-                    + [
-                        packet.obj
-                        for packet in packets
-                        if isinstance(packet.obj, CitationInfo)
-                    ],
-                    "top_documents": config.documents
-                    if renderer.answer_started and config.documents
-                    else response.top_documents,
-                    "pre_answer_processing_time": config.pre_answer_seconds
+                    "citation_info": response.citation_info + renderer.text.citations,
+                    "top_documents": renderer.text.documents or response.top_documents,
+                    "pre_answer_processing_time": setting.pre_answer_seconds
                     if renderer.answer_started
                     else response.pre_answer_processing_time,
                     "is_clarification": setting.is_clarification
@@ -258,26 +243,23 @@ def _project_response_display(
     return response.model_copy(update={"presentation": presentation})
 
 
-class _ActiveTool:
-    def __init__(self, identity: PacketIdentity) -> None:
-        self.identity = identity
-        self.progress = ToolProgressTracker()
+_TOOL_METADATA = TypeAdapter(ToolMetadata)
 
 
 class ResponsePresenter:
-    """Route live agent events into chat packets with message and parent identities.
-
-    Each message has a PacketRenderer. Tool progress is tracked until completion so
-    final results can supply fields that were not streamed.
-    """
+    """Publish item updates with stable identities across root and child runs."""
 
     def __init__(
-        self, emitter: Emitter, coordinator: AgentCoordinator | None = None
+        self,
+        emitter: Emitter,
+        coordinator: AgentCoordinator | None = None,
+        *,
+        tool_ids: Mapping[str, int] | None = None,
     ) -> None:
+        self.tool_ids = tool_ids or {}
         self.emitter = emitter
         self.coordinator = coordinator
-        self.renderers: dict[str, PacketRenderer] = {}
-        self.active_calls: dict[tuple[str, str], _ActiveTool] = {}
+        self.renderers: dict[str, MessageRenderer] = {}
         self.call_names: dict[tuple[str, str], str] = {}
 
     def _identity(self, event: AgentEvent, step_index: int) -> PacketIdentity:
@@ -299,18 +281,35 @@ class ResponsePresenter:
 
     def consume(self, event: AgentEvent) -> None:
         if isinstance(event, MessageStartEvent):
+            previous = self.renderers.get(event.run_id)
+            if (
+                previous
+                and previous.answer_started
+                and previous.text.purpose == DisplayTextPurpose.ANSWER
+            ):
+                previous.text.purpose = DisplayTextPurpose.COMMENTARY
+                self.emitter.emit(
+                    Packet(
+                        identity=previous.identity,
+                        obj=ItemUpdate(item=previous.text.model_copy(deep=True)),
+                    )
+                )
             setting = message_presentation(
                 event.metadata,
                 parent_tool_name=self.call_names.get(
                     (event.parent_message_id or "", event.parent_tool_call_id or "")
                 ),
             )
-            config = render_config(setting, message_documents(event.metadata))
-            self.renderers[event.run_id] = PacketRenderer(
-                config, self._identity(event, event.step_index)
+            self.renderers[event.run_id] = MessageRenderer(
+                setting,
+                message_documents(event.metadata),
+                self._identity(event, event.step_index),
             )
-        elif isinstance(event, (MessageUpdateEvent, MessageEndEvent)):
-            for packet in self.renderers[event.run_id].consume_items(event.items):
+        elif isinstance(event, MessageUpdateEvent):
+            for packet in self.renderers[event.run_id].consume(event.generation_event):
+                self.emitter.emit(packet)
+        elif isinstance(event, MessageEndEvent):
+            for packet in self.renderers[event.run_id].complete(event.message):
                 self.emitter.emit(packet)
         elif isinstance(event, (ToolStartEvent, ToolUpdateEvent, ToolEndEvent)):
             identity = self._identity(event, event.step_index).model_copy(
@@ -318,42 +317,67 @@ class ResponsePresenter:
             )
             key = (identity.message_id, event.tool_call.id)
             if isinstance(event, ToolStartEvent):
-                self.active_calls[key] = _ActiveTool(identity)
                 self.call_names[key] = event.tool_call.name
                 self.emitter.emit(
                     Packet(
                         identity=identity,
-                        obj=OperationStatus(
-                            status=RunStatus.RUNNING, tool_name=event.tool_call.name
+                        obj=ItemUpdate(
+                            item=ToolItem(
+                                name=event.tool_call.name,
+                                tool_id=self.tool_ids.get(event.tool_call.name),
+                                arguments={
+                                    key: value
+                                    for key, value in event.tool_call.arguments.items()
+                                    if key != "requestBody"
+                                },
+                            )
                         ),
                     )
                 )
             elif isinstance(event, ToolUpdateEvent):
-                self.active_calls[key].progress.observe(event.progress)
-                packet = project_tool_progress(event.progress)
-                if packet is not None:
-                    self.emitter.emit(Packet(identity=identity, obj=packet))
-            else:
-                active = self.active_calls.pop(key)
-                for progress in tool_display_progress(event.tool_call, event.result):
-                    remaining = active.progress.remaining(progress)
-                    if remaining is None:
-                        continue
-                    packet = project_tool_progress(remaining)
-                    if packet is not None:
-                        self.emitter.emit(Packet(identity=identity, obj=packet))
                 self.emitter.emit(
                     Packet(
                         identity=identity,
-                        obj=OperationStatus(
-                            status=RunStatus.ERROR
-                            if event.result.is_error
-                            else RunStatus.COMPLETE,
-                            tool_name=event.tool_call.name,
+                        obj=ItemDelta(
+                            delta=ToolOutputUpdate(
+                                output=event.progress.content or None,
+                                metadata=_TOOL_METADATA.validate_python(
+                                    event.progress.details.model_dump()
+                                )
+                                if event.progress.details is not None
+                                else None,
+                            )
                         ),
                     )
                 )
-                self.emitter.emit(Packet(identity=identity, obj=SectionEnd()))
+            else:
+                self.emitter.emit(
+                    Packet(
+                        identity=identity,
+                        obj=ItemUpdate(
+                            item=ToolItem(
+                                name=event.tool_call.name,
+                                tool_id=self.tool_ids.get(event.tool_call.name),
+                                arguments={
+                                    key: value
+                                    for key, value in event.tool_call.arguments.items()
+                                    if key != "requestBody"
+                                },
+                                status=ToolStatus.ERROR
+                                if event.result.is_error
+                                else ToolStatus.COMPLETE,
+                                output=event.result.text
+                                if event.result.details is None
+                                else "",
+                                metadata=_TOOL_METADATA.validate_python(
+                                    event.result.details.model_dump()
+                                )
+                                if event.result.details is not None
+                                else None,
+                            )
+                        ),
+                    )
+                )
         elif isinstance(event, (AgentStartEvent, AgentEndEvent)):
             identity = self._identity(event, 0).model_copy(update={"part_id": "run"})
             status = (
@@ -361,22 +385,22 @@ class ResponsePresenter:
             )
             if isinstance(event, AgentEndEvent):
                 if renderer := self.renderers.pop(event.run_id, None):
+                    if (
+                        event.answer_message_id == renderer.identity.message_id
+                        and renderer.text.purpose == DisplayTextPurpose.COMMENTARY
+                    ):
+                        renderer.text.purpose = DisplayTextPurpose.ANSWER
+                        self.emitter.emit(
+                            Packet(
+                                identity=renderer.identity,
+                                obj=ItemUpdate(
+                                    item=renderer.text.model_copy(deep=True)
+                                ),
+                            )
+                        )
                     for packet in renderer.finish(status):
                         self.emitter.emit(packet)
-                for key, active in list(self.active_calls.items()):
-                    call_identity = active.identity
-                    if call_identity.run_id != event.run_id:
-                        continue
-                    self.emitter.emit(
-                        Packet(
-                            identity=call_identity, obj=OperationStatus(status=status)
-                        )
-                    )
-                    self.emitter.emit(Packet(identity=call_identity, obj=SectionEnd()))
-                    del self.active_calls[key]
-            self.emitter.emit(
-                Packet(identity=identity, obj=OperationStatus(status=status))
-            )
+            self.emitter.emit(Packet(identity=identity, obj=RunUpdate(status=status)))
             if isinstance(event, AgentEndEvent) and event.parent_run_id is None:
                 self.emitter.emit(
                     Packet(

@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from uuid import uuid4
 
+import pytest
 from sqlalchemy.orm import Session
 
 from onyx.chat.models import AnswerStreamPart, StreamingError
@@ -21,14 +22,12 @@ from onyx.server.manage.llm.models import (
     ModelConfigurationUpsertRequest,
 )
 from onyx.server.query_and_chat.models import MessageResponseIDInfo, SendMessageRequest
-from onyx.server.query_and_chat.streaming_models import (
-    AgentResponseDelta,
-    AgentResponseStart,
-    Packet,
-)
+from tests.external_dependency_unit.answer.stream_test_utils import final_answer
 from tests.external_dependency_unit.conftest import create_test_user
+from tests.utils.secret_names import TestSecret
 
 
+@pytest.mark.secrets(TestSecret.ANTHROPIC_API_KEY)
 def test_answer_with_only_anthropic_provider(
     db_session: Session,
     full_deployment_setup: None,  # noqa: ARG001
@@ -94,17 +93,7 @@ def test_answer_with_only_anthropic_provider(
         )
         assert has_message_id, "Should include reserved assistant message ID"
 
-        has_message_start = any(
-            isinstance(packet, Packet) and isinstance(packet.obj, AgentResponseStart)
-            for packet in response_stream
-        )
-        assert has_message_start, "Stream should have a MessageStart packet"
-
-        has_message_delta = any(
-            isinstance(packet, Packet) and isinstance(packet.obj, AgentResponseDelta)
-            for packet in response_stream
-        )
-        assert has_message_delta, "Stream should have a MessageDelta packet"
+        assert final_answer(response_stream)
 
     finally:
         remove_llm_provider(db_session, anthropic_provider.id)

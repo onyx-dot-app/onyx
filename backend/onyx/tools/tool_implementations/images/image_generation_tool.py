@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
-from onyx.agents.tools import ToolInvocation, ToolProgress
+from onyx.agents.tools import ToolInvocation
 from onyx.configs.app_configs import IMAGE_MODEL_NAME, IMAGE_MODEL_PROVIDER
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.utils import (
@@ -34,13 +34,7 @@ from onyx.tools.interface import (
     ToolContext,
     parse_tool_arguments,
 )
-from onyx.tools.models import ToolCallException, ToolExecutionException
-from onyx.tools.progress import (
-    GeneratedImage,
-    ImageGenerationHeartbeat,
-    ImageGenerationStarted,
-    ImagesGenerated,
-)
+from onyx.tools.models import GeneratedImage, ToolCallException, ToolExecutionException
 from onyx.tools.tool_implementations.images.models import (
     FinalImageGenerationResponse,
     ImageGenerationResponse,
@@ -52,7 +46,7 @@ from onyx.utils.threadpool_concurrency import ContextThreadPoolExecutor
 logger = setup_logger()
 
 # Heartbeat interval in seconds to prevent timeouts
-HEARTBEAT_INTERVAL = 5.0
+CANCELLATION_POLL_INTERVAL = 5.0
 
 PROMPT_FIELD = "prompt"
 REFERENCE_IMAGE_FILE_IDS_FIELD = "reference_image_file_ids"
@@ -305,7 +299,6 @@ class ImageGenerationTool(Tool):
         return reference_images
 
     def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        invocation.update(ToolProgress(details=ImageGenerationStarted()))
         if PROMPT_FIELD not in invocation.arguments:
             raise ToolCallException(
                 message=f"Missing required '{PROMPT_FIELD}' parameter in generate_image tool call",
@@ -335,8 +328,7 @@ class ImageGenerationTool(Tool):
             pending = set(futures)
             while pending:
                 invocation.cancellation.check()
-                invocation.update(ToolProgress(details=ImageGenerationHeartbeat()))
-                _, pending = wait(pending, timeout=HEARTBEAT_INTERVAL)
+                _, pending = wait(pending, timeout=CANCELLATION_POLL_INTERVAL)
             image_generation_responses = [future.result() for future in futures]
         finally:
             executor.shutdown(wait=False, cancel_futures=True)
@@ -357,10 +349,6 @@ class ImageGenerationTool(Tool):
             )
             for img, file_id in zip(image_generation_responses, file_ids, strict=True)
         ]
-
-        invocation.update(
-            ToolProgress(details=ImagesGenerated(images=generated_images_metadata))
-        )
 
         final_image_generation_response = FinalImageGenerationResponse(
             generated_images=generated_images_metadata
