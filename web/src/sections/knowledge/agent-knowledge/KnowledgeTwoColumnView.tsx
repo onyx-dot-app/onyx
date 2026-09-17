@@ -119,7 +119,7 @@ export const KnowledgeTwoColumnView = memo(function KnowledgeTwoColumnView({
   searchNavigateNodeId,
 }: KnowledgeTwoColumnViewProps) {
   return (
-    <GeneralLayouts.Section gap={0.5} alignItems="stretch" height="auto">
+    <GeneralLayouts.Section gap={2} alignItems="stretch" height="auto">
       {vectorDbEnabled && (
         <KnowledgeSearchBar
           query={searchQuery}

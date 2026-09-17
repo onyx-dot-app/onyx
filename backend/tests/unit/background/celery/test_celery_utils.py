@@ -62,7 +62,7 @@ class TestEnumerationDuration:
             connector_type="confluence"
         )._sum.get()
 
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match="unexpected error"):
             extract_ids_from_runnable_connector(connector, connector_type="confluence")
 
         after = PRUNING_ENUMERATION_DURATION.labels(
@@ -116,7 +116,7 @@ class TestRateLimitDetection:
         connector = _raising_connector("RATE LIMIT exceeded")
         before = PRUNING_RATE_LIMIT_ERRORS.labels(connector_type="jira")._value.get()
 
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match="RATE LIMIT exceeded"):
             extract_ids_from_runnable_connector(connector, connector_type="jira")
 
         after = PRUNING_RATE_LIMIT_ERRORS.labels(connector_type="jira")._value.get()
@@ -131,7 +131,7 @@ class TestRateLimitDetection:
             connector_type="jira"
         )._value.get()
 
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match="rate limit exceeded"):
             extract_ids_from_runnable_connector(
                 connector, connector_type="google_drive"
             )
@@ -149,7 +149,7 @@ class TestRateLimitDetection:
         connector = _raising_connector("rate limit exceeded")
         before = PRUNING_RATE_LIMIT_ERRORS.labels(connector_type="unknown")._value.get()
 
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match="rate limit exceeded"):
             extract_ids_from_runnable_connector(connector)
 
         after = PRUNING_RATE_LIMIT_ERRORS.labels(connector_type="unknown")._value.get()

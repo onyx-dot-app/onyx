@@ -1,0 +1,420 @@
+"""DB accessors for the latest-only credential capability reports.
+
+One row per (credential, connector-scope): ``connector_id`` NULL is the
+config-less credential-time report, non-NULL is one per attached connector.
+Writers upsert against the scope's partial unique index, so concurrent writers
+resolve to one row instead of racing an insert.
+
+Two writer classes share these rows, with fixed precedence: granular named-check
+runs write through ``upsert_completed_capability_report`` and replace whatever
+is stored (latest-only truth); the coarse blocking-validation recorder writes
+through the ``unless_granular`` variant and never replaces a granular report or
+disturbs a run in flight. ``mark_capability_report_running`` and
+``mark_stale_capability_runs_failed`` belong to the check-runner lifecycle: the
+mark claims the row for a fresh run attempt (``run_id``) while the last
+completed report stays readable, and the sweep retires marks that outlived their
+run ceiling to FAILED_TO_RUN. The attempt's terminal writes are fenced on
+``run_id``, so a superseded attempt can never mislabel its successor's row; the
+sweep preserves ``run_id`` when retiring, so the same attempt's late completion
+still lands (the self-heal for a run that was merely slow).
+"""
+
+from datetime import datetime, timedelta
+from typing import Any, TypedDict
+from uuid import UUID, uuid4
+
+from sqlalchemy import (
+    ColumnElement,
+    and_,
+    func,
+    literal_column,
+    or_,
+    select,
+    text,
+    update,
+)
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.orm import Session
+
+from onyx.configs.constants import DocumentSource
+from onyx.connectors.capability_checks.models import CredentialCapabilityReport
+from onyx.db.enums import CapabilityCheckTrigger, CapabilityReportRunStatus
+from onyx.db.models import CredentialCapabilityReportRow
+
+# A stored report is granular when any check result came from a named check;
+# report serialization always writes ``is_fallback`` explicitly.
+_STORED_REPORT_IS_NOT_GRANULAR: ColumnElement[bool] = or_(
+    CredentialCapabilityReportRow.report.is_(None),
+    ~func.jsonb_path_exists(
+        CredentialCapabilityReportRow.report,
+        literal_column("'$.check_results[*] ? (@.is_fallback == false)'::jsonpath"),
+    ),
+)
+
+
+class _CapabilityReportValues(TypedDict, total=False):
+    """Columns an upsert may write; each writer passes only what it changes."""
+
+    source: DocumentSource
+    trigger: CapabilityCheckTrigger
+    report: dict[str, Any]
+    connector_config_hash: str | None
+    run_status: CapabilityReportRunStatus
+    run_started_at: ColumnElement[datetime]
+    run_id: UUID | None
+    time_updated: ColumnElement[datetime]
+
+
+def _connector_scope_clause(connector_id: int | None) -> ColumnElement[bool]:
+    """WHERE clause selecting the scope's row within one credential."""
+    if connector_id is None:
+        return CredentialCapabilityReportRow.connector_id.is_(None)
+    return CredentialCapabilityReportRow.connector_id == connector_id
+
+
+def _scope_conflict_kwargs(connector_id: int | None) -> dict[str, Any]:
+    """ON CONFLICT inference for the row's scope-specific partial index."""
+    index_elements = [CredentialCapabilityReportRow.credential_id]
+    index_where = "connector_id IS NULL"
+    if connector_id is not None:
+        index_elements.append(CredentialCapabilityReportRow.connector_id)
+        index_where = "connector_id IS NOT NULL"
+    return {"index_elements": index_elements, "index_where": text(index_where)}
+
+
+def _upsert_row(
+    db_session: Session,
+    *,
+    credential_id: int,
+    connector_id: int | None,
+    values: _CapabilityReportValues,
+    update_where: ColumnElement[bool] | None = None,
+) -> CredentialCapabilityReportRow | None:
+    """Inserts or updates the scope's single row with ``values``.
+
+    Columns absent from ``values`` keep their stored value on the update path,
+    which is how RUNNING marks preserve the previous report and completion
+    writes preserve ``run_started_at``. The statement executes immediately, but
+    the caller owns the transaction and must commit. ``update_where`` guards
+    only the conflict-update path: when the stored row fails it, nothing is
+    written and None is returned.
+    """
+    # Stamp both the insert and the conflict-update path explicitly: the model's
+    # ``onupdate`` is not applied to ON CONFLICT SET clauses, and the ``now()``
+    # defaults are transaction-start time, which would stamp every write of one
+    # transaction identically.
+    stamped: _CapabilityReportValues = {
+        **values,
+        "time_updated": func.statement_timestamp(),
+    }
+    stmt = (
+        insert(CredentialCapabilityReportRow)
+        .values(credential_id=credential_id, connector_id=connector_id, **stamped)
+        .on_conflict_do_update(
+            **_scope_conflict_kwargs(connector_id),
+            set_=stamped,
+            where=update_where,
+        )
+        .returning(CredentialCapabilityReportRow)
+    )
+    # ``populate_existing``: without it, RETURNING resolves to the stale
+    # identity-map instance when the caller's session already holds this row.
+    return db_session.scalars(
+        stmt, execution_options={"populate_existing": True}
+    ).one_or_none()
+
+
+def _completed_values(
+    connector_id: int | None,
+    source: DocumentSource,
+    trigger: CapabilityCheckTrigger,
+    report: CredentialCapabilityReport,
+    connector_config_hash: str | None,
+) -> _CapabilityReportValues:
+    # A connector-scoped report always ran against a config, a credential-time
+    # one never did; enforcing the pairing keeps an omitted hash from silently
+    # erasing the staleness signal. ``connector_id`` is taken only for this.
+    assert (connector_id is None) == (connector_config_hash is None), (
+        "Connector-scoped reports must carry a config hash; credential-scoped "
+        "reports must not."
+    )
+    return {
+        "source": source,
+        "trigger": trigger,
+        "report": report.model_dump(mode="json"),
+        "connector_config_hash": connector_config_hash,
+        "run_status": CapabilityReportRunStatus.COMPLETED,
+    }
+
+
+def upsert_completed_capability_report(
+    db_session: Session,
+    *,
+    credential_id: int,
+    connector_id: int | None,
+    source: DocumentSource,
+    trigger: CapabilityCheckTrigger,
+    report: CredentialCapabilityReport,
+    connector_config_hash: str | None = None,
+    run_id: UUID | None = None,
+) -> CredentialCapabilityReportRow | None:
+    """Writes a finished report onto the scope's row (latest-only replace).
+
+    With ``run_id`` the write is fenced to the attempt that claimed the row: it
+    compiles to a conditional UPDATE (never an insert) and lands only while the
+    stored ``run_id`` still matches, so a superseded attempt's completion is
+    discarded instead of mislabeling its successor's row. Retirement preserves
+    ``run_id``, so the same attempt's late completion still lands (the self-heal
+    for a run that was merely slow). Returns None when the fence discarded the
+    write.
+
+    Without ``run_id`` (tasks enqueued before the fence deployed) the write
+    lands only on a row whose stored ``run_id`` is NULL: pre-migration marks are
+    all NULL, so a legacy task still completes normally, but a row reclaimed by
+    a post-deploy attempt is untouchable. The fence is therefore unconditional,
+    with no transition-window exception.
+    """
+    values = _completed_values(
+        connector_id, source, trigger, report, connector_config_hash
+    )
+    if run_id is None:
+        return _upsert_row(
+            db_session,
+            credential_id=credential_id,
+            connector_id=connector_id,
+            values=values,
+            update_where=CredentialCapabilityReportRow.run_id.is_(None),
+        )
+    stamped: _CapabilityReportValues = {
+        **values,
+        # Mirrors ``_upsert_row``: model ``onupdate`` does not apply here.
+        "time_updated": func.statement_timestamp(),
+    }
+    stmt = (
+        update(CredentialCapabilityReportRow)
+        .where(
+            CredentialCapabilityReportRow.credential_id == credential_id,
+            _connector_scope_clause(connector_id),
+            # The fence. A NULL stored ``run_id`` (recorder write, legacy row)
+            # never matches: an attempt that lost the row cannot write back.
+            CredentialCapabilityReportRow.run_id == run_id,
+        )
+        .values(**stamped)
+        .returning(CredentialCapabilityReportRow)
+    )
+    # ``populate_existing``: see ``_upsert_row``.
+    return db_session.scalars(
+        stmt, execution_options={"populate_existing": True}
+    ).one_or_none()
+
+
+def upsert_completed_capability_report_unless_granular(
+    db_session: Session,
+    *,
+    credential_id: int,
+    connector_id: int | None,
+    source: DocumentSource,
+    trigger: CapabilityCheckTrigger,
+    report: CredentialCapabilityReport,
+    connector_config_hash: str | None = None,
+) -> CredentialCapabilityReportRow | None:
+    """Writes a finished report unless the stored one came from named checks.
+
+    The "unless" is not Python logic: it compiles into the statement as ``ON
+    CONFLICT DO UPDATE ... WHERE <stored report is not granular>``. A
+    read-then-decide here would race a concurrent granular write; Postgres
+    evaluates the guard against the stored row atomically, so a granular report
+    can never be replaced by this coarse write (the no-clobber rule). A row
+    marked RUNNING is likewise left alone: this coarse signal is a strict subset
+    of the granular run in flight, and overwriting the mark would strand that
+    attempt's fenced completion. Returns None when the stored row was preserved.
+    """
+    return _upsert_row(
+        db_session,
+        credential_id=credential_id,
+        connector_id=connector_id,
+        values={
+            **_completed_values(
+                connector_id, source, trigger, report, connector_config_hash
+            ),
+            # No run attempt owns a recorder write.
+            "run_id": None,
+        },
+        # The "unless": evaluated by Postgres inside the upsert, not here.
+        update_where=and_(
+            _STORED_REPORT_IS_NOT_GRANULAR,
+            CredentialCapabilityReportRow.run_status
+            != CapabilityReportRunStatus.RUNNING,
+        ),
+    )
+
+
+def mark_capability_report_running(
+    db_session: Session,
+    *,
+    credential_id: int,
+    connector_id: int | None,
+    source: DocumentSource,
+    trigger: CapabilityCheckTrigger,
+    active_within: timedelta,
+) -> CredentialCapabilityReportRow | None:
+    """Flags the scope's row RUNNING unless an unexpired run already is.
+
+    The previous COMPLETED ``report`` stays readable while the run is in flight.
+    The guard compiles into ``ON CONFLICT DO UPDATE ... WHERE``: a stored row
+    blocks the mark only while it is RUNNING with a start time newer than
+    ``active_within`` ago, evaluated atomically by Postgres so concurrent
+    triggers cannot double-mark. A RUNNING mark older than the bound is a
+    crashed or expired run and is replaced. The mark stamps a fresh ``run_id``
+    claiming the row for this attempt; the attempt's terminal writes are fenced
+    on it. Returns None when an active run blocked the mark.
+    """
+    return _upsert_row(
+        db_session,
+        credential_id=credential_id,
+        connector_id=connector_id,
+        values={
+            "source": source,
+            "trigger": trigger,
+            "run_status": CapabilityReportRunStatus.RUNNING,
+            # Statement time, not ``now()``: the run starts now, not when the
+            # caller's transaction began.
+            "run_started_at": func.statement_timestamp(),
+            "run_id": uuid4(),
+        },
+        update_where=or_(
+            CredentialCapabilityReportRow.run_status
+            != CapabilityReportRunStatus.RUNNING,
+            # Defensive: no writer leaves RUNNING with a NULL start, but the
+            # schema can represent it and it must read as stale, not active.
+            CredentialCapabilityReportRow.run_started_at.is_(None),
+            CredentialCapabilityReportRow.run_started_at
+            < func.statement_timestamp() - active_within,
+        ),
+    )
+
+
+def mark_capability_run_failed(
+    db_session: Session,
+    *,
+    credential_id: int,
+    connector_id: int | None,
+    run_id: UUID | None = None,
+) -> None:
+    """Retires the scope's RUNNING mark to FAILED_TO_RUN; the report survives.
+
+    For runs that verifiably will not happen (the trigger endpoint's failed
+    enqueue) and for a failing task's own exit write: FAILED_TO_RUN is the truth
+    pollers should read, and it does not block re-marking, so the scope stays
+    immediately re-triggerable. Guarded on RUNNING so a completion that raced
+    this write is never clobbered, and fenced to the caller's attempt so a
+    superseded attempt cannot fail-mark its successor. ``run_id`` None is the
+    legacy-task fence: it matches only a stored NULL (a pre-migration mark),
+    mirroring the completion writer.
+    """
+    where = [
+        CredentialCapabilityReportRow.credential_id == credential_id,
+        _connector_scope_clause(connector_id),
+        CredentialCapabilityReportRow.run_status == CapabilityReportRunStatus.RUNNING,
+        (
+            CredentialCapabilityReportRow.run_id.is_(None)
+            if run_id is None
+            else CredentialCapabilityReportRow.run_id == run_id
+        ),
+    ]
+    stmt = (
+        update(CredentialCapabilityReportRow)
+        .where(*where)
+        .values(
+            run_status=CapabilityReportRunStatus.FAILED_TO_RUN,
+            # Model ``onupdate`` does not apply to bulk updates.
+            time_updated=func.statement_timestamp(),
+        )
+    )
+    db_session.execute(stmt)
+
+
+def get_sources_with_running_capability_runs(
+    db_session: Session,
+) -> list[DocumentSource]:
+    """Returns the distinct sources holding a row currently marked RUNNING."""
+    stmt = (
+        select(CredentialCapabilityReportRow.source)
+        .where(
+            CredentialCapabilityReportRow.run_status
+            == CapabilityReportRunStatus.RUNNING
+        )
+        .distinct()
+    )
+    return list(db_session.scalars(stmt).all())
+
+
+def mark_stale_capability_runs_failed(
+    db_session: Session,
+    *,
+    source: DocumentSource,
+    stale_after: timedelta,
+) -> int:
+    """Retires dead runs: RUNNING rows older than ``stale_after`` turn
+    FAILED_TO_RUN.
+
+    Only the lifecycle fields change; the stored report (the last completed run)
+    stays readable, and ``run_id`` is preserved so a retired attempt that was
+    merely slow can still land its fenced completion (the self-heal). The cutoff
+    is evaluated by Postgres against statement time, mirroring the mark's guard,
+    so a scope re-marked concurrently is never retired. Returns the number of
+    rows retired.
+    """
+    stmt = (
+        update(CredentialCapabilityReportRow)
+        .where(
+            CredentialCapabilityReportRow.source == source,
+            CredentialCapabilityReportRow.run_status
+            == CapabilityReportRunStatus.RUNNING,
+            or_(
+                CredentialCapabilityReportRow.run_started_at.is_(None),
+                CredentialCapabilityReportRow.run_started_at
+                < func.statement_timestamp() - stale_after,
+            ),
+        )
+        .values(
+            run_status=CapabilityReportRunStatus.FAILED_TO_RUN,
+            # Model ``onupdate`` does not apply to bulk updates.
+            time_updated=func.statement_timestamp(),
+        )
+    )
+    result = db_session.execute(stmt)
+    return int(result.rowcount)  # ty: ignore[unresolved-attribute]
+
+
+def get_capability_report_row(
+    db_session: Session,
+    credential_id: int,
+    connector_id: int | None,
+) -> CredentialCapabilityReportRow | None:
+    """Returns the scope's row; it is the latest report by construction."""
+    stmt = select(CredentialCapabilityReportRow).where(
+        CredentialCapabilityReportRow.credential_id == credential_id
+    )
+    if connector_id is None:
+        stmt = stmt.where(CredentialCapabilityReportRow.connector_id.is_(None))
+    else:
+        stmt = stmt.where(CredentialCapabilityReportRow.connector_id == connector_id)
+    return db_session.scalars(stmt).one_or_none()
+
+
+def get_capability_report_rows_for_source(
+    db_session: Session,
+    source: DocumentSource,
+) -> list[CredentialCapabilityReportRow]:
+    """Returns every report row for a source, most recently updated first."""
+    stmt = (
+        select(CredentialCapabilityReportRow)
+        .where(CredentialCapabilityReportRow.source == source)
+        # ``id`` breaks timestamp ties deterministically.
+        .order_by(
+            CredentialCapabilityReportRow.time_updated.desc(),
+            CredentialCapabilityReportRow.id.desc(),
+        )
+    )
+    return list(db_session.scalars(stmt).all())

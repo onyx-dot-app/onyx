@@ -121,7 +121,9 @@ export const CustomTooltip = ({
 
   return (
     <>
+      {/* Pointer convenience only — the tooltip is hover-driven. */}
       <span
+        role="presentation"
         ref={triggerRef}
         className={cn("relative inline-block", className)}
         onMouseEnter={showTooltip}

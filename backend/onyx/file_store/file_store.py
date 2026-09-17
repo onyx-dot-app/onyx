@@ -5,9 +5,7 @@ from abc import ABC, abstractmethod
 from io import BytesIO
 from typing import IO, TYPE_CHECKING, Any, NotRequired, TypedDict, cast
 
-import boto3
 import puremagic
-from botocore.config import Config
 from botocore.exceptions import ClientError
 from sqlalchemy.orm import Session
 
@@ -47,6 +45,22 @@ if TYPE_CHECKING:
     from onyx.file_store.gcs_file_store import GCSBackedFileStore
 
 logger = setup_logger()
+
+
+# Persisted in file_record.file_size when the backing object is confirmed
+# missing, so listings stop re-probing the object store for it. Rendered as
+# "unknown" (None) in API responses.
+FILE_SIZE_MISSING_SENTINEL = -1
+
+
+def content_byte_size(file_content: object) -> int | None:
+    """Stored size in bytes of save_file content. str content is uploaded
+    UTF-8 encoded by every backend, so its size is the encoded length."""
+    if isinstance(file_content, (bytes, bytearray)):
+        return len(file_content)
+    if isinstance(file_content, str):
+        return len(file_content.encode("utf-8"))
+    return None
 
 
 class S3PutKwargs(TypedDict):
@@ -206,6 +220,10 @@ class S3BackedFileStore(FileStore):
         """Initialize S3 client if not already done"""
         if self._s3_client is None:
             try:
+                # Imported here: boto3 costs ~16 MB and most workers never build an S3 client.
+                import boto3
+                from botocore.config import Config
+
                 client_kwargs: dict[str, Any] = {
                     "service_name": "s3",
                     "region_name": self._aws_region_name,
@@ -392,6 +410,7 @@ class S3BackedFileStore(FileStore):
                 object_key=s3_key,
                 db_session=db_session,
                 file_metadata=file_metadata,
+                file_size=content_byte_size(file_content),
             )
             db_session.commit()
 
@@ -460,6 +479,17 @@ class S3BackedFileStore(FileStore):
                 Bucket=file_record.bucket_name, Key=file_record.object_key
             )
             return response.get("ContentLength")
+        except ClientError as e:
+            if e.response.get("Error", {}).get("Code") in (
+                "404",
+                "NotFound",
+                "NoSuchKey",
+            ):
+                raise FileNotFoundError(
+                    f"Object for file {file_id} does not exist"
+                ) from e
+            logger.warning("Error getting file size for %s: %s", file_id, e)
+            return None
         except Exception as e:
             logger.warning("Error getting file size for %s: %s", file_id, e)
             return None
@@ -549,6 +579,7 @@ class S3BackedFileStore(FileStore):
                     object_key=old_file_record.object_key,
                     db_session=db_session,
                     file_metadata=file_metadata,
+                    file_size=old_file_record.file_size,
                 )
 
                 delete_filerecord_by_file_id(file_id=old_file_id, db_session=db_session)

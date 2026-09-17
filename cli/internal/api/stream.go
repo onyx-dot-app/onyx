@@ -21,6 +21,7 @@ func (c *Client) SendMessageStream(
 	agentID int,
 	parentMessageID *int,
 	fileDescriptors []models.FileDescriptorPayload,
+	llmOverride *models.LLMOverride,
 ) <-chan models.StreamEvent {
 	ch := make(chan models.StreamEvent, 64)
 
@@ -29,6 +30,7 @@ func (c *Client) SendMessageStream(
 
 		payload := models.SendMessagePayload{
 			Message:          message,
+			LLMOverride:      llmOverride,
 			ParentMessageID:  parentMessageID,
 			FileDescriptors:  fileDescriptors,
 			Origin:           "api",

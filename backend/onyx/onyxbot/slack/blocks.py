@@ -35,7 +35,11 @@ from onyx.onyxbot.slack.constants import (
     LIKE_BLOCK_ACTION_ID,
     SHOW_EVERYONE_ACTION_ID,
 )
-from onyx.onyxbot.slack.formatting import format_slack_message
+from onyx.onyxbot.slack.formatting import (
+    escape_slack_specials,
+    format_slack_link_url,
+    format_slack_message,
+)
 from onyx.onyxbot.slack.icons import source_to_github_img_link
 from onyx.onyxbot.slack.models import (
     ActionValuesEphemeralMessage,
@@ -64,6 +68,7 @@ def _format_doc_updated_at(updated_at: datetime | None) -> str | None:
 
 
 def get_feedback_reminder_blocks(thread_link: str, include_followup: bool) -> Block:
+    thread_link = format_slack_link_url(thread_link)
     text = (
         f"Please provide feedback on <{thread_link}|this answer>. "
         "This is essential to help us to improve the quality of the answers. "
@@ -100,8 +105,8 @@ def _split_text(text: str, limit: int = 3000) -> list[str]:
 
 
 def _clean_markdown_link_text(text: str) -> str:
-    # Remove any newlines within the text
-    return format_slack_message(text).replace("\n", " ").strip()
+    # Must emit no Slack link syntax: callers may nest the result in a <url|label>
+    return format_slack_message(text, render_links=False).replace("\n", " ").strip()
 
 
 def _build_qa_feedback_block(
@@ -273,14 +278,21 @@ def _build_sources_blocks(
 
         owner_str = f"By {d.primary_owners[0]}" if d.primary_owners else None
         days_ago_str = _format_doc_updated_at(d.updated_at)
-        final_metadata_str = " | ".join(
-            ([owner_str] if owner_str else [])
-            + ([days_ago_str] if days_ago_str else [])
+        # Sits outside the link, so it needs escaping rather than a markdown
+        # pass that would reinterpret punctuation in an owner's name
+        final_metadata_str = escape_slack_specials(
+            " | ".join(
+                ([owner_str] if owner_str else [])
+                + ([days_ago_str] if days_ago_str else [])
+            )
         )
 
         document_title = _clean_markdown_link_text(doc_sem_id)
+        document_link = format_slack_link_url(d.link) if d.link else None
         img_link = source_to_github_img_link(d.source_type)
 
+        # verbatim stops Slack auto-linking indexed document text, which would
+        # otherwise absorb the surrounding * and > into a URL it detected
         section_blocks.append(
             ContextBlock(
                 elements=[
@@ -289,10 +301,11 @@ def _build_sources_blocks(
                         alt_text=f"{d.source_type.value} logo",
                     ),
                     (
-                        MarkdownTextObject(text=f"{document_title}")
-                        if d.link == ""
+                        MarkdownTextObject(text=document_title, verbatim=True)
+                        if document_link is None
                         else MarkdownTextObject(
-                            text=f"*<{d.link}|[{citation_num}] {document_title}>*\n{final_metadata_str}"
+                            text=f"*<{document_link}|[{citation_num}] {document_title}>*\n{final_metadata_str}",
+                            verbatim=True,
                         )
                     ),
                 ]

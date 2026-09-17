@@ -55,7 +55,7 @@ def is_continuation_token_done_for_all_slices(
 
 
 # shared_task allows this task to be shared across celery app instances.
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.MIGRATE_CHUNKS_FROM_VESPA_TO_OPENSEARCH_TASK,
     # Does not store the task's return value in the result backend.
     ignore_result=True,

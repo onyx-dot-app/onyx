@@ -670,7 +670,7 @@ def test_specific_user_email_shared_with_me(
     # expected += ['perm_sync_doc_0ACOrCU1EMD1hUk9PVA_ab63b976-effb-49af-84e7-423d17a17dd7']
     # expected += ['file_22.txt'] # Shared drive
 
-    doc_titles = set(doc.semantic_identifier for doc in output.documents)
+    doc_titles = {doc.semantic_identifier for doc in output.documents}
     assert doc_titles == set(expected)
 
 
@@ -701,7 +701,7 @@ def test_slim_retrieval_does_not_call_permissions_list(
         "onyx.connectors.google_drive.connector.execute_paginated_retrieval",
         wraps=execute_paginated_retrieval,
     ) as mock_paginated:
-        for batch in connector.retrieve_all_slim_docs():
+        for _batch in connector.retrieve_all_slim_docs():
             pass
 
     permissions_calls = [

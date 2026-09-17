@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from ee.onyx.background.task_name_builders import query_history_task_name
 from ee.onyx.db.query_history import (
+    fetch_persisting_chat_session_by_id,
     get_all_query_history_export_tasks,
     get_page_of_chat_sessions,
     get_total_filtered_chat_sessions_count,
@@ -37,7 +38,7 @@ from onyx.configs.constants import (
     QueryHistoryType,
     SessionType,
 )
-from onyx.db.chat import get_chat_session_by_id, get_chat_sessions_by_user
+from onyx.db.chat import get_chat_sessions_by_user
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission, TaskStatus
 from onyx.db.file_record import get_query_history_export_files
@@ -98,7 +99,7 @@ def fetch_and_process_chat_session_history(
             break
 
         paged_snapshots = parallel_yield(
-            [  # ty: ignore[invalid-argument-type]
+            [
                 yield_snapshot_from_chat_session(
                     db_session=db_session,
                     chat_session=chat_session,
@@ -157,7 +158,7 @@ def snapshot_from_chat_session(
 @router.get("/admin/chat-sessions")
 def admin_get_chat_sessions(
     user_id: UUID,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.READ_QUERY_HISTORY)),
     db_session: Session = Depends(get_session),
 ) -> ChatSessionsResponse:
     # we specifically don't allow this endpoint if "anonymized" since
@@ -170,8 +171,14 @@ def admin_get_chat_sessions(
     )
 
     try:
+        # Full History incognito is recorded for the workspace and hidden only
+        # from its own owner, so query history must still return it.
         chat_sessions = get_chat_sessions_by_user(
-            user_id=user_id, deleted=False, db_session=db_session, limit=0
+            user_id=user_id,
+            deleted=False,
+            db_session=db_session,
+            limit=0,
+            exclude_content_free=True,
         )
 
     except ValueError:
@@ -200,7 +207,7 @@ def get_chat_session_history(
     feedback_type: QAFeedbackType | None = None,
     start_time: datetime | None = None,
     end_time: datetime | None = None,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.READ_QUERY_HISTORY)),
     db_session: Session = Depends(get_session),
 ) -> PaginatedReturn[ChatSessionMinimal]:
     query_history_type = ensure_query_history_is_enabled(
@@ -240,7 +247,7 @@ def get_chat_session_history(
 @router.get("/admin/chat-session-history/{chat_session_id}")
 def get_chat_session_admin(
     chat_session_id: UUID,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.READ_QUERY_HISTORY)),
     db_session: Session = Depends(get_session),
 ) -> ChatSessionSnapshot:
     query_history_type = ensure_query_history_is_enabled(
@@ -248,11 +255,9 @@ def get_chat_session_admin(
     )
 
     try:
-        chat_session = get_chat_session_by_id(
+        chat_session = fetch_persisting_chat_session_by_id(
             chat_session_id=chat_session_id,
-            user_id=None,  # view chat regardless of user
             db_session=db_session,
-            include_deleted=True,
         )
     except ValueError:
         raise HTTPException(
@@ -277,7 +282,7 @@ def get_chat_session_admin(
 
 @router.get("/admin/query-history/list")
 def list_all_query_history_exports(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.READ_QUERY_HISTORY)),
     db_session: Session = Depends(get_session),
 ) -> list[QueryHistoryExport]:
     ensure_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
@@ -305,7 +310,7 @@ def list_all_query_history_exports(
 
 @router.post("/admin/query-history/start-export", tags=PUBLIC_API_TAGS)
 def start_query_history_export(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.READ_QUERY_HISTORY)),
     db_session: Session = Depends(get_session),
     start: datetime | None = None,
     end: datetime | None = None,
@@ -352,7 +357,7 @@ def start_query_history_export(
 @router.get("/admin/query-history/export-status", tags=PUBLIC_API_TAGS)
 def get_query_history_export_status(
     request_id: str,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.READ_QUERY_HISTORY)),
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
     ensure_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
@@ -386,7 +391,7 @@ def get_query_history_export_status(
 @router.get("/admin/query-history/download", tags=PUBLIC_API_TAGS)
 def download_query_history_csv(
     request_id: str,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.READ_QUERY_HISTORY)),
     db_session: Session = Depends(get_session),
 ) -> StreamingResponse:
     ensure_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])

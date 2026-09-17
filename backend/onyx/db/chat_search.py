@@ -32,6 +32,7 @@ def search_chat_sessions(
         stmt = (
             select(ChatSession)
             .where(ChatSession.onyxbot_flow.is_(False))
+            .where(ChatSession.incognito_record_mode.is_(None))
             .order_by(desc(ChatSession.time_created))
             .offset(offset_val)
             .limit(page_size + 1)
@@ -53,7 +54,12 @@ def search_chat_sessions(
     # Otherwise, proceed with full-text search
     query = query.strip()
 
-    base_conditions: list[ColumnElement[bool]] = [ChatSession.onyxbot_flow.is_(False)]
+    # Applied to both arms of the union, so an incognito session cannot surface
+    # through a message body when its description does not match.
+    base_conditions: list[ColumnElement[bool]] = [
+        ChatSession.onyxbot_flow.is_(False),
+        ChatSession.incognito_record_mode.is_(None),
+    ]
     if user_id is not None:
         base_conditions.append(ChatSession.user_id == user_id)
     if not include_deleted:

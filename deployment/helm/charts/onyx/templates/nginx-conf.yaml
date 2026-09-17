@@ -15,16 +15,16 @@ metadata:
 data:
   upstreams.conf: |
     upstream api_server {
-        server {{ include "onyx.fullname" . }}-api-service:{{ .Values.api.service.servicePort }} fail_timeout=0;
+        server {{ include "onyx.resourceName" (list . "api-service") }}:{{ .Values.api.service.servicePort }} fail_timeout=0;
     }
 
     upstream web_server {
-        server {{ include "onyx.fullname" . }}-webserver:{{ .Values.webserver.service.servicePort }} fail_timeout=0;
+        server {{ include "onyx.resourceName" (list . "webserver") }}:{{ .Values.webserver.service.servicePort }} fail_timeout=0;
     }
     {{- if .Values.mcpServer.enabled }}
 
     upstream mcp_server {
-        server {{ include "onyx.fullname" . }}-mcp-server-service:{{ .Values.mcpServer.service.servicePort }} fail_timeout=0;
+        server {{ include "onyx.resourceName" (list . "mcp-server-service") }}:{{ .Values.mcpServer.service.servicePort }} fail_timeout=0;
     }
     {{- end }}
 

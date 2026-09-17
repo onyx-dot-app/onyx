@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useParams, useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
 import { SettingsLayouts, toast } from "@opal/layouts";
@@ -20,7 +21,7 @@ import {
   updateScheduledTask,
 } from "@/app/craft/v1/tasks/api";
 import RunHistoryTable from "@/app/craft/v1/tasks/components/RunHistoryTable";
-import PreApprovedAppsSummary from "@/app/craft/v1/tasks/components/PreApprovedAppsSummary";
+import PreApprovalSummary from "@/app/craft/v1/tasks/components/PreApprovalSummary";
 import { TaskStatusBadge } from "@/app/craft/v1/tasks/components/StatusBadge";
 import { TASKS_PATH, taskEditPath } from "@/app/craft/v1/tasks/constants";
 import type {
@@ -32,6 +33,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
 export default function ScheduledTaskDetailPage() {
+  const t = useTranslations("craft.tasks.detailPage");
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const taskId = params?.id;
@@ -62,22 +64,24 @@ export default function ScheduledTaskDetailPage() {
     try {
       const updated = await updateScheduledTask(data.id, { status: next });
       await mutate(updated, { revalidate: false });
-      toast.success(next === "ACTIVE" ? "Task resumed." : "Task paused.");
+      toast.success(
+        next === "ACTIVE" ? t("toasts.resumed") : t("toasts.paused")
+      );
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Failed to update status"
+        err instanceof Error ? err.message : t("toasts.statusUpdateFailed")
       );
     } finally {
       setBusy(false);
     }
-  }, [data, mutate]);
+  }, [data, mutate, t]);
 
   const handleRunNow = useCallback(async () => {
     if (!data) return;
     setBusy(true);
     try {
       await runScheduledTaskNow(data.id);
-      toast.success(`Queued run for "${data.name}".`);
+      toast.success(t("toasts.runQueued", { name: data.name }));
       void mutate();
       // The run history table owns paginated SWR keys under this prefix —
       // invalidate every variant so the new ``manual_run_now`` row appears.
@@ -86,36 +90,40 @@ export default function ScheduledTaskDetailPage() {
         (key) => typeof key === "string" && key.startsWith(runsPrefix)
       );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to start run");
+      toast.error(
+        err instanceof Error ? err.message : t("toasts.runStartFailed")
+      );
     } finally {
       setBusy(false);
     }
-  }, [data, mutate, globalMutate]);
+  }, [data, mutate, globalMutate, t]);
 
   const handleDelete = useCallback(async () => {
     if (!data) return;
     setBusy(true);
     try {
       await deleteScheduledTask(data.id);
-      toast.success(`Deleted "${data.name}".`);
+      toast.success(t("toasts.deleted", { name: data.name }));
       router.push(TASKS_PATH);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to delete task");
+      toast.error(
+        err instanceof Error ? err.message : t("toasts.deleteFailed")
+      );
       setBusy(false);
     }
-  }, [data, router]);
+  }, [data, router, t]);
 
   if (!taskId) {
     return (
       <SettingsLayouts.Root width="lg">
         <SettingsLayouts.Header
           icon={SvgClock}
-          title="Scheduled task"
+          title={t("fallbackTitle")}
           backButton={handleBack}
         />
         <SettingsLayouts.Body>
           <Text font="main-ui-body" color="text-03">
-            Missing task id.
+            {t("missingTaskId")}
           </Text>
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
@@ -126,7 +134,7 @@ export default function ScheduledTaskDetailPage() {
     <SettingsLayouts.Root width="lg">
       <SettingsLayouts.Header
         icon={SvgClock}
-        title={data?.name ?? "Scheduled task"}
+        title={data?.name ?? t("fallbackTitle")}
         description={scheduleDescription}
         backButton={handleBack}
         rightChildren={
@@ -141,7 +149,7 @@ export default function ScheduledTaskDetailPage() {
                 disabled={busy}
                 data-testid="run-now-button"
               >
-                Run now
+                {t("runNowButton")}
               </Button>
               <Button
                 icon={data.status === "ACTIVE" ? SvgPauseCircle : SvgPlayCircle}
@@ -151,7 +159,9 @@ export default function ScheduledTaskDetailPage() {
                 disabled={busy}
                 data-testid="status-toggle"
               >
-                {data.status === "ACTIVE" ? "Pause" : "Resume"}
+                {data.status === "ACTIVE"
+                  ? t("pauseButton")
+                  : t("resumeButton")}
               </Button>
               <Button
                 icon={SvgEdit}
@@ -160,7 +170,7 @@ export default function ScheduledTaskDetailPage() {
                 href={taskEditPath(data.id)}
                 disabled={busy}
               >
-                Edit
+                {t("editButton")}
               </Button>
               <Button
                 icon={SvgTrash}
@@ -170,7 +180,7 @@ export default function ScheduledTaskDetailPage() {
                 disabled={busy}
                 data-testid="delete-button"
               >
-                Delete
+                {t("deleteButton")}
               </Button>
             </div>
           ) : undefined
@@ -183,12 +193,16 @@ export default function ScheduledTaskDetailPage() {
           </div>
         ) : error || !data ? (
           <Text font="main-ui-body" color="text-03">
-            Failed to load scheduled task.
+            {t("loadFailed")}
           </Text>
         ) : (
           <div className="flex flex-col gap-6">
-            {data.pre_approved_app_ids.length > 0 && (
-              <PreApprovedAppsSummary appIds={data.pre_approved_app_ids} />
+            {(data.pre_approved_app_ids.length > 0 ||
+              data.pre_approved_mcp_server_ids.length > 0) && (
+              <PreApprovalSummary
+                appIds={data.pre_approved_app_ids}
+                mcpServerIds={data.pre_approved_mcp_server_ids}
+              />
             )}
             <RunHistoryTable taskId={data.id} />
           </div>
@@ -198,8 +212,8 @@ export default function ScheduledTaskDetailPage() {
       {confirmDelete && data && (
         <ConfirmationModalLayout
           icon={SvgTrash}
-          title={`Delete "${data.name}"?`}
-          description="This stops future runs and removes the task. Past run history (and the underlying sessions) will be preserved for audit."
+          title={t("confirmDelete.title", { name: data.name })}
+          description={t("confirmDelete.description")}
           onClose={() => setConfirmDelete(false)}
           submit={
             <Button
@@ -209,7 +223,9 @@ export default function ScheduledTaskDetailPage() {
               disabled={busy}
               data-testid="confirm-delete-task"
             >
-              {busy ? "Deleting..." : "Delete"}
+              {busy
+                ? t("confirmDelete.deletingButton")
+                : t("confirmDelete.deleteButton")}
             </Button>
           }
         />

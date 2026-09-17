@@ -19,7 +19,6 @@ from onyx.db.models import (
     PublicExternalUserGroup,
     User,
     User__ExternalUserGroupId,
-    UserRole,
 )
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.conftest import create_test_user
@@ -30,7 +29,6 @@ def _create_ext_perm_user(db_session: Session, name: str) -> User:
     return create_test_user(
         db_session,
         name,
-        role=UserRole.EXT_PERM_USER,
         account_type=AccountType.EXT_PERM_USER,
     )
 
@@ -437,9 +435,8 @@ class TestPerformExternalGroupSync:
     def test_batch_processing(self, db_session: Session) -> None:
         """Test that large numbers of groups are processed in batches"""
         # Create many test users
-        users = []
-        for i in range(150):  # More than the batch size of 100
-            users.append(_create_ext_perm_user(db_session, f"user{i}"))
+        # More than the batch size of 100
+        users = [_create_ext_perm_user(db_session, f"user{i}") for i in range(150)]
 
         cc_pair = _create_test_connector_credential_pair(db_session)
 

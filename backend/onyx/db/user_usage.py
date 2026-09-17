@@ -1,21 +1,28 @@
 """Daily per-user LLM usage rollup for cost/token attribution.
 
 A window rollup: rows accumulate in place per (user, window,
-model, flow, provider), not an append-only per-call ledger."""
+model, flow, provider, incognito), not an append-only per-call ledger."""
 
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from datetime import datetime, timedelta
 from math import ceil
+from threading import RLock
+from typing import Any, cast
 
+from cachetools import TTLCache
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.engine.cursor import CursorResult
 from sqlalchemy.orm import Session
 
-from onyx.db.models import User, User__UserGroup, UserUsage
+from onyx.db.enums import UsageActorKind
+from onyx.db.llm_usage import LLMUsageRecord, build_usage_upsert_values
+from onyx.db.models import TokenRateLimit, User, User__UserGroup, UserUsage
 from onyx.utils.datetime import datetime_to_utc, get_window_start
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
 
@@ -23,7 +30,18 @@ USER_USAGE_BUCKET_SECONDS = 24 * 60 * 60
 USER_USAGE_BUCKET_HOURS = USER_USAGE_BUCKET_SECONDS // (60 * 60)
 TOKEN_BUDGET_PERIOD_ERROR = "Token budget periods must be whole UTC days"
 COST_BUDGET_PERIOD_ERROR = "Cost budget periods must be whole UTC days"
-_CONFLICT_COLS = ["user_id", "window_start", "model", "flow", "provider"]
+COST_BUDGET_PERIOD_HOURS = {24, 168, 720}
+_INVALID_COST_BUDGET_WARNING_TTL_SECONDS = 5 * 60
+_invalid_cost_budget_warning_lock = RLock()
+# Keyed by the raw contextvar value, not get_current_tenant_id, which raises when
+# the contextvar is unset (non-request callers). A warn path must never raise.
+_invalid_cost_budget_warning_cache: TTLCache[tuple[str | None, int, int], None] = (
+    TTLCache(maxsize=10_000, ttl=_INVALID_COST_BUDGET_WARNING_TTL_SECONDS)
+)
+# Not email-shaped on purpose: it can never collide with a real address.
+DELETED_USER_EXPORT_EMAIL = "(deleted user)"
+_CONFLICT_COLS = ["user_id", "window_start", "model", "flow", "provider", "incognito"]
+_USER_ACTOR_INDEX_PREDICATE = text("actor_kind = 'USER'")
 
 
 class TokenUsageBucket(BaseModel):
@@ -47,21 +65,58 @@ def get_token_window_start(now: datetime, period_hours: int) -> datetime:
 
 def _get_cost_period_seconds(period_hours: int) -> int:
     period_seconds = period_hours * 60 * 60
-    if (
-        period_seconds < USER_USAGE_BUCKET_SECONDS
-        or period_seconds % USER_USAGE_BUCKET_SECONDS
-    ):
-        raise ValueError(COST_BUDGET_PERIOD_ERROR)
+    if period_hours not in COST_BUDGET_PERIOD_HOURS:
+        raise ValueError("Cost budget periods must be daily, weekly, or monthly")
     return period_seconds
 
 
-def get_cost_window_start(now: datetime, period_hours: int) -> datetime:
-    """Start of the UTC-day buckets in a cost-budget window."""
-    period_seconds = _get_cost_period_seconds(period_hours)
-    current_bucket = get_window_start(now, USER_USAGE_BUCKET_SECONDS)
-    return current_bucket - timedelta(
-        seconds=period_seconds - USER_USAGE_BUCKET_SECONDS
+def _warn_for_invalid_cost_budget_period(rate_limit: TokenRateLimit) -> None:
+    cache_key = (
+        CURRENT_TENANT_ID_CONTEXTVAR.get(),
+        rate_limit.id,
+        rate_limit.period_hours,
     )
+    with _invalid_cost_budget_warning_lock:
+        if cache_key in _invalid_cost_budget_warning_cache:
+            return
+        _invalid_cost_budget_warning_cache[cache_key] = None
+
+    logger.warning(
+        "Skipping cost budget on token_rate_limit id=%s: unsupported period_hours=%s",
+        rate_limit.id,
+        rate_limit.period_hours,
+    )
+
+
+def cost_budget_limits(rate_limits: Sequence[TokenRateLimit]) -> list[TokenRateLimit]:
+    """Return enforceable cost limits and warn about unsupported stored periods."""
+    valid: list[TokenRateLimit] = []
+    for rate_limit in rate_limits:
+        if rate_limit.cost_budget_cents is None:
+            continue
+        if rate_limit.period_hours not in COST_BUDGET_PERIOD_HOURS:
+            _warn_for_invalid_cost_budget_period(rate_limit)
+            continue
+        valid.append(rate_limit)
+    return valid
+
+
+def get_cost_window_start(now: datetime, period_hours: int) -> datetime:
+    """Start of the current fixed UTC cost-budget period."""
+    _get_cost_period_seconds(period_hours)
+    current_bucket = get_window_start(now, USER_USAGE_BUCKET_SECONDS)
+    if period_hours == 24:
+        return current_bucket
+    if period_hours == 168:
+        return current_bucket - timedelta(days=current_bucket.weekday())
+    return current_bucket.replace(day=1)
+
+
+def cost_budget_fetch_cutoff(
+    now: datetime, cost_limits: Sequence[TokenRateLimit]
+) -> datetime:
+    """Earliest window start across the limits, so one fetch covers every window."""
+    return min(get_cost_window_start(now, limit.period_hours) for limit in cost_limits)
 
 
 def get_token_window_reset(now: datetime, period_hours: int) -> datetime:
@@ -71,9 +126,14 @@ def get_token_window_reset(now: datetime, period_hours: int) -> datetime:
 
 
 def get_cost_window_reset(now: datetime, period_hours: int) -> datetime:
-    period_seconds = _get_cost_period_seconds(period_hours)
-    current_bucket = get_window_start(now, USER_USAGE_BUCKET_SECONDS)
-    return current_bucket + timedelta(seconds=period_seconds)
+    window_start = get_cost_window_start(now, period_hours)
+    if period_hours == 24:
+        return window_start + timedelta(days=1)
+    if period_hours == 168:
+        return window_start + timedelta(days=7)
+    if window_start.month == 12:
+        return window_start.replace(year=window_start.year + 1, month=1)
+    return window_start.replace(month=window_start.month + 1)
 
 
 def earliest_window_reset(
@@ -111,57 +171,52 @@ class UserUsageByDay(BaseModel):
     input_tokens: int
     output_tokens: int
     cache_read_tokens: int
+    cache_creation_tokens: int
     cost_cents: float
 
 
 class UsageExportRow(BaseModel):
-    """Tenant-wide usage row by email, model, and UTC day."""
-
     email: str
     model: str
+    flow: str
+    provider: str
+    incognito: bool
     day: str  # YYYY-MM-DD
     input_tokens: int
     output_tokens: int
     cache_read_tokens: int
+    cache_creation_tokens: int
     cost_cents: float
 
 
 def record_user_usage(
     db_session: Session,
     user_id: str,
-    model: str,
-    flow: str,
-    provider: str | None,
-    input_tokens: int,
-    output_tokens: int,
-    cache_read_tokens: int,
-    cost_cents: float,
-    window_start: datetime,
+    usage: LLMUsageRecord,
+    incognito: bool = False,
 ) -> None:
     """Atomically accumulate into the ledger (Postgres upsert). Caller commits."""
     # Store "" rather than NULL for a missing provider so the dedup unique index
     # collapses these rows on every Postgres version (no NULLS NOT DISTINCT).
-    provider = provider or ""
+    provider = usage.provider or ""
     stmt = pg_insert(UserUsage).values(
         user_id=user_id,
-        window_start=window_start,
-        model=model,
-        flow=flow,
+        actor_kind=UsageActorKind.USER,
+        window_start=usage.window_start,
+        model=usage.model,
+        flow=usage.flow,
         provider=provider,
-        input_tokens=input_tokens,
-        output_tokens=output_tokens,
-        cache_read_tokens=cache_read_tokens,
-        cost_cents=cost_cents,
+        incognito=incognito,
+        input_tokens=usage.input_tokens,
+        output_tokens=usage.output_tokens,
+        cache_read_tokens=usage.cache_read_tokens,
+        cache_creation_tokens=usage.cache_creation_tokens,
+        cost_cents=usage.cost_cents,
     )
     stmt = stmt.on_conflict_do_update(
         index_elements=_CONFLICT_COLS,
-        set_={
-            "input_tokens": UserUsage.input_tokens + stmt.excluded.input_tokens,
-            "output_tokens": UserUsage.output_tokens + stmt.excluded.output_tokens,
-            "cache_read_tokens": UserUsage.cache_read_tokens
-            + stmt.excluded.cache_read_tokens,
-            "cost_cents": UserUsage.cost_cents + stmt.excluded.cost_cents,
-        },
+        index_where=_USER_ACTOR_INDEX_PREDICATE,
+        set_=build_usage_upsert_values(stmt),
     )
     db_session.execute(stmt)
     db_session.flush()
@@ -182,6 +237,7 @@ def get_user_usage_by_day_and_model(
             func.sum(UserUsage.input_tokens),
             func.sum(UserUsage.output_tokens),
             func.sum(UserUsage.cache_read_tokens),
+            func.sum(UserUsage.cache_creation_tokens),
             func.sum(UserUsage.cost_cents),
         )
         .where(
@@ -199,11 +255,114 @@ def get_user_usage_by_day_and_model(
             model=model,
             input_tokens=int(in_tok or 0),
             output_tokens=int(out_tok or 0),
-            cache_read_tokens=int(cache_tok or 0),
+            cache_read_tokens=int(cache_read_tok or 0),
+            cache_creation_tokens=int(cache_creation_tok or 0),
             cost_cents=float(cost or 0.0),
         )
-        for day, model, in_tok, out_tok, cache_tok, cost in rows
+        for (
+            day,
+            model,
+            in_tok,
+            out_tok,
+            cache_read_tok,
+            cache_creation_tok,
+            cost,
+        ) in rows
     ]
+
+
+def _get_usage_export_query(
+    start: datetime,
+    end: datetime,
+    model: str | None = None,
+) -> Any:
+    utc_day = func.date(func.timezone("UTC", UserUsage.window_start))
+    # Deleted users/API keys leave user_id NULL but keep their spend. An inner
+    # join would hide that spend here while the tenant-wide totals still count
+    # it, so the export would silently stop reconciling with them.
+    email_label = func.coalesce(User.email, DELETED_USER_EXPORT_EMAIL)
+    query = (
+        select(
+            email_label,
+            UserUsage.model,
+            UserUsage.flow,
+            UserUsage.provider,
+            UserUsage.incognito,
+            utc_day.label("day"),
+            func.sum(UserUsage.input_tokens),
+            func.sum(UserUsage.output_tokens),
+            func.sum(UserUsage.cache_read_tokens),
+            func.sum(UserUsage.cache_creation_tokens),
+            func.sum(UserUsage.cost_cents),
+        )
+        # UserUsage.user_id on the left: User.id comes from the fastapi-users
+        # base, which ty resolves as a plain value rather than a column.
+        .outerjoin(User, UserUsage.user_id == User.id)
+        .where(
+            UserUsage.actor_kind == UsageActorKind.USER,
+            UserUsage.window_start >= start,
+            UserUsage.window_start < end,
+        )
+        .group_by(
+            email_label,
+            UserUsage.model,
+            UserUsage.flow,
+            UserUsage.provider,
+            UserUsage.incognito,
+            utc_day,
+        )
+        .order_by(
+            email_label,
+            utc_day,
+            UserUsage.model,
+            UserUsage.flow,
+            UserUsage.provider,
+            UserUsage.incognito,
+        )
+    )
+    if model is not None:
+        query = query.where(UserUsage.model == model)
+
+    return query
+
+
+def iter_usage_export(
+    db_session: Session,
+    start: datetime,
+    end: datetime,
+    model: str | None = None,
+) -> Iterator[UsageExportRow]:
+    result = db_session.execute(
+        _get_usage_export_query(start, end, model).execution_options(
+            stream_results=True
+        )
+    ).yield_per(1000)
+    for (
+        email,
+        mdl,
+        flow,
+        provider,
+        incognito,
+        day,
+        in_tok,
+        out_tok,
+        cache_read_tok,
+        cache_creation_tok,
+        cost,
+    ) in result:
+        yield UsageExportRow(
+            email=str(email),
+            model=mdl,
+            flow=flow,
+            provider=provider,
+            incognito=bool(incognito),
+            day=str(day),
+            input_tokens=int(in_tok or 0),
+            output_tokens=int(out_tok or 0),
+            cache_read_tokens=int(cache_read_tok or 0),
+            cache_creation_tokens=int(cache_creation_tok or 0),
+            cost_cents=float(cost or 0.0),
+        )
 
 
 def get_usage_export(
@@ -212,45 +371,39 @@ def get_usage_export(
     end: datetime,
     model: str | None = None,
 ) -> list[UsageExportRow]:
-    """Tenant-wide usage by email, model, and UTC day."""
-    utc_day = func.date(func.timezone("UTC", UserUsage.window_start))
-    query = (
-        # User.email comes from the fastapi-users base; ty mis-resolves it as a
-        # non-column role, so the multi-column select overload doesn't match.
-        select(  # ty: ignore[no-matching-overload]
-            User.email,
-            UserUsage.model,
-            utc_day.label("day"),
-            func.sum(UserUsage.input_tokens),
-            func.sum(UserUsage.output_tokens),
-            func.sum(UserUsage.cache_read_tokens),
-            func.sum(UserUsage.cost_cents),
-        )
-        .join(User, User.id == UserUsage.user_id)
-        .where(
-            UserUsage.window_start >= start,
-            UserUsage.window_start < end,
-        )
-        .group_by(User.email, UserUsage.model, utc_day)
-        .order_by(User.email, utc_day, UserUsage.model)
+    return list(iter_usage_export(db_session, start, end, model))
+
+
+def get_usage_reset_window_start(
+    now: datetime, rate_limits: Sequence[TokenRateLimit]
+) -> datetime:
+    """Return the earliest bucket included by any applicable limit."""
+    window_starts = [get_window_start(now, USER_USAGE_BUCKET_SECONDS)]
+    window_starts.extend(
+        get_token_window_start(now, rate_limit.period_hours)
+        for rate_limit in rate_limits
+        if rate_limit.token_budget is not None
     )
-    if model is not None:
-        query = query.where(UserUsage.model == model)
+    window_starts.extend(
+        get_cost_window_start(now, rate_limit.period_hours)
+        for rate_limit in cost_budget_limits(rate_limits)
+    )
+    return min(window_starts)
 
-    rows = db_session.execute(query).all()
 
-    return [
-        UsageExportRow(
-            email=str(email),
-            model=mdl,
-            day=str(day),
-            input_tokens=int(in_tok or 0),
-            output_tokens=int(out_tok or 0),
-            cache_read_tokens=int(cache_tok or 0),
-            cost_cents=float(cost or 0.0),
-        )
-        for email, mdl, day, in_tok, out_tok, cache_tok, cost in rows
-    ]
+def reset_user_usage(db_session: Session, user_id: str, window_start: datetime) -> int:
+    """Clear a user's usage within the active enforcement window."""
+    result = cast(
+        CursorResult[Any],
+        db_session.execute(
+            delete(UserUsage).where(
+                UserUsage.user_id == user_id,
+                UserUsage.window_start >= window_start,
+            )
+        ),
+    )
+    db_session.flush()
+    return result.rowcount or 0
 
 
 def get_user_cost_cents_in_window(

@@ -64,6 +64,9 @@ class Settings(BaseModel):
     tier: Tier = Tier.COMMUNITY
 
     temperature_override_enabled: bool | None = True
+    reasoning_override_enabled: bool | None = True
+    # Model selector shows one flat list instead of per-provider groups.
+    hide_provider_grouping: bool = False
     auto_scroll: bool | None = False
     query_history_type: QueryHistoryType | None = None
 

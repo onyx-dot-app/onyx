@@ -601,6 +601,60 @@ class TestGetLMStudioAvailableModels:
             assert deepseek.supports_reasoning is True
             assert llama.supports_reasoning is False
 
+    def test_reads_capabilities_given_as_options_objects(self) -> None:
+        """Test that option-object capabilities are read as booleans.
+
+        Newer LM Studio servers describe a capability with an object such as
+        {"allowed_options": ["off", "on"], "default": "on"} instead of a bool.
+        """
+        from onyx.server.manage.llm.api import get_lm_studio_available_models
+
+        mock_session = MagicMock()
+        response = {
+            "models": [
+                {
+                    "key": "openai/gpt-oss-20b",
+                    "type": "llm",
+                    "display_name": "gpt-oss 20B",
+                    "max_context_length": 131072,
+                    "capabilities": {
+                        "reasoning": {
+                            "allowed_options": ["off", "low", "medium", "high"],
+                            "default": "medium",
+                        },
+                        "vision": {"allowed_options": ["off", "on"], "default": "on"},
+                    },
+                },
+                {
+                    "key": "lmstudio-community/Meta-Llama-3-8B",
+                    "type": "llm",
+                    "display_name": "Meta Llama 3 8B",
+                    "max_context_length": 8192,
+                    "capabilities": {
+                        "reasoning": {"allowed_options": ["off"], "default": "off"},
+                        "vision": False,
+                    },
+                },
+            ]
+        }
+
+        with patch("onyx.server.manage.llm.api.httpx") as mock_httpx:
+            mock_response = MagicMock()
+            mock_response.json.return_value = response
+            mock_response.raise_for_status = MagicMock()
+            mock_httpx.get.return_value = mock_response
+
+            request = LMStudioModelsRequest(api_base="http://localhost:1234")
+            results = get_lm_studio_available_models(request, MagicMock(), mock_session)
+
+            gpt_oss = next(r for r in results if "gpt-oss" in r.name)
+            llama = next(r for r in results if "Llama" in r.name)
+
+            assert gpt_oss.supports_reasoning is True
+            assert gpt_oss.supports_image_input is True
+            assert llama.supports_reasoning is False
+            assert llama.supports_image_input is False
+
     def test_uses_display_name_from_api(self, mock_lm_studio_response: dict) -> None:
         """Test that display_name from the API is used directly."""
         from onyx.server.manage.llm.api import get_lm_studio_available_models

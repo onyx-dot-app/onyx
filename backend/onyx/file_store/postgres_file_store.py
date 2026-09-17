@@ -26,6 +26,7 @@ from onyx.db.file_content import (
     upsert_file_content,
 )
 from onyx.db.file_record import (
+    FileRecordNotFoundError,
     delete_filerecord_by_file_id,
     get_filerecord_by_file_id,
     get_filerecord_by_file_id_optional,
@@ -157,6 +158,7 @@ class PostgresBackedFileStore(FileStore):
                     object_key=str(oid),
                     db_session=session,
                     file_metadata=file_metadata,
+                    file_size=len(file_bytes),
                 )
                 upsert_file_content(
                     file_id=file_id,
@@ -224,6 +226,8 @@ class PostgresBackedFileStore(FileStore):
                     file_id=file_id, db_session=session
                 )
                 return record.file_size
+        except FileRecordNotFoundError as e:
+            raise FileNotFoundError(f"Content for file {file_id} does not exist") from e
         except Exception as e:
             logger.warning("Error getting file size for %s: %s", file_id, e)
             return None
@@ -302,6 +306,7 @@ class PostgresBackedFileStore(FileStore):
                     object_key=old_record.object_key,
                     db_session=session,
                     file_metadata=file_metadata,
+                    file_size=old_record.file_size,
                 )
 
                 # 2. Move file_content in-place — the LO OID is never

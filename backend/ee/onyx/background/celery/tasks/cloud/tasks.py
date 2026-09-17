@@ -68,7 +68,7 @@ def _should_bypass_gate_for_full_fanout(
     return elapsed
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CLOUD_BEAT_TASK_GENERATOR,
     ignore_result=True,
     trail=False,
@@ -191,9 +191,9 @@ def cloud_beat_task_generator(
 
             self.app.send_task(
                 task_name,
-                kwargs=dict(
-                    tenant_id=tenant_id,
-                ),
+                kwargs={
+                    "tenant_id": tenant_id,
+                },
                 queue=queue,
                 priority=priority,
                 expires=expires,

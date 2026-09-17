@@ -111,7 +111,7 @@ def _extract_reasoning_chunk(state: ThinkToolProcessorState) -> str | None:
     if to_emit:
         to_emit = _unescape_json_string(to_emit)
 
-    return to_emit if to_emit else None
+    return to_emit or None
 
 
 def create_think_tool_token_processor() -> Callable[

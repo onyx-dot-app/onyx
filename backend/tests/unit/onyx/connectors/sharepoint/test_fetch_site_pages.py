@@ -18,6 +18,7 @@ from office365.runtime.client_request_exception import ClientRequestException
 from requests import Response
 from requests.exceptions import HTTPError
 
+from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
 from onyx.connectors.sharepoint.connector import (
     GRAPH_INVALID_REQUEST_CODE,
     PER_SITE_GRAPH_FAILURE_STATUSES,
@@ -96,7 +97,8 @@ def _patch_graph_api_get_json(
     monkeypatch: pytest.MonkeyPatch,
     fake_fn: Any,
 ) -> None:
-    monkeypatch.setattr(SharepointConnector, "_graph_api_get_json", fake_fn)
+    """Site pages go through the shared Graph client, so intercept it there."""
+    monkeypatch.setattr(GraphApiClient, "get_json", fake_fn)
 
 
 class TestFetchSitePages404:
@@ -367,7 +369,7 @@ class TestIsPerSiteGraphFailure:
         # ClientRequestException with response=None. The retry layer owns
         # those, so we treat None as "not per-site".
         exc = _make_client_request_exception(404)
-        exc.response = None  # type: ignore[assignment]
+        exc.response = None
         assert _is_per_site_graph_failure(exc) is False
 
     def test_itemnotfound_404_is_per_site(self) -> None:

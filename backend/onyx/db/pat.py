@@ -30,6 +30,10 @@ class PatAuthResult(NamedTuple):
 
     user: User
     scopes: list[Permission] | None
+    pat_id: int
+    pat_name: str
+    pat_display: str
+    pat_type: PatType
 
 
 async def resolve_pat(
@@ -70,7 +74,14 @@ async def resolve_pat(
     _schedule_pat_last_used_update(hashed_token, now)
     # None (no scopes) = unrestricted; a stored list is parsed to Permissions.
     scopes = parse_permission_values(pat.scopes) if pat.scopes is not None else None
-    return PatAuthResult(user=pat.user, scopes=scopes)
+    return PatAuthResult(
+        user=pat.user,
+        scopes=scopes,
+        pat_id=pat.id,
+        pat_name=pat.name,
+        pat_display=pat.token_display,
+        pat_type=pat.pat_type,
+    )
 
 
 def _schedule_pat_last_used_update(hashed_token: str, now: datetime) -> None:

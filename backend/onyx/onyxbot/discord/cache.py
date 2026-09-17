@@ -82,7 +82,7 @@ class DiscordCacheManager:
                     max_workers=_REFRESH_MAX_WORKERS,
                 )
 
-                for tenant_id, result in zip(tenant_ids, results):
+                for tenant_id, result in zip(tenant_ids, results, strict=True):
                     if result is None:
                         continue
 

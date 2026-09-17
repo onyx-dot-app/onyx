@@ -2,7 +2,11 @@
 // LLM Selection Types and Utilities
 // =============================================================================
 
-import { ModelConfiguration } from "@/lib/languageModels/types";
+import { DefaultModel, ModelConfiguration } from "@/lib/languageModels/types";
+import {
+  readStorageItem,
+  writeStorageItem,
+} from "@/app/craft/utils/localStorage";
 
 export interface BuildLlmSelection {
   providerId: number;
@@ -31,12 +35,33 @@ export const CRAFT_PROVIDERS: ProviderKey[] = [
 
 const CRAFT_PROVIDER_KEYS = new Set<string>(CRAFT_PROVIDERS);
 
-interface MinimalLlmProvider {
+export interface MinimalLlmProvider {
   id: number;
   name: string | null;
   provider: string;
   provider_display_name?: string | null;
   model_configurations: ModelConfiguration[];
+}
+
+export function providerHasVisibleModel(
+  provider: MinimalLlmProvider,
+  modelName: string
+): boolean {
+  return provider.model_configurations.some(
+    (model) => model.is_visible && model.name === modelName
+  );
+}
+
+export function toLlmSelection(
+  provider: MinimalLlmProvider,
+  modelName: string
+): BuildLlmSelection {
+  return {
+    providerId: provider.id,
+    providerName: provider.name ?? "",
+    provider: provider.provider,
+    modelName,
+  };
 }
 
 export function craftProviderDisplayName(provider: {
@@ -63,9 +88,33 @@ export function hasSupportedCraftProvider(
 
 // Access control is enforced server-side at session create.
 export function getDefaultLlmSelection(
-  llmProviders: MinimalLlmProvider[] | undefined
+  llmProviders: MinimalLlmProvider[] | undefined,
+  configuredDefaults: (DefaultModel | null | undefined)[] = []
 ): BuildLlmSelection | null {
   if (!llmProviders) return null;
+
+  // Each configured default (e.g. Craft's own default, then the shared chat
+  // default) outranks the built-in recommendation, tried in order. Mirrors
+  // the backend's _select_gateway_default.
+  for (const configuredDefault of configuredDefaults) {
+    if (!configuredDefault) continue;
+    const provider = llmProviders.find(
+      (candidate) => candidate.id === configuredDefault.provider_id
+    );
+    if (
+      provider?.model_configurations.some(
+        (model) =>
+          model.is_visible && model.name === configuredDefault.model_name
+      )
+    ) {
+      return {
+        providerId: provider.id,
+        providerName: provider.name ?? "",
+        provider: provider.provider,
+        modelName: configuredDefault.model_name,
+      };
+    }
+  }
 
   // Must match the backend's casefold-then-id ordering in
   // _gateway_provider_order; localeCompare would diverge.
@@ -81,12 +130,7 @@ export function getDefaultLlmSelection(
       isCraftRecommendedModel
     )?.name;
     if (!modelName) continue;
-    return {
-      providerId: provider.id,
-      providerName: provider.name ?? "",
-      provider: provider.provider,
-      modelName,
-    };
+    return toLlmSelection(provider, modelName);
   }
 
   // Must mirror the backend's _select_gateway_default fallback so the picker
@@ -98,12 +142,7 @@ export function getDefaultLlmSelection(
       .map((model) => model.name)
       .sort()[0];
     if (!modelName) continue;
-    return {
-      providerId: provider.id,
-      providerName: provider.name ?? "",
-      provider: provider.provider,
-      modelName,
-    };
+    return toLlmSelection(provider, modelName);
   }
 
   return null;
@@ -130,21 +169,14 @@ export function resolveSessionLlmSelection(
     : (llmProviders.find(
         (candidate) =>
           candidate.provider === agentProvider &&
-          candidate.model_configurations.some(
-            (model) => model.is_visible && model.name === agentModel
-          )
+          providerHasVisibleModel(candidate, agentModel)
       ) ??
       llmProviders.find((candidate) => candidate.provider === agentProvider));
   if (!provider) return null;
   const modelName = isGatewayModel
     ? agentModel.slice(separatorIndex + 1)
     : agentModel;
-  if (
-    isGatewayModel &&
-    !provider.model_configurations.some(
-      (model) => model.is_visible && model.name === modelName
-    )
-  ) {
+  if (isGatewayModel && !providerHasVisibleModel(provider, modelName)) {
     return null;
   }
 
@@ -167,24 +199,10 @@ function craftOnboardingSeenKey(userId: string): string {
   return `onyx:craftOnboardingSeen:${userId}`;
 }
 
-// localStorage access throws when the browser blocks site data; treat that
-// as "not seen" rather than crashing the page.
 export function getCraftOnboardingSeen(userId: string): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    return (
-      window.localStorage.getItem(craftOnboardingSeenKey(userId)) === "true"
-    );
-  } catch {
-    return false;
-  }
+  return readStorageItem(craftOnboardingSeenKey(userId)) === "true";
 }
 
 export function setCraftOnboardingSeen(userId: string): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(craftOnboardingSeenKey(userId), "true");
-  } catch {
-    // Storage unavailable — the intro will re-show next visit.
-  }
+  writeStorageItem(craftOnboardingSeenKey(userId), "true");
 }

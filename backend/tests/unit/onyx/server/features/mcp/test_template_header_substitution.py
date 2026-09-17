@@ -1,6 +1,6 @@
-"""`_build_headers_from_template` is the single source of truth for
-rendering per-user API_TOKEN headers: it must apply both user-supplied
-substitutions and auto ones (e.g. `{user_email}`) in one pass."""
+"""MCP templates apply user and automatic substitutions in one pass."""
+
+import pytest
 
 from onyx.server.features.mcp.api import _build_headers_from_template
 from onyx.server.features.mcp.models import MCPAuthTemplate
@@ -46,15 +46,24 @@ class TestBuildHeadersFromTemplate:
         )
         assert headers == {"Authorization": "Bearer k"}
 
-    def test_empty_header_name_is_dropped(self) -> None:
-        # Empty header names must be filtered (otherwise HTTP layer breaks).
-        template = MCPAuthTemplate(
-            headers={"": "Bearer {api_key}", "Authorization": "Bearer {api_key}"},
-            required_fields=["api_key"],
-        )
-        headers = _build_headers_from_template(
-            template_data=template,
-            credentials={"api_key": "k"},
-            user_email="alice@example.com",
-        )
-        assert headers == {"Authorization": "Bearer k"}
+    def test_empty_header_name_is_rejected(self) -> None:
+        with pytest.raises(ValueError, match="Invalid MCP header name"):
+            MCPAuthTemplate(
+                headers={
+                    "": "Bearer {api_key}",
+                    "Authorization": "Bearer {api_key}",
+                },
+            )
+
+    def test_denylisted_header_is_rejected(self) -> None:
+        with pytest.raises(ValueError, match="not allowed"):
+            MCPAuthTemplate(headers={"Host": "internal.example.com"})
+
+    def test_case_insensitive_duplicate_header_is_rejected(self) -> None:
+        with pytest.raises(ValueError, match="Duplicate MCP header name"):
+            MCPAuthTemplate(
+                headers={
+                    "Authorization": "Bearer first",
+                    "authorization": "Bearer second",
+                }
+            )

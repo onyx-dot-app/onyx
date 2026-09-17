@@ -69,7 +69,7 @@ def track_image_summarization(
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
         bound = inspect.signature(fn).bind(*args, **kwargs)
         bound.apply_defaults()
-        image_data: bytes | None = bound.arguments.get("image_data")  # type: ignore[assignment]
+        image_data: bytes | None = bound.arguments.get("image_data")
 
         labels: dict[str, str] = {
             "size_bucket": "unknown",

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import time
 from collections.abc import Generator
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any, NamedTuple
 from uuid import UUID, uuid4
@@ -29,6 +29,7 @@ from tests.integration.tests.craft.docker_e2e.conftest import (
     DockerExec,
     DockerSandbox,
     ProvisionSandbox,
+    remove_container,
 )
 
 pytestmark = pytest.mark.skipif(
@@ -88,8 +89,16 @@ def _drive_turn(
     timeout: float = 180.0,
 ) -> _Collected:
     turn = BuildSessionManager.start_turn(user, session_id, prompt)
-    turn_id = turn.turn_id
+    return _collect_turn_events(user, session_id, turn.turn_id, timeout=timeout)
 
+
+def _collect_turn_events(
+    user: DATestUser,
+    session_id: UUID,
+    turn_id: str,
+    *,
+    timeout: float = 180.0,
+) -> _Collected:
     out = _Collected()
     url = f"{API_SERVER_URL}/build/sessions/{session_id}/turns/{turn_id}/events"
     with client.stream(
@@ -138,11 +147,7 @@ def streaming_user() -> DATestUser:
 
 
 @pytest.fixture
-def live_session(
-    admin_user: DATestUser,
-    streaming_user: DATestUser,
-    provision_sandbox: ProvisionSandbox,
-) -> Generator[DockerLiveSession, None, None]:
+def live_openai_provider(admin_user: DATestUser) -> Generator[None, None, None]:
     real_key = os.environ.get("OPENAI_API_KEY")
     if not real_key:
         pytest.skip("OPENAI_API_KEY not set; live-turn streaming tests need it.")
@@ -158,16 +163,8 @@ def live_session(
         api_key=real_key,
         default_model_name=_LIVE_MODEL,
     )
-    result: DockerSandbox | None = None
     try:
-        # Pin the cheap model on the turn; provisioning otherwise selects the
-        # provider's recommended (flagship) model, ignoring default_model_name.
-        result = provision_sandbox(
-            streaming_user,
-            llm_provider_type=LlmProviderNames.OPENAI,
-            llm_model_name=_LIVE_MODEL,
-        )
-        yield DockerLiveSession(user=streaming_user, session_id=result.session_id)
+        yield
     finally:
         try:
             LLMProviderManager.delete(created_provider, admin_user, force=True)
@@ -176,20 +173,33 @@ def live_session(
                 "WARNING: failed to delete live-test LLM provider "
                 f"{created_provider.id!r}: {exc}"
             )
+
+
+def _provision_live_session(
+    provision_sandbox: ProvisionSandbox, user: DATestUser
+) -> DockerSandbox:
+    # Pin the cheap model on the turn; provisioning otherwise selects the
+    # provider's recommended (flagship) model, ignoring default_model_name.
+    return provision_sandbox(
+        user,
+        llm_provider_type=LlmProviderNames.OPENAI,
+        llm_model_name=_LIVE_MODEL,
+    )
+
+
+@pytest.fixture
+def live_session(
+    live_openai_provider: None,  # noqa: ARG001
+    streaming_user: DATestUser,
+    provision_sandbox: ProvisionSandbox,
+) -> Generator[DockerLiveSession, None, None]:
+    result: DockerSandbox | None = None
+    try:
+        result = _provision_live_session(provision_sandbox, streaming_user)
+        yield DockerLiveSession(user=streaming_user, session_id=result.session_id)
+    finally:
         if result is not None:
-            try:
-                subprocess.run(
-                    ["docker", "rm", "-f", result.container_name],
-                    capture_output=True,
-                    text=True,
-                    timeout=30.0,
-                    check=False,
-                )
-            except Exception as exc:
-                print(
-                    "WARNING: failed to remove container "
-                    f"{result.container_name!r}: {exc}"
-                )
+            remove_container(result.container_name)
 
 
 def test_provision_injects_serve_env_into_real_container(
@@ -295,3 +305,67 @@ def test_multi_turn_session_terminates_each_turn(
         assert out.term is not None, f"turn {i + 1} did not terminate"
         assert out.errors == [], f"turn {i + 1} had errors: {out.errors}"
         assert len(out.text) > 0, f"turn {i + 1} produced no text"
+
+
+@_SKIP_NO_LLM_KEY
+def test_parallel_sessions_on_shared_sandbox_stream_independently(
+    live_openai_provider: None,  # noqa: ARG001
+    streaming_user: DATestUser,
+    provision_sandbox: ProvisionSandbox,
+) -> None:
+    """Two sessions for one user share a sandbox — one opencode-serve, one
+    Instance per session directory. Each turn's SSE stream must deliver its
+    own session's chunks and terminator, and nothing from the other session
+    (May 2026 regression: parallel sessions on one pod shared an unscoped
+    ``/event`` bus and both hung waiting for terminators)."""
+    first = _provision_live_session(provision_sandbox, streaming_user)
+    try:
+        # The sleep keeps turn 1 live while session 2 provisions below, so the
+        # two turns genuinely stream in parallel on the shared opencode-serve.
+        turn_one = BuildSessionManager.start_turn(
+            streaming_user,
+            first.session_id,
+            "Run the bash command `sleep 45`, then write the word ALPHA on "
+            "20 separate lines, nothing else.",
+        )
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            # Attach immediately: the events endpoint is attach-only and 409s
+            # once a turn is no longer the session's active turn.
+            future_one = pool.submit(
+                _collect_turn_events,
+                streaming_user,
+                first.session_id,
+                turn_one.turn_id,
+            )
+            # Session 1 has a message now, so this provisions a distinct
+            # second session (the create endpoint reuses a still-empty session
+            # otherwise).
+            second = _provision_live_session(provision_sandbox, streaming_user)
+            assert second.container_name == first.container_name, (
+                "expected both sessions to share the user's sandbox container"
+            )
+            turn_two = BuildSessionManager.start_turn(
+                streaming_user,
+                second.session_id,
+                "Write the word BRAVO on 20 separate lines, nothing else.",
+            )
+            future_two = pool.submit(
+                _collect_turn_events,
+                streaming_user,
+                second.session_id,
+                turn_two.turn_id,
+            )
+            out_one = future_one.result(timeout=240.0)
+            out_two = future_two.result(timeout=240.0)
+
+        for label, out in (("first", out_one), ("second", out_two)):
+            assert out.term is not None, f"{label} session's turn never terminated"
+            assert out.errors == [], f"{label} session had errors: {out.errors}"
+        assert "ALPHA" in out_one.text and "BRAVO" not in out_one.text, (
+            f"first session's stream lost or leaked text: {out_one.text!r}"
+        )
+        assert "BRAVO" in out_two.text and "ALPHA" not in out_two.text, (
+            f"second session's stream lost or leaked text: {out_two.text!r}"
+        )
+    finally:
+        remove_container(first.container_name)

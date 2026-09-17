@@ -1,4 +1,3 @@
-import { UserRole } from "@/lib/types";
 import { parseErrorDetail } from "@/lib/fetcher";
 
 export async function deactivateUser(email: string): Promise<void> {
@@ -34,17 +33,19 @@ export async function deleteUser(email: string): Promise<void> {
   }
 }
 
-export async function setUserRole(
+export async function setUserAdminAccess(
   email: string,
-  newRole: UserRole
+  isAdmin: boolean
 ): Promise<void> {
-  const res = await fetch("/api/manage/set-user-role", {
+  const res = await fetch("/api/manage/admin/users/admin-access", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user_email: email, new_role: newRole }),
+    body: JSON.stringify({ user_email: email, is_admin: isAdmin }),
   });
   if (!res.ok) {
-    throw new Error(await parseErrorDetail(res, "Failed to update user role"));
+    throw new Error(
+      await parseErrorDetail(res, "Failed to update admin access")
+    );
   }
 }
 

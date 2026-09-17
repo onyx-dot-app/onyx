@@ -7,7 +7,7 @@ import {
   McpServerProcess,
 } from "@tests/e2e/utils/mcpServer";
 import { AdminMcpServersPage } from "@tests/e2e/pages/AdminMcpServersPage";
-import { ActionsPopover } from "@tests/e2e/pages/ActionsPopover";
+import { ToolsPopover } from "@tests/e2e/pages/ToolsPopover";
 
 // API keys baked into run_mcp_server_per_user_key.py. The script's middleware
 // also requires every /mcp/* request to carry a non-empty `X-Username` header
@@ -181,7 +181,7 @@ test.describe("MCP per-user API key auth (multi-field template)", () => {
     await page.waitForURL("**/app**");
     await ensureOnboardingComplete(page);
 
-    const actions = new ActionsPopover(page);
+    const actions = new ToolsPopover(page);
     await actions.expectServerVisible(serverName);
 
     // Clicking before authenticating opens the credentials modal.
@@ -221,7 +221,7 @@ test.describe("MCP per-user API key auth (multi-field template)", () => {
     await page.waitForURL("**/app**");
     await ensureOnboardingComplete(page);
 
-    const actions = new ActionsPopover(page);
+    const actions = new ToolsPopover(page);
     await actions.expectServerVisible(serverName);
 
     // Already authenticated from the previous test, so this drills into tools.

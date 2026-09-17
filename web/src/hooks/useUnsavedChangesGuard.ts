@@ -19,7 +19,10 @@ export default function useUnsavedChangesGuard({
   const [confirmationOpen, setConfirmationOpen] = useState(false);
   const pendingNavigation = useRef<(() => void) | null>(null);
   const onDiscardRef = useRef(onDiscard);
-  onDiscardRef.current = onDiscard;
+
+  useEffect(() => {
+    onDiscardRef.current = onDiscard;
+  }, [onDiscard]);
 
   const requestLeave = useCallback(
     (navigate: () => void) => {

@@ -45,36 +45,7 @@ export function useCaptcha() {
     }
 
     const scriptSrc = `https://www.google.com/recaptcha/api.js?render=${RECAPTCHA_SITE_KEY}`;
-
-    // Check if the script is already loaded
-    if (window.grecaptcha) {
-      window.grecaptcha.ready(() => {
-        setIsLoaded(true);
-      });
-      return;
-    }
-
-    // Check if the script is already in the DOM (loading but not yet executed)
-    const existingScript = document.querySelector(`script[src="${scriptSrc}"]`);
-    if (existingScript) {
-      // Script exists but hasn't loaded yet, wait for it
-      existingScript.addEventListener("load", () => {
-        if (window.grecaptcha) {
-          window.grecaptcha.ready(() => {
-            setIsLoaded(true);
-          });
-        }
-      });
-      return;
-    }
-
-    // Load the reCAPTCHA script
-    const script = document.createElement("script");
-    script.src = scriptSrc;
-    script.async = true;
-    script.defer = true;
-
-    script.onload = () => {
+    const handleLoad = () => {
       if (window.grecaptcha) {
         window.grecaptcha.ready(() => {
           setIsLoaded(true);
@@ -82,10 +53,35 @@ export function useCaptcha() {
       }
     };
 
+    // Check if the script is already loaded
+    if (window.grecaptcha) {
+      handleLoad();
+      return;
+    }
+
+    // Check if the script is already in the DOM (loading but not yet executed)
+    const existingScript = document.querySelector<HTMLScriptElement>(
+      `script[src="${scriptSrc}"]`
+    );
+    if (existingScript) {
+      // Script exists but hasn't loaded yet, wait for it
+      existingScript.addEventListener("load", handleLoad);
+      return () => {
+        existingScript.removeEventListener("load", handleLoad);
+      };
+    }
+
+    // Load the reCAPTCHA script
+    const script = document.createElement("script");
+    script.src = scriptSrc;
+    script.async = true;
+    script.defer = true;
+    script.addEventListener("load", handleLoad);
+
     document.head.appendChild(script);
 
     return () => {
-      // Cleanup is tricky with reCAPTCHA, so we leave the script in place
+      script.removeEventListener("load", handleLoad);
     };
   }, [isCaptchaEnabled]);
 

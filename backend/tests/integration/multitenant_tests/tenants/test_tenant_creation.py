@@ -3,7 +3,6 @@ from uuid import uuid4
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.enums import AccessType
-from onyx.db.models import UserRole
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
@@ -22,7 +21,7 @@ def test_first_user_is_admin(reset_multitenant: None) -> None:  # noqa: ARG001
     test_user: DATestUser = UserManager.create(
         name=f"test_{unique}", email=f"test_{unique}@example.com"
     )
-    assert UserManager.is_role(test_user, UserRole.ADMIN)
+    assert UserManager.is_admin(test_user)
 
 
 def test_admin_can_create_credential(
@@ -34,7 +33,7 @@ def test_admin_can_create_credential(
     test_user: DATestUser = UserManager.create(
         name=f"test_{unique}", email=f"test_{unique}@example.com"
     )
-    assert UserManager.is_role(test_user, UserRole.ADMIN)
+    assert UserManager.is_admin(test_user)
 
     # Create credential
     test_credential = CredentialManager.create(
@@ -55,7 +54,7 @@ def test_admin_can_create_connector(
     test_user: DATestUser = UserManager.create(
         name=f"test_{unique}", email=f"test_{unique}@example.com"
     )
-    assert UserManager.is_role(test_user, UserRole.ADMIN)
+    assert UserManager.is_admin(test_user)
 
     # Create connector
     test_connector = ConnectorManager.create(
@@ -76,7 +75,7 @@ def test_admin_can_create_and_verify_cc_pair(
     test_user: DATestUser = UserManager.create(
         name=f"test_{unique}", email=f"test_{unique}@example.com"
     )
-    assert UserManager.is_role(test_user, UserRole.ADMIN)
+    assert UserManager.is_admin(test_user)
 
     # Create credential
     test_credential = CredentialManager.create(
@@ -124,7 +123,7 @@ def test_image_gen_config_created_on_tenant_provision(
     test_user: DATestUser = UserManager.create(
         name=f"test_{unique}", email=f"test_{unique}@example.com"
     )
-    assert UserManager.is_role(test_user, UserRole.ADMIN)
+    assert UserManager.is_admin(test_user)
 
     # Check if image gen config was created during tenant provisioning
     all_configs = ImageGenerationConfigManager.get_all(user_performing_action=test_user)

@@ -193,8 +193,7 @@ class TestClaimConcurrency:
         results: list[bool] = []
         with ThreadPoolExecutor(max_workers=num_threads) as executor:
             futures = [executor.submit(claim) for _ in range(num_threads)]
-            for future in as_completed(futures):
-                results.append(future.result())
+            results.extend(future.result() for future in as_completed(futures))
 
         winners = sum(1 for r in results if r)
         assert winners == 1, f"Expected 1 winner, got {winners}"

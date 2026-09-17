@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/onyx-dot-app/onyx/cli/internal/agents"
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
 	"github.com/onyx-dot-app/onyx/cli/internal/browser"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
@@ -32,6 +33,9 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 			return cmdSelectAgent(m, arg)
 		}
 		return cmdShowAgents(m)
+
+	case "/model":
+		return cmdShowModels(m)
 
 	case "/attach":
 		return cmdAttach(m, arg)
@@ -109,22 +113,68 @@ func cmdShowAgents(m Model) (Model, tea.Cmd) {
 }
 
 func cmdSelectAgent(m Model, idStr string) (Model, tea.Cmd) {
+	idStr = strings.TrimSpace(idStr)
+	if idStr == "" {
+		return cmdShowAgents(m)
+	}
+
+	return applyAgentSelection(m, func() (*models.AgentSummary, error) {
+		if len(m.agents) == 0 {
+			return nil, fmt.Errorf("no agents available; run /agent to refresh the list")
+		}
+
+		// Exact name wins over numeric ID parsing (e.g. agent named "42").
+		switch exact := agents.ExactNameMatches(m.agents, idStr); len(exact) {
+		case 1:
+			return &exact[0], nil
+		case 0:
+			// fall through
+		default:
+			agent, err := agents.ResolveByName(m.agents, idStr)
+			if err != nil {
+				return nil, err
+			}
+			return &agent, nil
+		}
+
+		if pid, err := strconv.Atoi(idStr); err == nil {
+			for i := range m.agents {
+				if m.agents[i].ID == pid {
+					return &m.agents[i], nil
+				}
+			}
+			return nil, fmt.Errorf("agent %d not found. Use /agent to see available agents", pid)
+		}
+
+		agent, err := agents.ResolveByName(m.agents, idStr)
+		if err != nil {
+			return nil, err
+		}
+		return &agent, nil
+	})
+}
+
+func cmdSelectAgentByID(m Model, idStr string) (Model, tea.Cmd) {
 	pid, err := strconv.Atoi(strings.TrimSpace(idStr))
 	if err != nil {
 		m.viewport.addWarning("Invalid agent ID. Use a number.")
 		return m, nil
 	}
 
-	var target *models.AgentSummary
-	for i := range m.agents {
-		if m.agents[i].ID == pid {
-			target = &m.agents[i]
-			break
+	return applyAgentSelection(m, func() (*models.AgentSummary, error) {
+		for i := range m.agents {
+			if m.agents[i].ID == pid {
+				return &m.agents[i], nil
+			}
 		}
-	}
+		return nil, fmt.Errorf("agent %d not found. Use /agent to see available agents", pid)
+	})
+}
 
-	if target == nil {
-		m.viewport.addWarning(fmt.Sprintf("Agent %d not found. Use /agent to see available agents.", pid))
+func applyAgentSelection(m Model, lookup func() (*models.AgentSummary, error)) (Model, tea.Cmd) {
+	target, err := lookup()
+	if err != nil {
+		m.viewport.addWarning(err.Error())
 		return m, nil
 	}
 
@@ -140,7 +190,87 @@ func cmdSelectAgent(m Model, idStr string) (Model, tea.Cmd) {
 	return m, nil
 }
 
+// modelOption is one selectable model, flattened across providers.
+type modelOption struct {
+	configID      *int
+	name          string // model name sent to the API
+	label         string // display name shown in the UI
+	providerName  string // provider config name, for name-based override fallback
+	providerLabel string // provider display name shown in the UI
+	isDefault     bool   // true when this is the workspace default text model
+}
+
+// flattenModelOptions turns the provider listing into a flat list of visible
+// models, marking the workspace default.
+func flattenModelOptions(resp *models.LLMProviderResponse) []modelOption {
+	if resp == nil {
+		return nil
+	}
+	var options []modelOption
+	for _, provider := range resp.Providers {
+		// Only the provider config name works for the name-based override
+		// fallback on older servers; the provider type key does not resolve.
+		providerName := ""
+		if provider.Name != nil {
+			providerName = *provider.Name
+		}
+		for _, mc := range provider.ModelConfigurations {
+			if !mc.IsVisible {
+				continue
+			}
+			isDefault := resp.DefaultText != nil &&
+				resp.DefaultText.ProviderID == provider.ID &&
+				resp.DefaultText.ModelName == mc.Name
+			options = append(options, modelOption{
+				configID:      mc.ID,
+				name:          mc.Name,
+				label:         mc.Label(),
+				providerName:  providerName,
+				providerLabel: provider.ProviderDisplayName,
+				isDefault:     isDefault,
+			})
+		}
+	}
+	return options
+}
+
+func cmdShowModels(m Model) (Model, tea.Cmd) {
+	m.viewport.addInfo("Loading models...")
+	client := m.client
+	return m, func() tea.Msg {
+		resp, err := client.ListLLMProviders(context.Background())
+		return ModelsLoadedMsg{Response: resp, ShowPicker: true, Err: err}
+	}
+}
+
+// cmdSelectModel applies the picker selection. idxStr is an index into
+// m.llmModels (model names and config IDs are not unique across providers).
+func cmdSelectModel(m Model, idxStr string) (Model, tea.Cmd) {
+	idx, err := strconv.Atoi(idxStr)
+	if err != nil || idx < 0 || idx >= len(m.llmModels) {
+		m.viewport.addWarning("Invalid model selection.")
+		return m, nil
+	}
+	opt := m.llmModels[idx]
+
+	override := &models.LLMOverride{
+		ModelConfigurationID: opt.configID,
+		ModelVersion:         &opt.name,
+	}
+	if opt.providerName != "" {
+		override.ModelProvider = &opt.providerName
+	}
+	m.modelOverride = override
+	m.status.setModel(opt.label)
+	m.viewport.addInfo("Switched to model: " + opt.label)
+	return m, nil
+}
+
 func cmdAttach(m Model, pathStr string) (Model, tea.Cmd) {
+	if RemoteMode {
+		m.viewport.addWarning("/attach is disabled over SSH: paths resolve on the server host, not yours.")
+		return m, nil
+	}
 	if pathStr == "" {
 		m.viewport.addWarning("Usage: /attach <file_path>")
 		return m, nil
@@ -199,5 +329,14 @@ func loadAgentsCmd(client api.ClientAPI) tea.Cmd {
 	return func() tea.Msg {
 		agents, err := client.ListAgents(context.Background())
 		return InitDoneMsg{Agents: agents, Err: err}
+	}
+}
+
+// loadModelsCmd fetches LLM providers at startup so the status bar can show
+// the current (default) model.
+func loadModelsCmd(client api.ClientAPI) tea.Cmd {
+	return func() tea.Msg {
+		resp, err := client.ListLLMProviders(context.Background())
+		return ModelsLoadedMsg{Response: resp, Err: err}
 	}
 }

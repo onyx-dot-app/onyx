@@ -5,10 +5,10 @@ ARG BASE_IMAGE_REGISTRY=docker.io
 
 # bun + node binary sources. Pinned via the registry prefix in their own stages because buildx
 # rejects variable expansion directly in `COPY --from=` -- the ARG is only expandable in a FROM.
-FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS bun_source
+FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1@sha256:9114c058aeae42162ee16dd5084b95fe9473970bb6bcb5b232ab1630f0546895 AS bun_source
 FROM ${BASE_IMAGE_REGISTRY}/library/node:24.16.0-trixie-slim@sha256:05c08ce4291e9a58f59456a7985176defb12cdd42271f35ff81a3e167ea61d4c AS node_source
 
-FROM ${BASE_IMAGE_REGISTRY}/library/ubuntu:26.04@sha256:cc925e589b7543b910fea57a240468940003fbfc0515245a495dd0ad8fe7cef1
+FROM ${BASE_IMAGE_REGISTRY}/library/ubuntu:26.04@sha256:2260313b31c8c011cd2eebe728008efac1b3982be73eb71348ea2648d2c0e09b
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
   build-essential \
@@ -37,6 +37,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   libxmlsec1-dev \
   make \
   neovim \
+  nginx \
   openssh-client \
   pkg-config \
   postgresql-client \
@@ -97,8 +98,9 @@ RUN ln -s /usr/local/bin/bun /usr/local/bin/bunx
 # runner (web/tests/e2e) forks worker processes that require Node — running it
 # under bun alone hangs the runner. Daily JS tooling (Claude Code, opencode)
 # still runs under bun; Node is here only as the runtime for the test runner.
-# The chromium browser binary is installed at test time (web global-setup), not
-# baked here, so its version tracks web/package.json's floating @playwright/test.
+# The test runner's chromium binary is installed at test time, not baked here,
+# so its version tracks web/package.json's floating @playwright/test (the
+# chromium baked further down serves only the pinned Playwright MCP server).
 #
 # Copied from the official node image (digest-pinned in the node_source stage at the
 # top, routed through BASE_IMAGE_REGISTRY) instead of fetched from nodejs.org, so a
@@ -115,17 +117,27 @@ RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
 # the web-search open_url tool. The browser binary itself is downloaded
 # from the integration test conftest's _install_playwright fixture so
 # the version always matches the lockfile's playwright-python.
-#
-# Playwright doesn't ship Chromium builds for Ubuntu 26.04 yet, so spoof
-# the host platform to the binary-compatible Ubuntu 24.04 build. Arch
-# is detected from dpkg so both arm64 CI runners and x64 dev machines
-# work; we don't bake the override into ENV because that would leak
-# into interactive dev shells where it might mask real problems.
 RUN apt-get update \
-  && PW_ARCH=$(case $(dpkg --print-architecture) in amd64) echo x64;; arm64) echo arm64;; esac) \
-  && PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-${PW_ARCH} \
-       uvx --quiet --from playwright playwright install-deps chromium \
+  && uvx --quiet --from playwright playwright install-deps chromium \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Give Playwright's browser cache a fixed, user-independent path. The default
+# (~/.cache/ms-playwright) would be shadowed by the devcontainer's per-user
+# cache volume and differ between root and dev, so revisions baked below would
+# be invisible at runtime. Test-time installs (web e2e, the integration
+# conftest) land their own revisions alongside the baked one.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+
+# Bake the chromium build for the Playwright MCP server. Playwright browser
+# builds are revision-coupled to the playwright version that installs them, so
+# resolve the exact playwright the pinned MCP bundles and install with that —
+# a chromium installed by any other version would not be found. Keep the pin
+# in sync with .mcp.json. World-writable so test-time installs run as the dev
+# user can add their own revisions next to it.
+ARG PLAYWRIGHT_MCP_VERSION=0.0.78
+RUN PW_VERSION=$(npm view "@playwright/mcp@${PLAYWRIGHT_MCP_VERSION}" dependencies.playwright) \
+  && npx --yes "playwright@${PW_VERSION}" install chromium \
+  && chmod -R 777 /opt/ms-playwright
 
 # Install Python 3.13 via uv into a stable, image-level path so venvs
 # created in bind-mounted workspaces survive across `docker run`s.
@@ -134,6 +146,36 @@ RUN UV_PYTHON_BIN_DIR=/usr/local/bin uv python install 3.13 \
   && ln -s python3.13 /usr/local/bin/python3 \
   && ln -s python3.13 /usr/local/bin/python \
   && python --version
+
+# Install the Go toolchain. Every Go module in the repo pins `go 1.27.1` in its go.mod.
+# The golangci-lint pre-commit hook builds them against this version — keep it in
+# sync with the hook and with GO_VERSION in .github/workflows/pr-golang-tests.yml.
+#
+# Fetched from go.dev with a pinned per-arch checksum (same shape as the prek install
+# above) rather than copied out of the official golang image: base images here route
+# through the ECR pull-through cache, which only populates on tag-based pulls, so a
+# `golang:...@sha256:...` stage fails to resolve until something has already pulled that
+# exact digest by tag. The sha256 pin is what defeats a compromised mirror or MITM, so
+# nothing is given up by not going through a registry.
+#
+# Module and build caches are not baked in; they live in the dev user's home
+# (see .devcontainer/zshrc).
+ARG GO_VERSION=1.27.1
+RUN set -eux; \
+  case "$(dpkg --print-architecture)" in \
+    amd64) GO_ARCH=amd64; \
+           GO_SHA256=63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445 ;; \
+    arm64) GO_ARCH=arm64; \
+           GO_SHA256=3450b45a3f9ee8568792736a5c5e70a1f2e9b36c35a8f74958c03e51d7d92bec ;; \
+    *) echo "unsupported arch for go: $(dpkg --print-architecture)" >&2; exit 1 ;; \
+  esac; \
+  curl -fsSL -o /tmp/go.tar.gz \
+    "https://go.dev/dl/go${GO_VERSION}.linux-${GO_ARCH}.tar.gz"; \
+  echo "${GO_SHA256}  /tmp/go.tar.gz" | sha256sum -c -; \
+  tar -C /usr/local -xzf /tmp/go.tar.gz; \
+  rm -f /tmp/go.tar.gz
+ENV PATH=/usr/local/go/bin:$PATH
+RUN go version
 
 # Create non-root dev user with passwordless sudo
 RUN useradd -m -s /bin/zsh dev && \

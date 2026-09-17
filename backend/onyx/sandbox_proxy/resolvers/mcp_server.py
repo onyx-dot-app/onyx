@@ -23,11 +23,8 @@ from onyx.db.enums import (
     MCPAuthenticationType,
 )
 from onyx.db.mcp import (
-    MCPCredentialsError,
-    extract_connection_data,
     get_craft_enabled_mcp_servers,
     get_mcp_server_by_id,
-    resolve_mcp_credentials,
     user_can_access_mcp_server,
 )
 from onyx.db.models import MCPServer
@@ -47,10 +44,13 @@ from onyx.sandbox_proxy.resolvers.mcp_matching import (
     normalized_request_path,
     parse_target,
 )
-from onyx.server.features.mcp.oauth import (
+from onyx.server.features.mcp.credentials import (
+    MCPCredentialsError,
+    extract_connection_data,
     mcp_token_expired,
-    refresh_mcp_oauth_token_if_expired,
+    resolve_mcp_credentials,
 )
+from onyx.server.features.mcp.oauth import refresh_mcp_oauth_token_if_expired
 from onyx.utils.credential_audit import emit_credential_access
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -173,6 +173,7 @@ class MCPServerResolver(CredentialResolver):
                     str(e), sandbox_detail=_connect_detail(server.name, admin_managed)
                 ) from e
             headers = creds.build_headers()
+            credentials_ready = creds.can_authenticate()
             expired_oauth_config_id: int | None = None
             if (
                 server.auth_type == MCPAuthenticationType.OAUTH
@@ -183,18 +184,18 @@ class MCPServerResolver(CredentialResolver):
 
         # Refresh after the session closes — the primitive opens its own.
         if expired_oauth_config_id is not None:
-            headers = _refresh_oauth_headers(
-                tenant_id, server, str(user_id), expired_oauth_config_id
+            refreshed_headers = _refresh_oauth_headers(
+                tenant_id, server, expired_oauth_config_id
             )
-            if not headers:
+            if not refreshed_headers:
                 raise CredentialUnavailableError(
                     f"OAuth token for MCP server {server.id} is expired and "
                     "could not be refreshed",
                     sandbox_detail=_reconnect_detail(server.name, admin_managed),
                 )
+            headers.update(refreshed_headers)
 
-        requires_auth = server.auth_type not in (None, MCPAuthenticationType.NONE)
-        if requires_auth and not headers:
+        if not credentials_ready:
             raise CredentialUnavailableError(
                 f"no stored credentials for user {short_log_id(user_id)} on "
                 f"server {server.id}",
@@ -260,16 +261,14 @@ class MCPServerResolver(CredentialResolver):
 
 
 def _refresh_oauth_headers(
-    tenant_id: str, server: MCPServer, user_id: str, connection_config_id: int
+    tenant_id: str, server: MCPServer, connection_config_id: int
 ) -> dict[str, str] | None:
     """Fresh auth headers after refreshing the expired OAuth token, or None if
     it couldn't be refreshed. Sets the tenant contextvar the shared refresh
     primitive reads."""
     token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
     try:
-        auth_header = refresh_mcp_oauth_token_if_expired(
-            server, connection_config_id, user_id
-        )
+        auth_header = refresh_mcp_oauth_token_if_expired(server, connection_config_id)
     except Exception:
         logger.exception("mcp_token_refresh.failed config_id=%s", connection_config_id)
         return None

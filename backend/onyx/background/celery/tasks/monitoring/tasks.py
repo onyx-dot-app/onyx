@@ -33,7 +33,10 @@ from onyx.db.engine.sql_engine import (
     get_session_with_current_tenant,
     get_session_with_shared_schema,
 )
-from onyx.db.engine.tenant_utils import get_all_tenant_ids, validate_tenant_id
+from onyx.db.engine.tenant_utils import (
+    get_all_tenant_ids,
+    validate_tenant_id,
+)
 from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import IndexingStatus, SyncStatus, SyncType
 from onyx.db.models import (
@@ -172,8 +175,10 @@ def _collect_queue_metrics(redis_celery: Redis) -> list[Metric]:
         "llm_model_update_queue_length": OnyxCeleryQueues.LLM_MODEL_UPDATE,
         "checkpoint_cleanup_queue_length": OnyxCeleryQueues.CHECKPOINT_CLEANUP,
         "index_attempt_cleanup_queue_length": OnyxCeleryQueues.INDEX_ATTEMPT_CLEANUP,
+        "index_reclaim_queue_length": OnyxCeleryQueues.INDEX_RECLAIM,
         "chat_ttl_deletion_queue_length": OnyxCeleryQueues.CHAT_TTL_DELETION,
         "csv_generation_queue_length": OnyxCeleryQueues.CSV_GENERATION,
+        "capability_checks_queue_length": OnyxCeleryQueues.CAPABILITY_CHECKS,
         "user_file_processing_queue_length": OnyxCeleryQueues.USER_FILE_PROCESSING,
         "user_file_project_sync_queue_length": OnyxCeleryQueues.USER_FILE_PROJECT_SYNC,
         "user_file_delete_queue_length": OnyxCeleryQueues.USER_FILE_DELETE,
@@ -686,7 +691,7 @@ def build_job_id(
         return f"sync_record:{primary_id}"
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.MONITOR_BACKGROUND_PROCESSES,
     ignore_result=True,
     soft_time_limit=_MONITORING_SOFT_TIME_LIMIT,
@@ -840,7 +845,7 @@ def cloud_check_alembic() -> bool | None:
                     tenant_to_revision[tenant_id] = ALEMBIC_NULL_REVISION
 
         # get the total count of each revision
-        for k, v in tenant_to_revision.items():
+        for v in tenant_to_revision.values():
             revision_counts[v] = revision_counts.get(v, 0) + 1
 
         # error if any null revision tenants are found
@@ -908,7 +913,7 @@ def cloud_check_alembic() -> bool | None:
     return True
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CLOUD_MONITOR_CELERY_QUEUES, ignore_result=True, bind=True
 )
 def cloud_monitor_celery_queues(
@@ -917,7 +922,7 @@ def cloud_monitor_celery_queues(
     return monitor_celery_queues_helper(self)
 
 
-@shared_task(name=OnyxCeleryTask.MONITOR_CELERY_QUEUES, ignore_result=True, bind=True)
+@shared_task(name=OnyxCeleryTask.MONITOR_CELERY_QUEUES, ignore_result=True, bind=True)  # ty: ignore[invalid-argument-type]
 def monitor_celery_queues(self: Task, *, tenant_id: str) -> None:  # noqa: ARG001
     return monitor_celery_queues_helper(self)
 
@@ -971,8 +976,12 @@ def monitor_celery_queues_helper(
     n_index_attempt_cleanup = celery_get_queue_length(
         OnyxCeleryQueues.INDEX_ATTEMPT_CLEANUP, r_celery
     )
+    n_index_reclaim = celery_get_queue_length(OnyxCeleryQueues.INDEX_RECLAIM, r_celery)
     n_csv_generation = celery_get_queue_length(
         OnyxCeleryQueues.CSV_GENERATION, r_celery
+    )
+    n_capability_checks = celery_get_queue_length(
+        OnyxCeleryQueues.CAPABILITY_CHECKS, r_celery
     )
     n_monitoring = celery_get_queue_length(OnyxCeleryQueues.MONITORING, r_celery)
     n_sandbox = celery_get_queue_length(OnyxCeleryQueues.SANDBOX, r_celery)
@@ -1008,7 +1017,9 @@ def monitor_celery_queues_helper(
         f"llm_model_update={n_llm_model_update} "
         f"checkpoint_cleanup={n_checkpoint_cleanup} "
         f"index_attempt_cleanup={n_index_attempt_cleanup} "
+        f"index_reclaim={n_index_reclaim} "
         f"csv_generation={n_csv_generation} "
+        f"capability_checks={n_capability_checks} "
         f"monitoring={n_monitoring} "
         f"sandbox={n_sandbox} "
         f"opensearch_migration={n_opensearch_migration} "
@@ -1025,7 +1036,7 @@ def _get_cmdline_for_process(process: psutil.Process) -> str | None:
         return None
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.MONITOR_PROCESS_MEMORY,
     ignore_result=True,
     soft_time_limit=_MONITORING_SOFT_TIME_LIMIT,
@@ -1108,7 +1119,7 @@ def monitor_process_memory(self: Task, *, tenant_id: str) -> None:  # noqa: ARG0
         task_logger.exception("Error in monitor_process_memory task")
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CLOUD_MONITOR_CELERY_PIDBOX, ignore_result=True, bind=True
 )
 def cloud_monitor_celery_pidbox(

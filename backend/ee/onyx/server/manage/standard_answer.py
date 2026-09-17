@@ -9,6 +9,7 @@ from ee.onyx.db.standard_answer import (
     insert_standard_answer,
     insert_standard_answer_category,
     remove_standard_answer,
+    remove_standard_answer_category,
     update_standard_answer,
     update_standard_answer_category,
 )
@@ -144,3 +145,15 @@ def patch_standard_answer_category(
         db_session=db_session,
     )
     return StandardAnswerCategory.from_model(standard_answer_category_model)
+
+
+@router.delete("/admin/standard-answer/category/{standard_answer_category_id}")
+def delete_standard_answer_category(
+    standard_answer_category_id: int,
+    db_session: Session = Depends(get_session),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+) -> None:
+    remove_standard_answer_category(
+        standard_answer_category_id=standard_answer_category_id,
+        db_session=db_session,
+    )

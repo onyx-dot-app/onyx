@@ -15,7 +15,7 @@ def _cache() -> CacheBackend:
 def test_announcement_lifecycle() -> None:
     cache = _cache()
     session_id = f"connect-app-test-{uuid4()}"
-    cache.delete(connect_app._announce_key(session_id))  # type: ignore[attr-defined]
+    cache.delete(connect_app._announce_key(session_id))
 
     request = connect_app.ConnectAppRequest(
         request_id="req-1", external_app_id=17, reason="to schedule events"

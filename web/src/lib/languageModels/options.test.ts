@@ -71,3 +71,18 @@ describe("llmOptionKey", () => {
     );
   });
 });
+
+describe("buildLlmOptions", () => {
+  it("includes hidden models when requested by an admin picker", () => {
+    const hiddenModel = {
+      ...makeModelConfiguration(11, "hidden-model"),
+      is_visible: false,
+    };
+    const providers = [makeProvider(1, "OpenAI", "openai", [hiddenModel])];
+
+    expect(buildLlmOptions(providers)).toHaveLength(0);
+    expect(buildLlmOptions(providers, undefined, true)).toEqual([
+      expect.objectContaining({ modelName: "hidden-model" }),
+    ]);
+  });
+});

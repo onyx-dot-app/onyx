@@ -1,10 +1,6 @@
 import "@opal/components/cards/select-card/styles.css";
-import type {
-  BorderVariants,
-  PaddingVariants,
-  RoundingVariants,
-} from "@opal/types";
-import { paddingVariants, cardRoundingVariants } from "@opal/shared";
+import type { BorderVariants, Rounding, Spacing } from "@opal/types";
+import { roundingToRem, spacingToRem } from "@opal/shared";
 import { cn } from "@opal/utils";
 import { Interactive, type InteractiveStatefulProps } from "@opal/core";
 
@@ -14,34 +10,23 @@ import { Interactive, type InteractiveStatefulProps } from "@opal/core";
 
 type SelectCardProps = Omit<InteractiveStatefulProps, "variant"> & {
   /**
-   * Padding preset.
+   * Padding.
    *
-   * | Value   | Class   |
-   * |---------|---------|
-   * | `"lg"`  | `p-6`   |
-   * | `"md"`  | `p-4`   |
-   * | `"sm"`  | `p-2`   |
-   * | `"xs"`  | `p-1`   |
-   * | `"2xs"` | `p-0.5` |
-   * | `"fit"` | `p-0`   |
+   * A spacing step: `N` is `N / 4` rem, so `4` is `1rem`.
    *
-   * @default "md"
+   * @default 4
    */
-  padding?: PaddingVariants;
+  padding?: Spacing;
 
   /**
    * Border-radius preset.
    *
-   * | Value  | Class        |
-   * |--------|--------------|
-   * | `"xs"` | `rounded-04` |
-   * | `"sm"` | `rounded-08` |
-   * | `"md"` | `rounded-12` |
-   * | `"lg"` | `rounded-16` |
+   * `N` is `N / 4` rem, so `rounding={2}` is the same distance as
+   * `padding={2}`. `"full"` is a pill.
    *
-   * @default "md"
+   * @default 3
    */
-  rounding?: RoundingVariants;
+  rounding?: Rounding;
 
   /**
    * Border style.
@@ -86,21 +71,22 @@ type SelectCardProps = Omit<InteractiveStatefulProps, "variant"> & {
  * ```
  */
 function SelectCard({
-  padding: paddingProp = "md",
-  rounding: roundingProp = "md",
+  padding: paddingProp = 4,
+  rounding: roundingProp = 3,
   border = "solid",
   ref,
   children,
   ...statefulProps
 }: SelectCardProps) {
-  const padding = paddingVariants[paddingProp];
-  const rounding = cardRoundingVariants[roundingProp];
+  const paddingStyle = { padding: spacingToRem(paddingProp) };
+  const radius = roundingToRem(roundingProp);
 
   return (
     <Interactive.Stateful {...statefulProps} variant="select-card">
       <div
         ref={ref}
-        className={cn("opal-select-card", padding, rounding)}
+        className="opal-select-card"
+        style={{ ...paddingStyle, borderRadius: radius }}
         data-border={border}
       >
         {children}

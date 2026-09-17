@@ -10,7 +10,7 @@ from uuid import UUID
 
 from redis import Redis
 
-from ee.onyx.server.tenants.user_mapping import get_tenant_id_for_email
+from ee.onyx.db.user_tenant_mapping import get_tenant_id_for_email
 from onyx.auth.invited_users import get_invited_users, write_invited_users
 from onyx.configs.app_configs import (
     REDIS_AUTH_KEY_PREFIX,
@@ -92,7 +92,7 @@ def onyx_redis(
         host=host,
         port=port,
         db=db,
-        password=password if password else "",
+        password=password or "",
         ssl=ssl,
         ssl_cert_reqs="optional",
         ssl_ca_certs=None,

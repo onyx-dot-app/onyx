@@ -8,6 +8,8 @@ import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { cn } from "@opal/utils";
 import { useState } from "react";
+import useFocusOnMount from "@opal/hooks/useFocusOnMount";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -46,6 +48,9 @@ interface ContentXlProps {
 
   /** Clamp the title to N lines with ellipsis. Omit to wrap freely. */
   titleMaxLines?: number;
+
+  /** Strike the title through, for a row whose option is switched off. */
+  strikethrough?: boolean;
 
   /** Clamp the description to N lines. Maps to Text's maxLines prop. */
   descriptionMaxLines?: number;
@@ -107,6 +112,7 @@ function ContentXl({
   description,
   titleMaxLines,
   descriptionMaxLines,
+  strikethrough,
   editable,
   onTitleChange,
   moreIcon1: MoreIcon1,
@@ -115,6 +121,8 @@ function ContentXl({
 }: ContentXlProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(toPlainString(title));
+  const focusOnMount = useFocusOnMount<HTMLInputElement>();
+  const strings = useOpalStrings();
 
   const config = CONTENT_XL_PRESETS[sizePreset];
 
@@ -194,7 +202,7 @@ function ContentXl({
               value={editValue}
               onChange={(e) => setEditValue(e.target.value)}
               size={1}
-              autoFocus
+              ref={focusOnMount}
               onFocus={(e) => e.currentTarget.select()}
               onBlur={commit}
               onKeyDown={(e) => {
@@ -212,6 +220,7 @@ function ContentXl({
             font={config.titleFont}
             color="inherit"
             maxLines={titleMaxLines}
+            strikethrough={strikethrough}
             title={toPlainString(title)}
             onClick={editable ? startEditing : undefined}
           >
@@ -230,7 +239,7 @@ function ContentXl({
               icon={SvgEdit}
               prominence="internal"
               size={config.editButtonSize}
-              tooltip="Edit"
+              tooltip={strings.edit}
               tooltipSide="right"
               onClick={startEditing}
             />
@@ -242,7 +251,7 @@ function ContentXl({
         <div className="opal-content-xl-description">
           <Text
             font="secondary-body"
-            color="text-03"
+            color="inherit"
             as="p"
             maxLines={descriptionMaxLines}
           >

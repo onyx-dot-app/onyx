@@ -88,6 +88,168 @@ export function insertNodeAtCursor(element: HTMLElement, node: Node): void {
   element.normalize();
 }
 
+// ─── Undo Snapshots ─────────────────────────────────────────────────────────
+
+/**
+ * Serialized editor state for the app-level undo/redo history. Selection
+ * endpoints are in "flat units" — one per text character, `<br>`, or atomic
+ * rich tile — so they survive the innerHTML round-trip.
+ */
+export interface EditableSnapshot {
+  html: string;
+  selStart: number;
+  selEnd: number;
+}
+
+function isAtomicNode(node: Node): boolean {
+  if (node.nodeType !== Node.ELEMENT_NODE) return false;
+  const el = node as HTMLElement;
+  return el.tagName === "BR" || el.hasAttribute("data-rich-tile");
+}
+
+function unitLength(node: Node): number {
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent?.length ?? 0;
+  if (isAtomicNode(node)) return 1;
+  let sum = 0;
+  node.childNodes.forEach((child) => {
+    sum += unitLength(child);
+  });
+  return sum;
+}
+
+function boundaryToFlatOffset(
+  root: HTMLElement,
+  container: Node,
+  offset: number
+): number {
+  const range = document.createRange();
+  range.selectNodeContents(root);
+  range.setEnd(container, offset);
+  return unitLength(range.cloneContents());
+}
+
+function resolveFlatOffset(
+  root: HTMLElement,
+  target: number
+): { node: Node; offset: number } {
+  let remaining = target;
+
+  function walk(parent: Node): { node: Node; offset: number } | null {
+    const children = parent.childNodes;
+    for (let i = 0; i < children.length; i++) {
+      const child = children[i]!;
+      if (child.nodeType === Node.TEXT_NODE) {
+        const len = child.textContent?.length ?? 0;
+        if (remaining <= len) return { node: child, offset: remaining };
+        remaining -= len;
+      } else if (isAtomicNode(child)) {
+        if (remaining === 0) return { node: parent, offset: i };
+        remaining -= 1;
+        if (remaining === 0) return { node: parent, offset: i + 1 };
+      } else {
+        const found = walk(child);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  return walk(root) ?? { node: root, offset: root.childNodes.length };
+}
+
+export function captureSnapshot(element: HTMLElement): EditableSnapshot {
+  const end = unitLength(element);
+  let selStart = end;
+  let selEnd = end;
+  const sel = window.getSelection();
+  if (sel && sel.rangeCount > 0) {
+    const range = sel.getRangeAt(0);
+    if (
+      element.contains(range.startContainer) &&
+      element.contains(range.endContainer)
+    ) {
+      selStart = boundaryToFlatOffset(
+        element,
+        range.startContainer,
+        range.startOffset
+      );
+      selEnd = boundaryToFlatOffset(
+        element,
+        range.endContainer,
+        range.endOffset
+      );
+    }
+  }
+  // Strip transient tile-highlight classes so a restore can't resurrect them.
+  const clone = element.cloneNode(true) as HTMLElement;
+  clone
+    .querySelectorAll(
+      ".rich-input-tile-selected, .rich-input-tile-in-selection"
+    )
+    .forEach((tile) => {
+      tile.classList.remove(
+        "rich-input-tile-selected",
+        "rich-input-tile-in-selection"
+      );
+    });
+  return { html: clone.innerHTML, selStart, selEnd };
+}
+
+/**
+ * `snapshot.html` must come from `captureSnapshot` of the same element,
+ * never from external input — the innerHTML write would be an XSS sink.
+ */
+export function restoreSnapshot(
+  element: HTMLElement,
+  snapshot: EditableSnapshot
+): void {
+  element.innerHTML = snapshot.html;
+  const sel = window.getSelection();
+  if (!sel) return;
+  const start = resolveFlatOffset(element, snapshot.selStart);
+  const end =
+    snapshot.selEnd === snapshot.selStart
+      ? start
+      : resolveFlatOffset(element, snapshot.selEnd);
+  const range = document.createRange();
+  range.setStart(start.node, start.offset);
+  range.setEnd(end.node, end.offset);
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+export function snapshotsEqual(
+  a: EditableSnapshot,
+  b: EditableSnapshot
+): boolean {
+  return (
+    a.html === b.html && a.selStart === b.selStart && a.selEnd === b.selEnd
+  );
+}
+
+export const MAX_UNDO_ENTRIES = 100;
+// Paste tiles can hold very large text; bound total retained snapshot HTML.
+export const MAX_UNDO_TOTAL_CHARS = 2_000_000;
+
+/** Append to an undo/redo stack, enforcing the entry and total-size caps. */
+export function pushBoundedSnapshot(
+  stack: EditableSnapshot[],
+  snapshot: EditableSnapshot
+): void {
+  stack.push(snapshot);
+  if (stack.length > MAX_UNDO_ENTRIES) stack.shift();
+  let total = 0;
+  for (let i = stack.length - 1; i >= 0; i--) {
+    total += stack[i]!.html.length;
+    if (total > MAX_UNDO_TOTAL_CHARS) {
+      // Drop the entry that crossed the cap and everything older, but always
+      // retain the newest entry even if it alone exceeds the cap.
+      stack.splice(0, Math.min(i + 1, stack.length - 1));
+      break;
+    }
+  }
+}
+
 // ─── Text Content Extraction ────────────────────────────────────────────────
 
 const BLOCK_TAGS = new Set([

@@ -2,7 +2,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "onyx.fullname" . }}-mcp-server
+  name: {{ include "onyx.resourceName" (list . "mcp-server") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     {{- with .Values.mcpServer.deploymentLabels }}
@@ -101,7 +101,7 @@ spec:
             # API server connection for authentication and proxying
             # Uses full override variable to set the port instead of using default 8080
             - name: API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS
-              value: "http://{{ include "onyx.fullname" . }}-api-service:{{ .Values.api.service.servicePort }}"
+              value: "http://{{ include "onyx.resourceName" (list . "api-service") }}:{{ .Values.api.service.servicePort }}"
             {{- include "onyx.envSecrets" . | nindent 12 }}
             {{- include "onyx.metricsAuthEnv" . | nindent 12 }}
             {{- with include "onyx.customCACerts.env" . }}

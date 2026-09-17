@@ -1,6 +1,6 @@
 import time
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 from uuid import UUID
 
 import requests
@@ -40,6 +40,32 @@ logger = setup_logger()
 OAUTH_RESPONSE_TYPE_CODE = "code"
 OAUTH_GRANT_TYPE_AUTHORIZATION_CODE = "authorization_code"
 OAUTH_PKCE_CHALLENGE_METHOD_S256 = "S256"
+
+# Providers that issue a refresh token only when the authorization request
+# explicitly asks for offline access, keyed by authorization-endpoint host.
+# Without these params the grant dies at access-token expiry with no way to
+# refresh. Explicitly configured params always win over these defaults.
+_OFFLINE_ACCESS_AUTH_PARAMS_BY_HOST: dict[str, dict[str, str]] = {
+    # `prompt=consent` because Google issues a refresh token only on flows
+    # that show the consent screen; a silent re-auth would leave a reconnected
+    # config without one. Matches Onyx's own Google login flow.
+    "accounts.google.com": {"access_type": "offline", "prompt": "consent"},
+}
+
+
+def ensure_offline_access_auth_params(authorization_url: str) -> str:
+    """Merge missing offline-access params into a built authorize URL.
+    Params already in the URL win."""
+    parsed = urlparse(authorization_url)
+    defaults = _OFFLINE_ACCESS_AUTH_PARAMS_BY_HOST.get((parsed.hostname or "").lower())
+    if not defaults:
+        return authorization_url
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    missing = {key: value for key, value in defaults.items() if key not in query}
+    if not missing:
+        return authorization_url
+    query.update(missing)
+    return urlunparse(parsed._replace(query=urlencode(query)))
 
 
 class OAuthFlowParams(BaseModel):
@@ -83,7 +109,9 @@ def build_oauth_authorization_url(
         query.update(params.additional_params)
 
     separator = "&" if "?" in params.authorization_url else "?"
-    return f"{params.authorization_url}{separator}{urlencode(query)}"
+    return ensure_offline_access_auth_params(
+        f"{params.authorization_url}{separator}{urlencode(query)}"
+    )
 
 
 def exchange_oauth_code_for_token(

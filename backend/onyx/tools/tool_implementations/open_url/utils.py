@@ -10,8 +10,9 @@ def filter_web_contents_with_no_title_or_content(
     Downstream uses these fields for display + prompting; drop empty ones centrally
     rather than duplicating checks across provider clients.
     """
-    filtered: list[WebContent] = []
-    for content in contents:
-        if content.title.strip() or content.full_content.strip():
-            filtered.append(content)
+    filtered: list[WebContent] = [
+        content
+        for content in contents
+        if content.title.strip() or content.full_content.strip()
+    ]
     return filtered

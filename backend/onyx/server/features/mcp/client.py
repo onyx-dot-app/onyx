@@ -152,7 +152,7 @@ def _create_mcp_client_function_runner(
                 read, write, _ = client_tuple
             elif len(client_tuple) == 2:
                 assert isinstance(client_tuple, tuple)  # for type-checking
-                read, write = client_tuple  # ty: ignore[invalid-assignment]
+                read, write = client_tuple
             else:
                 raise ValueError(
                     f"Unexpected number of client tuple elements: {len(client_tuple)}"
@@ -226,20 +226,17 @@ def process_mcp_result(call_tool_result: CallToolResult) -> str:
     parts = []
     for content_block in call_tool_result.content:
         if content_block.type == ContentBlockTypes.TEXT.value:
-            parts.append(content_block.text or "")  # ty: ignore[unresolved-attribute]
+            parts.append(content_block.text or "")
         if content_block.type == ContentBlockTypes.RESOURCE.value:
             if isinstance(
-                content_block.resource,  # ty: ignore[unresolved-attribute]
+                content_block.resource,
                 TextResourceContents,
             ):
-                parts.append(
-                    content_block.resource.text  # ty: ignore[unresolved-attribute]
-                    or ""
-                )
+                parts.append(content_block.resource.text or "")
             # TODO: handle blob resource content
         if content_block.type == ContentBlockTypes.RESOURCE_LINK.value:
             parts.append(
-                f"link: {content_block.uri} title: {content_block.title} description: {content_block.description}"  # ty: ignore[unresolved-attribute]
+                f"link: {content_block.uri} title: {content_block.title} description: {content_block.description}"
             )
         # TODO: handle other content block types
 

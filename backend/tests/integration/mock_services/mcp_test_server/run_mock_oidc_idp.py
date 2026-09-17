@@ -36,6 +36,11 @@ Env (all optional):
   MOCK_OIDC_AUDIENCE        token audience (default: api://mcp)
   MOCK_OIDC_SCOPE           scope granted into the token (default: mcp:use)
   MOCK_OIDC_SUBJECT         sub claim for the fake user (default: mock-user@example.com)
+  MOCK_OIDC_CIMD_ONLY       advertise CIMD and reject DCR when true
+  MOCK_OIDC_EXPECTED_CLIENT_ID
+                            exact CIMD URL accepted by the authorization endpoint
+  MOCK_OIDC_CLIENT_METADATA_CA_FILE
+                            CA used to fetch the HTTPS client metadata document
 """
 
 from __future__ import annotations
@@ -44,19 +49,50 @@ import base64
 import hashlib
 import json
 import os
+import ssl
 import sys
 import time
+import urllib.request
 import uuid
-from typing import Any
+from typing import Any, Literal
 
 import jwt
 import uvicorn
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import (
+    JSONResponse,
+    PlainTextResponse,
+    RedirectResponse,
+    Response,
+)
+from pydantic import AnyUrl, BaseModel
 
 KEY_ID = "mock-oidc-key-1"
+CIMD_ONLY_ENV_VAR = "MOCK_OIDC_CIMD_ONLY"
+EXPECTED_CLIENT_ID_ENV_VAR = "MOCK_OIDC_EXPECTED_CLIENT_ID"
+CLIENT_METADATA_CA_FILE_ENV_VAR = "MOCK_OIDC_CLIENT_METADATA_CA_FILE"
+TRUE_VALUES = frozenset({"1", "true", "yes"})
+
+
+class OAuthClientMetadataDocument(BaseModel):
+    client_id: AnyUrl
+    redirect_uris: list[AnyUrl]
+    grant_types: list[Literal["authorization_code", "refresh_token"]]
+    response_types: list[Literal["code"]]
+    token_endpoint_auth_method: Literal["none"]
+
+
+class MockOidcStatus(BaseModel):
+    client_metadata_fetch_count: int
+    registration_request_count: int
+    last_client_id: str | None
+
+
+class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *_args: Any, **_kwargs: Any) -> None:
+        return None
 
 
 def _b64url_uint(value: int) -> str:
@@ -71,11 +107,27 @@ def _b64url(data: bytes) -> str:
 class MockOidc:
     """Holds signing key + in-flight authorization codes."""
 
-    def __init__(self, *, issuer: str, audience: str, scope: str, subject: str) -> None:
+    def __init__(
+        self,
+        *,
+        issuer: str,
+        audience: str,
+        scope: str,
+        subject: str,
+        cimd_only: bool = False,
+        expected_client_id: str | None = None,
+        client_metadata_ca_file: str | None = None,
+    ) -> None:
         self.issuer = issuer.rstrip("/")
         self.audience = audience
         self.scope = scope
         self.subject = subject
+        self.cimd_only = cimd_only
+        self.expected_client_id = expected_client_id
+        self.client_metadata_ca_file = client_metadata_ca_file
+        self.client_metadata_fetch_count = 0
+        self.registration_request_count = 0
+        self.last_client_id: str | None = None
         self._private_key = rsa.generate_private_key(
             public_exponent=65537, key_size=2048
         )
@@ -86,6 +138,29 @@ class MockOidc:
         )
         # code -> {code_challenge, redirect_uri, scope}
         self._codes: dict[str, dict[str, str]] = {}
+
+    def validate_client_metadata(self, client_id: str, redirect_uri: str) -> None:
+        if not self.cimd_only:
+            return
+        if client_id != self.expected_client_id:
+            raise ValueError("CIMD client_id does not match the expected URL")
+
+        ssl_context = ssl.create_default_context(cafile=self.client_metadata_ca_file)
+        opener = urllib.request.build_opener(
+            urllib.request.ProxyHandler({}),
+            NoRedirectHandler(),
+            urllib.request.HTTPSHandler(context=ssl_context),
+        )
+        with opener.open(client_id, timeout=10) as response:
+            metadata = OAuthClientMetadataDocument.model_validate_json(response.read())
+
+        if str(metadata.client_id) != client_id:
+            raise ValueError("CIMD client_id does not match the document URL")
+        if redirect_uri not in {str(uri) for uri in metadata.redirect_uris}:
+            raise ValueError("redirect_uri is not registered in the CIMD document")
+
+        self.client_metadata_fetch_count += 1
+        self.last_client_id = client_id
 
     # -- JWKS -----------------------------------------------------------------
     def jwks(self) -> dict[str, Any]:
@@ -155,12 +230,11 @@ class MockOidc:
 def build_app(oidc: MockOidc) -> FastAPI:
     app = FastAPI(title="Mock OIDC IdP for MCP tests")
 
-    metadata = {
+    metadata: dict[str, Any] = {
         "issuer": oidc.issuer,
         "authorization_endpoint": f"{oidc.issuer}/authorize",
         "token_endpoint": f"{oidc.issuer}/token",
         "jwks_uri": f"{oidc.issuer}/jwks",
-        "registration_endpoint": f"{oidc.issuer}/register",
         "response_types_supported": ["code"],
         "grant_types_supported": ["authorization_code", "refresh_token"],
         "code_challenge_methods_supported": ["S256"],
@@ -173,6 +247,10 @@ def build_app(oidc: MockOidc) -> FastAPI:
         "subject_types_supported": ["public"],
         "id_token_signing_alg_values_supported": ["RS256"],
     }
+    if oidc.cimd_only:
+        metadata["client_id_metadata_document_supported"] = True
+    else:
+        metadata["registration_endpoint"] = f"{oidc.issuer}/register"
 
     @app.get("/.well-known/oauth-authorization-server")
     @app.get("/.well-known/openid-configuration")
@@ -187,9 +265,22 @@ def build_app(oidc: MockOidc) -> FastAPI:
     def healthz() -> PlainTextResponse:
         return PlainTextResponse("ok")
 
+    @app.get("/test/status")
+    def test_status() -> MockOidcStatus:
+        return MockOidcStatus(
+            client_metadata_fetch_count=oidc.client_metadata_fetch_count,
+            registration_request_count=oidc.registration_request_count,
+            last_client_id=oidc.last_client_id,
+        )
+
     @app.post("/register")
     async def register(request: Request) -> JSONResponse:
-        """RFC 7591 dynamic client registration — accept anything, echo back."""
+        """Serve DCR unless CIMD-only mode disables it."""
+        oidc.registration_request_count += 1
+        if oidc.cimd_only:
+            return JSONResponse(
+                {"error": "dynamic_client_registration_disabled"}, status_code=400
+            )
         body = await request.json()
         client_id = f"mock-client-{uuid.uuid4().hex[:12]}"
         return JSONResponse(
@@ -218,9 +309,14 @@ def build_app(oidc: MockOidc) -> FastAPI:
         code_challenge: str = "",
         code_challenge_method: str = "S256",  # noqa: ARG001 (accepted; only S256)
         scope: str = "",
-        client_id: str = "",  # noqa: ARG001 (accepted; mock issues to any client)
-    ) -> RedirectResponse:
+        client_id: str = "",
+    ) -> Response:
         """No login page: immediately issue a code and redirect back."""
+        try:
+            oidc.validate_client_metadata(client_id, redirect_uri)
+        except (OSError, ValueError) as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+
         code = oidc.issue_code(
             code_challenge=code_challenge, redirect_uri=redirect_uri, scope=scope
         )
@@ -280,11 +376,25 @@ def main() -> None:
     audience = os.getenv("MOCK_OIDC_AUDIENCE", "api://mcp")
     scope = os.getenv("MOCK_OIDC_SCOPE", "mcp:use")
     subject = os.getenv("MOCK_OIDC_SUBJECT", "mock-user@example.com")
+    cimd_only = os.getenv(CIMD_ONLY_ENV_VAR, "").lower() in TRUE_VALUES
+    expected_client_id = os.getenv(EXPECTED_CLIENT_ID_ENV_VAR)
+    client_metadata_ca_file = os.getenv(CLIENT_METADATA_CA_FILE_ENV_VAR)
 
-    oidc = MockOidc(issuer=issuer, audience=audience, scope=scope, subject=subject)
+    oidc = MockOidc(
+        issuer=issuer,
+        audience=audience,
+        scope=scope,
+        subject=subject,
+        cimd_only=cimd_only,
+        expected_client_id=expected_client_id,
+        client_metadata_ca_file=client_metadata_ca_file,
+    )
     app = build_app(oidc)
 
-    print(f"[mock-oidc] issuer={issuer} audience={audience} scope={scope}")
+    print(
+        f"[mock-oidc] issuer={issuer} audience={audience} "
+        f"scope={scope} cimd_only={cimd_only}"
+    )
     print(f"[mock-oidc] discovery: {issuer}/.well-known/oauth-authorization-server")
     print(f"[mock-oidc] jwks: {issuer}/jwks")
     print(json.dumps(oidc.jwks()))

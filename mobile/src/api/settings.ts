@@ -4,16 +4,20 @@ import { apiFetch } from "@/api/client";
 import { QUERY_KEYS } from "@/api/query-keys";
 import { useSession } from "@/state/session";
 
-// disable_default_assistant is a workspace setting; when true the client hides id 0.
 export interface WorkspaceSettings {
   disable_default_assistant: boolean;
-  // admin hard cap for uploads (MB); null = no cap
+  // null = no cap
   user_file_max_upload_size_mb: number | null;
+  deep_research_enabled: boolean;
+  // false when the deployment sets DISABLE_VECTOR_DB — nothing indexed, so no sources to pick from.
+  vector_db_enabled: boolean;
 }
 
 interface WorkspaceSettingsResponse {
   disable_default_assistant?: boolean | null;
   user_file_max_upload_size_mb?: number | null;
+  deep_research_enabled?: boolean | null;
+  vector_db_enabled?: boolean | null;
 }
 
 export function useWorkspaceSettings() {
@@ -30,6 +34,8 @@ export function useWorkspaceSettings() {
     disable_default_assistant: query.data?.disable_default_assistant ?? false,
     user_file_max_upload_size_mb:
       query.data?.user_file_max_upload_size_mb ?? null,
+    deep_research_enabled: query.data?.deep_research_enabled ?? true,
+    vector_db_enabled: query.data?.vector_db_enabled ?? true,
   };
 
   return { ...query, settings };

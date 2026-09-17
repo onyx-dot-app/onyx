@@ -1,17 +1,18 @@
 """Database operations for Build Mode sessions."""
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
-from sqlalchemy import column, desc, exists, select, values
+from sqlalchemy import column, desc, exists, select, update, values
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import MessageType
 from onyx.db.enums import BuildSessionStatus, SessionOrigin, SharingScope
-from onyx.db.models import Artifact, BuildMessage, BuildSession, Sandbox
+from onyx.db.models import BuildMessage, BuildSession, Sandbox
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.configs import (
@@ -34,13 +35,16 @@ def create_build_session__no_commit(
 ) -> BuildSession:
     """``flush()`` only — caller commits.
 
+    Sessions are born ``INITIALIZING``; only the reconcile that builds their
+    workspace and OpenCode session finalizes them to ``ACTIVE``.
+
     ``agent_provider`` / ``agent_model`` are nullable for legacy rows;
     the send-message path then falls back to opencode's startup default.
     """
     session = BuildSession(
         user_id=user_id,
         name=name,
-        status=BuildSessionStatus.ACTIVE,
+        status=BuildSessionStatus.INITIALIZING,
         origin=origin,
         agent_provider=agent_provider,
         agent_model=agent_model,
@@ -203,6 +207,46 @@ def get_empty_session_for_user(
     )
 
 
+def mark_session_initializing__no_commit(
+    db_session: Session,
+    session: BuildSession,
+) -> None:
+    """Return a reserved/repairable empty session to ``INITIALIZING`` so its
+    workspace can be (re)built under the committed session ID."""
+    session.status = BuildSessionStatus.INITIALIZING
+    db_session.flush()
+
+
+def finalize_session_initialization__no_commit(
+    db_session: Session,
+    session_id: UUID,
+    to_status: Literal[BuildSessionStatus.ACTIVE, BuildSessionStatus.FAILED],
+    opencode_session_id: str | None = None,
+    skills_hash: str | None = None,
+    mcp_config_hash: str | None = None,
+) -> bool:
+    """Compare-and-set ``INITIALIZING`` → ``ACTIVE``/``FAILED``. Returns False
+    when the session already left ``INITIALIZING`` (e.g. a concurrent repair
+    finished first), in which case the caller's runtime state must not be
+    recorded."""
+    values_map: dict[str, object] = {"status": to_status}
+    if opencode_session_id is not None:
+        values_map["opencode_session_id"] = opencode_session_id
+    if skills_hash is not None:
+        values_map["skills_hash"] = skills_hash
+    if mcp_config_hash is not None:
+        values_map["mcp_config_hash"] = mcp_config_hash
+    result = db_session.execute(
+        update(BuildSession)
+        .where(
+            BuildSession.id == session_id,
+            BuildSession.status == BuildSessionStatus.INITIALIZING,
+        )
+        .values(**values_map)
+    )
+    return result.rowcount == 1  # ty: ignore[unresolved-attribute]
+
+
 def update_session_activity(
     session_id: UUID,
     db_session: Session,
@@ -272,62 +316,6 @@ def update_sandbox_heartbeat(
     if sandbox:
         sandbox.last_heartbeat = datetime.now(tz=timezone.utc)
         db_session.commit()
-
-
-# Artifact operations
-def create_artifact(
-    session_id: UUID,
-    artifact_type: str,
-    path: str,
-    name: str,
-    db_session: Session,
-) -> Artifact:
-    """Create a new artifact record."""
-    artifact = Artifact(
-        session_id=session_id,
-        type=artifact_type,
-        path=path,
-        name=name,
-    )
-    db_session.add(artifact)
-    db_session.commit()
-    db_session.refresh(artifact)
-
-    logger.info("Created artifact %s for session %s", artifact.id, session_id)
-    return artifact
-
-
-def get_session_artifacts(
-    session_id: UUID,
-    db_session: Session,
-) -> list[Artifact]:
-    """Get all artifacts for a session."""
-    return (
-        db_session.query(Artifact)
-        .filter(Artifact.session_id == session_id)
-        .order_by(desc(Artifact.created_at))
-        .all()
-    )
-
-
-def update_artifact(
-    artifact_id: UUID,
-    db_session: Session,
-    path: str | None = None,
-    name: str | None = None,
-) -> None:
-    """Update artifact metadata."""
-    artifact = (
-        db_session.query(Artifact).filter(Artifact.id == artifact_id).one_or_none()
-    )
-    if artifact:
-        if path is not None:
-            artifact.path = path
-        if name is not None:
-            artifact.name = name
-        artifact.updated_at = datetime.now(tz=timezone.utc)
-        db_session.commit()
-        logger.info("Updated artifact %s", artifact_id)
 
 
 # Message operations
@@ -529,35 +517,43 @@ def _is_port_available(port: int) -> bool:
     return True
 
 
-def allocate_nextjs_port(db_session: Session) -> int:
-    """Allocate an available port for a new session.
+def reserve_nextjs_port__no_commit(
+    db_session: Session,
+    build_session: BuildSession,
+) -> int:
+    """Reserve an available port on the session row.
 
-    Finds the first available port in the configured range by checking
-    both database allocations and system-level port availability.
-
-    Args:
-        db_session: Database session for querying allocated ports
-
-    Returns:
-        An available port number
+    Ports only need to be unique within one user's sandbox, so both the scan
+    and the partial unique index on ``(user_id, nextjs_port)`` are per-user:
+    each candidate is flushed inside a savepoint, and a collision with a
+    concurrent reservation rolls back just that attempt and moves to the next
+    port. The OS bind probe additionally filters ports in use outside the
+    database (relevant for the local/Docker backend).
 
     Raises:
         OnyxError: If no ports are available in the configured range
     """
-    from onyx.db.models import BuildSession
-
-    # Get all currently allocated ports from active sessions
-    allocated_ports = set(
-        db_session.query(BuildSession.nextjs_port)
-        .filter(BuildSession.nextjs_port.isnot(None))
+    allocated_ports = {
+        port
+        for (port,) in db_session.query(BuildSession.nextjs_port)
+        .filter(
+            BuildSession.user_id == build_session.user_id,
+            BuildSession.nextjs_port.isnot(None),
+        )
         .all()
-    )
-    allocated_ports = {port[0] for port in allocated_ports if port[0] is not None}
+        if port is not None
+    }
 
-    # Find first port that's not in DB and not currently bound
     for port in range(SANDBOX_NEXTJS_PORT_START, SANDBOX_NEXTJS_PORT_END):
-        if port not in allocated_ports and _is_port_available(port):
-            return port
+        if port in allocated_ports or not _is_port_available(port):
+            continue
+        try:
+            with db_session.begin_nested():
+                build_session.nextjs_port = port
+                db_session.flush()
+        except IntegrityError:
+            continue
+        return port
 
     raise OnyxError(
         OnyxErrorCode.SERVICE_UNAVAILABLE,

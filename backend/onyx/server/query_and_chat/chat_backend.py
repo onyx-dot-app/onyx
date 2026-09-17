@@ -5,7 +5,15 @@ from collections.abc import Generator
 from datetime import timedelta
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+)
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -15,6 +23,7 @@ from onyx.auth.api_key import get_hashed_api_key_from_request
 from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_chat_accessible_user
+from onyx.background.task_utils import enqueue_user_file_deletes
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.chat_processing_checker import (
     get_processing_run_id,
@@ -27,6 +36,11 @@ from onyx.chat.chat_utils import (
     create_chat_session_from_request,
     extract_headers,
 )
+from onyx.chat.incognito import (
+    delete_incognito_generated_files,
+    incognito_allowed_for_user,
+)
+from onyx.chat.incognito_context import teardown_incognito_session
 from onyx.chat.models import ChatFullResponse, CreateChatSessionID
 from onyx.chat.process_message import (
     gather_stream_full,
@@ -42,7 +56,11 @@ from onyx.configs.chat_configs import (
     CHAT_RESUME_POLL_INTERVAL_S,
     HARD_DELETE_CHATS,
 )
-from onyx.configs.constants import PUBLIC_API_TAGS, MessageType, MilestoneRecordType
+from onyx.configs.constants import (
+    PUBLIC_API_TAGS,
+    MessageType,
+    MilestoneRecordType,
+)
 from onyx.configs.model_configs import LITELLM_PASS_THROUGH_HEADERS
 from onyx.db.chat import (
     add_chats_to_session_from_slack_thread,
@@ -53,6 +71,7 @@ from onyx.db.chat import (
     get_chat_messages_by_session,
     get_chat_session_by_id,
     get_chat_sessions_by_user,
+    get_incognito_session_ids_for_user,
     set_as_latest_chat_message,
     set_preferred_response,
     translate_db_message_to_chat_message_detail,
@@ -60,23 +79,37 @@ from onyx.db.chat import (
 )
 from onyx.db.chat_search import search_chat_sessions
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
-from onyx.db.enums import Permission
+from onyx.db.enums import Permission, record_mode_persists_content
 from onyx.db.feedback import create_chat_message_feedback, remove_chat_message_feedback
-from onyx.db.models import ChatSessionSharedStatus, Persona, User
+from onyx.db.incognito import (
+    is_incognito_teardown_target,
+    mark_incognito_user_files_deleting,
+)
+from onyx.db.llm import fetch_default_chat_naming_model
+from onyx.db.models import ChatMessage, ChatSessionSharedStatus, Persona, User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.usage import UsageType, increment_usage
 from onyx.db.user_file import get_file_id_by_user_file_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.serving import (
+    RESPONSE_POLICY_VERSION,
+    resolve_inline_disposition,
+)
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.factory import get_default_llm, get_llm_for_persona, get_llm_token_counter
+from onyx.llm.factory import get_llm_for_persona, get_llm_token_counter
 from onyx.llm.models import (
     USER_SELECTABLE_REASONING_EFFORTS,
     ReasoningEffort,
     parse_user_selectable_reasoning_effort,
 )
-from onyx.secondary_llm_flows.chat_session_naming import generate_chat_session_name
+from onyx.llm.override_models import LLMOverride
+from onyx.secondary_llm_flows.chat_session_naming import (
+    DEFAULT_CHAT_SESSION_NAME,
+    generate_chat_session_name,
+    get_fallback_chat_session_name,
+)
 from onyx.server.api_key_usage import check_api_key_usage
 from onyx.server.middleware.rate_limiting import get_feedback_rate_limiters
 from onyx.server.query_and_chat.chat_utils import (
@@ -115,7 +148,7 @@ from onyx.server.usage_limits import (
     is_usage_limits_enabled,
 )
 from onyx.server.utils import get_json_line
-from onyx.tracing.framework.create import ensure_trace
+from onyx.tracing.framework.create import ChatTraceMetadata, ensure_trace
 from onyx.utils.headers import get_custom_tool_additional_request_headers
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
@@ -130,6 +163,7 @@ def _get_available_tokens_for_persona(
     persona: Persona,
     db_session: Session,
     user: User,
+    llm_override: LLMOverride | None = None,
 ) -> int:
     def _get_non_reserved_input_tokens(
         model_max_input_tokens: int,
@@ -146,7 +180,7 @@ def _get_available_tokens_for_persona(
             - default_reserved_tokens
         )
 
-    llm = get_llm_for_persona(persona=persona, user=user)
+    llm = get_llm_for_persona(persona=persona, user=user, llm_override=llm_override)
     token_counter = get_llm_token_counter(llm)
 
     if persona.replace_base_system_prompt and persona.system_prompt:
@@ -193,6 +227,8 @@ def get_user_chat_sessions(
             project_id=project_id,
             only_non_project_chats=only_non_project_chats,
             include_failed_chats=include_failed_chats,
+            # The owner's own history is the one surface incognito hides from.
+            exclude_incognito=True,
             limit=page_size + 1,
             before=before_dt,
         )
@@ -400,15 +436,11 @@ def get_chat_session(
 
     # Every assistant message might have a set of tool calls associated with it, these need to be replayed back for the frontend
     # Each list is the set of tool calls for the given assistant message.
-    replay_packet_lists: list[list[Packet]] = []
-    for msg in session_messages:
-        if msg.message_type == MessageType.ASSISTANT:
-            replay_packet_lists.append(
-                translate_assistant_message_to_packets(
-                    chat_message=msg, db_session=db_session
-                )
-            )
-            # msg_packet_list.append(Packet(ind=end_step_nr, obj=OverallStop()))
+    replay_packet_lists: list[list[Packet]] = [
+        translate_assistant_message_to_packets(chat_message=msg, db_session=db_session)
+        for msg in session_messages
+        if msg.message_type == MessageType.ASSISTANT
+    ]
 
     return ChatSessionDetailResponse(
         chat_session_id=session_id,
@@ -427,6 +459,7 @@ def get_chat_session(
         # Packets are now directly serialized as Packet Pydantic models
         packets=replay_packet_lists,
         current_run=current_run,
+        incognito=chat_session.incognito_record_mode is not None,
     )
 
 
@@ -444,6 +477,9 @@ def create_new_chat_session(
             user=user,
             db_session=db_session,
         )
+    except OnyxError:
+        # Carries its own status and detail (e.g. incognito refused).
+        raise
     except ValueError as e:
         # Project or persona access denied
         raise HTTPException(status_code=403, detail=str(e))
@@ -451,7 +487,63 @@ def create_new_chat_session(
         logger.exception(e)
         raise HTTPException(status_code=400, detail="Invalid Persona provided.")
 
-    return CreateChatSessionID(chat_session_id=new_chat_session.id)
+    return CreateChatSessionID(
+        chat_session_id=new_chat_session.id,
+        incognito=new_chat_session.incognito_record_mode is not None,
+    )
+
+
+def _generate_or_fallback_chat_session_name(
+    chat_history: list[ChatMessage],
+    request: Request,
+    user: User,
+    chat_session_id: UUID,
+    persona: Persona | None,
+    llm_override: LLMOverride | None,
+) -> str:
+    user_id = user.id
+    fallback_name = get_fallback_chat_session_name(chat_history)
+    max_tokens_for_naming = 3000
+
+    try:
+        check_token_rate_limits(user)
+        llm = get_llm_for_persona(
+            persona=persona,
+            user=user,
+            llm_override=llm_override,
+            additional_headers=extract_headers(
+                request.headers, LITELLM_PASS_THROUGH_HEADERS
+            ),
+        )
+        with get_session_with_current_tenant() as db_session:
+            check_llm_cost_limit_for_provider(
+                db_session=db_session,
+                tenant_id=get_current_tenant_id(),
+                llm_provider_api_key=llm.config.api_key,
+            )
+
+        token_counter = get_llm_token_counter(llm)
+        simple_chat_history = convert_chat_history_basic(
+            chat_history=chat_history,
+            token_counter=token_counter,
+            max_individual_message_tokens=max_tokens_for_naming,
+            max_total_tokens=max_tokens_for_naming,
+        )
+        with ensure_trace(
+            "chat_session_naming",
+            group_id=str(chat_session_id),
+            metadata=ChatTraceMetadata(
+                chat_session_id=str(chat_session_id),
+                user_id=str(user_id) if user_id else None,
+            ).model_dump(),
+        ):
+            return generate_chat_session_name(
+                chat_history=simple_chat_history,
+                llm=llm,
+            )
+    except Exception as error:
+        logger.warning("Failed to generate chat session name: %s", error)
+        return fallback_name
 
 
 @router.put("/rename-chat-session")
@@ -460,67 +552,59 @@ def rename_chat_session(
     request: Request,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> RenameChatSessionResponse:
-    # 3000 tokens is more than enough for a pair of messages which is enough to provide the required context for generating a
-    # good name for the chat session. It's also small enough to fit on even the worst context window LLMs.
-    max_tokens_for_naming = 3000
-
     name = rename_req.name
     chat_session_id = rename_req.chat_session_id
     user_id = user.id
 
     if name:
         with get_session_with_current_tenant() as db_session:
-            update_chat_session(
+            chat_session = update_chat_session(
                 db_session=db_session,
                 user_id=user_id,
                 chat_session_id=chat_session_id,
                 description=name,
             )
-        return RenameChatSessionResponse(new_name=name)
+        # Echo what was stored: a content-free session drops the title, and
+        # reporting the requested one would show a rename that did not happen.
+        return RenameChatSessionResponse(new_name=chat_session.description or "")
 
-    # Auto-naming calls an LLM, so apply the same per-user budget gate as
-    # send-message. Manual renames return above and stay free.
-    check_token_rate_limits(user)
-
-    llm = get_default_llm(
-        additional_headers=extract_headers(
-            request.headers, LITELLM_PASS_THROUGH_HEADERS
-        )
-    )
-
-    # Read-phase short session: usage check + history fetch. Closed before the
-    # LLM call so the underlying pool connection is fully released for the
-    # 2-10s generation window. (db_session.close() alone is insufficient in
-    # multi-tenant mode where the session is bound to an explicit Connection
-    # held by get_session_with_tenant's outer with-block.)
+    # Close the read session before the LLM's multi-second generation window.
     with get_session_with_current_tenant() as db_session:
-        check_llm_cost_limit_for_provider(
+        chat_session = get_chat_session_by_id(
+            chat_session_id=chat_session_id,
+            user_id=user_id,
             db_session=db_session,
-            tenant_id=get_current_tenant_id(),
-            llm_provider_api_key=llm.config.api_key,
+            eager_load_persona=True,
         )
+        # Auto-naming derives a title from the conversation and writes it to the
+        # session row. A non-persisting incognito mode keeps no content in
+        # Postgres, so it keeps the fallback name and skips the LLM call.
+        if not record_mode_persists_content(chat_session.incognito_record_mode):
+            return RenameChatSessionResponse(new_name=DEFAULT_CHAT_SESSION_NAME)
         full_history = create_chat_history_chain(
-            chat_session_id=chat_session_id, db_session=db_session
+            chat_session_id=chat_session_id,
+            db_session=db_session,
         )
-
-    token_counter = get_llm_token_counter(llm)
-    simple_chat_history = convert_chat_history_basic(
+        # Admin-designated dedicated naming model (so a single-stream local
+        # session model isn't blocked by naming calls) takes priority over the
+        # session's model.
+        naming_model = fetch_default_chat_naming_model(db_session)
+        naming_override = (
+            LLMOverride(
+                model_provider=naming_model.llm_provider.name,
+                model_version=naming_model.name,
+            )
+            if naming_model is not None
+            else chat_session.llm_override
+        )
+    new_name = _generate_or_fallback_chat_session_name(
         chat_history=full_history,
-        token_counter=token_counter,
-        max_individual_message_tokens=max_tokens_for_naming,
-        max_total_tokens=max_tokens_for_naming,
+        request=request,
+        user=user,
+        chat_session_id=chat_session_id,
+        persona=chat_session.persona,
+        llm_override=naming_override,
     )
-
-    with ensure_trace(
-        "chat_session_naming",
-        group_id=str(chat_session_id),
-        metadata={
-            "tenant_id": get_current_tenant_id(),
-            "chat_session_id": str(chat_session_id),
-            "user_id": str(user_id) if user_id else None,
-        },
-    ):
-        new_name = generate_chat_session_name(chat_history=simple_chat_history, llm=llm)
 
     with get_session_with_current_tenant() as db_session:
         update_chat_session(
@@ -550,15 +634,47 @@ def patch_chat_session(
     return None
 
 
+def _teardown_incognito_after_delete(
+    chat_session_id: UUID, user_id: UUID, db_session: Session
+) -> None:
+    """The rows are already gone, so a failed teardown is logged rather than
+    failing a delete the caller cannot retry. The context TTL is the backstop.
+
+    Uploads are queued here too, so deleting a chat cleans up the same things
+    the dedicated teardown endpoint does."""
+    try:
+        mark_incognito_user_files_deleting(db_session, chat_session_id, user_id)
+        db_session.commit()
+    except Exception:
+        logger.exception("Incognito file cleanup failed for %s", chat_session_id)
+    try:
+        teardown_incognito_session(chat_session_id)
+    except Exception:
+        logger.exception("Incognito teardown failed for session %s", chat_session_id)
+
+
 @router.delete("/delete-all-chat-sessions", tags=PUBLIC_API_TAGS)
 def delete_all_chat_sessions(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
+    incognito_session_ids = get_incognito_session_ids_for_user(user.id, db_session)
+    # Blobs first, and nothing is deleted while any remain: their ids live on
+    # the rows this is about to drop, so the other order strands them.
+    if not all(
+        delete_incognito_generated_files(incognito_id, db_session)
+        for incognito_id in incognito_session_ids
+    ):
+        raise OnyxError(
+            OnyxErrorCode.SERVICE_UNAVAILABLE,
+            "Some generated files could not be deleted yet. Try again shortly.",
+        )
     try:
         delete_all_chat_sessions_for_user(user=user, db_session=db_session)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    for incognito_id in incognito_session_ids:
+        _teardown_incognito_after_delete(incognito_id, user.id, db_session)
 
 
 @router.delete("/delete-chat-session/{session_id}", tags=PUBLIC_API_TAGS)
@@ -570,6 +686,17 @@ def delete_chat_session_by_id(
 ) -> None:
     user_id = user.id
     try:
+        session = get_chat_session_by_id(
+            chat_session_id=session_id, user_id=user_id, db_session=db_session
+        )
+        is_incognito = session.incognito_record_mode is not None
+        if is_incognito and not delete_incognito_generated_files(
+            session_id, db_session
+        ):
+            raise OnyxError(
+                OnyxErrorCode.SERVICE_UNAVAILABLE,
+                "Some generated files could not be deleted yet. Try again shortly.",
+            )
         # Use the provided hard_delete parameter if specified, otherwise use the default config
         actual_hard_delete = (
             hard_delete if hard_delete is not None else HARD_DELETE_CHATS
@@ -579,6 +706,68 @@ def delete_chat_session_by_id(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    if is_incognito:
+        _teardown_incognito_after_delete(session_id, user.id, db_session)
+
+
+class IncognitoAvailabilityResponse(BaseModel):
+    available: bool
+
+
+@router.get("/incognito-availability")
+def get_incognito_availability(
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> IncognitoAvailabilityResponse:
+    """Whether the acting user may start an incognito chat, so the client can
+    hide the toggle. The create endpoint enforces the same rule regardless."""
+    return IncognitoAvailabilityResponse(
+        available=incognito_allowed_for_user(user, db_session)
+    )
+
+
+@router.post("/end-incognito-session/{session_id}", tags=PUBLIC_API_TAGS)
+def end_incognito_session(
+    session_id: UUID,
+    bg_tasks: BackgroundTasks,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    """Drop an incognito session's live context the moment the chat closes.
+
+    The context TTL is only the backstop for when this never arrives, such as
+    a hard tab close. Uploads are found by session id, so one still in flight
+    when the user leaves, or one attached before any message created the
+    session, is queued for deletion just the same.
+    """
+    if not is_incognito_teardown_target(db_session, session_id, user.id):
+        return
+    # Durable file marking runs before the Redis teardown: the beacon is
+    # one-shot, so a failure after this point still leaves the files queued
+    # for deletion rather than stored but hidden.
+    deletable_ids = mark_incognito_user_files_deleting(db_session, session_id, user.id)
+    db_session.commit()
+
+    # Nothing past the commit may raise. This is a one-shot beacon, so an error
+    # reaches nobody who can act on it, and raising would discard the response
+    # carrying the in-process drain that a Celery-less deployment relies on.
+    enqueue_user_file_deletes(
+        deletable_ids, tenant_id=get_current_tenant_id(), bg_tasks=bg_tasks
+    )
+    for what, step in (
+        (
+            "delete generated files",
+            lambda: delete_incognito_generated_files(session_id, db_session),
+        ),
+        ("end the context", lambda: teardown_incognito_session(session_id)),
+    ):
+        try:
+            if step() is False:
+                logger.warning(
+                    "Incognito teardown could not %s for %s", what, session_id
+                )
+        except Exception:
+            logger.exception("Incognito teardown could not %s for %s", what, session_id)
 
 
 # NOTE: This endpoint is extremely central to the application, any changes to it should be reviewed and approved by an experienced
@@ -630,7 +819,12 @@ def handle_send_chat_message(
     Returns:
         StreamingResponse | ChatFullResponse: Either streams or returns complete response.
     """
-    logger.debug("Received new chat message: %s", chat_message_req.message)
+    # Session id only: the session's incognito mode isn't loaded yet, and a
+    # verbatim prompt in the debug log would be exactly the durable message
+    # log incognito must never leave behind.
+    logger.debug(
+        "Received new chat message for session %s", chat_message_req.chat_session_id
+    )
 
     tenant_id = get_current_tenant_id()
     mt_cloud_telemetry(
@@ -874,10 +1068,16 @@ class AvailableContextTokensResponse(BaseModel):
 @router.get("/available-context-tokens/{session_id}")
 def get_available_context_tokens_for_session(
     session_id: UUID,
+    model_configuration_id: int | None = None,
     user: User = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
 ) -> AvailableContextTokensResponse:
-    """Return available context tokens for a chat session based on its persona."""
+    """Return available context tokens for a chat session based on its persona.
+
+    ``model_configuration_id`` selects the model the user currently has picked
+    for the session — without it the budget reflects the persona/global
+    default model, which can differ after a mid-session model switch.
+    """
 
     try:
         chat_session = get_chat_session_by_id(
@@ -893,10 +1093,16 @@ def get_available_context_tokens_for_session(
     if not chat_session.persona:
         raise HTTPException(status_code=400, detail="Chat session has no persona")
 
+    llm_override = (
+        LLMOverride(model_configuration_id=model_configuration_id)
+        if model_configuration_id is not None
+        else None
+    )
     available = _get_available_tokens_for_persona(
         persona=chat_session.persona,
         user=user,
         db_session=db_session,
+        llm_override=llm_override,
     )
 
     return AvailableContextTokensResponse(available_tokens=available)
@@ -960,18 +1166,25 @@ def fetch_chat_file(
     if not file_record:
         raise HTTPException(status_code=404, detail="File not found")
 
-    media_type = file_record.file_type
     # `parsed` only changes behavior for spreadsheet files (xlsx is a binary zip
     # the frontend cannot render); everything else is served raw as usual.
-    parse_spreadsheet = parsed and is_spreadsheet_mime_type(media_type)
+    parse_spreadsheet = parsed and is_spreadsheet_mime_type(file_record.file_type)
+
+    media_type, security_headers = resolve_inline_disposition(
+        file_record.file_type,
+        # A parsed spreadsheet is served as a JSON preview, not as the stored bytes.
+        fallback_disposition=None if parse_spreadsheet else "attachment",
+    )
 
     # Files served here are immutable (content-addressed by file_id), so allow long-lived caching.
     # Use `private` because this is behind auth / tenant scoping.
-    etag = f'"{file_id}-parsed"' if parse_spreadsheet else f'"{file_id}"'
-    cache_headers = {
+    etag_variant: str = "-parsed" if parse_spreadsheet else ""
+    etag: str = f'"{file_id}{etag_variant}-{RESPONSE_POLICY_VERSION}"'
+    cache_headers: dict[str, str] = {
         "Cache-Control": "private, max-age=31536000, immutable",
         "ETag": etag,
         "Vary": "Cookie",
+        **security_headers,
     }
 
     if request.headers.get("if-none-match") == etag:

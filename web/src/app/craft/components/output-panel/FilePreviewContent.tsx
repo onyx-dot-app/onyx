@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { fetchFileContent } from "@/app/craft/services/apiServices";
@@ -45,7 +46,7 @@ function ImageRendererWrapper({ content, fileName }: FileRendererProps) {
 const PREVIEW_REGISTRY: PreviewEntry[] = [
   {
     type: "standalone",
-    matches: (path) => /\.pptx$/i.test(path),
+    matches: (path) => /\.pptx?$/i.test(path),
     component: PptxPreview,
   },
   {
@@ -154,6 +155,7 @@ function FetchedFilePreview({
   fullHeight,
   refreshKey,
 }: FetchedFilePreviewProps) {
+  const t = useTranslations("craft.filePreview");
   const { data, error, isLoading, mutate } = useSWR(
     SWR_KEYS.buildSessionArtifactFile(sessionId, filePath),
     () => fetchFileContent(sessionId, filePath),
@@ -177,10 +179,10 @@ function FetchedFilePreview({
           height="full"
           alignItems="center"
           justifyContent="center"
-          padding={2}
+          padding={8}
         >
           <Text font="secondary-body" color="text-03">
-            Loading file...
+            {t("loading.label")}
           </Text>
         </Section>
       );
@@ -188,7 +190,7 @@ function FetchedFilePreview({
     return (
       <div className="p-4">
         <Text font="secondary-body" color="text-03">
-          Loading file...
+          {t("loading.label")}
         </Text>
       </div>
     );
@@ -201,11 +203,11 @@ function FetchedFilePreview({
           height="full"
           alignItems="center"
           justifyContent="center"
-          padding={2}
+          padding={8}
         >
           <SvgFileText size={48} className="stroke-text-02" />
           <Text font="heading-h3" color="text-03">
-            Error loading file
+            {t("error.title")}
           </Text>
           <Text font="secondary-body" color="text-02">
             {error.message}
@@ -216,7 +218,7 @@ function FetchedFilePreview({
     return (
       <div className="p-4">
         <Text font="secondary-body" color="text-02">
-          {`Error: ${error.message}`}
+          {t("error.inline", { message: error.message })}
         </Text>
       </div>
     );
@@ -229,10 +231,10 @@ function FetchedFilePreview({
           height="full"
           alignItems="center"
           justifyContent="center"
-          padding={2}
+          padding={8}
         >
           <Text font="secondary-body" color="text-03">
-            No content
+            {t("noContent.label")}
           </Text>
         </Section>
       );
@@ -240,7 +242,7 @@ function FetchedFilePreview({
     return (
       <div className="p-4">
         <Text font="secondary-body" color="text-03">
-          No content
+          {t("noContent.label")}
         </Text>
       </div>
     );
@@ -253,11 +255,11 @@ function FetchedFilePreview({
           height="full"
           alignItems="center"
           justifyContent="center"
-          padding={2}
+          padding={8}
         >
           <SvgFileText size={48} className="stroke-text-02" />
           <Text font="heading-h3" color="text-03">
-            Cannot preview file
+            {t("cannotPreview.title")}
           </Text>
           <div className="text-center max-w-md">
             <Text font="secondary-body" color="text-02">

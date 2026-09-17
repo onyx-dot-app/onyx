@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "onyx.fullname" . }}-inference-model-service
+  name: {{ include "onyx.resourceName" (list . "inference-model-service") }}
 spec:
   type: {{ .Values.inferenceCapability.service.type }}
   ports:

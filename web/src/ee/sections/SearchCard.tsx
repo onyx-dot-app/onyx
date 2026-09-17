@@ -13,6 +13,7 @@ import { Interactive } from "@opal/core";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { timeAgo } from "@opal/time";
 import { useMemo } from "react";
+import { useLocale } from "next-intl";
 
 export interface SearchResultCardProps {
   /** The search result document to display */
@@ -33,6 +34,7 @@ export default function SearchCard({
   document,
   onDocumentClick,
 }: SearchResultCardProps) {
+  const locale = useLocale();
   const isWebSource =
     document.is_internet || document.source_type === ValidSources.Web;
 
@@ -57,13 +59,13 @@ export default function SearchCard({
   return (
     <Interactive.Stateless onClick={handleClick} prominence="secondary">
       <Interactive.Container size="fit" width="full">
-        <Section alignItems="start" gap={0} padding={0.25}>
+        <Section alignItems="start" gap={0} padding={1}>
           {/* Title Row */}
           <Section
             flexDirection="row"
             justifyContent="start"
-            gap={0.25}
-            padding={0.25}
+            gap={1}
+            padding={1}
           >
             {isWebSource && document.link ? (
               <WebResultIcon url={document.link} size={18} />
@@ -71,16 +73,16 @@ export default function SearchCard({
               <SourceIcon sourceType={document.source_type} iconSize={16} />
             )}
 
-            <Truncated mainUiAction className="text-left">
+            <Truncated mainUiAction className="text-start">
               {document.semantic_identifier}
             </Truncated>
           </Section>
 
           {/* Body Row */}
           <div className="px-1 pb-1">
-            <Section alignItems="start" gap={0.25}>
+            <Section alignItems="start" gap={1}>
               {/* Metadata */}
-              <Section flexDirection="row" justifyContent="start" gap={0.25}>
+              <Section flexDirection="row" justifyContent="start" gap={1}>
                 {(document.primary_owners ?? []).map((owner, index) => (
                   <Chip key={index}>{owner}</Chip>
                 ))}
@@ -92,14 +94,14 @@ export default function SearchCard({
                 {document.updated_at &&
                   !isNaN(new Date(document.updated_at).getTime()) && (
                     <Text secondaryBody text02>
-                      {timeAgo(document.updated_at)}
+                      {timeAgo(document.updated_at, locale)}
                     </Text>
                   )}
               </Section>
 
               {/* Blurb */}
               {content && (
-                <Text secondaryBody text03 className="text-left">
+                <Text secondaryBody text03 className="text-start">
                   {content}
                 </Text>
               )}

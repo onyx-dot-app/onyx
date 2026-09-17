@@ -1,0 +1,347 @@
+{
+  "include": [
+    "reasoning.encrypted_content"
+  ],
+  "input": [
+    {
+      "content": [
+        {
+          "text": "<permissions instructions>\nFilesystem sandboxing defines which files can be read or written. `sandbox_mode` is `read-only`: The sandbox only permits reading files. Network access is restricted.\nApproval policy is currently never. Do not provide the `sandbox_permissions` for any reason, commands will be rejected.\n</permissions instructions>",
+          "type": "input_text"
+        },
+        {
+          "text": "<skills_instructions>\n(elided: Codex injects ~16KB of skill descriptions here)\n</skills_instructions>",
+          "type": "input_text"
+        }
+      ],
+      "role": "developer",
+      "type": "message"
+    },
+    {
+      "content": [
+        {
+          "text": "<environment_context>\n  <cwd>/private/tmp/claude-501/-Users-rohoswagger--superconductor-worktrees-onyx-onyx-router/1d263b21-078b-46b4-b89d-12b4a2800b04/scratchpad/codex-spike</cwd>\n  <shell>zsh</shell>\n  <current_date>2026-07-29</current_date>\n  <timezone>America/Los_Angeles</timezone>\n  <filesystem><workspace_roots><root>/private/tmp/claude-501/-Users-rohoswagger--superconductor-worktrees-onyx-onyx-router/1d263b21-078b-46b4-b89d-12b4a2800b04/scratchpad/codex-spike</root></workspace_roots><permission_profile type=\"managed\"><file_system type=\"restricted\"><entry access=\"read\"><special>:root</special></entry></file_system></permission_profile></filesystem>\n</environment_context>",
+          "type": "input_text"
+        }
+      ],
+      "role": "user",
+      "type": "message"
+    },
+    {
+      "content": [
+        {
+          "text": "say hi",
+          "type": "input_text"
+        }
+      ],
+      "role": "user",
+      "type": "message"
+    }
+  ],
+  "instructions": "You are a coding agent running in the Codex CLI, a terminal-based coding assistant. Codex CLI is an open source project led by OpenAI. You are expected to be precise, safe, and helpful.\n\nYour capabilities:\n\n- Receive user prompts and other context provided by the harness, such as files in the workspace.\n- Communicate with the user by streaming thinking & responses, and by making & updating plans.\n",
+  "model": "1/test-model",
+  "parallel_tool_calls": false,
+  "prompt_cache_key": "00000000-0000-0000-0000-000000000000",
+  "reasoning": {
+    "summary": "auto"
+  },
+  "store": false,
+  "stream": true,
+  "tool_choice": "auto",
+  "tools": [
+    {
+      "description": "Runs a command in a PTY, returning output or a session ID for ongoing interaction.",
+      "name": "exec_command",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "cmd": {
+            "description": "Shell command to execute.",
+            "type": "string"
+          },
+          "justification": {
+            "description": "User-facing approval question for `require_escalated`; omit otherwise.",
+            "type": "string"
+          },
+          "login": {
+            "description": "True runs the shell with -l/-i semantics; false disables them. Defaults to true.",
+            "type": "boolean"
+          },
+          "max_output_tokens": {
+            "description": "Output token budget. Defaults to 10000 tokens; larger requests may be capped by policy.",
+            "type": "number"
+          },
+          "prefix_rule": {
+            "description": "Reusable approval prefix for `cmd`, only with `sandbox_permissions: \"require_escalated\"`; for example [\"git\", \"pull\"].",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "sandbox_permissions": {
+            "description": "Per-command sandbox override. Defaults to `use_default`; use `require_escalated` for unsandboxed execution.",
+            "enum": [
+              "use_default",
+              "require_escalated"
+            ],
+            "type": "string"
+          },
+          "shell": {
+            "description": "Shell binary to launch. Defaults to the user's default shell.",
+            "type": "string"
+          },
+          "tty": {
+            "description": "True allocates a PTY for the command; false or omitted uses plain pipes.",
+            "type": "boolean"
+          },
+          "workdir": {
+            "description": "Working directory for the command. Defaults to the turn cwd.",
+            "type": "string"
+          },
+          "yield_time_ms": {
+            "description": "Wait before yielding output. Defaults to 10000 ms; effective range is 250-30000 ms.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "cmd"
+        ],
+        "type": "object"
+      },
+      "strict": false,
+      "type": "function"
+    },
+    {
+      "description": "Writes characters to an existing unified exec session and returns recent output.",
+      "name": "write_stdin",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "chars": {
+            "description": "Bytes to write to stdin. Defaults to empty, which polls without writing.",
+            "type": "string"
+          },
+          "max_output_tokens": {
+            "description": "Output token budget. Defaults to 10000 tokens; larger requests may be capped by policy.",
+            "type": "number"
+          },
+          "session_id": {
+            "description": "Identifier of the running unified exec session.",
+            "type": "number"
+          },
+          "yield_time_ms": {
+            "description": "Wait before yielding output. Non-empty writes default to 250 ms and cap at 30000 ms; empty polls wait 5000-300000 ms by default.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "session_id"
+        ],
+        "type": "object"
+      },
+      "strict": false,
+      "type": "function"
+    },
+    {
+      "description": "Updates the task plan.\nProvide an optional explanation and a list of plan items, each with a step and status.\nAt most one step can be in_progress at a time.\n",
+      "name": "update_plan",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "explanation": {
+            "description": "Optional explanation for this plan update.",
+            "type": "string"
+          },
+          "plan": {
+            "description": "The list of steps",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "status": {
+                  "description": "Step status.",
+                  "enum": [
+                    "pending",
+                    "in_progress",
+                    "completed"
+                  ],
+                  "type": "string"
+                },
+                "step": {
+                  "description": "Task step text.",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "step",
+                "status"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "plan"
+        ],
+        "type": "object"
+      },
+      "strict": false,
+      "type": "function"
+    },
+    {
+      "description": "Request user input for one to three short questions and wait for the response. Set autoResolutionMs, from 60000 to 240000 milliseconds, only when the question is useful but non-blocking and continuing with best judgment is acceptable if the user does not answer; omit it when explicit user input is required. This tool is only available in Plan mode.",
+      "name": "request_user_input",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "autoResolutionMs": {
+            "description": "Optional auto-resolution window in milliseconds, from 60000 to 240000. Include this only when the question is useful but non-blocking and continuing with best judgment is acceptable if the user does not answer; omit it when explicit user input is required before continuing. Use 60000 for lightly helpful context and up to 240000 when the answer would materially unblock better work.",
+            "type": "number"
+          },
+          "questions": {
+            "description": "Questions to show the user. Prefer 1 and do not exceed 3",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "header": {
+                  "description": "Short header label shown in the UI (12 or fewer chars).",
+                  "type": "string"
+                },
+                "id": {
+                  "description": "Stable identifier for mapping answers (snake_case).",
+                  "type": "string"
+                },
+                "options": {
+                  "description": "Provide 2-3 mutually exclusive choices. Put the recommended option first and suffix its label with \"(Recommended)\". Do not include an \"Other\" option in this list; the client will add a free-form \"Other\" option automatically.",
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "description": {
+                        "description": "One short sentence explaining impact/tradeoff if selected.",
+                        "type": "string"
+                      },
+                      "label": {
+                        "description": "User-facing label (1-5 words).",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "label",
+                      "description"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "question": {
+                  "description": "Single-sentence prompt shown to the user.",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "header",
+                "question",
+                "options"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "questions"
+        ],
+        "type": "object"
+      },
+      "strict": false,
+      "type": "function"
+    },
+    {
+      "description": "View a local image file from the filesystem when visual inspection is needed. Use this for images already available on disk.",
+      "name": "view_image",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "description": "Local filesystem path to an image file.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "strict": false,
+      "type": "function"
+    },
+    {
+      "type": "namespace",
+      "name": "multi_agent_v1",
+      "description": "(elided: ~10KB of nested sub-tool schemas)"
+    },
+    {
+      "description": "Get the current goal for this thread, including status, budgets, token and elapsed-time usage, and remaining token budget.",
+      "name": "get_goal",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "strict": false,
+      "type": "function"
+    },
+    {
+      "description": "Create a goal only when explicitly requested by the user or system/developer instructions; do not infer goals from ordinary tasks.\nSet token_budget only when an explicit token budget is requested. Fails if an unfinished goal exists; use update_goal only for status.",
+      "name": "create_goal",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "objective": {
+            "description": "Required. The concrete objective to start pursuing. This starts a new active goal when no goal exists or replaces the current goal when it is complete.",
+            "type": "string"
+          },
+          "token_budget": {
+            "description": "Positive token budget for the new goal. Omit unless explicitly requested.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "objective"
+        ],
+        "type": "object"
+      },
+      "strict": false,
+      "type": "function"
+    },
+    {
+      "description": "Update the existing goal.\nUse this tool only to mark the goal achieved or genuinely blocked.\nSet status to `complete` only when the objective has actually been achieved and no required work remains.\nSet status to `blocked` only when the same blocking condition has repeated for at least three consecutive goal turns, counting the original/user-triggered turn and any automatic continuations, and the agent cannot make meaningful progress without user input or an external-state change.\nIf the user resumes a goal that was previously marked `blocked`, treat the resumed run as a fresh blocked audit. If the same blocking condition then repeats for at least three consecutive resumed goal turns, set status to `blocked` again.\nOnce the blocked threshold is satisfied, do not keep reporting that you are still blocked while leaving the goal active; set status to `blocked`.\nDo not use `blocked` merely because the work is hard, slow, uncertain, incomplete, or would benefit from clarification.\nDo not mark a goal complete merely because its budget is nearly exhausted or because you are stopping work.\nYou cannot use this tool to pause, resume, budget-limit, or usage-limit a goal; those status changes are controlled by the user or system.\nWhen marking a budgeted goal achieved with status `complete`, report the final token usage from the tool result to the user.",
+      "name": "update_goal",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "description": "Required. Set to `complete` only when the objective is achieved and no required work remains. Set to `blocked` only after the same blocking condition has recurred for at least three consecutive goal turns and the agent is at an impasse. After a previously blocked goal is resumed, the resumed run starts a fresh blocked audit.",
+            "enum": [
+              "complete",
+              "blocked"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
+      "strict": false,
+      "type": "function"
+    },
+    {
+      "external_web_access": false,
+      "type": "web_search"
+    }
+  ]
+}

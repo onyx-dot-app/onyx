@@ -61,7 +61,7 @@ streaming markdown renderer — **rejected** as too fragile for the value. Hidin
   `<StreamdownText markdown markdownStyle flavor="github" selectable>`. Today passes NO tap
   callback. `StreamdownText` **inherits all `EnrichedMarkdownText` props** (incl.
   `onLinkPress`/`onLinkLongPress` → `event.url`) **plus** `remendConfig`. `markdownStyle.link` =
-  `--action-link-05` + underline (global; no per-link styling).
+  `--action-selection-05` + underline (global; no per-link styling).
 - `mobile/src/hooks/useTypewriter.ts` — reveals `target` by growing char-prefix slice
   (~180cps mid-stream). Markers pass through as chars → a partial `[1` can momentarily show;
   citation parsing must run on the **full accumulated content**, not `displayed`.

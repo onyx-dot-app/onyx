@@ -29,6 +29,8 @@ func newTestRepo(t *testing.T) *testRepo {
 	r.Git("init", "-b", "main")
 	r.Git("config", "user.email", "test@test.com")
 	r.Git("config", "user.name", "Test")
+	// A global commit.gpgsign would break every commit made here.
+	r.Git("config", "commit.gpgsign", "false")
 	r.Commit("initial commit", "README.md", "init")
 
 	return r
@@ -180,5 +182,27 @@ func TestIsCommitAppliedOnBranch_NoFalsePositiveFromBody(t *testing.T) {
 
 	if IsCommitAppliedOnBranch(featureSHA, "main") {
 		t.Error("should NOT match when subject only appears in body of another commit")
+	}
+}
+
+// --- IsAncestor tests ---
+
+func TestIsAncestor_distinguishesFalseFromError(t *testing.T) {
+	// Precondition.
+	r := newTestRepo(t)
+	first := r.HEAD()
+	second := r.Commit("second commit", "second.txt", "content")
+
+	// Under test and postcondition: ancestor, non-ancestor, and error cases.
+	contained, err := IsAncestor(first, second)
+	if err != nil || !contained {
+		t.Errorf("expected (true, nil) for ancestor, got (%v, %v)", contained, err)
+	}
+	contained, err = IsAncestor(second, first)
+	if err != nil || contained {
+		t.Errorf("expected (false, nil) for non-ancestor, got (%v, %v)", contained, err)
+	}
+	if _, err = IsAncestor("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef", first); err == nil {
+		t.Error("expected an error for an unknown revision, got nil")
 	}
 }

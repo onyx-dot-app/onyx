@@ -3,6 +3,7 @@ from uuid import uuid4
 
 import pytest
 
+from onyx.db.enums import AccountType
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.user import UserManager
@@ -64,3 +65,47 @@ def test_add_users_to_group_invalid_user(admin_user: DATestUser) -> None:
 
     assert response.status_code == 404
     assert "not found" in response.text.lower()
+
+
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="User group tests are enterprise only",
+)
+def test_add_users_to_group_rejects_non_group_account(admin_user: DATestUser) -> None:
+    """The picker hides bots; the route took any uuid."""
+    bot_email = f"bot-{uuid4()}@example.com"
+    UserManager.seed_non_web_user(AccountType.BOT, bot_email)
+    bot = next(
+        user
+        for user in UserManager.get_user_page(
+            user_performing_action=admin_user,
+            account_types=[AccountType.BOT],
+            page_size=100,
+        ).items
+        if user.email == bot_email
+    )
+
+    user_group: DATestUserGroup = UserGroupManager.create(
+        name="add-bot-test-group",
+        user_ids=[admin_user.id],
+        user_performing_action=admin_user,
+    )
+    UserGroupManager.wait_for_sync(
+        user_performing_action=admin_user, user_groups_to_check=[user_group]
+    )
+
+    response = client.post(
+        f"{API_SERVER_URL}/manage/admin/user-group/{user_group.id}/add-users",
+        json={"user_ids": [str(bot.id)]},
+        headers=admin_user.headers,
+    )
+
+    assert response.status_code == 400, response.text
+    assert bot_email in response.text
+
+    members = next(
+        fetched
+        for fetched in UserGroupManager.get_all(user_performing_action=admin_user)
+        if fetched.id == user_group.id
+    ).users
+    assert str(bot.id) not in {str(member.id) for member in members}

@@ -125,6 +125,18 @@ def get_file_id_by_user_file_id(user_file_id: str, db_session: Session) -> str |
     return None
 
 
+def get_owned_file_ids(
+    file_ids: set[str], user_id: UUID, db_session: Session
+) -> set[str]:
+    return set(
+        db_session.scalars(
+            select(UserFile.file_id).where(
+                UserFile.file_id.in_(file_ids), UserFile.user_id == user_id
+            )
+        ).all()
+    )
+
+
 def get_file_ids_by_user_file_ids(
     user_file_ids: list[UUID], db_session: Session
 ) -> list[str]:
@@ -195,6 +207,7 @@ def get_user_file_ids_for_user_batch(
     stmt = select(UserFile.id).where(
         UserFile.user_id == user_id,
         UserFile.status == UserFileStatus.COMPLETED,
+        UserFile.incognito.is_(False),
     )
     if after_id is not None:
         stmt = stmt.where(UserFile.id > UUID(after_id))

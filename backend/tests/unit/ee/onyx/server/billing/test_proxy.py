@@ -250,7 +250,7 @@ class TestVerifyLicenseAuth:
         mock_is_valid: MagicMock,
         mock_verify: MagicMock,
     ) -> None:
-        """Should accept expired license when allow_expired=True."""
+        """A recently lapsed license still reaches the endpoints that un-lapse it."""
         from ee.onyx.server.tenants.proxy import verify_license_auth
 
         mock_payload = make_license_payload(expired=True)
@@ -260,3 +260,103 @@ class TestVerifyLicenseAuth:
         result = verify_license_auth("expired_license", allow_expired=True)
 
         assert result == mock_payload
+
+    @pytest.mark.asyncio
+    @patch("ee.onyx.server.tenants.proxy.LICENSE_ENFORCEMENT_ENABLED", True)
+    @patch("ee.onyx.server.tenants.proxy.verify_license_signature")
+    @patch("ee.onyx.server.tenants.proxy.is_license_valid")
+    async def test_a_long_expired_license_still_authenticates_the_way_back_in(
+        self,
+        mock_is_valid: MagicMock,
+        mock_verify: MagicMock,
+    ) -> None:
+        """These routes are how a lapsed customer renews, opens the billing
+        portal, or buys again. Refusing an old license on any age threshold
+        leaves someone still being billed with no self-serve path at all."""
+        from ee.onyx.server.tenants.proxy import verify_license_auth
+
+        mock_verify.return_value = make_license_payload(
+            expired=True, expired_days_ago=3650
+        )
+        mock_is_valid.return_value = False
+
+        payload = verify_license_auth("ancient_license", allow_expired=True)
+
+        assert payload.tenant_id == "tenant_123"
+
+
+class TestProxyLicenseFetchBustsBillingCache:
+    """A subscription changed in Stripe reaches the control plane by webhook,
+    which this proxy never sees. Its cached snapshot is only dropped by
+    endpoints that signal the subscription moved."""
+
+    @pytest.mark.asyncio
+    @patch("ee.onyx.server.tenants.proxy.get_redis_client")
+    @patch("ee.onyx.server.tenants.proxy.forward_to_control_plane")
+    async def test_reclaim_drops_the_cached_snapshot(
+        self,
+        mock_forward: AsyncMock,
+        mock_redis: MagicMock,
+    ) -> None:
+        from ee.onyx.server.tenants.proxy import (
+            BILLING_INFO_CACHE_KEY,
+            proxy_license_fetch,
+        )
+
+        mock_forward.return_value = {"license": "signed-license"}
+
+        await proxy_license_fetch(
+            tenant_id="tenant_123",
+            license_payload=make_license_payload(tenant_id="tenant_123"),
+        )
+
+        mock_redis.assert_called_once_with(tenant_id="tenant_123")
+        mock_redis.return_value.delete.assert_called_once_with(BILLING_INFO_CACHE_KEY)
+
+    @pytest.mark.asyncio
+    @patch("ee.onyx.server.tenants.proxy.get_redis_client")
+    @patch("ee.onyx.server.tenants.proxy.forward_to_control_plane")
+    async def test_an_incomplete_response_leaves_the_snapshot_alone(
+        self,
+        mock_forward: AsyncMock,
+        mock_redis: MagicMock,
+    ) -> None:
+        """Nothing was reclaimed, so the cached snapshot is still whatever the
+        control plane last reported."""
+        from fastapi import HTTPException
+
+        from ee.onyx.server.tenants.proxy import proxy_license_fetch
+
+        mock_forward.return_value = {}
+
+        with pytest.raises(HTTPException):
+            await proxy_license_fetch(
+                tenant_id="tenant_123",
+                license_payload=make_license_payload(tenant_id="tenant_123"),
+            )
+
+        mock_redis.return_value.delete.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("ee.onyx.server.tenants.proxy.get_redis_client")
+    @patch("ee.onyx.server.tenants.proxy.forward_to_control_plane")
+    async def test_a_redis_failure_still_returns_the_license(
+        self,
+        mock_forward: AsyncMock,
+        mock_redis: MagicMock,
+    ) -> None:
+        """The reclaim is the point of the call. A cache that cannot be dropped
+        costs a stale seat count, not the license."""
+        from redis.exceptions import RedisError
+
+        from ee.onyx.server.tenants.proxy import proxy_license_fetch
+
+        mock_forward.return_value = {"license": "signed-license"}
+        mock_redis.return_value.delete.side_effect = RedisError("down")
+
+        result = await proxy_license_fetch(
+            tenant_id="tenant_123",
+            license_payload=make_license_payload(tenant_id="tenant_123"),
+        )
+
+        assert result.license == "signed-license"

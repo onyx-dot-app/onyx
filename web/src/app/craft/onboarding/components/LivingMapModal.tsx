@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Modal } from "@opal/components";
 import { Button, Text } from "@opal/components";
@@ -39,6 +40,7 @@ export default function LivingMapModal({
   onDismiss = onComplete,
   initialStage = "prompt",
 }: LivingMapModalProps) {
+  const t = useTranslations("craft.onboarding.livingMap");
   const reduceMotion = useReducedMotion() ?? false;
   const [stageIdx, setStageIdx] = useState(() => stageIndex(initialStage));
   const [diving, setDiving] = useState(false);
@@ -87,8 +89,8 @@ export default function LivingMapModal({
       >
         {/* The X routes through Radix → onOpenChange, which owns dismissal;
             a real handler here would double-fire onDismiss. */}
-        <Modal.Header title="Meet Craft" onClose={() => {}} />
-        <Modal.Body padding={1.5}>
+        <Modal.Header title={t("modal.title")} onClose={() => {}} />
+        <Modal.Body padding={6}>
           <div className="flex w-full flex-col gap-3">
             {/* Stage copy crossfades above a scene that never unmounts. */}
             <div className="relative h-14">
@@ -102,10 +104,10 @@ export default function LivingMapModal({
                   className="absolute inset-0 flex flex-col items-center justify-center gap-0.5 text-center"
                 >
                   <Text font="heading-h3" color="text-05">
-                    {stage.title}
+                    {t(`stages.${stage.id}.title`)}
                   </Text>
                   <Text font="secondary-body" color="text-03">
-                    {stage.caption}
+                    {t(`stages.${stage.id}.caption`)}
                   </Text>
                 </motion.div>
               </AnimatePresence>
@@ -128,7 +130,7 @@ export default function LivingMapModal({
                 disabled={diving}
                 onClick={() => setStageIdx(stageIdx - 1)}
               >
-                Back
+                {t("modal.backButton")}
               </Button>
             )}
           </div>
@@ -146,14 +148,14 @@ export default function LivingMapModal({
           <div className="flex-1 flex justify-end">
             {isLastStage ? (
               <Button disabled={diving} onClick={finish}>
-                Put Craft to work
+                {t("modal.ctaButton")}
               </Button>
             ) : (
               <Button
                 rightIcon={SvgArrowRight}
                 onClick={() => setStageIdx(stageIdx + 1)}
               >
-                Next
+                {t("modal.nextButton")}
               </Button>
             )}
           </div>

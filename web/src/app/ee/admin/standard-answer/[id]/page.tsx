@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useParams } from "next/navigation";
 import { StandardAnswerCreationForm } from "@/app/ee/admin/standard-answer/StandardAnswerCreationForm";
 import {
@@ -14,6 +15,7 @@ import { ADMIN_ROUTES } from "@/lib/admin-routes";
 const route = ADMIN_ROUTES.STANDARD_ANSWERS;
 
 function Body({ id }: { id: string }) {
+  const t = useTranslations("admin.standardAnswers");
   const {
     data: standardAnswers,
     isLoading: answersLoading,
@@ -32,8 +34,8 @@ function Body({ id }: { id: string }) {
   if (answersError || categoriesError || !standardAnswerCategories) {
     return (
       <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg="Failed to fetch standard answers"
+        errorTitle={t("errors.genericTitle.title")}
+        errorMsg={t("errors.fetchAnswersFailed.message")}
       />
     );
   }
@@ -45,8 +47,8 @@ function Body({ id }: { id: string }) {
   if (!standardAnswer) {
     return (
       <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Did not find standard answer with ID: ${id}`}
+        errorTitle={t("errors.genericTitle.title")}
+        errorMsg={t("errors.notFound.message", { id })}
       />
     );
   }
@@ -60,13 +62,14 @@ function Body({ id }: { id: string }) {
 }
 
 export default function Page() {
+  const t = useTranslations("admin.standardAnswers");
   const params = useParams<{ id: string }>();
 
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={route.icon}
-        title="Edit Standard Answer"
+        title={t("editPage.title")}
         backButton
         divider
       />

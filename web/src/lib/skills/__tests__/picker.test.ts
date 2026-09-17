@@ -168,11 +168,11 @@ describe("toPickerSections", () => {
     const servers = [
       mcpServerFixture({ id: 9, name: "Zulip MCP" }),
       // A credential row can exist while the proxy still cannot authenticate
-      // the user, so `is_authenticated` must not drive this.
+      // the user, so `user_can_authenticate` must not drive this.
       mcpServerFixture({
         id: 4,
         name: "Asana MCP",
-        is_authenticated: true,
+        user_can_authenticate: true,
         craft_connected: false,
       }),
     ];

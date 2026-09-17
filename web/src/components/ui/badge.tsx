@@ -87,7 +87,7 @@ function Badge({
       {Icon && (
         <Icon
           className={cn(
-            "mr-1 shrink-0",
+            "me-1 shrink-0",
             size === "sm" ? "h-3 w-3" : size === "xs" ? "h-2 w-2" : "h-4 w-4"
           )}
         />
@@ -95,7 +95,7 @@ function Badge({
       {circle && (
         <div
           className={cn(
-            "mr-2 rounded-full bg-current opacity-80 shrink-0",
+            "me-2 rounded-full bg-current opacity-80 shrink-0",
             size === "xs" ? "h-2 w-2" : "h-2.5 w-2.5"
           )}
         />

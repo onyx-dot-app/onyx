@@ -1,0 +1,27 @@
+services:
+  tls_failure:
+    image: ${ONYX_BACKEND_IMAGE:?ONYX_BACKEND_IMAGE must be set}
+    command: python /test/tls_failure_server.py
+    volumes:
+      - ../../backend/tests/airgap/tls_failure_server.py:/test/tls_failure_server.py:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import socket; socket.create_connection(('localhost', 4443), 1).close()",
+        ]
+      interval: 1s
+      timeout: 1s
+      retries: 10
+
+  api_server:
+    depends_on:
+      tls_failure:
+        condition: service_healthy
+
+  inference_model_server:
+    depends_on:
+      tls_failure:
+        condition: service_healthy

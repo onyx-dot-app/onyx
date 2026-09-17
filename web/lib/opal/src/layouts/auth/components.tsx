@@ -9,10 +9,9 @@ import {
   Text,
 } from "@opal/components";
 import { Form } from "formik";
-import SvgArrowRightCircle from "@opal/icons/arrow-right-circle";
 import { Content } from "@opal/layouts";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
-import { SvgSimpleLoader } from "@opal/icons";
+import { SvgArrowRightCircle, SvgSimpleLoader } from "@opal/icons";
 
 const ICON_SIZE_PX = 44;
 
@@ -49,7 +48,7 @@ function Card({
 }: CardProps) {
   return (
     <div className="opal-auth-card-outer">
-      <OpalCard padding="lg" rounding="lg" shadow="lg">
+      <OpalCard padding={6} rounding={4} shadow="lg">
         <div className="flex flex-col gap-6">
           <div className="flex flex-col gap-3">
             <div className="p-0.5">
@@ -92,11 +91,15 @@ function FormBody({ children }: FormBodyProps) {
 }
 
 // ---------------------------------------------------------------------------
-// OrSeparator — "or" label flanked by two divider lines
+// OrSeparator: caller-supplied label flanked by two divider lines
 // ---------------------------------------------------------------------------
 
-function OrSeparator() {
-  return <EndOfList title="or" />;
+interface OrSeparatorProps {
+  title: string | RichStr;
+}
+
+function OrSeparator({ title }: OrSeparatorProps) {
+  return <EndOfList title={title} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -115,32 +118,21 @@ function Fields({ children }: FieldsProps) {
 // Submit — full-width submit button
 // ---------------------------------------------------------------------------
 
-type SubmitLabel =
-  | "submit"
-  | "create"
-  | "join"
-  | "reset"
-  | "impersonate"
-  | "logout";
-
 interface SubmitProps {
-  label: SubmitLabel;
+  children: string;
   isSubmitting?: boolean;
   isValid?: boolean;
   dirty?: boolean;
   onClick?: () => void;
 }
 
-const SUBMIT_LABEL_TEXT: Record<SubmitLabel, string> = {
-  submit: "Sign In",
-  create: "Create Account",
-  join: "Join",
-  reset: "Reset Password",
-  impersonate: "Impersonate",
-  logout: "Sign Out",
-};
-
-function Submit({ label, isSubmitting, isValid, dirty, onClick }: SubmitProps) {
+function Submit({
+  children,
+  isSubmitting,
+  isValid,
+  dirty,
+  onClick,
+}: SubmitProps) {
   return (
     <Button
       type="submit"
@@ -154,7 +146,7 @@ function Submit({ label, isSubmitting, isValid, dirty, onClick }: SubmitProps) {
       icon={isSubmitting ? SvgSimpleLoader : undefined}
       rightIcon={SvgArrowRightCircle}
     >
-      {SUBMIT_LABEL_TEXT[label]}
+      {children}
     </Button>
   );
 }
@@ -191,10 +183,10 @@ export {
   Card,
   type FormBodyProps,
   FormBody,
+  type OrSeparatorProps,
   OrSeparator,
   type FieldsProps,
   Fields,
-  type SubmitLabel,
   type SubmitProps,
   Submit,
   type MessageType,

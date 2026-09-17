@@ -1170,6 +1170,9 @@ def test_code_interpreter_receives_chat_files(
         ],
         project_id=None,
         temp_id_map=json.dumps({"0|data.csv": "data.csv"}),
+        # Explicit: calling the endpoint directly leaves this as the Form
+        # default object, which is truthy and trips the incognito guard.
+        incognito_session_id=None,
         user=user,
         db_session=db_session,
     )

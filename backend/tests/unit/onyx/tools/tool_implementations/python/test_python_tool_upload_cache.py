@@ -296,7 +296,7 @@ def test_count_overflow_files_are_not_downloaded() -> None:
 
     download_counts = {f"f{i}.csv": 0 for i in range(5)}
 
-    def _make_loader(name: str):  # type: ignore[no-untyped-def]
+    def _make_loader(name: str):
         def _load() -> bytes:
             download_counts[name] += 1
             return b"data"
@@ -423,7 +423,7 @@ def test_referenced_old_file_read_unreferenced_recent_not() -> None:
 
     download_counts = {"old.csv": 0, "new.csv": 0}
 
-    def _make_loader(name: str):  # type: ignore[no-untyped-def]
+    def _make_loader(name: str):
         def _load() -> bytes:
             download_counts[name] += 1
             return b"data"

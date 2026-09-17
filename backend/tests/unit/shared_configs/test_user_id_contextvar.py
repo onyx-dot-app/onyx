@@ -17,7 +17,12 @@ from onyx.auth.users import (
 )
 from onyx.configs.constants import ANONYMOUS_USER_UUID
 from onyx.db.engine.async_sql_engine import get_async_session
-from shared_configs.contextvars import CURRENT_USER_ID_CONTEXTVAR, get_current_user_id
+from shared_configs.contextvars import (
+    CURRENT_TENANT_ID_CONTEXTVAR,
+    CURRENT_USER_ID_CONTEXTVAR,
+    get_current_tenant_id,
+    get_current_user_id,
+)
 
 
 def test_get_current_user_id_returns_set_value() -> None:
@@ -157,30 +162,40 @@ async def test_websocket_user_context_is_set_and_reset(
         email = "test@example.com"
 
     async def retrieve_token(_: str) -> dict[str, str]:
-        return {"sub": str(user_id)}
+        return {"sub": str(user_id), "tenant_id": "tenant-a"}
+
+    seen_tenant_ids: list[str] = []
 
     async def get_user(_: dict[str, str]) -> _FakeUser:
+        seen_tenant_ids.append(get_current_tenant_id())
         return _FakeUser()
 
     async def check_user(user: _FakeUser) -> _FakeUser:
+        seen_tenant_ids.append(get_current_tenant_id())
         return user
 
     monkeypatch.setattr(users, "is_same_origin", lambda *_: True)
+    monkeypatch.setattr(users, "MULTI_TENANT", True)
     monkeypatch.setattr(users, "retrieve_ws_token_data", retrieve_token)
     monkeypatch.setattr(users, "_get_user_from_token_data", get_user)
     monkeypatch.setattr(users, "double_check_user", check_user)
     monkeypatch.setattr(users, "is_limited_user", lambda _: False)
 
     websocket = cast(WebSocket, type("_WebSocket", (), {"headers": {"origin": "x"}})())
-    outer_token = CURRENT_USER_ID_CONTEXTVAR.set("outer-user")
+    outer_user_token = CURRENT_USER_ID_CONTEXTVAR.set("outer-user")
+    outer_tenant_token = CURRENT_TENANT_ID_CONTEXTVAR.set("outer-tenant")
     dependency = current_user_from_websocket(websocket, token="token")
     try:
         try:
             resolved_user = await anext(dependency)
             assert resolved_user.id == user_id
             assert get_current_user_id() == str(user_id)
+            assert get_current_tenant_id() == "tenant-a"
         finally:
             await dependency.aclose()
         assert get_current_user_id() == "outer-user"
+        assert get_current_tenant_id() == "outer-tenant"
+        assert seen_tenant_ids == ["tenant-a", "tenant-a"]
     finally:
-        CURRENT_USER_ID_CONTEXTVAR.reset(outer_token)
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(outer_tenant_token)
+        CURRENT_USER_ID_CONTEXTVAR.reset(outer_user_token)

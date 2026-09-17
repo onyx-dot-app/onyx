@@ -271,7 +271,7 @@ class TestDocumentIndexNew:
             doc_id = f"test_gen_{uuid.uuid4().hex[:8]}"
             metadata = make_indexing_metadata([doc_id], old_counts=[0], new_counts=[3])
 
-            def chunk_gen() -> Iterator[DocMetadataAwareIndexChunk]:
+            def chunk_gen(doc_id: str = doc_id) -> Iterator[DocMetadataAwareIndexChunk]:
                 for i in range(3):
                     yield make_chunk(doc_id, chunk_id=i)
 

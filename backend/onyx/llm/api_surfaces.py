@@ -9,6 +9,10 @@ from enum import Enum
 
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.well_known_providers.constants import (
+    BIFROST_API_MODE_CHAT_COMPLETIONS,
+    BIFROST_API_MODE_CONFIG_KEY,
+    BIFROST_API_MODE_RESPONSES,
+    BIFROST_DEFAULT_API_MODE,
     PORTKEY_API_MODE_CHAT_COMPLETIONS,
     PORTKEY_API_MODE_CONFIG_KEY,
     PORTKEY_API_MODE_MESSAGES,
@@ -31,7 +35,6 @@ OPENAI_COMPATIBLE_SURFACES = frozenset(
 )
 
 _STATIC_SURFACES: dict[str, LlmApiSurface] = {
-    LlmProviderNames.BIFROST: LlmApiSurface.OPENAI_CHAT_COMPLETIONS,
     LlmProviderNames.OPENAI_COMPATIBLE: LlmApiSurface.OPENAI_CHAT_COMPLETIONS,
     LlmProviderNames.NEBIUS_TOKENFACTORY: LlmApiSurface.OPENAI_CHAT_COMPLETIONS,
 }
@@ -46,6 +49,16 @@ _SELECTABLE_SURFACES: dict[str, tuple[str, dict[str, LlmApiSurface], str]] = {
             PORTKEY_API_MODE_MESSAGES: LlmApiSurface.ANTHROPIC_MESSAGES,
         },
         PORTKEY_DEFAULT_API_MODE,
+    ),
+    # Bifrost's Anthropic-compatible surface lives under a different path
+    # prefix (/anthropic), so only the OpenAI-compatible modes are offered.
+    LlmProviderNames.BIFROST: (
+        BIFROST_API_MODE_CONFIG_KEY,
+        {
+            BIFROST_API_MODE_CHAT_COMPLETIONS: LlmApiSurface.OPENAI_CHAT_COMPLETIONS,
+            BIFROST_API_MODE_RESPONSES: LlmApiSurface.OPENAI_RESPONSES,
+        },
+        BIFROST_DEFAULT_API_MODE,
     ),
 }
 

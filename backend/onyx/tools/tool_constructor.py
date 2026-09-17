@@ -13,10 +13,8 @@ from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.context.search.models import BaseFilters, PersonaSearchInfo
 from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
 from onyx.db.mcp import (
-    MCPCredentialsError,
     get_all_mcp_tools_for_server,
     get_mcp_server_by_id,
-    resolve_mcp_credentials,
 )
 from onyx.db.models import Persona, User
 from onyx.db.models import Tool as ToolDBModel
@@ -27,6 +25,10 @@ from onyx.document_index.factory import get_default_document_index
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
 from onyx.llm.interfaces import LLM, LLMConfig
 from onyx.onyxbot.slack.models import SlackContext
+from onyx.server.features.mcp.credentials import (
+    MCPCredentialsError,
+    resolve_mcp_credentials,
+)
 from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.tools.interface import Tool
 from onyx.tools.models import DynamicSchemaInfo, SearchToolUsage
@@ -197,10 +199,7 @@ def _construct_tools_impl(
     )
 
     mcp_tool_cache: dict[int, dict[int, MCPTool]] = {}
-    # Get user's OAuth token if available
-    user_oauth_token = None
-    if user.oauth_accounts:
-        user_oauth_token = user.oauth_accounts[0].access_token
+    user_oauth_token: str | None = user.live_oauth_token
 
     search_settings = get_current_search_settings(db_session)
     # This flow is for search so we do not get all indices.
@@ -235,6 +234,13 @@ def _construct_tools_impl(
 
     added_search_tool = False
     for db_tool_model in persona.tools:
+        # Disabling an action leaves it attached to its personas, so an attached
+        # tool is not necessarily a usable one (see Persona__Tool). Only the tool
+        # listing endpoints filtered on this, which left a disabled tool callable
+        # by any request that sends no allowed_tool_ids whitelist.
+        if not db_tool_model.enabled:
+            continue
+
         # If allowed_tool_ids is specified, skip tools not in the allowed list
         if allowed_tool_ids is not None and db_tool_model.id not in allowed_tool_ids:
             continue
@@ -483,6 +489,7 @@ def _construct_tools_impl(
                     user_id=str(user.id),
                     user_oauth_token=mcp_credentials.user_oauth_token,
                     additional_headers=additional_mcp_headers,
+                    resolved_credentials=mcp_credentials,
                 )
                 mcp_tool_cache[db_tool_model.mcp_server_id][saved_tool.id] = mcp_tool
 

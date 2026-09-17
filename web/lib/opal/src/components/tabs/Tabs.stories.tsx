@@ -190,7 +190,7 @@ export const ContentPadding: Story = {
         <Tabs.Trigger value="padded">Padded</Tabs.Trigger>
         <Tabs.Trigger value="flush">Flush</Tabs.Trigger>
       </Tabs.List>
-      <Tabs.Content value="padded" padding={1}>
+      <Tabs.Content value="padded" padding={4}>
         <div className="border border-border-02 rounded-08 p-4">
           Inner content with 1rem padding
         </div>

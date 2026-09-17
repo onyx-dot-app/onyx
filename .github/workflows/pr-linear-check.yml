@@ -22,6 +22,7 @@ jobs:
           IGNORED_AUTHORS: |
             dependabot[bot]
             jmelahman
+            onyx-cherry-pick[bot]
         run: |
           normalized_author="$(printf '%s' "${PR_AUTHOR}" | tr '[:upper:]' '[:lower:]')"
           normalized_ignored="$(printf '%s\n' "${IGNORED_AUTHORS}" | tr '[:upper:]' '[:lower:]')"

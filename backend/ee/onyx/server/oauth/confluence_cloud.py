@@ -27,6 +27,8 @@ from onyx.db.credentials import (
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import CredentialBase
 from onyx.utils.logger import setup_logger
@@ -42,6 +44,7 @@ class ConfluenceCloudOAuth:
         """Stored in redis to be looked up on callback"""
 
         email: str
+        user_id: uuid.UUID | None = None
         redirect_on_success: str | None  # Where to send the user if OAuth flow succeeds
 
     class TokenResponse(BaseModel):
@@ -123,12 +126,14 @@ class ConfluenceCloudOAuth:
         return url
 
     @classmethod
-    def session_dump_json(cls, email: str, redirect_on_success: str | None) -> str:
+    def session_dump_json(
+        cls, email: str, redirect_on_success: str | None, user_id: uuid.UUID
+    ) -> str:
         """Temporary state to store in redis. to be looked up on auth response.
         Returns a json string.
         """
         session = ConfluenceCloudOAuth.OAuthSession(
-            email=email, redirect_on_success=redirect_on_success
+            email=email, redirect_on_success=redirect_on_success, user_id=user_id
         )
         return session.model_dump_json()
 
@@ -146,7 +151,7 @@ class ConfluenceCloudOAuth:
 def confluence_oauth_callback(
     code: str,
     state: str,
-    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
     tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> JSONResponse:
@@ -183,9 +188,15 @@ def confluence_oauth_callback(
         )
 
     session_json = session_json_bytes.decode("utf-8")
-    try:
-        session = ConfluenceCloudOAuth.parse_session(session_json)
+    session = ConfluenceCloudOAuth.parse_session(session_json)
 
+    if session.user_id is None or session.user_id != user.id:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Confluence Cloud OAuth failed - the OAuth state was started by another user.",
+        )
+
+    try:
         if not DEV_MODE:
             redirect_uri = ConfluenceCloudOAuth.REDIRECT_URI
         else:
@@ -258,7 +269,7 @@ def confluence_oauth_callback(
 @router.get("/connector/confluence/accessible-resources")
 def confluence_oauth_accessible_resources(
     credential_id: int,
-    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
     tenant_id: str | None = Depends(get_current_tenant_id),  # noqa: ARG001
 ) -> JSONResponse:
@@ -325,7 +336,7 @@ def confluence_oauth_finalize(
     cloud_id: str,
     cloud_name: str,
     cloud_url: str,
-    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
     tenant_id: str | None = Depends(get_current_tenant_id),  # noqa: ARG001
 ) -> JSONResponse:

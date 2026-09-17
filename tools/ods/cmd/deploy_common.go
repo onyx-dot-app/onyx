@@ -15,13 +15,43 @@ import (
 )
 
 const (
+	// The repo whose deployment.yml builds images on tag pushes, shared by the
+	// deploy and release commands.
+	onyxRepo               = "onyx-dot-app/onyx"
+	deploymentWorkflowFile = "deployment.yml"
+
 	// Polling configuration shared by the deploy subcommands. The "discover"
 	// phase polls fast for a short window because a run usually appears within
 	// seconds of pushing the tag / dispatching the workflow.
 	runDiscoveryInterval = 5 * time.Second
 	runDiscoveryTimeout  = 2 * time.Minute
 	runProgressInterval  = 30 * time.Second
+
+	// Build runs typically take 15-30 minutes. The ceiling is hang detection:
+	// the workflow runs staged jobs that each get up to 90 minutes.
+	buildPollTimeout = 120 * time.Minute
 )
+
+// runPolling holds the poll intervals and discovery timeouts used while
+// watching workflow runs and bump PRs.
+type runPolling struct {
+	discoveryInterval time.Duration
+	discoveryTimeout  time.Duration
+	progressInterval  time.Duration
+	bumpPRInterval    time.Duration
+	bumpPRTimeout     time.Duration
+}
+
+// defaultRunPolling returns the polling used by the deploy commands.
+func defaultRunPolling() runPolling {
+	return runPolling{
+		discoveryInterval: runDiscoveryInterval,
+		discoveryTimeout:  runDiscoveryTimeout,
+		progressInterval:  runProgressInterval,
+		bumpPRInterval:    bumpPRPollInterval,
+		bumpPRTimeout:     bumpPRDiscoveryTimeout,
+	}
+}
 
 // resolveDeployTarget returns the deploy target repo and workflow to use,
 // preferring explicit flags, then saved config, then prompting the user on
@@ -30,10 +60,10 @@ const (
 // workflowSelector picks which per-command section holds the workflow filename
 // (e.g. DeployEdge vs DeployWiki). Any newly-prompted values are persisted back
 // to the config file so subsequent runs are non-interactive.
-func resolveDeployTarget(flagRepo, flagWorkflow string, workflowSelector func(*config.Config) *string) (string, string) {
+func resolveDeployTarget(flagRepo, flagWorkflow string, workflowSelector func(*config.Config) *string) (string, string, error) {
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("Failed to load ods config: %v", err)
+		return "", "", fatalErrorf("Failed to load ods config: %w", err)
 	}
 	repoPtr := &cfg.Deploy.TargetRepo
 	workflowPtr := workflowSelector(cfg)
@@ -62,12 +92,27 @@ func resolveDeployTarget(flagRepo, flagWorkflow string, workflowSelector func(*c
 		*repoPtr = repo
 		*workflowPtr = workflow
 		if err := config.Save(cfg); err != nil {
-			log.Fatalf("Failed to save ods config: %v", err)
+			return "", "", fatalErrorf("Failed to save ods config: %w", err)
 		}
 		log.Infof("Saved deploy target to %s", paths.ConfigFilePath())
 	}
 
-	return repo, workflow
+	return repo, workflow, nil
+}
+
+// announceDeploymentRun looks up the deployment.yml run triggered by pushing
+// tag and prints its URL. The lookup is best-effort: the tag is already pushed
+// and the build runs regardless, so failures only warn.
+func announceDeploymentRun(polling runPolling, tag string) {
+	log.Info("Looking up the deployment run...")
+	run, err := waitForNewRun(polling, onyxRepo, deploymentWorkflowFile, "push", tag, 0)
+	if err != nil {
+		log.Warnf("Could not find the deployment run for %s: %v", tag, err)
+		log.Warnf("Find it at https://github.com/%s/actions/workflows/%s", onyxRepo, deploymentWorkflowFile)
+		return
+	}
+	log.Infof("Deployment run: %s", run.URL)
+	fmt.Println(run.URL)
 }
 
 // workflowRun is a partial representation of a `gh run list` JSON entry.
@@ -130,8 +175,8 @@ func listWorkflowRuns(repo, workflowFile, event, branch string, limit int) ([]wo
 
 // waitForNewRun polls until a workflow run with databaseId > priorRunID
 // appears, or the discovery timeout fires.
-func waitForNewRun(repo, workflowFile, event, branch string, priorRunID int64) (*workflowRun, error) {
-	deadline := time.Now().Add(runDiscoveryTimeout)
+func waitForNewRun(polling runPolling, repo, workflowFile, event, branch string, priorRunID int64) (*workflowRun, error) {
+	deadline := time.Now().Add(polling.discoveryTimeout)
 	for {
 		runs, err := listWorkflowRuns(repo, workflowFile, event, branch, 5)
 		if err != nil {
@@ -143,16 +188,16 @@ func waitForNewRun(repo, workflowFile, event, branch string, priorRunID int64) (
 			}
 		}
 		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("no new run appeared within %s", runDiscoveryTimeout)
+			return nil, fmt.Errorf("no new run appeared within %s", polling.discoveryTimeout)
 		}
-		time.Sleep(runDiscoveryInterval)
+		time.Sleep(polling.discoveryInterval)
 	}
 }
 
 // waitForRunCompletion polls a specific run until it reaches a terminal
 // status. Returns an error if the run does not conclude with success or the
 // timeout fires.
-func waitForRunCompletion(repo string, runID int64, timeout time.Duration, label string) error {
+func waitForRunCompletion(polling runPolling, repo string, runID int64, timeout time.Duration, label string) error {
 	deadline := time.Now().Add(timeout)
 	for {
 		run, err := getRun(repo, runID)
@@ -169,7 +214,7 @@ func waitForRunCompletion(repo string, runID int64, timeout time.Duration, label
 		if time.Now().After(deadline) {
 			return fmt.Errorf("%s run %d did not complete within %s (see %s)", label, runID, timeout, run.URL)
 		}
-		time.Sleep(runProgressInterval)
+		time.Sleep(polling.progressInterval)
 	}
 }
 

@@ -26,9 +26,13 @@ _TASK_MODULE = "ee.onyx.background.celery.tasks.license_notifications.tasks"
 pytestmark = pytest.mark.usefixtures("db_session", "tenant_context")
 
 
-def _fake_payload(expires_in_days: int = 25) -> MagicMock:
+def _fake_payload(expires_in_days: int = 25, self_renewing: bool = False) -> MagicMock:
     payload = MagicMock()
     payload.expires_at = datetime.now(timezone.utc) + timedelta(days=expires_in_days)
+    # Explicit: bare MagicMock attributes are truthy, which would read as a
+    # self-renewing trial and suppress the warning ladder.
+    payload.ends_with_trial = False
+    payload.self_renewing = self_renewing
     return payload
 
 
@@ -93,7 +97,8 @@ def test_stage_none_skips() -> None:
 
 
 def test_in_window_dispatches_to_notify() -> None:
-    """License within T_30D window → notify_admins_for_stage called once."""
+    """A sales-issued license within T_30D dispatches, since a person has to
+    go get its replacement."""
     payload = _fake_payload(expires_in_days=25)
     with (
         patch(f"{_TASK_MODULE}.MULTI_TENANT", False),
@@ -107,3 +112,18 @@ def test_in_window_dispatches_to_notify() -> None:
     call_kwargs = notify.call_args.kwargs
     assert call_kwargs["stage"] == ExpiryWarningStage.T_30D
     assert call_kwargs["expires_at"] == payload.expires_at
+
+
+def test_self_renewing_license_is_suppressed_before_lapse() -> None:
+    """A Stripe-billed license renews itself, so its lead-up stages give the
+    admin nothing to act on and must not notify."""
+    payload = _fake_payload(expires_in_days=25, self_renewing=True)
+    with (
+        patch(f"{_TASK_MODULE}.MULTI_TENANT", False),
+        patch(f"{_TASK_MODULE}.get_license", return_value=_fake_license_row()),
+        patch(f"{_TASK_MODULE}.verify_license_signature", return_value=payload),
+        patch(f"{_TASK_MODULE}.notify_admins_for_stage") as notify,
+    ):
+        check_license_expiry_notifications_task(tenant_id="t")
+
+    assert notify.call_count == 0

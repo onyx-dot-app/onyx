@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { useTranslations } from "next-intl";
 import { SvgCpu } from "@opal/icons";
 import { Divider } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
@@ -23,6 +24,7 @@ import { useOnboarding } from "@/app/craft/onboarding/BuildOnboardingProvider";
 const craftKeys: string[] = CRAFT_PROVIDERS;
 
 export default function CraftLlmSetup() {
+  const t = useTranslations("craft.onboarding.llmSetup");
   const { openProviderModal } = useOnboarding();
   const { llmProviderOptions } = useLLMProviderOptions();
 
@@ -40,11 +42,11 @@ export default function CraftLlmSetup() {
     >
       <ContentAction
         icon={SvgCpu}
-        title="Connect a model provider"
-        description="Craft agents need a model provider to build."
+        title={t("title")}
+        description={t("description")}
         sizePreset="main-ui"
         variant="section"
-        padding="lg"
+        padding={2}
       />
       <Divider />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 w-full max-h-56 overflow-y-auto [&>*:last-child:nth-child(odd)]:col-span-full">

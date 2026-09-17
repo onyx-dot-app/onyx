@@ -3,7 +3,7 @@ import type {
   ExternalAppUserResponse,
 } from "@/app/craft/v1/apps/registry";
 import type { SkillsList } from "@/lib/skills/types";
-import type { MCPServer } from "@/lib/tools/interfaces";
+import type { MCPServer } from "@/lib/tools/types";
 import { CRAFT_APPS_TAB_PARAM } from "@/app/craft/v1/apps/connectableApps";
 import { CRAFT_APPS_PATH } from "@/app/craft/v1/constants";
 

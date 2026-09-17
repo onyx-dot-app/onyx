@@ -269,7 +269,7 @@ class TestEntraUserLifecycle:
         patch_req = ScimPatchRequest(
             Operations=[
                 ScimPatchOperation(
-                    op="Replace",  # ty: ignore[invalid-argument-type]
+                    op="Replace",
                     path="active",
                     value=False,
                 )
@@ -303,7 +303,7 @@ class TestEntraUserLifecycle:
         patch_req = ScimPatchRequest(
             Operations=[
                 ScimPatchOperation(
-                    op="Add",  # ty: ignore[invalid-argument-type]
+                    op="Add",
                     path="externalId",
                     value="entra-ext-999",
                 )
@@ -372,7 +372,7 @@ class TestEntraUserLifecycle:
             department="Engineering",
             given_name="Test",
             family_name="User",
-            scim_emails_json='[{"value": "test@example.com", "type": "work", "primary": true}]',
+            scim_emails_json=None,
         )
 
     def test_patch_user_remove_external_id(
@@ -486,7 +486,7 @@ class TestEntraUserLifecycle:
             department="Marketing",
             given_name="Test",
             family_name="User",
-            scim_emails_json='[{"value": "test@example.com", "type": "work", "primary": true}]',
+            scim_emails_json=None,
         )
 
     def test_replace_user_includes_enterprise_schema(
@@ -738,7 +738,7 @@ class TestEntraGroupLifecycle:
         patch_req = ScimPatchRequest(
             Operations=[
                 ScimPatchOperation(
-                    op="Add",  # ty: ignore[invalid-argument-type]
+                    op="Add",
                     path="members",
                     value=[ScimGroupMember(value=uid)],
                 )
@@ -777,7 +777,7 @@ class TestEntraGroupLifecycle:
         patch_req = ScimPatchRequest(
             Operations=[
                 ScimPatchOperation(
-                    op="Remove",  # ty: ignore[invalid-argument-type]
+                    op="Remove",
                     path=f'members[value eq "{uid}"]',
                 )
             ]

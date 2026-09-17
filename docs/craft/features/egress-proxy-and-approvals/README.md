@@ -42,7 +42,7 @@ Proxy runtime:
 Approval persistence and API:
 
 - `backend/onyx/db/models.py` defines `ActionApproval`,
-  `ExternalAppPolicy`, and `ScheduledTaskPreApprovedApp`.
+  `ExternalAppPolicy`, and `ScheduledTaskPreApprovedTarget`.
 - `backend/onyx/db/enums.py` defines `EndpointPolicy`,
   `ApprovalDecision`, and `ApprovalDecidedVia`.
 - `backend/onyx/server/features/build/db/action_approval.py` owns approval DB
@@ -451,8 +451,8 @@ Partial coverage still parks.
 ### Scheduled Task Pre-Approvals
 
 Scheduled task pre-approvals are another grant source inside the same proxy
-approval path. A task can store a set of pre-approved external app ids in
-`scheduled_task_pre_approved_app`.
+approval path. A task can store external-app and MCP-server grants in the
+legacy-named `scheduled_task_pre_approved_app` table.
 
 For an `ASK` request, the gate checks grant sources in this order:
 
@@ -463,7 +463,7 @@ A scheduled-task grant applies only when:
 
 - The `BuildSession` has a `ScheduledTaskRun` row.
 - That run is currently `RUNNING`.
-- The task has a grant for the matched `external_app_id`.
+- The task has a grant for the matched `(target kind, target id)`.
 
 When it applies, the proxy inserts an `action_approval` row already
 `APPROVED` with `decided_via=PRE_APPROVAL`, emits a deduped scheduled-task

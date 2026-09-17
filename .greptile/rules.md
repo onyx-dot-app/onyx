@@ -24,16 +24,33 @@ When hardcoding a boolean variable to a constant value, remove the variable enti
 
 Code changes must consider both multi-tenant and single-tenant deployments. In multi-tenant mode, preserve tenant isolation, ensure tenant context is propagated correctly, and avoid assumptions that only hold for a single shared schema or globally shared state. In single-tenant mode, avoid introducing unnecessary tenant-specific requirements or cloud-only control-plane dependencies.
 
-## Nginx Routing — New Backend Routes
+## Routing for New Non-/api Backend Routes
 
-Whenever a new backend route is added that does NOT start with `/api`, it must also be explicitly added to ALL nginx configs:
+Whenever a new backend route is added that does NOT start with `/api`, it must be explicitly routed in ALL nginx configs:
 
-- `deployment/helm/charts/onyx/templates/nginx-conf.yaml` (Helm/k8s)
+- `deployment/helm/charts/onyx/templates/nginx-conf.yaml` (Helm/k8s, bundled nginx)
 - `deployment/data/nginx/app.conf.template` (docker-compose dev)
 - `deployment/data/nginx/app.conf.template.prod` (docker-compose prod)
 - `deployment/data/nginx/app.conf.template.no-letsencrypt` (docker-compose no-letsencrypt)
 
-Routes not starting with `/api` are not caught by the existing `^/(api|openapi\.json)` location block and will fall through to `location /`, which proxies to the Next.js web server and returns an HTML 404. The new location block must be placed before the `/api` block. Examples of routes that need this treatment: `/scim`, `/mcp`.
+Routes not starting with `/api` are not caught by the existing `^/(api|openapi\.json)` location block and will fall through to `location /`, which proxies to the Next.js web server and returns an HTML 404. In the nginx configs, the new location block must be placed before the `/api` block. Examples of routes that need this treatment: `/scim`, `/mcp`.
+
+The route must ALSO be covered in Helm ingress mode (`ingress.enabled=true`), which does not use the bundled nginx. Add a dedicated ingress template for the route (see `deployment/helm/charts/onyx/templates/ingress-scim.yaml`). `ingress-api.yaml` cannot host it, since that resource only routes `/api` and its resource-wide rewrite annotation strips other prefixes. If the web app owns a sub-path of the route (for example an IdP callback page), carve that sub-path back out to the webserver with `pathType: Exact`, following `ingress-mcp-oauth-callback.yaml`.
+
+## Backend API Consumers Beyond the Web App
+
+The backend HTTP API is not consumed only by `web/`. Changing a route path, its request or response model, or its auth requirements is a breaking change for consumers that no frontend build or type check will catch:
+
+- `backend/onyx/mcp_server/` — MCP tools and resources call the API over HTTP, forwarding the caller's bearer token, and parse responses with the backend's own Pydantic models. A renamed or removed field breaks them at runtime, not at build time.
+- `terraform-provider-onyx/internal/client/` — a Go client with hand-written request and response structs. It depends heavily on **admin** routes (`/admin/api-key`, `/admin/persona`, `/manage/admin/connector`, `/manage/admin/cc-pair`, `/manage/admin/document-set`, `/manage/admin/user-group`) as well as non-admin ones like `/persona`. "This is only an admin endpoint" is not a reason to treat a change as safe.
+- `mobile/` and `desktop/`.
+- External customers calling the API directly with a Personal Access Token or API key.
+
+When a change touches a route or a model it returns, check whether these consumers reference the path before treating the change as web-only. Prefer additive changes: adding an optional field is safe, renaming or removing one is not.
+
+Routes tagged `PUBLIC_API_TAGS` are a published contract. `backend/scripts/transform_openapi_for_docs.py` filters on the `public` tag to build the customer-facing API documentation, so those paths, parameters and response fields are visible to customers and should only change additively.
+
+Any route intended to be reachable programmatically must declare an auth marker: either `Depends(require_permission(...))` or `dependencies=[Depends(scope_exempt)]`. `_scoped_pat_permitted_on_route` in `backend/onyx/auth/users.py` fails closed — a route whose auth dependency carries neither marker rejects scoped Personal Access Tokens with `INSUFFICIENT_PERMISSIONS`, while still working with a session cookie or an unscoped token. This is easy to miss, because the web app only ever authenticates with a session.
 
 ## Full vs Lite Deployments
 

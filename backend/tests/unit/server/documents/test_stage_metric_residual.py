@@ -118,7 +118,7 @@ def test_residual_uses_component_totals_not_averages() -> None:
     assert residual.avg_duration_ms == 500 / 4
 
 
-def test_warn_log_fires_when_components_exceed_total(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_warn_log_fires_when_components_exceed_total(monkeypatch) -> None:
     import onyx.server.documents.models as models_module
 
     calls: list[tuple] = []

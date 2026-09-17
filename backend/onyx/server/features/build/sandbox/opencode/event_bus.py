@@ -17,6 +17,7 @@ from typing import Any
 
 import httpx
 
+from onyx.server.features.build.timeouts import CONNECT_TIMEOUT_SECONDS
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -52,7 +53,7 @@ class PodEventBus:
         auth: httpx.Auth | None,
         *,
         directory: str | None = None,
-        connect_timeout: float = 10.0,
+        connect_timeout: float = CONNECT_TIMEOUT_SECONDS,
         event_read_timeout: float | None = None,
         reload_auth: Callable[[], httpx.Auth | None] | None = None,
     ) -> None:

@@ -2,7 +2,7 @@
 # pull-through cache (<account>.dkr.ecr.us-east-2.amazonaws.com/docker-hub) to avoid Docker
 # Hub rate limits.
 ARG BASE_IMAGE_REGISTRY=docker.io
-FROM ${BASE_IMAGE_REGISTRY}/library/golang:1.26.4-alpine@sha256:7a3e50096189ad57c9f9f865e7e4aa8585ed1585248513dc5cda498e2f41812c AS builder
+FROM ${BASE_IMAGE_REGISTRY}/library/golang:1.27.1-alpine@sha256:cf6fca6641884b8433441b2b0652976f975e1d0fdd26d177eaaf8596087f3125 AS builder
 
 WORKDIR /app
 COPY ./ .

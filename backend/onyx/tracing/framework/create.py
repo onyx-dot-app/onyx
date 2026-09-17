@@ -4,17 +4,26 @@ from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
+from pydantic import BaseModel, Field
+
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 from .setup import get_trace_provider
 from .span_data import AgentSpanData, FunctionSpanData, GenerationSpanData
 from .spans import Span
-from .traces import Trace
+from .traces import Trace, TraceContentMode
 
 if TYPE_CHECKING:
     pass
 
 logger = setup_logger(__name__)
+
+
+class ChatTraceMetadata(BaseModel):
+    tenant_id: str = Field(default_factory=get_current_tenant_id)
+    chat_session_id: str | None = None
+    user_id: str | None = None
 
 
 def trace(
@@ -23,6 +32,7 @@ def trace(
     group_id: str | None = None,
     metadata: dict[str, Any] | None = None,
     disabled: bool = False,
+    content_mode: TraceContentMode = TraceContentMode.FULL,
 ) -> Trace:
     """
     Create a new trace. The trace will not be started automatically; you should either use
@@ -58,6 +68,7 @@ def trace(
         trace_id=trace_id,
         group_id=group_id,
         metadata=metadata,
+        content_mode=content_mode,
         disabled=disabled,
     )
 
@@ -69,6 +80,7 @@ def ensure_trace(
     group_id: str | None = None,
     metadata: dict[str, Any] | None = None,
     disabled: bool = False,
+    content_mode: TraceContentMode = TraceContentMode.FULL,
 ) -> Iterator[Trace | None]:
     """
     Ensure a trace exists. If a trace is already active, reuse it.
@@ -84,6 +96,7 @@ def ensure_trace(
         trace_id=trace_id,
         group_id=group_id,
         metadata=metadata,
+        content_mode=content_mode,
         disabled=disabled,
     ) as created_trace:
         yield created_trace
@@ -182,6 +195,7 @@ def generation_span(
     span_id: str | None = None,
     parent: Trace | Span[Any] | None = None,
     disabled: bool = False,
+    content_mode: TraceContentMode | None = None,
 ) -> Span[GenerationSpanData]:
     """Create a new generation span. The span will not be started automatically, you should either
     do `with generation_span() ...` or call `span.start()` + `span.finish()` manually.
@@ -225,5 +239,6 @@ def generation_span(
         ),
         span_id=span_id,
         parent=parent,
+        content_mode=content_mode,
         disabled=disabled,
     )

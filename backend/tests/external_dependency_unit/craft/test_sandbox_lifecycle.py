@@ -1,9 +1,9 @@
 """Sandbox lifecycle (status state machine), DB-only half.
 
-DB-bound tests that pin the sandbox state machine: PROVISIONING → RUNNING,
-provision failures rolling back the row, idempotent provisioning, the
-health-check failure -> re-provision recovery path, and the idle-selection
-query shape.
+DB-bound tests that pin the reserve → reconcile → finalize state machine:
+PROVISIONING → RUNNING, durable failure state with attempt-number advancement on
+retry, idempotent provisioning, the health-check failure -> re-provision
+recovery path, and the idle-selection query shape.
 
 The full ``cleanup_idle_sandboxes_task`` end-to-end behavior lives in
 ``test_idle_cleanup.py`` — this file only covers the selection query, not
@@ -24,7 +24,6 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import BuildSessionStatus, SandboxStatus
 from onyx.db.models import BuildSession, Sandbox, User
 from onyx.server.features.build.db.sandbox import (
-    create_sandbox__no_commit,
     create_snapshot__no_commit,
     get_running_sandboxes,
 )
@@ -37,10 +36,12 @@ from onyx.server.features.build.sandbox.models import (
 )
 from onyx.server.features.build.sandbox.user_library import USER_LIBRARY_MOUNT_PATH
 from onyx.server.features.build.session.api import restore_session
+from onyx.server.features.build.session.errors import SandboxProvisioningError
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.sandbox_lifecycle import (
+    ProvisioningPolicy,
+    ensure_sandbox_ready,
     is_sandbox_idle,
-    provision_sandbox,
 )
 from onyx.skills.push import SKILLS_MOUNT_PATH
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
@@ -49,21 +50,15 @@ from tests.external_dependency_unit.craft.db_helpers import make_sandbox, make_u
 
 
 class TestProvisionTransitions:
-    def test_provision_transitions_provisioning_to_running(
+    def test_ensure_ready_creates_and_transitions_to_running(
         self,
         db_session: Session,
         test_user: User,
         stub_sandbox_manager: StubSandboxManager,
     ) -> None:
-        # Create a sandbox row in PROVISIONING (the state set by
-        # create_sandbox__no_commit before provision_sandbox is called).
-        sandbox = create_sandbox__no_commit(db_session, test_user.id)
-        db_session.commit()
-        assert sandbox.status == SandboxStatus.PROVISIONING
-
         # Stub returns RUNNING from provision().
         stub_sandbox_manager.provision_returns = SandboxInfo(
-            sandbox_id=sandbox.id,
+            sandbox_id=uuid4(),
             directory_path="/tmp/sandbox",
             status=SandboxStatus.RUNNING,
             last_heartbeat=None,
@@ -71,56 +66,94 @@ class TestProvisionTransitions:
         # Provisioning hydrates managed content (skills + user library).
         stub_sandbox_manager.write_files_to_sandbox_silent = True
 
-        provision_sandbox(
-            db_session=db_session,
-            sandbox_manager=stub_sandbox_manager,
-            sandbox=sandbox,
-            user=test_user,
-            user_id=test_user.id,
-            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        sandbox, _outcome = ensure_sandbox_ready(
+            db_session,
+            stub_sandbox_manager,
+            test_user.id,
+            policy=ProvisioningPolicy.FAIL,
         )
-        db_session.commit()
+
         db_session.refresh(sandbox)
-
-        # Observable outcome: the DB row reflects the new state. We deliberately
-        # do NOT assert on ``provision_count`` — that's a mechanism assertion
-        # (P1) and ``StubSandboxManager.provision`` already raises if called
-        # without ``provision_returns`` set, which itself proves the call ran.
+        # Observable outcome: the DB row reflects the new state, with the
+        # first attempt's number.
         assert sandbox.status == SandboxStatus.RUNNING
+        assert sandbox.provisioning_attempt_number == 1
+        assert stub_sandbox_manager.last_provision_payload is not None
+        assert (
+            stub_sandbox_manager.last_provision_payload["provisioning_attempt_number"]
+            == 1
+        )
 
 
-class TestProvisionFailureRollback:
-    def test_provision_failure_rolls_back_db(
+class TestDurableProvisionFailure:
+    def test_provision_failure_leaves_durable_failed_state(
         self,
         db_session: Session,
         test_user: User,
         stub_sandbox_manager: StubSandboxManager,
     ) -> None:
-        # Mirror the endpoint pattern: create_sandbox__no_commit (flush only),
-        # then call provision_sandbox; if it raises, the caller rolls back so
-        # no Sandbox row persists.
-        sandbox = create_sandbox__no_commit(db_session, test_user.id)
-        sandbox_id = sandbox.id
-        # No provision_returns => stub raises NotImplementedError on provision().
-
-        with pytest.raises(NotImplementedError):
-            provision_sandbox(
-                db_session=db_session,
-                sandbox_manager=stub_sandbox_manager,
-                sandbox=sandbox,
-                user=test_user,
-                user_id=test_user.id,
-                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        # No provision_returns => stub raises NotImplementedError on
+        # provision(). The failure must be recorded durably — a FAILED row
+        # under the attempt's number — never rolled back to nothing.
+        with pytest.raises(SandboxProvisioningError):
+            ensure_sandbox_ready(
+                db_session,
+                stub_sandbox_manager,
+                test_user.id,
+                policy=ProvisioningPolicy.FAIL,
             )
 
-        # The endpoint's exception handler rolls back. Simulate that here.
         db_session.rollback()
-
-        # No row persisted at the (pre-flush, uncommitted) sandbox id.
-        assert (
-            db_session.query(Sandbox).filter(Sandbox.id == sandbox_id).one_or_none()
-            is None
+        row = (
+            db_session.query(Sandbox)
+            .filter(Sandbox.user_id == test_user.id)
+            .one_or_none()
         )
+        assert row is not None
+        assert row.status == SandboxStatus.FAILED
+        assert row.provisioning_attempt_number == 1
+
+    def test_retry_after_failure_reuses_sandbox_and_advances_generation(
+        self,
+        db_session: Session,
+        test_user: User,
+        stub_sandbox_manager: StubSandboxManager,
+    ) -> None:
+        with pytest.raises(SandboxProvisioningError):
+            ensure_sandbox_ready(
+                db_session,
+                stub_sandbox_manager,
+                test_user.id,
+                policy=ProvisioningPolicy.FAIL,
+            )
+        db_session.rollback()
+        failed_row = (
+            db_session.query(Sandbox).filter(Sandbox.user_id == test_user.id).one()
+        )
+        failed_id = failed_row.id
+
+        stub_sandbox_manager.provision_returns = SandboxInfo(
+            sandbox_id=failed_id,
+            directory_path="/tmp/sandbox",
+            status=SandboxStatus.RUNNING,
+            last_heartbeat=None,
+        )
+        stub_sandbox_manager.write_files_to_sandbox_silent = True
+        # Reviving a FAILED sandbox tears down any wedged runtime first.
+        stub_sandbox_manager.terminate_silent = True
+
+        sandbox, _outcome = ensure_sandbox_ready(
+            db_session,
+            stub_sandbox_manager,
+            test_user.id,
+            policy=ProvisioningPolicy.FAIL,
+        )
+
+        # Retry converges on the same committed identity under a new numbered
+        # attempt.
+        assert sandbox.id == failed_id
+        assert sandbox.status == SandboxStatus.RUNNING
+        assert sandbox.provisioning_attempt_number == 2
 
 
 class TestIdempotentProvision:
@@ -131,12 +164,11 @@ class TestIdempotentProvision:
         stub_sandbox_manager: StubSandboxManager,
         session_manager_with_stub: SessionManager,
     ) -> None:
-        # Drive the real ``SessionManager.create_session__no_commit`` twice
-        # and assert the second call observes the existing sandbox row
-        # instead of provisioning a new one. ``provision_returns`` is
-        # intentionally cleared between calls — the stub will raise if
-        # ``provision`` is invoked on the second pass, which would surface
-        # as a test failure.
+        # Drive the real ``SessionManager.create_session`` twice and assert
+        # the second call observes the existing sandbox row instead of
+        # provisioning a new one. ``provision_returns`` is intentionally
+        # cleared between calls — the stub will raise if ``provision`` is
+        # invoked on the second pass, which would surface as a test failure.
         stub_sandbox_manager.provision_returns = SandboxInfo(
             sandbox_id=uuid4(),
             directory_path="/tmp/sandbox",
@@ -149,8 +181,7 @@ class TestIdempotentProvision:
         stub_sandbox_manager.write_sandbox_file_silent = True
 
         # First call: provisions a new sandbox row.
-        session_manager_with_stub.create_session__no_commit(user_id=test_user.id)
-        db_session.commit()
+        session_manager_with_stub.create_session(user_id=test_user.id)
 
         first_rows = (
             db_session.query(Sandbox).filter(Sandbox.user_id == test_user.id).all()
@@ -165,8 +196,7 @@ class TestIdempotentProvision:
 
         # Second call: same user. Should reuse the existing sandbox row
         # via the health-check branch and never call ``provision``.
-        session_manager_with_stub.create_session__no_commit(user_id=test_user.id)
-        db_session.commit()
+        session_manager_with_stub.create_session(user_id=test_user.id)
 
         rows = db_session.query(Sandbox).filter(Sandbox.user_id == test_user.id).all()
         # Observable outcome: exactly one sandbox row for this user, and
@@ -530,9 +560,9 @@ class TestManagedContentPushOrdering:
         self,
         db_session: Session,
         test_user: User,
+        sandbox: Callable[..., Sandbox],
     ) -> None:
-        row = create_sandbox__no_commit(db_session, test_user.id)
-        db_session.commit()
+        row = sandbox(user=test_user, status=SandboxStatus.SLEEPING)
 
         stub = _PushRecordingStub(row)
         stub.provision_returns = SandboxInfo(
@@ -542,15 +572,12 @@ class TestManagedContentPushOrdering:
             last_heartbeat=None,
         )
 
-        provision_sandbox(
-            db_session=db_session,
-            sandbox_manager=stub,
-            sandbox=row,
-            user=test_user,
-            user_id=test_user.id,
-            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        ensure_sandbox_ready(
+            db_session,
+            stub,
+            test_user.id,
+            policy=ProvisioningPolicy.FAIL,
         )
-        db_session.commit()
         db_session.refresh(row)
 
         assert row.status == SandboxStatus.RUNNING
@@ -631,17 +658,13 @@ class TestManagedContentPushOrdering:
         assert refreshed.status == SandboxStatus.RUNNING
         assert stub.restore_snapshot_count == (1 if has_snapshot else 0)
         assert stub.setup_session_workspace_count == (0 if has_snapshot else 1)
-        # First pair lands while the committed status is still PROVISIONING
-        # (no turn can dispatch against an unhydrated pod); the second pair is
-        # a fresh managed-content push for the restored workspace, completed
-        # before the workspace is rendered.
+        # The push pair lands while the committed status is still PROVISIONING
+        # (no turn can dispatch against an unhydrated pod) and before the
+        # workspace is rendered. A fresh provision pushes exactly once — the
+        # restore branch reuses that hydration instead of re-pushing.
         assert stub.ops == [
-            f"push:{SKILLS_MOUNT_PATH}",
-            f"push:{USER_LIBRARY_MOUNT_PATH}",
             f"push:{SKILLS_MOUNT_PATH}",
             f"push:{USER_LIBRARY_MOUNT_PATH}",
             "render_workspace",
         ]
-        assert all(
-            status == SandboxStatus.PROVISIONING for _, status in stub.pushes[:2]
-        )
+        assert all(status == SandboxStatus.PROVISIONING for _, status in stub.pushes)

@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import BaseInputBar, {
   type BaseInputBarHandle,
@@ -56,7 +57,7 @@ export interface CraftInputBarProps {
   sandboxInitializing?: boolean;
   noBottomRounding?: boolean;
   queuedMessages?: readonly QueuedMessage[];
-  onQueueMessage?: (text: string) => void;
+  onQueueMessage?: (text: string, files: BuildFile[]) => void;
   onRemoveQueuedMessage?: (index: number) => void;
   onInterrupt?: () => void;
   isInterrupting?: boolean;
@@ -66,6 +67,11 @@ export interface CraftInputBarProps {
   } | null;
   /** Seed the active entry chips. For stories/tests; production callers leave unset. */
   initialEntries?: PickerEntry[];
+}
+
+function withEntryPrefixes(message: string, entries: PickerEntry[]): string {
+  const prefixes = entries.map(pickerEntryPromptPrefix).join(" ");
+  return prefixes ? `${prefixes} ${message}` : message;
 }
 
 const CraftInputBar = memo(
@@ -88,6 +94,8 @@ const CraftInputBar = memo(
       },
       ref
     ) => {
+      const t = useTranslations("craft.inputBar");
+      const entryMenuT = useTranslations("craft.entryMenu");
       const baseRef = useRef<BaseInputBarHandle>(null);
       const fileInputRef = useRef<HTMLInputElement>(null);
       const router = useRouter();
@@ -199,17 +207,27 @@ const CraftInputBar = memo(
 
       const handleSubmit = useCallback(
         (message: string) => {
-          const entryPrefixes = activeEntries
-            .map(pickerEntryPromptPrefix)
-            .join(" ");
-          const fullMessage = entryPrefixes
-            ? `${entryPrefixes} ${message}`
-            : message;
-          onSubmit(fullMessage, currentMessageFiles);
+          onSubmit(
+            withEntryPrefixes(message, activeEntries),
+            currentMessageFiles
+          );
           setActiveEntries([]);
           clearFiles({ suppressRefetch: true });
         },
         [activeEntries, currentMessageFiles, onSubmit, clearFiles]
+      );
+
+      const handleQueueMessage = useCallback(
+        (message: string) => {
+          if (!onQueueMessage) return;
+          onQueueMessage(
+            withEntryPrefixes(message, activeEntries),
+            currentMessageFiles
+          );
+          setActiveEntries([]);
+          clearFiles({ suppressRefetch: true });
+        },
+        [activeEntries, currentMessageFiles, onQueueMessage, clearFiles]
       );
 
       // Always rendered so the strip can animate its own collapse/expand.
@@ -225,17 +243,21 @@ const CraftInputBar = memo(
 
       const plusMenuItems = useMemo(
         () =>
-          buildEntryMenuItems(pickerSections, {
-            onAttachFiles: () => fileInputRef.current?.click(),
-            onSelectEntry: addEntry,
-            onBrowseSkills: () => router.push("/craft/v1/skills"),
-            onBrowseApps: () => router.push("/craft/v1/apps"),
-            libraryFiles,
-            // Defer the modal until the + popover finishes closing, else it paints over it.
-            onManageLibrary: () =>
-              window.setTimeout(() => setLibraryModalOpen(true), 200),
-          }),
-        [pickerSections, addEntry, libraryFiles, router]
+          buildEntryMenuItems(
+            pickerSections,
+            {
+              onAttachFiles: () => fileInputRef.current?.click(),
+              onSelectEntry: addEntry,
+              onBrowseSkills: () => router.push("/craft/v1/skills"),
+              onBrowseApps: () => router.push("/craft/v1/apps"),
+              libraryFiles,
+              // Defer the modal until the + popover finishes closing, else it paints over it.
+              onManageLibrary: () =>
+                window.setTimeout(() => setLibraryModalOpen(true), 200),
+            },
+            entryMenuT
+          ),
+        [pickerSections, addEntry, libraryFiles, router, entryMenuT]
       );
 
       const bottomLeftSlot = (
@@ -243,7 +265,7 @@ const CraftInputBar = memo(
           <PlusMenuButton
             items={plusMenuItems}
             disabled={disabled}
-            tooltip="Add files or skills"
+            tooltip={t("plusMenu.tooltip")}
           />
           {interruptible && <InterruptHint interrupting={isInterrupting} />}
         </>
@@ -280,7 +302,7 @@ const CraftInputBar = memo(
             sandboxInitializing={sandboxInitializing}
             submitBlocked={hasUploadingFiles}
             queuedMessages={queuedMessages}
-            onQueueMessage={onQueueMessage}
+            onQueueMessage={onQueueMessage ? handleQueueMessage : undefined}
             onRemoveQueuedMessage={onRemoveQueuedMessage}
             onInterrupt={onInterrupt}
             isInterrupting={isInterrupting}
@@ -307,8 +329,8 @@ const CraftInputBar = memo(
                 entryInfo.entry.kind === "skill"
                   ? entryInfo.entry.description
                   : entryInfo.entry.authenticated
-                    ? "Connected"
-                    : "Connection required"
+                    ? t("entryInfo.connected")
+                    : t("entryInfo.connectionRequired")
               }
               tileElement={entryInfo.chipEl}
               onDismiss={dismissEntryInfo}

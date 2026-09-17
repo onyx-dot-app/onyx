@@ -34,6 +34,8 @@ from onyx.server.query_and_chat.models import (
     MessageOrigin,
     SendMessageRequest,
 )
+from onyx.tools.constants import SEARCH_TOOL_ID
+from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.utils.logger import OnyxLoggingAdapter
 from onyx.utils.retry_wrapper import retry_builder
 from shared_configs.contextvars import CURRENT_USER_ID_CONTEXTVAR
@@ -328,13 +330,31 @@ def handle_regular_answer(
         filters = BaseFilters(
             source_type=None,
             document_set=document_set_names,
-            tags=channel_tags if channel_tags else None,
+            tags=channel_tags or None,
         )
+
+        # Slack answers should be grounded in retrieval (pre-#7399 behavior):
+        # force the search tool on the first LLM cycle, but only when the
+        # channel persona actually has a usable one — non-search personas,
+        # disabled search tools and deployments without connectors keep the
+        # unforced behavior.
+        forced_search_tool_id = next(
+            (
+                tool.id
+                for tool in persona.tools
+                if tool.in_code_tool_id == SEARCH_TOOL_ID and tool.enabled
+            ),
+            None,
+        )
+        if forced_search_tool_id is not None and not SearchTool.is_available(
+            db_session
+        ):
+            forced_search_tool_id = None
 
         new_message_request = SendMessageRequest(
             message=user_message.message,
             allowed_tool_ids=None,
-            forced_tool_id=None,
+            forced_tool_id=forced_search_tool_id,
             file_descriptors=[],
             internal_search_filters=filters,
             deep_research=False,

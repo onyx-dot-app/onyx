@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import { useTranslations } from "next-intl";
 import { SvgCheck, SvgChevronDown, SvgChevronRight } from "@opal/icons";
 import { Text, Popover, PopoverMenu, LineItemButton } from "@opal/components";
-import { Switch } from "@opal/components";
+import { InputSwitch } from "@opal/components";
 import {
   LLMProviderDescriptor,
   ModelConfiguration,
@@ -13,7 +14,14 @@ import {
   craftProviderDisplayName,
   isCraftRecommendedModel,
 } from "@/app/craft/onboarding/constants";
+import {
+  getStoredRecommendedModelsOnly,
+  setStoredLlmSelection,
+  setStoredRecommendedModelsOnly,
+} from "@/app/craft/utils/llmPreferences";
+import { useUser } from "@/providers/UserProvider";
 import { getModelIcon } from "@/lib/languageModels";
+import { AGGREGATOR_PROVIDERS } from "@/lib/languageModels/svc";
 import { Section } from "@/layouts/general-layouts";
 import {
   Accordion,
@@ -28,6 +36,9 @@ interface BuildLLMPopoverProps {
   llmProviders: LLMProviderDescriptor[] | undefined;
   children: React.ReactNode;
   disabled?: boolean;
+  // Admin surfaces that edit a workspace-wide setting pass `false` so the
+  // admin's own remembered pick isn't overwritten by that edit.
+  persistSelection?: boolean;
 }
 
 interface ModelOption {
@@ -35,7 +46,7 @@ interface ModelOption {
   providerKey: string;
   groupKey: string;
   providerName: string;
-  providerDisplayName: string;
+  groupDisplayName: string;
   modelName: string;
   displayName: string;
   isRecommended: boolean;
@@ -45,14 +56,37 @@ function modelDisplayName(model: ModelConfiguration): string {
   return model.effectiveDisplayName || model.display_name || model.name;
 }
 
+// Keyed by provider id, unlike the main app's `groupLlmOptions`, so two
+// providers sharing a display name stay distinct.
+function craftGroupKey(
+  providerId: number,
+  providerKey: string,
+  vendor: string | null
+): string {
+  return AGGREGATOR_PROVIDERS.has(providerKey.toLowerCase()) && vendor
+    ? `${providerId}/${vendor.toLowerCase()}`
+    : String(providerId);
+}
+
 export function BuildLLMPopover({
   currentSelection,
   onSelectionChange,
   llmProviders,
   children,
   disabled = false,
+  persistSelection = true,
 }: BuildLLMPopoverProps) {
-  const [showRecommendedOnly, setShowRecommendedOnly] = useState(true);
+  const t = useTranslations("craft.llmPopover");
+  const { user } = useUser();
+  const userId = user?.id;
+  // Storage is the source of truth for the toggle (the user id it's keyed by
+  // loads asynchronously, so derive at render); state only tracks an
+  // in-session flip, which also writes through to storage.
+  const [recommendedOnlyFlip, setRecommendedOnlyFlip] = useState<
+    boolean | null
+  >(null);
+  const showRecommendedOnly =
+    recommendedOnlyFlip ?? getStoredRecommendedModelsOnly(userId);
   const [isOpen, setIsOpen] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const selectedItemRef = useRef<HTMLDivElement>(null);
@@ -62,16 +96,31 @@ export function BuildLLMPopover({
     const options: ModelOption[] = [];
 
     llmProviders?.forEach((provider) => {
+      // Recommended-only still lists the active model so the current pick
+      // (e.g. restored from a stored preference) is never invisible.
+      const isCurrent = (model: ModelConfiguration): boolean =>
+        currentSelection?.providerId === provider.id &&
+        currentSelection.modelName === model.name;
       const models = showRecommendedOnly
-        ? provider.model_configurations.filter(isCraftRecommendedModel)
+        ? provider.model_configurations.filter(
+            (model) =>
+              model.is_visible &&
+              (isCraftRecommendedModel(model) || isCurrent(model))
+          )
         : provider.model_configurations.filter((model) => model.is_visible);
+      const providerDisplayName = craftProviderDisplayName(provider);
       models.forEach((model) => {
+        const vendor = model.vendor || null;
+        const groupKey = craftGroupKey(provider.id, provider.provider, vendor);
         options.push({
           providerId: provider.id,
           providerKey: provider.provider,
-          groupKey: String(provider.id),
+          groupKey,
           providerName: provider.name ?? "",
-          providerDisplayName: craftProviderDisplayName(provider),
+          groupDisplayName:
+            groupKey === String(provider.id)
+              ? providerDisplayName
+              : `${providerDisplayName}/${vendor}`,
           modelName: model.name,
           displayName: modelDisplayName(model),
           isRecommended: isCraftRecommendedModel(model),
@@ -80,7 +129,7 @@ export function BuildLLMPopover({
     });
 
     return options;
-  }, [showRecommendedOnly, llmProviders]);
+  }, [showRecommendedOnly, llmProviders, currentSelection]);
 
   // Group options by provider
   const groupedOptions = useMemo(() => {
@@ -101,7 +150,7 @@ export function BuildLLMPopover({
         groups.set(groupKey, {
           groupKey,
           providerKey: option.providerKey,
-          displayName: option.providerDisplayName,
+          displayName: option.groupDisplayName,
           options: [],
         });
       }
@@ -120,8 +169,21 @@ export function BuildLLMPopover({
   // Determine current group for auto-expand
   const currentGroupKey = useMemo(() => {
     if (!currentSelection) return "";
-    return String(currentSelection.providerId);
-  }, [currentSelection]);
+    const provider = llmProviders?.find(
+      (candidate) => candidate.id === currentSelection.providerId
+    );
+    const vendor =
+      provider?.model_configurations.find(
+        (model) => model.name === currentSelection.modelName
+      )?.vendor || null;
+    // Must use the same slug source as the group keys above; a persisted
+    // selection can carry a stale one.
+    return craftGroupKey(
+      currentSelection.providerId,
+      provider?.provider ?? currentSelection.provider,
+      vendor
+    );
+  }, [currentSelection, llmProviders]);
 
   // Track expanded groups
   const [expandedGroups, setExpandedGroups] = useState<string[]>([
@@ -152,17 +214,27 @@ export function BuildLLMPopover({
     setExpandedGroups(value);
   };
 
+  const handleRecommendedOnlyChange = useCallback(
+    (checked: boolean) => {
+      setRecommendedOnlyFlip(checked);
+      setStoredRecommendedModelsOnly(userId, checked);
+    },
+    [userId]
+  );
+
   const applySelection = useCallback(
     (option: ModelOption) => {
-      onSelectionChange({
+      const selection: BuildLlmSelection = {
         providerId: option.providerId,
         providerName: option.providerName,
         provider: option.providerKey,
         modelName: option.modelName,
-      });
+      };
+      if (persistSelection) setStoredLlmSelection(userId, selection);
+      onSelectionChange(selection);
       setIsOpen(false);
     },
-    [onSelectionChange]
+    [userId, persistSelection, onSelectionChange]
   );
 
   const handlePopoverOpenChange = (open: boolean) => {
@@ -179,7 +251,9 @@ export function BuildLLMPopover({
       currentSelection?.provider === option.providerKey;
 
     // Build description with recommendation badge
-    const description = option.isRecommended ? "Recommended" : undefined;
+    const description = option.isRecommended
+      ? t("recommended.label")
+      : undefined;
 
     const rowIcon = getModelIcon(option.providerKey, option.modelName);
     const groupIcon = getModelIcon(option.providerKey);
@@ -198,7 +272,7 @@ export function BuildLLMPopover({
           onClick={() => applySelection(option)}
           rightChildren={
             isSelected ? (
-              <SvgCheck className="h-4 w-4 stroke-action-link-05 shrink-0" />
+              <SvgCheck className="h-4 w-4 stroke-action-selection-05 shrink-0" />
             ) : null
           }
           title={option.displayName}
@@ -212,14 +286,14 @@ export function BuildLLMPopover({
       <Popover.Trigger asChild>{children}</Popover.Trigger>
       <Popover.Content side="bottom" align="start" width="lg">
         <div className="px-3">
-          <Section gap={0.5}>
+          <Section gap={2}>
             <div className="flex items-center justify-between py-3 gap-3 border-b border-border-01 px-1">
               <Text font="secondary-body" color="text-03">
-                Recommended Models Only
+                {t("recommendedOnly.label")}
               </Text>
-              <Switch
+              <InputSwitch
                 checked={showRecommendedOnly}
-                onCheckedChange={setShowRecommendedOnly}
+                onCheckedChange={handleRecommendedOnlyChange}
               />
             </div>
 
@@ -228,7 +302,7 @@ export function BuildLLMPopover({
                 ? [
                     <div key="empty" className="py-3 px-2">
                       <Text font="secondary-body" color="text-03">
-                        No models found
+                        {t("noModels.label")}
                       </Text>
                     </div>,
                   ]
@@ -261,7 +335,7 @@ export function BuildLLMPopover({
                                   <Text
                                     font="secondary-body"
                                     color="text-03"
-                                    nowrap
+                                    wordWrap="whitespace-nowrap"
                                   >
                                     {group.displayName}
                                   </Text>

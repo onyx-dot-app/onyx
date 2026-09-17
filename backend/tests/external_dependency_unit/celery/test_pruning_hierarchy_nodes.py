@@ -456,6 +456,44 @@ def test_pruning_hierarchy_node_upsert_updates_fields(db_session: Session) -> No
     assert set(db_node.external_user_emails) == {"new_user@example.com"}
 
 
+def test_pruning_hierarchy_node_upsert_preserves_unspecified_access(
+    db_session: Session,
+) -> None:
+    _cleanup_test_data(db_session)
+    ensure_source_node_exists(db_session, TEST_SOURCE, commit=True)
+    access = ExternalAccess(
+        external_user_emails={"user@example.com"},
+        external_user_group_ids={"external_group"},
+        is_public=False,
+    )
+    node = PydanticHierarchyNode(
+        raw_node_id=CHANNEL_A_ID,
+        display_name=CHANNEL_A_NAME,
+        node_type=HierarchyNodeType.CHANNEL,
+        external_access=access,
+    )
+    upsert_hierarchy_nodes_batch(
+        db_session,
+        [node],
+        TEST_SOURCE,
+        commit=True,
+    )
+
+    node.external_access = None
+    upsert_hierarchy_nodes_batch(
+        db_session,
+        [node],
+        TEST_SOURCE,
+        commit=True,
+    )
+
+    db_node = get_hierarchy_node_by_raw_id(db_session, CHANNEL_A_ID, TEST_SOURCE)
+    assert db_node is not None
+    assert db_node.external_user_emails == ["user@example.com"]
+    assert db_node.external_user_group_ids == ["external_group"]
+    assert db_node.is_public is False
+
+
 # ---------------------------------------------------------------------------
 # Document-to-hierarchy-node linkage tests
 # ---------------------------------------------------------------------------

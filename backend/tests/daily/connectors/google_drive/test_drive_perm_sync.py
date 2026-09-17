@@ -59,7 +59,7 @@ def _build_connector(
         my_drive_emails=None,
     )
     # don't need this anymore, it's been called in the factory
-    connector.load_credentials = MagicMock()  # ty: ignore[invalid-assignment]
+    connector.load_credentials = MagicMock()
     return connector
 
 

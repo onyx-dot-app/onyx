@@ -1,10 +1,14 @@
 import inspect
+import time
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ee.onyx.external_permissions.google_drive.group_sync import _get_all_folders
+from ee.onyx.external_permissions.google_drive.group_sync import (
+    _get_all_folders,
+    _get_all_google_groups,
+)
 
 
 def _folder(folder_id: str) -> dict[str, Any]:
@@ -123,3 +127,62 @@ def test_get_all_folders_aborts_after_too_many_user_failures(
                 skip_folders_without_permissions=True,
             )
         )
+
+
+@patch("ee.onyx.external_permissions.google_drive.group_sync.get_modified_folders")
+@patch("ee.onyx.external_permissions.google_drive.group_sync.get_drive_service")
+def test_get_all_folders_enforces_crawl_deadline(
+    mock_get_drive_service: MagicMock,
+    mock_get_modified_folders: MagicMock,
+) -> None:
+    """On large domains the crawl skips almost every folder and yields nothing
+    for hours, so consumer-side timeouts (checked between yields) never fire —
+    the crawl must enforce its own deadline and fail the sync outright rather
+    than being swallowed by the per-user failure accounting."""
+
+    def endless_folders(service: Any) -> Any:
+        del service
+        i = 0
+        while True:
+            i += 1
+            yield _folder(f"f{i}")
+
+    mock_get_drive_service.return_value = MagicMock()
+    mock_get_modified_folders.side_effect = endless_folders
+    connector = _make_connector(["a@example.com", "b@example.com"])
+
+    expired_deadline = time.monotonic() - 1
+    with pytest.raises(TimeoutError, match="group sync exceeded"):
+        list(
+            _get_all_folders(
+                google_drive_connector=connector,
+                skip_folders_without_permissions=True,
+                deadline=expired_deadline,
+            )
+        )
+
+    # Only the first user was touched: the deadline ends the whole sync
+    # instead of counting as a per-user failure and moving on.
+    assert mock_get_drive_service.call_count == 1
+
+
+def test_group_enumeration_enforces_sync_deadline() -> None:
+    """The groups phase materializes the full group list before anything
+    yields, so it must check the shared sync deadline itself."""
+
+    def endless_groups(*_args: Any, **_kwargs: Any) -> Any:
+        i = 0
+        while True:
+            i += 1
+            yield {"email": f"group-{i}@example.com"}
+
+    with patch(
+        "ee.onyx.external_permissions.google_drive.group_sync.execute_paginated_retrieval",
+        side_effect=endless_groups,
+    ):
+        with pytest.raises(TimeoutError, match="group sync exceeded"):
+            _get_all_google_groups(
+                admin_service=MagicMock(),
+                google_domain="example.com",
+                deadline=time.monotonic() - 1,
+            )

@@ -47,6 +47,7 @@ from onyx.document_index.factory import get_all_document_indices
 from onyx.document_index.interfaces_new import DocumentIndex
 from onyx.document_index.opensearch.client import (
     OpenSearchClient,
+    OpenSearchIndexWriteBlockedError,
     wait_for_opensearch_with_timeout,
 )
 from onyx.document_index.opensearch.opensearch_document_index import set_cluster_state
@@ -66,7 +67,11 @@ from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
     ModelConfigurationUpsertRequest,
 )
-from onyx.server.settings.store import load_settings, store_settings
+from onyx.server.settings.store import (
+    load_settings,
+    settings_write_lock,
+    store_settings,
+)
 from onyx.utils.gpu_utils import gpu_status_request
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import (
@@ -231,6 +236,22 @@ def setup_document_indices(
                 )
                 document_index_setup_success = True
                 break
+            except OpenSearchIndexWriteBlockedError as e:
+                # The index exists but is write-blocked (typically the
+                # read_only_allow_delete block applied at the disk flood-stage
+                # watermark). It is still readable, so start up degraded rather
+                # than crash-loop until the block clears. A missing index or
+                # blocked creation raises a different error and still fails.
+                logger.error(
+                    "Document index %s is write-blocked; continuing startup without "
+                    "the mapping refresh. Search still works, but indexing will fail "
+                    "until the block is cleared (usually by freeing disk space below "
+                    "the flood-stage watermark). Error: %s",
+                    document_index.__class__.__name__,
+                    e,
+                )
+                document_index_setup_success = True
+                break
             except Exception:
                 logger.exception(
                     "Document index %s setup did not succeed. The relevant service may not be ready yet. Retrying in %s seconds.",
@@ -315,10 +336,12 @@ def update_default_multipass_indexing(db_session: Session) -> None:
         )
         update_current_search_settings(db_session, updated_settings)
 
-        # Update settings with GPU availability
-        settings = load_settings()
-        settings.gpu_enabled = gpu_available
-        store_settings(settings)
+        # Shares the settings write lock so a concurrent writer cannot merge
+        # onto a stale snapshot.
+        with settings_write_lock():
+            settings = load_settings()
+            settings.gpu_enabled = gpu_available
+            store_settings(settings)
         logger.notice("Updated settings with GPU availability: %s", gpu_available)
 
     else:

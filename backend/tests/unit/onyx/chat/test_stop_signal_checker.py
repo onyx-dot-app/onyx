@@ -29,6 +29,9 @@ class _MemoryCacheBackend(CacheBackend):
     def get(self, key: str) -> bytes | None:
         return self._store.get(key)
 
+    def getdel(self, key: str) -> bytes | None:
+        return self._store.pop(key, None)
+
     def set(
         self,
         key: str,
@@ -39,6 +42,17 @@ class _MemoryCacheBackend(CacheBackend):
             self._store[key] = value
         else:
             self._store[key] = str(value).encode()
+
+    def set_if_absent(
+        self,
+        key: str,
+        value: str | bytes | int | float,
+        ex: int | None = None,
+    ) -> bool:
+        if key in self._store:
+            return False
+        self.set(key, value, ex=ex)
+        return True
 
     def delete(self, key: str) -> None:
         self._store.pop(key, None)

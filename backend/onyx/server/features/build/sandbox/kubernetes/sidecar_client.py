@@ -20,11 +20,19 @@ from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     PUSH_DAEMON_PORT,
     SIDECAR_FILESYSTEM_LIST_PATH,
     SIDECAR_HEALTH_PATH,
+    SIDECAR_OUTPUTS_MANIFEST_PATH,
     SIDECAR_PUSH_PATH,
     FilesystemListRequest,
     FilesystemListResponse,
+    OutputsManifestRequest,
+    OutputsManifestResponse,
 )
 from onyx.server.features.build.sandbox.models import FilesystemEntry
+from onyx.server.features.build.timeouts import (
+    BULK_TRANSFER_TIMEOUT_SECONDS,
+    CONNECT_TIMEOUT_SECONDS,
+    RPC_TIMEOUT_SECONDS,
+)
 
 _SIDECAR_CHUNK_SIZE = 8 * 1024 * 1024
 
@@ -130,7 +138,7 @@ class SidecarClient:
         sandbox_id: UUID,
         session_id: UUID,
         path: str,
-        timeout_seconds: float = 30.0,
+        timeout_seconds: float = RPC_TIMEOUT_SECONDS,
     ) -> list[FilesystemEntry]:
         payload = FilesystemListRequest(session_id=session_id, path=path)
         body = payload.model_dump_json().encode()
@@ -164,6 +172,36 @@ class SidecarClient:
             )
             for entry in listing.entries
         ]
+
+    def outputs_manifest(
+        self,
+        *,
+        sandbox_id: UUID,
+        session_id: UUID,
+        timeout_seconds: float = RPC_TIMEOUT_SECONDS,
+    ) -> OutputsManifestResponse:
+        payload = OutputsManifestRequest(session_id=session_id)
+        body = payload.model_dump_json().encode()
+        sha256_hex = hashlib.sha256(body).hexdigest()
+
+        try:
+            with httpx.Client(timeout=timeout_seconds) as http_client:
+                resp = http_client.post(
+                    self._url(self._host(sandbox_id), SIDECAR_OUTPUTS_MANIFEST_PATH),
+                    content=body,
+                    headers=self._signed_headers(
+                        signing_path=SIDECAR_OUTPUTS_MANIFEST_PATH,
+                        sha256_hex=sha256_hex,
+                        content_type="application/json",
+                    ),
+                )
+        except httpx.TransportError as e:
+            raise SidecarRequestError(f"outputs manifest request failed: {e}") from e
+
+        if resp.status_code != 200:
+            raise SidecarStatusError("outputs manifest", resp.status_code, resp.text)
+
+        return OutputsManifestResponse.model_validate_json(resp.content)
 
     @contextmanager
     def request_and_stream_new_snapshot(
@@ -222,7 +260,7 @@ class SidecarClient:
         archive_file: IO[bytes],
         sha256_hex: str,
         operation_label: str,
-        timeout_seconds: float = 300.0,
+        timeout_seconds: float = BULK_TRANSFER_TIMEOUT_SECONDS,
     ) -> None:
         def body() -> Iterator[bytes]:
             archive_file.seek(0)
@@ -248,7 +286,7 @@ class SidecarClient:
         sandbox_id: UUID,
         endpoint_path: str,
         operation_label: str,
-        timeout_seconds: float = 300.0,
+        timeout_seconds: float = BULK_TRANSFER_TIMEOUT_SECONDS,
     ) -> None:
         body = b""
         self._post(
@@ -350,7 +388,7 @@ class SidecarClient:
     def _timeout_for_post(remaining_seconds: float) -> httpx.Timeout:
         return httpx.Timeout(
             remaining_seconds,
-            connect=min(5.0, remaining_seconds),
+            connect=min(CONNECT_TIMEOUT_SECONDS, remaining_seconds),
             read=remaining_seconds,
             write=remaining_seconds,
         )

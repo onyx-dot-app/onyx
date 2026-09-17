@@ -120,16 +120,14 @@ def create_message_packets(
 def create_citation_packets(
     citation_info_list: list[CitationInfo], turn_index: int
 ) -> list[Packet]:
-    packets: list[Packet] = []
-
     # Emit each citation as a separate CitationInfo packet
-    for citation_info in citation_info_list:
-        packets.append(
-            Packet(
-                placement=Placement(turn_index=turn_index),
-                obj=citation_info,
-            )
+    packets: list[Packet] = [
+        Packet(
+            placement=Placement(turn_index=turn_index),
+            obj=citation_info,
         )
+        for citation_info in citation_info_list
+    ]
 
     packets.append(Packet(placement=Placement(turn_index=turn_index), obj=SectionEnd()))
 
@@ -789,7 +787,7 @@ def translate_assistant_message_to_packets(
                                 data=custom_data,
                                 file_ids=custom_file_ids,
                                 error=custom_error,
-                                tool_args=custom_args if custom_args else None,
+                                tool_args=custom_args or None,
                                 tool_id=tool_call.tool_id,
                             )
                         )

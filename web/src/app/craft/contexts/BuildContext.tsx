@@ -42,12 +42,10 @@ export function BuildProvider({ children }: BuildProviderProps) {
   }, []);
 
   const toggleVideoBackground = useCallback(() => {
-    setVideoBackgroundEnabled((prev) => {
-      const next = !prev;
-      localStorage.setItem(VIDEO_BACKGROUND_STORAGE_KEY, String(next));
-      return next;
-    });
-  }, []);
+    const next = !videoBackgroundEnabled;
+    setVideoBackgroundEnabled(next);
+    localStorage.setItem(VIDEO_BACKGROUND_STORAGE_KEY, String(next));
+  }, [videoBackgroundEnabled]);
 
   const value = useMemo<BuildContextValue>(
     () => ({

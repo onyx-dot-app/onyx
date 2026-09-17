@@ -1,16 +1,12 @@
-from slack_sdk import WebClient
-
 from onyx.access.models import ExternalAccess
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.slack.connector import ChannelType, channel_team_ids
-from onyx.connectors.slack.utils import (
-    expert_info_from_slack_id,
-    make_paginated_slack_api_call,
-)
+from onyx.connectors.slack.source_operations import SlackSourceOperations
+from onyx.connectors.slack.utils import expert_info_from_slack_id
 
 
 def get_channel_access(
-    client: WebClient,
+    slack_client: SlackSourceOperations,
     channel: ChannelType,
     user_cache: dict[str, BasicExpertInfo | None],
     team_id_to_user_emails: dict[str, set[str]] | None = None,
@@ -45,17 +41,14 @@ def get_channel_access(
     channel_id = channel["id"]
 
     member_ids = []
-    for result in make_paginated_slack_api_call(
-        client.conversations_members,
-        channel=channel_id,
-    ):
-        member_ids.extend(result.get("members", []))
+    for result in slack_client.list_channel_members(channel_id=channel_id):
+        member_ids.extend(result.members)
 
     member_emails = set()
     for member_id in member_ids:
         user_info = expert_info_from_slack_id(
             user_id=member_id,
-            client=client,
+            fetch_user_info=slack_client.fetch_user_info,
             user_cache=user_cache,
         )
         if user_info and user_info.email:

@@ -16,6 +16,7 @@ const config: StorybookConfig = {
     "../src/refresh-components/**/*.stories.@(ts|tsx)",
     "../src/sections/**/*.stories.@(ts|tsx)",
     "../src/app/craft/**/*.stories.@(ts|tsx)",
+    "../src/views/**/*.stories.@(ts|tsx)",
   ],
   addons: [
     getAbsolutePath("@storybook/addon-themes"),
@@ -28,7 +29,8 @@ const config: StorybookConfig = {
   },
   staticDirs: ["../public"],
   typescript: {
-    reactDocgen: "react-docgen-typescript",
+    // react-docgen-typescript needs the TypeScript 5/6 JS API.
+    reactDocgen: "react-docgen",
   },
   viteFinal: async (config) => {
     config.resolve = config.resolve ?? {};
@@ -53,6 +55,10 @@ const config: StorybookConfig = {
       ...config.define,
       "process.env": JSON.stringify({}),
     };
+
+    // Vite's default publicDir copy races/collides with Storybook's own
+    // `staticDirs` copy of the same `public/` dir (EEXIST): storybookjs/storybook#24627
+    config.publicDir = false;
 
     return config;
   },

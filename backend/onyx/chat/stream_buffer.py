@@ -11,6 +11,7 @@ to the DB-rendered message rather than replaying a broken sequence.
 """
 
 import zlib
+from collections.abc import Callable
 from uuid import UUID
 
 from pydantic import BaseModel, ValidationError
@@ -55,6 +56,11 @@ def _meta_key(chat_session_id: UUID, run_id: int) -> str:
     return f"{_PREFIX}_{chat_session_id}_{run_id}:meta"
 
 
+def stream_buffer_key_pattern(chat_session_id: UUID) -> str:
+    """Glob matching every buffered chunk and meta key of the session's runs."""
+    return f"{_PREFIX}_{chat_session_id}_*"
+
+
 class StreamBufferWriter:
     """Append-only writer for one run. Errors never propagate into the stream
     path — a broken cache downgrades the run to non-resumable (truncated)."""
@@ -64,10 +70,20 @@ class StreamBufferWriter:
         cache: CacheBackend,
         chat_session_id: UUID,
         run_id: int,
+        delete_on_done: bool = False,
+        session_ended: Callable[[], bool] | None = None,
     ) -> None:
         self._cache = cache
         self._chat_session_id = chat_session_id
         self._run_id = run_id
+        # Content-free incognito runs: completion deletes the run's keys, so a
+        # flush racing the session teardown still cleans itself up. Costs
+        # post-completion resume.
+        self._delete_on_done = delete_on_done
+        # Teardown scans the session's keys once. Without this the run keeps
+        # writing answer chunks behind it, which then live out the buffer TTL
+        # if the run never reaches completion.
+        self._session_ended = session_ended
         self._meta = StreamBufferMeta()
         self._pending: list[str] = []
         self._pending_bytes = 0
@@ -87,6 +103,11 @@ class StreamBufferWriter:
 
     def flush(self) -> None:
         if not self._pending or self._meta.truncated or self._meta.done:
+            return
+        if self._session_ended is not None and self._session_ended():
+            self._pending = []
+            self._pending_bytes = 0
+            self.mark_done()
             return
         payload = zlib.compress("".join(self._pending).encode("utf-8"))
         self._pending = []
@@ -129,6 +150,23 @@ class StreamBufferWriter:
                 )
 
     def mark_done(self) -> None:
+        if self._delete_on_done:
+            if self._meta.done:
+                return
+            self._meta.done = True
+            try:
+                self._cache.delete(_meta_key(self._chat_session_id, self._run_id))
+                for chunk_n in range(self._meta.chunk_count):
+                    self._cache.delete(
+                        _chunk_key(self._chat_session_id, self._run_id, chunk_n)
+                    )
+            except Exception:
+                logger.exception(
+                    "stream buffer deletion failed for session %s run %d",
+                    self._chat_session_id,
+                    self._run_id,
+                )
+            return
         self.flush()
         if self._meta.done:
             return

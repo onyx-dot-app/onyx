@@ -3,6 +3,7 @@
 permission paths. The user-side token comes from the synced domain group's real
 Workspace membership, not from the user's email string."""
 
+import time
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import MagicMock, call, patch
@@ -336,6 +337,8 @@ def test_group_sync_domain_group_uses_real_roster() -> None:
     with patch.object(
         group_sync, "execute_paginated_retrieval", return_value=iter(roster)
     ):
-        members = group_sync._get_all_domain_users(admin_service, COMPANY_DOMAIN)
+        members = group_sync._get_all_domain_users(
+            admin_service, COMPANY_DOMAIN, deadline=time.monotonic() + 60
+        )
 
     assert set(members) == {"alice@companya.com", "bob@companya.com"}

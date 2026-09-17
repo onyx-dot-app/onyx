@@ -1,17 +1,15 @@
 // The cited-sources surface: a "Sources · N" button under a completed answer, and the bottom-sheet
-// list it opens (mirrors web's mobile DocumentsSidebar Modal). Sections: Cited / More / User Files.
-import { Modal, Pressable, ScrollView, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+// list it opens (mirrors web's mobile DocumentsSidebar). Sections: Cited / More / User Files.
+import { Pressable, ScrollView, View } from "react-native";
 
 import { SelectedSources } from "@/chat/citations";
 import { SearchDoc } from "@/chat/contracts/documents";
 import { openSource } from "@/chat/openSource";
 import { SourceIcon } from "@/components/chat/SourceIcon";
 import { SourceRow } from "@/components/chat/SourceRow";
-import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Sheet } from "@/components/ui/sheet";
 import { Text } from "@/components/ui/text";
-import SvgX from "@/icons/x";
 
 interface CitedSourcesBarProps {
   iconDocs: SearchDoc[];
@@ -61,7 +59,6 @@ export function CitedSourcesSheet({
   onClose,
   sources,
 }: CitedSourcesSheetProps) {
-  const insets = useSafeAreaInsets();
   const { cited, more, files } = sources;
 
   const sections = [
@@ -71,62 +68,28 @@ export function CitedSourcesSheet({
   ].filter((section) => section.docs.length > 0);
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-      statusBarTranslucent
-    >
-      {/* Semantic color tokens can't express translucency (bare CSS vars, no alpha channel), so the
-          dimming scrim uses a raw rgba — the one place a non-token color is warranted. */}
-      <Pressable
-        className="flex-1 justify-end"
-        style={{ backgroundColor: "rgba(0, 0, 0, 0.4)" }}
-        onPress={onClose}
+    <Sheet visible={visible} onClose={onClose} title="Sources">
+      <ScrollView
+        className="max-h-[420px]"
+        keyboardShouldPersistTaps="handled"
+        contentContainerClassName="gap-12 pb-8"
       >
-        {/* Stop taps inside the sheet from dismissing it. */}
-        <Pressable
-          onPress={() => {}}
-          className="rounded-t-20 border-t border-border-01 bg-background-tint-00 px-16 pt-16"
-          style={{ paddingBottom: insets.bottom + 16 }}
-        >
-          <View className="mb-8 flex-row items-center justify-between">
-            <Text font="main-content-emphasis" color="text-04">
-              Sources
+        {sections.map((section, index) => (
+          <View key={section.title} className="gap-8">
+            {index > 0 ? <Separator /> : null}
+            <Text font="secondary-body" color="text-02">
+              {section.title}
             </Text>
-            <Button
-              icon={SvgX}
-              prominence="tertiary"
-              size="sm"
-              accessibilityLabel="Close"
-              onPress={onClose}
-            />
-          </View>
-
-          <ScrollView
-            className="max-h-[420px]"
-            keyboardShouldPersistTaps="handled"
-            contentContainerClassName="gap-12 pb-8"
-          >
-            {sections.map((section, index) => (
-              <View key={section.title} className="gap-8">
-                {index > 0 ? <Separator /> : null}
-                <Text font="secondary-body" color="text-02">
-                  {section.title}
-                </Text>
-                {section.docs.map((doc) => (
-                  <SourceRow
-                    key={doc.document_id}
-                    doc={doc}
-                    onPress={() => openSource(doc)}
-                  />
-                ))}
-              </View>
+            {section.docs.map((doc) => (
+              <SourceRow
+                key={doc.document_id}
+                doc={doc}
+                onPress={() => openSource(doc)}
+              />
             ))}
-          </ScrollView>
-        </Pressable>
-      </Pressable>
-    </Modal>
+          </View>
+        ))}
+      </ScrollView>
+    </Sheet>
   );
 }

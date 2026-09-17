@@ -104,8 +104,7 @@ def _json_to_natural_language(data: dict | list, indent: int = 0) -> str:
             else:
                 result.append(f"{indent_str}{key}: {value}")
     elif isinstance(data, list):
-        for item in data:
-            result.append(_json_to_natural_language(item, indent + 2))
+        result.extend(_json_to_natural_language(item, indent + 2) for item in data)
 
     return "\n".join(result)
 

@@ -44,8 +44,7 @@ from tests.external_dependency_unit.indexing_helpers import (
 )
 
 _PROCESSOR_PATH = (
-    "onyx.background.celery.tasks.docprocessing."
-    "targeted_reindex_task.process_targets_for_cc_pair"
+    "onyx.background.indexing.run_targeted_reindex.process_targets_for_cc_pair"
 )
 
 
@@ -53,7 +52,7 @@ def _patch_processor(
     landed_doc_ids: set[str] | None = None,
     failed_doc_ids: set[str] | None = None,
     unsupported: bool = False,
-):  # type: ignore[no-untyped-def]
+):
     """Patch the per-cc-pair processor with a fixed result.
 
     Defaults to landing nothing / failing nothing (no-op) so the
@@ -301,7 +300,7 @@ def test_task_does_not_resolve_error_when_doc_landed_for_other_cc_pair(
         )
 
         # Processor lands shared-doc for cc_pair A, fails it for cc_pair B.
-        def _by_cc_pair(*_args, **kwargs):  # type: ignore[no-untyped-def]
+        def _by_cc_pair(*_args, **kwargs):
             from onyx.background.indexing.run_targeted_reindex import (
                 CCPairReindexResult,
             )

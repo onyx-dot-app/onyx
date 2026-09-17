@@ -9,10 +9,12 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from onyx.db.enums import GatedAppKind
 from onyx.db.external_app import (
     get_connectable_apps_for_user,
     get_external_app_by_skill_id,
 )
+from onyx.db.gated_app import get_action_policies
 from onyx.db.models import Skill, User
 from onyx.db.skill import (
     SkillValidityUpdate,
@@ -28,9 +30,8 @@ from onyx.server.features.build.db.sandbox import (
     lock_sandbox_skills_hashes,
     set_sandbox_skills_hashes__no_commit,
 )
-from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
-from onyx.server.features.build.sandbox.models import FileSet, PushResult
+from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_connectable_apps_list,
 )
@@ -117,12 +118,13 @@ def _render_template(
     app_type = EXTERNAL_APP_SKILL_ID_TO_APP_TYPE.get(definition.built_in_skill_id)
     if app_type is not None:
         external_app = get_external_app_by_skill_id(db_session, skill.id)
-        rendered = render_external_app_skill(
-            db_session,
-            app_type,
-            external_app,
-            definition.source_dir,
+        stored = (
+            get_action_policies(db_session, GatedAppKind.EXTERNAL_APP, external_app.id)
+            if external_app
+            else {}
         )
+        template = (definition.source_dir / "SKILL.md.template").read_text()
+        rendered = render_external_app_skill(template, app_type, stored)
         files[f"{skill.name}/SKILL.md"] = rendered.encode("utf-8")
         return
 
@@ -252,24 +254,6 @@ def build_user_skills_payload(user: User, db_session: Session) -> tuple[str, Fil
         get_connectable_apps_for_user(db_session, user)
     )
     return connectable_apps_section, files
-
-
-def hydrate_sandbox_skills(
-    sandbox_id: UUID,
-    user: User,
-    db_session: Session,
-    *,
-    sandbox_manager: SandboxManager,
-    files: FileSet | None = None,
-) -> PushResult:
-    """Push all visible skills to a single sandbox (cold-start hydration)."""
-    if files is None:
-        files = build_skills_fileset_for_user(user, db_session)
-    return sandbox_manager.push_to_sandbox(
-        sandbox_id=sandbox_id,
-        mount_path=SKILLS_MOUNT_PATH,
-        files=files,
-    )
 
 
 def push_skill_to_affected_sandboxes(skill: Skill, db_session: Session) -> None:

@@ -217,6 +217,15 @@ def _is_shared_drive_root(folder: GoogleDriveFileType) -> bool:
     return bool(drive_id and folder_id == drive_id)
 
 
+def _resume_start(
+    completed_until: SecondsSinceUnixEpoch,
+    start: SecondsSinceUnixEpoch | None,
+) -> SecondsSinceUnixEpoch:
+    """Resume from the checkpointed frontier, but never before the configured
+    range start (a corrupted frontier must not widen the requested time range)."""
+    return max(completed_until, start) if start is not None else completed_until
+
+
 def _public_access() -> ExternalAccess:
     return ExternalAccess(
         external_user_emails=set(),
@@ -402,10 +411,7 @@ class GoogleDriveConnector(
         parsed = urlparse(url)
         netloc = parsed.netloc.lower()
 
-        if not (
-            netloc.startswith("docs.google.com")
-            or netloc.startswith("drive.google.com")
-        ):
+        if not netloc.startswith(("docs.google.com", "drive.google.com")):
             return NormalizationResult(normalized_url=None, use_default=False)
 
         file_id = _extract_drive_file_id(parsed)
@@ -946,7 +952,11 @@ class GoogleDriveConnector(
                         field_type=field_type,
                         include_shared_with_me=self.include_files_shared_with_me,
                         max_num_pages=MY_DRIVE_PAGES_PER_CHECKPOINT,
-                        start=curr_stage.completed_until if resuming else start,
+                        start=(
+                            _resume_start(curr_stage.completed_until, start)
+                            if resuming
+                            else start
+                        ),
                         end=end,
                         cache_folders=not bool(curr_stage.completed_until),
                         page_token=curr_stage.next_page_token,
@@ -995,7 +1005,7 @@ class GoogleDriveConnector(
             if resuming:
                 drive_id = curr_stage.current_folder_or_drive_id
                 if drive_id:
-                    resume_start = curr_stage.completed_until
+                    resume_start = _resume_start(curr_stage.completed_until, start)
                     for file_or_token in _yield_from_drive(drive_id, resume_start):
                         if isinstance(file_or_token, str):
                             checkpoint.completion_map[
@@ -1061,7 +1071,7 @@ class GoogleDriveConnector(
                         user_email,
                     )
                 else:
-                    resume_start = curr_stage.completed_until
+                    resume_start = _resume_start(curr_stage.completed_until, start)
                     yield from _yield_from_folder_crawl(folder_id, resume_start)
                 last_processed_folder = folder_id
 
@@ -1420,16 +1430,18 @@ class GoogleDriveConnector(
             ].current_folder_or_drive_id
             if drive_id is None:
                 raise ValueError("drive id not set in checkpoint")
-            resume_start = checkpoint.completion_map[
-                self.primary_admin_email
-            ].completed_until
+            resume_start = _resume_start(
+                checkpoint.completion_map[self.primary_admin_email].completed_until,
+                start,
+            )
             for file_or_token in _yield_from_drive(drive_id, resume_start):
-                if isinstance(file_or_token, str):
-                    checkpoint.completion_map[
-                        self.primary_admin_email
-                    ].next_page_token = file_or_token
-                    return  # done with the max num pages, return checkpoint
+                # Propagate page tokens so the caller records them and pauses at
+                # this stage. Consuming a token here looks like normal completion
+                # to the caller, which then advances the stage and drops the
+                # remaining pages of the drive.
                 yield file_or_token
+                if isinstance(file_or_token, str):
+                    return  # done with the max num pages, return checkpoint
             checkpoint.completion_map[self.primary_admin_email].next_page_token = None
 
         for drive_id in drive_ids_to_retrieve:
@@ -1443,13 +1455,22 @@ class GoogleDriveConnector(
                 drive_id,
                 self.primary_admin_email,
             )
+            # Record the stage and drive being listed before any file is
+            # yielded (as the service account path does), so a page token
+            # emitted before the first yielded file resumes this drive, not the
+            # previous one. Without the stage, the resume branch above is
+            # skipped and the token leaks into the first unretrieved drive's
+            # fresh listing.
+            checkpoint.completion_map[self.primary_admin_email].update(
+                stage=DriveRetrievalStage.SHARED_DRIVE_FILES,
+                completed_until=0,
+                current_folder_or_drive_id=drive_id,
+            )
             for file_or_token in _yield_from_drive(drive_id, start):
-                if isinstance(file_or_token, str):
-                    checkpoint.completion_map[
-                        self.primary_admin_email
-                    ].next_page_token = file_or_token
-                    return  # done with the max num pages, return checkpoint
+                # See the resume loop above: the caller records page tokens.
                 yield file_or_token
+                if isinstance(file_or_token, str):
+                    return  # done with the max num pages, return checkpoint
             checkpoint.completion_map[self.primary_admin_email].next_page_token = None
 
     def _oauth_retrieval_folders(
@@ -1500,11 +1521,12 @@ class GoogleDriveConnector(
                 self.primary_admin_email
             ].current_folder_or_drive_id
         ):
-            resume_start = checkpoint.completion_map[
-                self.primary_admin_email
-            ].completed_until
+            resume_start = _resume_start(
+                checkpoint.completion_map[self.primary_admin_email].completed_until,
+                start,
+            )
             yield from _yield_from_folder_crawl(
-                folder_id,  # ty: ignore[possibly-unresolved-reference]
+                folder_id,
                 resume_start,
             )
 
@@ -1557,6 +1579,16 @@ class GoogleDriveConnector(
                         file.completion_stage,
                         file.user_email,
                     )
+
+            # Never move the frontier backward within the same stage and
+            # drive/folder: a regression changes the listing query, invalidates
+            # the saved page token, and restarts retrieval from the regressed
+            # timestamp — which can loop forever.
+            if (
+                file.completion_stage == completion.stage
+                and file.parent_id == completion.current_folder_or_drive_id
+            ):
+                completed_until = max(completed_until, completion.completed_until)
 
             completion.update(
                 stage=file.completion_stage,
@@ -1614,7 +1646,7 @@ class GoogleDriveConnector(
             all_files_start = start
             # if resuming from a checkpoint
             if completion.stage == DriveRetrievalStage.OAUTH_FILES:
-                all_files_start = completion.completed_until
+                all_files_start = _resume_start(completion.completed_until, start)
 
             for file_or_token in self._oauth_retrieval_all_files(
                 field_type=field_type,
@@ -2071,14 +2103,18 @@ class GoogleDriveConnector(
             )
 
             # Build slim documents
-            for file in files_batch:
-                if doc := build_slim_document(
-                    self.creds,
-                    file.drive_file,
-                    permission_sync_context,
-                    retriever_email=file.user_email,
-                ):
-                    slim_batch.append(doc)
+            slim_batch.extend(
+                doc
+                for file in files_batch
+                if (
+                    doc := build_slim_document(
+                        self.creds,
+                        file.drive_file,
+                        permission_sync_context,
+                        retriever_email=file.user_email,
+                    )
+                )
+            )
 
             # Combine: hierarchy nodes first, then slim docs
             result: list[SlimDocument | HierarchyNode] = []

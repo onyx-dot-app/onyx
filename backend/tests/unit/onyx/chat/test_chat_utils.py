@@ -309,3 +309,42 @@ class TestConvertChatHistory:
         assert last_user.image_files is not None
         assert len(last_user.image_files) == 1
         assert last_user.image_files[0].file_id == "project_image"
+
+    def test_tool_response_placeholder_token_count_is_measured(self) -> None:
+        """Cross-turn tool responses are replayed as a placeholder — its
+        budgeted token count must come from the token counter, not a
+        hardcoded constant."""
+        tool_call = MagicMock()
+        tool_call.turn_number = 0
+        tool_call.tool_id = 1
+        tool_call.tool_call_id = "call-1"
+        tool_call.tool_call_arguments = {"queries": ["alpha"]}
+        tool_call.tool_call_tokens = 12
+        tool_call.generated_images = None
+        tool_call.tool_call_response = "original tool output"
+
+        assistant_msg = self._make_chat_message("final answer", MessageType.ASSISTANT)
+        assistant_msg.tool_calls = [tool_call]
+
+        chat_history = [
+            self._make_chat_message("A question", MessageType.USER),
+            assistant_msg,
+        ]
+
+        result = convert_chat_history(
+            chat_history=cast(list[ChatMessage], chat_history),
+            files=[],
+            context_image_files=[],
+            additional_context=None,
+            token_counter=lambda s: len(s),
+            tool_id_to_name_map={1: "internal_search"},
+        )
+
+        tool_responses = [
+            m
+            for m in result.simple_messages
+            if m.message_type == MessageType.TOOL_CALL_RESPONSE
+        ]
+        assert len(tool_responses) == 1
+        assert tool_responses[0].message == TOOL_CALL_RESPONSE_CROSS_MESSAGE
+        assert tool_responses[0].token_count == len(TOOL_CALL_RESPONSE_CROSS_MESSAGE)

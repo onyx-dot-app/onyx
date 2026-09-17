@@ -96,6 +96,13 @@ TOOL_CALL_RESPONSE_CROSS_MESSAGE = """
 This tool call completed but the results are no longer accessible.
 """.strip()
 
+# Replayed in place of an image when the current model does not accept image
+# input (e.g. after a mid-session model switch).
+NON_VISION_IMAGE_MARKER = (
+    "[attached image — file_id: {file_id} — not shown: the current model does "
+    "not support image input]"
+)
+
 # This is used to add the current date and time to the prompt in the case where the Agent should be aware of the current
 # date and time but the replacement pattern is not present in the prompt.
 ADDITIONAL_INFO = "\n\nAdditional Information:\n\t- {datetime_info}."

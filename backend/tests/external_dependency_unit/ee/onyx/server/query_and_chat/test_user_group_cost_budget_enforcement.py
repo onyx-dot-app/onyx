@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 import ee.onyx.server.query_and_chat.token_limit as ee_token_limit
 from onyx.configs.constants import TokenRateLimitScope
+from onyx.db.llm_usage import LLMUsageRecord
 from onyx.db.models import (
     TokenRateLimit,
     TokenRateLimit__UserGroup,
@@ -49,14 +50,16 @@ def _record_cost(db_session: Session, user: User, cost_cents: float) -> None:
     record_user_usage(
         db_session=db_session,
         user_id=str(user.id),
-        model=_TEST_MODEL,
-        flow=LLMFlow.CHAT_RESPONSE.value,
-        provider=None,
-        input_tokens=1,
-        output_tokens=1,
-        cache_read_tokens=0,
-        cost_cents=cost_cents,
-        window_start=window_start,
+        usage=LLMUsageRecord(
+            model=_TEST_MODEL,
+            flow=LLMFlow.CHAT_RESPONSE.value,
+            provider=None,
+            input_tokens=1,
+            output_tokens=1,
+            cache_read_tokens=0,
+            cost_cents=cost_cents,
+            window_start=window_start,
+        ),
     )
     db_session.commit()
 
@@ -93,7 +96,7 @@ def test_user_cost_isolated_and_longest_window_reported(
     other_user = create_test_user(db_session, "cost_budget_other")
     limits = [
         _cost_limit(TokenRateLimitScope.USER, period_hours=24),
-        _cost_limit(TokenRateLimitScope.USER, period_hours=48),
+        _cost_limit(TokenRateLimitScope.USER, period_hours=168),
     ]
     monkeypatch.setattr(
         ee_token_limit, "fetch_all_user_token_rate_limits", lambda **_: limits
@@ -110,7 +113,7 @@ def test_user_cost_isolated_and_longest_window_reported(
     _assert_cost_rate_limited(
         exc_info.value,
         TokenRateLimitScope.USER,
-        period_hours=48,
+        period_hours=168,
     )
 
 
@@ -149,7 +152,7 @@ def test_group_blocks_only_when_every_group_is_over_budget(
             User__UserGroup(user_id=spender.id, user_group_id=over_budget_group.id),
         ]
     )
-    _add_group_limit(db_session, over_budget_group, period_hours=48)
+    _add_group_limit(db_session, over_budget_group, period_hours=168)
     _add_group_limit(db_session, under_budget_group, period_hours=24)
     db_session.commit()
     _record_cost(db_session, spender, 150.0)
@@ -169,7 +172,7 @@ def test_group_blocks_only_when_every_group_is_over_budget(
     _assert_cost_rate_limited(
         exc_info.value,
         TokenRateLimitScope.USER_GROUP,
-        period_hours=48,
+        period_hours=168,
     )
 
 

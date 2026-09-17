@@ -24,6 +24,14 @@ pub struct AppConfig {
 
     #[serde(default)]
     pub hide_window_decorations: bool,
+
+    /// Global shortcut that summons Onyx from any app, in Tauri accelerator
+    /// syntax. Explicit `null` in config.json disables it.
+    #[serde(default = "default_summon_shortcut")]
+    pub summon_shortcut: Option<String>,
+
+    #[serde(default = "default_summon_opens_new_chat")]
+    pub summon_opens_new_chat: bool,
 }
 
 fn default_window_title() -> String {
@@ -34,6 +42,24 @@ const fn default_show_menu_bar() -> bool {
     true
 }
 
+// Space-with-modifiers chords are the only family major apps leave alone.
+// Alt+Space is contested on Windows (system window menu, Copilot, PowerToys
+// Run) and Ctrl+Alt+<letter> collides with AltGr typing on European layouts,
+// so Ctrl+Alt+Space is the safe non-mac default.
+#[allow(clippy::unnecessary_wraps)] // serde default for an `Option` field must return `Option`
+fn default_summon_shortcut() -> Option<String> {
+    let chord = if cfg!(target_os = "macos") {
+        "Super+Shift+Space"
+    } else {
+        "Ctrl+Alt+Space"
+    };
+    Some(chord.to_string())
+}
+
+const fn default_summon_opens_new_chat() -> bool {
+    true
+}
+
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
@@ -41,6 +67,8 @@ impl Default for AppConfig {
             window_title: default_window_title(),
             show_menu_bar: true,
             hide_window_decorations: false,
+            summon_shortcut: default_summon_shortcut(),
+            summon_opens_new_chat: default_summon_opens_new_chat(),
         }
     }
 }
@@ -159,13 +187,21 @@ impl ConfigState {
     /// concurrent caller can't save its own update in between this update and
     /// this save (which would otherwise leave `config.json` not matching
     /// whichever update actually happened last in memory).
+    ///
+    /// A failed save rolls the in-memory config back to its prior value, so a
+    /// setting can't appear to change for the session and then silently revert
+    /// on the next launch.
     pub fn update_and_persist(&self, f: impl FnOnce(&mut AppConfig)) -> Result<AppConfig, String> {
         let _guard = self
             .persist_lock
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let previous = self.config();
         let config = self.update_config(f);
-        save_config(&config)?;
+        if let Err(e) = save_config(&config) {
+            self.update_config(|current| *current = previous);
+            return Err(e);
+        }
         Ok(config)
     }
 
@@ -195,5 +231,38 @@ impl ConfigState {
             .app_base_url
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = url;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[allow(clippy::unwrap_used)]
+    fn parse(json: &str) -> AppConfig {
+        serde_json::from_str(json).unwrap()
+    }
+
+    #[test]
+    fn missing_summon_fields_get_defaults() {
+        let config = parse(r#"{"server_url": "https://cloud.onyx.app"}"#);
+        assert_eq!(config.summon_shortcut, default_summon_shortcut());
+        assert!(config.summon_shortcut.is_some());
+        assert!(config.summon_opens_new_chat);
+    }
+
+    #[test]
+    fn explicit_null_disables_summon_shortcut() {
+        let config = parse(r#"{"server_url": "https://cloud.onyx.app", "summon_shortcut": null}"#);
+        assert_eq!(config.summon_shortcut, None);
+    }
+
+    #[test]
+    fn custom_summon_settings_are_preserved() {
+        let config = parse(
+            r#"{"server_url": "https://cloud.onyx.app", "summon_shortcut": "F19", "summon_opens_new_chat": false}"#,
+        );
+        assert_eq!(config.summon_shortcut.as_deref(), Some("F19"));
+        assert!(!config.summon_opens_new_chat);
     }
 }

@@ -64,6 +64,16 @@ def _run_cache_cleanup() -> None:
     cleanup_expired_cache_entries()
 
 
+def _run_license_reclaim() -> None:
+    from onyx.utils.variable_functionality import fetch_versioned_implementation
+    from shared_configs.contextvars import get_current_tenant_id
+
+    fetch_versioned_implementation(
+        "onyx.background.celery.tasks.license_reclaim.tasks",
+        "reclaim_license_task",
+    )(tenant_id=get_current_tenant_id())
+
+
 def _run_scheduled_eval() -> None:
     from onyx.configs.app_configs import (
         BRAINTRUST_API_KEY,
@@ -107,6 +117,8 @@ def _run_scheduled_eval() -> None:
 
 
 _CACHE_CLEANUP_INTERVAL_SECONDS = 300
+# The lead-up reclaim rate. No beat runs here, so this thread sets the cadence.
+_LICENSE_RECLAIM_INTERVAL_SECONDS = 6 * 3600
 
 
 def _build_periodic_tasks() -> list[_PeriodicTaskDef]:
@@ -117,6 +129,7 @@ def _build_periodic_tasks() -> list[_PeriodicTaskDef]:
         CACHE_BACKEND,
         SCHEDULED_EVAL_DATASET_NAMES,
     )
+    from onyx.utils.variable_functionality import global_version
 
     tasks: list[_PeriodicTaskDef] = []
     if CACHE_BACKEND == CacheBackendType.POSTGRES:
@@ -144,6 +157,17 @@ def _build_periodic_tasks() -> list[_PeriodicTaskDef]:
                 interval_seconds=7 * 24 * 3600,
                 lock_id=PERIODIC_TASK_LOCK_BASE + 1,
                 run_fn=_run_scheduled_eval,
+            )
+        )
+    # EE-only: no license exists elsewhere. This deployment runs no Celery
+    # worker, so neither beat nor the point-of-use scheduler can renew.
+    if global_version.is_ee_version():
+        tasks.append(
+            _PeriodicTaskDef(
+                name="license-reclaim",
+                interval_seconds=_LICENSE_RECLAIM_INTERVAL_SECONDS,
+                lock_id=PERIODIC_TASK_LOCK_BASE + 3,
+                run_fn=_run_license_reclaim,
             )
         )
     return tasks

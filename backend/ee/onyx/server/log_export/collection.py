@@ -4,12 +4,15 @@ Shared by the api_server download endpoint today and intended to be reused by
 per-worker celery collector tasks once fan-out collection lands.
 """
 
+import os
 import socket
 import tempfile
 import zipfile
 from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
+
+from pydantic import BaseModel, ConfigDict
 
 from onyx import __version__
 from onyx.file_store.constants import MAX_IN_MEMORY_SIZE
@@ -20,11 +23,32 @@ README_FILE_NAME = "README.txt"
 # Matches the base log files plus their rotations (e.g. ``onyx_debug.log.3``).
 LOG_FILE_GLOB = "*.log*"
 
+# Known Debian package-manager logs at the top level of ``/var/log`` in the
+# backend image; build-time noise with no diagnostic value. Exact names only, so
+# unknown system logs fail open: they are collected as noise rather than risking
+# dropped Onyx logs.
+EXCLUDED_SYSTEM_LOG_FILE_NAMES = frozenset(
+    {"dpkg.log", "alternatives.log", "fontconfig.log"}
+)
+
 SENSITIVE_DATA_WARNING = (
     "WARNING: Log files may contain sensitive data such as user emails, "
     "document titles, search queries, URLs, and error payloads. Review the "
     "contents before sharing them outside your organization."
 )
+
+
+class BuiltLogZip(BaseModel):
+    """A materialized log archive plus metadata gathered while building it."""
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    # Positioned at offset 0; the caller owns the buffer and must close it.
+    zip_buffer: tempfile.SpooledTemporaryFile[bytes]
+    # Number of log files in the archive (the README is not counted).
+    log_file_count: int
+    # Total size of the finished archive in bytes.
+    size_bytes: int
 
 
 def get_default_log_directories() -> list[Path]:
@@ -38,16 +62,30 @@ def get_default_log_directories() -> list[Path]:
     return [Path("./log")]
 
 
-def _find_log_files(log_directories: Sequence[Path]) -> list[Path]:
-    """Returns all log files under the given directories, without duplicates."""
+def _find_log_files(
+    log_directories: Sequence[Path],
+    shallow_log_directories: Sequence[Path] = (),
+) -> list[Path]:
+    """Returns all log files under the given directories, without duplicates.
+
+    Directories in ``log_directories`` are searched recursively; those in
+    ``shallow_log_directories`` only at their top level. Files named in
+    ``EXCLUDED_SYSTEM_LOG_FILE_NAMES`` are skipped.
+    """
     seen: set[Path] = set()
     log_files: list[Path] = []
-    for directory in log_directories:
+    searches = [(directory, True) for directory in log_directories] + [
+        (directory, False) for directory in shallow_log_directories
+    ]
+    for directory, recursive in searches:
         if not directory.is_dir():
             continue
         root = directory.resolve()
-        for path in sorted(directory.rglob(LOG_FILE_GLOB)):
+        glob = directory.rglob if recursive else directory.glob
+        for path in sorted(glob(LOG_FILE_GLOB)):
             if not path.is_file():
+                continue
+            if path.name in EXCLUDED_SYSTEM_LOG_FILE_NAMES:
                 continue
             resolved = path.resolve()
             if not resolved.is_relative_to(root):
@@ -104,13 +142,15 @@ def _build_readme(
 def build_log_zip(
     log_directories: Sequence[Path],
     scope_note: str,
-) -> tempfile.SpooledTemporaryFile[bytes]:
+    shallow_log_directories: Sequence[Path] = (),
+) -> BuiltLogZip:
     """Collects every log file under the given directories into a zip.
 
     The archive always contains a ``README.txt`` (sensitive-data warning, scope
     note, and the list of collected files); log files are stored under their
     absolute path minus the leading slash. Unreadable files are noted in the
-    README instead of failing the export.
+    README instead of failing the export, and known system log files (e.g.
+    ``dpkg.log``) are excluded.
 
     Args:
         log_directories: Directories to search recursively for log files
@@ -119,12 +159,16 @@ def build_log_zip(
             once.
         scope_note: Human-readable description of what this export covers,
             included verbatim in the README.
+        shallow_log_directories: Directories to search without recursing into
+            subdirectories (e.g. ``/var/log``, where only the top-level
+            supervisord-captured logs are wanted). Same skip and dedupe rules as
+            ``log_directories``.
 
     Returns:
-        A spooled temporary file containing the zip archive, positioned at
-        offset 0. The caller owns the file and is responsible for closing it.
+        The archive buffer together with the log-file count and archive size,
+        per ``BuiltLogZip``.
     """
-    log_files = _find_log_files(log_directories)
+    log_files = _find_log_files(log_directories, shallow_log_directories)
 
     included: list[tuple[str, int]] = []
     skipped: list[tuple[str, str]] = []
@@ -146,5 +190,11 @@ def build_log_zip(
             README_FILE_NAME, _build_readme(scope_note, included, skipped)
         )
 
+    zip_buffer.seek(0, os.SEEK_END)
+    size_bytes = zip_buffer.tell()
     zip_buffer.seek(0)
-    return zip_buffer
+    return BuiltLogZip(
+        zip_buffer=zip_buffer,
+        log_file_count=len(included),
+        size_bytes=size_bytes,
+    )

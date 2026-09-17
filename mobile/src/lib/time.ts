@@ -1,3 +1,14 @@
+// Port of Opal `formatDurationSeconds` (web/lib/opal/src/time.ts): "8s", "1m", "1m 15s".
+export function formatDurationSeconds(seconds: number): string {
+  const totalSeconds = Math.ceil(seconds);
+  if (totalSeconds < 60) {
+    return `${totalSeconds}s`;
+  }
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
+  return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
+}
+
 // Compact relative-time label; null for unparseable input.
 export function timeAgo(iso: string): string | null {
   const then = new Date(iso).getTime();

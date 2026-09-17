@@ -1,34 +1,47 @@
-import re
-import time
 from collections import deque
-from collections.abc import Callable, Generator, Iterable
+from collections.abc import Iterable
 from typing import Any
 from urllib.parse import urlparse
 
-import requests as _requests
-from office365.directory.object_collection import DirectoryObjectCollection
 from office365.graph_client import GraphClient
 from office365.onedrive.driveitems.driveItem import DriveItem
 from office365.runtime.client_request import ClientRequestException
 from office365.sharepoint.client_context import ClientContext
 from office365.sharepoint.permissions.roles.definitions.definition import RoleDefinition
-from office365.sharepoint.permissions.securable_object import RoleAssignmentCollection
+from office365.sharepoint.permissions.securable_object import (
+    RoleAssignmentCollection,
+    SecurableObject,
+)
 from office365.sharepoint.principal.users.collection import UserCollection
 from pydantic import BaseModel
 
 from ee.onyx.db.external_perm import ExternalUserGroup
+from ee.onyx.external_permissions.microsoft_utils.entra_groups import (
+    enumerate_entra_groups,
+    expand_entra_group,
+    extract_guid,
+    normalize_email,
+    resolve_entra_group_name,
+)
 from onyx.access.models import ExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
-from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.sharepoint.connector import (
-    GRAPH_API_MAX_RETRIES,
-    GRAPH_API_RETRYABLE_STATUSES,
-    SHARED_DOCUMENTS_MAP_REVERSE,
+from onyx.connectors.microsoft_utils.drive_items import (
+    LIST_ITEM_ID_PROPERTY,
+    SHAREPOINT_IDS_PROPERTY,
+)
+from onyx.connectors.microsoft_utils.graph_client import (
+    GraphApiClient,
     sleep_and_retry,
 )
+from onyx.connectors.sharepoint.connector import SHARED_DOCUMENTS_MAP_REVERSE
+from onyx.connectors.sharepoint.connector_utils import (
+    SharepointGroup,
+    SharepointGroupExpansion,
+    SharepointPermissionCache,
+)
+from onyx.db.enums import HierarchyNodeType
 from onyx.utils.logger import setup_logger
-from onyx.utils.retry_after import parse_retry_after_seconds
 
 logger = setup_logger()
 
@@ -38,14 +51,13 @@ USER_PRINCIPAL_TYPE = 1  # Individual user accounts
 ANONYMOUS_USER_PRINCIPAL_TYPE = 3  # Anonymous/unauthenticated users (public access)
 AZURE_AD_GROUP_PRINCIPAL_TYPE = 4  # Azure Active Directory security groups
 SHAREPOINT_GROUP_PRINCIPAL_TYPE = 8  # SharePoint site groups (local to the site)
-MICROSOFT_DOMAIN = ".onmicrosoft"
 SHAREPOINT_GROUP_SCOPE_SEPARATOR = "::"
+GROUP_CACHE_KEY_SEPARATOR = ":"
+GET_SHAREPOINT_LIST_ITEM_ID_LABEL = "get_sharepoint_list_item_id"
 # PnP RoleType defines Guest=1 and RestrictedGuest=9:
 # https://github.com/pnp/pnpcore/blob/4e4f58fcac797f2957bfcd14fedcecd690dfe7ee/src/sdk/PnP.Core/Model/SharePoint/Core/Public/Enums/RoleType.cs
 LIMITED_ACCESS_ROLE_TYPES = frozenset({1, 9})
 
-
-AD_GROUP_ENUMERATION_THRESHOLD = 100_000
 
 # Page size for SharePoint REST RoleAssignments queries with
 # $expand=Member,RoleDefinitionBindings. Without an explicit $top, SharePoint
@@ -67,174 +79,32 @@ def _has_only_limited_access(
     )
 
 
-def _graph_api_get(
-    url: str,
-    get_access_token: Callable[[], str],
-    params: dict[str, str] | None = None,
-) -> dict[str, Any]:
-    """Authenticated Graph API GET with retry on transient errors."""
-    for attempt in range(GRAPH_API_MAX_RETRIES + 1):
-        access_token = get_access_token()
-        headers = {"Authorization": f"Bearer {access_token}"}
-        try:
-            resp = _requests.get(
-                url, headers=headers, params=params, timeout=REQUEST_TIMEOUT_SECONDS
-            )
-            if (
-                resp.status_code in GRAPH_API_RETRYABLE_STATUSES
-                and attempt < GRAPH_API_MAX_RETRIES
-            ):
-                parsed_retry_after = parse_retry_after_seconds(
-                    resp.headers.get("Retry-After")
-                )
-                wait = min(
-                    parsed_retry_after
-                    if parsed_retry_after is not None
-                    else float(2**attempt),
-                    60,
-                )
-                logger.warning(
-                    "Graph API %s on attempt %s, retrying in %ss: %s",
-                    resp.status_code,
-                    attempt + 1,
-                    wait,
-                    url,
-                )
-                time.sleep(wait)
-                continue
-            resp.raise_for_status()
-            return resp.json()
-        except (_requests.ConnectionError, _requests.Timeout, _requests.HTTPError):
-            if attempt < GRAPH_API_MAX_RETRIES:
-                wait = min(2**attempt, 60)
-                logger.warning(
-                    "Graph API connection error on attempt %s, retrying in %ss: %s",
-                    attempt + 1,
-                    wait,
-                    url,
-                )
-                time.sleep(wait)
-                continue
-            raise
-    raise RuntimeError(
-        f"Graph API request failed after {GRAPH_API_MAX_RETRIES + 1} attempts: {url}"
-    )
-
-
-def _iter_graph_collection(
-    initial_url: str,
-    get_access_token: Callable[[], str],
-    params: dict[str, str] | None = None,
-) -> Generator[dict[str, Any], None, None]:
-    """Paginate through a Graph API collection, yielding items one at a time."""
-    url: str | None = initial_url
-    while url:
-        data = _graph_api_get(url, get_access_token, params)
-        params = None
-        yield from data.get("value", [])
-        url = data.get("@odata.nextLink")
-
-
-def _normalize_email(email: str) -> str:
-    if MICROSOFT_DOMAIN in email:
-        return email.replace(MICROSOFT_DOMAIN, "")
-    return email
-
-
-class SharepointGroup(BaseModel):
-    model_config = {"frozen": True}
-
-    name: str
-    login_name: str
-    principal_type: int
-
-
 class GroupsResult(BaseModel):
     groups_to_emails: dict[str, set[str]]
     found_public_group: bool
 
 
-def _get_azuread_group_guid_by_name(
-    graph_client: GraphClient, group_name: str
-) -> str | None:
-    try:
-        # Search for groups by display name
-        groups = sleep_and_retry(
-            graph_client.groups.filter(f"displayName eq '{group_name}'").get(),
-            "get_azuread_group_guid_by_name",
-        )
-
-        if groups and len(groups) > 0:
-            return groups[0].id
-
-        return None
-
-    except Exception as e:
-        logger.error("Failed to get Azure AD group GUID for name %s: %s", group_name, e)
-        return None
-
-
-def _extract_guid_from_claims_token(claims_token: str) -> str | None:
-    try:
-        # Pattern to match GUID in claims token
-        # Claims tokens often have format: c:0o.c|provider|GUID_suffix
-        guid_pattern = r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"
-
-        match = re.search(guid_pattern, claims_token, re.IGNORECASE)
-        if match:
-            return match.group(1)
-
-        return None
-
-    except Exception as e:
-        logger.error("Failed to extract GUID from claims token %s: %s", claims_token, e)
-        return None
-
-
-def _get_group_guid_from_identifier(
-    graph_client: GraphClient, identifier: str
-) -> str | None:
-    try:
-        # Check if it's already a GUID
-        guid_pattern = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-        if re.match(guid_pattern, identifier, re.IGNORECASE):
-            return identifier
-
-        # Check if it's a SharePoint claims token
-        if identifier.startswith("c:0") and "|" in identifier:
-            guid = _extract_guid_from_claims_token(identifier)
-            if guid:
-                logger.info("Extracted GUID %s from claims token %s", guid, identifier)
-                return guid
-
-        # Try to search by display name as fallback
-        return _get_azuread_group_guid_by_name(graph_client, identifier)
-
-    except Exception as e:
-        logger.error("Failed to get group GUID from identifier %s: %s", identifier, e)
-        return None
+class DocumentGroupsResult(BaseModel):
+    group_ids: set[str]
+    found_public_group: bool
 
 
 def _get_sharepoint_list_item_id(drive_item: DriveItem) -> str | None:
     try:
-        # First try to get the list item directly from the drive item
+        properties = getattr(drive_item, "properties", None)  # ods: ignore[getattr]
+        sharepoint_ids = properties.get(SHAREPOINT_IDS_PROPERTY) if properties else None
+        if isinstance(sharepoint_ids, dict):
+            if list_item_id := sharepoint_ids.get(LIST_ITEM_ID_PROPERTY):
+                return str(list_item_id)
+
         if hasattr(drive_item, "listItem"):
             list_item = drive_item.listItem
             if list_item:
-                # Load the list item properties to get the ID
-                sleep_and_retry(list_item.get(), "get_sharepoint_list_item_id")
+                sleep_and_retry(list_item.get(), GET_SHAREPOINT_LIST_ITEM_ID_LABEL)
                 if hasattr(list_item, "id") and list_item.id:
                     return str(list_item.id)
 
-        # The SharePoint list item ID is typically available in the sharepointIds property
-        sharepoint_ids = getattr(drive_item, "sharepoint_ids", None)
-        if sharepoint_ids and hasattr(sharepoint_ids, "listItemId"):
-            return sharepoint_ids.listItemId
-
-        # Alternative: try to get it from the properties
-        properties = getattr(drive_item, "properties", None)
         if properties:
-            # Sometimes the SharePoint list item ID is in the properties
             for prop_name, prop_value in properties.items():
                 if "listitemid" in prop_name.lower():
                     return str(prop_value)
@@ -285,14 +155,6 @@ def _is_public_login_name(login_name: str) -> bool:
     return False
 
 
-# AD groups allows same display name for multiple groups, so we need to add the GUID to the name
-def _get_group_name_with_suffix(
-    login_name: str, group_name: str, graph_client: GraphClient
-) -> str:
-    ad_group_suffix = _get_group_guid_from_identifier(graph_client, login_name)
-    return f"{group_name}_{ad_group_suffix}"
-
-
 def _get_site_scoped_group_name(
     client_context: ClientContext,
     group_name: str,
@@ -321,8 +183,7 @@ def _get_sharepoint_groups(
             ):
                 if user.user_principal_name:
                     email = user.user_principal_name
-                    if MICROSOFT_DOMAIN in email:
-                        email = email.replace(MICROSOFT_DOMAIN, "")
+                    email = normalize_email(email)
                     user_emails.add(email)
                 else:
                     logger.warning(
@@ -334,9 +195,7 @@ def _get_sharepoint_groups(
             ]:
                 name = user.title
                 if user.principal_type == AZURE_AD_GROUP_PRINCIPAL_TYPE:
-                    name = _get_group_name_with_suffix(
-                        user.login_name, name, graph_client
-                    )
+                    name = resolve_entra_group_name(graph_client, user.login_name, name)
                 else:
                     name = _get_site_scoped_group_name(client_context, name)
                 groups.add(
@@ -358,94 +217,20 @@ def _get_sharepoint_groups(
 def _get_azuread_groups(
     graph_client: GraphClient, group_name: str
 ) -> tuple[set[SharepointGroup], set[str]]:
-    group_id = _get_group_guid_from_identifier(graph_client, group_name)
-    if not group_id:
-        logger.error("Failed to get Azure AD group GUID for name %s", group_name)
-        return set(), set()
-    group = graph_client.groups[group_id]
-    groups: set[SharepointGroup] = set()
-    user_emails: set[str] = set()
+    """Wrap the shared Entra expansion in SharePoint's principal model.
 
-    def process_members(members: DirectoryObjectCollection) -> None:
-        nonlocal groups, user_emails
-
-        # iterate `current_page` (the items just loaded by this page) instead of
-        # `members` directly: iterating the collection itself walks pages via
-        # `_get_next().execute_query()`, which re-fires this `page_loaded` callback
-        # and recurses until Python hits its max recursion depth.
-        for member in members.current_page:
-            member_data = member.to_json()
-            logger.debug("Member: %s", member_data)
-            # Check for user-specific attributes
-            user_principal_name = member_data.get("userPrincipalName")
-            mail = member_data.get("mail")
-            display_name = member_data.get("displayName") or member_data.get(
-                "display_name"
-            )
-
-            # Check object attributes directly (if available)
-            is_user = False
-            is_group = False
-
-            # Users typically have userPrincipalName or mail
-            if user_principal_name or (mail and "@" in str(mail)):
-                is_user = True
-            # Groups typically have displayName but no userPrincipalName
-            elif display_name and not user_principal_name:
-                # Additional check: try to access group-specific properties
-                if (
-                    hasattr(member, "groupTypes")
-                    or member_data.get("groupTypes") is not None
-                ):
-                    is_group = True
-                # Or check if it has an 'id' field typical for groups
-                elif member_data.get("id") and not user_principal_name:
-                    is_group = True
-
-            # Check the object type name (fallback)
-            if not is_user and not is_group:
-                obj_type = type(member).__name__.lower()
-                if "user" in obj_type:
-                    is_user = True
-                elif "group" in obj_type:
-                    is_group = True
-
-            # Process based on identification
-            if is_user:
-                if user_principal_name:
-                    email = user_principal_name
-                    if MICROSOFT_DOMAIN in email:
-                        email = email.replace(MICROSOFT_DOMAIN, "")
-                    user_emails.add(email)
-                elif mail:
-                    email = mail
-                    if MICROSOFT_DOMAIN in email:
-                        email = email.replace(MICROSOFT_DOMAIN, "")
-                    user_emails.add(email)
-                logger.info("Added user: %s", user_principal_name or mail)
-            elif is_group:
-                if not display_name:
-                    logger.error("No display name for group: %s", member_data.get("id"))
-                    continue
-                name = _get_group_name_with_suffix(
-                    member_data.get("id", ""), display_name, graph_client
-                )
-                groups.add(
-                    SharepointGroup(
-                        login_name=member_data.get("id", ""),  # Use ID for groups
-                        principal_type=AZURE_AD_GROUP_PRINCIPAL_TYPE,
-                        name=name,
-                    )
-                )
-                logger.info("Added group: %s", name)
-            else:
-                # Log unidentified members for debugging
-                logger.warning("Could not identify member type for: %s", member_data)
-
-    sleep_and_retry(
-        group.members.get_all(page_loaded=process_members), "get_azuread_groups"
-    )
-
+    The permission cache is keyed and serialized on SharepointGroup, so the
+    principal type is attached here rather than in the shared code.
+    """
+    nested, user_emails = expand_entra_group(graph_client, group_name)
+    groups = {
+        SharepointGroup(
+            login_name=group.id,
+            principal_type=AZURE_AD_GROUP_PRINCIPAL_TYPE,
+            name=group.name,
+        )
+        for group in nested
+    }
     return groups, user_emails
 
 
@@ -511,23 +296,94 @@ def _get_groups_and_members_recursively(
     )
 
 
-def get_external_access_from_sharepoint(
+def _group_cache_key(
+    client_context: ClientContext,
+    group: SharepointGroup,
+) -> str:
+    identity = group.login_name
+    if group.principal_type == SHAREPOINT_GROUP_PRINCIPAL_TYPE:
+        identity = _get_site_scoped_group_name(client_context, identity)
+    elif guid := extract_guid(identity):
+        identity = guid
+    return f"{group.principal_type}{GROUP_CACHE_KEY_SEPARATOR}{identity}"
+
+
+def _get_cached_group_expansion(
     client_context: ClientContext,
     graph_client: GraphClient,
-    drive_name: str | None,
-    drive_item: DriveItem | None,
-    site_page: dict[str, Any] | None,
+    group: SharepointGroup,
+    permission_cache: SharepointPermissionCache,
+) -> SharepointGroupExpansion:
+    cache_key = _group_cache_key(client_context, group)
+    cached_expansion = permission_cache.group_expansions.get(cache_key)
+    if cached_expansion is not None:
+        return cached_expansion
+
+    try:
+        if group.principal_type == SHAREPOINT_GROUP_PRINCIPAL_TYPE:
+            nested_groups, _ = _get_sharepoint_groups(
+                client_context, group.login_name, graph_client
+            )
+        else:
+            nested_groups, _ = _get_azuread_groups(graph_client, group.login_name)
+    except ClientRequestException as e:
+        if (
+            group.principal_type != AZURE_AD_GROUP_PRINCIPAL_TYPE
+            or e.response is None
+            or e.response.status_code != 404
+        ):
+            raise
+        logger.warning("Group %s not found", group.login_name)
+        nested_groups = set()
+
+    expansion = SharepointGroupExpansion(nested_groups=nested_groups)
+    permission_cache.group_expansions[cache_key] = expansion
+    return expansion
+
+
+def _resolve_document_groups(
+    client_context: ClientContext,
+    graph_client: GraphClient,
+    groups: set[SharepointGroup],
+    permission_cache: SharepointPermissionCache,
+) -> DocumentGroupsResult:
+    group_queue: deque[SharepointGroup] = deque(groups)
+    visited_group_keys: set[str] = set()
+    group_ids: set[str] = set()
+
+    while group_queue:
+        group = group_queue.popleft()
+        if _is_public_login_name(group.login_name):
+            return DocumentGroupsResult(group_ids=set(), found_public_group=True)
+
+        group_ids.add(group.name)
+        cache_key = _group_cache_key(client_context, group)
+        if cache_key in visited_group_keys:
+            continue
+        visited_group_keys.add(cache_key)
+
+        expansion = _get_cached_group_expansion(
+            client_context, graph_client, group, permission_cache
+        )
+        group_queue.extend(expansion.nested_groups)
+
+    return DocumentGroupsResult(
+        group_ids=group_ids,
+        found_public_group=False,
+    )
+
+
+def _get_external_access_from_securable_object(
+    client_context: ClientContext,
+    graph_client: GraphClient,
+    securable_object: SecurableObject,
+    permission_cache: SharepointPermissionCache,
     add_prefix: bool = False,
-    treat_sharing_link_as_public: bool = False,
 ) -> ExternalAccess:
-    """
-    Get external access information from SharePoint.
-    """
     groups: set[SharepointGroup] = set()
     user_emails: set[str] = set()
     group_ids: set[str] = set()
 
-    # Add all members to a processing set first
     def add_user_and_group_to_sets(
         role_assignments: RoleAssignmentCollection,
     ) -> None:
@@ -549,8 +405,7 @@ def get_external_access_from_sharepoint(
                     member, "user_principal_name"
                 ):
                     email = member.user_principal_name
-                    if MICROSOFT_DOMAIN in email:
-                        email = email.replace(MICROSOFT_DOMAIN, "")
+                    email = normalize_email(email)
                     user_emails.add(email)
                 elif member.principal_type in [
                     AZURE_AD_GROUP_PRINCIPAL_TYPE,
@@ -558,8 +413,8 @@ def get_external_access_from_sharepoint(
                 ]:
                     name = member.title
                     if member.principal_type == AZURE_AD_GROUP_PRINCIPAL_TYPE:
-                        name = _get_group_name_with_suffix(
-                            member.login_name, name, graph_client
+                        name = resolve_entra_group_name(
+                            graph_client, member.login_name, name
                         )
                     else:
                         name = _get_site_scoped_group_name(client_context, name)
@@ -571,6 +426,56 @@ def get_external_access_from_sharepoint(
                         )
                     )
 
+    sleep_and_retry(
+        securable_object.role_assignments.expand(
+            ["Member", "RoleDefinitionBindings"]
+        ).get_all(
+            page_size=ROLE_ASSIGNMENTS_PAGE_SIZE,
+            page_loaded=add_user_and_group_to_sets,
+        ),
+        "get_external_access_from_sharepoint",
+    )
+
+    resolved_groups = _resolve_document_groups(
+        client_context,
+        graph_client,
+        groups,
+        permission_cache,
+    )
+    if resolved_groups.found_public_group:
+        return ExternalAccess(
+            external_user_emails=set(),
+            external_user_group_ids=set(),
+            is_public=True,
+        )
+
+    for group_name in resolved_groups.group_ids:
+        if add_prefix:
+            group_name = build_ext_group_name_for_onyx(
+                group_name, DocumentSource.SHAREPOINT
+            )
+        group_ids.add(group_name.lower())
+
+    logger.info("User emails: %s", len(user_emails))
+    logger.info("Group IDs: %s", len(group_ids))
+    return ExternalAccess(
+        external_user_emails=user_emails,
+        external_user_group_ids=group_ids,
+        is_public=False,
+    )
+
+
+def get_external_access_from_sharepoint(
+    client_context: ClientContext,
+    graph_client: GraphClient,
+    drive_name: str | None,
+    drive_item: DriveItem | None,
+    site_page: dict[str, Any] | None,
+    add_prefix: bool = False,
+    treat_sharing_link_as_public: bool = False,
+    permission_cache: SharepointPermissionCache | None = None,
+) -> ExternalAccess:
+    permission_cache = permission_cache or SharepointPermissionCache()
     if drive_item and drive_name:
         is_public = _is_public_item(drive_item, treat_sharing_link_as_public)
         if is_public:
@@ -594,14 +499,6 @@ def get_external_access_from_sharepoint(
         item = client_context.web.lists.get_by_title(drive_name).items.get_by_id(
             item_id
         )
-
-        sleep_and_retry(
-            item.role_assignments.expand(["Member", "RoleDefinitionBindings"]).get_all(
-                page_size=ROLE_ASSIGNMENTS_PAGE_SIZE,
-                page_loaded=add_user_and_group_to_sets,
-            ),
-            "get_external_access_from_sharepoint",
-        )
     elif site_page:
         site_url = site_page.get("webUrl")
         # Keep percent-encoding intact so the path matches the encoding
@@ -614,103 +511,53 @@ def get_external_access_from_sharepoint(
             server_relative_url
         )
         item = file_obj.listItemAllFields
-
-        sleep_and_retry(
-            item.role_assignments.expand(["Member", "RoleDefinitionBindings"]).get_all(
-                page_size=ROLE_ASSIGNMENTS_PAGE_SIZE,
-                page_loaded=add_user_and_group_to_sets,
-            ),
-            "get_external_access_from_sharepoint",
-        )
     else:
         raise RuntimeError("No drive item or site page provided")
 
-    groups_and_members: GroupsResult = _get_groups_and_members_recursively(
-        client_context, graph_client, groups
-    )
-
-    # If the site is public, w have default groups assigned to it, so we return early
-    if groups_and_members.found_public_group:
-        return ExternalAccess(
-            external_user_emails=set(),
-            external_user_group_ids=set(),
-            is_public=True,
-        )
-
-    for group_name, _ in groups_and_members.groups_to_emails.items():
-        if add_prefix:
-            group_name = build_ext_group_name_for_onyx(
-                group_name, DocumentSource.SHAREPOINT
-            )
-        group_ids.add(group_name.lower())
-
-    logger.info("User emails: %s", len(user_emails))
-    logger.info("Group IDs: %s", len(group_ids))
-
-    return ExternalAccess(
-        external_user_emails=user_emails,
-        external_user_group_ids=group_ids,
-        is_public=False,
+    return _get_external_access_from_securable_object(
+        client_context,
+        graph_client,
+        item,
+        permission_cache,
+        add_prefix,
     )
 
 
-def _enumerate_ad_groups_paginated(
-    get_access_token: Callable[[], str],
-    already_resolved: set[str],
-    graph_api_base: str,
-) -> Generator[ExternalUserGroup, None, None]:
-    """Paginate through all Azure AD groups and yield ExternalUserGroup for each.
+def get_hierarchy_node_external_access_from_sharepoint(
+    client_context: ClientContext,
+    graph_client: GraphClient,
+    node_type: HierarchyNodeType,
+    drive_name: str | None,
+    folder_url: str | None,
+    permission_cache: SharepointPermissionCache | None = None,
+) -> ExternalAccess:
+    permission_cache = permission_cache or SharepointPermissionCache()
+    if node_type == HierarchyNodeType.SITE:
+        securable_object = client_context.web
+    elif node_type == HierarchyNodeType.DRIVE and drive_name:
+        list_name = SHARED_DOCUMENTS_MAP_REVERSE.get(drive_name, drive_name)
+        securable_object = client_context.web.lists.get_by_title(list_name)
+    elif node_type == HierarchyNodeType.FOLDER and folder_url:
+        server_relative_url = urlparse(folder_url).path
+        securable_object = client_context.web.get_folder_by_server_relative_url(
+            server_relative_url
+        ).list_item_all_fields
+    else:
+        raise ValueError(f"Unsupported SharePoint hierarchy node: {node_type}")
 
-    Skips groups whose suffixed name is already in *already_resolved*.
-    Stops early if the number of groups exceeds AD_GROUP_ENUMERATION_THRESHOLD.
-    """
-    groups_url = f"{graph_api_base}/groups"
-    groups_params: dict[str, str] = {"$select": "id,displayName", "$top": "999"}
-    total_groups = 0
-
-    for group_json in _iter_graph_collection(
-        groups_url, get_access_token, groups_params
-    ):
-        group_id: str = group_json.get("id", "")
-        display_name: str = group_json.get("displayName", "")
-        if not group_id or not display_name:
-            continue
-
-        total_groups += 1
-        if total_groups > AD_GROUP_ENUMERATION_THRESHOLD:
-            logger.warning(
-                "Azure AD group enumeration exceeded %s groups — stopping to avoid excessive memory/API usage. Remaining groups will be resolved from role assignments only.",
-                AD_GROUP_ENUMERATION_THRESHOLD,
-            )
-            return
-
-        name = f"{display_name}_{group_id}"
-        if name in already_resolved:
-            continue
-
-        member_emails: list[str] = []
-        members_url = f"{graph_api_base}/groups/{group_id}/members"
-        members_params: dict[str, str] = {
-            "$select": "userPrincipalName,mail",
-            "$top": "999",
-        }
-        for member_json in _iter_graph_collection(
-            members_url, get_access_token, members_params
-        ):
-            email = member_json.get("userPrincipalName") or member_json.get("mail")
-            if email:
-                member_emails.append(_normalize_email(email))
-
-        yield ExternalUserGroup(id=name, user_emails=member_emails)
-
-    logger.info("Enumerated %s Azure AD groups via paginated Graph API", total_groups)
+    return _get_external_access_from_securable_object(
+        client_context,
+        graph_client,
+        securable_object,
+        permission_cache,
+        add_prefix=True,
+    )
 
 
 def get_sharepoint_external_groups(
     client_context: ClientContext,
     graph_client: GraphClient,
-    graph_api_base: str,
-    get_access_token: Callable[[], str] | None = None,
+    graph_api: GraphApiClient | None = None,
     enumerate_all_ad_groups: bool = False,
 ) -> list[ExternalUserGroup]:
     groups: set[SharepointGroup] = set()
@@ -735,8 +582,8 @@ def get_sharepoint_external_groups(
                 ]:
                     name = member.title
                     if member.principal_type == AZURE_AD_GROUP_PRINCIPAL_TYPE:
-                        name = _get_group_name_with_suffix(
-                            member.login_name, name, graph_client
+                        name = resolve_entra_group_name(
+                            graph_client, member.login_name, name
                         )
                     else:
                         name = _get_site_scoped_group_name(client_context, name)
@@ -764,16 +611,13 @@ def get_sharepoint_external_groups(
         for group_name, emails in groups_and_members.groups_to_emails.items()
     ]
 
-    if not enumerate_all_ad_groups or get_access_token is None:
+    if not enumerate_all_ad_groups or graph_api is None:
         logger.info(
             "Skipping exhaustive Azure AD group enumeration. Only groups found in site role assignments are included."
         )
         return external_user_groups
 
     already_resolved = set(groups_and_members.groups_to_emails.keys())
-    for group in _enumerate_ad_groups_paginated(
-        get_access_token, already_resolved, graph_api_base
-    ):
-        external_user_groups.append(group)
+    external_user_groups.extend(enumerate_entra_groups(graph_api, already_resolved))
 
     return external_user_groups

@@ -12,6 +12,7 @@ import {
   fetchTurnEventStream,
   interruptMessageStream,
   processSSEStream,
+  RateLimitedError,
 } from "@/app/craft/services/apiServices";
 
 jest.mock("swr", () => ({
@@ -19,7 +20,13 @@ jest.mock("swr", () => ({
 }));
 
 jest.mock("@/app/craft/services/apiServices", () => ({
-  RateLimitError: class RateLimitError extends Error {},
+  RateLimitedError: class RateLimitedError extends Error {
+    details: Record<string, unknown>;
+    constructor(message: string, details: Record<string, unknown>) {
+      super(message);
+      this.details = details;
+    }
+  },
   createTurn: jest.fn(),
   fetchActiveTurn: jest.fn(),
   fetchArtifacts: jest.fn(),
@@ -111,6 +118,45 @@ describe("useBuildStreaming thinking packets", () => {
       id: "tool-read",
     });
   });
+
+  it.each([
+    { changesDuringTurn: false, expected: false },
+    { changesDuringTurn: true, expected: true },
+  ])(
+    "reconciles stale skills after turn creation when changesDuringTurn is $changesDuringTurn",
+    async ({ changesDuringTurn, expected }) => {
+      let resolveTurn: (
+        turn: Awaited<ReturnType<typeof createTurn>>
+      ) => void = () => {};
+      jest.mocked(createTurn).mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveTurn = resolve;
+        })
+      );
+      useBuildSessionStore.getState().updateSessionData(sessionId, {
+        skillsStale: true,
+      });
+      const { result } = renderHook(() => useBuildStreaming());
+
+      const stream = result.current.streamMessage(sessionId, "build the app");
+      if (changesDuringTurn) {
+        useBuildSessionStore.getState().updateSessionData(sessionId, {
+          skillsStale: true,
+        });
+      }
+      resolveTurn({
+        session_id: sessionId,
+        turn_id: "turn-thinking",
+        status: "QUEUED",
+        turn_index: 0,
+      });
+      await act(async () => stream);
+
+      expect(
+        useBuildSessionStore.getState().sessions.get(sessionId)?.skillsStale
+      ).toBe(expected);
+    }
+  );
 
   it("does not reset the abort controller when a newer turn took ownership mid-stream", async () => {
     const newerController = new AbortController();
@@ -848,6 +894,42 @@ describe("useBuildStreaming thinking packets", () => {
     ]);
   });
 
+  it("surfaces a usage rate-limit 429 as an in-transcript banner item", async () => {
+    jest.mocked(createTurn).mockRejectedValueOnce(
+      new RateLimitedError("You've reached the usage budget.", {
+        scope: "user",
+        reset_at: "2026-01-02T00:00:00Z",
+        retry_after_seconds: 3600,
+      })
+    );
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.streamMessage(sessionId, "build the app");
+    });
+
+    // Recoverable once the budget resets: session stays active (not failed),
+    // but `error` stays set so queued messages don't auto-send into the limit.
+    const session = useBuildSessionStore.getState().sessions.get(sessionId);
+    expect(session).toMatchObject({
+      status: "active",
+      error: "You've reached the usage budget.",
+      activeTurnId: null,
+      activeTurnLocalOwner: false,
+    });
+    expect(session?.streamItems).toEqual([
+      expect.objectContaining({
+        type: "error",
+        content: "You've reached the usage budget.",
+        rateLimit: {
+          scope: "user",
+          reset_at: "2026-01-02T00:00:00Z",
+          retry_after_seconds: 3600,
+        },
+      }),
+    ]);
+  });
+
   it("defers to reconcile when an error packet arrives mid-interrupt", async () => {
     jest
       .mocked(processSSEStream)
@@ -960,8 +1042,9 @@ describe("useBuildStreaming thinking packets", () => {
     jest.mocked(fetchSession).mockResolvedValue({
       id: sessionId,
       status: "active",
+      nextjs_port: null,
       session_loaded_in_sandbox: true,
-      sandbox: { id: "sandbox-1", status: "running", nextjs_port: null },
+      sandbox: { id: "sandbox-1", status: "running" },
       agent_provider: "openai",
       agent_model: "gpt-5-mini",
     } as never);

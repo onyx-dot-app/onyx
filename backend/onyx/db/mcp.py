@@ -1,19 +1,18 @@
 import datetime
-from collections.abc import Mapping
-from typing import cast
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Select, and_, delete, select
 from sqlalchemy.orm import Session, aliased, selectinload
 from sqlalchemy.orm.attributes import flag_modified
 
+from onyx.auth.permissions import has_global_permission
 from onyx.db.constants import UNSET, UnsetType
 from onyx.db.enums import (
     MCPAuthenticationPerformer,
     MCPOAuthProviderMode,
     MCPServerStatus,
     MCPTransport,
+    Permission,
     SandboxStatus,
 )
 from onyx.db.models import (
@@ -27,11 +26,9 @@ from onyx.db.models import (
     Tool,
     User,
     User__UserGroup,
-    UserRole,
 )
-from onyx.server.features.mcp.models import DENYLISTED_MCP_HEADERS, MCPConnectionData
+from onyx.server.features.mcp.models import MCPConnectionData
 from onyx.utils.logger import setup_logger
-from onyx.utils.sensitive import SensitiveValue
 
 logger = setup_logger()
 
@@ -114,7 +111,7 @@ def _add_mcp_server_access_filter(stmt: Select, user: User) -> Select:
     """Servers the user may add to an agent (public / direct / group). Admins bypass.
     Does not control chat use of agent-attached servers.
     """
-    if user.role == UserRole.ADMIN:
+    if has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS):
         return stmt
 
     stmt = stmt.distinct()
@@ -186,7 +183,7 @@ def affected_user_ids_for_mcp_server(
     # Admins see every craft-enabled server (ACL bypass), so any change to a
     # private server can be baked into an admin's session and must reload it.
     admin_users = select(User.id).where(  # ty: ignore[no-matching-overload]
-        User.role == UserRole.ADMIN
+        User.effective_permissions.contains([Permission.FULL_ADMIN_PANEL_ACCESS.value])
     )
     stmt = stmt.where(
         Sandbox.user_id.in_(group_users)
@@ -374,28 +371,15 @@ def remove_user_from_mcp_server(
 
 
 # MCPConnectionConfig operations
-def extract_connection_data(
-    config: MCPConnectionConfig | None, apply_mask: bool = False
-) -> MCPConnectionData:
-    """Extract MCPConnectionData from a connection config, with proper typing.
-
-    This helper encapsulates the cast from the JSON column's dict[str, Any]
-    to the typed MCPConnectionData structure.
-    """
-    if config is None or config.config is None:
-        return MCPConnectionData(headers={})
-    if isinstance(config.config, SensitiveValue):
-        return cast(MCPConnectionData, config.config.get_value(apply_mask=apply_mask))
-    return cast(MCPConnectionData, config.config)
-
-
 def get_connection_config_by_id(
-    config_id: int, db_session: Session
+    config_id: int, db_session: Session, *, for_update: bool = False
 ) -> MCPConnectionConfig:
-    """Get connection config by ID"""
-    config = db_session.scalar(
-        select(MCPConnectionConfig).where(MCPConnectionConfig.id == config_id)
-    )
+    """Get connection config by ID. ``for_update`` row-locks the config so a
+    read-compare-write over its JSON blob is atomic against concurrent writers."""
+    stmt = select(MCPConnectionConfig).where(MCPConnectionConfig.id == config_id)
+    if for_update:
+        stmt = stmt.with_for_update()
+    config = db_session.scalar(stmt)
     if not config:
         raise ValueError("Connection config by specified id does not exist")
     return config
@@ -413,128 +397,6 @@ def get_user_connection_config(
             )
         )
     )
-
-
-class MCPCredentialsError(Exception):
-    """Credentials for an MCP server cannot be resolved for this user."""
-
-
-class ResolvedMCPCredentials(BaseModel):
-    """Credential source for one (server, user) pair.
-
-    Exactly one of the fields is populated (both are None for auth type NONE):
-    `connection_config` for API_TOKEN / OAUTH servers, `user_oauth_token` for
-    PT_OAUTH servers.
-    """
-
-    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
-
-    connection_config: MCPConnectionConfig | None
-    user_oauth_token: str | None
-
-    def build_headers(self) -> dict[str, str]:
-        """Auth headers for a request to the server: the stored
-        connection-config headers, with PT_OAUTH's login token taking
-        precedence. Empty when no credentials are stored.
-
-        Denylisted headers (see DENYLISTED_MCP_HEADERS) are stripped so every
-        consumer gets the security filter automatically — stored credentials
-        must never source e.g. a Host header."""
-        stored = extract_connection_data(self.connection_config).get("headers", {})
-        headers = {
-            k: v for k, v in stored.items() if k.lower() not in DENYLISTED_MCP_HEADERS
-        }
-        if len(headers) != len(stored):
-            # Names only — header values are credentials.
-            logger.warning(
-                "Stored MCP credential headers contained denylisted headers "
-                "that were stripped: %s",
-                sorted(k for k in stored if k.lower() in DENYLISTED_MCP_HEADERS),
-            )
-        if self.user_oauth_token:
-            headers["Authorization"] = f"Bearer {self.user_oauth_token}"
-        return headers
-
-
-def resolve_mcp_credentials(
-    mcp_server: MCPServer,
-    user: User,
-    db_session: Session,
-    *,
-    user_configs: Mapping[int, MCPConnectionConfig] | None = None,
-) -> ResolvedMCPCredentials:
-    """Resolve which stored credentials authenticate `user` against `mcp_server`.
-
-    The single source of truth for the performer/auth-type branching, shared by
-    chat's MCPTool construction and Craft's sandbox-proxy credential injection:
-    - PT_OAUTH: the user's login OAuth token; no stored config row.
-    - API_TOKEN / OAUTH: the user's own `mcp_connection_config` row for
-      PER_USER servers, the admin config row otherwise.
-    - NONE: no credentials.
-
-    `user_configs` lets a caller resolving many servers pre-load the per-user
-    rows in one query (see `get_user_connection_configs`) instead of one per
-    server. It must cover every server the caller resolves — a miss reads as no
-    stored credential, not as unknown.
-
-    Raises MCPCredentialsError for PT_OAUTH with the anonymous user, who has no
-    login OAuth token.
-    """
-    if mcp_server.auth_type == MCPAuthenticationType.PT_OAUTH:
-        if user.is_anonymous:
-            raise MCPCredentialsError(
-                f"Anonymous user cannot use PT_OAUTH MCP server {mcp_server.id}"
-            )
-        return ResolvedMCPCredentials(
-            connection_config=None,
-            user_oauth_token=(
-                user.oauth_accounts[0].access_token if user.oauth_accounts else None
-            ),
-        )
-
-    if mcp_server.auth_type in (
-        MCPAuthenticationType.API_TOKEN,
-        MCPAuthenticationType.OAUTH,
-    ):
-        if mcp_server.auth_performer == MCPAuthenticationPerformer.PER_USER:
-            connection_config = (
-                user_configs.get(mcp_server.id)
-                if user_configs is not None
-                else get_user_connection_config(mcp_server.id, user.email, db_session)
-            )
-        else:
-            connection_config = mcp_server.admin_connection_config
-        return ResolvedMCPCredentials(
-            connection_config=connection_config, user_oauth_token=None
-        )
-
-    return ResolvedMCPCredentials(connection_config=None, user_oauth_token=None)
-
-
-def can_resolve_mcp_credentials(
-    mcp_server: MCPServer,
-    user: User,
-    db_session: Session,
-    *,
-    user_configs: Mapping[int, MCPConnectionConfig] | None = None,
-) -> bool:
-    """Whether the sandbox proxy will be able to authenticate `user` against
-    `mcp_server`, mirroring `MCPServerResolver._resolve_for_server`'s block
-    condition so callers can't drift from what injection does.
-
-    Not the same as the user having their own connection config: admin-managed,
-    `PT_OAUTH`, and no-auth servers all authenticate without one. See
-    `resolve_mcp_credentials` for `user_configs`.
-    """
-    if mcp_server.auth_type in (None, MCPAuthenticationType.NONE):
-        return True
-    try:
-        credentials = resolve_mcp_credentials(
-            mcp_server, user, db_session, user_configs=user_configs
-        )
-    except MCPCredentialsError:
-        return False
-    return bool(credentials.build_headers())
 
 
 def get_user_connection_configs(
@@ -591,14 +453,24 @@ def update_connection_config(
     config_data: MCPConnectionData | None = None,
 ) -> MCPConnectionConfig:
     """Update an existing connection config"""
+    config = update_connection_config__no_commit(config_id, db_session, config_data)
+    db_session.commit()
+    return config
+
+
+def update_connection_config__no_commit(
+    config_id: int,
+    db_session: Session,
+    config_data: MCPConnectionData | None = None,
+) -> MCPConnectionConfig:
+    """Update a connection config without owning the transaction."""
     config = get_connection_config_by_id(config_id, db_session)
 
     if config_data is not None:
         config.config = config_data  # ty: ignore[invalid-assignment]
-        # Force SQLAlchemy to detect the change by marking the field as modified
         flag_modified(config, "config")
 
-    db_session.commit()
+    db_session.flush()
     return config
 
 
@@ -622,20 +494,6 @@ def upsert_user_connection_config(
             user_email=user_email,
             db_session=db_session,
         )
-
-
-# TODO: do this in one db call
-def get_server_auth_template(
-    server_id: int, db_session: Session
-) -> MCPConnectionConfig | None:
-    """Get the authentication template for a server (from the admin connection config)"""
-    server = get_mcp_server_by_id(server_id, db_session)
-    if not server.admin_connection_config_id:
-        return None
-
-    if server.auth_performer == MCPAuthenticationPerformer.ADMIN:
-        return None  # admin server implies no template
-    return server.admin_connection_config
 
 
 def delete_connection_config(config_id: int, db_session: Session) -> None:
@@ -670,7 +528,10 @@ def delete_all_user_connection_configs_for_server_no_commit(
     """Delete all user connection configs for a specific MCP server"""
     db_session.execute(
         delete(MCPConnectionConfig).where(
-            MCPConnectionConfig.mcp_server_id == server_id
+            and_(
+                MCPConnectionConfig.mcp_server_id == server_id,
+                MCPConnectionConfig.user_email != "",
+            )
         )
     )
     db_session.flush()  # Don't commit yet, let caller decide when to commit

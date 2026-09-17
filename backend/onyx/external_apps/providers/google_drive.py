@@ -10,13 +10,15 @@ from onyx.external_apps.providers.actions import (
 )
 from onyx.external_apps.providers.base import OnyxManagedExtApp
 from onyx.external_apps.providers.google_base import GoogleOAuthProvider
+from shared_configs.configs import MULTI_TENANT
 
 
 # Google Drive API v3. Reads (GET) live under `/drive/v3/...`; content uploads
 # use the separate `/upload/drive/v3/...` host path, so both prefixes appear in
-# the upstream patterns and the catalog. The Google Docs API is a separate host
-# (`docs.googleapis.com/v1/documents/...`) authorized by the same `auth/drive`
-# scope. Reads default to ALWAYS; every mutation defaults to ASK so the egress
+# the upstream patterns and the catalog. The Google Docs, Sheets, and Slides
+# APIs live on their own hosts, covered by the single `auth/drive` scope
+# self-hosted and by per-API sensitive scopes on cloud (see `_CLOUD_SCOPE`).
+# Reads default to ALWAYS; every mutation defaults to ASK so the egress
 # approval gate prompts the user before it runs.
 class GoogleDriveAction(ExternalAppAction):
     """Strongly-typed catalog ids for the Google Drive provider."""
@@ -30,6 +32,12 @@ class GoogleDriveAction(ExternalAppAction):
     DOCS_READ = "gdrive.docs.read"
     DOCS_CREATE = "gdrive.docs.create"
     DOCS_UPDATE = "gdrive.docs.update"
+    SHEETS_READ = "gdrive.sheets.read"
+    SHEETS_CREATE = "gdrive.sheets.create"
+    SHEETS_UPDATE = "gdrive.sheets.update"
+    SLIDES_READ = "gdrive.slides.read"
+    SLIDES_CREATE = "gdrive.slides.create"
+    SLIDES_UPDATE = "gdrive.slides.update"
 
 
 _FILES = "/drive/v3/files"
@@ -38,6 +46,13 @@ _UPLOAD_FILES = "/upload/drive/v3/files"
 _UPLOAD_ITEM = f"{_UPLOAD_FILES}/{{fileId}}"
 _DOCS = "/v1/documents"
 _DOC_ITEM = f"{_DOCS}/{{documentId}}"
+# Google's `:verb` suffixes (`ID:batchUpdate`, `RANGE:append`) share a path
+# segment with the resource id, so a trailing `{name}` placeholder matches both.
+_SHEETS = "/v4/spreadsheets"
+_SHEET_ITEM = f"{_SHEETS}/{{spreadsheetId}}"
+_SHEET_VALUES = f"{_SHEET_ITEM}/values/{{range}}"
+_SLIDES = "/v1/presentations"
+_SLIDE_ITEM = f"{_SLIDES}/{{presentationId}}"
 _ENDPOINTS: list[EndpointSpec] = [
     EndpointSpec(
         id=GoogleDriveAction.FILES_READ,
@@ -71,6 +86,8 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="GET", path="/drive/v3/drives/{driveId}"),
         ),
         default_policy=EndpointPolicy.ALWAYS,
+        # drives.list needs a Drive-wide scope; `drive.file` can't reach it.
+        requires_self_hosted_scope=True,
     ),
     EndpointSpec(
         id=GoogleDriveAction.FILES_CREATE,
@@ -121,24 +138,100 @@ _ENDPOINTS: list[EndpointSpec] = [
         description="Apply edits to a Google Doc's contents via the Docs API.",
         matches=(RestRoute(method="POST", path=_DOC_ITEM),),
     ),
+    EndpointSpec(
+        id=GoogleDriveAction.SHEETS_READ,
+        normalised_name="Read a spreadsheet",
+        description=(
+            "Read a Google Sheet's structure and cell values via the Sheets API."
+        ),
+        matches=(
+            RestRoute(method="GET", path=_SHEET_ITEM),
+            RestRoute(method="GET", path=_SHEET_VALUES),
+        ),
+        default_policy=EndpointPolicy.ALWAYS,
+    ),
+    EndpointSpec(
+        id=GoogleDriveAction.SHEETS_CREATE,
+        normalised_name="Create a spreadsheet",
+        description="Create a new Google Sheet via the Sheets API.",
+        matches=(RestRoute(method="POST", path=_SHEETS),),
+    ),
+    EndpointSpec(
+        id=GoogleDriveAction.SHEETS_UPDATE,
+        normalised_name="Edit a spreadsheet",
+        description=(
+            "Write, append, or clear cell values and apply structural edits "
+            "to a Google Sheet via the Sheets API."
+        ),
+        matches=(
+            RestRoute(method="POST", path=_SHEET_ITEM),
+            RestRoute(method="PUT", path=_SHEET_VALUES),
+            RestRoute(method="POST", path=_SHEET_VALUES),
+        ),
+    ),
+    EndpointSpec(
+        id=GoogleDriveAction.SLIDES_READ,
+        normalised_name="Read a presentation",
+        description=(
+            "Read a Google Slides presentation's structure and text via the Slides API."
+        ),
+        matches=(
+            RestRoute(method="GET", path=_SLIDE_ITEM),
+            RestRoute(method="GET", path=f"{_SLIDE_ITEM}/pages/{{pageObjectId}}"),
+        ),
+        default_policy=EndpointPolicy.ALWAYS,
+    ),
+    EndpointSpec(
+        id=GoogleDriveAction.SLIDES_CREATE,
+        normalised_name="Create a presentation",
+        description="Create a new Google Slides presentation via the Slides API.",
+        matches=(RestRoute(method="POST", path=_SLIDES),),
+    ),
+    EndpointSpec(
+        id=GoogleDriveAction.SLIDES_UPDATE,
+        normalised_name="Edit a presentation",
+        description=(
+            "Apply edits (add slides, insert or replace text, restyle) to a "
+            "Google Slides presentation via the Slides API."
+        ),
+        matches=(RestRoute(method="POST", path=_SLIDE_ITEM),),
+    ),
 ]
+
+
+# Full drive scope: read, search, create, edit, and delete any of the user's
+# files. It also authorizes the Docs, Sheets, and Slides APIs. Mutations are
+# gated by per-action ASK approval.
+_SELF_HOSTED_SCOPE = "https://www.googleapis.com/auth/drive"
+# Every Drive-wide scope is restricted, so cloud pairs per-file access (files
+# Onyx created or the user opened with it) with the Docs, Sheets, and Slides
+# APIs, whose sensitive (not restricted) scopes each reach any file of their
+# type by id.
+_CLOUD_SCOPE = (
+    "https://www.googleapis.com/auth/drive.file "
+    "https://www.googleapis.com/auth/documents "
+    "https://www.googleapis.com/auth/spreadsheets "
+    "https://www.googleapis.com/auth/presentations"
+)
 
 
 class GoogleDriveProvider(GoogleOAuthProvider, OnyxManagedExtApp):
     spec = GoogleOAuthProvider.build_spec(
         app_type=ExternalAppType.GOOGLE_DRIVE,
         app_name="Google Drive",
-        # Full drive scope: read, search, create, edit, and delete any of the
-        # user's files. Mutations are gated by per-action ASK approval.
-        scope="https://www.googleapis.com/auth/drive",
+        scope=_CLOUD_SCOPE if MULTI_TENANT else _SELF_HOSTED_SCOPE,
         upstream_url_patterns=[
             "https://www\\.googleapis\\.com/drive/.*",
             # Content uploads use the separate /upload host path.
             "https://www\\.googleapis\\.com/upload/drive/.*",
-            # The Docs API lives on its own host.
+            # The Docs, Sheets, and Slides APIs each live on their own host.
             "https://docs\\.googleapis\\.com/.*",
+            "https://sheets\\.googleapis\\.com/.*",
+            "https://slides\\.googleapis\\.com/.*",
         ],
-        google_api_name="Google Drive API and Google Docs API",
+        google_api_name=(
+            "Google Drive, Google Docs, Google Sheets, and Google Slides APIs"
+        ),
         endpoint_catalog=_ENDPOINTS,
     )
 

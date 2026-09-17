@@ -1,11 +1,15 @@
+import type { ErrorResponseBody } from "@/lib/fetcher";
 import "server-only";
 
 import { buildUrl, UrlBuilder } from "@/lib/utilsSS";
 import { getDomain } from "@/lib/redirectSS";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { AuthTypeMetadata, type SSOProviderType } from "@/lib/auth/types";
-import { User, UserRole } from "@/lib/types";
+import { loginPath, ORIGINAL_PATH_HEADER } from "@/lib/auth/paths";
+import { User } from "@/lib/types";
+import { hasAnyAdminPermission } from "@/lib/permissions";
 import { getCurrentUserSS } from "@/lib/users/svcSS";
 
 export async function getAuthTypeMetadataSS(): Promise<AuthTypeMetadata> {
@@ -90,7 +94,7 @@ export async function authErrorRedirect(
 ): Promise<NextResponse> {
   const errorUrl = new URL("/auth/error", getDomain(request));
   try {
-    const body = await response.json();
+    const body: ErrorResponseBody = await response.json();
     const detail = body?.detail;
     if (typeof detail === "string" && detail) {
       errorUrl.searchParams.set("error", detail);
@@ -111,12 +115,6 @@ interface AuthCheckResult {
   redirect?: string;
 }
 
-const ADMIN_ALLOWED_ROLES = [
-  UserRole.ADMIN,
-  UserRole.CURATOR,
-  UserRole.GLOBAL_CURATOR,
-];
-
 export async function requireAuth(): Promise<AuthCheckResult> {
   let user: User | null = null;
   let authTypeMetadata: AuthTypeMetadata | null = null;
@@ -131,7 +129,12 @@ export async function requireAuth(): Promise<AuthCheckResult> {
   }
 
   if (!user) {
-    return { user, authTypeMetadata, redirect: "/auth/login" };
+    const originalPath = (await headers()).get(ORIGINAL_PATH_HEADER);
+    return {
+      user,
+      authTypeMetadata,
+      redirect: loginPath({ next: originalPath }),
+    };
   }
 
   if (user && !user.is_verified && authTypeMetadata?.requiresVerification) {
@@ -154,7 +157,9 @@ export async function requireAdminAuth(): Promise<AuthCheckResult> {
 
   const { user, authTypeMetadata } = authResult;
 
-  if (user && !ADMIN_ALLOWED_ROLES.includes(user.role)) {
+  // Reaching the admin panel means holding some permission an admin route requires —
+  // a scoped group manager may be a plain BASIC user, so a role check would bounce them.
+  if (user && !hasAnyAdminPermission(user.admin_capabilities ?? [])) {
     return { user, authTypeMetadata, redirect: "/app" };
   }
 

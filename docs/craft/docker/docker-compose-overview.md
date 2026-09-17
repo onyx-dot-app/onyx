@@ -24,7 +24,7 @@ cp "$WT"/deployment/data/nginx/app.conf.template               ~/onyx_data/data/
 cp "$WT"/deployment/data/nginx/run-nginx.sh                    ~/onyx_data/data/nginx/
 
 # 2. Run installer in --local mode with craft.
-bash "$WT"/deployment/docker_compose/install.sh --local --include-craft
+bash "$WT"/deployment/docker_compose/install.sh --local --include-craft --dir ~/onyx_data
 
 # 3. Fix the .env (existing-env install path skips these; see "Required env vars" below).
 cat >> ~/onyx_data/deployment/.env <<'ENV'
@@ -101,13 +101,14 @@ cp "$WT"/deployment/data/nginx/run-nginx.sh                    ~/onyx_data/data/
 ### 2. Run the installer
 
 ```bash
-bash "$WT"/deployment/docker_compose/install.sh --local --include-craft
+bash "$WT"/deployment/docker_compose/install.sh --local --include-craft --dir ~/onyx_data
 ```
 
 `--local` skips downloads and uses the pre-staged files. `--include-craft`
-opts into the Docker sandbox backend.
+opts into the Docker sandbox backend. `--dir` points at the staged directory —
+without it the installer defaults to `~/.config/onyx`.
 
-The installer is **interactive** — it reads prompts directly from `/dev/tty`,
+The installer is **interactive** — it prompts only when stdin is a terminal,
 so piping `2\n\n` as stdin does not work. Either run it from a terminal or
 adapt the prompts (Standard mode = `2`, keep existing env = blank).
 
@@ -591,9 +592,9 @@ Next Craft prompt re-provisions with the current code's env injection.
 cd ~/onyx_data/deployment
 docker compose -f docker-compose.yml -f docker-compose.craft.yml down
 
-# Or use the installer:
-bash /path/to/install.sh --shutdown   # stop containers, keep volumes
-bash /path/to/install.sh --delete-data # stop AND wipe all data
+# Or use the CLI the installer hands over to:
+onyx-cli deploy stop      # stop containers, keep volumes
+onyx-cli deploy uninstall # stop AND wipe all data
 
 # Kill orphan sandbox containers:
 docker ps --filter "name=sandbox-" -q | xargs -r docker rm -f

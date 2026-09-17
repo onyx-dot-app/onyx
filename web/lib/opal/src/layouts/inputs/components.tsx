@@ -100,7 +100,7 @@ function Vertical({
       sizePreset="main-ui"
       variant="section"
       width="full"
-      padding="fit"
+      padding={0}
       rightChildren={
         <Text font="secondary-body" color="text-03" as="p">
           {topRight}
@@ -120,7 +120,7 @@ function Vertical({
   );
 
   const content = (
-    <Section ref={ref} gap={0.25} alignItems="start">
+    <Section ref={ref} gap={1} alignItems="start">
       {titleRow}
       {children}
       {fieldName && <FormikInputError name={fieldName} />}
@@ -182,7 +182,7 @@ function Horizontal({
     typeof withLabelProp === "string" ? withLabelProp : undefined;
 
   const content = (
-    <Section ref={ref} gap={0.25} alignItems="start">
+    <Section ref={ref} gap={1} alignItems="start">
       <ContentAction
         icon={icon}
         title={title}
@@ -192,7 +192,7 @@ function Horizontal({
         sizePreset="main-ui"
         variant="section"
         width="full"
-        padding="fit"
+        padding={0}
         center={center}
         responsive={responsive}
         fillRight={fillInput}
@@ -285,7 +285,7 @@ function InputErrorText({
 // ---------------------------------------------------------------------------
 
 function InputDivider() {
-  return <Divider paddingParallel="sm" paddingPerpendicular="sm" />;
+  return <Divider paddingParallel={2} paddingPerpendicular={2} />;
 }
 
 // ---------------------------------------------------------------------------

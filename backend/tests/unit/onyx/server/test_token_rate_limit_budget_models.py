@@ -1,15 +1,20 @@
 import datetime
+from unittest.mock import Mock
 
 import pytest
 from pydantic import ValidationError
 
 from onyx.configs.constants import TokenRateLimitScope
 from onyx.db.models import TokenRateLimit
+from onyx.db.token_limit import update_token_rate_limit
 from onyx.db.user_usage import TokenUsageBucket
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.query_and_chat.token_limit import _token_budget_reset
 from onyx.server.token_rate_limits.models import (
+    MAX_TOKEN_BUDGET_THOUSANDS,
     TokenRateLimitArgs,
     TokenRateLimitDisplay,
+    TokenRateLimitUpdateArgs,
 )
 
 
@@ -61,6 +66,66 @@ def test_token_rate_limit_args_requires_a_budget() -> None:
 def test_token_rate_limit_args_requires_whole_utc_days() -> None:
     with pytest.raises(ValidationError, match="whole UTC days"):
         TokenRateLimitArgs(enabled=True, token_budget=1, period_hours=25)
+
+
+def test_token_rate_limit_args_rejects_budgets_above_one_trillion() -> None:
+    with pytest.raises(ValidationError):
+        TokenRateLimitArgs(
+            enabled=True,
+            token_budget=MAX_TOKEN_BUDGET_THOUSANDS + 1,
+            period_hours=24,
+        )
+
+
+def test_token_rate_limit_update_args_accepts_legacy_budget() -> None:
+    args = TokenRateLimitUpdateArgs(
+        enabled=False,
+        token_budget=MAX_TOKEN_BUDGET_THOUSANDS + 1,
+        period_hours=24,
+    )
+
+    assert args.token_budget == MAX_TOKEN_BUDGET_THOUSANDS + 1
+
+
+def test_legacy_budget_can_be_toggled_without_increasing_it() -> None:
+    legacy_budget = MAX_TOKEN_BUDGET_THOUSANDS + 1
+    limit = _rate_limit(legacy_budget)
+    limit.id = 7
+    session = Mock()
+    session.get.return_value = limit
+
+    updated = update_token_rate_limit(
+        session,
+        7,
+        TokenRateLimitUpdateArgs(
+            enabled=False,
+            token_budget=legacy_budget,
+            period_hours=24,
+        ),
+    )
+
+    assert updated.enabled is False
+    session.commit.assert_called_once()
+
+
+def test_existing_limit_cannot_be_raised_above_one_trillion() -> None:
+    limit = _rate_limit(MAX_TOKEN_BUDGET_THOUSANDS)
+    limit.id = 7
+    session = Mock()
+    session.get.return_value = limit
+
+    with pytest.raises(OnyxError):
+        update_token_rate_limit(
+            session,
+            7,
+            TokenRateLimitUpdateArgs(
+                enabled=True,
+                token_budget=MAX_TOKEN_BUDGET_THOUSANDS + 1,
+                period_hours=24,
+            ),
+        )
+
+    session.commit.assert_not_called()
 
 
 def test_token_rate_limit_uses_current_utc_day() -> None:

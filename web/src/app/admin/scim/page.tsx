@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 
 import { SvgUserSync } from "@opal/icons";
 import { useScimToken } from "@/hooks/useScimToken";
@@ -8,6 +9,7 @@ import { useCreateModal } from "@opal/components";
 import { SettingsLayouts, toast } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import { PageLoader } from "@opal/layouts";
+import type { ErrorResponseBody } from "@/lib/fetcher";
 
 import type { ScimTokenCreatedResponse, ScimModalView } from "./interfaces";
 import { generateScimToken } from "./svc";
@@ -19,6 +21,7 @@ import ScimModal from "./ScimModal";
 // ---------------------------------------------------------------------------
 
 function ScimContent() {
+  const t = useTranslations("admin.scim");
   const { data: token, error: tokenError, isLoading, mutate } = useScimToken();
 
   const modal = useCreateModal();
@@ -36,7 +39,7 @@ function ScimContent() {
   if (tokenError) {
     return (
       <Text as="p" text03>
-        Failed to load SCIM token status.
+        {t("loadFailed.error")}
       </Text>
     );
   }
@@ -62,20 +65,20 @@ function ScimContent() {
       if (!response.ok) {
         let detail: string;
         try {
-          const body = await response.clone().json();
+          const body: ErrorResponseBody = await response.clone().json();
           detail = body.detail ?? JSON.stringify(body);
         } catch {
           detail = await response.text();
         }
-        toast.error(`Failed to generate token: ${detail}`);
+        toast.error(t("toasts.generateFailed", { detail }));
         return;
       }
       const created: ScimTokenCreatedResponse = await response.json();
       await mutate();
       openModal({ kind: "token", rawToken: created.raw_token });
-      if (hasToken) toast.success("Token regenerated");
+      if (hasToken) toast.success(t("toasts.regenerated"));
     } catch {
-      toast.error("Something went wrong. Please try again.");
+      toast.error(t("toasts.genericError"));
     } finally {
       setIsSubmitting(false);
     }
@@ -116,12 +119,14 @@ function ScimContent() {
 // ---------------------------------------------------------------------------
 
 export default function Page() {
+  const t = useTranslations("admin.scim");
+
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgUserSync}
-        title="SCIM"
-        description="Sync users and groups via System for Cross-domain Identity Management (SCIM) protocol."
+        title={t("header.title")}
+        description={t("header.description")}
         divider
       />
       <SettingsLayouts.Body>

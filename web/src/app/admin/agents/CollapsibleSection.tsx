@@ -1,6 +1,8 @@
 "use client";
 import React, { ReactNode, useState } from "react";
 import { FiSettings } from "react-icons/fi";
+import { useTranslations } from "next-intl";
+import { clickOnKeyDown } from "@opal/utils";
 
 interface CollapsibleSectionProps {
   children: ReactNode;
@@ -13,6 +15,7 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
   prompt,
   className = "",
 }) => {
+  const t = useTranslations("admin.agents");
   const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
 
   const toggleCollapse = (e?: React.MouseEvent<HTMLDivElement>) => {
@@ -32,15 +35,24 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
       style={{ transition: "height 0.3s ease-out" }}
     >
       <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={!isCollapsed}
+        aria-label={
+          isCollapsed
+            ? t("collapsibleSection.expand.ariaLabel")
+            : t("collapsibleSection.collapse.ariaLabel")
+        }
+        onKeyDown={clickOnKeyDown(toggleCollapse)}
         className={`
           cursor-pointer
-          ${isCollapsed ? "h-6" : "pl-6 border-l-2  border-border"}
+          ${isCollapsed ? "h-6" : "ps-6 border-s-2  border-border"}
         `}
         onClick={toggleCollapse}
       >
         {" "}
         {isCollapsed ? (
-          <span className="collapse-toggle text-lg absolute left-0 top-0 text-sm flex items-center gap-x-3 cursor-pointer">
+          <span className="collapse-toggle text-lg absolute start-0 top-0 text-sm flex items-center gap-x-3 cursor-pointer">
             <FiSettings className="pointer-events-none my-auto" size={16} />
             {prompt}{" "}
           </span>

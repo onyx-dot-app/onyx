@@ -1,22 +1,35 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import cast, select, update
+from sqlalchemy import JSON, cast, select, update
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 from sqlalchemy.sql.elements import ColumnElement
 
-from onyx.auth.schemas import UserRole
+from onyx.auth.permissions import has_global_permission
 from onyx.configs.constants import NotificationType
+from onyx.db.enums import NotificationSeverity, Permission
 from onyx.db.models import Notification, User
+
+
+def _notification_additional_data_key() -> ColumnElement[dict]:
+    """Normalize legacy JSON null and SQL NULL values to the empty-object key."""
+    return func.coalesce(
+        func.nullif(
+            Notification.additional_data,
+            cast(JSON.NULL, postgresql.JSONB),
+        ),
+        cast({}, postgresql.JSONB),
+    )
 
 
 def _notification_filters(
     user: User | None,
     notif_type: NotificationType | None = None,
     include_dismissed: bool = True,
+    min_severity: NotificationSeverity | None = None,
 ) -> list[ColumnElement[bool]]:
     filters = [
         Notification.user_id == user.id if user else Notification.user_id.is_(None)
@@ -25,6 +38,11 @@ def _notification_filters(
         filters.append(Notification.dismissed.is_(False))
     if notif_type:
         filters.append(Notification.notif_type == notif_type)
+    if min_severity is not None:
+        ordered = list(NotificationSeverity)
+        filters.append(
+            Notification.severity.in_(ordered[ordered.index(min_severity) :])
+        )
     return filters
 
 
@@ -37,47 +55,57 @@ def create_notification(
     additional_data: dict | None = None,
     autocommit: bool = True,
     refresh_existing: bool = True,
+    severity: NotificationSeverity = NotificationSeverity.INFO,
 ) -> Notification:
-    # Previously, we only matched the first identical, undismissed notification
-    # Now, we assume some uniqueness to notifications
-    # If we previously issued a notification that was dismissed, we no longer issue a new one
+    """Create or return a notification without racing concurrent user inserts."""
 
-    # Normalize additional_data to match the unique index behavior
-    # The index uses COALESCE(additional_data, '{}'::jsonb)
-    # We need to match this logic in our query
     additional_data_normalized = additional_data if additional_data is not None else {}
 
-    existing_notification = (
+    existing_notification_query = (
         db_session.query(Notification)
         .filter_by(user_id=user_id, notif_type=notif_type)
-        .filter(
-            func.coalesce(Notification.additional_data, cast({}, postgresql.JSONB))
-            == additional_data_normalized
-        )
-        .first()
+        .filter(_notification_additional_data_key() == additional_data_normalized)
     )
 
-    if existing_notification:
-        # Read-triggered ensure paths should not mutate existing rows: changing
-        # last_shown makes notification GET responses differ on every request.
-        if refresh_existing and not existing_notification.dismissed:
-            existing_notification.last_shown = func.now()
+    def return_existing(notification: Notification) -> Notification:
+        # Read-triggered ensure callers opt out so repeated GETs do not change
+        # last_shown and produce different responses.
+        if refresh_existing and not notification.dismissed:
+            notification.last_shown = func.now()
             if autocommit:
                 db_session.commit()
-        return existing_notification
+        return notification
 
-    # Create a new notification if none exists
-    notification = Notification(
-        user_id=user_id,
-        notif_type=notif_type,
-        title=title,
-        description=description,
-        dismissed=False,
-        last_shown=func.now(),
-        first_shown=func.now(),
-        additional_data=additional_data,
+    # Avoid an insert attempt (and sequence consumption) on the common
+    # idempotent path. The conflict-safe insert below still arbitrates races.
+    existing_notification = existing_notification_query.first()
+    if existing_notification is not None:
+        return return_existing(existing_notification)
+
+    stmt = (
+        insert(Notification)
+        .values(
+            user_id=user_id,
+            notif_type=notif_type,
+            severity=severity,
+            title=title,
+            description=description,
+            dismissed=False,
+            last_shown=func.now(),
+            first_shown=func.now(),
+            additional_data=additional_data_normalized,
+        )
+        .on_conflict_do_nothing()
+        .returning(Notification)
     )
-    db_session.add(notification)
+    notification = db_session.scalars(stmt).one_or_none()
+
+    if notification is None:
+        existing_notification = existing_notification_query.first()
+        if existing_notification is None:
+            raise RuntimeError("Notification insert conflicted but no row was found")
+        return return_existing(existing_notification)
+
     if autocommit:
         db_session.commit()
     return notification
@@ -95,8 +123,7 @@ def delete_notifications_by_additional_data(
     additional_data_normalized = additional_data if additional_data is not None else {}
     db_session.query(Notification).filter(
         Notification.notif_type == notif_type,
-        func.coalesce(Notification.additional_data, cast({}, postgresql.JSONB))
-        == additional_data_normalized,
+        _notification_additional_data_key() == additional_data_normalized,
     ).delete(synchronize_session=False)
 
 
@@ -121,7 +148,9 @@ def get_notification_by_id(
     if not notif:
         raise ValueError(f"No notification found with id {notification_id}")
     if notif.user_id != user_id and not (
-        notif.user_id is None and user is not None and user.role == UserRole.ADMIN
+        notif.user_id is None
+        and user is not None
+        and has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS)
     ):
         raise PermissionError(
             f"User {user_id} is not authorized to access notification {notification_id}"
@@ -136,12 +165,14 @@ def get_notifications(
     include_dismissed: bool = True,
     limit: int | None = None,
     offset: int = 0,
+    min_severity: NotificationSeverity | None = None,
 ) -> list[Notification]:
     query = select(Notification).where(
         *_notification_filters(
             user=user,
             notif_type=notif_type,
             include_dismissed=include_dismissed,
+            min_severity=min_severity,
         )
     )
     # Sort: undismissed first, then by date (newest first)
@@ -159,6 +190,7 @@ def count_notifications(
     user: User | None,
     db_session: Session,
     notif_type: NotificationType | None = None,
+    min_severity: NotificationSeverity | None = None,
 ) -> tuple[int, int]:
     query = select(
         func.count(Notification.id),
@@ -167,6 +199,7 @@ def count_notifications(
         *_notification_filters(
             user=user,
             notif_type=notif_type,
+            min_severity=min_severity,
         )
     )
     total_items, undismissed_count = db_session.execute(query).one()
@@ -225,6 +258,7 @@ def batch_create_notifications(
     title: str,
     description: str | None = None,
     additional_data: dict | None = None,
+    severity: NotificationSeverity = NotificationSeverity.INFO,
 ) -> set[UUID]:
     """
     Create notifications for multiple users in a single batch operation.
@@ -235,6 +269,10 @@ def batch_create_notifications(
     Returns the set of user_ids whose row was newly inserted (excludes conflicts).
     Callers that need to fire side effects only on fresh inserts (emails, webhooks)
     can iterate the returned set without re-triggering on idempotent retries.
+
+    Severity is set only on fresh inserts: a conflicting row keeps its original
+    severity. Producers that need an escalation to re-alert must vary
+    additional_data (as the license flow does with its stage field).
 
     Relies on unique index on (user_id, notif_type, COALESCE(additional_data, '{}'))
     """
@@ -248,6 +286,7 @@ def batch_create_notifications(
         {
             "user_id": uid,
             "notif_type": notif_type,
+            "severity": severity,
             "title": title,
             "description": description,
             "dismissed": False,

@@ -31,8 +31,10 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/charlievieth/fastwalk"
 	cpb "github.com/google/osv-scalibr/binary/proto/config_go_proto"
 	"github.com/google/osv-scalibr/extractor/filesystem"
 	"github.com/google/osv-scalibr/extractor/filesystem/misc/githubactions"
@@ -60,9 +62,10 @@ type actionRef struct {
 }
 
 // scanActions discovers the actions used across the repo's workflows and
-// composite actions and matches them against OSV.dev advisories. Returns nil when
-// nothing is referenced or no advisories affect any used action.
-func scanActions() ([]Finding, error) {
+// composite actions and matches them against the advisories served at queryURL
+// (OSV.dev in production). Returns nil when nothing is referenced or no
+// advisories affect any used action.
+func scanActions(queryURL string) ([]Finding, error) {
 	root, err := paths.GitRoot()
 	if err != nil {
 		return nil, err
@@ -83,7 +86,7 @@ func scanActions() ([]Finding, error) {
 	names := uniqueActionNames(refs)
 	failed := 0
 	for _, name := range names {
-		vulns, err := queryActionAdvisories(client, name)
+		vulns, err := queryActionAdvisories(client, queryURL, name)
 		if err != nil {
 			// A single flaky query shouldn't sink the whole audit; the lockfile
 			// scan is the primary gate. Warn and treat the action as clean.
@@ -197,7 +200,9 @@ func extractCompositeActions(ext filesystem.Extractor, root string) ([]actionRef
 	}
 
 	var refs []actionRef
-	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+	// fastwalk runs the callback on several goroutines, so guard the slice.
+	var mu sync.Mutex
+	err := fastwalk.Walk(nil, dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -234,12 +239,22 @@ func extractCompositeActions(ext filesystem.Extractor, root string) ([]actionRef
 			log.Warnf("Skipping composite action %s: %v", manifest, err)
 			return nil
 		}
+		mu.Lock()
 		refs = append(refs, rs...)
+		mu.Unlock()
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
+	// Walk order is non-deterministic; sort so dedupeRefs always keeps the same
+	// manifest for an action used by more than one composite.
+	sort.Slice(refs, func(i, j int) bool {
+		if refs[i].Manifest != refs[j].Manifest {
+			return refs[i].Manifest < refs[j].Manifest
+		}
+		return refs[i].Name+"@"+refs[i].Ref < refs[j].Name+"@"+refs[j].Ref
+	})
 	return refs, nil
 }
 
@@ -369,14 +384,14 @@ type osvRange struct {
 // queryActionAdvisories asks OSV.dev for advisories affecting an action, querying
 // by name only. GitHub Actions advisories use ECOSYSTEM ranges OSV cannot match
 // against a supplied version, so we fetch all of them and evaluate ranges locally.
-func queryActionAdvisories(client *http.Client, name string) ([]osvVuln, error) {
+func queryActionAdvisories(client *http.Client, queryURL, name string) ([]osvVuln, error) {
 	payload, err := json.Marshal(map[string]any{
 		"package": osvPackage{Ecosystem: actionsEcosystem, Name: name},
 	})
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequest(http.MethodPost, osvQueryURL, bytes.NewReader(payload))
+	req, err := http.NewRequest(http.MethodPost, queryURL, bytes.NewReader(payload))
 	if err != nil {
 		return nil, err
 	}

@@ -24,7 +24,8 @@ from onyx.configs.onyxbot_configs import (
     ONYX_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD,
     ONYX_BOT_RESPONSE_LIMIT_TIME_PERIOD_SECONDS,
 )
-from onyx.connectors.slack.utils import SlackTextCleaner
+from onyx.connectors.slack.source_operations import SlackUserInfoResponse
+from onyx.connectors.slack.utils import FetchUserInfo, SlackTextCleaner
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.users import get_user_by_email
 from onyx.onyxbot.slack.constants import FeedbackVisibility
@@ -42,6 +43,16 @@ slack_token_lock = threading.Lock()
 
 _ONYX_BOT_MESSAGE_COUNT: int = 0
 _ONYX_BOT_COUNT_START_TIME: float = time.time()
+
+
+def bot_user_info_fetcher(client: WebClient) -> FetchUserInfo:
+    """
+    Adapts a bot WebClient to the ``FetchUserInfo`` contract of the shared slack
+    helpers (the connector satisfies it via its gateway operation).
+    """
+    return lambda user_id: SlackUserInfoResponse.model_validate(
+        client.users_info(user=user_id).data
+    )
 
 
 def get_onyx_bot_auth_ids(
@@ -380,7 +391,7 @@ def decompose_action_id(feedback_id: str) -> tuple[int, str | None, int | None]:
         raise ValueError("Received invalid Feedback Identifier")
 
 
-def get_view_values(state_values: dict[str, Any]) -> dict[str, str]:
+def get_view_values(state_values: dict[str, Any]) -> dict[str, Any]:
     """Extract view values
 
     Args:
@@ -390,7 +401,7 @@ def get_view_values(state_values: dict[str, Any]) -> dict[str, str]:
         dict: keys/values of the view state content
     """
     view_values = {}
-    for _, view_data in state_values.items():
+    for view_data in state_values.values():
         for k, v in view_data.items():
             if (
                 "selected_option" in v
@@ -638,7 +649,8 @@ def slack_usage_report(action: str, sender_id: str | None, client: WebClient) ->
     sender_email = None
     try:
         resp = client.users_info(user=sender_id)  # ty: ignore[invalid-argument-type]
-        sender_email = resp.data["user"]["profile"]["email"]  # type: ignore
+        data = cast(dict[str, Any], resp.data)
+        sender_email = data["user"]["profile"]["email"]
     except Exception:
         logger.warning("Unable to find sender email")
 

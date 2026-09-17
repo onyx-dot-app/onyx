@@ -1,0 +1,88 @@
+# =============================================================================
+# ONYX LITE — MINIMAL DEPLOYMENT OVERLAY
+# =============================================================================
+# Overlay to run Onyx in a minimal configuration: no vector database, no Redis,
+# no model servers, and no background workers. Only PostgreSQL is required. In
+# this mode, connectors and RAG search are disabled, but the core chat
+# experience (LLM conversations, tools, user file uploads, Projects, Agent
+# knowledge, code interpreter) still works.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml up -d
+#
+# With dev ports:
+#   docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml \
+#                  -f docker-compose.dev.yml up -d --wait
+#
+# This overlay:
+#   - Moves both model servers, OpenSearch, MinIO, Redis (cache), and the
+#     background worker to profiles so they do not start by default
+#   - Makes depends_on references to removed services optional
+#   - Sets DISABLE_VECTOR_DB=true on the api_server
+#   - Uses PostgreSQL for caching and auth instead of Redis
+#   - Uses PostgreSQL for file storage instead of S3/MinIO
+#
+# To selectively bring services back:
+#   --profile vectordb          Indexing model server
+#   --profile inference         Inference model server
+#   --profile background        Background worker (Celery) — also needs redis
+#   --profile redis             Redis cache
+#   --profile opensearch        OpenSearch
+#   --profile s3-filestore      MinIO (S3-compatible file store)
+# =============================================================================
+
+name: onyx
+
+services:
+  api_server:
+    depends_on:
+      opensearch:
+        condition: service_started
+        required: false
+      cache:
+        condition: service_started
+        required: false
+      inference_model_server:
+        condition: service_started
+        required: false
+      minio:
+        condition: service_started
+        required: false
+    environment:
+      - DISABLE_VECTOR_DB=true
+      - FILE_STORE_BACKEND=postgres
+      - CACHE_BACKEND=postgres
+      - AUTH_BACKEND=postgres
+
+  # Move the background worker to a profile so it does not start by default.
+  # The API server handles all background work in lite mode.
+  background:
+    profiles: ["background"]
+    depends_on:
+      inference_model_server:
+        condition: service_started
+        required: false
+      indexing_model_server:
+        condition: service_started
+        required: false
+
+  # Move Redis to a profile so it does not start by default.
+  # The Postgres cache backend replaces Redis in lite mode.
+  cache:
+    profiles: ["redis"]
+
+  # Move indexing model server to a profile so it does not start.
+  indexing_model_server:
+    profiles: ["vectordb"]
+
+  # Inference model server is only needed for local embeddings, not for LLM chat.
+  inference_model_server:
+    profiles: ["inference"]
+
+  # OpenSearch is not needed in lite mode (no indexing).
+  opensearch:
+    profiles: ["opensearch"]
+
+  # MinIO is not needed in lite mode (Postgres handles file storage).
+  minio:
+    profiles: ["s3-filestore"]

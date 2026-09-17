@@ -4,7 +4,7 @@ import uuid
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from io import BytesIO
-from typing import Any, Dict, List, Tuple, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Tuple, TypedDict, cast
 from unittest.mock import patch
 
 import pytest
@@ -17,6 +17,9 @@ from onyx.file_store.file_store import S3BackedFileStore
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+
+if TYPE_CHECKING:
+    from mypy_boto3_s3.type_defs import ObjectIdentifierTypeDef
 
 logger = setup_logger()
 
@@ -140,7 +143,9 @@ def file_store(
         )
 
         if "Contents" in response:
-            objects_to_delete = [{"Key": obj["Key"]} for obj in response["Contents"]]
+            objects_to_delete: list["ObjectIdentifierTypeDef"] = [
+                {"Key": obj["Key"]} for obj in response["Contents"]
+            ]
             s3_client.delete_objects(
                 Bucket=actual_bucket_name,
                 Delete={"Objects": objects_to_delete},

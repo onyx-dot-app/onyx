@@ -1,6 +1,7 @@
-import { SvgAzure, SvgElevenLabs, SvgOpenai } from "@opal/logos";
+import { SvgAzure, SvgElevenLabs, SvgOpenai, SvgZoom } from "@opal/logos";
 import { SvgMicrophone } from "@opal/icons";
 import type { IconProps } from "@opal/types";
+import type { JsonValue } from "@/lib/json";
 
 /** Whether the provider is being configured for speech-to-text or text-to-speech. */
 export type ProviderMode = "stt" | "tts";
@@ -38,6 +39,59 @@ export interface VoiceProviderDetail {
   sttModels?: Array<{ id: string; name: string }>;
   /** Selectable TTS models for this provider. Omit if the provider has no TTS model choice. */
   ttsModels?: Array<{ id: string; name: string }>;
+  /** Set if the provider supports configurable STT languages; renders the Spoken Languages field. */
+  sttLanguages?: { docsUrl: string };
+  /** Set if the provider requires a second stored credential in addition to the API key. */
+  requiresApiSecret?: boolean;
+  /** Single-select STT language options for providers with one active locale. */
+  sttLanguageOptions?: Array<{ id: string; name: string }>;
+}
+
+/** Locale shape for STT languages; mirrors AZURE_LOCALE_PATTERN in backend/onyx/voice/providers/azure.py. */
+export const STT_LOCALE_PATTERN = /^[A-Za-z]{2,3}(-[A-Za-z]{2,8}){1,2}$/;
+
+/** Azure's candidate caps for STT language auto-detect: continuous LID (cloud) vs at-start (self-hosted). */
+export const MAX_STT_LANGUAGES = 10;
+export const MAX_AT_START_STT_LANGUAGES = 4;
+
+const AZURE_CLOUD_HOST_SUFFIXES = [
+  ".speech.microsoft.com",
+  ".api.cognitive.microsoft.com",
+  ".cognitiveservices.azure.com",
+];
+
+/** Mirrors _is_azure_cloud_url in backend/onyx/voice/providers/azure.py. */
+function isAzureCloudUrl(uri: string): boolean {
+  try {
+    const hostname = new URL(uri).hostname.toLowerCase();
+    return AZURE_CLOUD_HOST_SUFFIXES.some((suffix) =>
+      hostname.endsWith(suffix)
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Language cap for the endpoint the admin entered: self-hosted endpoints use at-start detection. */
+export function maxSttLanguagesForTargetUri(targetUri: string): number {
+  return !targetUri || isAzureCloudUrl(targetUri)
+    ? MAX_STT_LANGUAGES
+    : MAX_AT_START_STT_LANGUAGES;
+}
+
+/** Splits comma-separated locale input into trimmed entries. */
+export function parseSttLanguages(value: string): string[] {
+  return value
+    .split(",")
+    .map((lang) => lang.trim())
+    .filter(Boolean);
+}
+
+/** Renders stored stt_languages config as the form's comma-separated input value. */
+export function sttLanguagesToInput(raw: JsonValue | undefined): string {
+  return Array.isArray(raw)
+    ? raw.filter((v): v is string => typeof v === "string").join(", ")
+    : "";
 }
 
 const DEFAULT_VOICE_PROVIDER_DETAIL: VoiceProviderDetail = {
@@ -72,6 +126,31 @@ export const VOICE_PROVIDER_DETAILS: Record<string, VoiceProviderDetail> = {
       url: "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts",
       label: "Azure",
     },
+    sttLanguages: {
+      docsUrl:
+        "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=stt",
+    },
+  },
+  zoom: {
+    label: "Zoom Scribe",
+    icon: SvgZoom,
+    apiKeyUrl: "https://developers.zoom.us/docs/ai-services/build-platform/",
+    docsUrl: "https://developers.zoom.us/docs/ai-services/scribe/",
+    sttModels: [{ id: "scribe-live", name: "Scribe Live" }],
+    requiresApiSecret: true,
+    sttLanguageOptions: [
+      { id: "en-US", name: "en-US" },
+      { id: "zh-CN", name: "zh-CN" },
+      { id: "ja-JP", name: "ja-JP" },
+      { id: "es-ES", name: "es-ES" },
+      { id: "it-IT", name: "it-IT" },
+      { id: "fr-FR", name: "fr-FR" },
+      { id: "de-DE", name: "de-DE" },
+      { id: "ar-SA", name: "ar-SA" },
+      { id: "ar-AE", name: "ar-AE" },
+      { id: "pt-BR", name: "pt-BR" },
+      { id: "pt-PT", name: "pt-PT" },
+    ],
   },
   elevenlabs: {
     label: "ElevenLabs",

@@ -5,6 +5,7 @@ import type { WithoutStyles } from "@opal/types";
 import { Button } from "@opal/components";
 import { SvgChevronDown, SvgChevronUp, SvgHandle, SvgSort } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
+import { useOpalStrings } from "@opal/strings";
 
 export type SortDirection = "none" | "ascending" | "descending";
 
@@ -59,9 +60,9 @@ function defaultSortIcon(sorted: SortDirection): IconFunctionComponent {
 }
 
 const alignmentThClass = {
-  left: "text-left",
+  left: "text-start",
   center: "text-center",
-  right: "text-right",
+  right: "text-end",
 } as const;
 
 export default function TableHead({
@@ -78,6 +79,7 @@ export default function TableHead({
 }: TableHeadProps) {
   const resolvedSize = useTableSize();
   const isSmall = resolvedSize === "md";
+  const strings = useOpalStrings();
   return (
     <th
       {...thProps}
@@ -87,7 +89,13 @@ export default function TableHead({
       data-size={resolvedSize}
       data-bottom-border={bottomBorder || undefined}
     >
-      <div className="flex items-center gap-1">
+      <div
+        className={cn(
+          "flex items-center gap-1",
+          alignment === "right" && "justify-end",
+          alignment === "center" && "justify-center"
+        )}
+      >
         <div className="table-head-label">
           <Text
             font={isSmall ? "secondary-action" : "main-ui-action"}
@@ -100,14 +108,14 @@ export default function TableHead({
         <div
           className={cn(
             "table-head-sort",
-            "opacity-0 group-hover:opacity-100 transition-opacity"
+            "opacity-0 group-hover:opacity-100 no-hover:opacity-100 transition-opacity"
           )}
         >
           {onSort && (
             <Button
               icon={iconFn(sorted ?? "none")}
               onClick={onSort}
-              tooltip="Sort"
+              tooltip={strings.sort}
               tooltipSide="top"
               prominence="internal"
               size="sm"
@@ -117,12 +125,13 @@ export default function TableHead({
       </div>
       {resizable && (
         <div
+          role="presentation"
           onMouseDown={onResizeStart}
           onTouchStart={onResizeStart}
           className={cn(
-            "absolute right-0 top-0 flex h-full items-center",
+            "absolute end-0 top-0 flex h-full items-center",
             "text-border-02",
-            "opacity-0 group-hover:opacity-100",
+            "opacity-0 group-hover:opacity-100 no-hover:opacity-100",
             "cursor-col-resize",
             "select-none touch-none"
           )}

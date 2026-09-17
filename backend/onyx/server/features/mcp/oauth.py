@@ -3,48 +3,66 @@
 Used by chat tool calls (`MCPTool.run`), the admin/user MCP API routes, and the
 Craft sandbox proxy's token refresh — anything that authenticates against an
 MCP server with the credentials persisted on `mcp_connection_config` rows.
-Routes and route-only flow helpers stay in `api.py`.
+Route orchestration lives in `oauth_flow.py`.
 """
 
-import asyncio
 import json
 import time
 from collections.abc import Awaitable, Callable
 from typing import Any, TypedDict
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlencode, urljoin, urlparse
 from uuid import uuid4
 
 import httpx
-from mcp.client.auth import OAuthClientProvider, TokenStorage
+from mcp.client.auth import OAuthClientProvider, PKCEParameters, TokenStorage
+from mcp.client.auth.exceptions import OAuthFlowError, OAuthTokenError
 from mcp.client.auth.oauth2 import OAuthContext
+from mcp.client.auth.utils import handle_token_response_scopes
 from mcp.shared.auth import (
     OAuthClientInformationFull,
     OAuthClientMetadata,
     OAuthMetadata,
     OAuthToken,
 )
-from pydantic import AnyUrl, BaseModel, ValidationError
+from pydantic import AnyUrl, ValidationError
 from sqlalchemy.orm import Session
 
+from onyx.auth.oauth_token_manager import ensure_offline_access_auth_params
 from onyx.cache.interface import CacheLockAcquisitionError
 from onyx.cache.locks import cache_shared_lock
-from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import MCPOAuthProviderMode
 from onyx.db.mcp import (
-    extract_connection_data,
     get_connection_config_by_id,
     update_connection_config,
+    update_connection_config__no_commit,
 )
-from onyx.db.models import MCPConnectionConfig
-from onyx.db.models import MCPServer as DbMCPServer
+from onyx.db.models import MCPConnectionConfig, MCPServer
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.redis.redis_pool import get_redis_client
-from onyx.server.features.mcp.models import MCPConnectionData, MCPOAuthKeys
-from onyx.server.features.mcp.ssrf import mcp_ssrf_httpx_client_factory
+from onyx.oauth.authorization_attempt import generate_authorization_state
+from onyx.server.features.mcp.client_metadata import (
+    mcp_oauth_redirect_uri,
+    validated_mcp_oauth_client_metadata_url,
+)
+from onyx.server.features.mcp.credentials import (
+    extract_connection_data,
+    mcp_oauth_client_information_fingerprint,
+    mcp_oauth_connection_headers_fingerprint,
+    mcp_token_expired,
+)
+from onyx.server.features.mcp.models import (
+    MCPOAuthFlowState,
+    MCPOAuthKeys,
+    MCPPendingOAuthAuthorization,
+    merge_mcp_headers,
+)
+from onyx.server.features.mcp.ssrf import (
+    mcp_ssrf_httpx_client_factory,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_async_sync_no_cancel
+from onyx.utils.url import SSRFException
 from shared_configs.contextvars import ONYX_REQUEST_ID_CONTEXTVAR, get_current_tenant_id
 
 logger = setup_logger()
@@ -68,40 +86,9 @@ _REFRESH_LOCK_WAIT_S = _REFRESH_POST_TIMEOUT_S + 5.0
 _REFRESH_LOCK_LEASE_S = 60.0
 
 
-STATE_TTL_SECONDS = 60 * 5  # 5 minutes
-OAUTH_WAIT_SECONDS = 30  # Give the user 30 seconds to complete the OAuth flow
-UNUSED_RETURN_PATH = "unused_path"
-
-
-def key_auth_url(user_id: str) -> str:
-    return f"mcp:oauth:{user_id}:auth_url"
-
-
-def key_state(user_id: str) -> str:
-    return f"mcp:oauth:{user_id}:state"
-
-
-def key_code(user_id: str, state: str) -> str:
-    return f"mcp:oauth:{user_id}:{state}:codes"
-
-
-def key_tokens(user_id: str) -> str:
-    return f"mcp:oauth:{user_id}:tokens"
-
-
-def key_client_info(user_id: str) -> str:
-    return f"mcp:oauth:{user_id}:client_info"
-
-
 REQUESTED_SCOPE: str | None = None
 
-
-class MCPOauthState(BaseModel):
-    server_id: int
-    return_path: str
-    is_admin: bool
-    state: str
-    code_verifier: str | None = None
+OAUTH_HTTP_TIMEOUT_SECONDS = 30.0
 
 
 class MCPRefreshLogContext(TypedDict):
@@ -112,8 +99,23 @@ class MCPRefreshLogContext(TypedDict):
     oauth_provider_mode: str
 
 
+class MCPClientRegistrationConflict(Exception):
+    """Another request persisted the shared client registration first."""
+
+
+class MCPRefreshSuperseded(Exception):
+    """The grant changed while a refresh request was in flight."""
+
+
+class MCPReauthenticationRequired(OAuthFlowError):
+    """A non-interactive MCP operation requires a new browser grant."""
+
+    def __init__(self) -> None:
+        super().__init__("Please reconnect to the server through Onyx.")
+
+
 def _refresh_log_context(
-    mcp_server: DbMCPServer, connection_config_id: int
+    mcp_server: MCPServer, connection_config_id: int
 ) -> MCPRefreshLogContext:
     return {
         "mcp_server_id": mcp_server.id,
@@ -170,13 +172,20 @@ def _oauth_token_from_response(body: bytes) -> OAuthToken:
 
 
 def _token_dict_with_preserved_refresh(
-    tokens: OAuthToken, existing_tokens_raw: dict[str, Any] | None
+    tokens: OAuthToken,
+    existing_tokens_raw: dict[str, Any] | None,
+    *,
+    preserve_existing_refresh_token: bool = True,
 ) -> dict[str, Any]:
     """Dump `tokens` for storage, carrying over a previously stored refresh
     token when the new payload omits one (providers like Google only issue a
     refresh token on the first authorization)."""
     token_dict = tokens.model_dump(mode="json")
-    if token_dict.get("refresh_token") or not existing_tokens_raw:
+    if (
+        token_dict.get("refresh_token")
+        or not existing_tokens_raw
+        or not preserve_existing_refresh_token
+    ):
         return token_dict
     existing_refresh = existing_tokens_raw.get("refresh_token")
     if existing_refresh:
@@ -192,79 +201,11 @@ def _absolute_token_expiry(tokens: OAuthToken) -> float | None:
     return time.time() + tokens.expires_in - TOKEN_EXPIRY_BUFFER_SECONDS
 
 
-async def _refresh_mcp_oauth_token_if_expired(
-    mcp_server: DbMCPServer,
-    connection_config_id: int,
-    user_id: str,
-) -> str | None:
-    """Refresh an SSE-transport MCP server's OAuth token via the same
-    `OAuthClientProvider`/`OnyxTokenStorage` every other MCP OAuth path uses
-    (see `make_oauth_provider`) — the SDK's own httpx.Auth refresh can't run
-    over an open SSE stream, so this drives the provider's refresh step
-    directly instead of the full httpx.Auth flow. That gets client-auth-method
-    handling (`client_secret_basic` vs. `client_secret_post`) and token
-    persistence for free, instead of a second implementation to keep in sync.
-
-    Uses private SDK methods (`_initialize`/`_refresh_token`/
-    `_handle_refresh_response`) since there's no public "refresh if needed"
-    API — may need adjusting on MCP SDK upgrades.
-
-    Returns the `Authorization` header to use now, or `None` with no opinion
-    (no refresh token / client info) — caller falls back to its own header.
-    Raises on failure; caller treats that as non-fatal.
-    """
-    # user_id only matters to redirect/callback handlers, never invoked here
-    # since UNUSED_RETURN_PATH short-circuits them.
-    provider = make_oauth_provider(
-        mcp_server,
-        user_id,
-        UNUSED_RETURN_PATH,
-        connection_config_id,
-        None,
-    )
-    context = provider.context
-    await provider._initialize()
-
-    if not context.can_refresh_token():
-        return None
-
-    if context.is_token_valid():
-        # Valid (no persisted expiry also reads as valid), or a racing call
-        # already refreshed it — hand back the current header either way.
-        current_tokens = context.current_tokens
-        assert current_tokens is not None  # implied by can_refresh_token()
-        return f"{current_tokens.token_type} {current_tokens.access_token}"
-
-    refresh_request = await provider._refresh_token()
-    async with mcp_ssrf_httpx_client_factory(
-        timeout=httpx.Timeout(_REFRESH_POST_TIMEOUT_S)
-    ) as client:
-        response = await client.send(refresh_request)
-
-    if not await provider._handle_refresh_response(response):
-        raise RuntimeError(
-            f"MCP OAuth refresh failed for server '{mcp_server.name}' "
-            f"(config {connection_config_id}): {response.status_code}"
-        )
-
-    logger.info(
-        "Refreshed SSE MCP OAuth token for server '%s' (config %s)",
-        mcp_server.name,
-        connection_config_id,
-    )
-    new_tokens = context.current_tokens
-    assert new_tokens is not None  # set by _handle_refresh_response on success
-    return f"{new_tokens.token_type} {new_tokens.access_token}"
-
-
 def refresh_mcp_oauth_token_if_expired(
-    mcp_server: DbMCPServer,
+    mcp_server: MCPServer,
     connection_config_id: int,
-    user_id: str,
 ) -> str | None:
-    """Sync entry point for `_refresh_mcp_oauth_token_if_expired`, single-flighted
-    per connection-config row (via `cache_shared_lock`) so two racing refreshes
-    can't redeem — and burn — the same rotating refresh token.
+    """Refresh an MCP OAuth token, single-flighted per connection config.
 
     On contention the loser waits out the in-flight refresh (the wait outlasts a
     refresh POST) and returns the winner's freshly persisted header. Only if the
@@ -279,11 +220,20 @@ def refresh_mcp_oauth_token_if_expired(
             wait_for_lock_s=_REFRESH_LOCK_WAIT_S,
             logger=logger,
         ):
-            return run_async_sync_no_cancel(
-                _refresh_mcp_oauth_token_if_expired(
-                    mcp_server, connection_config_id, user_id
-                )
+            provider = make_oauth_provider(
+                mcp_server,
+                connection_config_id,
+                None,
             )
+            tokens = run_async_sync_no_cancel(
+                provider.refresh_access_token_if_expired()
+            )
+            if tokens is None:
+                return None
+            return f"{tokens.token_type} {tokens.access_token}"
+    except MCPRefreshSuperseded:
+        logger.info("mcp_token_refresh.superseded config_id=%s", connection_config_id)
+        return _persisted_auth_header(connection_config_id)
     except CacheLockAcquisitionError:
         # Couldn't acquire within the wait; return whatever the winner persisted
         # (None if it hasn't finished and the stored token is still expired).
@@ -291,12 +241,6 @@ def refresh_mcp_oauth_token_if_expired(
             "mcp_token_refresh.lock_contended config_id=%s", connection_config_id
         )
         return _persisted_auth_header(connection_config_id)
-
-
-def mcp_token_expired(config_data: MCPConnectionData) -> bool:
-    """True iff the stored access token is past its persisted expiry."""
-    expires_at = config_data.get(MCPOAuthKeys.TOKEN_EXPIRES_AT.value)
-    return expires_at is not None and float(expires_at) <= time.time()
 
 
 def _persisted_auth_header(connection_config_id: int) -> str | None:
@@ -311,7 +255,7 @@ def _persisted_auth_header(connection_config_id: int) -> str | None:
     return (config_data.get("headers") or {}).get("Authorization")
 
 
-def _known_provider_oauth_metadata(mcp_server: DbMCPServer) -> OAuthMetadata | None:
+def _known_provider_oauth_metadata(mcp_server: MCPServer) -> OAuthMetadata | None:
     """Expose a KNOWN_PROVIDER server's configured endpoints as SDK OAuth
     metadata so refresh targets the real token endpoint, not the SDK's
     `<server-origin>/token` fallback."""
@@ -323,9 +267,9 @@ def _known_provider_oauth_metadata(mcp_server: DbMCPServer) -> OAuthMetadata | N
         return None
     parsed = urlparse(mcp_server.oauth_authorization_endpoint)
     return OAuthMetadata(
-        issuer=f"{parsed.scheme}://{parsed.netloc}",  # ty: ignore[invalid-argument-type]
-        authorization_endpoint=mcp_server.oauth_authorization_endpoint,  # ty: ignore[invalid-argument-type]
-        token_endpoint=mcp_server.oauth_token_endpoint,  # ty: ignore[invalid-argument-type]
+        issuer=f"{parsed.scheme}://{parsed.netloc}",
+        authorization_endpoint=mcp_server.oauth_authorization_endpoint,
+        token_endpoint=mcp_server.oauth_token_endpoint,
     )
 
 
@@ -337,12 +281,23 @@ class OnyxTokenStorage(TokenStorage):
     def __init__(
         self,
         connection_config_id: int,
-        alt_config_id: int | None = None,
+        shared_client_config_id: int | None = None,
         refresh_log_context: MCPRefreshLogContext | None = None,
+        *,
+        load_stored_tokens: bool = True,
+        expected_connection_headers_fingerprint: str | None = None,
+        expected_client_information_fingerprint: str | None = None,
     ):
-        self.alt_config_id = alt_config_id
+        self.shared_client_config_id = shared_client_config_id
         self.connection_config_id = connection_config_id
         self.refresh_log_context = refresh_log_context
+        self.load_stored_tokens = load_stored_tokens
+        self.expected_connection_headers_fingerprint = (
+            expected_connection_headers_fingerprint
+        )
+        self.expected_client_information_fingerprint = (
+            expected_client_information_fingerprint
+        )
         self.refresh_attempt_id: str | None = None
         # When bound, `get_tokens` hydrates its `token_expiry_time` from the
         # config read it already does — no separate query for the expiry.
@@ -351,8 +306,12 @@ class OnyxTokenStorage(TokenStorage):
     def bind_oauth_context(self, context: OAuthContext) -> None:
         self._oauth_context = context
 
-    def _ensure_connection_config(self, db_session: Session) -> MCPConnectionConfig:
-        config = get_connection_config_by_id(self.connection_config_id, db_session)
+    def _ensure_connection_config(
+        self, db_session: Session, *, for_update: bool = False
+    ) -> MCPConnectionConfig:
+        config = get_connection_config_by_id(
+            self.connection_config_id, db_session, for_update=for_update
+        )
         if config is None:
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "Connection config not found")
         return config
@@ -378,17 +337,109 @@ class OnyxTokenStorage(TokenStorage):
                             OAuthMetadata.model_validate(metadata_raw)
                         )
             tokens_raw = config_data.get(MCPOAuthKeys.TOKENS.value)
-            if tokens_raw:
+            if tokens_raw and self.load_stored_tokens:
                 return OAuthToken.model_validate(tokens_raw)
             return None
 
     async def set_tokens(self, tokens: OAuthToken) -> None:
+        await self._persist_tokens(tokens, preserve_existing_refresh_token=True)
+
+    async def set_refreshed_tokens(
+        self,
+        tokens: OAuthToken,
+        redeemed_refresh_token: str | None,
+    ) -> bool:
+        return await self._persist_tokens(
+            tokens,
+            preserve_existing_refresh_token=True,
+            expected_refresh_token=redeemed_refresh_token,
+            require_refresh_token_match=True,
+        )
+
+    async def set_authorization_result(
+        self,
+        tokens: OAuthToken,
+        client_information: OAuthClientInformationFull,
+    ) -> None:
+        """Persist a matching registration and grant in one row update."""
+        await self._persist_tokens(
+            tokens,
+            client_information,
+            preserve_existing_refresh_token=False,
+        )
+
+    async def _persist_tokens(
+        self,
+        tokens: OAuthToken,
+        client_information: OAuthClientInformationFull | None = None,
+        *,
+        preserve_existing_refresh_token: bool,
+        expected_refresh_token: str | None = None,
+        require_refresh_token_match: bool = False,
+    ) -> bool:
         with get_session_with_current_tenant() as db_session:
-            config = self._ensure_connection_config(db_session)
+            config = self._ensure_connection_config(db_session, for_update=True)
             config_data = extract_connection_data(config)
             existing_tokens_raw = config_data.get(MCPOAuthKeys.TOKENS.value)
+            if require_refresh_token_match and (
+                expected_refresh_token is None
+                or (existing_tokens_raw or {}).get("refresh_token")
+                != expected_refresh_token
+            ):
+                return False
+
+            existing_client_information_raw = config_data.get(
+                MCPOAuthKeys.CLIENT_INFO.value
+            )
+            if client_information is not None:
+                try:
+                    existing_client_information = (
+                        OAuthClientInformationFull.model_validate(
+                            existing_client_information_raw
+                        )
+                    )
+                except ValidationError as error:
+                    raise OnyxError(
+                        OnyxErrorCode.INVALID_INPUT,
+                        "MCP OAuth client registration changed while authorization "
+                        "was pending.",
+                    ) from error
+
+                expected_client_fingerprint = (
+                    self.expected_client_information_fingerprint
+                    or mcp_oauth_client_information_fingerprint(client_information)
+                )
+                if (
+                    mcp_oauth_client_information_fingerprint(client_information)
+                    != expected_client_fingerprint
+                    or mcp_oauth_client_information_fingerprint(
+                        existing_client_information
+                    )
+                    != expected_client_fingerprint
+                ):
+                    raise OnyxError(
+                        OnyxErrorCode.INVALID_INPUT,
+                        "MCP OAuth client registration changed while authorization "
+                        "was pending.",
+                    )
+
+                if (
+                    self.expected_connection_headers_fingerprint is not None
+                    and mcp_oauth_connection_headers_fingerprint(
+                        config_data.get("headers", {})
+                    )
+                    != self.expected_connection_headers_fingerprint
+                ):
+                    raise OnyxError(
+                        OnyxErrorCode.INVALID_INPUT,
+                        "MCP connection headers changed while authorization was "
+                        "pending.",
+                    )
+
             persisted_token_dict = _token_dict_with_preserved_refresh(
-                tokens, existing_tokens_raw
+                tokens,
+                existing_tokens_raw,
+                preserve_existing_refresh_token=preserve_existing_refresh_token,
             )
             config_data[MCPOAuthKeys.TOKENS.value] = persisted_token_dict
             token_expires_at_before_refresh = config_data.get(
@@ -410,9 +461,10 @@ class OnyxTokenStorage(TokenStorage):
                 config_data[MCPOAuthKeys.METADATA.value] = (
                     self._oauth_context.oauth_metadata.model_dump(mode="json")
                 )
-            config_data["headers"] = {
-                "Authorization": f"{tokens.token_type} {tokens.access_token}"
-            }
+            config_data["headers"] = merge_mcp_headers(
+                config_data.get("headers", {}),
+                {"Authorization": f"{tokens.token_type} {tokens.access_token}"},
+            )
             update_connection_config(config.id, db_session, config_data)
 
         if self.refresh_attempt_id and self.refresh_log_context:
@@ -438,19 +490,38 @@ class OnyxTokenStorage(TokenStorage):
                     "token_expiry_persisted": expires_at is not None,
                 },
             )
+        return True
 
-        # The shared admin row is intentionally NOT written here: it
-        # serves as the OAuth `client_info` registry shared across all
-        # users of this MCP server (see `get_client_info`). Per-user
-        # state (access tokens and resolved `Authorization` headers)
-        # belongs only on the per-user row. The Redis push below is
-        # what `process_oauth_callback` blocks on to know token exchange
-        # has completed; the admin config id is the only stable
-        # identifier shared between the two contexts.
-        if self.alt_config_id:
-            r = get_redis_client()
-            r.rpush(key_tokens(str(self.alt_config_id)), tokens.model_dump_json())
-            r.expire(key_tokens(str(self.alt_config_id)), OAUTH_WAIT_SECONDS)
+    async def discard_persisted_tokens(
+        self, redeemed_refresh_token: str | None
+    ) -> bool:
+        """Drop the persisted grant (tokens, expiry, Authorization header) so
+        the connection reads as unauthenticated until the user reconnects.
+
+        No-ops when the stored refresh token no longer matches
+        ``redeemed_refresh_token``: a concurrent refresh or reconnect already
+        replaced the grant, and the replacement must survive. Returns whether
+        the grant was discarded."""
+        with get_session_with_current_tenant() as db_session:
+            # Row lock: a concurrent set_tokens commit between an unlocked read
+            # and the update below would be clobbered by this stale read.
+            config = self._ensure_connection_config(db_session, for_update=True)
+            config_data = extract_connection_data(config)
+            stored_tokens = config_data.get(MCPOAuthKeys.TOKENS.value) or {}
+            if (
+                redeemed_refresh_token is None
+                or stored_tokens.get("refresh_token") != redeemed_refresh_token
+            ):
+                return False
+            config_data.pop(MCPOAuthKeys.TOKENS.value, None)
+            config_data.pop(MCPOAuthKeys.TOKEN_EXPIRES_AT.value, None)
+            config_data["headers"] = {
+                key: value
+                for key, value in config_data.get("headers", {}).items()
+                if key.lower() != "authorization"
+            }
+            update_connection_config(config.id, db_session, config_data)
+            return True
 
     async def get_client_info(self) -> OAuthClientInformationFull | None:
         with get_session_with_current_tenant() as db_session:
@@ -459,19 +530,18 @@ class OnyxTokenStorage(TokenStorage):
             client_info_raw = config_data.get(MCPOAuthKeys.CLIENT_INFO.value)
             if client_info_raw:
                 return OAuthClientInformationFull.model_validate(client_info_raw)
-            if self.alt_config_id:
-                alt_config = get_connection_config_by_id(self.alt_config_id, db_session)
-                if alt_config:
-                    alt_config_data = extract_connection_data(alt_config)
-                    alt_client_info = alt_config_data.get(
+            if self.shared_client_config_id:
+                shared_config = get_connection_config_by_id(
+                    self.shared_client_config_id, db_session
+                )
+                if shared_config:
+                    shared_config_data = extract_connection_data(shared_config)
+                    shared_client_info = shared_config_data.get(
                         MCPOAuthKeys.CLIENT_INFO.value
                     )
-                    if alt_client_info:
-                        # Cache the admin client info on the user config for future calls
-                        config_data[MCPOAuthKeys.CLIENT_INFO.value] = alt_client_info
-                        update_connection_config(config.id, db_session, config_data)
+                    if shared_client_info:
                         return OAuthClientInformationFull.model_validate(
-                            alt_client_info
+                            shared_client_info
                         )
             return None
 
@@ -480,54 +550,317 @@ class OnyxTokenStorage(TokenStorage):
     ) -> None:
         info_payload = info.model_dump(mode="json")
         with get_session_with_current_tenant() as db_session:
-            config = self._ensure_connection_config(db_session)
-            config_data = extract_connection_data(config)
-            config_data[MCPOAuthKeys.CLIENT_INFO.value] = info_payload
-            update_connection_config(config.id, db_session, config_data)
+            shared_config = None
+            shared_config_data = None
+            existing_shared_client_information = None
+            if self.shared_client_config_id:
+                shared_config = get_connection_config_by_id(
+                    self.shared_client_config_id, db_session, for_update=True
+                )
+                if shared_config is not None:
+                    shared_config_data = extract_connection_data(shared_config)
+                    existing_shared_client_information_raw = shared_config_data.get(
+                        MCPOAuthKeys.CLIENT_INFO.value
+                    )
+                    if existing_shared_client_information_raw:
+                        existing_shared_client_information = (
+                            OAuthClientInformationFull.model_validate(
+                                existing_shared_client_information_raw
+                            )
+                        )
 
-            # The shared admin row holds the OAuth `client_info` registry
-            # used by every user of this MCP server (see `get_client_info`).
-            # When DCR runs we want to cache the discovered client_info there
-            # so future users can re-use it — but ONLY the `client_info`
-            # field. The per-user `config_data` carries per-user state
-            # (`tokens`, resolved `Authorization` header) which belongs
-            # only on the per-user row.
-            if self.alt_config_id:
-                alt_config = get_connection_config_by_id(self.alt_config_id, db_session)
-                alt_config_data = extract_connection_data(alt_config)
-                alt_config_data[MCPOAuthKeys.CLIENT_INFO.value] = info_payload
-                update_connection_config(
-                    self.alt_config_id, db_session, alt_config_data
+            config = self._ensure_connection_config(db_session, for_update=True)
+            config_data = extract_connection_data(config)
+            registration_conflict = (
+                existing_shared_client_information is not None
+                and existing_shared_client_information != info
+            )
+            selected_info_payload = (
+                existing_shared_client_information.model_dump(mode="json")
+                if registration_conflict
+                else info_payload
+            )
+            config_data[MCPOAuthKeys.CLIENT_INFO.value] = selected_info_payload
+            update_connection_config__no_commit(config.id, db_session, config_data)
+
+            if shared_config is not None and shared_config_data is not None:
+                shared_config_data[MCPOAuthKeys.CLIENT_INFO.value] = (
+                    selected_info_payload
+                )
+                update_connection_config__no_commit(
+                    shared_config.id, db_session, shared_config_data
+                )
+            db_session.commit()
+
+            if registration_conflict:
+                raise MCPClientRegistrationConflict(
+                    "Concurrent MCP client registration selected a different client"
                 )
 
 
+AuthorizationRequestHandler = Callable[
+    [MCPPendingOAuthAuthorization, OAuthContext], Awaitable[None]
+]
+
+
+class OAuthAuthorizationRequired(Exception):
+    """Control signal for the browser boundary of a resumable OAuth flow.
+
+    The MCP SDK currently has no resumable browser boundary, so this unwinds its
+    inline HTTPX auth flow after the pending attempt has been persisted. Keep it
+    as an ordinary exception so framework cancellation and error handling retain
+    their normal Python semantics.
+    """
+
+    def __init__(self, authorization: MCPPendingOAuthAuthorization) -> None:
+        super().__init__("MCP OAuth browser authorization is required")
+        self.authorization = authorization
+
+
+def _authorization_handoffs(
+    error: BaseException,
+) -> list[OAuthAuthorizationRequired]:
+    if isinstance(error, OAuthAuthorizationRequired):
+        return [error]
+    if isinstance(error, BaseExceptionGroup):
+        return [
+            handoff
+            for nested_error in error.exceptions
+            for handoff in _authorization_handoffs(nested_error)
+        ]
+    return []
+
+
+async def run_with_authorization_handoff(
+    operation: Awaitable[object],
+) -> MCPPendingOAuthAuthorization | None:
+    """Run one SDK operation, returning its resumable browser handoff.
+
+    AnyIO may wrap the control signal in nested exception groups. A group that
+    also contains a real failure is still a failure; only a single, otherwise
+    clean handoff is converted into a normal result.
+    """
+    try:
+        await operation
+    except OAuthAuthorizationRequired as error:
+        return error.authorization
+    except ExceptionGroup as error:
+        matching_errors, unexpected_errors = error.split(OAuthAuthorizationRequired)
+        if unexpected_errors is not None:
+            raise unexpected_errors
+        if matching_errors is None:
+            raise error
+        handoffs = _authorization_handoffs(matching_errors)
+        if len(handoffs) != 1:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "MCP OAuth discovery produced multiple authorization redirects.",
+            )
+        return handoffs[0].authorization
+    return None
+
+
 class OnyxOAuthClientProvider(OAuthClientProvider):
-    """MCP SDK OAuth provider with safe refresh telemetry and error parsing."""
+    """MCP SDK provider with an optional resumable browser handoff.
+
+    Without a handoff, the provider can use or refresh existing credentials but
+    cannot begin interactive authorization.
+    """
 
     def __init__(
         self,
         server_url: str,
         client_metadata: OAuthClientMetadata,
         storage: TokenStorage,
-        redirect_handler: Callable[[str], Awaitable[None]] | None = None,
-        callback_handler: Callable[[], Awaitable[tuple[str, str | None]]] | None = None,
-        timeout: float = 300.0,
         client_metadata_url: str | None = None,
         *,
         refresh_log_context: MCPRefreshLogContext,
+        authorization_request_handler: AuthorizationRequestHandler | None = None,
     ) -> None:
         super().__init__(
             server_url=server_url,
             client_metadata=client_metadata,
             storage=storage,
-            redirect_handler=redirect_handler,
-            callback_handler=callback_handler,
-            timeout=timeout,
+            redirect_handler=None,
+            callback_handler=None,
             client_metadata_url=client_metadata_url,
         )
         self.refresh_log_context = refresh_log_context
+        self.authorization_request_handler = authorization_request_handler
         self.refresh_attempt_id: str | None = None
         self.token_expiry_before_refresh: float | None = None
+        # The refresh token the in-flight refresh attempt redeemed; guards the
+        # invalid_grant discard against wiping a concurrently stored grant.
+        self.redeemed_refresh_token: str | None = None
+
+    def build_resumable_authorization_request(
+        self,
+    ) -> MCPPendingOAuthAuthorization:
+        """Build the browser request whose continuation can run in a later task."""
+        redirect_uris = self.context.client_metadata.redirect_uris
+        if not redirect_uris:
+            raise OAuthFlowError(
+                "No redirect URIs provided for authorization code grant"
+            )
+        client_info = self.context.client_info
+        if client_info is None or not client_info.client_id:
+            raise OAuthFlowError("No client info available for authorization")
+
+        oauth_metadata = self.context.oauth_metadata
+        authorization_endpoint = (
+            str(oauth_metadata.authorization_endpoint)
+            if oauth_metadata and oauth_metadata.authorization_endpoint
+            else urljoin(
+                self.context.get_authorization_base_url(self.context.server_url),
+                "/authorize",
+            )
+        )
+        pkce = PKCEParameters.generate()
+        state = generate_authorization_state()
+        authorization_params = {
+            "response_type": "code",
+            "client_id": client_info.client_id,
+            "redirect_uri": str(redirect_uris[0]),
+            "state": state,
+            "code_challenge": pkce.code_challenge,
+            "code_challenge_method": "S256",
+        }
+        if self.context.should_include_resource_param(self.context.protocol_version):
+            authorization_params["resource"] = self.context.get_resource_url()
+        if self.context.client_metadata.scope:
+            authorization_params["scope"] = self.context.client_metadata.scope
+
+        separator = "&" if "?" in authorization_endpoint else "?"
+        authorization_url = ensure_offline_access_auth_params(
+            f"{authorization_endpoint}{separator}{urlencode(authorization_params)}"
+        )
+        return MCPPendingOAuthAuthorization(
+            authorization_url=authorization_url,
+            state=state,
+            code_verifier=pkce.code_verifier,
+        )
+
+    async def _perform_authorization_code_grant(self) -> tuple[str, str]:
+        """Pause the SDK flow at the browser boundary for web applications.
+
+        The upstream provider keeps PKCE and state in stack-local variables while
+        awaiting its callback handler. In resumable mode we persist those values
+        and unwind the HTTPX auth generator so the callback can run independently.
+        """
+        handler = self.authorization_request_handler
+        if handler is None:
+            raise MCPReauthenticationRequired()
+
+        authorization = self.build_resumable_authorization_request()
+        await handler(authorization, self.context)
+        raise OAuthAuthorizationRequired(authorization)
+
+    async def complete_authorization_code_exchange(
+        self,
+        authorization_code: str,
+        code_verifier: str,
+        *,
+        resource: str | None = None,
+    ) -> OAuthToken:
+        """Exchange a callback code using a reconstructed SDK OAuth context."""
+        redirect_uris = self.context.client_metadata.redirect_uris
+        client_info = self.context.client_info
+        if not redirect_uris or client_info is None or not client_info.client_id:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "MCP OAuth flow is missing client registration information.",
+            )
+
+        token_request = await self._exchange_token_authorization_code(
+            authorization_code,
+            code_verifier,
+            token_data={"resource": resource} if resource else None,
+        )
+
+        try:
+            async with mcp_ssrf_httpx_client_factory(
+                timeout=httpx.Timeout(OAUTH_HTTP_TIMEOUT_SECONDS)
+            ) as client:
+                response = await client.send(token_request)
+        except (SSRFException, ValueError) as error:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "MCP OAuth token endpoint is not allowed.",
+            ) from error
+        except httpx.HTTPError as error:
+            raise OnyxError(
+                OnyxErrorCode.BAD_GATEWAY,
+                "MCP OAuth token exchange request failed.",
+            ) from error
+
+        if response.status_code != 200:
+            body = await response.aread()
+            oauth_error, _ = _oauth_error_from_response(
+                body, response.headers.get("content-type")
+            )
+            detail = f"MCP OAuth token exchange failed ({response.status_code})"
+            if oauth_error:
+                detail += f": {oauth_error}"
+            raise OnyxError(
+                OnyxErrorCode.BAD_GATEWAY,
+                detail,
+            )
+
+        try:
+            tokens = await handle_token_response_scopes(response)
+        except OAuthTokenError as error:
+            raise OnyxError(
+                OnyxErrorCode.BAD_GATEWAY,
+                "MCP OAuth token endpoint returned an invalid token response.",
+            ) from error
+        self.context.current_tokens = tokens
+        self.context.update_token_expiry(tokens)
+        storage = self.context.storage
+        if isinstance(storage, OnyxTokenStorage):
+            await storage.set_authorization_result(tokens, client_info)
+        else:
+            await storage.set_tokens(tokens)
+        return tokens
+
+    async def refresh_access_token_if_expired(self) -> OAuthToken | None:
+        """Drive the SDK refresh step used outside its HTTPX auth generator."""
+        await self._initialize()
+        context = self.context
+        if not context.can_refresh_token():
+            return None
+        if context.is_token_valid():
+            # A racing call may already have persisted a fresh token.
+            current_tokens = context.current_tokens
+            if current_tokens is None:
+                raise RuntimeError(
+                    "MCP OAuth SDK reported a valid token without token data."
+                )
+            return current_tokens
+
+        refresh_request = await self._refresh_token()
+        async with mcp_ssrf_httpx_client_factory(
+            timeout=httpx.Timeout(_REFRESH_POST_TIMEOUT_S)
+        ) as client:
+            response = await client.send(refresh_request)
+        if not await self._handle_refresh_response(response):
+            raise RuntimeError(
+                "MCP OAuth refresh failed for server "
+                f"'{self.refresh_log_context['mcp_server_name']}' "
+                f"(config {self.refresh_log_context['connection_config_id']}): "
+                f"{response.status_code}"
+            )
+
+        logger.info(
+            "Refreshed SSE MCP OAuth token for server '%s' (config %s)",
+            self.refresh_log_context["mcp_server_name"],
+            self.refresh_log_context["connection_config_id"],
+        )
+        refreshed_tokens = context.current_tokens
+        if refreshed_tokens is None:
+            raise RuntimeError(
+                "MCP OAuth SDK reported a successful refresh without token data."
+            )
+        return refreshed_tokens
 
     def _refresh_log_fields(self, **fields: Any) -> dict[str, Any]:
         log_fields: dict[str, Any] = {
@@ -541,6 +874,10 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
     async def _refresh_token(self) -> httpx.Request:
         self.refresh_attempt_id = uuid4().hex
         self.token_expiry_before_refresh = self.context.token_expiry_time
+        current_tokens = self.context.current_tokens
+        self.redeemed_refresh_token = (
+            current_tokens.refresh_token if current_tokens else None
+        )
 
         request = await super()._refresh_token()
         logger.info(
@@ -560,15 +897,18 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
         )
         return request
 
-    async def _persist_refresh_tokens(self, tokens: OAuthToken) -> None:
+    async def _persist_refresh_tokens(self, tokens: OAuthToken) -> bool:
         storage = self.context.storage
         if not isinstance(storage, OnyxTokenStorage):
             await storage.set_tokens(tokens)
-            return
+            return True
 
         storage.refresh_attempt_id = self.refresh_attempt_id
         try:
-            await storage.set_tokens(tokens)
+            return await storage.set_refreshed_tokens(
+                tokens,
+                self.redeemed_refresh_token,
+            )
         finally:
             storage.refresh_attempt_id = None
 
@@ -590,6 +930,17 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
         if response.status_code != 200:
             logger.warning("mcp_oauth.refresh.failed", extra=response_fields)
             self.context.clear_tokens()
+            # invalid_grant means the refresh token itself is expired or
+            # revoked (RFC 6749) — discard the dead grant so the connection
+            # reads as unauthenticated instead of retrying forever.
+            storage = self.context.storage
+            if oauth_error == "invalid_grant" and isinstance(storage, OnyxTokenStorage):
+                if await storage.discard_persisted_tokens(self.redeemed_refresh_token):
+                    logger.warning("mcp_oauth.tokens_discarded", extra=response_fields)
+                else:
+                    logger.info(
+                        "mcp_oauth.tokens_discard_skipped_stale", extra=response_fields
+                    )
             return False
 
         try:
@@ -601,7 +952,19 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
 
         self.context.current_tokens = token_response
         self.context.update_token_expiry(token_response)
-        await self._persist_refresh_tokens(token_response)
+        if not await self._persist_refresh_tokens(token_response):
+            storage = self.context.storage
+            current_tokens = await storage.get_tokens()
+            if current_tokens is None:
+                raise MCPRefreshSuperseded
+            self.context.current_tokens = current_tokens
+            logger.info(
+                "mcp_oauth.refresh.superseded",
+                extra=self._refresh_log_fields(
+                    token_endpoint_hostname=token_endpoint_hostname,
+                ),
+            )
+            return True
         logger.info(
             "mcp_oauth.refresh.succeeded",
             extra=self._refresh_log_fields(
@@ -615,89 +978,47 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
 
 
 def make_oauth_provider(
-    mcp_server: DbMCPServer,
-    user_id: str,
-    return_path: str,
+    mcp_server: MCPServer,
     connection_config_id: int,
-    admin_config_id: int | None,
-) -> OAuthClientProvider:
-    async def redirect_handler(auth_url: str) -> None:
-        if return_path == UNUSED_RETURN_PATH:
-            raise ValueError("Please Reconnect to the server")
-        r = get_redis_client()
-        # The SDK generated & embedded 'state' in the auth_url; extract & store it.
-        parsed = urlparse(auth_url)
-        qs = dict([p.split("=", 1) for p in parsed.query.split("&") if "=" in p])
-        state = qs.get("state")
-        if not state:
-            # Defensive: some providers encode state differently; adapt if needed.
-            raise RuntimeError("Missing state in authorization_url")
-
-        # Save for the frontend & for callback validation
-        state_obj = MCPOauthState(
-            server_id=mcp_server.id,
-            return_path=return_path,
-            is_admin=admin_config_id is not None,
-            state=state,
-        )
-        r.rpush(key_auth_url(user_id), auth_url)
-        r.expire(key_auth_url(user_id), OAUTH_WAIT_SECONDS)
-        r.set(key_state(user_id), state_obj.model_dump_json(), ex=STATE_TTL_SECONDS)
-
-        # Return immediately; the HTTP layer will read the stored URL and send it to the browser.
-
-    async def callback_handler() -> tuple[str, str | None]:
-        r = get_redis_client()
-        # Wait up to TTL for the code published by the /oauth/callback route
-        state = r.get(key_state(user_id))
-        if not state:
-            raise RuntimeError("No pending OAuth state for user")
-        state_obj = MCPOauthState.model_validate_json(state)
-
-        # Block on Redis for (code, state). BLPOP returns (key, value).
-        key = key_code(user_id, state_obj.state)
-
-        # requests CAN block here for up to a minute if the user doesn't resolve the OAuth flow
-        # Run the blocking blpop operation in a thread pool to avoid blocking the event loop
-        loop = asyncio.get_running_loop()
-        pop = await loop.run_in_executor(
-            None, lambda: r.blpop([key], timeout=OAUTH_WAIT_SECONDS)
-        )
-        # TODO(evan): gracefully handle "user says no"
-        if not pop:
-            raise RuntimeError("Timed out waiting for OAuth callback")
-
-        code_state_dict = json.loads(pop[1].decode())
-
-        code = code_state_dict["code"]
-
-        if code_state_dict["state"] != state_obj.state:
-            raise RuntimeError("Invalid state in OAuth callback")
-
-        # Optional: cleanup
-        r.delete(key_auth_url(user_id), key_state(user_id))
-        return code, state_obj.state
-
+    shared_client_config_id: int | None,
+    *,
+    load_stored_tokens: bool = True,
+    authorization_request_handler: AuthorizationRequestHandler | None = None,
+    expected_connection_headers_fingerprint: str | None = None,
+    expected_client_information_fingerprint: str | None = None,
+) -> OnyxOAuthClientProvider:
     refresh_log_context = _refresh_log_context(mcp_server, connection_config_id)
     storage = OnyxTokenStorage(
         connection_config_id,
-        admin_config_id,
+        shared_client_config_id,
         refresh_log_context,
+        load_stored_tokens=load_stored_tokens,
+        expected_connection_headers_fingerprint=(
+            expected_connection_headers_fingerprint
+        ),
+        expected_client_information_fingerprint=(
+            expected_client_information_fingerprint
+        ),
+    )
+    client_metadata_url = (
+        validated_mcp_oauth_client_metadata_url()
+        if mcp_server.oauth_provider_mode is MCPOAuthProviderMode.AUTO_DISCOVERY
+        else None
     )
     provider = OnyxOAuthClientProvider(
         refresh_log_context=refresh_log_context,
         server_url=mcp_server.server_url,
         client_metadata=OAuthClientMetadata(
             client_name=f"Onyx - {mcp_server.name}",
-            redirect_uris=[AnyUrl(f"{WEB_DOMAIN}/mcp/oauth/callback")],
+            redirect_uris=[AnyUrl(mcp_oauth_redirect_uri())],
             grant_types=["authorization_code", "refresh_token"],
             response_types=["code"],
             scope=REQUESTED_SCOPE,  # TODO(evan): do we need to pass this in? maybe make configurable
             token_endpoint_auth_method="none",
         ),
         storage=storage,
-        redirect_handler=redirect_handler,
-        callback_handler=callback_handler,
+        client_metadata_url=client_metadata_url,
+        authorization_request_handler=authorization_request_handler,
     )
 
     # A fresh provider per tool call starts with an empty context, so the SDK
@@ -711,3 +1032,35 @@ def make_oauth_provider(
     if known_metadata is not None:
         provider.context.oauth_metadata = known_metadata
     return provider
+
+
+async def complete_mcp_oauth_authorization(
+    flow: MCPOAuthFlowState,
+    mcp_server: MCPServer,
+    client_information: OAuthClientInformationFull,
+    authorization_code: str,
+) -> None:
+    """Restore one persisted attempt and complete it through the MCP SDK."""
+    provider = make_oauth_provider(
+        mcp_server,
+        flow.connection_config_id,
+        mcp_server.admin_connection_config_id,
+        load_stored_tokens=False,
+        expected_connection_headers_fingerprint=flow.connection_headers_fingerprint,
+        expected_client_information_fingerprint=(flow.client_information_fingerprint),
+    )
+    context = provider.context
+    if flow.server_snapshot.provider_mode is MCPOAuthProviderMode.AUTO_DISCOVERY:
+        context.protected_resource_metadata = flow.protected_resource_metadata
+        context.oauth_metadata = flow.oauth_metadata
+        context.auth_server_url = flow.authorization_server_url
+        context.protocol_version = flow.protocol_version
+    context.client_metadata.scope = flow.scope
+    context.client_metadata.redirect_uris = [flow.redirect_uri]
+    context.client_info = client_information
+
+    await provider.complete_authorization_code_exchange(
+        authorization_code,
+        flow.code_verifier,
+        resource=str(flow.resource) if flow.resource else None,
+    )

@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class LLMErrorInfo(BaseModel):
@@ -14,6 +14,15 @@ class ToolChoiceOptions(str, Enum):
     REQUIRED = "required"
     AUTO = "auto"
     NONE = "none"
+
+
+class NamedToolChoice(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+
+
+ToolChoice = ToolChoiceOptions | NamedToolChoice
 
 
 class ReasoningEffort(str, Enum):
@@ -55,6 +64,61 @@ def parse_user_selectable_reasoning_effort(value: str) -> ReasoningEffort:
     effort = ReasoningEffort(value)
     if effort not in USER_SELECTABLE_REASONING_EFFORTS:
         raise ValueError(f"{value!r} is not a selectable reasoning effort")
+    return effort
+
+
+# AUTO has no rank: it defers a choice rather than naming an amount.
+_REASONING_EFFORT_RANK: dict[ReasoningEffort, int] = {
+    ReasoningEffort.OFF: 0,
+    ReasoningEffort.LOW: 1,
+    ReasoningEffort.MEDIUM: 2,
+    ReasoningEffort.HIGH: 3,
+    ReasoningEffort.XHIGH: 4,
+}
+
+
+def reasoning_effort_exceeds(effort: ReasoningEffort, cap: ReasoningEffort) -> bool:
+    """Whether `effort` asks for more thinking than `cap` allows."""
+    return _REASONING_EFFORT_RANK[effort] > _REASONING_EFFORT_RANK[cap]
+
+
+class UserChatDefaults(BaseModel):
+    """A user's own chat defaults, resolved below any admin per-model
+    setting. See resolve_reasoning_effort for the reasoning chain."""
+
+    temperature_default: float | None = None
+    reasoning_effort_default: ReasoningEffort | None = None
+
+
+def resolve_reasoning_effort(
+    requested: ReasoningEffort,
+    *,
+    default: ReasoningEffort | None,
+    user_default: ReasoningEffort | None,
+    maximum: ReasoningEffort | None,
+) -> ReasoningEffort:
+    """Settle a request against the admin's per-model default, the user's own
+    default, and the cap.
+
+    Ordered chain, first concrete source wins. The cap applies last and
+    unconditionally.
+
+    AUTO is concretized before clamping because it maps to medium downstream,
+    which would quietly exceed a cap of LOW.
+    """
+    if requested != ReasoningEffort.AUTO:
+        effort = requested
+    elif default is not None and default != ReasoningEffort.AUTO:
+        effort = default
+    elif user_default is not None and user_default != ReasoningEffort.AUTO:
+        effort = user_default
+    else:
+        if maximum is None:
+            return ReasoningEffort.AUTO
+        effort = ReasoningEffort.MEDIUM
+
+    if maximum is not None and reasoning_effort_exceeds(effort, maximum):
+        return maximum
     return effort
 
 
@@ -112,6 +176,22 @@ class ImageContentPart(BaseModel):
 ContentPart = TextContentPart | ImageContentPart
 
 
+# The signature is minted by the provider and must be round-tripped unmodified
+# for replay to be accepted.
+class ThinkingBlock(BaseModel):
+    type: Literal["thinking"] = "thinking"
+    thinking: str = ""
+    signature: str | None = None
+
+
+class RedactedThinkingBlock(BaseModel):
+    type: Literal["redacted_thinking"] = "redacted_thinking"
+    data: str
+
+
+AnyThinkingBlock = ThinkingBlock | RedactedThinkingBlock
+
+
 # Tool call structures
 class FunctionCall(BaseModel):
     name: str
@@ -147,6 +227,7 @@ class AssistantMessage(CacheableMessage):
     role: Literal["assistant"] = "assistant"
     content: str | None = None
     tool_calls: list[ToolCall] | None = None
+    thinking_blocks: list[AnyThinkingBlock] | None = None
 
 
 class ToolMessage(CacheableMessage):

@@ -42,7 +42,7 @@ from onyx.db.port_orphan_candidate import (
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.swap_index import _port_swap_ready
 from shared_configs.contextvars import get_current_tenant_id
-from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
     make_cc_pair,
@@ -76,7 +76,7 @@ def _delete_user_and_files(db_session: Session, user_id: UUID) -> None:
     )
     user = db_session.get(User, user_id)
     if user is not None:
-        db_session.delete(user)
+        delete_test_user(db_session, user)
     db_session.commit()
 
 
@@ -195,7 +195,7 @@ def test_run_port_attempt_user_scope_survival_filter(
     captured: dict[str, set[str]] = {}
     mock_copier = MagicMock()
 
-    def _copy(ids: list[str], *, surviving_doc_ids=None, **_):  # type: ignore[no-untyped-def]
+    def _copy(ids: list[str], *, surviving_doc_ids=None, **_):
         captured["surviving"] = surviving_doc_ids() if surviving_doc_ids else set()
         return len(ids), False
 

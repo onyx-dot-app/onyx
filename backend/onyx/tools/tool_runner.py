@@ -246,7 +246,7 @@ def run_tool_calls(
     # Files from the chat session to pass to tools like PythonTool
     chat_files: list[ChatFile] | None = None,
     # A map of url -> summary for passing web results to open url tool
-    url_snippet_map: dict[str, str] = {},
+    url_snippet_map: dict[str, str] | None = None,
     # When False, don't pass memory context to search tools for query expansion
     # (but still pass it to the memory tool for persistence)
     inject_memories_in_prompt: bool = True,
@@ -289,6 +289,8 @@ def run_tool_calls(
         - `updated_citation_mapping`: The updated citation mapping dictionary.
     """
     # Merge tool calls for SearchTool, WebSearchTool, and OpenURLTool
+    if url_snippet_map is None:
+        url_snippet_map = {}
     merged_tool_calls = _merge_tool_calls(tool_calls)
 
     if not merged_tool_calls:

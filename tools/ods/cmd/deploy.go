@@ -5,14 +5,15 @@ import (
 )
 
 // NewDeployCommand creates the parent `ods deploy` command. Subcommands hang
-// off it (e.g. `ods deploy edge`) and represent ad-hoc deployment workflows.
+// off it (e.g. `ods deploy cloud`) and represent deployment workflows.
 func NewDeployCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "deploy",
-		Short: "Trigger ad-hoc deployments",
-		Long:  "Trigger ad-hoc deployments to Onyx-managed environments.",
+		Short: "Trigger deployments",
+		Long:  "Trigger deployments to Onyx-managed environments.",
 	}
 
+	cmd.AddCommand(NewDeployCloudCommand())
 	cmd.AddCommand(NewDeployEdgeCommand())
 	cmd.AddCommand(NewDeployWikiCommand())
 

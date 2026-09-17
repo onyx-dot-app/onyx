@@ -75,7 +75,14 @@ export default function useMultiModelChat(
         opt.modelName === currentLlm.modelName
     );
     const match =
-      candidates.find((opt) => opt.name === currentLlm.name) ?? candidates[0];
+      (currentLlm.modelConfigurationId != null
+        ? candidates.find(
+            (opt) =>
+              opt.modelConfigurationId === currentLlm.modelConfigurationId
+          )
+        : undefined) ??
+      candidates.find((opt) => opt.name === currentLlm.name) ??
+      candidates[0];
     if (!match) return null;
     return {
       name: match.name,
@@ -111,7 +118,9 @@ export default function useMultiModelChat(
         if (base.some((m) => llmOptionKey(m) === llmOptionKey(model))) {
           return base;
         }
-        return [...base, model];
+        // Prepend so pills grow right-to-left: the first model keeps the
+        // right-most pill and panel, and is the implicit-preferred default.
+        return [model, ...base];
       });
     },
     [currentLlmModel]
@@ -128,6 +137,7 @@ export default function useMultiModelChat(
           name: next[0].name,
           provider: next[0].provider,
           modelName: next[0].modelName,
+          modelConfigurationId: next[0].modelConfigurationId,
         });
       }
       setSelectedModels(next);
@@ -144,6 +154,7 @@ export default function useMultiModelChat(
           name: model.name,
           provider: model.provider,
           modelName: model.modelName,
+          modelConfigurationId: model.modelConfigurationId,
         });
         return;
       }
@@ -227,6 +238,7 @@ export default function useMultiModelChat(
       model_provider: m.name,
       model_version: m.modelName,
       display_name: m.displayName,
+      model_configuration_id: m.modelConfigurationId ?? undefined,
     }));
   }, [effectiveSelectedModels]);
 

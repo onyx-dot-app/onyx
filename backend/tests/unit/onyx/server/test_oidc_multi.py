@@ -28,17 +28,29 @@ _OIDC_CONFIG = {
     "openid_config_url": "https://idp.example.com/.well-known/openid-configuration",
 }
 _GOOGLE_CONFIG = {"client_id": "gid", "client_secret": "gsecret"}
+
+
+@pytest.fixture(autouse=True)
+def _stub_idp_url_guard(monkeypatch: pytest.MonkeyPatch) -> None:
+    # These tests build clients from fake IdP URLs and stay off the network. The
+    # URL guard's own DNS/SSRF checks live in test_sso_url_guard.
+    monkeypatch.setattr(oidc_multi, "validate_idp_url", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        oidc_multi, "validate_discovered_endpoints", lambda *_a, **_k: None
+    )
+
+
 _DB = cast(Session, object())
 _TEST_SECRET = "unit-test-secret"
 
 
 def _provider(**overrides: object) -> SSOProvider:
-    base: dict[str, Any] = dict(
-        name="okta",
-        provider_type=SSOProviderType.OIDC,
-        allowed_email_domains=["companya.com"],
-        config=make_mock_sensitive_value(dict(_OIDC_CONFIG)),
-    )
+    base: dict[str, Any] = {
+        "name": "okta",
+        "provider_type": SSOProviderType.OIDC,
+        "allowed_email_domains": ["companya.com"],
+        "config": make_mock_sensitive_value(dict(_OIDC_CONFIG)),
+    }
     base.update(overrides)
     return cast(SSOProvider, SimpleNamespace(**base))
 
@@ -136,6 +148,78 @@ def test_build_client_oidc_uses_provider_name(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(oidc_multi, "VerifiedEmailOpenID", _fake_openid)
     client = oidc_multi._build_client(_provider(name="okta"), dict(_OIDC_CONFIG))
     assert client.name == "okta"
+
+
+def _openid_stub_with_discovery(scopes_supported: list[str] | None) -> Any:
+    class _FakeOpenID:
+        def __init__(
+            self,
+            _client_id: str,
+            _client_secret: str,
+            _config_url: str,
+            *,
+            name: str,
+            base_scopes: list[str] | None = None,
+            **_kwargs: Any,
+        ) -> None:
+            self.name = name
+            self.base_scopes = list(base_scopes or [])
+            self.openid_configuration: dict[str, Any] = (
+                {}
+                if scopes_supported is None
+                else {"scopes_supported": scopes_supported}
+            )
+
+    return _FakeOpenID
+
+
+def test_offline_access_dropped_when_idp_does_not_advertise_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Amazon Cognito advertises scopes_supported without offline_access and
+    # rejects the whole authorize request when it is included.
+    monkeypatch.setattr(
+        oidc_multi,
+        "VerifiedEmailOpenID",
+        _openid_stub_with_discovery(["openid", "email", "profile"]),
+    )
+    client = oidc_multi._build_client(_provider(), dict(_OIDC_CONFIG))
+    assert "offline_access" not in (client.base_scopes or [])
+
+
+def test_offline_access_kept_when_idp_advertises_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        oidc_multi,
+        "VerifiedEmailOpenID",
+        _openid_stub_with_discovery(["openid", "email", "offline_access"]),
+    )
+    client = oidc_multi._build_client(_provider(), dict(_OIDC_CONFIG))
+    assert "offline_access" in (client.base_scopes or [])
+
+
+def test_offline_access_kept_when_discovery_has_no_scopes_supported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        oidc_multi, "VerifiedEmailOpenID", _openid_stub_with_discovery(None)
+    )
+    client = oidc_multi._build_client(_provider(), dict(_OIDC_CONFIG))
+    assert "offline_access" in (client.base_scopes or [])
+
+
+def test_explicitly_configured_offline_access_is_never_dropped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        oidc_multi,
+        "VerifiedEmailOpenID",
+        _openid_stub_with_discovery(["openid", "email"]),
+    )
+    config = {**_OIDC_CONFIG, "scopes": ["openid", "email", "offline_access"]}
+    client = oidc_multi._build_client(_provider(), config)
+    assert "offline_access" in (client.base_scopes or [])
 
 
 @pytest.mark.asyncio
@@ -360,7 +444,6 @@ def test_fixed_callback_rejects_missing_state() -> None:
                 code="code",
                 state=None,
                 error=None,
-                db_session=_DB,
                 strategy=cast(Any, None),
                 user_manager=cast(Any, None),
             )
@@ -388,7 +471,6 @@ def test_fixed_callback_rejects_state_without_provider(
                 code="code",
                 state=state,
                 error=None,
-                db_session=_DB,
                 strategy=cast(Any, None),
                 user_manager=cast(Any, None),
             )

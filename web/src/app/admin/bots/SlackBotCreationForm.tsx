@@ -1,6 +1,7 @@
 "use client";
 
 import CardSection from "@/components/admin/CardSection";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { SlackTokensForm } from "./SlackTokensForm";
@@ -8,6 +9,7 @@ import { SettingsLayouts } from "@opal/layouts";
 import { SvgSlack } from "@opal/logos";
 
 export function NewSlackBotForm() {
+  const t = useTranslations("admin.slackBots");
   const [formValues] = useState({
     name: "",
     enabled: true,
@@ -21,7 +23,7 @@ export function NewSlackBotForm() {
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgSlack}
-        title="New Slack Bot"
+        title={t("newBot.header.title")}
         divider
         backButton
       />

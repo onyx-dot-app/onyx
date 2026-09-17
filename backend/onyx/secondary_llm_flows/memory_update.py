@@ -27,7 +27,7 @@ def _format_chat_history(chat_history: list[ChatMinimalTextMessage]) -> str:
     recent_user_messages = user_messages[-MAX_USER_MESSAGES:]
 
     formatted_parts = []
-    for i, msg in enumerate(recent_user_messages, start=1):
+    for _i, msg in enumerate(recent_user_messages, start=1):
         if len(msg.message) > MAX_CHARS_PER_MESSAGE:
             truncated_message = msg.message[:MAX_CHARS_PER_MESSAGE] + "[...truncated]"
         else:

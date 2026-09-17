@@ -101,7 +101,7 @@ def test_get_doc_from_page(
     )
     assert len(doc.sections) == 3
     for section, expected_section in zip(
-        doc.sections, test_page._sections_helper + [test_page.header]
+        doc.sections, test_page._sections_helper + [test_page.header], strict=True
     ):
         assert (
             section.text is not None

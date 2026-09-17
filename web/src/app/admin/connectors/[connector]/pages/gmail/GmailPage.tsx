@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { useTranslations } from "next-intl";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { LoadingAnimation } from "@/components/Loading";
 import { toast } from "@opal/layouts";
@@ -13,6 +14,8 @@ import {
 import { GmailAuthSection } from "./Credential";
 import { usePublicCredentials } from "@/lib/hooks";
 import { useUser } from "@/providers/UserProvider";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 import {
   useGoogleCredentials,
   refreshAllGoogleData,
@@ -27,7 +30,12 @@ export const GmailMain = ({
   buildMode = false,
   onOAuthRedirect,
 }: GmailMainProps) => {
-  const { isAdmin, user } = useUser();
+  const t = useTranslations("admin.connectorsList");
+  const { user } = useUser();
+  // See GoogleDrivePage — same gate, same reasoning.
+  const { isGlobalHolder } = usePermissionAuthority(
+    Permission.MANAGE_CONNECTORS
+  );
 
   const {
     data: credentialsData,
@@ -59,16 +67,16 @@ export const GmailMain = ({
   }
 
   if (credentialsError || !credentialsData) {
-    return <ErrorCallout errorTitle="Failed to load credentials." />;
+    return <ErrorCallout errorTitle={t("credentialsLoadError.title")} />;
   }
 
   if (gmailCredentialsError || !gmailCredentials) {
-    return <ErrorCallout errorTitle="Failed to load Gmail credentials." />;
+    return <ErrorCallout errorTitle={t("gmail.credentialsLoadError.title")} />;
   }
 
   return (
     <>
-      {isAdmin && (
+      {isGlobalHolder && (
         <>
           <GmailAuthSection
             refreshCredentials={handleRefresh}

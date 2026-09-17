@@ -1,5 +1,6 @@
 """Unit tests for split input/output cost and admin per-model overrides (SQLite)."""
 
+import logging
 from collections.abc import Generator
 from typing import cast
 
@@ -57,8 +58,8 @@ class TestComputeCostCents:
         in_cents, out_cents = compute_cost_cents(
             model="gpt-4o",
             provider="openai",
-            input_tokens=1000,
-            output_tokens=1000,
+            prompt_tokens=1000,
+            completion_tokens=1000,
         )
         assert in_cents == pytest.approx(0.25)
         assert out_cents == pytest.approx(1.0)
@@ -67,8 +68,8 @@ class TestComputeCostCents:
         result = compute_cost_cents(
             model="totally-made-up-model-xyz",
             provider="nobody",
-            input_tokens=1000,
-            output_tokens=1000,
+            prompt_tokens=1000,
+            completion_tokens=1000,
         )
         assert result == (0.0, 0.0)
 
@@ -80,27 +81,81 @@ class TestComputeCostCents:
         in_cents, out_cents = compute_cost_cents(
             model="totally-made-up-model-xyz",
             provider="nobody",
-            input_tokens=1_000_000,
-            output_tokens=1_000_000,
+            prompt_tokens=1_000_000,
+            completion_tokens=1_000_000,
             cache_read_tokens=0,
         )
         assert in_cents == pytest.approx(200.0)  # 1M * $2/Mtok = $2.00 = 200c
         assert out_cents == pytest.approx(600.0)  # 1M * $6/Mtok = $6.00 = 600c
 
     def test_cache_read_tokens_priced_as_input(self) -> None:
-        # gpt-4o: $2.50/Mtok input, $1.25/Mtok cache-read. 1000 non-cached +
-        # 2000 cache-read = 1000*2.5e-6 + 2000*1.25e-6 = $0.005 = 0.5 cents.
-        # Pinned exactly to catch double-counting cached tokens at full rate.
+        # gpt-4o $2.50/Mtok in, $1.25/Mtok cache-read:
+        # 1000*2.5e-6 + 2000*1.25e-6 = $0.005 = 0.5c
         cache_in, cache_out = compute_cost_cents(
             "gpt-4o",
             "openai",
-            input_tokens=1000,
-            output_tokens=500,
+            prompt_tokens=3000,
+            completion_tokens=500,
             cache_read_tokens=2000,
         )
         assert cache_in == pytest.approx(0.5)
         # Output (500 tok @ $10/Mtok) is unaffected by cache reads.
         assert cache_out == pytest.approx(0.5)
+
+    def test_cache_creation_tokens_priced_at_the_write_premium(self) -> None:
+        # claude-sonnet-4-5 $3/Mtok in, $3.75/Mtok cache-write:
+        # 1000*3e-6 + 2000*3.75e-6 = $0.0105 = 1.05c. The plain input rate
+        # would yield 0.9c.
+        cents_in, _ = compute_cost_cents(
+            "claude-sonnet-4-5",
+            "anthropic",
+            prompt_tokens=3000,
+            completion_tokens=0,
+            cache_creation_tokens=2000,
+        )
+        assert cents_in == pytest.approx(1.05)
+
+    def test_cache_write_costs_more_than_an_equivalent_read(self) -> None:
+        """Asserts a direction, not exact cents, so a price-table refresh
+        cannot break it."""
+        write_cents, _ = compute_cost_cents(
+            "claude-sonnet-4-5", "anthropic", 1000, 0, cache_creation_tokens=1000
+        )
+        read_cents, _ = compute_cost_cents(
+            "claude-sonnet-4-5", "anthropic", 1000, 0, cache_read_tokens=1000
+        )
+        plain_cents, _ = compute_cost_cents("claude-sonnet-4-5", "anthropic", 1000, 0)
+        assert write_cents > plain_cents > read_cents > 0
+
+    def test_inconsistent_cache_counts_warn_instead_of_billing_silently(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level(logging.WARNING):
+            compute_cost_cents(
+                "claude-sonnet-4-5",
+                "anthropic",
+                100,
+                0,
+                cache_read_tokens=80,
+                cache_creation_tokens=80,
+            )
+
+        assert "Cache subsets exceed the reported prompt total" in caplog.text
+
+    def test_cache_inclusive_prompt_total_prices_each_segment(self) -> None:
+        # 1000 fresh, 1000 read, 2000 written:
+        # 1000*3e-6 + 1000*0.30e-6 + 2000*3.75e-6 = $0.0108 = 1.08c
+        input_cents, output_cents = compute_cost_cents(
+            model="claude-sonnet-4-5",
+            provider="anthropic",
+            prompt_tokens=4000,
+            completion_tokens=0,
+            cache_read_tokens=1000,
+            cache_creation_tokens=2000,
+        )
+
+        assert input_cents == pytest.approx(1.08)
+        assert output_cents == 0
 
     def test_bedrock_model_priced_via_provider(self) -> None:
         # Bedrock names aren't self-identifying — without custom_llm_provider
@@ -109,8 +164,8 @@ class TestComputeCostCents:
         in_cents, out_cents = compute_cost_cents(
             model="anthropic.claude-3-haiku-20240307-v1:0",
             provider="bedrock",
-            input_tokens=1000,
-            output_tokens=1000,
+            prompt_tokens=1000,
+            completion_tokens=1000,
         )
         assert in_cents == pytest.approx(0.025)
         assert out_cents == pytest.approx(0.125)
@@ -122,8 +177,8 @@ class TestImageFlow:
         in_cents, out_cents = compute_cost_cents(
             model="dall-e-3",
             provider="openai",
-            input_tokens=0,
-            output_tokens=0,
+            prompt_tokens=0,
+            completion_tokens=0,
             flow=LLMFlow.IMAGE_GENERATION,
         )
         assert (in_cents + out_cents) == pytest.approx(4.0)
@@ -132,8 +187,8 @@ class TestImageFlow:
         in_cents, out_cents = compute_cost_cents(
             model="some-unpriced-image-model",
             provider="nobody",
-            input_tokens=0,
-            output_tokens=0,
+            prompt_tokens=0,
+            completion_tokens=0,
             flow=LLMFlow.IMAGE_EDIT,
         )
         from onyx.configs.app_configs import DEFAULT_IMAGE_COST_CENTS
@@ -144,8 +199,8 @@ class TestImageFlow:
         in_cents, out_cents = compute_cost_cents(
             model="dall-e-3",
             provider="openai",
-            input_tokens=0,
-            output_tokens=0,
+            prompt_tokens=0,
+            completion_tokens=0,
             flow=LLMFlow.IMAGE_GENERATION,
             image_count=3,
         )
@@ -166,8 +221,8 @@ class TestImageFlow:
         in_cents, out_cents = compute_cost_cents(
             model="dall-e-3",
             provider="openai",
-            input_tokens=0,
-            output_tokens=0,
+            prompt_tokens=0,
+            completion_tokens=0,
             flow=LLMFlow.IMAGE_GENERATION,
             db_session=db_session,
         )
@@ -188,8 +243,8 @@ class TestOverride:
         in_cents, out_cents = compute_cost_cents(
             model="gpt-4o",
             provider="openai",
-            input_tokens=1_000_000,
-            output_tokens=1_000_000,
+            prompt_tokens=1_000_000,
+            completion_tokens=1_000_000,
             db_session=db_session,
         )
         # $1.00 = 100 cents in, $2.00 = 200 cents out.
@@ -209,13 +264,35 @@ class TestOverride:
         in_cents, _ = compute_cost_cents(
             model="gpt-4o",
             provider="openai",
-            input_tokens=500_000,
-            output_tokens=0,
+            prompt_tokens=1_000_000,
+            completion_tokens=0,
             cache_read_tokens=500_000,
             db_session=db_session,
         )
-        # (500k + 500k) tok at $1/Mtok = $1.00 = 100 cents.
         assert in_cents == pytest.approx(100.0)
+
+    def test_override_bills_cache_writes_at_the_input_rate(
+        self, db_session: Session
+    ) -> None:
+        db_session.add(
+            ModelCostOverride(
+                model="gpt-4o",
+                input_cost_per_mtok=1.0,
+                output_cost_per_mtok=2.0,
+                cache_read_cost_per_mtok=0.1,
+            )
+        )
+        db_session.commit()
+
+        in_cents, _ = compute_cost_cents(
+            model="gpt-4o",
+            provider="openai",
+            prompt_tokens=2_000_000,
+            completion_tokens=0,
+            cache_creation_tokens=1_000_000,
+            db_session=db_session,
+        )
+        assert in_cents == pytest.approx(200.0)
 
     def test_override_cache_rate_applied_when_set(self, db_session: Session) -> None:
         db_session.add(
@@ -231,12 +308,12 @@ class TestOverride:
         in_cents, _ = compute_cost_cents(
             model="gpt-4o",
             provider="openai",
-            input_tokens=1_000_000,
-            output_tokens=0,
+            prompt_tokens=2_000_000,
+            completion_tokens=0,
             cache_read_tokens=1_000_000,
             db_session=db_session,
         )
-        # 1M input @ $1 = 100c + 1M cache @ $0.10 = 10c = 110 cents.
+        # 1M non-cached @ $1 = 100c + 1M cache reads @ $0.10 = 10c = 110 cents.
         assert in_cents == pytest.approx(110.0)
 
     def test_override_cache_is_tenant_scoped(self) -> None:
@@ -259,8 +336,8 @@ class TestOverride:
             a_in, a_out = compute_cost_cents(
                 "gpt-4o",
                 "openai",
-                input_tokens=1_000_000,
-                output_tokens=1_000_000,
+                prompt_tokens=1_000_000,
+                completion_tokens=1_000_000,
                 db_session=tenant_a,
             )
         finally:
@@ -272,8 +349,8 @@ class TestOverride:
             b_in, b_out = compute_cost_cents(
                 "gpt-4o",
                 "openai",
-                input_tokens=1_000_000,
-                output_tokens=1_000_000,
+                prompt_tokens=1_000_000,
+                completion_tokens=1_000_000,
                 db_session=tenant_b,
             )
         finally:

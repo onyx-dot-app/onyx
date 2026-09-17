@@ -1,4 +1,5 @@
 import json
+import math
 import os
 import urllib.parse
 from datetime import datetime, timezone
@@ -77,6 +78,17 @@ DISABLE_USER_KNOWLEDGE = os.environ.get("DISABLE_USER_KNOWLEDGE", "").lower() ==
 # Disables vector DB (Vespa/OpenSearch) entirely. When True, connectors and RAG search
 # are disabled but core chat, tools, user file uploads, and Projects still work.
 DISABLE_VECTOR_DB = os.environ.get("DISABLE_VECTOR_DB", "").lower() == "true"
+
+# TEMPORARY (will be removed soon): operator-forced Search-UI scope (self-hosted only) —
+# comma-separated document set NAMES. When set, the Onyx Search UI is restricted to those sets
+# (AND'd on top of any persona/user scope; ACL still enforced) — chat/other flows are unaffected,
+# and it is disabled under MULTI_TENANT. Empty = no restriction. Names match the index directly; a
+# name that doesn't exist matches nothing (fail-closed) and is logged. Read at import — restart to change.
+FORCED_DOCUMENT_SET_NAMES: list[str] = [
+    name.strip()
+    for name in os.environ.get("FORCED_DOCUMENT_SET_NAMES", "").split(",")
+    if name.strip()
+]
 
 # Which backend to use for caching, locks, and ephemeral state.
 # "redis" (default) or "postgres" (only valid when DISABLE_VECTOR_DB=true).
@@ -199,11 +211,10 @@ DISPOSABLE_EMAIL_DOMAINS_URL = os.environ.get(
 # lifetime, so a paired-up cookie + token never outlive each other.
 CAPTCHA_COOKIE_TTL_SECONDS = int(os.environ.get("CAPTCHA_COOKIE_TTL_SECONDS", "120"))
 
-# Redis TTL for cached control-plane billing/trial lookups. 24h default —
-# trial→paid conversions propagate within this window in the worst case,
-# and the admin panel call sites invalidate on write so immediate UI
-# refreshes are not stale. Env-tunable for emergency tightening.
-BILLING_CACHE_TTL_SECONDS = int(os.environ.get("BILLING_CACHE_TTL_SECONDS", "86400"))
+# Redis TTL for cached control-plane billing/trial lookups. Backstop only:
+# successful /tenants/tier-update pushes and admin-panel billing mutations
+# drop this cache, so 1h bounds staleness when a push is missed or fails.
+BILLING_CACHE_TTL_SECONDS = int(os.environ.get("BILLING_CACHE_TTL_SECONDS", "3600"))
 
 # OAuth Login Flow
 # Used for both Google OAuth2 and OIDC flows
@@ -346,7 +357,11 @@ if not MOBILE_ALLOWED_REDIRECT_URIS:
     MOBILE_ALLOWED_REDIRECT_URIS = _DEFAULT_MOBILE_REDIRECT_URIS
 
 # JWT Public Key URL for JWT token verification
-JWT_PUBLIC_KEY_URL: str | None = os.getenv("JWT_PUBLIC_KEY_URL", None)
+JWT_PUBLIC_KEY_URL: str | None = os.getenv("JWT_PUBLIC_KEY_URL") or None
+# Optional aud/iss scoping for JWT_PUBLIC_KEY_URL auth, off when unset. Empty
+# counts as unset because compose files pass absent vars through as "".
+JWT_EXPECTED_AUDIENCE: str | None = os.getenv("JWT_EXPECTED_AUDIENCE") or None
+JWT_EXPECTED_ISSUER: str | None = os.getenv("JWT_EXPECTED_ISSUER") or None
 
 USER_AUTH_SECRET = os.environ.get("USER_AUTH_SECRET", "")
 
@@ -603,14 +618,90 @@ POSTGRES_HOST = os.environ.get("POSTGRES_HOST") or "127.0.0.1"
 POSTGRES_PORT = os.environ.get("POSTGRES_PORT") or "5432"
 POSTGRES_DB = os.environ.get("POSTGRES_DB") or "postgres"
 AWS_REGION_NAME = os.environ.get("AWS_REGION_NAME") or "us-east-2"
-# Comma-separated replica / multi-host list. If unset, defaults to POSTGRES_HOST
-# only.
-_POSTGRES_HOSTS_STR = os.environ.get("POSTGRES_HOSTS", "").strip()
-POSTGRES_HOSTS: list[str] = (
-    [h.strip() for h in _POSTGRES_HOSTS_STR.split(",") if h.strip()]
-    if _POSTGRES_HOSTS_STR
-    else [POSTGRES_HOST]
+
+# --- Tenant sharding (multi-database) ---------------------------------------
+# Onyx addresses a tenant by schema (`schema_translate_map`). These settings let
+# tenants additionally be spread across separate physical databases ("shards").
+#
+# ONYX_DB_SHARDS is a JSON object of shard name -> connection overrides, e.g.
+#   {"shard-b": {"host": "other.rds.amazonaws.com", "db": "danswer"}}
+# Keys not supplied for a shard fall back to the POSTGRES_* values above.
+#
+# When unset, exactly one shard exists (named by ONYX_DB_DEFAULT_SHARD, built
+# from POSTGRES_*), which is the single-database behavior Onyx has always had.
+ONYX_DB_SHARDS_JSON = os.environ.get("ONYX_DB_SHARDS", "").strip()
+# Shard that hosts tenants with no explicit mapping.
+ONYX_DB_DEFAULT_SHARD = os.environ.get("ONYX_DB_DEFAULT_SHARD") or "default"
+# Shard that holds the shared `public` catalog tables (user_tenant_mapping etc.)
+# and the tenant -> shard map itself. Must be resolvable without a lookup.
+ONYX_DB_CATALOG_SHARD = os.environ.get("ONYX_DB_CATALOG_SHARD") or ONYX_DB_DEFAULT_SHARD
+# Shard that newly created tenants are placed on. Existing tenants are unaffected;
+# flipping this changes where the *next* tenant's schema is built. The pre-provisioned
+# pool drains oldest-first, so a flip ramps in gradually rather than all at once.
+ONYX_DB_NEW_TENANT_SHARD = (
+    os.environ.get("ONYX_DB_NEW_TENANT_SHARD") or ONYX_DB_DEFAULT_SHARD
 )
+# Connection pool for shards other than the default one. Unset means each shard gets
+# the same budget as the default, which is correct because a connection limit belongs
+# to a database rather than to the fleet. Set these lower while a new shard is still
+# filling up.
+ONYX_DB_SHARD_POOL_SIZE = (
+    int(os.environ["ONYX_DB_SHARD_POOL_SIZE"])
+    if os.environ.get("ONYX_DB_SHARD_POOL_SIZE")
+    else None
+)
+ONYX_DB_SHARD_POOL_OVERFLOW = (
+    int(os.environ["ONYX_DB_SHARD_POOL_OVERFLOW"])
+    if os.environ.get("ONYX_DB_SHARD_POOL_OVERFLOW")
+    else None
+)
+
+# Checked here so a bad value stops the process rather than surfacing on the first
+# request routed to a shard, whose engine is built lazily.
+if ONYX_DB_SHARD_POOL_SIZE is not None and ONYX_DB_SHARD_POOL_SIZE < 1:
+    # SQLAlchemy reads pool_size=0 as "no size limit", so a 0 here would uncap the
+    # shard rather than constrain it — the opposite of why this setting exists.
+    raise ValueError(
+        f"ONYX_DB_SHARD_POOL_SIZE must be at least 1, got {ONYX_DB_SHARD_POOL_SIZE}"
+    )
+if ONYX_DB_SHARD_POOL_OVERFLOW is not None and ONYX_DB_SHARD_POOL_OVERFLOW < 0:
+    # 0 is meaningful (no overflow past pool_size); negative means unlimited.
+    raise ValueError(
+        f"ONYX_DB_SHARD_POOL_OVERFLOW must be zero or greater, got "
+        f"{ONYX_DB_SHARD_POOL_OVERFLOW}"
+    )
+
+# Operator escape hatch: JSON object of tenant_id -> shard name, consulted
+# before the catalog table. Intended for incident response, not routine use.
+ONYX_DB_SHARD_OVERRIDES_JSON = os.environ.get("ONYX_DB_SHARD_OVERRIDES", "").strip()
+# How long a resolved tenant -> shard mapping is cached in-process. This is the
+# backstop on staleness when the Redis version channel is unavailable.
+ONYX_DB_SHARD_MAP_TTL_SECONDS = int(
+    os.environ.get("ONYX_DB_SHARD_MAP_TTL_SECONDS") or 60
+)
+# How often a process re-reads the shared shard-map version from Redis. Bounds how
+# quickly a migrator's map flip reaches every process in the common case; the freeze
+# window itself is bounded by the TTL above, since a Redis-partitioned process never
+# sees the flip at all.
+ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS = float(
+    os.environ.get("ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS") or 5
+)
+
+if ONYX_DB_SHARD_MAP_TTL_SECONDS <= 0:
+    raise ValueError(
+        f"ONYX_DB_SHARD_MAP_TTL_SECONDS must be positive, got "
+        f"{ONYX_DB_SHARD_MAP_TTL_SECONDS}"
+    )
+if (
+    not math.isfinite(ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS)
+    or ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS <= 0
+):
+    # A non-finite interval would stop the poller permanently, silently reducing
+    # flip propagation to the TTL path.
+    raise ValueError(
+        f"ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS must be a positive finite number, "
+        f"got {ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS}"
+    )
 
 POSTGRES_API_SERVER_POOL_SIZE = int(
     os.environ.get("POSTGRES_API_SERVER_POOL_SIZE") or 40
@@ -894,10 +985,25 @@ REDIS_HEALTH_CHECK_INTERVAL = int(os.environ.get("REDIS_HEALTH_CHECK_INTERVAL", 
 # our redis client only, not celery's
 REDIS_POOL_MAX_CONNECTIONS = int(os.environ.get("REDIS_POOL_MAX_CONNECTIONS", 128))
 
+# Per-recv and connect deadlines in seconds for our redis client, not celery's.
+# A peer that keeps the TCP session open without replying raises after this
+# instead of holding the thread until restart. The read value caps BLPOP too.
+REDIS_SOCKET_CONNECT_TIMEOUT = float(
+    os.environ.get("REDIS_SOCKET_CONNECT_TIMEOUT") or 10
+)
+REDIS_SOCKET_TIMEOUT = float(os.environ.get("REDIS_SOCKET_TIMEOUT") or 30)
+REDIS_SOCKET_TIMEOUT_KWARGS: dict[str, float] = {
+    "socket_connect_timeout": REDIS_SOCKET_CONNECT_TIMEOUT,
+    "socket_timeout": REDIS_SOCKET_TIMEOUT,
+}
+
 # https://docs.celeryq.dev/en/stable/userguide/configuration.html#redis-backend-settings
 # should be one of "required", "optional", or "none"
 REDIS_SSL_CERT_REQS = os.getenv("REDIS_SSL_CERT_REQS", "none")
 REDIS_SSL_CA_CERTS = os.getenv("REDIS_SSL_CA_CERTS", None)
+REDIS_SSL_CHECK_HOSTNAME = (
+    os.getenv("REDIS_SSL_CHECK_HOSTNAME", "false").lower() == "true"
+)
 # Client certificate + key for Redis mutual TLS (the server authenticating us).
 # Both must be set together and require REDIS_SSL=true. A managed Redis may hand
 # these out base64-encoded — decode them to files (e.g. a mounted secret) and
@@ -999,6 +1105,31 @@ MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE = max(
     1, _non_negative_int_env("MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE", 5)
 )
 
+# Old-index reclamation (post-reindex deletion of the now-PAST index).
+# Master switch: when False the reclaim beat task and every dispatched task no-op.
+# Set it to false to turn reclamation off; that takes effect once the workers restart.
+OLD_INDEX_RECLAIM_ENABLED = (
+    os.environ.get("OLD_INDEX_RECLAIM_ENABLED", "true").lower() == "true"
+)
+# Soak before deleting a PAST index, anchored to when it stopped being read.
+# 0 = delete immediately once the soak gate is reached.
+OLD_INDEX_RETENTION_HOURS = _non_negative_int_env("OLD_INDEX_RETENTION_HOURS", 24)
+# Bounds the blast radius of a runaway task.
+OLD_INDEX_RECLAIM_MAX_PER_RUN = max(
+    1, _non_negative_int_env("OLD_INDEX_RECLAIM_MAX_PER_RUN", 5)
+)
+# Consecutive failures on one reclaim before it is parked as BLOCKED and alerted.
+OLD_INDEX_RECLAIM_MAX_ATTEMPTS = max(
+    1, _non_negative_int_env("OLD_INDEX_RECLAIM_MAX_ATTEMPTS", 5)
+)
+# Max docs a single reclaim delete_by_query removes before returning, so one call
+# can't run past the OpenSearch client HTTP timeout (60s) on a huge tenant. The reclaim
+# loop re-runs until the tenant's slice is empty. Conservative default leaves margin on
+# a slow / loaded cluster (the fleet-reindex case); tune up for fast clusters.
+OLD_INDEX_RECLAIM_DELETE_BATCH_SIZE = max(
+    1, _non_negative_int_env("OLD_INDEX_RECLAIM_DELETE_BATCH_SIZE", 10_000)
+)
+
 _CELERY_WORKER_DOCFETCHING_CONCURRENCY_DEFAULT = 1
 try:
     env_value = os.environ.get("CELERY_WORKER_DOCFETCHING_CONCURRENCY")
@@ -1057,12 +1188,6 @@ POLL_CONNECTOR_OFFSET = 30  # Minutes overlap between poll windows
 # If this is empty, all connectors are enabled, this is an option for security heavy orgs where
 # only very select connectors are enabled and admins cannot add other connector types
 ENABLED_CONNECTOR_TYPES = os.environ.get("ENABLED_CONNECTOR_TYPES") or ""
-
-# If set to true, curators can only access and edit assistants that they created
-CURATORS_CANNOT_VIEW_OR_EDIT_NON_OWNED_ASSISTANTS = (
-    os.environ.get("CURATORS_CANNOT_VIEW_OR_EDIT_NON_OWNED_ASSISTANTS", "").lower()
-    == "true"
-)
 
 # Some calls to get information on expert users are quite costly especially with rate limiting
 # Since experts are not used in the actual user experience, currently it is turned off
@@ -1237,6 +1362,11 @@ SHAREPOINT_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("SHAREPOINT_CONNECTOR_SIZE_THRESHOLD", 20 * 1024 * 1024)
 )
 
+# Largest mail attachment the Outlook connector downloads and extracts.
+OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD = int(
+    os.environ.get("OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD", 20 * 1024 * 1024)
+)
+
 # When True, group sync enumerates every Azure AD group in the tenant (expensive).
 # When False (default), only groups found in site role assignments are synced.
 # Can be overridden per-connector via the "exhaustive_ad_enumeration" key in
@@ -1245,12 +1375,20 @@ SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION = (
     os.environ.get("SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION", "").lower() == "true"
 )
 
+AIRTABLE_ATTACHMENT_SIZE_THRESHOLD = int(
+    os.environ.get("AIRTABLE_ATTACHMENT_SIZE_THRESHOLD", 10 * 1024 * 1024)
+)
+
 BLOB_STORAGE_SIZE_THRESHOLD = int(
     os.environ.get("BLOB_STORAGE_SIZE_THRESHOLD", 20 * 1024 * 1024)
 )
 
 BOX_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("BOX_CONNECTOR_SIZE_THRESHOLD", 20 * 1024 * 1024)
+)
+
+DROPBOX_CONNECTOR_SIZE_THRESHOLD = int(
+    os.environ.get("DROPBOX_CONNECTOR_SIZE_THRESHOLD", 20 * 1024 * 1024)
 )
 
 JIRA_CONNECTOR_LABELS_TO_SKIP = [
@@ -1265,6 +1403,16 @@ JIRA_CONNECTOR_MAX_TICKET_SIZE = int(
 JIRA_SLIM_PAGE_SIZE = int(os.environ.get("JIRA_SLIM_PAGE_SIZE", 500))
 
 GONG_CONNECTOR_START_TIME = os.environ.get("GONG_CONNECTOR_START_TIME")
+
+# An occurrence is picked up by when the meeting ran, but its transcript
+# lands later, so each poll reaches back this far to catch ones that were
+# still processing. Zoom publishes no maximum for that lag, so raise this if
+# a deployment sees transcripts arrive later than the default covers.
+# Clamped at zero: a negative value would narrow the poll window instead of
+# widening it, quietly skipping occurrences the connector should have indexed.
+ZOOM_TRANSCRIPT_LAG_BUFFER_HOURS = max(
+    0, int(os.environ.get("ZOOM_TRANSCRIPT_LAG_BUFFER_HOURS") or 72)
+)
 
 GITHUB_CONNECTOR_BASE_URL = os.environ.get("GITHUB_CONNECTOR_BASE_URL") or None
 
@@ -1282,6 +1430,10 @@ EGNYTE_CLIENT_SECRET = os.getenv("EGNYTE_CLIENT_SECRET")
 # Linear specific configs
 LINEAR_CLIENT_ID = os.getenv("LINEAR_CLIENT_ID")
 LINEAR_CLIENT_SECRET = os.getenv("LINEAR_CLIENT_SECRET")
+
+# Salesforce specific configs
+SALESFORCE_CLIENT_ID = os.getenv("SALESFORCE_CLIENT_ID")
+SALESFORCE_CLIENT_SECRET = os.getenv("SALESFORCE_CLIENT_SECRET")
 
 # Slack specific configs
 SLACK_NUM_THREADS = int(os.getenv("SLACK_NUM_THREADS") or 8)
@@ -1359,8 +1511,6 @@ ENABLE_MULTIPASS_INDEXING = (
 # Enable contextual retrieval
 ENABLE_CONTEXTUAL_RAG = os.environ.get("ENABLE_CONTEXTUAL_RAG", "").lower() == "true"
 
-DEFAULT_CONTEXTUAL_RAG_LLM_NAME = "gpt-4o-mini"
-DEFAULT_CONTEXTUAL_RAG_LLM_PROVIDER = "DevEnvPresetOpenAI"
 # Finer grained chunking for more detail retention
 # Slightly larger since the sentence aware split is a max cutoff so most minichunks will be under MINI_CHUNK_SIZE
 # tokens. But we need it to be at least as big as 1/4th chunk size to avoid having a tiny mini-chunk at the end
@@ -1434,13 +1584,22 @@ MAX_FILE_SIZE_BYTES = int(
 # with thousands of embedded images can OOM the user-file-processing worker
 # because every image is decoded with PIL and then sent to the vision LLM.
 # Enforced both at upload time (rejects the file) and during extraction
-# (defense-in-depth: caps the number of images materialized).
+# (defense-in-depth: caps the number of images materialized). For PDFs the
+# count is of unique images that pass the content filters in
+# onyx/file_processing/pdf_image_utils.py.
 #
 # Clamped to >= 0; a negative env value would turn upload validation into
 # always-fail and extraction into always-stop, which is never desired. 0
 # disables image extraction entirely, which is a valid (if aggressive) setting.
 MAX_EMBEDDED_IMAGES_PER_FILE = max(
     0, int(os.environ.get("MAX_EMBEDDED_IMAGES_PER_FILE") or 500)
+)
+
+# Embedded PDF images narrower or shorter than this (px) are treated as
+# rendering artifacts (scanline strips, spacers, gradient tiles), not content,
+# and are skipped by both upload-time counting and extraction. 0 disables.
+MIN_EMBEDDED_IMAGE_DIMENSION_PX = max(
+    0, int(os.environ.get("MIN_EMBEDDED_IMAGE_DIMENSION_PX") or 16)
 )
 
 # Maximum embedded images allowed across all files in a single upload batch.
@@ -1773,6 +1932,14 @@ API_KEY_HASH_ROUNDS = (
 # MCP Server Configs
 #####
 MCP_SERVER_ENABLED = os.environ.get("MCP_SERVER_ENABLED", "").lower() == "true"
+_MCP_SERVER_API_REQUEST_TIMEOUT_RAW = int(
+    os.environ.get("MCP_SERVER_API_REQUEST_TIMEOUT_SECONDS") or 300
+)
+MCP_SERVER_API_REQUEST_TIMEOUT_SECONDS: int = (
+    _MCP_SERVER_API_REQUEST_TIMEOUT_RAW
+    if _MCP_SERVER_API_REQUEST_TIMEOUT_RAW > 0
+    else 300
+)
 MCP_SERVER_HOST = os.environ.get("MCP_SERVER_HOST", "0.0.0.0")  # noqa: S104 — server bind address; intentional default for containerized deployment
 MCP_SERVER_PORT = int(os.environ.get("MCP_SERVER_PORT") or 8090)
 
@@ -1824,9 +1991,7 @@ SIGNUP_RATE_LIMIT_ENABLED = (
 MOCK_CONNECTOR_FILE_PATH = os.environ.get("MOCK_CONNECTOR_FILE_PATH")
 
 # Set to true to mock LLM responses for testing purposes
-MOCK_LLM_RESPONSE = (
-    os.environ.get("MOCK_LLM_RESPONSE") if os.environ.get("MOCK_LLM_RESPONSE") else None
-)
+MOCK_LLM_RESPONSE = os.environ.get("MOCK_LLM_RESPONSE") or None
 
 
 DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB = 20

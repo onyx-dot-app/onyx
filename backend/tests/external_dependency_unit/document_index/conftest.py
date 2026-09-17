@@ -98,7 +98,7 @@ def make_indexing_metadata(
                 old_chunk_cnt=old,
                 new_chunk_cnt=new,
             )
-            for doc_id, old, new in zip(doc_ids, old_counts, new_counts)
+            for doc_id, old, new in zip(doc_ids, old_counts, new_counts, strict=True)
         }
     )
 

@@ -84,7 +84,9 @@ def weighted_reciprocal_rank_fusion(
     id_to_source_rank: dict[str, int] = {}
 
     # Compute weighted RRF scores
-    for source_idx, (result_list, weight) in enumerate(zip(ranked_results, weights)):
+    for source_idx, (result_list, weight) in enumerate(
+        zip(ranked_results, weights, strict=True)
+    ):
         for rank, item in enumerate(result_list, start=1):
             item_id = id_extractor(item)
 
@@ -241,7 +243,7 @@ def merge_overlapping_sections(
     merged_sections: dict[tuple[str, int], InferenceSection] = {}
 
     # Process each document's sections
-    for doc_id, doc_section_list in doc_sections.items():
+    for doc_section_list in doc_sections.values():
         if not doc_section_list:
             continue
 
@@ -448,7 +450,7 @@ def expand_section_with_context(
             chunks=all_chunks,
         )
 
-        return expanded_section if expanded_section else section
+        return expanded_section or section
 
     elif classification == ContextExpansionType.FULL_DOCUMENT:
         # Fetch 5 chunks above and below (optimal single retrieval)
@@ -486,7 +488,7 @@ def expand_section_with_context(
             chunks=all_chunks,
         )
 
-        return expanded_section if expanded_section else section
+        return expanded_section or section
 
     else:
         # Unknown classification - default to returning original section

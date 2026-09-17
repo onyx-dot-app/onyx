@@ -25,7 +25,7 @@ from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager im
 
 def _make_replica() -> KubernetesSandboxManager:
     """A fresh manager (its own state, like a separate pod); skips
-    ``_initialize`` so no kube config is needed."""
+    ``__init__`` so no kube config is needed."""
     m: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
     m._init_serve_state()
     return m

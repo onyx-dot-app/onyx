@@ -92,7 +92,7 @@ async def _resolve_capture_tenant_id(email: str) -> str | None:
     try:
         tenant_id = await asyncio.to_thread(
             fetch_ee_implementation_or_noop(
-                "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
+                "onyx.db.user_tenant_mapping", "get_tenant_id_for_email", None
             ),
             email,
         )
@@ -137,8 +137,12 @@ def _retain_richer_sources(
     return merged
 
 
-async def _store_claims_snapshot(email: str, snapshot: dict[str, Any]) -> None:
-    tenant_id = await _resolve_capture_tenant_id(email)
+async def _store_claims_snapshot(
+    email: str,
+    snapshot: dict[str, Any],
+    tenant_id: str | None = None,
+) -> None:
+    tenant_id = tenant_id or await _resolve_capture_tenant_id(email)
     if tenant_id is None:
         logger.debug(
             "Skipping claims capture for %s: tenant not yet resolved "
@@ -274,6 +278,8 @@ async def capture_oauth_login_claims(
     oauth_client: Any,
     email: str,
     token: dict[str, Any],
+    *,
+    tenant_id: str | None = None,
 ) -> None:
     """Snapshot the claims the IdP sent for this login into Redis.
 
@@ -287,7 +293,9 @@ async def capture_oauth_login_claims(
         return
     try:
         await asyncio.wait_for(
-            _capture_oauth_login_claims(oauth_client, email, token),
+            _capture_oauth_login_claims(
+                oauth_client, email, token, tenant_id=tenant_id
+            ),
             timeout=_IDP_CLAIMS_CAPTURE_TIMEOUT_SECONDS,
         )
     except asyncio.TimeoutError:
@@ -300,6 +308,8 @@ async def _capture_oauth_login_claims(
     oauth_client: Any,
     email: str,
     token: dict[str, Any],
+    *,
+    tenant_id: str | None = None,
 ) -> None:
     try:
         id_token_claims: dict[str, Any] = {}
@@ -311,7 +321,9 @@ async def _capture_oauth_login_claims(
                 logger.warning("OAuth claims capture: id_token decode failed: %s", e)
 
         userinfo: dict[str, Any] | None = None
-        openid_configuration = getattr(oauth_client, "openid_configuration", None)
+        openid_configuration = getattr(  # ods: ignore[getattr]
+            oauth_client, "openid_configuration", None
+        )
         userinfo_endpoint = (
             openid_configuration.get("userinfo_endpoint")
             if isinstance(openid_configuration, dict)
@@ -339,7 +351,9 @@ async def _capture_oauth_login_claims(
 
         snapshot = {
             "captured_at": datetime.now(timezone.utc).isoformat(),
-            "oauth_name": getattr(oauth_client, "name", "unknown"),
+            "oauth_name": getattr(  # ods: ignore[getattr]
+                oauth_client, "name", "unknown"
+            ),
             "email": email,
             "id_token_claims": id_token_claims,
             "userinfo": userinfo or {},
@@ -356,7 +370,7 @@ async def _capture_oauth_login_claims(
             },
         }
 
-        await _store_claims_snapshot(email, snapshot)
+        await _store_claims_snapshot(email, snapshot, tenant_id)
     except Exception:
         logger.warning(
             "OAuth claims capture failed for %s (login unaffected)",
@@ -554,7 +568,7 @@ def get_idp_profile(email: str) -> IdpProfileViews:
     try:
         profile = _resolve_profile(email)
         return IdpProfileViews(
-            fields={label: value for label, value in profile.values()},
+            fields=dict(profile.values()),
             placeholders={key: value for key, (_, value) in profile.items()},
         )
     except Exception:

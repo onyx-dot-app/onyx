@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Button, MessageCard } from "@opal/components";
 import { SvgRefreshCw } from "@opal/icons";
 import { toast } from "@opal/layouts";
@@ -16,6 +17,7 @@ export default function SkillsStaleNotice({
   sessionId,
   turnActive,
 }: SkillsStaleNoticeProps) {
+  const t = useTranslations("craft.skillsStale");
   const [reloading, setReloading] = useState(false);
   const updateSessionData = useBuildSessionStore(
     (state) => state.updateSessionData
@@ -27,28 +29,23 @@ export default function SkillsStaleNotice({
       updateSessionData(sessionId, { skillsStale: state.skills_stale });
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Failed to reload session"
+        error instanceof Error ? error.message : t("toast.reloadFailed")
       );
     } finally {
       setReloading(false);
     }
   };
 
+  if (turnActive) return null;
+
   return (
     <MessageCard
       variant="warning"
-      title="Your agent’s capabilities have changed"
-      description="Reload this session to apply the latest skills and app access."
+      title={t("notice.title")}
+      description={t("notice.description")}
       rightChildren={
-        <Button
-          icon={SvgRefreshCw}
-          onClick={reload}
-          disabled={turnActive || reloading}
-          tooltip={
-            turnActive ? "Wait for the current turn to finish." : undefined
-          }
-        >
-          {reloading ? "Reloading…" : "Reload"}
+        <Button icon={SvgRefreshCw} onClick={reload} disabled={reloading}>
+          {reloading ? t("reload.inProgress") : t("reload.button")}
         </Button>
       }
     />

@@ -93,16 +93,31 @@ pub fn log_backend_error(app: &AppHandle, message: &str) {
     if !state.debug_mode {
         return;
     }
-    // Bind the lock result to a named local rather than matching on it
-    // directly in the `if let` scrutinee: `if let Ok(x) = mutex.lock() { }`
-    // extends the whole `Result<MutexGuard, _>` temporary's lifetime to the
-    // end of the enclosing block, which the borrow checker rejects here
-    // since that block also owns `state` (the guard's ultimate borrow
-    // source). A named binding is scoped by normal liveness instead.
+    append_debug_log_line(&state, "ERROR", message);
+}
+
+/// Debug-mode-only sibling of `log_backend_error` for tracing expected
+/// behavior, e.g. confirming a global shortcut registered and actually fires.
+pub fn log_backend_debug(app: &AppHandle, message: &str) {
+    let state = app.state::<ConfigState>();
+    if !state.debug_mode {
+        return;
+    }
+    eprintln!("[ONYX DEBUG] {message}");
+    append_debug_log_line(&state, "DEBUG", message);
+}
+
+/// Append one line to the debug log file. The lock result is bound to a named
+/// local rather than matched directly in the `if let` scrutinee: `if let
+/// Ok(x) = mutex.lock() { }` extends the whole `Result<MutexGuard, _>`
+/// temporary's lifetime to the end of the enclosing block, which the borrow
+/// checker rejects when that block also owns the guard's ultimate borrow
+/// source. A named binding is scoped by normal liveness instead.
+fn append_debug_log_line(state: &ConfigState, level: &str, message: &str) {
     let lock_result = state.debug_log_file.lock();
     if let Ok(mut guard) = lock_result {
         if let Some(ref mut file) = *guard {
-            let line = format!("[{}] [ERROR] {}", format_utc_timestamp(), message);
+            let line = format!("[{}] [{level}] {}", format_utc_timestamp(), message);
             let _ = writeln!(file, "{line}");
             let _ = file.flush();
         }

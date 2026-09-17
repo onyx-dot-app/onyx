@@ -93,6 +93,20 @@ def test_whitelist_skips_check_for_real_member(
     verify_email_in_whitelist("member@example.com", "public")
 
 
+def test_whitelist_recognizes_renamed_member_by_oauth_subject(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    member = MagicMock()
+    member.account_type = AccountType.STANDARD
+    _patch_whitelist_deps(monkeypatch, None)
+    by_subject = MagicMock(return_value=member)
+    monkeypatch.setattr(users, "get_user_by_oauth_account", by_subject)
+
+    verify_email_in_whitelist("renamed@example.com", "public", "google", "sub-123")
+
+    by_subject.assert_called_once()
+
+
 def test_whitelist_enforces_for_unknown_email(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

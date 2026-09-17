@@ -69,7 +69,7 @@ def _are_search_docs_equal(
     received.sort(key=lambda x: x.document_id)
     expected.sort(key=lambda x: x.document_id)
 
-    for received_document, expected_document in zip(received, expected):
+    for received_document, expected_document in zip(received, expected, strict=True):
         if received_document.document_id != expected_document.document_id:
             return False
         if received_document.link != expected_document.link:
@@ -147,7 +147,9 @@ def is_image_generation_final_equal(
     if len(received.images) != len(expected.images):
         return False
 
-    for received_image, expected_image in zip(received.images, expected.images):
+    for received_image, expected_image in zip(
+        received.images, expected.images, strict=True
+    ):
         if received_image.url != f"/api/chat/file/{received_image.file_id}":
             return False
         if received_image.revised_prompt != expected_image.revised_prompt:

@@ -246,7 +246,7 @@ class TestExternalGroupPermissionSyncAttempt:
 
         # Create multiple attempts for the cc_pair
         attempt_ids = []
-        for i in range(5):
+        for _ in range(5):
             attempt_id = create_external_group_sync_attempt(cc_pair.id, db_session)
             attempt_ids.append(attempt_id)
 
@@ -293,7 +293,7 @@ class TestExternalGroupPermissionSyncAttempt:
 
         # Create multiple global attempts
         global_attempt_ids = []
-        for i in range(3):
+        for _ in range(3):
             attempt_id = create_external_group_sync_attempt(None, db_session)  # Global
             global_attempt_ids.append(attempt_id)
 

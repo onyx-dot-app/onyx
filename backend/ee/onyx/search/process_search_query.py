@@ -61,6 +61,8 @@ def _run_single_search(
         user=user,
         persona_search_info=None,
         db_session=db_session,
+        # Search UI is the only surface that enforces FORCED_DOCUMENT_SET_NAMES.
+        force_configured_document_set_scope=True,
     )
 
 
@@ -110,7 +112,7 @@ def stream_search_query(
             db_session=db_session,
             user_id=user.id,
             query=request.search_query,
-            query_expansions=keyword_expansions if keyword_expansions else None,
+            query_expansions=keyword_expansions or None,
         )
 
     # Execute search(es)

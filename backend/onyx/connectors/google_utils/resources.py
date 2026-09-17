@@ -74,7 +74,7 @@ def _get_google_service(
 ) -> GoogleDriveService | GoogleDocsService | AdminService | GmailService:
     creds = get_impersonated_creds(creds, user_email)
     service: Resource = build(service_name, service_version, credentials=creds)
-    return service
+    return service  # ty: ignore[invalid-return-type]
 
 
 def get_impersonated_creds(

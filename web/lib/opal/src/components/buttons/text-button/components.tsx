@@ -61,7 +61,12 @@ function TextButton({
   ...rest
 }: TextButtonProps) {
   const label = (
-    <Text font={font} color="inherit" as="p" nowrap={nowrap}>
+    <Text
+      font={font}
+      color="inherit"
+      as="p"
+      wordWrap={nowrap ? "whitespace-nowrap" : undefined}
+    >
       {children}
     </Text>
   );
@@ -81,12 +86,12 @@ function TextButton({
           href={(disabled ? undefined : href) as Route}
           target={target}
           rel={target === "_blank" ? "noopener noreferrer" : undefined}
-          className="opal-text-button interactive-foreground"
+          className="opal-text-label interactive-foreground"
         >
           {label}
         </Link>
       ) : (
-        <div className="opal-text-button interactive-foreground">{label}</div>
+        <div className="opal-text-label interactive-foreground">{label}</div>
       )}
     </Interactive.Stateless>
   );

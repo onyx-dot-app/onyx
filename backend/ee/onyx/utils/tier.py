@@ -4,18 +4,15 @@ Cloud: Redis HGET → CP lazy-refresh on miss → BUSINESS fallback.
 Self-hosted: license_payload.customer_tier (legacy licenses lacking the
 field default to ENTERPRISE).
 
-Promotion rule (cloud-only): a tenant whose contractual `customer_tier`
-is BUSINESS but whose subscription is still inside its trial window
-(`trial_end > now`) resolves to `Tier.ENTERPRISE` — they're being shown
-a preview of the Enterprise feature set during the trial. The contractual
-`customer_tier` on the tenant row is left unchanged; promotion is applied
-purely at read time so the moment `trial_end` passes, the cached entry
-naturally resolves back to BUSINESS without waiting on a webhook.
+Trial state never changes the resolved tier: a trialing tenant gets exactly
+the feature set it will hold when the trial expires. Both writers of the
+cache entry (the CP tier push and the lazy refresh) carry `trial_end` so the
+cached shape stays uniform. Resolution never reads it.
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 import requests
 from redis.exceptions import RedisError
@@ -47,21 +44,8 @@ _CUSTOMER_TIER_TO_TIER: dict[CustomerTier, Tier] = {
 }
 
 
-def _effective_tier(customer_tier: CustomerTier, trial_end: datetime | None) -> Tier:
-    """Apply the cloud trial-business → enterprise promotion.
-
-    A BUSINESS tenant whose `trial_end` is still in the future is resolved
-    to ENTERPRISE for the duration of the trial. Once `trial_end` is in the
-    past (or absent), the unpromoted mapping is used.
-    """
-    if (
-        customer_tier == CustomerTier.BUSINESS
-        and trial_end is not None
-        and trial_end > datetime.now(timezone.utc)
-    ):
-        return Tier.ENTERPRISE
-    # Unknown tier (e.g. a future CustomerTier value): fall back to the
-    # cloud floor — BUSINESS — rather than over-granting ENTERPRISE.
+def _cloud_tier(customer_tier: CustomerTier) -> Tier:
+    # Use the BUSINESS floor for an unknown cloud tier.
     return _CUSTOMER_TIER_TO_TIER.get(customer_tier, Tier.BUSINESS)
 
 
@@ -74,10 +58,10 @@ def tier_from_license_metadata(metadata: object | None) -> Tier:
     """
     if metadata is None:
         return Tier.COMMUNITY
-    status = getattr(metadata, "status", None)
+    status = getattr(metadata, "status", None)  # ods: ignore[getattr]
     if status == ApplicationStatus.GATED_ACCESS:
         return Tier.COMMUNITY
-    customer_tier = getattr(metadata, "customer_tier", None)
+    customer_tier = getattr(metadata, "customer_tier", None)  # ods: ignore[getattr]
     if not isinstance(customer_tier, CustomerTier):
         # None (legacy license) or unrecognized -> ENTERPRISE for back-compat.
         return Tier.ENTERPRISE
@@ -118,16 +102,13 @@ def _self_hosted_tier() -> Tier:
 def _extract_billing_state(
     billing: BillingInformation | SubscriptionStatusResponse,
 ) -> tuple[CustomerTier, datetime | None] | None:
-    customer_tier = getattr(billing, "customer_tier", None)
+    customer_tier = getattr(billing, "customer_tier", None)  # ods: ignore[getattr]
     if customer_tier is None:
         return None
-    trial_end = getattr(billing, "trial_end", None)
+    trial_end = getattr(billing, "trial_end", None)  # ods: ignore[getattr]
     if not isinstance(trial_end, datetime):
         trial_end = None
     elif trial_end.tzinfo is None or trial_end.tzinfo.utcoffset(trial_end) is None:
-        # Mirrors the cache-read guard: a naive trial_end would crash the
-        # tz-aware comparison in `_effective_tier`. Drop it and log so a
-        # CP-side regression is visible.
         logger.warning("CP returned naive trial_end; dropping: %r", trial_end)
         trial_end = None
     return customer_tier, trial_end
@@ -140,7 +121,7 @@ def _lazy_refresh_from_cp(
         billing = fetch_billing_information(tenant_id)
     except (requests.RequestException, ValueError) as e:
         logger.warning(
-            "Tier lazy-refresh failed for tenant %s; CP unreachable: %s",
+            "Tier lazy-refresh failed for tenant %s. CP request or payload failed: %s",
             tenant_id,
             e,
         )
@@ -167,7 +148,7 @@ def get_tier(tenant_id: str | None = None) -> Tier:
         return Tier.BUSINESS
 
     if cached is not None:
-        return _effective_tier(cached.customer_tier, cached.trial_end)
+        return _cloud_tier(cached.customer_tier)
 
     fresh = _lazy_refresh_from_cp(tid)
     if fresh is not None:
@@ -180,7 +161,7 @@ def get_tier(tenant_id: str | None = None) -> Tier:
                 tid,
                 e,
             )
-        return _effective_tier(fresh_tier, fresh_trial_end)
+        return _cloud_tier(fresh_tier)
 
     # Don't cache the fallback — next call retries the refresh.
     return Tier.BUSINESS

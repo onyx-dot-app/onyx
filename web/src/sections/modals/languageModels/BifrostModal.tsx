@@ -1,10 +1,13 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { markdown } from "@opal/utils";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import { InputDivider, toast } from "@opal/layouts";
+import { Tabs, Text } from "@opal/components";
 import {
+  BifrostApiMode,
   LLMProviderFormProps,
   LLMProviderName,
   LLMProviderView,
@@ -14,7 +17,7 @@ import {
   useInitialValues,
   buildValidationSchema,
   BaseLLMFormValues,
-  mergeFetchedModelConfigurations,
+  withFetchedModels,
 } from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
@@ -27,6 +30,26 @@ import {
   ModalWrapper,
 } from "@/sections/modals/languageModels/shared";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
+
+const DEFAULT_API_MODE: BifrostApiMode = "chat_completions";
+const BIFROST_API_MODE_KEY = "bifrost_api_mode";
+
+const API_MODE_TABS = [
+  {
+    value: "chat_completions",
+    titleKey: "bifrost.apiMode.chatCompletions.label",
+    subtitle: "/v1/chat/completions",
+  },
+  {
+    value: "responses",
+    titleKey: "bifrost.apiMode.responses.label",
+    subtitle: "/v1/responses",
+  },
+] as const satisfies readonly {
+  value: BifrostApiMode;
+  titleKey: string;
+  subtitle: string;
+}[];
 
 interface BifrostModalValues extends BaseLLMFormValues {
   api_key: string;
@@ -42,7 +65,14 @@ function BifrostModalInternals({
   existingLlmProvider,
   isOnboarding,
 }: BifrostModalInternalsProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const formikProps = useFormikContext<BifrostModalValues>();
+  const { setFieldValue, values } = formikProps;
+
+  const mode =
+    (values.custom_config?.[BIFROST_API_MODE_KEY] as
+      | BifrostApiMode
+      | undefined) ?? DEFAULT_API_MODE;
 
   const isFetchDisabled = !formikProps.values.api_base;
 
@@ -55,27 +85,44 @@ function BifrostModalInternals({
     if (error) {
       throw new Error(error);
     }
-    formikProps.setFieldValue(
-      "model_configurations",
-      mergeFetchedModelConfigurations(
-        models,
-        formikProps.values.model_configurations
-      )
-    );
+    formikProps.setValues(withFetchedModels(models));
   };
 
   return (
     <>
+      <Tabs
+        value={mode}
+        onValueChange={(next) =>
+          setFieldValue("custom_config", {
+            ...values.custom_config,
+            [BIFROST_API_MODE_KEY]: next as BifrostApiMode,
+          })
+        }
+      >
+        <Tabs.List>
+          {API_MODE_TABS.map((tab) => (
+            <Tabs.Trigger key={tab.value} value={tab.value}>
+              <div className="flex flex-col items-start">
+                <Text font="main-ui-action" color="inherit">
+                  {t(tab.titleKey)}
+                </Text>
+                <Text font="secondary-body" color="text-03">
+                  {tab.subtitle}
+                </Text>
+              </div>
+            </Tabs.Trigger>
+          ))}
+        </Tabs.List>
+      </Tabs>
+
       <APIBaseField
-        subDescription="Paste your Bifrost gateway endpoint URL (including API version)."
+        subDescription={t("bifrost.apiBaseField.description")}
         placeholder="https://your-bifrost-gateway.com/v1"
       />
 
       <APIKeyField
         optional
-        subDescription={markdown(
-          "Paste your API key from [Bifrost](https://docs.getbifrost.ai/overview) to access your models."
-        )}
+        subDescription={markdown(t("bifrost.apiKeyField.description"))}
       />
 
       {!isOnboarding && (
@@ -109,6 +156,7 @@ export default function BifrostModal({
   onSuccess,
   analyticsSource,
 }: LLMProviderFormProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
 
@@ -120,7 +168,18 @@ export default function BifrostModal({
     existingLlmProvider
   ) as BifrostModalValues;
 
-  const validationSchema = buildValidationSchema(isOnboarding, {
+  // useInitialValues drops custom_config, so seed it for submitProvider's
+  // custom_config_changed diff, preserving any other stored entries.
+  const initialMode =
+    (existingLlmProvider?.custom_config?.[BIFROST_API_MODE_KEY] as
+      | BifrostApiMode
+      | undefined) ?? DEFAULT_API_MODE;
+  initialValues.custom_config = {
+    ...existingLlmProvider?.custom_config,
+    [BIFROST_API_MODE_KEY]: initialMode,
+  };
+
+  const validationSchema = buildValidationSchema(t, isOnboarding, {
     apiBase: true,
   });
 
@@ -133,6 +192,7 @@ export default function BifrostModal({
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting, setStatus }) => {
         await submitProvider({
+          t,
           analyticsSource:
             analyticsSource ??
             (isOnboarding
@@ -153,8 +213,8 @@ export default function BifrostModal({
               await refreshLlmProviderCaches(mutate);
               toast.success(
                 existingLlmProvider
-                  ? "Provider updated successfully!"
-                  : "Provider enabled successfully!"
+                  ? t("toasts.providerUpdated")
+                  : t("toasts.providerEnabled")
               );
             }
           },

@@ -39,7 +39,7 @@ from onyx.llm.model_response import FunctionCall as DeltaFunctionCall
 from onyx.llm.models import (
     LanguageModelInput,
     ReasoningEffort,
-    ToolChoiceOptions,
+    ToolChoice,
     UserMessage,
 )
 from onyx.llm.tracing_wrap import (
@@ -82,12 +82,13 @@ class _FakeLLM(LLM):
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
-        tool_choice: ToolChoiceOptions | None = None,
+        tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
+        total_timeout_override: float | None = None,
     ) -> ModelResponse:
         self._invoke_calls += 1
         self._last_prompt = prompt
@@ -97,7 +98,7 @@ class _FakeLLM(LLM):
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
-        tool_choice: ToolChoiceOptions | None = None,
+        tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
@@ -120,8 +121,14 @@ class _NoOverrideLLM(_FakeLLM):
 
 
 def test_init_subclass_auto_wraps_invoke_and_stream() -> None:
-    assert getattr(_FakeLLM.invoke, _ALREADY_WRAPPED_ATTR, False) is True
-    assert getattr(_FakeLLM.stream, _ALREADY_WRAPPED_ATTR, False) is True
+    assert (
+        getattr(_FakeLLM.invoke, _ALREADY_WRAPPED_ATTR, False)  # ods: ignore[getattr]
+        is True
+    )
+    assert (
+        getattr(_FakeLLM.stream, _ALREADY_WRAPPED_ATTR, False)  # ods: ignore[getattr]
+        is True
+    )
 
 
 def test_inherited_methods_are_not_rewrapped() -> None:
@@ -210,7 +217,7 @@ def test_outer_guard_false_for_finished_span_leaked_into_contextvar() -> None:
 
 def test_extract_prompt_reads_positional_arg() -> None:
     llm = _FakeLLM()
-    sig = _validate_prompt_param(getattr(_FakeLLM.invoke, "__wrapped__"))
+    sig = _validate_prompt_param(getattr(_FakeLLM.invoke, "__wrapped__"))  # noqa: B009  # ods: ignore[getattr]
     prompt, tools = _extract_prompt_and_tools(sig, llm, ("hi",), {})
     assert prompt == "hi"
     assert tools is None
@@ -218,7 +225,7 @@ def test_extract_prompt_reads_positional_arg() -> None:
 
 def test_extract_prompt_reads_keyword_arg() -> None:
     llm = _FakeLLM()
-    sig = _validate_prompt_param(getattr(_FakeLLM.invoke, "__wrapped__"))
+    sig = _validate_prompt_param(getattr(_FakeLLM.invoke, "__wrapped__"))  # noqa: B009  # ods: ignore[getattr]
     prompt, tools = _extract_prompt_and_tools(sig, llm, (), {"prompt": "hi"})
     assert prompt == "hi"
     assert tools is None
@@ -226,7 +233,7 @@ def test_extract_prompt_reads_keyword_arg() -> None:
 
 def test_extract_tools_reads_keyword_arg() -> None:
     llm = _FakeLLM()
-    sig = _validate_prompt_param(getattr(_FakeLLM.invoke, "__wrapped__"))
+    sig = _validate_prompt_param(getattr(_FakeLLM.invoke, "__wrapped__"))  # noqa: B009  # ods: ignore[getattr]
     tool_defs = [{"type": "function", "function": {"name": "search"}}]
     prompt, tools = _extract_prompt_and_tools(
         sig, llm, (), {"prompt": "hi", "tools": tool_defs}
@@ -239,7 +246,7 @@ def test_extract_prompt_returns_none_on_signature_mismatch() -> None:
     """Unknown keyword arguments don't match the signature → bind fails →
     extraction returns (None, None) rather than raising."""
     llm = _FakeLLM()
-    sig = _validate_prompt_param(getattr(_FakeLLM.invoke, "__wrapped__"))
+    sig = _validate_prompt_param(getattr(_FakeLLM.invoke, "__wrapped__"))  # noqa: B009  # ods: ignore[getattr]
     assert _extract_prompt_and_tools(sig, llm, (), {"not_a_real_param": "hi"}) == (
         None,
         None,
@@ -323,12 +330,13 @@ class _ExplodingLLM(LLM):
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
-        tool_choice: ToolChoiceOptions | None = None,
+        tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
+        total_timeout_override: float | None = None,
     ) -> ModelResponse:
         raise RuntimeError("invoke-boom")
 
@@ -336,7 +344,7 @@ class _ExplodingLLM(LLM):
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
-        tool_choice: ToolChoiceOptions | None = None,
+        tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
@@ -484,12 +492,13 @@ class _ToolStreamLLM(LLM):
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
-        tool_choice: ToolChoiceOptions | None = None,
+        tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
+        total_timeout_override: float | None = None,
     ) -> ModelResponse:
         return _TEST_MODEL_RESPONSE
 
@@ -497,7 +506,7 @@ class _ToolStreamLLM(LLM):
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
-        tool_choice: ToolChoiceOptions | None = None,
+        tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
@@ -563,12 +572,13 @@ class _UsageStreamLLM(LLM):
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
-        tool_choice: ToolChoiceOptions | None = None,
+        tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
+        total_timeout_override: float | None = None,
     ) -> ModelResponse:
         return _TEST_MODEL_RESPONSE
 
@@ -576,7 +586,7 @@ class _UsageStreamLLM(LLM):
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
-        tool_choice: ToolChoiceOptions | None = None,
+        tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
@@ -603,7 +613,7 @@ class _UsageThenExplodeLLM(_UsageStreamLLM):
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
-        tool_choice: ToolChoiceOptions | None = None,
+        tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,

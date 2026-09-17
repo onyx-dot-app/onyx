@@ -40,16 +40,13 @@ def get_title(soup: BeautifulSoup) -> str:
 
 def get_pages(soup: BeautifulSoup, url: str) -> list[str]:
     page_tags = soup.select("li.pageNav-page")
-    page_numbers = []
-    for button in page_tags:
-        if re.match(r"^\d+$", button.text):
-            page_numbers.append(button.text)
+    page_numbers = [
+        button.text for button in page_tags if re.match(r"^\d+$", button.text)
+    ]
 
     max_pages = int(max(page_numbers, key=int)) if page_numbers else 1
 
-    all_pages = []
-    for x in range(1, int(max_pages) + 1):
-        all_pages.append(f"{url}page-{x}")
+    all_pages = [f"{url}page-{x}" for x in range(1, int(max_pages) + 1)]
     return all_pages
 
 

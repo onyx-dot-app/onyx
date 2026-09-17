@@ -22,6 +22,7 @@ from onyx.connectors.box.models import BoxFolderFrontierEntry
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
+    CredentialInvalidError,
     InsufficientPermissionsError,
     UnexpectedValidationError,
 )
@@ -576,6 +577,41 @@ def test_identity_validation_preserves_box_api_error(
     assert exc_info.value.__cause__ is box_error
 
 
+@pytest.mark.parametrize("oauth_error", ["invalid_client", "unauthorized_client"])
+def test_identity_validation_maps_oauth_400_to_credential_invalid(
+    oauth_error: str,
+) -> None:
+    connector = BoxConnector()
+    client = MagicMock()
+    box_error = make_box_api_error(
+        400,
+        body={"error": oauth_error, "error_description": "boom"},
+    )
+    client.users.get_user_me.side_effect = box_error
+    connector._auth = cast(BoxCCGAuth, MagicMock())
+    connector._content_client = cast(BoxClient, client)
+
+    with pytest.raises(CredentialInvalidError) as exc_info:
+        connector.validate_connector_settings()
+
+    assert exc_info.value.__cause__ is box_error
+    message = str(exc_info.value)
+    assert oauth_error in message
+    assert "boom" in message
+
+
+def test_identity_validation_unrecognized_400_stays_unexpected() -> None:
+    connector = BoxConnector()
+    client = MagicMock()
+    box_error = make_box_api_error(400, body={"error": "something_else"})
+    client.users.get_user_me.side_effect = box_error
+    connector._auth = cast(BoxCCGAuth, MagicMock())
+    connector._content_client = cast(BoxClient, client)
+
+    with pytest.raises(UnexpectedValidationError):
+        connector.validate_connector_settings()
+
+
 @pytest.mark.parametrize(
     "status,expected_error",
     [
@@ -616,7 +652,7 @@ def test_load_credentials_defers_clients_and_impersonation_lookup() -> None:
     assert connector._content_client is None
     assert connector._user_email == "user@example.com"
 
-    connector.enterprise_client
+    _ = connector.enterprise_client
 
     assert connector._enterprise_client is not None
     assert connector._content_client is None

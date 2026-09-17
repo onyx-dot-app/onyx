@@ -179,9 +179,7 @@ SAMPLE_BASES = [
 def _collect_docs(connector: AirtableConnector) -> list[Document]:
     docs: list[Document] = []
     for batch in connector.load_from_state():
-        for item in batch:
-            if isinstance(item, Document):
-                docs.append(item)
+        docs.extend(item for item in batch if isinstance(item, Document))
     return docs
 
 

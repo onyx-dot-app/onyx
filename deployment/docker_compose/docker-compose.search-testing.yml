@@ -215,7 +215,8 @@ services:
       && /tmp/run-nginx.sh app.conf.template"
 
   minio:
-    image: minio/minio:RELEASE.2025-07-23T15-54-02Z-cpuv1
+    # Same image as docker-compose.template.yml (see the note there).
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z-cpuv1@sha256:13582eff79c6605a2d315bdd0e70164142ea7e98fc8411e9e10d089502a6d883
     restart: unless-stopped
     # TODO(security): prefix 127.0.0.1: to bind loopback, not 0.0.0.0 (LAN-exposed).
     ports:

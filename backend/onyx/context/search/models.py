@@ -22,6 +22,10 @@ class QueryExpansionType(Enum):
 
 
 class SearchSettingsCreationRequest(IndexingSetting):
+    # cc_pairs the admin consented to delete (shown as "won't be ported"). Gates deletion:
+    # the server rejects if its authoritative recompute includes an unacknowledged cc_pair.
+    acknowledged_wont_port_cc_pair_ids: list[int] | None = None
+
     @classmethod
     def from_db_model(
         cls, search_settings: SearchSettings
@@ -54,6 +58,10 @@ class SavedSearchSettings(IndexingSetting):
             enable_contextual_rag=search_settings.enable_contextual_rag,
             contextual_rag_model_configuration_id=search_settings.contextual_rag_model_configuration_id,
         )
+
+
+class ContextualRagModelUpdateResponse(BaseModel):
+    contextual_rag_model_configuration_id: int
 
 
 class Tag(BaseModel):
@@ -146,6 +154,11 @@ class IndexFilters(BaseFilters, UserFileFilters, AssistantKnowledgeFilters):
     # DocumentAccess::to_acl.
     access_control_list: list[str] | None
     tenant_id: str | None = None
+    # Operator-forced document-set scope (NAMES, not IDs). When set, retrieval is
+    # restricted to these sets via a standalone AND clause — distinct from
+    # `document_set` (a user/persona OR-scope). Set only on the Search UI path
+    # (from FORCED_DOCUMENT_SET_NAMES); None = no restriction.
+    forced_document_set: list[str] | None = None
 
 
 class BasicChunkRequest(BaseModel):
@@ -274,8 +287,7 @@ class InferenceChunkUncleaned(InferenceChunk):
         inference_chunk_data = {
             k: v
             for k, v in self.model_dump().items()
-            if k
-            not in ["metadata_suffix"]  # May be other fields to throw out in the future
+            if k != "metadata_suffix"  # May be other fields to throw out in the future
         }
         return InferenceChunk(**inference_chunk_data)
 

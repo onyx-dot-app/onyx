@@ -12,7 +12,7 @@ export default meta;
 type Story = StoryObj<typeof Disabled>;
 
 const SampleContent = () => (
-  <Card border="solid" padding="md">
+  <Card border="solid" padding={4}>
     <div className="flex flex-col gap-2">
       <p className="text-sm font-medium">Card Title</p>
       <p className="text-xs text-text-03">Some content that can be disabled.</p>
@@ -63,7 +63,7 @@ export const TooltipSides: Story = {
           tooltip={`Tooltip on ${side}`}
           tooltipSide={side}
         >
-          <Card border="solid" padding="sm">
+          <Card border="solid" padding={2}>
             <p className="text-sm">tooltipSide: {side}</p>
           </Card>
         </Disabled>
@@ -76,7 +76,7 @@ export const WithAllowClick: Story = {
   render: () => (
     <div className="w-80">
       <Disabled disabled allowClick>
-        <Card border="solid" padding="md">
+        <Card border="solid" padding={4}>
           <p className="text-sm">
             Disabled visuals, but pointer events are still active.
           </p>

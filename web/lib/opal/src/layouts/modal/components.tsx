@@ -50,14 +50,15 @@ function ConfirmationModalLayout({
 }: ConfirmationModalProps) {
   const modalClose = useModalClose(externalOnClose);
   const closedRef = React.useRef(false);
+  const canClose = modalClose !== undefined;
 
   // The header X sits inside DialogPrimitive.Close AND carries onClick, so
   // one click reaches here twice (directly and via onOpenChange). A closed
   // confirmation unmounts, so close is one-shot by definition.
   const onClose = () => {
-    if (closedRef.current) return;
+    if (!modalClose || closedRef.current) return;
     closedRef.current = true;
-    modalClose?.();
+    modalClose();
   };
 
   return (
@@ -67,7 +68,7 @@ function ConfirmationModalLayout({
           icon={icon}
           title={title}
           description={description}
-          onClose={onClose}
+          onClose={canClose ? onClose : undefined}
         />
         <Modal.Body twoTone={twoTone}>
           {typeof children === "string" ? (
@@ -79,7 +80,7 @@ function ConfirmationModalLayout({
           )}
         </Modal.Body>
         <Modal.Footer>
-          {!hideCancel && (
+          {!hideCancel && canClose && (
             <Button prominence="secondary" onClick={onClose}>
               Cancel
             </Button>

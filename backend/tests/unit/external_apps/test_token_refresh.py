@@ -258,7 +258,7 @@ def _cred(values: dict[str, Any]) -> MagicMock:
 
 
 @contextmanager
-def _noop_cm(*_a: Any, **_k: Any):  # type: ignore[no-untyped-def]
+def _noop_cm(*_a: Any, **_k: Any):
     yield MagicMock()
 
 

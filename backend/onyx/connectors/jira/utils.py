@@ -45,10 +45,10 @@ def best_effort_basic_expert_info(obj: Any) -> BasicExpertInfo | None:
 
 def best_effort_get_field_from_issue(jira_issue: Issue, field: str) -> Any:
     if hasattr(jira_issue, field):
-        return getattr(jira_issue, field)
+        return getattr(jira_issue, field)  # ods: ignore[getattr]
 
     if hasattr(jira_issue, "fields") and hasattr(jira_issue.fields, field):
-        return getattr(jira_issue.fields, field)
+        return getattr(jira_issue.fields, field)  # ods: ignore[getattr]
 
     try:
         return jira_issue.raw["fields"][field]

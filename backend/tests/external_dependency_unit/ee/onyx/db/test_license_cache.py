@@ -50,8 +50,13 @@ def _setup(
 
 def _payload(
     customer_tier: CustomerTier | None = CustomerTier.ENTERPRISE,
+    stripe_customer_id: str | None = None,
 ) -> LicensePayload:
-    """Build a minimal valid LicensePayload for cache round-trips."""
+    """Build a minimal valid LicensePayload for cache round-trips.
+
+    stripe_customer_id drives the derived source, so pass it to exercise
+    AUTO_FETCH and omit it for MANUAL_UPLOAD.
+    """
     now = datetime.now(timezone.utc)
     return LicensePayload(
         version="1.0",
@@ -62,27 +67,20 @@ def _payload(
         seats=100,
         plan_type=PlanType.ANNUAL,
         customer_tier=customer_tier,
+        stripe_customer_id=stripe_customer_id,
     )
 
 
 def test_writes_under_expected_key() -> None:
     """The cache layer writes to the documented LICENSE_METADATA_KEY."""
-    update_license_cache(
-        _payload(),
-        source=LicenseSource.MANUAL_UPLOAD,
-        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
-    )
+    update_license_cache(_payload(), tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     redis_client = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     assert redis_client.exists(LICENSE_METADATA_KEY) == 1
 
 
 def test_sets_24h_ttl() -> None:
     """The cache entry expires after LICENSE_CACHE_TTL_SECONDS (24h)."""
-    update_license_cache(
-        _payload(),
-        source=LicenseSource.AUTO_FETCH,
-        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
-    )
+    update_license_cache(_payload(), tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     redis_client = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     ttl = redis_client.ttl(LICENSE_METADATA_KEY)
     # Allow a few seconds of drift between SET and TTL read.
@@ -92,8 +90,7 @@ def test_sets_24h_ttl() -> None:
 def test_round_trip_preserves_tier_and_source() -> None:
     """Cached metadata round-trips customer_tier and source unchanged."""
     update_license_cache(
-        _payload(CustomerTier.BUSINESS),
-        source=LicenseSource.AUTO_FETCH,
+        _payload(CustomerTier.BUSINESS, stripe_customer_id="cus_round_trip"),
         tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
     )
     metadata = get_cached_license_metadata(
@@ -109,12 +106,10 @@ def test_singleton_subsequent_write_overwrites() -> None:
     tier flips (BUSINESS↔ENTERPRISE) reactive within a single request."""
     update_license_cache(
         _payload(CustomerTier.BUSINESS),
-        source=LicenseSource.MANUAL_UPLOAD,
         tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
     )
     update_license_cache(
-        _payload(CustomerTier.ENTERPRISE),
-        source=LicenseSource.AUTO_FETCH,
+        _payload(CustomerTier.ENTERPRISE, stripe_customer_id="cus_overwrite"),
         tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
     )
     metadata = get_cached_license_metadata(
@@ -132,7 +127,6 @@ def test_legacy_payload_keeps_customer_tier_none_through_cache() -> None:
     (covered in the unit test for the resolver)."""
     update_license_cache(
         _payload(customer_tier=None),
-        source=LicenseSource.MANUAL_UPLOAD,
         tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
     )
     metadata = get_cached_license_metadata(

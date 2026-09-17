@@ -1,4 +1,6 @@
+from collections.abc import Callable
 from datetime import datetime, timezone
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -19,6 +21,14 @@ from onyx.db.models import OAuthAccount
 from onyx.utils.sensitive import make_mock_sensitive_value
 
 _ENV_DISCOVERY_URL = "https://idp.example.com/.well-known/openid-configuration"
+
+
+@pytest.fixture(autouse=True)
+def _stub_idp_url_guard(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests mock httpx but not DNS, so the SSRF guard's real
+    getaddrinfo on the discovery host would stall a no-network CI runner.
+    Guard behavior is covered in test_sso_url_guard.py."""
+    monkeypatch.setattr(oauth_refresher, "validate_idp_url", lambda *_a, **_k: None)
 
 
 @pytest.fixture
@@ -200,6 +210,49 @@ async def test_check_and_refresh_oauth_tokens(
     )
 
 
+async def _run_coalesced_refreshes(
+    users: tuple[MagicMock, MagicMock],
+    db_session: MagicMock,
+    user_manager: MagicMock,
+    on_refresh: Callable[[MagicMock, MagicMock], None],
+    monkeypatch: pytest.MonkeyPatch,
+) -> AsyncMock:
+    """Runs check_and_refresh_oauth_tokens for both users so the second reaches
+    the per-user lock while the first is parked inside refresh_oauth_token.
+    `on_refresh(user, account)` models what a completed refresh persists."""
+    import asyncio as _asyncio
+
+    monkeypatch.setattr(oauth_refresher, "_USER_REFRESH_LOCKS", {})
+    monkeypatch.setattr(oauth_refresher, "_USER_REFRESH_LOCKS_GUARD", None)
+    refresh_started = _asyncio.Event()
+    release_refresh = _asyncio.Event()
+
+    async def slow_refresh(
+        user: MagicMock, account: MagicMock, *_args: object, **_kwargs: object
+    ) -> bool:
+        refresh_started.set()
+        await release_refresh.wait()
+        on_refresh(user, account)
+        return True
+
+    with patch(
+        "onyx.auth.oauth_refresher.refresh_oauth_token",
+        AsyncMock(side_effect=slow_refresh),
+    ) as mock_refresh:
+        first = _asyncio.create_task(
+            check_and_refresh_oauth_tokens(users[0], db_session, user_manager)
+        )
+        await refresh_started.wait()
+        second = _asyncio.create_task(
+            check_and_refresh_oauth_tokens(users[1], db_session, user_manager)
+        )
+        # Yield once so the second task reaches the lock acquisition.
+        await _asyncio.sleep(0)
+        release_refresh.set()
+        await _asyncio.gather(first, second)
+    return mock_refresh
+
+
 @pytest.mark.asyncio
 async def test_check_and_refresh_oauth_tokens_coalesces_concurrent_refresh(
     mock_user_manager: MagicMock,
@@ -207,17 +260,9 @@ async def test_check_and_refresh_oauth_tokens_coalesces_concurrent_refresh(
 ) -> None:
     """Two concurrent refreshes for the same user trigger only one IdP POST.
 
-    Mirrors the post-refresh in-memory state by having the mocked
-    `refresh_oauth_token` update `account.expires_at` to a fresh value
-    (the way `update_oauth_account` would refresh the SQLAlchemy object on
-    success). The second coroutine must observe the fresh `expires_at`
-    inside the per-user lock and skip its redundant POST.
+    The mocked refresh updates `account.expires_at` the way a real one would,
+    so the second coroutine sees a fresh account inside the lock and skips.
     """
-    import asyncio as _asyncio
-
-    monkeypatch.setattr(oauth_refresher, "_USER_REFRESH_LOCKS", {})
-    monkeypatch.setattr(oauth_refresher, "_USER_REFRESH_LOCKS_GUARD", None)
-
     now_timestamp = datetime.now(timezone.utc).timestamp()
 
     account = MagicMock(spec=OAuthAccount)
@@ -233,37 +278,106 @@ async def test_check_and_refresh_oauth_tokens_coalesces_concurrent_refresh(
     db_session = MagicMock()
     db_session.refresh = AsyncMock()
 
-    refresh_started = _asyncio.Event()
-    release_refresh = _asyncio.Event()
+    def refreshed(_user: MagicMock, refreshed_account: MagicMock) -> None:
+        refreshed_account.expires_at = now_timestamp + 3600
 
-    async def slow_refresh(
-        _u: MagicMock, a: MagicMock, *_args: object, **_kwargs: object
-    ) -> bool:
-        # Park the first caller inside refresh_oauth_token so the second
-        # caller has a chance to reach the lock; the test fails
-        # (call_count > 1) if the lock doesn't coalesce them.
-        refresh_started.set()
-        await release_refresh.wait()
-        a.expires_at = now_timestamp + 3600  # simulate post-refresh state
-        return True
-
-    with patch(
-        "onyx.auth.oauth_refresher.refresh_oauth_token",
-        AsyncMock(side_effect=slow_refresh),
-    ) as mock_refresh:
-        first = _asyncio.create_task(
-            check_and_refresh_oauth_tokens(user, db_session, mock_user_manager)
-        )
-        await refresh_started.wait()
-        second = _asyncio.create_task(
-            check_and_refresh_oauth_tokens(user, db_session, mock_user_manager)
-        )
-        # Yield once so the second task reaches the lock acquisition.
-        await _asyncio.sleep(0)
-        release_refresh.set()
-        await _asyncio.gather(first, second)
-
+    mock_refresh = await _run_coalesced_refreshes(
+        (user, user), db_session, mock_user_manager, refreshed, monkeypatch
+    )
     assert mock_refresh.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_coalesced_refresh_updates_stale_oidc_expiry(
+    mock_user_manager: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The coroutine that skips its refresh still leaves with a live oidc_expiry.
+
+    Each request loads its own User instance before the refresh, so the winner's
+    new oidc_expiry never reaches the loser in memory. The loser re-reads it from
+    the DB rather than carry the expired one into double_check_user.
+    """
+    now_timestamp = datetime.now(timezone.utc).timestamp()
+    expired_at = now_timestamp - 30
+    refreshed_at = int(now_timestamp + 3600)
+    # What the DB holds. `db_session.refresh` re-reads it, as a session would.
+    persisted: dict[str, Any] = {
+        "expires_at": expired_at,
+        "oidc_expiry": datetime.fromtimestamp(expired_at, tz=timezone.utc),
+    }
+
+    def _request_user() -> MagicMock:
+        account = MagicMock(spec=OAuthAccount)
+        account.oauth_name = "openid"
+        account.refresh_token = "rt"
+        account.expires_at = expired_at
+        user = MagicMock()
+        user.id = "stale-expiry-user"
+        user.email = "stale@example.com"
+        user.oauth_accounts = [account]
+        user.oidc_expiry = persisted["oidc_expiry"]
+        return user
+
+    async def reread(obj: MagicMock, attribute_names: list[str] | None = None) -> None:
+        if attribute_names == ["oidc_expiry"]:
+            obj.oidc_expiry = persisted["oidc_expiry"]
+        else:
+            obj.expires_at = persisted["expires_at"]
+
+    db_session = MagicMock()
+    db_session.refresh = AsyncMock(side_effect=reread)
+
+    def refreshed(winner: MagicMock, account: MagicMock) -> None:
+        persisted["expires_at"] = refreshed_at
+        persisted["oidc_expiry"] = datetime.fromtimestamp(refreshed_at, tz=timezone.utc)
+        account.expires_at = refreshed_at
+        winner.oidc_expiry = persisted["oidc_expiry"]
+
+    first_user, second_user = _request_user(), _request_user()
+    mock_refresh = await _run_coalesced_refreshes(
+        (first_user, second_user), db_session, mock_user_manager, refreshed, monkeypatch
+    )
+    assert mock_refresh.call_count == 1
+    assert first_user.oidc_expiry == second_user.oidc_expiry
+    assert second_user.oidc_expiry == datetime.fromtimestamp(
+        refreshed_at, tz=timezone.utc
+    )
+
+
+@pytest.mark.asyncio
+async def test_failed_oidc_expiry_reload_is_logged_not_raised(
+    mock_user: MagicMock,
+    mock_user_manager: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A reload failure must not break the request, but it must leave a trace."""
+    account = MagicMock(spec=OAuthAccount)
+    account.oauth_name = "openid"
+    account.refresh_token = "rt"
+    account.expires_at = datetime.now(timezone.utc).timestamp() + 60
+    mock_user.oauth_accounts = [account]
+
+    async def refresh(
+        _obj: MagicMock, attribute_names: list[str] | None = None
+    ) -> None:
+        if attribute_names == ["oidc_expiry"]:
+            raise RuntimeError("connection reset")
+
+    db_session = MagicMock()
+    db_session.refresh = AsyncMock(side_effect=refresh)
+
+    with (
+        patch(
+            "onyx.auth.oauth_refresher.refresh_oauth_token",
+            AsyncMock(return_value=True),
+        ) as mock_refresh,
+        caplog.at_level("ERROR"),
+    ):
+        await check_and_refresh_oauth_tokens(mock_user, db_session, mock_user_manager)
+
+    mock_refresh.assert_called_once()
+    assert "Could not reload oidc_expiry" in caplog.text
 
 
 @pytest.mark.asyncio

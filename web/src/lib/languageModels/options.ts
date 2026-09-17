@@ -1,8 +1,16 @@
 import type { FunctionComponent } from "react";
 import type { IconProps } from "@opal/types";
-import { LLMProviderDescriptor } from "@/lib/languageModels/types";
+import {
+  LLMProviderDescriptor,
+  ReasoningEffortOverride,
+} from "@/lib/languageModels/types";
 import { getModelIcon, getProvider } from "@/lib/languageModels";
 import { AGGREGATOR_PROVIDERS } from "@/lib/languageModels/svc";
+
+export type ModelOptionProvider = Pick<
+  LLMProviderDescriptor,
+  "id" | "name" | "provider" | "model_configurations"
+>;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -21,6 +29,12 @@ export interface LLMOption {
   region?: string | null;
   version?: string | null;
   supportsReasoning?: boolean;
+  /** See ModelConfiguration.supported_reasoning_efforts. */
+  supportedReasoningEfforts?: ReasoningEffortOverride[];
+  /** See ModelConfiguration.reasoning_effort_max. */
+  reasoningEffortMax?: ReasoningEffortOverride | null;
+  reasoningEffortDefault?: ReasoningEffortOverride | null;
+  temperatureDefault?: number | null;
   supportsImageInput?: boolean;
 }
 
@@ -73,13 +87,13 @@ export function llmOptionKey(option: {
 
 /**
  * Flattens an array of provider descriptors into a deduplicated list of
- * selectable model options. Hidden models are excluded unless their name
- * matches `currentModelName` (so an already-selected hidden model still
- * appears in the list).
+ * selectable model options. Hidden models require an existing selection or
+ * an explicit admin opt-in.
  */
 export function buildLlmOptions(
-  llmProviders: LLMProviderDescriptor[] | undefined,
-  currentModelName?: string
+  llmProviders: ModelOptionProvider[] | undefined,
+  currentModelName?: string,
+  includeHiddenModels = false
 ): LLMOption[] {
   if (!llmProviders) return [];
 
@@ -88,7 +102,10 @@ export function buildLlmOptions(
 
   llmProviders.forEach((llmProvider) => {
     llmProvider.model_configurations
-      .filter((mc) => mc.is_visible || mc.name === currentModelName)
+      .filter(
+        (mc) =>
+          includeHiddenModels || mc.is_visible || mc.name === currentModelName
+      )
       .forEach((mc) => {
         const key =
           mc.id != null ? `id:${mc.id}` : `${llmProvider.provider}:${mc.name}`;
@@ -108,6 +125,10 @@ export function buildLlmOptions(
           region: mc.region || null,
           version: mc.version || null,
           supportsReasoning: mc.supports_reasoning || false,
+          supportedReasoningEfforts: mc.supported_reasoning_efforts,
+          reasoningEffortMax: mc.reasoning_effort_max,
+          reasoningEffortDefault: mc.reasoning_effort_default,
+          temperatureDefault: mc.temperature_default,
           supportsImageInput: mc.supports_image_input || false,
         });
       });

@@ -19,7 +19,7 @@ const meta: Meta<typeof Spacer> = {
           style={{
             width: 40,
             height: 40,
-            background: "var(--action-link-05)",
+            background: "var(--action-selection-05)",
             borderRadius: 4,
           }}
         />
@@ -28,7 +28,7 @@ const meta: Meta<typeof Spacer> = {
           style={{
             width: 40,
             height: 40,
-            background: "var(--action-link-05)",
+            background: "var(--action-selection-05)",
             borderRadius: 4,
           }}
         />
@@ -56,7 +56,7 @@ export const VerticalRem: Story = {
           style={{
             width: 40,
             height: 40,
-            background: "var(--action-link-05)",
+            background: "var(--action-selection-05)",
             borderRadius: 4,
           }}
         />
@@ -65,7 +65,7 @@ export const VerticalRem: Story = {
           style={{
             width: 40,
             height: 40,
-            background: "var(--action-link-05)",
+            background: "var(--action-selection-05)",
             borderRadius: 4,
           }}
         />

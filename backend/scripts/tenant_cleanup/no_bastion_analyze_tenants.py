@@ -5,6 +5,7 @@ Control plane and data plane are in SEPARATE clusters.
 
 Usage:
     PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_analyze_tenants.py \
+        [--inactive-days <days>] \
         [--skip-cache] \
         [--data-plane-context <context>] \
         [--control-plane-context <context>]
@@ -19,10 +20,20 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+from scripts.tenant_cleanup.activity_utils import (
+    ACTIVITY_CSV_FIELDNAMES,
+    DEFAULT_INACTIVE_DAYS,
+    get_activity_csv_values,
+    get_last_activity_time,
+    tenant_data_includes_craft_activity,
+)
 from scripts.tenant_cleanup.no_bastion_cleanup_utils import (
     find_background_pod,
     find_worker_pod,
 )
+
+# Splits the still-active tenants in the report. Never affects eligibility.
+RECENT_ACTIVITY_DAYS = 30
 
 
 def collect_tenant_data(
@@ -164,9 +175,11 @@ with engine.connect() as conn:
 
 
 def analyze_tenants(
-    tenants: list[dict[str, Any]], control_plane_data: list[dict[str, Any]]
+    tenants: list[dict[str, Any]],
+    control_plane_data: list[dict[str, Any]],
+    inactive_days: int,
 ) -> list[dict[str, Any]]:
-    """Analyze tenant activity data and return gated tenants with no query in last 3 months."""
+    """Return gated tenants with no chat or Craft activity for `inactive_days`."""
 
     print(f"\n{'=' * 80}")
     print(f"TENANT ANALYSIS REPORT - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -182,72 +195,68 @@ def analyze_tenants(
             control_plane_lookup[tenant_id] = tenant_status
 
     # Calculate cutoff dates
-    one_month_cutoff = datetime.now(timezone.utc) - timedelta(days=30)
-    three_month_cutoff = datetime.now(timezone.utc) - timedelta(days=90)
+    recent_days = min(RECENT_ACTIVITY_DAYS, inactive_days)
+    now = datetime.now(timezone.utc)
+    recent_cutoff = now - timedelta(days=recent_days)
+    inactive_cutoff = now - timedelta(days=inactive_days)
 
     # Categorize tenants into 4 groups
-    gated_no_query_3_months = []  # GATED_ACCESS + no query in last 3 months
-    gated_query_1_3_months = []  # GATED_ACCESS + query between 1-3 months
-    gated_query_1_month = []  # GATED_ACCESS + query in last 1 month
+    gated_inactive = []
+    gated_activity_middle = []
+    gated_activity_recent = []
     everyone_else = []  # All other tenants
 
     for tenant in tenants:
         tenant_id = tenant.get("tenant_id")
-        last_query_time = tenant.get("last_query_time")
         tenant_status = control_plane_lookup.get(tenant_id, "UNKNOWN")
 
         is_gated = tenant_status == "GATED_ACCESS"
-
-        # Parse last query time
-        if last_query_time:
-            query_time = datetime.fromisoformat(last_query_time.replace("Z", "+00:00"))
-        else:
-            query_time = None
+        last_activity_time = get_last_activity_time(tenant)
 
         # Categorize
         if is_gated:
-            if query_time is None or query_time <= three_month_cutoff:
-                gated_no_query_3_months.append(tenant)
-            elif query_time <= one_month_cutoff:
-                gated_query_1_3_months.append(tenant)
-            else:  # query_time > one_month_cutoff
-                gated_query_1_month.append(tenant)
+            if last_activity_time is None or last_activity_time <= inactive_cutoff:
+                gated_inactive.append(tenant)
+            elif last_activity_time <= recent_cutoff:
+                gated_activity_middle.append(tenant)
+            else:
+                gated_activity_recent.append(tenant)
         else:
             everyone_else.append(tenant)
 
     # Calculate document counts for each group
-    gated_no_query_docs = sum(
-        t.get("num_documents", 0) for t in gated_no_query_3_months
-    )
-    gated_1_3_month_docs = sum(
-        t.get("num_documents", 0) for t in gated_query_1_3_months
-    )
-    gated_1_month_docs = sum(t.get("num_documents", 0) for t in gated_query_1_month)
+    gated_inactive_docs = sum(t.get("num_documents", 0) for t in gated_inactive)
+    gated_middle_docs = sum(t.get("num_documents", 0) for t in gated_activity_middle)
+    gated_recent_docs = sum(t.get("num_documents", 0) for t in gated_activity_recent)
     everyone_else_docs = sum(t.get("num_documents", 0) for t in everyone_else)
 
     print("=" * 80)
     print("TENANT CATEGORIZATION BY GATED ACCESS STATUS AND ACTIVITY")
     print("=" * 80)
 
-    print("\n1. GATED_ACCESS + No query in last 3 months:")
-    print(f"   Count: {len(gated_no_query_3_months):,}")
-    print(f"   Total documents: {gated_no_query_docs:,}")
     print(
-        f"   Avg documents per tenant: {gated_no_query_docs / len(gated_no_query_3_months) if gated_no_query_3_months else 0:.2f}"
+        f"\n1. GATED_ACCESS + No chat or Craft activity in last {inactive_days} days:"
+    )
+    print(f"   Count: {len(gated_inactive):,}")
+    print(f"   Total documents: {gated_inactive_docs:,}")
+    print(
+        f"   Avg documents per tenant: {gated_inactive_docs / len(gated_inactive) if gated_inactive else 0:.2f}"
     )
 
-    print("\n2. GATED_ACCESS + Query between 1-3 months ago:")
-    print(f"   Count: {len(gated_query_1_3_months):,}")
-    print(f"   Total documents: {gated_1_3_month_docs:,}")
     print(
-        f"   Avg documents per tenant: {gated_1_3_month_docs / len(gated_query_1_3_months) if gated_query_1_3_months else 0:.2f}"
+        f"\n2. GATED_ACCESS + Activity between {recent_days}-{inactive_days} days ago:"
+    )
+    print(f"   Count: {len(gated_activity_middle):,}")
+    print(f"   Total documents: {gated_middle_docs:,}")
+    print(
+        f"   Avg documents per tenant: {gated_middle_docs / len(gated_activity_middle) if gated_activity_middle else 0:.2f}"
     )
 
-    print("\n3. GATED_ACCESS + Query in last 1 month:")
-    print(f"   Count: {len(gated_query_1_month):,}")
-    print(f"   Total documents: {gated_1_month_docs:,}")
+    print(f"\n3. GATED_ACCESS + Activity in last {recent_days} days:")
+    print(f"   Count: {len(gated_activity_recent):,}")
+    print(f"   Total documents: {gated_recent_docs:,}")
     print(
-        f"   Avg documents per tenant: {gated_1_month_docs / len(gated_query_1_month) if gated_query_1_month else 0:.2f}"
+        f"   Avg documents per tenant: {gated_recent_docs / len(gated_activity_recent) if gated_activity_recent else 0:.2f}"
     )
 
     print("\n4. Everyone else (non-GATED_ACCESS):")
@@ -258,10 +267,7 @@ def analyze_tenants(
     )
 
     total_docs = (
-        gated_no_query_docs
-        + gated_1_3_month_docs
-        + gated_1_month_docs
-        + everyone_else_docs
+        gated_inactive_docs + gated_middle_docs + gated_recent_docs + everyone_else_docs
     )
     print(f"\nTotal documents across all tenants: {total_docs:,}")
 
@@ -278,7 +284,7 @@ def analyze_tenants(
     top_100 = sorted_tenants[:100]
 
     print(
-        f"\n{'Rank':<6} {'Tenant ID':<45} {'Documents':>12} {'Users':>8} {'Last Query':<12} {'Group'}"
+        f"\n{'Rank':<6} {'Tenant ID':<45} {'Documents':>12} {'Users':>8} {'Last Activity':<13} {'Group'}"
     )
     print("-" * 130)
 
@@ -286,36 +292,31 @@ def analyze_tenants(
         tenant_id = tenant.get("tenant_id", "Unknown")
         num_docs = tenant.get("num_documents", 0)
         num_users = tenant.get("num_users", 0)
-        last_query = tenant.get("last_query_time", "Never")
+        last_activity_time = get_last_activity_time(tenant)
         tenant_status = control_plane_lookup.get(tenant_id, "UNKNOWN")
 
-        # Format the last query time
-        if last_query and last_query != "Never":
-            try:
-                query_dt = datetime.fromisoformat(last_query.replace("Z", "+00:00"))
-                last_query_str = query_dt.strftime("%Y-%m-%d")
-            except Exception:
-                last_query_str = last_query[:10] if len(last_query) > 10 else last_query
-        else:
-            last_query_str = "Never"
+        last_activity_str = (
+            last_activity_time.strftime("%Y-%m-%d")
+            if last_activity_time is not None
+            else "Never"
+        )
 
         # Determine group
         if tenant_status == "GATED_ACCESS":
-            if last_query and last_query != "Never":
-                query_time = datetime.fromisoformat(last_query.replace("Z", "+00:00"))
-                if query_time <= three_month_cutoff:
-                    group = "Gated - No query (3mo)"
-                elif query_time <= one_month_cutoff:
-                    group = "Gated - Query (1-3mo)"
+            if last_activity_time is not None:
+                if last_activity_time <= inactive_cutoff:
+                    group = f"Gated - No activity ({inactive_days}d)"
+                elif last_activity_time <= recent_cutoff:
+                    group = f"Gated - Activity ({recent_days}-{inactive_days}d)"
                 else:
-                    group = "Gated - Query (1mo)"
+                    group = f"Gated - Activity ({recent_days}d)"
             else:
-                group = "Gated - No query (3mo)"
+                group = f"Gated - No activity ({inactive_days}d)"
         else:
             group = f"Other ({tenant_status})"
 
         print(
-            f"{idx:<6} {tenant_id:<45} {num_docs:>12,} {num_users:>8} {last_query_str:<12} {group}"
+            f"{idx:<6} {tenant_id:<45} {num_docs:>12,} {num_users:>8} {last_activity_str:<13} {group}"
         )
 
     # Summary stats for top 100
@@ -355,7 +356,7 @@ def analyze_tenants(
         print(f"  99th percentile: {doc_counts[int(len(doc_counts) * 0.99)]:,}")
         print(f"  Max: {doc_counts[-1]:,}")
 
-    return gated_no_query_3_months
+    return gated_inactive
 
 
 def find_recent_tenant_data() -> tuple[list[dict[str, Any]] | None, str | None]:
@@ -383,6 +384,12 @@ def find_recent_tenant_data() -> tuple[list[dict[str, Any]] | None, str | None]:
         with open(most_recent, "r") as f:
             tenant_data = json.load(f)
 
+        if not tenant_data_includes_craft_activity(tenant_data):
+            print(
+                f"\n⚠ Ignoring cached tenant data without Craft activity: {most_recent.name}"
+            )
+            return None, None
+
         return tenant_data, str(most_recent)
 
     return None, None
@@ -392,6 +399,13 @@ def main() -> None:
     # Parse command-line arguments
     parser = argparse.ArgumentParser(
         description="Analyze tenant data WITHOUT bastion access - control plane and data plane are separate clusters"
+    )
+    parser.add_argument(
+        "--inactive-days",
+        type=int,
+        default=DEFAULT_INACTIVE_DAYS,
+        help=f"Days without chat or Craft activity before a gated tenant is "
+        f"eligible for cleanup (default: {DEFAULT_INACTIVE_DAYS})",
     )
     parser.add_argument(
         "--skip-cache",
@@ -409,6 +423,9 @@ def main() -> None:
         help="Kubectl context for control plane cluster (optional)",
     )
     args = parser.parse_args()
+
+    if args.inactive_days < 1:
+        parser.error("--inactive-days must be at least 1")
 
     try:
         # Step 1: Check for recent tenant data (< 7 days old) unless --skip-cache is set
@@ -450,16 +467,18 @@ def main() -> None:
             control_plane_pod, args.control_plane_context
         )
 
-        # Step 3: Analyze the data and get gated tenants without recent queries
-        gated_no_query_3_months = analyze_tenants(tenant_data, control_plane_data)
+        # Step 3: Analyze the data and get gated tenants without recent activity
+        inactive_tenants = analyze_tenants(
+            tenant_data, control_plane_data, args.inactive_days
+        )
 
         # Step 4: Export to CSV (sorted by num_documents descending)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        csv_file = f"gated_tenants_no_query_3mo_{timestamp}.csv"
+        csv_file = f"gated_tenants_inactive_{args.inactive_days}d_{timestamp}.csv"
 
         # Sort by num_documents in descending order
         sorted_tenants = sorted(
-            gated_no_query_3_months,
+            inactive_tenants,
             key=lambda t: t.get("num_documents", 0),
             reverse=True,
         )
@@ -469,40 +488,26 @@ def main() -> None:
                 "tenant_id",
                 "num_documents",
                 "num_users",
-                "last_query_time",
-                "days_since_last_query",
+                *ACTIVITY_CSV_FIELDNAMES,
             ]
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
 
             now = datetime.now(timezone.utc)
             for tenant in sorted_tenants:
-                # Calculate days since last query
-                last_query_time = tenant.get("last_query_time")
-                if last_query_time:
-                    try:
-                        query_dt = datetime.fromisoformat(
-                            last_query_time.replace("Z", "+00:00")
-                        )
-                        days_since = str((now - query_dt).days)
-                    except Exception:
-                        days_since = "N/A"
-                else:
-                    days_since = "Never"
-
                 writer.writerow(
                     {
                         "tenant_id": tenant.get("tenant_id", ""),
                         "num_documents": tenant.get("num_documents", 0),
                         "num_users": tenant.get("num_users", 0),
-                        "last_query_time": last_query_time or "Never",
-                        "days_since_last_query": days_since,
+                        **get_activity_csv_values(tenant, now),
                     }
                 )
 
         print(f"\n✓ CSV exported to: {csv_file}")
         print(
-            f"  Total gated tenants with no query in last 3 months: {len(gated_no_query_3_months)}"
+            f"  Total gated tenants with no chat or Craft activity in last "
+            f"{args.inactive_days} days: {len(inactive_tenants)}"
         )
 
     except subprocess.CalledProcessError as e:

@@ -15,12 +15,6 @@ variable "instance_type" {
   default     = "db.t4g.large" # 2 vCPU and 8 GB of memory
 }
 
-variable "storage_gb" {
-  type        = number
-  description = "Initial allocated storage in GB. RDS storage can grow but never shrink."
-  default     = 20
-}
-
 variable "max_storage_gb" {
   type        = number
   description = "Upper limit in GB for RDS storage autoscaling. Null or 0 disables autoscaling."
@@ -35,8 +29,14 @@ variable "max_storage_gb" {
 
 variable "storage_type" {
   type        = string
-  description = "EBS storage type for the RDS instance. gp3 gives 3000 baseline IOPS regardless of size; older stacks created before this variable existed are on gp2."
-  default     = "gp3"
+  description = "EBS storage type for the RDS instance. Null keeps the instance's existing type (fleet DBs predate this variable and run gp2); prefer gp3 for new stacks."
+  default     = null
+}
+
+variable "storage_gb" {
+  type        = number
+  description = "Storage size in GB"
+  default     = 20
 }
 
 variable "engine_version" {
@@ -47,17 +47,20 @@ variable "engine_version" {
 
 variable "vpc_id" {
   type        = string
-  description = "VPC ID"
+  description = "VPC ID. Unused when vpc_security_group_ids is set."
+  default     = null
 }
 
 variable "subnet_ids" {
   type        = list(string)
-  description = "Subnet IDs"
+  description = "Subnet IDs. Unused when db_subnet_group_name is set."
+  default     = []
 }
 
 variable "ingress_cidrs" {
   type        = list(string)
-  description = "Ingress CIDR blocks"
+  description = "Ingress CIDR blocks. Unused when vpc_security_group_ids is set."
+  default     = []
 }
 
 variable "username" {
@@ -72,6 +75,11 @@ variable "password" {
   description = "Password for the database"
   default     = null
   sensitive   = true
+
+  validation {
+    condition     = var.password == null || !var.manage_master_user_password
+    error_message = "password cannot be set when manage_master_user_password is true: RDS generates and rotates the master password in Secrets Manager, and the supplied value would be discarded."
+  }
 }
 
 variable "tags" {
@@ -212,4 +220,86 @@ variable "alarm_actions" {
   type        = list(string)
   description = "List of ARNs to notify when the alarm transitions state (e.g. SNS topic ARNs)"
   default     = []
+}
+
+variable "free_storage_threshold_bytes" {
+  type        = number
+  description = "FreeStorageSpace alarm floor in bytes. Null = 15% of allocated storage_gb."
+  default     = null
+
+  validation {
+    condition     = var.free_storage_threshold_bytes == null || var.free_storage_threshold_bytes > 0
+    error_message = "free_storage_threshold_bytes must be null or greater than 0."
+  }
+}
+
+variable "connections_alarm_threshold" {
+  type        = number
+  description = "DatabaseConnections alarm threshold (count)."
+  default     = 500
+
+  validation {
+    condition     = var.connections_alarm_threshold > 0
+    error_message = "connections_alarm_threshold must be greater than 0."
+  }
+}
+
+# --- Multi-AZ / tenant-shard support -----------------------------------------
+# Added for the multi-tenant shards, which need a standby, a shared parameter
+# group, and the ability to sit inside networking that already exists.
+
+variable "multi_az" {
+  type        = bool
+  description = "Run a standby in a second AZ. Doubles cost; required for anything serving tenants."
+  default     = false
+}
+
+variable "iops" {
+  type        = number
+  description = "Provisioned IOPS for gp3/io1. Null uses the gp3 baseline for the volume size."
+  default     = null
+}
+
+variable "storage_throughput" {
+  type        = number
+  description = "Provisioned throughput (MB/s) for gp3. Null uses the gp3 baseline."
+  default     = null
+}
+
+variable "parameter_group_name" {
+  type        = string
+  description = "Existing DB parameter group. Null uses the engine default."
+  default     = null
+}
+
+variable "performance_insights_enabled" {
+  type        = bool
+  description = "Enable Performance Insights."
+  default     = false
+}
+
+variable "maintenance_window" {
+  type        = string
+  description = "Preferred maintenance window, e.g. sat:10:10-sat:10:40."
+  default     = null
+}
+
+# When true, RDS generates and rotates the master password in Secrets Manager and
+# any value passed to var.password is ignored.
+variable "manage_master_user_password" {
+  type        = bool
+  description = "Let RDS generate and rotate the master password in Secrets Manager. Mutually exclusive with `password`."
+  default     = false
+}
+
+variable "db_subnet_group_name" {
+  type        = string
+  description = "Existing subnet group to join. Null creates one from `subnet_ids`."
+  default     = null
+}
+
+variable "vpc_security_group_ids" {
+  type        = list(string)
+  description = "Existing security groups to attach. Null creates one from `ingress_cidrs`."
+  default     = null
 }

@@ -1,8 +1,10 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
+from unittest import mock
 
 from litellm.completion_extras.litellm_responses_transformation.transformation import (
     LiteLLMResponsesTransformationHandler,
+    OpenAiResponsesToChatCompletionStreamIterator,
 )
 from litellm.litellm_core_utils.litellm_logging import Logging
 from litellm.llms.ollama.chat.transformation import OllamaChatCompletionResponseIterator
@@ -60,7 +62,12 @@ def test_ollama_chunk_parser_transitions_from_native_thinking_to_content() -> No
     assert thinking_response.choices[0].delta.reasoning_content == "Let me think"
     assert thinking_response.choices[0].delta.content is None
 
-    assert getattr(content_response.choices[0].delta, "reasoning_content", None) is None
+    assert (
+        getattr(  # ods: ignore[getattr]
+            content_response.choices[0].delta, "reasoning_content", None
+        )
+        is None
+    )
     assert content_response.choices[0].delta.content == "Final answer"
     assert iterator.finished_reasoning_content is True
 
@@ -82,7 +89,12 @@ def test_ollama_chunk_parser_keeps_tagged_thinking_until_close_tag() -> None:
     assert middle_response.choices[0].delta.reasoning_content == "step 2"
     assert middle_response.choices[0].delta.content is None
 
-    assert getattr(close_response.choices[0].delta, "reasoning_content", None) is None
+    assert (
+        getattr(  # ods: ignore[getattr]
+            close_response.choices[0].delta, "reasoning_content", None
+        )
+        is None
+    )
     assert close_response.choices[0].delta.content == "final"
     assert iterator.finished_reasoning_content is True
 
@@ -189,3 +201,260 @@ def test_responses_transform_response_preserves_reasoning_summary_sections() -> 
     assert (
         result.choices[0].message.reasoning_content == "first section\n\nsecond section"
     )
+
+
+def _minimal_completed_response_dict() -> dict[str, Any]:
+    return {
+        "id": "resp_dict_1",
+        "object": "response",
+        "created_at": 0,
+        "status": "completed",
+        "model": "m",
+        "output": None,
+        "usage": {"input_tokens": 5, "output_tokens": 3, "total_tokens": 8},
+    }
+
+
+def test_responses_chunk_parser_normalizes_null_output_on_completed() -> None:
+    apply_monkey_patches()
+    iterator = OpenAiResponsesToChatCompletionStreamIterator(
+        streaming_response=iter(()),
+        sync_stream=True,
+    )
+    parsed = iterator.chunk_parser(
+        {
+            "type": "response.completed",
+            "sequence_number": 9,
+            "response": _minimal_completed_response_dict(),
+        }
+    )
+    assert parsed.choices[0].finish_reason == "stop"
+
+
+def test_responses_chunk_parser_ignores_empty_tool_argument_delta() -> None:
+    apply_monkey_patches()
+    iterator = OpenAiResponsesToChatCompletionStreamIterator(
+        streaming_response=iter(()),
+        sync_stream=True,
+    )
+    empty = iterator.chunk_parser(
+        {
+            "type": "response.function_call_arguments.delta",
+            "item_id": "toolu_1",
+            "output_index": 0,
+            "delta": "",
+            "sequence_number": 4,
+        }
+    )
+    assert empty.choices[0].delta.tool_calls is None
+
+    real = iterator.chunk_parser(
+        {
+            "type": "response.function_call_arguments.delta",
+            "item_id": "toolu_1",
+            "output_index": 0,
+            "delta": '{"query": "onboarding"}',
+            "sequence_number": 5,
+        }
+    )
+    tool_calls = real.choices[0].delta.tool_calls
+    assert tool_calls is not None
+    assert tool_calls[0].function.arguments == '{"query": "onboarding"}'
+
+
+def test_assembled_streaming_response_handles_dict_response() -> None:
+    from types import SimpleNamespace
+
+    from litellm.types.llms.openai import ResponseCompletedEvent
+
+    apply_monkey_patches()
+    event = ResponseCompletedEvent.model_construct(
+        type="response.completed",
+        response=_minimal_completed_response_dict(),
+    )
+    get_assembled = cast(Any, Logging._get_assembled_streaming_response)
+    assembled = get_assembled(
+        SimpleNamespace(stream=True),
+        event,
+        None,
+        None,
+        False,
+        [],
+    )
+    assert isinstance(assembled, ResponsesAPIResponse)
+    assert assembled.usage is not None
+    assert assembled.usage.input_tokens == 5
+    assert assembled.usage.output_tokens == 3
+
+
+def test_bridge_check_honors_prefix_for_registry_known_models() -> None:
+    # Registry-known compound ids must still bridge when the prefix is explicit.
+    import litellm.main as litellm_main
+
+    apply_monkey_patches()
+    model_info, model = litellm_main.responses_api_bridge_check(
+        model="responses/anthropic/claude-haiku-4-5",
+        custom_llm_provider="openai",
+    )
+    assert model_info["mode"] == "responses"
+    assert model == "anthropic/claude-haiku-4-5"
+
+
+def test_bridge_check_delegates_without_prefix() -> None:
+    import litellm.main as litellm_main
+
+    apply_monkey_patches()
+    model_info, model = litellm_main.responses_api_bridge_check(
+        model="gpt-4o",
+        custom_llm_provider="openai",
+    )
+    assert model_info.get("mode") != "responses"
+    assert model == "gpt-4o"
+
+
+def test_openai_should_fake_stream_streams_natively_on_registry_miss() -> None:
+    # Force the registry miss so the except branch is unambiguously covered.
+    from litellm.llms.openai.responses.transformation import OpenAIResponsesAPIConfig
+
+    apply_monkey_patches()
+    config = OpenAIResponsesAPIConfig()
+    with mock.patch(
+        "litellm.get_model_info",
+        side_effect=Exception("This model isn't mapped yet"),
+    ) as get_model_info_mock:
+        result = config.should_fake_stream(
+            model="bedrock_mantle/openai.gpt-5.6-sol",
+            stream=True,
+            custom_llm_provider="openai",
+        )
+    assert get_model_info_mock.called
+    assert result is False
+
+
+def test_openai_should_fake_stream_keeps_faking_for_non_streaming_models() -> None:
+    # o1-pro is registry-marked supports_native_streaming=False.
+    from litellm.llms.openai.responses.transformation import OpenAIResponsesAPIConfig
+
+    apply_monkey_patches()
+    config = OpenAIResponsesAPIConfig()
+    assert (
+        config.should_fake_stream(
+            model="o1-pro",
+            stream=True,
+            custom_llm_provider="openai",
+        )
+        is True
+    )
+
+
+def test_openai_should_fake_stream_ignores_non_streaming_requests() -> None:
+    from litellm.llms.openai.responses.transformation import OpenAIResponsesAPIConfig
+
+    apply_monkey_patches()
+    config = OpenAIResponsesAPIConfig()
+    assert (
+        config.should_fake_stream(
+            model="o1-pro",
+            stream=None,
+            custom_llm_provider="openai",
+        )
+        is False
+    )
+
+
+def test_azure_should_fake_stream_inherits_registry_aware_patch() -> None:
+    # An upstream override on the Azure subclass would silently bypass the patch.
+    from litellm.llms.azure.responses.transformation import (
+        AzureOpenAIResponsesAPIConfig,
+    )
+
+    apply_monkey_patches()
+    assert (
+        AzureOpenAIResponsesAPIConfig.should_fake_stream.__name__
+        == "_patched_openai_should_fake_stream"
+    )
+    config = AzureOpenAIResponsesAPIConfig()
+    with mock.patch(
+        "litellm.get_model_info",
+        side_effect=Exception("This model isn't mapped yet"),
+    ):
+        assert (
+            config.should_fake_stream(
+                model="my-custom-deployment",
+                stream=True,
+                custom_llm_provider="azure",
+            )
+            is False
+        )
+
+
+def _anthropic_body(thinking: dict[str, str], messages: list[Any]) -> dict[str, Any]:
+    apply_monkey_patches()
+    from litellm.llms.anthropic.chat.transformation import AnthropicConfig
+
+    with mock.patch("litellm.modify_params", True):
+        return AnthropicConfig().transform_request(
+            model="claude-sonnet-5",
+            messages=messages,
+            optional_params={"thinking": dict(thinking), "max_tokens": 1024},
+            litellm_params={},
+            headers={},
+        )
+
+
+_TOOL_HISTORY: list[Any] = [
+    {"role": "user", "content": "What's the weather in SF?"},
+    {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [
+            {
+                "id": "call_1",
+                "type": "function",
+                "function": {"name": "get_weather", "arguments": "{}"},
+            }
+        ],
+    },
+    {"role": "tool", "tool_call_id": "call_1", "content": "Sunny, 70F"},
+]
+
+
+def test_disabled_thinking_survives_tool_call_history() -> None:
+    """Upstream drops any thinking param once tool calls arrive without thinking
+    blocks. Disabled thinking cannot cause the error that guard exists for, and
+    dropping it hands the Claude 5 line back its default effort."""
+    body = _anthropic_body({"type": "disabled"}, list(_TOOL_HISTORY))
+    assert body["thinking"] == {"type": "disabled"}
+
+
+def test_enabled_thinking_still_dropped_after_tool_calls() -> None:
+    """The guard itself must stay: we keep no signed blocks to replay."""
+    body = _anthropic_body({"type": "adaptive"}, list(_TOOL_HISTORY))
+    assert "thinking" not in body
+
+
+def _converse_fields(thinking: dict[str, str], messages: list[Any]) -> Any:
+    apply_monkey_patches()
+    from litellm.llms.bedrock.chat.converse_transformation import AmazonConverseConfig
+
+    with mock.patch("litellm.modify_params", True):
+        data = AmazonConverseConfig()._transform_request_helper(
+            model="anthropic.claude-sonnet-5",
+            system_content_blocks=[],
+            optional_params={"thinking": dict(thinking), "maxTokens": 1024},
+            messages=messages,
+            headers={},
+        )
+    return data.get("additionalModelRequestFields")
+
+
+def test_converse_keeps_disabled_thinking_after_tool_calls() -> None:
+    """Converse carries its own copy of the upstream drop, and puts thinking
+    under additionalModelRequestFields rather than at the top level."""
+    fields = _converse_fields({"type": "disabled"}, list(_TOOL_HISTORY))
+    assert fields == {"thinking": {"type": "disabled"}}
+
+
+def test_converse_still_drops_enabled_thinking_after_tool_calls() -> None:
+    fields = _converse_fields({"type": "adaptive"}, list(_TOOL_HISTORY))
+    assert not (fields or {}).get("thinking")

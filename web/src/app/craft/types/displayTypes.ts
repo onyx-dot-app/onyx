@@ -5,6 +5,8 @@
  * Items are stored and rendered in chronological order as they arrive.
  */
 
+import type { RateLimitDetails } from "@/app/app/interfaces";
+
 export type ToolCallKind =
   | "search"
   | "read"
@@ -104,7 +106,14 @@ export type StreamItem =
       reason: string | null;
     }
   | { type: "compaction"; id: string; summary: string | null }
-  | { type: "error"; id: string; content: string };
+  | {
+      type: "error";
+      id: string;
+      content: string;
+      /** Set for usage rate-limit (429) errors — renders the same
+       * rate-limit banner as chat, with reset-time countdown. */
+      rateLimit?: RateLimitDetails;
+    };
 
 export interface ContextUsage {
   usedTokens: number;

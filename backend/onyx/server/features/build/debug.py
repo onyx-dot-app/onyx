@@ -62,7 +62,9 @@ def stream_opencode_logs(
     # Only the K8s manager exposes pod logs — guard so other backends
     # (docker dev) return a clean error rather than blowing up on attribute
     # access.
-    stream_fn = getattr(sandbox_manager, "stream_pod_logs", None)
+    stream_fn = getattr(  # ods: ignore[getattr]
+        sandbox_manager, "stream_pod_logs", None
+    )
     if stream_fn is None:
         raise HTTPException(
             status_code=501,

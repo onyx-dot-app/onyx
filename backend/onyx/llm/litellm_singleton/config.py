@@ -3,7 +3,7 @@ from pathlib import Path
 
 import litellm
 
-from onyx.utils.logger import setup_logger
+from onyx.utils.logger import remove_litellm_native_log_handlers, setup_logger
 
 logger = setup_logger()
 
@@ -16,6 +16,9 @@ def configure_litellm_settings() -> None:
     litellm.modify_params = True
     litellm.add_function_to_prompt = False
     litellm.suppress_debug_info = True
+    # LiteLLM records must flow only through the app logging pipeline, not also
+    # through the stream handler LiteLLM attaches at import.
+    remove_litellm_native_log_handlers()
 
 
 # TODO: We might not need to register ollama_chat in addition to ollama but let's just do it for good measure for now.

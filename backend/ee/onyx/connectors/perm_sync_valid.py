@@ -1,6 +1,11 @@
+from collections.abc import Callable
+from typing import Any
+
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.box.connector import BoxConnector
 from onyx.connectors.canvas.connector import CanvasConnector
 from onyx.connectors.confluence.connector import ConfluenceConnector
+from onyx.connectors.factory import identify_connector_class
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.sharepoint.connector import SharepointConnector
@@ -62,6 +67,20 @@ def validate_sharepoint_perm_sync(connector: SharepointConnector) -> None:
     connector.probe_group_members_permission()
 
 
+# The single source of truth for which connectors carry a real perm-sync probe:
+# ``validate_perm_sync`` dispatches through it, and the capability check
+# framework derives probe-bearing sources from it via
+# ``source_has_perm_sync_probe``. Values take the matching connector subclass;
+# ``Any`` because a heterogeneous dict cannot express the per-entry pairing.
+_VALIDATOR_BY_CONNECTOR_CLASS: dict[type[BaseConnector], Callable[[Any], None]] = {
+    BoxConnector: validate_box_perm_sync,
+    CanvasConnector: validate_canvas_perm_sync,
+    ConfluenceConnector: validate_confluence_perm_sync,
+    GoogleDriveConnector: validate_drive_perm_sync,
+    SharepointConnector: validate_sharepoint_perm_sync,
+}
+
+
 def validate_perm_sync(connector: BaseConnector) -> None:
     """
     Override this if your connector needs to validate permissions syncing.
@@ -69,13 +88,22 @@ def validate_perm_sync(connector: BaseConnector) -> None:
 
     Default is a no-op (always successful).
     """
-    if isinstance(connector, BoxConnector):
-        validate_box_perm_sync(connector)
-    elif isinstance(connector, CanvasConnector):
-        validate_canvas_perm_sync(connector)
-    elif isinstance(connector, ConfluenceConnector):
-        validate_confluence_perm_sync(connector)
-    elif isinstance(connector, GoogleDriveConnector):
-        validate_drive_perm_sync(connector)
-    elif isinstance(connector, SharepointConnector):
-        validate_sharepoint_perm_sync(connector)
+    for connector_class, validator in _VALIDATOR_BY_CONNECTOR_CLASS.items():
+        if isinstance(connector, connector_class):
+            validator(connector)
+            return
+
+
+def source_has_perm_sync_probe(source: DocumentSource) -> bool:
+    """
+    Returns whether ``validate_perm_sync`` reaches a real probe for a source.
+
+    Mirrors the isinstance dispatch above (``issubclass``, so a connector class
+    deriving from a probe-bearing one counts the same way). Only meaningful for
+    sources with a connector class; callers gate on sync-capability first.
+    """
+    connector_class = identify_connector_class(source)
+    return any(
+        issubclass(connector_class, probe_class)
+        for probe_class in _VALIDATOR_BY_CONNECTOR_CLASS
+    )

@@ -2,7 +2,13 @@
   "mcpServers": {
     "playwright": {
       "command": "npx",
-      "args": ["@playwright/mcp@0.0.75", "--headless", "--isolated"]
+      "args": [
+        "@playwright/mcp@0.0.78",
+        "--headless",
+        "--isolated",
+        "--browser",
+        "chromium"
+      ]
     },
     "agent-wiki": {
       "type": "http",

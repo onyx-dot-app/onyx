@@ -1,19 +1,28 @@
 "use client";
 
 import React from "react";
+import { useTranslations } from "next-intl";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { LoadingAnimation } from "@/components/Loading";
 import { ValidSources } from "@/lib/types";
 import { usePublicCredentials } from "@/lib/hooks";
 import { DriveAuthSection } from "./Credential";
 import { useUser } from "@/providers/UserProvider";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 import {
   useGoogleCredentials,
   refreshAllGoogleData,
 } from "@/lib/googleConnector";
 
 const GDriveMain = () => {
-  const { isAdmin, user } = useUser();
+  const t = useTranslations("admin.connectorsList");
+  const { user } = useUser();
+  // Gated on the global holder, not isAdmin: managing connectors is what this
+  // form does, and every endpoint behind it already enforces MANAGE_CONNECTORS.
+  const { isGlobalHolder } = usePermissionAuthority(
+    Permission.MANAGE_CONNECTORS
+  );
 
   // Get all public credentials
   const {
@@ -50,18 +59,16 @@ const GDriveMain = () => {
 
   // Error states
   if (credentialsError || !credentialsData) {
-    return <ErrorCallout errorTitle="Failed to load credentials." />;
+    return <ErrorCallout errorTitle={t("credentialsLoadError.title")} />;
   }
 
   if (googleDriveCredentialsError || !googleDriveCredentials) {
-    return (
-      <ErrorCallout errorTitle="Failed to load Google Drive credentials." />
-    );
+    return <ErrorCallout errorTitle={t("gdrive.credentialsLoadError.title")} />;
   }
 
   return (
     <>
-      {isAdmin && (
+      {isGlobalHolder && (
         <>
           <DriveAuthSection refreshCredentials={handleRefresh} user={user} />
         </>

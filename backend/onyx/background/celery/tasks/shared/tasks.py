@@ -101,7 +101,7 @@ def _clear_port_orphan_candidate_for_live_doc(
     )
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.DOCUMENT_BY_CC_PAIR_CLEANUP_TASK,
     soft_time_limit=LIGHT_SOFT_TIME_LIMIT,
     time_limit=LIGHT_TIME_LIMIT,
@@ -356,7 +356,7 @@ def document_by_cc_pair_cleanup_task(
     return True
 
 
-@shared_task(name=OnyxCeleryTask.CELERY_BEAT_HEARTBEAT, ignore_result=True, bind=True)
+@shared_task(name=OnyxCeleryTask.CELERY_BEAT_HEARTBEAT, ignore_result=True, bind=True)  # ty: ignore[invalid-argument-type]
 def celery_beat_heartbeat(self: Task, *, tenant_id: str) -> None:  # noqa: ARG001
     """When this task runs, it writes a key to Redis with a TTL.
 

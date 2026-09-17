@@ -85,7 +85,7 @@ logger = setup_logger()
 # which bloats the result metadata considerably. trail=False prevents this.
 # TODO(andrei): Rename all these kinds of functions from *vespa* to a more
 # generic *document_index*.
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
     ignore_result=True,
     soft_time_limit=JOB_TIMEOUT,
@@ -159,8 +159,7 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str) -> bool | None:
                         db_session=db_session, only_up_to_date=False
                     )
 
-                    for usergroup in user_groups:
-                        usergroup_ids.append(usergroup.id)
+                    usergroup_ids.extend(usergroup.id for usergroup in user_groups)
 
                 for usergroup_id in usergroup_ids:
                     lock_beat.reacquire()
@@ -432,7 +431,7 @@ def monitor_document_set_taskset(
         has_connector_pairs = bool(document_set.connector_credential_pairs)
         # Federated connectors should keep a document set alive even without cc pairs.
         has_federated_connectors = bool(
-            getattr(document_set, "federated_connectors", [])
+            getattr(document_set, "federated_connectors", [])  # ods: ignore[getattr]
         )
 
         if not has_connector_pairs and not has_federated_connectors:
@@ -463,7 +462,7 @@ def monitor_document_set_taskset(
     rds.reset()
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.DOCUMENT_INDEX_METADATA_SYNC_TASK,
     bind=True,
     soft_time_limit=LIGHT_SOFT_TIME_LIMIT,

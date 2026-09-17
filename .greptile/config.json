@@ -14,7 +14,7 @@
     "onyx-cherry-pick[bot]"
   ],
   "ignoreKeywords": "",
-  "ignorePatterns": "",
+  "ignorePatterns": "web/tools/oxlint/anti-slop/**",
   "includeAuthors": [
     "duo-onyx",
     "Bo-Onyx",

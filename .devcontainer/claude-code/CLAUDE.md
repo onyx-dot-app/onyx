@@ -33,3 +33,8 @@ In dev mode the frontend proxies `/api/*` straight to the backend (the dev-only 
 handler at `web/src/app/api/[...path]/route.ts`), so **`localhost:3000` serves both the UI and
 `/api`** — no reverse proxy needed. You can also hit the backend directly at `localhost:8080` (note:
 **no** `/api` prefix there — e.g. `/health`, `/auth/type`).
+
+**Stop the dev servers when you're finished with them:**
+
+- frontend: `pkill -f "next dev"; pkill -f next-server`
+- backend: `pkill -f "uvicorn onyx.main:app"`

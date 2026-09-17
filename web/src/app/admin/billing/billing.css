@@ -118,8 +118,8 @@
 }
 
 .billing-option[data-selected="true"] {
-  border-color: var(--action-link-05);
-  background: var(--action-link-01);
+  border-color: var(--action-selection-05);
+  background: var(--action-selection-01);
 }
 
 .billing-option-title {
@@ -134,17 +134,17 @@
 }
 
 .billing-option[data-selected="true"] .billing-option-title {
-  color: var(--action-link-05);
+  color: var(--action-selection-05);
 }
 
 .billing-option-badge {
-  color: var(--action-link-05);
+  color: var(--action-selection-05);
 }
 
 .billing-option-check {
   width: 1rem;
   height: 1rem;
-  stroke: var(--action-link-05);
+  stroke: var(--action-selection-05);
 }
 
 .billing-error-text {

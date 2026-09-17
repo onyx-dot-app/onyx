@@ -13,6 +13,8 @@ class PlanType(str, Enum):
 
 
 class LicenseSource(str, Enum):
+    """Whether a license can be re-fetched from the control plane on its own."""
+
     AUTO_FETCH = "auto_fetch"
     MANUAL_UPLOAD = "manual_upload"
 
@@ -39,6 +41,34 @@ class LicensePayload(BaseModel):
     stripe_subscription_id: str | None = None
     stripe_customer_id: str | None = None
     customer_tier: CustomerTier | None = None
+    # Older licenses omit this field, so None means not-a-trial, never
+    # trial-unknown.
+    trial_end: datetime | None = None
+
+    @property
+    def ends_with_trial(self) -> bool:
+        """True when this license runs only as far as a trial.
+
+        A converted subscription keeps its past trial_end but expires at the
+        end of the paid period, so comparing the two distinguishes a trial
+        about to lapse from a paid license about to lapse.
+        """
+        return self.trial_end is not None and self.trial_end >= self.expires_at
+
+    @property
+    def source(self) -> LicenseSource:
+        # Only a Stripe-billed license has a customer the control plane can
+        # re-issue against. Sales-issued ones are replaced by hand.
+        return (
+            LicenseSource.AUTO_FETCH
+            if self.stripe_customer_id
+            else LicenseSource.MANUAL_UPLOAD
+        )
+
+    @property
+    def self_renewing(self) -> bool:
+        """True when a replacement arrives without anyone doing anything."""
+        return self.source == LicenseSource.AUTO_FETCH
 
 
 class LicenseData(BaseModel):
@@ -64,6 +94,7 @@ class LicenseMetadata(BaseModel):
     source: LicenseSource | None = None
     stripe_subscription_id: str | None = None
     customer_tier: CustomerTier | None = None
+    trial_end: datetime | None = None
 
 
 class LicenseStatusResponse(BaseModel):
@@ -79,6 +110,7 @@ class LicenseStatusResponse(BaseModel):
     status: ApplicationStatus | None = None
     expiry_warning_stage: ExpiryWarningStage = ExpiryWarningStage.NONE
     source: LicenseSource | None = None
+    trial_end: datetime | None = None
 
 
 class LicenseResponse(BaseModel):

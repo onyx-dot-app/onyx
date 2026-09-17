@@ -2,7 +2,11 @@ from ee.onyx.configs.app_configs import GATED_TENANTS_KEY
 from onyx.configs.constants import ONYX_CLOUD_TENANT_ID
 from onyx.redis.redis_pool import get_redis_client, get_redis_replica_client
 from onyx.server.settings.models import ApplicationStatus
-from onyx.server.settings.store import load_settings, store_settings
+from onyx.server.settings.store import (
+    load_settings,
+    settings_write_lock,
+    store_settings,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
@@ -20,22 +24,22 @@ def update_tenant_gating(tenant_id: str, status: ApplicationStatus) -> None:
 
 
 def store_product_gating(tenant_id: str, application_status: ApplicationStatus) -> None:
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
     try:
-        token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
-
-        settings = load_settings()
-        settings.application_status = application_status
-        store_settings(settings)
+        # Shares the settings write lock so a concurrent settings writer cannot
+        # merge onto a stale snapshot and drop application_status.
+        with settings_write_lock():
+            settings = load_settings()
+            settings.application_status = application_status
+            store_settings(settings)
 
         # Store gated tenant information in Redis
         update_tenant_gating(tenant_id, application_status)
-
-        if token is not None:
-            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
-
     except Exception:
         logger.exception("Failed to gate product")
         raise
+    finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
 def overwrite_full_gated_set(tenant_ids: list[str]) -> None:

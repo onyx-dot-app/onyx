@@ -122,7 +122,11 @@ class ToolRunnerResponse(BaseModel):
     @model_validator(mode="after")
     def validate_tool_runner_response(self) -> "ToolRunnerResponse":
         fields = ["tool_response", "tool_message_content", "tool_run_kickoff"]
-        provided = sum(1 for field in fields if getattr(self, field) is not None)
+        provided = sum(
+            1
+            for field in fields
+            if getattr(self, field) is not None  # ods: ignore[getattr]
+        )
 
         if provided != 1:
             raise ValueError(
@@ -215,7 +219,7 @@ class ChatFile(BaseModel):
         install_lazy_content_loader(inst, loader)
         return inst
 
-    def __getattribute__(self, name: str):  # type: ignore[no-untyped-def]
+    def __getattribute__(self, name: str):
         if name == "content":
             maybe_materialize_lazy_content(self)
         return object.__getattribute__(self, name)
@@ -274,6 +278,8 @@ class ToolCallInfo(BaseModel):
     search_docs: list[SearchDoc] | None = None
     generated_images: list[GeneratedImage] | None = None
     generated_files: list[PythonExecutionFile] | None = None
+    # File-store ids of blobs custom tools saved during the call.
+    generated_file_ids: list[str] | None = None
 
 
 CHAT_SESSION_ID_PLACEHOLDER = "CHAT_SESSION_ID"

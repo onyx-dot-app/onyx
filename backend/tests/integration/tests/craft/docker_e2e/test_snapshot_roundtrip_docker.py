@@ -24,8 +24,8 @@ from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
 from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     OPENCODE_DATA_DIR,
     SANDBOX_EXEC_USER,
-    SESSIONS_ROOT,
 )
+from onyx.server.features.build.sandbox.session_workspace import SESSIONS_ROOT
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser

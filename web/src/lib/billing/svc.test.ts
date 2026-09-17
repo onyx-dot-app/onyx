@@ -141,6 +141,8 @@ describe("billing actions", () => {
 
       expect(fetchSpy).toHaveBeenCalledWith("/api/license/refresh", {
         method: "POST",
+        // Bounded, so an unreachable cache cannot pin the caller's spinner.
+        signal: expect.any(AbortSignal),
       });
 
       expect(result).toEqual({ success: true, message: "Cache refreshed" });

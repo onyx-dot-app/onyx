@@ -1,6 +1,7 @@
 "use client";
 
 import { Form, Formik } from "formik";
+import { useTranslations } from "next-intl";
 import { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import * as Yup from "yup";
@@ -13,17 +14,17 @@ import {
 import {
   ConnectorStatus,
   DocumentSetSummary,
-  UserGroup,
-  UserRole,
   FederatedConnectorConfig,
+  Permission,
 } from "@/lib/types";
 import { TextFormField } from "@/components/Field";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 import React, { useEffect, useState } from "react";
 import { useUser } from "@/providers/UserProvider";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { ConnectorMultiSelect } from "@/components/ConnectorMultiSelect";
 import { NonSelectableConnectors } from "@/components/NonSelectableConnectors";
 import { FederatedConnectorSelector } from "@/components/FederatedConnectorSelector";
@@ -31,21 +32,23 @@ import { useFederatedConnectors } from "@/lib/hooks";
 
 interface SetCreationPopupProps {
   ccPairs: ConnectorStatus<any, any>[];
-  userGroups: UserGroup[] | undefined;
   onClose: () => void;
   existingDocumentSet?: DocumentSetSummary;
 }
 
 export const DocumentSetCreationForm = ({
   ccPairs,
-  userGroups,
   onClose,
   existingDocumentSet,
 }: SetCreationPopupProps) => {
+  const t = useTranslations("admin.documents");
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const isUpdate = existingDocumentSet !== undefined;
   const [localCcPairs, setLocalCcPairs] = useState(ccPairs);
   const { user } = useUser();
+  const { isGlobalHolder, isScopedManager } = usePermissionAuthority(
+    Permission.MANAGE_DOCUMENT_SETS
+  );
   const { data: federatedConnectors } = useFederatedConnectors();
 
   useEffect(() => {
@@ -75,7 +78,7 @@ export const DocumentSetCreationForm = ({
         }}
         validationSchema={Yup.object()
           .shape({
-            name: Yup.string().required("Please enter a name for the set"),
+            name: Yup.string().required(t("sets.form.name.required")),
             description: Yup.string().optional(),
             cc_pair_ids: Yup.array().of(Yup.number().required()),
             federated_connectors: Yup.array().of(
@@ -87,7 +90,7 @@ export const DocumentSetCreationForm = ({
           })
           .test(
             "at-least-one-connector",
-            "Please select at least one connector (regular or federated)",
+            t("sets.form.connectors.required"),
             function (values) {
               const hasRegularConnectors =
                 values.cc_pair_ids && values.cc_pair_ids.length > 0;
@@ -119,8 +122,8 @@ export const DocumentSetCreationForm = ({
           if (response.ok) {
             toast.success(
               isUpdate
-                ? "Successfully updated document set!"
-                : "Successfully created document set!"
+                ? t("sets.form.updated.toast")
+                : t("sets.form.created.toast")
             );
             await Promise.all([
               mutate(SWR_KEYS.documentSets),
@@ -131,41 +134,39 @@ export const DocumentSetCreationForm = ({
             const errorMsg = await response.text();
             toast.error(
               isUpdate
-                ? `Error updating document set - ${errorMsg}`
-                : `Error creating document set - ${errorMsg}`
+                ? t("sets.form.updateFailed.toast", { detail: errorMsg })
+                : t("sets.form.createFailed.toast", { detail: errorMsg })
             );
           }
         }}
       >
         {(props) => {
-          // Filter visible cc pairs for curator role
-          const visibleCcPairs =
-            user?.role === UserRole.CURATOR
-              ? localCcPairs.filter(
-                  (ccPair) =>
-                    ccPair.access_type === "public" ||
-                    (ccPair.groups.length > 0 &&
-                      props.values.groups.every((group) =>
-                        ccPair.groups.includes(group)
-                      ))
-                )
-              : localCcPairs;
+          // Only a scoped manager is restricted to connectors in their groups; a
+          // global MANAGE_DOCUMENT_SETS holder is org-wide and sees them all.
+          const visibleCcPairs = isScopedManager
+            ? localCcPairs.filter(
+                (ccPair) =>
+                  ccPair.access_type === "public" ||
+                  (ccPair.groups.length > 0 &&
+                    props.values.groups.every((group) =>
+                      ccPair.groups.includes(group)
+                    ))
+              )
+            : localCcPairs;
 
-          // Filter non-visible cc pairs for curator role
-          const nonVisibleCcPairs =
-            user?.role === UserRole.CURATOR
-              ? localCcPairs.filter(
-                  (ccPair) =>
-                    !(ccPair.access_type === "public") &&
-                    (ccPair.groups.length === 0 ||
-                      !props.values.groups.every((group) =>
-                        ccPair.groups.includes(group)
-                      ))
-                )
-              : [];
+          const nonVisibleCcPairs = isScopedManager
+            ? localCcPairs.filter(
+                (ccPair) =>
+                  !(ccPair.access_type === "public") &&
+                  (ccPair.groups.length === 0 ||
+                    !props.values.groups.every((group) =>
+                      ccPair.groups.includes(group)
+                    ))
+              )
+            : [];
 
           // Deselect filtered out cc pairs
-          if (user?.role === UserRole.CURATOR) {
+          if (isScopedManager) {
             const visibleCcPairIds = visibleCcPairs.map(
               (ccPair) => ccPair.cc_pair_id
             );
@@ -179,13 +180,13 @@ export const DocumentSetCreationForm = ({
               <div className="space-y-4 w-full">
                 <TextFormField
                   name="name"
-                  label="Name:"
-                  placeholder="A name for the document set"
+                  label={t("sets.form.name.label")}
+                  placeholder={t("sets.form.name.placeholder")}
                 />
                 <TextFormField
                   name="description"
-                  label="Description:"
-                  placeholder="Describe what the document set represents"
+                  label={t("sets.form.description.label")}
+                  placeholder={t("sets.form.description.placeholder")}
                   optional={true}
                 />
 
@@ -193,6 +194,7 @@ export const DocumentSetCreationForm = ({
                   <IsPublicGroupSelector
                     formikProps={props}
                     objectName="document set"
+                    isGlobalHolder={isGlobalHolder}
                   />
                 )}
               </div>
@@ -200,45 +202,41 @@ export const DocumentSetCreationForm = ({
               <div className="my-6 border-t border-border-02" />
 
               <div className="space-y-6">
-                {user?.role === UserRole.CURATOR ? (
+                {isScopedManager ? (
                   <>
                     <ConnectorMultiSelect
                       name="cc_pair_ids"
-                      label={`Connectors available to ${
-                        userGroups && userGroups.length > 1
-                          ? "the selected group"
-                          : "the group you curate"
-                      }`}
+                      label={t("sets.form.scopedConnectors.label", {
+                        count: props.values.groups.length,
+                      })}
                       connectors={visibleCcPairs}
                       selectedIds={props.values.cc_pair_ids}
                       onChange={(selectedIds) => {
                         props.setFieldValue("cc_pair_ids", selectedIds);
                       }}
-                      placeholder="Search for connectors..."
+                      placeholder={t("sets.form.connectors.placeholder")}
                     />
 
                     <NonSelectableConnectors
                       connectors={nonVisibleCcPairs}
-                      title={`Connectors not available to the ${
-                        userGroups && userGroups.length > 1
-                          ? `group${
-                              props.values.groups.length > 1 ? "s" : ""
-                            } you have selected`
-                          : "group you curate"
-                      }`}
-                      description="Only connectors that are directly assigned to the group you are trying to add the document set to will be available."
+                      title={t("sets.form.unavailableConnectors.title", {
+                        count: props.values.groups.length,
+                      })}
+                      description={t(
+                        "sets.form.unavailableConnectors.description"
+                      )}
                     />
                   </>
                 ) : (
                   <ConnectorMultiSelect
                     name="cc_pair_ids"
-                    label="Pick your connectors"
+                    label={t("sets.form.connectors.label")}
                     connectors={visibleCcPairs}
                     selectedIds={props.values.cc_pair_ids}
                     onChange={(selectedIds) => {
                       props.setFieldValue("cc_pair_ids", selectedIds);
                     }}
-                    placeholder="Search for connectors..."
+                    placeholder={t("sets.form.connectors.placeholder")}
                   />
                 )}
 
@@ -248,7 +246,7 @@ export const DocumentSetCreationForm = ({
                     <div className="my-4 border-t border-border-02" />
                     <FederatedConnectorSelector
                       name="federated_connectors"
-                      label="Federated Connectors"
+                      label={t("sets.form.federatedConnectors.label")}
                       federatedConnectors={federatedConnectors}
                       selectedConfigs={props.values.federated_connectors}
                       onChange={(selectedConfigs) => {
@@ -257,22 +255,26 @@ export const DocumentSetCreationForm = ({
                           selectedConfigs
                         );
                       }}
-                      placeholder="Search for federated connectors..."
+                      placeholder={t(
+                        "sets.form.federatedConnectors.placeholder"
+                      )}
                     />
                   </>
                 )}
               </div>
 
               <div className="flex mt-6 pt-4 border-t border-border-02">
-                {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-                <Button
-                  type="submit"
-                  disabled={props.isSubmitting}
-                  className="w-56 mx-auto"
-                  primary
-                >
-                  {isUpdate ? "Update Document Set" : "Create Document Set"}
-                </Button>
+                <div className="mx-auto w-56">
+                  <Button
+                    type="submit"
+                    disabled={props.isSubmitting}
+                    width="full"
+                  >
+                    {isUpdate
+                      ? t("sets.form.submitButton.updateLabel")
+                      : t("sets.form.submitButton.createLabel")}
+                  </Button>
+                </div>
               </div>
             </Form>
           );

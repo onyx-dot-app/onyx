@@ -10,6 +10,7 @@ from onyx.external_apps.providers.actions import (
 )
 from onyx.external_apps.providers.base import OnyxManagedExtApp
 from onyx.external_apps.providers.google_base import GoogleOAuthProvider
+from shared_configs.configs import MULTI_TENANT
 
 
 # Google Calendar REST v3 (https://www.googleapis.com/calendar/v3/...); the
@@ -79,11 +80,21 @@ _ENDPOINTS: list[EndpointSpec] = [
 ]
 
 
+_SELF_HOSTED_SCOPE = "https://www.googleapis.com/auth/calendar"
+# No Calendar scope is restricted, so this is just the least-privilege spelling
+# of the above — the whole catalog survives.
+_CLOUD_SCOPE = (
+    "https://www.googleapis.com/auth/calendar.events "
+    "https://www.googleapis.com/auth/calendar.calendarlist.readonly "
+    "https://www.googleapis.com/auth/calendar.freebusy"
+)
+
+
 class GoogleCalendarProvider(GoogleOAuthProvider, OnyxManagedExtApp):
     spec = GoogleOAuthProvider.build_spec(
         app_type=ExternalAppType.GOOGLE_CALENDAR,
         app_name="Google Calendar",
-        scope="https://www.googleapis.com/auth/calendar",
+        scope=_CLOUD_SCOPE if MULTI_TENANT else _SELF_HOSTED_SCOPE,
         upstream_url_patterns=["https://www\\.googleapis\\.com/calendar/.*"],
         google_api_name="Google Calendar API",
         endpoint_catalog=_ENDPOINTS,

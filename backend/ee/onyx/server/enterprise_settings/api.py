@@ -7,11 +7,13 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.scim import ScimDAL
+from ee.onyx.db.user_tenant_mapping import resolve_tenant_id
 from ee.onyx.server.enterprise_settings.models import (
     AnalyticsScriptUpload,
     EnterpriseSettings,
 )
 from ee.onyx.server.enterprise_settings.store import (
+    ALLOWED_LOGO_MIME_TYPES,
     get_logo_filename,
     get_logotype_filename,
     load_analytics_script,
@@ -36,12 +38,15 @@ from onyx.auth.users import (
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
+from onyx.db.users import get_user_by_oauth_account
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.serving import resolve_inline_disposition
 from onyx.server.settings.models import Tier
 from onyx.server.settings.tier_order import tier_at_least
 from onyx.server.utils import BasicAuthenticationError
+from onyx.utils.file import FileWithMimeType
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import get_current_tenant_id
@@ -68,12 +73,71 @@ class RefreshTokenData(BaseModel):
             )
 
 
+def _caller_owns_subject(
+    user: User, account_id: str, account_email: str, db_session: Session
+) -> bool:
+    """Whether this caller may refresh `account_id` as a "custom" login.
+
+    A subject the user already holds clears the ownership half on its own. It
+    survives an IdP email rename, which is why the address is not checked again
+    on that path.
+
+    Anything else is a first link, so the body's address has to name the caller
+    and the subject has to belong to nobody. `oauth_callback` resolves by
+    subject, so one that is really someone else's would put the caller's tokens
+    on that account instead.
+
+    The tenant half then applies to both, because owning a subject here says
+    nothing about which workspace it resolves to.
+    """
+    linked_subjects = {
+        account.account_id
+        for account in user.oauth_accounts
+        if account.oauth_name == "custom"
+    }
+    if account_id not in linked_subjects:
+        if account_email.strip().lower() != user.email.strip().lower():
+            return False
+
+        if get_user_by_oauth_account("custom", account_id, db_session) is not None:
+            return False
+
+    if not MULTI_TENANT:
+        return True
+
+    # The subject, not the address, picks the tenant `oauth_callback` runs in:
+    # it calls get_or_provision_tenant, which resolves with resolve_tenant_id.
+    # Mirror that call rather than re-deriving its precedence, so a subject
+    # resolving elsewhere cannot bind this caller's tokens in another tenant.
+    # This applies to a subject the caller already holds too — a local link
+    # says nothing about where the catalog now points.
+    try:
+        resolved_tenant_id = resolve_tenant_id(user.email, "custom", account_id)
+    except OnyxError:
+        # An address that names several workspaces is not one to guess at.
+        return False
+    return resolved_tenant_id in (None, get_current_tenant_id())
+
+
 @basic_router.post("/refresh-token")
 async def refresh_access_token(
     refresh_token: RefreshTokenData,
     user: User = Depends(current_user_with_expired_token),
     user_manager: UserManager = Depends(get_user_manager),
+    db_session: Session = Depends(get_session),
 ) -> None:
+    # The body is caller-supplied and nothing verifies it, so bind the subject
+    # in it to this user before `oauth_callback` resolves and rewrites the link
+    # it names. The guard sits before the try block, because the trailing except
+    # would otherwise turn it into a 500.
+    account_id = str(refresh_token.userinfo["userId"])
+    account_email = str(refresh_token.userinfo["email"])
+    if not _caller_owns_subject(user, account_id, account_email, db_session):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "refresh-token userinfo does not match the authenticated user",
+        )
+
     try:
         logger.debug("Received response from Meechum auth URL for user %s", user.id)
 
@@ -91,8 +155,11 @@ async def refresh_access_token(
         await user_manager.oauth_callback(
             oauth_name="custom",
             access_token=new_access_token,
-            account_id=refresh_token.userinfo["userId"],
-            account_email=refresh_token.userinfo["email"],
+            account_id=account_id,
+            # The stored address, not the one in the body. The subject already
+            # identifies the user, and adopting an unverified address here would
+            # move the account onto one the caller does not own.
+            account_email=user.email,
             expires_at=expires_at_timestamp,
             refresh_token=new_refresh_token,
             associate_by_email=True,
@@ -175,6 +242,28 @@ def put_logo(
     upload_logo(file=file, is_logotype=is_logotype)
 
 
+def _logo_response(onyx_file: FileWithMimeType, cache_control: str | None) -> Response:
+    """Serve branding bytes under the shared file-serving policy.
+
+    These routes are public and share the app origin, so a sniffed
+    image/svg+xml or text/html is clamped to an inert raster rather than
+    rendered as an active document. `sandbox` stays off: the logo is embedded
+    as an `<img>` and these routes have never sent a CSP.
+    """
+    media_type, security_headers = resolve_inline_disposition(
+        onyx_file.mime_type,
+        inline_types=ALLOWED_LOGO_MIME_TYPES,
+        fallback_media_type="image/png",
+        fallback_disposition='inline; filename="logo.png"',
+        sandbox=False,
+    )
+    headers = dict(security_headers)
+    if cache_control is not None:
+        headers["Cache-Control"] = cache_control
+
+    return Response(content=onyx_file.data, media_type=media_type, headers=headers)
+
+
 def fetch_logo_helper(db_session: Session) -> Response:  # noqa: ARG001
     try:
         file_store = get_default_file_store()
@@ -188,11 +277,7 @@ def fetch_logo_helper(db_session: Session) -> Response:  # noqa: ARG001
             detail="No logo file found",
         )
     else:
-        return Response(
-            content=onyx_file.data,
-            media_type=onyx_file.mime_type,
-            headers={"Cache-Control": "no-cache"},
-        )
+        return _logo_response(onyx_file, cache_control="no-cache")
 
 
 def fetch_logotype_helper(db_session: Session) -> Response:  # noqa: ARG001
@@ -207,7 +292,7 @@ def fetch_logotype_helper(db_session: Session) -> Response:  # noqa: ARG001
             detail="No logotype file found",
         )
     else:
-        return Response(content=onyx_file.data, media_type=onyx_file.mime_type)
+        return _logo_response(onyx_file, cache_control=None)
 
 
 @basic_router.get("/logotype")
@@ -301,7 +386,11 @@ def create_scim_token(
     revokes all previous tokens. The raw token value is returned exactly once
     in the response; it cannot be retrieved again.
     """
-    raw_token, hashed_token, token_display = generate_scim_token()
+    # The tenant is baked into the token so the IdP's later SCIM calls, which
+    # carry nothing but this bearer token, resolve to the right workspace.
+    raw_token, hashed_token, token_display = generate_scim_token(
+        get_current_tenant_id()
+    )
     token = dal.create_token(
         name=body.name,
         hashed_token=hashed_token,

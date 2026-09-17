@@ -2,8 +2,10 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from onyx.db.enums import SystemUsageAttribution
 from onyx.db.models import ModelCostOverride
 from onyx.db.user_usage import UserUsageByDay as UsageDayModel
+from onyx.llm.cost import ModelPrice
 
 
 class CostOverrideUpsertRequest(BaseModel):
@@ -40,10 +42,14 @@ class CostOverride(BaseModel):
 
 class UsageExportRecord(BaseModel):
     model: str
+    flow: str
+    provider: str
+    incognito: bool
     day: str  # YYYY-MM-DD
     input_tokens: int
     output_tokens: int
     cache_read_tokens: int
+    cache_creation_tokens: int
     cost_cents: float
 
 
@@ -51,6 +57,7 @@ class UsageExportTotals(BaseModel):
     input_tokens: int
     output_tokens: int
     cache_read_tokens: int
+    cache_creation_tokens: int
     cost_cents: float
 
 
@@ -68,13 +75,37 @@ class UsageExportResponse(BaseModel):
     users: list[UsageExportUser]
 
 
-class ModelPrice(BaseModel):
-    """USD per 1M tokens for the user's selected chat model; null if unpriced."""
-
+class SystemUsageRecord(BaseModel):
+    attribution: SystemUsageAttribution
     model: str
-    provider: str | None
-    input_per_mtok: float | None
-    output_per_mtok: float | None
+    flow: str
+    provider: str
+    day: str
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int
+    cache_creation_tokens: int
+    cost_cents: float
+
+
+class SystemUsageCategory(BaseModel):
+    category: str
+    totals: UsageExportTotals
+    records: list[SystemUsageRecord]
+
+
+class SystemUsageResponse(BaseModel):
+    start: str
+    end: str
+    categories: list[SystemUsageCategory]
+
+
+class ResetUsageRequest(BaseModel):
+    user_email: str = Field(min_length=1)
+
+
+class ResetUsageResponse(BaseModel):
+    reset_rows: int = Field(ge=0)
 
 
 class EffectiveCostBudget(BaseModel):
@@ -83,6 +114,7 @@ class EffectiveCostBudget(BaseModel):
     budget_cents: float
     remaining_cents: float
     period_hours: int
+    reset_at: datetime
 
 
 class UserUsageResponse(BaseModel):
@@ -92,4 +124,6 @@ class UserUsageResponse(BaseModel):
     budget_cents: float | None
     budget_remaining_cents: float | None
     budget_period_hours: int | None = None
+    budget_reset_at: datetime | None = None
     selected_model_price: ModelPrice | None
+    available_model_prices: list[ModelPrice] = Field(default_factory=list)

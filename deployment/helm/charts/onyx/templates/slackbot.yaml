@@ -2,7 +2,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "onyx.fullname" . }}-slackbot
+  name: {{ include "onyx.resourceName" (list . "slackbot") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     {{- with .Values.slackbot.deploymentLabels }}

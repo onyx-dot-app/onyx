@@ -12,10 +12,7 @@ import { cn } from "@opal/utils";
  */
 function ChevronIcon({ className, ...props }: IconProps) {
   return (
-    <SvgChevronDownSmall
-      className={cn(className, "opal-button-chevron")}
-      {...props}
-    />
+    <SvgChevronDownSmall className={cn(className, "opal-chevron")} {...props} />
   );
 }
 

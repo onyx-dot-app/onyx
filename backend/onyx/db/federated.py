@@ -163,20 +163,24 @@ def list_federated_connector_oauth_tokens(
     return list(result)
 
 
-def create_federated_connector_document_set_mapping(
+def create_federated_connector_document_set_mapping__no_commit(
     db_session: Session,
     federated_connector_id: int,
     document_set_id: int,
     entities: dict[str, Any],
 ) -> FederatedConnector__DocumentSet:
-    """Create a mapping between federated connector and document set with entities."""
+    """Create a mapping between federated connector and document set with entities.
+
+    Does NOT commit — callers write these in a loop inside a larger document-set
+    transaction, and committing per mapping would make a partial write durable and
+    drop the caller's FOR UPDATE lock mid-write.
+    """
     mapping = FederatedConnector__DocumentSet(
         federated_connector_id=federated_connector_id,
         document_set_id=document_set_id,
         entities=entities,
     )
     db_session.add(mapping)
-    db_session.commit()
     return mapping
 
 

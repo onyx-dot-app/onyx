@@ -120,10 +120,10 @@ def _create_mock_slack_client(
     )
 
     mock_users_info_response = Mock()
-    mock_users_info_response.__getitem__ = Mock(
-        side_effect=lambda key: {"ok": True}[key]
-    )
+    # A real SlackResponse carries the whole parsed body (including ``ok``) in
+    # ``.data``, and its subscript access reads from it.
     mock_users_info_response.data = {
+        "ok": True,
         "user": {
             "id": "U9876543210",
             "name": "testuser",
@@ -134,8 +134,11 @@ def _create_mock_slack_client(
                 "last_name": "User",
                 "email": "test@example.com",
             },
-        }
+        },
     }
+    mock_users_info_response.__getitem__ = Mock(
+        side_effect=mock_users_info_response.data.__getitem__
+    )
     mock_client.web_client.users_info = Mock(return_value=mock_users_info_response)
 
     mock_auth_test_response = {

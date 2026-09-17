@@ -1,7 +1,8 @@
+import type { ErrorResponseBody } from "@/lib/fetcher";
 import type { Settings } from "@/lib/settings/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
-  EmbeddingModel,
+  EmbeddingModelSpec,
   EmbeddingProviderName,
   ReindexErrorRow,
   SavedSearchSettings,
@@ -78,7 +79,7 @@ export async function connectEmbeddingProvider({
     });
 
     if (!testResponse.ok) {
-      const err = await testResponse.json();
+      const err: ErrorResponseBody = await testResponse.json();
       throw new Error(err.detail ?? "Embedding test failed");
     }
   }
@@ -91,6 +92,9 @@ export async function connectEmbeddingProvider({
     is_default_provider: false,
     is_configured: true,
   };
+  // Explicit, so the backend never has to infer intent from the masked value:
+  // null means the admin left the stored key alone.
+  body.api_key_changed = apiKey !== null;
   if (apiKey !== null) body.api_key = apiKey;
 
   const saveResponse = await fetch(SWR_KEYS.embeddingProviders, {
@@ -100,7 +104,7 @@ export async function connectEmbeddingProvider({
   });
 
   if (!saveResponse.ok) {
-    const err = await saveResponse.json();
+    const err: ErrorResponseBody = await saveResponse.json();
     throw new Error(err.detail ?? "Failed to save provider");
   }
 }
@@ -118,14 +122,14 @@ export async function disconnectEmbeddingProvider(
   );
 
   if (!response.ok) {
-    const err = await response.json();
+    const err: ErrorResponseBody = await response.json();
     throw new Error(err.detail ?? "Failed to disconnect provider");
   }
 }
 
 export async function saveAdminSettings(settings: Settings) {
   const response = await fetch("/api/admin/settings", {
-    method: "PUT",
+    method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(settings),
   });
@@ -175,11 +179,14 @@ export async function resumePausedPort(
 }
 
 interface SetNewSearchSettingsArgs {
-  model: EmbeddingModel;
+  model: EmbeddingModelSpec;
   providerName: EmbeddingProviderName;
   switchoverType: SwitchoverType;
   enableContextualRag: boolean;
   contextualRagModelConfigurationId: number | null;
+  // The server recomputes this set itself and rejects the reindex if its own set contains
+  // a cc_pair the admin never acknowledged.
+  acknowledgedWontPortCcPairIds: number[];
 }
 
 export async function setNewSearchSettings({
@@ -188,6 +195,7 @@ export async function setNewSearchSettings({
   switchoverType,
   enableContextualRag,
   contextualRagModelConfigurationId,
+  acknowledgedWontPortCcPairIds,
 }: SetNewSearchSettingsArgs): Promise<Response> {
   // The backend's EmbeddingProvider enum only contains cloud providers
   // (openai/cohere/voyage/google/litellm/azure). Self-hosted models live
@@ -212,17 +220,14 @@ export async function setNewSearchSettings({
       enable_contextual_rag: enableContextualRag,
       contextual_rag_model_configuration_id: contextualRagModelConfigurationId,
       switchover_type: switchoverType,
+      acknowledged_wont_port_cc_pair_ids: acknowledgedWontPortCcPairIds,
     }),
   });
 }
 
 /**
- * Persists non-reindex search-settings updates (e.g. toggling Contextual RAG
- * or switching its LLM). Backend is `update_saved_search_settings` — it
- * mutates the CURRENT search-settings row in place rather than creating a new
- * one + kicking off a re-index. Caller is responsible for ensuring the
- * embedding-model fields in `settings` match the current model; the endpoint
- * does not validate this.
+ * Switches the Contextual Retrieval LLM on the current index. Contextual
+ * Retrieval must already be enabled; all other settings must stay unchanged.
  */
 export async function updateInferenceSettings(
   settings: SavedSearchSettings

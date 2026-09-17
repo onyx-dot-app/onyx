@@ -51,6 +51,10 @@ class CloudEmbeddingProvider(BaseModel):
 class CloudEmbeddingProviderCreationRequest(BaseModel):
     provider_type: EmbeddingProvider
     api_key: str | None = None
+    # Absent means the caller does not use the flag, which is distinct from
+    # False and keeps callers predating it able to rotate a key. Read through
+    # ApiKeyIntent, which names all three cases.
+    api_key_changed: bool | None = None
     api_url: str | None = None
     api_version: str | None = None
     deployment_name: str | None = None

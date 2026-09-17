@@ -63,7 +63,11 @@ function Calendar(props: CalendarProps) {
       style={undefined}
       styles={undefined}
       formatters={undefined}
-      modifiersClassNames={undefined}
+      modifiersClassNames={{
+        range_preview_start: "opal-calendar-cell--range-preview-start",
+        range_preview_middle: "opal-calendar-cell--range-preview-middle",
+        range_preview_end: "opal-calendar-cell--range-preview-end",
+      }}
       modifiersStyles={undefined}
       // Outside days render as empty fixed-width cells, never as numerals.
       showOutsideDays={false}

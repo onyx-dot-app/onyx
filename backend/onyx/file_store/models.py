@@ -82,7 +82,7 @@ class ChatFileType(str, Enum):
     def use_metadata_only(self) -> bool:
         """File types where we can ignore the file content
         and only use the metadata."""
-        return self in (ChatFileType.TABULAR,)
+        return self == ChatFileType.TABULAR
 
 
 class FileDescriptor(TypedDict):
@@ -127,7 +127,7 @@ class InMemoryChatFile(BaseModel):
         install_lazy_content_loader(inst, loader)
         return inst
 
-    def __getattribute__(self, name: str):  # type: ignore[no-untyped-def]
+    def __getattribute__(self, name: str):
         if name == "content":
             maybe_materialize_lazy_content(self)
         return object.__getattribute__(self, name)

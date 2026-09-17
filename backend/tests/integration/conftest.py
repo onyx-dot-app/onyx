@@ -1,8 +1,8 @@
+import ast
 import os
-import platform
-import shutil
 import subprocess
 from collections.abc import Callable, Generator
+from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
@@ -50,7 +50,6 @@ from fastapi.testclient import TestClient  # noqa: E402
 # Letting onyx.main load first means ee.onyx.main's back-reference to
 # onyx.main.get_application (defined at line 429, before line 706) resolves cleanly.
 import onyx.main  # noqa: E402, F401
-from onyx.auth.schemas import UserRole  # noqa: E402
 from onyx.background.celery.apps.client import celery_app  # noqa: E402
 from onyx.configs.constants import DocumentSource  # noqa: E402
 from onyx.db.engine.sql_engine import (  # noqa: E402
@@ -81,6 +80,9 @@ from tests.integration.common_utils.managers.user import (  # noqa: E402
     DEFAULT_PASSWORD,
     UserManager,
     build_email,
+)
+from tests.integration.common_utils.managers.user_group import (  # noqa: E402
+    UserGroupManager,
 )
 from tests.integration.common_utils.reset import (  # noqa: E402
     _seed_dev_license_if_set,
@@ -125,26 +127,6 @@ def _run_migrations() -> None:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _install_playwright(_run_migrations: None) -> None:  # noqa: ARG001
-    # web_search tests exercise OnyxWebCrawler's Playwright fallback. The
-    # devcontainer ships the apt deps; download the chromium binary here so
-    # the version tracks the lockfile's playwright-python. Playwright has no
-    # ubuntu26.04 build yet, so pin to the binary-compatible 24.04 build.
-    # Skipped in onyx-lite (no web_search) and where Playwright isn't on PATH.
-    if os.getenv("DISABLE_VECTOR_DB", "false").lower() == "true":
-        return
-
-    if shutil.which("playwright") is None:
-        return
-
-    machine = platform.machine().lower()
-    pw_arch = "x64" if machine in ("x86_64", "amd64") else "arm64"
-    env = os.environ.copy()
-    env["PLAYWRIGHT_HOST_PLATFORM_OVERRIDE"] = f"ubuntu24.04-{pw_arch}"
-    subprocess.run(["playwright", "install", "chromium"], env=env, check=True)
-
-
-@pytest.fixture(scope="session", autouse=True)
 def initialize_db(_run_migrations: None) -> None:  # noqa: ARG001
     # Make sure that the db engine is initialized before any tests are run
     SqlEngine.init_engine(
@@ -159,12 +141,12 @@ _CELERY_WORKER_PROGRAMS: list[tuple[str, str]] = [
     (
         "light",
         "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,"
-        "checkpoint_cleanup,index_attempt_cleanup,opensearch_migration",
+        "checkpoint_cleanup,index_attempt_cleanup,index_reclaim,opensearch_migration",
     ),
     (
         "heavy",
         "connector_pruning,connector_doc_permissions_sync,"
-        "connector_external_group_sync,csv_generation,sandbox",
+        "connector_external_group_sync,csv_generation,sandbox,capability_checks",
     ),
     ("docprocessing", "docprocessing,port"),
     (
@@ -313,7 +295,6 @@ def _start_celery_workers(
 def _test_client(
     initialize_db: None,  # noqa: ARG001
     _start_celery_workers: None,  # noqa: ARG001
-    _install_playwright: None,  # noqa: ARG001
 ) -> Generator[TestClient, None, None]:
     # In-process api_server. Use the versioned dispatcher so MT / EE
     # builds get ee.onyx.main.get_application — that's the one that
@@ -385,7 +366,7 @@ def admin_user() -> DATestUser:
         user = UserManager.create(name=ADMIN_USER_NAME)
 
         # if there are other users for some reason, reset and try again
-        if not UserManager.is_role(user, UserRole.ADMIN):
+        if not UserManager.is_admin(user):
             print("Trying to reset")
             reset_all()
             user = UserManager.create(name=ADMIN_USER_NAME)
@@ -400,11 +381,11 @@ def admin_user() -> DATestUser:
                 email=build_email("admin_user"),
                 password=DEFAULT_PASSWORD,
                 headers=GENERAL_HEADERS,
-                role=UserRole.ADMIN,
+                is_admin=True,
                 is_active=True,
             )
         )
-        if not UserManager.is_role(user, UserRole.ADMIN):
+        if not UserManager.is_admin(user):
             reset_all()
             user = UserManager.create(name=ADMIN_USER_NAME)
             return user
@@ -419,16 +400,15 @@ def admin_user() -> DATestUser:
 @pytest.fixture
 def basic_user(
     # make sure the admin user exists first to ensure this new user
-    # gets the BASIC role
+    # lands in the Basic group rather than Admin
     admin_user: DATestUser,  # noqa: ARG001
 ) -> DATestUser:
     try:
         user = UserManager.create(name=BASIC_USER_NAME)
 
-        # Validate that the user has the BASIC role
-        if user.role != UserRole.BASIC:
+        if user.is_admin:
             raise RuntimeError(
-                f"Created user {BASIC_USER_NAME} does not have BASIC role"
+                f"Created user {BASIC_USER_NAME} unexpectedly has admin privileges"
             )
 
         return user
@@ -442,14 +422,15 @@ def basic_user(
                 email=build_email(BASIC_USER_NAME),
                 password=DEFAULT_PASSWORD,
                 headers=GENERAL_HEADERS,
-                role=UserRole.BASIC,
+                is_admin=False,
                 is_active=True,
             )
         )
 
-        # Validate that the logged-in user has the BASIC role
-        if not UserManager.is_role(user, UserRole.BASIC):
-            raise RuntimeError(f"User {BASIC_USER_NAME} does not have BASIC role")
+        if UserManager.is_admin(user):
+            raise RuntimeError(
+                f"User {BASIC_USER_NAME} unexpectedly has admin privileges"
+            )
 
         return user
 
@@ -491,8 +472,12 @@ def document_builder(admin_user: DATestUser) -> DocumentBuilderType:
     # HACK: Avoid importing generated OpenAPI client modules unless this fixture is used.
     from tests.integration.common_utils.managers.cc_pair import CCPairManager
 
+    admin_group = UserGroupManager.get_default(
+        user_performing_action=admin_user, name="Admin"
+    )
     api_key: DATestAPIKey = APIKeyManager.create(
         user_performing_action=admin_user,
+        group_ids=[admin_group.id],
     )
 
     # create connector
@@ -515,6 +500,78 @@ def document_builder(admin_user: DATestUser) -> DocumentBuilderType:
         return docs
 
     return _document_builder
+
+
+_INTEGRATION_DIR = Path(__file__).parent
+
+
+def _imports_mock(source: str) -> bool:
+    """Report whether the module imports unittest.mock, in any spelling.
+
+    Parsed rather than pattern-matched so that a docstring quoting the rule is
+    not mistaken for a violation, and so that a parenthesized import still
+    counts. It does not follow ``import unittest`` to a later ``unittest.mock``
+    attribute access; the check is a signpost, not a sandbox.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        # pytest reports the syntax error itself; nothing useful to add here.
+        return False
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            if any(alias.name == "unittest.mock" for alias in node.names):
+                return True
+        elif isinstance(node, ast.ImportFrom):
+            if node.module == "unittest.mock":
+                return True
+            if node.module == "unittest" and any(
+                alias.name == "mock" for alias in node.names
+            ):
+                return True
+    return False
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """Fail collection if an integration test mocks the code under test.
+
+    Integration tests are the black-box tier: they drive the product through its
+    real API and assert on observable behavior. Reaching inside with
+    ``unittest.mock`` turns them into external-dependency-unit tests wearing the
+    wrong hat, and that used to be caught only by a reviewer noticing the import.
+    """
+    offenders: set[str] = set()
+    checked: set[Path] = set()
+
+    for item in items:
+        path = getattr(item, "path", None)  # ods: ignore[getattr]
+        if path is None or path in checked:
+            continue
+        checked.add(path)
+
+        try:
+            rel = path.relative_to(_INTEGRATION_DIR).as_posix()
+        except ValueError:
+            continue
+
+        try:
+            source = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if _imports_mock(source):
+            offenders.add(rel)
+
+    if offenders:
+        listed = "\n".join(f"  tests/integration/{name}" for name in sorted(offenders))
+        raise pytest.UsageError(
+            "Integration tests must not import unittest.mock — they drive the "
+            "product through its real API and cannot mock it:\n"
+            f"{listed}\n"
+            "Move the test to backend/tests/external_dependency_unit/ (where "
+            "mocking is allowed and functions are called directly), or rewrite "
+            "it to assert on observable API behavior."
+        )
 
 
 def pytest_runtest_logstart(

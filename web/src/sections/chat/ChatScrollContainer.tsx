@@ -5,6 +5,7 @@ import React, {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -74,7 +75,6 @@ const ChatScrollContainer = React.memo(
         children,
         anchorSelector,
         autoScroll = true,
-        isStreaming = false,
         onScrollButtonVisibilityChange,
         sessionId,
         hideScrollbar = false,
@@ -104,12 +104,15 @@ const ChatScrollContainer = React.memo(
       const onScrollButtonVisibilityChangeRef = useRef(
         onScrollButtonVisibilityChange
       );
-      onScrollButtonVisibilityChangeRef.current =
-        onScrollButtonVisibilityChange;
       const autoScrollRef = useRef(autoScroll);
-      autoScrollRef.current = autoScroll;
-      const isStreamingRef = useRef(isStreaming);
-      isStreamingRef.current = isStreaming;
+
+      // Layout effect: queued rAF/observer callbacks fire after commit, so a
+      // passive sync could let them scroll with a stale autoScroll flag.
+      useLayoutEffect(() => {
+        onScrollButtonVisibilityChangeRef.current =
+          onScrollButtonVisibilityChange;
+        autoScrollRef.current = autoScroll;
+      }, [onScrollButtonVisibilityChange, autoScroll]);
 
       // Get current scroll state
       const getScrollState = useCallback((): ScrollState => {
@@ -363,13 +366,14 @@ const ChatScrollContainer = React.memo(
             data-chat-scroll
             className={cn(
               "flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden",
-              hideScrollbar ? "no-scrollbar" : "default-scrollbar"
+              hideScrollbar ? "no-scrollbar" : "default-scrollbar",
+              // Full-width (always the case below md) drops the reserved
+              // gutters so content sits flush with the chat edge; centered
+              // mode keeps both-edges to avoid shift.
+              !fullWidth && "md:[scrollbar-gutter:stable_both-edges]"
             )}
             onScroll={handleScroll}
             style={{
-              // Full-width drops the reserved gutters so content sits flush with
-              // the chat edge; centered mode keeps both-edges to avoid shift.
-              scrollbarGutter: fullWidth ? "auto" : "stable both-edges",
               // Apply mask to fade content opacity at edges
               maskImage: contentMask,
               WebkitMaskImage: contentMask,

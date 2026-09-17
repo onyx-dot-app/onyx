@@ -90,7 +90,7 @@ def test_send_message_with_text_file_attachment(admin_user: DATestUser) -> None:
 
 def _set_token_threshold(admin_user: DATestUser, threshold_k: int) -> None:
     """Set the file token count threshold via admin settings API."""
-    response = client.put(
+    response = client.patch(
         f"{API_SERVER_URL}/admin/settings",
         json={"file_token_count_threshold_k": threshold_k},
         headers=admin_user.headers,

@@ -1,5 +1,7 @@
 "use client";
 
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
+import { useTranslations } from "next-intl";
 import { PageLoader } from "@opal/layouts";
 import { PageSelector } from "@/components/PageSelector";
 import { SvgInfo, SvgPlusCircle } from "@opal/icons";
@@ -17,6 +19,7 @@ import Title from "@/components/ui/title";
 import { DocumentSetSummary } from "@/lib/types";
 import { useState } from "react";
 import { useDocumentSets } from "./hooks";
+import { can } from "@/lib/permissions/resource-actions";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
 import { deleteDocumentSet } from "./lib";
 import { SettingsLayouts, toast } from "@opal/layouts";
@@ -38,6 +41,7 @@ import { SourceIcon } from "@/components/SourceIcon";
 import Link from "next/link";
 
 const route = ADMIN_ROUTES.DOCUMENT_SETS;
+
 const numToDisplay = 50;
 
 // Component to display federated connectors with consistent styling
@@ -50,17 +54,18 @@ const FederatedConnectorTitle = ({
   showMetadata?: boolean;
   isLink?: boolean;
 }) => {
+  const t = useTranslations("admin.documents");
   const sourceType = federatedConnector.source.replace(/^federated_/, "");
 
   const mainSectionClassName = "text-blue-500 dark:text-blue-100 flex w-fit";
   const mainDisplay = (
     <>
       <SourceIcon sourceType={sourceType as any} iconSize={16} />
-      <div className="ml-1 my-auto text-xs font-medium truncate">
+      <div className="ms-1 my-auto text-xs font-medium truncate">
         {federatedConnector.name}
       </div>
-      <Badge variant="outline" className="text-xs ml-2">
-        Federated
+      <Badge variant="outline" className="text-xs ms-2">
+        {t("sets.federatedBadge.label")}
       </Badge>
     </>
   );
@@ -104,6 +109,7 @@ const EditRow = ({
   documentSet: DocumentSetSummary;
   isEditable: boolean;
 }) => {
+  const t = useTranslations("admin.documents");
   const router = useRouter();
 
   if (!isEditable) {
@@ -119,25 +125,28 @@ const EditRow = ({
       <Tooltip
         tooltip={
           !documentSet.is_up_to_date
-            ? "Cannot update while syncing! Wait for the sync to finish, then try again."
+            ? t("sets.editRow.syncing.tooltip")
             : undefined
         }
       >
-        <div
+        <button
+          type="button"
           className={`
               text-text-darker font-medium my-auto p-1 hover:bg-accent-background flex items-center select-none
               ${documentSet.is_up_to_date ? "cursor-pointer" : "cursor-default"}
             `}
           style={{ wordBreak: "normal", overflowWrap: "break-word" }}
+          // Not `disabled`: a disabled button fires no pointer events, which
+          // would hide the tooltip that explains why it cannot be used.
+          aria-disabled={!documentSet.is_up_to_date}
           onClick={() => {
-            if (documentSet.is_up_to_date) {
-              router.push(`/admin/documents/sets/${documentSet.id}`);
-            }
+            if (!documentSet.is_up_to_date) return;
+            router.push(`/admin/documents/sets/${documentSet.id}`);
           }}
         >
-          <FiEdit2 className="mr-2 shrink-0" />
+          <FiEdit2 className="me-2 shrink-0" />
           <span className="font-medium">{documentSet.name}</span>
-        </div>
+        </button>
       </Tooltip>
     </div>
   );
@@ -146,56 +155,40 @@ const EditRow = ({
 interface DocumentFeedbackTableProps {
   documentSets: DocumentSetSummary[];
   refresh: () => void;
-  refreshEditable: () => void;
-  editableDocumentSets: DocumentSetSummary[];
 }
 
 const DocumentSetTable = ({
   documentSets,
-  editableDocumentSets,
   refresh,
-  refreshEditable,
 }: DocumentFeedbackTableProps) => {
+  const t = useTranslations("admin.documents");
   const [page, setPage] = useState(1);
 
-  // sort by name for consistent ordering
-  documentSets.sort((a, b) => {
-    if (a.name < b.name) {
-      return -1;
-    } else if (a.name > b.name) {
-      return 1;
-    } else {
-      return 0;
-    }
+  // editable rows first, then by name — editability now rides on each row's
+  // permissions map, so no second fetch + set-diff is needed.
+  const sortedDocumentSets = [...documentSets].sort((a, b) => {
+    const editDiff = Number(can(b, "edit")) - Number(can(a, "edit"));
+    return editDiff !== 0 ? editDiff : a.name.localeCompare(b.name);
   });
-
-  const sortedDocumentSets = [
-    ...editableDocumentSets,
-    ...documentSets.filter(
-      (ds) => !editableDocumentSets.some((eds) => eds.id === ds.id)
-    ),
-  ];
 
   return (
     <div>
-      <Title>Existing Document Sets</Title>
+      <Title>{t("sets.table.title")}</Title>
       <Table className="overflow-visible mt-2">
         <TableHeader>
           <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Connectors</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Public</TableHead>
-            <TableHead>Delete</TableHead>
+            <TableHead>{t("sets.table.name.header")}</TableHead>
+            <TableHead>{t("sets.table.connectors.header")}</TableHead>
+            <TableHead>{t("sets.table.status.header")}</TableHead>
+            <TableHead>{t("sets.table.public.header")}</TableHead>
+            <TableHead>{t("sets.table.delete.header")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {sortedDocumentSets
             .slice((page - 1) * numToDisplay, page * numToDisplay)
             .map((documentSet) => {
-              const isEditable = editableDocumentSets.some(
-                (eds) => eds.id === documentSet.id
-              );
+              const isEditable = can(documentSet, "edit");
               return (
                 <TableRow key={documentSet.id}>
                   <TableCell className="whitespace-normal break-all">
@@ -225,8 +218,9 @@ const DocumentSetTable = ({
                                   sourceType={ccPairSummary.source}
                                   iconSize={16}
                                 />
-                                <div className="ml-1 my-auto text-xs font-medium truncate">
-                                  {ccPairSummary.name || "Unnamed"}
+                                <div className="ms-1 my-auto text-xs font-medium truncate">
+                                  {ccPairSummary.name ||
+                                    t("sets.connector.unnamed.label")}
                                 </div>
                               </div>
                             </div>
@@ -271,18 +265,18 @@ const DocumentSetTable = ({
                   <TableCell>
                     {documentSet.is_up_to_date ? (
                       <Badge variant="success" icon={FiCheckCircle}>
-                        Up to Date
+                        {t("sets.status.upToDate.label")}
                       </Badge>
                     ) : documentSet.cc_pair_summaries.length > 0 ||
                       (documentSet.federated_connector_summaries &&
                         documentSet.federated_connector_summaries.length >
                           0) ? (
                       <Badge variant="in_progress" icon={FiClock}>
-                        Syncing
+                        {t("sets.status.syncing.label")}
                       </Badge>
                     ) : (
                       <Badge variant="destructive" icon={FiAlertTriangle}>
-                        Deleting
+                        {t("sets.status.deleting.label")}
                       </Badge>
                     )}
                   </TableCell>
@@ -292,19 +286,19 @@ const DocumentSetTable = ({
                         variant={isEditable ? "success" : "default"}
                         icon={FiUnlock}
                       >
-                        Public
+                        {t("sets.access.public.label")}
                       </Badge>
                     ) : (
                       <Badge
                         variant={isEditable ? "private" : "default"}
                         icon={FiLock}
                       >
-                        Private
+                        {t("sets.access.private.label")}
                       </Badge>
                     )}
                   </TableCell>
                   <TableCell>
-                    {isEditable ? (
+                    {can(documentSet, "delete") ? (
                       <DeleteButton
                         onClick={async () => {
                           const response = await deleteDocumentSet(
@@ -312,16 +306,17 @@ const DocumentSetTable = ({
                           );
                           if (response.ok) {
                             toast.success(
-                              `Document set "${documentSet.name}" scheduled for deletion`
+                              t("sets.deleteScheduled.toast", {
+                                name: documentSet.name,
+                              })
                             );
                           } else {
                             const errorMsg = (await response.json()).detail;
                             toast.error(
-                              `Failed to schedule document set for deletion - ${errorMsg}`
+                              t("sets.deleteFailed.toast", { detail: errorMsg })
                             );
                           }
                           refresh();
-                          refreshEditable();
                         }}
                       />
                     ) : (
@@ -348,6 +343,7 @@ const DocumentSetTable = ({
 };
 
 function Main() {
+  const t = useTranslations("admin.documents");
   const {
     data: documentSets,
     isLoading: isDocumentSetsLoading,
@@ -355,14 +351,7 @@ function Main() {
     refreshDocumentSets,
   } = useDocumentSets();
 
-  const {
-    data: editableDocumentSets,
-    isLoading: isEditableDocumentSetsLoading,
-    error: editableDocumentSetsError,
-    refreshDocumentSets: refreshEditableDocumentSets,
-  } = useDocumentSets(true);
-
-  if (isDocumentSetsLoading || isEditableDocumentSetsLoading) {
+  if (isDocumentSetsLoading) {
     return (
       <div className="flex justify-center items-center min-h-[400px]">
         <PageLoader />
@@ -371,20 +360,16 @@ function Main() {
   }
 
   if (documentSetsError || !documentSets) {
-    return <div>Error: {documentSetsError}</div>;
-  }
-
-  if (editableDocumentSetsError || !editableDocumentSets) {
-    return <div>Error: {editableDocumentSetsError}</div>;
+    return (
+      <div>
+        {t("sets.loadError.message", { detail: String(documentSetsError) })}
+      </div>
+    );
   }
 
   return (
     <div className="mb-8">
-      <Text as="p">
-        {markdown(
-          "**Document Sets** allow you to group logically connected documents into a single bundle. These can then be used as a filter when performing searches to control the scope of information Onyx searches over."
-        )}
-      </Text>
+      <Text as="p">{markdown(t("sets.description"))}</Text>
       <Spacer rem={0.75} />
 
       <div className="mb-3"></div>
@@ -395,7 +380,7 @@ function Main() {
           prominence="secondary"
           href="/admin/documents/sets/new"
         >
-          New Document Set
+          {t("sets.newButton.label")}
         </Button>
       </div>
 
@@ -404,9 +389,7 @@ function Main() {
           <Divider />
           <DocumentSetTable
             documentSets={documentSets}
-            editableDocumentSets={editableDocumentSets}
             refresh={refreshDocumentSets}
-            refreshEditable={refreshEditableDocumentSets}
           />
         </>
       )}
@@ -415,9 +398,14 @@ function Main() {
 }
 
 export default function Page() {
+  const adminRouteTitle = useAdminRouteTitle();
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header icon={route.icon} title={route.title} divider />
+      <SettingsLayouts.Header
+        icon={route.icon}
+        title={adminRouteTitle(route)}
+        divider
+      />
       <SettingsLayouts.Body>
         <Main />
       </SettingsLayouts.Body>
