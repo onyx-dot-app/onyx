@@ -32,7 +32,7 @@ from tests.unit.onyx.connectors.teams.helpers import (
 )
 
 SELECT_USERS = "$select=id,userPrincipalName,mail,displayName"
-ALL_USERS_URL = f"users?{SELECT_USERS}&$filter=accountEnabled eq true&$top=999"
+ALL_USERS_URL = f"users?{SELECT_USERS}&$filter=accountEnabled eq true&$top=100"
 ADA = {
     "id": "user-1",
     "userPrincipalName": "Ada@Example.com",
@@ -324,13 +324,13 @@ def test_a_listing_outage_fails_the_attempt() -> None:
         _walk_transcripts(connector(client, include_meeting_transcripts=True))
 
 
-def test_the_slim_walk_lists_transcripts_and_skips_a_refused_organizer() -> None:
+def test_the_slim_walk_lists_transcripts_with_their_readers() -> None:
     routes = {
-        ALL_USERS_URL: {"value": [ADA, BOB]},
+        ALL_USERS_URL: {"value": [ADA]},
         _transcripts_url("user-1", None): {"value": [_transcript()]},
         MEETING_URL: _meeting(),
     }
-    client = graph_client(routes, refused={_transcripts_url("user-2", None): NO_POLICY})
+    client = graph_client(routes)
 
     slim = [
         (
@@ -349,24 +349,76 @@ def test_the_slim_walk_lists_transcripts_and_skips_a_refused_organizer() -> None
     ]
 
 
-def test_the_slim_walk_fails_when_a_later_listing_page_is_refused() -> None:
+@pytest.mark.parametrize("refused_page", ["first", "later"])
+def test_a_refused_organizer_fails_the_slim_walk(refused_page: str) -> None:
     first_page = _transcripts_url("user-1", None)
     second_page = "users/user-1/onlineMeetings/getAllTranscripts?skipToken=p2"
-    routes = {
-        ALL_USERS_URL: {"value": [ADA]},
-        first_page: {
+    routes: dict[str, Any] = {ALL_USERS_URL: {"value": [ADA]}, MEETING_URL: _meeting()}
+    if refused_page == "later":
+        routes[first_page] = {
             "value": [_transcript()],
             "@odata.nextLink": f"{SERVICE_ROOT}/{second_page}",
-        },
-        MEETING_URL: _meeting(),
-    }
-    client = graph_client(routes, refused={second_page: NO_POLICY})
+        }
+    refused = second_page if refused_page == "later" else first_page
+    client = graph_client(routes, refused={refused: NO_POLICY})
     walk = connector(
         client, include_meeting_transcripts=True
     ).retrieve_all_slim_docs_perm_sync()
 
     with pytest.raises(requests.HTTPError):
         list(walk)
+
+
+def test_organizers_page_through_the_checkpoint() -> None:
+    second_users_page = "users?$skiptoken=u2"
+    routes = {
+        ALL_USERS_URL: {
+            "value": [ADA],
+            "@odata.nextLink": f"{SERVICE_ROOT}/{second_users_page}",
+        },
+        second_users_page: {"value": [BOB]},
+        _transcripts_url("user-1", WINDOW): {"value": []},
+        _transcripts_url("user-2", WINDOW): {"value": []},
+    }
+    teams_connector = connector(graph_client(routes), include_meeting_transcripts=True)
+
+    checkpoint = TeamsCheckpoint(has_more=True)
+    listed: list[tuple[list[str], str | None]] = []
+    flags: list[bool] = []
+    while checkpoint.has_more and len(flags) < 8:
+        _, checkpoint = step(teams_connector, checkpoint, start=START)
+        listed.append(
+            (
+                [organizer.id for organizer in checkpoint.todo_organizers or []],
+                checkpoint.next_organizers_url,
+            )
+        )
+        flags.append(checkpoint.has_more)
+
+    assert listed[1] == (["user-1"], second_users_page)
+    assert listed[3] == (["user-2"], None)
+    assert flags == [True, True, True, True, False]
+
+
+def test_a_rejected_organizer_page_lists_the_organizers_again() -> None:
+    stale_page = "users?$skiptoken=stale"
+    client = graph_client(_routes(), refused={stale_page: 400})
+    checkpoint = TeamsCheckpoint(
+        has_more=True,
+        todo_team_ids=[],
+        todo_organizers=[],
+        next_organizers_url=stale_page,
+    )
+
+    _, checkpoint = step(
+        connector(client, include_meeting_transcripts=True), checkpoint, start=START
+    )
+
+    assert [organizer.id for organizer in checkpoint.todo_organizers or []] == [
+        "user-1"
+    ]
+    assert checkpoint.next_organizers_url is None
+    assert checkpoint.has_more is True
 
 
 def test_an_apostrophe_in_a_configured_organizer_is_doubled_for_odata() -> None:
@@ -510,6 +562,18 @@ def test_plain_transcript_text_drops_timings_and_keeps_speech() -> None:
         == "Hello, thanks for joining.\n\nGlad to be here."
     )
     assert transcript_text(ATTRIBUTED_VTT) == "Ada: hello\n\nBob: hi"
+
+
+def test_plain_speech_shaped_like_a_timing_line_is_kept() -> None:
+    content = (
+        "00:00:01.000 --> 00:00:02.000\n\n"
+        "02:34.567 --> that is when the alert fired\n\n"
+        "00:00:02.000 --> 00:00:03.000\n\nWEBVTT is the format\n"
+    )
+
+    assert transcript_text(content) == (
+        "02:34.567 --> that is when the alert fired\n\nWEBVTT is the format"
+    )
 
 
 class TestValidation:

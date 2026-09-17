@@ -83,6 +83,7 @@ from onyx.connectors.teams.transcripts import (
     Transcript,
     access_policy_missing,
     fetch_meeting,
+    fetch_organizer_page,
     fetch_organizers,
     fetch_transcript_text,
     fetch_transcripts,
@@ -149,9 +150,10 @@ class TeamsCheckpoint(ConnectorCheckpoint):
     # a page instead of a whole team. No page url means the channel's first page.
     current_channel: ChannelRef | None = None
     next_messages_url: str | None = None
-    # Meeting transcripts follow the channels. None until the organizers are
-    # listed, then one organizer per step.
+    # Meeting transcripts follow the channels. None until the first page of
+    # organizers is listed, then one organizer per step and a page at a time.
     todo_organizers: list[Organizer] | None = None
+    next_organizers_url: str | None = None
 
 
 class TeamsConnector(
@@ -470,17 +472,14 @@ class TeamsConnector(
                 team_id,
                 len(checkpoint.todo_team_ids),
             )
-        elif self.include_meeting_transcripts and checkpoint.todo_organizers is None:
-            checkpoint.todo_organizers = fetch_organizers(
-                self.graph_client, self.transcript_organizers
-            )
-            logger.info(
-                "Listed %s meeting organizer(s)", len(checkpoint.todo_organizers)
-            )
         elif self.include_meeting_transcripts and checkpoint.todo_organizers:
             yield from self._index_transcripts(
                 checkpoint.todo_organizers.pop(), start, end
             )
+        elif self.include_meeting_transcripts and (
+            checkpoint.todo_organizers is None or checkpoint.next_organizers_url
+        ):
+            self._list_organizer_page(checkpoint)
 
         checkpoint.has_more = bool(
             checkpoint.current_channel
@@ -488,10 +487,39 @@ class TeamsConnector(
             or checkpoint.todo_team_ids
             or (
                 self.include_meeting_transcripts
-                and (checkpoint.todo_organizers is None or checkpoint.todo_organizers)
+                and (
+                    checkpoint.todo_organizers is None
+                    or checkpoint.todo_organizers
+                    or checkpoint.next_organizers_url
+                )
             )
         )
         return checkpoint
+
+    def _list_organizer_page(self, checkpoint: TeamsCheckpoint) -> None:
+        """The next page of organizers into the checkpoint, which is saved after
+        every step and so never carries a whole tenant's directory."""
+        assert self.graph_client is not None
+        page_url = checkpoint.next_organizers_url
+        try:
+            organizers, next_url = fetch_organizer_page(
+                self.graph_client, self.transcript_organizers, page_url
+            )
+        except requests.HTTPError as e:
+            # Graph answers a skip token it no longer honors with 400 or 410.
+            if page_url is None or _status(e) not in (400, 410):
+                raise
+            logger.warning(
+                "The saved organizer page is no longer honored, listing the "
+                "organizers from the start: %s",
+                e,
+            )
+            organizers, next_url = fetch_organizer_page(
+                self.graph_client, self.transcript_organizers, None
+            )
+        checkpoint.todo_organizers = organizers
+        checkpoint.next_organizers_url = next_url
+        logger.info("Listed %s meeting organizer(s)", len(organizers))
 
     def _index_transcripts(
         self,
@@ -975,8 +1003,8 @@ class TeamsConnector(
         self, callback: IndexingHeartbeatInterface | None
     ) -> Iterator[SlimDocument]:
         """Every transcript of every organizer with the readers the indexing walk
-        gives it. An organizer whose listing is refused is skipped: those
-        transcripts cannot be indexed any more either, so pruning them is right."""
+        gives it. Pruning deletes whatever this walk leaves out, so a refused
+        organizer fails the walk: a missing access policy can be fixed."""
         assert self.graph_client is not None
         stop_check = lambda: _raise_if_stopped(callback)  # noqa: E731
         for organizer in fetch_organizers(
@@ -988,12 +1016,10 @@ class TeamsConnector(
             _raise_if_stopped(callback)
             if callback:
                 callback.progress("retrieve_all_slim_docs_perm_sync", 1)
-            listed = False
             try:
                 for transcript in fetch_transcripts(
                     self.graph_client, organizer.id, None, None, before_page=stop_check
                 ):
-                    listed = True
                     _raise_if_stopped(callback)
                     yield SlimDocument(
                         id=transcript_document_id(transcript.id),
@@ -1005,15 +1031,7 @@ class TeamsConnector(
             except requests.HTTPError as e:
                 if transcripts_disabled(e):
                     raise ConnectorValidationError(_TRANSCRIPTS_DISABLED) from e
-                # Pruning deletes what the walk leaves out, so a partly listed
-                # organizer fails the walk instead of being skipped.
-                if listed or not _is_permanent(e):
-                    raise
-                logger.warning(
-                    "Skipping the transcripts of %s: %s",
-                    organizer.email,
-                    _transcript_refusal(e),
-                )
+                raise
 
     def _slim_channel_files(
         self, channel: ChannelRef, with_readers: bool

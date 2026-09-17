@@ -4,6 +4,7 @@ tenant's transcript API access setting and an application access policy that
 names the app for the organizer. Each transcript is a document of its own,
 readable by the organizer and the people the meeting record lists."""
 
+import re
 from collections.abc import Callable, Generator
 from datetime import datetime, timezone
 from typing import Any
@@ -16,7 +17,12 @@ from pydantic import BaseModel
 from onyx.access.models import ExternalAccess
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.teams.utils import _iter_values, _retry, request_with_retry
+from onyx.connectors.teams.utils import (
+    _get_next_url,
+    _iter_values,
+    _retry,
+    request_with_retry,
+)
 from onyx.file_processing.webvtt import is_timing_line, parse_vtt_transcript
 from onyx.utils.logger import setup_logger
 
@@ -36,7 +42,14 @@ SPEAKER_ATTRIBUTION_DISABLED_CODE = "SpeakerAttributionNotAllowed"
 ACCESS_POLICY_MESSAGE = "application access policy"
 
 TRANSCRIPT_PAGE_SIZE = 50
-USER_PAGE_SIZE = 999
+# A page of organizers rides in the indexing checkpoint, so pages stay small.
+USER_PAGE_SIZE = 100
+ORGANIZERS_URL = (
+    "users?$select=id,userPrincipalName,mail,displayName"
+    f"&$filter=accountEnabled eq true&$top={USER_PAGE_SIZE}"
+)
+
+_BLANK_LINE_RE = re.compile(r"\n[ \t]*\n")
 
 
 def transcript_document_id(transcript_id: str) -> str:
@@ -148,29 +161,46 @@ def fetch_organizers(
     """The configured users, or every enabled user of the tenant when none are
     configured, at most ``limit`` of either. A configured name that resolves to
     nothing raises. ``before_page`` runs ahead of each user page request."""
-    select = "$select=id,userPrincipalName,mail,displayName"
     if principal_names:
-        # An OData string literal doubles its apostrophes, on top of url encoding.
-        return [
-            Organizer.from_graph(
-                _retry(
-                    graph_client,
-                    f"users('{quote(name.replace(chr(39), chr(39) * 2), safe='@.')}')"
-                    f"?{select}",
-                )
-            )
-            for name in principal_names[:limit]
-        ]
+        return _resolve_organizers(graph_client, principal_names[:limit])
     organizers: list[Organizer] = []
-    for row in _iter_values(
-        graph_client,
-        f"users?{select}&$filter=accountEnabled eq true&$top={USER_PAGE_SIZE}",
-        before_page,
-    ):
+    for row in _iter_values(graph_client, ORGANIZERS_URL, before_page):
         organizers.append(Organizer.from_graph(row))
         if limit is not None and len(organizers) >= limit:
             break
     return organizers
+
+
+def fetch_organizer_page(
+    graph_client: GraphClient, principal_names: list[str], page_url: str | None
+) -> tuple[list[Organizer], str | None]:
+    """One page of enabled users from ``page_url`` (the first page when None)
+    and the link to the next. Configured names are one page of their own."""
+    if principal_names:
+        return _resolve_organizers(graph_client, principal_names), None
+    json_response = _retry(graph_client, page_url or ORGANIZERS_URL)
+    organizers = [
+        Organizer.from_graph(row)
+        for row in json_response.get("value", [])
+        if isinstance(row, dict)
+    ]
+    return organizers, _get_next_url(graph_client, json_response)
+
+
+def _resolve_organizers(
+    graph_client: GraphClient, principal_names: list[str]
+) -> list[Organizer]:
+    # An OData string literal doubles its apostrophes, on top of url encoding.
+    return [
+        Organizer.from_graph(
+            _retry(
+                graph_client,
+                f"users('{quote(name.replace(chr(39), chr(39) * 2), safe='@.')}')"
+                "?$select=id,userPrincipalName,mail,displayName",
+            )
+        )
+        for name in principal_names
+    ]
 
 
 def _graph_timestamp(moment: SecondsSinceUnixEpoch) -> str:
@@ -240,18 +270,31 @@ def fetch_transcript_text(
 def transcript_text(content: str) -> str:
     """The spoken text. The unattributed format leaves the header out and puts a
     blank line between a cue's timing and its speech, which the WebVTT parser
-    reads as two empty blocks, so it falls back to dropping the timing lines."""
+    reads as two empty blocks, so it falls back to reading the blocks in turn."""
     parsed = parse_vtt_transcript(content, keep_speakers=True)
     if parsed:
         return parsed
-    lines = [
-        stripped
-        for line in content.replace("\r\n", "\n").splitlines()
-        if (stripped := line.strip())
-        and not is_timing_line(stripped)
-        and not stripped.startswith("WEBVTT")
+    return "\n\n".join(_plain_speech(content))
+
+
+def _plain_speech(content: str) -> list[str]:
+    """Blocks alternate between timing and speech. Only a block in timing
+    position is read as timing, so speech shaped like a timestamp is kept."""
+    blocks = [
+        lines
+        for block in _BLANK_LINE_RE.split(content.replace("\r\n", "\n"))
+        if (lines := [line.strip() for line in block.split("\n") if line.strip()])
     ]
-    return "\n\n".join(lines)
+    if blocks and blocks[0][0].startswith("WEBVTT"):
+        blocks = blocks[1:]
+    speech: list[str] = []
+    expect_timing = True
+    for lines in blocks:
+        if expect_timing and is_timing_line(lines[0]):
+            lines = lines[1:]
+        speech.extend(lines)
+        expect_timing = bool(lines)
+    return speech
 
 
 def transcript_access(
