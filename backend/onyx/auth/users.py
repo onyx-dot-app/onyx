@@ -2293,6 +2293,13 @@ async def optional_user(
         user,
         user_manager,
     )
+    # End the auth read transaction here so its DB connection is not held for
+    # the whole turn: FastAPI closes this session only after the response
+    # finishes, and streaming chat responses can run for minutes.
+    if async_db_session.in_transaction() and not (
+        async_db_session.new or async_db_session.dirty or async_db_session.deleted
+    ):
+        await async_db_session.commit()
     token = CURRENT_USER_ID_CONTEXTVAR.set(str(user.id) if user is not None else None)
     credential_token = CURRENT_USAGE_CREDENTIAL_CONTEXTVAR.set(
         getattr(request.state, "usage_credential", None)  # ods: ignore[getattr]
