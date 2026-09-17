@@ -14,13 +14,13 @@ import (
 
 // AuditOptions holds options for the audit command.
 type AuditOptions struct {
+	Format     string
+	FailOn     string
+	IgnoreURL  string
 	Web        bool
 	Python     bool
 	Dependabot bool
 	Actions    bool
-	Format     string
-	FailOn     string
-	IgnoreURL  string
 	Debug      bool
 }
 
