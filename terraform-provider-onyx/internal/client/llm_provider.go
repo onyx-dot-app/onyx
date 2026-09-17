@@ -21,34 +21,34 @@ type ModelConfigurationUpsert struct {
 // ModelConfigurationView mirrors ModelConfigurationView. Only fields the
 // provider consumes are declared; extra response fields are ignored.
 type ModelConfigurationView struct {
-	ID                 *int64  `json:"id"`
 	Name               string  `json:"name"`
-	IsVisible          bool    `json:"is_visible"`
+	ID                 *int64  `json:"id"`
 	MaxInputTokens     *int64  `json:"max_input_tokens"`
-	SupportsImageInput bool    `json:"supports_image_input"`
-	SupportsReasoning  bool    `json:"supports_reasoning"`
 	DisplayName        *string `json:"display_name"`
 	CustomDisplayName  *string `json:"custom_display_name"`
+	IsVisible          bool    `json:"is_visible"`
+	SupportsImageInput bool    `json:"supports_image_input"`
+	SupportsReasoning  bool    `json:"supports_reasoning"`
 }
 
 // LLMProviderUpsertRequest mirrors the backend model. No omitempty: the PUT
 // is a full replace and must assert complete desired state.
 type LLMProviderUpsertRequest struct {
+	Groups              []int64                    `json:"groups"`
+	Agents              []int64                    `json:"personas"`
+	ModelConfigurations []ModelConfigurationUpsert `json:"model_configurations"`
+	Provider            string                     `json:"provider"`
 	ID                  *int64                     `json:"id"`
 	Name                *string                    `json:"name"`
-	Provider            string                     `json:"provider"`
 	APIKey              *string                    `json:"api_key"`
 	APIBase             *string                    `json:"api_base"`
 	APIVersion          *string                    `json:"api_version"`
 	CustomConfig        map[string]string          `json:"custom_config"`
+	DeploymentName      *string                    `json:"deployment_name"`
 	IsPublic            bool                       `json:"is_public"`
 	IsAutoMode          bool                       `json:"is_auto_mode"`
-	Groups              []int64                    `json:"groups"`
-	Agents              []int64                    `json:"personas"`
-	DeploymentName      *string                    `json:"deployment_name"`
 	APIKeyChanged       bool                       `json:"api_key_changed"`
 	CustomConfigChanged bool                       `json:"custom_config_changed"`
-	ModelConfigurations []ModelConfigurationUpsert `json:"model_configurations"`
 }
 
 // LLMProviderView mirrors LLMProviderView. api_key and custom_config values
