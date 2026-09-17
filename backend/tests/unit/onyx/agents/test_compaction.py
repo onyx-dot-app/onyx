@@ -86,10 +86,7 @@ class ContextModel(LLM):
         yield GenerationDoneEvent(message=self.invoke(request, context))
 
 
-@pytest.mark.asyncio
-async def test_compaction_within_task_preserves_tool_effects_and_prepared_steps() -> (
-    None
-):
+def test_compaction_within_task_preserves_tool_effects_and_prepared_steps() -> None:
     model = ContextModel(tool_rounds=5)
     calls: list[str] = []
     prepared: list[int] = []
@@ -115,8 +112,8 @@ async def test_compaction_within_task_preserves_tool_effects_and_prepared_steps(
         prepare_step=prepare,
     )
     run = agent.start(max_steps=6)
-    await run.wait()
-    assert await run.wait_for_idle(2)
+    run.result()
+    assert run.wait_for_idle(2)
     assert len(model.summaries) >= 2
     for summary_request in model.summaries:
         assert "tool_result lookup (call-" in summary_request.messages[0].text
@@ -150,8 +147,8 @@ async def test_compaction_within_task_preserves_tool_effects_and_prepared_steps(
     reloaded_run = reloaded.start(
         max_steps=1, messages=[UserMessage(content="Summarize the conclusion.")]
     )
-    await reloaded_run.wait()
-    assert await reloaded_run.wait_for_idle(2)
+    reloaded_run.result()
+    assert reloaded_run.wait_for_idle(2)
     assert any(
         "Conversation summary:" in message.text
         for message in model.generations[-1].messages
@@ -209,24 +206,22 @@ def test_provider_context_rejection_preserves_execution_settings(
     assert result.output.text.endswith("[1].")
 
 
-@pytest.mark.asyncio
-async def test_oversized_required_instruction_fails_without_losing_snapshot() -> None:
+def test_oversized_required_instruction_fails_without_losing_snapshot() -> None:
     model = ContextModel()
     agent = Agent(
         model, context=AgentContext(messages=[UserMessage(content="mandatory " * 2000)])
     )
     run = agent.start(max_steps=1)
     with pytest.raises(RunFailed):
-        await run.wait()
-    assert await run.wait_for_idle(2)
+        run.result()
+    assert run.wait_for_idle(2)
     assert not model.generations
     assert agent.context.messages[0].text == "mandatory " * 2000
     snapshot = run.snapshot()
     assert snapshot is not None and snapshot.status == "error"
 
 
-@pytest.mark.asyncio
-async def test_checkpoint_from_another_branch_is_removed_from_context() -> None:
+def test_checkpoint_from_another_branch_is_removed_from_context() -> None:
     agent = Agent(
         ContextModel(),
         context=AgentContext(
@@ -237,7 +232,7 @@ async def test_checkpoint_from_another_branch_is_removed_from_context() -> None:
         ),
     )
     run = agent.start(max_steps=1)
-    await run.wait()
-    assert await run.wait_for_idle(2)
+    run.result()
+    assert run.wait_for_idle(2)
     assert run.snapshot().checkpoint is None
     assert agent.context.checkpoint is None

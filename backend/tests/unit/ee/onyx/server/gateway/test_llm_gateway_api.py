@@ -37,9 +37,9 @@ from onyx.llm.litellm_models import (
     StreamingChoice,
     SystemMessage,
     ToolCall,
+    ToolFunctionCall,
     UserMessage,
 )
-from onyx.llm.litellm_models import ToolFunctionCall as ToolFunctionCall
 from onyx.llm.models import (
     ImageContentPart,
     ImageUrlDetail,

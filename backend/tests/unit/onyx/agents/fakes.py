@@ -1,6 +1,5 @@
 """Run the chat adapter through model streaming, tools, and packet rendering."""
 
-import asyncio
 from collections.abc import Callable, Generator, Iterator, Sequence
 from typing import Any
 
@@ -34,6 +33,9 @@ class ScriptedTransport(LitellmTransport):
         self.max_input_tokens = max_input_tokens
         self.steps = iter(steps)
         self.requests: list[dict[str, Any]] = []
+
+    def redact_error(self, text: str) -> str:
+        return text
 
     @property
     def info(self) -> LLMInfo:
@@ -149,22 +151,21 @@ def run_agent(
     listener: Callable[[AgentEvent], None] | None = None,
     coordinator: AgentCoordinator | None = None,
 ) -> RunResult:
-    async def execute() -> RunResult:
+    def execute() -> RunResult:
         run = agent.start(
             max_steps=max_steps,
             messages=messages,
             cancellation=cancellation,
             coordinator=coordinator,
+            on_event=listener,
         )
         if runs is not None:
             runs.append(run)
-        if listener is not None:
-            run.subscribe(listener)
         if observe_run is not None:
             observe_run(run)
         try:
-            return await run.wait()
+            return run.result()
         finally:
-            assert await run.wait_for_idle(timeout=5)
+            assert run.wait_for_idle(timeout=5)
 
-    return asyncio.run(execute())
+    return execute()

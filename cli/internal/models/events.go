@@ -86,8 +86,8 @@ const (
 	DeltaToolArguments DeltaKind = "tool_arguments"
 )
 
-// ResponseItem contains the public content used by interactive and saved responses.
-type ResponseItem struct {
+// ChatItem contains the public content used by interactive and saved responses.
+type ChatItem struct {
 	Kind             ItemKind                   `json:"kind"`
 	Status           ItemStatus                 `json:"status"`
 	Text             string                     `json:"text,omitempty"`
@@ -104,7 +104,7 @@ type ResponseItem struct {
 }
 type ItemUpdateEvent struct {
 	EventContext
-	Item ResponseItem `json:"item"`
+	Item ChatItem `json:"item"`
 }
 
 func (e ItemUpdateEvent) EventType() string { return EventItemUpdate }

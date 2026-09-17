@@ -23,11 +23,11 @@ from onyx.server.manage.llm.models import (
 # matrix doesn't discover it) but runs against the same live dependencies,
 # so it reuses that tree's fixtures via explicit imports.
 from tests.external_dependency_unit.answer.conftest import (  # noqa: F401  # noqa: F401  # noqa: F401
+    mock_document_index,
     mock_external_deps,
     mock_file_store,  # noqa: F401
     mock_gpu_status,  # noqa: F401
     mock_nlp_embeddings_post,
-    mock_vespa_query,
 )
 from tests.external_dependency_unit.conftest import (
     db_session,  # noqa: F401
@@ -96,5 +96,5 @@ def eval_llm(
         return llm_from_provider(model_name=model, llm_provider=view)
     _ensure_llm_provider(db_session)
     if not fetch_existing_llm_providers(db_session, [LLMModelFlowType.CHAT]):
-        pytest.skip("no model provider configured; set one up to run the eval")
+        pytest.skip("no LLM provider configured; set one up to run the eval")
     return get_default_llm()

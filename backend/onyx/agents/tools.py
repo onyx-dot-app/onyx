@@ -1,6 +1,6 @@
 """Executable tools and their invocation-scoped services."""
 
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Callable, Sequence
 from enum import Enum
 from typing import TYPE_CHECKING, Protocol
 
@@ -30,7 +30,7 @@ class SpawnResult(BaseModel):
 class AgentControl(Protocol):
     """Start and observe authorized agent executions."""
 
-    async def spawn_agent(
+    def spawn_agent(
         self,
         agent: "Agent",
         *,
@@ -41,15 +41,19 @@ class AgentControl(Protocol):
         restoration_config: AgentRestorationConfig | None = None,
     ) -> SpawnResult: ...
 
-    async def start_run(
+    def start_run(
         self, agent_id: str, *, max_steps: int, messages: Sequence[Message]
     ) -> str: ...
 
-    async def wait_run(
+    def wait_run(
         self, run_id: str, *, timeout: float = DEFAULT_AGENT_WAIT_SECONDS
     ) -> "RunResult | None": ...
 
-    async def cancel_run(self, run_id: str) -> None: ...
+    def cancel_run(self, run_id: str) -> None: ...
+
+    def wait_for_idle(self, run_id: str, *, timeout: float = 1800.0) -> bool: ...
+
+    def add_idle_callback(self, run_id: str, callback: Callable[[], None]) -> None: ...
 
     def discovery(self) -> list["AgentInfo"]: ...
 
@@ -64,12 +68,6 @@ class ToolProgress(BaseModel):
 ToolUpdate = Callable[[ToolProgress], None]
 
 
-class BlockingRunner(Protocol):
-    async def __call__[T](
-        self, operation: Callable[[], T], *, cleanup: bool = False
-    ) -> T: ...
-
-
 class ToolInvocation:
     def __init__(
         self,
@@ -81,7 +79,6 @@ class ToolInvocation:
         update: ToolUpdate,
         messages: Sequence[Message] = (),
         agents: AgentControl | None = None,
-        run_blocking: BlockingRunner | None = None,
     ) -> None:
         self.call_id = call_id
         self.call_index = call_index
@@ -90,22 +87,12 @@ class ToolInvocation:
         self.update = update
         self.messages = messages
         self._agents = agents
-        self._run_blocking = run_blocking
 
     @property
     def agents(self) -> AgentControl:
         if self._agents is None:
             raise RuntimeError("Agent coordination was not supplied for this run")
         return self._agents
-
-    async def run_blocking[T](
-        self, operation: Callable[[], T], *, cleanup: bool = False
-    ) -> T:
-        if self._run_blocking is None:
-            raise RuntimeError(
-                "Blocking execution requires a runtime-managed tool invocation"
-            )
-        return await self._run_blocking(operation, cleanup=cleanup)
 
 
 class ToolExecutionMode(str, Enum):
@@ -120,17 +107,13 @@ class AgentTool:
         name: str,
         description: str,
         parameters: dict[str, JsonValue],
-        execute: Callable[[ToolInvocation], ToolResult] | None = None,
-        execute_async: Callable[[ToolInvocation], Awaitable[ToolResult]] | None = None,
+        execute: Callable[[ToolInvocation], ToolResult],
         execution_mode: ToolExecutionMode = ToolExecutionMode.PARALLEL,
     ) -> None:
-        if (execute is None) == (execute_async is None):
-            raise ValueError("A tool requires exactly one execution function")
         self.definition = ToolDefinition(
             name=name, description=description, parameters=parameters
         )
         self.execute = execute
-        self.execute_async = execute_async
         self.execution_mode = execution_mode
 
     def snapshot(self) -> "AgentTool":
@@ -140,7 +123,6 @@ class AgentTool:
             description=definition.description,
             parameters=definition.parameters,
             execute=self.execute,
-            execute_async=self.execute_async,
             execution_mode=self.execution_mode,
         )
 

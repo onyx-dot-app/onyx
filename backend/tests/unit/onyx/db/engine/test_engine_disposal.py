@@ -99,7 +99,12 @@ async def test_reset_async_engine_is_a_noop_when_uninitialized() -> None:
 
 
 @pytest.mark.asyncio
-async def test_lifespan_shutdown_disposes_all_three_engines() -> None:
+@pytest.mark.parametrize(
+    "drained, body_fails", [(True, False), (False, False), (True, True)]
+)
+async def test_lifespan_shutdown_disposes_all_three_engines(
+    drained: bool, body_fails: bool
+) -> None:
     """End-to-end check: the FastAPI lifespan's shutdown phase must dispose
     each engine. The lifespan touches a lot of other startup machinery; we
     patch it out so this test is hermetic and only asserts the disposal calls.
@@ -160,16 +165,40 @@ async def test_lifespan_shutdown_disposes_all_three_engines() -> None:
         stack.enter_context(patch.object(onyx_main, "optional_telemetry"))
         stack.enter_context(patch.object(onyx_main, "MULTI_TENANT", False))
         stack.enter_context(patch.object(onyx_main, "RATE_LIMITING_ENABLED", False))
-        stack.enter_context(patch.object(onyx_main, "DISABLE_VECTOR_DB", False))
+        stack.enter_context(patch.object(onyx_main, "DISABLE_VECTOR_DB", True))
+        stack.enter_context(
+            patch("onyx.background.periodic_poller.recover_stuck_user_files")
+        )
+        stack.enter_context(
+            patch("onyx.background.periodic_poller.start_periodic_poller")
+        )
+        stop_poller = stack.enter_context(
+            patch("onyx.background.periodic_poller.stop_periodic_poller")
+        )
+        shutdown_tracing = stack.enter_context(
+            patch("onyx.tracing.setup.shutdown_tracing")
+        )
+        stack.enter_context(
+            patch.object(onyx_main.ActiveChatTurns, "close", return_value=drained)
+        )
         stack.enter_context(patch.object(onyx_main, "OAUTH_CLIENT_ID", ""))
         stack.enter_context(patch.object(onyx_main, "OAUTH_CLIENT_SECRET", ""))
         stack.enter_context(patch.object(onyx_main, "SYSTEM_RECURSION_LIMIT", None))
 
-        async with onyx_main.lifespan(MagicMock()):
-            # Inside the lifespan body: startup ran, shutdown not yet.
-            reset_sync.assert_not_called()
-            reset_ro.assert_not_called()
-            reset_async.assert_not_called()
+        try:
+            async with onyx_main.lifespan(MagicMock()):
+                reset_sync.assert_not_called()
+                reset_ro.assert_not_called()
+                reset_async.assert_not_called()
+                if body_fails:
+                    raise RuntimeError("Lifespan body failed")
+        except RuntimeError as error:
+            assert body_fails
+            assert str(error) == "Lifespan body failed"
+        else:
+            assert not body_fails
+        shutdown_tracing.assert_called_once_with()
+        stop_poller.assert_called_once_with()
 
         # After exiting the context manager: shutdown ran.
         reset_async.assert_awaited_once_with()

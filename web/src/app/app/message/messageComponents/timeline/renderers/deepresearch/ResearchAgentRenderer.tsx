@@ -60,15 +60,15 @@ export const ResearchAgentRenderer: MessageRenderer<
     const parent: ResponseItem[] = [];
     const nestedBySubTurn = new Map<number, ResponseItem[]>();
 
-    items.forEach((packet) => {
-      if (packet.content.kind === "text" && packet.content.purpose === "report")
+    items.forEach((item) => {
+      if (item.content.kind === "text" && item.content.purpose === "report")
         return;
-      const subTurnIndex = packet.placement.sub_turn_index;
+      const subTurnIndex = item.placement.sub_turn_index;
       if (subTurnIndex === undefined || subTurnIndex === null) {
-        parent.push(packet);
+        parent.push(item);
       } else {
         const group = nestedBySubTurn.get(subTurnIndex) ?? [];
-        group.push(packet);
+        group.push(item);
         nestedBySubTurn.set(subTurnIndex, group);
       }
     });

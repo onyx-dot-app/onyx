@@ -1,6 +1,5 @@
 """Persistence projects canonical output without waiting for stream observers."""
 
-import asyncio
 import threading
 from collections.abc import Callable, Generator
 from concurrent.futures import Future
@@ -44,18 +43,16 @@ from onyx.utils.threadpool_concurrency import ContextThreadPoolExecutor
 from tests.unit.onyx.agents.fakes import FakeModelClient
 
 
-async def _run_observed(
+def _run_observed(
     agent: Agent,
     observe: Callable[[Run], None] | None = None,
     observer: Callable[[AgentEvent], None] | None = None,
 ) -> Run:
-    run = agent.start(max_steps=1)
+    run = agent.start(max_steps=1, on_event=observer)
     if observe:
         observe(run)
-    if observer:
-        run.subscribe(observer)
-    await run.wait()
-    assert await run.wait_for_idle(timeout=5)
+    run.result()
+    assert run.wait_for_idle(timeout=5)
     return run
 
 
@@ -97,9 +94,7 @@ def test_snapshot_retains_partial_output_after_producer_continues() -> None:
     )
 
     with ContextThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(
-            lambda: asyncio.run(_run_observed(agent, started.set_result))
-        )
+        future = executor.submit(lambda: _run_observed(agent, started.set_result))
         try:
             assert partial_ready.wait(2)
             saved = project_response(
@@ -145,7 +140,7 @@ def test_snapshot_does_not_wait_for_slow_stream_observer() -> None:
 
     with ContextThreadPoolExecutor(max_workers=2) as executor:
         running = executor.submit(
-            lambda: asyncio.run(_run_observed(agent, started.set_result, display))
+            lambda: _run_observed(agent, started.set_result, display)
         )
         try:
             assert updating.wait(2)
@@ -207,7 +202,7 @@ def test_full_response_content_survives_delivery_gaps(
         if delivery != "detached":
             run.subscribe(ResponsePresenter(Emitter(output.publish, 42)).consume)
 
-    run = asyncio.run(_run_observed(agent, observe))
+    run = _run_observed(agent, observe)
     response_future.set_result(
         ChatResponseOutcome(
             response=project_response(
@@ -249,7 +244,7 @@ def test_response_projection_uses_the_selected_run_after_agent_reuse() -> None:
             lambda *_: AssistantMessage(content=[TextContent(text=next(replies))])
         )
     )
-    first_run = asyncio.run(_run_observed(agent))
+    first_run = _run_observed(agent)
     first = project_response(first_run.snapshot(), response_id=42, tool_ids={})
     latest = agent.run(max_steps=1)
     assert project_response(first_run.snapshot(), response_id=42, tool_ids={}) == first

@@ -185,66 +185,43 @@ are:
 - Prepares all of the tools for the LLM
 - Creates the state container objects for use in the loop
 
-### Execution (`_run_models` function):
+### Execution (`ChatTurnExecution`)
 
-Each model runs in its own worker thread inside a `ThreadPoolExecutor`. Workers write packets to a shared
-`merged_queue` via an `Emitter`; the main thread drains the queue and yields packets in arrival order. This
-means the top level is isolated from the LLM flow and can yield packets as soon as they are produced. If a
-worker fails, the main thread yields a `StreamingError` for that model and keeps the other models running.
-All saving and database operations are handled by the main thread after the workers complete (or by the
-workers themselves via self-completion if the drain loop exits early).
+Each model response runs on an independent thread. A separate control thread checks Stop requests and refreshes processing status.
+Storage jobs also use independent threads, so a slow save cannot block Stop checks.
+Thread startup copies tenant and tracing context. There is no process-wide response admission limit or fixed worker pool.
 
-### Emitter
+The shared agent SDK executes each response. `ResponsePresenter` translates accepted run events into chat packets.
+Each `Emitter` adds response identity and model routing. `ChatDelivery` sends packets to the current reader and resumable stream buffer.
+A failed model reports its own error while other comparison responses continue.
 
-The emitter is an object that lower levels use to send packets without needing to yield them all the way back
-up the call stack. Each `Emitter` tags every packet with a `model_index` and places it on the shared
-`merged_queue` as a `(model_idx, packet)` tuple. The drain loop in `_run_models` consumes these tuples and
-yields the packets to the caller. Both the emitter and the state container are mutating state objects used
-only to accumulate state. There should be no logic dependent on the states of these objects, especially in
-the lower levels. The emitter should only take packets and should not be used for other things.
+### Saved responses and delivery
 
-### State Container
+The run owns accepted messages, tool results, and its terminal snapshot.
+After execution ends, chat projects that snapshot into a response and starts persistence.
+Save failures and saves that exceed their wait bound produce distinct persistence outcomes.
+Late save completion remains tracked after delivery ends.
 
-The state container is used to accumulate state during the LLM flow. Similar to the emitter, it should not be used for logic,
-only for accumulating state. It is used to gather all of the necessary information for saving the chat turn into the database.
-So it will accumulate answer tokens, reasoning tokens, tool calls, citation info, etc. This is used at the end of the flow once
-the lower level is completed whether on its own or stopped by the user. At that point, all of the state is read and stored into
-the database. The state container can be added to by any of the underlying layers, this is fine.
+Closing a browser reader does not cancel execution. `ActiveChatTurns` retains each turn until execution, storage, and delivery finish.
+API shutdown requests cancellation and waits for retained work within its shutdown bound.
 
-### Stopping Generation
+### Stopping generation
 
-The drain loop in `_run_models` checks `check_is_connected()` every 50 ms (on queue timeout). The signal itself
-is stored in Redis and is set by the user calling the stop endpoint. On disconnect, the drain loop saves
-partial state for every model, yields an `OverallStop(stop_reason="user_cancelled")` packet, and returns.
-A `drain_done` event signals emitters to stop blocking so worker threads can exit quickly. Workers that
-already completed successfully will self-complete (persist their response) if the drain loop exited before
-reaching the normal completion path.
+The control thread checks the shared Stop signal every 250 milliseconds.
+Stop cancels each active response, saves accepted partial content, and emits `OverallStop(stop_reason="user_cancelled")`.
+Run completion and resource cleanup are separate: the turn remains tracked while provider, tool, or save work drains.
 
-## 2. LLM Loop (run_llm_loop function)
-
-This function handles the logic of the Turn. It's essentially a while loop where context is added and modified (according what
-is outlined in the first half of this doc). Its main functionality is:
-
-- Translate and truncate the context for the LLM inference
-- Add context modifiers like reminders, updates to the system prompts, etc.
-- Run tool calls and gather results
-- Build some of the objects stored in the state container.
-
-## 3. LLM Step (run_llm_step function)
-
-This function is a single inference of the LLM. It's a wrapper around the LLM stream function which handles packet translations
-so that the Emitter can emit individual tokens as soon as they arrive. It also keeps track of the different sections since they
-do not all come at once (reasoning, answers, tool calls are all built up token by token). This layer also tracks the different
-tool calls and returns that to the LLM Loop to execute.
+For the execution loop, tool calls, and cancellation contracts, see the [agent SDK](../agents/README.md).
 
 ## Things to know
 
 - Chat packets carry content, execution identity, and model routing. The frontend derives timeline positions.
   See the [chat stream contract](../agents/README.md#chat-stream) for item and update types.
 
-- There are 3 representations of a message, each scoped to a different layer:
-  1. **ChatMessage** — The database model. Should be converted into ChatMessageSimple early and never passed deep into the flow.
-  2. **ChatMessageSimple** — The canonical data model used throughout the codebase. This is the rich, full-featured representation
-     of a message. Any modifications or additions to message structure should be made here.
-  3. **LanguageModelInput** — The LLM-facing representation. Intentionally minimal so the LLM interface layer stays clean and
-     easy to maintain/extend.
+- Message types serve different boundaries:
+  - **ChatMessage** stores a user message, summary, or response anchor in the session tree.
+    **ChatResponseItem** stores ordered assistant and tool content for a response. Both live in [database models](../db/models.py).
+  - **Message** is the SDK conversation type, defined in [LLM models](../llm/models.py).
+    History loading reconstructs these values from storage before agent execution.
+  - **LanguageModelInput** is the LiteLLM request wire type in [provider models](../llm/litellm_models.py).
+    The LLM adapter converts SDK messages into this provider format.

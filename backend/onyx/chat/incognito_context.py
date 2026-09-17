@@ -3,10 +3,10 @@
 import hashlib
 import json
 from collections.abc import Collection, Sequence
-from typing import Any, cast
+from typing import cast
 from uuid import UUID
 
-from pydantic import BaseModel, Field, TypeAdapter, ValidationError
+from pydantic import BaseModel, Field, JsonValue, TypeAdapter, ValidationError
 from redis.exceptions import WatchError
 
 from onyx.agents.coordination import AgentInfo
@@ -53,6 +53,13 @@ _PREVIOUS_RUN_FIELD = b"previous_run_id"
 _KEY_PREFIX = "incognito_ctx"
 
 _MESSAGE_ADAPTER: TypeAdapter[Message] = TypeAdapter(Message)
+_STORED_MESSAGES_ADAPTER = TypeAdapter(list[dict[str, JsonValue]])
+
+
+class _LegacyToolCall(BaseModel):
+    tool_call_id: str
+    tool_name: str
+    tool_arguments: dict[str, JsonValue]
 
 
 class _LegacyMessage(BaseModel):
@@ -61,14 +68,14 @@ class _LegacyMessage(BaseModel):
     message: str
     message_type: MessageType
     token_count: int
-    tool_calls: list[dict[str, Any]] | None = None
+    tool_calls: list[_LegacyToolCall] | None = None
     tool_call_id: str | None = None
     thinking_blocks: list[AnyThinkingBlock] | None = None
     file_id: str | None = None
     should_cache: bool = False
 
 
-def _read_message(item: dict[str, Any]) -> Message:
+def _read_message(item: dict[str, JsonValue]) -> Message:
     if "role" in item:
         data = dict(item)
         metadata = PromptMetadata.model_validate(data.pop("metadata", {}))
@@ -104,9 +111,9 @@ def _read_message(item: dict[str, Any]) -> Message:
                 TextContent(text=legacy.message),
                 *(
                     ToolCall(
-                        id=call["tool_call_id"],
-                        name=call["tool_name"],
-                        arguments=call["tool_arguments"],
+                        id=call.tool_call_id,
+                        name=call.tool_name,
+                        arguments=call.tool_arguments,
                     )
                     for call in legacy.tool_calls or []
                 ),
@@ -116,8 +123,8 @@ def _read_message(item: dict[str, Any]) -> Message:
     raise ValueError("Unsupported stored message role")
 
 
-def _write_message(message: Message) -> dict[str, Any]:
-    data = message.model_dump(mode="json", exclude={"details"})
+def _write_message(message: Message) -> dict[str, JsonValue]:
+    data: dict[str, JsonValue] = message.model_dump(mode="json", exclude={"details"})
     data["metadata"] = prompt_metadata(message).model_dump(
         exclude={"image_files", "image_token_count"}
     )
@@ -183,11 +190,7 @@ def _decode_context(
         )
         return IncognitoContext(version=0, messages=[])
     try:
-        decoded = json.loads(body)
-        if not isinstance(decoded, list):
-            raise ValueError("Context must be a message list")
-        if not all(isinstance(item, dict) for item in decoded):
-            raise ValueError("Context must contain message objects")
+        decoded = _STORED_MESSAGES_ADAPTER.validate_json(body)
         messages = [_read_message(item) for item in decoded]
     except (ValidationError, ValueError, TypeError, KeyError):
         # Corrupt context must end the session cleanly, not fail the turn.

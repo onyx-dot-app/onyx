@@ -11,7 +11,7 @@ import {
 
 import {
   groupStepsByTurn,
-  transformPacketGroups,
+  transformItemGroups,
 } from "@/app/app/message/messageComponents/timeline/transformers";
 import { stepHasCollapsedStreamingContent } from "@/app/app/message/messageComponents/timeline/itemHelpers";
 
@@ -196,7 +196,7 @@ it("keeps narration outside parallel tool tabs and opens previews only for visib
     packet({ type: "item_update", item: open }, openId),
   ];
   let state = processPackets(createInitialState(1), packets);
-  let groups = groupStepsByTurn(transformPacketGroups(state.toolGroups));
+  let groups = groupStepsByTurn(transformItemGroups(state.toolGroups));
   expect(state.narrationGroups[0]?.items[0]?.content.kind).toBe("text");
   expect(groups).toHaveLength(1);
   expect(groups[0]?.isParallel).toBe(true);
@@ -230,7 +230,7 @@ it("keeps narration outside parallel tool tabs and opens previews only for visib
     )
   );
   state = processPackets(state, packets);
-  groups = groupStepsByTurn(transformPacketGroups(state.toolGroups));
+  groups = groupStepsByTurn(transformItemGroups(state.toolGroups));
   expect(stepHasCollapsedStreamingContent(groups[0]!.steps[0]!.items)).toBe(
     true
   );

@@ -218,6 +218,7 @@ class CustomTool(Tool):
                 error=error_info,
             ),
             content=content,
+            is_error=not response.ok,
         )
 
 

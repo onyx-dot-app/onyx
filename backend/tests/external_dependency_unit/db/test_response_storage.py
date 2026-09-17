@@ -996,6 +996,33 @@ def test_discovery_batches_response_metadata(
     assert not any("chat_response_item" in query for query in executed_sql)
 
 
+def test_child_reload_batches_siblings(
+    db_session: Session,
+    conversation: ChatSession,
+    executed_sql: list[str],
+) -> None:
+    query_counts: list[int] = []
+    for child_count in (1, 6):
+        response = _response(db_session, conversation)
+        record = _record(response)
+        for index in range(child_count):
+            child = _child_record(record, uuid4(), f"Answer {index}")
+            child.agent_path = f"/root/research_{index}"
+        _save(db_session, response, record)
+        db_session.expire_all()
+        executed_sql.clear()
+
+        execution = read_chat_execution(response)
+
+        assert execution is not None
+        assert len(execution.response.child_runs) == child_count
+        assert [child.agent_path for child in execution.response.child_runs] == [
+            f"/root/research_{index}" for index in range(child_count)
+        ]
+        query_counts.append(len(executed_sql))
+    assert query_counts[0] == query_counts[1]
+
+
 def test_nested_reload_reuses_parent_identity(
     db_session: Session,
     conversation: ChatSession,

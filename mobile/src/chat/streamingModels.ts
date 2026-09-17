@@ -85,6 +85,7 @@ export type ToolMetadata =
       citation_mapping: Record<number, SearchDoc>;
     };
 
+/** Timeline positions. A presentation turn can cover one part of an SDK step. */
 export interface Placement {
   turn_index: number;
   tab_index?: number; // For parallel tool calls - tools with same turn_index but different tab_index run in parallel

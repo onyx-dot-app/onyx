@@ -33,6 +33,7 @@ def classify_is_search_flow(
                 reasoning_effort=ReasoningEffort.OFF, max_tokens=20
             ),
         ),
+        # Classification blocks the next UI action, so keep the timeout short.
         context=GenerationContext(timeout=2, flow=LLMFlow.SEARCH_FLOW_CLASSIFICATION),
     )
 

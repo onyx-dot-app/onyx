@@ -456,40 +456,49 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
     try:
         yield
     finally:
-        if not await run_in_threadpool(active_chat_turns.close):
-            raise RuntimeError("Chat turns did not drain before API shutdown")
+        try:
+            if not await run_in_threadpool(active_chat_turns.close):
+                logger.error("Chat turns did not drain before API shutdown")
+        except Exception:
+            logger.exception("Failed to drain chat turns on shutdown")
 
-    # Flush buffered per-user usage before disposing the DB engines its drain
-    # thread writes through.
-    from onyx.tracing.setup import shutdown_tracing
+        # Flush buffered per-user usage before disposing the DB engines its drain
+        # thread writes through.
+        from onyx.tracing.setup import shutdown_tracing
 
-    shutdown_tracing()
+        try:
+            shutdown_tracing()
+        except Exception:
+            logger.exception("Failed to flush tracing on shutdown")
 
-    if DISABLE_VECTOR_DB:
-        from onyx.background.periodic_poller import stop_periodic_poller
+        if DISABLE_VECTOR_DB:
+            from onyx.background.periodic_poller import stop_periodic_poller
 
-        stop_periodic_poller()
+            try:
+                stop_periodic_poller()
+            except Exception:
+                logger.exception("Failed to stop periodic poller on shutdown")
 
-    # Dispose every Postgres connection pool we opened in startup. Order:
-    # async first (its disposal is awaitable and can block), then the two
-    # sync engines. Each dispose() is wrapped so one failure cannot leak the
-    # remaining pools — this path runs on every uvicorn ``--reload`` worker
-    # shutdown, and any leaked pool accumulates until PG hits max_connections.
-    try:
-        await reset_sqlalchemy_async_engine()
-    except Exception:
-        logger.exception("Failed to dispose async SQLAlchemy engine on shutdown")
-    try:
-        SqlEngine.reset_engine()
-    except Exception:
-        logger.exception("Failed to dispose sync SQLAlchemy engine on shutdown")
-    try:
-        SqlEngine.reset_readonly_engine()
-    except Exception:
-        logger.exception("Failed to dispose readonly SQLAlchemy engine on shutdown")
+        # Dispose every Postgres connection pool we opened in startup. Order:
+        # async first (its disposal is awaitable and can block), then the two
+        # sync engines. Each dispose() is wrapped so one failure cannot leak the
+        # remaining pools — this path runs on every uvicorn ``--reload`` worker
+        # shutdown, and any leaked pool accumulates until PG hits max_connections.
+        try:
+            await reset_sqlalchemy_async_engine()
+        except Exception:
+            logger.exception("Failed to dispose async SQLAlchemy engine on shutdown")
+        try:
+            SqlEngine.reset_engine()
+        except Exception:
+            logger.exception("Failed to dispose sync SQLAlchemy engine on shutdown")
+        try:
+            SqlEngine.reset_readonly_engine()
+        except Exception:
+            logger.exception("Failed to dispose readonly SQLAlchemy engine on shutdown")
 
-    if RATE_LIMITING_ENABLED:
-        await close_auth_limiter()
+        if RATE_LIMITING_ENABLED:
+            await close_auth_limiter()
 
 
 def log_http_error(request: Request, exc: Exception) -> JSONResponse:

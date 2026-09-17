@@ -18,7 +18,11 @@ from onyx.coding_agent.tool_definitions import (
 from onyx.context.messages import PromptMetadata
 from onyx.context.prompt import prepare_prompt
 from onyx.deep_research.tool_definitions import THINK_TOOL_RESPONSE_MESSAGE
-from onyx.llm.cancellation import check_cancelled
+from onyx.llm.cancellation import (
+    CancellationSignal,
+    cancellation_scope,
+    check_cancelled,
+)
 from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
 from onyx.llm.model_capabilities import model_is_reasoning_model
 from onyx.llm.models import (
@@ -112,7 +116,8 @@ def _setup_session(
             yield session_id
         finally:
             try:
-                client.delete_session(session_id)
+                with cancellation_scope(CancellationSignal()):
+                    client.delete_session(session_id)
                 logger.info("Deleted coding agent session %s", session_id)
             except Exception:
                 # The remote TTL bounds resources when cleanup fails.

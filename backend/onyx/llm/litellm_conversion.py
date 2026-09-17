@@ -61,6 +61,7 @@ from onyx.llm.utils import model_needs_formatting_reenabled
 from onyx.tools.tool_name import sanitize_tool_name
 from onyx.utils.jsonriver import Parser
 from onyx.utils.logger import setup_logger
+from onyx.utils.postgres_sanitization import sanitize_string
 
 # OpenAI reasoning models need this prefix to enable Markdown formatting.
 CODE_BLOCK_MARKDOWN = "Formatting re-enabled. "
@@ -297,6 +298,37 @@ class Closable(Protocol):
 
 
 _ARGUMENTS = TypeAdapter(dict[str, JsonValue])
+_ENCODED_ARGUMENTS = TypeAdapter(dict[str, JsonValue] | str)
+_JSON_VALUE = TypeAdapter(JsonValue)
+
+
+def _normalize_arguments(
+    arguments: dict[str, JsonValue], definition: ToolDefinition | None
+) -> dict[str, JsonValue]:
+    if definition is None:
+        return arguments
+    properties = definition.parameters.get("properties")
+    if not isinstance(properties, dict):
+        return arguments
+    normalized = arguments.copy()
+    for name, value in arguments.items():
+        schema = properties.get(name)
+        if not isinstance(value, str) or not isinstance(schema, dict):
+            continue
+        expected_type = schema.get("type")
+        if expected_type not in ("array", "object"):
+            continue
+        # Only structured fields accept JSON strings; string fields retain literal text.
+        try:
+            decoded = _JSON_VALUE.validate_json(value)
+        except ValidationError:
+            logger.debug("Tool field %s is not encoded JSON", name, exc_info=True)
+            continue
+        if (expected_type == "array" and isinstance(decoded, list)) or (
+            expected_type == "object" and isinstance(decoded, dict)
+        ):
+            normalized[name] = decoded
+    return normalized
 
 
 class _PendingToolCall:
@@ -340,7 +372,8 @@ class _PendingToolCall:
 class MessageAccumulator:
     """Maintain ordered assistant content and incremental tool arguments."""
 
-    def __init__(self) -> None:
+    def __init__(self, tools: Sequence[ToolDefinition] = ()) -> None:
+        self.tools = {tool.name: tool for tool in tools}
         self.message = AssistantMessage()
         self.calls: dict[int, _PendingToolCall] = {}
         self.active_text: int | None = None
@@ -451,8 +484,13 @@ class MessageAccumulator:
     def finish(self) -> AssistantMessage:
         for pending in self.calls.values():
             try:
-                pending.call.arguments = _ARGUMENTS.validate_json(
-                    pending.arguments or "{}"
+                arguments = _ENCODED_ARGUMENTS.validate_json(
+                    sanitize_string(pending.arguments or "{}")
+                )
+                if isinstance(arguments, str):
+                    arguments = _ARGUMENTS.validate_json(arguments)
+                pending.call.arguments = _normalize_arguments(
+                    arguments, self.tools.get(pending.call.name)
                 )
                 pending.call.arguments_complete = True
                 pending.call.raw_arguments = None
@@ -499,22 +537,22 @@ def recover_tool_calls(
     ) or extract_tool_calls_from_response_text(message.thinking, definitions)
     if not calls:
         return message
+    tools = {tool.name: tool for tool in request.tools}
+    for call in calls:
+        call.arguments = _normalize_arguments(call.arguments, tools.get(call.name))
     return message.model_copy(update={"content": [*calls]})
 
 
 def normalized_stream(
     stream: Iterator[ModelResponseStream],
     request: GenerationRequest,
-    recover_text_tools: bool = True,
 ) -> Generator[ModelResponseStream, None, None]:
     """Normalize IDs and resolve text compatibility before events or rendering."""
     ids: dict[int, str] = {}
     buffered: list[ModelResponseStream] = []
-    accumulator = MessageAccumulator()
+    accumulator = MessageAccumulator(request.tools)
     buffering = (
-        recover_text_tools
-        and bool(request.tools)
-        and request.options.tool_choice != ToolChoiceOptions.NONE
+        bool(request.tools) and request.options.tool_choice != ToolChoiceOptions.NONE
     )
     try:
         for chunk in stream:
