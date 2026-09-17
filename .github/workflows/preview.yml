@@ -46,12 +46,25 @@ permissions:
 
 jobs:
   Deploy-Preview:
-    # Bot-authored PRs land without anyone opening a preview of them, so they
-    # only cost server capacity. A dispatch has no PR and is always honoured.
+    # A dispatch carries no PR and is always honoured. For pull_request:
+    #
+    # - Forks are excluded. GitHub hands a fork's workflow a read-only token
+    #   whatever the permissions block says, so minting the OIDC token and
+    #   writing the PR comment would both fail. Beyond that, previews run
+    #   against a seeded st-dev snapshot, so deploying a fork's code is not
+    #   something to hand an untrusted contributor. `push` never fired for
+    #   forks either, so this keeps the existing boundary rather than widening
+    #   it.
+    # - Bot-authored PRs land without anyone opening a preview of them, so they
+    #   only cost server capacity. Keyed on the PR *author*: github.actor is
+    #   whoever triggered the event, so on synchronize/reopened a maintainer
+    #   touching a bot's PR would otherwise deploy it.
     if: >-
       ${{ vars.PREVIEW_URL != ''
-      && github.actor != 'dependabot[bot]'
-      && github.actor != 'onyx-cherry-pick[bot]' }}
+      && (github.event_name == 'workflow_dispatch'
+      || (github.event.pull_request.head.repo.full_name == github.repository
+      && github.event.pull_request.user.login != 'dependabot[bot]'
+      && github.event.pull_request.user.login != 'onyx-cherry-pick[bot]')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
