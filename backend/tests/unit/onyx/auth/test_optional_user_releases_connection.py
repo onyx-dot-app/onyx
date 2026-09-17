@@ -131,6 +131,7 @@ async def test_commit_failure_does_not_break_auth(
     )
     try:
         assert await anext(gen) is resolved_user
+        session.commit.assert_awaited_once()
     finally:
         await gen.aclose()
 
