@@ -29,6 +29,9 @@ from onyx.db.engine.async_sql_engine import (
     get_async_session,
     get_sqlalchemy_async_engine,
 )
+from tests.external_dependency_unit.async_client_utils import (
+    dispose_async_clients_lifespan,
+)
 
 
 @pytest.fixture
@@ -36,9 +39,12 @@ def pooled_async_engine(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None
     # The directory conftest forces NullPool, which has no checkout counter.
     # This test measures pool checkouts, so it needs the real queue pool.
     monkeypatch.setattr(async_sql_engine, "POSTGRES_USE_NULL_POOL", False)
-    async_sql_engine._ASYNC_ENGINES = {}
+    async_sql_engine.abandon_async_engines()
     yield
-    async_sql_engine._ASYNC_ENGINES = {}
+    # The app lifespan disposes the queue-pooled engine on the portal loop.
+    # If the test failed before shutdown ran, the loop is gone, so only drop
+    # the reference.
+    async_sql_engine.abandon_async_engines()
 
 
 @pytest.mark.usefixtures("pooled_async_engine")
@@ -62,7 +68,7 @@ def test_no_auth_connection_checked_out_mid_stream(
         await session.execute(text("SELECT 1"))
         return _FakeUser()
 
-    app = FastAPI()
+    app = FastAPI(lifespan=dispose_async_clients_lifespan)
     app.dependency_overrides[optional_fastapi_current_user] = fake_auth
     app.dependency_overrides[get_user_manager] = lambda: object()
 
