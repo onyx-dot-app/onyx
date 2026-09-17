@@ -11,11 +11,15 @@ from onyx.connectors.models import (
     ConnectorFailure,
     Document,
     HierarchyNode,
+    InventoryGap,
     SlimDocument,
 )
 from onyx.file_store.staging import RawFileCallback
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
+
+logger = setup_logger()
 
 SecondsSinceUnixEpoch = float
 
@@ -155,6 +159,51 @@ class SlimConnectorWithPermSync(BaseConnector):
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         raise NotImplementedError
+
+
+class SlimInventoryGaps(abc.ABC):
+    """A slim walk that can lose a whole group of documents, because access to
+    them is granted per group and one group can be refused on its own.
+
+    Whoever consumes the walk to decide what no longer exists (pruning, and the
+    permission sync that makes a missing document private) must ask for the
+    gaps once the walk is finished, and spare the ids each gap covers.
+    """
+
+    @abc.abstractmethod
+    def inventory_gaps(self) -> list[InventoryGap]:
+        """The groups the walk just finished could not list. Empty means nothing
+        was refused, not that the walk covered the whole source."""
+        raise NotImplementedError
+
+
+def inventory_gaps(connector: BaseConnector) -> list[InventoryGap]:
+    """The gaps a finished slim walk reports, none for a connector that cannot
+    have them."""
+    if isinstance(connector, SlimInventoryGaps):
+        return connector.inventory_gaps()
+    return []
+
+
+def documents_outside_gaps(
+    document_ids: set[str], gaps: list[InventoryGap]
+) -> set[str]:
+    """The ids whose absence from a walk means something. An id under a gap was
+    never listed, so it is neither pruned nor made private."""
+    if not gaps:
+        return document_ids
+    kept = {
+        document_id
+        for document_id in document_ids
+        if any(document_id.startswith(gap.document_id_prefix) for gap in gaps)
+    }
+    logger.warning(
+        "Keeping %s document(s) the walk could not list, behind %s gap(s): %s",
+        len(kept),
+        len(gaps),
+        ", ".join(gap.entity_id for gap in gaps[:10]),
+    )
+    return document_ids - kept
 
 
 class OAuthConnector(BaseConnector):

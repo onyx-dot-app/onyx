@@ -1,13 +1,23 @@
 """Unit tests for extract_ids_from_runnable_connector metrics instrumentation."""
 
 from collections.abc import Iterator
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 
-from onyx.background.celery.celery_utils import extract_ids_from_runnable_connector
-from onyx.connectors.interfaces import SlimConnector
-from onyx.connectors.models import SlimDocument
+from onyx.background.celery.celery_utils import (
+    extract_ids_from_runnable_connector,
+    prunable_document_ids,
+)
+from onyx.connectors.interfaces import (
+    GenerateSlimDocumentOutput,
+    SecondsSinceUnixEpoch,
+    SlimConnector,
+    SlimInventoryGaps,
+)
+from onyx.connectors.models import InventoryGap, SlimDocument
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.server.metrics.pruning_metrics import (
     PRUNING_ENUMERATION_DURATION,
     PRUNING_RATE_LIMIT_ERRORS,
@@ -154,3 +164,36 @@ class TestRateLimitDetection:
 
         after = PRUNING_RATE_LIMIT_ERRORS.labels(connector_type="unknown")._value.get()
         assert after == before + 1
+
+
+class _GappyConnector(SlimConnector, SlimInventoryGaps):
+    """A slim walk that lists one document and misses one whole entity."""
+
+    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:  # noqa: ARG002
+        return None
+
+    def retrieve_all_slim_docs(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        callback: IndexingHeartbeatInterface | None = None,  # noqa: ARG002
+    ) -> GenerateSlimDocumentOutput:
+        yield [SlimDocument(id="doc1")]
+
+    def inventory_gaps(self) -> list[InventoryGap]:
+        return [InventoryGap(entity_id="entity-1", document_id_prefix="gapped:")]
+
+
+class TestInventoryGaps:
+    def test_a_gap_keeps_only_the_documents_it_covers(self) -> None:
+        extraction = extract_ids_from_runnable_connector(_GappyConnector())
+
+        assert [gap.entity_id for gap in extraction.gaps] == ["entity-1"]
+        assert prunable_document_ids({"doc1", "gapped:2"}, extraction) == []
+        assert prunable_document_ids({"doc1", "doc2"}, extraction) == ["doc2"]
+
+    def test_without_a_gap_the_missing_documents_are_pruned(self) -> None:
+        extraction = extract_ids_from_runnable_connector(_make_slim_connector(["doc1"]))
+
+        assert extraction.gaps == []
+        assert prunable_document_ids({"doc1", "doc2"}, extraction) == ["doc2"]

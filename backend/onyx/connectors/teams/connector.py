@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import partial
 from hashlib import sha256
-from itertools import chain
+from itertools import chain, islice
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -38,6 +38,7 @@ from onyx.connectors.interfaces import (
     SecondsSinceUnixEpoch,
     SlimConnector,
     SlimConnectorWithPermSync,
+    SlimInventoryGaps,
 )
 from onyx.connectors.microsoft_utils.drive_items import (
     DriveItemContentError,
@@ -69,6 +70,7 @@ from onyx.connectors.models import (
     EntityFailure,
     HierarchyNode,
     ImageSection,
+    InventoryGap,
     SlimDocument,
     TextSection,
 )
@@ -84,10 +86,11 @@ from onyx.connectors.teams.transcripts import (
     access_policy_missing,
     fetch_meeting,
     fetch_organizer_page,
-    fetch_organizers,
     fetch_transcript_text,
     fetch_transcripts,
+    iter_organizers,
     organizer_expert,
+    organizer_id_prefix,
     transcript_access,
     transcript_document_id,
     transcript_text,
@@ -96,6 +99,7 @@ from onyx.connectors.teams.transcripts import (
 from onyx.connectors.teams.utils import (
     ChannelFilesUnavailable,
     GraphRetriesExhausted,
+    escape_odata_string,
     execute_query_with_retry,
     fetch_channel_files_folder,
     fetch_channel_readers,
@@ -110,6 +114,7 @@ from onyx.file_processing.file_types import OnyxMimeTypes
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
 
@@ -160,6 +165,7 @@ class TeamsConnector(
     CheckpointedConnectorWithPermSync[TeamsCheckpoint],
     SlimConnector,
     SlimConnectorWithPermSync,
+    SlimInventoryGaps,
 ):
     MAX_WORKERS = 10
 
@@ -205,6 +211,9 @@ class TeamsConnector(
         self._rest_contexts: dict[str, tuple[ClientContext, float]] = {}
         # Group expansions SharePoint resolves, shared across files.
         self._permission_cache = SharepointPermissionCache()
+        # Organizers whose transcripts the slim walk could not list, read by
+        # whoever deletes what the walk leaves out. Reset on its first batch.
+        self._unlisted_entity_ids: list[str] = []
 
         resolved_env = resolve_microsoft_environment(graph_api_host, authority_host)
         self._azure_environment = resolved_env.environment
@@ -532,8 +541,9 @@ class TeamsConnector(
         access policy is granted per user, except the tenant-wide setting that
         turns transcript export off, which no other organizer escapes."""
         assert self.graph_client is not None
-        # Documents flow page by page. The document reads absorb their own
-        # refusals, so only the listing's refusals reach this handler.
+        # Documents flow page by page. A document read records its own 403 or
+        # 404, so what reaches this handler is a refused listing or an error
+        # too general to blame on the organizer.
         try:
             for transcript in fetch_transcripts(
                 self.graph_client, organizer.id, start, end
@@ -588,7 +598,7 @@ class TeamsConnector(
                 raise
             return ConnectorFailure(
                 failed_document=DocumentFailure(
-                    document_id=transcript_document_id(transcript.id),
+                    document_id=transcript_document_id(organizer.id, transcript.id),
                     document_link=link,
                 ),
                 failure_message=(
@@ -605,7 +615,7 @@ class TeamsConnector(
         # document or its old text would outlive it.
         text = transcript_text(content) or title
         return Document(
-            id=transcript_document_id(transcript.id),
+            id=transcript_document_id(organizer.id, transcript.id),
             sections=[TextSection(link=link, text=text)],
             source=DocumentSource.TEAMS,
             semantic_identifier=f"{title} ({when})",
@@ -632,10 +642,11 @@ class TeamsConnector(
         try:
             # Every configured name is resolved on purpose: a misspelled one is a
             # misconfiguration the admin should see now, not at index time.
+            listing = iter_organizers(self.graph_client, self.transcript_organizers)
             organizers = (
-                fetch_organizers(self.graph_client, self.transcript_organizers)
+                list(listing)
                 if self.transcript_organizers
-                else fetch_organizers(self.graph_client, [], limit=1)
+                else list(islice(listing, 1))
             )
         except requests.HTTPError as e:
             if _status(e) == 404 and self.transcript_organizers:
@@ -916,6 +927,7 @@ class TeamsConnector(
         with_readers: bool,
     ) -> GenerateSlimDocumentOutput:
         start = start or 0
+        self._unlisted_entity_ids = []
 
         teams = _collect_all_teams(
             graph_client=self.graph_client,  # ty: ignore[invalid-argument-type]
@@ -995,19 +1007,39 @@ class TeamsConnector(
                     yield slim_doc_buffer
 
         if self.include_meeting_transcripts:
-            yield from _batched(
-                self._slim_transcripts(callback), _SLIM_DOC_BATCH_SIZE, callback
+            yield from batch_generator(
+                self._slim_transcripts(callback),
+                _SLIM_DOC_BATCH_SIZE,
+                pre_batch_yield=lambda _: self._slim_batch_signals(callback),
             )
+
+    def _slim_batch_signals(self, callback: IndexingHeartbeatInterface | None) -> None:
+        """The stop and progress signals the channel loop gives the runner
+        before every full batch."""
+        _raise_if_stopped(callback)
+        if callback:
+            callback.progress("retrieve_all_slim_docs_perm_sync", 1)
+
+    def inventory_gaps(self) -> list[InventoryGap]:
+        """One gap per organizer whose transcripts were refused. Everything else
+        the walk listed is whole, so only those ids are held back."""
+        return [
+            InventoryGap(
+                entity_id=organizer_id,
+                document_id_prefix=organizer_id_prefix(organizer_id),
+            )
+            for organizer_id in self._unlisted_entity_ids
+        ]
 
     def _slim_transcripts(
         self, callback: IndexingHeartbeatInterface | None
     ) -> Iterator[SlimDocument]:
         """Every transcript of every organizer with the readers the indexing walk
-        gives it. Pruning deletes whatever this walk leaves out, so a refused
-        organizer fails the walk: a missing access policy can be fixed."""
+        gives it. A refused organizer becomes a gap, which holds back the
+        deletions this walk feeds: its transcripts are hidden, not gone."""
         assert self.graph_client is not None
         stop_check = lambda: _raise_if_stopped(callback)  # noqa: E731
-        for organizer in fetch_organizers(
+        for organizer in iter_organizers(
             self.graph_client, self.transcript_organizers, before_page=stop_check
         ):
             # An organizer can hold pages of transcripts, each with a meeting
@@ -1022,7 +1054,7 @@ class TeamsConnector(
                 ):
                     _raise_if_stopped(callback)
                     yield SlimDocument(
-                        id=transcript_document_id(transcript.id),
+                        id=transcript_document_id(organizer.id, transcript.id),
                         external_access=transcript_access(
                             organizer, self._meeting_record(organizer, transcript)
                         ),
@@ -1031,7 +1063,15 @@ class TeamsConnector(
             except requests.HTTPError as e:
                 if transcripts_disabled(e):
                     raise ConnectorValidationError(_TRANSCRIPTS_DISABLED) from e
-                raise
+                if not _is_permanent(e):
+                    raise
+                self._unlisted_entity_ids.append(organizer.id)
+                logger.warning(
+                    "Could not list the transcripts of %s, so nothing this walk "
+                    "feeds is deleted: %s",
+                    organizer.email,
+                    _transcript_refusal(e),
+                )
 
     def _slim_channel_files(
         self, channel: ChannelRef, with_readers: bool
@@ -1050,18 +1090,6 @@ class TeamsConnector(
                     ),
                     doc_created_at=item.created_datetime,
                 )
-
-
-def _escape_odata_string(name: str) -> str:
-    """Escape special characters for OData string literals.
-
-    Uses proper OData v4 string literal escaping:
-    - Single quotes: ' becomes ''
-    - Other characters are handled by using contains() instead of eq for problematic cases
-    """
-    # Escape single quotes for OData syntax (replace ' with '')
-    escaped = name.replace("'", "''")
-    return escaped
 
 
 def _has_odata_incompatible_chars(team_names: list[str] | None) -> bool:
@@ -1110,7 +1138,7 @@ def _build_simple_odata_filter(safe_names: list[str]) -> str | None:
 
     filter_parts = []
     for name in safe_names:
-        escaped_name = _escape_odata_string(name)
+        escaped_name = escape_odata_string(name)
         filter_parts.append(f"displayName eq '{escaped_name}'")
 
     return " or ".join(filter_parts)
@@ -1557,26 +1585,6 @@ def _raise_if_stopped(callback: IndexingHeartbeatInterface | None) -> None:
         raise RuntimeError("retrieve_all_slim_docs_perm_sync: Stop signal detected")
 
 
-def _batched(
-    items: Iterator[SlimDocument],
-    size: int,
-    callback: IndexingHeartbeatInterface | None,
-) -> Iterator[list[SlimDocument | HierarchyNode]]:
-    """Batches for the slim walk, with the stop and progress signals the
-    channel loop gives the runner before every full batch."""
-    batch: list[SlimDocument | HierarchyNode] = []
-    for item in items:
-        batch.append(item)
-        if len(batch) >= size:
-            _raise_if_stopped(callback)
-            if callback:
-                callback.progress("retrieve_all_slim_docs_perm_sync", 1)
-            yield batch
-            batch = []
-    if batch:
-        yield batch
-
-
 _TRANSCRIPTS_DISABLED = (
     "Include Meeting Transcripts needs the tenant setting that allows Graph API "
     "access to transcripts, which a Teams administrator has turned off."
@@ -1584,7 +1592,8 @@ _TRANSCRIPTS_DISABLED = (
 
 
 def _transcript_refusal(error: requests.HTTPError) -> str:
-    """What a refused transcript call asks the admin to do, by Graph's code."""
+    """The admin-facing cause of a refused transcript call, from Graph's code,
+    message or status."""
     if transcripts_disabled(error):
         return _TRANSCRIPTS_DISABLED
     if access_policy_missing(error):

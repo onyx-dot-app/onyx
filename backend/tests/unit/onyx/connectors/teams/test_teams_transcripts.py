@@ -6,7 +6,6 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
-import requests
 
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -159,7 +158,7 @@ def test_transcripts_follow_the_channels_one_organizer_per_step() -> None:
     assert len(items) == 1
     document = items[0]
     assert isinstance(document, Document)
-    assert document.id == transcript_document_id("t1")
+    assert document.id == transcript_document_id("user-1", "t1")
     assert document.title == "Planning"
     assert document.semantic_identifier == "Planning (2024-01-15)"
     assert [section.text for section in document.sections] == ["Ada: hello\n\nBob: hi"]
@@ -195,7 +194,7 @@ def test_configured_organizers_are_resolved_by_name() -> None:
     )
 
     assert [item.id for item in items if isinstance(item, Document)] == [
-        transcript_document_id("t1")
+        transcript_document_id("user-1", "t1")
     ]
 
 
@@ -250,7 +249,9 @@ def test_a_refused_transcript_is_a_document_failure_and_an_outage_fails_the_atte
 
     assert len(items) == 1 and isinstance(items[0], ConnectorFailure)
     assert items[0].failed_document is not None
-    assert items[0].failed_document.document_id == transcript_document_id("t1")
+    assert items[0].failed_document.document_id == transcript_document_id(
+        "user-1", "t1"
+    )
 
     client = graph_client(
         _routes(_transcript()), contents={(CONTENT_ROUTE, ATTRIBUTED_FORMAT): 503}
@@ -345,15 +346,21 @@ def test_the_slim_walk_lists_transcripts_with_their_readers() -> None:
     ]
 
     assert slim == [
-        (transcript_document_id("t1"), {"ada@example.com", "bob@example.com"})
+        (transcript_document_id("user-1", "t1"), {"ada@example.com", "bob@example.com"})
     ]
 
 
 @pytest.mark.parametrize("refused_page", ["first", "later"])
-def test_a_refused_organizer_fails_the_slim_walk(refused_page: str) -> None:
+def test_a_refused_organizer_is_a_gap_and_the_slim_walk_goes_on(
+    refused_page: str,
+) -> None:
     first_page = _transcripts_url("user-1", None)
     second_page = "users/user-1/onlineMeetings/getAllTranscripts?skipToken=p2"
-    routes: dict[str, Any] = {ALL_USERS_URL: {"value": [ADA]}, MEETING_URL: _meeting()}
+    routes: dict[str, Any] = {
+        ALL_USERS_URL: {"value": [ADA, BOB]},
+        MEETING_URL: _meeting(),
+        _transcripts_url("user-2", None): {"value": [_transcript("t9", "meeting-9")]},
+    }
     if refused_page == "later":
         routes[first_page] = {
             "value": [_transcript()],
@@ -361,12 +368,32 @@ def test_a_refused_organizer_fails_the_slim_walk(refused_page: str) -> None:
         }
     refused = second_page if refused_page == "later" else first_page
     client = graph_client(routes, refused={refused: NO_POLICY})
-    walk = connector(
-        client, include_meeting_transcripts=True
-    ).retrieve_all_slim_docs_perm_sync()
+    teams_connector = connector(client, include_meeting_transcripts=True)
 
-    with pytest.raises(requests.HTTPError):
-        list(walk)
+    slim = [
+        doc.id
+        for batch in teams_connector.retrieve_all_slim_docs_perm_sync()
+        for doc in batch
+        if isinstance(doc, SlimDocument)
+    ]
+
+    assert transcript_document_id("user-2", "t9") in slim
+    assert [gap.entity_id for gap in teams_connector.inventory_gaps()] == ["user-1"]
+    assert teams_connector.inventory_gaps()[0].document_id_prefix == (
+        "teams-transcript:user-1:"
+    )
+
+
+def test_a_walk_with_no_refusal_reports_no_gap() -> None:
+    routes = {
+        ALL_USERS_URL: {"value": [ADA]},
+        _transcripts_url("user-1", None): {"value": [_transcript()]},
+    }
+    teams_connector = connector(graph_client(routes), include_meeting_transcripts=True)
+
+    list(teams_connector.retrieve_all_slim_docs_perm_sync())
+
+    assert teams_connector.inventory_gaps() == []
 
 
 def test_organizers_page_through_the_checkpoint() -> None:

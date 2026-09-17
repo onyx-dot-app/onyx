@@ -21,6 +21,7 @@ from onyx.connectors.teams.utils import (
     _get_next_url,
     _iter_values,
     _retry,
+    escape_odata_string,
     request_with_retry,
 )
 from onyx.file_processing.webvtt import is_timing_line, parse_vtt_transcript
@@ -52,8 +53,14 @@ ORGANIZERS_URL = (
 _BLANK_LINE_RE = re.compile(r"\n[ \t]*\n")
 
 
-def transcript_document_id(transcript_id: str) -> str:
-    return f"{TRANSCRIPT_DOCUMENT_ID_PREFIX}{transcript_id}"
+def organizer_id_prefix(organizer_id: str) -> str:
+    """Every transcript of one organizer starts with this. Their transcripts are
+    listed and refused together, so an id says which listing it came from."""
+    return f"{TRANSCRIPT_DOCUMENT_ID_PREFIX}{organizer_id}:"
+
+
+def transcript_document_id(organizer_id: str, transcript_id: str) -> str:
+    return f"{organizer_id_prefix(organizer_id)}{transcript_id}"
 
 
 class Organizer(BaseModel):
@@ -113,17 +120,23 @@ class MeetingRecord(BaseModel):
         )
 
 
-def graph_error_code(error: requests.HTTPError) -> str:
-    """Graph's inner error code, or its outer code, or the empty string."""
+def _error_body(error: requests.HTTPError) -> dict[str, Any]:
+    """Graph's error object, empty when the body is not one."""
     if error.response is None:
-        return ""
+        return {}
     try:
         payload = error.response.json()
     except ValueError:
-        return ""
+        return {}
     body = payload.get("error") if isinstance(payload, dict) else None
-    if not isinstance(body, dict):
-        return ""
+    return body if isinstance(body, dict) else {}
+
+
+def graph_inner_error_code(error: requests.HTTPError) -> str:
+    """Graph's inner error code, or its outer code, or the empty string. The
+    inner one comes first: it names the cause, where the outer one repeats the
+    status."""
+    body = _error_body(error)
     inner = body.get("innerError")
     if isinstance(inner, dict) and inner.get("code"):
         return str(inner["code"])
@@ -131,20 +144,13 @@ def graph_error_code(error: requests.HTTPError) -> str:
 
 
 def graph_error_message(error: requests.HTTPError) -> str:
-    if error.response is None:
-        return ""
-    try:
-        payload = error.response.json()
-    except ValueError:
-        return ""
-    body = payload.get("error") if isinstance(payload, dict) else None
-    return str(body.get("message") or "") if isinstance(body, dict) else ""
+    return str(_error_body(error).get("message") or "")
 
 
 def transcripts_disabled(error: requests.HTTPError) -> bool:
     """The tenant setting that turns transcript export off for every app.
     Nothing on our side cures it, so callers stop rather than move on."""
-    return graph_error_code(error) == TRANSCRIPT_ACCESS_DISABLED_CODE
+    return graph_inner_error_code(error) == TRANSCRIPT_ACCESS_DISABLED_CODE
 
 
 def access_policy_missing(error: requests.HTTPError) -> bool:
@@ -152,23 +158,19 @@ def access_policy_missing(error: requests.HTTPError) -> bool:
     return ACCESS_POLICY_MESSAGE in graph_error_message(error).lower()
 
 
-def fetch_organizers(
+def iter_organizers(
     graph_client: GraphClient,
     principal_names: list[str],
-    limit: int | None = None,
     before_page: Callable[[], None] | None = None,
-) -> list[Organizer]:
+) -> Generator[Organizer]:
     """The configured users, or every enabled user of the tenant when none are
-    configured, at most ``limit`` of either. A configured name that resolves to
-    nothing raises. ``before_page`` runs ahead of each user page request."""
+    configured. A configured name that resolves to nothing raises.
+    ``before_page`` runs ahead of each user page request."""
     if principal_names:
-        return _resolve_organizers(graph_client, principal_names[:limit])
-    organizers: list[Organizer] = []
+        yield from _resolve_organizers(graph_client, principal_names)
+        return
     for row in _iter_values(graph_client, ORGANIZERS_URL, before_page):
-        organizers.append(Organizer.from_graph(row))
-        if limit is not None and len(organizers) >= limit:
-            break
-    return organizers
+        yield Organizer.from_graph(row)
 
 
 def fetch_organizer_page(
@@ -190,12 +192,13 @@ def fetch_organizer_page(
 def _resolve_organizers(
     graph_client: GraphClient, principal_names: list[str]
 ) -> list[Organizer]:
-    # An OData string literal doubles its apostrophes, on top of url encoding.
+    # A user principal name goes into an OData string literal, so its
+    # apostrophes double before url encoding.
     return [
         Organizer.from_graph(
             _retry(
                 graph_client,
-                f"users('{quote(name.replace(chr(39), chr(39) * 2), safe='@.')}')"
+                f"users('{quote(escape_odata_string(name), safe='@.')}')"
                 "?$select=id,userPrincipalName,mail,displayName",
             )
         )
@@ -260,7 +263,7 @@ def fetch_transcript_text(
             graph_client, request_url, ATTRIBUTED_FORMAT
         ).text, True
     except requests.HTTPError as e:
-        if graph_error_code(e) != SPEAKER_ATTRIBUTION_DISABLED_CODE:
+        if graph_inner_error_code(e) != SPEAKER_ATTRIBUTION_DISABLED_CODE:
             raise
     return request_with_retry(
         graph_client, request_url, UNATTRIBUTED_FORMAT
@@ -268,9 +271,9 @@ def fetch_transcript_text(
 
 
 def transcript_text(content: str) -> str:
-    """The spoken text. The unattributed format leaves the header out and puts a
-    blank line between a cue's timing and its speech, which the WebVTT parser
-    reads as two empty blocks, so it falls back to reading the blocks in turn."""
+    """The spoken text. The unattributed format puts a blank line between a
+    cue's timing and its speech, so the WebVTT parser finds a cue with no text
+    and a block with no timing and keeps neither. Then the blocks read in turn."""
     parsed = parse_vtt_transcript(content, keep_speakers=True)
     if parsed:
         return parsed
@@ -300,9 +303,9 @@ def _plain_speech(content: str) -> list[str]:
 def transcript_access(
     organizer: Organizer, meeting: MeetingRecord | None
 ) -> ExternalAccess:
-    """The organizer and everyone the meeting record lists. They were in the
-    room, and Graph does not expose an organizer's narrower viewing setting.
-    Without the record, the organizer alone."""
+    """The organizer and everyone the meeting record names as organizer or
+    attendee: the invited people, since Graph exposes neither who joined nor an
+    organizer's narrower viewing setting. Without the record, the organizer."""
     emails = {organizer.email.lower()} if organizer.email else set()
     if meeting is not None:
         emails |= meeting.participant_emails

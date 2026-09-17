@@ -21,11 +21,14 @@ from onyx.connectors.interfaces import (
     PollConnector,
     SlimConnector,
     SlimConnectorWithPermSync,
+    documents_outside_gaps,
+    inventory_gaps,
 )
 from onyx.connectors.models import (
     ConnectorFailure,
     Document,
     HierarchyNode,
+    InventoryGap,
     SlimDocument,
 )
 from onyx.file_store.staging import (
@@ -55,6 +58,19 @@ class SlimConnectorExtractionResult(BaseModel):
     raw_id_to_parent: dict[str, str | None]
     hierarchy_nodes: list[HierarchyNode]
     id_to_created_at: dict[str, datetime]
+    # Groups of documents the walk could not list, so their absence from the
+    # enumeration says nothing about whether they still exist.
+    gaps: list[InventoryGap] = []
+
+
+def prunable_document_ids(
+    indexed_document_ids: set[str],
+    extraction: SlimConnectorExtractionResult,
+) -> list[str]:
+    """The indexed documents the source no longer has. A document behind a gap
+    was never listed, so it is kept and the rest of the walk still prunes."""
+    unseen = indexed_document_ids - extraction.raw_id_to_parent.keys()
+    return list(documents_outside_gaps(unseen, extraction.gaps))
 
 
 def _checkpointed_batched_items(
@@ -250,6 +266,8 @@ def extract_ids_from_runnable_connector(
         raw_id_to_parent=all_raw_id_to_parent,
         hierarchy_nodes=all_hierarchy_nodes,
         id_to_created_at=all_id_to_created_at,
+        # Asked for once the walk is done, so it reports the whole walk.
+        gaps=inventory_gaps(runnable_connector),
     )
 
 
