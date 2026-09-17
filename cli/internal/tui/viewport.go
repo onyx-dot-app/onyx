@@ -52,22 +52,23 @@ const streamRenderInterval = 100 * time.Millisecond
 // viewport manages the chat display.
 type viewport struct {
 	entries      []chatEntry
-	width        int
-	streaming    bool
 	streamBuf    string
-	showSources  bool
 	renderer     *markdown.Renderer
 	pickerItems  []pickerItem
-	pickerActive bool
+	width        int
 	pickerIndex  int
 	pickerType   pickerKind
 	scrollOffset int // lines scrolled up from bottom (0 = pinned to bottom)
 
 	// Progressive markdown rendering during streaming
-	streamMarkdown bool   // feature flag: render markdown while streaming
 	streamRendered string // cached rendered output during streaming
 	lastRenderTime time.Time
 	lastRenderLen  int // length of streamBuf at last render (skip if unchanged)
+
+	streaming      bool
+	showSources    bool
+	pickerActive   bool
+	streamMarkdown bool // feature flag: render markdown while streaming
 }
 
 // newMarkdownRenderer creates a markdown renderer wrapping at width-4 to
